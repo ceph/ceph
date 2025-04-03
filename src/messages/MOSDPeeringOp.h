@@ -26,7 +26,7 @@ public:
   virtual PGPeeringEvent *get_event() = 0;
   virtual void inner_print(std::ostream& out) const = 0;
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
   // In crimson, conn is independently maintained outside Message.
   // Instead of get features from the connection later, set features at
   // the start of the operation.

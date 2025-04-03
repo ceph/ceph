@@ -13,7 +13,7 @@
 #include "include/ceph_assert.h"
 #include "common/admin_socket.h"
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
 #else
 #include "common/perf_counters_collection.h"

@@ -22,7 +22,7 @@ class entity_addrvec_t;
 #define CEPH_PICK_ADDRESS_DEFAULT_MON_PORTS  0x80
 #define CEPH_PICK_ADDRESS_PUBLIC_BIND 0x100
 
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 /*
   Pick addresses based on subnets if needed.
 
@@ -44,7 +44,7 @@ class entity_addrvec_t;
  */
 void pick_addresses(CephContext *cct, int needs);
 
-#endif	// !WITH_SEASTAR
+#endif	// !WITH_CRIMSON
 
 int pick_addresses(CephContext *cct, unsigned flags, entity_addrvec_t *addrs,
 		   int preferred_numa_node = -1);

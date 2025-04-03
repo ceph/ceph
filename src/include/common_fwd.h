@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #define TOPNSPC crimson
 #else
 #define TOPNSPC ceph

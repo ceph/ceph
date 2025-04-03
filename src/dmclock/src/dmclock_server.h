@@ -31,7 +31,7 @@
 #include <map>
 #include <deque>
 #include <queue>
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
@@ -760,7 +760,7 @@ namespace crimson {
       ClientInfoFunc        client_info_f;
       static constexpr bool is_dynamic_cli_info_f = U1;
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
       static constexpr int data_mtx = 0;
       struct DataGuard { DataGuard(int) {} };
 #else
@@ -806,7 +806,7 @@ namespace crimson {
       RejectThreshold  reject_threshold = 0;
 
       double           anticipation_timeout;
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
       bool finishing;
 #else
       std::atomic_bool finishing;
@@ -1509,7 +1509,7 @@ namespace crimson {
       }
     }; // class PullPriorityQueue
 
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
     // TODO: PushPriorityQueue is not ported to seastar yet
     // PUSH version
     template<typename C, typename R, bool IsDelayed=false, bool U1=false, unsigned B=2>
@@ -1811,6 +1811,6 @@ namespace crimson {
 	}
       }
     }; // class PushPriorityQueue
-#endif // !WITH_SEASTAR
+#endif // !WITH_CRIMSON
   } // namespace dmclock
 } // namespace crimson

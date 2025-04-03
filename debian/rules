@@ -12,7 +12,7 @@ ifneq (,$(findstring WITH_STATIC_LIBSTDCXX,$(CEPH_EXTRA_CMAKE_ARGS)))
   # see http://tracker.ceph.com/issues/25209
   export DEB_LDFLAGS_MAINT_STRIP = -Wl,-Bsymbolic-functions
 endif
-ifeq (,$(findstring WITH_SEASTAR,$(CEPH_EXTRA_CMAKE_ARGS)))
+ifeq (,$(findstring WITH_CRIMSON,$(CEPH_EXTRA_CMAKE_ARGS)))
   export CEPH_OSD_BASENAME = ceph-osd
 else
   export CEPH_OSD_BASENAME = crimson-osd
