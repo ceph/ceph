@@ -180,7 +180,7 @@ void usage()
   cout << "  bi put                           store bucket index object entries\n";
   cout << "  bi list                          list raw bucket index entries\n";
   cout << "  bi purge                         purge bucket index entries\n";
-  cout << "  object rm                        remove object\n";
+  cout << "  object rm                        remove object; include --yes-i-really-mean-it to force removal from bucket index\n";
   cout << "  object put                       put object\n";
   cout << "  object stat                      stat an object for its metadata\n";
   cout << "  object unlink                    unlink object from bucket index\n";
