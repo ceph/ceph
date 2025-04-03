@@ -145,49 +145,6 @@ int RGWSystemMetaObj::init(const DoutPrefixProvider *dpp, CephContext *_cct, RGW
   return read_info(dpp, id, y, old_format);
 }
 
-RGWZoneGroup::~RGWZoneGroup() {}
-
-const string RGWZoneGroup::get_default_oid(bool old_region_format) const
-{
-  if (old_region_format) {
-    if (cct->_conf->rgw_default_region_info_oid.empty()) {
-      return default_region_info_oid;
-    }
-    return cct->_conf->rgw_default_region_info_oid;
-  }
-
-  string default_oid = cct->_conf->rgw_default_zonegroup_info_oid;
-
-  if (cct->_conf->rgw_default_zonegroup_info_oid.empty()) {
-    default_oid = default_zone_group_info_oid;
-  }
-
-  default_oid += "." + realm_id;
-
-  return default_oid;
-}
-
-const string& RGWZoneGroup::get_info_oid_prefix(bool old_region_format) const
-{
-  if (old_region_format) {
-    return region_info_oid_prefix;
-  }
-  return zone_group_info_oid_prefix;
-}
-
-const string& RGWZoneGroup::get_names_oid_prefix() const
-{
-  return zonegroup_names_oid_prefix;
-}
-
-string RGWZoneGroup::get_predefined_id(CephContext *cct) const {
-  return cct->_conf.get_val<string>("rgw_zonegroup_id");
-}
-
-const string& RGWZoneGroup::get_predefined_name(CephContext *cct) const {
-  return cct->_conf->rgw_zonegroup;
-}
-
 rgw_pool RGWZoneGroup::get_pool(CephContext *cct_) const
 {
   if (cct_->_conf->rgw_zonegroup_root_pool.empty()) {
@@ -197,24 +154,6 @@ rgw_pool RGWZoneGroup::get_pool(CephContext *cct_) const
   return rgw_pool(cct_->_conf->rgw_zonegroup_root_pool);
 }
 
-int RGWZoneGroup::read_default_id(const DoutPrefixProvider *dpp, string& default_id, optional_yield y,
-				  bool old_format)
-{
-  if (realm_id.empty()) {
-    /* try using default realm */
-    RGWRealm realm;
-    auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-    auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
-    int ret = rgw::read_realm(dpp, y, cfgstore.get(), realm.get_id(), realm.get_name(), realm);
-    // no default realm exist
-    if (ret < 0) {
-      return read_id(dpp, default_zonegroup_name, default_id, y);
-    }
-    realm_id = realm.get_id();
-  }
-
-  return RGWSystemMetaObj::read_default_id(dpp, default_id, y, old_format);
-}
 
 int RGWSystemMetaObj::use_default(const DoutPrefixProvider *dpp, optional_yield y, bool old_format)
 {
@@ -258,7 +197,8 @@ int RGWSystemMetaObj::read_info(const DoutPrefixProvider *dpp, const string& obj
 
 void RGWZoneGroup::decode_json(JSONObj *obj)
 {
-  RGWSystemMetaObj::decode_json(obj);
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("name", name, obj);
   if (id.empty()) {
     derr << "old format " << dendl;
     JSONDecoder::decode_json("name", name, obj);
@@ -687,7 +627,8 @@ int RGWSystemMetaObj::delete_obj(const DoutPrefixProvider *dpp, optional_yield y
 
 void RGWZoneGroup::dump(Formatter *f) const
 {
-  RGWSystemMetaObj::dump(f);
+  encode_json("id", id , f);
+  encode_json("name", name , f);
   encode_json("api_name", api_name, f);
   encode_json("is_master", is_master, f);
   encode_json("endpoints", endpoints, f);
@@ -1187,24 +1128,6 @@ bool RGWPeriodMap::find_zone_by_id(const rgw_zone_id& zone_id,
   }
 
   return false;
-}
-
-int RGWZoneGroup::set_as_default(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
-{
-  if (realm_id.empty()) {
-    /* try using default realm */
-    RGWRealm realm;
-    auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-    auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
-    int ret = rgw::read_realm(dpp, y, cfgstore.get(), realm.get_id(), realm.get_name(), realm);
-    if (ret < 0) {
-      ldpp_dout(dpp, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
-      return -EINVAL;
-    }
-    realm_id = realm.get_id();
-  }
-
-  return RGWSystemMetaObj::set_as_default(dpp, y, exclusive);
 }
 
 int RGWSystemMetaObj::write(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)

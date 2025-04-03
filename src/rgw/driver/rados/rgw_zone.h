@@ -317,7 +317,9 @@ struct RGWZoneParams : RGWSystemMetaObj {
 };
 WRITE_CLASS_ENCODER(RGWZoneParams)
 
-struct RGWZoneGroup : public RGWSystemMetaObj {
+struct RGWZoneGroup {
+  std::string id;
+  std::string name;
   std::string api_name;
   std::list<std::string> endpoints;
   bool is_master = false;
@@ -351,24 +353,25 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
 
   rgw_sync_policy_info sync_policy;
   rgw::zone_features::set enabled_features;
+  CephContext *cct{nullptr};
 
   RGWZoneGroup(): is_master(false){}
-  RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
-  explicit RGWZoneGroup(const std::string &_name):RGWSystemMetaObj(_name) {}
-  RGWZoneGroup(const std::string &_name, bool _is_master, CephContext *cct, RGWSI_SysObj* sysobj_svc,
-	       const std::string& _realm_id, const std::list<std::string>& _endpoints)
-    : RGWSystemMetaObj(_name, cct , sysobj_svc), endpoints(_endpoints), is_master(_is_master),
-      realm_id(_realm_id) {}
-  virtual ~RGWZoneGroup();
+  RGWZoneGroup(const std::string &_id, const std::string &_name):id(_id), name(_name) {}
+  explicit RGWZoneGroup(const std::string &_name):name(_name) {}
+  RGWZoneGroup(const std::string &_name, bool _is_master, const std::string& _realm_id,
+               const std::list<std::string>& _endpoints)
+    : name(_name), endpoints(_endpoints), is_master(_is_master), realm_id(_realm_id) {}
+
+  const std::string& get_name() const { return name; }
+  const std::string& get_id() const { return id; }
+
+  void set_name(const std::string& _name) { name = _name;}
+  void set_id(const std::string& _id) { id = _id;}
+  void clear_id() { id.clear(); }
 
   bool is_master_zonegroup() const { return is_master;}
-  void update_master(const DoutPrefixProvider *dpp, bool _is_master, optional_yield y) {
-    is_master = _is_master;
-    post_process_params(dpp, y);
-  }
-  void post_process_params(const DoutPrefixProvider *dpp, optional_yield y);
 
-  void encode(bufferlist& bl) const override {
+  void encode(bufferlist& bl) const {
     ENCODE_START(6, 1, bl);
     encode(name, bl);
     encode(api_name, bl);
@@ -380,14 +383,21 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     encode(default_placement, bl);
     encode(hostnames, bl);
     encode(hostnames_s3website, bl);
-    RGWSystemMetaObj::encode(bl);
+    {
+      // these used to be wrapped by RGWSystemMetaObj::encode(),
+      // so the extra ENCODE_START/ENCODE_FINISH are preserved
+      ENCODE_START(1, 1, bl);
+      encode(id, bl);
+      encode(name, bl);
+      ENCODE_FINISH(bl);
+    }
     encode(realm_id, bl);
     encode(sync_policy, bl);
     encode(enabled_features, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) override {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(6, bl);
     decode(name, bl);
     decode(api_name, bl);
@@ -404,7 +414,14 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
       decode(hostnames_s3website, bl);
     }
     if (struct_v >= 4) {
-      RGWSystemMetaObj::decode(bl);
+    {
+      // these used to be wrapped by RGWSystemMetaObj::decode(),
+      // so the extra DECODE_START/DECODE_FINISH are preserved
+      DECODE_START(1, bl);
+      decode(id, bl);
+      decode(name, bl);
+      DECODE_FINISH(bl);
+    }
       decode(realm_id, bl);
     } else {
       id = name;
@@ -418,27 +435,8 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     DECODE_FINISH(bl);
   }
 
-  int read_default_id(const DoutPrefixProvider *dpp, std::string& default_id, optional_yield y, bool old_format = false) override;
-  int set_as_default(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive = false) override;
-  int create_default(const DoutPrefixProvider *dpp, optional_yield y, bool old_format = false);
   int equals(const std::string& other_zonegroup) const;
-  int add_zone(const DoutPrefixProvider *dpp, 
-               const RGWZoneParams& zone_params, bool *is_master, bool *read_only,
-               const std::list<std::string>& endpoints, const std::string *ptier_type,
-               bool *psync_from_all, std::list<std::string>& sync_from,
-               std::list<std::string>& sync_from_rm, std::string *predirect_zone,
-               std::optional<int> bucket_index_max_shards, RGWSyncModulesManager *sync_mgr,
-               const rgw::zone_features::set& enable_features,
-               const rgw::zone_features::set& disable_features,
-	       optional_yield y);
-  int remove_zone(const DoutPrefixProvider *dpp, const std::string& zone_id, optional_yield y);
-  int rename_zone(const DoutPrefixProvider *dpp, const RGWZoneParams& zone_params, optional_yield y);
-  rgw_pool get_pool(CephContext *cct) const override;
-  const std::string get_default_oid(bool old_region_format = false) const override;
-  const std::string& get_info_oid_prefix(bool old_region_format = false) const override;
-  const std::string& get_names_oid_prefix() const override;
-  std::string get_predefined_id(CephContext *cct) const override;
-  const std::string& get_predefined_name(CephContext *cct) const override;
+  rgw_pool get_pool(CephContext *cct) const;
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
