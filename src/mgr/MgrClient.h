@@ -108,6 +108,7 @@ protected:
 
 public:
   MgrClient(CephContext *cct_, Messenger *msgr_, MonMap *monmap);
+  ~MgrClient() noexcept;
 
   void set_messenger(Messenger *msgr_) { msgr = msgr_; }
 

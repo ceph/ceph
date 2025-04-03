@@ -1,4 +1,5 @@
 set(auth_srcs
+  Auth.cc
   AuthClientHandler.cc
   AuthMethodList.cc
   AuthRegistry.cc
