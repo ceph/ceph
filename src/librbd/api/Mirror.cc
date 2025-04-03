@@ -2475,15 +2475,15 @@ int prepare_group_images(IoCtx& group_ioctx,
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << dendl;
 
-  auto ns = group_ioctx.get_namespace();
-  group_ioctx.set_namespace("");
+  librados::IoCtx default_ns_ioctx;
+  default_ns_ioctx.dup(group_ioctx);
+  default_ns_ioctx.set_namespace("");
   std::vector<cls::rbd::MirrorPeer> peers;
-  int r = cls_client::mirror_peer_list(&group_ioctx, &peers);
+  int r = cls_client::mirror_peer_list(&default_ns_ioctx, &peers);
   if (r < 0) {
     lderr(cct) << "error reading mirror peers: " << cpp_strerror(r) << dendl;
     return r;
   }
-  group_ioctx.set_namespace(ns);
 
   for (auto &peer : peers) {
     if (peer.mirror_peer_direction == cls::rbd::MIRROR_PEER_DIRECTION_RX) {
