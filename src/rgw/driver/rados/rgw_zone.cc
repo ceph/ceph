@@ -106,22 +106,6 @@ int RGWSystemMetaObj::read(const DoutPrefixProvider *dpp, optional_yield y)
   return read_info(dpp, id, y);
 }
 
-int RGWZoneParams::create_default(const DoutPrefixProvider *dpp, optional_yield y, bool old_format)
-{
-  name = default_zone_name;
-
-  int r = create(dpp, y);
-  if (r < 0) {
-    return r;
-  }
-
-  if (old_format) {
-    name = id;
-  }
-
-  return r;
-}
-
 const string& RGWZoneParams::get_compression_type(const rgw_placement_rule& placement_rule) const
 {
   static const std::string NONE{"none"};

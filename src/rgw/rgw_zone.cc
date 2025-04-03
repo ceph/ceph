@@ -220,11 +220,10 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("enabled_features", enabled_features, obj);
 }
 
-RGWZoneParams::~RGWZoneParams() {}
-
 void RGWZoneParams::decode_json(JSONObj *obj)
 {
-  RGWSystemMetaObj::decode_json(obj);
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("domain_root", domain_root, obj);
   JSONDecoder::decode_json("control_pool", control_pool, obj);
   JSONDecoder::decode_json("gc_pool", gc_pool, obj);
@@ -251,7 +250,8 @@ void RGWZoneParams::decode_json(JSONObj *obj)
 
 void RGWZoneParams::dump(Formatter *f) const
 {
-  RGWSystemMetaObj::dump(f);
+  encode_json("id", id, f);
+  encode_json("name", name, f);
   encode_json("domain_root", domain_root, f);
   encode_json("control_pool", control_pool, f);
   encode_json("gc_pool", gc_pool, f);
@@ -276,17 +276,6 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("realm_id", realm_id, f);
 }
 
-int RGWZoneParams::init(const DoutPrefixProvider *dpp, 
-                        CephContext *cct, RGWSI_SysObj *sysobj_svc,
-			optional_yield y, bool setup_obj, bool old_format)
-{
-  if (name.empty()) {
-    name = cct->_conf->rgw_zone;
-  }
-
-  return RGWSystemMetaObj::init(dpp, cct, sysobj_svc, y, setup_obj, old_format);
-}
-
 rgw_pool RGWZoneParams::get_pool(CephContext *cct) const
 {
   if (cct->_conf->rgw_zone_root_pool.empty()) {
@@ -294,101 +283,6 @@ rgw_pool RGWZoneParams::get_pool(CephContext *cct) const
   }
 
   return rgw_pool(cct->_conf->rgw_zone_root_pool);
-}
-
-const string RGWZoneParams::get_default_oid(bool old_format) const
-{
-  if (old_format) {
-    return cct->_conf->rgw_default_zone_info_oid;
-  }
-
-  return cct->_conf->rgw_default_zone_info_oid + "." + realm_id;
-}
-
-const string& RGWZoneParams::get_names_oid_prefix() const
-{
-  return zone_names_oid_prefix;
-}
-
-const string& RGWZoneParams::get_info_oid_prefix(bool old_format) const
-{
-  return zone_info_oid_prefix;
-}
-
-string RGWZoneParams::get_predefined_id(CephContext *cct) const {
-  return cct->_conf.get_val<string>("rgw_zone_id");
-}
-
-const string& RGWZoneParams::get_predefined_name(CephContext *cct) const {
-  return cct->_conf->rgw_zone;
-}
-
-int RGWZoneParams::read_default_id(const DoutPrefixProvider *dpp, string& default_id, optional_yield y,
-				   bool old_format)
-{
-  if (realm_id.empty()) {
-    /* try using default realm */
-    RGWRealm realm;
-    auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-    auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
-    int ret = rgw::read_realm(dpp, y, cfgstore.get(), realm.get_id(), realm.get_name(), realm);
-    //no default realm exist
-    if (ret < 0) {
-      return read_id(dpp, default_zone_name, default_id, y);
-    }
-    realm_id = realm.get_id();
-  }
-
-  return RGWSystemMetaObj::read_default_id(dpp, default_id, y, old_format);
-}
-
-
-int RGWZoneParams::set_as_default(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
-{
-  if (realm_id.empty()) {
-    /* try using default realm */
-    RGWRealm realm;
-    auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-    auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
-    int ret = rgw::read_realm(dpp, y, cfgstore.get(), realm.get_id(), realm.get_name(), realm);
-    if (ret < 0) {
-      ldpp_dout(dpp, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
-      return -EINVAL;
-    }
-    realm_id = realm.get_id();
-  }
-
-  return RGWSystemMetaObj::set_as_default(dpp, y, exclusive);
-}
-
-int RGWZoneParams::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
-{
-  RGWZonePlacementInfo default_placement;
-  default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
-  rgw_pool pool = name + "." + default_storage_pool_suffix;
-  default_placement.storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &pool, nullptr);
-  default_placement.data_extra_pool = name + "." + default_storage_extra_pool_suffix;
-  placement_pools["default-placement"] = default_placement;
-
-  int r = fix_pool_names(dpp, y);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: fix_pool_names returned r=" << r << dendl;
-    return r;
-  }
-
-  r = RGWSystemMetaObj::create(dpp, y, exclusive);
-  if (r < 0) {
-    return r;
-  }
-
-  // try to set as default. may race with another create, so pass exclusive=true
-  // so we don't override an existing default
-  r = set_as_default(dpp, y, true);
-  if (r < 0 && r != -EEXIST) {
-    ldpp_dout(dpp, 10) << "WARNING: failed to set zone as default, r=" << r << dendl;
-  }
-
-  return 0;
 }
 
 rgw_pool fix_zone_pool_dup(const set<rgw_pool>& pools,
@@ -482,82 +376,6 @@ int get_zones_pool_set(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-}
-
-static int get_zones_pool_set(const DoutPrefixProvider *dpp,
-                              CephContext* cct,
-                              RGWSI_SysObj* sysobj_svc,
-                              const list<string>& zone_names,
-                              const string& my_zone_id,
-                              set<rgw_pool>& pool_names,
-		              optional_yield y)
-{
-  for (const auto& name : zone_names) {
-    RGWZoneParams zone(name);
-    int r = zone.init(dpp, cct, sysobj_svc, y);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "Error: failed to load zone " << name
-          << " with " << cpp_strerror(-r) << dendl;
-      return r;
-    }
-    if (zone.get_id() != my_zone_id) {
-      add_zone_pools(zone, pool_names);
-    }
-  }
-  return 0;
-}
-
-int RGWZoneParams::fix_pool_names(const DoutPrefixProvider *dpp, optional_yield y)
-{
-
-  list<string> zones;
-  int r = zone_svc->list_zones(dpp, zones);
-  if (r < 0) {
-    ldpp_dout(dpp, 10) << "WARNING: driver->list_zones() returned r=" << r << dendl;
-  }
-
-  set<rgw_pool> pools;
-  r = get_zones_pool_set(dpp, cct, sysobj_svc, zones, id, pools, y);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "Error: get_zones_pool_names" << r << dendl;
-    return r;
-  }
-
-  domain_root = fix_zone_pool_dup(pools, name, ".rgw.meta:root", domain_root);
-  control_pool = fix_zone_pool_dup(pools, name, ".rgw.control", control_pool);
-  gc_pool = fix_zone_pool_dup(pools, name ,".rgw.log:gc", gc_pool);
-  lc_pool = fix_zone_pool_dup(pools, name ,".rgw.log:lc", lc_pool);
-  log_pool = fix_zone_pool_dup(pools, name, ".rgw.log", log_pool);
-  intent_log_pool = fix_zone_pool_dup(pools, name, ".rgw.log:intent", intent_log_pool);
-  usage_log_pool = fix_zone_pool_dup(pools, name, ".rgw.log:usage", usage_log_pool);
-  user_keys_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.keys", user_keys_pool);
-  user_email_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.email", user_email_pool);
-  user_swift_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.swift", user_swift_pool);
-  user_uid_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.uid", user_uid_pool);
-  roles_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:roles", roles_pool);
-  reshard_pool = fix_zone_pool_dup(pools, name, ".rgw.log:reshard", reshard_pool);
-  otp_pool = fix_zone_pool_dup(pools, name, ".rgw.otp", otp_pool);
-  oidc_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:oidc", oidc_pool);
-  notif_pool = fix_zone_pool_dup(pools, name ,".rgw.log:notif", notif_pool);
-  topics_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:topics", topics_pool);
-  account_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:accounts", account_pool);
-  group_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:groups", group_pool);
-
-  for(auto& iter : placement_pools) {
-    iter.second.index_pool = fix_zone_pool_dup(pools, name, "." + default_bucket_index_pool_suffix,
-                                               iter.second.index_pool);
-    for (auto& pi : iter.second.storage_classes.get_all()) {
-      if (pi.second.data_pool) {
-        rgw_pool& pool = pi.second.data_pool.get();
-        pool = fix_zone_pool_dup(pools, name, "." + default_storage_pool_suffix,
-                                 pool);
-      }
-    }
-    iter.second.data_extra_pool= fix_zone_pool_dup(pools, name, "." + default_storage_extra_pool_suffix,
-                                                   iter.second.data_extra_pool);
-  }
-
-  return 0;
 }
 
 void RGWPeriodConfig::decode_json(JSONObj *obj)
