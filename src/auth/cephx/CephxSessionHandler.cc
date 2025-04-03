@@ -25,7 +25,7 @@
 #define dout_subsys ceph_subsys_auth
 
 namespace {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
   crimson::common::ConfigProxy& conf(CephContext*) {
     return crimson::common::local_conf();
   }

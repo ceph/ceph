@@ -17,7 +17,7 @@
 // like a full memory barrier stalling execution till CPU's store and
 // load buffers are drained.
 
-#if defined(WITH_SEASTAR) && !defined(WITH_BLUESTORE)
+#if defined(WITH_CRIMSON) && !defined(WITH_BLUESTORE)
 
 #include <type_traits>
 
@@ -84,10 +84,10 @@ namespace ceph {
   template <class T> using atomic = dummy_atomic<T>;
 } // namespace ceph
 
-#else  // WITH_SEASTAR
+#else  // WITH_CRIMSON
 
 namespace ceph {
   template <class T> using atomic = ::std::atomic<T>;
 } // namespace ceph
 
-#endif	// WITH_SEASTAR
+#endif	// WITH_CRIMSON

@@ -35,7 +35,7 @@
 #include "common/version.h"
 #include "common/ceph_mutex.h"
 
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 #include "common/Cond.h"
 #endif
 
@@ -442,7 +442,7 @@ void AdminSocket::do_tell_queue()
 	auto reply = new MCommandReply(r, err);
 	reply->set_tid(m->get_tid());
 	reply->set_data(outbl);
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
         // TODO: crimson: handle asok commmand from alien thread
 #else
 	m->get_connection()->send_message(reply);
@@ -458,7 +458,7 @@ void AdminSocket::do_tell_queue()
 	auto reply = new MMonCommandAck(m->cmd, r, err, 0);
 	reply->set_tid(m->get_tid());
 	reply->set_data(outbl);
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
         // TODO: crimson: handle asok commmand from alien thread
 #else
 	m->get_connection()->send_message(reply);
@@ -473,7 +473,7 @@ int AdminSocket::execute_command(
   std::ostream& errss,
   bufferlist *outbl)
 {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
    // TODO: crimson: blocking execute_command() in alien thread
   return -ENOSYS;
 #else

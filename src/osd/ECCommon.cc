@@ -109,7 +109,7 @@ ostream &operator<<(ostream &lhs, const ECCommon::read_result_t &rhs)
 ostream &operator<<(ostream &lhs, const ECCommon::ReadOp &rhs)
 {
   lhs << "ReadOp(tid=" << rhs.tid;
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   if (rhs.op && rhs.op->get_req()) {
     lhs << ", op=";
     rhs.op->get_req()->print(lhs);
@@ -127,7 +127,7 @@ ostream &operator<<(ostream &lhs, const ECCommon::ReadOp &rhs)
 void ECCommon::ReadOp::dump(Formatter *f) const
 {
   f->dump_unsigned("tid", tid);
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   if (op && op->get_req()) {
     f->dump_stream("op") << *(op->get_req());
   }
@@ -148,7 +148,7 @@ ostream &operator<<(ostream &lhs, const ECCommon::RMWPipeline::Op &rhs)
       << " tt=" << rhs.trim_to
       << " tid=" << rhs.tid
       << " reqid=" << rhs.reqid;
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   if (rhs.client_op && rhs.client_op->get_req()) {
     lhs << " client_op=";
     rhs.client_op->get_req()->print(lhs);
@@ -416,7 +416,7 @@ void ECCommon::ReadPipeline::start_read_op(
       std::move(to_read))).first->second;
   dout(10) << __func__ << ": starting " << op << dendl;
   if (_op) {
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
     op.trace = _op->pg_trace;
 #endif
     op.trace.event("start ec read");

@@ -48,7 +48,7 @@
 #include "common/PluginRegistry.h"
 #include "common/valgrind.h"
 #include "include/spinlock.h"
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 #include "mon/MonMap.h"
 #endif
 
@@ -64,7 +64,7 @@ using ceph::bufferlist;
 using ceph::HeartbeatMap;
 
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 namespace crimson::common {
 CephContext::CephContext()
   : _conf{crimson::common::local_conf()},
@@ -105,7 +105,7 @@ PerfCountersCollectionImpl* CephContext::get_perfcounters_collection()
 }
 
 }
-#else  // WITH_SEASTAR
+#else  // WITH_CRIMSON
 namespace {
 
 #ifdef CEPH_DEBUG_MUTEX
@@ -1063,4 +1063,4 @@ void CephContext::set_mon_addrs(const MonMap& mm) {
   set_mon_addrs(mon_addrs);
 }
 }
-#endif	// WITH_SEASTAR
+#endif	// WITH_CRIMSON

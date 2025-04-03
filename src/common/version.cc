@@ -50,7 +50,7 @@ std::string const pretty_version_to_str(void)
       << " (" << STRINGIFY(CEPH_GIT_VER) << ") "
       << ceph_release_name(CEPH_RELEASE)
       << " (" << CEPH_RELEASE_TYPE << ")"
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
       << " (crimson)"
 #endif
       ;

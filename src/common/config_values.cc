@@ -2,7 +2,7 @@
 #include "config_values.h"
 
 #include "config.h"
-#if WITH_SEASTAR
+#if WITH_CRIMSON
 #include "crimson/common/log.h"
 #endif
 
@@ -78,7 +78,7 @@ void ConfigValues::set_logging(int which, const char* val)
     }
     subsys.set_log_level(which, log);
     subsys.set_gather_level(which, gather);
-#if WITH_SEASTAR
+#if WITH_CRIMSON
     crimson::get_logger(which).set_level(crimson::to_log_level(log));
 #endif
   }
