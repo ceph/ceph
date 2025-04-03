@@ -42,6 +42,9 @@ public:
     kVandermonde = 0, kCauchy = 1
   };
 
+  static constexpr int MAX_K = 32;
+  static constexpr int MAX_M = 32;
+
   int k;
   int m;
   int w;
@@ -64,6 +67,13 @@ public:
   {
   }
 
+  uint64_t get_supported_optimizations() const override {
+    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+      FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
+      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
+      FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
+  }
+
   unsigned int
   get_chunk_count() const override
   {
@@ -78,23 +88,29 @@ public:
 
   unsigned int get_chunk_size(unsigned int stripe_width) const override;
 
+  [[deprecated]]
   int encode_chunks(const std::set<int> &want_to_encode,
                     std::map<int, ceph::buffer::list> *encoded) override;
+  int encode_chunks(const shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override;
 
+  [[deprecated]]
   int decode_chunks(const std::set<int> &want_to_read,
                             const std::map<int, ceph::buffer::list> &chunks,
                             std::map<int, ceph::buffer::list> *decoded) override;
+  int decode_chunks(const shard_id_set &want_to_read,
+                    shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override;
 
   int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
 
-  void isa_xor(char **data, char **coding, int blocksize);
+  void isa_xor(char **data, char *coding, int blocksize, int data_vectors);
 
-  void byte_xor(char *data, char *coding, char *data_end);
+  void byte_xor(int data_vects, int blocksize, char **array);
 
   virtual void isa_encode(char **data,
                           char **coding,
                           int blocksize) = 0;
-
 
   virtual int isa_decode(int *erasures,
                          char **data,
@@ -150,6 +166,13 @@ public:
                          char **coding,
                          int blocksize) override;
 
+  void encode_delta(const ceph::bufferptr &old_data,
+                    const ceph::bufferptr &new_data,
+                    ceph::bufferptr *delta_maybe_in_place) override;
+
+  void apply_delta(const shard_id_map<ceph::bufferptr> &in,
+                   shard_id_map<ceph::bufferptr> &out);
+
   unsigned get_alignment() const override;
 
   size_t get_minimum_granularity() override
@@ -163,5 +186,6 @@ public:
   int parse(ceph::ErasureCodeProfile &profile,
             std::ostream *ss) override;
 };
+static_assert(!std::is_abstract<ErasureCodeIsaDefault>());
 
 #endif

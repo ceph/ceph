@@ -52,7 +52,9 @@ namespace ECLegacy {
         chunks[j->first].substr_of(j->second, i, sinfo.get_chunk_size());
            }
       bufferlist bl;
+IGNORE_DEPRECATED
       int r = ec_impl->decode_concat(want_to_read, chunks, &bl);
+END_IGNORE_DEPRECATED
       ceph_assert(r == 0);
       ceph_assert(bl.length() % sinfo.get_chunk_size() == 0);
       out->claim_append(bl);
@@ -89,7 +91,9 @@ namespace ECLegacy {
     }
 
     map<int, vector<pair<int, int>>> min;
+IGNORE_DEPRECATED
     int r = ec_impl->minimum_to_decode(need, avail, &min);
+END_IGNORE_DEPRECATED
     ceph_assert(r == 0);
 
     int chunks_count = 0;
@@ -119,7 +123,9 @@ namespace ECLegacy {
                                    repair_data_per_chunk);
            }
       map<int, bufferlist> out_bls;
+  IGNORE_DEPRECATED
       r = ec_impl->decode(need, chunks, &out_bls, sinfo.get_chunk_size());
+  END_IGNORE_DEPRECATED
       ceph_assert(r == 0);
       for (auto j = out.begin(); j != out.end(); ++j) {
         ceph_assert(out_bls.count(j->first));
@@ -153,7 +159,9 @@ namespace ECLegacy {
       map<int, bufferlist> encoded;
       bufferlist buf;
       buf.substr_of(in, i, sinfo.get_stripe_width());
+IGNORE_DEPRECATED
       int r = ec_impl->encode(want, buf, &encoded);
+END_IGNORE_DEPRECATED
       ceph_assert(r == 0);
       for (map<int, bufferlist>::iterator i = encoded.begin();
            i != encoded.end();

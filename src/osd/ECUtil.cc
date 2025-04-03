@@ -9,6 +9,11 @@
 #include "global/global_context.h"
 #include "include/encoding.h"
 
+/* This file is soon going to be replaced (before next release), so we are going
+ * to simply ignore all deprecated warnings.
+ * */
+IGNORE_DEPRECATED
+
 using namespace std;
 using ceph::bufferlist;
 using ceph::ErasureCodeInterfaceRef;
@@ -261,3 +266,5 @@ const string &ECUtil::get_hinfo_key()
 {
   return HINFO_KEY;
 }
+
+END_IGNORE_DEPRECATED
