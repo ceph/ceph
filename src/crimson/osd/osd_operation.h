@@ -334,24 +334,28 @@ public:
 			  const std::set<std::string> &changed) final;
   void update_from_config(const ConfigProxy &conf);
 
+  bool available() const {
+    return !max_in_progress || in_progress < max_in_progress;
+  }
+
+  template <typename F>
+  auto with_throttle(
+    crimson::osd::scheduler::params_t params,
+    F &&f) {
+    if (!max_in_progress) return f();
+    return acquire_throttle(params)
+      .then(std::forward<F>(f))
+      .finally([this] {
+	release_throttle();
+      });
+  }
+
   template <class OpT, class... Args>
   seastar::future<> with_throttle_while(
     BlockingEvent::Trigger<OpT>&& trigger,
     Args&&... args) {
     return trigger.maybe_record_blocking(
       with_throttle_while(std::forward<Args>(args)...), *this);
-  }
-
-  // Returns std::nullopt if the throttle is acquired immediately,
-  // returns the future for the acquiring otherwise
-  std::optional<seastar::future<>>
-  try_acquire_throttle_now(crimson::osd::scheduler::params_t params) {
-    if (!max_in_progress || in_progress < max_in_progress) {
-      ++in_progress;
-      --pending;
-      return std::nullopt;
-    }
-    return acquire_throttle(params);
   }
 
 private:
