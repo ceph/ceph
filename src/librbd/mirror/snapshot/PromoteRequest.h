@@ -27,13 +27,23 @@ class PromoteRequest {
 public:
   static PromoteRequest *create(ImageCtxT *image_ctx,
                                 const std::string& global_image_id,
+                                const std::string &group_snap_id,
+                                uint64_t *snap_id, Context *on_finish) {
+    return new PromoteRequest(image_ctx, global_image_id, group_snap_id,
+                              snap_id, on_finish);
+  }
+  static PromoteRequest *create(ImageCtxT *image_ctx,
+                                const std::string& global_image_id,
                                 Context *on_finish) {
-    return new PromoteRequest(image_ctx, global_image_id, on_finish);
+    return new PromoteRequest(image_ctx, global_image_id, {}, nullptr,
+                              on_finish);
   }
 
   PromoteRequest(ImageCtxT *image_ctx, const std::string& global_image_id,
+                 const std::string &group_snap_id, uint64_t *snap_id,
                  Context *on_finish)
     : m_image_ctx(image_ctx), m_global_image_id(global_image_id),
+      m_group_snap_id(group_snap_id), m_snap_id(snap_id),
       m_on_finish(on_finish) {
   }
 
@@ -79,7 +89,9 @@ private:
    */
 
   ImageCtxT *m_image_ctx;
-  std::string m_global_image_id;
+  const std::string m_global_image_id;
+  const std::string m_group_snap_id;
+  uint64_t *m_snap_id;
   Context *m_on_finish;
 
   uint64_t m_rollback_snap_id = CEPH_NOSNAP;

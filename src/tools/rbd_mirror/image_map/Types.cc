@@ -72,18 +72,41 @@ private:
 
 } // anonymous namespace
 
+GlobalId::GlobalId(const std::string &global_id) {
+  size_t pos = 0;
+  if (global_id.size() > 1 && global_id[1] == ':') {
+    ceph_assert(global_id[0] >= '0');
+    type = static_cast<MirrorEntityType>(global_id[0] - '0');
+    pos = 2;
+  }
+  id = global_id.substr(pos);
+}
+
+std::string GlobalId::to_str() const {
+  if (type == MIRROR_ENTITY_TYPE_IMAGE) {
+    return id;
+  }
+
+  return stringify(static_cast<int>(type)) + ":" + id;
+}
+
+std::ostream &operator<<(std::ostream &os, const GlobalId &global_id) {
+  return os << "{" << global_id.type << ", " << global_id.id << "}";
+}
+
 PolicyMetaType PolicyData::get_policy_meta_type() const {
   return boost::apply_visitor(GetTypeVisitor<PolicyMetaType>(), policy_meta);
 }
 
 void PolicyData::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   boost::apply_visitor(EncodeVisitor(bl), policy_meta);
+  encode(weight, bl);
   ENCODE_FINISH(bl);
 }
 
 void PolicyData::decode(bufferlist::const_iterator& it) {
-  DECODE_START(1, it);
+  DECODE_START(2, it);
 
   uint32_t policy_meta_type;
   decode(policy_meta_type, it);
@@ -98,6 +121,9 @@ void PolicyData::decode(bufferlist::const_iterator& it) {
   }
 
   boost::apply_visitor(DecodeVisitor(struct_v, it), policy_meta);
+  if (struct_v >= 2) {
+    decode(weight, it);
+  }
   DECODE_FINISH(it);
 }
 
@@ -106,7 +132,7 @@ void PolicyData::dump(Formatter *f) const {
 }
 
 void PolicyData::generate_test_instances(std::list<PolicyData *> &o) {
-  o.push_back(new PolicyData(PolicyMetaNone()));
+  o.push_back(new PolicyData(1, PolicyMetaNone()));
 }
 
 std::ostream &operator<<(std::ostream &os, const ActionType& action_type) {
