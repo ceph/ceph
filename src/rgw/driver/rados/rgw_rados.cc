@@ -3017,9 +3017,8 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
 int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
                                            uint64_t size, uint64_t accounted_size,
                                            map<string, bufferlist>& attrs,
-                                           bool assume_noent, bool modify_tail,
-                                           void *_index_op, optional_yield y,
-                                           bool log_op)
+                                           bool assume_noent, void *_index_op,
+                                           optional_yield y, bool log_op)
 {
   RGWRados::Bucket::UpdateIndex *index_op = static_cast<RGWRados::Bucket::UpdateIndex *>(_index_op);
   RGWRados *store = target->get_store();
@@ -3062,7 +3061,7 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   if (!ptag && !index_op->get_optag()->empty()) {
     ptag = index_op->get_optag();
   }
-  r = target->prepare_atomic_modification(dpp, op, reset_obj, ptag, meta.if_match, meta.if_nomatch, false, modify_tail, y);
+  r = target->prepare_atomic_modification(dpp, op, reset_obj, ptag, meta.if_match, meta.if_nomatch, false, meta.modify_tail, y);
   if (r < 0)
     return r;
 
@@ -3208,7 +3207,7 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
 
   poolid = ioctx.get_id();
 
-  r = target->complete_atomic_modification(dpp);
+  r = target->complete_atomic_modification(dpp, meta.keep_tail);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: complete_atomic_modification returned r=" << r << dendl;
   }
@@ -3324,13 +3323,13 @@ int RGWRados::Object::Write::write_meta(const DoutPrefixProvider *dpp, uint64_t 
   bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
   int r;
   if (assume_noent) {
-    r = _do_write_meta(dpp, size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op, y, log_op);
+    r = _do_write_meta(dpp, size, accounted_size, attrs, assume_noent, (void *)&index_op, y, log_op);
     if (r == -EEXIST) {
       assume_noent = false;
     }
   }
   if (!assume_noent) {
-    r = _do_write_meta(dpp, size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op, y, log_op);
+    r = _do_write_meta(dpp, size, accounted_size, attrs, assume_noent, (void *)&index_op, y, log_op);
   }
   return r;
 }
@@ -4597,8 +4596,6 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     pmanifest = &manifest;
   } else {
     pmanifest = amanifest;
-    /* don't send the object's tail for garbage collection */
-    astate->keep_tail = true;
   }
 
   if (copy_first) {
@@ -4622,6 +4619,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   write_op.meta.olh_epoch = olh_epoch;
   write_op.meta.delete_at = delete_at;
   write_op.meta.modify_tail = !copy_itself;
+  write_op.meta.keep_tail = copy_itself;
 
   ret = write_op.write_meta(dpp, obj_size, astate->accounted_size, attrs, y);
   if (ret < 0) {
@@ -5000,9 +4998,9 @@ int RGWRados::bucket_suspended(const DoutPrefixProvider *dpp, rgw_bucket& bucket
   return 0;
 }
 
-int RGWRados::Object::complete_atomic_modification(const DoutPrefixProvider *dpp)
+int RGWRados::Object::complete_atomic_modification(const DoutPrefixProvider *dpp, bool keep_tail)
 {
-  if ((!manifest)|| state->keep_tail)
+  if ((!manifest) || keep_tail)
     return 0;
 
   cls_rgw_obj_chain chain;
@@ -5554,7 +5552,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
     }
     r = index_op.complete_del(dpp, poolid, epoch, state->mtime, params.remove_objs, y, log_op);
 
-    int ret = target->complete_atomic_modification(dpp);
+    int ret = target->complete_atomic_modification(dpp, false);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: complete_atomic_modification returned ret=" << ret << dendl;
     }
