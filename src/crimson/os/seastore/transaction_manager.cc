@@ -228,7 +228,7 @@ TransactionManager::ref_ret TransactionManager::remove(
       if (result.addr.is_paddr() &&
           !result.addr.get_paddr().is_zero()) {
         fut = cache->retire_extent_addr(
-          t, result.addr.get_paddr(), result.length);
+          t, result.direct_key, result.addr.get_paddr(), result.length);
       }
     }
     return fut.si_then([result=std::move(result), offset, &t, FNAME] {
@@ -352,6 +352,7 @@ TransactionManager::update_lba_mappings(
       pre_allocated_extents.end(),
       chksum_func);
 
+    // laddr -> extent shouldn't be modified here
     return lba_manager->update_mappings(
       t, lextents
     ).si_then([&pextents, this] {
@@ -498,7 +499,7 @@ TransactionManager::rewrite_logical_extent(
   if (get_extent_category(extent->get_type()) == data_category_t::METADATA) {
     assert(extent->is_fully_loaded());
     cache->retire_extent(t, extent);
-    auto nextent = cache->alloc_new_extent_by_type(
+    auto nextent = cache->alloc_new_non_data_extent_by_type(
       t,
       extent->get_type(),
       extent->get_length(),
@@ -526,10 +527,7 @@ TransactionManager::rewrite_logical_extent(
       extent->get_laddr(),
       extent->get_length(),
       extent->get_paddr(),
-      nextent->get_length(),
-      nextent->get_paddr(),
-      nextent->get_last_committed_crc(),
-      nextent.get()
+      *nextent
     ).discard_result();
   } else {
     assert(get_extent_category(extent->get_type()) == data_category_t::DATA);
@@ -570,15 +568,13 @@ TransactionManager::rewrite_logical_extent(
            * avoid this complication. */
           auto fut = base_iertr::now();
           if (first_extent) {
+            assert(off == 0);
             fut = lba_manager->update_mapping(
               t,
-              (extent->get_laddr() + off).checked_to_laddr(),
+              extent->get_laddr(),
               extent->get_length(),
               extent->get_paddr(),
-              nextent->get_length(),
-              nextent->get_paddr(),
-              nextent->get_last_committed_crc(),
-              nextent.get()
+              *nextent
             ).si_then([&refcount](auto c) {
               refcount = c;
             });
@@ -697,12 +693,13 @@ TransactionManager::get_extents_if_live(
   // as parallel transactions may split the extent at the same time.
   ceph_assert(paddr.get_addr_type() == paddr_types_t::SEGMENT);
 
-  return cache->get_extent_if_cached(t, paddr, type
+  return cache->get_extent_if_cached(t, laddr, paddr, len, type
   ).si_then([this, FNAME, type, paddr, laddr, len, &t](auto extent)
 	    -> get_extents_if_live_ret {
-    if (extent && extent->get_length() == len) {
+    if (extent) {
       DEBUGT("{} {}~0x{:x} {} is cached and alive -- {}",
              t, type, laddr, len, paddr, *extent);
+      assert(extent->get_length() == len);
       std::list<CachedExtentRef> res;
       res.emplace_back(std::move(extent));
       return get_extents_if_live_ret(

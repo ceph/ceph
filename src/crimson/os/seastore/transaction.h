@@ -98,17 +98,6 @@ struct rbm_pending_ool_t {
  * - seastore_cache logs
  */
 class Transaction {
-private:
-  auto lookup_read_set(CachedExtentRef ref) const {
-    assert(ref->is_valid());
-    assert(!is_weak());
-    auto it = ref->read_transactions.lower_bound(
-      this, read_set_item_t<Transaction>::trans_cmp_t());
-    bool exists =
-      (it != ref->read_transactions.end() && it->t == this);
-    return std::make_pair(exists, it);
-  }
-
 public:
   using Ref = std::unique_ptr<Transaction>;
   using on_destruct_func_t = std::function<void(Transaction&)>;
@@ -129,18 +118,56 @@ public:
     return result;
   }
 
+  struct get_logical_extent_ret {
+    get_extent_ret state;
+    LogicalCachedExtentRef extent;
+  };
+  get_logical_extent_ret get_logical_extent(laddr_t laddr) {
+    // it's possible that both write_set and retired_set contain
+    // this addr at the same time when addr is absolute and the
+    // corresponding extent is used to map existing extent on disk.
+    // So search write_set first.
+    auto extent = logical_write_set.find(laddr);
+    if (extent != nullptr) {
+      return {get_extent_ret::PRESENT, extent};
+    }
+    if (logical_retired_set.count(laddr)) {
+      return {get_extent_ret::RETIRED, nullptr};
+    }
+    extent = logical_read_set.find(laddr);
+    if (extent != nullptr) {
+      return {get_extent_ret::PRESENT, extent};
+    }
+    return {get_extent_ret::ABSENT, nullptr};
+  }
+
   void add_absent_to_retired_set(CachedExtentRef ref) {
-    add_to_read_set(ref);
+    bool added = do_add_to_read_set(ref);
+    ceph_assert(added);
+    assert(!ref->is_logical() ||
+           logical_read_set.count(ref->cast<LogicalCachedExtent>()->get_laddr()) == 0);
+    // don't add ref to logical_read_set upon retire
     add_present_to_retired_set(ref);
   }
 
   void add_present_to_retired_set(CachedExtentRef ref) {
+    // ref may be in logical_read_set
     assert(!is_weak());
 #ifndef NDEBUG
     auto [result, ext] = do_get_extent(ref->get_paddr());
     assert(result == get_extent_ret::PRESENT);
     assert(ext == ref);
 #endif
+    if (ref->is_logical()) {
+      auto& lextent = static_cast<LogicalCachedExtent&>(*ref);
+      if (lextent.is_pending()) {
+        logical_write_set.remove(lextent);
+      } else {
+        assert(lextent.is_stable());
+        logical_retired_set.insert(lextent);
+      }
+    }
+
     if (ref->is_exist_clean() ||
 	ref->is_exist_mutation_pending()) {
       existing_block_stats.dec(ref);
@@ -169,17 +196,16 @@ public:
     if (is_weak()) {
       return false;
     }
-
-    auto [exists, it] = lookup_read_set(ref);
-    if (exists) {
+    if (do_add_to_read_set(ref)) {
+      if (ref->is_logical()) {
+        logical_read_set.insert(static_cast<LogicalCachedExtent&>(*ref));
+      }
+      return true;
+    } else {
+      assert(!ref->is_logical() ||
+             logical_read_set.exists(*ref->cast<LogicalCachedExtent>()));
       return false;
     }
-
-    auto [iter, inserted] = read_set.emplace(this, ref);
-    ceph_assert(inserted);
-    ref->read_transactions.insert_before(
-      it, const_cast<read_set_item_t<Transaction>&>(*iter));
-    return true;
   }
 
   void add_to_read_set(CachedExtentRef ref) {
@@ -187,13 +213,11 @@ public:
       return;
     }
 
-    auto [exists, it] = lookup_read_set(ref);
-    assert(!exists);
-
-    auto [iter, inserted] = read_set.emplace(this, ref);
-    ceph_assert(inserted);
-    ref->read_transactions.insert_before(
-      it, const_cast<read_set_item_t<Transaction>&>(*iter));
+    bool added = do_add_to_read_set(ref);
+    ceph_assert(added);
+    if (ref->is_logical()) {
+      logical_read_set.insert(static_cast<LogicalCachedExtent&>(*ref));
+    }
   }
 
   void add_fresh_extent(
@@ -225,6 +249,18 @@ public:
     write_set.insert(*ref);
     if (is_backref_node(ref->get_type()))
       fresh_backref_extents++;
+  }
+
+  // Must correspond to add_fresh_extent(), after laddr is available,
+  // and upon the linkage of the logical extent.
+  //
+  // See TM::rewrite_logical_extent(), LBAManager::update_mapping()
+  //     TM::alloc_non_data_extent(),  LBAManager::alloc_extent()
+  //     TM::alloc_data_extents(),     LBAManager::alloc_extents()
+  //     TM::remap_pin(),              LBAManager::remap_mappings()
+  void add_logical_fresh_extent(LogicalCachedExtent& extent) {
+    assert(write_set.exists(extent));
+    logical_write_set.insert(extent);
   }
 
   uint64_t get_num_fresh_backref() const {
@@ -282,9 +318,12 @@ public:
     mutated_block_list.push_back(ref);
     if (!ref->is_exist_mutation_pending()) {
       write_set.insert(*ref);
+      if (ref->is_logical()) {
+        logical_write_set.insert(static_cast<LogicalCachedExtent&>(*ref));
+      }
     } else {
-      assert(write_set.find_offset(ref->get_paddr()) !=
-	     write_set.end());
+      // already added as fresh extent in write_set
+      assert(write_set.exists(*ref));
     }
   }
 
@@ -310,6 +349,11 @@ public:
       where = retired_set.erase(where);
       retired_set.emplace_hint(where, &extent, trans_id);
     }
+    assert(placeholder.is_logical());
+    assert(extent.is_logical());
+    logical_retired_set.replace(
+      static_cast<LogicalCachedExtent&>(extent),
+      static_cast<LogicalCachedExtent&>(placeholder));
   }
 
   auto get_delayed_alloc_list() {
@@ -348,7 +392,7 @@ public:
     return inline_block_list;
   }
 
-  bool is_retired(paddr_t paddr, extent_len_t len) {
+  bool is_stable_extent_retired(paddr_t paddr, extent_len_t len) {
     auto iter = retired_set.lower_bound(paddr);
     if (iter == retired_set.end()) {
       return false;
@@ -419,6 +463,7 @@ public:
       i.set_invalid(*this);
     }
     write_set.clear();
+    logical_write_set.clear();
   }
 
   ~Transaction() {
@@ -426,6 +471,8 @@ public:
     on_destruct(*this);
     invalidate_clear_write_set();
     views.clear();
+    logical_read_set.clear();
+    logical_retired_set.clear();
   }
 
   friend class crimson::os::seastore::SeaStore;
@@ -436,6 +483,7 @@ public:
     offset = 0;
     delayed_temp_offset = 0;
     read_set.clear();
+    logical_read_set.clear();
     fresh_backref_extents = 0;
     invalidate_clear_write_set();
     mutated_block_list.clear();
@@ -449,6 +497,7 @@ public:
     pre_alloc_list.clear();
     pre_inplace_rewrite_list.clear();
     retired_set.clear();
+    logical_retired_set.clear();
     existing_block_list.clear();
     existing_block_stats = {};
     onode_tree_stats = {};
@@ -605,6 +654,31 @@ private:
     }
   }
 
+  auto lookup_read_set(CachedExtentRef ref) const {
+    assert(ref->is_valid());
+    assert(!is_weak());
+    auto it = ref->read_transactions.lower_bound(
+      this, read_set_item_t<Transaction>::trans_cmp_t());
+    bool exists =
+      (it != ref->read_transactions.end() && it->t == this);
+    return std::make_pair(exists, it);
+  }
+
+  bool do_add_to_read_set(CachedExtentRef ref) {
+    assert(!is_weak());
+    assert(ref->is_stable());
+    auto [exists, it] = lookup_read_set(ref);
+    if (exists) {
+      return false;
+    }
+
+    auto [iter, inserted] = read_set.emplace(this, ref);
+    ceph_assert(inserted);
+    ref->read_transactions.insert_before(
+      it, const_cast<read_set_item_t<Transaction>&>(*iter));
+    return true;
+  }
+
   void set_backref_entries(backref_entry_refs_t&& entries) {
     assert(backref_entries.empty());
     backref_entries = std::move(entries);
@@ -624,6 +698,17 @@ private:
 
   device_off_t offset = 0; ///< relative offset of next block
   device_off_t delayed_temp_offset = 0;
+
+  // The extent ownership should be handled by read/write/retired_set.
+  //
+  // The logical sets may not be up-to-date in t,
+  // because the extents are added upon updating the lba mapping.
+  //
+  // logical_read_set won't contain retired extents.
+  LogicalExtentIndex<false> logical_read_set;
+  // User must retire the extent prior to updating the lba mapping.
+  LogicalExtentIndex<false> logical_write_set;
+  LogicalExtentIndex<false> logical_retired_set;
 
   /**
    * read_set

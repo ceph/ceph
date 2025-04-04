@@ -205,14 +205,29 @@ public:
     LOG_PREFIX(TransactionManager::read_extent);
     SUBDEBUGT(seastore_tm, "{}~0x{:x} {} ...",
               t, offset, length, T::TYPE);
+    auto ret = cache->get_logical_extent<T>(t, offset);
+    if (ret.has_value()) {
+      return std::move(*ret
+      ).si_then([FNAME, &t, offset, length](auto extent) {
+        if (length != extent->get_length()) {
+          SUBERRORT(seastore_tm, "{}~0x{:x} {} got wrong extent {}",
+                    t, offset, length, T::TYPE, *extent);
+          ceph_abort("Impossible");
+        }
+        SUBDEBUGT(seastore_tm, "{}~0x{:x} {} got {}",
+                  t, offset, length, T::TYPE, *extent);
+        // User should not know direct laddr under indirection
+        return maybe_indirect_extent_t<T>{extent, std::nullopt, false};
+      });
+    }
     return get_pin(
       t, offset
     ).si_then([this, FNAME, &t, offset, length] (auto pin)
       -> read_extent_ret<T> {
       if (length != pin->get_length() || !pin->get_val().is_real()) {
-        SUBERRORT(seastore_tm, "{}~0x{:x} {} got wrong {}",
+        SUBERRORT(seastore_tm, "{}~0x{:x} {} got wrong pin {}",
                   t, offset, length, T::TYPE, *pin);
-        ceph_assert(0 == "Should be impossible");
+        ceph_abort("Impossible");
       }
       return this->read_pin<T>(t, std::move(pin));
     });
@@ -230,14 +245,24 @@ public:
     LOG_PREFIX(TransactionManager::read_extent);
     SUBDEBUGT(seastore_tm, "{} {} ...",
               t, offset, T::TYPE);
+    auto ret = cache->get_logical_extent<T>(t, offset);
+    if (ret.has_value()) {
+      return std::move(*ret
+      ).si_then([FNAME, &t, offset](auto extent) {
+        SUBDEBUGT(seastore_tm, "{} {} got {}",
+                  t, offset, T::TYPE, *extent);
+        // User should not know direct laddr under indirection
+        return maybe_indirect_extent_t<T>{extent, std::nullopt, false};
+      });
+    }
     return get_pin(
       t, offset
     ).si_then([this, FNAME, &t, offset] (auto pin)
       -> read_extent_ret<T> {
       if (!pin->get_val().is_real()) {
-        SUBERRORT(seastore_tm, "{} {} got wrong {}",
+        SUBERRORT(seastore_tm, "{} {} got wrong pin {}",
                   t, offset, T::TYPE, *pin);
-        ceph_assert(0 == "Should be impossible");
+        ceph_abort("Impossible");
       }
       return this->read_pin<T>(t, std::move(pin));
     });
@@ -556,7 +581,9 @@ public:
 	  if (ext) {
 	    cache->retire_extent(t, ext);
 	  } else {
-	    cache->retire_absent_extent_addr(t, original_paddr, original_len);
+	    // the original_laddr must be direct because the pin is direct
+	    cache->retire_absent_extent_addr(
+	      t, original_laddr, original_paddr, original_len);
 	  }
 	  for (auto &remap : remaps) {
 	    auto remap_offset = remap.offset;
