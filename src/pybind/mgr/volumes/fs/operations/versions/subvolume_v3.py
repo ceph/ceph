@@ -10,10 +10,13 @@ from .subvolume_attrs import SubvolumeStates
 from .subvolume_v2 import SubvolumeV2
 from ..trash import create_trashcan, open_trashcan
 from ...exception import VolumeException
-from ...fs_util import listdir
+from ...fs_util import listdir, create_base_dir
 
 
 log = getLogger(__name__)
+
+
+PATH_MAX = 4096
 
 
 class SubvolumeV3(SubvolumeV2):
@@ -145,17 +148,18 @@ class SubvolumeV3(SubvolumeV2):
             raise VolumeException(-e.args[0], e.args[1])
 
     def _create_v3_layout(self, mode):
-        #for path in (self.subvol_dir, self.roots_dir, self.uuid_dir, self.data_dir):
-        #    self.fs.mkdir(path, mode)
-
-        self.fs.mkdirs(self.mnt_dir.decode('utf-8'), mode)
+        create_base_dir(self.fs, self.group.path, self.vol_spec.DEFAULT_MODE)
+        self.fs.mkdirs(self.mnt_dir, mode)
 
     def create_or_update_meta_file(self, subvol_type):
         super(SubvolumeV3, self).create_or_update_meta_file(subvol_type)
 
-        self.fs.symlink(basename(self.meta), self.current_meta)
+        try:
+            self.fs.symlink(basename(self.meta), self.current_meta)
+        except cephfs.ObjectExists:
+            x = self.fs.readlink(self.current_meta, PATH_MAX)
+            assert basename(self.meta) == x
 
-    # TODO: make sure "fs subvolume create" for v3 is idempotent.
     def _create(self, mode, attrs, subvol_type, auth=True):
         self._create_v3_layout(mode)
 
@@ -211,6 +215,11 @@ class SubvolumeV3(SubvolumeV2):
         if not self.are_there_other_incarnations():
             with open_trashcan(self.fs, self.vol_spec) as trashcan:
                 trashcan.dump(self.subvol_dir)
+
+    def remove(self, retainsnaps=False, internal_cleanup=False):
+        super(SubvolumeV3, self).remove(retainsnaps, internal_cleanup)
+
+        self.fs.unlink(self.current_meta)
 
     # TODO: base dir should be deleted in subvol v3 too when no snaps are
     # retained on any incarnation, right?
