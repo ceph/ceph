@@ -18,7 +18,7 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwMultisiteSyncPolicyStatus } from '../models/rgw-multisite';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import _ from 'lodash';
 
 @Component({
@@ -26,7 +26,7 @@ import _ from 'lodash';
   templateUrl: './rgw-multisite-sync-policy-form.component.html',
   styleUrls: ['./rgw-multisite-sync-policy-form.component.scss']
 })
-export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnInit {
+export class RgwMultisiteSyncPolicyFormComponent extends CdFormCanDeactivate implements OnInit {
   syncPolicyForm: CdFormGroup;
   editing = false;
   action: string;
@@ -84,6 +84,10 @@ export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnIni
         }
       });
     }
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.syncPolicyForm;
   }
 
   goToListView() {

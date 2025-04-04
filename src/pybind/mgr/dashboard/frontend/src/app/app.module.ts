@@ -13,6 +13,7 @@ import { CoreModule } from './core/core.module';
 import { ApiInterceptorService } from './shared/services/api-interceptor.service';
 import { JsErrorHandler } from './shared/services/js-error-handler.service';
 import { SharedModule } from './shared/shared.module';
+import { UnsavedChangesGuard } from './shared/services/unsaved-changes-guard.service';
 
 @NgModule({
   declarations: [AppComponent],
@@ -45,7 +46,9 @@ import { SharedModule } from './shared/shared.module';
       provide: APP_BASE_HREF,
       useValue: '/' + (window.location.pathname.split('/', 1)[1] || '')
     },
-    provideHttpClient(withInterceptorsFromDi())
+    provideHttpClient(withInterceptorsFromDi()),
+    UnsavedChangesGuard
+    
   ]
 })
 export class AppModule {}
