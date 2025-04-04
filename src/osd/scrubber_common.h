@@ -282,7 +282,8 @@ struct PgScrubBeListener {
   virtual const pg_info_t& get_pg_info(ScrubberPasskey) const = 0;
 
   // query the PG backend for the on-disk size of an object
-  virtual uint64_t logical_to_ondisk_size(uint64_t logical_size) const = 0;
+  virtual uint64_t logical_to_ondisk_size(uint64_t logical_size,
+                                 int8_t shard_id) const = 0;
 
   // used to verify our "cleanliness" before scrubbing
   virtual bool is_waiting_for_unreadable_object() const = 0;
