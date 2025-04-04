@@ -4669,11 +4669,7 @@ class TestPausePurging(TestVolumesHelper):
         return sv_path
 
     def _assert_sv_is_absent_in_trash(self, sv, sv_path, sv_files):
-        uuid = self.mount_a.get_shell_stdout('sudo ls volumes/_deleting').\
-            strip()
-
-        trash_sv_path = sv_path.replace('_nogroup', f'_deleting/{uuid}')
-        trash_sv_path = trash_sv_path.replace(sv, '')
+        trash_sv_path = sv_path.replace('_nogroup', '_deleting/')
 
         try:
             sv_files_new = self.mount_a.get_shell_stdout(
@@ -4688,11 +4684,7 @@ class TestPausePurging(TestVolumesHelper):
             self.assertNotIn(filename, sv_files_new)
 
     def _assert_trashed_sv_is_unpurged(self, sv, sv_path, sv_files):
-        uuid = self.mount_a.get_shell_stdout('sudo ls volumes/_deleting').\
-                    strip()
-
-        trash_sv_path = sv_path.replace('_nogroup', f'_deleting/{uuid}')
-        trash_sv_path = trash_sv_path.replace(sv, '')
+        trash_sv_path = sv_path.replace('_nogroup', '_deleting/')
         sv_files_new = self.mount_a.get_shell_stdout(f'sudo ls {trash_sv_path}').\
             strip()
 
@@ -4756,11 +4748,7 @@ class TestPausePurging(TestVolumesHelper):
         self._wait_for_trash_empty()
 
     def _get_trashed_sv_path(self, sv, sv_path):
-        uuid = self.mount_a.get_shell_stdout('sudo ls volumes/_deleting').\
-            strip()
-
-        trashed_sv_path = sv_path.replace('_nogroup', f'_deleting/{uuid}')
-        trashed_sv_path = trashed_sv_path.replace(sv, '')
+        trashed_sv_path = sv_path.replace('_nogroup', '_deleting/')
         return trashed_sv_path
 
     def _get_num_of_files_in_trashed_sv(self, trashed_sv_path):
@@ -4892,7 +4880,9 @@ class TestPauseCloning(TestVolumesHelper):
         # ...and now let's pause cloning
         self.run_ceph_cmd(f'config set mgr {self.CONF_OPT} true')
 
-        path = os.path.dirname(os.path.dirname(sv_path))
+        path = sv_path
+        for i in range(0, 4):
+            path = os.path.dirname(path)
         uuid = self.mount_a.get_shell_stdout(f'ls {path}/{c}').strip()
         # n = num of files, value returned by "wc -l"
         n = self.mount_a.get_shell_stdout(f'ls {path}/{c}/{uuid} | wc -l')
@@ -7384,7 +7374,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1)
 
         # remove snapshot from backend to force the clone failure.
-        snappath = os.path.join(".", "volumes", "_nogroup", subvolume, ".snap", snapshot)
+        roots_dir = os.path.join(".", "volumes", "_nogroup", subvolume, "roots")
+        uuid = self.mount_a.get_shell_stdout(f'ls {roots_dir}').strip()
+        snappath = os.path.join(roots_dir, uuid, ".snap", snapshot)
         self.mount_a.run_shell(['sudo', 'rmdir', snappath], omit_sudo=False)
 
         # wait for clone1 to fail.
