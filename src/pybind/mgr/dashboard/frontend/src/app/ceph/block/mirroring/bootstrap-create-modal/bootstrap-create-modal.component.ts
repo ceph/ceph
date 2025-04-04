@@ -13,8 +13,8 @@ import { BaseModal } from 'carbon-components-angular';
 import _ from 'lodash';
 import { concat, forkJoin, Subscription } from 'rxjs';
 import { last, tap } from 'rxjs/operators';
-
 import { Pool } from '~/app/ceph/pool/pool';
+
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -30,9 +30,7 @@ export class BootstrapCreateModalComponent
   implements OnDestroy, OnInit, AfterViewInit {
   pools: any[] = [];
   token: string;
-
   subs: Subscription;
-
   createBootstrapForm: CdFormGroup;
 
   constructor(
