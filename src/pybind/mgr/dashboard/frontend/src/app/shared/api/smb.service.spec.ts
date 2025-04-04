@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 
-import { SmbService } from './smb.service';
+import { APPJSON, APPYAML, SmbService } from './smb.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { provideHttpClient } from '@angular/common/http';
 import {
@@ -9,23 +9,104 @@ import {
   JOIN_AUTH_RESOURCE,
   USERSGROUPS_RESOURCE
 } from '~/app/ceph/smb/smb.model';
+import { NotificationService } from '../services/notification.service';
+import { ToastrModule } from 'ngx-toastr';
+import { NotificationType } from '../enum/notification-type.enum';
+import { SharedModule } from '../shared.module';
 
 describe('SmbService', () => {
   let service: SmbService;
   let httpTesting: HttpTestingController;
+  let notificationShowSpy: jasmine.Spy;
 
   configureTestBed({
-    providers: [SmbService, provideHttpClient(), provideHttpClientTesting()]
+    providers: [SmbService, provideHttpClient(), provideHttpClientTesting()],
+    imports: [ToastrModule.forRoot(), SharedModule]
   });
 
   beforeEach(() => {
     TestBed.configureTestingModule({});
     service = TestBed.inject(SmbService);
     httpTesting = TestBed.inject(HttpTestingController);
+    notificationShowSpy = spyOn(TestBed.inject(NotificationService), 'show');
+    spyOn(service, 'setDataUploaded');
   });
 
   it('should be created', () => {
     expect(service).toBeTruthy();
+  });
+
+  describe('uploadData function', () => {
+    it('should do nothing if no file is provided', () => {
+      const event: { values: () => Iterator<{ value: any }> } = {
+        values: () => ({
+          next: () => ({ value: null })
+        })
+      };
+
+      service.uploadData(event);
+      expect(notificationShowSpy).not.toHaveBeenCalled();
+      expect(service.setDataUploaded).not.toHaveBeenCalled();
+    });
+
+    it('should show an error notification if file type is invalid', () => {
+      const fakeFile = { type: 'invalid/type' };
+      const event = {
+        values: () => ({
+          next: () => ({ value: { file: fakeFile } })
+        })
+      };
+      service.uploadData(event);
+      expect(notificationShowSpy).toHaveBeenCalledWith(
+        NotificationType.error,
+        'Invalid file type: only .json or .yaml accepted'
+      );
+      expect(service.setDataUploaded).not.toHaveBeenCalled();
+    });
+
+    it('should process a valid JSON file correctly', () => {
+      const jsonContent = '{"foo": "bar"}';
+      const fakeFile = { type: APPJSON, name: 'data.json' };
+      const event = {
+        values: () => ({
+          next: () => ({ value: { file: fakeFile } })
+        })
+      };
+
+      // Create a fake FileReader
+      const fakeReader = {
+        onload: null as (e: ProgressEvent<FileReader>) => void,
+        readAsText(_: any) {
+          this.onload({ target: { result: jsonContent } } as ProgressEvent<FileReader>);
+        }
+      };
+      spyOn(window as any, 'FileReader').and.returnValue(fakeReader);
+      service.uploadData(event);
+      expect(service.setDataUploaded).toHaveBeenCalledWith({ foo: 'bar' });
+    });
+
+    it('should process a valid YAML file correctly', () => {
+      const yamlContent = 'foo: bar';
+      const fakeFile = { type: APPYAML, name: 'data.yaml' };
+      const event = {
+        values: () => ({
+          next: () => ({ value: { file: fakeFile } })
+        })
+      };
+
+      // Create a fake FileReader
+      const fakeReader = {
+        onload: null as (e: ProgressEvent<FileReader>) => void,
+        readAsText(_: any) {
+          this.onload({ target: { result: yamlContent } } as ProgressEvent<FileReader>);
+        }
+      };
+
+      spyOn(window as any, 'FileReader').and.returnValue(fakeReader);
+
+      service.uploadData(event);
+      expect(service.setDataUploaded).toHaveBeenCalledWith({ foo: 'bar' });
+    });
   });
 
   it('should call list clusters', () => {

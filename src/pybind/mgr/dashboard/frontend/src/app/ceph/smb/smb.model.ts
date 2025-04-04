@@ -136,6 +136,8 @@ interface Value {
   groups: Group[];
 }
 
+export type SMBResource = SMBCluster | SMBShare | SMBJoinAuth | SMBUsersGroups;
+
 export const CLUSTER_RESOURCE = 'ceph.smb.cluster' as const;
 export const SHARE_RESOURCE = 'ceph.smb.share' as const;
 export const JOIN_AUTH_RESOURCE = 'ceph.smb.join.auth' as const;

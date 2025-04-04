@@ -1,5 +1,5 @@
 import { HttpClient, HttpResponse } from '@angular/common/http';
-import { Injectable } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
 
 import {
@@ -8,9 +8,16 @@ import {
   ShareRequestModel,
   SMBCluster,
   SMBJoinAuth,
+  SMBResource,
   SMBShare,
   SMBUsersGroups
 } from '~/app/ceph/smb/smb.model';
+import { NotificationService } from '../services/notification.service';
+import { NotificationType } from '../enum/notification-type.enum';
+import * as yaml from 'js-yaml';
+
+export const APPYAML = 'application/yaml';
+export const APPJSON = 'application/json';
 
 @Injectable({
   providedIn: 'root'
@@ -19,11 +26,49 @@ export class SmbService {
   baseURL = 'api/smb';
   private modalDataSubject = new Subject<DomainSettings>();
   modalData$ = this.modalDataSubject.asObservable();
+  dataUploader = signal<SMBResource | null>(null);
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private notificationService: NotificationService) {}
 
   passData(data: DomainSettings) {
     this.modalDataSubject.next(data);
+  }
+
+  setDataUploaded(data: SMBResource): void {
+    this.dataUploader.set(data);
+  }
+
+  uploadData(event: any) {
+    const file = event.values().next().value?.file;
+    if (!file) {
+      return;
+    }
+
+    if (!(file.type === APPYAML || file.type === APPJSON)) {
+      this.notificationService.show(
+        NotificationType.error,
+        $localize`Invalid file type: only .json or .yaml accepted`
+      );
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e: ProgressEvent<FileReader>) => {
+      const fileContents: any = e.target?.result;
+      let parsedContent: any;
+      try {
+        if (file.type === APPYAML) {
+          parsedContent = yaml.load(fileContents);
+        } else if (file.type === APPJSON) {
+          parsedContent = JSON.parse(fileContents);
+        }
+      } catch (error) {
+        this.notificationService.show(NotificationType.error, $localize`${error.message}`);
+      }
+      this.setDataUploaded(parsedContent);
+    };
+
+    reader.readAsText(file);
   }
 
   listClusters(): Observable<SMBCluster[]> {
