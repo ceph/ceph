@@ -21,6 +21,21 @@ if(WITH_JAEGER)
 endif()
 
 if(WITH_RADOSGW_D4N)
+add_executable(ceph_test_rgw_d4n_filter
+  test_d4n_filter.cc
+  )
+target_include_directories(ceph_test_rgw_d4n_filter
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/d4n")
+target_link_libraries(ceph_test_rgw_d4n_filter PRIVATE
+  rgw_common
+  librados
+  ceph-common
+  ${rgw_libs}
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  )
+install(TARGETS ceph_test_rgw_d4n_filter DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 add_executable(ceph_test_rgw_d4n_directory
   test_d4n_directory.cc
   )
