@@ -376,6 +376,122 @@ void PerfCounters::reset()
   }
 }
 
+static std::string get_metric_type(const PerfCounters::perf_counter_data_any_d &d) {
+  if (d.type & PERFCOUNTER_COUNTER) {
+    return "counter";
+  } else {
+    return "gauge";
+  }
+}
+
+static std::string get_metric_name(const PerfCounters::perf_counter_data_any_d &d) {
+  return d.name;
+}
+
+static std::string get_units(const PerfCounters::perf_counter_data_any_d &d) {
+  if (d.unit == UNIT_NONE) {
+    return "none";
+  } else if (d.unit == UNIT_BYTES) {
+    return "bytes";
+  }
+
+  return "";
+}
+
+static std::string get_value_type(const PerfCounters::perf_counter_data_any_d &d) {
+  if (d.type & PERFCOUNTER_LONGRUNAVG) {
+    if (d.type & PERFCOUNTER_TIME) {
+      return "real-integer-pair";
+    } else {
+      return "integer-integer-pair";
+    }
+  } else if (d.type & PERFCOUNTER_HISTOGRAM) {
+    if (d.type & PERFCOUNTER_TIME) {
+      return "real-2d-histogram";
+    } else {
+      return "integer-2d-histogram";
+    }
+  } else {
+    if (d.type & PERFCOUNTER_TIME) {
+      return "real";
+    } else {
+      return "integer";
+    }
+  }
+}
+
+static uint64_t get_value(const PerfCounters::perf_counter_data_any_d &d) {
+  return d.u64;
+}
+
+static std::pair<uint64_t,uint64_t> get_average(const PerfCounters::perf_counter_data_any_d &d) {
+  return d.read_avg();
+}
+static PerfHistogram<> *get_histogram(const PerfCounters::perf_counter_data_any_d &d) {
+  return d.histogram.get();
+}
+
+static std::string get_nick(const PerfCounters::perf_counter_data_any_d &d) {
+  return d.nick ? d.nick : "";
+}
+
+static std::string get_description(const PerfCounters::perf_counter_data_any_d &d) {
+  return d.description ? d.description : "";
+}
+
+static uint8_t get_priority(const PerfCounters::perf_counter_data_any_d &d) {
+  return d.prio;
+}
+
+void PerfCounters::for_each_unlabeled_counter(const std::function<
+                                              void (perfcounter_type_d, std::string_view,
+                                                    std::string_view, std::string_view,
+                                                    std::string_view, std::string_view,
+                                                    std::string_view, int, const PerfType&)> &fn) const {
+  for (auto &data : m_data) {
+    PerfType perf_type = UnknownType();
+    auto perf_name = get_metric_name(data);
+
+    if (data.type & PERFCOUNTER_LONGRUNAVG) {
+      auto avg = get_average(data);
+      if (data.type & PERFCOUNTER_U64) {
+        perf_type = LongRunAverageType(perf_name, avg);
+      } else if (data.type & PERFCOUNTER_TIME) {
+        perf_type = LongRunTimeAverageType(perf_name, avg);
+      }
+    } else if (data.type & PERFCOUNTER_HISTOGRAM) {
+      auto h = get_histogram(data);
+      perf_type = HistogramType(perf_name, h);
+    } else {
+      auto value = get_value(data);
+      if (data.type & PERFCOUNTER_U64) {
+        perf_type = ValueType(perf_name, value);
+      } else if (data.type & PERFCOUNTER_TIME) {
+        perf_type = TimeType(perf_name, value);
+      }
+    }
+
+    fn(data.type,
+       perf_name,
+       get_metric_type(data),
+       get_value_type(data),
+       get_nick(data),
+       get_description(data),
+       get_units(data),
+       get_adjusted_priority(get_priority(data)), perf_type);
+  }
+}
+
+void PerfCounters::get_unlabeled_perf_counters(struct perf_counters *pc) const {
+  auto fn = [&](perfcounter_type_d type, std::string_view name,
+                std::string_view mtype, std::string_view vtype,
+                std::string_view nick, std::string_view description,
+                std::string_view units, int priority, const PerfType &perf_type) {
+    boost::apply_visitor(UnformattedDumpTypeVisitor(name, description, priority, pc), perf_type);
+  };
+
+  for_each_unlabeled_counter(fn);
+}
 
 /* Note:
  * This function dumps one counter. The dump format depends on
@@ -417,109 +533,39 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
     counters_section.emplace(*f, m_name);
   }
 
-  for (perf_counter_data_vec_t::const_iterator d = m_data.begin();
-       d != m_data.end(); ++d) {
-    if (!counter.empty() && counter != d->name) {
+  auto fn = [&](perfcounter_type_d type, std::string_view name,
+                std::string_view mtype, std::string_view vtype,
+                std::string_view nick, std::string_view description,
+                std::string_view units, int priority, const PerfType &perf_type) {
+    if (!counter.empty() && counter != name) {
       // Optionally filter on counter name
-      continue;
+      return;
     }
 
     // Switch between normal and histogram view
-    bool is_histogram = (d->type & PERFCOUNTER_HISTOGRAM) != 0;
+    bool is_histogram = (type & PERFCOUNTER_HISTOGRAM) != 0;
     if (is_histogram != histograms) {
-      continue;
+      return;
     }
 
     if (schema) {
-      Formatter::ObjectSection schedma_section{*f, d->name};
+      Formatter::ObjectSection schema_section{*f, name};
       // we probably should not have exposed this raw field (with bit
       // values), but existing plugins rely on it so we're stuck with
       // it.
-      f->dump_int("type", d->type);
-
-      if (d->type & PERFCOUNTER_COUNTER) {
-	f->dump_string("metric_type", "counter");
-      } else {
-	f->dump_string("metric_type", "gauge");
-      }
-
-      if (d->type & PERFCOUNTER_LONGRUNAVG) {
-	if (d->type & PERFCOUNTER_TIME) {
-	  f->dump_string("value_type", "real-integer-pair");
-	} else {
-	  f->dump_string("value_type", "integer-integer-pair");
-	}
-      } else if (d->type & PERFCOUNTER_HISTOGRAM) {
-	if (d->type & PERFCOUNTER_TIME) {
-	  f->dump_string("value_type", "real-2d-histogram");
-	} else {
-	  f->dump_string("value_type", "integer-2d-histogram");
-	}
-      } else {
-	if (d->type & PERFCOUNTER_TIME) {
-	  f->dump_string("value_type", "real");
-	} else {
-	  f->dump_string("value_type", "integer");
-	}
-      }
-
-      f->dump_string("description", d->description ? d->description : "");
-      if (d->nick != NULL) {
-        f->dump_string("nick", d->nick);
-      } else {
-        f->dump_string("nick", "");
-      }
-      f->dump_int("priority", get_adjusted_priority(d->prio));
-
-      if (d->unit == UNIT_NONE) {
-	f->dump_string("units", "none"); 
-      } else if (d->unit == UNIT_BYTES) {
-	f->dump_string("units", "bytes");
-      }
+      f->dump_int("type", type);
+      f->dump_string("metric_type", mtype);
+      f->dump_string("value_type", vtype);
+      f->dump_string("description", description);
+      f->dump_string("nick", nick);
+      f->dump_int("priority", priority);
+      f->dump_string("units", units);
     } else {
-      if (d->type & PERFCOUNTER_LONGRUNAVG) {
-        Formatter::ObjectSection longrunavg_section{*f, d->name};
-	pair<uint64_t,uint64_t> a = d->read_avg();
-	if (d->type & PERFCOUNTER_U64) {
-	  f->dump_unsigned("avgcount", a.second);
-	  f->dump_unsigned("sum", a.first);
-	} else if (d->type & PERFCOUNTER_TIME) {
-	  f->dump_unsigned("avgcount", a.second);
-	  f->dump_format_unquoted("sum", "%" PRId64 ".%09" PRId64,
-				  a.first / 1000000000ull,
-				  a.first % 1000000000ull);
-          uint64_t count = a.second;
-          uint64_t sum_ns = a.first;
-          if (count) {
-            uint64_t avg_ns = sum_ns / count;
-            f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64,
-                                    avg_ns / 1000000000ull,
-                                    avg_ns % 1000000000ull);
-          } else {
-            f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64, 0, 0);
-          }
-	} else {
-	  ceph_abort();
-	}
-      } else if (d->type & PERFCOUNTER_HISTOGRAM) {
-        ceph_assert(d->type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
-        ceph_assert(d->histogram);
-        Formatter::ObjectSection histogram_section{*f, d->name};
-        d->histogram->dump_formatted(f);
-      } else {
-	uint64_t v = d->u64;
-	if (d->type & PERFCOUNTER_U64) {
-	  f->dump_unsigned(d->name, v);
-	} else if (d->type & PERFCOUNTER_TIME) {
-	  f->dump_format_unquoted(d->name, "%" PRId64 ".%09" PRId64,
-				  v / 1000000000ull,
-				  v % 1000000000ull);
-	} else {
-	  ceph_abort();
-	}
-      }
+      boost::apply_visitor(DumpTypeVisitor(f), perf_type);
     }
-  }
+  };
+
+  for_each_unlabeled_counter(fn);
 }
 
 const std::string &PerfCounters::get_name() const

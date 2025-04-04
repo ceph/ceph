@@ -27,6 +27,7 @@
 #include "common/common_init.h"
 #include "common/config.h"
 #include "common/version.h"
+#include "common/Formatter.h"
 #include "mon/MonClient.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
@@ -2539,4 +2540,103 @@ extern "C" void ceph_free_snap_info_buffer(struct snap_info *snap_info) {
     free((void *)snap_info->snap_metadata[i].key); // malloc'd memory is key+value composite
   }
   free(snap_info->snap_metadata);
+}
+
+extern "C" int ceph_get_perf_counters(struct ceph_mount_info *cmount, struct ceph_perf_counters *perf) {
+  struct perf_counters pc;
+  cmount->get_client()->get_perf_counters(&pc);
+
+  size_t alloc_size = (pc.values.size() * sizeof(struct ceph_perf_type_value))
+    + (pc.times.size() * sizeof(struct ceph_perf_type_time))
+    + (pc.averages.size() * sizeof(struct ceph_perf_type_longrun_average))
+    + (pc.time_averages.size() * sizeof(struct ceph_perf_type_longrun_time_average))
+    + (pc.histograms.size() * sizeof(struct ceph_perf_type_histogram));
+
+  void *ptr = malloc(alloc_size);
+  if (!ptr) {
+    return -ENOMEM;
+  }
+
+  perf->__ptr = ptr;
+  void *_perf = ptr;
+
+  perf->num_values = pc.values.size();
+  perf->values = NULL;
+  if (perf->num_values) {
+    perf->values = (struct ceph_perf_type_value *)_perf;
+    struct ceph_perf_type_value *values = perf->values;
+    for (auto &value : pc.values) {
+      strncpy(values->desc.name, value.desc.name.c_str(), 256);
+      strncpy(values->desc.description, value.desc.description.c_str(), 4096);
+      values->desc.prio = value.desc.prio;
+      values->value = value.value;
+      ++values;
+    }
+
+    _perf = values;
+  }
+
+  perf->num_times = pc.times.size();
+  perf->times = NULL;
+  if (perf->num_times) {
+    perf->times = (struct ceph_perf_type_time *)_perf;
+    struct ceph_perf_type_time *times = perf->times;
+    for (auto &time : pc.times) {
+      strncpy(times->desc.name, time.desc.name.c_str(), 256);
+      strncpy(times->desc.description, time.desc.description.c_str(), 4096);
+      times->desc.prio = time.desc.prio;
+      times->value = time.value;
+      ++times;
+    }
+
+    _perf = times;
+  }
+
+  perf->num_averages = pc.averages.size();
+  perf->averages = NULL;
+  if (perf->num_averages) {
+    perf->averages = (struct ceph_perf_type_longrun_average *)_perf;
+    struct ceph_perf_type_longrun_average *averages = perf->averages;
+    for (auto &average : pc.averages) {
+      strncpy(averages->desc.name, average.desc.name.c_str(), 256);
+      strncpy(averages->desc.description, average.desc.description.c_str(), 4096);
+      averages->desc.prio = average.desc.prio;
+      averages->avgcount = average.avgcount;
+      averages->sum = average.sum;
+      ++averages;
+    }
+
+    _perf = averages;
+  }
+
+  perf->num_time_averages = pc.time_averages.size();
+  perf->time_averages = NULL;
+  if (perf->num_time_averages) {
+    perf->time_averages = (struct ceph_perf_type_longrun_time_average *)_perf;
+    struct ceph_perf_type_longrun_time_average *time_averages = perf->time_averages;
+    for (auto &time_average : pc.time_averages) {
+      strncpy(time_averages->desc.name, time_average.desc.name.c_str(), 256);
+      strncpy(time_averages->desc.description, time_average.desc.description.c_str(), 4096);
+      time_averages->desc.prio = time_average.desc.prio;
+      time_averages->avgcount = time_average.avgcount;
+      time_averages->sum = time_average.sum;
+      time_averages->avgtime = time_average.avgtime;
+      ++time_averages;
+    }
+
+    _perf = time_averages;
+  }
+
+  // no histogram support for now.
+  perf->num_histograms = 0;
+  perf->histograms = NULL;
+
+  return 0;
+}
+
+void ceph_free_perf_counters(struct ceph_perf_counters *perf) {
+  if (perf->__ptr) {
+    free(perf->__ptr);
+    perf->__ptr = NULL;
+  }
 }
