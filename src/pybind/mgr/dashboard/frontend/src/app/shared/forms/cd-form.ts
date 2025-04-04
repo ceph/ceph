@@ -7,8 +7,8 @@ export enum LoadingStatus {
   None
 }
 
-export class CdForm extends BaseModal {
-  constructor() {
+export abstract class CdForm extends BaseModal {
+    constructor() {
     super();
   }
 
@@ -28,5 +28,12 @@ export class CdForm extends BaseModal {
 
   loadingNone() {
     this.loading = LoadingStatus.None;
+  }
+
+  hasUnsavedChanges(): boolean {
+    if (!this['form']) {
+      return false;
+    }
+    return this['form'].dirty;
   }
 }
