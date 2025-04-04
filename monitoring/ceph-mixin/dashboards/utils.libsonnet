@@ -412,6 +412,7 @@ local timeSeries = import 'timeseries_panel.libsonnet';
     isGrayOnNoData=null,
     isHideAlertsOnDisable=null,
     isIgnoreOKColors=null,
+    noValue=null,
   )::
     g.statPanel.new(
       title=title,
@@ -428,6 +429,7 @@ local timeSeries = import 'timeseries_panel.libsonnet';
       pluginVersion=pluginVersion,
       decimals=decimals,
       thresholdsMode=thresholdsMode,
+      noValue=noValue
     ) + {
       [if interval != null then 'interval']: interval,
       [if maxDataPoints != null then 'maxDataPoints']: maxDataPoints,
@@ -576,6 +578,7 @@ local timeSeries = import 'timeseries_panel.libsonnet';
     },
   timeSeriesPanel(
     title='',
+    description='',
     datasource=null,
     gridPosition={},
     colorMode='palette-classic',
@@ -585,7 +588,7 @@ local timeSeries = import 'timeseries_panel.libsonnet';
     axisPlacement='auto',
     barAlignment=0,
     drawStyle='line',
-    fillOpacity=0,
+    fillOpacity=8,
     gradientMode='none',
     lineInterpolation='linear',
     lineWidth=0,
@@ -609,9 +612,11 @@ local timeSeries = import 'timeseries_panel.libsonnet';
     scaleDistributionLog=null,
     sortBy=null,
     sortDesc=null,
+    noValue=null,
   )::
     timeSeries.new(
       title=title,
+      description=description,
       gridPos=gridPosition,
       datasource=datasource,
       colorMode=colorMode,
@@ -643,6 +648,7 @@ local timeSeries = import 'timeseries_panel.libsonnet';
       scaleDistributionLog=scaleDistributionLog,
       sortBy=sortBy,
       sortDesc=sortDesc,
+      noValue=noValue,
     ) + {
       pluginVersion: pluginVersion,
       [if interval != null then 'interval']: interval,
