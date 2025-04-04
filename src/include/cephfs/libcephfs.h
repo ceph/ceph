@@ -134,6 +134,7 @@ struct ceph_ll_io_info {
 
 struct ceph_fscrypt_key_identifier;
 struct fscrypt_policy_v2;
+struct fscrypt_remove_key_arg;
 
 /* setattr mask bits (up to an int in size) */
 #ifndef CEPH_SETATTR_MODE

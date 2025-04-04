@@ -11421,7 +11421,7 @@ success:
     // r is expected to hold value of effective bytes read.
     // in the case of fscrypt, this will be the logical size. So if all bytes read
     // is equal to read_len, then display logical size.
-    if (read_len == read) {
+    if ((int)read_len == read) {
       r = len;
     } else {
       r = read;
