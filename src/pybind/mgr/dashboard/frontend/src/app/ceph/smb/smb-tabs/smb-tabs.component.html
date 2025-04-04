@@ -5,42 +5,26 @@
   [cacheActive]="false">
   <cds-tab
     heading="Clusters"
-    [tabContent]="clusters"
     i18n-heading
+    [active]="activeTab === Tabs.clusters"
     (selected)="onSelected(Tabs.clusters)">
   </cds-tab>
   <cds-tab
     heading="Active Directory"
-    [tabContent]="joinAuth"
     i18n-heading
-    (selected)="onSelected(Tabs.joinAuths)">
+    [active]="activeTab === Tabs.activeDirectory"
+    (selected)="onSelected(Tabs.activeDirectory)">
   </cds-tab>
   <cds-tab
     heading="Standalone"
-    [tabContent]="usersgroups"
     i18n-heading
-    (selected)="onSelected(Tabs.usersgroups)">
+    [active]="activeTab === Tabs.standalone"
+    (selected)="onSelected(Tabs.standalone)">
   </cds-tab>
   <cds-tab
     heading="Overview"
-    [tabContent]="overview"
     i18n-heading
+    [active]="activeTab === Tabs.overview"
     (selected)="onSelected(Tabs.overview)">
   </cds-tab>
 </cds-tabs>
-
-<ng-template #clusters>
-  <cd-smb-cluster-list></cd-smb-cluster-list>
-</ng-template>
-
-<ng-template #joinAuth>
-  <cd-smb-join-auth-list></cd-smb-join-auth-list>
-</ng-template>
-
-<ng-template #usersgroups>
-  <cd-smb-users-list></cd-smb-users-list>
-</ng-template>
-
-<ng-template #overview>
-  <cd-smb-overview></cd-smb-overview>
-</ng-template>
