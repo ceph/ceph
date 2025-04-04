@@ -317,6 +317,28 @@ struct RGWZoneParams : RGWSystemMetaObj {
 };
 WRITE_CLASS_ENCODER(RGWZoneParams)
 
+struct RGWCrossZoneGroup {
+  rgw::SyncPeerSet enable;
+  rgw::SyncPeerSet forbid;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(enable, bl);
+    encode(forbid, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(enable, bl);
+    decode(forbid, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter*) const;
+  void decode_json(JSONObj*);
+  static void generate_test_instances(std::list<RGWCrossZoneGroup*>&);
+};
+WRITE_CLASS_ENCODER(RGWCrossZoneGroup)
+
 struct RGWZoneGroup : public RGWSystemMetaObj {
   std::string api_name;
   std::list<std::string> endpoints;
@@ -352,6 +374,13 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   rgw_sync_policy_info sync_policy;
   rgw::zone_features::set enabled_features;
 
+  // Override the realm's default configuration to enable/disable
+  // cross-zonegroup replication to/from specific peer zonegroups.
+  RGWCrossZoneGroup cross_zonegroup_export;
+  RGWCrossZoneGroup cross_zonegroup_import;
+  /// Override the realm's default for same-zonegroup replication policy.
+  rgw::CanSync same_zonegroup = rgw::CanSync::Allowed;
+
   RGWZoneGroup(): is_master(false){}
   RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
   explicit RGWZoneGroup(const std::string &_name):RGWSystemMetaObj(_name) {}
@@ -369,7 +398,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   void post_process_params(const DoutPrefixProvider *dpp, optional_yield y);
 
   void encode(bufferlist& bl) const override {
-    ENCODE_START(6, 1, bl);
+    ENCODE_START(7, 1, bl);
     encode(name, bl);
     encode(api_name, bl);
     encode(is_master, bl);
@@ -384,11 +413,14 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     encode(realm_id, bl);
     encode(sync_policy, bl);
     encode(enabled_features, bl);
+    encode(cross_zonegroup_export, bl);
+    encode(cross_zonegroup_import, bl);
+    encode(same_zonegroup, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) override {
-    DECODE_START(6, bl);
+    DECODE_START(7, bl);
     decode(name, bl);
     decode(api_name, bl);
     decode(is_master, bl);
@@ -414,6 +446,11 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     }
     if (struct_v >= 6) {
       decode(enabled_features, bl);
+    }
+    if (struct_v >= 7) {
+      decode(cross_zonegroup_export, bl);
+      decode(cross_zonegroup_import, bl);
+      decode(same_zonegroup, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -528,7 +565,6 @@ struct RGWPeriodConfig
 };
 WRITE_CLASS_ENCODER(RGWPeriodConfig)
 
-class RGWRealm;
 class RGWPeriod;
 
 class RGWRealm : public RGWSystemMetaObj
@@ -536,6 +572,11 @@ class RGWRealm : public RGWSystemMetaObj
 public:
   std::string current_period;
   epoch_t epoch{0}; //< realm epoch, incremented for each new period
+  /// Defaults for cross-zonegroup and same-zonegroup replication policy.
+  /// Unless Forbidden, individual zonegroups can override this behavior
+  /// to/from other zonegroups.
+  rgw::CanSync cross_zonegroup = rgw::CanSync::Enabled;
+  rgw::CanSync same_zonegroup = rgw::CanSync::Enabled;
 
   int create_control(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
   int delete_control(const DoutPrefixProvider *dpp, optional_yield y);
@@ -547,18 +588,24 @@ public:
   virtual ~RGWRealm() override;
 
   void encode(bufferlist& bl) const override {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     RGWSystemMetaObj::encode(bl);
     encode(current_period, bl);
     encode(epoch, bl);
+    encode(cross_zonegroup, bl);
+    encode(same_zonegroup, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) override {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     RGWSystemMetaObj::decode(bl);
     decode(current_period, bl);
     decode(epoch, bl);
+    if (struct_v >= 2) {
+      decode(cross_zonegroup, bl);
+      decode(same_zonegroup, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -1018,5 +1065,16 @@ class SiteConfig {
 
 /// Test whether all zonegroups in the realm support the given zone feature.
 bool all_zonegroups_support(const SiteConfig& site, std::string_view feature);
+
+/// Test whether a destination zonegroup should sync from the given source
+/// zonegroup.
+bool should_sync_from(const RGWRealm& realm,
+                      const RGWZoneGroup& dest,
+                      const RGWZoneGroup& source);
+
+/// Test whether a destination bucket should sync from the given source bucket.
+bool should_sync_from(const SiteConfig& site,
+                      const RGWBucketInfo& dest,
+                      const RGWBucketInfo& source);
 
 } // namespace rgw
