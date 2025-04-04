@@ -69,7 +69,15 @@ class SubvolumeBase(object):
 
     @property
     def config_path(self):
-        return os.path.join(self.base_path, b".meta")
+        try:
+            self.fs.stat(os.path.join(self.base_path, b".meta"))
+            return os.path.join(self.base_path, b".meta")
+        except:
+            try:
+                self.fs.stat(os.path.join(self.base_path, b".meta.last"))
+                return os.path.join(self.base_path, b".meta.last")
+            except:
+                return os.path.join(self.base_path, b".meta")
 
     @property
     def legacy_dir(self):
