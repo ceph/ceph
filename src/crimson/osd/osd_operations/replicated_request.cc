@@ -69,6 +69,7 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
 {
   LOG_PREFIX(RepRequest::with_pg_interruptible);
   DEBUGI("{}", *this);
+  req->finish_decode();
   co_await this->template enter_stage<interruptor>(repop_pipeline(*pg).process);
   co_await interruptor::make_interruptible(this->template with_blocking_event<
     PG_OSDMapGate::OSDMapBlocker::BlockingEvent

@@ -1428,7 +1428,6 @@ seastar::future<> OSD::handle_rep_op(
   crimson::net::ConnectionRef conn,
   Ref<MOSDRepOp> m)
 {
-  m->finish_decode();
   return pg_shard_manager.start_pg_operation<RepRequest>(
     std::move(conn),
     std::move(m)).second;
