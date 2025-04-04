@@ -1404,6 +1404,7 @@ record_t Cache::prepare_record(
 
     bufferlist bl;
     i->prepare_write();
+    i->set_io_wait();
     i->prepare_commit();
     bl.append(i->get_bptr());
     if (is_root_type(i->get_type())) {
@@ -1458,6 +1459,7 @@ record_t Cache::prepare_record(
     assert(!i->is_inline());
     get_by_ext(efforts.fresh_ool_by_ext,
                i->get_type()).increment(i->get_length());
+    i->set_io_wait();
     i->prepare_commit();
     if (is_backref_mapped_type(i->get_type())) {
       laddr_t alloc_laddr;
@@ -1746,7 +1748,26 @@ void Cache::complete_commit(
     bool is_inline = false;
     if (i->is_inline()) {
       is_inline = true;
-      i->set_paddr(final_block_start.add_relative(i->get_paddr()));
+      auto new_paddr = final_block_start.add_relative(i->get_paddr());
+      // With the bottom-up lba iterator construction in place, chances are
+      // that a transaction may hit an initial_pending lba node committed
+      // by another transaction, we need to adjust the hitting transaction's
+      // read_set in this case in the segment device scenario as the previous
+      // initial_pending nodes' paddrs have been changed
+      //
+      // TODO: may need to figure out a more elegant way.
+      std::vector<read_extent_set_t<Transaction>::node_type> node_vec;
+      for (auto &item : i->read_transactions) {
+	if (item.t->get_trans_id() == t.get_trans_id()) {
+	  continue;
+	}
+	node_vec.emplace_back(item.t->read_set.extract(item));
+      }
+      i->set_paddr(new_paddr);
+      for (auto &node : node_vec) {
+	auto pt = node.value().t;
+	pt->read_set.insert(std::move(node));
+      }
     }
 #ifndef NDEBUG
     if (i->get_paddr().is_root() || epm.get_checksum_needed(i->get_paddr())) {
@@ -1767,6 +1788,7 @@ void Cache::complete_commit(
     assert(!i->is_dirty());
     const auto t_src = t.get_src();
     touch_extent(*i, &t_src, t.get_cache_hint());
+    i->complete_io();
     epm.commit_space_used(i->get_paddr(), i->get_length());
 
     // Note: commit extents and backref allocations in the same place
