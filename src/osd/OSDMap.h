@@ -1350,6 +1350,12 @@ public:
     return false;
   }
 
+  const std::vector<int> pgtemp_primaryfirst(const pg_pool_t& pool,
+			   const std::vector<int>& pg_temp) const;
+  const std::vector<int> pgtemp_undo_primaryfirst(const pg_pool_t& pool,
+			   const pg_t pg,
+			   const std::vector<int>& acting) const;
+
   bool in_removed_snaps_queue(int64_t pool, snapid_t snap) const {
     auto p = removed_snaps_queue.find(pool);
     if (p == removed_snaps_queue.end()) {

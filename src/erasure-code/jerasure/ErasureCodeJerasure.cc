@@ -185,13 +185,13 @@ int ErasureCodeJerasure::decode_chunks(const shard_id_set &want_to_read,
   unsigned int size = 0;
   shard_id_set erasures_set;
   shard_id_set to_free;
-  erasures_set.insert_range(shard_id_t(0), k + m);
   int erasures[k + m + 1];
   int erasures_count = 0;
   char *data[k];
   char *coding[m];
   memset(data, 0, sizeof(char*) * k);
   memset(coding, 0, sizeof(char*) * m);
+  erasures_set.insert_range(shard_id_t(0), k + m);
 
   for (auto &&[shard, ptr] : in) {
     if (size == 0) size = ptr.length();
@@ -214,6 +214,7 @@ int ErasureCodeJerasure::decode_chunks(const shard_id_set &want_to_read,
     else {
       coding[static_cast<int>(shard) - k] = const_cast<char*>(ptr.c_str());
     }
+    erasures_set.insert(shard);
   }
 
   for (int i = 0; i < k + m; i++) {
@@ -221,16 +222,19 @@ int ErasureCodeJerasure::decode_chunks(const shard_id_set &want_to_read,
     if (*buf == nullptr) {
       *buf = (char *)malloc(size);
       to_free.insert(shard_id_t(i));
+      /* If we are inventing a buffer for non-erasure shard, its zeros! */
+      if (i < k && !erasures_set.contains(shard_id_t(i))) {
+        memset(*buf, 0, size);
+      }
     }
   }
 
   for (auto && shard : erasures_set) {
     erasures[erasures_count++] = static_cast<int>(shard);
   }
-
-
   erasures[erasures_count] = -1;
   ceph_assert(erasures_count > 0);
+
   int r = jerasure_decode(erasures, data, coding, size);
   for (auto & shard : to_free) {
     int i = static_cast<int>(shard);

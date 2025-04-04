@@ -147,6 +147,7 @@ struct ECListener {
   // RMWPipeline
   virtual const pg_pool_t &get_pool() const = 0;
   virtual const std::set<pg_shard_t> &get_acting_recovery_backfill_shards() const = 0;
+  virtual const shard_id_set &get_acting_recovery_backfill_shard_id_set() const = 0;
   // XXX
   virtual bool should_send_op(
     pg_shard_t peer,

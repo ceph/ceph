@@ -429,7 +429,8 @@ public:
     CephContext *cct,
     ceph::ErasureCodeInterfaceRef ec_impl,
     uint64_t stripe_width,
-    ECSwitch *s);
+    ECSwitch *s,
+    ECExtentCache::LRU &ignored);
 
   int objects_get_attrs(
     const hobject_t &hoid,
@@ -443,7 +444,7 @@ public:
     ScrubMapBuilder &pos,
     ScrubMap::object &o);
 
-  uint64_t be_get_ondisk_size(uint64_t logical_size) const {
+  uint64_t be_get_ondisk_size(uint64_t logical_size, shard_id_t ignored) const {
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
 };
