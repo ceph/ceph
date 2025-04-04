@@ -145,18 +145,10 @@ struct rgw_rados_ref {
     return ioctx.aio_operate(obj.oid, c, op, pbl);
   }
 
-  int watch(uint64_t* handle, librados::WatchCtx2* ctx) {
-    return ioctx.watch2(obj.oid, handle, ctx);
-  }
+  int watch(const DoutPrefixProvider* dpp, uint64_t* handle,
+            librados::WatchCtx2* ctx, optional_yield y);
 
-  int aio_watch(librados::AioCompletion* c, uint64_t* handle,
-		librados::WatchCtx2 *ctx) {
-    return ioctx.aio_watch(obj.oid, c, handle, ctx);
-  }
-
-  int unwatch(uint64_t handle) {
-    return ioctx.unwatch2(handle);
-  }
+  int unwatch(const DoutPrefixProvider* dpp, uint64_t handle, optional_yield y);
 
   int notify(const DoutPrefixProvider* dpp, bufferlist& bl, uint64_t timeout_ms,
 	     bufferlist* pbl, optional_yield y) {
