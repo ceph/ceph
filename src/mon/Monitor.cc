@@ -23,6 +23,7 @@
 #include <limits.h>
 #include <cstring>
 #include <boost/scope_exit.hpp>
+#include <boost/make_shared.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
 #include "json_spirit/json_spirit_reader.h"
