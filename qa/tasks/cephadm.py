@@ -18,6 +18,7 @@ import jinja2
 from copy import deepcopy
 from io import BytesIO, StringIO
 from tarfile import ReadError
+from tasks.ceph import Rotater
 from tasks.ceph_manager import CephManager
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -106,7 +107,9 @@ def _role_to_remote(rctx, role):
     return None
 
 
-def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
+def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=None, **kwargs):
+    if extra_cephadm_args is None:
+        extra_cephadm_args = []
     teuthology.get_testdir(ctx)
     return remote.run(
         args=[
@@ -853,6 +856,49 @@ def ceph_bootstrap(ctx, config):
                     '*', '--mode', '0755'],
                    check_status=False)
 
+        # default logrotate config for cluster logs does not work for teuthology
+        # where debug logging tends to be enabled and massive log files that
+        # are multiple Gigabytes can be generate in tests that last an hour or two
+        teuth_cluster_logrotate_config = """# created by cephadm
+/var/log/ceph/{{ fsid }}/*.log {
+    rotate 100
+    size 2G
+    compress
+    sharedscripts
+    postrotate
+        killall -q -1 {{ targets|join(' ') }} || pkill -1 -x '{{ targets|join('|') }}' || true
+    endscript
+    missingok
+    notifempty
+    su root root
+}"""
+        bootstrap_remote.write_file(
+            path='/etc/ceph/logrotate.conf',
+            data=teuth_cluster_logrotate_config)
+
+        # It is necessary for upgrade tests to manually write the logrotate
+        # config files to the hosts as the version we're upgrading from (which
+        # is what we would have bootstrapped with here) won't support the
+        # ceph orch write-custom-logrotate command
+        require_manual_writing_of_logrotate_configs = False
+        try:
+            _shell(ctx, cluster_name, bootstrap_remote,
+                   ['ceph', 'orch', 'write-custom-logrotate', 'cluster', '-i', '/mnt/logrotate.conf'],
+                   extra_cephadm_args=['--mount', '/etc/ceph/logrotate.conf'])
+        except CommandFailedError as e:
+            if e.exitstatus == 22:  # invalid command, likely means we're bootstrapping an earlier version
+                require_manual_writing_of_logrotate_configs = True
+                log.info('Using a version that doesn\'t support write-custom-logrotate. '
+                         'Falling back to manual writing of logrotate configs')
+            else:
+                raise e
+
+        # we are setting ignore_missing to True for our Rotater instance as there
+        # will be a delay between when the Rotater starts running and when cephadm
+        # has the chance to actually write the logrotate configs out
+        logrotater = Rotater(ctx, f'/etc/logrotate.d/ceph-{fsid}', ignore_missing=True)
+        logrotater.begin()
+
         # add other hosts
         for remote, roles in _cephadm_remotes(ctx, log_excluded=True):
             if remote == bootstrap_remote:
@@ -867,6 +913,15 @@ def ceph_bootstrap(ctx, config):
             remote.write_file(
                 path='/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
                 data=ctx.ceph[cluster_name].admin_keyring)
+
+            if require_manual_writing_of_logrotate_configs:
+                log.info(f'Manually writing logrotate config to {remote.shortname}')
+                remote.write_file(
+                    path=f'/etc/logrotate.d/ceph-{fsid}',
+                    data=teuth_cluster_logrotate_config,
+                    sudo=True,
+                    mkdir=True
+                )
 
             log.info('Adding host %s to orchestrator...' % remote.shortname)
             _shell(ctx, cluster_name, bootstrap_remote, [
