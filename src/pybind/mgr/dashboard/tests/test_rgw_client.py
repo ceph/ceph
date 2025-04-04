@@ -6,7 +6,8 @@ from unittest.mock import Mock, patch
 
 from .. import mgr
 from ..exceptions import DashboardException
-from ..services.rgw_client import NoRgwDaemonsException, RgwClient, _parse_frontend_config
+from ..services.rgw_client import NoRgwDaemonsException, RgwClient, \
+    _determine_rgw_addr, _parse_frontend_config
 from ..services.service import NoCredentialsException
 from ..settings import Settings
 from ..tests import CLICommandTestMixin, RgwStub
@@ -272,6 +273,57 @@ class RgwClientTest(TestCase, CLICommandTestMixin):
                 retention_period_days=days,
                 retention_period_years=years
             ))
+
+    def test_set_rgw_hostname(self):
+        result = self.exec_cmd(
+            'set-rgw-hostname',
+            daemon_name='test_daemon',
+            hostname='example.hostname.com'
+        )
+        self.assertEqual(
+            result,
+            'RGW hostname for daemon test_daemon configured'
+        )
+        self.assertEqual(
+            Settings.RGW_HOSTNAME_PER_DAEMON,
+            {'test_daemon': 'example.hostname.com'}
+        )
+
+    @patch("dashboard.services.rgw_client.RgwDaemon")
+    def test_hostname_when_rgw_hostname_config_is_set(self, mock_daemons):
+        mock_instance = Mock()
+        mock_daemons.return_value = mock_instance
+
+        self.test_set_rgw_hostname()
+
+        daemon_info = {
+            'metadata': {
+                'id': 'test_daemon',
+                'hostname': 'my-hostname.com',
+                'frontend_config#0': 'beast port=8000'
+            },
+            'addr': '192.0.2.1'
+        }
+
+        result = _determine_rgw_addr(daemon_info)
+        self.assertEqual(result.host, "example.hostname.com")
+
+    @patch("dashboard.services.rgw_client.RgwDaemon")
+    def test_hostname_when_rgw_hostname_config_is_not_set(self, mock_daemons):
+        mock_instance = Mock()
+        mock_daemons.return_value = mock_instance
+
+        daemon_info = {
+            'metadata': {
+                'id': 'test_daemon',
+                'hostname': 'my.hostname.com',
+                'frontend_config#0': 'beast port=8000'
+            },
+            'addr': '192.168.178.3:49774/1534999298'
+        }
+
+        result = _determine_rgw_addr(daemon_info)
+        self.assertEqual(result.host, "192.168.178.3")
 
 
 class RgwClientHelperTest(TestCase):
