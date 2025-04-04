@@ -210,9 +210,9 @@ public:
     ).si_then([this, FNAME, &t, offset, length] (auto pin)
       -> read_extent_ret<T> {
       if (length != pin->get_length() || !pin->get_val().is_real()) {
-        SUBERRORT(seastore_tm, "{}~0x{:x} {} got wrong {}",
+        SUBERRORT(seastore_tm, "{}~0x{:x} {} got wrong pin {}",
                   t, offset, length, T::TYPE, *pin);
-        ceph_assert(0 == "Should be impossible");
+        ceph_abort("Impossible");
       }
       return this->read_pin<T>(t, std::move(pin));
     });
@@ -235,9 +235,9 @@ public:
     ).si_then([this, FNAME, &t, offset] (auto pin)
       -> read_extent_ret<T> {
       if (!pin->get_val().is_real()) {
-        SUBERRORT(seastore_tm, "{} {} got wrong {}",
+        SUBERRORT(seastore_tm, "{} {} got wrong pin {}",
                   t, offset, T::TYPE, *pin);
-        ceph_assert(0 == "Should be impossible");
+        ceph_abort("Impossible");
       }
       return this->read_pin<T>(t, std::move(pin));
     });
