@@ -1401,36 +1401,36 @@ seastar::future<> OSD::handle_update_log_missing(
   crimson::net::ConnectionRef conn,
   Ref<MOSDPGUpdateLogMissing> m)
 {
-  return pg_shard_manager.start_pg_operation<LogMissingRequest>(
+  return pg_shard_manager.start_pg_operation_active<LogMissingRequest>(
     std::move(conn),
-    std::move(m)).second;
+    std::move(m));
 }
 
 seastar::future<> OSD::handle_update_log_missing_reply(
   crimson::net::ConnectionRef conn,
   Ref<MOSDPGUpdateLogMissingReply> m)
 {
-  return pg_shard_manager.start_pg_operation<LogMissingRequestReply>(
+  return pg_shard_manager.start_pg_operation_active<LogMissingRequestReply>(
     std::move(conn),
-    std::move(m)).second;
+    std::move(m));
 }
 
 seastar::future<> OSD::handle_pg_pct(
   crimson::net::ConnectionRef conn,
   Ref<MOSDPGPCT> m)
 {
-  return pg_shard_manager.start_pg_operation<PGPCTRequest>(
+  return pg_shard_manager.start_pg_operation_active<PGPCTRequest>(
     std::move(conn),
-    std::move(m)).second;
+    std::move(m));
 }
 
 seastar::future<> OSD::handle_rep_op(
   crimson::net::ConnectionRef conn,
   Ref<MOSDRepOp> m)
 {
-  return pg_shard_manager.start_pg_operation<RepRequest>(
+  return pg_shard_manager.start_pg_operation_active<RepRequest>(
     std::move(conn),
-    std::move(m)).second;
+    std::move(m));
 }
 
 seastar::future<> OSD::handle_rep_op_reply(
@@ -1473,9 +1473,9 @@ seastar::future<> OSD::handle_scrub_message(
   crimson::net::ConnectionRef conn,
   Ref<MOSDFastDispatchOp> m)
 {
-  return pg_shard_manager.start_pg_operation<
+  return pg_shard_manager.start_pg_operation_active<
     crimson::osd::ScrubMessage
-    >(m, conn, m->get_min_epoch(), m->get_spg()).second;
+    >(m, conn, m->get_min_epoch(), m->get_spg());
 }
 
 seastar::future<> OSD::handle_mark_me_down(
@@ -1493,8 +1493,8 @@ seastar::future<> OSD::handle_recovery_subreq(
   crimson::net::ConnectionRef conn,
   Ref<MOSDFastDispatchOp> m)
 {
-  return pg_shard_manager.start_pg_operation<RecoverySubRequest>(
-    conn, std::move(m)).second;
+  return pg_shard_manager.start_pg_operation_active<RecoverySubRequest>(
+    conn, std::move(m));
 }
 
 vector<DaemonHealthMetric> OSD::get_health_metrics()
