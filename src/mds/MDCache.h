@@ -665,7 +665,9 @@ private:
     }
   }
   void end_dump() {
-    get_formatter()->close_section();
+    if(started) {
+      get_formatter()->close_section();
+    }
   }
   C_MDS_DumpStrayDirCtx(MDCache *c, Formatter* f, std::function<void(int)>&& ext_on_finish) : 
    MDSInternalContext(c->mds), cache(c), dump_formatter(f), on_finish(std::move(ext_on_finish)) {}
