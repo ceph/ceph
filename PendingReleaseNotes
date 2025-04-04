@@ -136,6 +136,9 @@
   `ceph fs subvolume earmark rm` have been added to set, get and remove earmark from a given subvolume.
 * RADOS: Add ``messenger dump`` command to retrieve runtime information
   on connections, sockets, and kernel TCP stats from the messenger.
+* RGW: deleted buckets are automatically cleaned up as part of trimming process.
+  DeleteBucket will start returning 409 BucketNotEmpty errors until empty
+  on all zones when sync policy is enabled.
 
 * RADOS: A performance botteneck in the balancer mgr module has been fixed.
   Related Tracker: https://tracker.ceph.com/issues/68657
