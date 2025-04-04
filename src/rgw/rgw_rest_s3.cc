@@ -1356,28 +1356,6 @@ struct ReplicationConfiguration {
       }
       pipe->dest.bucket.emplace(dest_bk);
 
-      std::unique_ptr<rgw::sal::Bucket> dest_bucket;
-      if (int r = driver->load_bucket(s, *pipe->dest.bucket, &dest_bucket, s->yield); r < 0) {
-        if (r == -ENOENT) {
-          s->err.message = "Destination bucket must exist.";
-          return -EINVAL;
-        }
-
-        ldpp_dout(s, 0) << "ERROR: failed to load bucket info for bucket=" << *pipe->dest.bucket << " r=" << r << dendl;
-        return r;
-      }
-
-      // check versioning identicality
-      if (dest_bucket->get_info().versioned() != s->bucket->get_info().versioned()) {
-        s->err.message = "Versioning must be identical in source and destination buckets.";
-        return -EINVAL;
-      }
-      // check object lock identicality
-      if (dest_bucket->get_info().obj_lock_enabled() != s->bucket->get_info().obj_lock_enabled()) {
-        s->err.message = "Object lock must be identical in source and destination buckets.";
-        return -EINVAL;
-      }
-
       if (filter) {
         int r = filter->to_sync_pipe_filter(s->cct, &pipe->params.source.filter);
         if (r < 0) {
