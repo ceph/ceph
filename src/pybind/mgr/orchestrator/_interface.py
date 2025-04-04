@@ -1012,6 +1012,39 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def list_daemon_actions(self) -> OrchResult[List[Tuple[str, str, str, bool]]]:
+        """
+        List scheduled daemon actions as tuples containing details
+
+        :returns: List of (host, daemon_name, action, force_status) tuples
+        """
+        raise NotImplementedError()
+
+    def cancel_daemon_action(self, daemon_name: str) -> OrchResult[bool]:
+        """
+        Cancel a scheduled daemon action
+
+        :param daemon_name: The name of the daemon (e.g., 'mon.myhost')
+        :returns: True if action was found and canceled, False otherwise
+        """
+        raise NotImplementedError()
+
+    def cancel_service_actions(self, service_name: str) -> OrchResult[str]:
+        """
+        Cancel all scheduled actions for a service
+
+        :param service_name: The name of the service (e.g., 'mon', 'mgr', 'mds.myfs')
+        :returns: Number of actions canceled
+        """
+        raise NotImplementedError()
+
+    def force_daemon_action(self, daemon_name: str, force: bool = True) -> OrchResult[bool]:
+        """
+        Mark a daemon action as forced or not forced
+        :returns: True if daemon was found and updated, False otherwise
+        """
+        raise NotImplementedError()
+
 
 GenericSpec = Union[ServiceSpec, HostSpec]
 
