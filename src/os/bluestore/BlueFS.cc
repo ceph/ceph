@@ -3872,6 +3872,13 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
     auto p = fnode.seek(offset, &x_off);
     if (p != fnode.extents.end()) {
       uint64_t cut_off = p2roundup(x_off, alloc_size[p->bdev]);
+      if (cut_off > p->length) {
+        // extent was allocated from shared, on fallback to smaller AU
+        ceph_assert(is_shared_alloc(p->bdev));
+        ceph_assert(shared_alloc);
+        cut_off = p2roundup(x_off, shared_alloc->alloc_unit);
+        ceph_assert(cut_off <= p->length);
+      }
       if (0 == cut_off) {
         // whole pextent to remove
         fnode.allocated = offset;
