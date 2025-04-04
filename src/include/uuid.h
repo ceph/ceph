@@ -15,6 +15,7 @@
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <boost/version.hpp>
 
 #if FMT_VERSION >= 90000
 #include <fmt/ostream.h>
