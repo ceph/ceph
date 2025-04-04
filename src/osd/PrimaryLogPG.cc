@@ -8552,21 +8552,33 @@ void PrimaryLogPG::_do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
   t->clone(soid, rollback_to_sobject);
   t->add_obc(rollback_to);
 
-  map<snapid_t, interval_set<uint64_t> >::iterator iter =
+  map<snapid_t, interval_set<uint64_t> >::iterator rollback_target_iter =
     snapset.clone_overlap.lower_bound(snapid);
-  ceph_assert(iter != snapset.clone_overlap.end());
-  interval_set<uint64_t> overlaps = iter->second;
-  for ( ;
-	iter != snapset.clone_overlap.end();
-	++iter)
-    overlaps.intersection_of(iter->second);
+  ceph_assert(rollback_target_iter != snapset.clone_overlap.end());
+  interval_set<uint64_t> new_last_overlap;
+  new_last_overlap.insert(0, rollback_to->obs.oi.size);
 
-  if (obs.oi.size > 0) {
+  // Let's reuse what we already have, bring forward the overlaps
+  // between the rollback target to the newest clone we have
+  auto last_clone_overlap_iter = --snapset.clone_overlap.end();
+  for (auto iter = rollback_target_iter;
+       iter != last_clone_overlap_iter;
+       ++iter) {
+    new_last_overlap.intersection_of(iter->second);
+  }
+
+  // The head will be re-written, adjust the newest
+  // clone overlap (with the rollback target) accordingly
+  last_clone_overlap_iter->second = new_last_overlap;
+
+  // Calculate what is modified between the
+  // rollback target and the newest clone
+  if (rollback_to->obs.oi.size > 0) {
     interval_set<uint64_t> modified;
-    modified.insert(0, obs.oi.size);
-    overlaps.intersection_of(modified);
-    modified.subtract(overlaps);
-    ctx->modified_ranges.union_of(modified);
+    modified.insert(0, rollback_to->obs.oi.size);
+    new_last_overlap.intersection_of(modified);
+    modified.subtract(new_last_overlap);
+    ctx->delta_stats.num_bytes += modified.size();
   }
 
   // Adjust the cached objectcontext
@@ -8777,6 +8789,10 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     ctx->modified_ranges.intersection_of(newest_overlap);
     if (is_present_clone(last_clone_oid)) {
       // modified_ranges is still in use by the clone
+      // WIP: the last commit will break this as modified_ranges will always be
+      // empty in rollbacks after modified_ranges intersection_of(newest_overlap)
+      // should we introduce rollback_modified_ranges?
+      // Or we can add the num_bytes when when rolling back
       ctx->delta_stats.num_bytes += ctx->modified_ranges.size();
     }
     newest_overlap.subtract(ctx->modified_ranges);
