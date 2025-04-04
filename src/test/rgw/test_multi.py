@@ -177,7 +177,7 @@ def init(parse_args):
                                          'file_log_level': 20,
                                          'tenant': None,
                                          'checkpoint_retries': 60,
-                                         'checkpoint_delay': 5,
+                                         'checkpoint_delay': 15,
                                          'reconfigure_delay': 5,
                                          'use_ssl': 'false',
                                          })
