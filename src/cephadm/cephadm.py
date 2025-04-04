@@ -69,6 +69,10 @@ from cephadmlib.context_getters import (
     get_parm,
     read_configuration_source,
 )
+from cephadmlib.coredumps import (
+    set_coredump_overrides,
+    remove_coredump_overrides,
+)
 from cephadmlib.exceptions import (
     ClusterAlreadyExists,
     Error,
@@ -1120,7 +1124,11 @@ def deploy_daemon_units(
         DaemonSubIdentity.must(sc.identity) for sc in sidecars or []
     ]
     systemd_unit.update_files(
-        ctx, ident, init_container_ids=ic_ids, sidecar_ids=sc_ids
+        ctx,
+        ident,
+        init_container_ids=ic_ids,
+        sidecar_ids=sc_ids,
+        limit_core_infinity=ctx.limit_core_infinity,
     )
     call_throws(ctx, ['systemctl', 'daemon-reload'])
 
@@ -3280,7 +3288,7 @@ def command_unit_install(ctx):
     if not getattr(ctx, 'name', None):
         raise Error('daemon name required')
     ident = DaemonIdentity.from_context(ctx)
-    systemd_unit.update_files(ctx, ident)
+    systemd_unit.update_files(ctx, ident, limit_core_infinity=ctx.limit_core_infinity)
     call_throws(ctx, ['systemctl', 'daemon-reload'])
     return 0
 
@@ -3300,6 +3308,19 @@ def command_unit(ctx):
         desc=''
     )
     return code
+
+##################################
+
+
+def command_set_coredump_overrides(ctx: CephadmContext) -> None:
+    if not ctx.cleanup:
+        set_coredump_overrides(ctx, ctx.fsid, ctx.coredump_max_size)
+        systemd_unit.update_base_ceph_unit_file(ctx, ctx.fsid, limit_core_infinity=True)
+    else:
+        remove_coredump_overrides(ctx, ctx.fsid)
+        systemd_unit.update_base_ceph_unit_file(ctx, ctx.fsid, limit_core_infinity=False)
+    # make sure changes to unit files and drop-ins are picked up
+    call_throws(ctx, ['systemctl', 'daemon-reload'])
 
 ##################################
 
@@ -4065,6 +4086,7 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
     unlink_file(unit_dir / f'ceph-{ctx.fsid}@.service', missing_ok=True)
     unlink_file(unit_dir / f'ceph-{ctx.fsid}.target', missing_ok=True)
     shutil.rmtree(unit_dir / f'ceph-{ctx.fsid}.target.wants', ignore_errors=True)
+    remove_coredump_overrides(ctx, ctx.fsid)
 
     # rm data
     shutil.rmtree(Path(ctx.data_dir) / ctx.fsid, ignore_errors=True)
@@ -4542,6 +4564,12 @@ def _add_deploy_parser_args(
         default=[],
         help='Additional entrypoint arguments to apply to deamon'
     )
+    parser_deploy.add_argument(
+        '--limit-core-infinity',
+        action='store_true',
+        default=False,
+        help='Set LimitCORE=infinity in ceph unit files'
+    )
 
 
 def _get_parser():
@@ -4701,6 +4729,12 @@ def _get_parser():
         action='store_true',
         default=False,
         help='Do not run containers with --cgroups=split (currently only relevant when using podman)')
+    parser_adopt.add_argument(
+        '--limit-core-infinity',
+        action='store_true',
+        default=False,
+        help='Set LimitCORE=infinity in generated ceph unit files'
+    )
 
     parser_rm_daemon = subparsers.add_parser(
         'rm-daemon', help='remove daemon instance')
@@ -4879,6 +4913,11 @@ def _get_parser():
         '--name', '-n',
         required=True,
         help='daemon name (type.id)')
+    parser_unit.add_argument(
+        '--limit-core-infinity',
+        action='store_true',
+        help='Set LimitCORE=infinity in ceph unit files'
+    )
 
     parser_logs = subparsers.add_parser(
         'logs', help='print journald logs for a daemon container')
@@ -5084,6 +5123,11 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--custom-prometheus-alerts',
         help='provide a file with custom prometheus alerts')
+    parser_bootstrap.add_argument(
+        '--limit-core-infinity',
+        action='store_true',
+        help='Set LimitCORE=infinity in ceph unit files'
+    )
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
@@ -5120,6 +5164,30 @@ def _get_parser():
         default='-',
         nargs='?',
         help='Configuration input source file',
+    )
+
+    parser_set_coredump_overrides = subparsers_orch.add_parser(
+        'set-coredump-overrides',
+        help='override coredumpctl max coredump process and external size'
+    )
+    parser_set_coredump_overrides.set_defaults(func=command_set_coredump_overrides)
+    parser_set_coredump_overrides.add_argument(
+        '--fsid',
+        required=True,
+        help='cluster fsid'
+    )
+    parser_set_coredump_overrides.add_argument(
+        '--coredump-max-size',
+        required=False,
+        default='32G',
+        help='custom max coredump size to set. Should be string including unit (e.g. 32G)'
+    )
+    parser_set_coredump_overrides.add_argument(
+        '--cleanup',
+        required=False,
+        default=False,
+        action='store_true',
+        help='Remove max coredump size drop-in and LimitCORE=infinity from unit file'
     )
 
     parser_check_host = subparsers.add_parser(
