@@ -58,6 +58,7 @@
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operations/recovery_subrequest.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
+#include "crimson/osd/osd_operations/replicated_request_reply.h"
 #include "crimson/osd/osd_operations/scrub_events.h"
 #include "crimson/osd/osd_operation_external_tracking.h"
 #include "crimson/crush/CrushLocation.h"
@@ -1437,19 +1438,9 @@ seastar::future<> OSD::handle_rep_op_reply(
   crimson::net::ConnectionRef conn,
   Ref<MOSDRepOpReply> m)
 {
-  LOG_PREFIX(OSD::handle_rep_op_reply);
-  spg_t pgid = m->get_spg();
-  return pg_shard_manager.with_pg(
-    pgid,
-    [FNAME, m=std::move(m)](auto &&pg) {
-      if (pg) {
-	m->finish_decode();
-	pg->handle_rep_op_reply(*m);
-      } else {
-	DEBUG("stale reply: {}", *m);
-      }
-      return seastar::now();
-    });
+  return pg_shard_manager.start_pg_operation_active<ReplicatedRequestReply>(
+    std::move(conn),
+    std::move(m));
 }
 
 seastar::future<> OSD::handle_scrub_command(
