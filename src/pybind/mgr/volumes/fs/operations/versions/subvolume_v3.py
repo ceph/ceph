@@ -91,6 +91,7 @@ class SubvolumeV3(SubvolumeV2):
         self.roots_dir = f'{self.subvol_dir}/roots'
         # meta file for the current subvolume's incarnation
         self.current_meta = f'{self.subvol_dir}/.meta'
+        self.last_meta = f'{self.subvol_dir}/.meta.last'
 
         self.uuid_dir = f'{self.roots_dir}/{self.uuid}'
         self.mnt_dir = f'{self.uuid_dir}/mnt'
@@ -154,11 +155,7 @@ class SubvolumeV3(SubvolumeV2):
     def create_or_update_meta_file(self, subvol_type):
         super(SubvolumeV3, self).create_or_update_meta_file(subvol_type)
 
-        try:
-            self.fs.symlink(basename(self.meta), self.current_meta)
-        except cephfs.ObjectExists:
-            x = self.fs.readlink(self.current_meta, PATH_MAX)
-            assert basename(self.meta) == x
+        self.fs.symlink(basename(self.meta), self.current_meta)
 
     def _create(self, mode, attrs, subvol_type, auth=True):
         self._create_v3_layout(mode)
@@ -216,10 +213,28 @@ class SubvolumeV3(SubvolumeV2):
             with open_trashcan(self.fs, self.vol_spec) as trashcan:
                 trashcan.dump(self.subvol_dir)
 
+    def unlink_current_meta_and_create_last_meta(self):
+        '''
+        Create self.last_meta symlink.
+        '''
+        last_meta_exists = None
+        try:
+            self.fs.stat(self.last_meta)
+            last_meta_exists = True
+        except:
+            last_meta_exists = False
+
+        if last_meta_exists:
+            self.fs.unlink(self.last_meta)
+
+        current_meta_file_name = self.fs.readlink(self.current_meta, PATH_MAX)
+        self.fs.unlink(self.current_meta)
+        self.fs.symlink(current_meta_file_name, self.last_meta)
+
     def remove(self, retainsnaps=False, internal_cleanup=False):
         super(SubvolumeV3, self).remove(retainsnaps, internal_cleanup)
 
-        self.fs.unlink(self.current_meta)
+        self.unlink_current_meta_and_create_last_meta()
 
     # TODO: base dir should be deleted in subvol v3 too when no snaps are
     # retained on any incarnation, right?
