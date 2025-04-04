@@ -111,6 +111,8 @@ using ceph::ErasureCodeProfile;
 using ceph::Formatter;
 using ceph::JSONFormatter;
 using ceph::make_message;
+using ceph::make_timespan;
+using ceph::timespan_str;
 using namespace std::literals;
 
 #define dout_subsys ceph_subsys_mon
@@ -14320,7 +14322,35 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						   get_last_committed() + 1));
     return true;
-  } else if (prefix == "osd force-create-pg") {
+  } else if (prefix == "osd pool availability-status") {
+    TextTable tbl;
+    tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("UPTIME", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("DOWNTIME", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("NUMFAILURES", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("MTBF", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("MTTR", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("SCORE", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("AVAILABLE", TextTable::LEFT, TextTable::RIGHT);
+    std::map<uint64_t, PoolAvailability> pool_availability = mon.mgrstatmon()->get_pool_availability();
+    for (const auto& i : pool_availability) {
+      const auto& p = i.second;
+      double mtbf = p.num_failures > 0 ? (p.uptime / p.num_failures) : 0;
+      double mttr = p.num_failures > 0 ? (p.downtime / p.num_failures) : 0;
+      double score = mtbf > 0 ? mtbf / (mtbf +  mttr): 1.0;
+      tbl << p.pool_name;
+      tbl << timespan_str(make_timespan(p.uptime));
+      tbl << timespan_str(make_timespan(p.downtime));
+      tbl << p.num_failures;
+      tbl << timespan_str(make_timespan(mtbf));
+      tbl << timespan_str(make_timespan(mttr));
+      tbl << score;
+      tbl << p.is_avail;
+      tbl << TextTable::endrow;
+    }
+    rdata.append(stringify(tbl));
+  }
+  else if (prefix == "osd force-create-pg") {
     pg_t pgid;
     string pgidstr;
     err = parse_pgid(cmdmap, ss, pgid, pgidstr);
