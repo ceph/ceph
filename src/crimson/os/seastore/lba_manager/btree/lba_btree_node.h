@@ -94,6 +94,7 @@ struct LBAInternalNode
   template <typename... T>
   LBAInternalNode(T&&... t) :
     FixedKVInternalNode(std::forward<T>(t)...) {}
+  static constexpr uint32_t CHILD_VEC_UNIT = 0;
 
   static constexpr extent_types_t TYPE = extent_types_t::LADDR_INTERNAL;
 
@@ -173,6 +174,7 @@ struct LBALeafNode
   using key_type = laddr_t;
   using parent_node_t = ParentNode<LBALeafNode, laddr_t>;
   using child_t = LogicalChildNode;
+  static constexpr uint32_t CHILD_VEC_UNIT = 0;
   LBALeafNode(ceph::bufferptr &&ptr)
     : parent_type_t(std::move(ptr)),
       parent_node_t(LEAF_NODE_CAPACITY) {}
@@ -184,6 +186,12 @@ struct LBALeafNode
       parent_node_t(rhs) {}
 
   static constexpr extent_types_t TYPE = extent_types_t::LADDR_LEAF;
+
+#ifndef NDEBUG
+  bool validate_child(
+    const base_child_t &child,
+    internal_const_iterator_t key);
+#endif
 
   void update(
     internal_const_iterator_t iter,
