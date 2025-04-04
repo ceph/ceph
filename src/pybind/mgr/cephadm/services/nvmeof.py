@@ -192,10 +192,14 @@ class NvmeofService(CephService):
             return HandleCommandResult(-errno.EBUSY, '', warn_message)
 
         # if reached here, there is > 1 nvmeof daemon. make sure none are down
-        warn_message = ('ALERT: 1 nvmeof daemon is already down. Please bring it back up before stopping this one')
-        nvmeof_daemons = self.mgr.cache.get_daemons_by_type(self.TYPE)
-        for i in nvmeof_daemons:
-            if i.status != DaemonDescriptionStatus.running:
+        if not force:
+            warn_message = ('WARNING: Only one nvmeof daemon is running. Please bring another nvmeof daemon up before stopping the current one.')
+            unreachable_hosts = [h.hostname for h in self.mgr.cache.get_unreachable_hosts()]
+            running_nvmeof_daemons = [
+                d for d in self.mgr.cache.get_daemons_by_type(self.TYPE)
+                if d.status == DaemonDescriptionStatus.running and d.hostname not in unreachable_hosts
+            ]
+            if len(running_nvmeof_daemons) < 2:
                 return HandleCommandResult(-errno.EBUSY, '', warn_message)
 
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
