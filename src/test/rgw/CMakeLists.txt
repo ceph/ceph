@@ -303,6 +303,10 @@ target_include_directories(ceph_test_rgw_gc_log
 target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} radostest-cxx)
 install(TARGETS ceph_test_rgw_gc_log DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+add_executable(unittest_rgw_shard_io test_rgw_shard_io.cc)
+add_ceph_unittest(unittest_rgw_shard_io)
+target_link_libraries(unittest_rgw_shard_io ${rgw_libs} unit-main ${UNITTEST_LIBS})
+
 add_ceph_test(test-ceph-diff-sorted.sh
   ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-diff-sorted.sh)
 
