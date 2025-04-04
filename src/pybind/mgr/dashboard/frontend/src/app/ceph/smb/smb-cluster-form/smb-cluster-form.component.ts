@@ -201,7 +201,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
           })
         ]
       ],
-      count: [1],
+      count: [2],
       custom_dns: new FormArray([]),
       joinSources: new FormArray([]),
       clustering: new UntypedFormControl(

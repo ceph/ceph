@@ -9,7 +9,11 @@
            class="form-header">
         {{ action | titlecase }} {{ resource | upperFirst }}
       </div>
-
+      <legend>
+        <cd-help-text i18n>
+          An SMB share is a resource on a server that is made accessible to users over a network using the SMB protocol.
+        </cd-help-text>
+      </legend>
       <!-- Share Id -->
       <div class="form-item">
         <cds-text-label
@@ -75,7 +79,17 @@
           >
         </ng-template>
       </div>
+      <cd-alert-panel *ngIf="allFsNames?.length === 0"
+      type="info"
+      spacingClass="mb-3"
+      class="align-items-center"
+      actionName="Create"
+      i18n
+      (action)="goToCreateVolume()">
+      No volume found. Consider creating it first to proceed.
+      </cd-alert-panel>
 
+      <!-- Sub Volume Group -->
       <div class="form-item"
            *ngIf="smbShareForm.getValue('volume')">
         <cds-select
@@ -88,7 +102,12 @@
           <option *ngIf="allsubvolgrps === null"
                   value=""
                   i18n>Loading...</option>
-          <option *ngIf="allsubvolgrps !== null && allsubvolgrps.length >= 0"
+          <option *ngIf="allsubvolgrps !== null && allsubvolgrps.length === 0"
+                  value=""
+                  i18n>
+            -- No SMB subvolume group available --
+          </option>
+          <option *ngIf="allsubvolgrps !== null && allsubvolgrps.length > 0"
                   value=""
                   i18n>
             -- Select the CephFS subvolume group --
@@ -103,7 +122,18 @@
           </option>
         </cds-select>
       </div>
+      <cd-alert-panel *ngIf="allsubvolgrps?.length === 0 && smbShareForm.getValue('volume')"
+      type="info"
+      spacingClass="mb-3"
+      class="align-items-center"
+      actionName="Create"
+      i18n
+      (action)="goToCreateSubVolumeGrp()"
+      >
+      No sub volume group found. Consider creating it first to proceed.
+      </cd-alert-panel>
 
+      <!-- Sub Volume -->
       <div class="form-group row"
            *ngIf="smbShareForm.getValue('volume')">
         <cds-select
@@ -136,51 +166,60 @@
           </option>
         </cds-select>
       </div>
+      <cd-alert-panel *ngIf="allsubvols?.length === 0 && smbShareForm.getValue('volume')"
+      type="info"
+      spacingClass="mb-3"
+      class="align-items-center"
+      actionName="Create"
+      i18n
+      (action)="goToCreateSubVolume()">
+      No sub volume found. Consider creating it first to proceed.
+      </cd-alert-panel>
 
-    <!-- Path -->
-    <div class="form-item form-item-append"
-         cdsRow>
-      <div cdsCol>
-        <cds-text-label labelInputID="prefixedPath"
-                        i18n
-                        helperText="A path is a relative path.">Prefixed Path
-          <input cdsText
-                 type="text"
-                 id="prefixedPath"
-                 formControlName="prefixedPath" />
-        </cds-text-label>
-      </div>
-      <div cdsCol>
-        <cds-text-label
-          labelInputID="inputPath"
-          i18n
-          [invalid]="
-            smbShareForm.controls.inputPath.invalid && smbShareForm.controls.inputPath.dirty
-          "
-          [invalidText]="pathError"
-          helperText="A relative path in a cephFS file system."
-          cdRequiredField="Path"
-          >Input Path
-          <input
-            cdsText
-            type="text"
-            id="inputPath"
-            formControlName="inputPath"
+      <!-- Path -->
+      <div class="form-item form-item-append"
+          cdsRow>
+        <div cdsCol>
+          <cds-text-label labelInputID="prefixedPath"
+                          i18n
+                          helperText="A path is a relative path.">Prefixed Path
+            <input cdsText
+                  type="text"
+                  id="prefixedPath"
+                  formControlName="prefixedPath" />
+          </cds-text-label>
+        </div>
+        <div cdsCol>
+          <cds-text-label
+            labelInputID="inputPath"
+            i18n
             [invalid]="
               smbShareForm.controls.inputPath.invalid && smbShareForm.controls.inputPath.dirty
             "
-          />
-        </cds-text-label>
-        <ng-template #pathError>
-          <span
-            class="invalid-feedback"
-            *ngIf="smbShareForm.showError('inputPath', formDir, 'required')"
-            i18n
-            >This field is required.</span
-          >
-        </ng-template>
+            [invalidText]="pathError"
+            helperText="A relative path in a cephFS file system."
+            cdRequiredField="Path"
+            >Input Path
+            <input
+              cdsText
+              type="text"
+              id="inputPath"
+              formControlName="inputPath"
+              [invalid]="
+                smbShareForm.controls.inputPath.invalid && smbShareForm.controls.inputPath.dirty
+              "
+            />
+          </cds-text-label>
+          <ng-template #pathError>
+            <span
+              class="invalid-feedback"
+              *ngIf="smbShareForm.showError('inputPath', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+        </div>
       </div>
-    </div>
 
       <!-- Browseable -->
       <div class="form-item">

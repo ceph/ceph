@@ -1,4 +1,4 @@
-import { Component, Inject, OnInit, Optional } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, Inject, OnInit, Optional, Output } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -13,6 +13,7 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { OctalToHumanReadablePipe } from '~/app/shared/pipes/octal-to-human-readable.pipe';
+import { SmbService } from '~/app/shared/api/smb.service';
 
 @Component({
   selector: 'cd-cephfs-subvolumegroup-form',
@@ -21,7 +22,7 @@ import { OctalToHumanReadablePipe } from '~/app/shared/pipes/octal-to-human-read
 })
 export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit {
   subvolumegroupForm: CdFormGroup;
-
+  @Output() dataSent: EventEmitter<any> = new EventEmitter();
   action: string;
   resource: string;
 
@@ -35,7 +36,7 @@ export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit 
     others: ['read', 'execute']
   };
   scopes: string[] = ['owner', 'group', 'others'];
-
+  poolsShare : any =[]
   constructor(
     private actionLabels: ActionLabelsI18n,
     private taskWrapper: TaskWrapperService,
@@ -43,11 +44,12 @@ export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit 
     private formatter: FormatterService,
     private dimlessBinary: DimlessBinaryPipe,
     private octalToHumanReadable: OctalToHumanReadablePipe,
-
+    private smbService : SmbService,
+    private cdr: ChangeDetectorRef,
     @Optional() @Inject('fsName') public fsName: string,
     @Optional() @Inject('subvolumegroupName') public subvolumegroupName: string,
     @Optional() @Inject('pools') public pools: Pool[],
-    @Optional() @Inject('isEdit') public isEdit = false
+    @Optional() @Inject('isEdit') public isEdit = false,
   ) {
     super();
     this.resource = $localize`subvolume group`;
@@ -55,6 +57,10 @@ export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit 
 
   ngOnInit(): void {
     this.action = this.actionLabels.CREATE;
+    this.smbService.poolData$.subscribe((data : any)=> {
+      this.poolsShare = data;
+      this.cdr.detectChanges();
+    });
     this.columns = [
       {
         prop: 'scope',
@@ -80,8 +86,10 @@ export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit 
         cellClass: 'text-center'
       }
     ];
-
-    this.dataPools = this.pools.filter((pool) => pool.type === 'data');
+    if(this.poolsShare){
+      this.dataPools = this.poolsShare.filter((pool : any) => pool.type === 'data');
+    }
+    this.dataPools = this.pools.filter((pool : any) => pool.type === 'data');
     this.createForm();
 
     this.isEdit ? this.populateForm() : this.loadingReady();
@@ -164,7 +172,7 @@ export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit 
             this.subvolumegroupForm.setErrors({ cdSubmitButton: true });
           },
           complete: () => {
-            this.closeModal();
+            this.closeModal1();
           }
         });
     } else {
@@ -188,9 +196,14 @@ export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit 
             this.subvolumegroupForm.setErrors({ cdSubmitButton: true });
           },
           complete: () => {
-            this.closeModal();
+            this.closeModal1();
           }
         });
     }
+  }
+
+  closeModal1() {
+   this.dataSent.emit(this.subvolumegroupForm);
+   this.closeModal();
   }
 }
