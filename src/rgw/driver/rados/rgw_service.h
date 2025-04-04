@@ -106,7 +106,7 @@ struct RGWServices_Def
 
   int init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
 	   bool raw_storage, bool run_sync, bool background_tasks,
-	   optional_yield y, const DoutPrefixProvider *dpp);
+	   optional_yield y, const DoutPrefixProvider *dpp, rgw::sal::ConfigStore* cfgstore);
   void shutdown();
 };
 
@@ -145,19 +145,19 @@ struct RGWServices
 
   int do_init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
 	      bool raw_storage, bool run_sync, bool background_tasks, optional_yield y,
-	      const DoutPrefixProvider *dpp, const rgw::SiteConfig& site);
+	      const DoutPrefixProvider *dpp, const rgw::SiteConfig& site, rgw::sal::ConfigStore* cfgstore);
 
   int init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
 	   bool run_sync, bool background_tasks, optional_yield y, const DoutPrefixProvider *dpp,
-	   const rgw::SiteConfig& site) {
-    return do_init(cct, store, have_cache, false, run_sync, background_tasks, y, dpp, site);
+	   const rgw::SiteConfig& site, rgw::sal::ConfigStore* cfgstore) {
+    return do_init(cct, store, have_cache, false, run_sync, background_tasks, y, dpp, site, cfgstore);
   }
 
   int init_raw(CephContext *cct, rgw::sal::RadosStore* store,
 	       bool have_cache, optional_yield y,
 	       const DoutPrefixProvider *dpp,
-	       const rgw::SiteConfig& site) {
-    return do_init(cct, store, have_cache, true, false, false, y, dpp, site);
+	       const rgw::SiteConfig& site, rgw::sal::ConfigStore* cfgstore) {
+    return do_init(cct, store, have_cache, true, false, false, y, dpp, site, cfgstore);
   }
   void shutdown() {
     _svc.shutdown();
