@@ -104,47 +104,6 @@ void RGWZone::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("supported_features", supported_features, obj);
 }
 
-int RGWSystemMetaObj::init(const DoutPrefixProvider *dpp, CephContext *_cct, RGWSI_SysObj *_sysobj_svc,
-			   optional_yield y,
-			   bool setup_obj, bool old_format)
-{
-  reinit_instance(_cct, _sysobj_svc);
-
-  if (!setup_obj)
-    return 0;
-
-  if (old_format && id.empty()) {
-    id = name;
-  }
-
-  if (id.empty()) {
-    id = get_predefined_id(cct);
-  }
-
-  if (id.empty()) {
-    int r;
-    if (name.empty()) {
-      name = get_predefined_name(cct);
-    }
-    if (name.empty()) {
-      r = use_default(dpp, y, old_format);
-      if (r < 0) {
-	return r;
-      }
-    } else if (!old_format) {
-      r = read_id(dpp, name, id, y);
-      if (r < 0) {
-        if (r != -ENOENT) {
-          ldpp_dout(dpp, 0) << "error in read_id for object name: " << name << " : " << cpp_strerror(-r) << dendl;
-        }
-        return r;
-      }
-    }
-  }
-
-  return read_info(dpp, id, y, old_format);
-}
-
 rgw_pool RGWZoneGroup::get_pool(CephContext *cct_) const
 {
   if (cct_->_conf->rgw_zonegroup_root_pool.empty()) {
@@ -152,47 +111,6 @@ rgw_pool RGWZoneGroup::get_pool(CephContext *cct_) const
   }
 
   return rgw_pool(cct_->_conf->rgw_zonegroup_root_pool);
-}
-
-
-int RGWSystemMetaObj::use_default(const DoutPrefixProvider *dpp, optional_yield y, bool old_format)
-{
-  return read_default_id(dpp, id, y, old_format);
-}
-
-void RGWSystemMetaObj::reinit_instance(CephContext *_cct, RGWSI_SysObj *_sysobj_svc)
-{
-  cct = _cct;
-  sysobj_svc = _sysobj_svc;
-  zone_svc = _sysobj_svc->get_zone_svc();
-}
-
-int RGWSystemMetaObj::read_info(const DoutPrefixProvider *dpp, const string& obj_id, optional_yield y,
-				bool old_format)
-{
-  rgw_pool pool(get_pool(cct));
-
-  bufferlist bl;
-
-  string oid = get_info_oid_prefix(old_format) + obj_id;
-
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
-  int ret = sysobj.rop().read(dpp, &bl, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "failed reading obj info from " << pool << ":" << oid << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  using ceph::decode;
-
-  try {
-    auto iter = bl.cbegin();
-    decode(*this, iter);
-  } catch (buffer::error& err) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to decode obj from " << pool << ":" << oid << dendl;
-    return -EIO;
-  }
-
-  return 0;
 }
 
 void RGWZoneGroup::decode_json(JSONObj *obj)
@@ -396,53 +314,6 @@ void RGWPeriodConfig::dump(Formatter *f) const
   encode_json("anonymous_ratelimit", anon_ratelimit, f);
 }
 
-int RGWSystemMetaObj::delete_obj(const DoutPrefixProvider *dpp, optional_yield y, bool old_format)
-{
-  rgw_pool pool(get_pool(cct));
-
-  /* check to see if obj is the default */
-  RGWDefaultSystemMetaObjInfo default_info;
-  int ret = read_default(dpp, default_info, get_default_oid(old_format), y);
-  if (ret < 0 && ret != -ENOENT)
-    return ret;
-  if (default_info.default_id == id || (old_format && default_info.default_id == name)) {
-    string oid = get_default_oid(old_format);
-    rgw_raw_obj default_named_obj(pool, oid);
-    auto sysobj = sysobj_svc->get_obj(default_named_obj);
-    ret = sysobj.wop().remove(dpp, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "Error delete default obj name  " << name << ": " << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-  }
-  if (!old_format) {
-    string oid  = get_names_oid_prefix() + name;
-    rgw_raw_obj object_name(pool, oid);
-    auto sysobj = sysobj_svc->get_obj(object_name);
-    ret = sysobj.wop().remove(dpp, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "Error delete obj name  " << name << ": " << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-  }
-
-  string oid = get_info_oid_prefix(old_format);
-  if (old_format) {
-    oid += name;
-  } else {
-    oid += id;
-  }
-
-  rgw_raw_obj object_id(pool, oid);
-  auto sysobj = sysobj_svc->get_obj(object_id);
-  ret = sysobj.wop().remove(dpp, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "Error delete object id " << id << ": " << cpp_strerror(-ret) << dendl;
-  }
-
-  return ret;
-}
-
 void RGWZoneGroup::dump(Formatter *f) const
 {
   encode_json("id", id , f);
@@ -521,42 +392,6 @@ void RGWZonePlacementInfo::decode_json(JSONObj *obj)
   if (ppool || pcompression) {
     storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, ppool, pcompression);
   }
-}
-
-void RGWSystemMetaObj::dump(Formatter *f) const
-{
-  encode_json("id", id , f);
-  encode_json("name", name , f);
-}
-
-void RGWSystemMetaObj::decode_json(JSONObj *obj)
-{
-  JSONDecoder::decode_json("id", id, obj);
-  JSONDecoder::decode_json("name", name, obj);
-}
-
-int RGWSystemMetaObj::read_default(const DoutPrefixProvider *dpp, 
-                                   RGWDefaultSystemMetaObjInfo& default_info,
-				   const string& oid, optional_yield y)
-{
-  using ceph::decode;
-  auto pool = get_pool(cct);
-  bufferlist bl;
-
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
-  int ret = sysobj.rop().read(dpp, &bl, y);
-  if (ret < 0)
-    return ret;
-
-  try {
-    auto iter = bl.cbegin();
-    decode(default_info, iter);
-  } catch (buffer::error& err) {
-    ldpp_dout(dpp, 0) << "error decoding data from " << pool << ":" << oid << dendl;
-    return -EIO;
-  }
-
-  return 0;
 }
 
 void RGWZoneGroupPlacementTarget::dump(Formatter *f) const
@@ -801,135 +636,6 @@ void RGWPeriodMap::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-int RGWSystemMetaObj::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
-{
-  int ret;
-
-  /* check to see the name is not used */
-  ret = read_id(dpp, name, id, y);
-  if (exclusive && ret == 0) {
-    ldpp_dout(dpp, 10) << "ERROR: name " << name << " already in use for obj id " << id << dendl;
-    return -EEXIST;
-  } else if ( ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 0) << "failed reading obj id  " << id << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  if (id.empty()) {
-    /* create unique id */
-    uuid_d new_uuid;
-    char uuid_str[37];
-    new_uuid.generate_random();
-    new_uuid.print(uuid_str);
-    id = uuid_str;
-  }
-
-  ret = store_info(dpp, exclusive, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR:  storing info for " << id << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  return store_name(dpp, exclusive, y);
-}
-
-int RGWSystemMetaObj::read_default_id(const DoutPrefixProvider *dpp, string& default_id, optional_yield y,
-				      bool old_format)
-{
-  RGWDefaultSystemMetaObjInfo default_info;
-
-  int ret = read_default(dpp, default_info, get_default_oid(old_format), y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  default_id = default_info.default_id;
-
-  return 0;
-}
-
-int RGWSystemMetaObj::set_as_default(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
-{
-  using ceph::encode;
-  string oid  = get_default_oid();
-
-  rgw_pool pool(get_pool(cct));
-  bufferlist bl;
-
-  RGWDefaultSystemMetaObjInfo default_info;
-  default_info.default_id = id;
-
-  encode(default_info, bl);
-
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
-  int ret = sysobj.wop()
-                  .set_exclusive(exclusive)
-                  .write(dpp, bl, y);
-  if (ret < 0)
-    return ret;
-
-  return 0;
-}
-
-int RGWSystemMetaObj::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
-{
-  rgw_pool pool(get_pool(cct));
-
-  string oid = get_info_oid_prefix() + id;
-
-  bufferlist bl;
-  using ceph::encode;
-  encode(*this, bl);
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
-  return sysobj.wop()
-               .set_exclusive(exclusive)
-               .write(dpp, bl, y);
-}
-
-int RGWSystemMetaObj::read_id(const DoutPrefixProvider *dpp, const string& obj_name, string& object_id,
-			      optional_yield y)
-{
-  using ceph::decode;
-  rgw_pool pool(get_pool(cct));
-  bufferlist bl;
-
-  string oid = get_names_oid_prefix() + obj_name;
-
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
-  int ret = sysobj.rop().read(dpp, &bl, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  RGWNameToId nameToId;
-  try {
-    auto iter = bl.cbegin();
-    decode(nameToId, iter);
-  } catch (buffer::error& err) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to decode obj from " << pool << ":" << oid << dendl;
-    return -EIO;
-  }
-  object_id = nameToId.obj_id;
-  return 0;
-}
-
-int RGWSystemMetaObj::store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
-{
-  rgw_pool pool(get_pool(cct));
-  string oid = get_names_oid_prefix() + name;
-
-  RGWNameToId nameToId;
-  nameToId.obj_id = id;
-
-  bufferlist bl;
-  using ceph::encode;
-  encode(nameToId, bl);
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
-  return sysobj.wop()
-               .set_exclusive(exclusive)
-               .write(dpp, bl, y);
-}
-
 bool RGWPeriodMap::find_zone_by_id(const rgw_zone_id& zone_id,
                                    RGWZoneGroup *zonegroup,
                                    RGWZone *zone) const
@@ -946,21 +652,6 @@ bool RGWPeriodMap::find_zone_by_id(const rgw_zone_id& zone_id,
   }
 
   return false;
-}
-
-int RGWSystemMetaObj::write(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
-{
-  int ret = store_info(dpp, exclusive, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 20) << __func__ << "(): store_info() returned ret=" << ret << dendl;
-    return ret;
-  }
-  ret = store_name(dpp, exclusive, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 20) << __func__ << "(): store_name() returned ret=" << ret << dendl;
-    return ret;
-  }
-  return 0;
 }
 
 namespace rgw {

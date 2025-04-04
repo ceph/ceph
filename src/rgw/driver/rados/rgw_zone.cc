@@ -59,53 +59,6 @@ void RGWDefaultSystemMetaObjInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("default_id", default_id, obj);
 }
 
-int RGWSystemMetaObj::rename(const DoutPrefixProvider *dpp, const string& new_name, optional_yield y)
-{
-  string new_id;
-  int ret = read_id(dpp, new_name, new_id, y);
-  if (!ret) {
-    return -EEXIST;
-  }
-  if (ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 0) << "Error read_id " << new_name << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  string old_name = name;
-  name = new_name;
-  ret = update(dpp, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "Error storing new obj info " << new_name << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  ret = store_name(dpp, true, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "Error storing new name " << new_name << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  /* delete old name */
-  rgw_pool pool(get_pool(cct));
-  string oid = get_names_oid_prefix() + old_name;
-  rgw_raw_obj old_name_obj(pool, oid);
-  auto sysobj = sysobj_svc->get_obj(old_name_obj);
-  ret = sysobj.wop().remove(dpp, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "Error delete old obj name  " << old_name << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  return ret;
-}
-
-int RGWSystemMetaObj::read(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  int ret = read_id(dpp, name, id, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return read_info(dpp, id, y);
-}
-
 const string& RGWZoneParams::get_compression_type(const rgw_placement_rule& placement_rule) const
 {
   static const std::string NONE{"none"};
