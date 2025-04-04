@@ -431,39 +431,53 @@ struct seastore_test_t :
 
     void check_omap(SeaStoreShard &sharded_seastore) {
       auto refiter = omap.begin();
-      std::optional<std::string> start;
-      while(true) {
-        auto [done, kvs] = sharded_seastore.omap_get_values(
-          coll,
-          oid,
-          start).unsafe_get();
-        auto iter = kvs.begin();
-        while (true) {
-	  if ((done && iter == kvs.end()) && refiter == omap.end()) {
-	    return; // finished
-          } else if (!done && iter == kvs.end()) {
-	    break; // reload kvs
-          }
-          if (iter == kvs.end() || refiter->first < iter->first) {
-	    logger().debug(
-	      "check_omap: missing omap key {}",
-	      refiter->first);
-	    GTEST_FAIL() << "missing omap key " << refiter->first;
-	    ++refiter;
-          } else if (refiter == omap.end() || refiter->first > iter->first) {
-	    logger().debug(
-	      "check_omap: extra omap key {}",
-	      iter->first);
-	    GTEST_FAIL() << "extra omap key " << iter->first;
-            ++iter;
-          } else {
-	    EXPECT_EQ(iter->second, refiter->second);
-            ++iter;
+      ObjectStore::omap_iter_seek_t start_from = ObjectStore::omap_iter_seek_t::min_lower_bound();
+
+      std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
+      [this, &refiter, &start_from] (std::string_view key, std::string_view value) {
+        if (refiter != omap.end()) {
+          EXPECT_EQ(refiter->first, key);
+        }
+        if (refiter != omap.end() && refiter->first < key) {
+          auto ite = omap.find(std::string(key));
+          auto dist = std::distance(refiter, ite);
+          for (int i = 0; i < dist; i++) {
+            logger().debug(
+              "check_omap: missing omap key {}",
+              refiter->first);
             ++refiter;
           }
+          ++refiter;
+          EXPECT_EQ(refiter->first, key);
+        } else if (refiter == omap.end() || refiter->first > key) {
+          logger().debug(
+            "check_omap: extra omap key {}",
+            key);
+        } else {
+          ceph::bufferlist bl;
+          bl.append(value);
+          EXPECT_EQ(bl, refiter->second);
+          ++refiter;
         }
-        if (!done) {
-          start = kvs.rbegin()->first;
+        start_from.seek_position = key;
+        start_from.seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND;
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      };
+
+      sharded_seastore.omap_iterate(
+        coll,
+        oid,
+        start_from,
+        callback).unsafe_get();
+
+      if (refiter == omap.end()) {
+        return;
+      } else {
+        for (; refiter != omap.end(); refiter++) {
+          logger().debug(
+            "check_omap: missing omap key {}",
+            refiter->first);
+          GTEST_FAIL() << "missing omap key " << refiter->first;
         }
       }
     }

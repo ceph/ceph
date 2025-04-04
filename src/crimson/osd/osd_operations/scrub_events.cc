@@ -291,65 +291,70 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
       } else if (!progress.keys_done) {
 	DEBUGDPP("op: {}, obj: {}, progress: {} scanning omap keys",
 		 pg, *this, obj, progress);
-	return pg.shard_services.get_store().omap_get_values(
-	  pg.get_collection_ref(),
-	  obj,
-	  progress.next_key
-	).safe_then([FNAME, this, &obj, &progress, &entry, &pg](auto result) {
-	  const auto &[done, omap] = result;
-	  DEBUGDPP("op: {}, obj: {}, progress: {} got {} keys",
-		   pg, *this, obj, progress, omap.size());
-	  for (const auto &p : omap) {
-	    bufferlist bl;
-	    encode(p.first, bl);
-	    encode(p.second, bl);
-	    progress.omap_hash << bl;
-	    entry.object_omap_keys++;
-	    entry.object_omap_bytes += p.second.length();
-	  }
-	  if (done) {
-	    DEBUGDPP("op: {}, obj: {}, progress: {} omap done",
-		     pg, *this, obj, progress);
-	    progress.keys_done = true;
-	    entry.omap_digest = progress.omap_hash.digest();
-	    entry.omap_digest_present = true;
+        return seastar::do_with(
+          ObjectStore::omap_iter_seek_t::min_lower_bound(),
+          std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)>(),
+          [FNAME, this, &obj, &progress, &entry, &pg] (auto &start_from, auto &callback) {
+          start_from.seek_position =  progress.next_key.has_value() ?
+                                      progress.next_key.value() : std::string{};
+          start_from.seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND;
 
-	    if ((entry.object_omap_keys >
-		 local_conf().get_val<uint64_t>(
-		   "osd_deep_scrub_large_omap_object_key_threshold")) ||
-		(entry.object_omap_bytes >
-		 local_conf().get_val<Option::size_t>(
-		   "osd_deep_scrub_large_omap_object_value_sum_threshold"))) {
-	      entry.large_omap_object_found = true;
-	      entry.large_omap_object_key_count = entry.object_omap_keys;
-	      ret.has_large_omap_object_errors = true;
-	    }
-	  } else {
-	    ceph_assert(!omap.empty()); // omap_get_values invariant
-	    DEBUGDPP("op: {}, obj: {}, progress: {} omap not done, next {}",
-		     pg, *this, obj, progress, omap.crbegin()->first);
-	    progress.next_key = omap.crbegin()->first;
-	  }
-	}).handle_error(
-	  ct_error::all_same_way([FNAME, this, &obj, &progress, &entry, &pg]
-				 (auto e) {
-	    DEBUGDPP("op: {}, obj: {}, progress: {} error reading omap {}",
-		     pg, *this, obj, progress, e);
-	    progress.keys_done = true;
-	    entry.read_error = true;
-	    return seastar::now();
-	  })
-	).then([] {
-	  return interruptor::make_interruptible(
-	    seastar::make_ready_future<seastar::stop_iteration>(
-	      seastar::stop_iteration::no));
-	});
+          callback = [&progress, &entry, &start_from] (std::string_view key, std::string_view value) {
+            start_from.seek_position = key;
+            bufferlist bl;
+            encode(key, bl);
+            encode(value, bl);
+            progress.omap_hash << bl;
+            entry.object_omap_keys++;
+            entry.object_omap_bytes += value.length();
+            return ObjectStore::omap_iter_ret_t::NEXT;
+          };
+
+          return pg.shard_services.get_store().omap_iterate(
+            pg.get_collection_ref(),
+            obj,
+            start_from,
+            callback 
+          ).safe_then([FNAME, this, &obj, &progress, &entry, &pg](auto result) {
+            if (result == ObjectStore::omap_iter_ret_t::NEXT) {
+              DEBUGDPP("op: {}, obj: {}, progress: {} omap done",
+                        pg, *this, obj, progress);
+              progress.keys_done = true;
+              entry.omap_digest = progress.omap_hash.digest();
+              entry.omap_digest_present = true;
+
+              if ((entry.object_omap_keys >
+                   local_conf().get_val<uint64_t>(
+                   "osd_deep_scrub_large_omap_object_key_threshold")) ||
+                  (entry.object_omap_bytes >
+                   local_conf().get_val<Option::size_t>(
+                   "osd_deep_scrub_large_omap_object_value_sum_threshold"))) {
+                entry.large_omap_object_found = true;
+                entry.large_omap_object_key_count = entry.object_omap_keys;
+                ret.has_large_omap_object_errors = true;
+              }
+            }
+          }).handle_error(
+            ct_error::all_same_way([FNAME, this, &obj, &progress, &entry, &pg]
+                      (auto e) {
+              DEBUGDPP("op: {}, obj: {}, progress: {} error reading omap {}",
+                        pg, *this, obj, progress, e);
+              progress.keys_done = true;
+              entry.read_error = true;
+              return seastar::now();
+            })
+          ).then([] {
+            return interruptor::make_interruptible(
+              seastar::make_ready_future<seastar::stop_iteration>(
+                seastar::stop_iteration::no));
+          });
+        });
       } else {
-	DEBUGDPP("op: {}, obj: {}, progress: {} done",
-		 pg, *this, obj, progress);
-	return interruptor::make_interruptible(
-	  seastar::make_ready_future<seastar::stop_iteration>(
-	    seastar::stop_iteration::yes));
+        DEBUGDPP("op: {}, obj: {}, progress: {} done",
+                  pg, *this, obj, progress);
+        return interruptor::make_interruptible(
+          seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::yes));
       }
     }).finally([progress_ref=std::move(progress_ref)] {});
 }

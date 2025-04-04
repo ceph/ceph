@@ -1148,38 +1148,43 @@ namespace {
       return seastar::do_with(
         std::move(ch),
         std::move(pgmeta_oid),
-        std::make_optional<std::string>(),
+        ObjectStore::omap_iter_seek_t::min_lower_bound(),
+        std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)>(),
         [this](crimson::os::CollectionRef &ch,
                ghobject_t &pgmeta_oid,
-               std::optional<std::string> &start) {
-          return seastar::repeat([this, &ch, &pgmeta_oid, &start]() {
-            return store.omap_get_values(
-              ch, pgmeta_oid, start
-            ).safe_then([this, &start](const auto& ret) {
-              const auto& [done, kvs] = ret;
-              for (const auto& [key, value] : kvs) {
-                process_entry(key, value);
-                start = key;
-              }
-              return seastar::make_ready_future<seastar::stop_iteration>(
-                done ? seastar::stop_iteration::yes : seastar::stop_iteration::no
-              );
-            }, crimson::os::FuturizedStore::Shard::read_errorator::assert_all{});
-          }).then([this] {
-            if (info.pgid.is_no_shard()) {
-              // replicated pool pg does not persist this key
-              assert(on_disk_rollback_info_trimmed_to == eversion_t());
-              on_disk_rollback_info_trimmed_to = info.last_update;
-            }
-            log = PGLog::IndexedLog(
-                 info.last_update,
-                 info.log_tail,
-                 on_disk_can_rollback_to,
-                 on_disk_rollback_info_trimmed_to,
-                 std::move(entries),
-                 std::move(dups));
-          });
-        });
+               auto &start_from,
+               auto &callback) {
+	start_from.seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND;
+
+	callback = [this, &start_from] (std::string_view key, std::string_view value) {
+          start_from.seek_position = key;
+          ceph::bufferlist bl;
+          bl.append(value);
+          process_entry(key, bl);
+          return ObjectStore::omap_iter_ret_t::NEXT;
+        };
+
+        return store.omap_iterate(
+          ch, pgmeta_oid, start_from, callback
+        ).safe_then([] (auto ret) {
+          assert (ret == ObjectStore::omap_iter_ret_t::NEXT);
+        }).handle_error(
+          crimson::os::FuturizedStore::Shard::read_errorator::assert_all{}
+        );
+      }).then([this] {
+        if (info.pgid.is_no_shard()) {
+          // replicated pool pg does not persist this key
+          assert(on_disk_rollback_info_trimmed_to == eversion_t());
+          on_disk_rollback_info_trimmed_to = info.last_update;
+        }
+        log = PGLog::IndexedLog(
+              info.last_update,
+              info.log_tail,
+              on_disk_can_rollback_to,
+              on_disk_rollback_info_trimmed_to,
+              std::move(entries),
+              std::move(dups));
+      });
     }
   };
 }
