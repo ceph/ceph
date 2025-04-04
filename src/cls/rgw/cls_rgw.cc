@@ -2081,7 +2081,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
              olh_key.name.c_str(), olh_key.instance.c_str(), olh_entry.delete_marker);
 
   if (olh_key == dest_key) {
-    /* this is the current head, need to update! */
+    /* this is the current head, need to update the OLH! */
     cls_rgw_obj_key next_key;
     bool found = false;
     ret = obj.find_next_key(&next_key, &found);
