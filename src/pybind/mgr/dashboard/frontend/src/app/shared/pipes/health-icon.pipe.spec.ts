@@ -7,14 +7,14 @@ describe('HealthIconPipe', () => {
   });
 
   it('transforms "HEALTH_OK"', () => {
-    expect(pipe.transform('HEALTH_OK')).toEqual('fa fa-check-circle');
+    expect(pipe.transform('HEALTH_OK')).toEqual('checkmark--filled');
   });
 
   it('transforms "HEALTH_WARN"', () => {
-    expect(pipe.transform('HEALTH_WARN')).toEqual('fa fa-exclamation-triangle');
+    expect(pipe.transform('HEALTH_WARN')).toEqual('warning--alt--filled');
   });
 
   it('transforms "HEALTH_ERR"', () => {
-    expect(pipe.transform('HEALTH_ERR')).toEqual('fa fa-exclamation-circle');
+    expect(pipe.transform('HEALTH_ERR')).toEqual('warning--filled');
   });
 });

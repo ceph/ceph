@@ -3,7 +3,6 @@ import { NgModule } from '@angular/core';
 import { ReactiveFormsModule } from '@angular/forms';
 import { FormlyModule } from '@ngx-formly/core';
 import { FormlyBootstrapModule } from '@ngx-formly/bootstrap';
-
 import { CssHelper } from '~/app/shared/classes/css-helper';
 import { ComponentsModule } from './components/components.module';
 import { DataTableModule } from './datatable/datatable.module';
@@ -17,6 +16,7 @@ import { FormlyObjectTypeComponent } from './forms/crud-form/formly-object-type/
 import { FormlyInputTypeComponent } from './forms/crud-form/formly-input-type/formly-input-type.component';
 import { FormlyTextareaTypeComponent } from './forms/crud-form/formly-textarea-type/formly-textarea-type.component';
 import { BlockUIModule, BlockUIService } from 'ng-block-ui';
+import { IconModule } from 'carbon-components-angular';
 
 @NgModule({
   imports: [
@@ -25,8 +25,8 @@ import { BlockUIModule, BlockUIService } from 'ng-block-ui';
     ComponentsModule,
     DataTableModule,
     DirectivesModule,
-
     ReactiveFormsModule,
+    IconModule,
     FormlyModule.forRoot({
       types: [
         { name: 'array', component: FormlyArrayTypeComponent },

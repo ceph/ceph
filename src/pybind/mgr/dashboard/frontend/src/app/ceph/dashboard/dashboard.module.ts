@@ -20,6 +20,7 @@ import { MgrDashboardSummaryPipe } from './mgr-dashboard-summary.pipe';
 import { MonSummaryPipe } from './mon-summary.pipe';
 import { osdDashboardSummaryPipe } from './osd-dashboard-summary.pipe';
 import { ToggletipModule } from 'carbon-components-angular';
+import { IconModule } from 'carbon-components-angular';
 
 @NgModule({
   imports: [
@@ -32,10 +33,10 @@ import { ToggletipModule } from 'carbon-components-angular';
     ReactiveFormsModule,
     DashboardV3Module,
     BaseChartDirective,
-    ToggletipModule
+    ToggletipModule,
+    IconModule
   ],
   declarations: [
-    HealthComponent,
     DashboardComponent,
     MonSummaryPipe,
     osdDashboardSummaryPipe,
@@ -44,7 +45,8 @@ import { ToggletipModule } from 'carbon-components-angular';
     HealthPieComponent,
     InfoCardComponent,
     InfoGroupComponent,
-    FeedbackComponent
+    FeedbackComponent,
+    HealthComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })
