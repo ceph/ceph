@@ -1,13 +1,20 @@
 # container_lookup.py - high-level functions for getting container info
 
-from typing import Optional
+from operator import itemgetter
+from typing import Optional, Tuple
 
 import logging
 
-from .container_engines import ContainerInfo, parsed_container_image_stats
+from .container_engines import (
+    ContainerInfo,
+    ImageInfo,
+    parsed_container_image_list,
+    parsed_container_image_stats,
+)
 from .container_types import get_container_stats
 from .context import CephadmContext
 from .daemon_identity import DaemonIdentity
+from .daemons.ceph import ceph_daemons
 from .listing import daemons_matching
 from .listing_updaters import CoreStatusUpdater
 
@@ -89,3 +96,79 @@ def get_container_info(
         'bad daemon state: no image, not running: %r', matched_deamon
     )
     return None
+
+
+def infer_local_ceph_image(
+    ctx: CephadmContext, container_path: str = ''
+) -> Optional[str]:
+    """Infer the best ceph image to use based on the following criteria:
+    Out of all images labeled as ceph that are non-dangling, prefer
+    1. the same image as the daemon container specified by -name arg (if provided).
+    2. the image used by any ceph container running on the host
+    3. the most ceph recent image on the host
+
+    :return: An image name or none
+    """
+    # enumerate ceph images on the system
+    images = parsed_container_image_list(
+        ctx,
+        filters=['dangling=false', 'label=ceph=True'],
+        container_path=container_path,
+    )
+    if not images:
+        logger.warning('No non-dangling ceph images found')
+        return None  # no images at all cached on host
+
+    # find running ceph daemons
+    _daemons = ceph_daemons()
+    daemon_name = getattr(ctx, 'name', '')
+    _cinfo_key = '_container_info'
+    _updater = CoreStatusUpdater(keep_container_info=_cinfo_key)
+    matching_daemons = [
+        itemgetter(_cinfo_key, 'name')(_updater.expand(ctx, entry))
+        for entry in daemons_matching(
+            ctx, fsid=ctx.fsid, daemon_type_predicate=lambda t: t in _daemons
+        )
+    ]
+    # collect the running ceph daemon image ids
+    images_in_use_by_daemon = set(
+        d.image_id for d, n in matching_daemons if n == daemon_name
+    )
+    images_in_use = set(d.image_id for d, _ in matching_daemons)
+
+    # prioritize images
+    def _keyfunc(image: ImageInfo) -> Tuple[bool, bool, str]:
+        return (
+            bool(
+                image.digest
+                and any(
+                    v.startswith(image.image_id)
+                    for v in images_in_use_by_daemon
+                )
+            ),
+            bool(
+                image.digest
+                and any(v.startswith(image.image_id) for v in images_in_use)
+            ),
+            image.created,
+        )
+
+    images.sort(key=_keyfunc, reverse=True)
+    best_image = images[0]
+    name_match, ceph_match, _ = _keyfunc(best_image)
+    reason = 'not in the list of non-dangling images with ceph=True label'
+    if images_in_use_by_daemon and not name_match:
+        expected = list(images_in_use_by_daemon)[0]
+        logger.warning(
+            'Not using image %r of named daemon: %s',
+            expected,
+            reason,
+        )
+    if images_in_use and not ceph_match:
+        expected = list(images_in_use)[0]
+        logger.warning(
+            'Not using image %r of ceph daemon: %s',
+            expected,
+            reason,
+        )
+    return best_image.name

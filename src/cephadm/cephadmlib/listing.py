@@ -50,7 +50,17 @@
 import os
 import logging
 
-from typing import TypedDict, Union, Optional, Iterator, List, Any, Dict, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    TypedDict,
+    Union,
+    cast,
+)
 
 from .context import CephadmContext
 from .daemon_identity import DaemonIdentity
@@ -191,6 +201,7 @@ def daemons_matching(
     daemon_name: Optional[str] = None,
     daemon_type: Optional[str] = None,
     fsid: Optional[str] = None,
+    daemon_type_predicate: Optional[Callable[[str], bool]] = None,
 ) -> Iterator[Union[LegacyDaemonEntry, DaemonEntry]]:
     """Iterate over the daemons configured on the current node, matching daemon
     name or daemon type if supplied.
@@ -200,6 +211,11 @@ def daemons_matching(
             if fsid is not None and fsid != entry.fsid:
                 continue
             if daemon_type is not None and daemon_type != entry.daemon_type:
+                continue
+            if (
+                daemon_type_predicate is not None
+                and not daemon_type_predicate(entry.daemon_type)
+            ):
                 continue
         elif isinstance(entry, DaemonEntry):
             if fsid is not None and fsid != entry.identity.fsid:
@@ -212,6 +228,11 @@ def daemons_matching(
             if (
                 daemon_type is not None
                 and daemon_type != entry.identity.daemon_type
+            ):
+                continue
+            if (
+                daemon_type_predicate is not None
+                and not daemon_type_predicate(entry.identity.daemon_type)
             ):
                 continue
         else:
