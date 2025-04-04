@@ -102,26 +102,26 @@ class RESTControllerTest(ControllerTestCase):
         self._get('/foo/error_foo_controller')
         self.assertStatus(400)
         self.assertJsonBody(
-            {'detail': '[errno -42] hi', 'code': "42", 'component': 'foo'}
+            {'detail': '[errno -42] hi', 'code': "42", 'component': 'foo', 'title': None}
         )
 
     def test_error_send_command(self):
         self._get('/foo/error_send_command')
         self.assertStatus(400)
         self.assertJsonBody(
-            {'detail': '[errno -42] hi', 'code': "42", 'component': 'foo'}
+            {'detail': '[errno -42] hi', 'code': "42", 'component': 'foo', 'title': None}
         )
 
     def test_error_send_command_list(self):
         self._get('/foo/')
         self.assertStatus(400)
         self.assertJsonBody(
-            {'detail': '[errno -42] list', 'code': "42", 'component': 'foo'}
+            {'detail': '[errno -42] list', 'code': "42", 'component': 'foo', 'title': None}
         )
 
     def test_error_foo_generic(self):
         self._get('/foo/error_generic')
-        self.assertJsonBody({'detail': 'hi', 'code': 'Error', 'component': None})
+        self.assertJsonBody({'detail': 'hi', 'code': 'Error', 'component': None, 'title': None})
         self.assertStatus(400)
 
     def test_viewcache_no_data(self):
@@ -133,14 +133,14 @@ class RESTControllerTest(ControllerTestCase):
         self._get('/foo/vc_exception')
         self.assertStatus(400)
         self.assertJsonBody(
-            {'detail': '[errno -42] hi', 'code': "42", 'component': 'foo'}
+            {'detail': '[errno -42] hi', 'code': "42", 'component': 'foo', 'title': None}
         )
 
     def test_task_exception(self):
         self._get('/foo/task_exception')
         self.assertStatus(400)
         self.assertJsonBody(
-            {'detail': '[errno -42] hi', 'code': "42", 'component': 'foo',
+            {'detail': '[errno -42] hi', 'code': "42", 'component': 'foo', 'title': None,
              'task': {'name': 'task_exceptions/task_exception', 'metadata': {'1': 2}}}
         )
 
