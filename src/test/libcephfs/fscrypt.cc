@@ -175,7 +175,7 @@ int fscrypt_encrypt(const string& dir_path)
     return r;
   }
 
-  for (int i = 0; i < sizeof(fscrypt_key); ++i) {
+  for (int i = 0; i < (int)sizeof(fscrypt_key); ++i) {
     fscrypt_key[i] = (char)rand();
   }
 
