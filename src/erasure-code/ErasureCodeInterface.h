@@ -309,15 +309,13 @@ namespace ceph {
     virtual int minimum_to_decode(const shard_id_set &want_to_read,
                           const shard_id_set &available,
                           shard_id_set &minimum_set,
-                          mini_flat_map<shard_id_t, std::vector<std::pair<int, int>>>
-                          *minimum_sub_chunks) = 0;
+                          mini_flat_map<shard_id_t, std::vector<std::pair<int, int>>> *minimum_sub_chunks) = 0;
 
     // Interface for legacy EC.
     [[deprecated]]
     virtual int minimum_to_decode(const std::set<int> &want_to_read,
                                   const std::set<int> &available,
-                                  std::map<int, std::vector<std::pair<int, int>>> 
-                                  *minimum) = 0;
+                                  std::map<int, std::vector<std::pair<int, int>>> *minimum) = 0;
 
     /**
      * Compute the smallest subset of **available** chunks that needs
