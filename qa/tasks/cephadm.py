@@ -1147,7 +1147,7 @@ def ceph_osds(ctx, config):
                 ]
             )
             add_osd_args = ['ceph', 'orch', 'daemon', 'add', 'osd',
-                            remote.shortname + ':' + short_dev]
+                            remote.shortname + ':' + short_dev, '--skip-validation']
             osd_method = config.get('osd_method')
             if osd_method:
                 add_osd_args.append(osd_method)
