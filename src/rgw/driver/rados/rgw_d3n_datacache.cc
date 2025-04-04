@@ -27,10 +27,16 @@ using namespace std;
 
 int D3nCacheAioWriteRequest::d3n_libaio_prepare_write_op(bufferlist& bl, unsigned int len, string oid, string cache_location)
 {
-  std::string location = cache_location + url_encode(oid, true);
+  std::string location = cache_location + oid;
   int r = 0;
 
   lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: " << __func__ << "(): Write To Cache, location=" << location << dendl;
+  std::filesystem::path dir = std::filesystem::path(location).parent_path();
+  std::error_code sec;
+  if (!std::filesystem::exists(dir) && !std::filesystem::create_directories(dir, sec)) {
+    ldout(cct, 0) << "ERROR: D3nCacheAioWriteRequest::d3n_libaio_prepare_write_op: Error creating cache sub-directories: error_code=" << sec.value() << " : " << sec.message() << ", dir='" << dir << "'" << dendl;
+    return -sec.value();
+  }
   cb = new struct aiocb;
   mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
   memset(cb, 0, sizeof(struct aiocb));
@@ -114,10 +120,17 @@ void D3nDataCache::init(CephContext *_cct) {
 int D3nDataCache::d3n_io_write(bufferlist& bl, unsigned int len, std::string oid)
 {
   D3nChunkDataInfo* chunk_info{nullptr};
-  std::string location = cache_location + url_encode(oid, true);
+  std::string location = cache_location + oid;
   int r = 0;
 
   lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: " << __func__ << "(): location=" << location << dendl;
+  std::filesystem::path dir = std::filesystem::path(location).parent_path();
+  std::error_code sec;
+  if (!std::filesystem::exists(dir) && !std::filesystem::create_directories(dir, sec)) {
+    std::cerr << "Error creating directories: " << sec.message() << std::endl;
+    ldout(cct, 0) << "ERROR: D3nCacheAioWriteRequest::d3n_libaio_prepare_write_op: Error creating cache sub-directories: error_code=" << sec.value() << " : " << sec.message() << ", dir='" << dir << "'" << dendl;
+    return -sec.value();
+  }
 
   {
     size_t nbytes = 0;
@@ -287,7 +300,7 @@ bool D3nDataCache::get(const string& oid, const off_t len)
 {
   const std::lock_guard l(d3n_cache_lock);
   bool exist = false;
-  string location = cache_location + url_encode(oid, true);
+  string location = cache_location + oid;
 
   lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: " << __func__ << "(): location=" << location << dendl;
   std::unordered_map<string, D3nChunkDataInfo*>::iterator iter = d3n_cache_map.find(oid);
@@ -341,7 +354,7 @@ size_t D3nDataCache::random_eviction()
     d3n_cache_map.erase(del_oid); // oid
   }
 
-  location = cache_location + url_encode(del_oid, true);
+  location = cache_location + del_oid;
   ::remove(location.c_str());
   return freed_size;
 }
@@ -377,7 +390,7 @@ size_t D3nDataCache::lru_eviction()
   }
   freed_size = del_entry->size;
   delete del_entry;
-  location = cache_location + url_encode(del_oid, true);
+  location = cache_location + del_oid;
   ::remove(location.c_str());
   return freed_size;
 }

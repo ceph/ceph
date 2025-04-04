@@ -142,7 +142,7 @@ struct D3nL1CacheRequest {
                               rgw::Aio* aio, rgw::AioResult& r) {
     auto ex = yield.get_executor();
     ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): oid=" << r.obj.oid << dendl;
-    async_read(dpp, ex, cache_location+"/"+url_encode(r.obj.oid, true), read_ofs, read_len, bind_executor(ex, d3n_libaio_handler{aio, r}));
+    async_read(dpp, ex, cache_location+"/"+r.obj.oid, read_ofs, read_len, bind_executor(ex, d3n_libaio_handler{aio, r}));
   }
 
 };
