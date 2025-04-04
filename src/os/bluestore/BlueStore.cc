@@ -2910,6 +2910,7 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
 {
   dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " start " << *this << dendl;
+  ceph_assert(r);
   ceph_assert(blob.can_split());
   ceph_assert(used_in_blob.can_split());
   bluestore_blob_t &lb = dirty_blob();
@@ -2920,6 +2921,9 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
     &(r->used_in_blob));
 
   lb.split(blob_offset, rb);
+  maybe_prune_tail(); // we might get tail-to-prune after splitting
+  r->maybe_prune_tail(); // likely redundant (as we tend to prune original blob beforehand)
+                         // but let it be
 
   dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " finish " << *this << dendl;
@@ -3580,9 +3584,14 @@ void BlueStore::ExtentMap::reshard(
 	   << needs_reshard_end << ")" << std::dec
 	   << " of " << onode->onode.extent_map_shards.size()
 	   << " shards on " << onode->oid << dendl;
-  for (auto& p : spanning_blob_map) {
-    dout(20) << __func__ << "   spanning blob " << p.first << " " << *p.second
-	     << dendl;
+  const int span_blob_log_level = 20;
+  if (cct->_conf->subsys.should_gather<ceph_subsys_bluestore, span_blob_log_level>()) {
+    for (auto& p : spanning_blob_map) {
+      dout(span_blob_log_level) << __func__
+                                << "   spanning blob " << p.first
+                                << " " << *p.second
+				<< dendl;
+    }
   }
   // determine shard index range
   unsigned shard_index_begin = 0, shard_index_end = 0;
@@ -3816,11 +3825,18 @@ void BlueStore::ExtentMap::reshard(
 		  dout(20) << __func__ << "    splitting blob, bstart 0x"
 			   << std::hex << bstart << " blob_offset 0x"
 			   << blob_offset << std::dec << " " << *b << dendl;
-		  b = split_blob(b, blob_offset, sh.shard_info->offset);
-		  // switch b to the new right-hand side, in case it
-		  // *also* has to get split.
-		  bstart += blob_offset;
-		  onode->c->store->logger->inc(l_bluestore_blob_split);
+		  BlobRef b1 = split_blob(b, blob_offset, sh.shard_info->offset);
+                  if (b1) {
+		    // switch b to the new right-hand side, in case it
+		    // *also* has to get split.
+                    b = b1;
+		    bstart += blob_offset;
+		    onode->c->store->logger->inc(l_bluestore_blob_split);
+                  } else {
+                    // if null - we've trimmed the blob, shouldn't escape the range now
+                    ceph_assert(!extent->blob_escapes_range(shard_start, shard_end - shard_start));
+                    break;
+                  }
 		} else {
 		  must_span = true;
 		  break;
@@ -4536,28 +4552,102 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
   BlobRef rb = onode->c->new_blob();
   lb->split(onode->c, blob_offset, rb.get());
 
-  for (auto ep = seek_lextent(pos);
-       ep != extent_map.end() && ep->logical_offset < end_pos;
-       ++ep) {
+  auto& rblob = rb->get_blob();
+  bool rb_allocated = false;
+  auto ep0 = seek_lextent(pos);
+  while (ep0 != extent_map.end() && ep0->logical_offset < end_pos) {
+     auto ep = ep0;
+     ++ep0;
     if (ep->blob != lb) {
       continue;
     }
     if (ep->logical_offset < pos) {
-      // split extent
-      size_t left = pos - ep->logical_offset;
-      Extent *ne = new Extent(pos, 0, ep->length - left, rb);
-      extent_map.insert(*ne);
-      ep->length = left;
-      dout(30) << __func__ << "  split " << *ep << dendl;
-      dout(30) << __func__ << "     to " << *ne << dendl;
+      uint64_t lleft = pos - ep->logical_offset;
+      uint64_t lright = ep->length - lleft;
+      bool warn = false;
+      if (rblob.get_logical_length() < lright) {
+        // generally we shouldn't get here,
+        // this means the extent was [partially] referencing to "invalid"
+        // piece of a blob.
+        // Let's fix the issue and even warn if new extent is created
+        lright = rblob.get_logical_length();
+        warn = true;
+      }
+      // Deliberately call is_unallocated() as it's counterpart is_allocated()
+      // returns true when FULL blob is allocated only while we're fine
+      // with partial allocation.
+      if (!rblob.is_unallocated(0, lright)) {
+        rb_allocated = true;
+        // we have at least some valid extents behind
+        ceph_assert(ep->length >= lleft); // by the nature of seek_lextent
+        Extent *ne = new Extent(pos, 0, lright, rb);
+        extent_map.insert(*ne);
+        if (warn) {
+          dout(5) << __func__ << "  [warn] right truncated " << *ne
+                              << dendl;
+        }
+        dout(30) << __func__ << "  split " << *ep << dendl;
+        dout(30) << __func__ << "     to " << *ne << dendl;
+      } else {
+        dout(30) << __func__ << "  split " << *ep << dendl;
+        dout(30) << __func__ << "     to " << "(dummy)" << dendl;
+      }
+      ep->length = lleft;
+      auto lb_len = lb->get_blob().get_logical_length();
+      if (lb_len < ep->length) {
+        // generally we shouldn't get here,
+        // this means the extent was [partially] referencing to "invalid"
+        // piece of a blob.
+        // Let's warn and fix the issue
+        ep->length = lb_len;
+        dout(5) << __func__ << "  [warn] left truncated " << *ep
+                            <<dendl;
+      }
     } else {
-      // switch blob
+      //Extent references right blob only,
+      // let's switch blob
       ceph_assert(ep->blob_offset >= blob_offset);
-
+      auto l = rblob.get_logical_length();
+      bool warn = false;
+      if (l < ep->length) {
+        // generally we shouldn't get here,
+        // this means the extent was [partially] referencing to "invalid"
+        // piece of a blob.
+        // Let's warn and fix the issue
+        warn = true;
+        ep->length = l;
+      }
       ep->blob = rb;
       ep->blob_offset -= blob_offset;
-      dout(30) << __func__ << "  adjusted " << *ep << dendl;
+      if (warn) {
+        dout(5) << __func__ << "  [warn] truncated+adjusted " << *ep << dendl;
+      } else {
+        dout(30) << __func__ << "  adjusted " << *ep << dendl;
+      }
+      // But let's make a final check whether we have anything
+      // valid behind the extent.
+      // Deliberately use is_unallocated() as it's counterpart is_allocated()
+      // returns true when FULL blob is allocated only while we're fine
+      // with partial allocation.
+      if (rblob.is_unallocated(ep->blob_offset, ep->length)) {
+        // We get no valid pextents under the extent at all.
+        // Generally this shouldn't happen unless
+        // the extent was [partially] referencing to "invalid"
+        // piece of a blob.
+        // Let's warn and erase the extent
+        dout(5) << __func__ << "  [warn] thrown away " << *ep << dendl;
+        extent_map.erase(ep);
+      } else {
+        rb_allocated = true;
+      }
     }
+  }
+  // Make a final check whether blob is fully unallocated
+  // unless we've already discovered some allocations.
+  if (!rb_allocated &&
+       rblob.is_unallocated(0, rblob.get_logical_length())) {
+    // forget it, caller should treat that as trimming not splitting
+    rb.reset();
   }
   return rb;
 }
