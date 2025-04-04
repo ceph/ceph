@@ -6,6 +6,8 @@ import time
 import logging
 import errno
 import dateutil.parser
+from datetime import datetime
+import threading
 
 from itertools import combinations
 from itertools import zip_longest
@@ -3755,6 +3757,126 @@ def test_bucket_create_location_constraint():
                                     CreateBucketConfiguration={'LocationConstraint': zg.name})
                 assert e.response['ResponseMetadata']['HTTPStatusCode'] == 400
 
+def test_timestamp_based_epochs():
+    """
+    the test generates objects/instance in both zones: for each of NUM_OBJECTS NUM_VERSIONS are generated;
+    then it waits for the replication to finish and then lists objects/instances in both zones and checks that the instances
+    there are listed are in chronological order, with the expectation that without time-based epochs the listed order of object
+    versions won't be chronological; with the time-based epochs the order should be strictly chronological
+    (although there is still a very slim chance of epoch collisions);
+    :return:
+    """
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    NUM_OBJECTS = 10
+    NUM_VERSIONS = 100
+
+    source_bucket = primary.create_bucket(gen_bucket_name())
+    log.info('created bucket=%s', source_bucket.name)
+
+    def create_bucket_objects (client):
+        log.info(f"Creating objects for {client.meta.endpoint_url} in bucket {source_bucket.name}")
+        attempts=0
+        MAX_ATTEMPTS=3
+        while attempts<MAX_ATTEMPTS:
+            try:
+                for i in range(0, NUM_OBJECTS):
+                    for vid in range(0, NUM_VERSIONS):
+                        key=f"obj-{i}.txt"
+                        response=client.put_object(Key=key, Body=f"This is version {vid}", Bucket=source_bucket.name)
+                        log.info(f"Instance {key} ({response['ResponseMetadata']['HTTPHeaders']['x-amz-version-id']}) created @ {client.meta.endpoint_url}")
+                    log.info(f"{NUM_VERSIONS} versions created for object {key} on {client.meta.endpoint_url}")
+                return
+            except client.exceptions.NoSuchBucket as e:
+                attempts+=1
+                log.info(f"Attempt #{attempts}. Got NoSuchBucket exception. {'Will attempt again in 5 sec' if attempts<MAX_ATTEMPTS else 'Giving up'}")
+                time.sleep(5)
+
+        log.info(f"Failed to create objects for bucket {source_bucket.name} @ {client.meta.endpoint_url}")
+
+
+    # list all objects/versions in the zone and check that their versions are listed in the
+    # chronological order - from the newest to the oldest;
+    def check_modification_history(client, res: dict):
+        for oid in range(0, NUM_OBJECTS):
+            obj_name = f"obj-{oid}.txt"
+            # list all versions of the object from the newest to the oldest
+            response = client.list_object_versions(Bucket=source_bucket.name, Prefix=obj_name)
+            # run the check
+            log.info(f"---------------------------")
+            log.info(f"Checking versions for {obj_name}")
+            log.info(f"---------------------------")
+            prev_date: datetime = None
+            prev_version = ""
+            version_count=0
+            for version in response['Versions']:
+                version_count+=1
+                if prev_date == None:
+                    prev_date = version['LastModified']
+                    prev_version = version['VersionId']
+                    # print(f"remembering {prev_version}")
+                    continue
+
+                cur_date = version['LastModified']
+                # print(f"checking {version['VersionId']}")
+                if cur_date > prev_date:
+                    # TEST FAILED for {obj_name} and {version['VersionId']}
+                    res[client.meta.endpoint_url][obj_name] = version['VersionId']
+                    break
+                else:
+                    prev_date = cur_date
+                    prev_version = version['VersionId']
+
+            log.info(f"Zone {client.meta.endpoint_url}: object {obj_name}: history OK for {version_count} versions")
+
+    def set_bucket_versioning(state: bool):
+        primary.s3_client.put_bucket_versioning(Bucket=source_bucket.name, VersioningConfiguration=
+        {'Status': 'Enabled' if state else 'Disabled'})
+
+
+    set_bucket_versioning(True)
+
+    # let's wait for those changes to propagate to the secondary zone;
+    time.sleep(10)
+
+    tm = threading.Thread(target=create_bucket_objects, args=[primary.s3_client])
+    ts = threading.Thread(target=create_bucket_objects, args=[secondary.s3_client])
+    tm.start()
+    ts.start()
+    tm.join()
+    ts.join()
+
+    # now wait for data sync to replicate the instances between zones
+    # TO DO: improve this by checking sync status of each zone instead
+    time.sleep(15)
+
+    # now check modification history in each zone
+    zone_results={}
+    tm = threading.Thread(target=check_modification_history, args=[primary.s3_client, zone_results])
+    ts = threading.Thread(target=check_modification_history, args=[secondary.s3_client, zone_results])
+    tm.start()
+    ts.start()
+    tm.join()
+    ts.join()
+
+    # print the results
+    log.info(f"---------------------------")
+    log.info(f"---------------------------")
+    log.info(f"---------------------------")
+    for client in [primary.s3_client, secondary.s3_client]:
+        if not client.meta.endpoint_url in zone_results:
+            log.info(f"Test SUCCEEDED for {client.meta.endpoint_url}")
+        else:
+            log.info(f"Test FAILED for {client.meta.endpoint_url}")
+            failed_objs = zone_results[client.meta.endpoint_url]
+            for obj in failed_objs:
+                log.info(f"{obj} version {failed_objs[obj]} is newer than the previous one")
+
+    assert len(zone_results)==0
+
 def allow_bucket_replication(function):
     def wrapper(*args, **kwargs):
         zonegroup = realm.master_zonegroup()
@@ -4201,3 +4323,4 @@ def test_bucket_replication_lock_disabled_to_lock_enabled():
     # check that object does not exist in destination bucket
     e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket_name, Key=objname)
     assert e.response['Error']['Code'] == 'NoSuchKey'
+
