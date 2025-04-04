@@ -89,7 +89,7 @@ static int32_t proxy_link_read(proxy_link_t *link, int32_t sd, void *buffer,
 			return proxy_log(LOG_ERR, EPIPE, "Partial read");
 		}
 
-		buffer += len;
+		buffer = (char *)buffer + len;
 		size -= len;
 	}
 
@@ -117,7 +117,7 @@ static int32_t proxy_link_write(proxy_link_t *link, int32_t sd, void *buffer,
 			return proxy_log(LOG_ERR, EPIPE, "Partial write");
 		}
 
-		buffer += len;
+		buffer = (char *)buffer + len;
 		size -= len;
 	}
 
@@ -239,13 +239,13 @@ static int32_t proxy_link_negotiate_read(proxy_link_t *link, int32_t sd,
 					 proxy_link_negotiate_t *neg)
 {
 	char buffer[128];
-	void *ptr;
+	char *ptr;
 	uint32_t size, len;
 	int32_t err;
 
 	memset(neg, 0, sizeof(proxy_link_negotiate_t));
 
-	ptr = neg;
+	ptr = (char *)neg;
 
 	err = proxy_link_read(link, sd, ptr, sizeof(neg->v0));
 	if (err < 0) {
@@ -706,7 +706,7 @@ int32_t proxy_link_send(int32_t sd, struct iovec *iov, int32_t count)
 		}
 
 		if (count > 0) {
-			iov->iov_base += len;
+			iov->iov_base = (char *)iov->iov_base + len;
 			iov->iov_len -= len;
 		}
 	}
@@ -746,7 +746,7 @@ int32_t proxy_link_recv(int32_t sd, struct iovec *iov, int32_t count)
 		}
 
 		if (count > 0) {
-			iov->iov_base += len;
+			iov->iov_base = (char *)iov->iov_base + len;
 			iov->iov_len -= len;
 		}
 	}
@@ -806,7 +806,7 @@ int32_t proxy_link_req_recv(int32_t sd, struct iovec *iov, int32_t count)
 			return proxy_log(LOG_ERR, ENOBUFS,
 					 "Request is too long");
 		}
-		iov->iov_base += sizeof(proxy_link_req_t);
+		iov->iov_base = (char *)iov->iov_base + sizeof(proxy_link_req_t);
 		iov->iov_len = req->header_len - sizeof(proxy_link_req_t);
 	} else {
 		iov++;
@@ -877,7 +877,7 @@ int32_t proxy_link_ans_recv(int32_t sd, struct iovec *iov, int32_t count)
 			return proxy_log(LOG_ERR, ENOBUFS,
 					 "Answer is too long");
 		}
-		iov->iov_base += sizeof(proxy_link_ans_t);
+		iov->iov_base = (char *)iov->iov_base + sizeof(proxy_link_ans_t);
 		iov->iov_len = ans->header_len - sizeof(proxy_link_ans_t);
 	} else {
 		iov++;
