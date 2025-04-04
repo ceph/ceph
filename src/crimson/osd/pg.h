@@ -952,6 +952,10 @@ private:
       !peering_state.get_missing_loc().readable_with_acting(
 	oid, get_actingset(), v);
   }
+
+  // check if any head or clone of this object is missing
+  bool is_missing_head_and_clones(const hobject_t &hoid);
+
   bool is_missing_on_peer(
     const pg_shard_t &peer,
     const hobject_t &soid) const {

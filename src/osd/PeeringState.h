@@ -2441,6 +2441,10 @@ public:
   unsigned int get_num_missing() const {
     return pg_log.get_missing().num_missing();
   }
+  bool is_missing_any_head_or_clone_of(const hobject_t &hoid) {
+    const auto& missing = pg_log.get_missing();
+    return missing.is_missing_any_head_or_clone_of(hoid);
+  }
 
   const MissingLoc &get_missing_loc() const {
     return missing_loc;

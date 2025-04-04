@@ -1435,6 +1435,35 @@ TEST(pg_missing_t, split_into)
   EXPECT_TRUE(missing.is_missing(oid2));
 }
 
+TEST(pg_missing_t, is_missing_any_head_or_clone_of)
+{
+  hobject_t head_oid(object_t("objname"), "key", 123, 456, 0, "");
+  auto clone_oid = head_oid;
+  clone_oid.snap = 1;
+
+  // empty missing
+  pg_missing_t missing;
+  EXPECT_FALSE(missing.is_missing(head_oid));
+  EXPECT_FALSE(missing.is_missing_any_head_or_clone_of(head_oid));
+  EXPECT_FALSE(missing.is_missing(clone_oid));
+  EXPECT_FALSE(missing.is_missing_any_head_or_clone_of(clone_oid));
+
+  // only head is missing
+  missing.add(head_oid, eversion_t(), eversion_t(), false);
+  EXPECT_TRUE(missing.is_missing(head_oid));
+  EXPECT_TRUE(missing.is_missing_any_head_or_clone_of(head_oid));
+  EXPECT_FALSE(missing.is_missing(clone_oid));
+  EXPECT_TRUE(missing.is_missing_any_head_or_clone_of(clone_oid));
+
+  // only clone is missing
+  pg_missing_t missing2;
+  missing2.add(clone_oid, eversion_t(), eversion_t(), false);
+  EXPECT_FALSE(missing2.is_missing(head_oid));
+  EXPECT_TRUE(missing2.is_missing_any_head_or_clone_of(head_oid));
+  EXPECT_TRUE(missing2.is_missing(clone_oid));
+  EXPECT_TRUE(missing2.is_missing_any_head_or_clone_of(clone_oid));
+}
+
 TEST(pg_pool_t_test, get_pg_num_divisor) {
   pg_pool_t p;
   p.set_pg_num(16);
