@@ -31,7 +31,7 @@
           (updateSelection)="updateSelection($event)">
 
   <div class="table-actions">
-    <cd-table-actions [permission]="permission"
+    <cd-table-actions [permission]="permissions.nvmeof"
                       [selection]="selection"
                       class="btn-group"
                       [tableActions]="tableActions">
@@ -40,6 +40,7 @@
 
   <cd-nvmeof-subsystems-details *cdTableDetail
                                 [selection]="expandedRow"
+                                [permissions]="permissions"
                                 [group]="group">
   </cd-nvmeof-subsystems-details>
 </cd-table>
