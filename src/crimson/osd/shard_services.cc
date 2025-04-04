@@ -64,11 +64,12 @@ seastar::future<> PerShardState::dump_ops_in_flight(Formatter *f) const
 seastar::future<> PerShardState::stop_pgs()
 {
   assert_core();
-  return seastar::parallel_for_each(
+  co_await seastar::parallel_for_each(
     pg_map.get_pgs(),
     [](auto& p) {
       return p.second->stop();
     });
+  co_await pg_timer.stop();
 }
 
 std::map<pg_t, pg_stat_t> PerShardState::get_pg_stats()
