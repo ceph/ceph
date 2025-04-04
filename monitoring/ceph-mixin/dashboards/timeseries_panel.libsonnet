@@ -43,6 +43,7 @@
     scaleDistributionLog=null,
     sortBy=null,
     sortDesc=null,
+    noValue=null,
   ):: {
     title: title,
     type: 'timeseries',
@@ -90,6 +91,7 @@
           mode: thresholdsMode,
           steps: [],
         },
+        [if noValue != null then 'noValue']: noValue,
         unit: unit,
       },
       overrides: [],
