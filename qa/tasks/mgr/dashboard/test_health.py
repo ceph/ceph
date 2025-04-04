@@ -62,6 +62,7 @@ class HealthTest(DashboardTestCase):
             'refuse_standby_for_another_fs': bool,
             'balance_automate': bool,
             'allow_referent_inodes': bool,
+            'use_global_snaprealm': bool,
         }),
         'ever_allowed_features': int,
         'root': int,
