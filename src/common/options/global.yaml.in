@@ -4248,6 +4248,15 @@ options:
   level: advanced
   default: false
   with_legacy: true
+- name: bluefs_wal_envelope_mode
+  type: bool
+  level: advanced
+  desc: Enables a faster backend in BlueFS for WAL writes.
+  long_desc: In envelope mode BlueFS files do not need to update metadata. When applied to RocksDB WAL files,
+    it reduces by ~50% the amount of fdatasync syscalls.
+    Downgrading from an envelope mode to legacy mode requires `ceph-bluestore-tool --command downgrade-wal-to-v1`.
+  default: true
+  with_legacy: false
 - name: bluefs_allocator
   type: str
   level: dev
