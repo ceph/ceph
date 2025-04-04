@@ -381,6 +381,31 @@ def configure_compression(ctx, clients, compression):
     yield
 
 @contextlib.contextmanager
+def enable_zone_feature(ctx, clients, feature):
+    """ enable feature in the default zone """
+    log.info('Enabling feature = %s', feature)
+    for client in clients:
+        if not ctx.rgw.realm:
+            # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
+            # issue a 'radosgw-admin user list' command to trigger this
+            rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
+
+        rgwadmin(ctx, client,
+                 cmd=['zone', 'modify', '--rgw-zone', ctx.rgw.zone,
+                      '--enable-feature', feature],
+                check_status=True)
+
+        if ctx.rgw.realm:
+            rgwadmin(ctx, client,
+                    cmd=['period', 'update', '--commit',
+                        '--rgw-realm', ctx.rgw.realm,
+                        '--rgw-zonegroup', ctx.rgw.zonegroup,
+                        '--rgw-zone', ctx.rgw.zone],
+                    check_status=True)
+
+    yield
+
+@contextlib.contextmanager
 def disable_inline_data(ctx, clients):
     for client in clients:
         if not ctx.rgw.realm:
@@ -515,6 +540,7 @@ def task(ctx, config):
     ctx.rgw.realm = config.pop('realm', None)
     ctx.rgw.zonegroup = config.pop('zonegroup', 'default')
     ctx.rgw.zone = config.pop('zone', 'default')
+    ctx.rgw.zone_features = config.pop('zone_features', [])
     ctx.rgw.config = config
 
     log.debug("config is {}".format(config))
@@ -534,6 +560,12 @@ def task(ctx, config):
             lambda: configure_compression(ctx=ctx, clients=clients,
                                           compression=ctx.rgw.compression_type),
         ])
+    if ctx.rgw.zone_features:
+        for feature in ctx.rgw.zone_features:
+            subtasks.extend([
+                lambda: enable_zone_feature(ctx=ctx, clients=clients,
+                                            feature=feature),
+            ])
     if not ctx.rgw.inline_data:
         subtasks.extend([
             lambda: disable_inline_data(ctx=ctx, clients=clients),
