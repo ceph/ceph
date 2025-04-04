@@ -237,6 +237,7 @@ public:
   : m_func(func) {}
   template<typename... Arg>
   void operator()(Arg... arg) { if (m_func) m_func(std::forward<Arg...>(arg...)); }
+  void operator()() { if (m_func) m_func(); }
   void operator=(T&& func) { m_func = std::move(func);}
   void operator=(T& func) { m_func = func;}
 private:
@@ -562,7 +563,7 @@ private:
   uint64_t _get_minimal_reserved(unsigned id) const;
 
   FileRef _get_file(uint64_t ino);
-  void _drop_link_D(FileRef f);
+  void _drop_link_DF(FileRef f);
 
   unsigned _get_slow_device_id() {
     return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
@@ -813,6 +814,7 @@ public:
   bool debug_get_is_dev_dirty(FileWriter *h, uint8_t dev);
   debug_point_t<std::function<void(uint32_t)>> tracepoint_async_compact;
   void trim_free_space(const std::string& type, std::ostream& outss);
+  debug_point_t<std::function<void()>> unittest_inject_delay;
 
 private:
   // Wrappers for BlockDevice::read(...) and BlockDevice::read_random(...)
