@@ -192,10 +192,15 @@ class NvmeofService(CephService):
             return HandleCommandResult(-errno.EBUSY, '', warn_message)
 
         # if reached here, there is > 1 nvmeof daemon. make sure none are down
-        warn_message = ('ALERT: 1 nvmeof daemon is already down. Please bring it back up before stopping this one')
-        nvmeof_daemons = self.mgr.cache.get_daemons_by_type(self.TYPE)
-        for i in nvmeof_daemons:
-            if i.status != DaemonDescriptionStatus.running:
+        if not force:
+            warn_message = ('ALERT: Only 1 nvmeof daemon is up. Please bring 1 nvmeof daemon back up before stopping this one')
+            up_daemon_cnt = 0
+            hosts_in_maintainance_mode = self.mgr.inventory.get_host_with_state("maintenance")
+            nvmeof_daemons = self.mgr.cache.get_daemons_by_type(self.TYPE)
+            for i in nvmeof_daemons:
+                if i.status == DaemonDescriptionStatus.running and i.hostname not in hosts_in_maintainance_mode:
+                    up_daemon_cnt += 1
+            if up_daemon_cnt < 2:
                 return HandleCommandResult(-errno.EBUSY, '', warn_message)
 
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
