@@ -163,6 +163,58 @@ TEST_F(coroutine_test_t, test_ertr_coroutine_error)
   });
 }
 
+// same as test_ertr_coroutine_error but without ignoring the
+// exeptional future.
+TEST_F(coroutine_test_t, test_ertr_coroutine_error_2)
+{
+  run_scl([this]() -> seastar::future<> {
+
+    auto fut = scl([]() -> ertr::future<int> {
+      co_await ertr::future<int>(crimson::ct_error::invarg::make());
+      EXPECT_EQ("above co_await should throw", nullptr);
+      co_return 10;
+    })();
+
+    auto ret = co_await std::move(fut).handle_error(
+      [](const crimson::ct_error::invarg &e) {
+	return 20;
+      }
+    );
+    EXPECT_EQ(ret, 20);
+  });
+}
+
+TEST_F(coroutine_test_t, test_ertr_coroutine_pass_further)
+{
+  run_scl([this]() -> seastar::future<> {
+
+    // foo1 makes an error which throws
+    auto fut = scl([]() -> ertr::future<int> {
+      co_await ertr::future<int>(crimson::ct_error::invarg::make());
+      EXPECT_EQ("above co_await should throw", nullptr);
+      co_return 10;
+    })();
+
+    // foo2 handles the error and passes it further
+    auto fut2 = scl([fut = std::move(fut)]() mutable -> ertr::future<int> {
+      co_await std::move(fut).handle_error(
+        ertr::pass_further{}
+      );
+      EXPECT_EQ("above co_await should throw", nullptr);
+      co_return 10;
+    })();
+
+    // handle the passed further error from foo2
+    auto ret = co_await std::move(fut2).handle_error(
+      [](const crimson::ct_error::invarg &e) {
+	return 20;
+      }
+    );
+
+    EXPECT_EQ(ret, 20);
+  });
+}
+
 #if 0
 // This one is left in, but commented out, as a test which *should fail to
 // build* due to trying to co_await a more errorated future.
