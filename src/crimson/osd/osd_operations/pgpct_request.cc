@@ -17,7 +17,7 @@ namespace crimson::osd {
 
 PGPCTRequest::PGPCTRequest(crimson::net::ConnectionRef&& conn,
 		       Ref<MOSDPGPCT> &&req)
-  : l_conn{std::move(conn)},
+  : RemoteOperation{std::move(conn)},
     req{std::move(req)}
 {}
 
