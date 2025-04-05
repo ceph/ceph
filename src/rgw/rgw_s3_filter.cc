@@ -9,6 +9,7 @@
 #include "rgw_sal.h"
 #include <regex>
 #include <algorithm>
+#define RGW_ATTR_ZONE_ID "zone_id"
 
 void rgw_s3_key_filter::dump(Formatter *f) const {
   if (!has_content()) {
@@ -152,12 +153,14 @@ void rgw_s3_filter::dump(Formatter *f) const {
   encode_json("S3Key", key_filter, f);
   encode_json("S3Metadata", metadata_filter, f);
   encode_json("S3Tags", tag_filter, f);
+  encode_json("S3Zones", zone_filter, f);
 }
 
 bool rgw_s3_filter::decode_xml(XMLObj* obj) {
   RGWXMLDecoder::decode_xml("S3Key", key_filter, obj);
   RGWXMLDecoder::decode_xml("S3Metadata", metadata_filter, obj);
   RGWXMLDecoder::decode_xml("S3Tags", tag_filter, obj);
+  RGWXMLDecoder::decode_xml("Zones", zone_filter, obj);  
   return true;
 }
 
@@ -171,13 +174,67 @@ void rgw_s3_filter::dump_xml(Formatter *f) const {
   if (tag_filter.has_content()) {
     ::encode_xml("S3Tags", tag_filter, f);
   }
+  if (zone_filter.has_content()) {
+    ::encode_xml("Zones", zone_filter, f);
+  }
 }
 
 bool rgw_s3_filter::has_content() const {
   return key_filter.has_content()  ||
          metadata_filter.has_content() ||
-         tag_filter.has_content();
+         tag_filter.has_content() ||
+         zone_filter.has_content();
 }
+
+bool rgw_s3_zone_filter::decode_xml(XMLObj* obj) {
+  zones.clear();
+
+  XMLObjIter iter = obj->find("FilterRule");
+  XMLObj* o;
+
+  const auto throw_if_missing = true;
+  std::string name;
+  std::string type;
+
+  while ((o = iter.get_next())) {
+    RGWXMLDecoder::decode_xml("Name", name, o, throw_if_missing);
+    if (RGWXMLDecoder::decode_xml("Type", type, o, !throw_if_missing)) {
+      negative_filter = type == "IN" ? false : true;
+    }
+    zones.insert(name);
+  }
+  return true;
+}
+
+bool rgw_s3_zone_filter::has_content() const {
+  return !zones.empty();
+}
+
+void rgw_s3_zone_filter::dump(Formatter* f) const {
+  if (!has_content()) {
+    return;
+  }
+
+  f->open_array_section("FilterRules");
+  for (const auto& zone : zones) {
+    f->open_object_section("");
+    ::encode_json("Name", zone, f);
+    ::encode_json("Type", negative_filter ? "OUT" : "IN", f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+
+void rgw_s3_zone_filter::dump_xml(Formatter* f) const {
+  for (const auto& zone : zones) {
+    f->open_object_section("FilterRule");
+    ::encode_xml("Name", zone, f);
+    ::encode_xml("Type", negative_filter ? "OUT" : "IN", f);
+    f->close_section();
+  }
+}
+
 
 bool match(const rgw_s3_key_filter& filter, const std::string& key) {
   const auto key_size = key.size();
@@ -234,6 +291,16 @@ bool match(const rgw_s3_key_value_filter& filter, const KeyMultiValueMap& kv) {
   return negative_filter == true ? false : true;
 }
 
+bool match(const rgw_s3_zone_filter& filter, const std::string& zone) {
+  if (filter.zones.empty()) {
+    return false;
+  }
+
+  const bool contains = filter.zones.count(zone) > 0;
+  return filter.negative_filter ? !contains : contains;
+}
+
+
 bool match(const rgw_s3_filter& s3_filter, const rgw::sal::Object* obj) {
   if (obj == nullptr) {
     return false;
@@ -278,6 +345,17 @@ bool match(const rgw_s3_filter& s3_filter, const rgw::sal::Object* obj) {
     }
     if (match(s3_filter.tag_filter, tags)) {
       return true;
+    }
+  }
+
+  // match zone filter
+  if (!s3_filter.zone_filter.zones.empty()) {
+    const auto attr_iter = attrs.find(RGW_ATTR_ZONE_ID);
+    if (attr_iter != attrs.end()) {
+      std::string zone_id = attr_iter->second.to_str();
+      if (match(s3_filter.zone_filter, zone_id)) {
+        return true;
+      }
     }
   }
 
