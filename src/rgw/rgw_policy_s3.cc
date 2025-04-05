@@ -248,13 +248,56 @@ int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
 {
   JSONParser parser;
 
-  // Without subtracting 1, we wind up sending bad data into the
-  // parser:
-  if (!parser.parse(bl.c_str(), bl.length() - 1)) {
-    err_msg = "Malformed JSON (RGWPolicy)";
-    dout(0) << "malformed json (RGWPolicy)" << dendl;
-    return -EINVAL;
+try {
+
+/*
+dout(0) << "JFW: start parse ---------------" << dendl;
+dout(0) << "JFW: from_json(): JSON in:" << dendl;
+dout(0) << "JFW: " << bl.c_str() << dendl;
+dout(0) << "JFW: -----------------------------" << dendl;
+*/
+
+  if (!parser.parse_JFW(bl.c_str(), bl.length() - 1)) {
+//JFW: this should never be reached in our test as the underlying mechanism throws
+    err_msg = fmt::format("JFW: Malformed JSON (RGWPolicy) length = {}:\n{}\n----\n", bl.length() - 1, bl.c_str());
+    dout(0) << err_msg << dendl;
   }
+} catch(const std::runtime_error& e) {
+    err_msg = fmt::format("JFW: Malformed JSON (RGWPolicy) length = {}:\n{}\n----\n", bl.length() - 1, bl.c_str());
+    dout(0) << err_msg << dendl;
+
+    try {
+err_msg = fmt::format("JFW: JSON parse failed: Malformed JSON (RGWPolicy) length = {}:\n{}\n----\n", bl.length() - 1, bl.c_str());
+dout(0) << err_msg << dendl;
+
+auto bl_len = bl.length();
+std::string s = bl.c_str();
+dout(0) << "JFW: bl.length() = " << bl_len << "; s.length() = " << s.length() << dendl;
+dout(0) << "JFW: s[s.length()] = " << (int)(s[s.length()]) << dendl;
+dout(0) << "JFW: s:" << dendl;
+dout(0) << s << dendl;
+dout(0) << "JFW." << dendl;
+
+
+dout(0) << "JFW: trying again WITHOUT correction..." << dendl;
+      if (!parser.parse_JFW(bl.c_str(), bl.length())) {
+//JFW: should never make it here
+        dout(0) << "JFW: STILL FAILS after retry" << dendl;
+    err_msg = fmt::format("JFW: Malformed JSON (RGWPolicy) length = {}:\n{}\n----\n", bl.length() - 1, bl.c_str());
+    dout(0) << err_msg << dendl;
+        return -EINVAL;
+      }
+    
+dout(0) << "JFW: -------------------- parse OK after retry" << dendl;
+    } catch(const std::runtime_error& e) {
+        dout(0) << "JFW: STILL FAILS after retry" << dendl;
+      return -EINVAL;
+}
+
+//JFW:    return -EINVAL;
+ 
+ return 0; // JFW: OK
+}
 
   // as no time was included in the request, we hope that the user has included a short timeout
   JSONObjIter iter = parser.find_first("expiration");
