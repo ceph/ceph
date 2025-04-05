@@ -504,6 +504,26 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_restore_lock_max_time
+  type: int
+  level: dev
+  default: 90
+  services:
+  - rgw
+  see_also:
+  with_legacy: true
+- name: rgw_restore_processor_period
+  type: int
+  level: advanced
+  desc: Restore cycle run time
+  long_desc: The amount of time between the start of consecutive runs of the garbage
+    collector threads. If garbage collector runs takes more than this period, it will
+    not wait before running again.
+  fmt_desc: The cycle time for garbage collection processing.
+  default: 1_hr
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_mp_lock_max_time
   type: int
   level: advanced

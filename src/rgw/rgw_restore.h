@@ -29,6 +29,76 @@
 static std::string restore_oid_prefix = "restore";
 static std::string restore_index_lock_name = "restore_process";
 
+extern const char* RESTORE_STATUS[];
+
+typedef enum {
+  restore_uninitial = 0,
+  restore_in_progress,
+  restore_failed,
+  restore_complete
+} RESTORE_ENTRY_STATUS;
+
+struct rgw_restore_entry {
+  rgw_bucket bucket;
+  rgw_obj_key obj_key;
+  std::optional<uint64_t> days;
+  std::string zone_id; // or should it be zone name?
+  uint32_t status;
+
+  rgw_restore_entry() {}
+  rgw_restore_entry(rgw::sal::RestoreEntry e): bucket(e.bucket), obj_key(e.obj_key), days(e.days),
+       				zone_id(e.zone_id), status(e.status) {}
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(bucket, bl);
+    encode(obj_key, bl);
+    encode(days, bl);
+    encode(zone_id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+     DECODE_START(1, bl);
+     decode(bucket, bl);
+     decode(obj_key, bl);
+     decode(days, bl);
+     decode(zone_id, bl);
+     DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter* f) const;
+  void decode_json(JSONObj* obj);
+};
+WRITE_CLASS_ENCODER(rgw_restore_entry)
+
+struct rgw_restore_log_entry {
+  std::string id;
+  ceph::real_time mtime;
+  rgw_restore_entry entry;
+
+  rgw_restore_log_entry() {}
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(id, bl);
+    encode(mtime, bl);
+    encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+     DECODE_START(1, bl);
+     decode(id, bl);
+     decode(mtime, bl);
+     decode(entry, bl);
+     DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter* f) const;
+  void decode_json(JSONObj* obj);
+};
+WRITE_CLASS_ENCODER(rgw_restore_log_entry)
+
 class RGWRestore : public DoutPrefixProvider {
   CephContext *cct;
   rgw::sal::Driver* driver;
@@ -52,6 +122,11 @@ class RGWRestore : public DoutPrefixProvider {
 
     RestoreWorker(const DoutPrefixProvider* _dpp, CephContext *_cct, RGWRestore *_restore) : dpp(_dpp), cct(_cct), restore(_restore) {}
     RGWRestore* get_restore() { return restore; }
+
+    std::string thr_name() {
+      return std::string{"restore_thrd: "}; // + std::to_string(ix);
+    }
+
 
     void *entry() override;
     void stop();
@@ -84,12 +159,14 @@ public:
 
   std::ostream& gen_prefix(std::ostream& out) const;
 
-  int process(RestoreWorker* worker,
-              bool once, //is it needed for Restore?
-              bool retry); // to retry in_progress request after restart
-
+  int process(RestoreWorker* worker, optional_yield y,
+		   bool once = false, //is it needed for CR?
+		   bool retry = false); // to retry in_progress request after restart
   time_t thread_stop_at();
 
+  int choose_oid(rgw::sal::RestoreEntry e);
+  int process(int index, int max_secs, optional_yield y);
+  int process_restore_entry(rgw::sal::RestoreEntry& entry, optional_yield y);
 
   int set_cloud_restore_status(const DoutPrefixProvider* dpp, rgw::sal::Object* pobj,
 		  	   optional_yield y, rgw::sal::RGWRestoreStatus restore_status);

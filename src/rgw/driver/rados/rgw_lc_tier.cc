@@ -308,7 +308,7 @@ int rgw_cloud_tier_restore_object(RGWLCCloudTierCtx& tier_ctx,
     }
 
     in_progress = is_restore_in_progress(tier_ctx.dpp, headers);
-  } while(1); // should we try multiple times?
+  } while(0); // should we try multiple times?
 
   if (in_progress) {
     ldpp_dout(tier_ctx.dpp, 20) << __func__ << "Restoring object=" << target_obj_name << " still in progress; returning " << dendl;

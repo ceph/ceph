@@ -1652,18 +1652,42 @@ public:
 						       const std::string& cookie) = 0;
 };
 
-/** Single entry in a lifecycle run.  Multiple entries can exist processing different
- * buckets. */
+class RestoreSerializer : public Serializer {
+public:
+  RestoreSerializer() {}
+  virtual ~RestoreSerializer() = default;
+};
+
 struct RestoreEntry {
-  std::string bucket;
-  rgw_obj_index_key obj_key;
+  rgw_bucket bucket;
+  rgw_obj_key obj_key;
   std::optional<uint64_t> days;
+  std::string zone_id; // or should it be zone name?
+  uint32_t status;
 };
 
 class Restore {
 public:
   Restore() = default;
   virtual ~Restore() = default;
+  virtual int init(const DoutPrefixProvider* dpp, 
+		  Driver *driver, int max_objs, std::string prefix) = 0;
+  virtual int add_entry(const DoutPrefixProvider* dpp, optional_yield y,
+		  int index, RestoreEntry r_entry) = 0;
+  virtual int add_entries(const DoutPrefixProvider* dpp, optional_yield y,
+	       int index, std::list<RestoreEntry> restore_entries) = 0;
+  /** List all known entries */
+  virtual int list(const DoutPrefixProvider *dpp, optional_yield y,
+	       	   int index,
+	           const std::string& marker, std::string* out_marker,
+		   uint32_t max_entries, std::vector<RestoreEntry>& entries,
+		   bool* truncated) = 0;
+  virtual int trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
+		 	  int index, std::string_view marker) = 0;
+  /** Get a serializer for lifecycle */
+  virtual std::unique_ptr<RestoreSerializer> get_serializer(const std::string& lock_name,
+						       const std::string& oid,
+						       const std::string& cookie) = 0;
 };
 
 /**

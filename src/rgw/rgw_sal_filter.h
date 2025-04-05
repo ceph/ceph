@@ -1053,6 +1053,19 @@ public:
 						       const std::string& cookie) override;
 };
 
+class FilterRestoreSerializer : public RestoreSerializer {
+protected:
+  std::unique_ptr<RestoreSerializer> next;
+
+public:
+  FilterRestoreSerializer(std::unique_ptr<RestoreSerializer> _next) : next(std::move(_next)) {}
+  virtual ~FilterRestoreSerializer() = default;
+
+  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
+  virtual int unlock() override { return next->unlock(); }
+  virtual void print(std::ostream& out) const override { return next->print(out); }
+};
+
 class FilterRestore : public Restore {
 protected:
   std::unique_ptr<Restore> next;
@@ -1061,6 +1074,24 @@ public:
 
   FilterRestore(std::unique_ptr<Restore> _next) : next(std::move(_next)) {}
   virtual ~FilterRestore() = default;
+  virtual int init(const DoutPrefixProvider* dpp, 
+		  Driver *driver, int max_objs, std::string prefix) override;
+  virtual int add_entry(const DoutPrefixProvider* dpp, optional_yield y,
+		  int index, RestoreEntry r_entry) override;
+  virtual int add_entries(const DoutPrefixProvider* dpp, optional_yield y,
+	       int index, std::list<RestoreEntry> restore_entries) override;
+  /** List all known entries */
+  virtual int list(const DoutPrefixProvider *dpp, optional_yield y,
+	       	   int index,
+	           const std::string& marker, std::string* out_marker,
+		   uint32_t max_entries, std::vector<RestoreEntry>& entries,
+		   bool* truncated) override;
+  virtual int trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
+		 	  int index, std::string_view marker) override;
+  /** Get a serializer for lifecycle */
+  virtual std::unique_ptr<RestoreSerializer> get_serializer(const std::string& lock_name,
+						       const std::string& oid,
+						       const std::string& cookie) override;
 };
 
 class FilterNotification : public Notification {

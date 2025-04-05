@@ -46,6 +46,7 @@
 #include "rgw_tools.h"
 #include "rgw_tracer.h"
 #include "rgw_oidc_provider.h"
+#include "rgw_restore.h"
 
 #include "rgw_zone.h"
 #include "rgw_rest_conn.h"
@@ -4487,6 +4488,242 @@ std::unique_ptr<LCSerializer> RadosLifecycle::get_serializer(const std::string& 
 							     const std::string& cookie)
 {
   return std::make_unique<LCRadosSerializer>(store, oid, lock_name, cookie);
+}
+
+RestoreRadosSerializer::RestoreRadosSerializer(RadosStore* store, const std::string& _oid, const std::string& lock_name, const std::string& cookie) :
+  StoreRestoreSerializer(_oid),
+  ioctx(*store->getRados()->get_restore_pool_ctx()),
+  lock(lock_name)
+{
+//  ioctx = &store->getRados()->restore_pool_ctx;
+  lock.set_cookie(cookie);
+}
+
+int RestoreRadosSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y)
+{
+  lock.set_duration(dur);
+  return lock.lock_exclusive((librados::IoCtx*)(&ioctx), oid);
+}
+
+std::unique_ptr<RestoreSerializer> RadosRestore::get_serializer(const std::string& lock_name,
+							     const std::string& oid,
+							     const std::string& cookie)
+{
+  return std::make_unique<RestoreRadosSerializer>(store, oid, lock_name, cookie);
+}
+
+int RadosRestore::init(const DoutPrefixProvider *dpp, Driver* st,
+	       	int n_objs, std::string pr) {
+    store = (RadosStore*)st;
+    num_objs = n_objs;
+    prefix = pr;
+//    auto& ioctx = *store->getRados()->get_restore_pool_ctx();
+/*    for (int i =0; i < num_objs; i++) 
+    { 
+	    LazyFIFO* f = new LazyFIFO(ioctx, get_oid(i));
+	    fifos.push_back((f));
+    }*/
+//    fifos = new (ceph::containers::tiny_vector<LazyFIFO>(num_objs, [&ioctx, this](std::size_t i, auto emplacer) {
+//	         emplacer.emplace(ioctx, get_oid(i));
+  // }))
+    return 0;
+}
+
+int RadosRestore::add_entry(const DoutPrefixProvider* dpp, optional_yield y,
+		int index, RestoreEntry entry) {
+  bufferlist bl;
+  std::vector<ceph::buffer::list> ent_list;
+
+  rgw_restore_entry r_entry(entry);
+  encode(r_entry, bl);
+
+  //std::unique_lock<rgw::sal::RestoreSerializer> lock(
+    //*(serializer.get()), std::adopt_lock);
+
+  auto ret = push(dpp, y, index, std::move(bl));
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: push() returned " << ret << dendl;
+    return ret;
+  }
+//  lock.unlock();
+
+  return 0;
+}
+
+
+int RadosRestore::add_entries(const DoutPrefixProvider* dpp, optional_yield y,
+		int index, std::list<RestoreEntry> restore_entries) {
+  std::vector<ceph::buffer::list> ent_list;
+
+  for (auto& entry : restore_entries) {
+    bufferlist bl;
+
+    rgw_restore_entry r_entry(entry);
+    encode(r_entry, bl);
+    ent_list.push_back(std::move(bl));
+
+   // m[index].first.push_back(index);
+//    prepare(std::move(bl), m[index].second);
+  }
+
+/*  for (auto& [index, p] : m) {
+    auto& ents = p;
+
+    auto now = real_clock::now();
+
+    auto ret = push(dpp, index, std::move(ents), null_yield);*/
+
+  //std::unique_lock<rgw::sal::RestoreSerializer> lock(
+   // *(serializer.get()), std::adopt_lock);
+
+    int ret = push(dpp, y, index, std::move(ent_list));
+
+    if (ret < 0) {
+      ldpp_dout(dpp, -1) << "ERROR: push() returned " << ret << dendl;
+      return ret;
+    }
+//    lock.unlock();
+//  }
+
+  return 0;
+}
+
+void RadosRestore::prepare(ceph::buffer::list&& entry, entries& out) {
+  if (!std::holds_alternative<centries>(out)) {
+    ceph_assert(std::visit([](auto& v) { return std::empty(v); }, out));
+    out = centries();
+  }
+  std::get<centries>(out).push_back(std::move(entry));
+}
+
+int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
+		int index, entries&& items) {
+  auto r = fifos[index].push(dpp, std::get<centries>(items), y);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
+		 << ": unable to push to FIFO: " << get_oid(index)
+		 << ": " << cpp_strerror(-r) << dendl;
+    }
+    return r;
+}
+
+int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
+		int index, ceph::buffer::list&& bl) {
+  auto r = fifos[index].push(dpp, std::move(bl), y);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
+		 << ": unable to push to FIFO: " << get_oid(index)
+		 << ": " << cpp_strerror(-r) << dendl;
+  }
+  return r;
+}
+
+int RadosRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
+	       	   int index, const std::string& marker, std::string* out_marker,
+		   uint32_t max_entries, std::vector<RestoreEntry>& entries,
+		   bool* truncated)
+{
+  std::vector<rgw::cls::fifo::list_entry> restore_entries;
+  bool more = false;
+
+ // std::unique_lock<rgw::sal::RestoreSerializer> lock(
+   // *(serializer.get()), std::adopt_lock);
+
+  auto r = fifos[index].list(dpp, max_entries, marker, &restore_entries, &more, y);
+
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
+		 << ": unable to list FIFO: " << get_oid(index)
+		 << ": " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+//  lock.unlock();
+
+  entries.clear();
+
+  for (const auto& entry : restore_entries) {
+      rgw_restore_log_entry r_entry;
+      r_entry.id = entry.marker; // XXX: see what should be marker... maybe obj_key
+      r_entry.mtime = entry.mtime;
+
+      auto liter = entry.data.cbegin();
+      try {
+	decode(r_entry.entry, liter);
+      } catch (const buffer::error& err) {
+	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
+		   << ": failed to decode restore entry: "
+		   << err.what() << dendl;
+	return -EIO;
+      }
+      RestoreEntry e;
+      rgw_restore_entry& ent = r_entry.entry;
+      e.bucket = ent.bucket;
+      e.obj_key = ent.obj_key;
+      e.days = ent.days;
+      e.zone_id = ent.zone_id;
+      e.status = ent.status;
+
+      entries.push_back(std::move(e));
+  }
+
+  if (truncated)
+    *truncated = more;
+
+  if (out_marker && !restore_entries.empty()) {
+    *out_marker = restore_entries.back().marker;
+  }
+
+  return 0;
+}
+
+int RadosRestore::trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
+			int index, std::string_view marker)
+{
+  assert(index < num_objs);
+//  std::unique_lock<rgw::sal::RestoreSerializer> lock(
+  //  *(serializer.get()), std::adopt_lock);
+
+  int ret = trim(dpp, y, index, marker);
+//  lock.unlock();
+
+  return ret;
+}
+
+int RadosRestore::trim(const DoutPrefixProvider *dpp, optional_yield y,
+		int index, std::string_view marker) {
+  auto r = fifos[index].trim(dpp, marker, false, y);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
+		 << ": unable to trim FIFO: " << get_oid(index)
+		 << ": " << cpp_strerror(-r) << dendl;
+  }
+
+  return r;
+}
+
+std::string_view RadosRestore::max_marker() {
+  static const std::string mm = rgw::cls::fifo::marker::max().to_string();
+  return std::string_view(mm);
+}
+
+int RadosRestore::is_empty(const DoutPrefixProvider *dpp, optional_yield y) {
+    std::vector<rgw::cls::fifo::list_entry> restore_entries;
+    bool more = false;
+
+    for (auto shard = 0u; shard < fifos.size(); ++shard) {
+      auto r = fifos[shard].list(dpp, 1, {}, &restore_entries, &more, y);
+      if (r < 0) {
+	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
+		   << ": unable to list FIFO: " << get_oid(shard)
+		   << ": " << cpp_strerror(-r) << dendl;
+	return r;
+      }
+      if (!restore_entries.empty()) {
+	return 0;
+      }
+    }
+
+    return 1;
 }
 
 int RadosNotification::publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags)

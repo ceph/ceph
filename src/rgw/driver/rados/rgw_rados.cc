@@ -1206,6 +1206,10 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
   if (ret < 0)
     return ret;
 
+  ret = open_restore_pool_ctx(dpp);
+  if (ret < 0)
+    return ret;
+
   ret = open_objexp_pool_ctx(dpp);
   if (ret < 0)
     return ret;
@@ -1451,6 +1455,11 @@ int RGWRados::open_gc_pool_ctx(const DoutPrefixProvider *dpp)
 int RGWRados::open_lc_pool_ctx(const DoutPrefixProvider *dpp)
 {
   return rgw_init_ioctx(dpp, get_rados_handle(), svc.zone->get_zone_params().lc_pool, lc_pool_ctx, true, true);
+}
+
+int RGWRados::open_restore_pool_ctx(const DoutPrefixProvider *dpp)
+{
+  return rgw_init_ioctx(dpp, get_rados_handle(), svc.zone->get_zone_params().restore_pool, restore_pool_ctx, true, true);
 }
 
 int RGWRados::open_objexp_pool_ctx(const DoutPrefixProvider *dpp)

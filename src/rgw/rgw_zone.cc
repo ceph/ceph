@@ -304,6 +304,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("placement_pools", placement_pools, obj);
   JSONDecoder::decode_json("tier_config", tier_config, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
+  JSONDecoder::decode_json("restore_pool", restore_pool, obj);
 }
 
 void RGWZoneParams::dump(Formatter *f) const
@@ -331,6 +332,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("placement_pools", placement_pools, f);
   encode_json("tier_config", tier_config, f);
   encode_json("realm_id", realm_id, f);
+  encode_json("restore_pool", restore_pool, f);
 }
 
 int RGWZoneParams::init(const DoutPrefixProvider *dpp, 
@@ -473,6 +475,7 @@ void add_zone_pools(const RGWZoneParams& info,
   pools.insert(info.domain_root);
   pools.insert(info.control_pool);
   pools.insert(info.gc_pool);
+  pools.insert(info.restore_pool);
   pools.insert(info.log_pool);
   pools.insert(info.intent_log_pool);
   pools.insert(info.usage_log_pool);
@@ -580,6 +583,7 @@ int RGWZoneParams::fix_pool_names(const DoutPrefixProvider *dpp, optional_yield 
   control_pool = fix_zone_pool_dup(pools, name, ".rgw.control", control_pool);
   gc_pool = fix_zone_pool_dup(pools, name ,".rgw.log:gc", gc_pool);
   lc_pool = fix_zone_pool_dup(pools, name ,".rgw.log:lc", lc_pool);
+  restore_pool = fix_zone_pool_dup(pools, name ,".rgw.log:restore", restore_pool);
   log_pool = fix_zone_pool_dup(pools, name, ".rgw.log", log_pool);
   intent_log_pool = fix_zone_pool_dup(pools, name, ".rgw.log:intent", intent_log_pool);
   usage_log_pool = fix_zone_pool_dup(pools, name, ".rgw.log:usage", usage_log_pool);
@@ -1276,6 +1280,7 @@ int init_zone_pool_names(const DoutPrefixProvider *dpp, optional_yield y,
   info.control_pool = fix_zone_pool_dup(pools, info.name, ".rgw.control", info.control_pool);
   info.gc_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log:gc", info.gc_pool);
   info.lc_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log:lc", info.lc_pool);
+  info.restore_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log:restore", info.restore_pool);
   info.log_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log", info.log_pool);
   info.intent_log_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log:intent", info.intent_log_pool);
   info.usage_log_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log:usage", info.usage_log_pool);

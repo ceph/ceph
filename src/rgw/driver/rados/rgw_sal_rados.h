@@ -28,6 +28,9 @@
 #include "services/svc_tier_rados.h"
 #include "cls/lock/cls_lock_client.h"
 
+// for LazyFIFO .. should it be moved to any other common file
+#include "rgw_log_backing.h"
+
 namespace rgw { namespace sal {
 
 class RadosMultipartUpload;
@@ -946,11 +949,80 @@ public:
 						       const std::string& cookie) override;
 };
 
-class RadosRestore : public Restore {
-  RadosStore* store;
+class RestoreRadosSerializer : public StoreRestoreSerializer {
+  librados::IoCtx& ioctx;
+  ::rados::cls::lock::Lock lock;
 
 public:
-  RadosRestore(RadosStore* _st) : store(_st) {}
+  RestoreRadosSerializer(RadosStore* store, const std::string& oid, const std::string& lock_name, const std::string& cookie);
+
+  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
+  virtual int unlock() override {
+    return lock.unlock(&ioctx, oid);
+  }
+};
+
+class RadosRestore : public Restore {
+  RadosStore* store;
+  std::string prefix;
+  int num_objs;
+  librados::IoCtx& ioctx;
+  using centries = std::vector<ceph::buffer::list>;
+  ceph::containers::tiny_vector<LazyFIFO> fifos;
+//  std::vector<LazyFIFO*> fifos;
+//  list<rgw_restore_entry> entries;
+  using entries = std::variant<std::list<RestoreEntry>,
+			       std::vector<ceph::buffer::list>>;
+
+public:
+  RadosRestore(RadosStore* _st) : store(_st), num_objs(32),
+       ioctx(*store->getRados()->get_restore_pool_ctx()),
+       fifos(num_objs,
+	[&](const size_t ix, auto emplacer) {
+	  emplacer.emplace(ioctx, get_oid(ix));
+	})
+		{}
+/*  RadosRestore(RadosStore* _st, int _n_objs, std::string _prefix)
+	       : store(_st),
+	       num_objs(_n_objs),
+	       prefix(_prefix),
+    	       rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), store->svc()->zone->get_zone_params().log_pool, ioctx, true),
+	       fifos(num_objs, [&ioctx, this](std::size_t i, auto emplacer) {
+	         emplacer.emplace(ioctx, get_oid(i));
+	       }) {}*/
+
+  ~RadosRestore() override = default;
+  int init(const DoutPrefixProvider *dpp, Driver* st, int n_objs, std::string pr) override;
+
+  std::string get_oid(int i) {
+	  prefix = "rgw_restore";
+	  return fmt::format("{}.{}", prefix, i);
+  }
+  virtual int add_entry(const DoutPrefixProvider* dpp, optional_yield y,
+		  int index, RestoreEntry r_entry) override;
+  virtual int add_entries(const DoutPrefixProvider* dpp, optional_yield y,
+	       int index, std::list<RestoreEntry> restore_entries) override;
+  virtual int list(const DoutPrefixProvider *dpp, optional_yield y,
+	       	   int index,
+	           const std::string& marker, std::string* out_marker,
+		   uint32_t max_entries, std::vector<RestoreEntry>& entries,
+		   bool* truncated) override;
+  virtual int trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
+		 	  int index, std::string_view marker) override;
+  virtual std::unique_ptr<RestoreSerializer> get_serializer(const std::string& lock_name,
+						       const std::string& oid,
+						       const std::string& cookie) override;
+  int is_empty(const DoutPrefixProvider *dpp, optional_yield y);
+
+  std::string_view max_marker();
+
+  int trim(const DoutPrefixProvider *dpp, optional_yield y,
+		int index, std::string_view marker);
+  int push(const DoutPrefixProvider *dpp, optional_yield y,
+		int index, ceph::buffer::list&& bl);
+  int push(const DoutPrefixProvider *dpp, optional_yield y,
+		int index, entries&& items);
+  void prepare(ceph::buffer::list&& entry, entries& out);
 };
 
 class RadosNotification : public StoreNotification {

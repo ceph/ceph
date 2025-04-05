@@ -1432,6 +1432,51 @@ std::unique_ptr<LCSerializer> FilterLifecycle::get_serializer(
   return std::make_unique<FilterLCSerializer>(std::move(ns));
 }
 
+int FilterRestoreSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur,
+				 optional_yield y)
+{
+  return next->try_lock(dpp, dur, y);
+}
+
+std::unique_ptr<RestoreSerializer> FilterRestore::get_serializer(const std::string& lock_name,
+						       const std::string& oid,
+						       const std::string& cookie) {
+  std::unique_ptr<RestoreSerializer> ns;
+  ns = next->get_serializer(lock_name, oid, cookie);
+
+  return std::make_unique<FilterRestoreSerializer>(std::move(ns));
+}
+
+int FilterRestore::init(const DoutPrefixProvider* dpp, 
+		  Driver *driver, int max_objs, std::string prefix) {
+	return next->init(dpp, driver, max_objs, prefix);
+}
+
+int FilterRestore::add_entry(const DoutPrefixProvider* dpp, optional_yield y,
+		  int index, RestoreEntry r_entry) {
+	return next->add_entry(dpp, y, index, r_entry);
+}
+
+int FilterRestore::add_entries(const DoutPrefixProvider* dpp, optional_yield y,
+	       int index, std::list<RestoreEntry> restore_entries) {
+	return next->add_entries(dpp, y, index, restore_entries);
+}
+
+  /** List all known entries */
+int FilterRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
+	       	   int index,
+	           const std::string& marker, std::string* out_marker,
+		   uint32_t max_entries, std::vector<RestoreEntry>& entries,
+		   bool* truncated) {
+	return next->list(dpp, y, index, marker, out_marker, max_entries,
+			entries, truncated);
+}
+
+int FilterRestore::trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
+		 	  int index, std::string_view marker) {
+	return next->trim_entries(dpp, y, index, marker);
+}
+
 int FilterNotification::publish_reserve(const DoutPrefixProvider *dpp,
 					RGWObjTags* obj_tags)
 {

@@ -523,44 +523,45 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 	}
       }
     } /* checksum_mode */
-    auto attr_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
-    if (attr_iter != attrs.end()) {
-      rgw::sal::RGWRestoreType rt;
-      bufferlist bl = attr_iter->second;
-      auto iter = bl.cbegin();
-      decode(rt, iter);
 
-      rgw::sal::RGWRestoreStatus restore_status;
-      attr_iter = attrs.find(RGW_ATTR_RESTORE_STATUS);
-      if (attr_iter != attrs.end()) {
-        bufferlist bl = attr_iter->second;
-        auto iter = bl.cbegin();
-        decode(restore_status, iter);
-      }
+    rgw::sal::RGWRestoreStatus restore_status;
+    auto r_iter = attrs.find(RGW_ATTR_RESTORE_STATUS);
+    if (r_iter != attrs.end()) {
+      bufferlist rbl = r_iter->second;
+      auto iter = rbl.cbegin();
+      decode(restore_status, iter);
       
       //restore status
       if (restore_status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
-          dump_header(s, "x-amz-restore", "ongoing-request=\"true\"");
-      }
-      if (rt == rgw::sal::RGWRestoreType::Temporary) {
-        auto expire_iter = attrs.find(RGW_ATTR_RESTORE_EXPIRY_DATE);
-        ceph::real_time expiration_date;
+        dump_header(s, "x-amz-restore", "ongoing-request=\"true\"");
+      } else {
+      auto attr_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
+      if (attr_iter != attrs.end()) {
+        rgw::sal::RGWRestoreType rt;
+        bufferlist bl = attr_iter->second;
+        auto iter = bl.cbegin();
+        decode(rt, iter);
+        if (rt == rgw::sal::RGWRestoreType::Temporary) {
+          auto expire_iter = attrs.find(RGW_ATTR_RESTORE_EXPIRY_DATE);
+          ceph::real_time expiration_date;
         
-        if (expire_iter != attrs.end()) {
-          bufferlist bl = expire_iter->second;
-          auto iter = bl.cbegin();
-          decode(expiration_date, iter);
-        }
-        //restore status
-        dump_header_if_nonempty(s, "x-amz-restore", "ongoing-request=\"false\", expiry-date=\""+ dump_time_to_str(expiration_date) +"\"");
-        // temporary restore; set storage-class to cloudtier storage class
-        auto c_iter = attrs.find(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
+          if (expire_iter != attrs.end()) {
+            bufferlist bl = expire_iter->second;
+            auto iter = bl.cbegin();
+            decode(expiration_date, iter);
+          }
+          //restore status
+          dump_header_if_nonempty(s, "x-amz-restore", "ongoing-request=\"false\", expiry-date=\""+ dump_time_to_str(expiration_date) +"\"");
+          // temporary restore; set storage-class to cloudtier storage class
+          auto c_iter = attrs.find(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
 
-        if (c_iter != attrs.end()) {
-          attrs[RGW_ATTR_STORAGE_CLASS] = c_iter->second;
+          if (c_iter != attrs.end()) {
+            attrs[RGW_ATTR_STORAGE_CLASS] = c_iter->second;
+          }
         }
       }
     }
+  }
 
     for (struct response_attr_param *p = resp_attr_params; p->param; p++) {
       bool exists;
