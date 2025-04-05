@@ -22,7 +22,9 @@ class ShardServices;
 class OSD;
 class PG;
 
-class PGPCTRequest final : public PhasedOperationT<PGPCTRequest> {
+class PGPCTRequest final :
+    public PhasedOperationT<PGPCTRequest>,
+    public RemoteOperation {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::pgpct_request;
   PGPCTRequest(crimson::net::ConnectionRef&&, Ref<MOSDPGPCT>&&);
@@ -41,33 +43,6 @@ public:
   ConnectionPipeline &get_connection_pipeline();
 
   PerShardPipeline &get_pershard_pipeline(ShardServices &);
-
-  crimson::net::Connection &get_local_connection() {
-    assert(l_conn);
-    assert(!r_conn);
-    return *l_conn;
-  };
-
-  crimson::net::Connection &get_foreign_connection() {
-    assert(r_conn);
-    assert(!l_conn);
-    return *r_conn;
-  };
-
-  crimson::net::ConnectionFFRef prepare_remote_submission() {
-    assert(l_conn);
-    assert(!r_conn);
-    auto ret = seastar::make_foreign(std::move(l_conn));
-    l_conn.reset();
-    return ret;
-  }
-
-  void finish_remote_submission(crimson::net::ConnectionFFRef conn) {
-    assert(conn);
-    assert(!l_conn);
-    assert(!r_conn);
-    r_conn = make_local_shared_foreign(std::move(conn));
-  }
 
   seastar::future<> with_pg(
     ShardServices &shard_services, Ref<PG> pg);
@@ -88,9 +63,6 @@ public:
   > tracking_events;
 
 private:
-  crimson::net::ConnectionRef l_conn;
-  crimson::net::ConnectionXcoreRef r_conn;
-
   // must be after `conn` to ensure the ConnectionPipeline is alive
   PipelineHandle handle;
   Ref<MOSDPGPCT> req;

@@ -60,8 +60,8 @@ void ClientRequest::complete_request(PG &pg)
 ClientRequest::ClientRequest(
   ShardServices &_shard_services, crimson::net::ConnectionRef conn,
   Ref<MOSDOp> &&m)
-  : shard_services(&_shard_services),
-    l_conn(std::move(conn)),
+  : RemoteOperation(std::move(conn)),
+    shard_services(&_shard_services),
     m(std::move(m)),
     begin_time(std::chrono::steady_clock::now()),
     instance_handle(new instance_handle_t)
@@ -486,7 +486,7 @@ ClientRequest::do_process(
     co_return;
   }
 
-  OpsExecuter ox(pg, obc, op_info, *m, r_conn, snapc);
+  OpsExecuter ox(pg, obc, op_info, *m, get_remote_connection(), snapc);
   auto ret = co_await pg->run_executer(
     ox, obc, op_info, m->ops
   ).si_then([]() -> std::optional<std::error_code> {

@@ -23,7 +23,7 @@ namespace crimson::osd {
 
 RepRequest::RepRequest(crimson::net::ConnectionRef&& conn,
 		       Ref<MOSDRepOp> &&req)
-  : l_conn{std::move(conn)},
+  : RemoteOperation{std::move(conn)},
     req{std::move(req)}
 {}
 
@@ -49,8 +49,8 @@ void RepRequest::dump_detail(Formatter *f) const
 
 ConnectionPipeline &RepRequest::get_connection_pipeline()
 {
-  return get_osd_priv(&get_local_connection()
-         ).replicated_request_conn_pipeline;
+  return get_osd_priv(&get_connection()
+  ).replicated_request_conn_pipeline;
 }
 
 PerShardPipeline &RepRequest::get_pershard_pipeline(

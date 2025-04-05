@@ -21,7 +21,7 @@ namespace crimson::osd {
 LogMissingRequestReply::LogMissingRequestReply(
   crimson::net::ConnectionRef&& conn,
   Ref<MOSDPGUpdateLogMissingReply> &&req)
-  : l_conn{std::move(conn)},
+  : RemoteOperation{std::move(conn)},
     req{std::move(req)}
 {}
 
