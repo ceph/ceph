@@ -588,9 +588,10 @@ class TestMirroring(CephFSTestCase):
 
         # create a bunch of files in a directory to snap
         self.mount_a.run_shell(["mkdir", "d0"])
-        for i in range(100):
-            self.mount_a.write_n_mb(os.path.join('d0', f'file.{i}'), 1)
+        for i in range(10):
+            self.mount_a.write_n_mb(os.path.join('d0', f'file.{i}'), 1024)
 
+        time.sleep(60)
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
         self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
         self.peer_add(self.primary_fs_name, self.primary_fs_id, "client.mirror_remote@ceph", self.secondary_fs_name)
@@ -602,7 +603,7 @@ class TestMirroring(CephFSTestCase):
         # take a snapshot
         self.mount_a.run_shell(["mkdir", "d0/.snap/snap0"])
 
-        time.sleep(60)
+        time.sleep(500)
         self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
                                "client.mirror_remote@ceph", '/d0', 'snap0', 1)
         self.verify_snapshot('d0', 'snap0')
@@ -614,18 +615,18 @@ class TestMirroring(CephFSTestCase):
         self.assertGreater(second["counters"]["last_synced_start"], first["counters"]["last_synced_start"])
         self.assertGreater(second["counters"]["last_synced_end"], second["counters"]["last_synced_start"])
         self.assertGreater(second["counters"]["last_synced_duration"], 0)
-        self.assertEquals(second["counters"]["last_synced_bytes"], 104857600) # last_synced_bytes = 100 files of 1MB size each
+        self.assertEquals(second["counters"]["last_synced_bytes"], 10737418240) # last_synced_bytes = 10 files of 1024MB size each
 
         # some more IO
-        for i in range(150):
-            self.mount_a.write_n_mb(os.path.join('d0', f'more_file.{i}'), 1)
+        for i in range(10):
+            self.mount_a.write_n_mb(os.path.join('d0', f'more_file.{i}'), 1024)
 
         time.sleep(60)
 
         # take another snapshot
         self.mount_a.run_shell(["mkdir", "d0/.snap/snap1"])
 
-        time.sleep(120)
+        time.sleep(500)
         self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
                                "client.mirror_remote@ceph", '/d0', 'snap1', 2)
         self.verify_snapshot('d0', 'snap1')
@@ -637,7 +638,7 @@ class TestMirroring(CephFSTestCase):
         self.assertGreater(third["counters"]["last_synced_start"], second["counters"]["last_synced_end"])
         self.assertGreater(third["counters"]["last_synced_end"], third["counters"]["last_synced_start"])
         self.assertGreater(third["counters"]["last_synced_duration"], 0)
-        self.assertEquals(third["counters"]["last_synced_bytes"], 157286400) # last_synced_bytes = 150 files of 1MB size each
+        self.assertEquals(third["counters"]["last_synced_bytes"], 10737418240) # last_synced_bytes = 10 files of 1024MB size each
 
         # delete a snapshot
         self.mount_a.run_shell(["rmdir", "d0/.snap/snap0"])
