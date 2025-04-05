@@ -54,8 +54,13 @@ public:
     static_assert(std::is_same_v<T, MOSDOp>);
     return m.get();
   }
-  const crimson::net::ConnectionRef &get_connection() const {
-    return l_conn;
+  const crimson::net::Connection &get_connection() const {
+    if (l_conn) {
+      return *l_conn;
+    } else {
+      assert(r_conn);
+      return *r_conn;
+    }
   }
 
   /**
