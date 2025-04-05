@@ -5,7 +5,8 @@ from mgr_module import NFS_GANESHA_SUPPORTED_FSALS
 
 from .exception import NFSInvalidOperation, FSNotFound
 from .utils import check_fs
-from .qos_conf import QOS, RawBlock
+from .qos_conf import QOS
+from .ganesha_raw_conf import RawBlock
 
 if TYPE_CHECKING:
     from nfs.module import Module
