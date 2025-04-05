@@ -16,6 +16,7 @@ using namespace std;
 
 StoreTool::StoreTool(const string& type,
 		     const string& path,
+                     bool read_only,
 		     bool to_repair,
 		     bool need_stats)
   : store_path(path)
@@ -28,7 +29,7 @@ StoreTool::StoreTool(const string& type,
 
   if (type == "bluestore-kv") {
 #ifdef WITH_BLUESTORE
-    if (load_bluestore(path, to_repair) != 0)
+    if (load_bluestore(path, read_only, to_repair) != 0)
       exit(1);
 #else
     cerr << "bluestore not compiled in" << std::endl;
@@ -37,7 +38,8 @@ StoreTool::StoreTool(const string& type,
   } else {
     auto db_ptr = KeyValueDB::create(g_ceph_context, type, path);
     if (!to_repair) {
-      if (int r = db_ptr->open(std::cerr); r < 0) {
+      int r = read_only ? db_ptr->open_read_only(std::cerr) : db_ptr->open(std::cerr);
+      if (r < 0) {
         cerr << "failed to open type " << type << " path " << path << ": "
              << cpp_strerror(r) << std::endl;
         exit(1);
@@ -47,11 +49,11 @@ StoreTool::StoreTool(const string& type,
   }
 }
 
-int StoreTool::load_bluestore(const string& path, bool to_repair)
+int StoreTool::load_bluestore(const string& path, bool read_only, bool to_repair)
 {
     auto bluestore = new BlueStore(g_ceph_context, path);
     KeyValueDB *db_ptr;
-    int r = bluestore->open_db_environment(&db_ptr, to_repair);
+    int r = bluestore->open_db_environment(&db_ptr, read_only, to_repair);
     if (r < 0) {
      return -EINVAL;
     }
