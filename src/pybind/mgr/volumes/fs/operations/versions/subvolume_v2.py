@@ -168,8 +168,14 @@ class SubvolumeV2(SubvolumeV1):
         try:
             # create group directory with default mode(0o755) if it doesn't exist.
             create_base_dir(self.fs, self.group.path, self.vol_spec.DEFAULT_MODE)
-            self.fs.mkdirs(subvol_path, mode)
+            # mark subvolume immediately after creating subvol base dir and before creation of
+            # uuid directory or config files as marking subvolume fails if directory is not
+            # empty. So create only base directory first and mark_subvolume. In v2 subvolumes,
+            # snapshot is taken at subvolume base path, not the uuid directory
+            self.fs.mkdirs(self.base_path, mode)
             self.mark_subvolume()
+
+            self.fs.mkdirs(subvol_path, mode)
             attrs = {
                 'uid': uid,
                 'gid': gid,
@@ -233,9 +239,15 @@ class SubvolumeV2(SubvolumeV1):
                 attrs["data_pool"] = pool
                 attrs["pool_namespace"] = None
 
+            # mark subvolume immediately after creating subvol base dir and before creation of
+            # uuid directory or config files as marking subvolume fails if directory is not
+            # empty. So create only base directory first and mark_subvolume. In v2 subvolumes,
+            # snapshot is taken at subvolume base path, not the uuid directory
+            self.fs.mkdirs(self.base_path, attrs.get("mode"))
+            self.mark_subvolume()
+
             # create directory and set attributes
             self.fs.mkdirs(subvol_path, attrs.get("mode"))
-            self.mark_subvolume()
             self.set_attrs(subvol_path, attrs)
 
             # persist subvolume metadata and clone source
