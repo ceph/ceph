@@ -140,6 +140,51 @@ options:
   - osd_recovery_sleep
   flags:
   - runtime
+- name: osd_recovery_sleep_degraded
+  type: float
+  level: advanced
+  desc: Time in seconds to sleep before next recovery or backfill op when PGs are degraded.
+    This setting overrides _ssd, _hdd, and _hybrid if non-zero.
+  fmt_desc: Time in seconds to sleep before the next recovery or backfill op when PGs
+    are degraded. Increasing this value will slow down recovery ops while client
+    ops will be less impacted.
+  default: 0
+  flags:
+  - runtime
+- name: osd_recovery_sleep_degraded_hdd
+  type: float
+  level: advanced
+  desc: Time in seconds to sleep before next recovery or backfill op for HDDs
+    when PGs is degraded.
+  fmt_desc: Time in seconds to sleep before next recovery or backfill op
+    for HDDs when PGs are degraded.
+  default: 0.1
+  flags:
+  - runtime
+- name: osd_recovery_sleep_degraded_ssd
+  type: float
+  level: advanced
+  desc: Time in seconds to sleep before next recovery or backfill op for SSDs
+    when PGs are degraded.
+  fmt_desc: Time in seconds to sleep before the next recovery or backfill op
+    for SSDs when PGs are degraded.
+  default: 0
+  see_also:
+  - osd_recovery_sleep_degraded
+  flags:
+  - runtime
+- name: osd_recovery_sleep_degraded_hybrid
+  type: float
+  level: advanced
+  desc: Time in seconds to sleep before next recovery or backfill op when PGs
+    are degraded and data is on HDD and journal is on SSD
+  fmt_desc: Time in seconds to sleep before the next recovery or backfill op when
+    PGs are degraded and OSD data is on HDD and OSD journal / WAL+DB is on SSD.
+  default: 0.025
+  see_also:
+  - osd_recovery_sleep_degraded
+  flags:
+  - runtime
 - name: osd_snap_trim_sleep
   type: float
   level: advanced
