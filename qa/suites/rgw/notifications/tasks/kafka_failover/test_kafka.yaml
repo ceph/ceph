@@ -1,0 +1,8 @@
+tasks:
+- kafka-failover:
+    client.0:
+      kafka_version: 3.8.1
+- notification-tests:
+    client.0:
+      extra_attr: ["kafka_failover"]
+      rgw_server: client.0
