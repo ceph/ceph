@@ -41,7 +41,7 @@ static void usage()
  */
 int main(int argc, const char **argv)
 {
-  ceph_pthread_setname(pthread_self(), "ceph-mgr");
+  ceph_pthread_setname("ceph-mgr");
 
   auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
