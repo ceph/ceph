@@ -1859,7 +1859,7 @@ int RGWRados::Bucket::List::list_objects_ordered(
     ldpp_dout(dpp, 20) << __func__ <<
       ": starting attempt " << attempt << dendl;
 
-    if (attempt > 1 && !(prev_marker < cur_marker)) {
+    if (attempt > 1 && prev_marker == cur_marker) {
       // we've failed to make forward progress
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
 	" marker failed to make forward progress; attempt=" << attempt <<
