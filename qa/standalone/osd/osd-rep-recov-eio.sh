@@ -219,6 +219,18 @@ function TEST_rados_repair_warning() {
     ceph health | $(! grep -q "Too many repaired reads on 1 OSDs") || return 1
     set +o pipefail
 
+    ceph health unmute OSD_TOO_MANY_REPAIRS
+    ceph tell osd.$primary clear_shards_repaired
+    sleep 10
+
+    set -o pipefail
+    # Should clear this
+    ceph health | $(! grep -q "Too many repaired reads on 1 OSDs") || return 1
+    set +o pipefail
+
+    ceph tell osd.$primary clear_shards_repaired $OBJS
+    sleep 10
+
     for i in $(seq 1 $OBJS)
      do
        inject_$inject rep data $poolname ${objbase}-$i $dir 0 || return 1
@@ -235,7 +247,7 @@ function TEST_rados_repair_warning() {
     COUNT=$(ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats_sum.num_shards_repaired")
     test "$COUNT" = "$(expr $OBJS \* 3)" || return 1
 
-    # Give mon a chance to notice additional OSD and unmute
+    # Give mon a chance to notice additional OSD and reset num_shards_repaired
     # The default tick time is 5 seconds
     CHECKTIME=10
     LOOPS=0
