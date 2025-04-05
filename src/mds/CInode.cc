@@ -3146,8 +3146,9 @@ void CInode::pre_cow_old_inode()
   snapid_t follows;
   bool using_global_snaprealm_seq = false;
   SnapRealm *realm = find_snaprealm();
+  auto use_global_snaprealm_seq = g_conf().get_val<bool>("mds_use_global_snaprealm_seq_for_subvol");
 
-  if (realm->get_subvolume_ino()) {
+  if (!use_global_snaprealm_seq && realm->get_subvolume_ino()) {
     follows = realm->get_newest_seq();
   } else {
     follows = mdcache->get_global_snaprealm()->get_newest_seq();
