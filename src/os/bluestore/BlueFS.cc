@@ -436,6 +436,7 @@ void BlueFS::_shutdown_logger()
 {
   cct->get_perfcounters_collection()->remove(logger);
   delete logger;
+  logger = nullptr;
 }
 
 void BlueFS::_update_logger_stats()
@@ -455,15 +456,34 @@ void BlueFS::_update_logger_stats()
 }
 
 int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
-                             uint64_t reserved,
                              bluefs_shared_alloc_context_t* _shared_alloc)
 {
+  uint64_t reserved;
+  string dev_name;
+  switch(id) {
+    case BDEV_WAL:
+    case BDEV_NEWWAL:
+      reserved = BDEV_LABEL_BLOCK_SIZE;
+      dev_name = "wal";
+      break;
+    case BDEV_DB:
+    case BDEV_NEWDB:
+      reserved = DB_SUPER_RESERVED;
+      dev_name = "db";
+      break;
+    case BDEV_SLOW:
+      reserved = 0;
+      dev_name = "slow";
+      break;
+    default:
+      ceph_assert(false);
+  }
   dout(10) << __func__ << " bdev " << id << " path " << path << " "
-           << reserved << dendl;
+           << " reserved " << reserved << dendl;
   ceph_assert(id < bdev.size());
   ceph_assert(bdev[id] == NULL);
   BlockDevice *b = BlockDevice::create(cct, path, NULL, NULL,
-				       discard_cb[id], static_cast<void*>(this));
+				       discard_cb[id], static_cast<void*>(this), dev_name.c_str());
   block_reserved[id] = reserved;
   if (_shared_alloc) {
     b->set_no_exclusive_lock();
@@ -727,6 +747,7 @@ void BlueFS::_init_alloc()
               << ", allocator name " << name
               << ", allocator type " << cct->_conf->bluefs_allocator
               << ", capacity 0x" << bdev[id]->get_size()
+              << ", reserved 0x" << block_reserved[id]
               << ", block size 0x" << alloc_size[id]
               << std::dec << dendl;
       alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
