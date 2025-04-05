@@ -7,19 +7,19 @@ RGW Service
 Deploy RGWs
 ===========
 
-Cephadm deploys radosgw as a collection of daemons that manage a
+Cephadm deploys the Object Gateway (RGW) as a collection of daemons that manage a
 single-cluster deployment or a particular *realm* and *zone* in a
 multisite deployment.  (For more information about realms and zones,
 see :ref:`multisite`.)
 
-Note that with cephadm, radosgw daemons are configured via the monitor
+Note that with ``cephadm``, ``radosgw`` daemons are configured via the monitor
 configuration database instead of via a `ceph.conf` or the command line.  If
 that configuration isn't already in place (usually in the
-``client.rgw.<something>`` section), then the radosgw
+``client.rgw.<something>`` section), then the ``radosgw``
 daemons will start up with default settings (e.g., binding to port
 80).
 
-To deploy a set of radosgw daemons, with an arbitrary service name
+To deploy a set of ``radosgw`` daemons, with an arbitrary service name
 *name*, run the following command:
 
 .. prompt:: bash #
@@ -29,8 +29,8 @@ To deploy a set of radosgw daemons, with an arbitrary service name
 Trivial setup
 -------------
 
-For example, to deploy 2 RGW daemons (the default) for a single-cluster RGW deployment
-under the arbitrary service id *foo*:
+For example, to deploy two daemons (the default) for a single-cluster RGW deployment
+with the arbitrary service id ``foo``:
 
 .. prompt:: bash #
 
@@ -58,7 +58,7 @@ See also: :ref:`cephadm_co_location`.
 Specifying Networks
 -------------------
 
-The RGW service can have the network they bind to configured with a yaml service specification.
+The RGW service can have the network they bind to configured with a YAML service specification.
 
 example spec file:
 
@@ -77,8 +77,8 @@ example spec file:
 Passing Frontend Extra Arguments
 --------------------------------
 
-The RGW service specification can be used to pass extra arguments to the rgw frontend by using
-the `rgw_frontend_extra_args` arguments list.
+The RGW service specification can be used to pass extra arguments to the frontend by using
+the ``rgw_frontend_extra_args`` arguments list.
 
 example spec file:
 
@@ -98,23 +98,23 @@ example spec file:
       - "tcp_nodelay=1"
       - "max_header_size=65536"
 
-.. note:: cephadm combines the arguments from the `spec` section and the ones from
-	  the `rgw_frontend_extra_args` into a single space-separated arguments list
-	  which is used to set the value of `rgw_frontends` configuration parameter.
+.. note:: ``cephadm`` combines the arguments from the ``spec`` section with those from
+	  ``rgw_frontend_extra_args`` into a single space-separated arguments list
+	  which is used to set the value of the ``rgw_frontends`` configuration parameter.
 
 Multisite zones
 ---------------
 
-To deploy RGWs serving the multisite *myorg* realm and the *us-east-1* zone on
-*myhost1* and *myhost2*:
+To deploy RGWs serving the multisite ``myorg`` realm and the ``us-east-1`` zone on
+``myhost1`` and ``myhost2``:
 
 .. prompt:: bash #
 
    ceph orch apply rgw east --realm=myorg --zonegroup=us-east-zg-1 --zone=us-east-1 --placement="2 myhost1 myhost2"
 
-Note that in a multisite situation, cephadm only deploys the daemons.  It does not create
-or update the realm or zone configurations.  To create a new realms, zones and zonegroups
-you can use :ref:`mgr-rgw-module` or manually using something like:
+Note that in a multisite situation, ``cephadm`` only deploys the daemons.  It does not create
+or update the realm or zone configurations.  To create a new realm, zone, and zonegroup
+use :ref:`mgr-rgw-module` or issue commands of the following form:
 
 .. prompt:: bash #
 
@@ -227,7 +227,7 @@ Use the command::
 Service specification
 ---------------------
 
-It is a yaml format file with the following properties:
+Service specs are YAML blocks with the following properties:
 
 .. code-block:: yaml
 
@@ -329,12 +329,12 @@ where the properties of this service specification are:
 
 .. _ingress-virtual-ip:
 
-Selecting ethernet interfaces for the virtual IP
+Selecting network interfaces for the virtual IP
 ------------------------------------------------
 
 You cannot simply provide the name of the network interface on which
-to configure the virtual IP because interface names tend to vary
-across hosts (and/or reboots).  Instead, cephadm will select
+to configure the virtual IP because interface names may vary
+across hosts (and/or reboots).  Instead, ``cephadm`` will select
 interfaces based on other existing IP addresses that are already
 configured.
 
@@ -366,8 +366,8 @@ and reference that dummy network in the networks list (see above).
 Useful hints for ingress
 ------------------------
 
-* It is good to have at least 3 RGW daemons.
-* We recommend at least 3 hosts for the ingress service.
+* It is advised to have at least three ``radosgw`` daemons for availability and load balancing.
+* We recommend at least three hosts for the ``ingress`` service.
 
 Further Reading
 ===============
