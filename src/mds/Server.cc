@@ -6402,7 +6402,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     try {
       if (is_rmxattr) {
         const auto srnode = cur->get_projected_srnode();
-	if (!srnode->is_subvolume()) {
+	if (srnode && !srnode->is_subvolume()) {
 	  respond_to_request(mdr, 0);
 	  return;
 	}
@@ -6435,8 +6435,16 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
       mds->locker->drop_locks(mdr.get());
     }
 
-    if (!xlock_policylock(mdr, cur, false, true))
+    MutationImpl::LockOpVec lov;
+    lov.add_rdlock(&cur->filelock);   // to verify it's empty
+    if (!xlock_policylock(mdr, cur, false, true, std::move(lov)))
       return;
+
+    if (_dir_is_nonempty(mdr, cur)) {
+      dout(10) << __func__ << " error: ENOTEMPTY - while setting vxattr " << name << " on " << *cur << dendl;
+      respond_to_request(mdr, -ENOTEMPTY);
+      return;
+    }
 
     /* repeat rdonly checks in case changed between rdlock -> xlock */
     SnapRealm *realm = cur->find_snaprealm();

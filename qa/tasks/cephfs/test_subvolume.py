@@ -197,6 +197,30 @@ class TestSubvolume(CephFSTestCase):
         # clean up
         self.mount_a.run_shell(['rmdir', 'group/subvol2/dir/.snap/s2'])
 
+    def test_subvolume_vxattr_removal_without_setting(self):
+        """
+        To verify that the ceph.dir.subvolume vxattr removal without setting doesn't cause mds crash
+        """
+
+        # create a subvol
+        self.mount_a.run_shell(['mkdir', 'group/subvol3'])
+        self.mount_a.removexattr('group/subvol3', 'ceph.dir.subvolume')
+
+        # cleanup
+        self.mount_a.run_shell(['rmdir', 'group/subvol2'])
+
+    def test_subvolume_vxattr_on_non_empty_dir(self):
+        """
+        To verify that the ceph.dir.subvolume vxattr fails on non empty directory
+        """
+
+        # create a subvol and a file inside
+        self.mount_a.run_shell(['mkdir', 'group/subvol3'])
+        self.mount_a.run_shell(['touch', 'group/subvol3/file1'])
+
+        with self.assertRaises(CommandFailedError):
+            self.mount_a.setfattr('group/subvol3', 'ceph.dir.subvolume', '1')
+
 
 class TestSubvolumeReplicated(CephFSTestCase):
     CLIENTS_REQUIRED = 1

@@ -1563,6 +1563,18 @@ options:
   max: 4_K
   flags:
   - runtime
+- name: mds_use_global_snaprealm_seq_for_subvol
+  type: bool
+  level: advanced
+  default: false
+  services:
+  - mds
+  fmt_desc: MDS will use global snaprealm's seq to cow old inodes for subvolume
+    inode and inodes under it. If the option is disabled, MDS will use the
+    subvolume snaprealm's seq number to cow old inodes for subvolume inode
+    and inodes under it.
+  flags:
+  - runtime
 - name: mds_asio_thread_count
   type: uint
   level: advanced

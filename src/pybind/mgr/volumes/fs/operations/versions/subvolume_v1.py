@@ -62,12 +62,12 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     def features(self):
         return [SubvolumeFeatures.FEATURE_SNAPSHOT_CLONE.value, SubvolumeFeatures.FEATURE_SNAPSHOT_AUTOPROTECT.value]
 
-    def mark_subvolume(self):
+    def mark_subvolume(self, subvol_path):
         # set subvolume attr, on subvolume root, marking it as a CephFS subvolume
         # subvolume root is where snapshots would be taken, and hence is the <uuid> dir for v1 subvolumes
         try:
             # MDS treats this as a noop for already marked subvolume
-            self.fs.setxattr(self.path, 'ceph.dir.subvolume', b'1', 0)
+            self.fs.setxattr(subvol_path, 'ceph.dir.subvolume', b'1', 0)
         except cephfs.InvalidValue:
             raise VolumeException(-errno.EINVAL, "invalid value specified for ceph.dir.subvolume")
         except cephfs.Error as e:
@@ -98,6 +98,11 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             create_base_dir(self.fs, self.group.path, self.vol_spec.DEFAULT_MODE)
             # create directory and set attributes
             self.fs.mkdirs(subvol_path, mode)
+            # mark subvolume immediately after creating subvol path dir and before creation of config files
+            # as marking subvolume fails if directory is not empty. In v1 subvolumes, snapshot is taken at
+            # subvolume path i.e., the uuid directory. Also subvol_path needs to be explicitly passed since
+            # self.path is not yet initialized.
+            self.mark_subvolume(subvol_path)
             attrs = {
                 'uid': uid,
                 'gid': gid,
@@ -113,7 +118,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             # persist subvolume metadata
             qpath = subvol_path.decode('utf-8')
             self.init_config(SubvolumeV1.VERSION, subvolume_type, qpath, initial_state)
-            self.mark_subvolume()
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
             try:
                 log.info("cleaning up subvolume with path: {0}".format(self.subvolname))
@@ -182,7 +186,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
             # create directory and set attributes
             self.fs.mkdirs(subvol_path, attrs.get("mode"))
-            self.mark_subvolume()
+            self.mark_subvolume(subvol_path)
             self.set_attrs(subvol_path, attrs)
 
             # persist subvolume metadata and clone source
@@ -246,7 +250,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             log.debug("refreshed metadata, checking subvolume path '{0}'".format(subvol_path))
             st = self.fs.stat(subvol_path)
             # unconditionally mark as subvolume, to handle pre-existing subvolumes without the mark
-            self.mark_subvolume()
+            self.mark_subvolume(subvol_path)
 
             self.uid = int(st.st_uid)
             self.gid = int(st.st_gid)
