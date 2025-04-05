@@ -481,19 +481,24 @@ struct POSIXUploadPartInfo {
   uint32_t num{0};
   std::string etag;
   ceph::real_time mtime;
+  std::optional<rgw::cksum::Cksum> cksum;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(num, bl);
     encode(etag, bl);
     encode(mtime, bl);
+    encode(cksum, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 1, 1, bl);
     decode(num, bl);
     decode(etag, bl);
     decode(mtime, bl);
+    if (struct_v > 1) {
+      decode(cksum, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -516,8 +521,12 @@ public:
   virtual uint64_t get_size() { return shadow->get_obj_size(); }
   virtual const std::string& get_etag() { return info.etag; }
   virtual ceph::real_time& get_mtime() { return info.mtime; }
+  virtual const std::optional<rgw::cksum::Cksum>& get_cksum() {
+    return info.cksum;
+  }
 
-  int load(const DoutPrefixProvider* dpp, optional_yield y, POSIXDriver* driver, rgw_obj_key& key);
+  int load(const DoutPrefixProvider* dpp, optional_yield y, POSIXDriver* driver,
+	   rgw_obj_key& key);
 
   friend class POSIXMultipartUpload;
 };
@@ -613,6 +622,7 @@ public:
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
 		       std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
 		       ceph::real_time delete_at,
 		       const char *if_match, const char *if_nomatch,
 		       const std::string *user_data,
@@ -653,6 +663,7 @@ public:
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
 		       std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
 		       ceph::real_time delete_at,
 		       const char *if_match, const char *if_nomatch,
 		       const std::string *user_data,
