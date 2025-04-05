@@ -4058,6 +4058,23 @@ options:
   - runtime
   see_also:
   - bdev_enable_discard
+  - bdev_async_discard_max_pending
+- name: bdev_async_discard_max_pending
+  desc: maximum number of pending discards
+  long_desc: The maximum number of pending async discards that can be queued and not claimed by an
+    async discard thread. Discards will not be issued once the queue is full and blocks will be
+    freed back to the allocator immediately instead. This is useful if you have a device with slow
+    discard performance that can't keep up to a consistently high write workload. 0 means
+    'unlimited'.
+  type: uint
+  level: advanced
+  default: 1000000
+  min: 0
+  with_legacy: true
+  flags:
+  - runtime
+  see_also:
+  - bdev_async_discard_threads
 - name: bdev_flock_retry_interval
   type: float
   level: advanced
