@@ -6,6 +6,7 @@ import time
 from rados import Rados
 from rbd import (RBD,
                  Image,
+                 ImageExists,
                  ImageNotFound,
                  RBD_FEATURE_EXCLUSIVE_LOCK,
                  RBD_FEATURE_LAYERING,
@@ -101,7 +102,13 @@ def slave(ioctx):
     print("detected master")
 
     print("rename")
-    RBD().rename(ioctx, CLONE_IMG_NAME, CLONE_IMG_RENAME);
+    try:
+        RBD().rename(ioctx, CLONE_IMG_NAME, CLONE_IMG_RENAME)
+    except ImageExists as e:
+        if 'RBD_DISABLE_UPDATE_FEATURES' in os.environ:
+            print("ignoring {}".format(e))
+        else:
+            raise
 
     with Image(ioctx, CLONE_IMG_RENAME) as image:
         print("flatten")
@@ -114,7 +121,13 @@ def slave(ioctx):
         assert(image.stat()['size'] == IMG_SIZE // 2)
 
         print("create_snap")
-        image.create_snap('snap1')
+        try:
+            image.create_snap('snap1')
+        except ImageExists as e:
+            if 'RBD_DISABLE_UPDATE_FEATURES' in os.environ:
+                print("ignoring {}".format(e))
+            else:
+                raise
         assert(not image.is_exclusive_lock_owner())
         assert(any(snap['name'] == 'snap1'
                    for snap in image.list_snaps()))
@@ -136,7 +149,13 @@ def slave(ioctx):
                    for snap in image.list_snaps()))
 
         print("remove_snap")
-        image.remove_snap('snap1-new')
+        try:
+            image.remove_snap('snap1-new')
+        except ImageNotFound as e:
+            if 'RBD_DISABLE_UPDATE_FEATURES' in os.environ:
+                print("ignoring {}".format(e))
+            else:
+                raise
         assert(not image.is_exclusive_lock_owner())
         assert(list(image.list_snaps()) == [])
 
