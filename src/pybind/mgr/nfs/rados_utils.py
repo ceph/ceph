@@ -3,8 +3,9 @@ from typing import Optional, Any
 
 from rados import TimedOut, ObjectNotFound, Rados
 from mgr_module import NFS_POOL_NAME as POOL_NAME
-from .ganesha_conf import RawBlock, format_block
+from .ganesha_conf import format_block
 from .utils import USER_CONF_PREFIX
+from .ganesha_raw_conf import RawBlock
 
 log = logging.getLogger(__name__)
 
