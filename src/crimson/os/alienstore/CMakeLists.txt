@@ -50,6 +50,7 @@ set(alien_store_srcs
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/Allocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/AvlAllocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BtreeAllocator.cc
+  ${PROJECT_SOURCE_DIR}/src/os/bluestore/Btree2Allocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BitmapFreelistManager.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueFS.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/bluefs_types.cc
