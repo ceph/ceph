@@ -336,7 +336,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         'OSDs',
         '',
         'current',
-        'count(sum by (ceph_daemon) (ceph_osd_metadata{%(matchers)s}))' % $.matchers(),
+        'count(sum by (ceph_daemon) (ceph_osd_metadata{%(matchers)s hostname=~"$ceph_hosts"}))' % $.matchers(),
         null,
         'time_series',
         0,
