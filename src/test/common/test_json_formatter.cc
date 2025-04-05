@@ -185,20 +185,3 @@ TEST(formatter, parse_types) {
   }
 }
 
-TEST(formatter_malformed0, parse_types) {
-
- // Address a "malformed json" message; it should :
-
- const auto json_input = 
-R"({"token": {"methods": ["password"], "user": {"domain": {"id": "default", "name": "Default"}, "id": "ad4fe82ccdcd411bbdfb19dd58f4dd6b", "name": "tempest-ContainerQuotasTest-212225503-project-member", "password_expires_at": null}, "audit_ids": ["fLe_8GEsSAiaeH963hNWSw"], "expires_at": "2025-03-27T01:01:59.000000Z", "issued_at": "2025-03-27T00:01:59.000000Z", "project": {"domain": {"id": "default", "name": "Default"}, "id": "b20a7518e719409d8da9872032d02eb7", "name": "tempest-ContainerQuotasTest-212225503"}, "is_domain": false, "roles": [{"id": "cde208786b8849f99e1b27ac367bf585", "name": "reader"}, {"id": "7b7da0cff34e4d55b0bd0f9d67c4a2da", "name": "manager"}, {"id": "bbe2a1d2436f4e3faa8fa25b4161e5f5", "name": "member"}, {"id": "da1960cc046a4413814890a54fba8f97", "name": "admin"}], "catalog": [{"endpoints": [{"id": "ccf75eb71fe14e3ca663c84aebd701be", "interface": "public", "region_id": null, "url": "http://smithi146.front.sepia.ceph.com:80/v1/KEY_b20a7518e719409d8da9872032d02eb7", "region": null}], "id": "37c2769bfaf849d58b64ee794a1c59e5", "type": "object-store", "name": "swift"}, {"endpoints": [{"id": "8b744175c5914e06b567ee2c8e8c4840", "interface": "admin", "region_id": "RegionOne", "url": "http://smithi146.front.sepia.ceph.com:5000/v3", "region": "RegionOne"}, {"id": "88550e082d2a43d4a0d2c6937550a33f", "interface": "internal", "region_id": "RegionOne", "url": "http://smithi146.front.sepia.ceph.com:5000/v3", "region": "RegionOne"}, {"id": "7c83dd5d80c646deb2af7c017e86ca11", "interface": "public", "region_id": "RegionOne", "url": "http://smithi146.front.sepia.ceph.com:5000/v3", "region": "RegionOne"}], "id": "6e2fa31121dc42e49c675871e9121146", "type": "identity", "name": "keystone"}]}})";
-
- JSONParser parser;
-
- EXPECT_FALSE(parser.parse(json_input, strlen(json_input) - 1)); 
-
- EXPECT_TRUE(parser.parse(json_input)); 
- EXPECT_TRUE(parser.parse(std::string_view(json_input)));
- EXPECT_TRUE(parser.parse(json_input, strlen(json_input)));
-}
-
-

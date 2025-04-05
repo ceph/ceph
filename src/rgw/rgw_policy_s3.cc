@@ -248,13 +248,30 @@ int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
 {
   JSONParser parser;
 
-  // Without subtracting 1, we wind up sending bad data into the
-  // parser:
-  if (!parser.parse(bl.c_str(), bl.length() - 1)) {
+try {
+  if (!parser.parse_JFW(bl.c_str(), bl.length())) {
     err_msg = "Malformed JSON (RGWPolicy)";
     dout(0) << "malformed json (RGWPolicy)" << dendl;
     return -EINVAL;
   }
+} catch(const std::runtime_error& e) {
+    err_msg = fmt::format("JFW: Malformed JSON (RGWPolicy): {}", e.what());
+    dout(0) << err_msg << dendl;
+
+try {
+  dout(0) << "JFW: trying again with correction..." << dendl;
+  if (!parser.parse_JFW(bl.c_str(), bl.length() - 1)) {
+dout(0) << "JFW: STILL FAILS" << dendl;
+    return -EINVAL;
+  }
+
+dout(0) << "JFW: WORKED" << dendl;
+} catch(const std::runtime_error& e) {
+dout(0) << "JFW: STILL FAILS" << dendl;
+}
+
+    return -EINVAL;
+}
 
   // as no time was included in the request, we hope that the user has included a short timeout
   JSONObjIter iter = parser.find_first("expiration");
