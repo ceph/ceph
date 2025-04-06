@@ -158,7 +158,7 @@ version_t NVMeofGwMon::get_trim_to() const
  * function called during new paxos epochs
  * function called to restore in pending map all data that is not serialized
  * to paxos peons. Othervise it would be overriden in "pending_map = map"
- * currently  just "allow_failovers_ts" variable is restored
+ * currently "allow_failovers_ts" and "last_gw_down_ts" variables restored
  */
 void NVMeofGwMon::restore_pending_map_info(NVMeofGwMap & tmp_map) {
   std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
@@ -173,6 +173,8 @@ void NVMeofGwMon::restore_pending_map_info(NVMeofGwMap & tmp_map) {
         pending_map.created_gws[group_key][gw_id].allow_failovers_ts =
           gw_created_pair.second.allow_failovers_ts;
       }
+      pending_map.created_gws[group_key][gw_id].last_gw_down_ts =
+          gw_created_pair.second.last_gw_down_ts;
     }
   }
 }
@@ -671,7 +673,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 		<< gw_id << dendl;
 	 process_gw_down(gw_id, group_key, gw_propose, avail);
 	 pending_map.skip_failovers_for_group(group_key);
-	 dout(4) << "set skip-failovers for gw's group " << gw_id << " group "
+	 dout(4) << "fast_reboot:set skip-failovers for group " << gw_id << " group "
 	 << group_key << dendl;
       } else if (
 	pending_map.created_gws[group_key][gw_id].performed_full_startup ==
