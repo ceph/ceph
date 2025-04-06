@@ -9883,6 +9883,8 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_object_clean_region_max_num_intervals",
     "osd_scrub_min_interval",
     "osd_scrub_max_interval",
+    "osd_deep_scrub_interval",
+    "osd_scrub_interval_randomize_ratio",
     "osd_op_thread_timeout",
     "osd_op_thread_suicide_timeout",
     "osd_max_scrubs",
@@ -10008,13 +10010,15 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
 
   if (changed.count("osd_scrub_min_interval") ||
       changed.count("osd_scrub_max_interval") ||
-      changed.count("osd_deep_scrub_interval")) {
+      changed.count("osd_deep_scrub_interval") ||
+      changed.count("osd_scrub_interval_randomize_ratio")) {
     service.get_scrub_services().on_config_change();
     dout(0) << fmt::format(
-		   "{}: scrub interval change (min:{} deep:{} max:{})",
+		   "{}: scrub interval change (min:{} deep:{} max:{} ratio:{})",
 		   __func__, cct->_conf->osd_scrub_min_interval,
 		   cct->_conf->osd_deep_scrub_interval,
-		   cct->_conf->osd_scrub_max_interval)
+		   cct->_conf->osd_scrub_max_interval,
+		   cct->_conf->osd_scrub_interval_randomize_ratio)
 	    << dendl;
   }
 
