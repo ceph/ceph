@@ -70,7 +70,7 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 32 20 * * 4        $CW $SS      4 --ceph main --suite powercycle -p 950
 40 20 * * 5        $CW $SS      1 --ceph main --suite        rgw -p 950
 48 20 * * 6        $CW $SS      4 --ceph main --suite       krbd -p 950 --kernel testing
-56 20 * * 6        $CW $SS      1 --ceph main --suite crimson-rados -p 101 --force-priority --flavor crimson
+56 20 * * 2,6      $CW $SS      1 --ceph main --suite crimson-rados -p 101 --force-priority --flavor crimson
 
 
 ## squid branch runs - weekly
