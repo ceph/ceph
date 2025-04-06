@@ -25,7 +25,8 @@ using namespace std;
 using Svc = RGWSI_MDLog::Svc;
 using Cursor = RGWPeriodHistory::Cursor;
 
-RGWSI_MDLog::RGWSI_MDLog(CephContext *cct, bool _run_sync) : RGWServiceInstance(cct), run_sync(_run_sync) {
+RGWSI_MDLog::RGWSI_MDLog(CephContext *cct, bool _run_sync, rgw::sal::ConfigStore* _cfgstore) : RGWServiceInstance(cct),
+              run_sync(_run_sync), cfgstore(_cfgstore) {
 }
 
 RGWSI_MDLog::~RGWSI_MDLog() {

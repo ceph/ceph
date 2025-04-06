@@ -64,9 +64,9 @@ int RGWServices_Def::init(CephContext *cct,
   cls = std::make_unique<RGWSI_Cls>(cct);
   config_key_rados = std::make_unique<RGWSI_ConfigKey_RADOS>(cct);
   datalog_rados = std::make_unique<RGWDataChangesLog>(cct);
-  mdlog = std::make_unique<RGWSI_MDLog>(cct, run_sync);
+  mdlog = std::make_unique<RGWSI_MDLog>(cct, run_sync, cfgstore);
   notify = std::make_unique<RGWSI_Notify>(cct);
-  zone = std::make_unique<RGWSI_Zone>(cct);
+  zone = std::make_unique<RGWSI_Zone>(cct, cfgstore);
   zone_utils = std::make_unique<RGWSI_ZoneUtils>(cct);
   quota = std::make_unique<RGWSI_Quota>(cct);
   sync_modules = std::make_unique<RGWSI_SyncModules>(cct);

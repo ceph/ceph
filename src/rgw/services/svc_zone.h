@@ -79,7 +79,7 @@ class RGWSI_Zone : public RGWServiceInstance
                              rgw::sal::ConfigStore* cfgstore,
                              optional_yield y);
 public:
-  RGWSI_Zone(CephContext *cct);
+  RGWSI_Zone(CephContext *cct, rgw::sal::ConfigStore* cfgstore);
   ~RGWSI_Zone();
 
   const RGWZoneParams& get_zone_params() const;
