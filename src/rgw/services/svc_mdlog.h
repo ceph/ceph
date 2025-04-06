@@ -53,7 +53,7 @@ class RGWSI_MDLog : public RGWServiceInstance
   rgw::sal::ConfigStore* cfgstore{nullptr};
 
 public:
-  RGWSI_MDLog(CephContext *cct, bool run_sync);
+  RGWSI_MDLog(CephContext *cct, bool run_sync, rgw::sal::ConfigStore* _cfgstore);
   virtual ~RGWSI_MDLog();
 
   librados::Rados* rados{nullptr};
