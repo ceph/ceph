@@ -3724,6 +3724,7 @@ class InitBucketFullSyncStatusCR : public RGWCoroutine {
 
   const rgw_bucket_index_marker_info& info;
   BucketIndexShardsManager marker_mgr;
+  const BucketIndexShardsManager empty_mgr;
 
   bool all_incremental = true;
   bool no_zero = false;
@@ -3789,23 +3790,31 @@ public:
       }
 
       if (status.state != BucketSyncState::Incremental) {
-	// initialize all shard sync status. this will populate the log marker
-        // positions where incremental sync will resume after full sync
-	yield {
-	  const int num_shards = marker_mgr.get().size();
-	  call(new InitBucketShardStatusCollectCR(sc, sync_pair, info.latest_gen, marker_mgr, num_shards));
-	}
-	if (retcode < 0) {
-          ldout(cct, 20) << "failed to init bucket shard status: "
-			 << cpp_strerror(retcode) << dendl;
-	  return set_cr_error(retcode);
-        }
-
         // always init with full sync when the src and dest are the same buckets (force symmetry within the zonegroup)
         if (sync_pair.is_symmetric_pair() || sync_env->sync_module->should_full_sync()) {
           status.state = BucketSyncState::Full;
         } else {
           status.state = BucketSyncState::Incremental;
+        }
+
+        // initialize all shard sync status. this will populate the log marker
+        // positions where incremental sync will resume after full sync
+        yield {
+          const int num_shards = marker_mgr.get().size();
+          if (status.state == BucketSyncState::Incremental) {
+            // When initializing the sync status with an incremental state,
+            // avoid using the maximum marker position from the log.
+            // Instead, pass an empty marker to ensure it starts with the
+            // earliest available bilog entry in the source zone.
+            call(new InitBucketShardStatusCollectCR(sc, sync_pair, info.latest_gen, empty_mgr, num_shards));
+          } else {
+            call(new InitBucketShardStatusCollectCR(sc, sync_pair, info.latest_gen, marker_mgr, num_shards));
+          }
+        }
+        if (retcode < 0) {
+          ldout(cct, 20) << "failed to init bucket shard status: "
+            << cpp_strerror(retcode) << dendl;
+          return set_cr_error(retcode);
         }
       }
 
