@@ -6,6 +6,7 @@ from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import OAuth2ProxySpec, MgmtGatewaySpec, ServiceSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
 from .service_registry import register_cephadm_service
+from cephadm.tlsobject_store import TLSObjectScope
 
 if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
@@ -16,7 +17,12 @@ logger = logging.getLogger(__name__)
 @register_cephadm_service
 class OAuth2ProxyService(CephadmService):
     TYPE = 'oauth2-proxy'
+    SCOPE = TLSObjectScope.HOST
     SVC_TEMPLATE_PATH = 'services/oauth2-proxy/oauth2-proxy.conf.j2'
+
+    @property
+    def needs_certificates(self) -> bool:
+        return True
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
