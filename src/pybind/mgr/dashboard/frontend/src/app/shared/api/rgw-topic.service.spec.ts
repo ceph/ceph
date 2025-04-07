@@ -1,5 +1,4 @@
 import { TestBed } from '@angular/core/testing';
-
 import { RgwTopicService } from './rgw-topic.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
