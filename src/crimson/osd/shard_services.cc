@@ -23,6 +23,7 @@
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operations/pg_splitting.h"
+#include "crimson/osd/osd_operations/pg_merging.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_meta.h"
 
@@ -93,35 +94,70 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
   assert_core();
   auto &pgs = pg_map.get_pgs();
   return seastar::parallel_for_each(
-    pgs.begin(), pgs.end(),
+      pgs.begin(), pgs.end(),
     [=, &shard_services](auto& pg) {
       auto old_map = pg.second->get_osdmap();
       return shard_services.start_operation<PGAdvanceMap>(
-	pg.second,
-	shard_services,
-	epoch,
-	PeeringCtx{}, false, false).second.then(
-     [this, old_map, epoch, &shard_services, pg=pg.second] {
-      return identify_splits(
-	shard_services,
-	pg,
-	old_map,
-	epoch).then(
-	  [old_map, epoch, &shard_services, pg] (auto&& children) {
-	  if (!children.empty()) {
-	    return shard_services.get_map(epoch).then(
-	      [&shard_services, pg, children] (cached_map_t&& new_map) {
-		return shard_services.start_operation<PGSplitting>(
-		  pg,
-		  shard_services,
-		  new_map,
-		  std::move(children),
-		  PeeringCtx{}).second;
-	    });
-	  } else {
-	    return seastar::now();
-	  }
+        pg.second,
+        shard_services,
+        epoch,
+        PeeringCtx{}, false, false).second.then(
+        [this, old_map, epoch, &shard_services, pg=pg.second] () {
+          return identify_splits(shard_services, pg, old_map, epoch).then(
+            [this, old_map, epoch, &shard_services, pg] (auto&& split_children) {
+              if (!split_children.empty()) {
+                return shard_services.get_map(epoch).then(
+                  [&shard_services, pg, split_children = std::move(split_children)]
+                  (cached_map_t&& new_map) {
+                    return shard_services.start_operation<PGSplitting>(
+                      pg,
+                      shard_services,
+                      new_map,
+                      std::move(split_children),
+                      PeeringCtx{}).second;
+                  });
+              } else {
+                return seastar::now();
+              }
+	    }).then([this, old_map, epoch, &shard_services, pg] () {
+              // Check for merges and register the PGs that need to be merged
+                return identify_merges(shard_services, pg, old_map, epoch).then(
+                [old_map, epoch, &shard_services, pg] (auto&& merge_candidates) {
+                  if (!merge_candidates.empty()) {
+                    return shard_services.get_map(epoch).then(
+                      [&shard_services, pg, old_map, merge_candidates = std::move(merge_candidates)]
+                      (cached_map_t&& new_map) {
+		        return shard_services.register_for_merge(
+			    pg,
+			    new_map,
+			    old_map);
+                      });
+                  } else {
+                    return seastar::now();
+                  }
+                });
+	      return seastar::now();
+            });
+	  return seastar::now();
         });
+      return seastar::now();
+    }).then([this, epoch, &shard_services] () {
+      if (!shard_services.merge_target_pgs.empty()) {
+	return shard_services.get_map(epoch).then(
+	    [this, &shard_services] (cached_map_t&& new_map) {
+	    auto target_pgs = shard_services.merge_target_pgs;
+	    return seastar::parallel_for_each(target_pgs.begin(), target_pgs.end(),
+	       [this, &shard_services, &new_map] (auto &target_info) {
+                  auto pg = shard_services.get_pg(target_info.first);
+		  return shard_services.start_operation<PGMerging>(
+		    pg,
+		    shard_services,
+		    new_map,
+		    target_info.second,
+		    PeeringCtx{}).second;
+	    });
+	});
+      }
       return seastar::now();
     });
 }
