@@ -1,11 +1,8 @@
 import { TestBed } from '@angular/core/testing';
-import { RgwTopicService } from './rgw-topic.service';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
-import { HttpParams } from '@angular/common/http';
-import { of } from 'rxjs';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { TopicModel } from '~/app/ceph/rgw/rgw-topic-list/topic.model';
-import { RgwDaemonService } from './rgw-daemon.service';
+import { RgwTopicService } from './rgw-topic.service';
 
 const mockTopicData: TopicModel[] = [
   {
@@ -52,23 +49,26 @@ const mockTopicData: TopicModel[] = [
 describe('RgwTopicService', () => {
   let service: RgwTopicService;
   let httpTesting: HttpTestingController;
-  let rgwDaemonService: jasmine.SpyObj<RgwDaemonService>;
+  configureTestBed({
+    imports: [HttpClientTestingModule]
+  });
   configureTestBed({
     imports: [HttpClientTestingModule],
-    providers: [RgwTopicService, { provide: RgwDaemonService, useValue: { request: jest.fn() } }]
+    providers: [RgwTopicService]
   });
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
     service = TestBed.inject(RgwTopicService);
     httpTesting = TestBed.inject(HttpTestingController);
-    rgwDaemonService = TestBed.inject(RgwDaemonService);
+  });
+
+  afterEach(() => {
+    httpTesting.verify();
   });
 
   it('should be created', () => {
     expect(service).toBeTruthy();
   });
-
   it('should list topics', () => {
     service.listTopic().subscribe((data) => {
       expect(data).toEqual(mockTopicData);
