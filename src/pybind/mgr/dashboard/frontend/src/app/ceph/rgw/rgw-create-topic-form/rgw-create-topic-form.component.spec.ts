@@ -1,7 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RgwCreateTopicFormComponent } from './rgw-create-topic-form.component';
 import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
-import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ReactiveFormsModule } from '@angular/forms';
