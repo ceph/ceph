@@ -123,7 +123,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "count(sum by (ceph_daemon) (ceph_osd_metadata{cluster=~\"$cluster\", }))",
+               "expr": "count(sum by (ceph_daemon) (ceph_osd_metadata{cluster=~\"$cluster\",  hostname=~\"$ceph_hosts\"}))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "",
