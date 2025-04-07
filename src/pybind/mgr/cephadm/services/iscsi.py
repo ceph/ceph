@@ -11,6 +11,7 @@ from ceph.deployment.service_spec import IscsiServiceSpec, ServiceSpec
 from orchestrator import DaemonDescription, DaemonDescriptionStatus
 from .cephadmservice import CephadmDaemonDeploySpec, CephService
 from .service_registry import register_cephadm_service
+from cephadm.tlsobject_store import TLSObjectScope
 from .. import utils
 
 if TYPE_CHECKING:
@@ -33,6 +34,11 @@ def get_trusted_ips(mgr: "CephadmOrchestrator", spec: IscsiServiceSpec) -> str:
 @register_cephadm_service
 class IscsiService(CephService):
     TYPE = 'iscsi'
+    SCOPE = TLSObjectScope.SERVICE
+
+    @property
+    def needs_certificates(self) -> bool:
+        return True
 
     def config(self, spec: IscsiServiceSpec) -> None:  # type: ignore
         assert self.TYPE == spec.service_type
