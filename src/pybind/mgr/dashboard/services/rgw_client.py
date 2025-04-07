@@ -22,7 +22,7 @@ try:
 except ModuleNotFoundError:
     logging.error("Module 'xmltodict' is not installed.")
 
-from mgr_util import build_url, name_to_config_section
+from mgr_util import build_url
 
 from .. import mgr
 from ..awsauth import S3Auth
@@ -100,9 +100,12 @@ def _determine_rgw_addr(daemon_info: Dict[str, Any]) -> RgwDaemon:
     Parse RGW daemon info to determine the configured host (IP address) and port.
     """
     daemon = RgwDaemon()
-    rgw_dns_name = CephService.send_command('mon', 'config get',
-                                            who=name_to_config_section('rgw.' + daemon_info['metadata']['id']),  # noqa E501 #pylint: disable=line-too-long
-                                            key='rgw_dns_name').rstrip()
+    rgw_dns_name = ''
+    if (
+        Settings.RGW_HOSTNAME_PER_DAEMON
+        and daemon_info['metadata']['id'] in Settings.RGW_HOSTNAME_PER_DAEMON
+    ):
+        rgw_dns_name = Settings.RGW_HOSTNAME_PER_DAEMON[daemon_info['metadata']['id']]
 
     daemon.port, daemon.ssl = _parse_frontend_config(daemon_info['metadata']['frontend_config#0'])
 
@@ -279,7 +282,9 @@ class RgwClient(RestClient):
         return (Settings.RGW_API_ACCESS_KEY,
                 Settings.RGW_API_SECRET_KEY,
                 Settings.RGW_API_ADMIN_RESOURCE,
-                Settings.RGW_API_SSL_VERIFY)
+                Settings.RGW_API_SSL_VERIFY,
+                Settings.RGW_HOSTNAME_PER_DAEMON
+                )
 
     @staticmethod
     def instance(userid: Optional[str] = None,
