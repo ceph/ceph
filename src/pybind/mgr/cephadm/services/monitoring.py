@@ -15,6 +15,7 @@ from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceS
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_urls
 from mgr_util import build_url, password_hash
 from ceph.deployment.utils import wrap_ipv6
+from cephadm.tlsobject_store import TLSObjectScope
 from .. import utils
 
 if TYPE_CHECKING:
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 @register_cephadm_service
 class GrafanaService(CephadmService):
     TYPE = 'grafana'
+    SCOPE = TLSObjectScope.HOST
     DEFAULT_SERVICE_PORT = 3000
 
     def generate_data_sources(self, security_enabled: bool, mgmt_gw_enabled: bool, cert: str, pkey: str) -> str:
