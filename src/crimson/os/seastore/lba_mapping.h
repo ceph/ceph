@@ -17,7 +17,7 @@ class LogicalCachedExtent;
 
 class LBAMapping : public BtreeNodeMapping<laddr_t, paddr_t> {
 public:
-  LBAMapping(op_context_t<laddr_t> ctx)
+  LBAMapping(op_context_t ctx)
     : BtreeNodeMapping<laddr_t, paddr_t>(ctx) {}
   template <typename... T>
   LBAMapping(T&&... t)
@@ -54,7 +54,7 @@ public:
 
   virtual ~LBAMapping() {}
 protected:
-  virtual LBAMappingRef _duplicate(op_context_t<laddr_t>) const = 0;
+  virtual LBAMappingRef _duplicate(op_context_t) const = 0;
   std::optional<child_pos_t<
     lba_manager::btree::LBALeafNode>> child_pos = std::nullopt;
 };
