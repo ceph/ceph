@@ -548,8 +548,7 @@ def get_topics(zone):
     """
     cmd = ['topic', 'list'] + zone.zone_args()
     topics_json, _ = zone.cluster.admin(cmd, read_only=True)
-    topics = json.loads(topics_json)
-    return topics['topics']
+    return json.loads(topics_json)
 
 
 def create_topic_per_zone(zonegroup_conns, topics_per_zone=1):
