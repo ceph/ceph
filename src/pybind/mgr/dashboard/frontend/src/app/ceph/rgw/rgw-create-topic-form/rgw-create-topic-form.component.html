@@ -221,7 +221,7 @@
         *ngIf="topicForm.showError('port', formDir, 'required')">This field is required</span>
   <span class="invalid-feedback"
         *ngIf="topicForm.controls.port.hasError('pattern') && topicForm.controls.port.touched"
-         i18n> Port must be a valid integer</span>
+        i18n> Port must be a valid integer</span>
   </ng-template>
   <ng-template #portText>
   <span i18n>
@@ -321,7 +321,7 @@
   <cds-checkbox id="enable_ssl"
                 formControlName="enable_ssl"
                 name="enable_ssl"
-                (checkedChange)="onSecureSslChange($event)">     
+                (checkedChange)="onSecureSslChange($event)">
   <ng-container i18n>Enable SSL</ng-container>
   <cd-help-text i18n>Enabling SSL ensures that your connection is encrypted and secure. You must have a valid SSL certificate installed on your server.
   </cd-help-text>
