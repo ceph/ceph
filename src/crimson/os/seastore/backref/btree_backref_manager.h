@@ -11,10 +11,10 @@ namespace crimson::os::seastore::backref {
 
 class BtreeBackrefMapping : public BackrefMapping {
 public:
-  BtreeBackrefMapping(op_context_t<paddr_t> ctx)
+  BtreeBackrefMapping(op_context_t ctx)
     : BackrefMapping(ctx) {}
   BtreeBackrefMapping(
-    op_context_t<paddr_t> ctx,
+    op_context_t ctx,
     BackrefLeafNodeRef parent,
     uint16_t pos,
     backref_map_val_t &val,
@@ -101,8 +101,8 @@ public:
 private:
   Cache &cache;
 
-  op_context_t<paddr_t> get_context(Transaction &t) {
-    return op_context_t<paddr_t>{cache, t};
+  op_context_t get_context(Transaction &t) {
+    return op_context_t{cache, t};
   }
 };
 

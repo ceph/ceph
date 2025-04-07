@@ -74,7 +74,7 @@ void LBALeafNode::maybe_fix_mapping_pos(BtreeLBAMapping &mapping)
 }
 
 BtreeLBAMappingRef LBALeafNode::get_mapping(
-  op_context_t<laddr_t> c, laddr_t laddr)
+  op_context_t c, laddr_t laddr)
 {
   auto iter = lower_bound(laddr);
   ceph_assert(iter != end() && iter->get_key() == laddr);
