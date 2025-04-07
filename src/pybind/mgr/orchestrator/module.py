@@ -1166,8 +1166,12 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=output)
 
     @_cli_read_command('orch certmgr cert ls')
-    def _cert_store_cert_ls(self, show_details: bool = False, format: Format = Format.plain) -> HandleCommandResult:
-        completion = self.cert_store_cert_ls(show_details)
+    def _cert_store_cert_ls(self,
+                            filter_by: str = '',
+                            show_details: bool = False,
+                            include_cephadm_signed: bool = False,
+                            format: Format = Format.plain) -> HandleCommandResult:
+        completion = self.cert_store_cert_ls(filter_by, show_details, include_cephadm_signed)
         cert_ls = raise_if_exception(completion)
         if format != Format.plain:
             return HandleCommandResult(stdout=to_format(cert_ls, format, many=False, cls=None))
