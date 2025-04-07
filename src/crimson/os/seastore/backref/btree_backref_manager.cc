@@ -22,7 +22,7 @@ phy_tree_root_t& get_phy_tree_root<
 template<>
 const get_phy_tree_root_node_ret get_phy_tree_root_node<
   crimson::os::seastore::backref::BackrefBtree>(
-  const RootBlockRef &root_block, op_context_t<paddr_t> c) {
+  const RootBlockRef &root_block, op_context_t c) {
   auto backref_root = root_block->backref_root_node;
   if (backref_root) {
     ceph_assert(backref_root->is_initial_pending()
@@ -455,7 +455,7 @@ BtreeBackrefManager::scan_mapped_space(
 }
 
 BtreeBackrefManager::base_iertr::future<> _init_cached_extent(
-  op_context_t<paddr_t> c,
+  op_context_t c,
   const CachedExtentRef &e,
   BackrefBtree &btree,
   bool &ret)
