@@ -12346,9 +12346,7 @@ int Client::WriteEncMgr::read_modify_write(Context *_iofinish)
     clnt->client_lock.lock();
 
     r = aioc.get_retcode();
-    if (r < 0) {
-      goto done;
-    }
+    // fallthrough
   }
 
 
