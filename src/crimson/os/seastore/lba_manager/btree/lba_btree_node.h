@@ -262,13 +262,13 @@ struct LBALeafNode
   }
 
   bool is_child_stable(
-    op_context_t<laddr_t> c,
+    op_context_t c,
     uint16_t pos,
     laddr_t key) const {
     return parent_node_t::_is_child_stable(c.trans, c.cache, pos, key);
   }
   bool is_child_data_stable(
-    op_context_t<laddr_t> c,
+    op_context_t c,
     uint16_t pos,
     laddr_t key) const {
     return parent_node_t::_is_child_stable(c.trans, c.cache, pos, key, true);
@@ -328,7 +328,7 @@ struct LBALeafNode
   std::ostream &print_detail(std::ostream &out) const final;
 
   void maybe_fix_mapping_pos(BtreeLBAMapping &mapping);
-  std::unique_ptr<BtreeLBAMapping> get_mapping(op_context_t<laddr_t> c, laddr_t laddr);
+  std::unique_ptr<BtreeLBAMapping> get_mapping(op_context_t c, laddr_t laddr);
 };
 using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
 

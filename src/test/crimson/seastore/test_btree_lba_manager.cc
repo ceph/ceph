@@ -221,7 +221,7 @@ struct lba_btree_test : btree_test_base {
   std::map<laddr_t, lba_map_val_t> check;
 
   auto get_op_context(Transaction &t) {
-    return op_context_t<laddr_t>{*cache, t};
+    return op_context_t{*cache, t};
   }
 
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
