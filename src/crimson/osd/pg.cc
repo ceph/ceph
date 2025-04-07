@@ -1694,4 +1694,35 @@ bool PG::check_in_progress_op(
       reqid, version, user_version, return_code, op_returns));
 }
 
+
+seastar::future<> PG::merge_from(std::map<spg_t,Ref<PG>>& sources, PeeringCtx &rctx,
+                                 unsigned split_bits,
+                                 const pg_merge_meta_t& last_pg_merge_meta)
+{
+  LOG_PREFIX(PG::merge_from);
+  DEBUG(" {}", get_pgid());
+  std::map<spg_t, PeeringState*> source_peering_state;
+  for (auto &&source : sources) {
+    source_peering_state.emplace(source.first, &source.second->peering_state);
+  }
+  peering_state.merge_from(source_peering_state, rctx, split_bits, last_pg_merge_meta);
+
+  return seastar::do_for_each(sources, [this, FNAME, &rctx, split_bits] (auto &source) {
+    auto target_coll = coll_ref->get_cid();
+    auto source_pg = source.second;
+    DEBUG(" source pg{}", source_pg->get_pgid());
+    // wipe out source PG's pgmeta
+    auto source_coll = source_pg->get_collection_ref()->get_cid();
+    // merge (and destroy source collection)
+    rctx.transaction.remove(source_coll, source.first.make_snapmapper_oid());
+    rctx.transaction.remove(source_coll, source_pg->pgmeta_oid);
+    rctx.transaction.merge_collection(source_coll, target_coll, split_bits);
+    // Remove the PG from the shard
+    return shard_services.remove_pg(source_pg->get_pgid());
+  }).then([this, FNAME, &rctx, split_bits] {
+    rctx.transaction.collection_set_bits(coll_ref->get_cid(), split_bits);
+    return shard_services.get_store().do_transaction(coll_ref, std::move(rctx.transaction));
+  });
+}
+
 }
