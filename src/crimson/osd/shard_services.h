@@ -627,6 +627,15 @@ public:
       });
   }
 
+  /// merge epoch -> target pgid -> source pgid -> pg
+  std::map<epoch_t,std::map<spg_t,std::map<spg_t,Ref<PG>>>> merge_waiters;
+  std::map<spg_t, OSDMapRef> merge_target_pgs;
+  seastar::future<> register_for_merge(Ref<PG> pg,
+                                       OSDMapRef new_map,
+                                       OSDMapRef old_map);
+  bool add_merge_waiter(OSDMapRef nextmap, spg_t target, Ref<PG> source,
+                        unsigned need);
+
   FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_source)
   FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_target)
   FORWARD_TO_OSD_SINGLETON(set_not_ready_to_merge_source)

@@ -124,8 +124,49 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
         });
       return seastar::now();
     });
+}
+
+seastar::future<> ShardServices::register_for_merge(Ref<PG> pg,
+                                                    OSDMapRef new_map,
+						    OSDMapRef old_map)
+{
+  LOG_PREFIX(ShardServices::register_for_merge);
+  unsigned old_pg_num = old_map->get_pg_num(pg->get_pgid().pool());
+  unsigned new_pg_num = new_map->get_pg_num(pg->get_pgid().pool());
+  DEBUG(" old_pg_num: {}, new_pg_num: {}", old_pg_num, new_pg_num);
+
+  spg_t parent;
+  if (pg->get_pgid().is_merge_source(
+	old_pg_num,
+	new_pg_num,
+	&parent)) {
+    DEBUG(" {} is merge source, target is {}", pg->get_pgid(), parent);
+
+    // for the target parent PG, calculate how many source PGs will be needed
+    std::set<spg_t> merge_sources;
+    parent.is_split(new_pg_num, old_pg_num, &merge_sources);
+    if (add_merge_waiter(new_map, parent,
+			 pg, merge_sources.size())) {
+	DEBUG(" added {} to merge waiter for target PG {}", pg->get_pgid(), parent);
+    }
     return seastar::now();
-  });
+  } else if (pg->get_pgid().is_merge_target(old_pg_num, new_pg_num)) {
+    DEBUG(" {} is a merge target", pg->get_pgid());
+    merge_target_pgs[pg->get_pgid()] = old_map;
+    return seastar::now();
+  }
+  return seastar::now();
+}
+
+bool ShardServices::add_merge_waiter(OSDMapRef nextmap, spg_t target, Ref<PG> src,
+                           unsigned need)
+{
+  LOG_PREFIX(ShardServices::add_merge_waiter);
+  auto& p = merge_waiters[nextmap->get_epoch()][target];
+  p[src->get_pgid()] = src;
+  DEBUG(" added merge waiter {} for {} have {}/{}",
+      src->get_pgid(), target, p.size(), need);
+  return p.size() == need;
 }
 
 seastar::future<std::set<std::pair<spg_t, epoch_t>>> PerShardState::identify_splits(
