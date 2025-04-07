@@ -72,10 +72,74 @@
   by disabling async recovery by setting osd_async_recovery_min_cost to a very
   large value on all OSDs until the upgrade is complete:
   ``ceph config set osd osd_async_recovery_min_cost 1099511627776``
+* CephFS: Modifying the setting "max_mds" when a cluster is
+  unhealthy now requires users to pass the confirmation flag
+  (--yes-i-really-mean-it). This has been added as a precaution to tell the
+  users that modifying "max_mds" may not help with troubleshooting or recovery
+  effort. Instead, it might further destabilize the cluster.
+* RADOS: Added convenience function `librados::AioCompletion::cancel()` with
+  the same behavior as `librados::IoCtx::aio_cancel()`.
+
+* mgr/restful, mgr/zabbix: both modules, already deprecated since 2020, have been
+  finally removed. They have not been actively maintenance in the last years,
+  and started suffering from vulnerabilities in their dependency chain (e.g.:
+  CVE-2023-46136).  As alternatives, for the `restful` module, the `dashboard` module
+  provides a richer and better maintained RESTful API. Regarding the `zabbix` module,
+  there are alternative monitoring solutions, like `prometheus`, which is the most
+  widely adopted among the Ceph user community.
+
 * CephFS: EOPNOTSUPP (Operation not supported ) is now returned by the CephFS
   fuse client for `fallocate` for the default case (i.e. mode == 0) since
   CephFS does not support disk space reservation. The only flags supported are
   `FALLOC_FL_KEEP_SIZE` and `FALLOC_FL_PUNCH_HOLE`.
+* pybind/rados: Fixes WriteOp.zero() in the original reversed order of arguments
+  `offset` and `length`. When pybind calls WriteOp.zero(), the argument passed
+  does not match rados_write_op_zero, and offset and length are swapped, which
+  results in an unexpected response.
+
+* The HeadBucket API now reports the `X-RGW-Bytes-Used` and `X-RGW-Object-Count`
+  headers only when the `read-stats` querystring is explicitly included in the
+  API request.
+
+* RGW: PutObjectLockConfiguration can now be used to enable S3 Object Lock on an
+  existing versioning-enabled bucket that was not created with Object Lock enabled.
+
+* RADOS: The ceph df command reports incorrect MAX AVAIL for stretch mode pools when
+  CRUSH rules use multiple take steps for datacenters. PGMap::get_rule_avail
+  incorrectly calculates available space from only one datacenter.
+  As a workaround, define CRUSH rules with take default and choose firstn 0 type
+  datacenter. See https://tracker.ceph.com/issues/56650#note-6 for details.
+  Upgrading a cluster configured with a crush rule with multiple take steps
+  can lead to data shuffling, as the new crush changes may necessitate data
+  redistribution. In contrast, a stretch rule with a single-take configuration
+  will not cause any data movement during the upgrade process.
+
+* RGW: The `x-amz-confirm-remove-self-bucket-access` header is now supported by
+  `PutBucketPolicy`. Additionally, the root user will always have access to modify
+  the bucket policy, even if the current policy explicitly denies access.
+
+* CephFS: The ``ceph fs subvolume snapshot getpath`` command now allows users
+  to get the path of a snapshot of a subvolume. If the snapshot is not present
+  ``ENOENT`` is returned.
+
+* CephFS: The ``ceph fs volume create`` command now allows users to pass
+  metadata and data pool names to be used for creating the volume. If either
+  is not passed or if either is a non-empty pool, the command will abort.
+
+
+>=19.2.1
+
+* CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
+  `--earmark` with a unique identifier needed for NFS or SMB services. The earmark
+  string for a subvolume is empty by default. To remove an already present earmark,
+  an empty string can be assigned to it. Additionally, commands
+  `ceph fs subvolume earmark set`, `ceph fs subvolume earmark get` and
+  `ceph fs subvolume earmark rm` have been added to set, get and remove earmark from a given subvolume.
+* RADOS: Add ``messenger dump`` command to retrieve runtime information
+  on connections, sockets, and kernel TCP stats from the messenger.
+
+* RADOS: A performance botteneck in the balancer mgr module has been fixed.
+  Related Tracker: https://tracker.ceph.com/issues/68657
 
 >=19.0.0
 
