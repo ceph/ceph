@@ -130,6 +130,11 @@ class PerShardState {
     Ref<PG> pg,
     cached_map_t cur_map,
     epoch_t epoch);
+  seastar::future<std::set<std::pair<spg_t, epoch_t>>> identify_merges(
+    ShardServices &shard_services,
+    Ref<PG> pg,
+    cached_map_t cur_map,
+    epoch_t epoch);
 
 
   Ref<PG> get_pg(spg_t pgid);

@@ -255,6 +255,86 @@ seastar::future<std::set<std::pair<spg_t, epoch_t>>> PerShardState::identify_spl
   });
 }
 
+seastar::future<std::set<std::pair<spg_t, epoch_t>>> PerShardState::identify_merges(
+  ShardServices &shard_services,
+  Ref<PG> pg,
+  cached_map_t old_map,
+  epoch_t epoch)
+{
+  LOG_PREFIX(PerShardState::identify_merges);
+  DEBUG(" {} e{} to e{}", pg->get_pgid(), old_map->get_epoch(), epoch);
+  unsigned old_pg_num;
+  if (old_map->have_pg_pool(pg->get_pgid().pool())) {
+    old_pg_num = old_map->get_pg_num(pg->get_pgid().pool());
+  } else {
+    DEBUG("{} pool doesn't exist in epoch {}", pg->get_pgid(), old_map->get_epoch());
+    return seastar::make_ready_future<std::set<std::pair<spg_t, epoch_t>>>(
+        std::move(std::set<std::pair<spg_t, epoch_t>>()));
+  }
+
+  return shard_services.get_map(epoch).then(
+    [this, FNAME, old_pg_num, old_map, pg] (cached_map_t&& new_map) {
+    auto pgid = pg->get_pgid();
+    const auto& pool_pg_num_history_map = per_shard_pg_num_history.pg_nums[pgid.pool()];
+    std::set<std::pair<spg_t, epoch_t>> merge_pgs;
+    std::deque<spg_t> check_for_merge_queue;
+    check_for_merge_queue.push_back(pgid);
+    std::set<spg_t> check_done;
+    while(!check_for_merge_queue.empty()) {
+      auto cur_pg = check_for_merge_queue.front();
+      check_for_merge_queue.pop_front();
+      check_done.insert(cur_pg);
+      unsigned pg_num = old_pg_num;
+      for (auto map_iter = pool_pg_num_history_map.lower_bound(old_map->get_epoch());
+           map_iter != pool_pg_num_history_map.end();
+           ++map_iter) {
+        const auto& [new_epoch, new_pg_num] = *map_iter;
+        if (new_epoch > new_map->get_epoch()) {
+          // don't handle any changes recorded later than new_map's epoch
+          break;
+        }
+        // checking for merge
+        if (cur_pg.ps() >= new_pg_num) {
+          if (cur_pg.ps() < pg_num) {
+            spg_t parent;
+            if (cur_pg.is_merge_source(pg_num, new_pg_num, &parent)) {
+              std::set<spg_t> children;
+              parent.is_split(new_pg_num, pg_num, &children);
+              DEBUG("{} e{} pg_num {} -> {} is merge source target :{} source(s): {}", cur_pg, new_epoch,
+                     pg_num, new_pg_num, parent, children);
+              merge_pgs.insert(std::make_pair(parent, new_epoch));
+              if (!check_done.count(parent))
+                check_for_merge_queue.push_back(parent);
+              for (auto child: children) {
+                merge_pgs.insert(std::make_pair(child, new_epoch));
+                if (!check_done.count(child))
+                  check_for_merge_queue.push_back(child);
+              }
+            }
+          } else {
+            DEBUG("{} e{} pg_num {} -> {} is beyond old pg_num, skipping",
+                  cur_pg, new_epoch, pg_num, new_pg_num);
+          }
+        } else {
+          std::set<spg_t> children;
+          if (cur_pg.is_split(new_pg_num, pg_num, &children)) {
+              DEBUG("{} e{} pg_num {} -> {} is merge target, source {}", cur_pg, new_epoch,
+                     pg_num, new_pg_num, children);
+              for (auto child: children) {
+		merge_pgs.insert(std::make_pair(child, new_epoch));
+                if (!check_done.count(child))
+                  check_for_merge_queue.push_back(child);
+              }
+              merge_pgs.insert(std::make_pair(cur_pg, new_epoch));
+          }
+        }
+        pg_num = new_pg_num;
+      }
+      }
+      return seastar::make_ready_future<std::set<std::pair<spg_t, epoch_t>>>(
+        std::move(merge_pgs));
+    });
+}
 
 Ref<PG> PerShardState::get_pg(spg_t pgid)
 {
