@@ -430,3 +430,111 @@ def normalize_container_id(i: str) -> str:
     if i.startswith(prefix):
         i = i[len(prefix) :]
     return i
+
+
+class ImageInfo:
+    def __init__(
+        self,
+        image_id: str,
+        repository: str,
+        digest: str,
+        tag: str,
+        created: str,
+    ) -> None:
+        self.image_id = image_id
+        self.repository = repository
+        self.digest = digest
+        self.tag = tag
+        self.created = created
+
+    @property
+    def name_with_tag(self) -> str:
+        if self.repository and self.tag:
+            return f'{self.repository}:{self.tag}'
+        return ''
+
+    @property
+    def name_with_digest(self) -> str:
+        if self.repository and self.digest:
+            return f'{self.repository}@{self.digest}'
+        return ''
+
+    @property
+    def name(self) -> str:
+        if self.name_with_digest:
+            return self.name_with_digest
+        if self.name_with_tag:
+            return self.name_with_tag
+        return self.image_id
+
+    def __repr__(self) -> str:
+        return (
+            'ImageInfo('
+            f'image_id={self.image_id!r}, '
+            f'repository={self.repository!r}, '
+            f'digest={self.digest!r}, '
+            f'tag={self.tag!r}, '
+            f'created={self.created!r}'
+            ')'
+        )
+
+
+def _container_image_list(
+    ctx: CephadmContext,
+    filters: Optional[List[str]] = None,
+    *,
+    container_path: str = '',
+) -> Tuple[str, str, int]:
+    """get images with stats from the container engine"""
+    container_path = container_path or ctx.container_engine.path
+    args = [container_path, 'images']
+    for filter_value in filters or []:
+        args.append(f'--filter={filter_value}')
+    fmt = '{{.Repository}}@{{.Digest}}|{{.ID}}|{{.Tag}}|{{.CreatedAt}}'
+    args.append(f'--format={fmt}')
+    return call(ctx, args, verbosity=CallVerbosity.QUIET)
+
+
+def _parse_container_image_list(
+    out: str,
+    err: str,
+    code: int,
+) -> List[ImageInfo]:
+    if code != 0:
+        return []
+    images: List[ImageInfo] = []
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            digest_part, image_id, tag, created_date = line.split('|')
+        except ValueError:
+            raise ValueError('invalid container image value: {line!r}')
+        try:
+            repository, digest = (digest_part or '@').split('@')
+        except ValueError:
+            raise ValueError('invalid digest part: {digest_part!r}')
+        tag = '' if tag == '<none>' else tag
+        repository = '' if repository == '<none>' else repository
+        image_info = ImageInfo(
+            image_id=image_id,
+            repository=repository,
+            digest=digest,
+            tag=tag,
+            created=created_date,
+        )
+        images.append(image_info)
+    return images
+
+
+def parsed_container_image_list(
+    ctx: CephadmContext,
+    filters: Optional[List[str]] = None,
+    *,
+    container_path: str = '',
+) -> List[ImageInfo]:
+    out, err, code = _container_image_list(
+        ctx, filters=filters, container_path=container_path
+    )
+    return _parse_container_image_list(out, err, code)

@@ -201,7 +201,7 @@ from cephadmlib.listing_updaters import (
     MemUsageStatusUpdater,
     VersionStatusUpdater,
 )
-from cephadmlib.container_lookup import get_container_info
+from cephadmlib.container_lookup import infer_local_ceph_image
 
 
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -463,51 +463,6 @@ def update_default_image(ctx: CephadmContext) -> None:
         ctx.image = os.environ.get('CEPHADM_IMAGE')
     if not ctx.image:
         ctx.image = _get_default_image(ctx)
-
-
-def infer_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optional[str]:
-    """
-     Infer the local ceph image based on the following priority criteria:
-       1- the image specified by --image arg (if provided).
-       2- the same image as the daemon container specified by --name arg (if provided).
-       3- image used by any ceph container running on the host. In this case we use daemon types.
-       4- if no container is found then we use the most ceph recent image on the host.
-
-     Note: any selected container must have the same fsid inferred previously.
-
-    :return: The most recent local ceph image (already pulled)
-    """
-    # '|' special character is used to separate the output fields into:
-    #  - Repository@digest
-    #  - Image Id
-    #  - Image Tag
-    #  - Image creation date
-    out, _, _ = call_throws(ctx,
-                            [container_path, 'images',
-                             '--filter', 'label=ceph=True',
-                             '--filter', 'dangling=false',
-                             '--format', '{{.Repository}}@{{.Digest}}|{{.ID}}|{{.Tag}}|{{.CreatedAt}}'])
-
-    container_info = None
-    daemon_name = ctx.name if ('name' in ctx and ctx.name and '.' in ctx.name) else None
-    daemons_ls = [daemon_name] if daemon_name is not None else ceph_daemons()  # daemon types: 'mon', 'mgr', etc
-    for daemon in daemons_ls:
-        container_info = get_container_info(ctx, daemon, daemon_name is not None)
-        if container_info is not None:
-            logger.debug(f"Using container info for daemon '{daemon}'")
-            break
-
-    for image in out.splitlines():
-        if image and not image.isspace():
-            (digest, image_id, tag, created_date) = image.lstrip().split('|')
-            if container_info is not None and image_id not in container_info.image_id:
-                continue
-            if digest and not digest.endswith('@'):
-                logger.info(f"Using ceph image with id '{image_id}' and tag '{tag}' created on {created_date}\n{digest}")
-                return digest
-    if container_info is not None:
-        logger.warning(f"Not using image '{container_info.image_id}' as it's not in list of non-dangling images with ceph=True label")
-    return None
 
 
 def get_log_dir(fsid, log_dir):
