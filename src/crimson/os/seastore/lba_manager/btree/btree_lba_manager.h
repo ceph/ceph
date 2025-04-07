@@ -62,10 +62,10 @@ class BtreeLBAMapping : public LBAMapping {
 // NOTE THAT, for direct BtreeLBAMappings, their intermediate_keys are the same as
 // their keys.
 public:
-  BtreeLBAMapping(op_context_t<laddr_t> ctx)
+  BtreeLBAMapping(op_context_t ctx)
     : LBAMapping(ctx) {}
   BtreeLBAMapping(
-    op_context_t<laddr_t> c,
+    op_context_t c,
     LBALeafNodeRef parent,
     uint16_t pos,
     lba_map_val_t &val,
@@ -203,7 +203,7 @@ public:
 
 protected:
   LBAMappingRef _duplicate(
-    op_context_t<laddr_t> ctx) const final {
+    op_context_t ctx) const final {
     auto pin = std::unique_ptr<BtreeLBAMapping>(new BtreeLBAMapping(ctx));
     pin->key = key;
     pin->intermediate_base = intermediate_base;
@@ -600,8 +600,8 @@ private:
     uint64_t num_alloc_extents_iter_nexts = 0;
   } stats;
 
-  op_context_t<laddr_t> get_context(Transaction &t) {
-    return op_context_t<laddr_t>{cache, t};
+  op_context_t get_context(Transaction &t) {
+    return op_context_t{cache, t};
   }
 
   seastar::metrics::metric_group metrics;
@@ -702,20 +702,20 @@ private:
 
   using _get_mapping_ret = get_mapping_iertr::future<BtreeLBAMappingRef>;
   _get_mapping_ret _get_mapping(
-    op_context_t<laddr_t> c,
+    op_context_t c,
     LBABtree& btree,
     laddr_t offset);
 
   using _get_mappings_ret = get_mappings_iertr::future<std::list<BtreeLBAMappingRef>>;
   _get_mappings_ret _get_mappings(
-    op_context_t<laddr_t> c,
+    op_context_t c,
     LBABtree& btree,
     laddr_t offset,
     extent_len_t length);
 
   using get_indirect_pin_ret = get_mappings_iertr::future<BtreeLBAMappingRef>;
   get_indirect_pin_ret get_indirect_pin(
-    op_context_t<laddr_t> c,
+    op_context_t c,
     LBABtree& btree,
     laddr_t key,
     laddr_t intermediate_key,
