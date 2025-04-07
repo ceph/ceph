@@ -939,7 +939,6 @@ Summary:	Ceph Object Storage Daemon
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
-Provides:	ceph-test:/usr/bin/ceph-osdomap-tool
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:	sudo
 Requires:	libstoragemgmt
@@ -2317,7 +2316,6 @@ fi
 %{_bindir}/ceph-bluestore-tool
 %{_bindir}/ceph-erasure-code-tool
 %{_bindir}/ceph-objectstore-tool
-%{_bindir}/ceph-osdomap-tool
 %{_bindir}/ceph-osd
 %{_libexecdir}/ceph/ceph-osd-prestart.sh
 %{_mandir}/man8/ceph-clsinfo.8*

@@ -200,10 +200,6 @@ TYPE(ConnectionTracker);
 TYPE(health_check_t)
 TYPE(health_check_map_t)
 
-#include "os/DBObjectMap.h"
-TYPE(DBObjectMap::_Header)
-TYPE(DBObjectMap::State)
-
 #include "os/kstore/kstore_types.h"
 TYPE(kstore_cnode_t)
 TYPE(kstore_onode_t)

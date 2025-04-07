@@ -1564,100 +1564,6 @@ out:
 
 // omap reads
 
-KStore::OmapIteratorImpl::OmapIteratorImpl(
-  CollectionRef c, OnodeRef o, KeyValueDB::Iterator it)
-  : c(c), o(o), it(it)
-{
-  std::shared_lock l{c->lock};
-  if (o->onode.omap_head) {
-    get_omap_key(o->onode.omap_head, string(), &head);
-    get_omap_tail(o->onode.omap_head, &tail);
-    it->lower_bound(head);
-  }
-}
-
-int KStore::OmapIteratorImpl::seek_to_first()
-{
-  std::shared_lock l{c->lock};
-  if (o->onode.omap_head) {
-    it->lower_bound(head);
-  } else {
-    it = KeyValueDB::Iterator();
-  }
-  return 0;
-}
-
-int KStore::OmapIteratorImpl::upper_bound(const string& after)
-{
-  std::shared_lock l{c->lock};
-  if (o->onode.omap_head) {
-    string key;
-    get_omap_key(o->onode.omap_head, after, &key);
-    it->upper_bound(key);
-  } else {
-    it = KeyValueDB::Iterator();
-  }
-  return 0;
-}
-
-int KStore::OmapIteratorImpl::lower_bound(const string& to)
-{
-  std::shared_lock l{c->lock};
-  if (o->onode.omap_head) {
-    string key;
-    get_omap_key(o->onode.omap_head, to, &key);
-    it->lower_bound(key);
-  } else {
-    it = KeyValueDB::Iterator();
-  }
-  return 0;
-}
-
-bool KStore::OmapIteratorImpl::valid()
-{
-  std::shared_lock l{c->lock};
-  if (o->onode.omap_head && it->valid() && it->raw_key().second <= tail) {
-    return true;
-  } else {
-    return false;
-  }
-}
-
-int KStore::OmapIteratorImpl::next()
-{
-  std::shared_lock l{c->lock};
-  if (o->onode.omap_head) {
-    it->next();
-    return 0;
-  } else {
-    return -1;
-  }
-}
-
-string KStore::OmapIteratorImpl::key()
-{
-  std::shared_lock l{c->lock};
-  ceph_assert(it->valid());
-  string db_key = it->raw_key().second;
-  string user_key;
-  decode_omap_key(db_key, &user_key);
-  return user_key;
-}
-
-bufferlist KStore::OmapIteratorImpl::value()
-{
-  std::shared_lock l{c->lock};
-  ceph_assert(it->valid());
-  return it->value();
-}
-
-std::string_view KStore::OmapIteratorImpl::value_as_sv()
-{
-  std::shared_lock l{c->lock};
-  ceph_assert(it->valid());
-  return it->value_as_sv();
-}
-
 int KStore::omap_get(
   CollectionHandle& ch,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
@@ -1853,26 +1759,6 @@ int KStore::omap_check_keys(
   return r;
 }
 
-ObjectMap::ObjectMapIterator KStore::get_omap_iterator(
-  CollectionHandle& ch,              ///< [in] collection
-  const ghobject_t &oid  ///< [in] object
-  )
-{
-
-  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
-  Collection *c = static_cast<Collection*>(ch.get());
-  std::shared_lock l{c->lock};
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    dout(10) << __func__ << " " << oid << "doesn't exist" <<dendl;
-    return ObjectMap::ObjectMapIterator();
-  }
-  o->flush();
-  dout(10) << __func__ << " header = " << o->onode.omap_head <<dendl;
-  KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
-  return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o, it));
-}
-
 int KStore::omap_iterate(
   CollectionHandle &ch,   ///< [in] collection
   const ghobject_t &oid, ///< [in] object
@@ -1881,6 +1767,7 @@ int KStore::omap_iterate(
 {
   dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
   Collection *c = static_cast<Collection*>(ch.get());
+  bool more = false;
   {
     std::shared_lock l{c->lock};
 
@@ -1927,6 +1814,7 @@ int KStore::omap_iterate(
       }
       omap_iter_ret_t ret = f(user_key, it->value_as_sv());
       if (ret == omap_iter_ret_t::STOP) {
+        more = true;
         break;
       } else if (ret == omap_iter_ret_t::NEXT) {
         it->next();
@@ -1935,7 +1823,7 @@ int KStore::omap_iterate(
       }
     }
   }
-  return 0;
+  return more;
 }
 
 
