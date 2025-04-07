@@ -275,7 +275,7 @@ class PgScrubber : public ScrubPgIF,
 
   // managing scrub op registration
 
-  void update_scrub_job(Scrub::delay_ready_t delay_ready) final;
+  void update_scrub_job() final;
 
   void rm_from_osd_scrubbing() final;
 

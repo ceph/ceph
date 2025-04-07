@@ -161,10 +161,6 @@ struct scrub_schedule_t {
   bool operator==(const scrub_schedule_t& rhs) const = default;
 };
 
-
-/// rescheduling param: should we delay jobs already ready to execute?
-enum class delay_ready_t : bool { delay_ready = true, no_delay = false };
-
 }  // namespace Scrub
 
 namespace fmt {
@@ -487,7 +483,7 @@ struct ScrubPgIF {
    *
    * Dequeues the scrub job, and re-queues it with the new schedule.
    */
-  virtual void update_scrub_job(Scrub::delay_ready_t delay_ready) = 0;
+  virtual void update_scrub_job() = 0;
 
   virtual scrub_level_t scrub_requested(
       scrub_level_t scrub_level,

@@ -11,7 +11,6 @@ using OSDRestrictions = Scrub::OSDRestrictions;
 using sched_conf_t = Scrub::sched_conf_t;
 using scrub_schedule_t = Scrub::scrub_schedule_t;
 using ScrubJob = Scrub::ScrubJob;
-using delay_ready_t = Scrub::delay_ready_t;
 using namespace std::chrono;
 
 using SchedEntry = Scrub::SchedEntry;
@@ -97,15 +96,11 @@ void ScrubJob::set_both_targets_queued()
 void ScrubJob::adjust_shallow_schedule(
     utime_t last_scrub,
     const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now,
-    delay_ready_t modify_ready_targets)
+    utime_t scrub_clock_now)
 {
   dout(10) << fmt::format(
-		  "at entry: shallow target:{}, conf:{}, last-stamp:{:s} "
-		  "also-ready?{:c}",
-		  shallow_target, app_conf, last_scrub,
-		  (modify_ready_targets == delay_ready_t::delay_ready) ? 'y'
-								       : 'n')
+		  "at entry: shallow target:{}, conf:{}, last-stamp:{:s}",
+		  shallow_target, app_conf, last_scrub)
 	   << dendl;
 
   auto& sh_times = shallow_target.sched_info.schedule;	// shorthand
@@ -115,15 +110,11 @@ void ScrubJob::adjust_shallow_schedule(
     utime_t adj_target = last_scrub;
     sh_times.deadline = adj_target;
 
-    // add a random delay to the proposed scheduled time - but only for periodic
-    // scrubs that are not already eligible for scrubbing.
-    if ((modify_ready_targets == delay_ready_t::delay_ready) ||
-	adj_not_before > scrub_clock_now) {
-      adj_target += app_conf.shallow_interval;
-      double r = rand() / (double)RAND_MAX;
-      adj_target +=
+    // add a random delay to the proposed scheduled time
+    adj_target += app_conf.shallow_interval;
+    double r = rand() / (double)RAND_MAX;
+    adj_target +=
 	  app_conf.shallow_interval * app_conf.interval_randomize_ratio * r;
-    }
 
     // the deadline can be updated directly into the scrub-job
     if (app_conf.max_shallow) {
@@ -236,15 +227,11 @@ utime_t ScrubJob::get_sched_time() const
 void ScrubJob::adjust_deep_schedule(
     utime_t last_deep,
     const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now,
-    delay_ready_t modify_ready_targets)
+    utime_t scrub_clock_now)
 {
   dout(10) << fmt::format(
-		  "at entry: deep target:{}, conf:{}, last-stamp:{:s} "
-		  "also-ready?{:c}",
-		  deep_target, app_conf, last_deep,
-		  (modify_ready_targets == delay_ready_t::delay_ready) ? 'y'
-								       : 'n')
+		  "at entry: deep target:{}, conf:{}, last-stamp:{:s}",
+		  deep_target, app_conf, last_deep)
 	   << dendl;
 
   auto& dp_times = deep_target.sched_info.schedule;  // shorthand
@@ -254,23 +241,19 @@ void ScrubJob::adjust_deep_schedule(
     utime_t adj_target = last_deep;
     dp_times.deadline = adj_target;
 
-    // add a random delay to the proposed scheduled time - but only for periodic
-    // scrubs that are not already eligible for scrubbing.
-    if ((modify_ready_targets == delay_ready_t::delay_ready) ||
-	adj_not_before > scrub_clock_now) {
-      double sdv = app_conf.deep_interval * app_conf.deep_randomize_ratio;
-      std::normal_distribution<double> normal_dist{app_conf.deep_interval, sdv};
-      auto next_delay = std::clamp(
-	  normal_dist(random_gen), app_conf.deep_interval - 2 * sdv,
-	  app_conf.deep_interval + 2 * sdv);
-      adj_target += next_delay;
-      dout(20) << fmt::format(
-		      "deep scrubbing: next_delay={:.0f} (interval={:.0f}, "
-		      "ratio={:.3f}), adjusted:{:s}",
-		      next_delay, app_conf.deep_interval,
-		      app_conf.deep_randomize_ratio, adj_target)
-	       << dendl;
-    }
+    // add a random delay to the proposed scheduled time
+    const double sdv = app_conf.deep_interval * app_conf.deep_randomize_ratio;
+    std::normal_distribution<double> normal_dist{app_conf.deep_interval, sdv};
+    auto next_delay =
+        std::clamp(normal_dist(random_gen), app_conf.deep_interval - 2 * sdv,
+                   app_conf.deep_interval + 2 * sdv);
+    adj_target += next_delay;
+    dout(20) << fmt::format(
+                    "deep scrubbing: next_delay={:.0f} (interval={:.0f}, "
+                    "ratio={:.3f}), adjusted:{:s}",
+                    next_delay, app_conf.deep_interval,
+                    app_conf.deep_randomize_ratio, adj_target)
+             << dendl;
 
     // the deadline can be updated directly into the scrub-job
     if (app_conf.max_shallow) {

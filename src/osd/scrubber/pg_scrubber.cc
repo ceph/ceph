@@ -478,11 +478,10 @@ void PgScrubber::update_targets(utime_t scrub_clock_now)
 
   // the next periodic scrubs:
   m_scrub_job->adjust_shallow_schedule(
-      m_pg->info.history.last_scrub_stamp, applicable_conf, scrub_clock_now,
-      delay_ready_t::delay_ready);
+      m_pg->info.history.last_scrub_stamp, applicable_conf, scrub_clock_now);
   m_scrub_job->adjust_deep_schedule(
       m_pg->info.history.last_deep_scrub_stamp, applicable_conf,
-      scrub_clock_now, delay_ready_t::delay_ready);
+      scrub_clock_now);
 
   dout(10) << fmt::format("{}: adjusted:{}", __func__, *m_scrub_job) << dendl;
 }
@@ -497,7 +496,7 @@ void PgScrubber::schedule_scrub_with_osd()
 		  "{}: state at entry: {}", __func__, m_scrub_job->state_desc())
 	   << dendl;
   m_scrub_job->registered = true;
-  update_scrub_job(delay_ready_t::delay_ready);
+  update_scrub_job();
 }
 
 
@@ -521,7 +520,7 @@ void PgScrubber::on_primary_active_clean()
  * - in the 2nd case - we know the PG state and we know we are only called
  *   for a Primary.
  */
-void PgScrubber::update_scrub_job(Scrub::delay_ready_t delay_ready)
+void PgScrubber::update_scrub_job()
 {
   if (!is_primary() || !m_scrub_job) {
     dout(10) << fmt::format(
@@ -2034,7 +2033,7 @@ void PgScrubber::scrub_finish()
     request_rescrubbing();
   }
   // determine the next scrub time
-  update_scrub_job(delay_ready_t::delay_ready);
+  update_scrub_job();
 
   if (m_pg->is_active() && m_pg->is_primary()) {
     m_pg->recovery_state.share_pg_info();
