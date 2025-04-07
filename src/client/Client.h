@@ -1630,8 +1630,10 @@ private:
     aio_collection *aioc;
     int io_id;
 
-    iofinish_method_ctx(T& _t, void (T::*_call)(int), aio_collection *_aioc) : t(_t), call(_call),
-                                                                               aioc(_aioc) {
+    iofinish_method_ctx(T& _t, void (T::*_call)(int), aio_collection *_aioc)
+      : t(_t),
+        call(_call),
+        aioc(_aioc) {
       _ctx.reset(new _Ctx(this));
 
       if (aioc) {
