@@ -128,7 +128,8 @@ ECBackend::ECBackend(
   CephContext *cct,
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width,
-  ECSwitch *s)
+  ECSwitch *s,
+  ECExtentCache::LRU &ignored)
   : parent(pg), cct(cct), switcher(s),
     read_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener()),
     rmw_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(), *this),
