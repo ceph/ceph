@@ -3306,8 +3306,11 @@ Then run the following:
                 'certificate': self.cert_mgr.get_root_ca()}
 
     @handle_orch_error
-    def cert_store_cert_ls(self, show_details: bool = False) -> Dict[str, Any]:
-        return self.cert_mgr.cert_ls(show_details)
+    def cert_store_cert_ls(self,
+                           cert_name: str = '',
+                           show_details: bool = False,
+                           show_cephadm_signed: bool = False) -> Dict[str, Any]:
+        return self.cert_mgr.cert_ls(cert_name, show_details, show_cephadm_signed)
 
     @handle_orch_error
     def cert_store_entity_ls(self) -> Dict[str, Dict[str, List[str]]]:

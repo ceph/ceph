@@ -274,10 +274,18 @@ class CertMgr:
         self.rm_cert(self.self_signed_cert(service_name), service_name, host)
         self.rm_key(self.self_signed_key(service_name), service_name, host)
 
-    def cert_ls(self, include_datails: bool = False) -> Dict:
+    def cert_ls(self, certificate_name: str = '', include_datails: bool = False, show_cephadm_signed: bool = False) -> Dict:
         cert_objects: List = self.cert_store.list_tlsobjects()
         ls: Dict = {}
         for cert_name, cert_obj, target in cert_objects:
+
+            # If certificate_name is provided, skip everything else unless it matches
+            if certificate_name:
+                if cert_name != certificate_name:
+                    continue
+            elif not show_cephadm_signed and cert_name.startswith(self.CEPHADM_SIGNED):
+                continue
+
             cert_extended_info = get_certificate_info(cert_obj.cert, include_datails)
             cert_scope = self.get_cert_scope(cert_name)
             if cert_name not in ls:
