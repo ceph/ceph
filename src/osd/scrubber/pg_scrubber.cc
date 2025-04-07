@@ -2511,6 +2511,17 @@ PgScrubber::PgScrubber(PG* pg)
   m_scrub_job.emplace(m_osds->cct, m_pg->pg_id, m_osds->get_nodeid());
 }
 
+void PgScrubber::refresh_config_params()
+{
+  osd_scrub_chunk_max.refresh();
+  osd_shallow_scrub_chunk_max.refresh();
+  osd_scrub_chunk_min.refresh();
+  osd_shallow_scrub_chunk_min.refresh();
+  osd_stats_update_period_scrubbing.refresh();
+  osd_stats_update_period_not_scrubbing.refresh();
+  // osd_deep_scrub_interval_cv.refresh();
+}
+
 void PgScrubber::set_scrub_duration(std::chrono::milliseconds duration)
 {
   dout(20) << fmt::format("{}: to {}", __func__, duration) << dendl;

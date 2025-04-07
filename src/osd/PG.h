@@ -262,7 +262,7 @@ public:
 	set_last_scrub_stamp(t, history, stats);
 	return true;
       });
-    on_scrub_schedule_input_change();
+    on_scrub_schedule_input_change(Scrub::force_refresh_t::no_refresh);
   }
 
   static void set_last_deep_scrub_stamp(
@@ -278,7 +278,7 @@ public:
 	set_last_scrub_stamp(t, history, stats);
 	return true;
       });
-    on_scrub_schedule_input_change();
+    on_scrub_schedule_input_change(Scrub::force_refresh_t::no_refresh);
   }
 
   static void add_objects_scrubbed_count(
@@ -510,8 +510,16 @@ public:
    *   osd_scrub_max_interval
    * - pg stat scrub timestamps
    * - etc
+   *
+   * \param refresh_config is set when on_scrub_schedule_input_change() is
+   * invoked from a configuration-change handler (specifically -
+   * from OsdScrub::on_config_change()).
+   * When set, the Scrubber "manually" refreshes all its cached
+   * scheduling-related configuration values, making sure the latest values
+   * are available (even if the corresponding configuration change handlers
+   * have not executed yet).
    */
-  void on_scrub_schedule_input_change();
+  void on_scrub_schedule_input_change(Scrub::force_refresh_t refresh_config);
 
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) override;
 

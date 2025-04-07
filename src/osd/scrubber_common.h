@@ -161,6 +161,9 @@ struct scrub_schedule_t {
   bool operator==(const scrub_schedule_t& rhs) const = default;
 };
 
+/// rescheduling param: should we force configuration refresh?
+enum class force_refresh_t : bool { force_refresh = true, no_refresh = false };
+
 }  // namespace Scrub
 
 namespace fmt {
@@ -484,6 +487,17 @@ struct ScrubPgIF {
    * Dequeues the scrub job, and re-queues it with the new schedule.
    */
   virtual void update_scrub_job() = 0;
+
+  /**
+   * forces a manual update of configuration parameters
+   * cached using md_config_cacher_t.
+   * The refresh is required whenever the conf parameter is used
+   * by a Scrubber method that was called from the OSD Queue conig
+   * change handler. As the order of execution of the handlers is
+   * undefined, we cannot be sure that the separate config-cachers
+   * handlers were called before or after the Osd Queue handler.
+   */
+  virtual void refresh_config_params() = 0;
 
   virtual scrub_level_t scrub_requested(
       scrub_level_t scrub_level,
