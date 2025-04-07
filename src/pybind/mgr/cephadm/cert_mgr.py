@@ -226,6 +226,10 @@ class CertMgr:
     ) -> Tuple[str, str]:
         return self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list)
 
+    def cert_exists(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
+        cert_obj = self.cert_store.get_tlsobject(cert_name, service_name, host)
+        return cert_obj is not None
+
     def is_cert_editable(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
         cert_obj = cast(Cert, self.cert_store.get_tlsobject(cert_name, service_name, host))
         return cert_obj.editable if cert_obj else True
