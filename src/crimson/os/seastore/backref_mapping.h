@@ -10,7 +10,7 @@ namespace crimson::os::seastore {
 class BackrefMapping : public BtreeNodeMapping<paddr_t, laddr_t> {
   extent_types_t type;
 public:
-  BackrefMapping(op_context_t<paddr_t> ctx)
+  BackrefMapping(op_context_t ctx)
     : BtreeNodeMapping(ctx) {}
   template <typename... T>
   BackrefMapping(extent_types_t type, T&&... t)
