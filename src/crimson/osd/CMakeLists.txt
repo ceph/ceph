@@ -24,6 +24,7 @@ add_executable(crimson-osd
   osd_operations/peering_event.cc
   osd_operations/pg_advance_map.cc
   osd_operations/pg_splitting.cc
+  osd_operations/pg_merging.cc
   osd_operations/replicated_request.cc
   osd_operations/logmissing_request.cc
   osd_operations/logmissing_request_reply.cc
