@@ -1557,7 +1557,9 @@ class CephExporterService(CephService):
         security_enabled, _, _ = self.mgr._get_security_config()
         if security_enabled:
             exporter_config.update({'https_enabled': True})
-            crt, key = self.get_certificates(daemon_spec)
+            node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
+            host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
+            crt, key = self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
             exporter_config['files'] = {
                 'ceph-exporter.crt': crt,
                 'ceph-exporter.key': key
