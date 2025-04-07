@@ -71,6 +71,16 @@ public:
 
   bool get_replay_status(std::string* description);
 
+  int get_error_code() const {
+    std::unique_lock locker(m_lock);
+    return m_error_code;
+  }
+
+  std::string get_error_description() const {
+    std::unique_lock locker(m_lock);
+    return m_error_description;
+  }
+
 private:
   enum State {
     STATE_INIT,
@@ -104,6 +114,9 @@ private:
 
   AsyncOpTracker m_in_flight_op_tracker;
 
+  int m_error_code = 0;
+  std::string m_error_description;
+
   bool m_stop_requested = false;
   bool m_retry_validate_snap = false;
 
@@ -121,7 +134,9 @@ private:
   void handle_schedule_load_group_snapshots(int r);
   void cancel_load_group_snapshots();
 
-  void notify_group_listener_stop();
+  void handle_replay_complete(int r, const std::string& desc);
+  void notify_group_listener();
+
   bool is_resync_requested();
   bool is_rename_requested();
 

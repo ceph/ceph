@@ -183,12 +183,33 @@ void Replayer<I>::cancel_load_group_snapshots() {
 }
 
 template <typename I>
-void Replayer<I>::notify_group_listener_stop() {
+void Replayer<I>::handle_replay_complete(int r, const std::string &desc) {
+  dout(10) << dendl;
+
+  std::unique_lock locker{m_lock};
+  if (m_error_code == 0) {
+    m_error_code = r;
+    m_error_description = desc;
+  }
+
+  if (m_state != STATE_REPLAYING && m_state != STATE_IDLE) {
+    return;
+  }
+
+  m_stop_requested = true;
+  m_state = STATE_COMPLETE;
+  notify_group_listener();
+}
+
+template <typename I>
+void Replayer<I>::notify_group_listener() {
   dout(10) << dendl;
 
   Context *ctx = new LambdaContext([this](int) {
-      m_local_group_ctx->listener->stop();
+      m_local_group_ctx->listener->handle_notification();
+      m_in_flight_op_tracker.finish_op();
       });
+  m_in_flight_op_tracker.start_op();
   m_threads->work_queue->queue(ctx, 0);
 }
 
@@ -313,10 +334,10 @@ void Replayer<I>::load_local_group_snapshots() {
     if (m_stop_requested) {
       return;
     } else if (is_rename_requested()) {
-      m_stop_requested = true;
-      dout(10) << "remote group rename requested" << dendl;
+      dout(10) << "remote group renamed" << dendl;
       // send stop for Group Replayer
-      notify_group_listener_stop();
+      locker.unlock();
+      handle_replay_complete(0, "remote group renamed");
       return;
     }
   }
@@ -364,7 +385,7 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
   if (r < 0) {
     derr << "error listing local mirror group snapshots: " << cpp_strerror(r)
          << dendl;
-    notify_group_listener_stop();
+    handle_replay_complete(r, "failed to list local group snapshots");
     return;
   }
 
@@ -378,8 +399,7 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
     if (ns->state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
       break;
     }
-    m_state = STATE_COMPLETE;
-    notify_group_listener_stop();
+    handle_replay_complete(0, "local group is primary");
     return;
   }
 
@@ -420,7 +440,7 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
   if (r < 0) {  // may be remote group is deleted?
     derr << "error listing remote mirror group snapshots: " << cpp_strerror(r)
          << dendl;
-    notify_group_listener_stop();
+    handle_replay_complete(r, "failed to list remote group snapshots");
     return;
   } else if (is_resync_requested()) {
     dout(10) << "local group resync requested" << dendl;
@@ -430,11 +450,11 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
         last_remote_snap_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
       m_stop_requested = true;
       // send stop for Group Replayer
-      notify_group_listener_stop();
+      handle_replay_complete(0, "resync requested");
       return;
     }
-    dout(10) << "turns out remote is not primary, we cannot resync, will retry later"
-             << dendl;
+    //FIXME: Not required anymore?
+    dout(10) << "cannot resync as remote is not primary" << dendl;
   }
 
   if (!m_local_group_snaps.empty()) {
@@ -446,8 +466,28 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
         last_local_snap_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED &&
         !m_remote_group_snaps.empty()) {
       if (last_local_snap->id == last_remote_snap->id) {
-        m_stop_requested = true;
-        notify_group_listener_stop();
+	handle_replay_complete(-EREMOTEIO, "remote group demoted");
+        return;
+      }
+    } else if (last_local_snap_ns &&
+     last_local_snap_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED) {
+      bool split_brain = true;
+      //FIXME: Should this be handled as part of the snapshot scanning?
+      for (auto it = m_remote_group_snaps.begin();
+           it != m_remote_group_snaps.end(); it++) {
+        auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+             &it->snapshot_namespace);
+        if (ns == nullptr ||
+            it->id != last_local_snap->id) {
+          continue;
+        }
+        if (ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED) {
+          split_brain = false;
+          break;
+        }
+      }
+      if (split_brain) {
+        handle_replay_complete(-EEXIST, "split-brain");
         return;
       }
     }
@@ -704,9 +744,10 @@ void Replayer<I>::scan_for_unsynced_group_snapshots() {
 out:
   // At this point all group snapshots have been synced, but we keep poll
   locker.unlock();
+  //FIXME: should be checked after locking
   if (m_stop_requested) {
     // stop group replayer
-    notify_group_listener_stop();
+    handle_replay_complete(0, "");
     return;
   }
   schedule_load_group_snapshots();
