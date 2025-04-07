@@ -10,6 +10,7 @@ from cephadm import utils
 from orchestrator import OrchestratorError, DaemonDescription
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
 from .service_registry import register_cephadm_service
+from cephadm.tlsobject_store import TLSObjectScope
 
 if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
@@ -20,7 +21,12 @@ logger = logging.getLogger(__name__)
 @register_cephadm_service
 class IngressService(CephService):
     TYPE = 'ingress'
+    SCOPE = TLSObjectScope.SERVICE
     MAX_KEEPALIVED_PASS_LEN = 8
+
+    @property
+    def needs_certificates(self) -> bool:
+        return True
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
