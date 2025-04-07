@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+import functools
 import os
 import sys
 import time
@@ -12,6 +13,8 @@ from rbd import (RBD,
                  RBD_FEATURE_OBJECT_MAP,
                  RBD_FEATURE_FAST_DIFF,
                  RBD_FLAG_OBJECT_MAP_INVALID)
+
+print = functools.partial(print, flush=True)
 
 POOL_NAME='rbd'
 PARENT_IMG_NAME='test_notify_parent'
