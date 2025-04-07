@@ -40,10 +40,11 @@ public:
     ObjectStore *store,
     CephContext *cct,
     ceph::ErasureCodeInterfaceRef ec_impl,
-    uint64_t stripe_width) :
+    uint64_t stripe_width,
+    ECExtentCache::LRU &lru) :
     PGBackend(cct, pg, store, coll, ch),
     legacy(pg, cct, ec_impl, stripe_width, this),
-    optimized(pg, cct, ec_impl, stripe_width, this),
+    optimized(pg, cct, ec_impl, stripe_width, this, lru),
     is_optimized_actual(get_parent()->get_pool().allows_ecoptimizations()) {}
 
   bool is_optimized() const
