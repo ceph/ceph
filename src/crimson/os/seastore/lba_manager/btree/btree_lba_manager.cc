@@ -45,7 +45,7 @@ get_phy_tree_root<
 template <>
 const get_phy_tree_root_node_ret get_phy_tree_root_node<
   crimson::os::seastore::lba_manager::btree::LBABtree>(
-  const RootBlockRef &root_block, op_context_t<laddr_t> c)
+  const RootBlockRef &root_block, op_context_t c)
 {
   auto lba_root = root_block->lba_root_node;
   if (lba_root) {
@@ -193,7 +193,7 @@ BtreeLBAManager::get_mappings(
 
 BtreeLBAManager::_get_mappings_ret
 BtreeLBAManager::_get_mappings(
-  op_context_t<laddr_t> c,
+  op_context_t c,
   LBABtree& btree,
   laddr_t laddr,
   extent_len_t length)
@@ -231,7 +231,7 @@ BtreeLBAManager::_get_mappings(
 
 BtreeLBAManager::get_indirect_pin_ret
 BtreeLBAManager::get_indirect_pin(
-  op_context_t<laddr_t> c,
+  op_context_t c,
   LBABtree& btree,
   laddr_t key,
   laddr_t intermediate_key,
@@ -289,7 +289,7 @@ BtreeLBAManager::get_mapping(
 
 BtreeLBAManager::_get_mapping_ret
 BtreeLBAManager::_get_mapping(
-  op_context_t<laddr_t> c,
+  op_context_t c,
   LBABtree& btree,
   laddr_t laddr)
 {
@@ -469,7 +469,7 @@ static bool is_lba_node(const CachedExtent &e)
 
 BtreeLBAManager::base_iertr::template future<>
 _init_cached_extent(
-  op_context_t<laddr_t> c,
+  op_context_t c,
   const CachedExtentRef &e,
   LBABtree &btree,
   bool &ret)
