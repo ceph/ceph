@@ -1,5 +1,6 @@
-from typing import TYPE_CHECKING, Tuple, Union, List, Dict, Optional, cast, Any
+from typing import TYPE_CHECKING, Tuple, Union, List, Dict, Optional, cast, Any, Callable
 import logging
+from fnmatch import fnmatch
 from enum import Enum
 
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
@@ -15,10 +16,10 @@ logger = logging.getLogger(__name__)
 
 
 class CertStatus(str, Enum):
-    VALID =     "valid"
-    INVALID =   "invalid"
-    EXPIRED =   "expired"
-    EXPIRING =  "expiring"
+    VALID = "valid"
+    INVALID = "invalid"
+    EXPIRED = "expired"
+    EXPIRING = "expiring"
 
 
 class CertInfo:
@@ -294,10 +295,54 @@ class CertMgr:
         self.rm_cert(self.self_signed_cert(service_name), service_name, host)
         self.rm_key(self.self_signed_key(service_name), service_name, host)
 
-    def cert_ls(self, include_datails: bool = False) -> Dict:
+    def cert_ls(self, filter_by: str = '',
+                include_datails: bool = False,
+                include_cephadm_signed: bool = False) -> Dict:
+
+        def build_cert_context(cert_info: CertInfo) -> Dict[str, Any]:
+            return {
+                "name": cert_info.cert_name,
+                "status": cert_info.status.value,
+                "signed_by": cert_info.signed_by,
+                "scope": self.get_cert_scope(cert_info.cert_name),
+                "entity": self.get_associated_service(cert_info),
+            }
+
+        def _make_filter(expr: str) -> Callable[[Dict[str, Any]], bool]:
+            key, _, value = expr.partition('=')
+            key = key.strip().lower()
+            value = value.strip()
+
+            if key == 'name':
+                return lambda ctx: fnmatch(ctx['name'], value)
+            if key == 'scope':
+                want = value.upper()
+                return lambda ctx: ctx['scope'].name == want
+            if key == 'entity':
+                return lambda ctx: fnmatch(ctx['entity'], value)
+            if key == 'status':
+                want = value.lower()
+                return lambda ctx: ctx['status'] == want
+            if key == 'signed-by':
+                return lambda ctx: ctx['signed_by'] == value.lower()
+            # Default: unknown field selector -> nop filter (don't exclude)
+            return lambda ctx: True
+
+        # By default: filter out cephadm-signed certs unless explicitly included
+        # with the exception of the cephadm root CA cert (CEPHADM_ROOT_CA_CERT) as
+        # technically the user may be interested in adding it to his CA trust chain
+        filters = [_make_filter(expr) for expr in filter_by.split(",") if expr.strip()]
+        if not include_cephadm_signed and not any('signed-by=' in f for f in filter_by.split(',')):
+            filters.append(lambda ctx: ctx['signed_by'] == 'user' or ctx['name'] == self.CEPHADM_ROOT_CA_CERT)
+
         cert_objects: List = self.cert_store.list_tlsobjects()
         ls: Dict = {}
         for cert_name, cert_obj, target in cert_objects:
+
+            cert_info = self._check_certificate_state(cert_name, target, cert_obj)
+            if not all(f(build_cert_context(cert_info)) for f in filters):
+                continue
+
             cert_extended_info = get_certificate_info(cert_obj.cert, include_datails)
             cert_scope = self.get_cert_scope(cert_name)
             if cert_name not in ls:
