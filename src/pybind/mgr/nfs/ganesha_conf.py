@@ -413,6 +413,11 @@ class Export:
         # accept "sectype" too.
         sectype = (export_block.values.get("SecType")
                    or export_block.values.get("sectype") or None)
+        # If sectype was only a single value (e.g. "sys") we end
+        # up with a string instead of a list of strings here
+        # https://github.com/ceph/go-ceph/issues/1097
+        if sectype is not None and not isinstance(sectype, list):
+            sectype = [sectype]
         return cls(export_block.values['export_id'],
                    export_block.values['path'],
                    cluster_id,
