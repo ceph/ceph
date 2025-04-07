@@ -6965,7 +6965,12 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
   bool throttled = false;
   while (1) {
     throttled |= trim_counter_start+trimmed >= trim_threshold;
-    if (throttled) break;
+    if (throttled) {
+      if (logger) {
+        logger->inc(l_mdss_cache_trim_throttle);
+      }
+      break;
+    }
     CDentry *dn = static_cast<CDentry*>(bottom_lru.lru_expire());
     if (!dn)
       break;
@@ -6991,7 +6996,12 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
   // trim dentries from the LRU until count is reached
   while (!throttled && (cache_toofull() || count > 0)) {
     throttled |= trim_counter_start+trimmed >= trim_threshold;
-    if (throttled) break;
+    if (throttled) {
+      if (logger) {
+        logger->inc(l_mdss_cache_trim_throttle);
+      }
+      break;
+    }
     CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
     if (!dn) {
       break;
