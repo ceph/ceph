@@ -235,14 +235,12 @@ class ScrubJob {
   void adjust_shallow_schedule(
     utime_t last_scrub,
     const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now,
-    delay_ready_t modify_ready_targets);
+    utime_t scrub_clock_now);
 
   void adjust_deep_schedule(
     utime_t last_deep,
     const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now,
-    delay_ready_t modify_ready_targets);
+    utime_t scrub_clock_now);
 
   /**
    * For the level specified, set the 'not-before' time to 'now+delay',
