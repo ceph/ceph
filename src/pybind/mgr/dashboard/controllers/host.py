@@ -146,7 +146,7 @@ def get_hosts(sources=None):
             hosts = [
                 merge_dicts(
                     {
-                        'ceph_version': '',
+                        'ceph_version': mgr.version,
                         'services': [],
                         'sources': {
                             'ceph': False,
