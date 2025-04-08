@@ -112,6 +112,9 @@ class CertMgr:
             TLSObjectScope.GLOBAL: {},
         }
 
+    def is_cephadm_signed_entity(self, entity: str) -> bool:
+        return entity.startswith(self.CEPHADM_SIGNED)
+
     def self_signed_cert(self, service_name: str) -> str:
         return f'{self.CEPHADM_SIGNED}_{service_name}_cert'
 
@@ -125,13 +128,10 @@ class CertMgr:
             return cert_name[len(prefix):-len(suffix)]
         return 'unkown-service'
 
-    def cephadm_signed_entity_checker(self, entity: str) -> bool:
-        return entity.startswith(self.CEPHADM_SIGNED)
-
     def init_tlsobject_store(self) -> None:
-        self.cert_store = TLSObjectStore(self.mgr, Cert, self.known_certs, self.cephadm_signed_entity_checker)
+        self.cert_store = TLSObjectStore(self.mgr, Cert, self.known_certs, self.is_cephadm_signed_entity)
         self.cert_store.load()
-        self.key_store = TLSObjectStore(self.mgr, PrivKey, self.known_keys, self.cephadm_signed_entity_checker)
+        self.key_store = TLSObjectStore(self.mgr, PrivKey, self.known_keys, self.is_cephadm_signed_entity)
         self.key_store.load()
         self._initialize_root_ca(self.mgr.get_mgr_ip())
 
@@ -213,7 +213,7 @@ class CertMgr:
         :param cert_name: The certificate or key name.
         :return: The entity name if found, otherwise None.
         """
-        if cert_name.startswith(self.CEPHADM_SIGNED):
+        if self.is_cephadm_signed_entity(cert_name):
             return self.service_name_from_cert(cert_name)
         for scope_entities in self.entities.values():
             for entity, certs in scope_entities.items():
@@ -328,7 +328,7 @@ class CertMgr:
         return entities
 
     def get_cert_scope(self, cert_name: str) -> TLSObjectScope:
-        if cert_name.startswith('cephadm-signed'):
+        if self.is_cephadm_signed_entity(cert_name):
             return TLSObjectScope.HOST
         for scope, certificates in self.known_certs.items():
             if cert_name in certificates:
