@@ -7703,6 +7703,11 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath, walk_dentry_r
     ldout(cct, 10) << " " << i << " " << *diri << " " << dname << dendl;
     ldout(cct, 20) << "  (path is " << path << ")" << dendl;
     InodeRef next;
+    if (!diri.get()->is_dir()) {
+      ldout(cct, 20) << diri.get() << " is not a dir inode, name " << dname.c_str() << dendl;
+      rc = -ENOTDIR;
+      goto out;
+    }
     if (should_check_perms()) {
       int r = may_lookup(diri.get(), perms);
       if (r < 0) {
