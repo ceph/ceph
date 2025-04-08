@@ -188,9 +188,9 @@ from cephadmlib.daemons import (
 )
 from cephadmlib.agent import http_query
 from cephadmlib.listing import (
+    CombinedStatusUpdater,
     DaemonStatusUpdater,
     NoOpDaemonStatusUpdater,
-    CombinedStatusUpdater,
     daemons_matching,
     daemons_summary,
 )
@@ -201,7 +201,7 @@ from cephadmlib.listing_updaters import (
     MemUsageStatusUpdater,
     VersionStatusUpdater,
 )
-from cephadmlib.container_lookup import infer_local_ceph_image
+from cephadmlib.container_lookup import infer_local_ceph_image, identify
 
 
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -3151,12 +3151,9 @@ def command_shell(ctx):
 
 
 @infer_fsid
-def command_enter(ctx):
-    # type: (CephadmContext) -> int
-    if not ctx.fsid:
-        raise Error('must pass --fsid to specify cluster')
-    (daemon_type, daemon_id) = ctx.name.split('.', 1)
-    container_args = ['-i']  # type: List[str]
+def command_enter(ctx: CephadmContext) -> int:
+    ident = identify(ctx)
+    container_args = ['-i']
     if ctx.command:
         command = ctx.command
     else:
@@ -3168,10 +3165,10 @@ def command_enter(ctx):
         ]
     c = CephContainer(
         ctx,
+        identity=ident,
         image=ctx.image,
         entrypoint='doesnotmatter',
         container_args=container_args,
-        cname='ceph-%s-%s.%s' % (ctx.fsid, daemon_type, daemon_id),
     )
     command = c.exec_cmd(command)
     return call_timeout(ctx, command, ctx.timeout)
@@ -4767,10 +4764,13 @@ def _get_parser():
     parser_enter.add_argument(
         '--fsid',
         help='cluster FSID')
-    parser_enter.add_argument(
+    parser_enter_ng = parser_enter.add_mutually_exclusive_group(required=True)
+    parser_enter_ng.add_argument(
         '--name', '-n',
-        required=True,
         help='daemon name (type.id)')
+    parser_enter_ng.add_argument(
+        '--infer-name', '-i',
+        help='daemon name search (type[.partial_id])')
     parser_enter.add_argument(
         'command', nargs=argparse.REMAINDER,
         help='command')
