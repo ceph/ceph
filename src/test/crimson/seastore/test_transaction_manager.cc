@@ -690,6 +690,29 @@ struct transaction_manager_test_t :
     return ext;
   }
 
+  LBAManager::move_mapping_ret_t move_mapping(
+    test_transaction_t &t,
+    LBAMapping &src,
+    laddr_t new_laddr,
+    LBAMapping &dest)
+  {
+    auto val = src.get_val();
+    auto checksum = src.get_checksum();
+    auto ret = with_trans_intr(*(t.t), [&](auto &trans) {
+      return tm->move_and_clone_direct_mapping<TestBlock>(
+	trans, std::move(src), new_laddr, std::move(dest));
+    }).unsafe_get();
+    assert(val == ret.dest.get_val());
+    assert(checksum == ret.dest.get_checksum());
+    assert(new_laddr == ret.dest.get_key());
+    assert(ret.dest.is_viewable());
+    assert(ret.src.is_viewable());
+    assert(!ret.dest.is_clone());
+    assert(ret.src.is_indirect());
+    assert(ret.src.get_intermediate_key() == ret.dest.get_key());
+    return ret;
+  }
+
   LBAMapping get_pin(
     test_transaction_t &t,
     laddr_t offset) {
@@ -2220,6 +2243,29 @@ TEST_P(tm_single_device_test_t, invalid_lba_mapping_detect)
         return std::move(v.get_child_fut());
       }).unsafe_get();
       assert(extent.get() == extent2.get());
+      submit_transaction(std::move(t));
+    }
+  });
+}
+
+TEST_P(tm_single_device_intergrity_check_test_t, move_mapping)
+{
+  run_async([this] {
+    using namespace crimson::os::seastore::lba;
+    {
+      auto t = create_transaction();
+      auto extent = alloc_extent(
+	t,
+	get_laddr_hint(4096),
+	4096,
+	'a');
+      submit_transaction(std::move(t));
+
+      t = create_transaction();
+      auto src_mapping = get_pin(t, extent->get_laddr());
+      auto dest_mapping = get_end(t);
+      auto new_laddr = get_laddr_hint(8192);
+      auto ret = move_mapping(t, src_mapping, new_laddr, dest_mapping);
       submit_transaction(std::move(t));
     }
   });
