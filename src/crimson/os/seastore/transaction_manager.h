@@ -556,7 +556,9 @@ public:
 	  if (ext) {
 	    cache->retire_extent(t, ext);
 	  } else {
-	    cache->retire_absent_extent_addr(t, original_paddr, original_len);
+	    // the original_laddr must be direct because the pin is direct
+	    cache->retire_absent_extent_addr(
+	      t, original_laddr, original_paddr, original_len);
 	  }
 	  for (auto &remap : remaps) {
 	    auto remap_offset = remap.offset;

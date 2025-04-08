@@ -1448,7 +1448,7 @@ constexpr bool is_logical_metadata_type(extent_types_t type) {
          type <= extent_types_t::COLL_BLOCK;
 }
 
-constexpr bool is_logical_type(extent_types_t type) {
+constexpr bool is_logical_real_type(extent_types_t type) {
   if ((type >= extent_types_t::ROOT_META &&
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
       type == extent_types_t::TEST_BLOCK) {
@@ -1464,6 +1464,20 @@ constexpr bool is_logical_type(extent_types_t type) {
 
 constexpr bool is_retired_placeholder_type(extent_types_t type) {
   return type == extent_types_t::RETIRED_PLACEHOLDER;
+}
+
+constexpr bool is_logical_type(extent_types_t type) {
+  if ((type >= extent_types_t::ROOT_META &&
+       type <= extent_types_t::RETIRED_PLACEHOLDER) ||
+      type == extent_types_t::TEST_BLOCK) {
+    assert(is_logical_real_type(type) ||
+           is_retired_placeholder_type(type));
+    return true;
+  } else {
+    assert(!is_logical_real_type(type) &&
+           !is_retired_placeholder_type(type));
+    return false;
+  }
 }
 
 constexpr bool is_root_type(extent_types_t type) {
@@ -1506,12 +1520,12 @@ constexpr bool is_backref_mapped_type(extent_types_t type) {
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
       type == extent_types_t::TEST_BLOCK ||
       type == extent_types_t::TEST_BLOCK_PHYSICAL) {
-    assert(is_logical_type(type) ||
+    assert(is_logical_real_type(type) ||
 	   is_lba_node(type) ||
 	   type == extent_types_t::TEST_BLOCK_PHYSICAL);
     return true;
   } else {
-    assert(!is_logical_type(type) &&
+    assert(!is_logical_real_type(type) &&
 	   !is_lba_node(type) &&
 	   type != extent_types_t::TEST_BLOCK_PHYSICAL);
     return false;
@@ -1522,11 +1536,11 @@ constexpr bool is_real_type(extent_types_t type) {
   if (type <= extent_types_t::OBJECT_DATA_BLOCK ||
       (type >= extent_types_t::TEST_BLOCK &&
        type <= extent_types_t::BACKREF_LEAF)) {
-    assert(is_logical_type(type) ||
+    assert(is_logical_real_type(type) ||
            is_physical_type(type));
     return true;
   } else {
-    assert(!is_logical_type(type) &&
+    assert(!is_logical_real_type(type) &&
            !is_physical_type(type));
     return false;
   }

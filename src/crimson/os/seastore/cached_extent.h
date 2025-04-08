@@ -1326,53 +1326,6 @@ public:
   virtual ~PhysicalNodeMapping() {}
 };
 
-/**
- * RetiredExtentPlaceholder
- *
- * Cache::retire_extent_addr(Transaction&, paddr_t, extent_len_t) can retire an
- * extent not currently in cache. In that case, in order to detect transaction
- * invalidation, we need to add a placeholder to the cache to create the
- * mapping back to the transaction. And whenever there is a transaction tries
- * to read the placeholder extent out, Cache is responsible to replace the
- * placeholder by the real one. Anyway, No placeholder extents should escape
- * the Cache interface boundary.
- */
-class RetiredExtentPlaceholder : public CachedExtent {
-
-public:
-  RetiredExtentPlaceholder(extent_len_t length)
-    : CachedExtent(CachedExtent::retired_placeholder_construct_t{}, length) {}
-
-  CachedExtentRef duplicate_for_write(Transaction&) final {
-    ceph_abort("Should never happen for a placeholder");
-    return CachedExtentRef();
-  }
-
-  ceph::bufferlist get_delta() final {
-    ceph_abort("Should never happen for a placeholder");
-    return ceph::bufferlist();
-  }
-
-  static constexpr extent_types_t TYPE = extent_types_t::RETIRED_PLACEHOLDER;
-  extent_types_t get_type() const final {
-    return TYPE;
-  }
-
-  void apply_delta_and_adjust_crc(
-    paddr_t base, const ceph::bufferlist &bl) final {
-    ceph_abort("Should never happen for a placeholder");
-  }
-
-  void on_rewrite(Transaction &, CachedExtent&, extent_len_t) final {}
-
-  std::ostream &print_detail(std::ostream &out) const final {
-    return out << ", RetiredExtentPlaceholder";
-  }
-
-  void on_delta_write(paddr_t record_block_offset) final {
-    ceph_abort("Should never happen for a placeholder");
-  }
-};
 
 class LBAMapping;
 /**
@@ -1474,6 +1427,51 @@ struct ref_laddr_cmp {
   bool operator()(const LogicalCachedExtentRef &lhs,
 		  const laddr_t &rhs) const {
     return lhs->get_laddr() < rhs;
+  }
+};
+
+/**
+ * RetiredExtentPlaceholder
+ *
+ * Cache::retire_(absent_)extent_addr(Transaction&, paddr_t,
+ * extent_len_t) can retire an extent not currently in cache. In that case, in
+ * order to detect transaction invalidation, we need to add a placeholder to
+ * the cache to create the mapping back to the transaction. And whenever there
+ * is a transaction tries to read the placeholder extent out, Cache is
+ * responsible to replace the placeholder by the real one. Anyway, No
+ * placeholder extents should escape the Cache interface boundary.
+ */
+class RetiredExtentPlaceholder : public LogicalCachedExtent {
+
+public:
+  RetiredExtentPlaceholder(extent_len_t length)
+    : LogicalCachedExtent(CachedExtent::retired_placeholder_construct_t{}, length) {}
+
+  CachedExtentRef duplicate_for_write(Transaction&) final {
+    ceph_abort("Should never happen for a placeholder");
+    return CachedExtentRef();
+  }
+
+  ceph::bufferlist get_delta() final {
+    ceph_abort("Should never happen for a placeholder");
+    return ceph::bufferlist();
+  }
+
+  static constexpr extent_types_t TYPE = extent_types_t::RETIRED_PLACEHOLDER;
+  extent_types_t get_type() const final {
+    return TYPE;
+  }
+
+  void apply_delta(const ceph::bufferlist &bl) final {
+    ceph_abort("Should never happen for a placeholder");
+  }
+
+  std::ostream &print_detail_l(std::ostream &out) const final {
+    return out << ", RetiredExtentPlaceholder";
+  }
+
+  void logical_on_delta_write() final {
+    ceph_abort("Should never happen for a placeholder");
   }
 };
 

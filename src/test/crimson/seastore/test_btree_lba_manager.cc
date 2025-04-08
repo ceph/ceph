@@ -601,7 +601,7 @@ struct btree_lba_manager_test : btree_test_base {
 	  EXPECT_EQ(result.refcount, target->second.refcount);
 	  if (result.refcount == 0) {
 	    return cache->retire_extent_addr(
-	      t, result.addr.get_paddr(), result.length);
+	      t, target->first, result.addr.get_paddr(), result.length);
 	  }
 	  return Cache::retire_extent_iertr::now();
 	});

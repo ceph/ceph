@@ -228,7 +228,7 @@ TransactionManager::ref_ret TransactionManager::remove(
       if (result.addr.is_paddr() &&
           !result.addr.get_paddr().is_zero()) {
         fut = cache->retire_extent_addr(
-          t, result.addr.get_paddr(), result.length);
+          t, result.direct_key, result.addr.get_paddr(), result.length);
       }
     }
     return fut.si_then([result=std::move(result), offset, &t, FNAME] {
