@@ -379,6 +379,23 @@ public:
     update_child_ptr(pos, child);
   }
 
+  void insert_null_child_ptr(
+    btreenode_pos_t offset,
+    btreenode_pos_t size) {
+    auto &me = down_cast();
+    if (size == 0) {
+      size = me.get_size();
+    }
+    maybe_expand_children(size + 1);
+    assert(size < children.capacity());
+    auto raw_children = children.data();
+    std::memmove(
+      &raw_children[offset + 1],
+      &raw_children[offset],
+      (size - offset) * sizeof(BaseChildNode<T, node_key_t>*));
+    children[offset] = nullptr;
+  }
+
   void insert_child_ptr(
     btreenode_pos_t offset,
     BaseChildNode<T, node_key_t>* child,
@@ -405,6 +422,10 @@ public:
   void update_child_ptr(btreenode_pos_t pos, BaseChildNode<T, node_key_t>* child) {
     children[pos] = child;
     set_child_ptracker(child);
+  }
+
+  void reset_child_ptr(btreenode_pos_t pos) {
+    children[pos] = get_reserved_ptr<T, node_key_t>();
   }
 
 protected:

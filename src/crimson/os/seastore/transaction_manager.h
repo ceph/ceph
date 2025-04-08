@@ -651,8 +651,8 @@ public:
 	      t,
 	      remap_laddr,
 	      remap_paddr,
+	      remap_offset,
 	      remap_len,
-	      original_laddr,
 	      original_bptr);
 	    // user must initialize the logical extent themselves.
 	    extent->set_seen_by_users();
@@ -743,6 +743,68 @@ public:
     ).si_then([FNAME, &t](auto ret) {
       SUBDEBUGT(seastore_tm, "cloned as {}", t, ret.cloned_mapping);
       return ret;
+    });
+  }
+
+  using move_mapping_iertr = LBAManager::move_mapping_iertr;
+  using move_mapping_ret = LBAManager::move_mapping_ret;
+  template <typename T>
+  move_mapping_ret move_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest)
+  {
+    LOG_PREFIX(TransactionManager::move_mapping);
+    SUBDEBUGT(seastore_tm, "src={}, dest={}", t, src, dest);
+    assert(src.is_valid());
+    assert(!src.is_indirect());
+    assert(!src.is_end());
+    assert(dest.is_valid());
+    auto fut = base_iertr::make_ready_future<TCachedExtentRef<T>>();
+    if (full_extent_integrity_check) {
+      fut = read_pin<T>(t, src.duplicate()
+      ).si_then([](auto maybe_indirect_extent) {
+	assert(!maybe_indirect_extent.is_indirect());
+	assert(!maybe_indirect_extent.is_clone);
+	return maybe_indirect_extent.extent;
+      });
+    } else {
+      auto ret = get_extent_if_linked<T>(t, src.duplicate());
+      if (ret.index() == 1) {
+	fut = std::move(std::get<1>(ret));
+      } else {
+	// absent
+	fut = base_iertr::make_ready_future<TCachedExtentRef<T>>();
+      }
+    }
+    return fut.si_then([&t, src=std::move(src), dest_laddr, this,
+			dest=std::move(dest)](auto ext) mutable {
+      if (full_extent_integrity_check) {
+	assert(ext && ext->is_fully_loaded());
+      }
+      std::optional<ceph::bufferptr> original_bptr;
+      // TODO: preserve the bufferspace if partially loaded
+      if (ext && ext->is_fully_loaded()) {
+	ceph_assert(!ext->is_mutable());
+	original_bptr = ext->get_bptr();
+      }
+      T* extent = nullptr;
+      if (ext) {
+	cache->retire_extent(t, ext);
+	extent = cache->alloc_remapped_extent<T>(
+	  t,
+	  dest_laddr,
+	  ext->get_paddr(),
+	  0,
+	  ext->get_length(),
+	  original_bptr).get();
+      } else {
+	cache->retire_absent_extent_addr(t, src.get_val(), src.get_length());
+      }
+      return lba_manager->move_mapping(
+	t, std::move(src), dest_laddr,
+	std::move(dest), extent);
     });
   }
 

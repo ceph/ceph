@@ -124,6 +124,25 @@ public:
     laddr_t laddr,
     bool updateref) = 0;
 
+  struct move_mapping_ret_t {
+    LBAMapping src;
+    LBAMapping dest;
+  };
+  /*
+   * move_mapping
+   *
+   * move an direct mapping to "pos" and make the original
+   * mapping an indirect one.
+   */
+  using move_mapping_iertr = alloc_extent_iertr;
+  using move_mapping_ret = move_mapping_iertr::future<move_mapping_ret_t>;
+  virtual move_mapping_ret move_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest,
+    LogicalChildNode *extent = nullptr) = 0;
+
   virtual alloc_extent_ret reserve_region(
     Transaction &t,
     laddr_t hint,
