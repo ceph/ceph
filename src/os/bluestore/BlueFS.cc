@@ -3846,6 +3846,9 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
   // we never truncate internal log files
   ceph_assert(fnode.ino > 1);
 
+  dout(10) << __func__ << " 0x" << std::hex << offset << std::dec
+           << " file " << fnode << dendl;
+
   // truncate off unflushed data?
   if (h->pos < offset &&
       h->pos + h->get_buffer_length() > offset) {
