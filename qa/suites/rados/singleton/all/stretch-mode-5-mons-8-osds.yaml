@@ -26,7 +26,6 @@ overrides:
   ceph:
     conf:
       global:
-        mon election default strategy: 3
         osd pool default size: 3
         osd pool default min size: 2
       mon:

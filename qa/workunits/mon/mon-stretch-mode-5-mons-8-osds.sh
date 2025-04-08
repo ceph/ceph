@@ -9,6 +9,10 @@ if [ $NUM_OSDS_UP -lt 8 ]; then
     exit 1
 fi
 
+# ensure election strategy is set to "connectivity"
+# See https://tracker.ceph.com/issues/69107
+ceph mon set election_strategy connectivity
+
 for dc in dc1 dc2
     do
       ceph osd crush add-bucket $dc datacenter
