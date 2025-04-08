@@ -74,13 +74,7 @@ void RGWOp_Period_Get::execute(optional_yield y)
   RESTArgs::get_string(s, "period_id", period_id, &period_id);
   RESTArgs::get_uint32(s, "epoch", 0, &epoch);
 
-
-  period.set_realm_id(realm_id);
-  period.set_id(period_id);
-  period.set_epoch(epoch);
-
-
-  op_ret = s->penv.cfgstore->read_period(this, y, period_id, epoch, period);
+  op_ret = s->penv.cfgstore->read_period(this, y, period_id, std::nullopt, period);
   if (op_ret < 0)
     ldpp_dout(this, 5) << "failed to read period" << dendl;
 }
@@ -107,7 +101,7 @@ void RGWOp_Period_Post::execute(optional_yield y)
   auto cct = driver->ctx();
 
   // initialize the period without reading from rados
-  s->penv.cfgstore->read_period(this, y,driver->get_zone()->get_current_period_id(), std::nullopt, period);
+  s->penv.cfgstore->read_period(this, y, driver->get_zone()->get_current_period_id(), std::nullopt, period);
 
   // decode the period from input
   const auto max_size = cct->_conf->rgw_max_put_param_size;

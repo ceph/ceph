@@ -70,10 +70,8 @@ int RGWPeriodPuller::pull(const DoutPrefixProvider *dpp, const std::string& peri
 			  optional_yield y, rgw::sal::ConfigStore* cfgstore)
 {
   // try to read the period from rados
-  constexpr auto zero_epoch = 0;
   period.set_id(period_id);
-  period.set_epoch(zero_epoch);
-  int r = cfgstore->read_period(dpp, y, period_id, zero_epoch, period);
+  int r = cfgstore->read_period(dpp, y, period_id, std::nullopt, period);
   if (r < 0) {
     if (svc.zone->is_meta_master()) {
       // can't pull if we're the master

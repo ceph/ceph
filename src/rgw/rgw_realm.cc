@@ -69,11 +69,8 @@ int RGWRealm::find_zone(const DoutPrefixProvider *dpp,
 
   found = false;
 
-  string period_id;
-  epoch_t epoch = 0;
-
-  RGWPeriod period(period_id, epoch);
-  int r = cfgstore->read_period(dpp, y, period_id, epoch, period);
+  RGWPeriod period;
+  int r = cfgstore->read_period(dpp, y, current_period, std::nullopt, period);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "WARNING: period init failed: " << cpp_strerror(-r) << " ... skipping" << dendl;
     return r;
