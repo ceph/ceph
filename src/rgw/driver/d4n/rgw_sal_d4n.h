@@ -68,6 +68,7 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::ObjectDirectory* get_obj_dir() { return objDir; }
     rgw::d4n::BlockDirectory* get_block_dir() { return blockDir; }
     rgw::d4n::PolicyDriver* get_policy_driver() { return policyDriver; }
+    void shutdown() override;
 };
 
 class D4NFilterUser : public FilterUser {
