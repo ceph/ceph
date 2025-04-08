@@ -1,0 +1,29 @@
+[Unit]
+Description=Ceph cluster exporter daemon
+PartOf=ceph.target
+After=network-online.target local-fs.target
+Before=ceph.target
+Wants=network-online.target local-fs.target ceph.target ceph-mon.target
+
+[Service]
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStart=/usr/bin/ceph-exporter -f --id %i --setuser ceph --setgroup ceph
+LockPersonality=true
+NoNewPrivileges=true
+PrivateDevices=yes
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=full
+Restart=on-failure
+RestartSec=10
+RestrictSUIDSGID=true
+StartLimitBurst=3
+StartLimitInterval=30min
+
+[Install]
+WantedBy=multi-user.target ceph.target
