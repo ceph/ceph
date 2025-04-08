@@ -7503,6 +7503,11 @@ int Client::_lookup(const InodeRef& dir, const std::string& name, std::string& a
   mask &= CEPH_CAP_ANY_SHARED | CEPH_STAT_RSTAT;
   std::string dname = name;
 
+  if (!dir->is_dir()) {
+    r = -ENOTDIR;
+    goto done;
+  }
+
   if (dname == ".."sv) {
     if (dir->dentries.empty()) {
       MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
@@ -7526,11 +7531,6 @@ int Client::_lookup(const InodeRef& dir, const std::string& name, std::string& a
 
   if (dname == "."sv) {
     *target = dir;
-    goto done;
-  }
-
-  if (!dir->is_dir()) {
-    r = -ENOTDIR;
     goto done;
   }
 
