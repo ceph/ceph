@@ -844,14 +844,14 @@ int FilterBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
   return next->load_bucket(dpp, y);
 }
 
-int FilterBucket::read_stats(const DoutPrefixProvider *dpp,
+int FilterBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			     const bucket_index_layout_generation& idx_layout,
 			     int shard_id, std::string* bucket_ver,
 			     std::string* master_ver,
 			     std::map<RGWObjCategory, RGWStorageStats>& stats,
 			     std::string* max_marker, bool* syncstopped)
 {
-  return next->read_stats(dpp, idx_layout, shard_id, bucket_ver, master_ver,
+  return next->read_stats(dpp, y, idx_layout, shard_id, bucket_ver, master_ver,
 			  stats, max_marker, syncstopped);
 }
 
@@ -935,21 +935,21 @@ int FilterBucket::remove_objs_from_index(const DoutPrefixProvider *dpp,
   return next->remove_objs_from_index(dpp, objs_to_unlink);
 }
 
-int FilterBucket::check_index(const DoutPrefixProvider *dpp,
+int FilterBucket::check_index(const DoutPrefixProvider *dpp, optional_yield y,
 			      std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
 			      std::map<RGWObjCategory, RGWStorageStats>& calculated_stats)
 {
-  return next->check_index(dpp, existing_stats, calculated_stats);
+  return next->check_index(dpp, y, existing_stats, calculated_stats);
 }
 
-int FilterBucket::rebuild_index(const DoutPrefixProvider *dpp)
+int FilterBucket::rebuild_index(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return next->rebuild_index(dpp);
+  return next->rebuild_index(dpp, y);
 }
 
-int FilterBucket::set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout)
+int FilterBucket::set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y, uint64_t timeout)
 {
-  return next->set_tag_timeout(dpp, timeout);
+  return next->set_tag_timeout(dpp, y, timeout);
 }
 
 int FilterBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)

@@ -152,7 +152,7 @@ protected:
                  const CreateParams& params,
                  optional_yield y) override;
       virtual int load_bucket(const DoutPrefixProvider *dpp, optional_yield y) override;
-      virtual int read_stats(const DoutPrefixProvider *dpp,
+      virtual int read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			     const bucket_index_layout_generation& idx_layout,
 			     int shard_id,
           std::string *bucket_ver, std::string *master_ver,
@@ -175,9 +175,11 @@ protected:
           std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
       virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override;
       virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink) override;
-      virtual int check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) override;
-      virtual int rebuild_index(const DoutPrefixProvider *dpp) override;
-      virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) override;
+      virtual int check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                              std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
+                              std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) override;
+      virtual int rebuild_index(const DoutPrefixProvider *dpp, optional_yield y) override;
+      virtual int set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y, uint64_t timeout) override;
       virtual int purge_instance(const DoutPrefixProvider *dpp, optional_yield y) override;
       virtual std::unique_ptr<Bucket> clone() override {
         return std::make_unique<DBBucket>(*this);
@@ -564,6 +566,8 @@ protected:
 			   bool* truncated, list_parts_each_t each_func,
 			   optional_yield y) override;
 
+      bool is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
+                             const ceph::real_time& obj_mtime) override;
       virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
       virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) override;
       virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp,

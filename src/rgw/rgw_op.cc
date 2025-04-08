@@ -911,19 +911,19 @@ void rgw_build_iam_environment(rgw::sal::Driver* driver,
 }
 
 void handle_replication_status_header(
-    const DoutPrefixProvider *dpp,
+    const DoutPrefixProvider *dpp, optional_yield y,
     rgw::sal::Attrs& attrs,
     req_state* s,
     const ceph::real_time &obj_mtime) {
   auto attr_iter = attrs.find(RGW_ATTR_OBJ_REPLICATION_STATUS);
   if (attr_iter != attrs.end() && attr_iter->second.to_str() == "PENDING") {
-    if (s->object->is_sync_completed(dpp, obj_mtime)) {
+    if (s->object->is_sync_completed(dpp, y, obj_mtime)) {
       s->object->set_atomic();
       rgw::sal::Attrs setattrs, rmattrs;
       bufferlist bl;
       bl.append("COMPLETED");
       setattrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = bl;
-      int ret = s->object->set_obj_attrs(dpp, &setattrs, &rmattrs, s->yield, 0);
+      int ret = s->object->set_obj_attrs(dpp, &setattrs, &rmattrs, y, 0);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: failed to set object replication status to COMPLETED ret=" << ret << dendl;
         return;
@@ -2456,7 +2456,7 @@ void RGWGetObj::execute(optional_yield y)
     filter = &*decompress;
   }
 
-  handle_replication_status_header(this, attrs, s, lastmod);
+  handle_replication_status_header(this, y, attrs, s, lastmod);
 
   attr_iter = attrs.find(RGW_ATTR_OBJ_REPLICATION_TRACE);
   if (attr_iter != attrs.end()) {
@@ -3122,7 +3122,7 @@ static int load_bucket_stats(const DoutPrefixProvider* dpp, optional_yield y,
   std::string bver, mver; // ignored
   std::map<RGWObjCategory, RGWStorageStats> categories;
 
-  int r = bucket.read_stats(dpp, index, -1, &bver, &mver, categories);
+  int r = bucket.read_stats(dpp, y, index, -1, &bver, &mver, categories);
   if (r < 0) {
     return r;
   }

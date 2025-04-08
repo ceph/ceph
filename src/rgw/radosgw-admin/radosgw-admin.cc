@@ -8771,7 +8771,7 @@ next:
 			bucket->get_info(), bucket->get_attrs(),
 			nullptr /* no callback */);
     list<cls_rgw_bucket_instance_entry> status;
-    int r = br.get_status(dpp(), &status);
+    int r = br.get_status(dpp(), null_yield, &status);
     if (r < 0) {
       cerr << "ERROR: could not get resharding status for bucket " <<
 	bucket_name << std::endl;
@@ -10315,7 +10315,7 @@ next:
 
     do {
       list<rgw_bi_log_entry> entries;
-      ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->bilog_rados->log_list(dpp(), bucket->get_info(), log_layout, shard_id, marker, max_entries - count, entries, &truncated);
+      ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->bilog_rados->log_list(dpp(), null_yield, bucket->get_info(), log_layout, shard_id, marker, max_entries - count, entries, &truncated);
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -10809,7 +10809,7 @@ next:
     if (!gen) {
       gen = 0;
     }
-    ret = bilog_trim(dpp(), static_cast<rgw::sal::RadosStore*>(driver),
+    ret = bilog_trim(dpp(), null_yield, static_cast<rgw::sal::RadosStore*>(driver),
 		     bucket->get_info(), *gen,
 		     shard_id, start_marker, end_marker);
     if (ret < 0) {
@@ -11539,9 +11539,9 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->trim_reshard_log_entries(dpp(), bucket->get_info(), null_yield);
+    ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->bi_rados->trim_reshard_log(dpp(), null_yield, bucket->get_info());
     if (ret < 0) {
-      cerr << "ERROR: trim_reshard_log_entries(): " << cpp_strerror(-ret) << std::endl;
+      cerr << "ERROR: trim_reshard_log(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
   }
