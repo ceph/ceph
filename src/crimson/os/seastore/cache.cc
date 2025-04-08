@@ -51,23 +51,25 @@ Cache::~Cache()
 
 // TODO: this method can probably be removed in the future
 Cache::retire_extent_ret Cache::retire_extent_addr(
-  Transaction &t, paddr_t paddr, extent_len_t length)
+  Transaction &t, laddr_t laddr, paddr_t paddr, extent_len_t length)
 {
   LOG_PREFIX(Cache::retire_extent_addr);
-  TRACET("retire {}~0x{:x}", t, paddr, length);
+  TRACET("retire {}~0x{:x} {}", t, paddr, length, laddr);
 
   assert(paddr.is_real() && !paddr.is_block_relative());
 
   CachedExtentRef ext;
   auto result = t.get_extent(paddr, &ext);
   if (result == Transaction::get_extent_ret::PRESENT) {
-    DEBUGT("retire {}~0x{:x} on t -- {}",
-           t, paddr, length, *ext);
+    DEBUGT("retire {}~0x{:x} {} on t -- {}",
+           t, paddr, length, laddr, *ext);
+    assert(ext->is_logical());
+    assert(ext->cast<LogicalCachedExtent>()->get_laddr() == laddr);
     t.add_present_to_retired_set(ext);
     return retire_extent_iertr::now();
   } else if (result == Transaction::get_extent_ret::RETIRED) {
-    ERRORT("retire {}~0x{:x} failed, already retired -- {}",
-           t, paddr, length, *ext);
+    ERRORT("retire {}~0x{:x} {} failed, already retired -- {}",
+           t, paddr, length, laddr, *ext);
     ceph_abort();
   }
 
@@ -78,24 +80,29 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   // retiring is not included by the cache hit metrics
   ext = query_cache(paddr);
   if (ext) {
-    DEBUGT("retire {}~0x{:x} in cache -- {}", t, paddr, length, *ext);
+    DEBUGT("retire {}~0x{:x} {} in cache -- {}",
+           t, paddr, length, laddr, *ext);
   } else {
     // add a new placeholder to Cache
-    ext = CachedExtent::make_cached_extent_ref<
+    auto placeholder = CachedExtent::make_cached_extent_ref<
       RetiredExtentPlaceholder>(length);
-    ext->init(
+    placeholder->init(
       CachedExtent::extent_state_t::CLEAN, paddr,
       PLACEMENT_HINT_NULL, NULL_GENERATION, TRANS_ID_NULL);
-    DEBUGT("retire {}~0x{:x} as placeholder, add extent -- {}",
-           t, paddr, length, *ext);
+    placeholder->set_laddr(laddr);
+    ext = placeholder;
+    DEBUGT("retire {}~0x{:x} {} as placeholder, add extent -- {}",
+           t, paddr, length, laddr, *ext);
     add_extent(ext);
   }
+  assert(ext->is_logical());
+  assert(ext->cast<LogicalCachedExtent>()->get_laddr() == laddr);
   t.add_absent_to_retired_set(ext);
   return retire_extent_iertr::now();
 }
 
 void Cache::retire_absent_extent_addr(
-  Transaction &t, paddr_t paddr, extent_len_t length)
+  Transaction &t, laddr_t laddr, paddr_t paddr, extent_len_t length)
 {
   CachedExtentRef ext;
 #ifndef NDEBUG
@@ -106,13 +113,15 @@ void Cache::retire_absent_extent_addr(
 #endif
   LOG_PREFIX(Cache::retire_absent_extent_addr);
   // add a new placeholder to Cache
-  ext = CachedExtent::make_cached_extent_ref<
+  auto placeholder = CachedExtent::make_cached_extent_ref<
     RetiredExtentPlaceholder>(length);
-  ext->init(
+  placeholder->init(
     CachedExtent::extent_state_t::CLEAN, paddr,
     PLACEMENT_HINT_NULL, NULL_GENERATION, TRANS_ID_NULL);
-  DEBUGT("retire {}~0x{:x} as placeholder, add extent -- {}",
-	 t, paddr, length, *ext);
+  placeholder->set_laddr(laddr);
+  ext = placeholder;
+  DEBUGT("retire {}~0x{:x} {} as placeholder, add extent -- {}",
+	 t, paddr, length, laddr, *ext);
   add_extent(ext);
   t.add_absent_to_retired_set(ext);
 }
