@@ -2,10 +2,15 @@
 Reef
 ====
 
-This is the fifth backport release in the Reef series. We recommend that all users update to this release.
+Reef is the 18th stable release of Ceph. It is named after the reef squid (Sepioteuthis).
 
 v18.2.5 Reef
 ============
+
+This is the fifth backport release in the Reef series. We recommend that all users update to this release.
+
+Notable Changes
+---------------
 
 * RBD: The ``try-netlink`` mapping option for rbd-nbd has become the default
   and is now deprecated. If the NBD netlink interface is not supported by the
@@ -18,8 +23,8 @@ v18.2.5 Reef
    - https://tracker.ceph.com/issues/67179
    - https://tracker.ceph.com/issues/66867
 
-Notable Changes
----------------
+Changelog
+---------
 
 * (reintroduce) test/librados: fix LibRadosIoECPP.CrcZeroWrite (`pr#61395 <https://github.com/ceph/ceph/pull/61395>`_, Samuel Just, Nitzan Mordechai)
 * .github: sync the list of paths for rbd label, expand tests label to qa/\* (`pr#57727 <https://github.com/ceph/ceph/pull/57727>`_, Ilya Dryomov)
@@ -298,7 +303,7 @@ Notable Changes
 * doc/rgw/notifications: specify which event types are enabled by default (`pr#54500 <https://github.com/ceph/ceph/pull/54500>`_, Yuval Lifshitz)
 * doc/security: remove old GPG information (`pr#56914 <https://github.com/ceph/ceph/pull/56914>`_, Zac Dover)
 * doc/security: update CVE list (`pr#57018 <https://github.com/ceph/ceph/pull/57018>`_, Zac Dover)
-* doc/src: add inline literals (``) to variables (`pr#57937 <https://github.com/ceph/ceph/pull/57937>`_, Zac Dover)
+* doc/src: add inline literals (` `` `) to variables (`pr#57937 <https://github.com/ceph/ceph/pull/57937>`_, Zac Dover)
 * doc/src: invadvisable is not a word (`pr#58190 <https://github.com/ceph/ceph/pull/58190>`_, Doug Whitfield)
 * doc/start/os-recommendations: remove 16.2.z support for CentOS 7 (`pr#58721 <https://github.com/ceph/ceph/pull/58721>`_, gukaifeng)
 * doc/start: Add Beginner's Guide (`pr#57822 <https://github.com/ceph/ceph/pull/57822>`_, Zac Dover)
