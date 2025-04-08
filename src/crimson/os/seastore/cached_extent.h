@@ -4,6 +4,7 @@
 #pragma once
 
 #include <iostream>
+#include <unordered_map>
 
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/set.hpp>
@@ -570,6 +571,10 @@ public:
   bool is_mutation_pending() const {
     return state == extent_state_t::MUTATION_PENDING
       || state == extent_state_t::EXIST_MUTATION_PENDING;
+  }
+
+  bool is_mutation_pending_state() const {
+    return state == extent_state_t::MUTATION_PENDING;
   }
 
   /// Returns true if extent is a fresh extent
@@ -1326,6 +1331,8 @@ public:
   virtual ~PhysicalNodeMapping() {}
 };
 
+template <bool UnlinkOnDestruct>
+class LogicalExtentIndex;
 
 class LBAMapping;
 /**
@@ -1389,7 +1396,7 @@ public:
     ceph_abort("Unsupported");
   }
 
-  virtual ~LogicalCachedExtent() {}
+  virtual ~LogicalCachedExtent();
 
 protected:
 
@@ -1411,6 +1418,11 @@ private:
   // the logical address of the extent, and if shared,
   // it is the intermediate_base, see BtreeLBAMapping comments.
   laddr_t laddr = L_ADDR_NULL;
+
+  LogicalExtentIndex<true>* parent_logical_index = nullptr;
+
+  template <bool UnlinkOnDestruct>
+  friend class LogicalExtentIndex;
 };
 
 using LogicalCachedExtentRef = TCachedExtentRef<LogicalCachedExtent>;
@@ -1433,7 +1445,7 @@ struct ref_laddr_cmp {
 /**
  * RetiredExtentPlaceholder
  *
- * Cache::retire_(absent_)extent_addr(Transaction&, paddr_t,
+ * Cache::retire_(absent_)extent_addr(Transaction&, laddr_t, paddr_t,
  * extent_len_t) can retire an extent not currently in cache. In that case, in
  * order to detect transaction invalidation, we need to add a placeholder to
  * the cache to create the mapping back to the transaction. And whenever there
@@ -1505,6 +1517,126 @@ using lextent_set_t = addr_extent_set_base_t<
 template <typename T>
 using lextent_list_t = addr_extent_list_base_t<
   laddr_t, TCachedExtentRef<T>>;
+
+bool is_logical_extent_linked(LogicalCachedExtent& extent);
+
+/**
+ * LogicalExtentIndex
+ *
+ * Index of LogicalCachedExtent by direct laddr, does not hold a reference,
+ * user must ensure each extent is removed prior to destruction
+ */
+template <bool UnlinkOnDestruct>
+class LogicalExtentIndex {
+public:
+  LogicalCachedExtentRef find(laddr_t laddr) const {
+    assert(laddr != L_ADDR_NULL);
+    auto iter = index.find(laddr);
+    if (iter == index.end()) {
+      return nullptr;
+    }
+    auto& pextent = iter->second;
+    validate_valid_extent(*pextent);
+    assert(pextent->get_laddr() == laddr);
+    if constexpr (UnlinkOnDestruct) {
+      assert(pextent->parent_logical_index == this);
+    }
+    return pextent;
+  }
+
+  std::size_t count(laddr_t laddr) const {
+    assert(laddr != L_ADDR_NULL);
+    return index.count(laddr);
+  }
+
+  bool exists(LogicalCachedExtent& extent) {
+    validate_valid_extent(extent);
+    auto found = find(extent.get_laddr());
+    if (found == nullptr) {
+      return false;
+    }
+    return (&*found == &extent);
+  }
+
+  void insert(LogicalCachedExtent& extent) {
+    validate_valid_extent(extent);
+    [[maybe_unused]] auto [iter, inserted] = index.emplace(
+      extent.get_laddr(), &extent);
+    assert(inserted);
+    if constexpr (UnlinkOnDestruct) {
+      assert(extent.parent_logical_index == nullptr);
+      extent.parent_logical_index = this;
+    }
+  }
+
+  void remove(LogicalCachedExtent& extent) {
+    validate_extent(extent);
+    auto iter = index.find(extent.get_laddr());
+    assert(iter != index.end());
+    assert(iter->second == &extent);
+    index.erase(iter);
+    if constexpr (UnlinkOnDestruct) {
+      assert(extent.parent_logical_index == this);
+      extent.parent_logical_index = nullptr;
+    }
+  }
+
+  void replace(LogicalCachedExtent& to,
+               LogicalCachedExtent& from) {
+    validate_valid_extent(to);
+    validate_extent(from);
+    auto laddr = from.get_laddr();
+    assert(laddr == to.get_laddr());
+    auto iter = index.find(laddr);
+    assert(iter != index.end());
+    assert(iter->second == &from);
+    iter = index.erase(iter);
+    index.emplace_hint(iter, laddr, &to);
+    if constexpr (UnlinkOnDestruct) {
+      assert(from.parent_logical_index == this);
+      assert(to.parent_logical_index == nullptr);
+      from.parent_logical_index = nullptr;
+      to.parent_logical_index = this;
+    }
+  }
+
+  void clear() {
+    if constexpr (UnlinkOnDestruct) {
+      std::for_each(index.begin(), index.end(), [this](auto& kv) {
+        assert(kv->second != nullptr);
+        assert(kv->second->parent_logical_index == this);
+        kv->second->parent_logical_index = nullptr;
+      });
+    }
+    index.clear();
+  }
+
+  bool is_empty() {
+    return index.empty();
+  }
+
+  ~LogicalExtentIndex() {
+    assert(index.empty());
+  }
+
+private:
+  void validate_valid_extent(LogicalCachedExtent& extent) const {
+    validate_extent(extent);
+    assert(extent.is_valid());
+    if (!is_retired_placeholder_type(extent.get_type())) {
+      assert(extent.is_mutation_pending_state() ||
+             is_logical_extent_linked(extent));
+    }
+  }
+
+  void validate_extent(LogicalCachedExtent& extent) const {
+    assert(extent.has_laddr());
+  }
+
+  // XXX: consider to convert it to an intrusive data structure
+  // and evaluate the performance impacts
+  std::unordered_map<laddr_t, LogicalCachedExtent*> index;
+};
 
 } // namespace crimson::os::seastore
 

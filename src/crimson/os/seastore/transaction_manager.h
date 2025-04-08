@@ -205,6 +205,21 @@ public:
     LOG_PREFIX(TransactionManager::read_extent);
     SUBDEBUGT(seastore_tm, "{}~0x{:x} {} ...",
               t, offset, length, T::TYPE);
+    auto ret = cache->get_logical_extent<T>(t, offset);
+    if (ret.has_value()) {
+      return std::move(*ret
+      ).si_then([FNAME, &t, offset, length](auto extent) {
+        if (length != extent->get_length()) {
+          SUBERRORT(seastore_tm, "{}~0x{:x} {} got wrong extent {}",
+                    t, offset, length, T::TYPE, *extent);
+          ceph_abort("Impossible");
+        }
+        SUBDEBUGT(seastore_tm, "{}~0x{:x} {} got {}",
+                  t, offset, length, T::TYPE, *extent);
+        // User should not know direct laddr under indirection
+        return maybe_indirect_extent_t<T>{extent, std::nullopt, false};
+      });
+    }
     return get_pin(
       t, offset
     ).si_then([this, FNAME, &t, offset, length] (auto pin)
@@ -230,6 +245,16 @@ public:
     LOG_PREFIX(TransactionManager::read_extent);
     SUBDEBUGT(seastore_tm, "{} {} ...",
               t, offset, T::TYPE);
+    auto ret = cache->get_logical_extent<T>(t, offset);
+    if (ret.has_value()) {
+      return std::move(*ret
+      ).si_then([FNAME, &t, offset](auto extent) {
+        SUBDEBUGT(seastore_tm, "{} {} got {}",
+                  t, offset, T::TYPE, *extent);
+        // User should not know direct laddr under indirection
+        return maybe_indirect_extent_t<T>{extent, std::nullopt, false};
+      });
+    }
     return get_pin(
       t, offset
     ).si_then([this, FNAME, &t, offset] (auto pin)
