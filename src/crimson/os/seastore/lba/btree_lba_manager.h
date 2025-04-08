@@ -107,6 +107,34 @@ public:
     laddr_t laddr,
     bool updateref) final;
 
+  move_mapping_ret move_indirect_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest) final {
+    assert(src.is_indirect());
+    return _move_mapping(
+      t, std::move(src), dest_laddr, std::move(dest), nullptr);
+  }
+
+  move_mapping_ret move_direct_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest,
+    LogicalChildNode &extent) final {
+    assert(!src.is_indirect());
+    return _move_mapping(
+      t, std::move(src), dest_laddr, std::move(dest), &extent);
+  }
+
+  move_mapping_ret move_and_clone_direct_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest,
+    LogicalChildNode &extent) final;
+
 #ifdef UNIT_TESTS_BUILT
   get_end_mapping_ret get_end_mapping(Transaction &t) final;
 #endif
@@ -451,6 +479,37 @@ private:
     std::variant<laddr_t, LBACursor*> addr_or_cursor,
     int delta,
     bool cascade_remove);
+
+  /*
+   * _move_mapping
+   *
+   * copy the mapping "src" to "dest" and remove the "src" mapping.
+   *
+   * Return: the mappings next to "src" and the "dest" mapping
+   */
+  move_mapping_ret _move_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest,
+    LogicalChildNode *extent);
+
+  /*
+   * _copy_mapping
+   *
+   * copy the mapping "src" to "dest", the extent attached to
+   * "src" will also be attached to the dest. This is the building
+   * block for _move_mapping and move_and_clone_direct_mapping
+   *
+   * Return: the "src" and the new "dest"
+   */
+  move_mapping_ret _copy_mapping(
+    op_context_t c,
+    LBABtree &btree,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest,
+    LogicalChildNode *extent);
 
   /**
    * _update_mapping
