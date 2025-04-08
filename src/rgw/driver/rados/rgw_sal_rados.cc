@@ -3465,6 +3465,7 @@ RadosObject::RadosDeleteOp::RadosDeleteOp(RadosObject *_source) :
 	parent_op(&op_target)
 { }
 
+
 int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
 {
   parent_op.params.bucket_owner = params.bucket_owner;
@@ -3486,15 +3487,16 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
       parent_op.params.check_objv = params.objv_tracker->version_for_check();
   }
 
-  int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP);
-  if (ret < 0)
+  int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP);
+  if (ret < 0) {
     return ret;
+  }
 
   result.delete_marker = parent_op.result.delete_marker;
   result.version_id = parent_op.result.version_id;
 
   return ret;
-}
+} // RadosObject::RadosDeleteOp::delete_obj
 
 int RadosObject::delete_object(const DoutPrefixProvider* dpp,
 			       optional_yield y,
@@ -3506,15 +3508,18 @@ int RadosObject::delete_object(const DoutPrefixProvider* dpp,
   RGWRados::Object::Delete del_op(&del_target);
 
   del_op.params.bucket_owner = bucket->get_info().owner;
-  del_op.params.versioning_status = (flags & FLAG_PREVENT_VERSIONING)
-                                    ? 0 : bucket->get_info().versioning_status();
+  del_op.params.versioning_status =
+    (flags & FLAG_PREVENT_VERSIONING)
+    ? 0
+    : bucket->get_info().versioning_status();
   del_op.params.remove_objs = remove_objs;
   if (objv) {
       del_op.params.check_objv = objv->version_for_check();
   }
 
-  return del_op.delete_obj(y, dpp, flags & FLAG_LOG_OP);
-}
+  // convert flags to bool params
+  return del_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP);
+} // RadosObject::delete_object
 
 int RadosObject::copy_object(const ACLOwner& owner,
 				const rgw_user& remote_user,
