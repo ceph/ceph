@@ -1511,6 +1511,10 @@ void PG::context_registry_on_change() {
   }
 }
 
+bool PG::is_missing_head_and_clones(const hobject_t &hoid) {
+  return peering_state.is_missing_any_head_or_clone_of(hoid);
+}
+
 bool PG::can_discard_op(const MOSDOp& m) const {
   if (m.get_map_epoch() <
       peering_state.get_info().history.same_primary_since) {

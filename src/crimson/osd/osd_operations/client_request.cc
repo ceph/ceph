@@ -197,13 +197,16 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
     }
 
     pg.get_perf_logger().inc(l_osd_replica_read);
-    if (pg.is_unreadable_object(m->get_hobj())) {
-      DEBUGDPP("{}.{}: {} missing on replica, bouncing to primary",
-	       pg, *this, this_instance_id, m->get_hobj());
+    if (pg.is_missing_head_and_clones(m->get_hobj())) {
+      DEBUGDPP("{}.{}: {} possibly missing head or clone object on replica,"
+               " bouncing to primary",
+               pg, *this, this_instance_id, m->get_hobj());
       pg.get_perf_logger().inc(l_osd_replica_read_redirect_missing);
       co_await reply_op_error(pgref, -EAGAIN);
       co_return;
     } else if (!pg.get_peering_state().can_serve_replica_read(m->get_hobj())) {
+      // Note: can_serve_replica_read checks for writes on the head object
+      //       as writes can only occur to head.
       DEBUGDPP("{}.{}: unstable write on replica, bouncing to primary",
 	       pg, *this, this_instance_id);
       pg.get_perf_logger().inc(l_osd_replica_read_redirect_conflict);
@@ -353,7 +356,8 @@ ClientRequest::process_op(
     }
 
     std::set<snapid_t> snaps = snaps_need_to_recover();
-    if (!snaps.empty()) {
+    if (!snaps.empty() &&
+        pg->is_missing_head_and_clones(m->get_hobj().get_head())) {
       co_await recover_missing_snaps(pg, snaps);
     }
   }
