@@ -1204,8 +1204,10 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             return HandleCommandResult(stdout=result_str)
 
     @_cli_read_command('orch certmgr key ls')
-    def _cert_store_key_ls(self, format: Format = Format.plain) -> HandleCommandResult:
-        completion = self.cert_store_key_ls()
+    def _cert_store_key_ls(self,
+                           include_cephadm_signed: bool = False,
+                           format: Format = Format.plain) -> HandleCommandResult:
+        completion = self.cert_store_key_ls(include_cephadm_signed)
         key_ls = raise_if_exception(completion)
         if format != Format.plain:
             return HandleCommandResult(stdout=to_format(key_ls, format, many=False, cls=None))

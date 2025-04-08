@@ -3334,8 +3334,8 @@ Then run the following:
         return report
 
     @handle_orch_error
-    def cert_store_key_ls(self) -> Dict[str, Any]:
-        return self.cert_mgr.key_ls()
+    def cert_store_key_ls(self, include_cephadm_signed: bool = False) -> Dict[str, Any]:
+        return self.cert_mgr.key_ls(include_cephadm_signed)
 
     @handle_orch_error
     def cert_store_get_cert(
