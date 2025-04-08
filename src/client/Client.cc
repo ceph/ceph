@@ -7650,6 +7650,10 @@ Dentry *Client::get_or_create(Inode *dir, const std::string& name)
 {
   // lookup
   ldout(cct, 20) << __func__ << " " << *dir << " name " << name << dendl;
+  if (!dir->is_dir()) {
+    ldout(cct, 20) << *dir << " is not a dir inode, name " << name << dendl;
+    return nullptr;
+  }
   dir->open_dir();
   auto it = dir->dir->dentries.find(name);
   if (it != dir->dir->dentries.end())
