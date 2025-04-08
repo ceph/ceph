@@ -300,10 +300,12 @@ class CertMgr:
 
         return ls
 
-    def key_ls(self) -> Dict:
+    def key_ls(self, show_cephadm_signed: bool = False) -> Dict:
         key_objects: List = self.key_store.list_tlsobjects()
         ls: Dict = {}
         for key_name, key_obj, target in key_objects:
+            if not show_cephadm_signed and self.is_cephadm_signed_entity(key_name):
+                continue
             priv_key_info = get_private_key_info(key_obj.key)
             key_scope = self.get_key_scope(key_name)
             if key_name not in ls:
