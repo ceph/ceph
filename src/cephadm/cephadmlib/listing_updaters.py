@@ -59,9 +59,9 @@ class CoreStatusUpdater(DaemonStatusUpdater):
             data_dir, identity.fsid, identity.daemon_name
         )
         cinfo = get_container_stats(ctx, identity)
+        if self.keep_container_info:
+            val[self.keep_container_info] = cinfo
         if cinfo:
-            if self.keep_container_info:
-                val[self.keep_container_info] = cinfo
             container_id = cinfo.container_id
             image_name = cinfo.image_name
             image_id = cinfo.image_id

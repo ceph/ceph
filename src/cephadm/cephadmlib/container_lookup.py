@@ -134,7 +134,9 @@ def infer_local_ceph_image(
     images_in_use_by_daemon = set(
         d.image_id for d, n in matching_daemons if n == daemon_name
     )
-    images_in_use = set(d.image_id for d, _ in matching_daemons)
+    images_in_use = set(
+        d.image_id for d, _ in matching_daemons if d is not None
+    )
 
     # prioritize images
     def _keyfunc(image: ImageInfo) -> Tuple[bool, bool, str]:
