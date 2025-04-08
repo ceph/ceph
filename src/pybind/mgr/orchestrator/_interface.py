@@ -602,7 +602,7 @@ class Orchestrator(object):
     def cert_store_cert_check(self) -> OrchResult[List[str]]:
         raise NotImplementedError()
 
-    def cert_store_key_ls(self) -> OrchResult[Dict[str, Any]]:
+    def cert_store_key_ls(self, include_cephadm_signed: bool = False) -> OrchResult[Dict[str, Any]]:
         raise NotImplementedError()
 
     def cert_store_get_cert(
