@@ -3,6 +3,7 @@
 from operator import itemgetter
 from typing import Optional, Tuple
 
+import fnmatch
 import logging
 
 from .container_engines import (
@@ -15,7 +16,8 @@ from .container_types import get_container_stats
 from .context import CephadmContext
 from .daemon_identity import DaemonIdentity
 from .daemons.ceph import ceph_daemons
-from .listing import daemons_matching
+from .exceptions import Error
+from .listing import LegacyDaemonEntry, daemons_matching
 from .listing_updaters import CoreStatusUpdater
 
 
@@ -174,3 +176,56 @@ def infer_local_ceph_image(
             reason,
         )
     return best_image.name
+
+
+def infer_daemon_identity(
+    ctx: CephadmContext, partial_name: str
+) -> DaemonIdentity:
+    """Given a partial daemon/service name, infer the identity of the
+    daemon.
+    """
+
+    if not partial_name:
+        raise Error('a daemon type is required to infer a service name')
+    if '.' in partial_name:
+        _type, _name = partial_name.split('.', 1)
+    else:
+        _type, _name = partial_name, ''
+    # allow searching for a name with just the beginning without having
+    # to expliclity supply a trailing asterisk
+    _name += '*'
+    matches = []
+    for d in daemons_matching(ctx, fsid=ctx.fsid, daemon_type=_type):
+        if isinstance(d, LegacyDaemonEntry):
+            logger.info('Ignoring legacy daemon %s', d.name)
+            continue  # ignore legacy daemons
+        if fnmatch.fnmatch(d.identity.daemon_id, _name):
+            matches.append(d)
+
+    if not matches:
+        raise Error(f'no daemons match {partial_name!r}')
+    if len(matches) > 1:
+        excess = ', '.join(d.identity.daemon_name for d in matches)
+        raise Error(f'too many daemons match {partial_name!r} ({excess})')
+    ident = matches[0].identity
+    logger.info('Inferring daemon %s', ident.daemon_name)
+    return ident
+
+
+def identify(ctx: CephadmContext) -> DaemonIdentity:
+    """Given a context try and determine a specific daemon identity to use
+    based on the --name CLI option (exact) or --infer-name (partial match)
+    option.
+    """
+    if not ctx.fsid:
+        raise Error('must pass --fsid to specify cluster')
+    name = getattr(ctx, 'name', '')
+    if name:
+        return DaemonIdentity.from_name(ctx.fsid, name)
+    iname = getattr(ctx, 'infer_name', '')
+    if iname:
+        return infer_daemon_identity(ctx, iname)
+    raise Error(
+        'must specify a daemon name'
+        ' (use --name/-n or --infer-name/-i for example)'
+    )
