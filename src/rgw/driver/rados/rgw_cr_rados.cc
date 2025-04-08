@@ -716,6 +716,7 @@ int RGWRadosBILogTrimCR::send_request(const DoutPrefixProvider *dpp)
   encode(call, in);
 
   librados::ObjectWriteOperation op;
+  op.assert_exists();
   op.exec(RGW_CLASS, RGW_BI_LOG_TRIM, in);
 
   cn = stack->create_completion_notifier();
