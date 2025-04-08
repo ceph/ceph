@@ -4997,6 +4997,12 @@ public:
       return false;
     return true;
   }
+
+  bool is_missing_any_head_or_clone_of(const hobject_t& oid) const {
+    return missing.lower_bound(oid.get_object_boundary()) !=
+      missing.lower_bound(oid.get_max_object_boundary());
+  }
+
   eversion_t get_oldest_need() const {
     if (missing.empty()) {
       return eversion_t();
