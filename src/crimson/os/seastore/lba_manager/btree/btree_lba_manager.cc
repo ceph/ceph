@@ -1361,12 +1361,14 @@ BtreeLBAManager::remap_mappings(
       assert(mapping.is_indirect() ||
 	(val.pladdr.is_paddr() &&
 	 !val.pladdr.get_paddr().is_zero()));
+      // remove the remapped mapping
       return update_refcount(c.trans, &cursor, -1, false
       ).si_then([&mapping, &btree, &iter, c, &ret,
 		&remaps, pladdr=val.pladdr](auto r) {
 	assert(r.is_removed_mapping());
 	auto &cursor = *r.get_removed_mapping().next;
 	iter = btree.make_partial_iter(c, cursor);
+	// insert new remap mapping
 	return trans_intr::do_for_each(
 	  remaps,
 	  [&mapping, &btree, &iter, c, &ret, pladdr](auto &remap) {
@@ -1424,6 +1426,9 @@ BtreeLBAManager::remap_mappings(
 	return refresh_lba_cursor_iertr::now();
       }).si_then([this, c, &mapping, &remaps] {
 	if (remaps.size() > 1 && mapping.is_indirect()) {
+	  // increase the refcount of the direct mapping if
+	  // the mapping is indirect and it's remapped into
+	  // more than 1 mappings
 	  auto &cursor = mapping.direct_cursor;
 	  assert(cursor->is_valid());
 	  return update_refcount(
@@ -1444,6 +1449,89 @@ BtreeLBAManager::remap_mappings(
       });
     });
   });
+}
+
+BtreeLBAManager::move_mapping_ret
+BtreeLBAManager::move_mapping(
+  Transaction &t,
+  LBAMapping src,
+  laddr_t dest_laddr,
+  LBAMapping dest,
+  LogicalChildNode &extent)
+{
+  LOG_PREFIX(BtreeLBAManager::move_mapping);
+  assert(dest.is_valid());
+  assert(src.is_valid());
+  assert(!src.is_indirect());
+  assert(!src.is_end());
+  assert(src.direct_cursor->get_refcount() == EXTENT_DEFAULT_REF_COUNT);
+  DEBUGT("src={} dest={}", t, src, dest);
+  auto c = get_context(t);
+  return with_btree_state<LBABtree, move_mapping_ret_t>(
+    cache,
+    c,
+    move_mapping_ret_t{std::move(src), std::move(dest)},
+    [c, FNAME, &extent, this, dest_laddr](auto &btree, auto &state) {
+    auto &cursor = state.dest.get_effective_cursor();
+    auto iter = btree.make_partial_iter(c, cursor);
+    if (!iter.is_end()) {
+      assert(iter.get_key() >= dest_laddr + state.src.get_length());
+    }
+    // insert the src mapping to dest
+    return btree.insert(
+      c,
+      std::move(iter),
+      dest_laddr,
+      lba_map_val_t{
+	state.src.get_length(),
+	state.src.get_val(),
+	EXTENT_DEFAULT_REF_COUNT,
+	state.src.get_checksum()}
+    ).si_then([&state, &extent, c](auto p) {
+      auto [iter, inserted] = std::move(p);
+      // attach extent to the new mapping if it exists
+      auto &leaf_node = *iter.get_leaf_node();
+      leaf_node.insert_child_ptr(
+	iter.get_leaf_pos(),
+	&extent,
+	leaf_node.get_size() - 1 /*the size before the insert*/);
+      state.dest = LBAMapping::create_direct(iter.get_cursor(c));
+    }).si_then([this, &state, c] {
+      // refresh the src mapping since a modification may have
+      // renderred the src invalid
+      return refresh_lba_mapping(c.trans, std::move(state.src));
+    }).si_then([&state, c, this](auto nsrc) {
+      state.src = std::move(nsrc);
+      // turn the src mapping into an indirect one pointing to
+      // the previously inserted mapping
+      return this->_update_mapping(
+	c.trans,
+	*state.src.direct_cursor,
+	[&state](const auto &in) {
+	  lba_map_val_t val = in;
+	  val.pladdr = state.dest.get_key();
+	  val.checksum = 0;
+	  return val;
+	},
+	nullptr);
+    }).si_then([c, &btree, &state, FNAME](auto ret) {
+      assert(ret.is_alive_mapping());
+      auto cursor = ret.take_cursor();
+      assert(cursor->is_indirect());
+      auto iter = btree.make_partial_iter(c, *cursor);
+      DEBUGT("resetting child ptr, leaf: {}, pos: {}",
+	c.trans, *iter.get_leaf_node(), iter.get_leaf_pos());
+      iter.get_leaf_node()->reset_child_ptr(iter.get_leaf_pos());
+      state.src = LBAMapping::create_indirect(std::move(cursor));
+    }).si_then([&state, this, c] {
+      return refresh_lba_mapping(c.trans, std::move(state.dest));
+    }).si_then([&state](auto ndest) {
+      state.dest = std::move(ndest);
+    });
+  }).handle_error_interruptible(
+    move_mapping_iertr::pass_further{},
+    crimson::ct_error::assert_all{"unexpected error"}
+  );
 }
 
 BtreeLBAManager::make_btree_partial_iter_ret

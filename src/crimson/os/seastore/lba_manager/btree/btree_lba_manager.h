@@ -106,6 +106,13 @@ public:
     laddr_t laddr,
     bool updateref) final;
 
+  move_mapping_ret move_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest,
+    LogicalChildNode &extent) final;
+
   next_mapping_ret next_mapping(
     Transaction &t,
     const LBAMapping mapping) final;
