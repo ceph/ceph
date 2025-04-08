@@ -50,7 +50,7 @@ using P = BlueStore::printer;
 using Estimator = BlueStore::Estimator;
 using P = BlueStore::printer;
 
-void Estimator::reset()
+void Estimator::cleanup()
 {
   new_size = 0;
   uncompressed_size = 0;
@@ -220,6 +220,12 @@ void Estimator::finish()
   dout(25) << "exp_comp_factor=" << expected_compression_factor
            << " exp_recomp_err=" << expected_recompression_error
            << " exp_pad_exp=" << expected_pad_expansion << dendl;
+  cleanup();
+}
+
+Estimator* BlueStore::create_estimator()
+{
+  return new Estimator(this);
 }
 
 struct scan_blob_element_t {
