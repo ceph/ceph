@@ -684,6 +684,82 @@ public:
     });
   }
 
+  /*
+   * move_and_clone_direct_mapping
+   *
+   * move the direct mapping "src" to "dest" and clone it at the
+   * position of "src". Extents attched to "src" are reattached
+   * to the new mapping.
+   *
+   * Return: the new indirect mapping and the moved direct mapping
+   */
+  using move_mapping_iertr = LBAManager::move_mapping_iertr;
+  using move_mapping_ret = LBAManager::move_mapping_ret;
+  template <typename T>
+  move_mapping_ret move_and_clone_direct_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest)
+  {
+    LOG_PREFIX(TransactionManager::move_and_clone_direct_mapping);
+    SUBDEBUGT(seastore_tm, "src={}, dest={}", t, src, dest);
+    assert(!src.is_indirect());
+    assert(!src.is_end());
+    return seastar::do_with(
+      std::move(src),
+      std::move(dest),
+      [&t, dest_laddr, this](auto &src, auto &dest) {
+      return src.refresh().si_then([&src, &dest](auto s) {
+	src = std::move(s);
+	return dest.refresh();
+      }).si_then([&t, this, &src, &dest](auto m) {
+	dest = std::move(m);
+	if (full_extent_integrity_check) {
+	  return read_pin<T>(t, src
+	  ).si_then([](auto maybe_indirect_extent) {
+	    assert(!maybe_indirect_extent.is_indirect());
+	    assert(!maybe_indirect_extent.is_clone);
+	    return maybe_indirect_extent.extent;
+	  });
+	} else {
+	  auto ret = get_extent_if_linked<T>(t, src);
+	  if (ret.index() == 1) {
+	    return std::move(std::get<1>(ret));
+	  } else {
+	    // absent
+	    cache->retire_absent_extent_addr(t, src.get_val(), src.get_length());
+	    return base_iertr::make_ready_future<TCachedExtentRef<T>>();
+	  }
+	}
+      }).si_then([&t, &src, dest_laddr, this, &dest](auto ext) mutable {
+	if (full_extent_integrity_check) {
+	  assert(ext && ext->is_fully_loaded());
+	}
+	std::optional<ceph::bufferptr> original_bptr;
+	// TODO: preserve the bufferspace if partially loaded
+	if (ext && ext->is_fully_loaded()) {
+	  ceph_assert(!ext->is_mutable());
+	  original_bptr = ext->get_bptr();
+	}
+	T* extent = nullptr;
+	if (ext) {
+	  cache->retire_extent(t, ext);
+	}
+	extent = cache->alloc_remapped_extent<T>(
+	  t,
+	  dest_laddr,
+	  src.get_val(),
+	  0,
+	  src.get_length(),
+	  original_bptr).get();
+	return lba_manager->move_and_clone_direct_mapping(
+	  t, std::move(src), dest_laddr,
+	  std::move(dest), *extent);
+      });
+    });
+  }
+
   /* alloc_extents
    *
    * allocates more than one new blocks of type T.
@@ -1349,8 +1425,8 @@ private:
 	      t,
 	      remap_laddr,
 	      remap_paddr,
+	      remap_offset,
 	      remap_len,
-	      original_laddr,
 	      original_bptr);
 	    // user must initialize the logical extent themselves.
 	    extent->set_seen_by_users();
