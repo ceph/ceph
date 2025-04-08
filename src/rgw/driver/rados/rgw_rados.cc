@@ -4317,7 +4317,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                RGWFetchObjFilter *filter,
                bool stat_follow_olh,
                const rgw_obj& stat_dest_obj,
-               const rgw_zone_set_entry& source_trace_entry,
+               std::optional<rgw_zone_set_entry> source_trace_entry,
                rgw_zone_set *zones_trace,
                std::optional<uint64_t>* bytes_transferred)
 {
@@ -4559,32 +4559,39 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   //erase the append attr
   cb.get_attrs().erase(RGW_ATTR_APPEND_PART_NUM);
 
-  { // add x-amz-replication-status=REPLICA
-    auto& bl = cb.get_attrs()[RGW_ATTR_OBJ_REPLICATION_STATUS];
-    bl.clear(); // overwrite source's status
-    bl.append("REPLICA");
-  }
-  { // update replication trace
-    std::vector<rgw_zone_set_entry> trace;
-    if (auto i = cb.get_attrs().find(RGW_ATTR_OBJ_REPLICATION_TRACE);
-        i != cb.get_attrs().end()) {
-      try {
-        decode(trace, i->second);
-      } catch (const buffer::error&) {}
+  if (source_trace_entry) { // replication attrs only if we are replicating
+    { // add x-amz-replication-status=REPLICA
+      auto& bl = cb.get_attrs()[RGW_ATTR_OBJ_REPLICATION_STATUS];
+      bl.clear(); // overwrite source's status
+      bl.append("REPLICA");
     }
-    // add the source entry to the end
-    trace.push_back(source_trace_entry);
+    { // update replication trace
+      std::vector<rgw_zone_set_entry> trace;
+      if (auto i = cb.get_attrs().find(RGW_ATTR_OBJ_REPLICATION_TRACE);
+          i != cb.get_attrs().end()) {
+        try {
+          decode(trace, i->second);
+        } catch (const buffer::error&) {}
+      }
+      // add the source entry to the end
+      trace.push_back(*source_trace_entry);
 
-    bufferlist bl;
-    encode(trace, bl);
-    cb.get_attrs()[RGW_ATTR_OBJ_REPLICATION_TRACE] = std::move(bl);
-  }
-  {
-    // add x-amz-replicated-at
-    bufferlist bl;
-    ceph::real_time timestamp = real_clock::now();
-    encode(timestamp, bl);
-    cb.get_attrs()[RGW_ATTR_OBJ_REPLICATION_TIMESTAMP] = std::move(bl);
+      bufferlist bl;
+      encode(trace, bl);
+      cb.get_attrs()[RGW_ATTR_OBJ_REPLICATION_TRACE] = std::move(bl);
+    }
+    {
+      // add x-amz-replicated-at
+      bufferlist bl;
+      ceph::real_time timestamp = real_clock::now();
+      encode(timestamp, bl);
+      cb.get_attrs()[RGW_ATTR_OBJ_REPLICATION_TIMESTAMP] = std::move(bl);
+    }
+  } else {
+    // remove replication attrs
+    cb.get_attrs().erase(RGW_ATTR_OBJ_REPLICATION_STATUS);
+    cb.get_attrs().erase(RGW_ATTR_OBJ_REPLICATION_TRACE);
+    cb.get_attrs().erase(RGW_ATTR_OBJ_REPLICATION_TIMESTAMP);
   }
 
   if (source_zone.empty()) {
@@ -4814,7 +4821,6 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   ldpp_dout(dpp, 5) << "Copy object " << src_obj.bucket << ":" << src_obj.get_oid() << " => " << dest_obj.bucket << ":" << dest_obj.get_oid() << dendl;
 
   if (remote_src || !source_zone.empty()) {
-    rgw_zone_set_entry source_trace_entry{source_zone.id, std::nullopt};
     // null_yield resolves a crash when calling progress_cb(), because the beast
     // frontend tried to use this same yield context to write the progress
     // response to the frontend socket. call fetch_remote_obj() synchronously so
@@ -4826,7 +4832,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
                unmod_ptr, high_precision_time,
                if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
                olh_epoch, delete_at, ptag, petag, progress_cb, progress_data, rctx,
-               nullptr /* filter */, stat_follow_olh, stat_dest_obj, source_trace_entry);
+               nullptr /* filter */, stat_follow_olh, stat_dest_obj, std::nullopt);
   }
 
   map<string, bufferlist> src_attrs;
