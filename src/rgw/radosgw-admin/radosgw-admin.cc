@@ -185,7 +185,7 @@ void usage()
   cout << "  bi put                           store bucket index object entries\n";
   cout << "  bi list                          list raw bucket index entries\n";
   cout << "  bi purge                         purge bucket index entries\n";
-  cout << "  object rm                        remove object\n";
+  cout << "  object rm                        remove object; include --yes-i-really-mean-it to force removal from bucket index\n";
   cout << "  object put                       put object\n";
   cout << "  object stat                      stat an object for its metadata\n";
   cout << "  object unlink                    unlink object from bucket index\n";
@@ -8360,9 +8360,10 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    rgw_obj_key key(object, object_version);
-    ret = rgw_remove_object(dpp(), driver, bucket.get(), key, null_yield);
 
+    rgw_obj_key key(object, object_version);
+
+    ret = rgw_remove_object(dpp(), driver, bucket.get(), key, null_yield, yes_i_really_mean_it);
     if (ret < 0) {
       cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
       return -ret;
