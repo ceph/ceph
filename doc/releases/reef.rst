@@ -2,8 +2,7 @@
 Reef
 ====
 
-Reef is the 5th stable release of Ceph. It is named after the reef squid
-(Sepioteuthis).
+This is the fifth backport release in the Reef series. We recommend that all users update to this release.
 
 v18.2.5 Reef
 ============
@@ -14,6 +13,7 @@ v18.2.5 Reef
 
 * RADOS: A new command, `ceph osd rm-pg-upmap-primary-all`, has been added that allows
   users to clear all pg-upmap-primary mappings in the osdmap when desired.
+
   Related trackers:
    - https://tracker.ceph.com/issues/67179
    - https://tracker.ceph.com/issues/66867
