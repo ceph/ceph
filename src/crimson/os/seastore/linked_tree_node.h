@@ -6,10 +6,9 @@
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/root_block.h"
+#include "crimson/os/seastore/btree/btree_types.h"
 
 namespace crimson::os::seastore {
-
-using btreenode_pos_t = uint16_t;
 
 template <typename ParentT>
 class child_pos_t {
