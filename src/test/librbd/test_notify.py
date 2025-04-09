@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+import functools
 import os
 import sys
 import time
@@ -12,6 +13,8 @@ from rbd import (RBD,
                  RBD_FEATURE_OBJECT_MAP,
                  RBD_FEATURE_FAST_DIFF,
                  RBD_FLAG_OBJECT_MAP_INVALID)
+
+print = functools.partial(print, flush=True)
 
 POOL_NAME='rbd'
 PARENT_IMG_NAME='test_notify_parent'
@@ -140,18 +143,15 @@ def slave(ioctx):
         assert(not image.is_exclusive_lock_owner())
         assert(list(image.list_snaps()) == [])
 
-        if 'RBD_DISABLE_UPDATE_FEATURES' not in os.environ:
-            print("update_features")
-            assert((image.features() & RBD_FEATURE_OBJECT_MAP) != 0)
-            image.update_features(RBD_FEATURE_OBJECT_MAP, False)
-            assert(not image.is_exclusive_lock_owner())
-            assert((image.features() & RBD_FEATURE_OBJECT_MAP) == 0)
-            image.update_features(RBD_FEATURE_OBJECT_MAP, True)
-            assert(not image.is_exclusive_lock_owner())
-            assert((image.features() & RBD_FEATURE_OBJECT_MAP) != 0)
-            assert((image.flags() & RBD_FLAG_OBJECT_MAP_INVALID) != 0)
-        else:
-            print("skipping update_features")
+        print("update_features")
+        assert((image.features() & RBD_FEATURE_OBJECT_MAP) != 0)
+        image.update_features(RBD_FEATURE_OBJECT_MAP, False)
+        assert(not image.is_exclusive_lock_owner())
+        assert((image.features() & RBD_FEATURE_OBJECT_MAP) == 0)
+        image.update_features(RBD_FEATURE_OBJECT_MAP, True)
+        assert(not image.is_exclusive_lock_owner())
+        assert((image.features() & RBD_FEATURE_OBJECT_MAP) != 0)
+        assert((image.flags() & RBD_FLAG_OBJECT_MAP_INVALID) != 0)
 
         print("rebuild object map")
         image.rebuild_object_map()
