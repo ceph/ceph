@@ -330,7 +330,7 @@ cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, std::ostream& ss)
 
   try {
     if (!json_spirit::read(fullcmd, v))
-      throw std::runtime_error("JFW unparseable JSON " + fullcmd);
+      throw std::runtime_error("JFW unparseable JSON: |" + fullcmd + '|');
 
     if (v.type() != json_spirit::obj_type)
       throw std::runtime_error("JFW not JSON object " + fullcmd);
