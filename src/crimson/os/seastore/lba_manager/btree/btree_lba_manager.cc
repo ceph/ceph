@@ -208,7 +208,7 @@ BtreeLBAManager::_get_original_mappings(
 	  c.trans, pin->get_key(), pin->get_length());
 	return this->get_mappings(
 	  c.trans, pin->get_raw_val().get_laddr(), pin->get_length()
-	).si_then([&pin, &ret, c](auto new_pin_list) {
+	).si_then([this, &pin, &ret, c](auto new_pin_list) {
 	  LOG_PREFIX(BtreeLBAManager::get_mappings);
 	  assert(new_pin_list.size() == 1);
 	  auto &new_pin = new_pin_list.front();
@@ -224,13 +224,24 @@ BtreeLBAManager::_get_original_mappings(
 	    new_pin->get_key(), new_pin->get_length(),
 	    pin->get_key(), pin->get_length(),
 	    pin->get_raw_val().get_laddr());
+      auto dmap_val = static_cast<BtreeLBAMapping&>(*new_pin).get_map_val();
+      if (dmap_val.refcount == 1 && c.trans.get_src() != Transaction::src_t::READ) {
+        auto&& fut = this->_decref_intermediate(c.trans, new_pin->get_key(), new_pin->get_length()
+        ).si_then([this, c, pin=std::move(pin), dmap_val](std::optional<ref_update_result_t> maybe_result) {
+                  assert(maybe_result.has_value());
+                  return this->_update_mapping(c.trans, pin->get_key(),
+                  [dmap_val](const lba_map_val_t&) -> lba_map_val_t {return dmap_val;}, nullptr);}
+        ).si_then([&ret](auto update_result) -> void {ret.emplace_back(std::move(update_result.mapping));}
+        );
+        return fut;
+      }
 	  auto &btree_new_pin = static_cast<BtreeLBAMapping&>(*new_pin);
 	  btree_new_pin.make_indirect(
 	    pin->get_key(),
 	    pin->get_length(),
 	    pin->get_raw_val().get_laddr());
 	  ret.emplace_back(std::move(new_pin));
-	  return seastar::now();
+	  return get_mapping_iertr::now();
 	}).handle_error_interruptible(
 	  crimson::ct_error::input_output_error::pass_further{},
 	  crimson::ct_error::assert_all("unexpected enoent")
