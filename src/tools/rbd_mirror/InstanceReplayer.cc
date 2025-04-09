@@ -607,9 +607,12 @@ void InstanceReplayer<I>::handle_stop_image_replayers(int r) {
     }
     m_image_replayers.clear();
 
+    m_image_replayers_stopped = true;
+    if (m_group_replayers_stopped) {
+      std::swap(on_finish, m_on_shut_down);
+    }
   }
-  if (--m_shutdown_counter == 0 ) {
-    std::swap(on_finish, m_on_shut_down);
+  if (on_finish) {
     on_finish->complete(r);
   }
 }
@@ -799,9 +802,12 @@ void InstanceReplayer<I>::handle_stop_group_replayers(int r) {
     }
     m_group_replayers.clear();
 
+    m_group_replayers_stopped = true;
+    if (m_image_replayers_stopped) {
+      std::swap(on_finish, m_on_shut_down);
+    }
   }
-  if (--m_shutdown_counter == 0) {
-    std::swap(on_finish, m_on_shut_down);
+  if (on_finish) {
     on_finish->complete(r);
   }
 }
