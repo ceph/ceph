@@ -765,8 +765,8 @@ TEST(ECCommon, get_min_want_to_read_shards)
 }
 
 TEST(ECCommon, get_min_avail_to_read_shards) {
-  const uint64_t page_size = CEPH_PAGE_SIZE;
-  const uint64_t swidth = 64*page_size;
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
   const unsigned int k = 4;
   const unsigned int m = 2;
   const int nshards = 6;
@@ -807,7 +807,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     hobject_t hoid;
 
     for (shard_id_t i; i<k; ++i) {
-      to_read_list[i].insert(int(i) * 2 * page_size, page_size);
+      to_read_list[i].insert(int(i) * 2 * align_size, align_size);
     }
 
     ECCommon::read_request_t read_request(to_read_list, false, object_size);
@@ -828,7 +828,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
     hobject_t hoid;
     for (shard_id_t i; i<k; ++i) {
-      to_read_list[i].insert(int(i) * 2 * page_size, page_size);
+      to_read_list[i].insert(int(i) * 2 * align_size, align_size);
     }
 
     ECCommon::read_request_t read_request(to_read_list, false, object_size);
@@ -854,7 +854,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     hobject_t hoid;
 
     for (shard_id_t i; i < (int)k; ++i) {
-      to_read_list[i].insert(int(i) * 2 * page_size + int(i) + 1, int(i) + 1);
+      to_read_list[i].insert(int(i) * 2 * align_size + int(i) + 1, int(i) + 1);
     }
     ECCommon::read_request_t ref(to_read_list, false, object_size);
     ECCommon::read_request_t read_request(to_read_list, false, object_size);
@@ -862,7 +862,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
       shard_id_t shard_id(i);
       ECCommon::shard_read_t &ref_shard_read = ref.shard_reads[shard_id];
       ref_shard_read.subchunk = ecode->default_sub_chunk;
-      ref_shard_read.extents.insert(i*2*page_size, page_size);
+      ref_shard_read.extents.insert(i*2*align_size, align_size);
       ref_shard_read.pg_shard = pg_shard_t(i, shard_id_t(i));
     }
 
@@ -876,7 +876,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     hobject_t hoid;
 
     for (shard_id_t i; i<k; ++i) {
-      to_read_list[i].insert(int(i) * 2 * page_size, page_size);
+      to_read_list[i].insert(int(i) * 2 * align_size, align_size);
     }
 
     ECCommon::read_request_t read_request(to_read_list, false, object_size);
@@ -916,19 +916,19 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     hobject_t hoid;
     unsigned int missing_shard = 1;
 
-    to_read_list[shard_id_t(0)].insert(0, page_size);
-    to_read_list[shard_id_t(1)].insert(page_size, page_size);
-    to_read_list[shard_id_t(2)].insert(2*page_size, page_size);
-    to_read_list[shard_id_t(3)].insert(3*page_size, page_size);
+    to_read_list[shard_id_t(0)].insert(0, align_size);
+    to_read_list[shard_id_t(1)].insert(align_size, align_size);
+    to_read_list[shard_id_t(2)].insert(2*align_size, align_size);
+    to_read_list[shard_id_t(3)].insert(3*align_size, align_size);
     ECCommon::read_request_t read_request(to_read_list, false, object_size);
     ECCommon::read_request_t ref(to_read_list, false, object_size);
 
     // Populating reference manually to check that adjacent shards get correctly combined.
-    ref.shard_reads[shard_id_t(0)].extents.insert(0, page_size*2);
-    ref.shard_reads[shard_id_t(2)].extents.insert(page_size, page_size*2);
-    ref.shard_reads[shard_id_t(3)].extents.insert(page_size, page_size);
-    ref.shard_reads[shard_id_t(3)].extents.insert(3*page_size, page_size);
-    ref.shard_reads[shard_id_t(4)].extents.insert(page_size, page_size);
+    ref.shard_reads[shard_id_t(0)].extents.insert(0, align_size*2);
+    ref.shard_reads[shard_id_t(2)].extents.insert(align_size, align_size*2);
+    ref.shard_reads[shard_id_t(3)].extents.insert(align_size, align_size);
+    ref.shard_reads[shard_id_t(3)].extents.insert(3*align_size, align_size);
+    ref.shard_reads[shard_id_t(4)].extents.insert(align_size, align_size);
     ref.shard_reads[shard_id_t(0)].pg_shard = pg_shard_t(0, shard_id_t(0));
     ref.shard_reads[shard_id_t(2)].pg_shard = pg_shard_t(2, shard_id_t(2));
     ref.shard_reads[shard_id_t(3)].pg_shard = pg_shard_t(3, shard_id_t(3));
@@ -956,8 +956,8 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
 
     extent_set extents_to_read;
     for (shard_id_t i; i<k; ++i) {
-      to_read_list[i].insert(int(i) * 2 * page_size, page_size);
-      extents_to_read.insert(int(i) * 2 * page_size, page_size);
+      to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+      extents_to_read.insert(int(i) * 2 * align_size, align_size);
     }
     ECCommon::read_request_t read_request(to_read_list, false, object_size);
 
@@ -981,7 +981,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     hobject_t hoid;
 
     for (shard_id_t i; i<k; ++i) {
-      to_read_list[i].insert(int(i) * 2 * page_size, page_size);
+      to_read_list[i].insert(int(i) * 2 * align_size, align_size);
     }
     ECCommon::read_request_t read_request(to_read_list, false, object_size);
 
@@ -1019,8 +1019,8 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
 
 TEST(ECCommon, shard_read_combo_tests)
 {
-  const uint64_t page_size = CEPH_PAGE_SIZE;
-  const uint64_t swidth = 2*page_size;
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 2*align_size;
   const unsigned int k = 2;
   const unsigned int m = 2;
   const int nshards = 4;
@@ -1140,8 +1140,8 @@ TEST(ECCommon, get_min_want_to_read_shards_bug67087)
 
 TEST(ECCommon, get_remaining_shards)
 {
-  const uint64_t page_size = CEPH_PAGE_SIZE;
-  const uint64_t swidth = 64*page_size;
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
   const unsigned int k = 4;
   const unsigned int m = 2;
   const int nshards = 6;
@@ -1202,7 +1202,7 @@ TEST(ECCommon, get_remaining_shards)
     hobject_t hoid;
 
     ECUtil::shard_extent_set_t to_read(s.get_k_plus_m());
-    s.ro_range_to_shard_extent_set(chunk_size/2, chunk_size+page_size, to_read);
+    s.ro_range_to_shard_extent_set(chunk_size/2, chunk_size+align_size, to_read);
     ECCommon::read_request_t read_request(to_read, false, object_size);
     unsigned int missing_shard = 1;
 
@@ -1228,11 +1228,11 @@ TEST(ECCommon, get_remaining_shards)
     }
     ref.shard_reads[shard_id_t(0)].extents.insert(0, chunk_size/2);
     ref.shard_reads[shard_id_t(0)].pg_shard = pg_shards[0];
-    ref.shard_reads[shard_id_t(2)].extents.insert(0, chunk_size/2+page_size);
+    ref.shard_reads[shard_id_t(2)].extents.insert(0, chunk_size/2+align_size);
     ref.shard_reads[shard_id_t(2)].pg_shard = pg_shards[2];
-    ref.shard_reads[shard_id_t(3)].extents.insert(0, chunk_size/2+page_size);
+    ref.shard_reads[shard_id_t(3)].extents.insert(0, chunk_size/2+align_size);
     ref.shard_reads[shard_id_t(3)].pg_shard = pg_shards[3];
-    ref.shard_reads[shard_id_t(4)].extents.insert(0, chunk_size/2+page_size);
+    ref.shard_reads[shard_id_t(4)].extents.insert(0, chunk_size/2+align_size);
     ref.shard_reads[shard_id_t(4)].pg_shard = pg_shards[4];
     ASSERT_EQ(read_request,  ref);
   }
@@ -1240,8 +1240,8 @@ TEST(ECCommon, get_remaining_shards)
 
 TEST(ECCommon, encode)
 {
-  const uint64_t page_size = CEPH_PAGE_SIZE;
-  const uint64_t swidth = 2*page_size;
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 2*align_size;
   const unsigned int k = 2;
   const unsigned int m = 2;
 
@@ -1267,8 +1267,8 @@ TEST(ECCommon, encode)
 
 TEST(ECCommon, decode)
 {
-  const uint64_t page_size = CEPH_PAGE_SIZE;
-  const uint64_t swidth = 3*page_size;
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 3*align_size;
   const unsigned int k = 3;
   const unsigned int m = 2;
 
