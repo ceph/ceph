@@ -46,14 +46,14 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
                  const std::string& pool, const std::string& oid,
                  const std::optional<std::vector<int>>& cached_shard_order,
                  uint64_t block_size, int seed, int threads, ceph::mutex& lock,
-                 ceph::condition_variable& cond, bool ec_optimizations)
+                 ceph::condition_variable& cond, bool is_replicated_pool,
+                 bool ec_optimizations)
     : Model(oid, block_size),
       rados(rados),
       asio(asio),
       om(std::make_unique<ObjectModel>(oid, block_size, seed)),
       db(data_generation::DataGenerator::create_generator(
           data_generation::GenerationType::HeaderedSeededRandom, *om)),
-      cc(std::make_unique<ConsistencyChecker>(rados, asio, pool)),
       pool(pool),
       cached_shard_order(cached_shard_order),
       threads(threads),
@@ -63,6 +63,9 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
   int rc;
   rc = rados.ioctx_create(pool.c_str(), io);
   ceph_assert(rc == 0);
+  if (!is_replicated_pool) {
+    cc = std::make_unique<ConsistencyChecker>(rados, asio, pool);
+  }
 }
 
 RadosIo::~RadosIo() {}
