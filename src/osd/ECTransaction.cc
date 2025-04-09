@@ -149,17 +149,17 @@ ECTransaction::WritePlanObj::WritePlanObj(
 
   /* Calculate any non-aligned pages. These need to be read and written */
   extent_set aligned_ro_writes(unaligned_ro_writes);
-  aligned_ro_writes.align(CEPH_PAGE_SIZE);
+  aligned_ro_writes.align(EC_ALIGN_SIZE);
   extent_set partial_page_ro_writes(aligned_ro_writes);
   partial_page_ro_writes.subtract(unaligned_ro_writes);
-  partial_page_ro_writes.align(CEPH_PAGE_SIZE);
+  partial_page_ro_writes.align(EC_ALIGN_SIZE);
 
   extent_set write_superset;
   for (auto &&[off, len] : unaligned_ro_writes) {
     sinfo.ro_range_to_shard_extent_set_with_superset(
       off, len, will_write, write_superset);
   }
-  write_superset.align(CEPH_PAGE_SIZE);
+  write_superset.align(EC_ALIGN_SIZE);
 
   shard_id_set writable_parity_shards = shard_id_set::intersection(sinfo.get_parity_shards(), writable_shards);
   if (write_superset.size() > 0) {
@@ -180,10 +180,10 @@ ECTransaction::WritePlanObj::WritePlanObj(
       reads.intersection_of(read_mask);
       do_parity_delta_write = false;
     } else {
-      will_write.align(CEPH_PAGE_SIZE);
+      will_write.align(EC_ALIGN_SIZE);
       ECUtil::shard_extent_set_t pdw_reads(will_write);
 
-      sinfo.ro_size_to_read_mask(ECUtil::align_page_next(orig_size), read_mask);
+      sinfo.ro_size_to_read_mask(ECUtil::align_next(orig_size), read_mask);
 
       /* Next we need to add the reads required for a conventional write */
       for (auto shard : sinfo.get_data_shards()) {
@@ -542,7 +542,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   }
 
   if (entry && plan.orig_size < plan.projected_size) {
-    entry->mod_desc.append(ECUtil::align_page_next(plan.orig_size));
+    entry->mod_desc.append(ECUtil::align_next(plan.orig_size));
   }
 
   if (op.is_delete()) {
@@ -623,8 +623,8 @@ void ECTransaction::Generate::truncate() {
 
       auto &t = transactions.at(shard);
       uint64_t start = eset.range_start();
-      uint64_t start_align_prev = ECUtil::align_page_prev(start);
-      uint64_t start_align_next = ECUtil::align_page_next(start);
+      uint64_t start_align_prev = ECUtil::align_prev(start);
+      uint64_t start_align_next = ECUtil::align_next(start);
       uint64_t end = eset.range_end();
       t.touch(
         coll_t(spg_t(pgid, shard)),
@@ -695,12 +695,12 @@ void ECTransaction::Generate::overlay_writes() {
 void ECTransaction::Generate::appends_and_clone_ranges() {
 
   extent_set clone_ranges = plan.will_write.get_extent_superset();
-  uint64_t clone_max = ECUtil::align_page_next(plan.orig_size);
+  uint64_t clone_max = ECUtil::align_next(plan.orig_size);
 
   if (op.delete_first) {
     clone_max = 0;
   } else if (op.truncate && op.truncate->first < clone_max) {
-    clone_max = ECUtil::align_page_next(op.truncate->first);
+    clone_max = ECUtil::align_next(op.truncate->first);
   }
   ECUtil::shard_extent_set_t cloneable_range(sinfo.get_k_plus_m());
   sinfo.ro_size_to_read_mask(clone_max, cloneable_range);
@@ -820,7 +820,7 @@ void ECTransaction::Generate::written_and_present_shards() {
       entry->mod_desc.rollback_extents(
         entry->version.version,
         rollback_extents,
-        ECUtil::align_page_next(plan.orig_size),
+        ECUtil::align_next(plan.orig_size),
         rollback_shards);
     }
     if (entry->written_shards.size() == sinfo.get_k_plus_m()) {
