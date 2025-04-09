@@ -97,7 +97,7 @@ from .inventory import (
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
 from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall_hosts, \
-    cephadmNoImage, CEPH_UPGRADE_ORDER, SpecialHostLabels
+    cephadmNoImage, SpecialHostLabels
 from .configchecks import CephadmConfigChecks
 from .offline_watcher import OfflineHostWatcher
 from .tuned_profiles import TunedProfileUtils
@@ -3913,9 +3913,9 @@ Then run the following:
             raise OrchestratorError('--daemon-types and --services are mutually exclusive')
         if daemon_types is not None:
             for dtype in daemon_types:
-                if dtype not in CEPH_UPGRADE_ORDER:
+                if dtype not in utils.CEPH_IMAGE_TYPES:
                     raise OrchestratorError(f'Upgrade aborted - Got unexpected daemon type "{dtype}".\n'
-                                            f'Viable daemon types for this command are: {utils.CEPH_TYPES + utils.GATEWAY_TYPES}')
+                                            f'Viable daemon types for this command are: {utils.CEPH_IMAGE_TYPES}')
         if services is not None:
             for service in services:
                 if service not in self.spec_store:
