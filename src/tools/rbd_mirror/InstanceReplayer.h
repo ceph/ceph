@@ -125,7 +125,8 @@ private:
   Context *m_image_state_check_task = nullptr;
   Context *m_group_state_check_task = nullptr;
   Context *m_on_shut_down = nullptr;
-  std::atomic<int> m_shutdown_counter{2};
+  bool m_image_replayers_stopped = false;
+  bool m_group_replayers_stopped = false;
   bool m_manual_stop = false;
   bool m_blocklisted = false;
 
