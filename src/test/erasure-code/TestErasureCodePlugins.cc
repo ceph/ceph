@@ -436,7 +436,7 @@ TEST_P(PluginTest,ParityDelta_MultipleDeltaMultipleParity)
     }
   }
   EXPECT_EQ(parity_matches, true);
-}
+} 
 TEST_P(PluginTest,MinimumGranularity)
 {
   initialize();
