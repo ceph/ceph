@@ -4050,7 +4050,7 @@ public:
       rmobject(old_version);
     }
     virtual void create() {}
-    virtual void update_snaps(const std::set<snapid_t> &old_snaps) {}
+    virtual void update_snaps(const std::vector<snapid_t> &old_snaps) {}
     virtual void rollback_extents(
       const version_t gen,
       const std::vector<std::pair<uint64_t, uint64_t>> &extents,
@@ -4150,7 +4150,7 @@ public:
     append_id(CREATE);
     ENCODE_FINISH(bl);
   }
-  void update_snaps(const std::set<snapid_t> &old_snaps) {
+  void update_snaps(const std::vector<snapid_t> &old_snaps) {
     if (!can_local_rollback || rollback_info_completed) {
       return;
     }

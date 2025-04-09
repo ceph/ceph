@@ -331,7 +331,7 @@ void PG::clear_object_snap_mapping(
 }
 
 void PG::update_object_snap_mapping(
-  ObjectStore::Transaction *t, const hobject_t &soid, const set<snapid_t> &snaps)
+  ObjectStore::Transaction *t, const hobject_t &soid, const vector<snapid_t> &snaps)
 {
   OSDriver::OSTransaction _t(osdriver.get_transaction(t));
   ceph_assert(soid.snap < CEPH_MAXSNAP);

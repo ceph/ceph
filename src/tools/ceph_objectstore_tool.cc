@@ -1429,7 +1429,7 @@ int get_attrs(
       for (auto& p : snapset.clone_snaps) {
 	ghobject_t clone = hoid;
 	clone.hobj.snap = p.first;
-	set<snapid_t> snaps(p.second.begin(), p.second.end());
+        const vector<snapid_t> &snaps = p.second;
 	if (!store->exists(ch, clone)) {
 	  // no clone, skip.  this is probably a cache pool.  this works
 	  // because we use a separate transaction per object and clones

@@ -413,11 +413,10 @@ void PrimaryLogPG::on_local_recover(
   clear_object_snap_mapping(t, hoid);
   if (!is_delete && recovery_info.soid.is_snap()) {
     OSDriver::OSTransaction _t(osdriver.get_transaction(t));
-    set<snapid_t> snaps;
     dout(20) << " snapset " << recovery_info.ss << dendl;
     auto p = recovery_info.ss.clone_snaps.find(hoid.snap);
     if (p != recovery_info.ss.clone_snaps.end()) {
-      snaps.insert(p->second.begin(), p->second.end());
+      const auto& snaps = p->second;
       dout(20) << " snaps " << snaps << dendl;
       snap_mapper.add_oid(
 	recovery_info.soid,
@@ -4701,7 +4700,11 @@ int PrimaryLogPG::trim_object(
 		       << " for object " << coid << "\n";
     return -ENOENT;
   }
-  set<snapid_t> old_snaps(citer->second.begin(), citer->second.end());
+  vector<snapid_t> old_snaps;
+  old_snaps.reserve(citer->second.size());
+  for (auto &s : citer->second) {
+    old_snaps.emplace_back(s);
+  }
   if (old_snaps.empty()) {
     osd->clog->error() << "No object info snaps for object " << coid;
     return -ENOENT;
@@ -4714,14 +4717,13 @@ int PrimaryLogPG::trim_object(
     return -ENOENT;
   }
 
-  set<snapid_t> new_snaps;
+  vector<snapid_t> new_snaps;
+  new_snaps.reserve(old_snaps.size());
   const OSDMapRef& osdmap = get_osdmap();
-  for (set<snapid_t>::iterator i = old_snaps.begin();
-       i != old_snaps.end();
-       ++i) {
-    if (!osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), *i) &&
-	*i != snap_to_trim) {
-      new_snaps.insert(*i);
+  for (auto &s : old_snaps) {
+    if (!osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), s) &&
+	s != snap_to_trim) {
+      new_snaps.emplace_back(s);
     }
   }
 

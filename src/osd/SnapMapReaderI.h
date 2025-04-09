@@ -7,6 +7,7 @@
  * \brief Defines the interface for the snap-mapper used by the scrubber.
  */
 #include <set>
+#include <vector>
 
 #include "common/scrub_types.h"
 #include "include/expected.hpp"
@@ -25,7 +26,7 @@ namespace Scrub {
 
 struct SnapMapReaderI {
   struct result_t {
-    enum class code_t { success, backend_error, not_found, inconsistent };
+    enum class code_t { success, matched, backend_error, not_found, inconsistent };
     code_t code{code_t::success};
     int backend_error{0};  ///< errno returned by the backend
   };
@@ -35,7 +36,7 @@ struct SnapMapReaderI {
    *  \returns a set of snaps, or an error code
    *  \attn: only OBJ_ DB entries are consulted
    */
-  virtual tl::expected<std::set<snapid_t>, result_t> get_snaps(
+  virtual tl::expected<std::vector<snapid_t>, result_t> get_snaps(
     const hobject_t& hoid) const = 0;
 
   /**
@@ -45,8 +46,8 @@ struct SnapMapReaderI {
    *  A mismatch between both sets of entries will result in an error.
    *  \returns a set of snaps, or an error code.
    */
-  virtual tl::expected<std::set<snapid_t>, result_t>
-  get_snaps_check_consistency(const hobject_t& hoid) const = 0;
+  virtual tl::expected<std::vector<snapid_t>, result_t>
+  get_snaps_check_consistency(const hobject_t& hoid, const std::vector<snapid_t>& match_to) const = 0;
 
   virtual ~SnapMapReaderI() = default;
 };
@@ -61,8 +62,20 @@ enum class snap_mapper_op_t {
 struct snap_mapper_fix_t {
   snap_mapper_op_t op;
   hobject_t hoid;
-  std::set<snapid_t> snaps;
-  std::set<snapid_t> wrong_snaps;  // only collected & returned for logging sake
+  std::vector<snapid_t> snaps;
+  std::vector<snapid_t> wrong_snaps;  // only collected & returned for logging sake
+
+  snap_mapper_fix_t(snap_mapper_op_t _op,
+                    const hobject_t& _hoid,
+                    const std::vector<snapid_t>& _snaps) :
+    op(_op), hoid(_hoid), snaps(_snaps) {}
+  snap_mapper_fix_t(snap_mapper_op_t _op,
+                    const hobject_t& _hoid,
+                    const std::vector<snapid_t>& _snaps,
+                    std::vector<snapid_t>&& _wrong_snaps) :
+    op(_op), hoid(_hoid), snaps(_snaps) {
+    wrong_snaps.swap(_wrong_snaps);
+  }
 };
 
 }  // namespace Scrub

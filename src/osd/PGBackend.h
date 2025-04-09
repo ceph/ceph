@@ -242,7 +242,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual void pgb_set_object_snap_mapping(
        const hobject_t &soid,
-       const std::set<snapid_t> &snaps,
+       const std::vector<snapid_t> &snaps,
        ObjectStore::Transaction *t) = 0;
 
      virtual void pgb_clear_object_snap_mapping(

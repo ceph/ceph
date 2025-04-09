@@ -16,6 +16,7 @@
 
 #include <fmt/printf.h>
 #include <fmt/ranges.h>
+#include <algorithm>
 
 #include "common/ceph_context.h"
 #include "common/debug.h"
@@ -287,12 +288,18 @@ string SnapMapper::to_object_key(const hobject_t &hoid) const
   return OBJECT_PREFIX + shard_prefix + hoid.to_str();
 }
 
-void SnapMapper::object_snaps::encode(ceph::buffer::list &bl) const
+void SnapMapper::object_snaps::encode(const hobject_t& _oid,
+  const std::vector<snapid_t> _snaps, ceph::buffer::list &bl)
 {
   ENCODE_START(1, 1, bl);
-  encode(oid, bl);
-  encode(snaps, bl);
+  encode(_oid, bl);
+  encode(_snaps, bl);
   ENCODE_FINISH(bl);
+}
+
+void SnapMapper::object_snaps::encode(ceph::buffer::list &bl) const
+{
+  encode(oid, snaps, bl);
 }
 
 void SnapMapper::object_snaps::decode(ceph::buffer::list::const_iterator &bl)
@@ -315,8 +322,8 @@ void SnapMapper::object_snaps::generate_test_instances(
   o.push_back(new object_snaps);
   o.push_back(new object_snaps);
   o.back()->oid = hobject_t(sobject_t("name", CEPH_NOSNAP));
-  o.back()->snaps.insert(1);
-  o.back()->snaps.insert(2);
+  o.back()->snaps.emplace_back(1);
+  o.back()->snaps.emplace_back(2);
 }
 
 bool SnapMapper::check(const hobject_t &hoid) const
@@ -334,7 +341,7 @@ int SnapMapper::get_snaps(const hobject_t &oid, object_snaps *out) const
 {
   auto snaps = get_snaps_common(oid);
   if (snaps) {
-    *out = *snaps;
+    std::swap(*out, *snaps);
     return 0;
   }
   switch (auto e = snaps.error(); e.code) {
@@ -352,7 +359,7 @@ int SnapMapper::get_snaps(const hobject_t &oid, object_snaps *out) const
   }
 }
 
-tl::expected<std::set<snapid_t>, Scrub::SnapMapReaderI::result_t>
+tl::expected<std::vector<snapid_t>, Scrub::SnapMapReaderI::result_t>
 SnapMapper::get_snaps(const hobject_t &oid) const
 {
   auto snaps = get_snaps_common(oid);
@@ -400,7 +407,7 @@ SnapMapper::get_snaps_common(const hobject_t &oid) const
 
 std::vector<std::string> SnapMapper::to_raw_keys(
   const hobject_t &clone,
-  const std::set<snapid_t> &snaps) const
+  const std::vector<snapid_t> &snaps) const
 {
   std::vector<std::string> keys;
   keys.reserve(snaps.size());
@@ -414,15 +421,17 @@ std::vector<std::string> SnapMapper::to_raw_keys(
   return keys;
 }
 
-tl::expected<std::set<snapid_t>, result_t>
-SnapMapper::get_snaps_check_consistency(const hobject_t &hoid) const
+tl::expected<std::vector<snapid_t>, result_t>
+SnapMapper::get_snaps_check_consistency(const hobject_t &hoid,
+                                        const std::vector<snapid_t>& snaps_from_outside) const
 {
   // derive the set of snaps from the 'OBJ_' entry
   auto obj_snaps = get_snaps(hoid);
   if (!obj_snaps) {
-    return obj_snaps;
+    return tl::unexpected(obj_snaps.error());
   }
 
+  std::sort(obj_snaps->begin(), obj_snaps->end());
   // make sure we have the expected set of SNA_ entries:
   // we have the clone oid and the set of snaps relevant to this clone.
   // Let's construct all expected SNA_ key, then fetch them.
@@ -440,7 +449,8 @@ SnapMapper::get_snaps_check_consistency(const hobject_t &hoid) const
     return tl::unexpected(result_t{code_t::inconsistent, r});
   }
 
-  std::set<snapid_t> snaps_from_mapping;
+  std::vector<snapid_t> snaps_from_mapping;
+  snaps_from_mapping.reserve(kvmap.size());
   for (auto &[k, v] : kvmap) {
     dout(20) << __func__ << " " << hoid << " " << k << dendl;
     // extract the object ID from the value fetched for an SNA mapping key
@@ -452,20 +462,48 @@ SnapMapper::get_snaps_check_consistency(const hobject_t &hoid) const
 	      << dendl;
       return tl::unexpected(result_t{code_t::inconsistent});
     }
-    snaps_from_mapping.insert(sn);
+    snaps_from_mapping.emplace_back(sn);
   }
-
-  if (snaps_from_mapping != *obj_snaps) {
+  bool sorted = false; // for a bit paranoid check below
+  bool consistent = snaps_from_mapping.size() == obj_snaps->size();
+  if (consistent) {
+    std::sort(obj_snaps->begin(), obj_snaps->end());
+    sorted = true;
+    for (auto s : snaps_from_mapping) {
+      consistent = std::binary_search(obj_snaps->begin(), obj_snaps->end(), s);
+      if (!consistent) {
+        break;
+      }
+    }
+  }
+  if (!consistent) {
     dout(10) << fmt::format(
 		  "{}: hoid:{} -> mapper internal inconsistency ({} vs {})",
 		  __func__, hoid, *obj_snaps, snaps_from_mapping)
 	     << dendl;
     return tl::unexpected(result_t{code_t::inconsistent});
   }
+  bool matches = snaps_from_outside.size() == obj_snaps->size();
+  if (matches) {
+    ceph_assert(sorted); // just in case
+    for (auto s : snaps_from_outside) {
+      matches = std::binary_search(obj_snaps->begin(), obj_snaps->end(), s);
+      if (!matches) {
+        break;
+      }
+    }
+  }
+  if (matches) {
+    dout(10) << fmt::format(
+		  "{}: hoid:{} -> mapper state matches external snaps)",
+		  __func__, hoid, *obj_snaps)
+	     << dendl;
+    return tl::unexpected(result_t{code_t::matched});
+  }
   dout(10) << fmt::format(
 		"{}: snaps for {}: {}", __func__, hoid, snaps_from_mapping)
 	   << dendl;
-  return obj_snaps;
+  return snaps_from_mapping;
 }
 
 void SnapMapper::clear_snaps(
@@ -486,15 +524,13 @@ void SnapMapper::clear_snaps(
 
 void SnapMapper::set_snaps(
   const hobject_t &oid,
-  const object_snaps &in,
+  const vector<snapid_t>& snaps,
   MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
   ceph_assert(check(oid));
   map<string, ceph::buffer::list> to_set;
-  ceph::buffer::list bl;
-  encode(in, bl);
-  to_set[to_object_key(oid)] = bl;
-  dout(20) << __func__ << " " << oid << " " << in.snaps << dendl;
+  object_snaps::encode(oid, snaps, to_set[to_object_key(oid)]);
+  dout(20) << __func__ << " " << oid << " " << snaps << dendl;
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_set) {
       dout(20) << __func__ << "::set " << i.first << dendl;
@@ -523,12 +559,12 @@ void SnapMapper::update_bits(
 
 int SnapMapper::update_snaps(
   const hobject_t &oid,
-  const set<snapid_t> &new_snaps,
-  const set<snapid_t> *old_snaps_check,
+  vector<snapid_t> &&new_snaps,
+  const vector<snapid_t> *old_snaps_check,
   MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
   dout(20) << *this << __func__ << " " << oid << " " << new_snaps
-	   << " was " << (old_snaps_check ? *old_snaps_check : set<snapid_t>())
+	   << " was " << (old_snaps_check ? *old_snaps_check : vector<snapid_t>())
 	   << dendl;
   ceph_assert(check(oid));
   if (new_snaps.empty())
@@ -542,16 +578,16 @@ int SnapMapper::update_snaps(
   if (old_snaps_check)
     ceph_assert(out.snaps == *old_snaps_check);
 
-  object_snaps in(oid, new_snaps);
-  set_snaps(oid, in, t);
+  set_snaps(oid, new_snaps, t);
 
   vector<string> to_remove;
+  std::vector<snapid_t> _new_snaps;
+  _new_snaps.swap(new_snaps);
+  std::sort(_new_snaps.begin(), _new_snaps.end());
   to_remove.reserve(out.snaps.size());
-  for (set<snapid_t>::iterator i = out.snaps.begin();
-       i != out.snaps.end();
-       ++i) {
-    if (!new_snaps.count(*i)) {
-      to_remove.emplace_back(to_raw_key(make_pair(*i, oid)));
+  for (auto s : out.snaps) {
+    if (!std::binary_search(_new_snaps.begin(), _new_snaps.end(), s)) {
+      to_remove.emplace_back(to_raw_key(make_pair(s, oid)));
     }
   }
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
@@ -565,7 +601,7 @@ int SnapMapper::update_snaps(
 
 void SnapMapper::add_oid(
   const hobject_t &oid,
-  const set<snapid_t>& snaps,
+  const vector<snapid_t>& snaps,
   MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
   dout(20) << __func__ << " " << oid << " " << snaps << dendl;
@@ -582,14 +618,11 @@ void SnapMapper::add_oid(
     }
   }
 
-  object_snaps _snaps(oid, snaps);
-  set_snaps(oid, _snaps, t);
+  set_snaps(oid, snaps, t);
 
   map<string, ceph::buffer::list> to_add;
-  for (set<snapid_t>::iterator i = snaps.begin();
-       i != snaps.end();
-       ++i) {
-    to_add.insert(to_raw(make_pair(*i, oid)));
+  for (auto s : snaps) {
+    to_add.insert(to_raw(make_pair(s, oid)));
   }
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_add) {
@@ -740,7 +773,7 @@ int SnapMapper::_remove_oid(
 
   vector<string> to_remove;
   to_remove.reserve(out.snaps.size());
-  for (set<snapid_t>::iterator i = out.snaps.begin();
+  for (auto i = out.snaps.begin();
        i != out.snaps.end();
        ++i) {
     to_remove.emplace_back(to_raw_key(make_pair(*i, oid)));
@@ -756,7 +789,7 @@ int SnapMapper::_remove_oid(
 
 int SnapMapper::get_snaps(
   const hobject_t &oid,
-  std::set<snapid_t> *snaps) const
+  std::vector<snapid_t> *snaps) const
 {
   ceph_assert(check(oid));
   object_snaps out;
@@ -793,18 +826,17 @@ void SnapMapper::update_snap_map(
       dout(20) << *this << __func__ << " decode snaps failure on " << i << dendl;
       snaps.clear();
     }
-    std::set<snapid_t> _snaps(snaps.begin(), snaps.end());
 
     if (i.is_clone() || i.is_promote()) {
       add_oid(
         i.soid,
-        _snaps,
+        snaps,
         _t);
     } else if (i.is_modify()) {
       int r = update_snaps(
         i.soid,
-        _snaps,
-        0,
+        std::move(snaps),
+        nullptr,
         _t);
       ceph_assert(r == 0);
     } else {

@@ -1834,7 +1834,6 @@ std::optional<snap_mapper_fix_t> ScrubBackend::scan_object_snaps(
          << dendl;
     return std::nullopt;
   }
-  set<snapid_t> obj_snaps{p->second.begin(), p->second.end()};
 
   // clang-format off
 
@@ -1857,9 +1856,15 @@ std::optional<snap_mapper_fix_t> ScrubBackend::scan_object_snaps(
 
   // clang-format on
 
-  auto cur_snaps = snaps_getter.get_snaps_check_consistency(hoid);
+  auto cur_snaps = snaps_getter.get_snaps_check_consistency(hoid, p->second);
   if (!cur_snaps) {
     switch (auto e = cur_snaps.error(); e.code) {
+      case result_t::code_t::matched:
+        dout(20) << fmt::format(
+		      "{}: {}: snapset match SnapMapper's ({})", __func__, hoid,
+		      p->second)
+	         << dendl;
+        return std::nullopt;
       case result_t::code_t::backend_error:
 	derr << __func__ << ": get_snaps returned "
 	     << cpp_strerror(e.backend_error) << " for " << hoid << dendl;
@@ -1867,38 +1872,30 @@ std::optional<snap_mapper_fix_t> ScrubBackend::scan_object_snaps(
       case result_t::code_t::not_found:
 	dout(10) << __func__ << ": no snaps for " << hoid << ". Adding."
 		 << dendl;
-	return snap_mapper_fix_t{snap_mapper_op_t::add, hoid, obj_snaps, {}};
+	return snap_mapper_fix_t{snap_mapper_op_t::add, hoid, p->second};
       case result_t::code_t::inconsistent:
 	dout(10) << __func__ << ": inconsistent snapmapper data for " << hoid
 		 << ". Recreating." << dendl;
 	return snap_mapper_fix_t{
-	  snap_mapper_op_t::overwrite, hoid, obj_snaps, {}};
+	  snap_mapper_op_t::overwrite, hoid, p->second};
       default:
 	dout(10) << __func__ << ": error (" << cpp_strerror(e.backend_error)
 		 << ") fetching snapmapper data for " << hoid << ". Recreating."
 		 << dendl;
 	return snap_mapper_fix_t{
-	  snap_mapper_op_t::overwrite, hoid, obj_snaps, {}};
+	  snap_mapper_op_t::overwrite, hoid, p->second};
     }
     __builtin_unreachable();
-  }
-
-  if (*cur_snaps == obj_snaps) {
-    dout(20) << fmt::format(
-		  "{}: {}: snapset match SnapMapper's ({})", __func__, hoid,
-		  obj_snaps)
-	     << dendl;
-    return std::nullopt;
   }
 
   // add this object to the list of snapsets that needs fixing. Note
   // that we also collect the existing (bogus) list, for logging purposes
   dout(20) << fmt::format(
 		"{}: obj {}: was: {} updating to: {}", __func__, hoid,
-		*cur_snaps, obj_snaps)
+		*cur_snaps, p->second)
 	   << dendl;
   return snap_mapper_fix_t{
-    snap_mapper_op_t::update, hoid, obj_snaps, *cur_snaps};
+    snap_mapper_op_t::update, hoid, p->second, std::move(*cur_snaps)};
 }
 
 /*

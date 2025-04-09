@@ -4656,7 +4656,7 @@ void ObjectModDesc::visit(Visitor *visitor) const
 	break;
       }
       case UPDATE_SNAPS: {
-	set<snapid_t> snaps;
+	vector<snapid_t> snaps;
 	decode(snaps, bp);
 	visitor->update_snaps(snaps);
 	break;
@@ -4735,7 +4735,7 @@ struct DumpVisitor : public ObjectModDesc::Visitor {
     f->dump_string("code", "CREATE");
     f->close_section();
   }
-  void update_snaps(const set<snapid_t> &snaps) override {
+  void update_snaps(const vector<snapid_t> &snaps) override {
     f->open_object_section("op");
     f->dump_string("code", "UPDATE_SNAPS");
     f->dump_stream("snaps") << snaps;

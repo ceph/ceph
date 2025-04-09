@@ -140,7 +140,7 @@ public:
     std::optional<ceph::buffer::list> omap_header;
 
     /// (old, new) -- only valid with no truncate or buffer updates
-    std::optional<std::pair<std::set<snapid_t>, std::set<snapid_t>>> updated_snaps;
+    std::optional<std::pair<std::vector<snapid_t>, std::vector<snapid_t>>> updated_snaps;
 
     struct alloc_hint_t {
       uint64_t expected_object_size;
@@ -322,8 +322,8 @@ public:
 
   void update_snaps(
     const hobject_t &hoid,         ///< [in] object for snaps
-    std::set<snapid_t> &&old_snaps,///< [in] old snaps value
-    std::set<snapid_t> &&new_snaps ///< [in] new snaps value
+    std::vector<snapid_t> &&old_snaps,///< [in] old snaps value
+    std::vector<snapid_t> &&new_snaps ///< [in] new snaps value
     ) {
     auto &op = get_object_op(hoid);
     ceph_assert(!op.updated_snaps);
