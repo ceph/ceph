@@ -280,7 +280,7 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
       extents.union_of(read_request.shard_want_to_read.at(shard));
     }
 
-    extents.align(CEPH_PAGE_SIZE);
+    extents.align(EC_ALIGN_SIZE);
     if (read_mask.contains(shard)) {
       shard_read.extents.intersection_of(extents, read_mask.at(shard));
     }
