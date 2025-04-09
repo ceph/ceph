@@ -144,7 +144,7 @@ TEST(ectransaction, partial_write)
   // The object is empty, so we should have no reads and an 4k write.
   ASSERT_FALSE(plan.to_read);
   extent_set ref_write;
-  ref_write.insert(0, 4096);
+  ref_write.insert(0, EC_ALIGN_SIZE);
   ASSERT_EQ(2u, plan.will_write.shard_count());
   ASSERT_EQ(ref_write, plan.will_write.at(shard_id_t(0)));
   ASSERT_EQ(ref_write, plan.will_write.at(shard_id_t(2)));
@@ -186,7 +186,7 @@ TEST(ectransaction, overlapping_write_non_aligned)
   // There should be no overlap of this read.
   ASSERT_EQ(1u, (*plan.to_read).shard_count());
   extent_set ref;
-  ref.insert(0, 4096);
+  ref.insert(0, EC_ALIGN_SIZE);
   ASSERT_EQ(2u, plan.will_write.shard_count());
   ASSERT_EQ(1u, (*plan.to_read).shard_count());
   ASSERT_EQ(ref, plan.will_write.at(shard_id_t(0)));
@@ -285,15 +285,15 @@ TEST(ectransaction, test_append_not_page_aligned_with_large_hole)
   PGTransaction::ObjectOperation op;
   bufferlist a;
 
-  // We have a 4k write quite a way after the current limit of a 4k object
-  a.append_zero(2048);
-  op.buffer_updates.insert(24*4096 + 1024, a.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{a, 0});
+  // We have a 4k write quite a way after the current limit of a EC_ALIGN_SIZE object
+  a.append_zero(EC_ALIGN_SIZE / 2);
+  op.buffer_updates.insert(24 * EC_ALIGN_SIZE + EC_ALIGN_SIZE / 4, a.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{a, 0});
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_t sinfo(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
-  oi.size = 25*4096;
+  oi.size = 25*EC_ALIGN_SIZE;
   shard_id_set shards;
   shards.insert_range(shard_id_t(), 3);
   ECTransaction::WritePlanObj plan(
@@ -303,7 +303,7 @@ TEST(ectransaction, test_append_not_page_aligned_with_large_hole)
     shards,
     shards,
     false,
-    4096,
+    EC_ALIGN_SIZE,
     oi,
     std::nullopt,
     ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
@@ -317,8 +317,8 @@ TEST(ectransaction, test_append_not_page_aligned_with_large_hole)
 
   // Writes should grow to 4k
   ECUtil::shard_extent_set_t ref_write(sinfo.get_k_plus_m());
-  ref_write[shard_id_t(0)].insert(12*4096, 4096);
-  ref_write[shard_id_t(2)].insert(12*4096, 4096);
+  ref_write[shard_id_t(0)].insert(12*EC_ALIGN_SIZE, EC_ALIGN_SIZE);
+  ref_write[shard_id_t(2)].insert(12*EC_ALIGN_SIZE, EC_ALIGN_SIZE);
   ASSERT_EQ(ref_write, plan.will_write);
 }
 
@@ -329,14 +329,14 @@ TEST(ectransaction, test_overwrite_with_missing)
   bufferlist a;
 
   // We have a 4k write quite a way after the current limit of a 4k object
-  a.append_zero(14*1024);
+  a.append_zero(14 * (EC_ALIGN_SIZE / 4));
   op.buffer_updates.insert(0, a.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{a, 0});
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_t sinfo(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
-  oi.size = 42*1024;
+  oi.size = 42*(EC_ALIGN_SIZE / 4);
   shard_id_set shards;
   shards.insert(shard_id_t(0));
   shards.insert(shard_id_t(1));
@@ -348,7 +348,7 @@ TEST(ectransaction, test_overwrite_with_missing)
     shards,
     shards,
     false,
-    42*1024,
+    42*(EC_ALIGN_SIZE / 4),
     oi,
     std::nullopt,
     ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
@@ -360,13 +360,13 @@ TEST(ectransaction, test_overwrite_with_missing)
   // No reads (because not yet written)
   ASSERT_TRUE(plan.to_read);
   ECUtil::shard_extent_set_t ref_read(sinfo.get_k_plus_m());
-  ref_read[shard_id_t(1)].insert(4096, 4096);
+  ref_read[shard_id_t(1)].insert(EC_ALIGN_SIZE, EC_ALIGN_SIZE);
   ASSERT_EQ(ref_read, plan.to_read);
 
   // Writes should grow to 4k
   ECUtil::shard_extent_set_t ref_write(sinfo.get_k_plus_m());
-  ref_write[shard_id_t(0)].insert(0, 8192);
-  ref_write[shard_id_t(1)].insert(0, 8192);
+  ref_write[shard_id_t(0)].insert(0, 2 * EC_ALIGN_SIZE);
+  ref_write[shard_id_t(1)].insert(0, 2 * EC_ALIGN_SIZE);
   ASSERT_EQ(ref_write, plan.will_write);
 }
 
