@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        bluestore onode segment size: 512K
+        bluestore debug onode segmentation random: true
+
