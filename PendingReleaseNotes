@@ -19,6 +19,10 @@
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a
   ``$GETOPT`` environment override so GNU getopt can be selected
   (``brew install bash gnu-getopt``).
+
+* CephFS: Added support to search using filter for the commands used for listing the
+  volumes, subvolumes, subvolumegroups, snapshots.
+
 * CephFS: Added a multi-tiered scoring matrix to the MDS Monitor to dynamically
   prioritize standby promotion during failover events. The `mds_join_fs` configuration
   variable is now checked in combination with infrastructure topology rules to enforce
