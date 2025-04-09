@@ -5,7 +5,9 @@
 #include "bluefs_types.h"
 #include "BlueFS.h"
 #include "common/Formatter.h"
+#include "include/byteorder.h"
 #include "include/denc.h"
+#include "include/encoding.h"
 #include "include/uuid.h"
 #include "include/stringify.h"
 
@@ -176,19 +178,28 @@ bluefs_super_t::bluefs_super_t() : seq(0), block_size(4096) {
 
 void bluefs_super_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 1, bl);
+  ceph_assert(_version >= BASELINE);
+  __u8 _compat = 1;
+  if (_version == ENVELOPE_MODE_ENABLED) {
+    _compat = ENVELOPE_MODE_ENABLED;
+  }
+  ENCODE_START(_version, _compat, bl);
   encode(uuid, bl);
   encode(osd_uuid, bl);
   encode(seq, bl);
   encode(block_size, bl);
   encode(log_fnode, bl);
   encode(memorized_layout, bl);
+  if (_version >= 3) {
+    encode(wal_version, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void bluefs_super_t::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START(2, p);
+
+  DECODE_START(3, p);
   decode(uuid, p);
   decode(osd_uuid, p);
   decode(seq, p);
@@ -196,6 +207,9 @@ void bluefs_super_t::decode(bufferlist::const_iterator& p)
   decode(log_fnode, p);
   if (struct_v >= 2) {
     decode(memorized_layout, p);
+  }
+  if (struct_v >= 3) {
+    decode(wal_version, p);
   }
   DECODE_FINISH(p);
 }
@@ -265,6 +279,9 @@ bluefs_fnode_delta_t* bluefs_fnode_t::make_delta(bluefs_fnode_delta_t* delta) {
   delta->mtime = mtime;
   delta->offset = allocated_commited;
   delta->extents.clear();
+
+  delta->encoding = encoding;
+  delta->content_size = content_size;
   if (allocated_commited < allocated) {
     uint64_t x_off = 0;
     auto p = seek(allocated_commited, &x_off);
@@ -302,29 +319,46 @@ void bluefs_fnode_t::generate_test_instances(list<bluefs_fnode_t*>& ls)
   ls.back()->mtime = utime_t(123,45);
   ls.back()->extents.push_back(bluefs_extent_t(0, 1048576, 4096));
   ls.back()->__unused__ = 1;
+  ls.back()->encoding = 0;
 }
 
 ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
 {
-  return out << "file(ino " << file.ino
+  out << "file(ino " << file.ino
 	     << " size 0x" << std::hex << file.size << std::dec
 	     << " mtime " << file.mtime
 	     << " allocated " << std::hex << file.allocated << std::dec
 	     << " alloc_commit " << std::hex << file.allocated_commited << std::dec
-	     << " extents " << file.extents
-	     << ")";
+	     << " extents " << file.extents;
+  if (file.encoding == ENVELOPE || file.encoding == ENVELOPE_FIN) {
+    out << " content-size 0x" << std::hex << file.content_size << std::dec << std::hex;
+    if (file.encoding == ENVELOPE)
+      out << " ENVELOPE " << std::dec;
+    if (file.encoding == ENVELOPE_FIN)
+      out << " ENVELOPE-FIN " << std::dec;
+  }
+  out << ")";
+  return out;
 }
 
 // bluefs_fnode_delta_t
 
 std::ostream& operator<<(std::ostream& out, const bluefs_fnode_delta_t& delta)
 {
-  return out << "delta(ino " << delta.ino
-	     << " size 0x" << std::hex << delta.size << std::dec
-	     << " mtime " << delta.mtime
-	     << " offset " << std::hex << delta.offset << std::dec
-	     << " extents " << delta.extents
-	     << ")";
+  out << "delta(ino " << delta.ino
+    << " size 0x" << std::hex << delta.size << std::dec
+    << " mtime " << delta.mtime
+    << " offset " << std::hex << delta.offset << std::dec
+    << " extents " << delta.extents;
+  if (delta.encoding == ENVELOPE || delta.encoding == ENVELOPE_FIN) {
+    out << " content-size 0x" << std::hex << delta.content_size << std::dec << std::hex;
+    if (delta.encoding == ENVELOPE)
+      out << " ENVELOPE" << std::dec;
+    if (delta.encoding == ENVELOPE_FIN)
+      out << " ENVELOPE-FIN" << std::dec;
+  }
+  out << ")";
+  return out;
 }
 
 // bluefs_transaction_t
@@ -404,4 +438,3 @@ ostream& operator<<(ostream& out, const bluefs_transaction_t& t)
 	     << " crc 0x" << t.op_bl.crc32c(-1)
 	     << std::dec << ")";
 }
-

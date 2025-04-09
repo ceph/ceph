@@ -3147,6 +3147,7 @@ public:
   int repair(bool deep) override {
     return _fsck(deep ? FSCK_DEEP : FSCK_REGULAR, true);
   }
+  int revert_wal_to_plain();
   int quick_fix() override {
     return _fsck(FSCK_SHALLOW, true);
   }
