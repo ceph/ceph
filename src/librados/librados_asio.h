@@ -268,6 +268,65 @@ auto async_operate(IoExecutor ex, IoCtx& io, const std::string& oid,
       }, token, ex, io, oid, std::move(write_op), flags, trace_ctx);
 }
 
+/// Calls IoCtx::aio_watch2() and arranges for the AioCompletion to call a
+/// given handler with signature (error_code, version_t).
+///
+/// The given IoCtx reference is not required to remain valid, but some IoCtx
+/// instance must preserve its underlying implementation until completion.
+template <boost::asio::execution::executor IoExecutor, typename CompletionToken>
+auto async_watch(IoExecutor ex, IoCtx& io, const std::string& oid,
+                 uint64_t* handle, librados::WatchCtx2* ctx,
+                 uint32_t timeout_ms, CompletionToken &&token)
+{
+  using Op = detail::AsyncOp<void>;
+  using Signature = typename Op::Signature;
+  return boost::asio::async_initiate<CompletionToken, Signature>(
+      [] (auto handler, IoExecutor ex, const IoCtx& i, const std::string& oid,
+          uint64_t* handle, librados::WatchCtx2* ctx, uint32_t timeout_ms) {
+        constexpr bool is_read = false;
+        auto p = Op::create(ex, is_read, std::move(handler));
+        auto& op = p->user_data;
+
+        IoCtx& io = const_cast<IoCtx&>(i);
+        int ret = io.aio_watch2(oid, op.aio_completion.get(),
+                                handle, ctx, timeout_ms);
+        if (ret < 0) {
+          auto ec = boost::system::error_code{-ret, librados::detail::err_category()};
+          ceph::async::post(std::move(p), ec, 0);
+        } else {
+          p.release(); // release ownership until completion
+        }
+      }, token, ex, io, oid, handle, ctx, timeout_ms);
+}
+
+/// Calls IoCtx::aio_unwatch() and arranges for the AioCompletion to call a
+/// given handler with signature (error_code, version_t).
+///
+/// The given IoCtx reference is not required to remain valid, but some IoCtx
+/// instance must preserve its underlying implementation until completion.
+template <boost::asio::execution::executor IoExecutor, typename CompletionToken>
+auto async_unwatch(IoExecutor ex, IoCtx& io, uint64_t handle,
+                   CompletionToken &&token)
+{
+  using Op = detail::AsyncOp<void>;
+  using Signature = typename Op::Signature;
+  return boost::asio::async_initiate<CompletionToken, Signature>(
+      [] (auto handler, IoExecutor ex, const IoCtx& i, uint64_t handle) {
+        constexpr bool is_read = false;
+        auto p = Op::create(ex, is_read, std::move(handler));
+        auto& op = p->user_data;
+
+        IoCtx& io = const_cast<IoCtx&>(i);
+        int ret = io.aio_unwatch(handle, op.aio_completion.get());
+        if (ret < 0) {
+          auto ec = boost::system::error_code{-ret, librados::detail::err_category()};
+          ceph::async::post(std::move(p), ec, 0);
+        } else {
+          p.release(); // release ownership until completion
+        }
+      }, token, ex, io, handle);
+}
+
 /// Calls IoCtx::aio_notify() and arranges for the AioCompletion to call a
 /// given handler with signature (error_code, version_t, bufferlist).
 ///
