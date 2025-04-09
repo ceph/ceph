@@ -271,6 +271,7 @@ public:
   struct BufferSpace;
   struct Collection;
   struct Onode;
+  class Estimator;
   typedef boost::intrusive_ptr<Collection> CollectionRef;
   typedef boost::intrusive_ptr<Onode> OnodeRef;
 
