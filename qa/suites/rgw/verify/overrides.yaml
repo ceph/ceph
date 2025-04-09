@@ -17,7 +17,9 @@ overrides:
         rgw reshard progress judge interval: 10
   rgw:
     compression type: random
-    storage classes: LUKEWARM, FROZEN
+    storage classes:
+      LUKEWARM:
+      FROZEN:
   s3tests:
     storage classes: LUKEWARM, FROZEN
     accounts:
