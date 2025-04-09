@@ -19,6 +19,12 @@ prometheus_stats_interval = {{ spec.prometheus_stats_interval }}
 verify_nqns = {{ spec.verify_nqns }}
 verify_keys = {{ spec.verify_keys }}
 verify_listener_ip = {{ spec.verify_listener_ip }}
+# This is a development flag, do not change it
+abort_on_errors = {{ spec.abort_on_errors }}
+# This is a development flag, do not change it
+omap_file_ignore_unlock_errors = {{ spec.omap_file_ignore_unlock_errors }}
+# This is a development flag, do not change it
+omap_file_lock_on_read = {{ spec.omap_file_lock_on_read }}
 omap_file_lock_duration = {{ spec.omap_file_lock_duration }}
 omap_file_lock_retries = {{ spec.omap_file_lock_retries }}
 omap_file_lock_retry_sleep_interval = {{ spec.omap_file_lock_retry_sleep_interval }}
@@ -48,6 +54,8 @@ log_directory = {{ spec.log_directory }}
 [discovery]
 addr = {{ discovery_addr }}
 port = {{ spec.discovery_port }}
+# This is a development flag, do not change it
+abort_on_errors = {{ spec.abort_discovery_on_errors }}
 
 [ceph]
 pool = {{ spec.pool }}
