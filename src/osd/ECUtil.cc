@@ -161,7 +161,7 @@ void ECUtil::stripe_info_t::trim_shard_extent_set_for_ro_offset(
       ro_offset, raw_shard_id_t(0));
     for (auto &&iter = shard_extent_set.begin(); iter != shard_extent_set.end()
          ;) {
-      iter->second.erase_after(align_page_next(shard_offset));
+      iter->second.erase_after(align_next(shard_offset));
       if (iter->second.empty()) iter = shard_extent_set.erase(iter);
       else ++iter;
     }
@@ -179,7 +179,7 @@ void ECUtil::stripe_info_t::ro_size_to_stripe_aligned_read_mask(
 void ECUtil::stripe_info_t::ro_size_to_read_mask(
     uint64_t ro_size,
     shard_extent_set_t &shard_extent_set) const {
-  ro_range_to_shard_extent_set_with_parity(0, align_page_next(ro_size),
+  ro_range_to_shard_extent_set_with_parity(0, align_next(ro_size),
                                            shard_extent_set);
 }
 
@@ -187,9 +187,9 @@ void ECUtil::stripe_info_t::ro_size_to_zero_mask(
     uint64_t ro_size,
     shard_extent_set_t &shard_extent_set) const {
   // There should never be any zero padding on the parity.
-  ro_range_to_shard_extent_set(align_page_next(ro_size),
+  ro_range_to_shard_extent_set(align_next(ro_size),
                                ro_offset_to_next_stripe_ro_offset(ro_size) -
-                               align_page_next(ro_size),
+                               align_next(ro_size),
                                shard_extent_set);
   trim_shard_extent_set_for_ro_offset(ro_size, shard_extent_set);
 }
@@ -470,7 +470,7 @@ void shard_extent_map_t::insert_parity_buffers() {
           continue;
       }
       bufferlist bl;
-      bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
+      bl.push_back(buffer::create_aligned(length, EC_ALIGN_SIZE));
       extent_maps[shard].insert(offset, length, bl);
     }
   }
@@ -503,7 +503,7 @@ int shard_extent_map_t::_encode(const ErasureCodeInterfaceRef &ec_impl) {
   }
 
   if (rebuild_req) {
-    pad_and_rebuild_to_page_align();
+    pad_and_rebuild_to_ec_align();
     return _encode(ec_impl);
   }
 
@@ -544,8 +544,8 @@ int shard_extent_map_t::encode_parity_delta(
     shard_extent_map_t &old_sem) {
   shard_id_set out_set = sinfo->get_parity_shards();
 
-  pad_and_rebuild_to_page_align();
-  old_sem.pad_and_rebuild_to_page_align();
+  pad_and_rebuild_to_ec_align();
+  old_sem.pad_and_rebuild_to_ec_align();
 
   for (auto data_shard : sinfo->get_data_shards()) {
     shard_extent_map_t s(sinfo);
@@ -568,9 +568,9 @@ int shard_extent_map_t::encode_parity_delta(
       shard_id_map<bufferptr> &parity_shards = iter.get_out_bufferptrs();
 
       unsigned int size = iter.get_length();
-      ceph_assert(size % 4096 == 0);
+      ceph_assert(size % EC_ALIGN_SIZE == 0);
       ceph_assert(size > 0);
-      bufferptr delta = buffer::create_aligned(size, CEPH_PAGE_SIZE);
+      bufferptr delta = buffer::create_aligned(size, EC_ALIGN_SIZE);
 
       if (data_shards[shard_id_t(0)].length() != 0 && data_shards[shard_id_t(1)]
         .length() != 0) {
@@ -595,7 +595,7 @@ void shard_extent_map_t::pad_on_shards(const shard_extent_set_t &pad_to,
     }
     for (auto &[off, length] : pad_to.at(shard)) {
       bufferlist bl;
-      bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
+      bl.push_back(buffer::create_aligned(length, EC_ALIGN_SIZE));
       insert_in_shard(shard, off, bl);
     }
   }
@@ -606,7 +606,7 @@ void shard_extent_map_t::pad_on_shards(const extent_set &pad_to,
   for (auto &shard : shards) {
     for (auto &[off, length] : pad_to) {
       bufferlist bl;
-      bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
+      bl.push_back(buffer::create_aligned(length, EC_ALIGN_SIZE));
       insert_in_shard(shard, off, bl);
     }
   }
@@ -719,7 +719,7 @@ int shard_extent_map_t::_decode(const ErasureCodeInterfaceRef &ec_impl,
   }
 
   if (rebuild_req) {
-    pad_and_rebuild_to_page_align();
+    pad_and_rebuild_to_ec_align();
     return _decode(ec_impl, want_set, need_set);
   }
 
@@ -728,7 +728,7 @@ int shard_extent_map_t::_decode(const ErasureCodeInterfaceRef &ec_impl,
   return 0;
 }
 
-void shard_extent_map_t::pad_and_rebuild_to_page_align() {
+void shard_extent_map_t::pad_and_rebuild_to_ec_align() {
   bool resized = false;
   for (auto &&[shard, emap] : extent_maps) {
     extent_map aligned;
@@ -742,21 +742,21 @@ void shard_extent_map_t::pad_and_rebuild_to_page_align() {
       uint64_t start = i.get_off();
       uint64_t end = start + i.get_len();
 
-      if ((start & ~CEPH_PAGE_MASK) != 0) {
-        bl.prepend_zero(start - (start & CEPH_PAGE_MASK));
-        start = start & CEPH_PAGE_MASK;
+      if ((start & ~EC_ALIGN_MASK) != 0) {
+        bl.prepend_zero(start - (start & EC_ALIGN_MASK));
+        start = start & EC_ALIGN_MASK;
         resized_i = true;
       }
-      if ((end & ~CEPH_PAGE_MASK) != 0) {
-        bl.append_zero((end & CEPH_PAGE_MASK) + CEPH_PAGE_SIZE - end);
-        end = (end & CEPH_PAGE_MASK) + CEPH_PAGE_SIZE;
+      if ((end & ~EC_ALIGN_MASK) != 0) {
+        bl.append_zero((end & EC_ALIGN_MASK) + EC_ALIGN_SIZE - end);
+        end = (end & EC_ALIGN_MASK) + EC_ALIGN_SIZE;
         resized_i = true;
       }
 
       // Perhaps we can get away without page aligning here and only SIMD
       // align. However, typical workloads are actually page aligned already,
       // so this should not cause problems on any sensible workload.
-      if (bl.rebuild_aligned_size_and_memory(bl.length(), CEPH_PAGE_SIZE) ||
+      if (bl.rebuild_aligned_size_and_memory(bl.length(), EC_ALIGN_SIZE) ||
         resized_i) {
         // We are not permitted to modify the emap while iterating.
         aligned.insert(start, end - start, bl);
