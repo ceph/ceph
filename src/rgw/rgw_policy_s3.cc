@@ -295,8 +295,8 @@ dout(0) << "JFW: -------------------- parse OK after retry" << dendl;
 }
 
 //JFW:    return -EINVAL;
- 
- return 0; // JFW: OK
+
+err_msg.clear();
 }
 
   // as no time was included in the request, we hope that the user has included a short timeout

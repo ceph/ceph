@@ -3348,6 +3348,7 @@ ldpp_dout(this, 0) << "JFW: decoded_policy: " << decoded_policy.c_str() << dendl
 	err_msg = "Failed to parse policy";
       }
       ldpp_dout(this, 0) << "failed to parse policy" << dendl;
+      ldpp_dout(this, 0) << "JFW: err_msg = " << err_msg << dendl;
       return -EINVAL;
     }
 
