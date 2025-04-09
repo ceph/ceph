@@ -17,7 +17,6 @@ from orchestrator import OrchestratorClientMixin, raise_if_exception, Orchestrat
 from rbd import RBD
 
 from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List, Callable, IO
-
 LabelValues = Tuple[str, ...]
 Number = Union[int, float]
 MetricValue = Dict[LabelValues, Number]
@@ -94,7 +93,7 @@ OSD_STATUS = ['weight', 'up', 'in']
 
 OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
-POOL_METADATA = ('pool_id', 'name', 'type', 'description', 'compression_mode')
+POOL_METADATA = ('pool_id', 'name', 'type', 'description', 'compression_mode', 'application')
 
 RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version', 'instance_id')
 
@@ -1267,13 +1266,23 @@ class Module(MgrModule, OrchestratorClientMixin):
             if 'options' in pool:
                 compression_mode = pool['options'].get('compression_mode', 'none')
 
+            storage_type = {'rbd': 'Block',
+                'cephfs': 'Filesystem',
+                'rgw': 'Object'}
+
+            application_metadata = pool.get('application_metadata', {})
+            application_metadata_str = ', '.join(storage_type.get(str(k))
+                                        if storage_type.get(str(k)) else str(k)
+                                        for k in application_metadata)
             self.metrics['pool_metadata'].set(
                 1, (
                     pool['pool'],
                     pool['pool_name'],
                     pool_type,
                     pool_description,
-                    compression_mode)
+                    compression_mode,
+                    application_metadata_str,
+                ),
             )
 
         # Populate other servers metadata
