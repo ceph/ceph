@@ -169,7 +169,7 @@ int RadosBucket::create(const DoutPrefixProvider* dpp,
   key.bucket_id = params.bucket_id;
 
   int ret = store->getRados()->create_bucket(
-      dpp, y, key, params.owner, params.zonegroup_id,
+      dpp, y, key, params.owner, params.zonegroup_id, params.local_zone_id,
       params.placement_rule, params.zone_placement, params.attrs,
       params.obj_lock_enabled, params.swift_ver_location,
       params.quota, params.creation_time, params.index_type,
