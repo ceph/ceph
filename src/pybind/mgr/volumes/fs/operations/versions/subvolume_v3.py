@@ -32,6 +32,12 @@ class PreV3Helper:
     def snapshot_base_path(self):
         return self.get_incar_snap_base_path()
 
+    def snapshot_path(self, snap_name, uuid=None):
+        '''
+        Path to a specific snapshot named 'snap_name'.
+        '''
+        self.get_snap_path()
+
 
 class SubvolumeV3(SubvolumeV2):
     '''
@@ -199,32 +205,17 @@ class SubvolumeV3(SubvolumeV2):
     # ----- methods for snapshot creation -----
 
 
-    def snapshot_path(self, snap_name, uuid=None):
-        '''
-        Path to a specific snapshot named 'snap_name'.
-        '''
-        self.get_snap_path()
-
     def get_incar_uuid_for_snap(self, snap_name):
         '''
         Return incarnation's UUID in which the snapshot name is present.
         When multiple incarnations for a subvolume exists, check if a snap
         exists in one of the incarnations.
         '''
-        # list of all incarnations/UUID dirs of this subvolume.
-        incars = listdir(self.fs, self.roots_dir)
-
-        for incar_uuid in incars:
+        for uuid in self.get_v3_incars():
             # construct path to ".snap" directory for given UUID.
-            snap_dir = join(self.roots_dir, incar_uuid,
-                            self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
-            all_snap_names = listdir(self.fs, snap_dir)
-            # encode since listdir() call above returns list of bytes and list
-            # of str
-            if snap_name.encode('utf-8') in all_snap_names:
-                return incar_uuid
-
-        return None
+            path = self.get_incar_snap_base_path(uuid)
+            if snap_name in self.list_snaps(path):
+                return uuid
 
     def create_snapshot(self, snap_name):
         if self.get_incar_uuid_for_snap(snap_name) != None:
