@@ -225,7 +225,7 @@ struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
         pre_assert();
       }
       if (msg) {
-        ceph_abort(msg);
+        ceph_abort_msg(msg);
       } else {
         ceph_abort();
       }
@@ -319,7 +319,7 @@ struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
         }
       }
       if (msg) {
-        ceph_abort(msg);
+        ceph_abort_msg(msg);
       } else {
         ceph_abort();
       }
@@ -1351,7 +1351,7 @@ namespace ct_error {
         pre_assert();
       }
       if (msg) {
-        ceph_abort(msg);
+        ceph_abort_msg(msg);
       } else {
         ceph_abort();
       }
