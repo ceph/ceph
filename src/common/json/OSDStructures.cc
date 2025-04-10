@@ -173,7 +173,7 @@ void InjectECParityRead::decode_json(JSONObj* obj) {
 }
 
 void InjectECClearParityRead::dump(Formatter* f) const {
-  encode_json("prefix", "injectparityread", f);
+  encode_json("prefix", "injectclearparityread", f);
   encode_json("pool", pool, f);
   encode_json("objname", objname, f);
 }
