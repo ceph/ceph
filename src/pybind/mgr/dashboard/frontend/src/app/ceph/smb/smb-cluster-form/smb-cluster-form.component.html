@@ -96,6 +96,7 @@
               />
               <cds-icon-button kind="ghost"
                                (click)="editDomainSettingsModal()"
+                               data-cy="editDomainSettingsModal"
                                size="md">
                 <svg cdsIcon="edit"
                      size="32"
@@ -140,6 +141,7 @@
             <cds-select
               label="Standalone user access resources"
               i18n-label
+              [id]="i"
               [formControlName]="i"
               [invalid]="smbForm.controls.joinSources.controls[i].invalid && smbForm.controls.joinSources.controls[i].dirty"
               [invalidText]="ugError"
