@@ -452,7 +452,6 @@ void GroupReplayer<I>::restart(Context *on_finish) {
   {
     std::lock_guard locker{m_lock};
     m_restart_requested = true;
-    m_on_start_finish = nullptr;
   }
 
   auto ctx = new LambdaContext(
