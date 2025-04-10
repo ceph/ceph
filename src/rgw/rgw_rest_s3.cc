@@ -75,6 +75,7 @@
 #include "rgw_sal_rados.h"
 #include "rgw_cksum_pipe.h"
 #include "rgw_s3select.h"
+#include "rgw_process_env.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -2558,10 +2559,12 @@ struct RGWCreateBucketIndex : XMLObj {
 struct RGWCreateBucketConfig : XMLObj {
   XMLObj* location_constraint = nullptr;
   RGWCreateBucketIndex* index = nullptr;
+  XMLObj* redundancy = nullptr;
 
   bool xml_end(const char*) override {
     location_constraint = find_first("LocationConstraint");
     index = static_cast<RGWCreateBucketIndex*>(find_first("BucketIndex"));
+    redundancy = find_first("DataRedundancy");
     return true;
   }
 };
@@ -2668,6 +2671,19 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
           return -EINVAL;
         }
         createparams.index_shards = val;
+      }
+    }
+
+    if (config->redundancy) {
+      const std::string value = config->redundancy->get_data();
+      if (value == "ZoneGroup") {
+        // zonegroup replication enabled by default
+      } else if (value == "SingleZone") {
+        // pin the bucket to the local zone id
+        createparams.local_zone_id = s->penv.site->get_zone_params().id;
+      } else {
+        s->err.message = "DataRedundancy must be ZoneGroup or SingleZone";
+        return -EINVAL;
       }
     }
   }
