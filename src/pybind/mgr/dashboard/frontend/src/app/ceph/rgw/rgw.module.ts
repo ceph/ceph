@@ -99,6 +99,7 @@ import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
 import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
 import { RgwCreateTopicFormComponent } from './rgw-create-topic-form/rgw-create-topic-form.component';
+import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
 
 @NgModule({
   imports: [
@@ -199,7 +200,8 @@ import { RgwCreateTopicFormComponent } from './rgw-create-topic-form/rgw-create-
     RgwRateLimitDetailsComponent,
     RgwTopicListComponent,
     RgwTopicDetailsComponent,
-    RgwCreateTopicFormComponent
+    RgwCreateTopicFormComponent,
+    RgwBucketNotificationListComponent
   ],
   providers: [TitleCasePipe]
 })
