@@ -72,22 +72,57 @@ def get_pool_ids(mgr, volname):
         return None, None
     return metadata_pool_id, data_pool_ids
 
-def create_volume(mgr, volname, placement):
-    """
-    create volume  (pool, filesystem and mds)
-    """
+def create_fs_pools(mgr, volname, data_pool, metadata_pool):
+    '''
+    Generate names of metadata pool and data pool and create these pools.
+
+    This methods returns a list where the first member represents whether or
+    not this method ran successfullly.
+    '''
+    assert not data_pool and not metadata_pool
+
     metadata_pool, data_pool = gen_pool_names(volname)
-    # create pools
+
     r, outb, outs = create_pool(mgr, metadata_pool)
     if r != 0:
-        return r, outb, outs
+        return [False, r, outb, outs]
+
     # default to a bulk pool for data. In case autoscaling has been disabled
-    # for the cluster with `ceph osd pool set noautoscale`, this will have no effect.
+    # for the cluster with `ceph osd pool set noautoscale`, this will have
+    # no effect.
     r, outb, outs = create_pool(mgr, data_pool, bulk=True)
+    # cleanup
     if r != 0:
-        #cleanup
         remove_pool(mgr, metadata_pool)
-        return r, outb, outs
+        return [False, r, outb, outs]
+
+    return [True, data_pool, metadata_pool]
+
+def create_volume(mgr, volname, placement, data_pool, metadata_pool):
+    """
+    Create volume, create pools if pool names are not passed and create MDS
+    based on placement passed.
+    """
+    # although writing this case is technically redundant (because pool names
+    # are passed by user they must exist already), leave it here so that some
+    # future readers know that this case is already considered and not missed
+    # by chance.
+    if data_pool and metadata_pool:
+        pass
+    elif not data_pool and metadata_pool:
+        errmsg = 'data pool name isn\'t passed'
+        return -errno.EINVAL, '', errmsg
+    elif data_pool and not metadata_pool:
+        errmsg = 'metadata pool name isn\'t passed'
+        return -errno.EINVAL, '', errmsg
+    elif not data_pool and not metadata_pool:
+        retval = create_fs_pools(mgr, volname, data_pool, metadata_pool)
+        success = retval.pop(0)
+        if success:
+            data_pool, metadata_pool = retval
+        else:
+            return retval
+
     # create filesystem
     r, outb, outs = create_filesystem(mgr, volname, metadata_pool, data_pool)
     if r != 0:
