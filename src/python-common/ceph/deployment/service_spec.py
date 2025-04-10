@@ -1380,6 +1380,9 @@ class NvmeofServiceSpec(ServiceSpec):
                  rebalance_period_sec: Optional[int] = 7,
                  max_gws_in_grp: Optional[int] = 16,
                  max_ns_to_change_lb_grp: Optional[int] = 8,
+                 abort_on_errors: Optional[bool] = True,
+                 omap_file_ignore_unlock_errors: Optional[bool] = False,
+                 omap_file_lock_on_read: Optional[bool] = True,
                  omap_file_lock_duration: Optional[int] = 20,
                  omap_file_lock_retries: Optional[int] = 30,
                  omap_file_lock_retry_sleep_interval: Optional[float] = 1.0,
@@ -1400,7 +1403,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  max_namespaces_with_netmask: Optional[int] = 1000,
                  max_subsystems: Optional[int] = 128,
                  max_hosts: Optional[int] = 2048,
-                 max_namespaces: Optional[int] = 1024,
+                 max_namespaces: Optional[int] = 2048,
                  max_namespaces_per_subsystem: Optional[int] = 256,
                  max_hosts_per_subsystem: Optional[int] = 128,
                  server_key: Optional[str] = None,
@@ -1428,6 +1431,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  discovery_addr: Optional[str] = None,
                  discovery_addr_map: Optional[Dict[str, str]] = None,
                  discovery_port: Optional[int] = None,
+                 abort_discovery_on_errors: Optional[bool] = True,
                  log_level: Optional[str] = 'INFO',
                  log_files_enabled: Optional[bool] = True,
                  log_files_rotation_enabled: Optional[bool] = True,
@@ -1497,6 +1501,12 @@ class NvmeofServiceSpec(ServiceSpec):
         self.verify_keys = verify_keys
         #: ``verify_listener_ip`` enables verification of listener IP address
         self.verify_listener_ip = verify_listener_ip
+        #: ``abort_on_errors`` abort gateway in case of errors
+        self.abort_on_errors = abort_on_errors
+        #: ``omap_file_ignore_unlock_errors`` ignore errors when unlocking the OMAP file
+        self.omap_file_ignore_unlock_errors = omap_file_ignore_unlock_errors
+        #: ``omap_file_lock_on_read`` lock omap when reading its content
+        self.omap_file_lock_on_read = omap_file_lock_on_read
         #: ``omap_file_lock_duration`` number of seconds before automatically unlock OMAP file lock
         self.omap_file_lock_duration = omap_file_lock_duration
         #: ``omap_file_lock_retries`` number of retries to lock OMAP file before giving up
@@ -1587,6 +1597,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.discovery_addr_map = discovery_addr_map
         #: ``discovery_port`` port of the discovery service
         self.discovery_port = discovery_port or 8009
+        #: ``abort_discovery_on_errors`` abort discovery service in case of errors
+        self.abort_discovery_on_errors = abort_discovery_on_errors
         #: ``log_level`` the nvmeof gateway log level
         self.log_level = log_level or 'INFO'
         #: ``log_files_enabled`` enables the usage of files to keep the nameof gateway log
@@ -1694,6 +1706,9 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_non_negative_int(self.max_gws_in_grp, "Max gateways in group")
         verify_non_negative_int(self.max_ns_to_change_lb_grp,
                                 "Max namespaces to change load balancing group")
+        verify_boolean(self.abort_on_errors, "Abort gateway on errors")
+        verify_boolean(self.omap_file_ignore_unlock_errors, "Ignore OMAP file unlock errors")
+        verify_boolean(self.omap_file_lock_on_read, "Lock OMAP on read")
         verify_non_negative_int(self.omap_file_lock_duration, "OMAP file lock duration")
         verify_non_negative_number(self.omap_file_lock_retry_sleep_interval,
                                    "OMAP file lock sleep interval")
@@ -1713,6 +1728,7 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_non_negative_number(self.monitor_timeout, "Monitor timeout")
         verify_non_negative_int(self.port, "Port")
         verify_non_negative_int(self.discovery_port, "Discovery port")
+        verify_boolean(self.abort_discovery_on_errors, "Abort discovery service on errors")
         verify_non_negative_int(self.prometheus_port, "Prometheus port")
         verify_non_negative_int(self.prometheus_stats_interval, "Prometheus stats interval")
         verify_boolean(self.state_update_notify, "State update notify")
