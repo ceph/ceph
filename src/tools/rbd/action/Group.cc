@@ -779,25 +779,26 @@ int execute_group_snap_list(const po::variables_map &vm,
   for (const auto& snap : snaps) {
     auto state_string = get_group_snap_state_name(snap.state);
     auto type_string = get_group_snap_namespace_name(snap.namespace_type);
+
+    int get_mirror_res = -ENOENT;
     librbd::group_snap_mirror_namespace_t mirror_snap;
     std::string mirror_snap_state = "unknown";
     if (snap.namespace_type == RBD_GROUP_SNAP_NAMESPACE_TYPE_MIRROR) {
-      r = rbd.group_snap_get_mirror_namespace(io_ctx, group_name.c_str(),
-                                              snap.id.c_str(), &mirror_snap);
-      if (r < 0) {
-        return r;
-      }
-      switch (mirror_snap.state) {
-        case RBD_SNAP_MIRROR_STATE_PRIMARY:
-            mirror_snap_state = "primary";
-            break;
-        case RBD_SNAP_MIRROR_STATE_NON_PRIMARY:
-            mirror_snap_state = "non-primary";
-            break;
-        case RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED:
-        case RBD_SNAP_MIRROR_STATE_NON_PRIMARY_DEMOTED:
-            mirror_snap_state = "demoted";
-            break;
+      get_mirror_res = rbd.group_snap_get_mirror_namespace(
+        io_ctx, group_name.c_str(), snap.id.c_str(), &mirror_snap);
+      if (get_mirror_res == 0) {
+        switch (mirror_snap.state) {
+          case RBD_SNAP_MIRROR_STATE_PRIMARY:
+              mirror_snap_state = "primary";
+              break;
+          case RBD_SNAP_MIRROR_STATE_NON_PRIMARY:
+              mirror_snap_state = "non-primary";
+              break;
+          case RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED:
+          case RBD_SNAP_MIRROR_STATE_NON_PRIMARY_DEMOTED:
+              mirror_snap_state = "demoted";
+              break;
+        }
       }
     }
 
@@ -808,7 +809,7 @@ int execute_group_snap_list(const po::variables_map &vm,
       f->dump_string("state", state_string);
       f->open_object_section("namespace");
       f->dump_string("type", type_string);
-      if (snap.namespace_type == RBD_GROUP_SNAP_NAMESPACE_TYPE_MIRROR) {
+      if (get_mirror_res == 0) {
         f->dump_string("state", mirror_snap_state);
         f->open_array_section("mirror_peer_uuids");
         for (auto &uuid : mirror_snap.mirror_peer_uuids) {
@@ -828,7 +829,7 @@ int execute_group_snap_list(const po::variables_map &vm,
       t << snap.id << snap.name << state_string;
       std::ostringstream oss;
       oss << type_string;
-      if (snap.namespace_type == RBD_GROUP_SNAP_NAMESPACE_TYPE_MIRROR) {
+      if (get_mirror_res == 0) {
         oss << " (" << mirror_snap_state << " "
                     << "peer_uuids:[" << mirror_snap.mirror_peer_uuids << "]";
         if (mirror_snap.state == RBD_SNAP_MIRROR_STATE_NON_PRIMARY ||
