@@ -53,7 +53,15 @@ def name_to_json(names):
     """
     namedict = []
     for i in range(len(names)):
-        namedict.append({'name': names[i].decode('utf-8')})
+        if isinstance(names[i], bytes):
+            name = names[i].decode('utf-8')
+        elif isinstance(names[i], str):
+            name = names[i]
+        else:
+            raise RuntimeError('variable "name" should\'ve been type str or '
+                               f'type bytes but is {type(name)}. it\'s value '
+                               f'is "{name}"')
+        namedict.append({'name': name})
     return json.dumps(namedict, indent=4, sort_keys=True)
 
 
@@ -634,6 +642,24 @@ class VolumeClient(CephfsClient["Module"]):
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def _filter_in_if_current_incar_exists(self, subvol_name_list, fs_handle, group):
+        '''
+        Remove names of subvolumes the current incarnation for which don't exist
+        from the received list of subvolume names.
+        '''
+        names_of_unexisting_subvols = []
+
+        for sv_name in subvol_name_list:
+            with open_subvol(self.mgr, fs_handle, self.volspec, group, sv_name,
+                             SubvolumeOpType.LIST) as subvol:
+                if not subvol.current_incar_exists():
+                    names_of_unexisting_subvols.append(sv_name)
+
+        for sv_name in names_of_unexisting_subvols:
+            subvol_name_list.remove(sv_name)
+
+        return subvol_name_list
+
     def list_subvolumes(self, **kwargs):
         ret        = 0, "", ""
         volname    = kwargs['vol_name']
@@ -643,6 +669,9 @@ class VolumeClient(CephfsClient["Module"]):
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     subvolumes = group.list_subvolumes()
+                    subvolumes = [sv_name.decode('utf-8') for sv_name in subvolumes]
+                    subvolumes = self._filter_in_if_current_incar_exists(
+                        subvolumes, fs_handle, group)
                     ret = 0, name_to_json(subvolumes), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
