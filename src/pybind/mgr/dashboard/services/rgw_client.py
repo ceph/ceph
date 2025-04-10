@@ -14,17 +14,11 @@ from collections import defaultdict
 from enum import Enum
 from subprocess import SubprocessError
 from urllib.parse import urlparse, urlunparse
+from xml.parsers.expat import ExpatError
 from xml.sax.saxutils import escape
-# from pyexpat import ExpatError
-
 
 import requests
-
-try:
-    import xmltodict
-except ModuleNotFoundError:
-    logging.error("Module 'xmltodict' is not installed.")
-
+import xmltodict
 from mgr_util import build_url, name_to_config_section
 
 from .. import mgr
