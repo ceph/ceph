@@ -17,6 +17,7 @@
 
 #include "common/dout.h"
 #include "include/scope_guard.h"
+#include "include/random.h"
 #include "common/Clock.h"
 #include "common/armor.h"
 #include "common/async/spawn_throttle.h"
@@ -512,6 +513,46 @@ static int get_swift_owner_account_acl(const DoutPrefixProvider* dpp,
   return ret;
 }
 
+// return a random endpoint from the requested zone
+static int zone_local_bucket_redirect(const DoutPrefixProvider* dpp,
+                                      const RGWZoneGroup& zonegroup,
+                                      const std::string& zone_id,
+                                      const std::string& bucket_name,
+                                      std::string& error_message,
+                                      std::string& endpoint)
+{
+  auto zone = zonegroup.zones.find(zone_id);
+  if (zone == zonegroup.zones.end()) {
+    // the requested zone is no longer in the zonegroup
+    error_message = fmt::format(
+        "The requested zone-local bucket {} belongs to zone id {} which "
+        "is no longer in the bucket's zonegroup {}. If the zone was removed "
+        "permanently, the bucket metadata must be removed by admin.",
+        bucket_name, zone_id, zonegroup.id);
+    ldpp_dout(dpp, 0) << "ERROR: " << error_message << dendl;
+    return -ERR_REDIRECT_ZONE_GONE; // 410 Gone
+  }
+
+  const size_t count = zone->second.endpoints.size();
+  if (!count) {
+    // the requested zone has no endpoints for redirect
+    error_message = fmt::format(
+        "The requested zone-local bucket {} belongs to zone id {} which "
+        "has no endpoints configured, so cannot be redirected.",
+        bucket_name, zone_id);
+    ldpp_dout(dpp, 0) << "ERROR: " << error_message << dendl;
+    return -ERR_SERVICE_UNAVAILABLE; // 503 Service Unavailable
+  }
+
+  // select an endpoint at random
+  const size_t index = ceph::util::generate_random_number(0, count - 1);
+  endpoint = zone->second.endpoints[index];
+
+  ldpp_dout(dpp, 4) << "Redirecting request for non-replicated bucket "
+      << bucket_name << " to zone id " << zone_id << " " << endpoint << dendl;
+  return -ERR_PERMANENT_REDIRECT; // 301 Permanent Redirect
+}
+
 /**
  * Get the AccessControlPolicy for an user, bucket or object off of disk.
  * s: The req_state to draw information from.
@@ -598,6 +639,19 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
           rgw::sal::Object::empty(s->object.get())) {
         return -ERR_PERMANENT_REDIRECT;
       }
+    }
+
+    // non-replicated buckets only reside on a single zone. redirect to a zone
+    // endpoint unless the request was forwarded to the metdata master zone
+    const std::string& local_zone_id = s->bucket->get_info().local_zone_id;
+    const RGWZoneParams& local_zone_params = s->penv.site->get_zone_params();
+    const bool forwarded = s->penv.site->is_meta_master() && s->system_request;
+    if (!local_zone_id.empty() &&
+        local_zone_id != local_zone_params.id &&
+        !forwarded) {
+      return zone_local_bucket_redirect(dpp, zonegroup, local_zone_id,
+                                        s->bucket->get_name(), s->err.message,
+                                        s->zonegroup_endpoint);
     }
 
     /* init dest placement */
