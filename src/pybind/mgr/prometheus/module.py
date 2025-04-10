@@ -10,6 +10,7 @@ import time
 import enum
 from collections import namedtuple
 from tempfile import NamedTemporaryFile
+import socket
 
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
 from mgr_util import get_default_addr, profile_method, build_url
@@ -638,6 +639,8 @@ class Module(MgrModule, OrchestratorClientMixin):
         _global_instance = self
         self.metrics_thread = MetricCollectionThread(_global_instance)
         self.health_history = HealthHistory(self)
+        self._current_host = None
+        self._current_port = None
 
     def _setup_static_metrics(self) -> Dict[str, Metric]:
         metrics = {}
@@ -871,18 +874,40 @@ class Module(MgrModule, OrchestratorClientMixin):
             return self.get_mgr_ip()
         return server_addr
 
+    def wait_for_port_release(self, port, host='127.0.0.1', timeout=60):
+        """Wait until the given port is no longer in use."""
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            self.log.info('waiting to fully stop...')
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                try:
+                    s.bind((host, port))
+                    self.log.info(f"Port {port} is now released.")
+                    return
+                except OSError:
+                    time.sleep(0.5)
+        raise TimeoutError(f"Port {port} not released within timeout")
+
     def config_notify(self) -> None:
         """
         This method is called whenever one of our config options is changed.
         """
-        # https://stackoverflow.com/questions/7254845/change-cherrypy-port-and-restart-web-server
-        # if we omit the line: cherrypy.server.httpserver = None
-        # then the cherrypy server is not restarted correctly
         self.log.info('Restarting engine...')
         cherrypy.engine.stop()
         cherrypy.server.httpserver = None
+
+        prev_host = self._current_host
+        prev_port = self._current_port
+
         server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
         server_port = cast(int, self.get_localized_module_option('server_port', DEFAULT_PORT))
+
+        self.log.info(f'Engine previously running on: {prev_host}:{prev_port}')
+        self.log.info(f'Engine will start on: {server_addr}:{server_port}')
+
+        # Only wait for port release if host/port are the same and not None
+        if prev_host == server_addr and prev_port == server_port and prev_host is not None and prev_port is not None:
+            self.wait_for_port_release(server_port, server_addr)
         self.configure(server_addr, server_port)
         cherrypy.engine.start()
         self.log.info('Engine started.')
