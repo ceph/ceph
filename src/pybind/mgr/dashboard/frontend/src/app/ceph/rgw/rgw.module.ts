@@ -83,7 +83,8 @@ import {
   TagModule,
   TooltipModule,
   ComboBoxModule,
-  ToggletipModule
+  ToggletipModule,
+  LayoutModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
@@ -99,6 +100,7 @@ import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
 import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
 import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component';
+import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
 
 @NgModule({
   imports: [
@@ -135,7 +137,8 @@ import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component
     ComboBoxModule,
     ToggletipModule,
     RadioModule,
-    SelectModule
+    SelectModule,
+    LayoutModule
   ],
   exports: [
     RgwDaemonDetailsComponent,
@@ -199,7 +202,8 @@ import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component
     RgwRateLimitDetailsComponent,
     RgwTopicListComponent,
     RgwTopicDetailsComponent,
-    RgwTopicFormComponent
+    RgwTopicFormComponent,
+    RgwBucketNotificationListComponent
   ],
   providers: [TitleCasePipe]
 })
