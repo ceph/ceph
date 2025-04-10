@@ -381,6 +381,8 @@ public:
     static_assert(!std::is_same_v<return_t, void>,
                   "error handlers mustn't return void");
 
+    auto ep = take_exception_from_future();
+
     // Any assert_* handler we have:
     // assert_failure, assert_all and assert_all_func_t
     // are expected to return void since we actually abort in them.
@@ -389,7 +391,6 @@ public:
     // label of: no_touch_error_marker. Otherwise we would fail the above
     // static assertion.
     if constexpr (std::is_same_v<return_t, no_touch_error_marker>) {
-      [[maybe_unused]] auto &&ep = std::move(result).get_exception();
       std::ignore = std::invoke(std::forward<ErrorVisitorT>(errfunc),
                                 ErrorT::error_t::from_exception_ptr(std::move(ep)));
     } else {
@@ -405,12 +406,9 @@ public:
       // `catch`. The limitation here is lack of support for hierarchies
       // of exceptions. The code below checks for exact match only while
       // `catch` would allow to match against a base class as well.
-      // However, this shouldn't be a big issue for `errorator` as Error
-      // Visitors are already checked for exhaustiveness at compile-time.
+      // However, this shouldn't be a big issue for `errorator` as
+      // ErrorVisitorT are already checked for exhaustiveness at compile-time.
       if (type_info == ErrorT::error_t::get_exception_ptr_type_info()) {
-        // set `state::invalid` in internals of `seastar::future` to not
-        // call `report_failed_future()` during `operator=()`.
-        [[maybe_unused]] auto &&ep = std::move(result).get_exception();
         if constexpr (std::is_assignable_v<decltype(result), return_t>) {
           result = std::invoke(std::forward<ErrorVisitorT>(errfunc),
                                ErrorT::error_t::from_exception_ptr(std::move(ep)));
@@ -425,6 +423,15 @@ public:
 
   auto get_result() && {
     return std::move(result);
+  }
+
+  // seastar::future::get_exception()&& calls take_exception() internally.
+  // This will result in the future state to be "state::invalid".
+  // That way when using seastar::future `operator=()`,
+  // report_failed_future() won't be called.
+  std::exception_ptr take_exception_from_future() {
+    auto&& ep = std::move(result).get_exception();
+    return ep;
   }
 };
 
