@@ -4,6 +4,8 @@
 * RBD: The ``try-netlink`` mapping option for rbd-nbd has become the default
   and is now deprecated. If the NBD netlink interface is not supported by the
   kernel, then the mapping is retried using the legacy ioctl interface.
+* RGW: Adding missing quotes to the ETag values returned by S3 CopyPart,
+  PostObject and CompleteMultipartUpload responses.
 
 * RADOS: A new command, `ceph osd rm-pg-upmap-primary-all`, has been added that allows
   users to clear all pg-upmap-primary mappings in the osdmap when desired.
