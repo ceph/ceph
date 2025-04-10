@@ -1102,6 +1102,9 @@ struct RGWBucketInfo {
   RGWObjectLock obj_lock;
 
   std::optional<rgw_sync_policy_info> sync_policy;
+  // When not empty, this bucket is pinned to the given zone and not replicated.
+  // Requests for this bucket's data get redirected to this zone.
+  std::string redirect_zone_id;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
