@@ -5922,7 +5922,7 @@ int main(int argc, const char **argv)
         zonegroup.name = zonegroup_name;
         zonegroup.is_master = is_master;
         zonegroup.realm_id = realm.get_id();
-        zonegroup.endpoints = endpoints;
+        zonegroup.endpoints.assign(endpoints.begin(), endpoints.end());
         zonegroup.api_name = (api_name.empty() ? zonegroup_name : api_name);
 
         zonegroup.enabled_features = enable_features;
@@ -6074,7 +6074,7 @@ int main(int argc, const char **argv)
         }
 
         if (!endpoints.empty()) {
-          zonegroup.endpoints = endpoints;
+          zonegroup.endpoints.assign(endpoints.begin(), endpoints.end());
           need_update = true;
         }
 
