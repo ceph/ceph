@@ -5795,6 +5795,12 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
       return set_cr_error(retcode);
     }
 
+    // skip same-bucket replication for zone-local buckets
+    if (!sync_pipe.source_bucket_info.local_zone_id.empty() &&
+        sync_pair.source_bs.bucket == sync_pair.dest_bucket) {
+      return set_cr_done();
+    }
+
     yield call(new RGWSyncGetBucketInfoCR(env, sync_pair.dest_bucket, &sync_pipe.dest_bucket_info,
                                           &sync_pipe.dest_bucket_attrs, tn));
     if (retcode < 0) {
