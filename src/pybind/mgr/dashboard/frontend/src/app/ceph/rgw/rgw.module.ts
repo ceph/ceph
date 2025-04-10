@@ -84,7 +84,8 @@ import {
   TooltipModule,
   ComboBoxModule,
   ToggletipModule,
-  IconService
+  IconService,
+  LayoutModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/16';
 import ScalesIcon from '@carbon/icons/es/scales/20';
@@ -112,6 +113,7 @@ import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
 import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
 import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component';
+import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
 
 @NgModule({
   imports: [
@@ -148,7 +150,8 @@ import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component
     ComboBoxModule,
     ToggletipModule,
     RadioModule,
-    SelectModule
+    SelectModule,
+    LayoutModule
   ],
   exports: [
     RgwDaemonDetailsComponent,
@@ -212,7 +215,8 @@ import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component
     RgwRateLimitDetailsComponent,
     RgwTopicListComponent,
     RgwTopicDetailsComponent,
-    RgwTopicFormComponent
+    RgwTopicFormComponent,
+    RgwBucketNotificationListComponent
   ],
   providers: [TitleCasePipe]
 })
