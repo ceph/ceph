@@ -85,12 +85,12 @@ public:
   RGWRESTConn(CephContext *_cct,
               rgw::sal::Driver* driver,
               const std::string& _remote_id,
-              const std::list<std::string>& endpoints,
+              const std::vector<std::string>& endpoints,
               std::optional<std::string> _api_name,
               HostStyle _host_style = PathStyle);
   RGWRESTConn(CephContext *_cct,
 	      const std::string& _remote_id,
-	      const std::list<std::string>& endpoints,
+	      const std::vector<std::string>& endpoints,
 	      RGWAccessKey _cred,
 	      std::string _zone_group,
 	      std::optional<std::string> _api_name,
@@ -243,9 +243,9 @@ class S3RESTConn : public RGWRESTConn {
 
 public:
 
-  S3RESTConn(CephContext *_cct, rgw::sal::Driver* driver, const std::string& _remote_id, const std::list<std::string>& endpoints, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle) :
+  S3RESTConn(CephContext *_cct, rgw::sal::Driver* driver, const std::string& _remote_id, const std::vector<std::string>& endpoints, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle) :
     RGWRESTConn(_cct, driver, _remote_id, endpoints, _api_name, _host_style) {}
-  S3RESTConn(CephContext *_cct, const std::string& _remote_id, const std::list<std::string>& endpoints, RGWAccessKey _cred, std::string _zone_group, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle):
+  S3RESTConn(CephContext *_cct, const std::string& _remote_id, const std::vector<std::string>& endpoints, RGWAccessKey _cred, std::string _zone_group, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle):
     RGWRESTConn(_cct, _remote_id, endpoints, _cred, _zone_group, _api_name, _host_style) {}
   ~S3RESTConn() override = default;
 

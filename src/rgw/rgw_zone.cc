@@ -769,7 +769,7 @@ int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
   zone.id = zone_params.id;
   zone.name = zone_params.name;
   if (!endpoints.empty()) {
-    zone.endpoints = endpoints;
+    zone.endpoints.assign(endpoints.begin(), endpoints.end());
   }
   if (pread_only) {
     zone.read_only = *pread_only;
