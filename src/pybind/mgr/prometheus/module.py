@@ -9,6 +9,7 @@ import threading
 import time
 import enum
 from collections import namedtuple
+import socket
 import tempfile
 
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
@@ -866,6 +867,19 @@ class Module(MgrModule, OrchestratorClientMixin):
             return self.get_mgr_ip()
         return server_addr
 
+    def wait_for_port_release(self, port, host='127.0.0.1', timeout=60):
+        """Wait until the given port is no longer in use."""
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            self.log.info('waiting to fully stop...')
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                try:
+                    s.bind((host, port))
+                    return True  # Port is available
+                except OSError:
+                    time.sleep(0.5)
+        raise TimeoutError(f"Port {port} not released within timeout")
+
     def config_notify(self) -> None:
         """
         This method is called whenever one of our config options is changed.
@@ -876,6 +890,10 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.log.info('Restarting engine...')
         cherrypy.engine.stop()
         cherrypy.server.httpserver = None
+        self.wait_for_port_release(
+            cherrypy.config.get("server.socket_port", 8080),
+            cherrypy.config.get("server.socket_host", "127.0.0.1"),
+        )
         server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
         server_port = cast(int, self.get_localized_module_option('server_port', DEFAULT_PORT))
         self.configure(server_addr, server_port)
