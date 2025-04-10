@@ -692,7 +692,7 @@ public:
 
     int prepare_atomic_modification(const DoutPrefixProvider *dpp, librados::ObjectWriteOperation& op, bool reset_obj, const std::string *ptag,
                                     const char *ifmatch, const char *ifnomatch, bool removal_op, bool modify_tail, optional_yield y);
-    int complete_atomic_modification(const DoutPrefixProvider *dpp, optional_yield y);
+    int complete_atomic_modification(const DoutPrefixProvider *dpp, bool keep_tail, optional_yield y);
 
   public:
     Object(RGWRados *_store, const RGWBucketInfo& _bucket_info, RGWObjectCtx& _ctx, const rgw_obj& _obj) : store(_store), bucket_info(_bucket_info),
@@ -810,22 +810,22 @@ public:
         const std::string *user_data;
         rgw_zone_set *zones_trace;
         bool modify_tail;
+        bool keep_tail;
         bool completeMultipart;
         bool appendable;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGWObjCategory::Main), flags(0),
                  if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), zones_trace(nullptr),
-                 modify_tail(false),  completeMultipart(false), appendable(false) {}
+                 modify_tail(false), keep_tail(false), completeMultipart(false), appendable(false) {}
       } meta;
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
 
       int _do_write_meta(uint64_t size, uint64_t accounted_size,
                      std::map<std::string, bufferlist>& attrs,
-                     bool modify_tail, bool assume_noent,
-                     void *index_op, const req_context& rctx,
-                     jspan_context& trace,
+                     bool assume_noent, void *index_op,
+                     const req_context& rctx, jspan_context& trace,
                      bool log_op = true);
       int write_meta(uint64_t size, uint64_t accounted_size,
                      std::map<std::string, bufferlist>& attrs,

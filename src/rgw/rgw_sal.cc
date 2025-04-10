@@ -93,7 +93,6 @@ RGWObjState::RGWObjState(const RGWObjState& rhs) : obj (rhs.obj) {
     data = rhs.data;
   }
   prefetch_data = rhs.prefetch_data;
-  keep_tail = rhs.keep_tail;
   is_olh = rhs.is_olh;
   objv_tracker = rhs.objv_tracker;
   pg_ver = rhs.pg_ver;
