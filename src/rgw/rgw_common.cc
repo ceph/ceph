@@ -144,6 +144,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ECANCELED, {409, "ConcurrentModification"}},
     { EDQUOT, {507, "InsufficientCapacity"}},
     { ENOSPC, {507, "InsufficientCapacity"}},
+    { ERR_REDIRECT_ZONE_GONE, {410, "Gone"}},
 });
 
 rgw_http_errors rgw_http_swift_errors({
