@@ -1,0 +1,2059 @@
+commit 838cd35201e4fe1339e16d987cc33e873524af90 (tag: refs/tags/v0.94.8, refs/remotes/gh/hammer)
+Author: Jenkins Build Slave User <jenkins-build@trusty-huge--349f4788-0128-42d9-aca5-78c0aad008e6.localdomain>
+Date:   Fri Aug 26 00:02:49 2016 +0000
+
+    0.94.8
+
+commit eb27865f268eaa4abc4e4b46354f1ea1556d1a5c
+Merge: 08277b7 5248929
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Aug 17 15:26:49 2016 +0200
+
+    Merge pull request #10750 from ceph/wip-14799-hammer
+    
+    hammer: rocksdb do not link against tcmalloc if it's disabled
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 5248929c296d6130ee99fe94fbe69151d241efb8
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Tue Aug 16 23:45:18 2016 -0700
+
+    rocksdb: disable tcmalloc if disabled
+    
+    the rocksdb/configure.ac does not support --with-tcmalloc before,
+    and the updated rocksdb commit has the change for '--with-tcmalloc'
+    option, so let's pick it up.
+    
+    Fixes: http://tracker.ceph.com/issues/14799
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+
+commit fdfcd9b66cda1c637fbaad1c15d2ea04e426210d
+Author: Sage Weil <sage@redhat.com>
+Date:   Sat Sep 12 14:12:20 2015 -0400
+
+    ceph.spec: respect CEPH_EXTRA_CONFIGURE_ARGS
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 51abff11688f0201b8f4076ac515e4515929d4cb)
+    Signed-off-by: Brad Hubbard <bhubbard@redhat.com>
+
+commit 08277b7bc7c0e533c3fd56a0040dc0ddc74637d6
+Merge: bcab369 d5274a3
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Sat Aug 13 19:19:37 2016 +0200
+
+    Merge pull request #10718 from oritwas/wip-14328-hammer
+    
+    hammer: rgw: the swift key remains after removing a subuser
+
+commit bcab36992580e5666afbf8e7bada4e850dfc84c6
+Merge: da2960f 699b7c8
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Sat Aug 13 18:22:19 2016 +0200
+
+    Merge pull request #10509 from yehudasa/wip-15557-hammer
+    
+    rgw: Have a flavor of bucket deletion to bypass GC and to trigger
+
+commit d5274a3aeb7cc40f5ac04ac1ffcd6e3fc3019be3
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Wed Jan 20 17:24:38 2016 +0100
+
+    rgw: fix subuser rm command failure
+    
+    Fixes: 14375
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit bbc06e70b49b2917ee63985727cb92724fb99209)
+
+commit f9637743efc7ba3164e3bb9ee7a768801e1599da
+Author: Sangdi Xu <xu.sangdi@h3c.com>
+Date:   Wed Dec 16 09:09:16 2015 +0800
+
+    rgw: add a method to purge all associate keys when removing a subuser
+    
+    Fixes: #12890
+    
+    When removing a subuser, make sure all of its keys, including the swift key and possible s3 keys, are also deleted.
+    
+    Signed-off-by: Sangdi Xu <xu.sangdi@h3c.com>
+    (cherry picked from commit e7b7e1afc7a81c3f97976f7442fbdc5118b532b5)
+
+commit da2960f974b9a64a683ac8b77faf08fda3a5d0ba
+Merge: 0f67539 3a30ffc
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Aug 12 12:23:41 2016 +0200
+
+    Merge pull request #10291 from badone/wip-13829-hammer
+    
+    hammer: config set with negative value results in "error setting 'filestore_merge_threshold' to '-40': (22) Invalid argument"
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 0f67539cf5efc46a92d7ea3ac031e0ce1c573a7a
+Merge: 1e01986 0d4b601
+Author: Loic Dachary <loic@dachary.org>
+Date:   Fri Aug 12 09:46:30 2016 +0200
+
+    Merge pull request #10699 from ktdreyer/wip-15867-nroff
+    
+    jewel: doc: fix by-parttypeuuid in ceph-disk(8) nroff
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 0d4b6013f0f130c93e2e488d1cd83527ad91274f
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Thu Aug 11 17:11:41 2016 -0600
+
+    doc: fix by-parttypeuuid in ceph-disk(8) nroff
+    
+    Commit 221efb0b893adbfd7a19df171cf967fee87afcc7 altered the rST source
+    for the ceph-disk man page. In Hammer, we also have to modify the nroff
+    sources, because static copies of the generated man pages are stored in
+    Git.
+    
+    Fixes: http://tracker.ceph.com/issues/15867
+    Signed-off-by: Ken Dreyer <kdreyer@redhat.com>
+
+commit 1e01986e9550700a11adfc1b175eca042c9cb188
+Merge: de28029 187d308
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Aug 11 22:58:33 2016 +0200
+
+    Merge pull request #9741 from SUSE/wip-16343-hammer
+    
+    hammer: boost uuid makes valgrind complain
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Sage Weil <sage@redhat.com>
+    Reviewed-by: Ken Dreyer <kdreyer@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit de28029c25e4ff527c6021488381022538331473
+Merge: cb0488c 64211fa
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Thu Aug 11 15:58:51 2016 +0200
+
+    Merge pull request #10554 from Vicente-Cheng/wip-16815-hammer
+    
+    hammer: radosgw-admin region-map set is not reporting the bucket quota correctly
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit cb0488c181a122de13d63686b2a64e1aa00791ca
+Merge: 0bc2d66 a3003f6
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Thu Aug 11 15:56:39 2016 +0200
+
+    Merge pull request #10555 from Vicente-Cheng/wip-16317-hammer
+    
+    hammer: rgw: bucket listing following object delete is partial
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit 0bc2d66db5feba6cd887d7c297839b231012b880
+Merge: 5866fef 81aef60
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Thu Aug 11 15:55:01 2016 +0200
+
+    Merge pull request #10530 from yehudasa/wip-16412-hammer
+    
+    rgw: remove bucket index objects when deleting the bucket
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit 5866fefb32cc443549891754a97eb8a6b8dd2af0
+Merge: da4f735 300c111
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Thu Aug 11 11:14:53 2016 +0200
+
+    Merge pull request #8755 from kmroz/wip-hammer-convert-plain-object-to-versioned
+    
+    hammer: rgw: convert plain object to versioned (with null version) when removing
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit da4f735d7937aa623dfef41f921ad9381b1a07d7
+Merge: 4a12a88 d3eae0a
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Aug 4 21:41:15 2016 +0200
+
+    Merge pull request #9271 from XinzeChi/wip-fix-digest-hammer
+    
+    osd: fix omap digest compare when scrub
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: David Zafman <dzafman@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 4a12a88d7098c1f67365a82f3cf9a174dd5ada32
+Merge: 6f107f1 ec02d8b
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Aug 4 21:38:57 2016 +0200
+
+    Merge pull request #8805 from SUSE/wip-15482-hammer
+    
+    hammer: is_split crash in handle_pg_create
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit 6f107f1a7a42c070ef2da7f2b0b07d8bd2826429
+Merge: 3b9e73f 3cb72dd
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Aug 4 21:37:24 2016 +0200
+
+    Merge pull request #8593 from renhwsky/wip-15478-hammer
+    
+    hammer: Pool quota alarm is not in effect
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 3b9e73f319b28c0403871c7d842304aca74f4c6a
+Merge: d34ac2a b9a4ad9
+Author: John Spray <jspray@redhat.com>
+Date:   Wed Aug 3 13:31:41 2016 +0100
+
+    Merge pull request #7542 from SUSE/wip-14668-hammer
+    
+    hammer: Wrong ceph get mdsmap assertion
+    
+    Reviewed-by: John Spray <john.spray@redhat.com>
+
+commit d34ac2a4d76eda4a371cc16dbc6bfdc0223c81d8
+Merge: 8f51f14 3ecdedd
+Author: John Spray <jspray@redhat.com>
+Date:   Wed Aug 3 13:31:30 2016 +0100
+
+    Merge pull request #8042 from ukernel/hammer-15050
+    
+    hammer: mds: fix stray purging in 'stripe_count > 1' case
+    
+    Reviewed-by: John Spray <john.spray@redhat.com>
+
+commit 8f51f146c98e281f065debdfdc4399624e0cce97
+Merge: 4773e9c 049bc8a
+Author: John Spray <jspray@redhat.com>
+Date:   Wed Aug 3 13:31:22 2016 +0100
+
+    Merge pull request #8804 from SUSE/wip-15512-hammer
+    
+    hammer: Double decreased the count to trim caps which will cause failing to respond to cache pressure
+    
+    Reviewed-by: John Spray <john.spray@redhat.com>
+
+commit 4773e9c40849c2796aa16b7cacddbfe99536919c
+Merge: 85a25e4 f6076dd
+Author: John Spray <jspray@redhat.com>
+Date:   Wed Aug 3 13:31:09 2016 +0100
+
+    Merge pull request #9404 from SUSE/wip-16082-hammer
+    
+    hammer: mds: wrongly treat symlink inode as normal file/dir when symlink inode is stale on kcephfs
+    
+    Reviewed-by: John Spray <john.spray@redhat.com>
+
+commit 85a25e43d4451b999ad517f089593d45895a7c59
+Merge: 3c4d14f 2633ec3
+Author: John Spray <jspray@redhat.com>
+Date:   Wed Aug 3 13:30:58 2016 +0100
+
+    Merge pull request #10198 from SUSE/wip-16626-hammer
+    
+    hammer: Failing file operations on kernel based cephfs mount point leaves unaccessible file behind on hammer 0.94.7
+    
+    Reviewed-by: John Spray <john.spray@redhat.com>
+
+commit a3003f6f4f02e37cf96b6e243203d86ad2e39549
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Thu Feb 25 16:02:15 2016 +0100
+
+    rgw: reset return code in when iterating over the bucket the objects
+    
+    Fixes: #14826
+    
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit e23fdcbbce47aaf041b9f8a0812c8a729aa5014b)
+
+commit 64211fa78f872648aad2b2cec2b4b3cb8f2b9953
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Tue Oct 13 17:04:57 2015 -0700
+
+    rgw: fix compilation
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 9dfbae6d65bf6f8ab7cdf8597d556505b81cedd9)
+
+commit 3e45c6bb431f7763a12a48daac30fbe7aa3047cd
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Mon Oct 12 11:14:19 2015 +0200
+
+    rgw: add bucket_quota to RGWRegionMap::encode_json
+    
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit e18b72f7e97a65af681e368d3706a465603df89d)
+
+commit 699b7c8d5f51d895f5ff0578de5bf610436ee33b
+Author: root <root@ceph-node1.homeoffice.wal-mart.com>
+Date:   Wed Apr 20 14:15:55 2016 +0530
+
+    rgw: Have a flavor of bucket deletion to bypass GC and to trigger
+    object deletions async.
+    
+    Fixes: http://tracker.ceph.com/issues/15557
+    Signed-off-by: Pavan Rallabhandi <PRallabhandi@walmartlabs.com>
+    (cherry picked from commit b7a69fca248afeef1de1278890076693b16cf6d3)
+    
+    Conflicts:
+    	src/rgw/rgw_admin.cc
+    	src/rgw/rgw_bucket.cc
+    	src/rgw/rgw_bucket.h
+    	src/test/cli/radosgw-admin/help.t
+
+commit 81aef600671f0fe523206cea16000e79bc6bb75c
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Mon Jul 4 15:01:51 2016 +0200
+
+    rgw: remove bucket index objects when deleting the bucket
+    
+    Fixes: http://tracker.ceph.com/issues/16412
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit 3ae276390641ad5fc4fef0c03971db95948880b4)
+
+commit 3c4d14fe73a97c52345369e732e445c78fb656c8
+Merge: 79753ed 8a39e5e
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 23:51:47 2016 +0200
+
+    Merge pull request #10182 from gaurav36/wip-configure-xfs-issue-hammer
+    
+    hammer: configure: Add -D_LARGEFILE64_SOURCE to Linux build.
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 79753edf9c4763ae15d82502b53c6f3c9cd24349
+Merge: 75271a2 7dbace5
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 09:40:46 2016 +0200
+
+    Merge pull request #7961 from dzafman/wip-15002
+    
+    hammer: objects unfound after repair (fixed by repeering the pg)
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 75271a2529b1504d249b528fe3fafd4c5e90a9bc
+Merge: 76fa3b1 43d1b92
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 09:38:15 2016 +0200
+
+    Merge pull request #9125 from dzafman/wip-15635
+    
+    hammer: [MON] Fixed calculation of %USED
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 76fa3b1097b3711ef75bd36aa2a4074e7a8fa9e6
+Merge: cf5f111 ca0beef
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 09:36:05 2016 +0200
+
+    Merge pull request #8464 from dzafman/wip-13039-15315
+    
+    hammer: "FAILED assert(pg->info.history.same_interval_since == p.same_interval_since)" in upgrade:hammer-x-jewel-distro-basic-openstack
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit cf5f1117afe9e03c683fd40e5af964eaf5975e2b
+Merge: 76ce775 488a787
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 09:32:47 2016 +0200
+
+    Merge pull request #8573 from Vicente-Cheng/wip-15293-hammer
+    
+    hammer: ECBackend: send write and read sub ops on behalf of client ops at normal priority
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 76ce775761f755bd3085ba22cf088c3a46b78d3a
+Merge: 8629d37 e20df80
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 09:31:16 2016 +0200
+
+    Merge pull request #8665 from Vicente-Cheng/wip-15525-hammer
+    
+    hammer: ReplicatedPG.cc: 430: FAILED assert(!actingbackfill.empty()): old watch timeout tries to queue repop on replica
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 8629d378b05d4f0374436373a0c972360bae7273
+Merge: 79fc401 7b3f1da
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 09:29:58 2016 +0200
+
+    Merge pull request #8806 from SUSE/wip-15320-hammer
+    
+    hammer: LibRadosMiscConnectFailure.ConnectFailure (not so intermittent) failure in upgrade/hammer-x
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 79fc401844c935283f43fbea83e113e298a830ba
+Merge: f4d56b0 cbd5aaf
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 09:28:32 2016 +0200
+
+    Merge pull request #9001 from Vicente-Cheng/wip-15730-hammer
+    
+    hammer: osd: acting_primary not updated on split
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit f4d56b03b1decf83bebbf6996909ee89783068f0
+Merge: f71c9e6 410ff15
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 09:26:55 2016 +0200
+
+    Merge pull request #9400 from Vicente-Cheng/wip-15796-hammer
+    
+    hammer: LibRadosWatchNotifyPPTests/LibRadosWatchNotifyPP.WatchNotify2Timeout/1 segv
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit f71c9e658d6f5af3cfa48a0dfb9a063f4965e7ce
+Merge: fdb730e 23498a9
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 09:24:42 2016 +0200
+
+    Merge pull request #9416 from chardan/wip-15770-hammer
+    
+    hammer: mon/OSDMonistor: improve reweight_by_utilization() logic
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit fdb730e169d8885ccd72e140c31797179c0a2c75
+Merge: f9e8dc8 2c18015
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 09:21:25 2016 +0200
+
+    Merge pull request #10189 from dreamhost/wip-16618-hammer
+    
+    rgw: fix multi-delete query param parsing.
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit f9e8dc824a5aa89e24ef12fc8fcfdbdd4f926aef
+Merge: f3cbf5f 24cc4f9
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 09:17:57 2016 +0200
+
+    Merge pull request #8379 from Vicente-Cheng/wip-15283-hammer
+    
+    hammer: RGW shouldn't send Content-Type nor Content-Length for 304 responses
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit f3cbf5f891029975f4f5a915366fce28fcabd196
+Merge: ba8de3a f28477c
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 09:14:39 2016 +0200
+
+    Merge pull request #8313 from SUSE/wip-15257-hammer
+    
+    hammer: rgw: radosgw server abort when user passed bad parameters to set quota
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit ba8de3ab31567c8179b72fb1dc8dbf7ccd1f5f38
+Merge: 9562198 ed4ca7c
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 09:13:09 2016 +0200
+
+    Merge pull request #8528 from wido/hammer-issue-15348
+    
+    rgw: Set Access-Control-Allow-Origin to a Asterisk if allowed in a rule
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 95621986d893029bc0a4a686c7da5cd6e0fa6f2b
+Merge: 28107d3 1ac920b
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 09:10:57 2016 +0200
+
+    Merge pull request #9671 from ceph/hammer-rgw-copy-if-newer
+    
+    hammer: rgw: backport rgwx-copy-if-newer for radosgw-agent
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 28107d3ebfded3cd9046e5a23ab83d4e0252cce2
+Merge: 5e1a57a 850881c
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 09:09:14 2016 +0200
+
+    Merge pull request #9961 from SUSE/wip-16190-hammer
+    
+    hammer: subuser rm fails with status 125
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit 5e1a57a6f9c2afbdfc6d3e73d438551202c68229
+Merge: 91889db ce313cd
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Jul 29 09:07:10 2016 +0200
+
+    Merge pull request #9402 from SUSE/wip-15966-hammer
+    
+    hammer: No Last-Modified, Content-Size and X-Object-Manifest headers if no segments in DLO manifest
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 23498a9620f792cd099dba028c5bdf96b1a625be
+Author: xie xingguo <xie.xingguo@zte.com.cn>
+Date:   Tue May 31 15:40:05 2016 -0700
+
+    mon/OSDMonitor: avoid potential expensive grace calculation
+    
+    The grace calculation during check_failure() is now very complicated
+    and time-consuming. Therefore we shall skip this when it is possible.
+    
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    (cherry picked from commit 3557903d5d57642179b2ae137bedc389974b1956)
+    
+     Conflicts:
+    	src/mon/OSDMonitor.cc
+    
+    Resolved by choosing the move-to-top implementation. Removed unused vars.
+
+commit 1b6f6f27b77803727a523b4337cbad411e8321ed
+Author: xie xingguo <xie.xingguo@zte.com.cn>
+Date:   Tue Apr 26 11:13:32 2016 +0800
+
+    mon/OSDMonitor: improve reweight_by_utilization() logic
+    
+    By calling reweight_by_utilization() method, we are aiming at an evener result
+    of utilization among all osds. To achieve this, we shall decrease weights of
+    osds which are currently overloaded, and try to increase weights of osds which
+    are currently underloaded when it is possible.
+    However, we can't do this all at a time in order to avoid a massive pg migrations
+    between osds. Thus we introduce a max_osds limit to smooth the progress.
+    
+    The problem here is that we have sorted the utilization of all osds in a descending
+    manner and we always try to decrease the weights of the most overloaded osds
+    since they are most likely to encounter a nearfull/full transition soon, but
+    we won't increase the weights from the most underloaded(least utilized by contrast)
+    at the same time, which I think is not quite reasonable.
+    
+    Actually, the best thing would probably be to iterate over teh low and high osds
+    in parallel, and do the ones that are furthest from the average first.
+    
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    (cherry picked from commit e7a32534ebc9e27f955ff2d7a8d1db511383301e)
+    
+     Conflicts:
+    	src/mon/OSDMonitor.cc
+    
+    Resolved by picking the lambda implemenation.
+    NOTE: Because hammer does not support C++11, the lambda functionality from the
+    current master has been moved into the "Sorter" function object.
+
+commit 91889db73ab097502615b208c6e9f3b40411e682
+Merge: f3c4f7b b78a1be
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Wed Jul 27 08:28:38 2016 +0200
+
+    Merge pull request #10038 from tchaikov/wip-16297-hammer
+    
+    mon: Monitor: validate prefix on handle_command()
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit f3c4f7b61ab519c532a2218a11c5472daaaf5fa9
+Merge: 2fe8edb b31ac2d
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Jul 26 19:08:23 2016 +0200
+
+    Merge pull request #9090 from tchaikov/wip-13990-hammer
+    
+    hammer: osd: remove all stale osdmaps in handle_osd_map()
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 2fe8edb87e7384f206414db8a49e909e51f48de3
+Merge: 67b7f11 0498969
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Jul 25 21:44:14 2016 +0200
+
+    Merge pull request #10227 from SUSE/wip-15081-hammer
+    
+    hammer: When logging to a file fails, ceph logs excessively to stderr
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 67b7f11c63313a5dcdf34b904137ef7a4673f4ec
+Merge: bd59c96 474abb8
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Jul 25 21:43:49 2016 +0200
+
+    Merge pull request #9893 from Vicente-Cheng/wip-16430-hammer
+    
+    hammer: OSDMonitor: drop pg temps from not the current primary
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit bd59c9695fadedef89b77166f60f5a8cf85825ff
+Merge: 3794e3a 055427c
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Jul 25 21:42:54 2016 +0200
+
+    Merge pull request #9238 from SUSE/wip-15962-hammer
+    
+    hammer: ceph-osd valgrind invalid reads/writes
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 3794e3ad44d1e429f110abe71fb2d2319567bcd1
+Merge: 89233e3 d96086a
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Jul 25 21:42:06 2016 +0200
+
+    Merge pull request #8849 from SUSE/wip-14326-hammer
+    
+    hammer: osd/PGLog.h: 88: FAILED assert(rollback_info_trimmed_to == head)
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 89233e32ffcdd7f795873771859caba1ce3ad23f
+Merge: 253143b fb1b40f
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Jul 25 21:40:57 2016 +0200
+
+    Merge pull request #8845 from SUSE/wip-15647-hammer
+    
+    hammer: osd: rados cppool omap to ec pool crashes osd
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 253143b559001eadb73ed9945abe2d0b8d946b65
+Merge: 81133dd 365f21b
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Jul 25 15:05:54 2016 +0200
+
+    Merge pull request #8470 from dachary/wip-15403-api-test-timeout-hammer
+    
+    hammer: tests: be more generous with test timeout
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 81133dd6e2724ee78cc69bda8e89ca35b20b6b23
+Merge: d71845c 3bb248b
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Jul 25 15:05:31 2016 +0200
+
+    Merge pull request #9977 from shun-s/hammer
+    
+    replcatedBackend: delete one of the repeated op->mark_started in ReplicatedBackend::sub_op_modify_impl
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit d71845cec169c660c180a4c0313e0cdbc25329dc
+Merge: 387d5c1 5057c34
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Jul 25 12:51:45 2016 +0200
+
+    Merge pull request #8960 from badone/wip-hammer-rados-bench-units
+    
+    hammer: Add units to rados bench output and clean up formatting
+    
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 474abb8275cd7507d7c7eae0d0e5647612fc177e
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Jun 2 10:43:17 2016 -0700
+
+    OSDMonitor: drop pg temp from sources other than the current primary
+    
+    Fixes: http://tracker.ceph.com/issues/16127
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 1a07123c38e3fecb3fb2e43bbbae962d8411d287)
+    
+    	change:
+                use NULL to replace the nullptr because we don't have C++11
+
+commit b31ac2d37ecb68ed9661923fbaeaedeac241ba4a
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Thu May 12 20:28:11 2016 +0800
+
+    osd: reset session->osdmap if session is not waiting for a map anymore
+    
+    we should release the osdmap reference once we are done with it,
+    otherwise we might need to wait very long to update that reference with
+    a newer osdmap ref. this appears to be an OSDMap leak: it is held by an
+    quiet OSD::Session forever.
+    
+    the osdmap is not reset in OSD::session_notify_pg_create(), because its
+    only caller is wake_pg_waiters(), which will call
+    dispatch_session_waiting() later. and dispatch_session_waiting() will
+    check the session->osdmap, and will also reset the osdmap if
+    session->waiting_for_pg.empty().
+    
+    Fixes: http://tracker.ceph.com/issues/13990
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 82b0af7cedc3071cd83ee53479f834c23c62b7d0)
+
+commit 3a30ffc21a5edd52726867302da6b358f93aa8dc
+Author: Brad Hubbard <bhubbard@redhat.com>
+Date:   Wed Jan 27 11:34:47 2016 +1000
+
+    qa: Add test for #13829
+    
+    qa/workunits/cephtool/test.sh: add test for setting negative int options
+    src/test/daemon_config.cc: remove tests for failed negative values
+    
+    Fixes: #13829
+    
+    Signed-off-by: Brad Hubbard <bhubbard@redhat.com>
+    (cherry picked from commit 994ac2942d04584d1617e6d4bbd5b880b1ea0448)
+
+commit f70e4adf8682ed82b267e21e5e63039048893243
+Author: Brad Hubbard <bhubbard@redhat.com>
+Date:   Wed Jan 27 11:18:16 2016 +1000
+
+    common: Allow config set with negative value
+    
+    A recent commit disabled negative values but they are required for variables
+    such as filestore_merge_threshold.
+    
+    Modified patch to remove C++11 specific elements so it will build for hammer
+    
+    Fixes: #13829
+    
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    Signed-off-by: Brad Hubbard <bhubbard@redhat.com>
+    (cherry picked from commit 8b777a0c346bc70fd10d07e89368b3785b58f10e)
+
+commit 04989695915fd7ee5ef85ae34ede1fd680514f9d
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Mar 10 09:50:07 2016 -0500
+
+    log: do not repeat errors to stderr
+    
+    If we get an error writing to the log, log it only once to stderr.
+    This avoids generating, say, 72 GB of ENOSPC errors in
+    teuthology.log when /var/log fills up.
+    
+    Fixes: #14616
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit d9ac0474b864afda58a44b9012cca4bbc6aaf509)
+    
+    Conflicts:
+    	src/log/Log.cc (drop m_uid and m_gid which are not used in hammer;
+    	order of do_stderr, do_syslog, do_fd conditional blocks is reversed in
+    	hammer; drop irrelevant speed optimization code from
+    	5bfe05aebfefdff9022f0eb990805758e0edb1dc)
+
+commit 2633ec3934ad8f7629c55b4345f426cacfb7b140
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Fri Apr 15 20:15:14 2016 +0800
+
+    mds: disallow 'open truncate' non-regular inode
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 0e4b6f2332bb4822cf324587a94144f1c98e4b97)
+    
+    Conflicts:
+    	src/mds/Server.cc (hammer has cur->inode.inline_version - in master
+    	this has been changed to cur->inode.inline_data.version)
+
+commit 3f0fb20ed08dfde614cff6c056d41b59af200c2c
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Fri Apr 15 19:45:23 2016 +0800
+
+    mds: only open non-regular inode with mode FILE_MODE_PIN
+    
+    ceph_atomic_open() in kernel client does lookup and open at the same
+    time. So it can open a symlink inode with mode CEPH_FILE_MODE_WR.
+    Open a symlink inode with mode CEPH_FILE_MODE_WR triggers assertion
+    in Locker::check_inode_max_size();
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 4d15eb12298e007744486e28924a6f0ae071bd06)
+
+commit 2c180159c00aa184e1fe8b051b1aa1e9f0f332fc
+Author: Robin H. Johnson <robin.johnson@dreamhost.com>
+Date:   Thu Jul 7 14:14:36 2016 -0700
+
+    rgw: fix multi-delete query param parsing.
+    
+    Multi-delete is triggered by a query parameter on POST, but there are
+    multiple valid ways of representing it, and Ceph should accept ANY way
+    that has the query parameter set, regardless of what value or absence of
+    value.
+    
+    This caused the RubyGem aws-sdk-v1 to break, and has been present since
+    multi-delete was first added in commit 0a1f4a97da, for the bobtail
+    release.
+    
+    Fixes: http://tracker.ceph.com/issues/16618
+    Signed-off-by: Robin H. Johnson <robin.johnson@dreamhost.com>
+    (cherry picked from commit a7016e1b67e82641f0702fda4eae799e953063e6)
+
+commit 387d5c1ba836833a0cf11ddf9a4fb8690a532878
+Merge: 2fd75cc 4eea92b
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Jul 7 10:16:31 2016 -0700
+
+    Merge pull request #9407 from SUSE/wip-15833-hammer
+    
+    hammer: RGW :: Subset of uploaded objects via radosgw are unretrievable when using erasure coded pool
+
+commit 8a39e5e67bc9a93cadb6c13f25c7ccd57421af6b
+Author: Ira Cooper <ira@redhat.com>
+Date:   Thu Mar 31 12:30:45 2016 -0400
+
+    configure: Add -D_LARGEFILE64_SOURCE to Linux build.
+    
+    Fixes: http://tracker.ceph.com/issues/16612
+    
+    Without -D_LARGEFILE64_SOURCE we can't build against libxfs,
+    because off64_t must be defined.
+    
+    Signed-off-by: Ira Cooper <ira@redhat.com>
+    (cherry picked from commit 602425a)
+
+commit 2fd75cced9dbcfdfdcba979eae90a6f4fb384758
+Merge: dac65d0 2c97cb3
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Wed Jul 6 20:25:20 2016 +0200
+
+    Merge pull request #8475 from Vicente-Cheng/wip-15343-hammer
+    
+    hammer: Multipart ListPartsResult has missing quotes on ETag
+    Reviewed-bu: Orit Wasserman <owasserm@redhat.com>
+
+commit 3bb248b7d530403b347e3ff68a8996b624fc1c98
+Author: shun-s <song.shun3@zte.com.cn>
+Date:   Tue Jun 28 15:30:16 2016 +0800
+
+    replcatedBackend: delete one useless op->mark_started as there are two in ReplicatedBackend::sub_op_modify_impl
+    delete one mark_start event as there are two same op->mark_started  in ReplicatedBackend::sub_op_modify_impl
+    Fixes: http://tracker.ceph.com/issues/16572
+    
+    Signed-off-by: shun-s <song.shun3@zte.com.cn>
+
+commit ed4ca7c92cdf7404754dab6f9d58c64b647136c5
+Author: Wido den Hollander <wido@42on.com>
+Date:   Tue Apr 5 11:14:16 2016 +0200
+
+    rgw: Set Access-Control-Allow-Origin to a Asterisk if allowed in a rule
+    
+    Before this patch the RGW would respond with the Origin send by the client in the request
+    if a wildcard/asterisk was specified as a valid Origin.
+    
+    This patch makes sure we respond with a header like this:
+    
+      Access-Control-Allow-Origin: *
+    
+    This way a resource can be used on different Origins by the same browser and that browser
+    will use the content as the asterisk.
+    
+    We also keep in mind that when Authorization is send by the client different rules apply.
+    In the case of Authorization we may not respond with an Asterisk, but we do have to
+    add the Vary header with 'Origin' as a value to let the browser know that for different
+    Origins it has to perform a new request.
+    
+    More information: https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS
+    
+    Fixes: #15348
+    
+    Signed-off-by: Wido den Hollander <wido@42on.com>
+    (cherry picked from commit 0021e224480c7164330eaa7cc1078bb8795169bf)
+    
+    Conflicts:
+    	src/rgw/rgw_rest.cc
+    		hammer still uses s->cio->print() where master uses STREAM_IO(s)->print()
+
+commit b78a1be835706e7dabc505be343945d0ac05697d
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Thu Jun 30 13:24:22 2016 +0800
+
+    mon: Monitor: validate prefix on handle_command()
+    
+    Fixes: http://tracker.ceph.com/issues/16297
+    
+    Signed-off-by: You Ji <youji@ebay.com>
+    (cherry picked from commit 7cb3434fed03a5497abfd00bcec7276b70df0654)
+    
+    Conflicts:
+        src/mon/Monitor.cc (the signature of Monitor::reply_command()
+                            changed a little bit in master, so adapt the
+                            commit to work with the old method)
+
+commit dac65d048919f701877de96d3271131853e532ed (refs/remotes/gh/wip-optracker-4354)
+Merge: 2e156d7 a2e7ca1
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Jun 27 17:51:19 2016 +0200
+
+    Merge pull request #8538 from Vicente-Cheng/wip-15360-hammer
+    
+    hammer: Linking to -lrbd causes process startup times to balloon
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 850881cf787ccb23eca989861a6688f3a4de1a7c
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Wed Jan 20 17:24:38 2016 +0100
+
+    rgw: fix subuser rm command failure
+    
+    Fixes: 14375
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit bbc06e70b49b2917ee63985727cb92724fb99209)
+    
+    Conflicts:
+    	src/rgw/rgw_user.cc The "if (op_state.will_purge_keys())" block was
+    	later changed to "always purge all associated keys" by
+    	e7b7e1afc7a81c3f97976f7442fbdc5118b532b5 - keep the hammer version
+
+commit 055427cf58857eeadda11ed1b3381e84e384bc85
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu May 12 16:57:49 2016 -0700
+
+    Pipe: take a ref to existing while we are waiting
+    
+    Otherwise, if it is reaped while we are waiting, it'll be a
+    use-after-free.
+    
+    Fixes: http://tracker.ceph.com/issues/15870
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit b224912d249453d754fc0478d3680f8cfa1a5c22)
+    
+    Conflicts:
+        src/msg/simple/Pipe.cc: nullptr changed to 0 because hammer is not compiled
+        with -std=c++11
+
+commit 24cc4f9e67d9c61f68ccc8f7d80ac227d67aeda1
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Wed Jun 15 16:53:16 2016 +0200
+
+    rgw: check for -ERR_NOT_MODIFIED in rgw_rest_s3.cc
+    
+    Fixes: http://tracker.ceph.com/issues/16327
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit fc38346c596d8b0bc156183970d6a327943cb577)
+    
+    Conflicts:
+    	src/rgw/rgw_rest_s3.cc
+    	  use ret instead of op_ret to check op result
+
+commit 7dbace59b83a059fcb364b78fc78d4e38164df6c
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu May 28 22:35:08 2015 +0200
+
+    erasure-code: s/unreocvery/unfound/
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit 28820d1cd630ec466ed1069a437d740a025fb9aa)
+
+commit e726f211107cd84cc722744c38213b96dc59cdc7
+Author: Jianpeng Ma <jianpeng.ma@intel.com>
+Date:   Wed Apr 22 09:45:04 2015 +0800
+
+    test: add test-case for repair unrecovery-ec pg.
+    
+    Signed-off-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    (cherry picked from commit 8f30db85219a6c57cb2fc03f4049a3f57446ca55)
+
+commit 40b1c2b231b62471d4f3cfba3ba2c3d596c9e170
+Author: Jianpeng Ma <jianpeng.ma@intel.com>
+Date:   Tue Apr 14 13:29:54 2015 +0800
+
+    osd: Remove the duplicated func MissingLoc::get_all_missing.
+    
+    It is the same as MissingLoc::get_needs_recovery.
+    
+    Signed-off-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    (cherry picked from commit bdd6205408cf20e039496728052a36c1a7d758c6)
+
+commit 47d5dfc0323e8d7614ad5793d85c1476b63c18e6
+Author: Jianpeng Ma <jianpeng.ma@intel.com>
+Date:   Tue Apr 14 09:11:58 2015 +0800
+
+    osd: Fix ec pg repair endless when met unrecover object.
+    
+    In repair_object, if bad_peer is replica, it don't add soid in
+    MissingLoc for ec pool. If there are more bad replica for ec pool
+    which cause object can't recover, the later recoverying will endless.
+    
+    Signed-off-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit d51806f5b330d5f112281fbb95ea6addf994324e)
+
+commit 187d308b5b0cb0512b442bbad1bddfda8ef9203f
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Aug 24 14:51:47 2015 -0400
+
+    uuid: use boost::random:random_device
+    
+    The boost mt code uses uninitialized memory for extra randomness,
+    which is a bad idea in general but more importantly makes valgrind
+    unhappy.  Use /dev/urandom instead.
+    
+    Unfortunately this introduces a link time dependency.. meh!
+    
+    Fixes: #12736
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit dbcaa544856fcc99ab912a101c4a28e1eb3fb94e)
+    
+    Conflicts:
+    	ceph.spec.in (trivial resolution)
+
+commit 174de7fce8080df6e02b363e7821e8cca6f8157f
+Author: Rohan Mars <code@rohanmars.com>
+Date:   Wed Aug 12 21:19:31 2015 -0700
+
+    moved to use boost uuid implementation, based on commit 4fe89a7b14c97b2ed7f357132901beb2bdcec551
+    
+    Signed-off-by: Rohan Mars <code@rohanmars.com>
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 62bfc7a1ab1587e81ed3bff0ddfbb1aa69d1c299)
+    
+    Conflicts:
+    	debian/control (trivial resolution)
+    	src/common/Makefile.am (trivial resolution)
+    	src/common/blkdev.cc (no get_device_by_uuid() function in hammer)
+
+commit 2e156d7ad4b9f4ffd6028df3a460b50b30c8b0d3
+Merge: 054a90e 5cd922c
+Author: Mykola Golub <to.my.trociny@gmail.com>
+Date:   Thu Jun 16 08:26:00 2016 +0300
+
+    Merge pull request #9722 from trociny/wip-16289-hammer
+    
+    hammer: qa/workunits/rbd: respect RBD_CREATE_ARGS environment variable
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 5cd922ca31d2eb987992b2afcbd45d5d92aeac69
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Tue Jun 14 15:28:06 2016 +0300
+
+    qa/workunits/rbd: respect RBD_CREATE_ARGS environment variable
+    
+    Fixes: http://tracker.ceph.com/issues/16289
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit 3048d3c7ce800a6174c54946b838e4e4079ec609)
+
+commit 1ac920bf291a58cf680108f8dc738197e9bae44d
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Sep 18 17:34:51 2015 -0700
+
+    rgw: fix identification of canceled operation
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 9f63b15b3a7c4cc633ff90f529934f071aea7c62)
+
+commit a38f157a09097d1eaef64813fc947aac19e3844a
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Mar 25 17:35:40 2015 -0700
+
+    rgw: identify racing writes when using copy-if-newer
+    
+    When copying an object from a different zone, and copy-if-newer is
+    specified, if the final meta write is canceled check whether the
+    destinatioin that was created is actually newer than our mtime,
+    otherwise retry.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit fe9c64b75caf3f53ce2dfdea5e39d794528dfc33)
+
+commit 02f6d8aaa86f4fdb9912763883d079d02589e5be
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Tue Mar 24 22:48:03 2015 -0700
+
+    rgw: translate http error 304 to appropriate status
+    
+    So that we can return the appropriate response on a conditioinal multi
+    zone copy operation.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 20d24e965884af440f94c7e3093587c7b8643cb9)
+
+commit 7319d76b269d541249124f46890f1b04279ba2ea
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Tue Mar 24 20:24:55 2015 -0700
+
+    rgw: fix if-modified-since boundary
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 27946e8ba4bc5dbfec2da319fa23266d5885d655)
+
+commit 5e4de5ad66dc24b059ef19664d1eef22be6890f7
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Tue Mar 24 20:16:02 2015 -0700
+
+    rgw: add rgwx-copy-if-newer http header
+    
+    Similar to IF_MOD_SINCE, but does not take a time argument, and should
+    protected against races (not there yet).
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 8813a4401198636e0f4d3a220a0f726625a5c5d4)
+
+commit 054a90edb2812f78426b8cb1dac2e768b2e7fc51
+Merge: 785ffd1 c722d00
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Tue Jun 7 15:48:00 2016 +0200
+
+    Merge pull request #8113 from Vicente-Cheng/wip-15023-hammer
+    
+    hammer: rgw: user quota may not adjust on bucket removal
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit 785ffd1f616864909b24314c803d12566c885d14
+Merge: e0a3589 139691c
+Author: Samuel Just <sjust@redhat.com>
+Date:   Mon Jun 6 12:42:14 2016 -0700
+
+    Merge pull request #9277 from ceph/wip-split-lfn-hammer
+    
+    Hammer LFN collection split fix: backport of http://tracker.ceph.com/issues/14766
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit e0a358972644d3718c80970fd7236a4df8e61afe
+Merge: 735c524 006ea56
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Mon Jun 6 08:19:23 2016 -0700
+
+    Merge pull request #9521 from ceph/revert-9496-wip-16149-hammer
+    
+    Revert "hammer: Scrub error: 0/1 pinned"
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 006ea56f603e160c83c8b1fe35ee8022321bf3b2
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jun 6 11:15:54 2016 -0400
+
+    Revert "hammer: Scrub error: 0/1 pinned"
+
+commit 735c52423305d4ad548464e986ff88e57333b8ca
+Merge: a1a5f57 c294bd3
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jun 6 08:46:45 2016 -0400
+
+    Merge pull request #9496 from Vicente-Cheng/wip-16149-hammer
+    
+    hammer: Scrub error: 0/1 pinned
+
+commit a1a5f57558e30fc0fd581756a75da5abee3e897b
+Merge: a336291 d1ab71f
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Mon Jun 6 11:39:34 2016 +0200
+
+    Merge pull request #8987 from dreamhost/hammer-wip-pr7712
+    
+    hammer: rgw: S3: set EncodingType in ListBucketResult
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit c294bd34e7e29f2c96e3277491c02ea26bf6da5c
+Author: Samuel Just <sjust@redhat.com>
+Date:   Fri May 20 13:59:10 2016 -0700
+
+    ReplicatedPG: adjust num_pinned in _delete_oid
+    
+    Fixes: http://tracker.ceph.com/issues/15952
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 907d4e25c676fd3e1c2be90ce8ab5b64b362b0bc)
+
+commit 43d1b92b97e0bb1c419341ba3c740fa632cafef0
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue May 17 17:14:07 2016 -0700
+
+    test: Fix grouping of mon_cephdf_commands by moving to MON_TESTS
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 2fb0530a5650bcdb9c89d8bdd2504a7dd1642678)
+    
+    Conflicts:
+    	qa/workunits/cephtool/test.sh (trivial)
+
+commit 300c11179290d9b119ff6f310efd1cf5b559b3e1
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Tue Mar 22 18:14:57 2016 -0700
+
+    rgw: convert plain object to versioned (with null version) when removing
+    
+    Fixes #15243
+    
+    When removing a plain null versioned object (was created prior to bucket versioning
+    enabled), need to convert the bucket index representation to a versioned one. This
+    is needed so that all the versioning mechanics play together.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit c6334d430b17739fed2df2b4481ae395ef6568d9)
+    
+    Conflicts:
+            src/rgw/rgw_rados.cc
+              - hammer is missing get_zone() API from which log_data can be
+                obtained. Needed to fall back to zone_public_config
+                structure in bucket_index_unlink_instance() definition.
+              - olh_tag string parameter added to
+                bucket_index_unlink_instance() definition.
+            src/rgw/rgw_rados.h
+              - olh_tag string parameter added to
+                bucket_index_unlink_instance() declaration.
+
+commit 4eea92b4a50e06d850c39009d122f8bbbd48c857
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu May 5 14:02:25 2016 -0700
+
+    rgw: handle stripe transition when flushing final pending_data_bl
+    
+    Fixes: http://tracker.ceph.com/issues/15745
+    
+    When complete_writing_data() is called, if pending_data_bl is not empty
+    we still need to handle stripe transition correctly. If pending_data_bl
+    has more data that we can allow in current stripe, move to the next one.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit b7a7d41839558b1a8786a66e27d9d80e606f61c7)
+    
+    Conflicts:
+    	src/rgw/rgw_rados.cc (hammer write_data() takes rgw_obj reference as
+    	4th argument, hammer throttle_data() takes rgw_obj as 2nd argument)
+
+commit f6076dd0416dd4464955f208d8964ef136b6142b
+Author: Zhi Zhang <willzzhang@tencent.com>
+Date:   Tue May 3 17:12:26 2016 +0800
+
+    mds: wrongly treat symlink inode as normal file/dir when symlink inode is stale on kcephfs
+    
+    Signed-off-by: Zhi Zhang <zhangz.david@outlook.com>
+    (cherry picked from commit 88b6d669e37924536152a552db46ef43a7353562)
+    
+    Conflicts:
+    	src/mds/Server.cc (hammer has req->head.args.open.flags instead of just flags)
+
+commit ce313cd89e29c0cfc6b7c600a82bdea7b351cdbd
+Author: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+Date:   Tue May 10 17:45:20 2016 +0200
+
+    rgw: handle errors properly during GET on Swift's DLO.
+    
+    Backport: Jewel, Hammer
+    Fixes: http://tracker.ceph.com/issues/15812
+    Signed-off-by: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+    (cherry picked from commit 5ef0202a86a1e4cb56bd29d926555f114a1acdd8)
+    
+    Conflicts:
+    	src/rgw/rgw_op.cc (hammer uses ret instead of op_ret; enclosing if
+    			   block in hammer does not check skip_manifest)
+
+commit 410ff1528caafaec0cfd9ea6ee4b86ed6788b09d
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri May 6 09:09:43 2016 -0400
+
+    osdc/Objecter: upper bound watch_check result
+    
+    This way we always return a safe upper bound on the amount of time
+    since we did a check.  Among other things, this prevents us from
+    returning a value of 0, which is confusing.
+    
+    Fixes: http://tracker.ceph.com/issues/15760
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 2e2ce365866a7569b55aff338a82c132aa927089)
+    
+    Conflicts:
+    	src/osdc/Objecter.cc
+    	    By https://github.com/ceph/ceph/pull/8967, simply add 1 to return vaule.
+
+commit d3eae0a01ae8d33988ffccee1f0af145aa10fa33
+Author: Xinze Chi <xinze@xsky.com>
+Date:   Mon May 23 21:38:39 2016 +0800
+
+    osd: fix omap digest compare when scrub
+    
+    Introduce by fe1c28dea4e5607a0c72eab1f046074616cd55a7.
+    
+    Fixes: http://tracker.ceph.com/issues/16000
+    Signed-off-by: Xinze Chi <xinze@xsky.com>
+
+commit a33629106ec64acdaba45bf9db18d2402a926b8e
+Merge: b9b5f96 dd29310
+Author: Sage Weil <sage@redhat.com>
+Date:   Sat May 21 14:18:25 2016 -0400
+
+    Merge pull request #9240 from yehudasa/wip-15886-hammer
+    
+    rgw: keep track of written_objs correctly
+
+commit dd29310bd6273ec3643bf90e51f7cae4801629c7
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon May 16 14:35:12 2016 -0700
+
+    rgw: keep track of written_objs correctly
+    
+    Fixes: http://tracker.ceph.com/issues/15886
+    
+    Only add a rados object to the written_objs list if the write
+    was successful. Otherwise if the write will be canceled for some
+    reason, we'd remove an object that we didn't write to. This was
+    a problem in a case where there's multiple writes that went to
+    the same part. The second writer should fail the write, since
+    we do an exclusive write. However, we added the object's name
+    to the written_objs list anyway, which was a real problem when
+    the old processor was disposed (as it was clearing the objects).
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 8fd74d11682f9d0c9085d2dc445fc3eb5631f6e0)
+
+commit c2ea6dbd652782bb227b7787c486660871b2d950
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Mon May 9 15:01:46 2016 +0800
+
+    osd: remove all stale osdmaps in handle_osd_map()
+    
+    in a large cluster, there are better chances that the OSD fails to trim
+    the cached osdmap in a timely manner. and sometimes, it is just unable
+    to keep up with the incoming osdmap if skip_maps, so the osdmap cache
+    can keep building up to over 250GB in size. in this change
+    
+    * publish_superblock() before trimming the osdmaps, so other osdmap
+      consumers of OSDService.superblock won't access the osdmaps being
+      removed.
+    * trim all stale osdmaps in batch of conf->osd_target_transaction_size
+      if skip_maps is true. in my test, it happens when the osd only
+      receives the osdmap from monitor occasionally because the osd happens
+      to be chosen when monitor wants to share a new osdmap with a random
+      osd.
+    * always use dedicated transaction(s) for trimming osdmaps. so even in
+      the normal case where we are able to trim all stale osdmaps in a
+      single batch, a separated transaction is used. we can piggy back
+      the commits for removing maps, but we keep it this way for simplicity.
+    * use std::min() instead MIN() for type safety
+    
+    Fixes: http://tracker.ceph.com/issues/13990
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 369db9930887d75b498927da9c97733bff4472b6)
+    
+    Conflicts:
+        remove the C++11ism
+
+commit ac0340ad30329df7919ce82938ad49d0a2e2d160
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Wed Mar 16 21:15:35 2016 +0800
+
+    osd: populate the trim_thru epoch using MOSDMap.oldest_map
+    
+    instead of filling MOSDMap with the local oldest_map, we share
+    the maximum MOSDMap.oldest_map received so far with peers. That
+    way one OSD's failure to trim won't prevent it from sharing with
+    others that they are allowed to trim.
+    
+    Fixes: #13990
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 9789c29fe0f82b236703f7ae4d356251fde3a46f)
+    
+    Conflict: use atomic_t instead of std::atomic<>
+
+commit b9b5f966ddfe7e706c038db204271ee662e0d825
+Merge: b90c097 bb5e015
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed May 18 17:02:26 2016 -0400
+
+    Merge pull request #9164 from liewegas/wip-osdmapcrc-hammer
+    
+    osd: dump full map bl at 20 when crc doesn't match
+
+commit bb5e015d50cb50361dd6ce258c720fe798b3835a
+Author: Sage Weil <sage@redhat.com>
+Date:   Sun Sep 6 13:56:38 2015 -0400
+
+    osd: dump full map bl at 20 when crc doesn't match
+    
+    This will help us debug cases where the encoding doesn't match due
+    to a bug.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit bfe359af0b80f44ca04847f74d5a2d81097ce4e6)
+
+commit 5057c34ebe4f93792f058ea5f2e3c7e0a29b3d3d
+Author: Dmitry Yatsushkevich <dyatsushkevich@mirantis.com>
+Date:   Mon Mar 23 11:05:44 2015 -0700
+
+    obj_bencher: cosmetic display fixes
+    
+    fix indents in output
+    change `snprintf' to `setprecision'
+    
+    Signed-off-by: Dmitry Yatsushkevich <dyatsushkevich@mirantis.com>
+    (cherry picked from commit ddb422f40394ec2f4fc4a6a6cff49e43538121a9)
+    Signed-off-by: Brad Hubbard <bhubbard@redhat.com>
+
+commit 6d8ad0edf6bae57a6e8ca5cc1a7add1659a92691
+Author: Brad Hubbard <bhubbard@redhat.com>
+Date:   Fri May 6 15:05:42 2016 +1000
+
+    common: Add space between timestamp and "min lat:" in bench output
+    
+    This change is taken from 069d95eaf49cadaa9a8fa1fa186455944a50ec7d
+    but I did not want to cherry-pick that patch since the rest of it
+    is purely cosmetic and would be unlikely to apply cleanly.
+    
+    Signed-off-by: Brad Hubbard <bhubbard@redhat.com>
+
+commit b90c097ddd3e172df4534509309a554cb3bc3917
+Merge: aefe2cb aab3a40
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon May 16 13:02:44 2016 +0200
+
+    Merge pull request #8535 from asheplyakov/bug-14512-hammer
+    
+    hammer: rbd snap rollback: restore the link to parent
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 31849986896ba6b5fd2b0b13023b50f67842fd28
+Author: Adam Kupczyk <akupczyk@mirantis.com>
+Date:   Wed Mar 2 12:31:01 2016 +0100
+
+    [MON] Fixed calculation of %USED. Now it is shows (space used by all replicas)/(raw space available on OSDs). Before it was (size of pool)/(raw space available on OSDs).
+    
+    Signed-off-by: Adam Kupczyk akupczyk@mirantis.com
+    (cherry picked from commit 71c4e525f27b8efd2aa4f3b5e95f4a13f123d41a)
+
+commit fed256e40f5465959384735be957dec88733aeb7
+Author: Ruifeng Yang <yangruifeng.09209@h3c.com>
+Date:   Tue Jan 12 22:08:41 2016 +0800
+
+    mon: add a column 'RAW USED' for ceph df detail
+    
+    Signed-off-by: Ruifeng Yang <yangruifeng.09209@h3c.com>
+    (cherry picked from commit 2b597ae6d4d53974f28a2da090232577daf09979)
+    
+    Conflicts:
+    	qa/workunits/cephtool/test.sh (trivial)
+    	src/mon/PGMonitor.cc (trivial)
+    	src/mon/PGMonitor.h (trivial)
+
+commit aefe2cb4f262112f0a028797733f868b83da7bd2
+Merge: d56bdf9 221efb0
+Author: Loic Dachary <loic@dachary.org>
+Date:   Thu May 12 23:17:51 2016 +0200
+
+    Merge pull request #9107 from SUSE/wip-15867-hammer
+    
+    hammer: ceph-disk s/by-parttype-uuid/by-parttypeuuid/
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 139691c646809f6c25d72c8de064f26b3c036197
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu May 12 13:50:58 2016 -0700
+
+    src/test/objectstore/store_test.cc: fix shards for new tests
+    
+    This didn't matter on master/jewel, but in hammer, keyvaluestore
+    asserts that gen != NO_GEN => shard != NO_SHARD.
+    
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+
+commit 221efb0b893adbfd7a19df171cf967fee87afcc7
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu May 12 20:06:06 2016 +0200
+
+    doc: s/by-parttype-uuid/by-parttypeuuid/ in ceph-disk
+    
+    Fixes: http://tracker.ceph.com/issues/15867
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+
+commit 62f4fbe66f8af79fb874125743df0433aa92b731
+Author: Samuel Just <sjust@redhat.com>
+Date:   Fri Mar 11 17:02:15 2016 -0800
+
+    store_test: improve synthetic coverage of the ec stash case
+    
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit f3a78e046d54260de01a4d1db8e104130e35cf42)
+    
+    Conflicts:
+            src/test/objectstore/store_test.cc
+
+commit b6bc9cbaef99670bc0fc55936ab02a3656ec8bfd
+Author: Samuel Just <sjust@redhat.com>
+Date:   Fri Mar 11 14:05:37 2016 -0800
+
+    store_test: improve synthetic test coverage of long object names
+    
+    1/2 of objects will now have long names, and we'll shift the region
+    of the hash space where new objects are created every 1024 objects
+    created.
+    
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 4b44720f752ebac63454ecd338e2b0c77c8fe501)
+    
+    Conflicts:
+    	src/test/objectstore/store_test.cc
+
+commit ec74c1281e641a45de039f2c168b50902e514729
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Mar 10 15:38:26 2016 -0800
+
+    TestRados: make half the objects have long names
+    
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 8b64432d07a14df9dfd2ed1314783de16530b1d1)
+
+commit 9d1ee7cf390154c5939a01ff439e33d303a952c2
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Mar 10 15:19:15 2016 -0800
+
+    LFNIndex::lfn_translate: consider alt attr as well
+    
+    If the file has an alt attr, there are two possible matching
+    ghobjects.  We want to make sure we choose the right one for
+    the short name we have.  If we don't, a split while there are
+    two objects linking to the same inode will result in one of
+    the links being orphaned in the source directory, resulting
+    in #14766.
+    
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 850ce11ea3c4dacc6ff1a3ce7ff37000818267c2)
+
+commit 6b821cc8f394e59760e3d58d27f382976bb69e13
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Mar 10 11:06:06 2016 -0800
+
+    LFNIndex::created: fix return value with failure injection
+    
+    See comment for explanation.
+    
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit aec5560887a1c1dbbb5aba822280e2c1e05d5d8f)
+
+commit f500435da3ddf750cf0770c0f63e9cff0cebd7a7
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Mar 10 11:03:13 2016 -0800
+
+    store_test: add reproducer for #14766
+    
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 0fb67c772561aaca9261ac9094b74d7524498f6f)
+    
+    Conflicts:
+            src/test/objectstore/store_test.cc
+
+commit cbd5aafe93a5c85392a460a183862f62af2836b8
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Apr 29 15:24:09 2016 -0400
+
+    osd/PG: update info.stats.* mappings on split
+    
+    These are updated in the init and start_peering_interval paths, but not
+    on split.
+    
+    Fixes: http://tracker.ceph.com/issues/15523
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 8b42294d98dd70715184991da5ba495fbe93d009)
+
+commit d1ab71ff6084719e86e07a447f3054af73e40868
+Author: Vitja Makarov <vitja.makarov@gmail.com>
+Date:   Wed Feb 17 13:46:18 2016 +0300
+
+    hammer: rgw: S3: set EncodingType in ListBucketResult
+    
+    Signed-off-by: Victor Makarov <vitja.makarov@gmail.com>
+    (cherry picked from commit d2e281d2beb0a49aae0fd939f9387cb2af2692c8)
+    X-Github-PR: 7712
+    Backport: hammer
+    Signed-off-by: Robin H. Johnson <robin.johnson@dreamhost.com>
+
+commit df4eadc2376bb4a53210e2fe176520887b840f2f
+Author: Gu Zhongyan <guzhongyan@360.cn>
+Date:   Wed Dec 30 16:42:07 2015 +0800
+
+    rados: Add units to rados bench output
+    
+    Fixes: #12248
+    Signed-off-by: Gu Zhongyan <guzhongyan@360.com>
+    Reviewed-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 669b932934d60bbfa751cebd9340f11bd95e2853)
+    Signed-off-by: Brad Hubbard <bhubbard@redhat.com>
+
+commit d96086af5d54a7450f3823210323b9fe08fc075a
+Author: Samuel Just <sjust@redhat.com>
+Date:   Wed Dec 2 17:20:19 2015 -0800
+
+    PGLog::rewind_divergent_log: fix rollback_info_trimmed_to before index()
+    
+    Fixes: #13965
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 053ee919059b2671d40110e8dff8615dc13d34e0)
+
+commit e79162de4cb418576ca633d5c7ea6fb766706962
+Author: Samuel Just <sjust@redhat.com>
+Date:   Wed Dec 2 17:17:57 2015 -0800
+
+    TestPGLog: add test for 13965
+    
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 66c7246491f4b6e5b95d80cc93c9157725a1a778)
+
+commit fb1b40f5e2da1b70d9ff026a75196c79d09cf0c6
+Author: Jianpeng Ma <jianpeng.ma@intel.com>
+Date:   Sun Mar 22 22:07:24 2015 +0800
+
+    osd/Replicated: For CEPH_OSD_OP_WRITE, set data digest.
+    
+    Add two cases which can add data digest for OP_WRITE:
+    a: offset = 0, and length > original size
+    b: offset = original size, and original has data_digest.
+    
+    Signed-off-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    (cherry picked from commit c7702bf85d3617b3e1c6619b8ebeff34932fc3e4)
+
+commit f0242598ea7c990aef2d00f3dc6a0cd65656332c
+Author: Jianpeng Ma <jianpeng.ma@intel.com>
+Date:   Mon Mar 23 09:54:52 2015 +0800
+
+    osd/ReplicatedPG: For obj has omap, it mean have omap data or omap header or have both.
+    
+    Signed-off-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    (cherry picked from commit fc51ce2a837e8e878d46d8ca54531aa7bd5d01b2)
+
+commit 7b3f1da0ab7f60705b6bc802ddb1bfbce10c8738
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Mar 28 10:33:53 2016 -0400
+
+    mon/MonClient: fix shutdown race
+    
+    While we are shutting down, we should drop all subsequent mon
+    messages.  Currently it is possible to finish the authentication
+    sequence *while* we are shutting down, such that a subsequent
+    attempt to authenticate succeeds.
+    
+    Fix this by resetting cur_con early in the sequence, as this
+    makes us drop all incoming messages.
+    
+    Fixes: http://tracker.ceph.com/issues/13992
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 5b44a348bfe4978446bbc7acf58eb8f60a47c965)
+
+commit ec02d8b7b1610bd7fd00c201fb01ef80d3b9f05b
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Tue Apr 12 17:31:27 2016 +0800
+
+    PG: set epoch_created and parent_split_bits for child pg
+    
+    if we have a wrong "created", OSD receiving an osd_pg_create message
+    could fail to project its history and crash. a bad split_bits could
+    mislead the monitor and osd, and hence cause problems.
+    * set child.info.history.epoch_created to osdmap.get_epoch() instead of
+      using the parent's epoch_created
+    * set child.info.stats.parent_split_bits to the calculated split_bits
+      instead using the parent's split_bits
+    
+    Fixes: http://tracker.ceph.com/issues/15426
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 8b985561ba08d4ed2d7751a8e09f9d9067c5fbd3)
+
+commit 049bc8a498d4ab516c2daded8ac44699aa72c982
+Author: Zhi Zhang <willzzhang@tencent.com>
+Date:   Thu Jan 14 11:04:42 2016 +0800
+
+    ceph-fuse: double decreased the count to trim caps
+    
+    Signed-off-by: Zhi Zhang zhangz.david@outlook.com
+    (cherry picked from commit d8a3f6d839649243b12cd6f73e6cb8aec1f955c1)
+
+commit e20df8020458a7b7679d0105183f870220ed0ce7
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Apr 8 10:35:29 2016 -0400
+
+    osd/ReplicatedPG: make handle_watch_timeout no-op if !active
+    
+    During on_change, we clean up old events on the obcs.  This can
+    include a queued watch timeout:
+    
+     3: (ReplicatedPG::handle_watch_timeout(std::shared_ptr<Watch>)+0x125) [0x7f1fc21fe375]
+     4: (HandleDelayedWatchTimeout::finish(int)+0xd3) [0x7f1fc213e2e3]
+     5: (Context::complete(int)+0x9) [0x7f1fc20ead29]
+     6: (ReplicatedPG::finish_degraded_object(hobject_t const&)+0x354) [0x7f1fc22429e4]
+     7: (ReplicatedPG::on_change(ObjectStore::Transaction*)+0x2ba) [0x7f1fc224353a]
+     8: (PG::start_peering_interval(std::shared_ptr<OSDMap const>, std::vector<int, std::allocator<int> > const&, int, std::vector<int, std::allocator<int> > const&, int, ObjectStore::Transaction*)+0x7bd) [0x7f1fc219a0bd]
+    
+    In this case, handle_watch_timeout should not assume that we are
+    active and primary.
+    
+    Fixes: http://tracker.ceph.com/issues/15391
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 4b0e39ee11e7bd5079ff6704bc74627d3ba8ba44)
+
+commit 3cb72dd57f901f400d19022269fb098c06318d6b
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Tue Jun 9 14:57:54 2015 +0200
+
+    mon/OSDMonitor.cc: fix UNINTENDED_INTEGER_DIVISION
+    
+    Fix for:
+    
+    CID 1297885 (#1 of 2): Result is not floating-point (UNINTENDED_INTEGER_DIVISION)
+     integer_division: Dividing integer expressions g_conf->mon_pool_quota_warn_threshold
+     and 100, and then converting the integer quotient to type float. Any remainder,
+     or fractional part of the quotient, is ignored.
+    
+    CID 1297885 (#2 of 2): Result is not floating-point (UNINTENDED_INTEGER_DIVISION)
+     integer_division: Dividing integer expressions g_conf->mon_pool_quota_crit_threshold
+     and 100, and then converting the integer quotient to type float. Any remainder,
+      or fractional part of the quotient, is ignored.
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit be7e07a52871e16e8a46accde6171077cca8db5a)
+
+commit aab3a40f95dafab34a7eadc2159d142a5f0f88f1
+Author: Alexey Sheplyakov <asheplyakov@mirantis.com>
+Date:   Mon Apr 11 14:16:48 2016 +0300
+
+    hammer: rbd snap rollback: restore the link to parent
+    
+    So snapshot, flatten, rollback of a cloned image does not loose any data
+    
+    Fixes: #14512
+    Signed-off-by: Alexey Sheplyakov <asheplyakov@mirantis.com>
+
+commit 488a78794d800312f79f7a8cd75dfda3bf3d6ed0
+Author: Samuel Just <sjust@redhat.com>
+Date:   Fri Jan 8 13:26:39 2016 -0800
+
+    ECBackend: send subop writes and reads at normal priority
+    
+    We want these to be processed ahead of new client ops since
+    there are resources being held.
+    
+    Fixes: 14313
+    Backport: hammer
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit b1151c4b8b7f22c7ac067da059d087007b0bc8ea)
+
+commit a2e7ca15d6fd0326526b77f443c15067eb1840ac
+Author: Richard W.M. Jones <rjones@redhat.com>
+Date:   Mon Mar 21 14:24:35 2016 +0000
+
+    common/Cycles: Do not initialize Cycles globally.
+    
+    Move initialization to the few tests that actually use it.
+    
+    Fixes: http://tracker.ceph.com/issues/15225
+    Signed-off-by: Richard W.M. Jones <rjones@redhat.com>
+    (cherry picked from commit 1c2831a2c1277c69f9649200d74a75c04a4b0296)
+    
+      Conflicts:
+    	src/test/msgr/perf_msgr_client.cc
+    	src/test/msgr/perf_msgr_server.cc
+    	src/test/perf_local.cc
+                These three files were not introduced on hammer, just remove
+
+commit ca0beef84812b09f1ab224e4796fd44c8fe37989
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Mar 18 10:42:40 2016 -0700
+
+    osd/OSD: fix build_past_intervals_parallel
+    
+    We may be only calculating older past intervals and have a valid
+    history.same_interval_since value, in which case the local
+    same_interval_since value will end at the newest old interval we had to
+    generate.
+    
+    Same as 0830275b39afc408573c2c468fa3b0e7b1d5cc4e change in generate_past_intervals()
+    This was introduced by 70316541bbb115d9a35954bfba373cf1dc084b7e.
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 0fd674bbf0c17a673be40123645adee3d64375a0)
+
+commit fce79027034bef0cfedbecd9d2601589495f86e6
+Author: David Zafman <dzafman@redhat.com>
+Date:   Mon Jul 20 17:48:15 2015 -0700
+
+    osd: When generating past intervals due to an import end at pg epoch
+    
+    Add assert() to make sure same_interval_since isn't too far forward
+    
+    Fixes: #12387
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 65dcc2da76750d0b6dd2cf0031c44f32749f33e5)
+
+commit 2c97cb33c8aa3f53af8a331075a3f79e70113cea
+Author: xie xingguo <xie.xingguo@zte.com.cn>
+Date:   Thu Mar 31 19:48:38 2016 +0800
+
+    rgw: fix compiling error
+    
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    (cherry picked from commit 535eb0e608f3bf6b7c561f277e9977b91ab97b48)
+
+commit 2aa1ea6b505c768323abb99dcc8c8f24e594a898
+Author: Robin H. Johnson <robin.johnson@dreamhost.com>
+Date:   Thu Mar 31 06:24:40 2016 +0000
+
+    rgw: Multipart ListPartsResult ETag quotes
+    
+    ListPartsResult output has always missed quotes on the ETag since it was
+    first committed.
+    
+    Fixes: #15334
+    Backports: hammer, infernalis
+    Signed-off-by: Robin H. Johnson <robin.johnson@dreamhost.com>
+    (cherry picked from commit a58b774e72cc1613d62e10b25322d6d15e9d2899)
+
+commit 365f21b1181b08e0bb89b916833301228e7c9efc
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Apr 6 15:39:23 2016 +0200
+
+    tests: be more generous with test timeout
+    
+    When the thrasher is in action together with a validater (lockdep or
+    valgrind), a single test may hang for more than 360 seconds. Increase to
+    1200: it does not matter if the value is large, only that it prevents
+    the test from hanging forever.
+    
+    Fixes: http://tracker.ceph.com/issues/15403
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit af89474b3fb2c4aa63680aa6b30d71fad2fdd373)
+
+commit c722d00af5286785ad23c574359220e47fd15076
+Author: Vicente Cheng <freeze.bilsted@gmail.com>
+Date:   Tue Feb 9 12:03:24 2016 -0800
+
+    rgw: user quota may not adjust on bucket removal
+    
+    Description:
+    If the user/admin removes a bucket using --force/--purge-objects options with s3cmd/radosgw-admin respectively, the user stats will continue to reflect the deleted objects for quota purposes, and there seems to be no way to reset them. User stats need to be sync'ed prior to bucket removal.
+    
+    Solution:
+    Sync user stats before removing a bucket.
+    
+    Fixes: #14507
+    Signed-off-by: Edward Yang <eyang@us.fujitsu.com>
+    (cherry picked from commit 06507992e3fad837c4667f467d59fc026a2ca0e8)
+    
+    Conflicts:
+    
+    	src/rgw/rgw_op.cc
+                reordering the check seqence and replace some op_ret to ret
+    
+    Backport Change:
+    We remove the `tenant` parameter because this feature is not introduced on hammer version.
+    The rgw multi-tenant feature is introduced on pr#6784 (https://github.com/ceph/ceph/pull/6784)
+    This feature is supported from v10.0.2 and later version.
+
+commit 20f300e2900ff123974312143c10dca59ee1a64a
+Author: Wido den Hollander <wido@42on.com>
+Date:   Tue Mar 22 11:35:05 2016 +0100
+
+    rgw: Do not send a Content-Length header on a 304 response
+    
+    We tell the client that the content has not changed. If we
+    send a Content-Length header RFC2616 describes that the client
+    MUST use that new value:
+    
+    "If a cache uses a received 304 response to update a cache entry,
+    the cache MUST update the entry to reflect any new field values
+    given in the response."
+    
+    Therefor we should not send a Content-Length header
+    
+    Fixes: #15119
+    
+    Signed-off-by: Wido den Hollander <wido@42on.com>
+    (cherry picked from commit fb4e5cc5d6adc82423d294496855f56e43e8c11d)
+
+commit e53751d0e52f6fb611d9bd81fe2115cd7ce533b3
+Author: Wido den Hollander <wido@42on.com>
+Date:   Mon Mar 21 16:50:49 2016 +0100
+
+    rgw: Do not send a Content-Type on a '304 Not Modified' response
+    
+    When we say the Content has not changed we should not respond
+    with a content type which defaults to binary/octet stream.
+    
+    Fixes: #15119
+    
+    Signed-off-by: Wido den Hollander <wido@42on.com>
+    (cherry picked from commit 471fa29e643fcfd5e1383fb987f99b5b21038ed7)
+
+commit 19dbc2598d15d0676017abe4fb75f7ddc3248119
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Dec 18 10:18:22 2015 -0800
+
+    rgw: dump_status() uses integer
+    
+    so that we can avoid atoi() later
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 744a29a34b72d2a709a58a5ea5fb6223a39c676a)
+    
+      Conflicts:
+    	src/rgw/rgw_rest.cc
+            rename the input parameter from `err` to `http_ret`
+
+commit c79b481311b3cd992794abc6e2f194f350d43531
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Dec 18 10:07:27 2015 -0800
+
+    rgw: move status_num initialization into constructor
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 2a12ffc3d7f98504ece8906a6fcb5dac8fd81aba)
+
+commit ceb8e19096f7d4ef35ed3ad8fad508aecbfa78ef
+Author: Wido den Hollander <wido@42on.com>
+Date:   Wed Nov 11 19:01:15 2015 +0100
+
+    rgw: Do not send a Content-Length header on status 204
+    
+    RFC7230 says:
+      A server MUST NOT send a Content-Length header field in any response with a
+      status code of 1xx (Informational) or 204 (No Content).
+    
+    Fixes: #13582
+    Signed-off-by: Wido den Hollander <wido@42on.com>
+    (cherry picked from commit 4e5921dbc7d1c51feb4cc5c03aa59a432742765e)
+
+commit 3ecdedd5cfe67d85530123ed6684688b43910aa6
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Fri Mar 11 11:13:43 2016 +0800
+
+    mds: fix stray purging in 'stripe_count > 1' case
+    
+    Fixes: #15050
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 99ec183973e0f4686673d93df02e5381543be51f)
+
+commit f28477c9cf904e9b27e6ad6bb38fbeeb80db5017
+Author: Dunrong Huang <riegamaths@gmail.com>
+Date:   Mon Dec 28 18:55:37 2015 +0800
+
+    rgw: do not abort when user passed bad parameters to set quota
+    
+    when user passes bad parameter(e.g. pass "null" to bool parameter), the ceph_json.cc::decode_json_obj()
+    will raise a exception with type of JSONDecoder::err(). If we do not catch this exception, the radosgw
+    server will abort.
+    
+    Fixes: #14191
+    
+    $ curl -X PUT http://ceph1:9090/admin/user?quota&uid=test5&quota-type=user -d '{"enabled": "null"}'
+    
+     0> 2015-12-28 11:25:20.864091 7f0d46fb5700 -1 *** Caught signal (Aborted) **
+     in thread 7f0d46fb5700
+    
+     ceph version 10.0.1-787-gc485d29 (c485d29a53f6a2c1a3b561c54632dbac1c4e9473)
+     1: (ceph::BackTrace::BackTrace(int)+0x2d) [0x7f0e13ef88c5]
+     2: (()+0x8fbfb7) [0x7f0e13ef7fb7]
+     3: (()+0xf100) [0x7f0e082c3100]
+     4: (gsignal()+0x37) [0x7f0e072fd5f7]
+     5: (abort()+0x148) [0x7f0e072fece8]
+     6: (__gnu_cxx::__verbose_terminate_handler()+0x165) [0x7f0e07c019b5]
+     7: (()+0x5e926) [0x7f0e07bff926]
+     8: (()+0x5e953) [0x7f0e07bff953]
+     9: (()+0x5eb73) [0x7f0e07bffb73]
+     10: (bool JSONDecoder::decode_json<bool>(char const*, bool&, JSONObj*, bool)+0x288) [0x7f0e13d74c2c]
+     11: (RGWQuotaInfo::decode_json(JSONObj*)+0x6c) [0x7f0e13d71128]
+     12: (void decode_json_obj<RGWQuotaInfo>(RGWQuotaInfo&, JSONObj*)+0x23) [0x7f0e13d21f16]
+     13: (int rgw_rest_get_json_input<RGWQuotaInfo>(CephContext*, req_state*, RGWQuotaInfo&, int, bool*)+0x11e) [0x7f0e13d21e48]
+     14: (RGWOp_Quota_Set::execute()+0x8c9) [0x7f0e13d1ed6d]
+     15: (()+0x7532d2) [0x7f0e13d4f2d2
+    
+    Reported-by: Coffee Chou <coffee.zyr@gmail.com>
+    Signed-off-by: Dunrong Huang <riegamaths@gmail.com>
+    (cherry picked from commit 59f9058467480d21bd98e0e90aa97313a92478a1)
+    
+    Conflicts:
+    	src/rgw/rgw_rest.h
+                hammer version lacks rgw_rest_get_json_input_keep_data()
+                template
+
+commit 9786394b2f75d883505125bc45c95fb685b96531
+Author: Dunrong Huang <riegamaths@gmail.com>
+Date:   Mon Dec 28 18:14:22 2015 +0800
+
+    rgw: do not abort when user passed bad parameters to set metadata
+    
+    Fixes: #14190
+    
+    when user passes bad parameter(e.g. pass "null" to bool parameter), the ceph_json.cc::decode_json_obj()
+    will raise a exception with type of JSONDecoder::err(). If we do not catch this exception, the radosgw
+    server will abort.
+    
+    $ curl -X PUT http://ceph1:9090/admin/metadata?user&format=json -d 'data = { "mtime": "null"}'
+    
+    terminate called after throwing an instance of 'JSONDecoder::err'
+    *** Caught signal (Aborted) **
+     in thread 7ff982f55700
+     ceph version 10.0.1-787-gc485d29 (c485d29a53f6a2c1a3b561c54632dbac1c4e9473)
+     1: (ceph::BackTrace::BackTrace(int)+0x2d) [0x7ffa814db8c5]
+     2: (()+0x8fbfb7) [0x7ffa814dafb7]
+     3: (()+0xf100) [0x7ffa758a6100]
+     4: (gsignal()+0x37) [0x7ffa748e05f7]
+     5: (abort()+0x148) [0x7ffa748e1ce8]
+     6: (__gnu_cxx::__verbose_terminate_handler()+0x165) [0x7ffa751e49b5]
+     7: (()+0x5e926) [0x7ffa751e2926]
+     8: (()+0x5e953) [0x7ffa751e2953]
+     9: (()+0x5eb73) [0x7ffa751e2b73]
+     10: (bool JSONDecoder::decode_json<long>(char const*, long&, JSONObj*, bool)+0x28c) [0x7ffa8135920a]
+     11: (RGWMetadataManager::put(std::string&, ceph::buffer::list&, RGWMetadataHandler::sync_type_t, obj_version*)+0x173) [0x7ffa81468029]
+     12: (RGWOp_Metadata_Put::execute()+0x172) [0x7ffa81308dcc]
+     13: (()+0x7532d2) [0x7ffa813322d2]
+     14: (RGWFCGXProcess::handle_request(RGWRequest*)+0x90) [0x7ffa813328a4]
+    
+    Reported-by: Coffee Chou <coffee.zyr@gmail.com>
+    Signed-off-by: Dunrong Huang <riegamaths@gmail.com>
+    (cherry picked from commit 83503239c81573232429a5fe98381f1a8f1357e9)
+    
+    Conflicts:
+    	src/rgw/rgw_user.cc
+                hammer version uses RGWUserInfo instead of RGWUserCompleteInfo
+
+commit b9a4ad9da99d82bd247e5d39108840f19535fa5e
+Author: Vicente Cheng <freeze.bilsted@gmail.com>
+Date:   Fri Mar 27 18:49:28 2015 +0800
+
+    Fixed the ceph get mdsmap assertion.
+    
+        When we want to get mdsmap, we try to get_version()
+        and the return value err = 0 means success.
+    
+        The assert verified r == 0. r would not change in this flow.
+        It always meet assert and lead mon failure.
+    
+        I think this verify should be:
+            assert(err == 0)
+        It will help to check return value of get_version().
+    
+    If you have any questions, feel free to let me know.
+    Thanks!
+    
+    Signed-off-by: Vicente Cheng <freeze.bilsted@gmail.com>
+    (cherry picked from commit f4398d2e6c245e3f81a6038425e1b8372b265b8c)

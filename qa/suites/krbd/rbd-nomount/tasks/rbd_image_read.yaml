@@ -1,0 +1,15 @@
+tasks:
+- workunit:
+    clients:
+      all:
+        - rbd/image_read.sh
+# Options for rbd/image_read.sh (default values shown)
+#    env:
+#        IMAGE_READ_LOCAL_FILES: 'false'
+#        IMAGE_READ_FORMAT: '2'
+#        IMAGE_READ_VERBOSE: 'true'
+#        IMAGE_READ_PAGE_SIZE: '4096'
+#        IMAGE_READ_OBJECT_ORDER: '22'
+#        IMAGE_READ_TEST_CLONES: 'true'
+#        IMAGE_READ_DOUBLE_ORDER: 'true'
+#        IMAGE_READ_HALF_ORDER: 'false'

@@ -1,0 +1,51 @@
+<legend i18n>{{this.type === 'user'? 'User Rate Limit': 'Bucket Rate Limit'}}</legend>
+<table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
+  <tbody>
+    <tr>
+    <td i18n
+        class="bold w-25">Enabled</td>
+    <td class="w-75">{{ rateLimitConfig.enabled | booleanText }}</td>
+    </tr>
+    <tr>
+    <td i18n
+        class="bold">Maximum Read Ops</td>
+    <td *ngIf="!rateLimitConfig.enabled">-</td>
+    <td *ngIf="rateLimitConfig.enabled && rateLimitConfig.max_read_ops <= 0"
+        i18n>Unlimited</td>
+    <td *ngIf="rateLimitConfig.enabled && rateLimitConfig.max_read_ops > 0">
+        {{ rateLimitConfig.max_read_ops}}
+    </td>
+    </tr>
+    <tr>
+    <td i18n
+        class="bold">Maximum Write Ops</td>
+    <td *ngIf="!rateLimitConfig.enabled">-</td>
+    <td *ngIf="rateLimitConfig.enabled && rateLimitConfig.max_write_ops <= 0"
+        i18n>Unlimited</td>
+    <td *ngIf="rateLimitConfig.enabled && rateLimitConfig.max_write_ops > 0">
+        {{ rateLimitConfig.max_write_ops }}
+    </td>
+    </tr>
+    <tr>
+    <td i18n
+        class="bold">Maximum Read Bytes</td>
+    <td *ngIf="!rateLimitConfig.enabled">-</td>
+    <td *ngIf="rateLimitConfig.enabled && rateLimitConfig.max_read_bytes <= 0"
+        i18n>Unlimited</td>
+    <td *ngIf="rateLimitConfig.enabled && rateLimitConfig.max_read_bytes > 0">
+        {{ rateLimitConfig.max_read_bytes | dimlessBinaryPerMinute}}
+    </td>
+    </tr>
+    <tr>
+    <td i18n
+        class="bold">Maximum Write Bytes</td>
+    <td *ngIf="!rateLimitConfig.enabled">-</td>
+    <td *ngIf="rateLimitConfig.enabled && rateLimitConfig.max_write_bytes <= 0"
+        i18n>Unlimited</td>
+    <td *ngIf="rateLimitConfig.enabled && rateLimitConfig.max_write_bytes > 0">
+        {{ rateLimitConfig.max_write_bytes | dimlessBinaryPerMinute}}
+    </td>
+    </tr>
+  </tbody>
+</table>
+
