@@ -466,6 +466,10 @@ public:
 			     std::string>>
   list_entries(const DoutPrefixProvider* dpp, int shard, int max_entries,
 	       std::string marker);
+  int list_entries_checked(const DoutPrefixProvider *dpp, int shard, int max_entries,
+			   std::vector<rgw_data_change_log_entry>& entries,
+			   std::string_view marker, std::string* out_marker,
+			   bool* truncated, optional_yield y);
   int list_entries(const DoutPrefixProvider *dpp, int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
 		   std::string_view marker, std::string* out_marker,

@@ -10942,10 +10942,10 @@ next:
     do {
       std::vector<rgw_data_change_log_entry> entries;
       if (specified_shard_id) {
-        ret = datalog_svc->list_entries(dpp(), shard_id, max_entries - count,
-					entries, marker,
-					&marker, &truncated,
-					null_yield);
+        ret = datalog_svc->list_entries_checked(dpp(), shard_id, max_entries - count,
+						entries, marker,
+						&marker, &truncated,
+						null_yield);
       } else {
         ret = datalog_svc->list_entries(dpp(), max_entries - count, entries,
 					log_marker, &truncated, null_yield);
