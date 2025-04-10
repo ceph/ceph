@@ -15,14 +15,63 @@ using LBAMappingRef = std::unique_ptr<LBAMapping>;
 
 class LogicalCachedExtent;
 
-class LBAMapping : public BtreeNodeMapping<laddr_t, paddr_t> {
+class LBAMapping {
 public:
   LBAMapping(op_context_t ctx)
-    : BtreeNodeMapping<laddr_t, paddr_t>(ctx) {}
-  template <typename... T>
-  LBAMapping(T&&... t)
-    : BtreeNodeMapping<laddr_t, paddr_t>(std::forward<T>(t)...)
+    : ctx(ctx) {}
+  LBAMapping(
+    op_context_t ctx,
+    CachedExtentRef parent,
+    uint16_t pos,
+    pladdr_t value,
+    extent_len_t len,
+    fixed_kv_node_meta_t<laddr_t> meta)
+    : ctx(ctx),
+      parent(parent),
+      value(value),
+      len(len),
+      range(meta),
+      pos(pos)
   {}
+
+  CachedExtentRef get_parent() {
+    return parent;
+  }
+
+  uint16_t get_pos() const {
+    return pos;
+  }
+
+  extent_len_t get_length() const {
+    ceph_assert(range.end > range.begin);
+    return len;
+  }
+
+  paddr_t get_val() const {
+    return value.get_paddr();
+  }
+
+  virtual laddr_t get_key() const {
+    return range.begin;
+  }
+
+  bool has_been_invalidated() const {
+    return parent->has_been_invalidated();
+  }
+
+  bool is_parent_viewable() const {
+    ceph_assert(parent);
+    return parent->is_viewable_by_trans(ctx.trans).first;
+  }
+
+  bool is_parent_valid() const {
+    ceph_assert(parent);
+    return parent->is_valid();
+  }
+
+  virtual void maybe_fix_pos() = 0;
+  virtual bool parent_modified() const = 0;
+  virtual uint32_t get_checksum() const = 0;
 
   // An lba pin may be indirect, see comments in lba_manager/btree/btree_lba_manager.h
   virtual bool is_indirect() const = 0;
@@ -55,6 +104,15 @@ public:
   virtual ~LBAMapping() {}
 protected:
   virtual LBAMappingRef _duplicate(op_context_t) const = 0;
+
+  op_context_t ctx;
+  CachedExtentRef parent;
+
+  pladdr_t value;
+  extent_len_t len = 0;
+  fixed_kv_node_meta_t<laddr_t> range;
+  uint16_t pos = std::numeric_limits<uint16_t>::max();
+
   std::optional<child_pos_t<
     lba_manager::btree::LBALeafNode>> child_pos = std::nullopt;
 };

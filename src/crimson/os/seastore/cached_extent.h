@@ -1110,8 +1110,7 @@ protected:
   friend class crimson::os::seastore::SegmentedAllocator;
   friend class crimson::os::seastore::TransactionManager;
   friend class crimson::os::seastore::ExtentPlacementManager;
-  template <typename, typename>
-  friend class BtreeNodeMapping;
+  friend class LBAMapping;
   friend class ::btree_lba_manager_test;
   friend class ::lba_btree_test;
   friend class ::btree_test_base;
@@ -1311,41 +1310,6 @@ public:
 
 private:
   uint64_t bytes = 0;
-};
-
-template <typename key_t, typename>
-class PhysicalNodeMapping;
-
-template <typename key_t, typename val_t>
-using PhysicalNodeMappingRef = std::unique_ptr<PhysicalNodeMapping<key_t, val_t>>;
-
-template <typename key_t, typename val_t>
-class PhysicalNodeMapping {
-public:
-  PhysicalNodeMapping() = default;
-  PhysicalNodeMapping(const PhysicalNodeMapping&) = delete;
-  virtual extent_len_t get_length() const = 0;
-  virtual val_t get_val() const = 0;
-  virtual key_t get_key() const = 0;
-  virtual bool has_been_invalidated() const = 0;
-  virtual CachedExtentRef get_parent() const = 0;
-  virtual uint16_t get_pos() const = 0;
-  virtual uint32_t get_checksum() const {
-    ceph_abort("impossible");
-    return 0;
-  }
-  virtual bool is_parent_viewable() const = 0;
-  virtual bool is_parent_valid() const = 0;
-  virtual bool parent_modified() const {
-    ceph_abort("impossible");
-    return false;
-  };
-
-  virtual void maybe_fix_pos() {
-    ceph_abort("impossible");
-  }
-
-  virtual ~PhysicalNodeMapping() {}
 };
 
 /**
