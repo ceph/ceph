@@ -166,6 +166,10 @@ public:
     return do_add_to_read_set(ref);
   }
 
+  bool is_in_read_set(const CachedExtent &extent) const {
+    return lookup_read_set(extent).first;
+  }
+
   void add_to_read_set(CachedExtentRef ref) {
     assert(ref->get_paddr().is_absolute()
            || ref->get_paddr().is_root());
@@ -594,20 +598,21 @@ private:
     }
   }
 
-  auto lookup_read_set(CachedExtentRef ref) const {
-    assert(ref->is_valid());
+  std::pair<bool, read_trans_set_t<Transaction>::const_iterator>
+  lookup_read_set(const CachedExtent &extent) const {
+    assert(extent.is_valid());
     assert(!is_weak());
-    auto it = ref->read_transactions.lower_bound(
+    auto it = extent.read_transactions.lower_bound(
       this, read_set_item_t<Transaction>::trans_cmp_t());
     bool exists =
-      (it != ref->read_transactions.end() && it->t == this);
+      (it != extent.read_transactions.end() && it->t == this);
     return std::make_pair(exists, it);
   }
 
   bool do_add_to_read_set(CachedExtentRef ref) {
     assert(!is_weak());
     assert(ref->is_stable());
-    auto [exists, it] = lookup_read_set(ref);
+    auto [exists, it] = lookup_read_set(*ref);
     if (exists) {
       return false;
     }
