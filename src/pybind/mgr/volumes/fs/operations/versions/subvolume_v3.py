@@ -215,8 +215,16 @@ class SubvolumeV3(SubvolumeV2):
 
     def unlink_current_meta_and_create_last_meta(self):
         '''
-        Create self.last_meta symlink.
+        Create self.last_meta symlink, if subvol dir was not deleted.
         '''
+        # if entire subvol dir was deleted, and not just incarnation dir, then
+        # .meta file was also deleted along and therefore skipping unlinking/
+        # re-linking it and return.
+        try:
+            self.fs.stat(self.subvol_dir)
+        except cephfs.ObjectNotFound:
+            return
+
         last_meta_exists = None
         try:
             self.fs.stat(self.last_meta)
@@ -254,8 +262,49 @@ class SubvolumeV3(SubvolumeV2):
     # following are methods that help or do snapshot creation
 
 
+    def snapshot_path(self, snap_name, uuid=None):
+        '''
+        Path to a specific snapshot named 'snap_name'.
+        '''
+        if uuid:
+            return join(self.roots_dir, uuid, self.vol_spec.snapshot_prefix,
+                        snap_name.encode('utf-8'))
+        else:
+            return join(self.snapshot_base_path(), snap_name.encode('utf-8'))
+
     def snapshot_base_path(self):
         return self.snap_dir
+
+    def snap_exists(self, snap_name, return_incar_uuid_too=False):
+        # list of all incarnations/UUID dirs of this subvolume.
+        incars = listdir(self.fs, self.roots_dir)
+
+        for incar_uuid in incars:
+            # construct path to ".snap" directory for given UUID.
+            snap_dir = join(self.roots_dir, incar_uuid,
+                            self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
+            snap_names = listdir(self.fs, snap_dir)
+            if snap_names in snap_names:
+                return (True, incar_uuid) if return_incar_uuid_too else True
+
+        return (False, None) if return_incar_uuid_too else False
+
+    def create_snapshot(self, snap_name):
+        if self.snap_exists(snap_name):
+            raise VolumeException(errno.EEXIST,
+                                  f'subvolume \'{snap_name}\' already exists')
+
+        super(SubvolumeV3, self).create_snapshot(snap_name)
+
+    def remove_snapshot(self, snap_name, force):
+        snap_exists, uuid = self.snap_exists(snap_name,
+                                             return_incar_uuid_too=True)
+        if not snap_exists:
+            raise VolumeException(errno.ENOENT,
+                                  f'subvolume \'{snap_name}\' does not exists')
+
+        super(SubvolumeV3, self).remove_snapshot(snap_name, force=force,
+                                                 uuid=uuid)
 
     # in subvol v3, self.mnt_dir (AKA data dir) is renamed to ".unlinked" if
     # subvol is deleted but snapshots are retained.
@@ -272,11 +321,12 @@ class SubvolumeV3(SubvolumeV2):
             SubvolumeStates.STATE_RETAINED.value)
         self.metadata_mgr.flush()
 
+
     # Following methods help clone operation -
 
 
-    def snapshot_data_path(self, snapname):
-        snappath = join(self.snapshot_path(snapname), b'mnt')
+    def snapshot_data_path(self, snap_name):
+        snappath = join(self.snapshot_path(snap_name), b'mnt')
 
         # v2 raises exception if the snapshot path do not exist so do the same
         # to prevent any bugs due to difference in behaviour.
@@ -291,7 +341,8 @@ class SubvolumeV3(SubvolumeV2):
             self.fs.stat(snappath)
         except cephfs.Error as e:
             if e.errno == errno.ENOENT:
-                raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
+                raise VolumeException(-errno.ENOENT,
+                                      f'snapshot \'{snap_name}\' does not exist')
             raise VolumeException(-e.args[0], e.args[1])
 
         return snappath
