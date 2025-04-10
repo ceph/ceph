@@ -92,6 +92,7 @@
                 cdsText
                 type="text"
                 formControlName="name"
+                id="name"
                 [invalid]="form.controls['users'].controls[i].controls.name.invalid &&
                           form.controls['users'].controls[i].controls.name.dirty"
               />
@@ -120,6 +121,7 @@
               type="password"
               label="Password"
               formControlName="password"
+              id="password"
               [invalid]="form.controls['users'].controls[i].controls.password.invalid &&
                           form.controls['users'].controls[i].controls.password.dirty"
             >

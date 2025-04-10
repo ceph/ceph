@@ -25,6 +25,7 @@
               cdsText
               type="text"
               formControlName="realm"
+              id="realm"
               autofocus
             />
           </cds-text-label>
@@ -57,6 +58,7 @@
                     label="Active Directory access resources"
                     i18n-label
                     formControlName="ref"
+                    id="ref"
                     [invalid]="domainSettingsForm.controls?.join_sources.controls[i].invalid && domainSettingsForm.controls?.join_sources.controls[i].controls.ref.dirty"
                     [invalidText]="joinSourceError"
                   >
@@ -105,6 +107,7 @@
             <button cdsButton="tertiary"
                     type="button"
                     (click)="navigateCreateJoinSource()"
+                    data-testid="navigateCreateJoinSource"
                     i18n>
               Create AD access resource
               <svg

@@ -30,6 +30,7 @@
                 [preserveFragment]="action.preserveFragment ? '' : null"
                 [disabled]="tableActions.disableSelectionAction(action)"
                 [attr.aria-label]="action.name"
+                data-testid="table-toolbar-actions"
                 i18n>
           {{ action.name }}
         </button>

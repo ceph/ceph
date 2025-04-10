@@ -106,3 +106,10 @@ And('select {string} {string}', (selectionName: string, option: string) => {
   cy.get(`select[id=${selectionName}]`).select(option);
   cy.get(`select[id=${selectionName}] option:checked`).contains(option);
 });
+
+And('select {string} {string} in the carbon modal', (selectionName: string, option: string) => {
+  cy.get('cds-modal').within(() => {
+    cy.get(`select[id=${selectionName}]`).select(option);
+    cy.get(`select[id=${selectionName}] option:checked`).contains(option);
+  });
+});

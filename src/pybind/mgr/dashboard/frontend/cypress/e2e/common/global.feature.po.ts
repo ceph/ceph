@@ -25,6 +25,24 @@ When('I click on {string} button', (button: string) => {
   cy.get(`[aria-label="${button}"]`).first().click({ force: true });
 });
 
+/**
+ * General purpose click on function
+ * @param dataTestid data-testid of the element to click on
+ */
+And('I click on {string}', (dataTestid: string) => {
+  cy.get(`[data-testid=${dataTestid}]`).click();
+});
+
+/**
+ * General purpose click on function in modal
+ * @param dataTestid data-testid of the element to click on
+ */
+And('I click on {string} in the carbon modal', (dataTestid: string) => {
+  cy.get('cds-modal').within(() => {
+    cy.get(`[data-testid="${dataTestid}"]`).click();
+  });
+});
+
 Then('I should see the modal', () => {
   cy.get('cd-modal').should('exist');
 });
@@ -49,6 +67,30 @@ And('I go to the {string} tab', (names: string) => {
   }
 });
 
+And('I go to the {string} carbon tab', (name: string) => {
+  cy.get('cds-tabs').within(() => {
+    cy.contains('button', name).click();
+  });
+});
+
 And('I wait for {string} seconds', (seconds: number) => {
   cy.wait(seconds * 1000);
+});
+
+Given('a volume is available', () => {
+  cy.request({
+    method: 'POST',
+    url: '/api/cephfs',
+    body: { name: 'testFs', service_spec: { placement: {} } },
+    headers: { Accept: 'application/vnd.ceph.api.v1.0+json' }
+  });
+});
+
+Given('a subvolume group is available', () => {
+  cy.request({
+    method: 'POST',
+    url: '/api/cephfs/subvolume/group',
+    body: { vol_name: 'testFs', group_name: 'testSubvGrp' },
+    headers: { Accept: 'application/vnd.ceph.api.v1.0+json' }
+  });
 });
