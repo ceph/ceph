@@ -316,7 +316,7 @@ WRITE_CLASS_ENCODER(RGWZonePlacementInfo)
 struct RGWZone {
   std::string id;
   std::string name;
-  std::list<std::string> endpoints; // std::vector?
+  std::vector<std::string> endpoints;
   bool log_meta;
   bool log_data;
   bool read_only;
