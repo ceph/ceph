@@ -360,6 +360,10 @@ class maybe_handle_error_t {
   ErrorVisitorT errfunc;
 
 public:
+  // NOTE: `__cxa_exception_type()` is an extension of the language.
+  // It should be available both in GCC and Clang but a fallback
+  // (based on `std::rethrow_exception()` and `catch`) can be made
+  // to handle other platforms if necessary.
   maybe_handle_error_t(ErrorVisitorT&& errfunc, std::exception_ptr ep)
     : type_info(*ep.__cxa_exception_type()),
       result(FuturatorT::make_exception_future(std::move(ep))),
@@ -403,11 +407,6 @@ public:
       // `catch` would allow to match against a base class as well.
       // However, this shouldn't be a big issue for `errorator` as Error
       // Visitors are already checked for exhaustiveness at compile-time.
-      //
-      // NOTE: `__cxa_exception_type()` is an extension of the language.
-      // It should be available both in GCC and Clang but a fallback
-      // (based on `std::rethrow_exception()` and `catch`) can be made
-      // to handle other platforms if necessary.
       if (type_info == ErrorT::error_t::get_exception_ptr_type_info()) {
         // set `state::invalid` in internals of `seastar::future` to not
         // call `report_failed_future()` during `operator=()`.
