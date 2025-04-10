@@ -409,6 +409,8 @@ public:
       // However, this shouldn't be a big issue for `errorator` as
       // ErrorVisitorT are already checked for exhaustiveness at compile-time.
       if (type_info == ErrorT::error_t::get_exception_ptr_type_info()) {
+
+        // TODO: add missing explanation
         if constexpr (std::is_assignable_v<decltype(result), return_t>) {
           result = std::invoke(std::forward<ErrorVisitorT>(errfunc),
                                ErrorT::error_t::from_exception_ptr(std::move(ep)));
