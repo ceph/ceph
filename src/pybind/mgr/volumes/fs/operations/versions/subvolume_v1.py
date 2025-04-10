@@ -925,3 +925,10 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         except (IndexException, MetadataMgrException) as e:
             log.warning("error delining snapshot from clone: {0}".format(e))
             raise VolumeException(-errno.EINVAL, "error delinking snapshot from clone")
+
+    def exists(self):
+        # XXX: unlike v3, in v1 a subvol either exists or doesn't. previous
+        # incarnations are never preserved whether or not snapshots are
+        # retained. Therefore, this method EXISTS ONLY FOR COMPATIBILITY with
+        # v3.
+        return True

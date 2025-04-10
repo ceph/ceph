@@ -133,6 +133,17 @@ class SubvolumeV3(SubvolumeV2):
         '''
         return self.meta
 
+    def exists(self):
+        '''
+        Return true if this subvolume has an incarnation data. This inferred by
+        testing the existence of ".meta" file.
+        '''
+        try:
+            self.fs.stat(self.current_meta)
+            return True
+        except cephfs.ObjectNotFound:
+            return False
+
 
     # following methods either help or do subvolume creation and opening/discovery
 
