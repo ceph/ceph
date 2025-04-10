@@ -11,8 +11,6 @@ namespace crimson::os::seastore::backref {
 
 class BtreeBackrefMapping : public BackrefMapping {
 public:
-  BtreeBackrefMapping(op_context_t ctx)
-    : BackrefMapping(ctx) {}
   BtreeBackrefMapping(
     op_context_t ctx,
     BackrefLeafNodeRef parent,
