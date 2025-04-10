@@ -1167,6 +1167,50 @@ class RgwClient(RestClient):
 
         return result
 
+    @RestClient.api_put('/{bucket_name}?notification')
+    def set_notification(self, bucket_name, notification, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request(data=notification)  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
+    @RestClient.api_get('/{bucket_name}?notification')
+    def get_notification(self, bucket_name, notification_id=None, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request(
+                raw_content=True, headers={'Accept': 'text/xml'}).decode()  # type: ignore
+            notification_config = xmltodict.parse(result)
+            if notification_config is not None:
+                notification_configuration = notification_config.get(
+                    'NotificationConfiguration', {}
+                )
+                topic_configuration = notification_configuration.get('TopicConfiguration')
+                if isinstance(topic_configuration, dict):
+                    notification_configuration['TopicConfiguration'] = [topic_configuration]
+
+                notification_config['NotificationConfiguration'] = notification_configuration
+            return notification_config['NotificationConfiguration']['TopicConfiguration']
+
+        except RequestException as e:
+            if e.content:
+                root = ET.fromstring(e.content)
+                code = root.find('Code')
+                if code is not None and code.text == 'NoSuchNotificationConfiguration':
+                    return None
+            raise DashboardException(msg=str(e), component='rgw')
+
+    @RestClient.api_delete('/{bucket_name}?notification')
+    def delete_notification(self, bucket_name, notification_id, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request()
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
 
 class SyncStatus(Enum):
     enabled = 'enabled'
