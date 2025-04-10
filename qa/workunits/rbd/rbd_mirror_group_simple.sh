@@ -18,6 +18,8 @@
 #    ../qa/workunits/rbd/rbd_mirror_group_simple.sh 
 #
 # Alternatively the script takes a number of optional arguments:
+#  -d <filename>  Save debug info for a test+scenario to $TEMPDIR/filename.  After a successful test completion the contents of this file
+#                 are deleted prior to running the next test to free up disk space.
 #  -m <multiplier> Some tests can be run with a variable number of images.  The multiplier value can be specified
 #                  to increase the default number of images. (image_count = default_count * multiplier)                          
 #  -r <repeat_count> repeat_count is a number that sets the number of times each test should be run. 
@@ -51,8 +53,11 @@ image_multiplier=1
 repeat_count=1
 feature=0
 
-while getopts ":f:m:r:s:t:" opt; do
+while getopts "d:f:m:r:s:t:" opt; do
   case $opt in
+    d)
+      RBD_MIRROR_SAVE_CLI_OUTPUT=$OPTARG
+      ;;
     f)
       feature=$OPTARG
       ;;
@@ -319,6 +324,8 @@ test_enable_mirroring_when_duplicate_group_exists()
   local group=$1 ; shift
   local scenario=$1 ; shift
 
+  start_mirrors "${primary_cluster}"
+
   group_create "${primary_cluster}" "${pool}/${group}"
   group_create "${secondary_cluster}" "${pool}/${group}"
   
@@ -326,40 +333,28 @@ test_enable_mirroring_when_duplicate_group_exists()
 
   # group will be present on secondary, but won't be mirrored
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" 0
-  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'down+unknown'
-  test_fields_in_group_info ${primary_cluster} ${pool}/${group} 'snapshot' 'enabled' 'true'
+  # TODO - fails on next line with blank description
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'up+stopped' 'local group is primary'
+  test_fields_in_group_info "${primary_cluster}" "${pool}/${group}" 'snapshot' 'enabled' 'true'
 
-#TODO need to finish this test so that it looks at the "state" and "description" fields for the peer site in the
-# group status output.
+  # Look at the "state" and "description" fields for the peer site in the group status output.
+  # Can't look at the state directly on the secondary because mirroring should have failed to be enabled
 
-# Example output is:
-#test-group0:
-  #global_id:   2abbba6c-4d06-46b5-ad9a-3e833b4555f1
-  #state:       down+unknown
-  #description: status not found
-  #last_update: 
-  #images:
-  #peer_sites:
-    #name: cluster1
-    #state: up+error
-    #description: bootstrap failed
-
-  # TODO write a helper function - wait_for_peer_group_status_in_pool_dir() that checks the state and description 
-  # see get_fields_from_mirror_group_status() function to help with this
+  # TODO - fails with incorrect description in peer status
   if [ "${scenario}" = 'remove' ]; then
-    wait_for_peer_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+error' 'split-brain'
+    wait_for_peer_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'up+error' 'split-brain detected'
     # remove the non-mirrored group on the secondary
     group_remove "${secondary_cluster}" "${pool}/${group}"
   elif  [ "${scenario}" = 'rename_secondary' ]; then
-    wait_for_peer_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+error' 'split-brain'
+    wait_for_peer_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'up+error' 'split-brain detected'
     group_rename "${secondary_cluster}" "${pool}/${group}" "${pool}/${group}_renamed"
   elif  [ "${scenario}" = 'rename_primary' ]; then
-    wait_for_peer_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+error' 'split-brain'
+    wait_for_peer_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'up+error' 'split-brain detected'
     group_rename "${primary_cluster}" "${pool}/${group}" "${pool}/${group}_renamed"
     group_orig="${group}"
     group="${group}_renamed"
   elif  [ "${scenario}" = 'disable_then_rename_primary' ]; then
-    wait_for_peer_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+error' 'split-brain'
+    wait_for_peer_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'up+error' 'split-brain detected'
     mirror_group_disable "${primary_cluster}" "${pool}/${group}"
     group_rename "${primary_cluster}" "${pool}/${group}" "${pool}/${group}_renamed"
     group_orig="${group}"
@@ -368,17 +363,17 @@ test_enable_mirroring_when_duplicate_group_exists()
   fi
 
   if [ "${scenario}" = 'remove' ]; then
-    wait_for_peer_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying'
-    test_fields_in_group_info ${secondary_cluster} ${pool}/${group} 'snapshot' 'enabled' 'false'
+    wait_for_peer_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'up+replaying'
+    test_fields_in_group_info "${secondary_cluster}" "${pool}/${group}" 'snapshot' 'enabled' 'false'
   elif  [ "${scenario}" = 'rename_secondary' ]; then
-    wait_for_peer_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying'
-    test_fields_in_group_info ${secondary_cluster} ${pool}/${group} 'snapshot' 'enabled' 'false'
+    wait_for_peer_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'up+replaying'
+    test_fields_in_group_info "${secondary_cluster}" "${pool}/${group}" 'snapshot' 'enabled' 'false'
   elif  [ "${scenario}" = 'rename_primary' ]; then
-    # Group should still not be mirrored in this case
-    wait_for_peer_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+error' 'split-brain'
+    # Group should still not be mirrored in this case - need to disable, rename and renable to fix
+    wait_for_peer_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'up+error' 'split-brain detected'
   elif  [ "${scenario}" = 'disable_then_rename_primary' ]; then
-    wait_for_peer_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying'
-    test_fields_in_group_info ${secondary_cluster} ${pool}/${group} 'snapshot' 'enabled' 'false'
+    wait_for_peer_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'up+replaying'
+    test_fields_in_group_info "${secondary_cluster}" "${pool}/${group}" 'snapshot' 'enabled' 'false'
   fi
 
   group_remove "${primary_cluster}" "${pool}/${group}"
@@ -390,122 +385,99 @@ test_enable_mirroring_when_duplicate_group_exists()
   elif  [ "${scenario}" = 'rename_primary' ]; then
     group_remove "${secondary_cluster}" "${pool}/${group_orig}"
   fi
+
+  wait_for_no_keys "${primary_cluster}"
+  stop_mirrors "${primary_cluster}"
 }
 
-declare -a test_enable_mirroring_when_duplicate_group_and_images_exists_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 2 'remove')
-declare -a test_enable_mirroring_when_duplicate_group_and_images_exists_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 2 'rename_secondary')
-declare -a test_enable_mirroring_when_duplicate_group_and_images_exists_3=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 2 'rename_primary')
-declare -a test_enable_mirroring_when_duplicate_group_and_images_exists_4=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 2 'disable_then_rename_primary')
+declare -a test_enable_mirroring_when_duplicate_image_exists_1=("${CLUSTER2}" "${CLUSTER1}" 'remove')
+declare -a test_enable_mirroring_when_duplicate_image_exists_2=("${CLUSTER2}" "${CLUSTER1}" 'rename_secondary')
+declare -a test_enable_mirroring_when_duplicate_image_exists_3=("${CLUSTER2}" "${CLUSTER1}" 'rename_primary')
+declare -a test_enable_mirroring_when_duplicate_image_exists_4=("${CLUSTER2}" "${CLUSTER1}" 'disable_then_rename_primary')
 
-test_enable_mirroring_when_duplicate_group_and_images_exists_scenarios=4
+test_enable_mirroring_when_duplicate_image_exists_scenarios=4
 
-# This test does the following
-# 1. create a group with images on primary site
-# 2. create a group with the same name with images with the same name on the secondary site
-# 3. enable mirroring on the primary site 
+# This test does the following 
+# 1. create a group with an image on primary site
+# 2. create an image with the same name on the secondary site
+# 3. enable mirroring for the group on the primary site 
 # 4. take different actions to allow mirroring to proceed
-#    scenario 1 - delete the duplicate named group and images on the secondary
-#    scenario 2 - rename the duplicate named group and images on the secondary
-#    scenario 3 - rename the duplicate named group and images on the primary without disabling mirroring
-#    scenario 4 - disable mirroing then rename the duplicate named group and images on the primary and re-enable mirroring
+#    scenario 1 - delete the duplicate image on the secondary
+#    scenario 2 - rename the duplicate image on the secondary
+#    scenario 3 - rename the duplicate image on the primary without disabling mirroring
+#    scenario 4 - disable mirroing then rename the duplicate named image on the primary and re-enable mirroring
 # 5. check that group and all images are successfully mirrored to secondary - apart from scenario 3
-test_enable_mirroring_when_duplicate_group_and_images_exists()
+test_enable_mirroring_when_duplicate_image_exists()
 {
   local primary_cluster=$1 ; shift
   local secondary_cluster=$1 ; shift
-  local pool=$1 ; shift
-  local group=$1 ; shift
-  local image_prefix=$1 ; shift
-  local image_count=$(($1*"${image_multiplier}")) ; shift
   local scenario=$1 ; shift
+  local image_count=1
+  local pool="${pool0}"
+  local group="${group0}"
+
+  start_mirrors "${primary_cluster}"
 
   group_create "${primary_cluster}" "${pool}/${group}"
   images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
   group_images_add "${primary_cluster}" "${pool}/${group}" "${pool}/${image_prefix}" "${image_count}"
 
-  group_create "${secondary_cluster}" "${pool}/${group}"
   images_create "${secondary_cluster}" "${pool}/${image_prefix}" "${image_count}"
-  group_images_add "${secondary_cluster}" "${pool}/${group}" "${pool}/${image_prefix}" "${image_count}"
   
   mirror_group_enable "${primary_cluster}" "${pool}/${group}"
 
-  # group will be present on secondary, but won't be mirrored
-  wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" "${image_count}"
-  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'down+unknown'
-  test_fields_in_group_info ${primary_cluster} ${pool}/${group} 'snapshot' 'enabled' 'true'
-  check_daemon_running "${secondary_cluster}"
+  # group will be present on secondary, but image won't be mirrored
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" 0
+  # TODO fails on next line with description 'bootstrap failed'
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'up+stopped' 'local group is primary'
+  test_fields_in_group_info "${primary_cluster}" "${pool}/${group}" 'snapshot' 'enabled' 'true'
+
+  # group should be mirrored, but image can't be
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+error' 'failed to start image replayers'
+  test_fields_in_group_info "${secondary_cluster}" "${pool}/${group}" 'snapshot' 'enabled' 'false'
 
   if [ "${scenario}" = 'remove' ]; then
-    # remove the non-mirrored group on the secondary
-    group_remove "${secondary_cluster}" "${pool}/${group}"
-  elif  [ "${scenario}" = 'rename_secondary' ]; then
-    group_rename "${secondary_cluster}" "${pool}/${group}" "${pool}/${group}_renamed"
-  elif  [ "${scenario}" = 'rename_primary' ]; then
-    group_rename "${primary_cluster}" "${pool}/${group}" "${pool}/${group}_renamed"
-    group_orig="${group}"
-    group="${group}_renamed"
-  elif  [ "${scenario}" = 'disable_then_rename_primary' ]; then
-    mirror_group_disable "${primary_cluster}" "${pool}/${group}"
-    group_rename "${primary_cluster}" "${pool}/${group}" "${pool}/${group}_renamed"
-    group_orig="${group}"
-    group="${group}_renamed"
-    mirror_group_enable "${primary_cluster}" "${pool}/${group}"
-  fi
-
-  # group should now be mirrored, but images can't be
-  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+error'
-  test_fields_in_group_info ${secondary_cluster} ${pool}/${group} 'snapshot' 'enabled' 'false'
-
-  if [ "${scenario}" = 'remove' ]; then
-    # remove the non-mirrored images on the secondary
+    # remove the non-mirrored image on the secondary
     images_remove "${secondary_cluster}" "${pool}/${image_prefix}" "${image_count}"
   elif  [ "${scenario}" = 'rename_secondary' ]; then
-    local i
-    for i in $(seq 0 $((image_count-1))); do
-      image_rename "${secondary_cluster}" "${pool}/${image_prefix}${i}" "${pool}/${image_prefix}_renamed${i}"
-    done
+    image_rename "${secondary_cluster}" "${pool}/${image_prefix}0" "${pool}/${image_prefix}_renamed0"
   elif  [ "${scenario}" = 'rename_primary' ]; then
-    local i
-    for i in $(seq 0 $((image_count-1))); do
-      image_rename "${primary_cluster}" "${pool}/${image_prefix}${i}" "${pool}/${image_prefix}_renamed${i}"
-    done
+    image_rename "${primary_cluster}" "${pool}/${image_prefix}0" "${pool}/${image_prefix}_renamed0"
     image_prefix_orig="${image_prefix}"
     image_prefix="${image_prefix}_renamed"
   elif  [ "${scenario}" = 'disable_then_rename_primary' ]; then
     mirror_group_disable "${primary_cluster}" "${pool}/${group}"
-    local i
-    for i in $(seq 0 $((image_count-1))); do
-      image_rename "${primary_cluster}" "${pool}/${image_prefix}${i}" "${pool}/${image_prefix}_renamed${i}"
-    done
+    image_rename "${primary_cluster}" "${pool}/${image_prefix}0" "${pool}/${image_prefix}_renamed0"
     image_prefix_orig="${image_prefix}"
     image_prefix="${image_prefix}_renamed"
     mirror_group_enable "${primary_cluster}" "${pool}/${group}"
+    wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" "${image_count}"
   fi
 
-  # TODO scenario 3 fails on the next line - no images are listed in the group 
-  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying' "${image_count}"
-  wait_for_group_synced "${primary_cluster}" "${pool}/${group}" "${secondary_cluster}" "${pool}"/"${group}"
-
-  wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group}" "${image_count}"
-  check_daemon_running "${secondary_cluster}"
-
-  if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
-    wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'down+unknown' 0
+  if [ "${scenario}" = 'rename_primary' ]; then
+    # Group should still not be mirrored in this case - need to disable, rename and renable to fix
+    # TODO scenario 3 fails on the next line - description is blank'
+    wait_for_peer_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'up+stopped' 'local group is primary'
+  else
+    wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying' "${image_count}"
+    wait_for_group_synced "${primary_cluster}" "${pool}/${group}" "${secondary_cluster}" "${pool}"/"${group}"
+    wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group}" "${image_count}"
+    wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'up+stopped' "${image_count}"
   fi
 
   group_remove "${primary_cluster}" "${pool}/${group}"
   wait_for_group_not_present "${primary_cluster}" "${pool}" "${group}"
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group}"
-  check_daemon_running "${secondary_cluster}"
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
 
   if [ "${scenario}" = 'rename_secondary' ]; then
-    group_remove "${secondary_cluster}" "${pool}/${group}_renamed"
     images_remove "${secondary_cluster}" "${pool}/${image_prefix}_renamed" "${image_count}"
   elif  [ "${scenario}" = 'rename_primary' ]; then
-    group_remove "${secondary_cluster}" "${pool}/${group_orig}"
     images_remove "${secondary_cluster}" "${pool}/${image_prefix_orig}" "${image_count}"
   fi
+
+  wait_for_no_keys "${primary_cluster}"
+  stop_mirrors "${primary_cluster}"
 }
 
 # record the time taken to enable and sync for a group with increasing number of images.
@@ -686,7 +658,7 @@ test_create_group_stop_daemon_then_recreate()
 
   # Wait for rbd_mirror_leader to be empty
   for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16; do
-    sleep ${s}
+    sleep "${s}"
     count_omap_keys_with_filter "${secondary_cluster}" "${pool}" "rbd_mirror_leader" "image_map" key_count
     test "${key_count}" = 0 && break
   done
@@ -1138,7 +1110,7 @@ test_remote_namespace()
     wait_for_status_in_pool_dir "${secondary_cluster}" "${secondary_pool_spec}" "${standalone_image}" 'up+unknown'
   fi
 
-  # try promote, modify image and check new snapshot syncs 
+  # try promote (of original secondary), modify image and check new snapshot syncs 
   if [ "${test_group}" = 'true' ]; then
     mirror_group_promote "${secondary_cluster}" "${secondary_pool_spec}/${group}"
     test_fields_in_group_info "${secondary_cluster}" "${secondary_pool_spec}/${group}" 'snapshot' 'enabled' 'true'
@@ -1157,7 +1129,7 @@ test_remote_namespace()
     wait_for_snapshot_sync_complete "${primary_cluster}" "${secondary_cluster}" "${primary_pool_spec}" "${secondary_pool_spec}" "${standalone_image}"
   fi  
 
-  # try demote, promote and resync
+  # try demote, promote (of original primary) and resync
   if [ "${test_group}" = 'true' ]; then
     mirror_group_demote "${secondary_cluster}" "${secondary_pool_spec}/${group}"
     test_fields_in_group_info "${secondary_cluster}" "${secondary_pool_spec}/${group}" 'snapshot' 'enabled' 'false'
@@ -1168,7 +1140,10 @@ test_remote_namespace()
     test_fields_in_group_info "${primary_cluster}" "${primary_pool_spec}/${group}" 'snapshot' 'enabled' 'true'
     wait_for_group_status_in_pool_dir "${secondary_cluster}" "${secondary_pool_spec}"/"${group}" 'up+replaying' "${image_count}"
 
+    local group_id_before
+    get_id_from_group_info "${secondary_cluster}" "${secondary_pool_spec}/${group}" group_id_before
     mirror_group_resync "${secondary_cluster}" "${secondary_pool_spec}/${group}"
+    wait_for_group_id_changed "${secondary_cluster}" "${secondary_pool_spec}/${group}" "${group_id_before}"
 
     wait_for_group_synced "${primary_cluster}" "${primary_pool_spec}/${group}" "${secondary_cluster}" "${secondary_pool_spec}/${group}"
 
@@ -1189,6 +1164,22 @@ test_remote_namespace()
     wait_for_status_in_pool_dir "${primary_cluster}" "${primary_pool_spec}" "${standalone_image}" 'up+stopped'
     wait_for_snapshot_sync_complete "${secondary_cluster}" "${primary_cluster}" "${secondary_pool_spec}" "${primary_pool_spec}" "${standalone_image}"
   fi    
+
+  # try another manual snapshot and check that it still syncs OK
+  if [ "${test_group}" = 'true' ]; then
+    write_image "${primary_cluster}" "${primary_pool_spec}" "${image_prefix}0" 10 4096
+    local group_snap_id
+    mirror_group_snapshot "${primary_cluster}" "${primary_pool_spec}/${group}" group_snap_id
+    wait_for_group_snap_present "${secondary_cluster}" "${secondary_pool_spec}/${group}" "${group_snap_id}"
+    wait_for_group_snap_sync_complete "${secondary_cluster}" "${secondary_pool_spec}/${group}" "${group_snap_id}"
+
+    # Check all images in the group and confirms that they are synced
+    test_group_synced_image_status "${secondary_cluster}" "${secondary_pool_spec}/${group}" "${group_snap_id}" "${image_count}"
+  else
+    # try a standalone image
+    mirror_image_snapshot "${primary_cluster}" "${primary_pool_spec}" "${standalone_image}"
+    wait_for_snapshot_sync_complete "${secondary_cluster}" "${primary_cluster}" "${secondary_pool_spec}" "${primary_pool_spec}" "${standalone_image}"
+  fi  
 
   if [ "${test_group}" = 'true' ]; then
     group_remove "${primary_cluster}" "${primary_pool_spec}/${group}"
@@ -1273,7 +1264,11 @@ test_empty_group()
   test_fields_in_group_info "${primary_cluster}" "${pool}/${group}" 'snapshot' 'enabled' 'true'
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying'
 
+  local group_id_before
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group}" group_id_before
   mirror_group_resync "${secondary_cluster}" "${pool}/${group}"
+  wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group}" "${group_id_before}"
+
   wait_for_group_synced "${primary_cluster}" "${pool}/${group}" "${secondary_cluster}" "${pool}/${group}"
 
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying'
@@ -1434,7 +1429,11 @@ test_empty_groups()
   test_fields_in_group_info "${primary_cluster}" "${pool}/${group1}" 'snapshot' 'enabled' 'true'
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group1}" 'up+replaying'
 
+  local group_id_before
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group1}" group_id_before
   mirror_group_resync "${secondary_cluster}" "${pool}/${group1}"
+  wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group1}" "${group_id_before}"
+
   wait_for_group_synced "${primary_cluster}" "${pool}/${group1}" "${secondary_cluster}" "${pool}/${group1}"
 
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group1}" 'up+replaying'
@@ -1963,13 +1962,22 @@ test_stopped_daemon()
   get_newest_group_snapshot_id "${secondary_cluster}" "${pool}"/"${group}" secondary_group_snap_id
   test "${primary_group_snap_id}" = "${secondary_group_snap_id}" ||  { fail "mismatched ids"; return 1; }
 
-  # TODO test more actions whilst daemon is stopped
-  # add image, take snapshot, remove image, take snapshot, restart
-  # disable mirroring 
-  
+  # TODO When dynamic groups are support this test could be extended with more actions whilst daemon is stopped.
+  # eg add image, take snapshot, remove image, take snapshot, restart
+
+  # Disable mirroring for synced group (whilst daemon is stopped)
+  echo "stopping daemon"
+  stop_mirrors "${secondary_cluster}"
+
   mirror_group_disable "${primary_cluster}" "${pool}/${group}"
   group_remove "${primary_cluster}" "${pool}/${group}"
   wait_for_group_not_present "${primary_cluster}" "${pool}" "${group}"
+  test_group_present "${secondary_cluster}" "${pool}" "${group}" 1 "${group_image_count}"
+
+  # restart daemon and confirm that group is removed from secondary
+  echo "starting daemon"
+  start_mirrors "${secondary_cluster}"
+
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group}"
 
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${group_image_count}"
@@ -1977,10 +1985,8 @@ test_stopped_daemon()
 }
 
 # multiple images in group and standalone images too with io
-declare -a test_group_and_standalone_images_do_io_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 'false')
-declare -a test_group_and_standalone_images_do_io_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 'true')
+declare -a test_group_and_standalone_images_do_io_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}")
 
-# TODO scenario 2 fails currently - it is waiting for the groups to be listed in the pool status
 test_group_and_standalone_images_do_io_scenarios=1 
 
 test_group_and_standalone_images_do_io()
@@ -1990,7 +1996,6 @@ test_group_and_standalone_images_do_io()
   local pool=$3
   local group=$4
   local image_prefix=$5
-  local test_pool_status=$6
 
   local standalone_image_prefix=standalone-image
   local standalone_image_count=4
@@ -2002,25 +2007,20 @@ test_group_and_standalone_images_do_io()
   images_create "${primary_cluster}" "${pool}/${image_prefix}" "${group_image_count}"
   group_images_add "${primary_cluster}" "${pool}/${group}" "${pool}/${image_prefix}" "${group_image_count}"
 
-  if [ 'true' = "${test_pool_status}" ]; then
-    local fields=(//status/images/image/name //status/groups/group/name)
-    local pool_fields_count_arr=()
-    count_fields_in_mirror_pool_status "${primary_cluster}" "${pool}" pool_fields_count_arr "${fields[@]}"
-    # Check count of images and groups in the command output
-    test 0 = "${pool_fields_count_arr[0]}" || fail "unexpected count of images : ${pool_fields_count_arr[0]}"
-    test 0 = "${pool_fields_count_arr[1]}" || fail "unexpected count of groups : ${pool_fields_count_arr[1]}"
-  fi
+  local fields=(//status/images/image/name //status/groups/group/name)
+  local pool_fields_count_arr=()
+  count_fields_in_mirror_pool_status "${primary_cluster}" "${pool}" pool_fields_count_arr "${fields[@]}"
+  # Check count of images and groups in the command output
+  test 0 = "${pool_fields_count_arr[0]}" || fail "unexpected count of images : ${pool_fields_count_arr[0]}"
+  test 0 = "${pool_fields_count_arr[1]}" || fail "unexpected count of groups : ${pool_fields_count_arr[1]}"
 
   mirror_group_enable "${primary_cluster}" "${pool}/${group}"
 
-  if [ 'true' = "${test_pool_status}" ]; then
-    local fields=(//status/images/image/name //status/groups/group/name)
-    pool_fields_count_arr=()
-    count_fields_in_mirror_pool_status "${primary_cluster}" "${pool}" pool_fields_count_arr "${fields[@]}"
-    # Check count of images and groups in the command output
-    test $((${group_image_count})) = "${pool_fields_count_arr[0]}" || fail "unexpected count of images : ${pool_fields_count_arr[0]}"
-    test 1 = "${pool_fields_count_arr[1]}" || fail "unexpected count of groups : ${pool_fields_count_arr[1]}"
-  fi
+  pool_fields_count_arr=()
+  count_fields_in_mirror_pool_status "${primary_cluster}" "${pool}" pool_fields_count_arr "${fields[@]}"
+  # Check count of images and groups in the command output
+  test $((${group_image_count})) = "${pool_fields_count_arr[0]}" || fail "unexpected count of images : ${pool_fields_count_arr[0]}"
+  test 1 = "${pool_fields_count_arr[1]}" || fail "unexpected count of groups : ${pool_fields_count_arr[1]}"
 
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" "${group_image_count}"
 
@@ -2041,14 +2041,11 @@ test_group_and_standalone_images_do_io()
     compare_images "${secondary_cluster}" "${primary_cluster}" "${pool}" "${pool}" "${standalone_image_prefix}${loop_instance}"
   done
 
-  if [ 'true' = "${test_pool_status}" ]; then
-    local fields=(//status/images/image/name //status/groups/group/name)
-    pool_fields_count_arr=()
-    count_fields_in_mirror_pool_status "${primary_cluster}" "${pool}" pool_fields_count_arr "${fields[@]}"
-    # Check count of images and groups in the command output
-    test $((${standalone_image_count}+${group_image_count})) = "${pool_fields_count_arr[0]}" || fail "unexpected count of images : ${pool_fields_count_arr[0]}"
-    test 1 = "${pool_fields_count_arr[1]}" || fail "unexpected count of groups : ${pool_fields_count_arr[1]}"
-  fi
+  pool_fields_count_arr=()
+  count_fields_in_mirror_pool_status "${primary_cluster}" "${pool}" pool_fields_count_arr "${fields[@]}"
+  # Check count of images and groups in the command output
+  test $((${standalone_image_count}+${group_image_count})) = "${pool_fields_count_arr[0]}" || fail "unexpected count of images : ${pool_fields_count_arr[0]}"
+  test 1 = "${pool_fields_count_arr[1]}" || fail "unexpected count of groups : ${pool_fields_count_arr[1]}"
 
   local io_count=1024
   local io_size=4096
@@ -2186,7 +2183,7 @@ test_create_multiple_groups_do_io()
   #        - also maybe change image count in groups and check rebalancing
   local group_arr
   local image_arr
-  for instance in $(seq 0 ${LAST_MIRROR_INSTANCE}); do
+  for instance in $(seq 0 "${LAST_MIRROR_INSTANCE}"); do
     local result
     query_replayer_assignment "${secondary_cluster}" "${instance}" result
     group_arr+=("${result[0]}")
@@ -2194,7 +2191,7 @@ test_create_multiple_groups_do_io()
     group_count_arr+=("${result[2]}")
     image_count_arr+=("${result[3]}")
   done
-  for instance in $(seq 0 ${LAST_MIRROR_INSTANCE}); do
+  for instance in $(seq 0 "${LAST_MIRROR_INSTANCE}"); do
       echo -e "${RED}MIRROR DAEMON INSTANCE:${instance}${NO_COLOUR}";
       echo -e "${RED}GROUP_REPLAYERS:${group_count_arr[$instance]}${NO_COLOUR}";
       echo -e "${RED}${group_arr[$instance]}${NO_COLOUR}";
@@ -2460,7 +2457,8 @@ test_image_move_group()
   wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group0}" $(("${image_count}"-4))
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' $(("${image_count}"-4))
 
-  # set up a chain of moves TODO
+  # TODO when dynamic groups are supported, this test could be extended to set up a chain of moves 
+  # ie stop daemon, move image from group A->B, move image from B->C then restart daemon
 
   mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
   group_remove "${primary_cluster}" "${pool}/${group0}"
@@ -2665,10 +2663,9 @@ test_force_promote()
     sleep 5
   fi  
 
+  wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group0}" "${group_id_before}"
+
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}/${group0}"
-  local group_id_after
-  get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_after
-  test "${group_id_before}" != "${group_id_after}" || fail "group was not recreated by resync"
 
   compare_image_with_snapshot "${secondary_cluster}" "${pool}/${image_prefix}0" "${secondary_cluster}" "${pool}/${image_prefix}0@${snap0}"
   compare_image_with_snapshot "${secondary_cluster}" "${pool}/${big_image}" "${secondary_cluster}" "${pool}/${big_image}@${snap0}"
@@ -2735,10 +2732,10 @@ test_force_promote_delete_group()
   stop_mirrors "${secondary_cluster}" '-9'
   mirror_group_promote "${secondary_cluster}" "${pool}/${group0}" '--force'
   start_mirrors "${secondary_cluster}"
-  wait_for_group_replay_stopped ${secondary_cluster} ${pool}/${group0}
-  wait_for_group_replay_stopped ${primary_cluster} ${pool}/${group0}
-  wait_for_group_status_in_pool_dir ${secondary_cluster} ${pool}/${group0} 'up+stopped' "${image_count}"
-  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+stopped' "${image_count}"
+  wait_for_group_replay_stopped "${secondary_cluster}" "${pool}/${group0}"
+  wait_for_group_replay_stopped "${primary_cluster}" "${pool}/${group0}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}/${group0}" 'up+stopped' "${image_count}"
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}/${group0}" 'up+stopped' "${image_count}"
 
   wait_for_group_present "${primary_cluster}" "${pool}" "${group0}" "${image_count}"
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
@@ -2749,21 +2746,21 @@ test_force_promote_delete_group()
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
 
   # group still exists on original primary
-  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+stopped' "${image_count}"
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}/${group0}" 'up+stopped' "${image_count}"
 
-  group_image_remove ${secondary_cluster} ${pool}/${group0} ${pool}/${image_prefix}0
+  group_image_remove "${secondary_cluster}" "${pool}/${group0}" "${pool}/${image_prefix}0"
 
   wait_for_group_present "${primary_cluster}" "${pool}" "${group0}" "${image_count}"
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" $(("${image_count}"-1))
-  test_fields_in_group_info ${primary_cluster} ${pool}/${group0} 'snapshot' 'enabled' 'true'
-  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+stopped' "${image_count}"
+  test_fields_in_group_info "${primary_cluster}" "${pool}/${group0}" 'snapshot' 'enabled' 'true'
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}/${group0}" 'up+stopped' "${image_count}"
 
   mirror_group_enable "${secondary_cluster}" "${pool}/${group0}"
-  test_fields_in_group_info ${primary_cluster} ${pool}/${group0} 'snapshot' 'enabled' 'true'
-  test_fields_in_group_info ${secondary_cluster} ${pool}/${group0} 'snapshot' 'enabled' 'true'
+  test_fields_in_group_info "${primary_cluster}" "${pool}/${group0}" 'snapshot' 'enabled' 'true'
+  test_fields_in_group_info "${secondary_cluster}" "${pool}/${group0}" 'snapshot' 'enabled' 'true'
 
-  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+stopped' "${image_count}"
-  wait_for_group_status_in_pool_dir ${secondary_cluster} ${pool}/${group0} 'up+stopped' $(("${image_count}"-1))
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}/${group0}" 'up+stopped' "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}/${group0}" 'up+stopped' $(("${image_count}"-1))
 
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" $(("${image_count}"-1))
   wait_for_group_present "${primary_cluster}" "${pool}" "${group0}" "${image_count}"
@@ -2841,9 +2838,11 @@ test_force_promote_before_initial_sync()
   # force promote the group on the secondary - this should fail with a sensible error message
   expect_failure "no initial group snapshot available" rbd --cluster=${secondary_cluster} mirror group promote ${pool}/${group0} --force
 
+  local group_id_before
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before
   mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
   start_mirrors "${secondary_cluster}"
-  sleep 5
+  wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group0}" "${group_id_before}"
 
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}/${group0}"
 
@@ -2854,9 +2853,10 @@ test_force_promote_before_initial_sync()
   # demote and try to resync again
   mirror_group_demote "${secondary_cluster}" "${pool}/${group0}"
 
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before
   mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
   start_mirrors "${secondary_cluster}"
-  sleep 5
+  wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group0}" "${group_id_before}"
 
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}/${group0}"
 
@@ -2978,7 +2978,7 @@ test_multiple_mirror_group_snapshot_whilst_stopped()
 
   wait_for_group_synced "${primary_cluster}" "${pool}/${group0}" "${secondary_cluster}" "${pool}"/"${group0}" 
   max_image=$((image_count-1))
-  for i in $(seq 0 ${max_image}); do  
+  for i in $(seq 0 "${max_image}"); do  
       wait_for_status_in_pool_dir "${secondary_cluster}" "${pool}" "${image_prefix}$i" 'up+replaying'
   done;
 
@@ -3051,14 +3051,11 @@ test_odf_failover_failback()
   # original site comes alive again
   mirror_group_demote "${primary_cluster}" "${pool}/${group0}"
 
-  local group_id_before group_id_after
-  get_id_from_group_info ${primary_cluster} ${pool}/${group0} group_id_before
+  local group_id_before
+  get_id_from_group_info "${primary_cluster}" "${pool}/${group0}" group_id_before
   mirror_group_resync "${primary_cluster}" "${pool}/${group0}" 
-
+  wait_for_group_id_changed "${primary_cluster}" "${pool}/${group0}" "${group_id_before}"
   wait_for_group_synced "${secondary_cluster}" "${pool}"/"${group0}" "${primary_cluster}" "${pool}/${group0}" 
-
-  get_id_from_group_info ${primary_cluster} ${pool}/${group0} group_id_after
-  test "${group_id_before}" != "${group_id_after}" || fail "group was not recreated"
 
   compare_image_with_snapshot "${primary_cluster}" "${pool}/${image_prefix}0" "${primary_cluster}" "${pool}/${image_prefix}0@${snap0}"
 
@@ -3085,18 +3082,18 @@ test_odf_failover_failback()
   test "${group_snap_id_a}" != "${group_snap_id_c}" || fail "new snap not taken by demote"
 
   local group_id_before group_id_after
-  get_id_from_group_info ${secondary_cluster} ${pool}/${group0} group_id_before
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before
   local image_id_before image_id_after
-  get_image_id2 ${secondary_cluster} ${pool}/${image_prefix}0 image_id_before
+  get_image_id2 "${secondary_cluster}" "${pool}/${image_prefix}0" image_id_before
   
   if [ "${scenario}" = 'resync_on_failback' ]; then
     # request resync - won't happen until other site is marked as primary
     mirror_group_resync "${secondary_cluster}" "${pool}/${group0}" 
   fi  
 
-  get_id_from_group_info ${secondary_cluster} ${pool}/${group0} group_id_after
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_after
   test "${group_id_before}" = "${group_id_after}" || fail "group recreated with no primary"
-  get_image_id2 ${secondary_cluster} ${pool}/${image_prefix}0 image_id_after
+  get_image_id2 "${secondary_cluster}" "${pool}/${image_prefix}0" image_id_after
   test "${image_id_before}" = "${image_id_after}" || fail "image recreated with no primary"
 
   if [ "${scenario}" != 'retry_promote' ]; then
@@ -3110,6 +3107,7 @@ test_odf_failover_failback()
     test "${group_snap_id_c}" = "${group_snap_id_f}" || fail "group not synced"
   fi
 
+  # promote original primary again
   if [ "${scenario}" = 'retry_promote' ]; then
     while true; do
       { mirror_group_promote_try "${primary_cluster}" "${pool}/${group0}" && break; } || :
@@ -3118,20 +3116,19 @@ test_odf_failover_failback()
     mirror_group_promote "${primary_cluster}" "${pool}/${group0}"
   fi  
 
+  if [ "${scenario}" = 'resync_on_failback' ]; then
+    # check that group and images were deleted and recreated on secondary cluster (as a result of the resync request)
+    wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group0}" "${group_id_before}"
+    get_image_id2 "${secondary_cluster}" "${pool}/${image_prefix}0" image_id_after
+    test "${image_id_before}" != "${image_id_after}" || fail "image not recreated by resync"
+  fi  
+
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
   wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped'
 
   # Write some data, take a regular mirror snapshot, wait for it to sync on secondary cluster
   write_image "${primary_cluster}" "${pool}" "${image_prefix}0" 10 4096
   mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}"/"${group0}"
-    
-  if [ "${scenario}" = 'resync_on_failback' ]; then
-    # check that group and images were deleted and recreated on secondary cluster (as a result of the resync request)
-    get_id_from_group_info ${secondary_cluster} ${pool}/${group0} group_id_after
-    test "${group_id_before}" != "${group_id_after}" || fail "group not recreated by resync"
-    get_image_id2 ${secondary_cluster} ${pool}/${image_prefix}0 image_id_after
-    test "${image_id_before}" != "${image_id_after}" || fail "image not recreated by resync"
-  fi  
 
   group_remove "${primary_cluster}" "${pool}/${group0}"
   wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
@@ -3189,25 +3186,25 @@ test_resync_marker()
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
 
   local group_id_before group_id_after
-  get_id_from_group_info ${secondary_cluster} ${pool}/${group0} group_id_before
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before
   local image_id_before image_id_after
-  get_image_id2 ${secondary_cluster} ${pool}/${image_prefix}0 image_id_before
+  get_image_id2 "${secondary_cluster}" "${pool}/${image_prefix}0" image_id_before
 
   # demote primary and request resync on secondary - check that group does not get deleted (due to resync request flag)
   mirror_group_demote "${primary_cluster}" "${pool}/${group0}" 
   mirror_group_resync "${secondary_cluster}" "${pool}/${group0}" 
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+unknown'
 
-  get_id_from_group_info ${secondary_cluster} ${pool}/${group0} group_id_after
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_after
   test "${group_id_before}" = "${group_id_after}" || fail "group recreated with no primary"
-  get_image_id2 ${secondary_cluster} ${pool}/${image_prefix}0 image_id_after
+  get_image_id2 "${secondary_cluster}" "${pool}/${image_prefix}0" image_id_after
   test "${image_id_before}" = "${image_id_after}" || fail "image recreated with no primary"
 
   mirror_group_promote "${secondary_cluster}" "${pool}/${group0}"
 
-  get_id_from_group_info ${secondary_cluster} ${pool}/${group0} group_id_after
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_after
   test "${group_id_before}" = "${group_id_after}" || fail "group recreated"
-  get_image_id2 ${secondary_cluster} ${pool}/${image_prefix}0 image_id_after
+  get_image_id2 "${secondary_cluster}" "${pool}/${image_prefix}0" image_id_after
   test "${image_id_before}" = "${image_id_after}" || fail "image recreated"
 
   write_image "${secondary_cluster}" "${pool}" "${image_prefix}0" 10 4096
@@ -3225,9 +3222,9 @@ test_resync_marker()
   mirror_group_promote "${primary_cluster}" "${pool}/${group0}"
 
   # confirm that group and image are not recreated - resync flag was cleared
-  get_id_from_group_info ${secondary_cluster} ${pool}/${group0} group_id_after
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_after
   test "${group_id_before}" = "${group_id_after}" || fail "group recreated"
-  get_image_id2 ${secondary_cluster} ${pool}/${image_prefix}0 image_id_after
+  get_image_id2 "${secondary_cluster}" "${pool}/${image_prefix}0" image_id_after
   test "${image_id_before}" = "${image_id_after}" || fail "image recreated"
 
   # write some data, take a snapshot and wait for sync to complete
@@ -3235,9 +3232,9 @@ test_resync_marker()
   mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}"/"${group0}"
   
   # check that group and image ids still not changed on secondary
-  get_id_from_group_info ${secondary_cluster} ${pool}/${group0} group_id_after
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_after
   test "${group_id_before}" = "${group_id_after}" || fail "group recreated"
-  get_image_id2 ${secondary_cluster} ${pool}/${image_prefix}0 image_id_after
+  get_image_id2 "${secondary_cluster}" "${pool}/${image_prefix}0" image_id_after
   test "${image_id_before}" = "${image_id_after}" || fail "image recreated"
 
   group_remove "${primary_cluster}" "${pool}/${group0}"
@@ -3305,7 +3302,10 @@ test_resync()
   
   # restart daemon and request a resync from primary
   start_mirrors "${secondary_cluster}"
+  local group_id_before
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before
   mirror_group_resync "${secondary_cluster}" "${pool}"/"${group0}"
+  wait_for_group_id_changed  "${secondary_cluster}" "${pool}/${group0}" "${group_id_before}"
 
   # confirm that data on secondary again matches initial snapshot on primary
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
@@ -3329,7 +3329,9 @@ test_resync()
   
   # restart daemon and request a resync from primary
   start_mirrors "${secondary_cluster}"
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before
   mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
+  wait_for_group_id_changed  "${secondary_cluster}" "${pool}/${group0}" "${group_id_before}"
 
   # confirm that data on secondary again matches latest snapshot on primary
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}"  "${secondary_cluster}" "${pool}"/"${group0}"
@@ -3354,7 +3356,10 @@ test_resync()
 
   # restart daemon and request a resync from primary
   start_mirrors "${primary_cluster}"
+  
+  get_id_from_group_info "${primary_cluster}" "${pool}/${group0}" group_id_before
   mirror_group_resync "${primary_cluster}" "${pool}/${group0}"
+  wait_for_group_id_changed  "${primary_cluster}" "${pool}/${group0}" "${group_id_before}"
 
   # confirm that data on secondary again matches latest snapshot on primary
   wait_for_group_synced "${secondary_cluster}" "${pool}"/"${group0}" "${primary_cluster}" "${pool}"/"${group0}"
@@ -3375,6 +3380,80 @@ test_resync()
   start_mirrors "${secondary_cluster}"
 }
 
+# test ODF failover/failback sequence
+declare -a test_demote_snap_sync_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 'wait_before_promote' 3)
+
+test_demote_snap_sync_scenarios=1
+
+# 1. Create and mirror enable a group. Wait until it syncs to the secondary
+# 2. Kill the rbd-mirror daemon on the secondary
+# 3. Demote the primary group
+# 4. Start the rbd-mirror daemon on the secondary
+# 5. Check that the demote snap is synced to the secondary
+# 6. promote the group on the secondary
+
+test_demote_snap_sync()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift
+  local image_prefix=$1 ; shift
+  local scenario=$1 ; shift
+  local image_count=$(($1*"${image_multiplier}")) ; shift
+
+  start_mirrors "${primary_cluster}"
+
+  group_create "${primary_cluster}" "${pool}/${group0}"
+  images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  write_image "${primary_cluster}" "${pool}" "${image_prefix}0" 10 4096
+  group_images_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${image_prefix}" "${image_count}"
+
+  mirror_group_enable "${primary_cluster}" "${pool}/${group0}"
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group0}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' 
+
+  wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}" 
+
+  # stop daemon on secondary (cluster1), demote original primary (cluster2) and restart daemon on secondary
+  stop_mirrors "${secondary_cluster}" 
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'down+stopped'
+  local group_snap_id
+  get_newest_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" group_snap_id
+
+  mirror_group_demote "${primary_cluster}" "${pool}/${group0}"
+
+  local primary_demote_snap_id
+  get_newest_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" primary_demote_snap_id
+
+  test "${group_snap_id}" != "${primary_demote_snap_id}" ||  { fail "no new snapshot after demote"; return 1; }
+
+  start_mirrors "${secondary_cluster}"
+
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}/${group0}" 'up+unknown'
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}/${group0}" 'up+unknown'
+
+  local secondary_snap_id
+  get_newest_group_snapshot_id "${secondary_cluster}" "${pool}/${group0}" secondary_snap_id
+
+  # TODO this test currently fails on the next line. Waiting for fix to issue 39
+  test "${primary_demote_snap_id}" = "${secondary_snap_id}" ||  { fail "demote snapshot ${primary_demote_snap_id} not synced"; return 1; }
+
+  mirror_group_promote "${secondary_cluster}" "${pool}/${group0}" 
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+stopped' 
+
+  group_remove "${secondary_cluster}" "${pool}/${group0}"
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
+
+  images_remove "${secondary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  wait_for_no_keys "${secondary_cluster}"
+  stop_mirrors "${primary_cluster}"
+  check_daemon_running "${secondary_cluster}"
+}
+
 check_for_no_keys()
 {
   local primary_cluster=$1
@@ -3383,14 +3462,14 @@ check_for_no_keys()
 
   for cluster in ${primary_cluster} ${secondary_cluster}; do
     local pools
-    pools=$(CEPH_ARGS='' ceph --cluster ${cluster} osd pool ls  | grep -v "^\." | xargs)
+    pools=$(CEPH_ARGS='' ceph --cluster "${cluster}" osd pool ls  | grep -v "^\." | xargs)
 
     for pool in ${pools}; do
       # see if the rbd_mirror_leader object exists in the pool
       get_pool_obj_count "${cluster}" "${pool}" "rbd_mirror_leader" obj_count
 
       # if it does then check that there are no entries left in it
-      if [ $obj_count -gt 0 ]; then
+      if [ "$obj_count" -gt 0 ]; then
         count_omap_keys_with_filter "${cluster}" "${pool}" "rbd_mirror_leader" "image_map" key_count
         test "${key_count}" = 0 || testlog "last test left keys" 
       fi
@@ -3415,7 +3494,7 @@ wait_for_no_keys()
       count_omap_keys_with_filter "${cluster}" "${pool}" "rbd_mirror_leader" "image_map" key_count
       if [ "${key_count}" -gt 0 ]; then
         for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16; do
-          sleep ${s}
+          sleep "${s}"
           count_omap_keys_with_filter "${cluster}" "${pool}" "rbd_mirror_leader" "image_map" key_count
           test "${key_count}" = 0 && break
         done
@@ -3448,10 +3527,15 @@ run_test()
     # look at every pool on both clusters and check that there are no entries leftover in rbd_image_leader
     check_for_no_keys "${primary_cluster}" "${secondary_cluster}"
 
+    if [ -n "${RBD_MIRROR_SAVE_CLI_OUTPUT}" ]; then 
+      # Record the test name and scenario and clear any old output in the file
+      echo "Test:${test_name} Scenario:${test_scenario}" > "${TEMPDIR}/${RBD_MIRROR_SAVE_CLI_OUTPUT}"
+    fi
+
      # if the "mirror" pool doesn't exist then call setup to recreate all the required pools
     local pool_count
     get_pool_count "${primary_cluster}" 'mirror' pool_count
-    if [ 0 = ${pool_count} ]; then
+    if [ 0 = "${pool_count}" ]; then
       setup
     fi
   else
@@ -3486,7 +3570,7 @@ run_test_all_scenarios()
   local working_test_scenarios 
   if [[ $test_scenarios =~ ^[0-9]+$ ]]
   then
-    working_test_scenarios=$(seq 1 $test_scenarios)
+    working_test_scenarios=$(seq 1 "$test_scenarios")
   else
     working_test_scenarios=$test_scenarios
   fi
@@ -3494,7 +3578,7 @@ run_test_all_scenarios()
 
   local loop
   for loop in $working_test_scenarios; do
-    run_test $test_name $loop
+    run_test "$test_name" "$loop"
   done
 }
 
@@ -3527,11 +3611,12 @@ run_all_tests()
   run_test_all_scenarios test_create_group_with_image_remove_then_repeat
   run_test_all_scenarios test_enable_disable_repeat
   run_test_all_scenarios test_empty_group_omap_keys
+  # TODO next test is disabled waiting for fix to issue 28
   #run_test_all_scenarios test_group_with_clone_image
   run_test_all_scenarios test_multiple_mirror_group_snapshot_unlink_time
   run_test_all_scenarios test_force_promote_delete_group
   run_test_all_scenarios test_create_group_stop_daemon_then_recreate
-  # TODO these next 2 tests are disabled as they need a bit more work
+  # TODO these next 2 tests are disabled as they fails with incorrect state/description in mirror group status - issue 50
   #run_test_all_scenarios test_enable_mirroring_when_duplicate_group_exists
   #run_test_all_scenarios test_enable_mirroring_when_duplicate_group_and_images_exists
   run_test_all_scenarios test_odf_failover_failback
@@ -3539,6 +3624,8 @@ run_all_tests()
   run_test_all_scenarios test_force_promote_before_initial_sync
   run_test_all_scenarios test_image_snapshots_with_group
   run_test_all_scenarios test_group_rename
+  # TODO this test is disabled until Nithya delivers her bootstrap changes
+  #run_test_all_scenarios test_demote_snap_sync
 }
 
 if [ -n "${RBD_MIRROR_HIDE_BASH_DEBUGGING}" ]; then
