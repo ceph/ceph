@@ -4780,17 +4780,20 @@ void RGWPutObj::execute(optional_yield y)
     }
   }
 
-  RGWBucketSyncPolicyHandlerRef policy_handler;
-  op_ret = driver->get_sync_policy_handler(this, std::nullopt, s->bucket->get_key(), &policy_handler, s->yield);
+  // set replication status for replicated buckets
+  if (s->bucket->get_info().local_zone_id.empty()) {
+    RGWBucketSyncPolicyHandlerRef policy_handler;
+    op_ret = driver->get_sync_policy_handler(this, std::nullopt, s->bucket->get_key(), &policy_handler, s->yield);
 
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "failed to read sync policy for bucket: " << s->bucket << dendl;
-    return;
-  }
-  if (policy_handler && policy_handler->bucket_exports_object(s->object->get_name(), obj_tags)) {
-    bufferlist repl_bl;
-    repl_bl.append("PENDING");
-    emplace_attr(RGW_ATTR_OBJ_REPLICATION_STATUS, std::move(repl_bl));
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "failed to read sync policy for bucket: " << s->bucket << dendl;
+      return;
+    }
+    if (policy_handler && policy_handler->bucket_exports_object(s->object->get_name(), obj_tags)) {
+      bufferlist repl_bl;
+      repl_bl.append("PENDING");
+      emplace_attr(RGW_ATTR_OBJ_REPLICATION_STATUS, std::move(repl_bl));
+    }
   }
 
   if (slo_info) {
