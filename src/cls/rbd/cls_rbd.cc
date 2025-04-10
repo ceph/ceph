@@ -5938,8 +5938,6 @@ int mirror_remote_namespace_get(cls_method_context_t hctx, bufferlist *in,
   std::string mirror_ns_decode;
   int r = read_key(hctx, mirror::REMOTE_NAMESPACE, &mirror_ns_decode);
   if (r < 0) {
-    CLS_ERR("error getting mirror remote namespace: %s",
-            cpp_strerror(r).c_str());
     return r;
   }
 
