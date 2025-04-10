@@ -1462,6 +1462,12 @@ void RGWPutBucketReplication::execute(optional_yield y) {
   }
 
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
+    // TODO: validate destination buckets too
+    if (!s->bucket->get_info().redirect_zone_id.empty()) {
+      s->err.message = "Cannot set replication policy on non-replicated buckets.";
+      return -ERR_INVALID_BUCKET_STATE;
+    }
+
     auto sync_policy = (s->bucket->get_info().sync_policy ? *s->bucket->get_info().sync_policy : rgw_sync_policy_info());
 
     for (auto& group : sync_policy_groups) {
