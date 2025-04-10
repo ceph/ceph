@@ -381,6 +381,15 @@ public:
     static_assert(!std::is_same_v<return_t, void>,
                   "error handlers mustn't return void");
 
+    // The code below checks for exact match only while
+    // `catch` would allow to match against a base class as well.
+    // However, this shouldn't be a big issue for `errorator` as
+    // ErrorVisitorT are already checked for exhaustiveness at compile-time.
+    // TODO: why/when is this possible?
+    if (type_info != ErrorT::error_t::get_exception_ptr_type_info()) {
+        return;
+    }
+
     auto ep = take_exception_from_future();
 
     // Any assert_* handler we have:
@@ -404,21 +413,16 @@ public:
       // pointee's type with `__cxa_exception_type()` instead of costly
       // re-throwing (via `std::rethrow_exception()`) and matching with
       // `catch`. The limitation here is lack of support for hierarchies
-      // of exceptions. The code below checks for exact match only while
-      // `catch` would allow to match against a base class as well.
-      // However, this shouldn't be a big issue for `errorator` as
-      // ErrorVisitorT are already checked for exhaustiveness at compile-time.
-      if (type_info == ErrorT::error_t::get_exception_ptr_type_info()) {
+      // of exceptions.
 
-        // TODO: add missing explanation
-        if constexpr (std::is_assignable_v<decltype(result), return_t>) {
-          result = std::invoke(std::forward<ErrorVisitorT>(errfunc),
-                               ErrorT::error_t::from_exception_ptr(std::move(ep)));
-        } else {
-          result = FuturatorT::invoke(
-            std::forward<ErrorVisitorT>(errfunc),
-            ErrorT::error_t::from_exception_ptr(std::move(ep)));
-        }
+       // TODO: add missing explanation
+      if constexpr (std::is_assignable_v<decltype(result), return_t>) {
+        result = std::invoke(std::forward<ErrorVisitorT>(errfunc),
+                             ErrorT::error_t::from_exception_ptr(std::move(ep)));
+      } else {
+        result = FuturatorT::invoke(
+          std::forward<ErrorVisitorT>(errfunc),
+          ErrorT::error_t::from_exception_ptr(std::move(ep)));
       }
     }
   }
