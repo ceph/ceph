@@ -1053,9 +1053,9 @@ int FilterObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pst
 }
 
 int FilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-				Attrs* delattrs, optional_yield y)
+				Attrs* delattrs, optional_yield y, uint32_t flags)
 {
-  return next->set_obj_attrs(dpp, setattrs, delattrs, y);
+  return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
 }
 
 int FilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,

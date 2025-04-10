@@ -206,6 +206,8 @@ class StoreObject : public Object {
     virtual bool is_prefetch_data() override { return state.prefetch_data; }
     virtual void set_compressed() override { state.compressed = true; }
     virtual bool is_compressed() override { return state.compressed; }
+    virtual bool is_sync_completed(const DoutPrefixProvider* dpp,
+      const ceph::real_time& obj_mtime) override { return false; }
     virtual void invalidate() override {
       rgw_obj obj = state.obj;
       bool is_atomic = state.is_atomic;
