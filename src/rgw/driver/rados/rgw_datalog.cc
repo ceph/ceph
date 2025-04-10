@@ -1357,10 +1357,13 @@ bool RGWDataChangesLog::going_down() const
 
 asio::awaitable<void> RGWDataChangesLog::shutdown() {
   DoutPrefix dp{cct, ceph_subsys_rgw, "Datalog Shutdown"};
-  if (down_flag || !ran_background) {
+  if (down_flag) {
     co_return;
   }
   down_flag = true;
+  if (!ran_background)  {
+    co_return;
+  }
   renew_stop();
   // Revisit this later
   if (renew_signal)
