@@ -1,7 +1,16 @@
 #!/usr/bin/python3
 
 '''
-This workunits tests the functionality of the D4N read workflow on a small object of size 4.
+This workunit tests the functionality of the D4N read workflow on a small object of size 4 and 
+a multipart object of a randomly generated size. Each test runs the following workflow:
+
+1. Upload the object
+2. Perform a GET call (object should be retrieved from backend)
+3. Compare the cached object's contents to the original object
+4. Check the directory contents
+5. Perform another GET call (object should be retrieved from datacache)
+6. Compare the cached object's contents to the original object
+7. Check the directory contents once more
 '''
 
 import logging as log
@@ -138,7 +147,8 @@ def get_body(response):
         got = got.decode()
     return got
 
-def test_small_object(r, client, obj):
+def test_small_object(r, client, s3):
+    obj = s3.Object(bucket_name='bkt', key='test.txt')
     test_txt = 'test'
 
     response_put = obj.put(Body=test_txt)
@@ -156,27 +166,37 @@ def test_small_object(r, client, obj):
     body = get_body(response_get)
     assert(body == "test")
 
-    data = subprocess.check_output(['ls', '/tmp/rgw_d4n_datacache/'])
-    data = data.decode('latin-1').strip()
-    output = subprocess.check_output(['md5sum', '/tmp/rgw_d4n_datacache/' + data]).decode('latin-1')
+    object_stat = subprocess.check_output(['radosgw-admin', 'object', 'stat', '--bucket=bkt', '--object=test.txt'])
+    attrs = json.loads(object_stat.decode('latin-1'))
 
+    bucketID = attrs.get('manifest').get('tail_placement').get('bucket').get('bucket_id')
+    datacache_path = '/tmp/rgw_d4n_datacache/' + bucketID + '/test.txt/'
+    datacache = subprocess.check_output(['ls', '-a', datacache_path])
+    datacache = datacache.decode('latin-1').strip().splitlines()[2]
+    log.info("1. Datacache contents:") # TODO: Remove logs if no errors
+    log.info(datacache)
+    output = subprocess.check_output(['md5sum', datacache_path + datacache]).decode('latin-1')
     assert(output.splitlines()[0].split()[0] == hashlib.md5("test".encode('utf-8')).hexdigest())
 
-    data = r.hgetall('bkt_test.txt_0_4')
-    output = subprocess.check_output(['radosgw-admin', 'object', 'stat', '--bucket=bkt', '--object=test.txt'])
-    attrs = json.loads(output.decode('latin-1'))
+    data = r.hgetall(bucketID + '_test.txt_0_4')
 
     # directory entry comparisons
+    log.info("1. Directory data:") # TODO: Remove logs if no errors
+    log.info(data)
     assert(data.get('blockID') == '0')
     assert(data.get('version') == attrs.get('tag'))
+    assert(data.get('deleteMarker') == '0')
     assert(data.get('size') == '4')
     assert(data.get('globalWeight') == '0')
-    assert(data.get('blockHosts') == '127.0.0.1:6379')
     assert(data.get('objName') == 'test.txt')
-    assert(data.get('bucketName') == 'bkt')
+    assert(data.get('bucketName') == bucketID)
     assert(data.get('creationTime') == attrs.get('mtime'))
     assert(data.get('dirty') == '0')
-    assert(data.get('objHosts') == '')
+    assert(data.get('hosts') == '127.0.0.1:6379')
+    assert(data.get('etag') == attrs.get('etag'))
+    assert(data.get('objSize') == attrs.get('manifest').get('obj_size'))
+    assert(data.get('userID') == attrs.get('policy').get('owner').get('id'))
+    assert(data.get('displayName') == attrs.get('policy').get('owner').get('display_name'))
 
     # repopulate cache
     response_put = obj.put(Body=test_txt)
@@ -187,34 +207,39 @@ def test_small_object(r, client, obj):
     assert(response_get.get('ResponseMetadata').get('HTTPStatusCode') == 200)
 
     # check logs to ensure object was retrieved from cache
-    res = subprocess.call(['grep', '"SSDCache: get_async(): ::aio_read(), ret=0"', '/var/log/ceph/rgw.ceph.client.0.log'])
+    res = subprocess.call(['grep', '"SSDCache: operator()(): ::aio_write(), r=0"', '/var/log/ceph/rgw.ceph.client.0.log'])
     assert(res >= 1)
 
     # retrieve and compare cache contents
     body = get_body(response_get)
     assert(body == "test")
 
-    data = subprocess.check_output(['ls', '/tmp/rgw_d4n_datacache/'])
-    data = data.decode('latin-1').strip()
-    output = subprocess.check_output(['md5sum', '/tmp/rgw_d4n_datacache/' + data]).decode('latin-1')
-
+    datacache = subprocess.check_output(['ls', '-a', datacache_path])
+    datacache = datacache.decode('latin-1').strip().splitlines()[2]
+    log.info("2. Datacache contents:") # TODO: Remove logs if no errors
+    log.info(datacache)
+    output = subprocess.check_output(['md5sum', datacache_path + datacache]).decode('latin-1')
     assert(output.splitlines()[0].split()[0] == hashlib.md5("test".encode('utf-8')).hexdigest())
 
-    data = r.hgetall('bkt_test.txt_0_4')
-    output = subprocess.check_output(['radosgw-admin', 'object', 'stat', '--bucket=bkt', '--object=test.txt'])
-    attrs = json.loads(output.decode('latin-1'))
+    data = r.hgetall(bucketID + '_test.txt_0_4')
 
     # directory entries should remain consistent
+    log.info("2. Directory data:") # TODO: Remove logs if no errors
+    log.info(data)
     assert(data.get('blockID') == '0')
     assert(data.get('version') == attrs.get('tag'))
+    assert(data.get('deleteMarker') == '0')
     assert(data.get('size') == '4')
     assert(data.get('globalWeight') == '0')
-    assert(data.get('blockHosts') == '127.0.0.1:6379')
     assert(data.get('objName') == 'test.txt')
-    assert(data.get('bucketName') == 'bkt')
+    assert(data.get('bucketName') == bucketID)
     assert(data.get('creationTime') == attrs.get('mtime'))
     assert(data.get('dirty') == '0')
-    assert(data.get('objHosts') == '')
+    assert(data.get('hosts') == '127.0.0.1:6379')
+    assert(data.get('etag') == attrs.get('etag'))
+    assert(data.get('objSize') == attrs.get('manifest').get('obj_size'))
+    assert(data.get('userID') == attrs.get('policy').get('owner').get('id'))
+    assert(data.get('displayName') == attrs.get('policy').get('owner').get('display_name'))
 
     r.flushall()
 
@@ -241,78 +266,93 @@ def test_large_object(r, client, s3):
     with open(file_path, 'r') as body:
         assert(body.read() == data)
 
-    datacache_path = '/tmp/rgw_d4n_datacache/'
-    datacache = subprocess.check_output(['ls', datacache_path])
-    datacache = datacache.decode('latin-1').splitlines()
+    object_stat = subprocess.check_output(['radosgw-admin', 'object', 'stat', '--bucket=bkt', '--object=mymultipart'])
+    attrs = json.loads(object_stat.decode('latin-1'))
+
+    bucketID = attrs.get('manifest').get('tail_placement').get('bucket').get('bucket_id')
+    datacache_path = '/tmp/rgw_d4n_datacache/' + bucketID + '/mymultipart/'
+    datacache = subprocess.check_output(['ls', '-a', datacache_path])
+    datacache = datacache.decode('latin-1').splitlines()[2:]
+    log.info("1. Multipart datacache contents:") # TODO: Remove logs if no errors
+    log.info(datacache)
 
     for file in datacache:
-        ofs = int(file.split("_")[3])
-        size = int(file.split("_")[4])
-        output = subprocess.check_output(['md5sum', datacache_path + file]).decode('latin-1')
-        assert(output.splitlines()[0].split()[0] == hashlib.md5(data[ofs:ofs+size].encode('utf-8')).hexdigest())
+        if '#' in file: # data blocks
+            ofs = int(file.split("#")[1])
+            size = int(file.split("#")[2])
+            output = subprocess.check_output(['md5sum', datacache_path + file]).decode('latin-1')
+            assert(output.splitlines()[0].split()[0] == hashlib.md5(data[ofs:ofs+size].encode('utf-8')).hexdigest())
 
-    output = subprocess.check_output(['radosgw-admin', 'object', 'stat', '--bucket=bkt', '--object=mymultipart'])
-    attrs = json.loads(output.decode('latin-1'))
-
-    for entry in r.scan_iter("bkt_mymultipart_*"):
+    for entry in r.scan_iter("*_mymultipart_*"):
         data = r.hgetall(entry)
-        name = entry.split("_")
+        entry_name = entry.split("_")
 
         # directory entry comparisons
-        assert(data.get('blockID') == name[2])
+        log.info("1. Multipart directory data:") # TODO: Remove logs if no errors
+        log.info(data)
+        assert(data.get('blockID') == entry_name[2])
         assert(data.get('version') == attrs.get('tag'))
-        assert(data.get('size') == name[3])
+        assert(data.get('deleteMarker') == '0')
+        assert(data.get('size') == entry_name[3])
         assert(data.get('globalWeight') == '0')
-        assert(data.get('blockHosts') == '127.0.0.1:6379')
         assert(data.get('objName') == 'mymultipart')
-        assert(data.get('bucketName') == 'bkt')
+        assert(data.get('bucketName') == bucketID)
         assert(data.get('creationTime') == attrs.get('mtime'))
         assert(data.get('dirty') == '0')
-        assert(data.get('objHosts') == '')
+        assert(data.get('hosts') == '127.0.0.1:6379')
+        assert(data.get('etag') == attrs.get('etag'))
+        assert(data.get('objSize') == attrs.get('manifest').get('obj_size'))
+        assert(data.get('userID') == attrs.get('policy').get('owner').get('id'))
+        assert(data.get('displayName') == attrs.get('policy').get('owner').get('display_name'))
 
     # repopulate cache
     (upload_id, data, parts) = _multipart_upload(bucket_name=bucket_name, key=key, size=objlen, client=client, content_type=content_type, metadata=metadata)
     client.complete_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id, MultipartUpload={'Parts': parts})
 
-    #second get
+    # second get
     s3.Object(bucket_name, key).download_file(file_path)
 
     # check logs to ensure object was retrieved from cache
-    res = subprocess.call(['grep', '"SSDCache: get_async(): ::aio_read(), ret=0"', '/var/log/ceph/rgw.ceph.client.0.log'])
+    res = subprocess.call(['grep', '"SSDCache: operator()(): ::aio_write(), r=0"', '/var/log/ceph/rgw.ceph.client.0.log'])
     assert(res >= 1)
 
     # retrieve and compare cache contents
     with open(file_path, 'r') as body:
         assert(body.read() == data)
 
-    datacache_path = '/tmp/rgw_d4n_datacache/'
-    datacache = subprocess.check_output(['ls', datacache_path])
-    datacache = datacache.decode('latin-1').splitlines()
+    datacache = subprocess.check_output(['ls', '-a', datacache_path])
+    datacache = datacache.decode('latin-1').splitlines()[2:]
+    log.info("2. Multipart datacache contents:") # TODO: Remove logs if no errors
+    log.info(datacache)
 
     for file in datacache:
-        ofs = int(file.split("_")[3])
-        size = int(file.split("_")[4])
-        output = subprocess.check_output(['md5sum', datacache_path + file]).decode('latin-1')
-        assert(output.splitlines()[0].split()[0] == hashlib.md5(data[ofs:ofs+size].encode('utf-8')).hexdigest())
+        if '#' in file: # data blocks
+            ofs = int(file.split("#")[1])
+            size = int(file.split("#")[2])
+            output = subprocess.check_output(['md5sum', datacache_path + file]).decode('latin-1')
+            assert(output.splitlines()[0].split()[0] == hashlib.md5(data[ofs:ofs+size].encode('utf-8')).hexdigest())
 
-    output = subprocess.check_output(['radosgw-admin', 'object', 'stat', '--bucket=bkt', '--object=mymultipart'])
-    attrs = json.loads(output.decode('latin-1'))
+    for entry in r.scan_iter("*_mymultipart_*"):
+        data = r.hgetall(entry)
+        entry_name = entry.split("_")
 
-    for key in r.scan_iter("bkt_mymultipart_*"):
-        data = r.hgetall(key)
-        name = key.split("_")
-
-        # directory entry comparisons
-        assert(data.get('blockID') == name[2])
+        # directory entries should remain consistent
+        log.info("2. Multipart directory data:") # TODO: Remove logs if no errors
+        log.info(data)
+        assert(data.get('blockID') == entry_name[2])
         assert(data.get('version') == attrs.get('tag'))
-        assert(data.get('size') == name[3])
+        assert(data.get('deleteMarker') == '0')
+        assert(data.get('size') == entry_name[3])
         assert(data.get('globalWeight') == '0')
-        assert(data.get('blockHosts') == '127.0.0.1:6379')
         assert(data.get('objName') == 'mymultipart')
-        assert(data.get('bucketName') == 'bkt')
+        assert(data.get('bucketName') == bucketID)
         assert(data.get('creationTime') == attrs.get('mtime'))
         assert(data.get('dirty') == '0')
-        assert(data.get('objHosts') == '')
+        assert(data.get('hosts') == '127.0.0.1:6379')
+        assert(data.get('etag') == attrs.get('etag'))
+        assert(data.get('objSize') == attrs.get('manifest').get('obj_size'))
+        assert(data.get('userID') == attrs.get('policy').get('owner').get('id'))
+        assert(data.get('displayName') == attrs.get('policy').get('owner').get('display_name'))
 
     r.flushall()
 
@@ -346,7 +386,6 @@ def main():
 
     bucket = s3.Bucket('bkt')
     bucket.create()
-    obj = s3.Object(bucket_name='bkt', key='test.txt')
 
     # Check for Redis instance
     try:
@@ -363,7 +402,7 @@ def main():
     r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
     # Run small object test
-    test_small_object(r, client, obj)
+    test_small_object(r, client, s3)
 
     # Run large object test
     test_large_object(r, client, s3)
