@@ -1200,8 +1200,8 @@ class RgwClient(RestClient):
                     notification_configuration['TopicConfiguration'] = [topic_configuration]
 
                 notification_config['NotificationConfiguration'] = notification_configuration
-
-            return notification_config
+            
+            return notification_config['NotificationConfiguration']['TopicConfiguration']
 
         except RequestException as e:
             if e.content:
