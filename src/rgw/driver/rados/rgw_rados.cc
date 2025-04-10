@@ -2392,6 +2392,7 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
                             const rgw_bucket& bucket,
                             const rgw_owner& owner,
                             const std::string& zonegroup_id,
+                            const std::string& redirect_zone_id,
                             const rgw_placement_rule& placement_rule,
                             const RGWZonePlacementInfo* zone_placement,
                             const std::map<std::string, bufferlist>& attrs,
@@ -2421,6 +2422,7 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
 
     info.owner = owner;
     info.zonegroup = zonegroup_id;
+    info.redirect_zone_id  = redirect_zone_id;
     info.placement_rule = placement_rule;
     info.swift_versioning = swift_ver_location.has_value();
     if (swift_ver_location) {
