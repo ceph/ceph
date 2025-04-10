@@ -803,7 +803,7 @@ TEST_F(TestCls2PCQueue, MultiProducer)
   cls_2pc_queue_init(op, queue_name, max_size);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
-  auto producer_count = max_producer_count;
+  std::atomic<int>  producer_count = max_producer_count;
 
   std::vector<std::thread> producers(max_producer_count);
   for (auto& p : producers) {
@@ -925,9 +925,9 @@ TEST_F(TestCls2PCQueue, MultiProducerConsumer)
   cls_2pc_queue_init(op, queue_name, max_size);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
-  auto producer_count = max_workers;
+  std::atomic<int> producer_count = max_workers;
 
-  auto retry_happened = false;
+  std::atomic<bool> retry_happened = false;
 
   std::vector<std::thread> producers(max_workers);
   for (auto& p : producers) {
