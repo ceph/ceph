@@ -37,7 +37,7 @@ template <
   typename node_val_t,
   typename internal_node_t,
   typename leaf_node_t,
-  typename pin_t,
+  typename cursor_t,
   size_t node_size>
 class FixedKVBtree {
   static constexpr size_t MAX_DEPTH = 16;
@@ -46,7 +46,7 @@ class FixedKVBtree {
     node_val_t,
     internal_node_t,
     leaf_node_t,
-    pin_t,
+    cursor_t,
     node_size>;
 public:
   using InternalNodeRef = TCachedExtentRef<internal_node_t>;
@@ -201,22 +201,15 @@ public:
       return leaf.pos == 0;
     }
 
-    std::unique_ptr<pin_t> get_pin(op_context_t ctx) const {
+    std::unique_ptr<cursor_t> get_cursor(op_context_t ctx) const {
       assert(!is_end());
-      auto val = get_val();
-      auto key = get_key();
-      node_key_t end{};
-      if constexpr (std::is_same_v<node_key_t, laddr_t>) {
-        end = (key + val.len).checked_to_laddr();
-      } else {
-        end = key + val.len;
-      }
-      return std::make_unique<pin_t>(
+      return std::make_unique<cursor_t>(
         ctx,
 	leaf.node,
-        leaf.pos,
-	val,
-	fixed_kv_node_meta_t<node_key_t>{ key, end, 0 });
+        leaf.node->modifications,
+        get_key(),
+        std::make_optional(get_val()),
+        leaf.pos);
     }
 
     typename leaf_node_t::Ref get_leaf_node() {
@@ -2144,7 +2137,7 @@ template <
   typename node_val_t,
   typename internal_node_t,
   typename leaf_node_t,
-  typename pin_t,
+  typename cursor_t,
   size_t node_size>
 struct is_fixed_kv_tree<
   FixedKVBtree<
@@ -2152,7 +2145,7 @@ struct is_fixed_kv_tree<
     node_val_t,
     internal_node_t,
     leaf_node_t,
-    pin_t,
+    cursor_t,
     node_size>> : std::true_type {};
 
 template <
