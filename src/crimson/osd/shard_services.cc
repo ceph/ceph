@@ -94,7 +94,7 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
   auto &pgs = pg_map.get_pgs();
   return seastar::parallel_for_each(
     pgs.begin(), pgs.end(),
-    [=, &shard_services](auto& pg) {
+    [this, &shard_services, epoch](auto& pg) {
       return shard_services.start_operation<PGAdvanceMap>(
 	pg.second,
 	shard_services,
