@@ -51,43 +51,43 @@ Cache::~Cache()
 
 // TODO: this method can probably be removed in the future
 Cache::retire_extent_ret Cache::retire_extent_addr(
-  Transaction &t, paddr_t addr, extent_len_t length)
+  Transaction &t, paddr_t paddr, extent_len_t length)
 {
   LOG_PREFIX(Cache::retire_extent_addr);
-  TRACET("retire {}~0x{:x}", t, addr, length);
+  TRACET("retire {}~0x{:x}", t, paddr, length);
 
-  assert(addr.is_real() && !addr.is_block_relative());
+  assert(paddr.is_real() && !paddr.is_block_relative());
 
   CachedExtentRef ext;
-  auto result = t.get_extent(addr, &ext);
+  auto result = t.get_extent(paddr, &ext);
   if (result == Transaction::get_extent_ret::PRESENT) {
-    DEBUGT("retire {}~0x{:x} on t -- {}", t, addr, length, *ext);
-    t.add_present_to_retired_set(CachedExtentRef(&*ext));
+    DEBUGT("retire {}~0x{:x} on t -- {}",
+           t, paddr, length, *ext);
+    t.add_present_to_retired_set(ext);
     return retire_extent_iertr::now();
   } else if (result == Transaction::get_extent_ret::RETIRED) {
-    ERRORT("retire {}~0x{:x} failed, already retired -- {}", t, addr, length, *ext);
+    ERRORT("retire {}~0x{:x} failed, already retired -- {}",
+           t, paddr, length, *ext);
     ceph_abort();
   }
 
-  // any relative addr must have been on the transaction
-  assert(!addr.is_relative());
+  // any relative paddr must have been on the transaction
+  assert(!paddr.is_relative());
 
   // absent from transaction
   // retiring is not included by the cache hit metrics
-  ext = query_cache(addr);
+  ext = query_cache(paddr);
   if (ext) {
-    DEBUGT("retire {}~0x{:x} in cache -- {}", t, addr, length, *ext);
+    DEBUGT("retire {}~0x{:x} in cache -- {}", t, paddr, length, *ext);
   } else {
     // add a new placeholder to Cache
     ext = CachedExtent::make_cached_extent_ref<
       RetiredExtentPlaceholder>(length);
-    ext->init(CachedExtent::extent_state_t::CLEAN,
-              addr,
-              PLACEMENT_HINT_NULL,
-              NULL_GENERATION,
-	      TRANS_ID_NULL);
+    ext->init(
+      CachedExtent::extent_state_t::CLEAN, paddr,
+      PLACEMENT_HINT_NULL, NULL_GENERATION, TRANS_ID_NULL);
     DEBUGT("retire {}~0x{:x} as placeholder, add extent -- {}",
-           t, addr, length, *ext);
+           t, paddr, length, *ext);
     add_extent(ext);
   }
   t.add_absent_to_retired_set(ext);
@@ -95,26 +95,24 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
 }
 
 void Cache::retire_absent_extent_addr(
-  Transaction &t, paddr_t addr, extent_len_t length)
+  Transaction &t, paddr_t paddr, extent_len_t length)
 {
   CachedExtentRef ext;
 #ifndef NDEBUG
-  auto result = t.get_extent(addr, &ext);
+  auto result = t.get_extent(paddr, &ext);
   assert(result != Transaction::get_extent_ret::PRESENT
     && result != Transaction::get_extent_ret::RETIRED);
-  assert(!query_cache(addr));
+  assert(!query_cache(paddr));
 #endif
   LOG_PREFIX(Cache::retire_absent_extent_addr);
   // add a new placeholder to Cache
   ext = CachedExtent::make_cached_extent_ref<
     RetiredExtentPlaceholder>(length);
-  ext->init(CachedExtent::extent_state_t::CLEAN,
-	    addr,
-	    PLACEMENT_HINT_NULL,
-	    NULL_GENERATION,
-	    TRANS_ID_NULL);
+  ext->init(
+    CachedExtent::extent_state_t::CLEAN, paddr,
+    PLACEMENT_HINT_NULL, NULL_GENERATION, TRANS_ID_NULL);
   DEBUGT("retire {}~0x{:x} as placeholder, add extent -- {}",
-	 t, addr, length, *ext);
+	 t, paddr, length, *ext);
   add_extent(ext);
   t.add_absent_to_retired_set(ext);
 }
@@ -1062,7 +1060,7 @@ void Cache::on_transaction_destruct(Transaction& t)
   }
 }
 
-CachedExtentRef Cache::alloc_new_extent_by_type(
+CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
   Transaction &t,        ///< [in, out] current transaction
   extent_types_t type,   ///< [in] type tag
   extent_len_t length,   ///< [in] length
@@ -1070,7 +1068,7 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
   rewrite_gen_t gen      ///< [in] rewrite generation
 )
 {
-  LOG_PREFIX(Cache::alloc_new_extent_by_type);
+  LOG_PREFIX(Cache::alloc_new_non_data_extent_by_type);
   SUBDEBUGT(seastore_cache, "allocate {} 0x{:x}B, hint={}, gen={}",
             t, type, length, hint, rewrite_gen_printer_t{gen});
   ceph_assert(get_extent_category(type) == data_category_t::METADATA);
@@ -1181,7 +1179,6 @@ CachedExtentRef Cache::duplicate_for_write(
   assert(!i->prior_poffset);
   auto [iter, inserted] = i->mutation_pending_extents.insert(*ret);
   ceph_assert(inserted);
-  t.add_mutated_extent(ret);
   if (is_root_type(ret->get_type())) {
     t.root = ret->cast<RootBlock>();
   } else {
@@ -1196,6 +1193,8 @@ CachedExtentRef Cache::duplicate_for_write(
     assert(ret->is_logical());
     static_cast<LogicalCachedExtent&>(*ret).set_laddr(lextent.get_laddr());
   }
+
+  t.add_mutated_extent(ret);
   DEBUGT("{} -> {}", t, *i, *ret);
   return ret;
 }
