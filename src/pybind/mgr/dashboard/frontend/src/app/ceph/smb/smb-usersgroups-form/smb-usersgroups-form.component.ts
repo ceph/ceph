@@ -5,7 +5,7 @@ import { Observable } from 'rxjs';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -19,7 +19,7 @@ import { USERSGROUPS_URL } from '../smb-usersgroups-list/smb-usersgroups-list.co
   templateUrl: './smb-usersgroups-form.component.html',
   styleUrls: ['./smb-usersgroups-form.component.scss']
 })
-export class SmbUsersgroupsFormComponent extends CdForm implements OnInit {
+export class SmbUsersgroupsFormComponent extends CdFormCanDeactivate implements OnInit {
   form: CdFormGroup;
   action: string;
   resource: string;
@@ -71,6 +71,10 @@ export class SmbUsersgroupsFormComponent extends CdForm implements OnInit {
     } else {
       this.addUser();
     }
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.form;
   }
 
   createForm() {

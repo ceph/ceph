@@ -57,6 +57,7 @@ import { SmbJoinAuthFormComponent } from './ceph/smb/smb-join-auth-form/smb-join
 import { SmbUsersgroupsFormComponent } from './ceph/smb/smb-usersgroups-form/smb-usersgroups-form.component';
 import { NfsClusterComponent } from './ceph/nfs/nfs-cluster/nfs-cluster.component';
 
+
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
   resolve(route: ActivatedRouteSnapshot) {
@@ -375,7 +376,8 @@ const routes: Routes = [
       {
         path: 'pool',
         data: { breadcrumbs: 'Cluster/Pools' },
-        loadChildren: () => import('./ceph/pool/pool.module').then((m) => m.RoutedPoolModule)
+        loadChildren: () => import('./ceph/pool/pool.module').then((m) => m.RoutedPoolModule),
+      
       },
       // Block
       {

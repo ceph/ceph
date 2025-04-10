@@ -6,7 +6,7 @@ import expand from 'brace-expansion';
 import { HostService } from '~/app/shared/api/host.service';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -20,7 +20,7 @@ const HOSTS = 'hosts';
   templateUrl: './host-form.component.html',
   styleUrls: ['./host-form.component.scss']
 })
-export class HostFormComponent extends CdForm implements OnInit {
+export class HostFormComponent extends CdFormCanDeactivate implements OnInit {
   open: boolean = false;
   hostForm: CdFormGroup;
   action: string;
@@ -74,6 +74,10 @@ export class HostFormComponent extends CdForm implements OnInit {
         return { name: label, content: label };
       });
     });
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.hostForm;
   }
 
   // check if hostname is a single value or pattern to hide network address field

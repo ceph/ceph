@@ -13,7 +13,7 @@ import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { DirectoryStoreService } from '~/app/shared/api/directory-store.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
@@ -26,7 +26,7 @@ const DEBOUNCE_TIMER = 300;
   templateUrl: './cephfs-auth-modal.component.html',
   styleUrls: ['./cephfs-auth-modal.component.scss']
 })
-export class CephfsAuthModalComponent extends CdForm implements OnInit, AfterViewInit {
+export class CephfsAuthModalComponent extends CdFormCanDeactivate implements OnInit, AfterViewInit {
   subvolumeGroup: string;
   subvolume: string;
   isDefaultSubvolumeGroup = false;
@@ -88,6 +88,10 @@ export class CephfsAuthModalComponent extends CdForm implements OnInit, AfterVie
     } else {
       this.form.get('directory').disable();
     }
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.form;
   }
 
   createForm() {

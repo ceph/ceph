@@ -73,6 +73,7 @@ import Close from '@carbon/icons/es/close/32';
 import AddFilled from '@carbon/icons/es/add--filled/32';
 import SubtractFilled from '@carbon/icons/es/subtract--filled/32';
 import Reset from '@carbon/icons/es/reset/32';
+import { UnsavedChangesGuard } from '~/app/shared/services/unsaved-changes-guard.service';
 
 @NgModule({
   imports: [
@@ -187,26 +188,31 @@ const routes: Routes = [
       {
         path: URLVerbs.CREATE,
         component: RbdFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
         path: `${URLVerbs.EDIT}/:image_spec`,
         component: RbdFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: { breadcrumbs: ActionLabels.EDIT }
       },
       {
         path: `${URLVerbs.CLONE}/:image_spec/:snap`,
         component: RbdFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: { breadcrumbs: ActionLabels.CLONE }
       },
       {
         path: `${URLVerbs.COPY}/:image_spec`,
         component: RbdFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: { breadcrumbs: ActionLabels.COPY }
       },
       {
         path: `${URLVerbs.COPY}/:image_spec/:snap`,
         component: RbdFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: { breadcrumbs: ActionLabels.COPY }
       }
     ]
@@ -251,11 +257,13 @@ const routes: Routes = [
           {
             path: URLVerbs.CREATE,
             component: IscsiTargetFormComponent,
+            canDeactivate: [UnsavedChangesGuard],
             data: { breadcrumbs: ActionLabels.CREATE }
           },
           {
             path: `${URLVerbs.EDIT}/:target_iqn`,
             component: IscsiTargetFormComponent,
+            canDeactivate: [UnsavedChangesGuard],
             data: { breadcrumbs: ActionLabels.EDIT }
           }
         ]
@@ -292,29 +300,34 @@ const routes: Routes = [
           {
             path: URLVerbs.CREATE,
             component: NvmeofSubsystemsFormComponent,
+            canDeactivate: [UnsavedChangesGuard],
             outlet: 'modal'
           },
           // listeners
           {
             path: `${URLVerbs.CREATE}/:subsystem_nqn/listener`,
             component: NvmeofListenersFormComponent,
+            canDeactivate: [UnsavedChangesGuard],
             outlet: 'modal'
           },
           // namespaces
           {
             path: `${URLVerbs.CREATE}/:subsystem_nqn/namespace`,
             component: NvmeofNamespacesFormComponent,
+            canDeactivate: [UnsavedChangesGuard],
             outlet: 'modal'
           },
           {
             path: `${URLVerbs.EDIT}/:subsystem_nqn/namespace/:nsid`,
             component: NvmeofNamespacesFormComponent,
+            canDeactivate: [UnsavedChangesGuard],
             outlet: 'modal'
           },
           // initiators
           {
             path: `${URLVerbs.ADD}/:subsystem_nqn/initiator`,
             component: NvmeofInitiatorsFormComponent,
+            canDeactivate: [UnsavedChangesGuard],
             outlet: 'modal'
           }
         ]
@@ -325,6 +338,8 @@ const routes: Routes = [
 ];
 
 @NgModule({
-  imports: [BlockModule, RouterModule.forChild(routes)]
+  imports: [BlockModule, RouterModule.forChild(routes)],
+  providers: [UnsavedChangesGuard]
+
 })
 export class RoutedBlockModule {}

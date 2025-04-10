@@ -9,7 +9,7 @@ import { RoleService } from '~/app/shared/api/role.service';
 import { ScopeService } from '~/app/shared/api/scope.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -22,7 +22,7 @@ import { RoleFormModel } from './role-form.model';
   templateUrl: './role-form.component.html',
   styleUrls: ['./role-form.component.scss']
 })
-export class RoleFormComponent extends CdForm implements OnInit {
+export class RoleFormComponent extends CdFormCanDeactivate implements OnInit {
   roleForm: CdFormGroup;
   response: RoleFormModel;
 
@@ -135,6 +135,12 @@ export class RoleFormComponent extends CdForm implements OnInit {
       });
     });
   }
+
+
+  getFormGroup(): CdFormGroup {
+    return this.roleForm;
+  }
+
 
   getRequest(): RoleFormModel {
     const roleFormModel = new RoleFormModel();
