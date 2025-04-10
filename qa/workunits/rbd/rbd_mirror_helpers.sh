@@ -189,6 +189,16 @@ run_cmd_internal() {
         cat "$CMD_STDERR" 1>&2
     fi
 
+    if [ -n "${RBD_MIRROR_SAVE_CLI_OUTPUT}" ]; then 
+        if [ 'true' = "${as_admin}" ]; then
+            echo "CEPH_ARGS=''" "$@" >> "${TEMPDIR}/${RBD_MIRROR_SAVE_CLI_OUTPUT}"
+        else
+            echo "CEPH_ARGS='--id ${CEPH_ID}'" "$@" >> "${TEMPDIR}/${RBD_MIRROR_SAVE_CLI_OUTPUT}"
+        fi
+        cat "$CMD_STDOUT" >> "${TEMPDIR}/${RBD_MIRROR_SAVE_CLI_OUTPUT}"
+        cat "$CMD_STDERR" >> "${TEMPDIR}/${RBD_MIRROR_SAVE_CLI_OUTPUT}"
+    fi
+
     if [ 0 = $rc ] ; then
         return 0
     fi
@@ -1145,10 +1155,11 @@ get_fields_from_group_info()
 {
     local cluster=$1 ; shift
     local group_spec=$1 ; shift
+    local runner=$1 ; shift
     local -n _group_info_result_arr=$1 ; shift
     local fields=("$@")
 
-    run_cmd "rbd --cluster ${cluster} group info ${group_spec} --format xml --pretty-format" || { fail; return 1; }
+    "$runner" "rbd --cluster ${cluster} group info ${group_spec} --format xml --pretty-format" || { fail; return 1; }
 
     local field result
     for field in "${fields[@]}"; do
@@ -1157,7 +1168,6 @@ get_fields_from_group_info()
     done
 }
 
-# TODO need to verify the new mirroring fields in the group info once they are available
 test_fields_in_group_info()
 {
     local cluster=$1 ; shift
@@ -1168,7 +1178,7 @@ test_fields_in_group_info()
 
     local fields=(//group/group_name //group/group_id //group/mirroring/mode //group/mirroring/state //group/mirroring/global_id //group/mirroring/primary)
     local fields_arr
-    get_fields_from_group_info "${cluster}" "${group_spec}" fields_arr "${fields[@]}"
+    get_fields_from_group_info "${cluster}" "${group_spec}" "run_cmd" fields_arr "${fields[@]}"
     test "${fields_arr[2]}" = "${expected_mode}" || { fail "mode = ${fields_arr[2]}"; return 1; }
     test "${fields_arr[3]}" = "${expected_state}" || { fail "state = ${fields_arr[3]}"; return 1; }
     test "${fields_arr[5]}" = "${expected_is_primary}" || { fail "primary = ${fields_arr[5]}"; return 1; }
@@ -1179,10 +1189,11 @@ get_id_from_group_info()
     local cluster=$1 ; shift
     local group_spec=$1 ; shift
     local -n _result=$1 ; shift
+    local runner=${1:-"run_cmd"}
 
     local fields=(//group/group_id)
     local fields_arr
-    get_fields_from_group_info "${cluster}" "${group_spec}" fields_arr "${fields[@]}"
+    get_fields_from_group_info "${cluster}" "${group_spec}" "${runner}" fields_arr "${fields[@]}" || { fail; return 1; }
     _result="${fields_arr[0]}"
 }
 
@@ -1218,15 +1229,12 @@ check_fields_in_group_and_image_status()
         get_fields_from_mirror_image_status "${cluster}" "${image_spec}" image_fields_arr "${fields[@]}"
 
         # check that the image "state" matches the group "state"
-# TODO. The imaage status doesn not always get updated before the group status - see slack thread.   Fail and allow retry for now
-#        test "${image_fields_arr[0]}" = "${group_fields_arr[0]}" || { fail "image:${image_spec} ${image_fields_arr[0]} != ${group_fields_arr[0]}"; return 1; } 
-        test "${image_fields_arr[0]}" = "${group_fields_arr[0]}" || { fail; return 1; } 
+        test "${image_fields_arr[0]}" = "${group_fields_arr[0]}" || { fail "image:${image_spec} ${image_fields_arr[0]} != ${group_fields_arr[0]}"; return 1; } 
 
         # check that the image "description" matches the group "description".  Need to remove the extra information from the image description first
         local image_description
         image_description=$(cut -d ',' -f 1 <<< "${image_fields_arr[1]}")
-#        test "${image_description}" = "${group_fields_arr[1]}" || { fail "image:${image_spec} ${image_description} != ${group_fields_arr[1]}"; return 1; } 
-         test "${image_description}" = "${group_fields_arr[1]}" || { fail;  return 1; } 
+        test "${image_description}" = "${group_fields_arr[1]}" || { fail "image:${image_spec} ${image_description} != ${group_fields_arr[1]}"; return 1; } 
     done
 }
 
@@ -2579,6 +2587,32 @@ wait_for_group_not_present()
     wait_for_test_group_present "${cluster}" "${pool}" "${group}" 0 0
 }
 
+test_group_id_changed()
+{
+    local cluster=$1
+    local group_spec=$2
+    local orig_group_id=$3    
+    local current_group_id
+
+    get_id_from_group_info "${cluster}" "${group_spec}" current_group_id "try_cmd" || { fail; return 1; }
+    test "${orig_group_id}" != "${current_group_id}" || { fail; return 1; }
+  }
+
+wait_for_group_id_changed()
+{
+    local cluster=$1
+    local group_spec=$2
+    local orig_group_id=$3
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        test_group_id_changed "${cluster}" "${group_spec}" "${orig_group_id}" && return 0
+    done
+    fail "wait for group with name ${group} to change id from ${orig_group_id} failed on ${cluster}"
+    return 1
+}
+
 test_group_snap_present()
 {
     local cluster=$1
@@ -2586,9 +2620,7 @@ test_group_snap_present()
     local group_snap_id=$3
     local expected_snap_count=$4
 
-    # TODO - have seen this next cmd fail with rc=2 and an empty list
-    # this should not happen, but if it does then retry as a temp workaround
-    try_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" 
+    run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" 
 
     test "${expected_snap_count}" = "$(xmlstarlet sel -t -v "count(//group_snaps/group_snap[id='${group_snap_id}'])" < "$CMD_STDOUT")" || { fail; return 1; }
 }
@@ -2635,9 +2667,7 @@ test_group_snap_sync_state()
     local group_snap_id=$3
     local expected_state=$4
 
-    # TODO - have seen this next cmd fail with rc=2 and an empty list
-    # this should not happen, but if it does then retry as a temp workaround
-    try_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" 
+    run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" 
 
     test "${expected_state}" = "$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/state" < "$CMD_STDOUT")" || { fail; return 1; }
 }
@@ -2660,6 +2690,17 @@ test_group_snap_sync_incomplete()
     test_group_snap_sync_state "${cluster}" "${group_spec}" "${group_snap_id}" 'incomplete'
 }
 
+list_image_snaps_for_group()
+{
+    local cluster=$1
+    local group_spec=$2
+
+    try_cmd "rbd --cluster ${cluster} group image list ${group_spec}"
+    for image_spec in $(cat "$CMD_STDOUT" | xargs); do
+        try_cmd "rbd --cluster ${cluster} snap list -a ${image_spec}" || :
+    done
+}
+
 wait_for_test_group_snap_sync_complete()
 {
     local cluster=$1
@@ -2667,9 +2708,15 @@ wait_for_test_group_snap_sync_complete()
     local group_snap_id=$3
     local s
 
-    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32 32 32 64; do
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32 32 32 64 64 64 64 64; do
         sleep ${s}
         test_group_snap_sync_complete "${cluster}" "${group_spec}" "${group_snap_id}" && return 0
+
+        if [ "$s" -gt 32 ]; then
+            # query the snap progress for each image in the group - debug info to check that sync is progressing
+            list_image_snaps_for_group "${cluster}" "${group_spec}"
+        fi
+
     done
 
     fail "wait for group snap with id ${group_snap_id} to be synced failed on ${cluster}"
@@ -2807,17 +2854,10 @@ get_newest_group_snapshot_id()
     local group_spec=$2
     local -n _group_snap_id=$3
 
-    # TODO - have seen this next cmd fail with rc=2 and an empty list
-    # this should not happen, but if it does then retry as a temp workaround
-    try_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" &&
-      { _group_snap_id=$(xmlstarlet sel -t -v "(//group_snaps/group_snap[state='complete']/id)[last()]" "$CMD_STDOUT" ); return; }
-    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16; do
-        echo -e "${RED}RETRYING COMMAND${NO_COLOUR}";
-        sleep ${s}
-        try_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" && {
-          _group_snap_id=$(xmlstarlet sel -t -v "(//group_snaps/group_snap[state='complete']/id)[last()]" "$CMD_STDOUT" ); return; }
-    done
-    fail "Failed to execute command"
+    run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" 
+    _group_snap_id=$(xmlstarlet sel -t -v "(//group_snaps/group_snap[state='complete']/id)[last()]" "$CMD_STDOUT" ) && return 0
+
+    fail "Failed to get snapshot id"
     return 1
 }
 
@@ -2888,10 +2928,7 @@ test_group_status_in_pool_dir()
     local description_pattern=$5
     local current_state=stopped
 
-    # When running the split-brain test in rbd_mirror_group.sh this next command sometimes fails with a message
-    # "rbd: mirroring not enabled on the group" (even though it clearly is).  To stop the test from failing, treat this as a non-fatal
-    # error for now and the caller will retry the command.  TODO change back to run_admin_cmd.
-    try_admin_cmd "rbd --cluster ${cluster} mirror group status ${group_spec} --format xml --pretty-format" || { fail; return 1; }
+    run_admin_cmd "rbd --cluster ${cluster} mirror group status ${group_spec} --format xml --pretty-format" || { fail; return 1; }
 
     test -n "${state_pattern}" && { test "${state_pattern}" = $(xmlstarlet sel -t -v "//group/state" < "${CMD_STDOUT}" ) || { fail; return 1; } }
     test -n "${description_pattern}" && { test "${description_pattern}" = "$(xmlstarlet sel -t -v "//group/description" "${CMD_STDOUT}" )" || { fail; return 1; } }
@@ -2915,7 +2952,7 @@ test_group_status_in_pool_dir()
         fi
     fi
 
-    # TODO enable this once tests are more reliable
+    # TODO enable this once there is more coordination between the group and image replayer to ensure that the state is in sync
     #check_fields_in_group_and_image_status "${cluster}" "${group_spec}" ||  { fail; return 1; }
     
     return 0
@@ -2936,6 +2973,38 @@ wait_for_group_status_in_pool_dir()
             return 0
     done
     fail 1 "failed to reach expected status"
+    return 1
+}
+
+test_peer_group_status_in_pool_dir()
+{
+    local cluster=$1
+    local group_spec=$2
+    local state_pattern=$3
+    local description_pattern=$4
+
+    local fields=(//group/peer_sites/peer_site/state //group/peer_sites/peer_site/description)
+    local group_fields_arr
+    get_fields_from_mirror_group_status "${cluster}" "${group_spec}" group_fields_arr "${fields[@]}"
+
+    test "${state_pattern}" = "${group_fields_arr[0]}" || { fail; return 1; } 
+    if [ -n "${description_pattern}" ]; then
+        test "${description_pattern}" = "${group_fields_arr[1]}" || { fail; return 1; } 
+    fi
+}
+
+wait_for_peer_group_status_in_pool_dir()
+{
+    local cluster=$1
+    local group_spec=$2
+    local state_pattern=$3
+    local description_pattern=$4
+
+    for s in 1 2 4 8 8 8 8 8 8 8 8 16 16; do
+        sleep ${s}
+        test_peer_group_status_in_pool_dir "${cluster}" "${group_spec}" "${state_pattern}" "${description_pattern}" && return 0
+    done
+    fail 1 "failed to reach expected peer status"
     return 1
 }
 
