@@ -2283,7 +2283,7 @@ void RGWBucketInfo::encode(bufferlist& bl) const {
   const rgw_user* user = std::get_if<rgw_user>(&owner);
   std::string empty;
 
-  ENCODE_START(24, 4, bl);
+  ENCODE_START(25, 4, bl);
   encode(bucket, bl);
   if (user) {
     encode(user->id, bl);
@@ -2330,12 +2330,13 @@ void RGWBucketInfo::encode(bufferlist& bl) const {
     encode(empty, bl);
   }
   ceph::versioned_variant::encode(owner, bl); // v24
+  encode(local_zone_id, bl);
   ENCODE_FINISH(bl);
 }
 
 void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
   rgw_user user;
-  DECODE_START_LEGACY_COMPAT_LEN_32(24, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN_32(25, 4, 4, bl);
   decode(bucket, bl);
   if (struct_v >= 2) {
     string s;
@@ -2416,6 +2417,9 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
     ceph::versioned_variant::decode(owner, bl);
   } else {
     owner = std::move(user); // user was decoded piecewise above
+  }
+  if (struct_v >= 25) {
+    decode(local_zone_id, bl);
   }
 
   if (layout.logs.empty() &&
@@ -2564,6 +2568,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   if (obj_lock_enabled()) {
     encode_json("obj_lock", obj_lock, f);
   }
+  encode_json("local_zone_id", local_zone_id, f);
 }
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
@@ -2610,6 +2615,7 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   if (obj_lock_enabled()) {
     JSONDecoder::decode_json("obj_lock", obj_lock, obj);
   }
+  JSONDecoder::decode_json("local_zone_id", local_zone_id, obj);
 }
 
 list<RGWUserInfo> RGWUserInfo::generate_test_instances()
