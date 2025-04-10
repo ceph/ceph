@@ -483,7 +483,10 @@ mirror_group_demote ${CLUSTER1} ${POOL}/${group}
 test_fields_in_group_info ${CLUSTER1} ${POOL}/${group} 'snapshot' 'enabled' 'false'
 test_fields_in_group_info ${CLUSTER2} ${POOL}/${group} 'snapshot' 'enabled' 'true'
 wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+error' 0 'split-brain detected'
+
+get_id_from_group_info ${CLUSTER1} ${POOL}/${group} group_id_before
 mirror_group_resync ${CLUSTER1} ${POOL}/${group}
+wait_for_group_id_changed ${CLUSTER1} ${POOL}/${group} ${group_id_before}
 wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+replaying' 1
 
 #TODO: Fix blocklisting IP's which are consequence of "TEST: stop mirror, create group, start mirror and test replay"
