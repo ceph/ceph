@@ -110,6 +110,57 @@ void LogicalCachedExtent::maybe_set_intermediate_laddr(LBAMapping &mapping) {
     : mapping.get_key();
 }
 
+std::pair<bool, CachedExtent::viewable_state_t>
+CachedExtent::is_viewable_by_trans(Transaction &t) {
+  if (!is_valid()) {
+    return std::make_pair(false, viewable_state_t::invalid);
+  }
+
+  auto trans_id = t.get_trans_id();
+  if (is_pending()) {
+    ceph_assert(is_pending_in_trans(trans_id));
+    return std::make_pair(true, viewable_state_t::pending);
+  }
+
+  // shared by multiple transactions
+  assert(t.is_in_read_set(this));
+  assert(is_stable_written());
+
+  auto cmp = trans_spec_view_t::cmp_t();
+  if (mutation_pending_extents.find(trans_id, cmp) !=
+      mutation_pending_extents.end()) {
+    return std::make_pair(false, viewable_state_t::stable_become_pending);
+  }
+
+  if (retired_transactions.find(trans_id, cmp) !=
+      retired_transactions.end()) {
+    assert(t.is_stable_extent_retired(get_paddr(), get_length()));
+    return std::make_pair(false, viewable_state_t::stable_become_retired);
+  }
+
+  return std::make_pair(true, viewable_state_t::stable);
+}
+
+std::ostream &operator<<(
+  std::ostream &out,
+  CachedExtent::viewable_state_t state)
+{
+  switch(state) {
+  case CachedExtent::viewable_state_t::stable:
+    return out << "stable";
+  case CachedExtent::viewable_state_t::pending:
+    return out << "pending";
+  case CachedExtent::viewable_state_t::invalid:
+    return out << "invalid";
+  case CachedExtent::viewable_state_t::stable_become_retired:
+    return out << "stable_become_retired";
+  case CachedExtent::viewable_state_t::stable_become_pending:
+    return out << "stable_become_pending";
+  default:
+    __builtin_unreachable();
+  }
+}
+
 bool BufferSpace::is_range_loaded(extent_len_t offset, extent_len_t length) const
 {
   assert(length > 0);
