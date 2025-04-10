@@ -483,7 +483,7 @@ _init_cached_extent(
 	  iter.get_val().pladdr.get_paddr() == logn->get_paddr()) {
 	assert(!iter.get_leaf_node()->is_pending());
 	iter.get_leaf_node()->link_child(logn.get(), iter.get_leaf_pos());
-	logn->set_laddr(iter.get_pin(c)->get_key());
+	logn->set_laddr(iter.get_key());
 	ceph_assert(iter.get_val().len == e->get_length());
 	DEBUGT("logical extent {} live", c.trans, *logn);
 	ret = true;
