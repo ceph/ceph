@@ -413,3 +413,10 @@ class SubvolumeV2(SubvolumeV1):
             # tickle the volume purge job to purge this entry, using ESTALE
             raise VolumeException(-errno.ESTALE, "subvolume '{0}' has been removed as the last retained snapshot is removed".format(self.subvolname))
         # if not purgeable, subvol is not retained, or has snapshots, or already has purge jobs that will garbage collect this subvol
+
+    def current_incar_exists(self):
+        # XXX: unlike v3, in v2 a subvol either exists or doesn't. previous
+        # incarnations are never preserved whether or not snapshots are
+        # retained. Therefore, this method EXISTS ONLY FOR COMPATIBILITY with
+        # v3.
+        return True
