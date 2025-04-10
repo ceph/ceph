@@ -869,6 +869,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
   string prefix;
   cmd_getval(cmdmap, "prefix", prefix);
   if (prefix == "auth add" ||
+      prefix == "auth rotate" ||
       prefix == "auth del" ||
       prefix == "auth rm" ||
       prefix == "auth get-or-create" ||
@@ -1915,6 +1916,41 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
+    return true;
+  } else if (prefix == "auth rotate") {
+    if (entity_name.empty()) {
+      ss << "bad entity name";
+      err = -EINVAL;
+      goto done;
+    }
+
+    EntityAuth entity_auth;
+    if (!mon.key_server.get_auth(entity, entity_auth)) {
+      ss << "entity does not exist";
+      err = -ENOENT;
+      goto done;
+    }
+
+    entity_auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+
+    KeyServerData::Incremental auth_inc;
+    auth_inc.op = KeyServerData::AUTH_INC_ADD;
+    auth_inc.name = entity;
+    auth_inc.auth = entity_auth;
+    push_cephx_inc(auth_inc);
+
+    {
+      KeyRing kr;
+      kr.add(entity, entity_auth.key, entity_auth.pending_key);
+      if (f) {
+        kr.set_caps(entity, entity_auth.caps);
+        kr.encode_formatted("auth", f.get(), rdata);
+      } else {
+        kr.encode_plaintext(rdata);
+      }
+    }
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
+                                              get_last_committed() + 1));
     return true;
   }
 done:
