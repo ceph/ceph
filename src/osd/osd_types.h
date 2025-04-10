@@ -6349,7 +6349,7 @@ struct PushOp {
   ceph::buffer::list data;
   interval_set<uint64_t> data_included;
   ceph::buffer::list omap_header;
-  std::map<std::string, ceph::buffer::list> omap_entries;
+  std::vector<std::pair<std::string, ceph::buffer::list>> omap_entries;
   std::map<std::string, ceph::buffer::list, std::less<>> attrset;
 
   ObjectRecoveryInfo recovery_info;
@@ -6842,7 +6842,7 @@ static const __u8 pg_compat_struct_v = 10;
 
 int prepare_info_keymap(
   CephContext* cct,
-  std::map<std::string,ceph::buffer::list> *km,
+  std::vector<std::pair<std::string,ceph::buffer::list>> *km,
   std::string *key_to_remove,
   epoch_t epoch,
   pg_info_t &info,

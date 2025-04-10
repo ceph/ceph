@@ -7967,14 +7967,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	tracepoint(osd, do_osd_op_pre_omapsetvals, soid.oid.name.c_str(), soid.snap.val);
 	if (cct->_conf->subsys.should_gather<dout_subsys, 20>()) {
 	  dout(20) << "setting vals: " << dendl;
-	  map<string,bufferlist> to_set;
+	  vector<pair<string,bufferlist>> to_set;
 	  bufferlist::const_iterator pt = to_set_bl.begin();
 	  decode(to_set, pt);
-	  for (map<string, bufferlist>::iterator i = to_set.begin();
-	       i != to_set.end();
-	       ++i) {
-	    dout(20) << "\t" << i->first << dendl;
-	  }
+          for (auto &p : to_set) {
+            dout(20) << "\t" << p.first << dendl;
+          }
 	}
 	t->omap_setkeys(soid, to_set_bl);
 	ctx->clean_regions.mark_omap_dirty();
@@ -10073,10 +10071,7 @@ void PrimaryLogPG::_write_copy_chunk(CopyOpRef cop, PGTransaction *t)
 	cop->omap_header.clear();
       }
       if (cop->omap_data.length()) {
-	map<string,bufferlist> omap;
-	bufferlist::const_iterator p = cop->omap_data.begin();
-	decode(omap, p);
-	t->omap_setkeys(cop->results.temp_oid, omap);
+	t->omap_setkeys(cop->results.temp_oid, cop->omap_data);
 	cop->omap_data.clear();
       }
     }

@@ -878,9 +878,10 @@ void PG::upgrade(ObjectStore *store)
 
   // update infover_key
   if (info_struct_v < pg_latest_struct_v) {
-    map<string,bufferlist> v;
+    vector<std::pair<string, bufferlist>> v(1);
+    v[0].first = string(infover_key);
     __u8 ver = pg_latest_struct_v;
-    encode(ver, v[string(infover_key)]);
+    encode(ver, v[0].second);
     t.omap_setkeys(coll, pgmeta_oid, v);
   }
 
@@ -916,7 +917,7 @@ void PG::prepare_write(
 {
   info.stats.stats.add(unstable_stats);
   unstable_stats.clear();
-  map<string,bufferlist> km;
+  vector<pair<string,bufferlist>> km;
   string key_to_remove;
   if (dirty_big_info || dirty_info) {
     int ret = prepare_info_keymap(

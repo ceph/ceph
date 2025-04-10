@@ -60,7 +60,7 @@ public:
       : cid(cid), hoid(hoid), t(t) {}
   public:
     void set_keys(
-      const std::map<std::string, ceph::buffer::list> &to_set) override {
+      const std::vector<std::pair<std::string, ceph::buffer::list>> &to_set) override {
       t->omap_setkeys(cid, hoid, to_set);
     }
     void remove_keys(
@@ -226,7 +226,7 @@ private:
     snapid_t *begin, snapid_t *end);
   static void make_purged_snap_key_value(
     int64_t pool, snapid_t begin,
-    snapid_t end, std::map<std::string,ceph::buffer::list> *m);
+    snapid_t end, std::vector<std::pair<std::string,ceph::buffer::list>> *m);
   static std::string make_purged_snap_key(int64_t pool, snapid_t last);
 
   // note: marked 'mutable', as functions as a cache and used in some 'const'

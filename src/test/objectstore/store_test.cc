@@ -445,7 +445,7 @@ public:
       t.touch(cid, hoid);
       generator gen{3.85 + 0.1 * o / object_count, 1 - double(o) / object_count};
 
-      map<string, bufferlist> start_set;
+      vector<pair<string, bufferlist>> start_set;
       size_t omap_count = 1 + gen() * 20;
       bool do_omap_header = gen() > 0.5;
       if (do_omap_header) {
@@ -457,7 +457,7 @@ public:
 	std::string name = generate_monotonic_name(omap_count, i, 3.66 + 0.22 * o / object_count, 0.5);
 	bufferlist val;
 	val.append(gen_string(100, gen));
-	start_set.emplace(name, val);
+	start_set.emplace_back(name, val);
       }
       t.omap_setkeys(cid, hoid, start_set);
       r = queue_transaction(store, ch, std::move(t));
@@ -3689,9 +3689,9 @@ TEST_P(StoreTest, OmapSimple) {
 			    "key", 123, -1, ""));
   bufferlist small;
   small.append("small");
-  map<string,bufferlist> km;
-  km["foo"] = small;
-  km["bar"].append("asdfjkasdkjdfsjkafskjsfdj");
+  vector<pair<string,bufferlist>> km;
+  km.emplace_back("foo", small);
+  km.emplace_back("bar", bufferlist()).second.append("asdfjkasdkjdfsjkafskjsfdj");
   bufferlist header;
   header.append("this is a header");
   {
@@ -3752,9 +3752,9 @@ TEST_P(StoreTest, OmapCloneTest) {
 			    "key", 123, -1, ""));
   bufferlist small;
   small.append("small");
-  map<string,bufferlist> km;
-  km["foo"] = small;
-  km["bar"].append("asdfjkasdkjdfsjkafskjsfdj");
+  vector<pair<string,bufferlist>> km;
+  km.emplace_back("foo", small);
+  km.emplace_back("bar", bufferlist()).second.append("asdfjkasdkjdfsjkafskjsfdj");
   bufferlist header;
   header.append("this is a header");
   {
@@ -5996,7 +5996,7 @@ TEST_P(StoreTest, OMapTest) {
     ObjectStore::Transaction t;
     t.touch(cid, hoid);
     t.omap_clear(cid, hoid);
-    map<string, bufferlist> start_set;
+    vector<pair<string, bufferlist>> start_set;
     t.omap_setkeys(cid, hoid, start_set);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
@@ -6030,8 +6030,8 @@ TEST_P(StoreTest, OMapTest) {
     bl.clear();
     bufferptr bp(buf, strlen(buf) + 1);
     bl.append(bp);
-    map<string, bufferlist> to_add;
-    to_add.insert(pair<string, bufferlist>("key-" + string(buf), bl));
+    vector<pair<string, bufferlist>> to_add;
+    to_add.emplace_back("key-" + string(buf), bl);
     attrs.insert(pair<string, bufferlist>("key-" + string(buf), bl));
     t.omap_setkeys(cid, hoid, to_add);
     r = queue_transaction(store, ch, std::move(t));
@@ -6082,8 +6082,8 @@ TEST_P(StoreTest, OMapTest) {
  
     bufferlist bl2;
     bl2.append("value");
-    map<string, bufferlist> to_add;
-    to_add.insert(pair<string, bufferlist>("key", bl2));
+    vector<pair<string, bufferlist>> to_add;
+    to_add.emplace_back("key", bl2);
     t.omap_setkeys(cid, hoid, to_add);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
@@ -6104,9 +6104,9 @@ TEST_P(StoreTest, OMapTest) {
   // test omap_clear, omap_rmkey_range
   {
     {
-      map<string,bufferlist> to_set;
+      vector<pair<string,bufferlist>> to_set;
       for (int n=0; n<10; ++n) {
-	to_set[stringify(n)].append("foo");
+	to_set.emplace_back(stringify(n), bufferlist()).second.append("foo");
       }
       bufferlist h;
       h.append("header");
@@ -6177,7 +6177,7 @@ TEST_P(StoreTest, OMapIterator) {
     ObjectStore::Transaction t;
     t.touch(cid, hoid);
     t.omap_clear(cid, hoid);
-    map<string, bufferlist> start_set;
+    vector<pair<string, bufferlist>> start_set;
     t.omap_setkeys(cid, hoid, start_set);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
@@ -6218,8 +6218,8 @@ TEST_P(StoreTest, OMapIterator) {
     bl.clear();
     bufferptr bp(buf, strlen(buf) + 1);
     bl.append(bp);
-    map<string, bufferlist> to_add;
-    to_add.insert(pair<string, bufferlist>("key-" + string(buf), bl));
+    vector<pair<string, bufferlist>> to_add;
+    to_add.emplace_back("key-" + string(buf), bl);
     attrs.insert(pair<string, bufferlist>("key-" + string(buf), bl));
     ObjectStore::Transaction t;
     t.omap_setkeys(cid, hoid, to_add);
@@ -6809,10 +6809,10 @@ TEST_P(StoreTest, MoveRename) {
   }
   ASSERT_TRUE(store->exists(ch, oid));
   bufferlist data, attr;
-  map<string, bufferlist> omap;
+  vector<pair<string, bufferlist>> omap;
   data.append("data payload");
   attr.append("attr value");
-  omap["omap_key"].append("omap value");
+  omap.emplace_back("omap_key", bufferlist()).second.append("omap value");
   {
     ObjectStore::Transaction t;
     t.touch(cid, temp_oid);
@@ -6848,7 +6848,8 @@ TEST_P(StoreTest, MoveRename) {
     ASSERT_GE(r, 0);
     ASSERT_EQ(1u, newomap.size());
     ASSERT_TRUE(newomap.count("omap_key"));
-    ASSERT_TRUE(bl_eq(omap["omap_key"], newomap["omap_key"]));
+    ASSERT_EQ(omap[0].first, "omap_key");
+    ASSERT_TRUE(bl_eq(omap[0].second, newomap["omap_key"]));
   }
   {
     ObjectStore::Transaction t;
@@ -11797,10 +11798,10 @@ TEST_P(StoreTestOmapUpgrade, WithOmapHeader) {
     bufferlist header;
     header.append(expected_header);
     t.omap_setheader(cid, hoid, header);
-    map<string, bufferlist> start_set;
+    vector<pair<string, bufferlist>> start_set;
     bufferlist bl;
     bl.append(string("value"));
-    start_set.emplace(string("key1"), bl);
+    start_set.emplace_back(string("key1"), bl);
     t.omap_setkeys(cid, hoid, start_set);
     r = queue_transaction(store, ch, std::move(t));
   }
@@ -11902,10 +11903,10 @@ TEST_P(StoreTestOmapUpgrade, NoOmapHeader) {
   {
     ObjectStore::Transaction t;
     t.touch(cid, hoid);
-    map<string, bufferlist> start_set;
+    vector<pair<string, bufferlist>> start_set;
     bufferlist bl;
     bl.append(string("value"));
-    start_set.emplace(string("key1"), bl);
+    start_set.emplace_back(string("key1"), bl);
     t.omap_setkeys(cid, hoid, start_set);
     r = queue_transaction(store, ch, std::move(t));
   }

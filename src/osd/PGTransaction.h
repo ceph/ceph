@@ -449,6 +449,7 @@ public:
   void omap_setkeys(
     const hobject_t &hoid,         ///< [in] object to write
     ceph::buffer::list &keys_bl            ///< [in] encoded map<string, ceph::buffer::list>
+                                           ///<  or vector<pair<string, ceph::buffer::list>>
     ) {
     auto &op = get_object_op_for_modify(hoid);
     op.omap_updates.emplace_back(
@@ -459,6 +460,15 @@ public:
   void omap_setkeys(
     const hobject_t &hoid,         ///< [in] object to write
     std::map<std::string, ceph::buffer::list> &keys  ///< [in] omap keys, may be cleared
+    ) {
+    using ceph::encode;
+    ceph::buffer::list bl;
+    encode(keys, bl);
+    omap_setkeys(hoid, bl);
+  }
+  void omap_setkeys(
+    const hobject_t &hoid,         ///< [in] object to write
+    std::vector<std::pair<std::string, ceph::buffer::list>> &keys  ///< [in] omap keys, may be cleared
     ) {
     using ceph::encode;
     ceph::buffer::list bl;

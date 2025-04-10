@@ -583,7 +583,7 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   //Empty for this
   coll_t coll(info.pgid);
   ghobject_t pgmeta_oid(info.pgid.make_pgmeta_oid());
-  map<string,bufferlist> km;
+  vector<pair<string,bufferlist>> km;
   string key_to_remove;
   pg_info_t last_written_info;
   int ret = prepare_info_keymap(
@@ -615,7 +615,7 @@ int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
     return ret;
 
   coll_t coll(info.pgid);
-  map<string,bufferlist> km;
+  vector<pair<string,bufferlist>> km;
   const bool require_rollback = !info.pgid.is_no_shard();
   if (!divergent.empty()) {
     ceph_assert(missing.get_items().empty());
@@ -1189,13 +1189,13 @@ int expand_log(
     info.last_update = target_version;
     info.last_user_version = target_version.version + 1;
 
-    std::map<string, bufferlist> km;
+    std::vector<pair<string, bufferlist>> km;
     ObjectStore::Transaction t;
 
     pg_fast_info_t fast;
     fast.populate_from(info);
-    encode(fast, km[string(fastinfo_key)]);
-    encode(info, km[string(info_key)]);
+    encode(fast, km.emplace_back(string(fastinfo_key), bufferlist()).second);
+    encode(info, km.emplace_back(string(info_key), bufferlist()).second);
     log.write_log_and_missing(
       t,
       &km,

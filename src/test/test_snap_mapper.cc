@@ -53,10 +53,10 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
     }
   };
   struct Insert : public _Op {
-    map<string, bufferlist> to_insert;
-    explicit Insert(const map<string, bufferlist> &to_insert) : to_insert(to_insert) {}
+    vector<pair<string, bufferlist>> to_insert;
+    explicit Insert(const vector<pair<string, bufferlist>> &to_insert) : to_insert(to_insert) {}
     void operate(map<string, bufferlist> *store) override {
-      for (map<string, bufferlist>::iterator i = to_insert.begin();
+      for (auto i = to_insert.begin();
 	   i != to_insert.end();
 	   ++i) {
 	store->erase(i->first);
@@ -77,7 +77,7 @@ public:
     list<Op> ops;
     list<Op> callbacks;
   public:
-    void set_keys(const map<string, bufferlist> &i) override {
+    void set_keys(const vector<pair<string, bufferlist>> &i) override {
       ops.push_back(Op(new Insert(i)));
     }
     void remove_keys(const vector<string> &r) override {
@@ -293,15 +293,14 @@ public:
   }
   void do_set() {
     size_t set_size = random_num();
-    map<string, bufferlist> to_set;
+    vector<pair<string, bufferlist>> to_set;
     for (size_t i = 0; i < set_size; ++i) {
       bufferlist bl;
       random_bl(random_size(), &bl);
       string key = *rand_choose(names);
-      to_set.insert(
-	make_pair(key, bl));
+      to_set.emplace_back(key, bl);
     }
-    for (map<string, bufferlist>::iterator i = to_set.begin();
+    for (auto i = to_set.begin();
 	 i != to_set.end();
 	 ++i) {
       truth.erase(i->first);
@@ -394,18 +393,20 @@ public:
 TEST_F(MapCacherTest, Simple)
 {
   driver->pause();
+  vector<pair<string, bufferlist>> truth0;
   map<string, bufferlist> truth;
   vector<string> truth_keys;
   string blah("asdf");
   bufferlist bl;
   encode(blah, bl);
-  truth[string("asdf")] = bl;
+  truth0.emplace_back("asdf", bl);
+  truth.emplace("asdf", bl);
   truth_keys.push_back(truth.begin()->first);
   {
     PausyAsyncMap::Transaction t;
-    cache->set_keys(truth, &t);
+    cache->set_keys(truth0, &t);
     driver->submit(&t);
-    cache->set_keys(truth, &t);
+    cache->set_keys(truth0, &t);
     driver->submit(&t);
   }
 
@@ -1092,7 +1093,7 @@ public:
     PausyAsyncMap::Transaction t;
     mapper->backend.remove_keys(vector{k}, &t);
     auto short_k = k.substr(0, 10);
-    mapper->backend.set_keys(map<string, bufferlist>{{short_k, kvmap[k]}}, &t);
+    mapper->backend.set_keys(vector<pair<string, bufferlist>>{{short_k, kvmap[k]}}, &t);
     driver->submit(&t);
     driver->flush();
   }

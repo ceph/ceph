@@ -528,8 +528,8 @@ void SnapMapper::set_snaps(
   MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
   ceph_assert(check(oid));
-  map<string, ceph::buffer::list> to_set;
-  object_snaps::encode(oid, snaps, to_set[to_object_key(oid)]);
+  vector<pair<string, ceph::buffer::list>> to_set;
+  object_snaps::encode(oid, snaps, to_set.emplace_back(to_object_key(oid), bufferlist()).second);
   dout(20) << __func__ << " " << oid << " " << snaps << dendl;
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_set) {
@@ -620,9 +620,10 @@ void SnapMapper::add_oid(
 
   set_snaps(oid, snaps, t);
 
-  map<string, ceph::buffer::list> to_add;
+  vector<pair<string, bufferlist>> to_add;
+  to_add.reserve(snaps.size());
   for (auto s : snaps) {
-    to_add.insert(to_raw(make_pair(s, oid)));
+    to_add.emplace_back(to_raw(make_pair(s, oid)));
   }
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_add) {
@@ -857,10 +858,10 @@ string SnapMapper::make_purged_snap_key(int64_t pool, snapid_t last)
 }
 
 void SnapMapper::make_purged_snap_key_value(
-  int64_t pool, snapid_t begin, snapid_t end, map<string,ceph::buffer::list> *m)
+  int64_t pool, snapid_t begin, snapid_t end, vector<pair<string,ceph::buffer::list>> *m)
 {
   string k = make_purged_snap_key(pool, end - 1);
-  auto& v = (*m)[k];
+  auto& v = m->emplace_back(k, bufferlist()).second;
   ceph::encode(pool, v);
   ceph::encode(begin, v);
   ceph::encode(end, v);
@@ -910,7 +911,8 @@ void SnapMapper::record_purged_snaps(
   map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps)
 {
   dout(10) << __func__ << " purged_snaps " << purged_snaps << dendl;
-  map<string,ceph::buffer::list> m;
+  vector<pair<string,ceph::buffer::list>> m;
+  m.reserve(4096);
   vector<string> rm;
   rm.reserve(4096);
   for (auto& [epoch, bypool] : purged_snaps) {

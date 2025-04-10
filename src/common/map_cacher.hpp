@@ -34,7 +34,7 @@ class Transaction {
 public:
   /// Std::set keys according to map
   virtual void set_keys(
-    const std::map<K, V> &keys ///< [in] keys/values to std::set
+    const std::vector<std::pair<K, V>> &keys ///< [in] keys/values to std::set
     ) = 0;
 
   /// Remove keys
@@ -183,7 +183,7 @@ public:
 
   /// Adds operation setting keys to Transaction
   void set_keys(
-    const std::map<K, V> &keys,  ///< [in] keys/values to std::set
+    const std::vector<std::pair<K, V>> &keys,  ///< [in] keys/values to std::set
     Transaction<K, V> *t    ///< [out] transaction to use
     ) {
     std::set<VPtr> vptrs;

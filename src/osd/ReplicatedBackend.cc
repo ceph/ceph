@@ -1739,7 +1739,7 @@ void ReplicatedBackend::submit_push_data(
   bufferlist data_included,
   bufferlist omap_header,
   const map<string, bufferlist, less<>> &attrs,
-  const map<string, bufferlist> &omap_entries,
+  const vector<pair<string, bufferlist>> &omap_entries,
   ObjectStore::Transaction *t)
 {
   hobject_t target_oid;
@@ -2242,7 +2242,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
             return ObjectStore::omap_iter_ret_t::STOP;
 	  }
         }
-        omap_entries.insert(make_pair(key, to_bufferlist(value)));
+        omap_entries.emplace_back(key, to_bufferlist(value));
 	available -= std::min(available, num_new_bytes);
         return ObjectStore::omap_iter_ret_t::NEXT;
       });

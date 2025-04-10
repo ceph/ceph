@@ -754,7 +754,8 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
                               u->xfer_buflen ) );
 
     map<string,bufferptr,less<>> attrset;
-    map<string, bufferlist> omaps;
+    vector<pair<string, bufferlist>> omaps;
+    omaps.reserve(8); // should be sufficient for now
     // enqueue a write transaction on the collection's handle
     ObjectStore::Transaction t;
     char ver_key[64];
@@ -766,14 +767,14 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
       job->one_for_all_data.set_length(
         ceph::util::generate_random_number(
 	  o->oi_attr_len_low, o->oi_attr_len_high));
-      attrset["_"] = job->one_for_all_data;
+      attrset.emplace("_", job->one_for_all_data);
     }
     if (o->snapset_attr_len_high) {
       ceph_assert(o->snapset_attr_len_high >= o->snapset_attr_len_low);
       job->one_for_all_data.set_length(
         ceph::util::generate_random_number
 	  (o->snapset_attr_len_low, o->snapset_attr_len_high));
-      attrset["snapset"] = job->one_for_all_data;
+      attrset.emplace("snapset", job->one_for_all_data);
 
     }
     if (o->_fastinfo_omap_len_high) {
@@ -782,7 +783,7 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
       job->one_for_all_data.set_length(
 	ceph::util::generate_random_number(
 	  o->_fastinfo_omap_len_low, o->_fastinfo_omap_len_high));
-      omaps["_fastinfo"].append(job->one_for_all_data);
+      omaps.emplace_back("_fastinfo", bufferlist()).second.append(job->one_for_all_data);
     }
 
     uint64_t pglog_trim_head = 0, pglog_trim_tail = 0;
@@ -820,7 +821,7 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
         job->one_for_all_data.set_length(
 	  ceph::util::generate_random_number(
 	    o->pglog_omap_len_low, o->pglog_omap_len_high));
-	omaps[ver_key].append(job->one_for_all_data);
+	omaps.emplace_back(ver_key, bufferlist()).second.append(job->one_for_all_data);
       }
       if (o->pglog_dup_omap_len_high) {
 	//insert dup
@@ -832,7 +833,7 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
 	  job->one_for_all_data.set_length(
 	    ceph::util::generate_random_number(
 	      o->pglog_dup_omap_len_low, o->pglog_dup_omap_len_high));
-	  omaps[ver_key].append(job->one_for_all_data);
+	  omaps.emplace_back(ver_key, bufferlist()).second.append(job->one_for_all_data);
 	}
       }
     }
@@ -842,16 +843,18 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
     }
     t.write(coll.cid, object.oid, u->offset, u->xfer_buflen, bl, flags);
 
-    set<string> rmkeys;
+    vector<string> rmkeys;
+    rmkeys.reserve(pglog_trim_head - pglog_trim_tail +
+                   pglog_dup_trim_head - pglog_dup_trim_tail);
     for( auto i = pglog_trim_tail; i < pglog_trim_head; ++i) {
 	snprintf(ver_key, sizeof(ver_key),
 	  "0000000011.%020llu", (unsigned long long)i);
-	rmkeys.emplace(ver_key);
+	rmkeys.emplace_back(ver_key);
     }
     for( auto i = pglog_dup_trim_tail; i < pglog_dup_trim_head; ++i) {
 	snprintf(ver_key, sizeof(ver_key),
 	  "dup_0000000011.%020llu", (unsigned long long)i);
-	rmkeys.emplace(ver_key);
+	rmkeys.emplace_back(ver_key);
     }
 
     if (rmkeys.size()) {

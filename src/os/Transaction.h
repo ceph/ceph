@@ -749,6 +749,10 @@ public:
       using ceph::decode;
       decode(aset, data_misaligned_bl_p);
     }
+    void decode_attrset(std::vector<std::pair<std::string,ceph::buffer::list>>& aset) {
+	using ceph::decode;
+      decode(aset, data_misaligned_bl_p);
+    }
     void decode_attrset_bl(ceph::buffer::list *pbl) {
       decode_str_str_map_to_bl(data_misaligned_bl_p, pbl);
     }
@@ -1147,6 +1151,19 @@ public:
     encode(attrset, data_misaligned_bl);
     data.ops = data.ops + 1;
   }
+  void omap_setkeys(
+    const coll_t& cid,                           ///< [in] Collection containing oid
+    const ghobject_t &oid,                ///< [in] Object to update
+    const std::vector<std::pair<std::string, ceph::buffer::list>> &attrset ///< [in] Replacement keys and values
+    ) {
+    using ceph::encode;
+    Op* _op = _get_next_op();
+    _op->op = OP_OMAP_SETKEYS;
+    _op->cid = _get_coll_id(cid);
+    _op->oid = _get_object_id(oid);
+    encode(attrset, data_misaligned_bl);
+    data.ops = data.ops + 1;
+  }
 
   /// Set keys on an oid omap (ceph::buffer::list variant).
   void omap_setkeys(
@@ -1186,7 +1203,7 @@ public:
     _op->op = OP_OMAP_RMKEYS;
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
-    encode(keys, data_bl);
+    encode(keys, data_misaligned_bl);
     data.ops = data.ops + 1;
   }
 
