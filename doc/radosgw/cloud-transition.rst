@@ -1,9 +1,9 @@
-==================
- Cloud Transition 
-==================
+================
+Cloud Transition
+================
 
 This feature enables transitioning S3 objects to a remote cloud service as part
-of `<https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html>`
+of `Object Lifecycle <https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html>`_
 via :ref:`storage_classes`. The transition is unidirectional: data cannot be
 transitioned back from the remote zone. The goal of this feature is to enable
 data transition to multiple cloud providers. The currently supported cloud
@@ -35,7 +35,8 @@ The below tier types are supported:
 Cloud Storage Class Tier Configuration
 --------------------------------------
 
-```
+::
+
     {
       "access_key": <access>,
       "secret": <secret>,
@@ -51,10 +52,10 @@ Cloud Storage Class Tier Configuration
       "multipart_min_part_size": {part_size},
       "retain_head_object": <true | false>
     }
-```
 
-Cloud Transition Specific Configurables:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Cloud Transition Specific Configurables
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * ``access_key`` (string)
 
@@ -120,19 +121,18 @@ This option is ignored for current-versioned objects. For more details,
 refer to the "Versioned Objects" section below.
 
 
-S3 Specific Configurables:
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+S3 Specific Configurables
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Currently, cloud transition will work only with backends that are compatible with
 AWS S3. There are a few configurables that can be used to tweak behavior
-when accessing cloud services:
+when accessing cloud services::
 
-```
     {
       "multipart_sync_threshold": {object_size},
       "multipart_min_part_size": {part_size}
     }
-```
+
 
 * ``multipart_sync_threshold`` (integer)
 
@@ -155,19 +155,24 @@ See :ref:`adding_a_storage_class` for how to configure storage-class for a zoneg
           the zone/zonegroup changes will take effect once the changes are
           committed with ``radosgw-admin period update --commit``.
 
-```
-    # radosgw-admin zonegroup placement add --rgw-zonegroup={zone-group-name} \
-                                            --placement-id={placement-id} \
-                                            --storage-class={storage-class-name} \
-                                            --tier-type=cloud-s3 
-```
+.. prompt:: bash #
+
+   radosgw-admin zonegroup placement add --rgw-zonegroup={zone-group-name} \
+                                           --placement-id={placement-id} \
+                                           --storage-class={storage-class-name} \
+                                           --tier-type=cloud-s3 
+
 
 For example:
 
-```
-    # radosgw-admin zonegroup placement add --rgw-zonegroup=default \
-                                            --placement-id=default-placement \
-                                            --storage-class=CLOUDTIER --tier-type=cloud-s3
+.. prompt:: bash #
+
+   radosgw-admin zonegroup placement add --rgw-zonegroup=default \
+                                           --placement-id=default-placement \
+                                           --storage-class=CLOUDTIER --tier-type=cloud-s3
+
+::
+
     [
         {
             "key": "default-placement",
@@ -202,91 +207,99 @@ For example:
             }
         }
     ]
-```
+
 
 .. note:: Once a storage class
-	  of ``--tier-type=cloud-s3`` or ``--tier-type=cloud-s3-glacier``,
+          of ``--tier-type=cloud-s3`` or ``--tier-type=cloud-s3-glacier``
           is created it cannot be later modified to any other storage class type.
 
 The tier configuration can be then performed using the following command:
 
-```
-    # radosgw-admin zonegroup placement modify --rgw-zonegroup={zone-group-name} \
-                                               --placement-id={placement-id} \
-                                               --storage-class={storage-class-name} \
-                                               --tier-config={key}={val}[,{key}={val}]
-```
+.. prompt:: bash #
+
+   radosgw-admin zonegroup placement modify --rgw-zonegroup={zone-group-name} \
+                                              --placement-id={placement-id} \
+                                              --storage-class={storage-class-name} \
+                                              --tier-config={key}={val}[,{key}={val}]
+
 
 The ``key`` in the configuration specifies the config variable to be updated, and
 the ``val`` specifies its new value.
 
 For example:
 
-```
-    # radosgw-admin zonegroup placement modify --rgw-zonegroup default \
-                                               --placement-id default-placement \
-                                               --storage-class CLOUDTIER \
-                                               --tier-config=endpoint=http://XX.XX.XX.XX:YY,\
-                                               access_key=<access_key>,secret=<secret>, \
-                                               multipart_sync_threshold=44432, \
-                                               multipart_min_part_size=44432, \
-                                               retain_head_object=true
-```
+.. prompt:: bash #
+
+   radosgw-admin zonegroup placement modify --rgw-zonegroup default \
+                                              --placement-id default-placement \
+                                              --storage-class CLOUDTIER \
+                                              --tier-config=endpoint=http://XX.XX.XX.XX:YY,\
+                                              access_key=<access_key>,secret=<secret>, \
+                                              multipart_sync_threshold=44432, \
+                                              multipart_min_part_size=44432, \
+                                              retain_head_object=true
+
 
 Nested values can be accessed using periods. For example:
 
-```
-    # radosgw-admin zonegroup placement modify --rgw-zonegroup={zone-group-name} \
-                                               --placement-id={placement-id} \
-                                               --storage-class={storage-class-name} \
-                                               --tier-config=acls.source_id=${source-id}, \
-                                               acls.dest_id=${dest-id}
-```
+.. prompt:: bash #
+
+   radosgw-admin zonegroup placement modify --rgw-zonegroup={zone-group-name} \
+                                              --placement-id={placement-id} \
+                                              --storage-class={storage-class-name} \
+                                              --tier-config=acls.source_id=${source-id}, \
+                                              acls.dest_id=${dest-id}
+
 
 Configuration array entries can be accessed by specifying the specific entry to
 be referenced enclosed in square brackets, and adding a new array entry can be
 performed with an empty array `[]`.
 For example, creating a new ``acl`` array entry:
 
-```
-    # radosgw-admin zonegroup placement modify --rgw-zonegroup={zone-group-name} \
-                                               --placement-id={placement-id} \
-                                               --storage-class={storage-class-name} \
-                                               --tier-config=acls[].source_id=${source-id}, \
-                                               acls[${source-id}].dest_id=${dest-id}, \
-                                               acls[${source-id}].type=email
-```
+.. prompt:: bash #
+
+   radosgw-admin zonegroup placement modify --rgw-zonegroup={zone-group-name} \
+                                              --placement-id={placement-id} \
+                                              --storage-class={storage-class-name} \
+                                              --tier-config=acls[].source_id=${source-id}, \
+                                              acls[${source-id}].dest_id=${dest-id}, \
+                                              acls[${source-id}].type=email
+
 
 An entry can be removed by supplying ``--tier-config-rm={key}``.
 
 For example:
 
-```
-    # radosgw-admin zonegroup placement modify --rgw-zonegroup default \
-                                               --placement-id default-placement \
-                                               --storage-class CLOUDTIER \
-                                               --tier-config-rm=acls.source_id=testid
+.. prompt:: bash #
+   radosgw-admin zonegroup placement modify --rgw-zonegroup default \
+                                              --placement-id default-placement \
+                                              --storage-class CLOUDTIER \
+                                              --tier-config-rm=acls.source_id=testid
 
-    # radosgw-admin zonegroup placement modify --rgw-zonegroup default \
-                                               --placement-id default-placement \
-                                               --storage-class CLOUDTIER \
-                                               --tier-config-rm=target_path
-```
+   radosgw-admin zonegroup placement modify --rgw-zonegroup default \
+                                              --placement-id default-placement \
+                                              --storage-class CLOUDTIER \
+                                              --tier-config-rm=target_path
+
 
 The storage class can be removed using the following command:
 
-```
-    # radosgw-admin zonegroup placement rm --rgw-zonegroup={zone-group-name} \
-                                           --placement-id={placement-id} \
-                                           --storage-class={storage-class-name}
-```
+.. prompt:: bash #
+
+   radosgw-admin zonegroup placement rm --rgw-zonegroup={zone-group-name} \
+                                          --placement-id={placement-id} \
+                                          --storage-class={storage-class-name}
+
 
 For example,
 
-```
-    # radosgw-admin zonegroup placement rm --rgw-zonegroup default \
-                                           --placement-id default-placement \
-                                           --storage-class CLOUDTIER
+.. prompt:: bash #
+
+   radosgw-admin zonegroup placement rm --rgw-zonegroup default \
+                                          --placement-id default-placement \
+                                          --storage-class CLOUDTIER
+::
+
     [
         {
             "key": "default-placement",
@@ -299,21 +312,20 @@ For example,
             }
         }
     ]
-```
+
 
 Object Modification and Limitations
-----------------------------------
+-----------------------------------
 
 The cloud storage class, once configured, can be used like any other storage
-class when defining bucket lifecycle (LC) rules. For example,
+class when defining bucket lifecycle (LC) rules. For example::
 
-```
     <Transition>
       <StorageClass>CLOUDTIER</StorageClass>
       ....
       ....
     </Transition>
-```
+
 
 Since the transition is unidirectional, when configuring S3
 lifecycle rules, the cloud storage class should be specified
@@ -322,15 +334,14 @@ Subsequent rules (if any) do not apply post-transition to the cloud.
 
 Due to API limitations, there is no way to preserve the original object
 modification time and ETag, which are stored as metadata attributes
-on the destination objects, as shown below:
+on the destination objects, as shown below::
 
-```
    x-amz-meta-rgwx-source: rgw
    x-amz-meta-rgwx-source-etag: ed076287532e86365e841e92bfc50d8c
    x-amz-meta-rgwx-source-key: lc.txt
    x-amz-meta-rgwx-source-mtime: 1608546349.757100363
    x-amz-meta-rgwx-versioned-epoch: 0
-```
+
 
 In order to allow cloud services to detect the source and map
 user-defined ``x-amz-meta-`` attributes, two additional new
@@ -355,8 +366,12 @@ with an ``InvalidObjectState`` error.
 
 For example:
 
-```
-    # s3cmd info s3://bucket/lc.txt
+.. prompt:: bash $
+
+   s3cmd info s3://bucket/lc.txt
+
+::
+
     s3://bucket/lc.txt (object):
        File size: 12
        Last mod:  Mon, 21 Dec 2020 10:25:56 GMT
@@ -369,20 +384,24 @@ For example:
        ACL:       M. Tester: FULL_CONTROL
        x-amz-meta-s3cmd-attrs: atime:1608466266/ctime:1597606156/gid:0/gname:root/md5:ed076287532e86365e841e92bfc50d8c/mode:33188/mtime:1597605793/uid:0/uname:root
 
-    # s3cmd get s3://bucket/lc.txt lc_restore.txt
+.. prompt:: bash $
+
+   s3cmd get s3://bucket/lc.txt lc_restore.txt
+
+::
+
     download: 's3://bucket/lc.txt' -> 'lc_restore.txt'  [1 of 1]
     ERROR: S3 error: 403 (InvalidObjectState)
-```
+
 
 To avoid object name collisions across buckets, the source bucket name is
 prepended to the target object name. If the object is versioned, the object's
 ``versionid`` is appended.
 
-Below is the object name format:
+Below is the object name format::
 
-```
     s3://<target_path>/<source_bucket_name>/<source_object_name>(-<source_object_version_id>)
-```
+
 
 Versioned Objects
 ~~~~~~~~~~~~~~~~~
@@ -397,7 +416,7 @@ For versioned and locked objects, similar semantics as that of LifecycleExpirati
 Restoring Objects
 -----------------
 The objects transitioned to cloud can now be restored. For more information, refer to 
-[Restoring Objects from Cloud](https://docs.aws.amazon.com/AmazonS3/latest/dev/cloud-restore.html)
+`Restoring Objects from Cloud <https://docs.aws.amazon.com/AmazonS3/latest/dev/cloud-restore.html>`_
 
 
 Future Work
