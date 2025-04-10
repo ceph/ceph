@@ -1,0 +1,15 @@
+  <legend i18n>
+    Notification Configuration
+    <cd-help-text>
+      Configure a bucket notification.
+    </cd-help-text>
+  </legend>
+  <cd-table #table
+            [data]="notification$ | async"
+            [columns]="columns"
+            columnMode="flex"
+            selectionType="single"
+            (updateSelection)="updateSelection($event)"
+            identifier="Id"
+            (fetchData)="loadNotification($event)">
+  </cd-table>
