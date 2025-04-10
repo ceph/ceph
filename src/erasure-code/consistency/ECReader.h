@@ -35,7 +35,6 @@ namespace ceph {
         std::string pool_name;
         std::string oid;
         librados::IoCtx io;
-        librados::ObjectReadOperation op;
         ceph::condition_variable cond;
         std::vector<ReadResult> results;
         ceph::mutex lock;

@@ -70,6 +70,7 @@ void ECReader::wait_for_io()
 void ECReader::do_read(Read read)
 {
   start_io();
+  librados::ObjectReadOperation op;
   op.read(read.get_offset() * read.get_block_size(),
           read.get_length() * read.get_block_size(),
           nullptr, nullptr);
