@@ -87,22 +87,21 @@ class RGWBucketReshard {
 
   int calc_target_shard(const RGWBucketInfo& bucket_info, const rgw_obj_key& key,
                         int& shard, const DoutPrefixProvider *dpp);
-  int reshard_process(const rgw::bucket_index_layout_generation& current,
-                      int& max_entries,
-                      BucketReshardManager& target_shards_mgr,
-                      bool verbose_json_out,
-                      std::ostream *out,
-                      Formatter *formatter, rgw::BucketReshardState reshard_stage,
+  int reshard_process(const rgw::bucket_index_layout_generation &current,
+                      int &max_entries, BucketReshardManager &target_shards_mgr,
+                      std::vector<uint64_t> &omap_count_hint,
+                      bool verbose_json_out, std::ostream *out,
+                      Formatter *formatter,
+                      rgw::BucketReshardState reshard_stage,
                       const DoutPrefixProvider *dpp, optional_yield y);
 
-  int do_reshard(const rgw::bucket_index_layout_generation& current,
-                 const rgw::bucket_index_layout_generation& target,
-                 int max_entries, bool support_logrecord,
-                 bool verbose,
-                 std::ostream *os,
-		 Formatter *formatter,
-                 ReshardFaultInjector& fault,
+  int do_reshard(const rgw::bucket_index_layout_generation &current,
+                 const rgw::bucket_index_layout_generation &target,
+                 int max_entries, std::vector<uint64_t> &omap_count_hint,
+                 bool support_logrecord, bool verbose, std::ostream *os,
+                 Formatter *formatter, ReshardFaultInjector &fault,
                  const DoutPrefixProvider *dpp, optional_yield y);
+
 public:
 
   // pass nullptr for the final parameter if no outer reshard lock to

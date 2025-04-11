@@ -812,12 +812,12 @@ static int commit_target_layout(rgw::sal::RadosStore* store,
   return ret;
 } // commit_target_layout
 
-static int commit_reshard(rgw::sal::RadosStore* store,
-                          RGWBucketInfo& bucket_info,
-			  std::map<std::string, bufferlist>& bucket_attrs,
-                          ReshardFaultInjector& fault,
-                          const DoutPrefixProvider *dpp, optional_yield y)
-{
+static int commit_reshard(rgw::sal::RadosStore *store,
+                          RGWBucketInfo &bucket_info,
+                          std::map<std::string, bufferlist> &bucket_attrs,
+                          std::vector<uint64_t> &omap_count_hint,
+                          ReshardFaultInjector &fault,
+                          const DoutPrefixProvider *dpp, optional_yield y) {
   auto prev = bucket_info.layout; // make a copy for cleanup
 
   // retry in case of racing writes to the bucket instance metadata
@@ -900,7 +900,8 @@ static int commit_reshard(rgw::sal::RadosStore* store,
       });
   if (log == logs.end()) {
     // delete the index objects (ignore errors)
-    store->svc()->bi->clean_index(dpp, y, bucket_info, prev.current_index);
+    store->svc()->bi->clean_index(dpp, y, bucket_info, prev.current_index,
+                                  &omap_count_hint);
   }
   return 0;
 } // commit_reshard
@@ -1061,14 +1062,12 @@ int RGWBucketReshard::calc_target_shard(const RGWBucketInfo& bucket_info, const 
   return 0;
 }
 
-int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation& current,
-                                      int& max_op_entries,
-                                      BucketReshardManager& target_shards_mgr,
-                                      bool verbose_json_out,
-                                      ostream *out,
-                                      Formatter *formatter, rgw::BucketReshardState reshard_stage,
-                                      const DoutPrefixProvider *dpp, optional_yield y)
-{
+int RGWBucketReshard::reshard_process(
+    const rgw::bucket_index_layout_generation &current, int &max_op_entries,
+    BucketReshardManager &target_shards_mgr,
+    std::vector<uint64_t> &omap_count_hint, bool verbose_json_out, ostream *out,
+    Formatter *formatter, rgw::BucketReshardState reshard_stage,
+    const DoutPrefixProvider *dpp, optional_yield y) {
   list<rgw_cls_bi_entry> entries;
 
   string stage;
@@ -1100,6 +1099,7 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
 
   const uint32_t num_source_shards = rgw::num_shards(current.layout.normal);
   string marker;
+
   for (uint32_t i = 0; i < num_source_shards; ++i) {
     bool is_truncated = true;
     marker.clear();
@@ -1119,7 +1119,7 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
         derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
         return ret;
       }
-
+      omap_count_hint[i] += entries.size();
       for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
         rgw_cls_bi_entry& entry = *iter;
         if (verbose_json_out) {
@@ -1190,16 +1190,14 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
   return 0;
 }
 
-int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& current,
-                                 const rgw::bucket_index_layout_generation& target,
-                                 int max_op_entries, // max num to process per op
-                                 bool support_logrecord,
-				 bool verbose,
-				 ostream *out,
-				 Formatter *formatter,
-                                 ReshardFaultInjector& fault,
-                                 const DoutPrefixProvider *dpp, optional_yield y)
-{
+int RGWBucketReshard::do_reshard(
+    const rgw::bucket_index_layout_generation &current,
+    const rgw::bucket_index_layout_generation &target,
+    int max_op_entries, // max num to process per op
+    std::vector<uint64_t> &omap_count_hint, bool support_logrecord,
+    bool verbose, ostream *out, Formatter *formatter,
+    ReshardFaultInjector &fault, const DoutPrefixProvider *dpp,
+    optional_yield y) {
   if (out) {
     (*out) << "tenant: " << bucket_info.bucket.tenant << std::endl;
     (*out) << "bucket name: " << bucket_info.bucket.name << std::endl;
@@ -1215,11 +1213,16 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
 
   bool verbose_json_out = verbose && (formatter != nullptr) && (out != nullptr);
 
+  const uint32_t num_source_shards = rgw::num_shards(current.layout.normal);
+  omap_count_hint = std::vector <uint64_t> (num_source_shards, 0);
+
   if (support_logrecord) {
     // a log is written to shard going with client op at this state
     ceph_assert(bucket_info.layout.resharding == rgw::BucketReshardState::InLogrecord);
-    int ret = reshard_process(current, max_op_entries, target_shards_mgr, verbose_json_out, out,
-                              formatter, bucket_info.layout.resharding, dpp, y);
+    int ret = reshard_process(current, max_op_entries, target_shards_mgr,
+                              omap_count_hint, verbose_json_out, out, formatter,
+                              bucket_info.layout.resharding, dpp, y);
+                          
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << ": failed in logrecord state of reshard ret = " << ret << dendl;
       return ret;
@@ -1232,8 +1235,10 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
 
     // block the client op and complete the resharding
     ceph_assert(bucket_info.layout.resharding == rgw::BucketReshardState::InProgress);
-    ret = reshard_process(current, max_op_entries, target_shards_mgr, verbose_json_out, out,
-			  formatter, bucket_info.layout.resharding, dpp, y);
+    ret = reshard_process(current, max_op_entries, target_shards_mgr,
+                          omap_count_hint, verbose_json_out, out, formatter,
+                          bucket_info.layout.resharding, dpp, y);
+                          
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << ": failed in progress state of reshard ret = " << ret << dendl;
       return ret;
@@ -1241,8 +1246,9 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
   } else {
     // setting InProgress state, but doing InLogrecord state
     ceph_assert(bucket_info.layout.resharding == rgw::BucketReshardState::InProgress);
-    int ret = reshard_process(current, max_op_entries, target_shards_mgr, verbose_json_out, out,
-                              formatter, rgw::BucketReshardState::InLogrecord, dpp, y);
+    int ret = reshard_process(current, max_op_entries, target_shards_mgr,
+                              omap_count_hint, verbose_json_out, out, formatter,
+                              rgw::BucketReshardState::InLogrecord, dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << ": failed in logrecord state of reshard ret = " << ret << dendl;
       return ret;
@@ -1291,12 +1297,13 @@ int RGWBucketReshard::execute(int num_shards,
     return ret;
   }
 
+  std::vector <uint64_t> omap_count_hint;
   if (ret = fault.check("do_reshard");
       ret == 0) { // no fault injected, do the reshard
     ret = do_reshard(bucket_info.layout.current_index,
-                     *bucket_info.layout.target_index,
-                     max_op_entries, support_logrecord,
-                     verbose, out, formatter, fault, dpp, y);
+                     *bucket_info.layout.target_index, max_op_entries,
+                     omap_count_hint, support_logrecord, verbose, out,
+                     formatter, fault, dpp, y);
   }
 
   if (ret < 0) {
@@ -1308,7 +1315,8 @@ int RGWBucketReshard::execute(int num_shards,
   }
 
   auto current_num_shards = rgw::num_shards(bucket_info.layout.current_index);
-  ret = commit_reshard(store, bucket_info, bucket_attrs, fault, dpp, y);
+  ret = commit_reshard(store, bucket_info, bucket_attrs, omap_count_hint, fault,
+                       dpp, y);
   if (ret < 0) {
     return ret;
   }

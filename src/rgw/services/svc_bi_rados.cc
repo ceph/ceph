@@ -492,13 +492,22 @@ int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
 }
 
 struct IndexCleanWriter : rgwrados::shard_io::RadosWriter {
-  IndexCleanWriter(const DoutPrefixProvider& dpp,
-                   boost::asio::any_io_executor ex,
-                   librados::IoCtx& ioctx)
-    : RadosWriter(dpp, std::move(ex), ioctx)
-  {}
+  IndexCleanWriter(const DoutPrefixProvider &dpp,
+                   boost::asio::any_io_executor ex, librados::IoCtx &ioctx,
+                   std::vector<uint64_t> *omap_count_hint = nullptr,
+                   int64_t db_delete_range_threshold_hint = -1)
+      : RadosWriter(dpp, std::move(ex), ioctx),
+        omap_count_hint(omap_count_hint),
+        db_delete_range_threshold_hint(db_delete_range_threshold_hint) {}
+  std::vector <uint64_t> *omap_count_hint;
+  int64_t db_delete_range_threshold_hint = -1;
   void prepare_write(int shard, librados::ObjectWriteOperation& op) override {
-    op.remove();
+    int64_t count_hint = -1;
+    if (omap_count_hint) {
+      ceph_assert(shard < (*omap_count_hint).size());
+      count_hint = (*omap_count_hint)[shard];
+    }
+    op.remove(count_hint, db_delete_range_threshold_hint);
   }
   Result on_complete(int, boost::system::error_code ec) override {
     // ignore ENOENT
@@ -513,11 +522,11 @@ struct IndexCleanWriter : rgwrados::shard_io::RadosWriter {
   }
 };
 
-int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp,
-                                         optional_yield y,
-                                         const RGWBucketInfo& bucket_info,
-                                         const rgw::bucket_index_layout_generation& idx_layout)
-{
+int RGWSI_BucketIndex_RADOS::clean_index(
+    const DoutPrefixProvider *dpp, optional_yield y,
+    const RGWBucketInfo &bucket_info,
+    const rgw::bucket_index_layout_generation &idx_layout,
+    std::vector<uint64_t>* omap_count_hint) {
   if (idx_layout.layout.type != rgw::BucketIndexType::Normal) {
     return 0;
   }
@@ -538,22 +547,45 @@ int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp,
 
   const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
   boost::system::error_code ec;
+  auto st = ceph::coarse_real_clock::now();
+
+  bool use_hint =
+      cct->_conf.get_val<bool>("rgw_apply_db_delete_range_threshold");
+  int64_t default_hint =
+      cct->_conf.get_val<int64_t>("rgw_db_delete_range_threshold");
+  int64_t db_delete_range_threshold_hint = -1;
+  if (use_hint) {
+    if (default_hint >= 0) {
+      db_delete_range_threshold_hint = default_hint;
+    } else if (omap_count_hint) {
+      int64_t total_keys = 0;
+      for (auto key_count : (*omap_count_hint)) {
+        total_keys += key_count;
+      }
+      db_delete_range_threshold_hint = std::ceil(sqrt(1.0 * total_keys));
+    }
+  }
   if (y) {
     // run on the coroutine's executor and suspend until completion
     auto yield = y.get_yield_context();
     auto ex = yield.get_executor();
-    auto writer = IndexCleanWriter{*dpp, ex, index_pool};
+    auto writer = IndexCleanWriter{*dpp, ex, index_pool, omap_count_hint,
+                                   db_delete_range_threshold_hint};
 
     rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio, yield[ec]);
   } else {
     // run a strand on the system executor and block on a condition variable
     auto ex = boost::asio::make_strand(boost::asio::system_executor{});
-    auto writer = IndexCleanWriter{*dpp, ex, index_pool};
+    auto writer = IndexCleanWriter{*dpp, ex, index_pool, omap_count_hint,
+                                   db_delete_range_threshold_hint};
 
     maybe_warn_about_blocking(dpp);
     rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio,
                                      ceph::async::use_blocked[ec]);
   }
+  auto ed = ceph::coarse_real_clock::now();
+  ceph::coarse_real_clock::duration elapsed = st - ed;
+  ldpp_dout(dpp, 0) << __func__ << ": delete duration-->" << elapsed << dendl;
   return ceph::from_error_code(ec);
 }
 
