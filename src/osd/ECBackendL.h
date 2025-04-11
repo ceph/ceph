@@ -385,6 +385,9 @@ END_IGNORE_DEPRECATED
     return sinfo.get_chunk_size();
   }
   uint64_t object_size_to_shard_size(const uint64_t size) const {
+    if (size == std::numeric_limits<uint64_t>::max()) {
+      return size;
+    }
     return sinfo.logical_to_next_chunk_offset(size);
   }
   /**

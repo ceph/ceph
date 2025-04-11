@@ -477,6 +477,10 @@ public:
     void trim(const pg_log_entry_t &entry) override {
       // TODO
     }
+    void partial_write(pg_info_t *info, const pg_log_entry_t &entry) override {
+      // TODO
+      ceph_abort_msg("not implemented yet");
+    }
   };
   PGLog::LogEntryHandlerRef get_log_handler(
     ceph::os::Transaction &t) final {
