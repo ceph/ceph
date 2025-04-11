@@ -1,5 +1,8 @@
 >=20.0.0
 
+* RGW: Adding missing quotes to the ETag values returned by S3 CopyPart,
+  PostObject and CompleteMultipartUpload responses.
+
 * RBD: All Python APIs that produce timestamps now return "aware" `datetime`
   objects instead of "naive" ones (i.e. those including time zone information
   instead of those not including it).  All timestamps remain to be in UTC but
