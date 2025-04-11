@@ -53,7 +53,15 @@ def name_to_json(names):
     """
     namedict = []
     for i in range(len(names)):
-        namedict.append({'name': names[i].decode('utf-8')})
+        if isinstance(names[i], bytes):
+            name = names[i].decode('utf-8')
+        elif isinstance(names[i], str):
+            name = names[i]
+        else:
+            raise RuntimeError('variable "name" should\'ve been type str or '
+                               f'type bytes but is {type(name)}. it\'s value '
+                               f'is "{name}"')
+        namedict.append({'name': name})
     return json.dumps(namedict, indent=4, sort_keys=True)
 
 
@@ -634,6 +642,29 @@ class VolumeClient(CephfsClient["Module"]):
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def _rm_unexisting_subvols(self, subvol_name_list, fs_handle, group):
+        '''
+        Remove names of subvolumes that don't exist from the received list of
+        subvolume names.
+
+        In v1 and v2 a subvol exists if subvol dir/base dir exists. Bbut in v3,
+        a subvol's prev incarnation's dir is left undeleted if snapshots were
+        retained during subvol deletion. Hence, in v3 existence of subvol needs
+        to be checked, existence of subvol dir alone is insufficient.
+        '''
+        names_of_unexisting_subvols = []
+
+        for sv_name in subvol_name_list:
+            with open_subvol(self.mgr, fs_handle, self.volspec, group, sv_name,
+                             SubvolumeOpType.LIST) as subvol:
+                if not subvol.exists():
+                    names_of_unexisting_subvols.append(sv_name)
+
+        for sv_name in names_of_unexisting_subvols:
+            subvol_name_list.remove(sv_name)
+
+        return subvol_name_list
+
     def list_subvolumes(self, **kwargs):
         ret        = 0, "", ""
         volname    = kwargs['vol_name']
@@ -643,6 +674,9 @@ class VolumeClient(CephfsClient["Module"]):
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     subvolumes = group.list_subvolumes()
+                    subvolumes = [sv_name.decode('utf-8') for sv_name in subvolumes]
+                    subvolumes = self._rm_unexisting_subvols(subvolumes,
+                                                             fs_handle, group)
                     ret = 0, name_to_json(subvolumes), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
