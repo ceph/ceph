@@ -21,6 +21,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { Group, SMBCluster, SMBUsersGroups, User, USERSGROUPS_RESOURCE } from '../smb.model';
 import { Location } from '@angular/common';
 import { USERSGROUPS_URL } from '../smb-usersgroups-list/smb-usersgroups-list.component';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
 
 @Component({
   selector: 'cd-smb-usersgroups-form',
@@ -117,7 +118,16 @@ export class SmbUsersgroupsFormComponent extends CdForm implements OnInit, OnDes
   createForm() {
     this.form = this.formBuilder.group({
       usersGroupsId: new FormControl('', {
-        validators: [Validators.required]
+        validators: [Validators.required],
+        asyncValidators: [
+          CdValidators.unique(
+            this.smbService.usersGroupsExists,
+            this.smbService,
+            null,
+            null,
+            this.form?.get('usersGroupsId')?.value
+          )
+        ]
       }),
       linkedToCluster: new FormControl(null),
       users: new FormArray([]),

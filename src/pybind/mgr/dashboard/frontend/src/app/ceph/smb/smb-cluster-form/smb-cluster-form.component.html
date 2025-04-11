@@ -38,6 +38,12 @@
             i18n
             >This field is required.</span
           >
+          <span
+            class="invalid-feedback"
+            *ngIf="smbForm.showError('cluster_id', formDir, 'notUnique')"
+            i18n
+          >The chosen cluster name is already in use.
+          </span>
         </ng-template>
       </div>
 
@@ -295,11 +301,25 @@
               <cds-text-label
                 for="custom_dns"
                 i18n
+                [invalid]="smbForm.controls.custom_dns.controls[i].invalid &&
+                          smbForm.controls.custom_dns.controls[i].dirty"
+                [invalidText]="dnsError"
               >DNS
-              <input cdsText
-                     [formControlName]="i"
-                     placeholder="192.168.76.204"/>
+              <input
+                cdsText
+                [formControlName]="i"
+                placeholder="192.168.76.204"
+                [invalid]="smbForm.controls.custom_dns.controls[i].invalid &&
+                          smbForm.controls.custom_dns.controls[i].dirty"/>
               </cds-text-label>
+              <ng-template #dnsError>
+                <span
+                  class="invalid-feedback"
+                  *ngIf="smbForm.showError('custom_dns', formDir, 'pattern')"
+                  i18n
+                  >The value is not a valid IP address.</span
+                >
+              </ng-template>
             </div>
             <div
               cdsCol
@@ -387,8 +407,9 @@
                 <ng-template #addressError>
                   <span
                     class="invalid-feedback"
-                  >
-                    <ng-container i18n> This field is required. </ng-container>
+                    *ngIf="smbForm.showError('public_addrs', formDir, 'pattern')"
+                    i18n
+                  >The value is not a valid network address.
                   </span>
                 </ng-template>
               </div>
@@ -441,7 +462,7 @@
               class="cds--btn__icon"
               icon></svg>
           </button>
-          <cd-helper i18n>Assign virtual IP addresses that will be managed
+          <cd-helper i18n>Assign virtual network addresses that will be managed
             by the clustering subsystem and may automatically
             move between nodes running Samba containers.</cd-helper>
         </div>
