@@ -30,10 +30,15 @@ from prettytable import PrettyTable
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.service_spec import \
-    ServiceSpec, PlacementSpec, \
-    HostPlacementSpec, IngressSpec, \
-    TunedProfileSpec, IscsiServiceSpec
+from ceph.deployment.service_spec import (
+    ServiceSpec,
+    PlacementSpec,
+    HostPlacementSpec,
+    IngressSpec,
+    TunedProfileSpec,
+    IscsiServiceSpec,
+    NvmeofServiceSpec,
+)
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
@@ -3455,6 +3460,27 @@ Then run the following:
 
         host_count = len(self.inventory.keys())
         max_count = self.max_count_per_host
+
+
+        if spec.service_type == 'nvmeof':
+            nvmeof_spec = cast(NvmeofServiceSpec, spec)
+            assert nvmeof_spec.pool is not None, "Pool cannot be None for nvmeof services"
+            assert nvmeof_spec.service_id is not None  # for mypy
+            try:
+                self._check_pool_exists(nvmeof_spec.pool, nvmeof_spec.service_name())
+            except OrchestratorError as e:
+                self.log.debug(f"{e}")
+                raise
+            nvmeof_spec = cast(NvmeofServiceSpec, spec)
+            assert nvmeof_spec.service_id is not None  # for mypy
+            if nvmeof_spec.group and not nvmeof_spec.service_id.endswith(nvmeof_spec.group):
+                raise OrchestratorError("The 'nvmeof' service id/name must end with '.<nvmeof-group-name>'. Found "
+                                        f"group name '{nvmeof_spec.group}' and service id '{nvmeof_spec.service_id}'")
+            for sspec in [s.spec for s in self.spec_store.get_by_service_type('nvmeof')]:
+                nspec = cast(NvmeofServiceSpec, sspec)
+                if nvmeof_spec.group == nspec.group:
+                    raise OrchestratorError(f"Cannot create nvmeof service with group {nvmeof_spec.group}. That group is already "
+                                            f"being used by the service {nspec.service_name()}")
 
         if spec.placement.count is not None:
             if spec.service_type in ['mon', 'mgr']:
