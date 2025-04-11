@@ -7,8 +7,10 @@
 
 import collections
 import functools
+import hashlib
 import logging
 import math
+import os
 import subprocess
 import time
 import typing
@@ -117,3 +119,37 @@ def array_stats(array: list):
         'std_dev': std_dev,
         'count': len(array)
     }
+
+
+def generate_random_file(path, size, chunk_size=8192):
+    if size % chunk_size:
+        raise exception.CephTestException(
+            f"The file size ({size}) is not a multiple of the "
+            f"chunk size ({chunk_size}).")
+    with open(path, 'rb+') as f:
+        for chunk_idx in range(size // chunk_size):
+            f.write(os.urandom(chunk_size))
+
+
+def checksum(path, algorithm='md5', chunk_size=1048576):
+    total_read = 0
+    hash_func = getattr(hashlib, algorithm)
+    file_hash = hash_func()
+
+    with open(path, "rb") as f:
+        try:
+            while chunk := f.read(chunk_size):
+                file_hash.update(chunk)
+                total_read += len(chunk)
+        except PermissionError:
+            # Windows throws a permission error when reading past
+            # the disk boundary.
+            if not total_read:
+                raise
+
+    return file_hash.hexdigest()
+
+
+def str2bool(val):
+    val = val or ''
+    return val.lower() in ['y', 'yes', 'true', 't', '1', 'enabled']
