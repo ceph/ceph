@@ -580,7 +580,7 @@ def get_container(ctx):
     if ImageSource.CACHE in allowed:
         log.info("Checking for cached image")
         present, hash_ok = _check_cached_image(ctx)
-        if present and hash_ok:
+        if present and hash_ok or len(allowed) == 1:
             return
     if ImageSource.PULL in allowed:
         log.info("Checking for image in remote repository")
