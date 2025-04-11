@@ -8242,6 +8242,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -8292,6 +8297,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -8321,6 +8331,8 @@ paths:
                 gw_group:
                   type: string
                 log_level:
+                  type: string
+                traddr:
                   type: string
               required:
               - log_level
@@ -8357,6 +8369,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -8382,6 +8399,11 @@ paths:
       - allowEmptyValue: true
         in: query
         name: gw_group
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
         schema:
           type: string
       responses:
@@ -8415,6 +8437,8 @@ paths:
                 log_level:
                   type: string
                 print_level:
+                  type: string
+                traddr:
                   type: string
               type: object
       responses:
@@ -8451,6 +8475,8 @@ paths:
               properties:
                 gw_group:
                   type: string
+                traddr:
+                  type: string
               type: object
       responses:
         '200':
@@ -8482,6 +8508,11 @@ paths:
       - allowEmptyValue: true
         in: query
         name: gw_group
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
         schema:
           type: string
       responses:
@@ -8524,6 +8555,8 @@ paths:
                   type: integer
                 nqn:
                   description: NVMeoF subsystem NQN
+                  type: string
+                traddr:
                   type: string
               required:
               - nqn
@@ -8574,6 +8607,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -8613,6 +8651,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -8648,6 +8691,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -8681,6 +8729,11 @@ paths:
         description: NVMeoF gateway group
         in: query
         name: gw_group
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
         schema:
           type: string
       responses:
@@ -8721,6 +8774,8 @@ paths:
                   type: string
                 host_nqn:
                   description: NVMeoF host NQN. Use "*" to allow any host.
+                  type: string
+                traddr:
                   type: string
               required:
               - host_nqn
@@ -8771,6 +8826,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -8809,6 +8869,11 @@ paths:
         description: NVMeoF gateway group
         in: query
         name: gw_group
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
         schema:
           type: string
       responses:
@@ -8974,6 +9039,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -9044,6 +9114,8 @@ paths:
                   default: 1024
                   description: RBD image size
                   type: integer
+                traddr:
+                  type: string
                 trash_image:
                   default: false
                   description: Trash the RBD image when namespace is removed
@@ -9097,6 +9169,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       - default: 'false'
         description: Force remove the RBD image
         in: query
@@ -9146,6 +9223,11 @@ paths:
         description: NVMeoF gateway group
         in: query
         name: gw_group
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
         schema:
           type: string
       responses:
@@ -9205,6 +9287,8 @@ paths:
                 rw_mbytes_per_second:
                   description: Read/Write MB/s
                   type: integer
+                traddr:
+                  type: string
                 trash_image:
                   description: Trash RBD image after removing namespace
                   type: boolean
@@ -9251,6 +9335,11 @@ paths:
         description: NVMeoF gateway group
         in: query
         name: gw_group
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
         schema:
           type: string
       responses:
