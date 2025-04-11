@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <boost/container/small_vector.hpp>
+
 #include "rgw_common.h"
 #include "rgw_rest_client.h"
 #include "rgw_acl_s3.h"
@@ -46,10 +48,10 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
 {
   unique_lock guard(out_headers_lock);
 
-  char line[len + 1];
+  boost::container::small_vector<char, 1024> line(len + 1);
 
   char *s = (char *)ptr, *end = (char *)ptr + len;
-  char *p = line;
+  char *p = line.data();
   ldpp_dout(this, 30) << "receive_http_header" << dendl;
 
   while (s != end) {
@@ -61,12 +63,12 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
       *p = '\0';
       ldpp_dout(this, 30) << "received header:" << line << dendl;
       // TODO: fill whatever data required here
-      char *l = line;
+      char *l = line.data();
       char *tok = strsep(&l, " \t:");
       if (tok && l) {
         while (*l == ' ')
           l++;
- 
+
         if (strcmp(tok, "HTTP") == 0 || strncmp(tok, "HTTP/", 5) == 0) {
           http_status = atoi(l);
           if (http_status == 100) /* 100-continue response */
@@ -74,21 +76,22 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
           status = rgw_http_error_to_errno(http_status);
         } else {
           /* convert header field name to upper case  */
-          char *src = tok;
-          char buf[len + 1];
-          size_t i;
-          for (i = 0; i < len && *src; ++i, ++src) {
-            switch (*src) {
-              case '-':
-                buf[i] = '_';
-                break;
-              default:
-                buf[i] = toupper(*src);
-            }
-          }
-          buf[i] = '\0';
-          out_headers[buf] = l;
-          int r = handle_header(buf, l);
+	  std::string_view src(tok, len);
+	  std::string key;
+	  key.reserve(len);
+	  std::transform(src.cbegin(), src.cend(),
+			 std::back_inserter(key),
+			 [](char c) -> char {
+			   switch (c) {
+			   case '-':
+			     return '_';
+			     break;
+			   default:
+			     return char(toupper(c));
+			   }
+			 });
+          out_headers[key] = l;
+          int r = handle_header(key, l);
           if (r < 0)
             return r;
         }
@@ -969,20 +972,19 @@ int RGWHTTPStreamRWRequest::complete_request(const DoutPrefixProvider* dpp,
     const string& attr_name = iter->first;
     if (attr_name.compare(0, sizeof(RGW_HTTP_RGWX_ATTR_PREFIX) - 1, RGW_HTTP_RGWX_ATTR_PREFIX) == 0) {
       string name = attr_name.substr(sizeof(RGW_HTTP_RGWX_ATTR_PREFIX) - 1);
-      const char *src = name.c_str();
-      char buf[name.size() + 1];
-      char *dest = buf;
-      for (; *src; ++src, ++dest) {
-        switch(*src) {
-          case '_':
-            *dest = '-';
-            break;
-          default:
-            *dest = tolower(*src);
-        }
-      }
-      *dest = '\0';
-      (*pattrs)[buf] = iter->second;
+      std::string key;
+      key.reserve(name.size());
+      std::transform(name.cbegin(), name.cend(),
+		     std::back_inserter(key),
+		     [](char c) -> char {
+		       switch(c) {
+		       case '_':
+			 return '-';
+		       default:
+			 return char(tolower(c));
+		       }
+		     });
+      (*pattrs)[std::move(key)] = iter->second;
     }
   }
 
