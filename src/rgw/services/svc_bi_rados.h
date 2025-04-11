@@ -127,8 +127,9 @@ public:
                  const rgw::bucket_index_layout_generation& idx_layout,
                  bool judge_support_logrecord = false) override;
   int clean_index(const DoutPrefixProvider *dpp, optional_yield y,
-                  const RGWBucketInfo& bucket_info,
-                  const rgw::bucket_index_layout_generation& idx_layout) override;
+                  const RGWBucketInfo &bucket_info,
+                  const rgw::bucket_index_layout_generation &idx_layout,
+                  std::vector<uint64_t> *omap_count_hint = nullptr) override;
 
   /* RADOS specific */
 

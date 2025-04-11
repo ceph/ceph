@@ -4303,3 +4303,29 @@ options:
   - startup
   see_also:
   with_legacy: true
+- name: rgw_apply_db_delete_range_threshold
+  type: bool
+  level: basic
+  desc: It enables imposing `rocksdb_delete_range_threshold` from rgw
+  long_desc: If true, then if `rgw_db_delete_range_threshold` is non-negative, 
+    then `rocksdb_delete_range_threshold` will be imposed to rocksdbm, 
+    otherwise rgw will calculate the threshold equal to the square root of 
+    number of omap keys in source shards.
+  default: true
+  services:
+  - rgw
+  see_also:
+  - rocksdb_delete_range_threshold
+- name: rgw_db_delete_range_threshold
+  type: int
+  level: basic
+  desc: It defines the `rocksdb_delete_range_threshold` from rgw
+  long_desc: If `rgw_apply_db_delete_range_threshold` true and this value
+    is non-negative then rgw will choose this threshold to impose as 
+    `rocksdb_delete_range_threshold`
+  default: -1
+  services:
+  - rgw
+  see_also:
+  - rocksdb_delete_range_threshold
+  - rgw_apply_db_delete_range_threshold

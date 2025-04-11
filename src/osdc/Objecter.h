@@ -610,6 +610,12 @@ struct ObjectOperation {
     ceph::buffer::list bl;
     add_data(CEPH_OSD_OP_DELETE, 0, 0, bl);
   }
+  void remove(int64_t omap_count_hint, int64_t db_delete_range_threshold_hint) {
+    ceph::buffer::list bl;
+    encode(omap_count_hint, bl);
+    encode(db_delete_range_threshold_hint, bl);
+    add_data(CEPH_OSD_OP_DELETE, 0, bl.length(), bl);
+  }
   void mapext(uint64_t off, uint64_t len) {
     ceph::buffer::list bl;
     add_data(CEPH_OSD_OP_MAPEXT, off, len, bl);

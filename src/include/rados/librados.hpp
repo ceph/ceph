@@ -412,6 +412,7 @@ inline namespace v14_2_0 {
 		   const bufferlist& bl);
     void append(const bufferlist& bl);
     void remove();
+    void remove(int64_t omap_count_hint, int64_t db_delete_range_threshold_hint);
     void truncate(uint64_t off);
     void zero(uint64_t off, uint64_t len);
     void rmxattr(const char *name);
@@ -878,6 +879,8 @@ inline namespace v14_2_0 {
 		 size_t chunk_size, bufferlist *pbl);
     int remove(const std::string& oid);
     int remove(const std::string& oid, int flags);
+    int remove(const std::string &oid, int64_t omap_count_hint,
+               int64_t db_delete_range_threshold_hint);
     int trunc(const std::string& oid, uint64_t size);
     int mapext(const std::string& o, uint64_t off, size_t len, std::map<uint64_t,uint64_t>& m);
     int cmpext(const std::string& o, uint64_t off, bufferlist& cmp_bl);

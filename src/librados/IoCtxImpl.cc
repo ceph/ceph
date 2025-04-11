@@ -1251,6 +1251,14 @@ int librados::IoCtxImpl::remove(const object_t& oid, int flags)
   return operate(oid, &op, NULL, flags);
 }
 
+int librados::IoCtxImpl::remove(const object_t &oid, int64_t omap_count_hint,
+                                int64_t db_delete_range_threshold_hint) {
+  ::ObjectOperation op;
+  prepare_assert_ops(&op);
+  op.remove(omap_count_hint, db_delete_range_threshold_hint);
+  return operate(oid, &op, NULL, CEPH_OSD_FLAG_FULL_FORCE);
+}
+
 int librados::IoCtxImpl::trunc(const object_t& oid, uint64_t size)
 {
   ::ObjectOperation op;

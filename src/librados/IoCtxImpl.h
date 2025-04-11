@@ -141,6 +141,8 @@ struct librados::IoCtxImpl {
 	       size_t len, uint64_t off, size_t chunk_size, bufferlist *pbl);
   int remove(const object_t& oid);
   int remove(const object_t& oid, int flags);
+  int remove(const object_t& oid, int64_t omap_count_hint,
+             int64_t db_delete_range_threshold_hint);
   int stat(const object_t& oid, uint64_t *psize, time_t *pmtime);
   int stat2(const object_t& oid, uint64_t *psize, struct timespec *pts);
   int trunc(const object_t& oid, uint64_t size);
