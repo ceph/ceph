@@ -18,7 +18,9 @@ from orchestrator import DaemonDescription, OrchestratorError
   "placement": {
     "count": 1
   },
-  "service_type": "alertmanager"
+  "service_type": "alertmanager",
+  "ssl": true,
+  "certificate_source": "cephadm-signed"
 },
 {
   "placement": {
@@ -31,7 +33,9 @@ from orchestrator import DaemonDescription, OrchestratorError
     "count": 1
   },
   "service_type": "grafana",
-  "protocol": "https"
+  "protocol": "https",
+  "ssl": true,
+  "certificate_source": "cephadm-signed"
 },
 {
   "placement": {
@@ -49,13 +53,17 @@ from orchestrator import DaemonDescription, OrchestratorError
   "placement": {
     "host_pattern": "*"
   },
-  "service_type": "node-exporter"
+  "service_type": "node-exporter",
+  "ssl": true,
+  "certificate_source": "cephadm-signed"
 },
 {
   "placement": {
     "count": 1
   },
-  "service_type": "prometheus"
+  "service_type": "prometheus",
+  "ssl": true,
+  "certificate_source": "cephadm-signed"
 },
 {
   "placement": {
@@ -68,6 +76,7 @@ from orchestrator import DaemonDescription, OrchestratorError
     ]
   },
   "service_type": "rgw",
+  "certificate_source": "cephadm-signed",
   "service_id": "default-rgw-realm.eu-central-1.1",
   "rgw_realm": "default-rgw-realm",
   "rgw_zone": "eu-central-1"
