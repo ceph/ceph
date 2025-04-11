@@ -5059,10 +5059,11 @@ public:
    * this needs to be called in log order as we extend the log.  it
    * assumes missing is accurate up through the previous log entry.
    */
-  void add_next_event(const pg_log_entry_t& e) {
+  void add_next_event(const pg_log_entry_t& e, const pg_pool_t &pool, shard_id_t shard) {
     std::map<hobject_t, item>::iterator missing_it;
     missing_it = missing.find(e.soid);
     bool is_missing_divergent_item = missing_it != missing.end();
+    bool skipped = false;
     if (e.prior_version == eversion_t() || e.is_clone()) {
       // new object.
       if (is_missing_divergent_item) {  // use iterator
@@ -5070,6 +5071,9 @@ public:
         // .have = nil
         missing_it->second = item(e.version, eversion_t(), e.is_delete());
         missing_it->second.clean_regions.mark_fully_dirty();
+      } else if (pool.is_nonprimary_shard(shard) && !e.is_written_shard(shard)) {
+	// new object, partial write and not already missing - skip
+	skipped = true;
       } else {
          // create new element in missing map
          // .have = nil
@@ -5085,6 +5089,9 @@ public:
         missing_it->second.clean_regions.mark_fully_dirty();
       else
         missing_it->second.clean_regions.merge(e.clean_regions);
+    } else if (pool.is_nonprimary_shard(shard) && !e.is_written_shard(shard)) {
+      // existing object, partial write and not already missing - skip
+      skipped = true;
     } else {
       // not missing, we must have prior_version (if any)
       ceph_assert(!is_missing_divergent_item);
@@ -5094,8 +5101,10 @@ public:
       else
         missing[e.soid].clean_regions = e.clean_regions;
     }
-    rmissing[e.version.version] = e.soid;
-    tracker.changed(e.soid);
+    if (!skipped) {
+      rmissing[e.version.version] = e.soid;
+      tracker.changed(e.soid);
+    }
   }
 
   void revise_need(hobject_t oid, eversion_t need, bool is_delete) {
