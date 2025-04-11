@@ -18,7 +18,7 @@ export class ChangePasswordGuardService {
     // are fulfilled:
     // - The user must be logged in.
     // - SSO must be disabled.
-    // - The flag 'User must change password at next logon' must be set.
+    // - The flag 'User must change password at next login' must be set.
     if (
       this.authStorageService.isLoggedIn() &&
       !this.authStorageService.isSSO() &&
