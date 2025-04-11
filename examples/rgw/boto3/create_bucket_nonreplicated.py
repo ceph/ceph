@@ -22,4 +22,4 @@ client = boto3.client('s3',
 
 client.create_bucket(
     Bucket=bucketname,
-    CreateBucketConfiguration={'Replication': 'Enabled'})
+    CreateBucketConfiguration={'Replication': 'Disabled'})
