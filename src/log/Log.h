@@ -7,6 +7,7 @@
 #include <boost/circular_buffer.hpp>
 
 #include <condition_variable>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -14,6 +15,7 @@
 #include <string_view>
 
 #include "common/Thread.h"
+#include "common/ceph_time.h"
 #include "common/likely.h"
 
 #include "log/Entry.h"
@@ -86,9 +88,14 @@ protected:
 
 private:
   using EntryRing = boost::circular_buffer<ConcreteEntry>;
+  using mono_clock = ceph::coarse_mono_clock;
+  using mono_time = ceph::coarse_mono_time;
+
+  using RecentThreadNames = std::map<pthread_t, std::pair<mono_time, boost::circular_buffer<std::string> > >;
 
   static const std::size_t DEFAULT_MAX_NEW = 100;
   static const std::size_t DEFAULT_MAX_RECENT = 10000;
+  static constexpr std::size_t DEFAULT_MAX_THREAD_NAMES = 4;
 
   Log **m_indirect_this;
 
@@ -102,6 +109,7 @@ private:
   pthread_t m_queue_mutex_holder;
   pthread_t m_flush_mutex_holder;
 
+  RecentThreadNames m_recent_thread_names; // protected by m_flush_mutex
   EntryVector m_new;    ///< new entries
   EntryRing m_recent; ///< recent (less new) entries we've already written at low detail
   EntryVector m_flush; ///< entries to be flushed (here to optimize heap allocations)
