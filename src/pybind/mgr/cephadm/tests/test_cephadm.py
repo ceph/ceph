@@ -273,6 +273,7 @@ class TestCephadm(object):
                             'service_id': 'r.z',
                             'service_name': 'rgw.r.z',
                             'service_type': 'rgw',
+                            'certificate_source': 'cephadm-signed',
                             'status': {'created': mock.ANY, 'running': 1, 'size': 1,
                                        'ports': [80]},
                         }
