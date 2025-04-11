@@ -2079,16 +2079,19 @@ Upgrading non-cephadm clusters
 
    2. If your cluster is running Pacific (16.2.x) or later, systemd unit file names have changed to include the cluster fsid. To find the correct systemd unit file name for your cluster, run following command:
 
-      ```
-      systemctl -l | grep <daemon type>
-      ```
+      ::
+
+        systemctl -l | grep <daemon type>
 
       Example:
 
-      ```
-      $ systemctl -l | grep mon | grep active
-      ceph-6ce0347c-314a-11ee-9b52-000af7995d6c@mon.f28-h21-000-r630.service                                           loaded active running   Ceph mon.f28-h21-000-r630 for 6ce0347c-314a-11ee-9b52-000af7995d6c
-      ```
+      .. prompt:: bash $
+
+        systemctl -l | grep mon | grep active
+
+      ::
+
+        ceph-6ce0347c-314a-11ee-9b52-000af7995d6c@mon.f28-h21-000-r630.service                                           loaded active running   Ceph mon.f28-h21-000-r630 for 6ce0347c-314a-11ee-9b52-000af7995d6c
 
 #. Set the `noout` flag for the duration of the upgrade. (Optional, but recommended.)
 
