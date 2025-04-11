@@ -16,6 +16,7 @@
 #include <boost/container/flat_map.hpp>
 
 #include <boost/system/system_error.hpp>
+#include <boost/system/generic_category.hpp>
 
 #include "include/fs_types.h"
 #include "include/neorados/RADOS.hpp"
@@ -1091,7 +1092,12 @@ asio::awaitable<std::tuple<std::vector<rgw_data_change_log_entry>,
 RGWDataChangesLog::list_entries(const DoutPrefixProvider* dpp, int shard,
 				int max_entries, std::string marker)
 {
-  assert(shard < num_shards);
+  if (shard >= num_shards) [[unlikely]] {
+    throw sys::system_error{
+      EINVAL, sys::generic_category(),
+      fmt::format("{} is not a valid shard. Valid shards are integers in [0, {})",
+		  shard, num_shards)};
+  }
   if (max_entries <= 0) {
     co_return std::make_tuple(std::vector<rgw_data_change_log_entry>{},
 			      std::string{});
@@ -1109,7 +1115,6 @@ int RGWDataChangesLog::list_entries(
   std::string_view marker, std::string* out_marker, bool* truncated,
   optional_yield y)
 {
-  assert(shard < num_shards);
   std::exception_ptr eptr;
   std::tuple<std::span<rgw_data_change_log_entry>,
 	     std::string> out;
