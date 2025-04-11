@@ -38,22 +38,22 @@ class QOSType(Enum):
 
 
 def _validate_qos_bw(bandwidth: str) -> int:
-    min_bw = 1000000  # 1MB
-    max_bw = 4000000000  # 4GB
+    min_bw = 1024 * 1024  # 1MiB
+    max_bw = 100 * 1024 * 1024 * 1024  # 100GiB
     bw_bytes = with_units_to_int(bandwidth)
     if bw_bytes != 0 and (bw_bytes < min_bw or bw_bytes > max_bw):
         raise Exception(
-            f"Provided bandwidth value is not in range, Please enter a value between {min_bw} (1MB) and {max_bw} (4GB) bytes per second."
+            f"Provided bandwidth value is not in range, Please enter a value between {min_bw} (1MiB) and {max_bw} (100GiB) bytes per second."
         )
     return bw_bytes
 
 
 def _validate_qos_ops(count: int) -> int:
     min_cnt = 10
-    max_cnt = 16384
+    max_cnt = 409600
     if count != 0 and (count < min_cnt or count > max_cnt):
         raise Exception(
-            f"Provided IOS count value is not in range, Please enter a value between {min_cnt} and {max_cnt} bytes per second."
+            f"Provided IOS count value is not in range, Please enter a value between {min_cnt} and {max_cnt} count per second."
         )
     return count
 
