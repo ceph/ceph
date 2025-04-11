@@ -70,6 +70,8 @@ struct omap_manager_test_t :
   using test_omap_t = std::map<std::string, ceph::bufferlist>;
   test_omap_t test_omap_mappings;
 
+  ObjectStore::omap_iter_seek_t start_from;
+
   void set_key(
     omap_root_t &omap_root,
     Transaction &t,
@@ -230,6 +232,63 @@ struct omap_manager_test_t :
     } else {
       EXPECT_EQ(results.size(), max);
     }
+  }
+
+  ObjectStore::omap_iter_ret_t  check_iterate(std::string_view key, std::string_view val)
+  {
+    static uint32_t current_index = 0;
+    static uint32_t last_index = 0;
+    static bool check_start = true;
+
+    if(check_start && start_from.seek_position != "") {
+      if(start_from.seek_type == ObjectStore::omap_iter_seek_t::LOWER_BOUND) {
+	 EXPECT_TRUE(start_from.seek_position == key);
+      } else {
+	 EXPECT_TRUE(start_from.seek_position < key);
+      }
+      check_start = false;
+    }
+    start_from.seek_position = key;
+    start_from.seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND;
+    auto iter = test_omap_mappings.find(std::string(key));
+    EXPECT_TRUE(iter != test_omap_mappings.end());
+    ceph::bufferlist bl = iter->second;
+    std::string result(bl.c_str(), bl.length());
+    EXPECT_TRUE(result == val);
+    current_index = std::distance(test_omap_mappings.begin(), iter);
+    if (last_index != 0) {
+      EXPECT_EQ(last_index + 1, current_index);
+    }
+    last_index = current_index;
+
+    if (current_index > test_omap_mappings.size() - 10) {
+      current_index = 0;
+      last_index = 0;
+      check_start = true;
+      return ObjectStore::omap_iter_ret_t::STOP;
+    } else {
+      return ObjectStore::omap_iter_ret_t::NEXT;
+    }
+ }
+
+  void iterate(
+    const omap_root_t &omap_root,
+    Transaction &t,
+    std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> &f) {
+
+    if (start_from.seek_type == ObjectStore::omap_iter_seek_t::LOWER_BOUND) {
+      logger().debug("iterate lower bound on {}", start_from.seek_position);
+    } else {
+      logger().debug("iterate upper bound on {}", start_from.seek_position);
+    }
+
+    auto ret = with_trans_intr(
+      t,
+      [&, this](auto &t) {
+	return omap_manager->omap_iterate(omap_root, t, start_from, f);
+      }).unsafe_get();
+
+    EXPECT_EQ(ret, ObjectStore::omap_iter_ret_t::STOP);
   }
 
   void clear(
@@ -584,7 +643,6 @@ TEST_P(omap_manager_test_t, force_inner_node_split_list_rmkey_range)
   });
 }
 
-
 TEST_P(omap_manager_test_t, internal_force_split)
 {
   run_async([this] {
@@ -718,6 +776,59 @@ TEST_P(omap_manager_test_t, internal_force_split_to_root)
       submit_transaction(std::move(t));
      }
     check_mappings(omap_root);
+  });
+}
+
+TEST_P(omap_manager_test_t, omap_iterate)
+{
+  run_async([this] {
+    omap_root_t omap_root = initialize();
+
+    std::string lower_key;
+    std::string upper_key;
+
+    for (unsigned i = 0; i < 40; i++) {
+      auto t = create_mutate_transaction();
+      logger().debug("opened transaction");
+      for (unsigned j = 0; j < 10; ++j) {
+        auto key = set_random_key(omap_root, *t);
+        if (i == 3) {
+	        lower_key = key;
+	      }
+	      if (i == 5) {
+	        upper_key = key;
+	      }
+      }
+      submit_transaction(std::move(t));
+    }
+    std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
+      [this](std::string_view key, std::string_view val) {
+        return this->check_iterate(key, val);
+    };
+    {
+      start_from.seek_position = lower_key;
+      start_from.seek_type = ObjectStore::omap_iter_seek_t::LOWER_BOUND;
+      auto t = create_read_transaction();
+      iterate(omap_root, *t, callback);
+    }
+
+    {
+      start_from.seek_position = upper_key;
+      start_from.seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND;
+      auto t = create_read_transaction();
+      iterate(omap_root, *t, callback);
+    }
+
+    {
+      start_from = ObjectStore::omap_iter_seek_t::min_lower_bound();
+      auto t = create_read_transaction();
+      iterate(omap_root, *t, callback);
+    }
+    {
+      auto t = create_mutate_transaction();
+      clear(omap_root, *t);
+      submit_transaction(std::move(t));
+    }
   });
 }
 

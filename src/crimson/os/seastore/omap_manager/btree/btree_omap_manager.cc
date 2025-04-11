@@ -243,6 +243,27 @@ BtreeOMapManager::omap_rm_key_range(
   });
 }
 
+BtreeOMapManager::omap_iterate_ret
+BtreeOMapManager::omap_iterate(
+  const omap_root_t &omap_root,
+  Transaction &t,
+  ObjectStore::omap_iter_seek_t &start_from,
+  std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> &f)
+{
+  LOG_PREFIX(BtreeOMapManager::omap_iterate);
+  DEBUGT("{}, seek_positon: {}", t, omap_root,
+              start_from.seek_position);
+  return get_omap_root(
+    get_omap_context(t, omap_root),
+    omap_root
+  ).si_then([this, &t, &start_from, &f, &omap_root](auto extent) {
+    return extent->iterate(
+      get_omap_context(t, omap_root),
+      start_from,
+      f);
+  });
+}
+
 BtreeOMapManager::omap_list_ret
 BtreeOMapManager::omap_list(
   const omap_root_t &omap_root,
