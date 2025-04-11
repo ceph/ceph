@@ -129,12 +129,21 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
       itemDescription: $localize`Users and groups access resource`,
       itemNames: [usersGroupsId],
       submitActionObservable: () =>
-        this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('smb/standalone/remove', {
-            usersGroupsId: usersGroupsId
-          }),
-          call: this.smbService.deleteUsersgroups(usersGroupsId)
-        })
+        this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('smb/standalone/remove', {
+              usersGroupsId: usersGroupsId
+            }),
+            call: this.smbService.deleteUsersgroups(usersGroupsId)
+          })
+          .subscribe({
+            error: () => {
+              this.modalService.dismissAll();
+            },
+            complete: () => {
+              this.modalService.dismissAll();
+            }
+          })
     });
   }
 
