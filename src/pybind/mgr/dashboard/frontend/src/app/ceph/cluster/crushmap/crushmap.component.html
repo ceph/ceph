@@ -6,8 +6,10 @@
       <div class="card-body">
         <div class="row">
           <div class="col-sm-6 col-lg-6 tree-container">
-            <i *ngIf="loadingIndicator"
-               [ngClass]="[icons.large, icons.spinner, icons.spin]"></i>
+            <svg *ngIf="loadingIndicator"
+                 [cdsIcon]="icons.spinner"
+                 [size]="icons.size32"
+                 class="loader cds--btn__icon spin"></svg>
             <cds-tree-view #tree
                            [isMultiSelect]="false"
                            (select)="onNodeSelected($event)">
