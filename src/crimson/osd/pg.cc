@@ -1458,6 +1458,7 @@ seastar::future<> PG::stop()
   cancel_remote_recovery_reservation();
   check_readable_timer.cancel();
   renew_lease_timer.cancel();
+  backend->on_actingset_changed(false);
   return osdmap_gate.stop().then([this] {
     return wait_for_active_blocker.stop();
   }).then([this] {

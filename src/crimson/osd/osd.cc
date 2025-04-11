@@ -28,6 +28,7 @@
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDScrub2.h"
+#include "messages/MOSDPGPCT.h"
 #include "messages/MPGStats.h"
 
 #include "os/Transaction.h"
@@ -53,6 +54,7 @@
 #include "crimson/osd/pg_meta.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
+#include "crimson/osd/osd_operations/pgpct_request.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operations/recovery_subrequest.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
@@ -994,6 +996,9 @@ OSD::do_ms_dispatch(
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
     return handle_update_log_missing_reply(conn, boost::static_pointer_cast<
       MOSDPGUpdateLogMissingReply>(m));
+  case MSG_OSD_PG_PCT:
+    return handle_pg_pct(conn, boost::static_pointer_cast<
+      MOSDPGPCT>(m));
   default:
     return std::nullopt;
   }
@@ -1409,6 +1414,15 @@ seastar::future<> OSD::handle_update_log_missing_reply(
   Ref<MOSDPGUpdateLogMissingReply> m)
 {
   return pg_shard_manager.start_pg_operation<LogMissingRequestReply>(
+    std::move(conn),
+    std::move(m)).second;
+}
+
+seastar::future<> OSD::handle_pg_pct(
+  crimson::net::ConnectionRef conn,
+  Ref<MOSDPGPCT> m)
+{
+  return pg_shard_manager.start_pg_operation<PGPCTRequest>(
     std::move(conn),
     std::move(m)).second;
 }

@@ -34,6 +34,7 @@
 
 class MCommand;
 class MOSDMap;
+class MOSDPGPCT;
 class MOSDRepOpReply;
 class MOSDRepOp;
 class MOSDScrub2;
@@ -233,6 +234,9 @@ private:
   seastar::future<> handle_update_log_missing_reply(
     crimson::net::ConnectionRef conn,
     Ref<MOSDPGUpdateLogMissingReply> m);
+  seastar::future<> handle_pg_pct(
+    crimson::net::ConnectionRef conn,
+    Ref<MOSDPGPCT> m);
 
   std::vector<DaemonHealthMetric> get_health_metrics();
 
