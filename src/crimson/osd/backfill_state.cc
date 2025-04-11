@@ -85,7 +85,7 @@ BackfillState::Initial::react(const BackfillState::Triggered& evt)
   ceph_assert(backfill_state().last_backfill_started == \
               peering_state().earliest_backfill());
   ceph_assert(peering_state().is_backfilling());
-  // initialize BackfillIntervals
+  // initialize ReplicaBackfillIntervals
   for (const auto& bt : peering_state().get_backfill_targets()) {
     backfill_state().peer_backfill_info[bt].reset(
       peering_state().get_peer_last_backfill(bt));
@@ -134,13 +134,52 @@ void BackfillState::Enqueuing::maybe_update_range()
 	  if (e.is_update()) {
 	    DEBUGDPP("maybe_update_range(lambda): {} updated to ver {}",
 	      pg(), e.soid, e.version);
-            primary_bi.objects.erase(e.soid);
-            primary_bi.objects.insert(std::make_pair(e.soid,
-                                                             e.version));
+	    if (e.written_shards.empty()) {
+	      // Log entry updates all shards, replace all entries for e.soid
+	      primary_bi.objects.erase(e.soid);
+	      primary_bi.objects.insert(
+			   std::make_pair(e.soid,
+					  std::make_pair(shard_id_t::NO_SHARD,
+							 e.version)));
+	    } else {
+	      // Update backfill interval for shards modified by log entry
+	      std::map<shard_id_t,eversion_t> versions;
+	      // Create map from existing entries in backfill entry
+	      const auto & [begin, end] = primary_bi.objects.equal_range(e.soid);
+	      for (const auto & entry : std::ranges::subrange(begin, end)) {
+		const auto & [shard, version] = entry.second;
+		versions[shard] = version;
+	      }
+	      // Update entries in map that are modified by log entry
+	      bool uses_default = false;
+	      for (const auto & shard : peering_state().get_backfill_targets()) {
+		if (e.is_written_shard(shard.shard)) {
+		  versions.erase(shard.shard);
+		  uses_default = true;
+		} else {
+		  if (!versions.contains(shard.shard)) {
+		    versions[shard.shard] = e.prior_version;
+		  }
+		  //Else: keep existing version
+		}
+	      }
+	      if (uses_default) {
+		versions[shard_id_t::NO_SHARD] = e.version;
+	      } else {
+		versions.erase(shard_id_t::NO_SHARD);
+	      }
+	      // Erase and recreate backfill interval for e.soid using map
+	      primary_bi.objects.erase(e.soid);
+	      for (auto & [shard, version] : versions) {
+		primary_bi.objects.insert(
+			     std::make_pair(e.soid,
+					    std::make_pair(shard, version)));
+	      }
+	    }
 	  } else if (e.is_delete()) {
             DEBUGDPP("maybe_update_range(lambda): {} removed",
 	      pg(), e.soid);
-            primary_bi.objects.erase(e.soid);
+            primary_bi.objects.erase(e.soid); // Erase all entries for e.soid
           }
         }
       };
@@ -168,8 +207,8 @@ void BackfillState::Enqueuing::trim_backfill_infos()
 
 /* static */ bool BackfillState::Enqueuing::all_enqueued(
   const PeeringFacade& peering_state,
-  const BackfillInterval& backfill_info,
-  const std::map<pg_shard_t, BackfillInterval>& peer_backfill_info)
+  const PrimaryBackfillInterval& backfill_info,
+  const std::map<pg_shard_t, ReplicaBackfillInterval>& peer_backfill_info)
 {
   const bool all_local_enqueued = \
     backfill_info.extends_to_end() && backfill_info.empty();
@@ -184,7 +223,8 @@ void BackfillState::Enqueuing::trim_backfill_infos()
 }
 
 hobject_t BackfillState::Enqueuing::earliest_peer_backfill(
-  const std::map<pg_shard_t, BackfillInterval>& peer_backfill_info) const
+  const std::map<pg_shard_t,
+                 ReplicaBackfillInterval>& peer_backfill_info) const
 {
   hobject_t e = hobject_t::get_max();
   for (const pg_shard_t& bt : peering_state().get_backfill_targets()) {
@@ -196,8 +236,8 @@ hobject_t BackfillState::Enqueuing::earliest_peer_backfill(
 }
 
 bool BackfillState::Enqueuing::should_rescan_replicas(
-  const std::map<pg_shard_t, BackfillInterval>& peer_backfill_info,
-  const BackfillInterval& backfill_info) const
+  const std::map<pg_shard_t, ReplicaBackfillInterval>& peer_backfill_info,
+  const PrimaryBackfillInterval& backfill_info) const
 {
   const auto& targets = peering_state().get_backfill_targets();
   return std::any_of(std::begin(targets), std::end(targets),
@@ -208,8 +248,8 @@ bool BackfillState::Enqueuing::should_rescan_replicas(
 }
 
 bool BackfillState::Enqueuing::should_rescan_primary(
-  const std::map<pg_shard_t, BackfillInterval>& peer_backfill_info,
-  const BackfillInterval& backfill_info) const
+  const std::map<pg_shard_t, ReplicaBackfillInterval>& peer_backfill_info,
+  const PrimaryBackfillInterval& backfill_info) const
 {
   return backfill_info.begin <= earliest_peer_backfill(peer_backfill_info) &&
 	 !backfill_info.extends_to_end() && backfill_info.empty();
@@ -218,7 +258,7 @@ bool BackfillState::Enqueuing::should_rescan_primary(
 void BackfillState::Enqueuing::trim_backfilled_object_from_intervals(
   BackfillState::Enqueuing::result_t&& result,
   hobject_t& last_backfill_started,
-  std::map<pg_shard_t, BackfillInterval>& peer_backfill_info)
+  std::map<pg_shard_t, ReplicaBackfillInterval>& peer_backfill_info)
 {
   std::for_each(std::begin(result.pbi_targets), std::end(result.pbi_targets),
     [&peer_backfill_info] (const auto& bt) {
@@ -257,13 +297,28 @@ BackfillState::Enqueuing::update_on_peers(const hobject_t& check)
   result_t result { {}, primary_bi.begin };
   std::map<hobject_t, std::pair<eversion_t, std::vector<pg_shard_t>>> backfills;
 
+  std::map<shard_id_t,eversion_t> versions;
+  auto it = primary_bi.objects.begin();
+  const hobject_t& hoid = it->first;
+  eversion_t obj_v;
+  while (it != primary_bi.objects.end() && it->first == hoid) {
+    obj_v = std::max(obj_v, it->second.second);
+    versions[it->second.first] = it->second.second;
+    ++it;
+  }
+
   for (const auto& bt : peering_state().get_backfill_targets()) {
     const auto& peer_bi = backfill_state().peer_backfill_info.at(bt);
 
     // Find all check peers that have the wrong version
-    if (const eversion_t& obj_v = primary_bi.objects.begin()->second;
-        check == primary_bi.begin && check == peer_bi.begin) {
-      if (peer_bi.objects.begin()->second != obj_v) {
+    if (check == primary_bi.begin && check == peer_bi.begin) {
+      eversion_t replicaobj_v;
+      if (versions.contains(bt.shard)) {
+	replicaobj_v = versions.at(bt.shard);
+      } else {
+	replicaobj_v = versions.at(shard_id_t::NO_SHARD);
+      }
+      if (peer_bi.objects.begin()->second != replicaobj_v) {
 	std::ignore = backfill_state().progress_tracker->enqueue_push(
 	  primary_bi.begin);
 	auto &[v, peers] = backfills[primary_bi.begin];
@@ -298,8 +353,9 @@ BackfillState::Enqueuing::update_on_peers(const hobject_t& check)
 }
 
 bool BackfillState::Enqueuing::Enqueuing::all_emptied(
-  const BackfillInterval& local_backfill_info,
-  const std::map<pg_shard_t, BackfillInterval>& peer_backfill_info) const
+  const PrimaryBackfillInterval& local_backfill_info,
+  const std::map<pg_shard_t,
+                 ReplicaBackfillInterval>& peer_backfill_info) const
 {
   const auto& targets = peering_state().get_backfill_targets();
   const auto replicas_emptied =
@@ -459,8 +515,8 @@ BackfillState::PrimaryScanning::react(ObjectPushed evt)
 
 // -- ReplicasScanning
 bool BackfillState::ReplicasScanning::replica_needs_scan(
-  const BackfillInterval& replica_backfill_info,
-  const BackfillInterval& local_backfill_info)
+  const ReplicaBackfillInterval& replica_backfill_info,
+  const PrimaryBackfillInterval& local_backfill_info)
 {
   return replica_backfill_info.empty() && \
          replica_backfill_info.begin <= local_backfill_info.begin && \
