@@ -34,11 +34,9 @@ class SMBService(CephService):
         return 'clustered' in smb_spec.features
 
     def fence(self, daemon_id: str) -> None:
-        logger.info(f'Fencing old smb.{daemon_id}')
-        ret, out, err = self.mgr.mon_command({
-            'prefix': 'auth rm',
-            'entity': f'client.smb.fs.cluster.{daemon_id}',
-        })
+        # ... but fencing still wont do anything real, because we
+        # do not have per-service keys. but logging is fun
+        logger.debug('Will not fence key for smb cluster %r', daemon_id)
 
     def fence_old_ranks(
         self,
@@ -47,11 +45,11 @@ class SMBService(CephService):
         num_ranks: int,
     ) -> None:
         smb_spec = cast(SMBSpec, spec)
+        logger.info('Fencing called for smb.%s', smb_spec.cluster_id)
         for rank, m in list(rank_map.items()):
             if rank >= num_ranks:
                 for daemon_id in m.values():
                     if daemon_id is not None:
-                        logger.info(f'Fencing old smb.{smb_spec.cluster_id}')
                         self.fence(smb_spec.cluster_id)
                 del rank_map[rank]
                 self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
@@ -60,7 +58,6 @@ class SMBService(CephService):
                 for gen, daemon_id in list(m.items()):
                     if gen < max_gen:
                         if daemon_id is not None:
-                            logger.info(f'Fencing old smb.{smb_spec.cluster_id}')
                             self.fence(smb_spec.cluster_id)
                         del rank_map[rank][gen]
                         self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
