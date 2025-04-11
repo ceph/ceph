@@ -316,6 +316,11 @@ std::ostream& RGWHTTPClient::gen_prefix(std::ostream& out) const
 
 void RGWHTTPClient::init()
 {
+  char* ca_bundle = std::getenv("CURL_CA_BUNDLE");
+  if (ca_bundle) {
+    set_ca_path(std::string(ca_bundle, std::min(strlen(ca_bundle), 1024ul)));
+}
+
   auto pos = url.find("://");
   if (pos == string::npos) {
     host = url;
