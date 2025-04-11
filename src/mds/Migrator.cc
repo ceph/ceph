@@ -1957,10 +1957,10 @@ void Migrator::handle_export_ack(const cref_t<MExportDirAck> &m)
   // this keeps authority().first in sync with subtree auth state in the journal.
   mdcache->adjust_subtree_auth(dir, it->second.peer, mds->get_nodeid());
 
+  ceph_assert(g_conf()->mds_kill_export_at != 10);
   // log export completion, then finish (unfreeze, trigger finish context, etc.)
   mds->mdlog->submit_entry(le, new C_MDS_ExportFinishLogged(this, dir));
   mds->mdlog->flush();
-  ceph_assert(g_conf()->mds_kill_export_at != 10);
 }
 
 void Migrator::export_notify_abort(CDir *dir, export_state_t& stat, set<CDir*>& bounds)
@@ -2844,7 +2844,6 @@ void Migrator::import_reverse(CDir *dir)
   dout(7) << *dir << dendl;
 
   import_state_t& stat = import_state[dir->dirfrag()];
-  stat.state = IMPORT_ABORTING;
 
   set<CDir*> bounds;
   mdcache->get_subtree_bounds(dir, bounds);
@@ -2950,10 +2949,14 @@ void Migrator::import_reverse(CDir *dir)
       }
       in->put(CInode::PIN_IMPORTINGCAPS);
     }
+  }
+
+  if (stat.state == IMPORT_LOGGINGSTART || stat.state == IMPORT_ACKING) {
     for (auto& p : stat.session_map) {
       Session *session = p.second.first;
       session->dec_importing();
     }
+    mds->server->close_forced_opened_sessions(stat.session_map);
   }
 	 
   // log our failure
@@ -2962,6 +2965,7 @@ void Migrator::import_reverse(CDir *dir)
   mdcache->trim(num_dentries); // try trimming dentries
 
   // notify bystanders; wait in aborting state
+  stat.state = IMPORT_ABORTING;
   import_notify_abort(dir, bounds);
 }
 
@@ -3054,10 +3058,9 @@ void Migrator::import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
   dout(7) << *dir << dendl;
 
   map<dirfrag_t, import_state_t>::iterator it = import_state.find(dir->dirfrag());
-  if (it == import_state.end() ||
-      it->second.state != IMPORT_LOGGINGSTART) {
+  ceph_assert(it != import_state.end());
+  if (it->second.state != IMPORT_LOGGINGSTART) {
     dout(7) << "import " << df << " must have aborted" << dendl;
-    mds->server->finish_force_open_sessions(imported_session_map);
     return;
   }
 
