@@ -74,14 +74,14 @@ _common_formatters = {
 
 
 _log_file_handler = {
-    'level': 'DEBUG',
+    'level': 'INFO',
     'class': 'logging.handlers.WatchedFileHandler',
     'formatter': 'cephadm',
     'filename': '%s/cephadm.log' % LOG_DIR,
 }
 
 _syslog_handler = {
-    'level': 'DEBUG',
+    'level': 'INFO',
     'class': 'logging.handlers.SysLogHandler',
     'formatter': 'cephadm',
     'address': '/dev/log',
