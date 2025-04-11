@@ -23,6 +23,7 @@
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"
+#include "common/RefCountedObj.h"
 
 #include <unordered_set>
 
@@ -38,7 +39,7 @@ class CDentry;
 class MDSRank;
 struct MDPeerUpdate;
 
-class LogSegment {
+class LogSegment : public RefCountedObject {
  public:
   using seq_t = uint64_t;
 
@@ -110,7 +111,9 @@ class LogSegment {
   MDSContext::vec expiry_waiters;
 };
 
-static inline std::ostream& operator<<(std::ostream& out, const LogSegment& ls) {
+using LogSegmentRef = boost::intrusive_ptr<LogSegment>;
+
+static inline std::ostream& operator<<(std::ostream& out, const LogSegment &ls) {
   return out << "LogSegment(" << ls.seq << "/0x" << std::hex << ls.offset
              << "~" << ls.end << std::dec << " events=" << ls.num_events << ")";
 }

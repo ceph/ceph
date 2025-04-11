@@ -53,10 +53,14 @@
 #include <memory>
 #include <ostream>
 #include <string>
+#include <boost/intrusive_ptr.hpp>
 
 class MDSRank;
 class LogSegment;
 class EMetaBlob;
+class LogSegment;
+
+using LogSegmentRef = boost::intrusive_ptr<LogSegment>;
 
 // generic log event
 class LogEvent {
@@ -65,10 +69,10 @@ public:
   friend class MDLog;
 
   LogEvent() = delete;
-  explicit LogEvent(int t) : _type(t) {}
+  explicit LogEvent(int t);
   LogEvent(const LogEvent&) = delete;
   LogEvent& operator=(const LogEvent&) = delete;
-  virtual ~LogEvent() {}
+  virtual ~LogEvent();
 
   std::string_view get_type_str() const;
   static EventType str_to_type(std::string_view str);
@@ -117,8 +121,8 @@ public:
   virtual EMetaBlob *get_metablob() { return NULL; }
 
 protected:
-  LogSegment* get_segment() { return _segment; }
-  LogSegment const* get_segment() const { return _segment; }
+  LogSegmentRef get_segment();
+  LogSegmentRef const get_segment() const;
 
   utime_t stamp;
 
@@ -129,7 +133,7 @@ private:
 
   EventType _type = 0;
   uint64_t _start_off = 0;
-  LogSegment *_segment = nullptr;
+  LogSegmentRef _segment;
 };
 
 #endif
