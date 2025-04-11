@@ -362,6 +362,8 @@ size_t RGWHTTPClient::receive_http_header(void * const ptr,
     dout(5) << "WARNING: client->receive_header() returned ret=" << ret << dendl;
     req_data->user_ret = ret;
     return CURLE_WRITE_ERROR;
+  } else if (ret > 0) { // libcurl errors to be propagated
+    return ret;
   }
 
   return len;
@@ -1116,28 +1118,30 @@ void *RGWHTTPManager::reqs_thread_entry()
     switch (mstatus) {
       case CURLM_OK:
       case CURLM_CALL_MULTI_PERFORM:
+      case CURLM_ABORTED_BY_CALLBACK:
         break;
       default:
         dout(10) << "curl_multi_perform returned: " << mstatus << dendl;
-	break;
+        break;
     }
+
     int msgs_left;
     CURLMsg *msg;
     while ((msg = curl_multi_info_read((CURLM *)multi_handle, &msgs_left))) {
       if (msg->msg == CURLMSG_DONE) {
-	int result = msg->data.result;
-	CURL *e = msg->easy_handle;
-	rgw_http_req_data *req_data;
-	curl_easy_getinfo(e, CURLINFO_PRIVATE, (void **)&req_data);
-	curl_multi_remove_handle((CURLM *)multi_handle, e);
+        int result = msg->data.result;
+        CURL *e = msg->easy_handle;
+        rgw_http_req_data *req_data;
+        curl_easy_getinfo(e, CURLINFO_PRIVATE, (void **)&req_data);
+        curl_multi_remove_handle((CURLM *)multi_handle, e);
 
-	long http_status;
+        long http_status;
         int status;
         if (!req_data->user_ret) {
           curl_easy_getinfo(e, CURLINFO_RESPONSE_CODE, (void **)&http_status);
 
           status = rgw_http_error_to_errno(http_status);
-          if (result != CURLE_OK && status == 0) {
+          if (result != CURLE_OK && result != CURLE_ABORTED_BY_CALLBACK && status == 0) {
             dout(0) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << ", maybe network unstable" << dendl;
             status = -EAGAIN;
           }
@@ -1158,13 +1162,12 @@ void *RGWHTTPManager::reqs_thread_entry()
           default:
             dout(20) << "ERROR: msg->data.result=" << result << " req_data->id=" << id << " http_status=" << http_status << dendl;
             dout(20) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << " req_data->error_buf=" << req_data->error_buf << dendl;
-	    break;
+            break;
         }
-	finish_request(req_data, status, http_status);
+        finish_request(req_data, status, http_status);
       }
     }
   }
-
 
   std::unique_lock rl{reqs_lock};
   for (auto r : unregistered_reqs) {
