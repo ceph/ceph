@@ -31,6 +31,7 @@
 
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
+#include "common/debug.h"
 #if defined(__linux__)
 #include "common/linux_version.h"
 #endif
