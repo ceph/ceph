@@ -7513,6 +7513,11 @@ int Client::_lookup(const InodeRef& dir, const std::string& name, std::string& a
   mask &= CEPH_CAP_ANY_SHARED | CEPH_STAT_RSTAT;
   std::string dname = name;
 
+  if (!dir->is_dir()) {
+    r = -ENOTDIR;
+    goto done;
+  }
+
   if (dname == ".."sv) {
     if (dir->dentries.empty()) {
       MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
@@ -7536,11 +7541,6 @@ int Client::_lookup(const InodeRef& dir, const std::string& name, std::string& a
 
   if (dname == "."sv) {
     *target = dir;
-    goto done;
-  }
-
-  if (!dir->is_dir()) {
-    r = -ENOTDIR;
     goto done;
   }
 
@@ -7650,6 +7650,10 @@ Dentry *Client::get_or_create(Inode *dir, const std::string& name)
 {
   // lookup
   ldout(cct, 20) << __func__ << " " << *dir << " name " << name << dendl;
+  if (!dir->is_dir()) {
+    ldout(cct, 20) << *dir << " is not a dir inode, name " << name << dendl;
+    return nullptr;
+  }
   dir->open_dir();
   auto it = dir->dir->dentries.find(name);
   if (it != dir->dir->dentries.end())
