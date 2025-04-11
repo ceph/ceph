@@ -98,7 +98,6 @@ if tags.has('man'):             # noqa: F821
                          'cephfs/*',
                          'dev/*',
                          'governance.rst',
-                         'foundation.rst',
                          'install/*',
                          'mon/*',
                          'rados/*',
