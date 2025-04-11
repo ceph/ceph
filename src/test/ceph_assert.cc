@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <sys/time.h>
+#include <sys/resource.h>
 #include <fmt/format.h>
 
 #include "common/ceph_argparse.h"
@@ -33,6 +35,9 @@ TEST(CephAssertDeathTest, ceph_assert_supresssions) {
 }
 
 int main(int argc, char **argv) {
+  // Disable core files
+  const struct rlimit rlim = { 0, 0 };
+  setrlimit(RLIMIT_CORE, &rlim);
 
   auto args = argv_to_vec(argc, argv);
   auto cct = global_init(
