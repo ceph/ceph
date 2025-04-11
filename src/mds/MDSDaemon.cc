@@ -908,6 +908,12 @@ void MDSDaemon::suicide()
 
   clean_up_admin_socket();
 
+  /* Unlock the mds_lock while waiting for beacon ACK to avoid a
+   * deadlock with the dispatcher thread which may try to acquire
+   * mds_lock, preventing it from receiving the beacon ACK.
+   */
+  mds_lock.unlock();
+
   // Notify the Monitors (MDSMonitor) that we're dying, so that it doesn't have
   // to wait for us to go laggy. Only do this if we're actually in the MDSMap,
   // because otherwise the MDSMonitor will drop our message.
@@ -921,9 +927,11 @@ void MDSDaemon::suicide()
     mgrc.shutdown();
 
   if (mds_rank) {
+    mds_lock.lock();
     mds_rank->shutdown();
   } else {
     timer.shutdown();
+    mds_lock.lock();
 
     monc->shutdown();
     messenger->shutdown();
