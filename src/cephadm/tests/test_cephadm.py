@@ -804,6 +804,30 @@ quay.ceph.io/ceph-ci/ceph@sha256:8eb43767c40d3e2d8cdb7577904f5f0b94373afe2dde296
         image = _cephadm.infer_local_ceph_image(ctx, ctx.container_engine)
         assert image == expected
 
+    def test_infer_local_ceph_image_no_cinfo(self, funkypatch):
+        ctx = _cephadm.CephadmContext()
+        ctx.fsid = '00000000-0000-0000-0000-0000deadbeez'
+        ctx.container_engine = mock_podman()
+
+        out = """quay.ceph.io/ceph-ci/ceph@sha256:d6d1f4ab7148145467d9b632efc89d75710196434cba00aec5571b01e15b8a99|1b58ca4f6df|test|2025-01-21 16:54:41 +0000 UTC
+quay.ceph.io/ceph-ci/ceph@sha256:8eb43767c40d3e2d8cdb7577904f5f0b94373afe2dde29672c2b0001bd098789|c17226ffd482|test|2025-01-22 16:54:41 +0000 UTC"""
+        funkypatch.patch('cephadmlib.call_wrappers.call').return_value = (
+            out,
+            '',
+            0,
+        )
+        funkypatch.patch(
+            'cephadmlib.listing_updaters.CoreStatusUpdater'
+        )().expand.side_effect = lambda ctx, v: v
+        funkypatch.patch(
+            'cephadmlib.listing.daemons_matching'
+        ).return_value = [
+            {'_container_info': None, 'name': 'mon.vm-00'},
+            {'_container_info': None, 'name': 'mgr.vm-00.cdjeee'}
+        ]
+        image = _cephadm.infer_local_ceph_image(ctx, ctx.container_engine)
+        assert image == 'quay.ceph.io/ceph-ci/ceph@sha256:8eb43767c40d3e2d8cdb7577904f5f0b94373afe2dde29672c2b0001bd098789'
+
     @pytest.mark.parametrize('daemon_filter, by_name, daemon_list, container_stats, output',
         [
             # get container info by type ('mon')
