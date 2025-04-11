@@ -98,6 +98,6 @@ int get_iface_numa_node(
 bool is_addr_in_subnet(
   CephContext *cct,
   const std::string &networks,
-  const std::string &addr);
+  const entity_addr_t &addr);
 
 #endif
