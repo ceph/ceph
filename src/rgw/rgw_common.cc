@@ -2132,6 +2132,7 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "mdlog",
                                     "datalog",
                                     "roles",
+                                    "managed-policy",
                                     "user-policy",
                                     "amz-cache",
                                     "oidc-provider",
