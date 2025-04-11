@@ -405,7 +405,7 @@ export class TaskMessageService {
       this.nfs(metadata)
     ),
     // smb
-    'smb/cluster/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+    'smb/cluster/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.smbCluster(metadata)
     ),
     'smb/ad/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
@@ -414,7 +414,7 @@ export class TaskMessageService {
     'smb/ad/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
       this.smbJoinAuth(metadata)
     ),
-    'smb/ad/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+    'smb/ad/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.smbJoinAuth(metadata)
     ),
     'smb/standalone/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
@@ -423,7 +423,7 @@ export class TaskMessageService {
     'smb/standalone/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
       this.smbUsersgroups(metadata)
     ),
-    'smb/standalone/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+    'smb/standalone/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.smbUsersgroups(metadata)
     ),
     // Grafana tasks
