@@ -1,5 +1,5 @@
 from unittest.mock import MagicMock
-from cephadm.service_discovery import Root
+from cephadm.services.service_discovery import Root
 
 
 class FakeDaemonDescription:
