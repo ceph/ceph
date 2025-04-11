@@ -1,8 +1,9 @@
 overrides:
   ceph:
-    conf:
+    cluster-conf:
       mgr:
         client mount timeout: 30
         debug client: 20
         debug mgr: 20
         debug ms: 1
+        mon warn on pool no app: false
