@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { AbstractControl, ValidationErrors } from '@angular/forms';
+
 import _ from 'lodash';
 import { isEmptyInputValue } from '../forms/cd-validators';
 
@@ -87,7 +88,7 @@ export class FormatterService {
     const base = 1024;
     const units = ['b', 'k', 'm', 'g', 't', 'p', 'e', 'z', 'y'];
     const bytesRegexMatch = RegExp(
-      '^(\\d+(.\\d+)?) ?([' + units.join('') + ']?(b|ib|B/s|B/m|iB/m)?)?$',
+      '^(\\d+(.\\d+)?) ?([' + units.join('') + ']?(b|ib|B/s|B/m|iB/m|iB/s)?)?$',
       'i'
     ).exec(value);
     if (bytesRegexMatch === null) {
@@ -99,7 +100,6 @@ export class FormatterService {
     }
     return Math.round(bytes);
   }
-
   /**
    * Converts `x ms` to `x` (currently) or `0` if the conversion fails
    */
@@ -164,6 +164,11 @@ export class FormatterService {
     if (type == 'quota') {
       const bytes = new FormatterService().toBytes(control.value);
       return bytes < 1024 ? errorObject : null;
+    }
+    // For all bandwidth values:  minimum  1Mbps Maximum. 4Gbps
+    if (type == 'nfsRateLimit') {
+      const bytes = new FormatterService().toBytes(control.value);
+      return bytes < 1024 * 1024 || bytes > 4 * (1024 * 1024 * 1024) ? errorObject : null;
     }
     return null;
   }
