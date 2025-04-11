@@ -1814,7 +1814,7 @@ public:
   }
 };
 
-int RGWAWSSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config,  RGWSyncModuleInstanceRef *instance){
+int RGWAWSSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, const RGWZoneGroup& zonegroup, RGWSyncModuleInstanceRef *instance){
   AWSSyncConfig conf;
 
   int r = conf.init(dpp, cct, config);
