@@ -301,7 +301,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
 
   private setAvailableApps(apps: string[] = this.data.applications.default) {
     this.data.applications.available = _.uniq(apps.sort()).map(
-      (x: string) => new SelectOption(false, x, '')
+      (x: string) => new SelectOption(false, x, this.data.APP_LABELS[x] || x)
     );
   }
 
