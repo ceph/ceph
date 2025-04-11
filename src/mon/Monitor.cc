@@ -2296,7 +2296,7 @@ void Monitor::win_election(epoch_t epoch, const set<int>& active, uint64_t featu
     encode(m, bl);
     t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
   }
-
+  elector.process_pending_pings();
   finish_election();
   if (monmap->size() > 1 &&
       monmap->get_epoch() > 0) {
