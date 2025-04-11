@@ -367,14 +367,14 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, SuccessJournal) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_ORPHAN,
                          "remote mirror uuid", 0);
 
   expect_mirror_image_set("image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, 0);
 
   expect_set_journal_policy(mock_image_ctx);
@@ -415,14 +415,14 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, SuccessSnapshot) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_NON_PRIMARY,
                          "remote mirror uuid", 0);
 
   expect_mirror_image_set("image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, 0);
 
   expect_set_journal_policy(mock_image_ctx);
@@ -481,7 +481,7 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, GetMirrorInfoLocalPrimary) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_PRIMARY,
                          "remote mirror uuid", 0);
@@ -502,7 +502,7 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, GetMirrorInfoOrphan) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_ORPHAN,
                          "remote mirror uuid", 0);
@@ -527,7 +527,7 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, GetMirrorInfoDNE) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_ORPHAN,
                          "remote mirror uuid", -ENOENT);
@@ -548,7 +548,7 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, GetMirrorInfoError) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_ORPHAN,
                          "remote mirror uuid", -EINVAL);
@@ -569,14 +569,14 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, DisableMirrorImageError) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_ORPHAN,
                          "remote mirror uuid", 0);
 
   expect_mirror_image_set("image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, -EINVAL);
 
   C_SaferCond ctx;
@@ -599,14 +599,14 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, OpenImageError) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_ORPHAN,
                          "remote mirror uuid", 0);
 
   expect_mirror_image_set("image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, 0);
 
   expect_set_journal_policy(mock_image_ctx);
@@ -632,14 +632,14 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, ResetJournalError) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_ORPHAN,
                          "remote mirror uuid", 0);
 
   expect_mirror_image_set("image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, 0);
 
   expect_set_journal_policy(mock_image_ctx);
@@ -670,14 +670,14 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, AcquireLockError) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_ORPHAN,
                          "remote mirror uuid", 0);
 
   expect_mirror_image_set("image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, 0);
 
   expect_set_journal_policy(mock_image_ctx);
@@ -711,14 +711,14 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, TrashMoveError) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_ORPHAN,
                          "remote mirror uuid", 0);
 
   expect_mirror_image_set("image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, 0);
 
   expect_set_journal_policy(mock_image_ctx);
@@ -756,14 +756,14 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, RemoveMirrorImageError) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_ORPHAN,
                          "remote mirror uuid", 0);
 
   expect_mirror_image_set("image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, 0);
 
   expect_set_journal_policy(mock_image_ctx);
@@ -806,14 +806,14 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, CloseImageError) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_ORPHAN,
                          "remote mirror uuid", 0);
 
   expect_mirror_image_set("image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, 0);
 
   expect_set_journal_policy(mock_image_ctx);
@@ -857,14 +857,14 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, DelayedDelation) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_NON_PRIMARY,
                          "remote mirror uuid", 0);
 
   expect_mirror_image_set("image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, 0);
 
   expect_set_journal_policy(mock_image_ctx);
