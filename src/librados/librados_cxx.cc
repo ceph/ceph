@@ -504,6 +504,13 @@ void librados::ObjectWriteOperation::remove()
   o->remove();
 }
 
+void librados::ObjectWriteOperation::remove(
+    int64_t omap_count_hint, int64_t db_delete_range_threshold_hint) {
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->remove(omap_count_hint, db_delete_range_threshold_hint);
+}
+
 void librados::ObjectWriteOperation::truncate(uint64_t off)
 {
   ceph_assert(impl);
@@ -1298,6 +1305,13 @@ int librados::IoCtx::remove(const std::string& oid, int flags)
 {
   object_t obj(oid);
   return io_ctx_impl->remove(obj, flags); 
+}
+
+int librados::IoCtx::remove(const std::string &oid, int64_t omap_count_hint,
+                            int64_t db_delete_range_threshold_hint) {
+  object_t obj(oid);
+  return io_ctx_impl->remove(oid, omap_count_hint,
+                             db_delete_range_threshold_hint);
 }
 
 int librados::IoCtx::trunc(const std::string& oid, uint64_t size)
