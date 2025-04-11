@@ -107,6 +107,18 @@
             </td>
             <td>{{ selection?.multipart_sync_threshold }}</td>
           </tr>
+          <tr>
+            <td
+                class="bold">
+              Retain Head Object
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  Retain object metadata after transition to the cloud (default: false).
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.retain_head_object }}</td>
+          </tr>
         </tbody>
       </table>
     </cds-tab>
