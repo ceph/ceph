@@ -25,6 +25,8 @@
 #include <memory>
 #include <atomic>
 #include <cstdint>
+#include <boost/variant.hpp>
+#include <cinttypes>
 
 #include "common/perf_histogram.h"
 #include "include/common_fwd.h"
@@ -59,6 +61,52 @@ enum unit_t : uint8_t
 enum class select_labeled_t {
   labeled,
   unlabeled
+};
+
+struct perf_desc {
+  std::string name;
+  std::string description;
+  int prio;
+};
+
+struct perf_dump_type_value {
+  // PERFCOUNTER_U64
+  struct perf_desc desc;
+  uint64_t value;
+};
+
+struct perf_dump_type_time {
+  // PERFCOUNTER_TIME
+  struct perf_desc desc;
+  double value;
+};
+
+struct perf_dump_type_longrun_average {
+  // PERFCOUNTER_U64 | PERFCOUNTER_LONGRUNAVG
+  struct perf_desc desc;
+  uint64_t avgcount;
+  uint64_t sum;
+};
+
+struct perf_dump_type_longrun_time_average {
+  // PERFCOUNTER_TIME | PERFCOUNTER_LONGRUNAVG
+  struct perf_desc desc;
+  uint64_t avgcount;
+  double sum;
+  double avgtime;
+};
+
+struct perf_dump_type_histogram {
+  // PERFCOUNTER_U64 | PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER
+  struct perf_desc desc;
+};
+
+struct perf_counters {
+  std::vector<perf_dump_type_value> values;
+  std::vector<perf_dump_type_time> times;
+  std::vector<perf_dump_type_longrun_average> averages;
+  std::vector<perf_dump_type_longrun_time_average> time_averages;
+  std::vector<perf_dump_type_histogram> histograms;
 };
 
 /* Class for constructing a PerfCounters object.
@@ -270,6 +318,7 @@ public:
       const std::string &counter = "") const {
     dump_formatted_generic(f, schema, true, select_labeled_t::unlabeled, counter);
   }
+
   std::pair<uint64_t, uint64_t> get_tavg_ns(int idx) const;
 
   const std::string& get_name() const;
@@ -316,6 +365,231 @@ private:
 
   friend class PerfCountersBuilder;
   friend class PerfCountersCollectionImpl;
+
+  class ValueType {
+  public:
+    explicit ValueType(std::string_view name, uint64_t value)
+      : name(name),
+        value(value) {
+    }
+
+    void dump(Formatter *f) const {
+      f->dump_unsigned(name, value);
+    }
+
+    void dump(std::string_view name, std::string_view description, int priority,
+              struct perf_counters *pc) const {
+      struct perf_desc pd(std::string(name), std::string(description), priority);
+      struct perf_dump_type_value pdd(pd, value);
+      pc->values.emplace_back(perf_dump_type_value
+                              {
+                                perf_desc
+                                {
+                                  std::string(name),std::string(description), priority
+                                },
+                                value
+                              });
+    }
+
+  protected:
+    std::string name;
+    uint64_t value;
+  };
+
+  class TimeType : public ValueType {
+  public:
+    explicit TimeType(std::string_view name, uint64_t value)
+      : ValueType(name, value) {
+    }
+
+    void dump(Formatter *f) const {
+      f->dump_format_unquoted(name, "%" PRId64 ".%09" PRId64,
+                              value / 1000000000ull,
+                              value % 1000000000ull);
+    }
+
+    void dump(std::string_view name, std::string_view description, int priority,
+              struct perf_counters *pc) const {
+      char val[255];
+      snprintf(val, 255, "%" PRId64 ".%09" PRId64, value / 1000000000, value % 1000000000);
+      pc->times.emplace_back(perf_dump_type_time
+                              {
+                                perf_desc
+                                {
+                                  std::string(name),std::string(description), priority
+                                },
+                                atof(val)
+                              });
+    }
+  };
+
+  class LongRunAverageType {
+  public:
+    explicit LongRunAverageType(std::string_view name,
+                                const std::pair<uint64_t,uint64_t> &avg)
+      : name(name),
+        avg(avg) {
+    }
+
+    void dump(Formatter *f) const {
+      Formatter::ObjectSection longrunavg_section{*f, name};
+      f->dump_unsigned("avgcount", avg.second);
+      f->dump_unsigned("sum", avg.first);
+    }
+
+    void dump(std::string_view name, std::string_view description, int priority,
+              struct perf_counters *pc) const {
+      pc->averages.emplace_back(perf_dump_type_longrun_average
+                                {
+                                  perf_desc
+                                  {
+                                    std::string(name),std::string(description), priority
+                                  },
+                                  avg.second, avg.first
+                                });
+    }
+
+  protected:
+    std::string name;
+    std::pair<uint64_t,uint64_t> avg;
+  };
+
+  class LongRunTimeAverageType : public LongRunAverageType {
+  public:
+    explicit LongRunTimeAverageType(std::string_view name,
+                                    const std::pair<uint64_t,uint64_t> &avg)
+      : LongRunAverageType(name, avg) {
+    }
+
+    void dump(Formatter *f) const {
+      Formatter::ObjectSection longrunavg_section{*f, name};
+      f->dump_unsigned("avgcount", avg.second);
+      f->dump_format_unquoted("sum", "%" PRId64 ".%09" PRId64,
+                              avg.first / 1000000000ull,
+                              avg.first % 1000000000ull);
+      uint64_t count = avg.second;
+      uint64_t sum_ns = avg.first;
+      if (count) {
+        uint64_t avg_ns = sum_ns / count;
+        f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64,
+                                avg_ns / 1000000000ull,
+                                avg_ns % 1000000000ull);
+      } else {
+        f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64, 0, 0);
+      }
+    }
+
+    void dump(std::string_view name, std::string_view description, int priority,
+              struct perf_counters *pc) const {
+      char val1[255], val2[255];
+      snprintf(val1, 255, "%" PRId64 ".%09" PRId64, avg.first / 1000000000, avg.first % 1000000000);
+      if (avg.second) {
+        uint64_t avg_ns = avg.first / avg.second;
+        snprintf(val2, 255, "%" PRId64 ".%09" PRId64, avg_ns / 1000000000, avg_ns % 1000000000);
+      } else {
+        snprintf(val2, 255, "%" PRId64 ".%09" PRId64, 0ul, 0ul);
+      }
+
+      pc->time_averages.emplace_back(perf_dump_type_longrun_time_average
+                                {
+                                  perf_desc
+                                  {
+                                    std::string(name),std::string(description), priority
+                                  },
+                                  avg.second, atof(val1), atof(val2)
+                                });
+    }
+  };
+
+  class HistogramType {
+  public:
+    explicit HistogramType(std::string_view name, PerfHistogram<> *histogram)
+      : name(name),
+        histogram(histogram) {
+    }
+
+    void dump(Formatter *f) const {
+      Formatter::ObjectSection histogram_section{*f, name};
+      histogram->dump_formatted(f);
+    }
+
+    void dump(std::string_view name, std::string_view description, int priority,
+              struct perf_counters *pc) const {
+      // TODO: to be implemented
+    }
+
+  private:
+    std::string name;
+    PerfHistogram<> *histogram;
+  };
+
+  class UnknownType {
+  public:
+    explicit UnknownType() {
+    }
+
+    void dump(Formatter *f) const {
+      ceph_abort();
+    }
+
+    void dump(std::string_view name, std::string_view description, int priority,
+              struct perf_counters *pc) const {
+      ceph_abort();
+    }
+  };
+
+  typedef boost::variant<ValueType,
+                         TimeType,
+                         LongRunAverageType,
+                         LongRunTimeAverageType,
+                         HistogramType,
+                         UnknownType> PerfType;
+
+  class DumpTypeVisitor : public boost::static_visitor<void> {
+  public:
+    explicit DumpTypeVisitor(Formatter *f)
+      : f(f) {
+    }
+
+    template <typename PerfType>
+    inline void operator()(const PerfType &perf_type) const {
+      perf_type.dump(f);
+    }
+
+  private:
+    Formatter *f;
+  };
+
+  class UnformattedDumpTypeVisitor : public boost::static_visitor<void> {
+  public:
+    explicit UnformattedDumpTypeVisitor(std::string_view name, std::string_view description,
+                                        int priority, struct perf_counters *pc)
+      : name(name),
+        description(description),
+        priority(priority),
+        pc(pc) {
+    }
+
+    template <typename PerfType>
+    inline void operator()(const PerfType &perf_type) const {
+      perf_type.dump(name, description, priority, pc);
+    }
+
+  private:
+    std::string name;
+    std::string description;
+    int priority;
+    struct perf_counters *pc;
+  };
+
+  void for_each_unlabeled_counter(const std::function<
+                                  void (perfcounter_type_d, std::string_view,
+                                        std::string_view, std::string_view,
+                                        std::string_view, std::string_view,
+                                        std::string_view, int, const PerfType&)> &fn) const;
+
+public:
+  void get_unlabeled_perf_counters(struct perf_counters *pc) const;
 };
 
 struct SortPerfCountersByName {
