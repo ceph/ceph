@@ -96,9 +96,9 @@ We'll use a stable/regular 15.2.17 release of Octopus as an example throughout t
 2. Log in with GitHub OAuth
 3. Set the parameters as necessary::
 
-    BRANCH=octopus
+    BRANCH=squid
     TAG=checked
-    VERSION=15.2.17
+    VERSION=19.2.2
     RELEASE_TYPE=STABLE
     ARCHS=x86_64 arm64
 
@@ -147,21 +147,27 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
 
    Example::
 
-      $ sync-pull ceph octopus 8a82819d84cf884bd39c17e3236e0632ac146dc4
-      sync for: ceph octopus
+      $ sync-pull ceph squid 0eceb0defba60152a8182f7bd87d164b639885b8
+      sync for: ceph squid
       ********************************************
-      Found the most packages (332) in ubuntu/bionic.
-      No JSON object could be decoded
-      No JSON object could be decoded
-      ubuntu@chacra.ceph.com:/opt/repos/ceph/octopus/8a82819d84cf884bd39c17e3236e0632ac146dc4/ubuntu/bionic/flavors/default/* /opt/repos/ceph/octopus-15.2.17/debian/jessie/
-      --------------------------------------------
-      receiving incremental file list
-      db/
-       db/checksums.db
-              180.22K 100%    2.23MB/s    0:00:00 (xfr#1, to-chk=463/467)
-      db/contents.cache.db
-              507.90K 100%    1.95MB/s    0:00:00 (xfr#2, to-chk=462/467)
-      db/packages.db
+      + : 0eceb0defba60152a8182f7bd87d164b639885b8
+      + project=ceph
+      + release=squid
+      + sha1=0eceb0defba60152a8182f7bd87d164b639885b8
+      + echo 'sync for: ceph squid'
+      sync for: ceph squid
+      + echo '********************************************'
+      ********************************************
+      + [[ ceph == \c\e\p\h ]]
+      + current_highest_count=0
+      + for combo in debian/bookworm debian/bullseye ubuntu/bionic ubuntu/focal ubuntu/jammy
+      ++ wc -l
+      ++ curl -fs https://chacra.ceph.com/r/ceph/squid/0eceb0defba60152a8182f7bd87d164b639885b8/debian/bookworm/flavors/default/pool/main/c/ceph/
+      + combo_count=161
+      + [[ 0 -eq 22 ]]
+      + '[' 161 -gt 0 ']'
+      + current_highest_count=161
+      + highest_combo=debian/bookworm
 
       etc...
 
@@ -169,20 +175,16 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
 
    .. prompt:: bash
 
-      merfi gpg /opt/repos/ceph/octopus-15.2.17/debian
+      merfi gpg /opt/repos/ceph/squid-19.2.2/debian/
 
    Example::
 
-      $ merfi gpg /opt/repos/ceph/octopus-15.2.17/debian
       --> Starting path collection, looking for files to sign
-      --> 18 matching paths found
-      --> will sign with the following commands:
-      --> gpg --batch --yes --armor --detach-sig --output Release.gpg Release
-      --> gpg --batch --yes --clearsign --output InRelease Release
-      --> signing: /opt/repos/ceph/octopus-15.2.17/debian/jessie/dists/bionic/Release
+      --> 1 repos found
+      --> signing: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release
       --> Running command: gpg --batch --yes --armor --detach-sig --output Release.gpg Release
       --> Running command: gpg --batch --yes --clearsign --output InRelease Release
-      --> signing: /opt/repos/ceph/octopus-15.2.17/debian/jessie/dists/focal/Release
+      --> signing: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/Release
       --> Running command: gpg --batch --yes --armor --detach-sig --output Release.gpg Release
       --> Running command: gpg --batch --yes --clearsign --output InRelease Release
 
@@ -192,17 +194,35 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
 
    .. prompt:: bash
 
-      sign-rpms ceph octopus
+      sign-rpms ceph squid
 
    Example::
 
-      $ sign-rpms ceph octopus
-      Checking packages in: /opt/repos/ceph/octopus-15.2.17/centos/7
-      signing:  /opt/repos/ceph/octopus-15.2.17/centos/7/SRPMS/ceph-release-1-1.el7.src.rpm
-      /opt/repos/ceph/octopus-15.2.17/centos/7/SRPMS/ceph-release-1-1.el7.src.rpm:
-      signing:  /opt/repos/ceph/octopus-15.2.17/centos/7/SRPMS/ceph-15.2.17-0.el7.src.rpm
-      /opt/repos/ceph/octopus-15.2.17/centos/7/SRPMS/ceph-15.2.17-0.el7.src.rpm:
-      signing:  /opt/repos/ceph/octopus-15.2.17/centos/7/noarch/ceph-mgr-modules-core-15.2.17-0.el7.noarch.rpm
+      $ sign-rpms ceph squid
+
+      + [[ 2 -lt 1 ]]
+      + project=ceph
+      + shift
+      + '[' 1 -eq 0 ']'
+      + releases=("$@")
+      + distros=(centos rhel)
+      + distro_versions=(7 8 9)
+      + read -s -p 'Key Passphrase: ' GPG_PASSPHRASE
+      Key Passphrase: + echo
+
+      + for release in "${releases[@]}"
+      + for distro in "${distros[@]}"
+      + for distro_version in "${distro_versions[@]}"
+      + for path in /opt/repos/$project/$release*
+      + '[' -d /opt/repos/ceph/squid-19.1.0/centos/7 ']'
+      ...
+      + echo 'Checking packages in: /opt/repos/ceph/squid-19.1.0/centos/9'
+      Checking packages in: /opt/repos/ceph/squid-19.1.0/centos/9
+      + update_repo=0
+      + cd /opt/repos/ceph/squid-19.1.0/centos/9
+      ++ find -name '*.rpm'
+      + for rpm in `find -name "*.rpm"`
+      ++ grep '^Signature'
 
       etc...
 
@@ -210,7 +230,7 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
 
    .. prompt:: bash $
 
-      sync-push ceph octopus
+      sync-push ceph squid-19.2.2 2
 
 This leaves the packages, and the tarball, in a password-protected
 prerelease area at https://download.ceph.com/prerelease/ceph.  Verify them
@@ -230,8 +250,9 @@ This must be done after :ref:`Signing and Publishing the Build`.
 
 A Jenkins job named ``ceph-release-containers`` exists so that we can test the
 images before release. The job exists both for convenience and because it
-requires access to both x86_64 and arm64 builders. Start the job manually on
-the Jenkins server. This job:
+requires access to both x86_64 and arm64 builders. Start the job as Build with Parameters on
+the Jenkins server, set ``BRANCH``, ``SHA1`` and ``VERSION`` fields and leave other fields as defaults. 
+This job:
 
 * builds the architecture-specific container imagess and pushes them to
   ``quay.ceph.io/ceph/prerelease-amd64`` and
@@ -244,7 +265,7 @@ Finally, when all appropriate testing and verification is done on the
 container images, run ``make-manifest-list.py --promote`` from the Ceph
 source tree (at ``container/make-manifest-list.py``) to promote them to
 their final release location on ``quay.io/ceph/ceph`` (you must ensure
-that you're logged into ``quay.io/ceph`` with appropriate permissions):
+that you're logged into ``quay.io/ceph`` and ``quay.ceph.io/ceph`` with appropriate permissions):
 
     .. prompt:: bash
 
