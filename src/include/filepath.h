@@ -34,6 +34,7 @@
 #include "include/fs_types.h" // for inodeno_t
 
 #include "common/Formatter.h"
+#include "common/strescape.h"
 
 
 class filepath {
@@ -251,18 +252,17 @@ class filepath {
     // walk into snapdir?
     return depth() > 0 && bits[0].length() == 0;
   }
+
+  void print(std::ostream& os) const {
+    if (get_ino()) {
+      os << '#' << get_ino();
+      if (length())
+        os << '/';
+    }
+    os << binstrprint(get_path());
+  }
 };
 
 WRITE_CLASS_ENCODER(filepath)
-
-inline std::ostream& operator<<(std::ostream& out, const filepath& path)
-{
-  if (path.get_ino()) {
-    out << '#' << path.get_ino();
-    if (path.length())
-      out << '/';
-  }
-  return out << path.get_path();
-}
 
 #endif

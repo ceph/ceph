@@ -24,6 +24,12 @@
 #include "UserPerm.h"
 #include "Delegation.h"
 
+#include "FSCrypt.h"
+
+#ifndef S_ENCRYPTED
+#define S_ENCRYPTED (1 << 14)
+#endif
+
 class Client;
 class Dentry;
 class Dir;
@@ -32,6 +38,7 @@ struct Inode;
 class MetaRequest;
 class filepath;
 class Fh;
+class FSCrypt;
 
 class Cap {
 public:
@@ -133,6 +140,7 @@ struct Inode : RefCountedObject {
   uint32_t   mode = 0;
   uid_t      uid = 0;
   gid_t      gid = 0;
+  uint32_t   i_flags = 0;
 
   // nlink
   int32_t    nlink = 0;
@@ -170,14 +178,38 @@ struct Inode : RefCountedObject {
   decltype(InodeStat::optmetadata) optmetadata;
   using optkind_t = decltype(InodeStat::optmetadata)::optkind_t;
 
+  FSCryptContextRef fscrypt_ctx;
+  FSCryptKeyValidatorRef fscrypt_key_validator;
+
+  uint64_t effective_size() const;
+  void set_effective_size(uint64_t size);
+
+  // this method returns true if inode is de facto ecrypted.
+  // semantics of "enabled" is a bit confusing since it may mean
+  // "enabled but not encrypted de facto".
   bool is_fscrypt_enabled() {
     return !!fscrypt_auth.size();
   }
+
+  FSCryptContextRef init_fscrypt_ctx(FSCrypt *fscrypt);
+
+  void gen_inherited_fscrypt_auth(std::vector<uint8_t> *ctx);
 
   bool is_root()    const { return ino == CEPH_INO_ROOT; }
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
   bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
+
+  // use i_flags as 1 << 14 will overlap with other mode bits.
+  bool is_encrypted() const { return (i_flags & S_ENCRYPTED) == S_ENCRYPTED; }
+  // this function sets S_ENCRYPTED bit in i_flag
+  // is called when the is_fscrypt_enabled
+  void set_is_encrypted_flag() {
+    bool en = is_fscrypt_enabled();
+    // just to make sure that no garbage is set in the flag, if fscrypt is disabled
+    ceph_assert(en || !(i_flags & S_ENCRYPTED));
+    i_flags |= en ? S_ENCRYPTED : 0;
+  }
 
   bool has_dir_layout() const {
     return layout != file_layout_t();
