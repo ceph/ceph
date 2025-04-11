@@ -1307,25 +1307,19 @@ int Group<I>::snap_get_mirror_namespace(
     return r;
   }
 
-  std::vector<cls::rbd::GroupSnapshot> cls_group_snaps;
-  r = group_snap_list<I>(group_ioctx, group_id, false, false, &cls_group_snaps);
+  auto group_header_oid = librbd::util::group_header_name(group_id);
+
+  cls::rbd::GroupSnapshot group_snap;
+  r = cls_client::group_snap_get_by_id(&group_ioctx, group_header_oid, snap_id,
+                                       &group_snap);
   if (r < 0) {
+    lderr(cct) << "failed to retrieve group snapshot: " << cpp_strerror(r)
+                << dendl;
     return r;
   }
 
-  const cls::rbd::GroupSnapshot *cls_group_snap_ptr = nullptr;
-  for (const auto& cls_group_snap : cls_group_snaps) {
-    if (cls_group_snap.id == snap_id) {
-      cls_group_snap_ptr = &cls_group_snap;
-      break;
-    }
-  }
-  if (cls_group_snap_ptr == nullptr) {
-    return -ENOENT;
-  }
-
   GetGroupMirrorVisitor visitor(mirror_namespace);
-  r = cls_group_snap_ptr->snapshot_namespace.visit(visitor);
+  r = group_snap.snapshot_namespace.visit(visitor);
   if (r < 0) {
     return r;
   }
