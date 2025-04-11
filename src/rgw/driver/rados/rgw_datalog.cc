@@ -1104,13 +1104,29 @@ RGWDataChangesLog::list_entries(const DoutPrefixProvider* dpp, int shard,
   co_return std::make_tuple(std::move(entries), std::move(outmark));
 }
 
+int RGWDataChangesLog::list_entries_checked(
+  const DoutPrefixProvider *dpp, int shard,
+  int max_entries, std::vector<rgw_data_change_log_entry>& entries,
+  std::string_view marker, std::string* out_marker, bool* truncated,
+  optional_yield y)
+{
+  if (shard >= num_shards) [[unlikely]] {
+    ldpp_dout_fmt(
+      dpp, -1,
+      "{} is not a valid shard. Valid shards are integers in [0, {})",
+      shard, num_shards);
+    return -EINVAL;
+  }
+  return list_entries(dpp, shard, max_entries, entries, marker, out_marker,
+		      truncated, y);
+}
+
 int RGWDataChangesLog::list_entries(
   const DoutPrefixProvider *dpp, int shard,
   int max_entries, std::vector<rgw_data_change_log_entry>& entries,
   std::string_view marker, std::string* out_marker, bool* truncated,
   optional_yield y)
 {
-  assert(shard < num_shards);
   std::exception_ptr eptr;
   std::tuple<std::span<rgw_data_change_log_entry>,
 	     std::string> out;
