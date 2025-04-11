@@ -806,16 +806,18 @@ const std::string ceph::io_sequence::tester::SelectErasurePool::select() {
       ceph::messaging::osd::OSDPoolGetRequest osdPoolGetRequest{*force_value};
       rc = send_mon_command(osdPoolGetRequest, rados, "OSDPoolGetRequest", inbl,
                             &outbl, formatter.get());
-      ceph_assert(rc == 0);
+      if (rc == 0) {
+	JSONParser p;
+	bool success = p.parse(outbl.c_str(), outbl.length());
+	ceph_assert(success);
 
-      JSONParser p;
-      bool success = p.parse(outbl.c_str(), outbl.length());
-      ceph_assert(success);
+	ceph::messaging::osd::OSDPoolGetReply pool_get_reply;
+	pool_get_reply.decode_json(&p);
 
-      ceph::messaging::osd::OSDPoolGetReply pool_get_reply;
-      pool_get_reply.decode_json(&p);
-
-      profile = sep.selectExistingProfile(pool_get_reply.erasure_code_profile);
+	profile = sep.selectExistingProfile(pool_get_reply.erasure_code_profile);
+      } else {
+	replica_pool = true;
+      }
     } else {
       created_pool_name = create();
     }
@@ -932,11 +934,13 @@ ceph::io_sequence::tester::TestObject::TestObject(
   } else {
     const std::string pool = spo.select();
     if (!dryrun) {
-      ceph_assert(spo.getProfile());
-      pool_km = spo.getProfile()->km;
-      if (spo.getProfile()->mapping && spo.getProfile()->layers) {
-        pool_mappinglayers = {*spo.getProfile()->mapping,
-                             *spo.getProfile()->layers};
+      if (!spo.is_replica_pool()) {
+	ceph_assert(spo.getProfile());
+	pool_km = spo.getProfile()->km;
+	if (spo.getProfile()->mapping && spo.getProfile()->layers) {
+	  pool_mappinglayers = {*spo.getProfile()->mapping,
+				*spo.getProfile()->layers};
+	}
       }
     }
 
@@ -966,7 +970,8 @@ ceph::io_sequence::tester::TestObject::TestObject(
 
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(
         rados, asio, pool, oid, cached_shard_order, sbs.select(), rng(),
-        threads, lock, cond, spo.get_allow_pool_ec_optimizations());
+        threads, lock, cond, spo.is_replica_pool(),
+	spo.get_allow_pool_ec_optimizations());
     dout(0) << "= " << oid << " pool=" << pool << " threads=" << threads
             << " blocksize=" << exerciser_model->get_block_size() << " ="
             << dendl;
@@ -1235,7 +1240,7 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
     model = std::make_unique<ceph::io_exerciser::RadosIo>(
         rados, asio, pool, object_name, osd_map_reply.acting, sbs.select(), rng(),
         1,  // 1 thread
-        lock, cond,
+        lock, cond, spo.is_replica_pool(),
         spo.get_allow_pool_ec_optimizations());
   }
 
