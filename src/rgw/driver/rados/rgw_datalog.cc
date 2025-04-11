@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <boost/system/detail/generic_category.hpp>
 #include <exception>
 #include <ranges>
 #include <shared_mutex> // for std::shared_lock
@@ -1092,7 +1093,12 @@ asio::awaitable<std::tuple<std::vector<rgw_data_change_log_entry>,
 RGWDataChangesLog::list_entries(const DoutPrefixProvider* dpp, int shard,
 				int max_entries, std::string marker)
 {
-  assert(shard < num_shards);
+  if (shard >= num_shards) [[unlikely]] {
+    throw sys::system_error{
+      EINVAL, sys::generic_category(),
+      fmt::format("{} is not a valid shard. Valid shards are integers in [0, {})",
+		  shard, num_shards)};
+  }
   if (max_entries <= 0) {
     co_return std::make_tuple(std::vector<rgw_data_change_log_entry>{},
 			      std::string{});
@@ -1110,7 +1116,6 @@ int RGWDataChangesLog::list_entries(
   std::string_view marker, std::string* out_marker, bool* truncated,
   optional_yield y)
 {
-  assert(shard < num_shards);
   std::exception_ptr eptr;
   std::tuple<std::span<rgw_data_change_log_entry>,
 	     std::string> out;
