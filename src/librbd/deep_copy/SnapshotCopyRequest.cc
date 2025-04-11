@@ -39,6 +39,16 @@ const std::string &get_snapshot_name(I *image_ctx, librados::snap_t snap_id) {
   return snap_it->first.second;
 }
 
+const std::string calc_ind_image_snap_name(uint64_t pool_id,
+                                           const std::string group_id,
+                                           const std::string snap_id)
+{
+  std::stringstream ind_snap_name_stream;
+  ind_snap_name_stream << ".group." << std::hex << pool_id << "_"
+                       << group_id << "_" << snap_id;
+  return ind_snap_name_stream.str();
+}
+
 } // anonymous namespace
 
 using librbd::util::create_context_callback;
@@ -357,7 +367,8 @@ void SnapshotCopyRequest<I>::send_snap_create() {
 
     if (m_snap_seqs.find(src_snap_id) == m_snap_seqs.end()) {
       // the source snapshot is not in our mapping table, ...
-      if (std::holds_alternative<cls::rbd::UserSnapshotNamespace>(snap_namespace)) {
+      if (std::holds_alternative<cls::rbd::UserSnapshotNamespace>(snap_namespace) ||
+          std::holds_alternative<cls::rbd::ImageSnapshotNamespaceGroup>(snap_namespace)) {
         // ... create it since it's a user snapshot
         break;
       } else if (src_snap_id == m_src_snap_id_end) {
@@ -390,6 +401,15 @@ void SnapshotCopyRequest<I>::send_snap_create() {
 
   uint64_t size = snap_info_it->second.size;
   m_snap_namespace = snap_info_it->second.snap_namespace;
+  auto ns = std::get_if<cls::rbd::ImageSnapshotNamespaceGroup>(
+      &m_snap_namespace);
+  if (ns != nullptr) {
+    ns->group_pool = m_dst_image_ctx->group_spec.pool_id;
+    ns->group_id = m_dst_image_ctx->group_spec.group_id;
+    m_snap_name = calc_ind_image_snap_name(ns->group_pool,
+                                           ns->group_id,
+                                           ns->group_snapshot_id);
+  }
   cls::rbd::ParentImageSpec parent_spec;
   uint64_t parent_overlap = 0;
   if (!m_flatten && snap_info_it->second.parent.spec.pool_id != -1) {
@@ -443,6 +463,10 @@ void SnapshotCopyRequest<I>::handle_snap_create(int r) {
 
   auto snap_it = m_dst_image_ctx->snap_ids.find(
       {cls::rbd::UserSnapshotNamespace(), m_snap_name});
+  if (snap_it == m_dst_image_ctx->snap_ids.end()) {
+    snap_it = m_dst_image_ctx->snap_ids.find(
+        {cls::rbd::ImageSnapshotNamespaceGroup(), m_snap_name});
+  }
   ceph_assert(snap_it != m_dst_image_ctx->snap_ids.end());
   librados::snap_t dst_snap_id = snap_it->second;
 
