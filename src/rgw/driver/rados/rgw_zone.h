@@ -319,7 +319,7 @@ WRITE_CLASS_ENCODER(RGWZoneParams)
 
 struct RGWZoneGroup : public RGWSystemMetaObj {
   std::string api_name;
-  std::list<std::string> endpoints;
+  std::vector<std::string> endpoints;
   bool is_master = false;
 
   rgw_zone_id master_zone;
@@ -355,10 +355,6 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   RGWZoneGroup(): is_master(false){}
   RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
   explicit RGWZoneGroup(const std::string &_name):RGWSystemMetaObj(_name) {}
-  RGWZoneGroup(const std::string &_name, bool _is_master, CephContext *cct, RGWSI_SysObj* sysobj_svc,
-	       const std::string& _realm_id, const std::list<std::string>& _endpoints)
-    : RGWSystemMetaObj(_name, cct , sysobj_svc), endpoints(_endpoints), is_master(_is_master),
-      realm_id(_realm_id) {}
   virtual ~RGWZoneGroup();
 
   bool is_master_zonegroup() const { return is_master;}

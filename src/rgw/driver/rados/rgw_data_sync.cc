@@ -5836,12 +5836,20 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
       tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pair.source_bs.bucket}));
       return set_cr_error(retcode);
     }
+    if (!sync_pipe.source_bucket_info.redirect_zone_id.empty()) {
+      // skip sync from non-replicated buckets
+      return set_cr_done();
+    }
 
     yield call(new RGWSyncGetBucketInfoCR(env, sync_pair.dest_bucket, &sync_pipe.dest_bucket_info,
                                           &sync_pipe.dest_bucket_attrs, tn));
     if (retcode < 0) {
       tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pair.source_bs.bucket}));
       return set_cr_error(retcode);
+    }
+    if (!sync_pipe.dest_bucket_info.redirect_zone_id.empty()) {
+      // skip sync to non-replicated buckets
+      return set_cr_done();
     }
 
     sync_pipe.info = sync_pair;

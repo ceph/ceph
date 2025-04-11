@@ -4864,3 +4864,59 @@ def test_bucket_delete_with_sync_policy_object_prefix():
     remove_sync_policy_group(c1, "sync-group")
 
     return
+
+def test_bucket_create_nonreplicated():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    # create a destination bucket for replication policy
+    dest_bucket_name = gen_bucket_name()
+    zonegroup_conns.rw_zones[0].s3_client.create_bucket(Bucket=dest_bucket_name)
+
+    try:
+        for bucket_zone in zonegroup_conns.rw_zones:
+            bucket_name = gen_bucket_name()
+
+            # create a non-replicated bucket
+            try:
+                bucket_zone.s3_client.create_bucket(Bucket=bucket_name, CreateBucketConfiguration={'Replication': 'Disabled'})
+            except botocore.exceptions.ParamValidationError:
+                raise SkipTest("Tests for non-replicated buckets require rgw extensions in service-2.sdk-extras.json")
+
+            try:
+                zonegroup_meta_checkpoint(zonegroup)
+                bucket_zone.s3_client.put_object(Bucket=bucket_name, Key='obj')
+
+                # check that bilog is empty
+                assert not bilog_list(bucket_zone.zone, bucket_name)
+                # TODO: check that datalog doesn't mention bucket_name
+                # XXX: radosgw-admin datalog list is broken https://tracker.ceph.com/issues/70883
+                try:
+                    # without waiting for a checkpoint, verify that each zone redirects
+                    # HeadObject and that ReplicationStatus is empty from all zones
+                    for zone in zonegroup_conns.rw_zones:
+                        response = zone.s3_client.head_object(Bucket=bucket_name, Key='obj')
+                        assert 'ReplicationStatus' not in response
+                finally:
+                    bucket_zone.s3_client.delete_object(Bucket=bucket_name, Key='obj')
+
+                # test that put_bucket_replication() fails with InvalidBucketState
+                bucket_zone.s3_client.put_bucket_replication(
+                        Bucket=bucket_name,
+                        ReplicationConfiguration={
+                            'Role': '',
+                            'Rules': [{
+                                'ID': 'rule1',
+                                'Status': 'Enabled',
+                                'Destination': {
+                                    'Bucket': f'arn:aws:s3:::{dest_bucket_name}',
+                                }
+                            }]
+                        })
+            finally:
+                bucket_zone.s3_client.delete_bucket(Bucket=bucket_name)
+    finally:
+        zonegroup_conns.rw_zones[0].s3_client.delete_bucket(Bucket=dest_bucket_name)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zonegroup_data_checkpoint(zonegroup_conns)
