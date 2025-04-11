@@ -93,6 +93,7 @@ from .inventory import (
     TunedProfileStore,
     NodeProxyCache,
     OrchSecretNotFound,
+    CoredumpctlOverrides,
 )
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
@@ -488,6 +489,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default='169.254.1.1',
             desc="Default address for RedFish API (oob management)."
         ),
+        Option(
+            'set_coredump_overrides',
+            type='bool',
+            default=False,
+            desc='Whether cephadm should use a systemd drop-in to modify coredump settings'
+        ),
+        Option(
+            'coredump_max_size',
+            type='int',
+            default=32,
+            desc='Size cephadm should override the max coredump size to in Gigabytes'
+        ),
     ]
     for image in DefaultImages:
         MODULE_OPTIONS.append(Option(image.key, default=image.image_ref, desc=image.desc))
@@ -587,6 +600,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.certificate_automated_rotation_enabled = False
             self.certificate_check_debug_mode = False
             self.certificate_check_period = 0
+            self.set_coredump_overrides = False
+            self.coredump_max_size = 0
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -2336,6 +2351,48 @@ Then run the following:
             self.log.warning(log_msg)
 
         return f'{msg}'
+
+    def set_host_coredump_overrides(self, host: str, settings: CoredumpctlOverrides) -> None:
+        with self.async_timeout_handler(host, 'cephadm _orch set-coredump-overrides'):
+            # Note that the way we infer an fsid relies on daemons being on the
+            # host and as there may not be any present when running this we should
+            # pass this explicitly (handled by no_fsid parameter to _run_cephadm)
+            out, err, code = self.wait_async(
+                CephadmServe(self)._run_cephadm(
+                    host,
+                    cephadmNoImage,
+                    ['_orch', 'set-coredump-overrides'],
+                    settings.to_args(),
+                    no_fsid=False,
+                    error_ok=True
+                )
+            )
+        if code:
+            raise OrchestratorError(
+                f'Unable to set coredumpctl overrides on {host}\n rc: {code}\n out: {out}\n err: {err}'
+            )
+        self.cache.update_last_coredumpctl_overrides(host, settings)
+
+    def rm_host_coredump_overrides(self, host: str) -> None:
+        with self.async_timeout_handler(host, 'cephadm _orch set-coredump-overrides'):
+            # Note that the way we infer an fsid relies on daemons being on the
+            # host and as there may not be any present when running this we should
+            # pass this explicitly (handled by no_fsid parameter to _run_cephadm)
+            out, err, code = self.wait_async(
+                CephadmServe(self)._run_cephadm(
+                    host,
+                    cephadmNoImage,
+                    ['_orch', 'set-coredump-overrides'],
+                    ['--cleanup'],
+                    no_fsid=False,
+                    error_ok=True
+                )
+            )
+        if code:
+            raise OrchestratorError(
+                f'Unable to remove coredumpctl overrides on {host}\n rc: {code}\n out: {out}\n err: {err}'
+            )
+        self.cache.clear_last_max_coredumpctl_overrides(host)
 
     def get_minimal_ceph_conf(self) -> str:
         _, config, _ = self.check_mon_command({
