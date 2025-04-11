@@ -22,13 +22,6 @@ using namespace std;
 
 static string notify_oid_prefix = "notify";
 
-RGWSI_Notify::RGWSI_Notify(CephContext *cct) : RGWServiceInstance(cct) {}
-RGWSI_Notify::~RGWSI_Notify()
-{
-  shutdown();
-}
-
-
 class RGWWatcher : public DoutPrefixProvider , public librados::WatchCtx2 {
   CephContext *cct;
   RGWSI_Notify *svc;
@@ -141,6 +134,11 @@ public:
   }
 };
 
+RGWSI_Notify::RGWSI_Notify(CephContext *cct) : RGWServiceInstance(cct) {}
+RGWSI_Notify::~RGWSI_Notify()
+{
+  shutdown();
+}
 
 class RGWSI_Notify_ShutdownCB : public RGWSI_Finisher::ShutdownCB
 {
