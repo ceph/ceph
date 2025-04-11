@@ -184,3 +184,23 @@ int rgw_chown_bucket_and_objects(rgw::sal::Driver* driver, rgw::sal::Bucket* buc
   return ret;
 }
 
+uint64_t get_usage(const std::string &bucket_name) {
+
+    //hstTODO: add unique identifiers for bucket as arguments
+    // in bucket_cache.h GetBucketResult gbr = get_bucket(nullptr, bname, BucketCache<D, B>::FLAG_LOCK);
+    // Create a bucket instance
+    RGWBucket bucket(bucket_name);
+
+    // Retrieve the bucket's metadata
+    RGWBucketInfo bucket_info;
+    int ret = bucket.get_info(bucket_info); // Assuming get_info fetches the metadata
+
+    if (ret < 0) {
+        // Handle error 
+        // hstTODO: add a log for it 
+        return 0; // Return 0 if unable to retrieve usage
+    }
+
+    // Return the bytes used from the bucket's metadata
+    return bucket_info.size_rounded; 
+}
