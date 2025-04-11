@@ -3143,8 +3143,23 @@ const CInode::mempool_old_inode& CInode::cow_old_inode(snapid_t follows, bool co
 
 void CInode::pre_cow_old_inode()
 {
-  snapid_t follows = mdcache->get_global_snaprealm()->get_newest_seq();
-  dout(20) << __func__ << " follows " << follows << " on " << *this << dendl;
+  snapid_t follows;
+  bool using_global_snaprealm_seq = true;
+  SnapRealm *realm = find_snaprealm();
+  auto use_global_snaprealm_seq = g_conf().get_val<bool>("mds_use_global_snaprealm_seq_for_subvol");
+
+  if (use_global_snaprealm_seq) {
+    follows = mdcache->get_global_snaprealm()->get_newest_seq();
+  } else if (realm->get_newest_seq()>1 && !realm->get_subvolume_ino()) {
+    // There is a snapshot between root and subvol path, hence use global snaprealm seq
+    follows = mdcache->get_global_snaprealm()->get_newest_seq();
+  } else {
+    follows = realm->get_newest_seq();
+    using_global_snaprealm_seq = false;
+  }
+
+  dout(20) << __func__ << " using_global_snaprealm_seq:" << (using_global_snaprealm_seq ? "yes ":"no ")
+           << " follows " << follows << " on " << *this << " snaprealm=" << *realm << dendl;
   if (first <= follows)
     cow_old_inode(follows, true);
 }
