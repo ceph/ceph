@@ -120,7 +120,7 @@ int RGWRESTConn::get_url(string& endpoint)
 
   if (num == endpoints.size()) {
     ldout(cct, 5) << "ERROR: no valid endpoint" << dendl;
-    return -EINVAL;
+    return -ERR_SERVICE_UNAVAILABLE;
   }
   ldout(cct, 20) << "get_url picked endpoint=" << endpoint << dendl;
 
