@@ -1319,6 +1319,10 @@ class RgwService(CephService):
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         svc_spec = cast(RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         config, parent_deps = super().generate_config(daemon_spec)
+
+        if hasattr(svc_spec, 'rgw_exit_timeout_secs') and svc_spec.rgw_exit_timeout_secs:
+            config['rgw_exit_timeout_secs'] = svc_spec.rgw_exit_timeout_secs
+
         rgw_deps = parent_deps + self.get_dependencies(self.mgr, svc_spec)
         return config, rgw_deps
 
