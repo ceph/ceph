@@ -37,7 +37,7 @@ static void get_jf(const string& s, JSONFormattable *f)
   }
 }
 
-TEST(formatable, str) {
+TEST(formattable, str) {
   JSONFormattable f;
   get_jf("{ \"foo\": \"bar\" }", &f);
   ASSERT_EQ((string)f["foo"], "bar");
@@ -45,7 +45,7 @@ TEST(formatable, str) {
   ASSERT_EQ((string)f["fooz"]("lala"), "lala");
 }
 
-TEST(formatable, str2) {
+TEST(formattable, str2) {
   JSONFormattable f;
   get_jf("{ \"foo\": \"bar\" }", &f);
   ASSERT_EQ((string)f["foo"], "bar");
@@ -61,13 +61,13 @@ TEST(formatable, str2) {
 
 }
 
-TEST(formatable, str3) {
+TEST(formattable, str3) {
   JSONFormattable f;
   get_jf("{ \"foo\": \"1234bar56\" }", &f);
   ASSERT_EQ((string)f["foo"], "1234bar56");
 }
 
-TEST(formatable, int) {
+TEST(formattable, int) {
   JSONFormattable f;
   get_jf("{ \"foo\": 1 }", &f);
   ASSERT_EQ((int)f["foo"], 1);
@@ -82,7 +82,7 @@ TEST(formatable, int) {
   ASSERT_EQ((int)f2["fooz"](111), 123);
 }
 
-TEST(formatable, bool) {
+TEST(formattable, bool) {
   JSONFormattable f;
   get_jf("{ \"foo\": \"true\" }", &f);
   ASSERT_EQ((bool)f["foo"], true);
@@ -94,7 +94,7 @@ TEST(formatable, bool) {
   ASSERT_EQ((bool)f["foo"], false);
 }
 
-TEST(formatable, nested) {
+TEST(formattable, nested) {
   JSONFormattable f;
   get_jf("{ \"obj\": { \"foo\": 1, \"inobj\": { \"foo\": 2 } } }", &f);
   ASSERT_EQ((int)f["foo"], 0);
@@ -102,7 +102,7 @@ TEST(formatable, nested) {
   ASSERT_EQ((int)f["obj"]["inobj"]["foo"], 2);
 }
 
-TEST(formatable, array) {
+TEST(formattable, array) {
   JSONFormattable f;
   get_jf("{ \"arr\": [ { \"foo\": 1, \"inobj\": { \"foo\": 2 } }," 
          "{ \"foo\": 2 } ] }", &f);
@@ -123,7 +123,7 @@ TEST(formatable, array) {
   }
 }
 
-TEST(formatable, bin_encode) {
+TEST(formattable, bin_encode) {
   JSONFormattable f, f2;
   get_jf("{ \"arr\": [ { \"foo\": 1, \"bar\": \"aaa\", \"inobj\": { \"foo\": 2 } }," 
          "{ \"foo\": 2, \"inobj\": { \"foo\": 3 } } ] }", &f);
@@ -155,7 +155,7 @@ TEST(formatable, bin_encode) {
 
 }
 
-TEST(formatable, json_encode) {
+TEST(formattable, json_encode) {
   JSONFormattable f, f2;
   get_jf("{ \"arr\": [ { \"foo\": 1, \"bar\": \"aaa\", \"inobj\": { \"foo\": 2 } }," 
          "{ \"foo\": 2, \"inobj\": { \"foo\": 3 } } ] }", &f);
@@ -180,7 +180,7 @@ TEST(formatable, json_encode) {
 
 }
 
-TEST(formatable, set) {
+TEST(formattable, set) {
   JSONFormattable f, f2;
 
   f.set("", "{ \"abc\": \"xyz\"}");
@@ -199,13 +199,13 @@ TEST(formatable, set) {
   ASSERT_EQ((int)f["obj"]["c"], 30);
 }
 
-TEST(formatable, set2) {
+TEST(formattable, set2) {
   JSONFormattable f;
   f.set("foo", "1234bar56");
   ASSERT_EQ((string)f["foo"], "1234bar56");
 }
 
-TEST(formatable, erase) {
+TEST(formattable, erase) {
   JSONFormattable f, f2;
 
   f.set("", "{ \"abc\": \"xyz\"}");
@@ -239,7 +239,7 @@ static void dumpf(const JSONFormattable& f) {
   dumpt(f, "f");
 }
 
-TEST(formatable, set_array) {
+TEST(formattable, set_array) {
   JSONFormattable f, f2;
 
   f.set("asd[0]", "\"xyz\"");
@@ -271,7 +271,7 @@ TEST(formatable, set_array) {
   ASSERT_EQ((string)f2[0]["field"], "xyz");
 }
 
-TEST(formatable, erase_array) {
+TEST(formattable, erase_array) {
   JSONFormattable f;
 
   f.set("asd[0]", "\"xyz\"");
@@ -314,7 +314,7 @@ void formatter_convert(JSONFormatter& formatter, JSONFormattable *dest)
   get_jf(ss.str(), dest);
 }
 
-TEST(formatable, encode_simple) {
+TEST(formattable, encode_simple) {
   JSONFormattable f;
 
   encode_json("foo", "bar", &f);
@@ -421,7 +421,7 @@ struct struct2 {
 };
 
 
-TEST(formatable, encode_struct) {
+TEST(formattable, encode_struct) {
   JSONFormattable f;
 
   struct2 s2;
