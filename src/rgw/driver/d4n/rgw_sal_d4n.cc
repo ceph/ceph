@@ -145,14 +145,13 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
   return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
 }
 
-int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
-                                rgw_obj* target_obj)
+int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 {
   rgw::sal::Attrs attrs;
 
   if (driver->get_cache_driver()->get_attrs(dpp, this->get_key().get_oid(), attrs, y) < 0) {
     ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): CacheDriver get_attrs method failed." << dendl;
-    return next->get_obj_attrs(y, dpp, target_obj);
+    return next->get_obj_attrs(y, dpp);
   } else {
     /* Set metadata locally */
     RGWQuotaInfo quota_info;
@@ -198,7 +197,7 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
     /* Set attributes locally */
     if (this->set_attrs(attrs) < 0) {
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): D4NFilterObject set_attrs method failed." << dendl;
-      return next->get_obj_attrs(y, dpp, target_obj);
+      return next->get_obj_attrs(y, dpp);
     }
   }
 
@@ -834,7 +833,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   int ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs, cksum,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
 			canceled, rctx, flags);
-  obj->get_obj_attrs(rctx.y, save_dpp, NULL);
+  obj->get_obj_attrs(rctx.y, save_dpp);
 
   /* Append additional metadata to attributes */ 
   rgw::sal::Attrs baseAttrs = obj->get_attrs();
