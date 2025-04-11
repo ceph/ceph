@@ -4052,8 +4052,10 @@ public:
     virtual void create() {}
     virtual void update_snaps(const std::set<snapid_t> &old_snaps) {}
     virtual void rollback_extents(
-      version_t gen,
-      const std::vector<std::pair<uint64_t, uint64_t> > &extents) {}
+      const version_t gen,
+      const std::vector<std::pair<uint64_t, uint64_t>> &extents,
+      const uint64_t object_size,
+      const std::vector<shard_id_set> &shards) {}
     virtual ~Visitor() {}
   };
   void visit(Visitor *visitor) const;
@@ -4076,8 +4078,9 @@ public:
     rollback_info_completed = other.rollback_info_completed;
   }
   void claim_append(ObjectModDesc &other) {
-    if (!can_local_rollback || rollback_info_completed)
+    if (!can_local_rollback || rollback_info_completed) {
       return;
+    }
     if (!other.can_local_rollback) {
       mark_unrollbackable();
       return;
@@ -4099,24 +4102,27 @@ public:
     encode(_id, bl);
   }
   void append(uint64_t old_size) {
-    if (!can_local_rollback || rollback_info_completed)
+    if (!can_local_rollback || rollback_info_completed) {
       return;
+    }
     ENCODE_START(1, 1, bl);
     append_id(APPEND);
     encode(old_size, bl);
     ENCODE_FINISH(bl);
   }
   void setattrs(std::map<std::string, std::optional<ceph::buffer::list>> &old_attrs) {
-    if (!can_local_rollback || rollback_info_completed)
+    if (!can_local_rollback || rollback_info_completed) {
       return;
+    }
     ENCODE_START(1, 1, bl);
     append_id(SETATTRS);
     encode(old_attrs, bl);
     ENCODE_FINISH(bl);
   }
   bool rmobject(version_t deletion_version) {
-    if (!can_local_rollback || rollback_info_completed)
+    if (!can_local_rollback || rollback_info_completed) {
       return false;
+    }
     ENCODE_START(1, 1, bl);
     append_id(DELETE);
     encode(deletion_version, bl);
@@ -4125,8 +4131,9 @@ public:
     return true;
   }
   bool try_rmobject(version_t deletion_version) {
-    if (!can_local_rollback || rollback_info_completed)
+    if (!can_local_rollback || rollback_info_completed) {
       return false;
+    }
     ENCODE_START(1, 1, bl);
     append_id(TRY_DELETE);
     encode(deletion_version, bl);
@@ -4135,27 +4142,51 @@ public:
     return true;
   }
   void create() {
-    if (!can_local_rollback || rollback_info_completed)
+    if (!can_local_rollback || rollback_info_completed) {
       return;
+    }
     rollback_info_completed = true;
     ENCODE_START(1, 1, bl);
     append_id(CREATE);
     ENCODE_FINISH(bl);
   }
   void update_snaps(const std::set<snapid_t> &old_snaps) {
-    if (!can_local_rollback || rollback_info_completed)
+    if (!can_local_rollback || rollback_info_completed) {
       return;
+    }
     ENCODE_START(1, 1, bl);
     append_id(UPDATE_SNAPS);
     encode(old_snaps, bl);
     ENCODE_FINISH(bl);
   }
   void rollback_extents(
-    version_t gen, const std::vector<std::pair<uint64_t, uint64_t> > &extents) {
+   const version_t gen,
+   const std::vector<std::pair<uint64_t, uint64_t>> &extents,
+   const uint64_t object_size,
+   const std::vector<shard_id_set> &shards) {
     ceph_assert(can_local_rollback);
     ceph_assert(!rollback_info_completed);
-    if (max_required_version < 2)
+    if (max_required_version < 2) {
       max_required_version = 2;
+    }
+    ENCODE_START(3, 2, bl);
+    append_id(ROLLBACK_EXTENTS);
+    encode(gen, bl);
+    encode(extents, bl);
+    encode(object_size, bl);
+    encode(shards, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  // Version for legacy EC (can be deleted when EC*L.cc is deleted.
+  void rollback_extents(
+   const version_t gen,
+   const std::vector<std::pair<uint64_t, uint64_t>> &extents) {
+    ceph_assert(can_local_rollback);
+    ceph_assert(!rollback_info_completed);
+    if (max_required_version < 2) {
+      max_required_version = 2;
+    }
     ENCODE_START(2, 2, bl);
     append_id(ROLLBACK_EXTENTS);
     encode(gen, bl);
@@ -4185,8 +4216,9 @@ public:
    * message buffer
    */
   void trim_bl() const {
-    if (bl.length() > 0)
+    if (bl.length() > 0) {
       bl.rebuild();
+    }
   }
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
