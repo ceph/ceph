@@ -18,7 +18,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
-export const JOINAUTH_URL = '/cephfs/smb/ad';
+export const JOINAUTH_URL = '/cephfs/smb/active-directory';
 
 @Component({
   selector: 'cd-smb-join-auth-list',
