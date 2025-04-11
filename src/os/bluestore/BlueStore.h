@@ -3849,12 +3849,12 @@ private:
 		CollectionRef& c,
 		OnodeRef& o,
 		uint64_t offset);
-  int _remove(TransContext *txc,
-	      CollectionRef& c,
-	      OnodeRef& o);
-  int _do_remove(TransContext *txc,
-		 CollectionRef& c,
-		 OnodeRef& o);
+  int _remove(TransContext *txc, CollectionRef &c, OnodeRef &o,
+              int64_t omap_count_hint = -1,
+              int64_t db_delete_range_threshold_hint = -1);
+  int _do_remove(TransContext *txc, CollectionRef &c, OnodeRef &o,
+                 int64_t omap_count_hint = -1,
+                 int64_t db_delete_range_threshold_hint = -1);
   int _setattr(TransContext *txc,
 	       CollectionRef& c,
 	       OnodeRef& o,
@@ -3871,7 +3871,9 @@ private:
   int _rmattrs(TransContext *txc,
 	       CollectionRef& c,
 	       OnodeRef& o);
-  void _do_omap_clear(TransContext *txc, OnodeRef& o);
+  void _do_omap_clear(TransContext *txc, OnodeRef &o,
+                      int64_t omap_count_hint = -1,
+                      int64_t db_delete_range_threshold_hint = -1);
   int _omap_clear(TransContext *txc,
 		  CollectionRef& c,
 		  OnodeRef& o);

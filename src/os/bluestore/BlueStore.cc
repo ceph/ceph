@@ -15871,7 +15871,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_REMOVE:
       {
-	r = _remove(txc, c, o);
+        int64_t omap_count_hint = i.decode_int64_t();
+        int64_t db_delete_range_threshold_hint = i.decode_int64_t();
+  r = _remove(txc, c, o, omap_count_hint, db_delete_range_threshold_hint);
       }
       break;
 
@@ -17734,17 +17736,15 @@ int BlueStore::_truncate(TransContext *txc,
   return r;
 }
 
-int BlueStore::_do_remove(
-  TransContext *txc,
-  CollectionRef& c,
-  OnodeRef& o)
-{
+int BlueStore::_do_remove(TransContext *txc, CollectionRef &c, OnodeRef &o,
+                          int64_t omap_count_hint,
+                          int64_t db_delete_range_threshold_hint) {
   set<SharedBlob*> maybe_unshared_blobs;
   bool is_gen = !o->oid.is_no_gen();
   _do_truncate(txc, c, o, 0, is_gen ? &maybe_unshared_blobs : nullptr);
   if (o->onode.has_omap()) {
     o->flush();
-    _do_omap_clear(txc, o);
+    _do_omap_clear(txc, o, omap_count_hint, db_delete_range_threshold_hint);
   }
   o->exists = false;
   string key;
@@ -17847,15 +17847,14 @@ int BlueStore::_do_remove(
   return 0;
 }
 
-int BlueStore::_remove(TransContext *txc,
-		       CollectionRef& c,
-		       OnodeRef& o)
-{
+int BlueStore::_remove(TransContext *txc, CollectionRef &c, OnodeRef &o,
+                       int64_t omap_count_hint,
+                       int64_t db_delete_range_threshold_hint) {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " onode " << o.get()
 	   << " txc "<< txc << dendl;
- auto start_time = mono_clock::now();
-  int r = _do_remove(txc, c, o);
+  auto start_time = mono_clock::now();
+  int r = _do_remove(txc, c, o, omap_count_hint, db_delete_range_threshold_hint);
 
   log_latency_fn(
     __func__,
@@ -17971,13 +17970,15 @@ int BlueStore::_rmattrs(TransContext *txc,
   return r;
 }
 
-void BlueStore::_do_omap_clear(TransContext *txc, OnodeRef& o)
-{
+void BlueStore::_do_omap_clear(TransContext *txc, OnodeRef &o,
+                               int64_t omap_count_hint,
+                               int64_t db_delete_range_threshold_hint) {
   const string& omap_prefix = o->get_omap_prefix();
   string prefix, tail;
   o->get_omap_header(&prefix);
   o->get_omap_tail(&tail);
-  txc->t->rm_range_keys(omap_prefix, prefix, tail);
+  txc->t->rm_range_keys(omap_prefix, prefix, tail, omap_count_hint,
+                        db_delete_range_threshold_hint);
   txc->t->rmkey(omap_prefix, tail);
   o->onode.clear_omap_flag();
   dout(20) << __func__ << " remove range start: "

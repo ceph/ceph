@@ -331,6 +331,12 @@ public:
       const std::string &prefix,
       const std::string &start,
       const std::string &end) override;
+    void rm_range_keys(
+      const std::string &prefix,
+      const std::string &start,
+      const std::string &end,
+      int64_t key_count_hint,
+      int64_t db_delete_range_threshold_hint) override;
     void merge(
       const std::string& prefix,
       const std::string& k,

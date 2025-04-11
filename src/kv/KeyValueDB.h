@@ -131,6 +131,16 @@ public:
       const std::string &end        ///< [in] The start bound of remove keys
       ) = 0;
 
+    virtual void rm_range_keys(
+      const std::string &prefix,    ///< [in] Prefix by which to remove keys
+      const std::string &start,     ///< [in] The start bound of remove keys
+      const std::string &end,        ///< [in] The start bound of remove keys
+      int64_t key_count_hint,        ///< [in] number of keys hint
+      int64_t db_delete_range_threshold_hint)///< [in] delete iteration threshold hint(for rocksDB)
+      {
+        ceph_abort_msg("Not implemented");
+      }
+
     /// Merge value into key
     virtual void merge(
       const std::string &prefix,   ///< [in] Prefix/CF ==> MUST match some established merge operator
