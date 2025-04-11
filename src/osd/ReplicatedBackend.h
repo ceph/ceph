@@ -453,6 +453,7 @@ private:
 
 
   int be_deep_scrub(
+    [[maybe_unused]] const Scrub::ScrubIoCounterSet& io_counters,
     const hobject_t &poid,
     ScrubMap &map,
     ScrubMapBuilder &pos,

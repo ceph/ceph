@@ -299,13 +299,15 @@ public:
     return legacy.be_get_ondisk_size(logical_size);
   }
 
-  int be_deep_scrub(const hobject_t &oid, ScrubMap &map, ScrubMapBuilder &pos
-                    , ScrubMap::object &o)
+  int be_deep_scrub(
+      const Scrub::ScrubIoCounterSet &io_counters,
+      const hobject_t &oid, ScrubMap &map, ScrubMapBuilder &pos,
+      ScrubMap::object &o)
   {
     if (is_optimized()) {
-      return optimized.be_deep_scrub(oid, map, pos, o);
+      return optimized.be_deep_scrub(io_counters, oid, map, pos, o);
     }
-    return legacy.be_deep_scrub(oid, map, pos, o);
+    return legacy.be_deep_scrub(io_counters, oid, map, pos, o);
   }
 
   unsigned get_ec_data_chunk_count() const override

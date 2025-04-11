@@ -611,6 +611,7 @@ PGBackend *PGBackend::build_pg_backend(
 }
 
 int PGBackend::be_scan_list(
+  const Scrub::ScrubIoCounterSet& io_counters,
   ScrubMap &map,
   ScrubMapBuilder &pos)
 {
@@ -618,10 +619,12 @@ int PGBackend::be_scan_list(
   ceph_assert(!pos.done());
   ceph_assert(pos.pos < pos.ls.size());
   hobject_t& poid = pos.ls[pos.pos];
+  auto& perf_logger = *(get_parent()->get_logger());
 
   int r = 0;
   ScrubMap::object &o = map.objects[poid];
   if (!pos.metadata_done) {
+    perf_logger.inc(io_counters.stats_cnt);
     struct stat st;
     r = store->stat(
       ch,
@@ -631,6 +634,7 @@ int PGBackend::be_scan_list(
       true);
 
     if (r == 0) {
+      perf_logger.inc(io_counters.getattr_cnt);
       o.size = st.st_size;
       ceph_assert(!o.negative);
       r = store->getattrs(
@@ -665,7 +669,7 @@ int PGBackend::be_scan_list(
   }
 
   if (pos.deep) {
-    r = be_deep_scrub(poid, map, pos, o);
+    r = be_deep_scrub(io_counters, poid, map, pos, o);
     if (r == -EINPROGRESS) {
       return -EINPROGRESS;
     } else if (r != 0) {

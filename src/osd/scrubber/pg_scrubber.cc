@@ -1406,7 +1406,9 @@ int PgScrubber::build_scrub_map_chunk(ScrubMap& map,
   // scan objects
   while (!pos.done()) {
 
-    int r = m_pg->get_pgbackend()->be_scan_list(map, pos);
+    const auto& selected_io_counters = is_primary() ? Scrub::io_counters_primary :
+      Scrub::io_counters_replica;
+    int r = m_pg->get_pgbackend()->be_scan_list(selected_io_counters, map, pos);
     dout(30) << __func__ << " BE returned " << r << dendl;
     if (r == -EINPROGRESS) {
       dout(20) << __func__ << " in progress" << dendl;

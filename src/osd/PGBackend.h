@@ -26,6 +26,7 @@
 #include "common/WorkQueue.h"
 #include "include/Context.h"
 #include "os/ObjectStore.h"
+#include "osd/scrubber_common.h"
 #include "common/LogClient.h"
 #include <string>
 #include "PGTransaction.h"
@@ -591,7 +592,9 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      Context *on_complete, bool fast_read = false) = 0;
 
    virtual bool auto_repair_supported() const = 0;
+
    int be_scan_list(
+     const Scrub::ScrubIoCounterSet& io_counters,
      ScrubMap &map,
      ScrubMapBuilder &pos);
 
@@ -599,6 +602,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      uint64_t logical_size) const = 0;
 
    virtual int be_deep_scrub(
+     [[maybe_unused]] const Scrub::ScrubIoCounterSet& io_counters,
      const hobject_t &oid,
      ScrubMap &map,
      ScrubMapBuilder &pos,

@@ -15,6 +15,7 @@
 #include "include/types.h"
 #include "messages/MOSDScrubReserve.h"
 #include "os/ObjectStore.h"
+#include "osd/osd_perf_counters.h" // for osd_perf_counters_t
 
 #include "OpRequest.h"
 
@@ -288,6 +289,17 @@ struct PgScrubBeListener {
   virtual bool is_waiting_for_unreadable_object() const = 0;
 };
 
+
+struct ScrubIoCounterSet {
+  osd_perf_counters_t getattr_cnt; ///< get_attr calls count
+  osd_perf_counters_t stats_cnt;  ///< stats calls count
+  osd_perf_counters_t read_cnt;   ///< read calls count
+  osd_perf_counters_t read_bytes;  ///< total bytes read
+  osd_perf_counters_t omapgetheader_cnt; ///< omap get header calls count
+  osd_perf_counters_t omapgetheader_bytes;  ///< bytes read by omap get header
+  osd_perf_counters_t omapget_cnt;  ///< omap get calls count
+  osd_perf_counters_t omapget_bytes;  ///< total bytes read by omap get
+};
 }  // namespace Scrub
 
 

@@ -7,7 +7,7 @@
 #include "common/perf_counters.h"
 #include "common/perf_counters_key.h"
 
-enum {
+enum osd_perf_counters_t {
   l_osd_first = 10000,
   l_osd_op_wip,
   l_osd_op,
@@ -142,6 +142,25 @@ enum {
   l_osd_scrub_reservation_dur_hist,
 
   l_osd_watch_timeouts,
+
+  // scrub I/O performed as a primary
+  l_osd_scrub_prm_getattr_cnt, ///< get_attr calls count
+  l_osd_scrub_prm_stats_cnt, ///< stats calls count
+  l_osd_scrub_prm_read_cnt, ///< read calls count
+  l_osd_scrub_prm_read_bytes, ///< total bytes read
+  l_osd_scrub_prm_omapgetheader_cnt,  ///< omap get header calls count
+  l_osd_scrub_prm_omapgetheader_bytes,  ///< bytes read by omap get header
+  l_osd_scrub_prm_omapget_cnt, ///< omap get calls count
+  l_osd_scrub_prm_omapget_bytes, ///< total bytes read by omap get
+  // scrub I/O performed as a replica
+  l_osd_scrub_rep_getattr_cnt, ///< get_attr calls count
+  l_osd_scrub_rep_stats_cnt, ///< stats calls count
+  l_osd_scrub_rep_read_cnt, ///< read calls count
+  l_osd_scrub_rep_read_bytes, ///< total bytes read
+  l_osd_scrub_rep_omapgetheader_cnt,  ///< omap get header calls count
+  l_osd_scrub_rep_omapgetheader_bytes,  ///< bytes read by omap get header
+  l_osd_scrub_rep_omapget_cnt, ///< omap get calls count
+  l_osd_scrub_rep_omapget_bytes, ///< total bytes read by omap get
 
   l_osd_last,
 };

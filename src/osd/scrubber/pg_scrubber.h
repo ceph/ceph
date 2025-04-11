@@ -133,6 +133,29 @@ class MapsCollectionStatus {
 };
 
 
+// links to the two sets of I/O performance counters used by PgScrubber
+// (one to be used when primary, the other when replica)
+static inline constexpr ScrubIoCounterSet io_counters_primary{
+  .getattr_cnt = l_osd_scrub_prm_getattr_cnt,
+  .stats_cnt = l_osd_scrub_prm_stats_cnt,
+  .read_cnt = l_osd_scrub_prm_read_cnt,
+  .read_bytes = l_osd_scrub_prm_read_bytes,
+  .omapgetheader_cnt = l_osd_scrub_prm_omapgetheader_cnt,
+  .omapgetheader_bytes = l_osd_scrub_prm_omapgetheader_bytes,
+  .omapget_cnt = l_osd_scrub_prm_omapget_cnt,
+  .omapget_bytes = l_osd_scrub_prm_omapget_bytes
+};
+
+static inline constexpr ScrubIoCounterSet io_counters_replica{
+  .getattr_cnt = l_osd_scrub_rep_getattr_cnt,
+  .stats_cnt = l_osd_scrub_rep_stats_cnt,
+  .read_cnt = l_osd_scrub_rep_read_cnt,
+  .read_bytes = l_osd_scrub_rep_read_bytes,
+  .omapgetheader_cnt = l_osd_scrub_rep_omapgetheader_cnt,
+  .omapgetheader_bytes = l_osd_scrub_rep_omapgetheader_bytes,
+  .omapget_cnt = l_osd_scrub_rep_omapget_cnt,
+  .omapget_bytes = l_osd_scrub_rep_omapget_bytes
+};
 }  // namespace Scrub
 
 

@@ -356,7 +356,25 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter(
   l_osd_watch_timeouts, "watch_timeouts",
   "Number of watches that timed out or were blocklisted",
-  NULL, PerfCountersBuilder::PRIO_USEFUL);
+  nullptr, PerfCountersBuilder::PRIO_USEFUL);
+
+  osd_plb.add_u64_counter(l_osd_scrub_prm_getattr_cnt, "scrub_primary_getattr_cnt", "scrub primary getattr calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_prm_stats_cnt, "scrub_primary_stats_cnt", "scrub primary stats calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_prm_read_cnt, "scrub_primary_read_cnt", "scrub primary read calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_prm_read_bytes, "scrub_primary_read_bytes", "scrub primary read bytes read");
+  osd_plb.add_u64_counter(l_osd_scrub_prm_omapgetheader_cnt, "scrub_primary_omapgetheader_cnt", "scrub primary omap get header calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_prm_omapgetheader_bytes, "scrub_primary_omapgetheader_bytes", "scrub primary omap get header bytes read");
+  osd_plb.add_u64_counter(l_osd_scrub_prm_omapget_cnt, "scrub_primary_omapget_cnt", "scrub primary omap get calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_prm_omapget_bytes, "scrub_primary_omapget_bytes", "scrub primary omap get bytes read");
+// scrub I/O performed as a replica
+  osd_plb.add_u64_counter(l_osd_scrub_rep_getattr_cnt, "scrub_replica_getattr_cnt", "scrub replica getattr calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_rep_stats_cnt, "scrub_replica_stats_cnt", "scrub replica stats calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_rep_read_cnt, "scrub_replica_read_cnt", "scrub replica read calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_rep_read_bytes, "scrub_replica_read_bytes", "scrub replica read bytes read");
+  osd_plb.add_u64_counter(l_osd_scrub_rep_omapgetheader_cnt, "scrub_replica_omapgetheader_cnt", "scrub replica omap get header calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_rep_omapgetheader_bytes, "scrub_replica_omapgetheader_bytes", "scrub replica omap get header bytes read");
+  osd_plb.add_u64_counter(l_osd_scrub_rep_omapget_cnt, "scrub_replica_omapget_cnt", "scrub replica omap get calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_rep_omapget_bytes, "scrub_replica_omapget_bytes", "scrub replica omap get bytes read");
 
   return osd_plb.create_perf_counters();
 }
