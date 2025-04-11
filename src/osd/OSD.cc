@@ -10074,6 +10074,9 @@ std::vector<std::string> OSD::get_tracked_keys() const noexcept
     "osd_object_clean_region_max_num_intervals"s,
     "osd_scrub_min_interval"s,
     "osd_scrub_max_interval"s,
+    "osd_deep_scrub_interval"s,
+    "osd_deep_scrub_interval_cv"s,
+    "osd_scrub_interval_randomize_ratio"s,
     "osd_op_thread_timeout"s,
     "osd_op_thread_suicide_timeout"s,
     "osd_max_scrubs"s
@@ -10201,13 +10204,16 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
 
   if (changed.count("osd_scrub_min_interval") ||
       changed.count("osd_scrub_max_interval") ||
-      changed.count("osd_deep_scrub_interval")) {
+      changed.count("osd_deep_scrub_interval") ||
+      changed.count("osd_deep_scrub_interval_cv") ||
+      changed.count("osd_scrub_interval_randomize_ratio")) {
     service.get_scrub_services().on_config_change();
     dout(0) << fmt::format(
-		   "{}: scrub interval change (min:{} deep:{} max:{})",
+		   "{}: scrub interval change (min:{} deep:{} max:{} ratio:{})",
 		   __func__, cct->_conf->osd_scrub_min_interval,
 		   cct->_conf->osd_deep_scrub_interval,
-		   cct->_conf->osd_scrub_max_interval)
+		   cct->_conf->osd_scrub_max_interval,
+		   cct->_conf->osd_scrub_interval_randomize_ratio)
 	    << dendl;
   }
 
