@@ -1887,13 +1887,6 @@ exit 0
 %post common
 %tmpfiles_create %{_tmpfilesdir}/ceph-common.conf
 
-%postun common
-# Package removal cleanup
-if [ "$1" -eq "0" ] ; then
-    rm -rf %{_localstatedir}/log/ceph
-    rm -rf %{_sysconfdir}/ceph
-fi
-
 %files mds
 %{_bindir}/ceph-mds
 %{_mandir}/man8/ceph-mds.8*
