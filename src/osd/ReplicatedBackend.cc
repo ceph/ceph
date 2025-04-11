@@ -361,7 +361,7 @@ void generate_transaction(
       }
 
       if (op.delete_first) {
-	t->remove(coll, goid);
+        t->remove(coll, goid, op.omap_count_hint, op.db_delete_range_threshold_hint);
       }
 
       match(
