@@ -275,7 +275,7 @@ class PgScrubber : public ScrubPgIF,
 
   // managing scrub op registration
 
-  void update_scrub_job(Scrub::delay_ready_t delay_ready) final;
+  void update_scrub_job() final;
 
   void rm_from_osd_scrubbing() final;
 
@@ -380,6 +380,19 @@ class PgScrubber : public ScrubPgIF,
 		 std::string param,
 		 Formatter* f,
 		 std::stringstream& ss) override;
+
+
+  /**
+   * forces a manual update of configuration parameters cached
+   * using md_config_cacher_t objects.
+   *
+   * The refresh is required whenever the conf parameter is used
+   * by a Scrubber method that was called from the OSD Queue config
+   * change handler. As the order of execution of the handlers is
+   * undefined, we are not guaranteed that the separate config-cachers'
+   * handlers were called before the Osd Queue handler.
+   */
+  void refresh_config_params() final;
 
   int m_debug_blockrange{0};
 

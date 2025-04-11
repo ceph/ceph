@@ -61,6 +61,16 @@ public:
   ValueT operator*() const {
     return value_cache.load();
   }
+
+  /*
+   * Allow caller to refresh the cached value on demand,
+   * avoiding a possible race condition where the cached value may be stale
+   * when accessed from a different change handler (note that
+   * the order of execution of the handlers is undefined).
+   */
+  void refresh() {
+    value_cache.store(conf.get_val<ValueT>(option_name));
+  }
 };
 
 #endif // CEPH_CONFIG_CACHER_H

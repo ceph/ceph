@@ -1298,16 +1298,15 @@ double PG::next_deepscrub_interval() const
   return info.history.last_deep_scrub_stamp + deep_scrub_interval;
 }
 
-void PG::on_scrub_schedule_input_change(Scrub::delay_ready_t delay_ready)
+void PG::on_scrub_schedule_input_change(Scrub::force_refresh_t refresh_config)
 {
   if (is_active() && is_primary() && !is_scrub_queued_or_active()) {
-    dout(10) << fmt::format(
-		    "{}: active/primary. delay_ready={:c}", __func__,
-		    (delay_ready == Scrub::delay_ready_t::delay_ready) ? 't'
-								       : 'f')
-	     << dendl;
+    dout(10) << fmt::format("{}: active/primary", __func__) << dendl;
     ceph_assert(m_scrubber);
-    m_scrubber->update_scrub_job(delay_ready);
+    if (refresh_config == Scrub::force_refresh_t::force_refresh) {
+      m_scrubber->refresh_config_params();
+    }
+    m_scrubber->update_scrub_job();
   } else {
     dout(10) << fmt::format(
 		    "{}: inactive, non-primary - or already scrubbing",
@@ -2210,7 +2209,7 @@ void PG::handle_activate_map(PeeringCtx &rctx, epoch_t range_starts_at)
   // on_scrub_schedule_input_change() as pool.info contains scrub scheduling
   // parameters.
   if (pool.info.last_change >= range_starts_at) {
-    on_scrub_schedule_input_change(Scrub::delay_ready_t::delay_ready);
+    on_scrub_schedule_input_change(Scrub::force_refresh_t::no_refresh);
   }
 }
 

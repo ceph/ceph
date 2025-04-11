@@ -260,7 +260,7 @@ void OsdScrub::on_config_change()
 		    (locked_pg->pg())->get_pgid())
 	     << dendl;
     locked_pg->pg()->on_scrub_schedule_input_change(
-	Scrub::delay_ready_t::no_delay);
+        Scrub::force_refresh_t::force_refresh);
   }
 }
 
