@@ -590,6 +590,7 @@ private:
 
   mempool::osdmap::vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   mempool::osdmap::vector<osd_info_t> osd_info;
+  // Optimized EC pools re-order pg_temp, see pgtemp_primaryfirst
   std::shared_ptr<PGTempMap> pg_temp;  // temp pg mapping (e.g. while we rebuild)
   std::shared_ptr< mempool::osdmap::map<pg_t,int32_t > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
   std::shared_ptr< mempool::osdmap::vector<__u32> > osd_primary_affinity; ///< 16.16 fixed point, 0x10000 = baseline
@@ -1356,6 +1357,12 @@ public:
     }
     return false;
   }
+
+  const std::vector<int> pgtemp_primaryfirst(const pg_pool_t& pool,
+			   const std::vector<int>& pg_temp) const;
+  const std::vector<int> pgtemp_undo_primaryfirst(const pg_pool_t& pool,
+			   const pg_t pg,
+			   const std::vector<int>& acting) const;
 
   bool in_removed_snaps_queue(int64_t pool, snapid_t snap) const {
     auto p = removed_snaps_queue.find(pool);

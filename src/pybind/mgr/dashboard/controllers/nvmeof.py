@@ -133,7 +133,7 @@ else:
     @APIDoc("NVMe-oF Subsystem Management API", "NVMe-oF Subsystem")
     class NVMeoFSubsystem(RESTController):
         @EndpointDoc("List all NVMeoF subsystems")
-        @pick(field="subsystems", first=True)
+        @pick(field="subsystems")
         @NvmeofCLICommand("nvmeof subsystem list")
         @convert_to_model(model.SubsystemList)
         @handle_nvmeof_error
