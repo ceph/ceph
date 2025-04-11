@@ -711,6 +711,12 @@ public:
       decode(s, data_bl_p);
       return s;
     }
+    int64_t decode_int64_t() {
+      using ceph::decode;
+      int64_t num = -1;
+      decode(num, data_bl_p);
+      return num;
+    }
     void decode_bl(ceph::buffer::list& bl) {
 	using ceph::decode;
       decode(bl, data_bl_p);
@@ -890,11 +896,16 @@ public:
     data.ops = data.ops + 1;
   }
   /// Remove an object. All four parts of the object are removed.
-  void remove(const coll_t& cid, const ghobject_t& oid) {
-    Op* _op = _get_next_op();
+  void remove(const coll_t &cid, const ghobject_t &oid,
+              int64_t omap_count_hint = -1,
+              int64_t db_delete_range_threshold_hint = -1) {
+    using ceph::encode;
+    Op *_op = _get_next_op();
     _op->op = OP_REMOVE;
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
+    encode(omap_count_hint, data_bl);
+    encode(db_delete_range_threshold_hint, data_bl);
     data.ops = data.ops + 1;
   }
   /// Set an xattr of an object
