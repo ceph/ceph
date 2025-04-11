@@ -321,6 +321,78 @@ void PeeringState::query_unfound(Formatter *f, string state)
   return;
 }
 
+void PeeringState::update_peer_info(const pg_shard_t &from,
+				    const pg_info_t &oinfo)
+{
+  if (!oinfo.partial_writes_last_complete.empty()) {
+    bool updated = false;
+    // oinfo includes partial_writes_last_complete data.
+    // Merge this with our copy keeping the most up to date versions
+    for (const auto & [shard, versionrange] :
+	   oinfo.partial_writes_last_complete) {
+      auto & [ofromversion, otoversion] = versionrange;
+      if (info.partial_writes_last_complete.contains(shard)) {
+	auto & [fromversion, toversion] =
+	  info.partial_writes_last_complete[shard];
+	// Prefer pwlc with a newer toversion, if toversion matches prefer an
+	// older fromversion.
+	if ((otoversion > toversion) ||
+	    ((otoversion == toversion) && (ofromversion < fromversion))) {
+	  if (!updated) {
+	    updated = true;
+	    psdout(10) << "osd." << from
+		       << " has pwlc=" << oinfo.partial_writes_last_complete
+		       << dendl;
+	  }
+          psdout(10) << "osd." << from << " updating shard " << shard << dendl;
+	  info.partial_writes_last_complete[shard] = versionrange;
+	}
+      } else {
+	if (!updated) {
+	  updated = true;
+	  psdout(10) << "osd." << from
+		     << " has pwlc=" << oinfo.partial_writes_last_complete
+		     << dendl;
+	}
+        psdout(10) << "osd." << from << " setting shard " << shard << dendl;
+	info.partial_writes_last_complete[shard] = versionrange;
+      }
+    }
+    if (updated) {
+      psdout(10) << "pwlc=" << info.partial_writes_last_complete << dendl;
+    }
+  }
+  // 3 cases:
+  // We are the primary - from is the shard that sent the oinfo
+  // We are a replica - from is the primary, it will not have pwlc infomation
+  // Merge - from is pg_whoami, oinfo is a source pg that is being merged
+  if ((from != pg_whoami) &&
+      info.partial_writes_last_complete.contains(from.shard)) {
+    // Check if last_complete and last_update can be advanced based on
+    // knowledge of partial_writes
+    const auto & [fromversion, toversion] =
+      info.partial_writes_last_complete[from.shard];
+    if (toversion > peer_info[from].last_complete) {
+      if (fromversion <= peer_info[from].last_complete) {
+	psdout(10) << "osd." << from << " has last_complete "
+		   << peer_info[from].last_complete
+		   << " but pwlc says its at " << toversion
+		   << dendl;
+	peer_info[from].last_complete = toversion;
+	if (toversion > peer_info[from].last_update) {
+	  peer_info[from].last_update = toversion;
+	}
+      } else {
+	psdout(10) << "osd." << from << " has last_complete "
+		   << peer_info[from].last_complete
+		   << " cannot apply pwlc from " << fromversion
+		   << " to " << toversion
+		   << dendl;
+      }
+    }
+  }
+}
+
 bool PeeringState::proc_replica_notify(const pg_shard_t &from, const pg_notify_t &notify)
 {
   const pg_info_t &oinfo = notify.info;
@@ -342,6 +414,7 @@ bool PeeringState::proc_replica_notify(const pg_shard_t &from, const pg_notify_t
   psdout(10) << " got osd." << from << " " << oinfo << dendl;
   ceph_assert(is_primary());
   peer_info[from] = oinfo;
+  update_peer_info(from, oinfo);
   might_have_unfound.insert(from);
 
   update_history(oinfo.history);
@@ -705,6 +778,7 @@ void PeeringState::start_peering_interval(
 
   peer_purged.clear();
   acting_recovery_backfill.clear();
+  acting_recovery_backfill_shard_id_set.clear();
 
   // reset primary/replica state?
   if (was_old_primary || is_primary()) {
@@ -896,6 +970,7 @@ void PeeringState::clear_recovery_state()
 {
   async_recovery_targets.clear();
   backfill_targets.clear();
+  backfill_target_shard_id_set.clear();
 }
 
 void PeeringState::clear_primary_state()
@@ -2483,6 +2558,12 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
     return true;
   want_acting.clear();
   acting_recovery_backfill = want_acting_backfill;
+  acting_recovery_backfill_shard_id_set.clear();
+  for (auto &ps : acting_recovery_backfill) {
+    if (ps.shard != shard_id_t::NO_SHARD) {
+      acting_recovery_backfill_shard_id_set.insert(ps.shard);
+    }
+  }
   psdout(10) << "acting_recovery_backfill is "
 	     << acting_recovery_backfill << dendl;
   ceph_assert(
@@ -2491,6 +2572,12 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
   if (backfill_targets.empty()) {
     // Caller is GetInfo
     backfill_targets = want_backfill;
+    backfill_target_shard_id_set.clear();
+    for (auto &&i : want_backfill) {
+      if (i.shard != shard_id_t::NO_SHARD) {
+        backfill_target_shard_id_set.insert(i.shard);
+      }
+    }
   }
   // Adding !needs_recovery() to let the async_recovery_targets reset after recovery is complete
   ceph_assert(
@@ -2567,6 +2654,14 @@ bool PeeringState::search_for_missing(
       oinfo.last_update != eversion_t()) {
     pg_info_t tinfo(oinfo);
     tinfo.pgid.shard = pg_whoami.shard;
+    // add partial write from our info
+    tinfo.partial_writes_last_complete = info.partial_writes_last_complete;
+    if (!tinfo.partial_writes_last_complete.empty()) {
+      psdout(20) << "sending info to " << from
+		 << " pwcl=" << tinfo.partial_writes_last_complete
+		 << " info=" << tinfo
+		 << dendl;
+    }
     ctx.send_info(
       from.osd,
       spg_t(info.pgid.pgid, from.shard),
@@ -2742,7 +2837,7 @@ void PeeringState::activate(
   } else {
     psdout(10) << "activate - not complete, " << missing << dendl;
     info.stats.stats.sum.num_objects_missing = missing.num_missing();
-    pg_log.activate_not_complete(info);
+    pg_log.activate_not_complete(info, pool.info.allows_ecoptimizations());
   }
 
   log_weirdness();
@@ -2820,6 +2915,12 @@ void PeeringState::activate(
 	if (!pi.is_empty()) {
 	  psdout(10) << "activate peer osd." << peer
 		     << " is up to date, queueing in pending_activators" << dendl;
+          if (!info.partial_writes_last_complete.empty()) {
+	    psdout(20) << "sending info to " << peer
+		       << " pwcl=" << info.partial_writes_last_complete
+		       << " info=" << info
+		       << dendl;
+	  }
 	  ctx.send_info(
 	    peer.osd,
 	    spg_t(info.pgid.pgid, peer.shard),
@@ -3012,7 +3113,7 @@ void PeeringState::activate(
   }
   if (acting_set_writeable()) {
     PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
-    pg_log.roll_forward(rollbacker.get());
+    pg_log.roll_forward(&info, rollbacker.get());
   }
 }
 
@@ -3098,6 +3199,7 @@ void PeeringState::proc_master_log(
   // non-divergent).
   merge_log(t, oinfo, std::move(olog), from);
   peer_info[from] = oinfo;
+  update_peer_info(from, oinfo);
   psdout(10) << " peer osd." << from << " now " << oinfo
 	     << " " << omissing << dendl;
   might_have_unfound.insert(from);
@@ -3130,6 +3232,7 @@ void PeeringState::proc_replica_log(
   pg_log.proc_replica_log(oinfo, olog, omissing, from);
 
   peer_info[from] = oinfo;
+  update_peer_info(from, oinfo);
   psdout(10) << " peer osd." << from << " now "
 	     << oinfo << " " << omissing << dendl;
   might_have_unfound.insert(from);
@@ -3286,6 +3389,8 @@ void PeeringState::try_mark_clean()
 void PeeringState::split_into(
   pg_t child_pgid, PeeringState *child, unsigned split_bits)
 {
+  bool ec_optimizations_enabled = pool.info.allows_ecoptimizations();
+
   child->update_osdmap_ref(get_osdmap());
   child->pool = pool;
 
@@ -3298,12 +3403,14 @@ void PeeringState::split_into(
 
   child->info.last_user_version = info.last_user_version;
 
+  child->info.partial_writes_last_complete = info.partial_writes_last_complete;
+
   info.log_tail = pg_log.get_tail();
   child->info.log_tail = child->pg_log.get_tail();
 
   // reset last_complete, we might have modified pg_log & missing above
-  pg_log.reset_complete_to(&info);
-  child->pg_log.reset_complete_to(&child->info);
+  pg_log.reset_complete_to(&info, ec_optimizations_enabled);
+  child->pg_log.reset_complete_to(&child->info, ec_optimizations_enabled);
 
   // Info
   child->info.history = info.history;
@@ -3398,7 +3505,7 @@ void PeeringState::merge_from(
   }
 
   PGLog::LogEntryHandlerRef handler{pl->get_log_handler(rctx.transaction)};
-  pg_log.roll_forward(handler.get());
+  pg_log.roll_forward(&info, handler.get());
 
   info.last_complete = info.last_update;  // to fake out trim()
   pg_log.reset_recovery_pointers();
@@ -3437,7 +3544,7 @@ void PeeringState::merge_from(
     // prepare log
     PGLog::LogEntryHandlerRef handler{
       source->pl->get_log_handler(rctx.transaction)};
-    source->pg_log.roll_forward(handler.get());
+    source->pg_log.roll_forward(&info, handler.get());
     source->info.last_complete = source->info.last_update;  // to fake out trim()
     source->pg_log.reset_recovery_pointers();
     source->pg_log.trim(source->info.last_update, source->info);
@@ -3455,6 +3562,15 @@ void PeeringState::merge_from(
     if (past_intervals.empty() && !source->past_intervals.empty()) {
       psdout(10) << "taking source's past_intervals" << dendl;
       past_intervals = source->past_intervals;
+    }
+
+    // merge pwlc
+    if (!info.partial_writes_last_complete.empty()) {
+      psdout(10) << "before pwlc=" << info.partial_writes_last_complete << dendl;
+    }
+    update_peer_info(pg_whoami, source->info);
+    if (!info.partial_writes_last_complete.empty()) {
+      psdout(10) << "after pwlc=" << info.partial_writes_last_complete << dendl;
     }
   }
 
@@ -4113,13 +4229,14 @@ bool PeeringState::append_log_entries_update_missing(
     pg_log.append_new_log_entries(
       info.last_backfill,
       entries,
-      rollbacker.get());
+      rollbacker.get(),
+      pool.info.allows_ecoptimizations());
 
   if (pg_committed_to && entries.rbegin()->soid > info.last_backfill) {
-    pg_log.roll_forward(rollbacker.get());
+    pg_log.roll_forward(&info, rollbacker.get());
   }
   if (pg_committed_to && *pg_committed_to > pg_log.get_can_rollback_to()) {
-    pg_log.roll_forward_to(*pg_committed_to, rollbacker.get());
+    pg_log.roll_forward_to(*pg_committed_to, &info, rollbacker.get());
     last_rollback_info_trimmed_to_applied = *pg_committed_to;
   }
 
@@ -4247,7 +4364,7 @@ void PeeringState::append_log(
       * from the backend and we do not end up in a situation, where the
       * object is deleted before we can _merge_object_divergent_entries().
       */
-    pg_log.skip_rollforward();
+    pg_log.skip_rollforward(&info, handler.get());
   }
 
   for (auto p = logv.begin(); p != logv.end(); ++p) {
@@ -4258,12 +4375,13 @@ void PeeringState::append_log(
      * above */
     if (transaction_applied &&
 	p->soid > info.last_backfill) {
-      pg_log.roll_forward(handler.get());
+      pg_log.roll_forward(&info, handler.get());
     }
   }
   if (transaction_applied && roll_forward_to > pg_log.get_can_rollback_to()) {
     pg_log.roll_forward_to(
       roll_forward_to,
+      &info,
       handler.get());
     last_rollback_info_trimmed_to_applied = roll_forward_to;
   }
@@ -4299,7 +4417,7 @@ void PeeringState::recover_got(
      * to roll it back anyway (and we'll be rolled forward shortly
      * anyway) */
     PGLog::LogEntryHandlerRef handler{pl->get_log_handler(t)};
-    pg_log.roll_forward_to(v, handler.get());
+    pg_log.roll_forward_to(v, &info, handler.get());
   }
 
   psdout(10) << "got missing " << oid << " v " << v << dendl;
@@ -4387,7 +4505,7 @@ void PeeringState::force_object_missing(
       peer_missing[peer].add(soid, version, eversion_t(), false);
     } else {
       pg_log.missing_add(soid, version, eversion_t());
-      pg_log.reset_complete_to(&info);
+      pg_log.reset_complete_to(&info, pool.info.allows_ecoptimizations());
       pg_log.set_last_requested(0);
     }
   }
@@ -6488,6 +6606,10 @@ boost::statechart::result PeeringState::ReplicaActive::react(
   pg_info_t i = ps->info;
   i.history.last_epoch_started = evt.activation_epoch;
   i.history.last_interval_started = i.history.same_interval_since;
+  if (!i.partial_writes_last_complete.empty()) {
+    psdout(20) << "sending info to " << ps->get_primary() << " pwcl="
+	      << i.partial_writes_last_complete << " info=" << i << dendl;
+  }
   rctx.send_info(
     ps->get_primary().osd,
     spg_t(ps->info.pgid.pgid, ps->get_primary().shard),
@@ -6537,6 +6659,7 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MLogRec& loge
   psdout(10) << "received log from " << logevt.from << dendl;
   ObjectStore::Transaction &t = context<PeeringMachine>().get_cur_transaction();
   ps->merge_log(t, logevt.msg->info, std::move(logevt.msg->log), logevt.from);
+  ps->update_peer_info(logevt.from, logevt.msg->info);
   ceph_assert(ps->pg_log.get_head() == ps->info.last_update);
   if (logevt.msg->lease) {
     ps->proc_lease(*logevt.msg->lease);
@@ -6645,11 +6768,12 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
     ps->dirty_big_info = true;  // maybe.
 
     PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
-    ps->pg_log.reset_backfill_claim_log(msg->log, rollbacker.get());
+    ps->pg_log.reset_backfill_claim_log(msg->log, &ps->info, rollbacker.get());
 
     ps->pg_log.reset_backfill();
   } else {
     ps->merge_log(t, msg->info, std::move(msg->log), logevt.from);
+    ps->update_peer_info(logevt.from, msg->info);
   }
   if (logevt.msg->lease) {
     ps->proc_lease(*logevt.msg->lease);
@@ -6680,7 +6804,8 @@ boost::statechart::result PeeringState::Stray::react(const MInfoRec& infoevt)
 
   ceph_assert(infoevt.info.last_update == ps->info.last_update);
   ceph_assert(ps->pg_log.get_head() == ps->info.last_update);
-
+  // Update pwlc
+  ps->update_peer_info(infoevt.from, infoevt.info);
   post_event(Activate(infoevt.info.last_epoch_started));
   return transit<ReplicaActive>();
 }
@@ -6794,7 +6919,7 @@ PeeringState::Deleting::Deleting(my_context ctx)
 
   // clear log
   PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
-  ps->pg_log.roll_forward(rollbacker.get());
+  ps->pg_log.roll_forward(&ps->info, rollbacker.get());
 
   // adjust info to backfill
   ps->info.set_last_backfill(hobject_t());
@@ -7517,6 +7642,7 @@ boost::statechart::result PeeringState::WaitUpThru::react(const MLogRec& logevt)
   psdout(10) << "Noting missing from osd." << logevt.from << dendl;
   ps->peer_missing[logevt.from].claim(std::move(logevt.msg->missing));
   ps->peer_info[logevt.from] = logevt.msg->info;
+  ps->update_peer_info(logevt.from, logevt.msg->info);
   return discard_event();
 }
 
