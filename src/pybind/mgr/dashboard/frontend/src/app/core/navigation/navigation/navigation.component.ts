@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { Router } from '@angular/router';
 
 import * as _ from 'lodash';
@@ -38,6 +38,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
     autoHide: false
   };
   displayedSubMenu = {};
+  @ViewChild('sidenavContainer') sidenavContainer: ElementRef;
   private subs = new Subscription();
 
   clustersMap: Map<string, any> = new Map<string, any>();
@@ -137,7 +138,21 @@ export class NavigationComponent implements OnInit, OnDestroy {
 
     return undefined;
   }
+  
+  onMenuClick(event: MouseEvent) {
+    const clickedElement = event.target as HTMLElement;
+    const menuElement = clickedElement.closest('cds-sidenav-menu');
 
+    if (menuElement) {
+      const clientViewBounding = menuElement.getBoundingClientRect();
+      const isOutOfView = clientViewBounding.top < 0 || clientViewBounding.bottom > window.innerHeight;
+
+      if (isOutOfView) {
+        menuElement.scrollIntoView({ behavior: 'smooth', block:'nearest'});
+      }
+    }
+  }
+  
   toggleSubMenu(menu: string) {
     this.displayedSubMenu[menu] = !this.displayedSubMenu[menu];
   }
