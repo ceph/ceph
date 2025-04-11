@@ -107,7 +107,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
           this.storageClassForm.get('endpoint').setValue(response.endpoint);
           this.storageClassForm.get('storage_class').setValue(this.storageClassInfo.storage_class);
           this.storageClassForm.get('access_key').setValue(response.access_key);
-          this.storageClassForm.get('secret_key').setValue(response.access_key);
+          this.storageClassForm.get('secret_key').setValue(response.secret);
           this.storageClassForm.get('target_path').setValue(response.target_path);
           this.storageClassForm
             .get('retain_head_object')
