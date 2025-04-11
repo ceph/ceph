@@ -1215,6 +1215,13 @@ This example applies to two hosts: ``ceph01`` and ``ceph04``.
 post pertinent to its development can be seen here:*
 `Eugen Block's "Cephadm: Activate existing OSDs" blog post <https://heiterbiswolkig.blogs.nde.ag/2025/02/06/cephadm-activate-existing-osds/>`_.
 
+.. note::
+    It is usually not safe to run ``ceph orch restart osd.myosdservice`` on a
+    running cluster, as attention is not paid to CRUSH failure domains, and
+    parallel OSD restarts may lead to temporary data unavailability or in rare
+    cases even data loss.
+
+
 Further Reading
 ===============
 
