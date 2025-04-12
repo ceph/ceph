@@ -1,5 +1,5 @@
 from errno import *
-from os.path import basename
+from os.path import basename, dirname
 from logging import getLogger
 
 from cephfs import Error, InvalidValue
@@ -10,8 +10,8 @@ from .metadata_manager import MetadataManager
 from .auth_metadata import AuthMetadataManager
 from ..trash import create_trashcan, open_trashcan
 from ...utils import gen_uuid, verify_uuid, safe_join, to_utf8, to_str
-from ...fs_util import listdir, path_exists
-from ...exception import VolumeException
+from ...fs_util import listdir, path_exists, listsnaps
+from ...exception import VolumeException, MetadataMgrException
 
 
 log = getLogger(__name__)
@@ -70,6 +70,35 @@ class PreV3Helper:
         # terms
         self.trash_subvol_dir()
 
+    def snapshot_base_path(self):
+        return self.get_incar_snap_base_path()
+
+    def snapshot_path(self, snap_name):
+        if snap_path := self.get_snap_path(snap_name):
+            return snap_path
+
+        # TODO
+        # v2 raises exception if the snapshot path do not exist so do the same
+        # to prevent any bugs due to difference in behaviour.
+        #
+        # not raising exception indeed leads to a bug: the volumes plugin fails
+        # when exception is not raised by this method when it is calld by
+        # do_clone() method of async_cloner.py. this is made to happen by a test
+        # by deleting snapshot after running the snapshot clone cmd but before
+        # the clone operation actually begins. this is done by a adding a delay
+        # using mgr/volumes/snapshot_clone_delay config option.
+        raise VolumeException(ENOENT, f'snap "{snap_name}" does not exist')
+
+    def snapshot_data_path(self, snap_name):
+        return self.snapshot_path(snap_name)
+
+    def list_snapshots(self):
+        '''
+        :return: list of snap names
+        :rtype: list of str
+        '''
+        return self.get_snap_names()
+
 
 class SubvolHelper:
     '''
@@ -81,6 +110,9 @@ class SubvolHelper:
 
     def path_exists(self, path):
         return path_exists(self.fs, path)
+
+    def list_snaps(self, path):
+        return listsnaps(self.fs, self.spec, path)
 
 
 class SubvolumeV3(SubvolumeV2):
@@ -275,4 +307,141 @@ class SubvolumeV3(SubvolumeV2):
         create_trashcan(self.fs, self.spec)
 
         with open_trashcan(self.fs, self.spec) as trashcan:
-            trashcan.dump(self.subvol_path)
+            if len(self.get_v3_incars()) > 1:
+                trashcan.dump(self.get_incar_path())
+            else:
+                trashcan.dump(self.subvol_path)
+
+    @property
+    def has_pending_purges(self):
+        # since there is not in-subvol ".trash" dir in subvol v3, this method
+        # should always return False
+        return False
+
+
+    # ----- helper methods for snap code -----
+
+
+    def get_snap_names(self, uuid):
+        names = []
+        if uuid:
+            path = self.get_incar_snap_base_path(uuid)
+            return self.list_snaps(path)
+        else:
+            snap_names = []
+            for uuid in self.get_incars():
+                path = self.get_incar_snap_base_path(uuid)
+                snap_names += self.list_snaps(path)
+            return snap_names
+
+        return []
+
+    # Listing all snaps can be expensive due to multiple snaps in multiple
+    # incarnations. So, don't list all snaps unnecessarily, use this instead.
+    def has_snap(self, snap_name=None, uuid=None):
+        if snap_name and uuid:
+            path = self.get_incar_snap_path(uuid, snap_name)
+            return self.path_exists(path)
+        elif snap_name and not uuid:
+            uuid = self.get_incar_for_snap_name(snap_name)
+            path = self.get_incar_snap_path(uuid, snap_name)
+            return self.path_exists(path)
+        elif not snap_name and uuid:
+            path = self.get_incar_snap_base_path(uuid)
+            return not self.dir_is_empty(path)
+        elif not snap_name and not uuid:
+            for uuid in self.get_v3_incars():
+                path = self.get_incar_snap_base_path(uuid)
+                return not self.dir_is_empty(path)
+        else:
+            # shouldn't have reached here
+            assert False
+
+        return False
+
+    def get_incar_for_snap_name(self, snap_name):
+        for uuid in self.get_v3_incars():
+            path = self.get_incar_snap_base_path(uuid)
+            if snap_name in self.list_dirs(path):
+                return uuid
+
+        return None
+
+
+    # ----- methods for snaps -----
+
+
+    def get_snap_path(self, snap_name):
+        '''
+        Gets snap path regardless of where it's present: v3 or v2.
+        '''
+        snap_name = to_utf8(snap_name)
+
+        snap_path = None
+        if uuid := self.get_incar_for_snap_name(snap_name):
+            snap_path = self.get_incar_snap_path(uuid, snap_name)
+
+        return snap_path if self.path_exists(snap_path) else None
+
+    def create_snapshot(self, snap_name):
+        snap_name = to_utf8(snap_name)
+
+        if self.has_snap(snap_name):
+            raise VolumeException(EEXIST, f'snap "{snap_name}" already exists')
+
+        SubvolumeV2.create_snapshot(self, snap_name)
+
+    # TOOD,v3: remove this method? subvol snap rm cmd needs to tested before
+    # that.
+    @property
+    def purgeable(self):
+        return False if not self.retained or self.list_snapshots() else True
+
+    def remove_snapshot(self, snap_name, force):
+        snap_name = to_utf8(snap_name)
+
+        # UUID can be none if snap is absent but don't raise any exception in
+        # this case since command's behaviour is expected to be idempotent.
+        if not (snap_path := self.get_snap_path(snap_name)):
+            raise VolumeException(ENOENT, f'snap "{snap_name}" does not exist')
+
+        SubvolumeV2.remove_snapshot(self, snap_name, force,)
+        if self.retained:
+            if not self.has_snap():
+                self.trash_base_dir()
+                raise VolumeException(ESTALE, 'release lock and queue async '
+                                              'purge job')
+        else:
+            uuid = basename(dirname(dirname(snap_path)))
+            self.trash_uuid_dir(uuid)
+            raise VolumeException(ESTALE, 'release lock and queue async '
+                                          'purge job')
+        return False
+
+
+    # ----- methods for subvol removal while retaining snaps -----
+
+
+    def deact_curr_incar(self):
+        self.fs.rename(self.get_incar_mnt_path(), self.get_incar_deac_path())
+
+    def update_meta_file_after_retain(self):
+        self.md.remove_section(self.md.USER_METADATA_SECTION)
+
+        self.md.update_global_section('key', self.get_incar_deact_path())
+        self.md.update_global_section('state',
+                                      SubvolumeStates.STATE_RETAINED.value)
+
+        self.md.flush()
+
+    def remove_but_retain_snaps(self):
+        assert self.state != SubvolumeStates.STATE_RETAINED
+
+        try:
+            self.update_meta_file_after_retain()
+            self.deact_curr_incar()
+            self.auth_md.delete_subvolume_metadata_file(self.group.name,
+                                                        self.name)
+        except MetadataMgrException as e:
+            log.error(f"failed to write config: {e}")
+            raise VolumeException(e)
