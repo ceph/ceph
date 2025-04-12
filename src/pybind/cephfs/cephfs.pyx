@@ -1255,6 +1255,14 @@ cdef class LibCephFS(object):
         """
 
         self.require_state("mounted")
+        if isinstance(path, bytes):
+            pass
+        elif isinstance(path, str):
+            path = path.encode('utf-8')
+        else:
+            raise TypeError('"path" must be bytes or str. type(path) = '
+                            f'{type(path)}')
+
         path = cstr(path, 'path')
         if not isinstance(mode, int):
             raise TypeError('mode must be an int')
@@ -1300,6 +1308,9 @@ cdef class LibCephFS(object):
         """
 
         self.require_state("mounted")
+        if type(path) is str:
+            path = path.encode('utf-8')
+
         path = cstr(path, 'path')
         name = cstr(name, 'name')
         if not isinstance(mode, int):

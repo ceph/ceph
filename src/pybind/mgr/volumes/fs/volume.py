@@ -897,12 +897,15 @@ class VolumeClient(CephfsClient["Module"]):
         groupname  = kwargs['group_name']
         force      = kwargs['force']
 
+        should_purge = False
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     op = SubvolumeOpType.SNAP_REMOVE_FORCE if force else SubvolumeOpType.SNAP_REMOVE
                     with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, op) as subvolume:
-                        subvolume.remove_snapshot(snapname, force)
+                        should_purge = subvolume.remove_snapshot(snapname, force)
+            if should_purge:
+                self.purge_queue.queue_job(volname)
         except VolumeException as ve:
             # ESTALE serves as an error to state that subvolume is currently stale due to internal removal and,
             # we should tickle the purge jobs to purge the same
