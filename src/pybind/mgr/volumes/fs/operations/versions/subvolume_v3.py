@@ -137,7 +137,10 @@ class SubvolHelper:
         return path_exists(self.fs, path)
 
     def list_snaps(self, path):
-        return listsnaps(self.fs, self.spec, path)
+        snap_dirs = listsnaps(self.fs, self.spec, path)
+        if not snap_dirs:
+            return snap_dirs
+        return to_utf8b(snap_dirs)
 
 
 class SubvolumeV3(SubvolumeV2):
@@ -489,7 +492,7 @@ class SubvolumeV3(SubvolumeV2):
     def update_meta_file_after_retain(self):
         self.md.remove_section(self.md.USER_METADATA_SECTION)
 
-        self.md.update_global_section('key', self.get_reatined_path())
+        self.md.update_global_section('key', self.get_retained_path())
         self.md.update_global_section('state',
                                       SubvolumeStates.STATE_RETAINED.value)
 

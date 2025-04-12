@@ -109,7 +109,7 @@ class Group(GroupTemplate):
         try:
             dirpath = os.path.join(self.path,
                                    self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
-            return listsnaps(self.fs, self.vol_spec, dirpath, filter_inherited_snaps=True)
+            return listsnaps(self.fs, self.vol_spec, dirpath)
         except VolumeException as ve:
             if ve.errno == -errno.ENOENT:
                 return []
