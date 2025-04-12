@@ -1,9 +1,9 @@
 from errno import EINVAL, EAGAIN, ENOTEMPTY
-from os.path import basename
+from os.path import basename, dirname
 from logging import getLogger
 from typing import Final
 
-from cephfs import Error, InvalidValue
+from cephfs import Error, InvalidValue, ObjectNotFound
 
 from .subvolume_v2 import SubvolumeV2
 from .subvolume_attrs import SubvolumeStates
@@ -11,8 +11,8 @@ from .metadata_manager import MetadataManager
 from .auth_metadata import AuthMetadataManager
 from ..trash import create_trashcan, open_trashcan
 from ...utils import gen_uuid, verify_uuid, safe_join, to_utf8, to_str
-from ...fs_util import listdir, path_exists
-from ...exception import VolumeException
+from ...fs_util import listdir, path_exists, listsnaps
+from ...exception import VolumeException, MetadataMgrException
 
 
 log = getLogger(__name__)
@@ -72,6 +72,51 @@ class PreV3Helper:
                            'in-subvol trash dir (which is named ".trash" in'
                            'subvol v2)')
 
+    def snapshot_base_path(self):
+        return self.get_snap_base_path()
+
+    # simply returns snap path, regardless of whether it exists.
+    #
+    # unfortunately, v1/v2 has this strange naming which doesn't tell enough.
+    # adhering with it for now to avoid unrelated group of changes to codebase
+    # in this patch series.
+    def snapshot_path(self, snap_name):
+        return self.get_snap_path(snap_name)
+
+    # returns snap path if the snap exists.
+    #
+    # unfortunately, v1/v2 has this strange naming which doesn't tell enough.
+    # adhering with it for now to avoid unrelated group of changes to codebase
+    # in this patch series.
+    def snapshot_data_path(self, snap_name):
+        if snap_path := self.find_snap(snap_name):
+            return snap_path
+
+        # TODO
+        # v2 raises exception if the snapshot path do not exist so do the same
+        # to prevent any bugs due to difference in behaviour.
+        #
+        # not raising exception indeed leads to a bug: the volumes plugin fails
+        # when exception is not raised by this method when it is calld by
+        # do_clone() method of async_cloner.py. this is made to happen by a test
+        # by deleting snapshot after running the snapshot clone cmd but before
+        # the clone operation actually begins. this is done by a adding a delay
+        # using mgr/volumes/snapshot_clone_delay config option.
+        raise VolumeException(ENOENT, f'snap "{snap_name}" does not exist')
+
+    def list_snapshots(self):
+        '''
+        :return: list of snap names
+        :rtype: list of str
+        '''
+        return self.get_snap_names()
+
+    def create_snapshot(self, snap_name):
+        return self.create_snap(snap_name)
+
+    def remove_snapshot(self, snap_name, force):
+        return self.rm_snap(snap_name, force)
+
 
 class SubvolHelper:
     '''
@@ -87,6 +132,9 @@ class SubvolHelper:
 
     def path_exists(self, path):
         return path_exists(self.fs, path)
+
+    def list_snaps(self, path):
+        return listsnaps(self.fs, self.spec, path)
 
 
 class SubvolumeV3(SubvolumeV2):
@@ -217,13 +265,7 @@ class SubvolumeV3(SubvolumeV2):
         if self.creating:
             return False
         else:
-            return SubvolumeV2.retained(self)
-
-    @property
-    def has_pending_purges(self):
-        # since v3 does not have in-subvol ".trash" dir, this method must always
-        # return False.
-        return False
+            return SubvolumeV2.retained.fget(self)
 
     def _remove_on_failure(self, retained):
         if not retained:
@@ -237,6 +279,12 @@ class SubvolumeV3(SubvolumeV2):
             self.fs.rmdir(curr_incar_path)
         except Error as e:
             raise VolumeException(e)
+
+    @property
+    def has_pending_purges(self):
+        # since v3 does not have in-subvol ".trash" dir, this method must always
+        # return False.
+        return False
 
     def mark_subvolume(self):
         '''
@@ -319,4 +367,145 @@ class SubvolumeV3(SubvolumeV2):
         create_trashcan(self.fs, self.spec)
 
         with open_trashcan(self.fs, self.spec) as trashcan:
+            # it's incorrect to call this method if there are more than one
+            # incars.
+            assert len(self.get_v3_incars()) == 1
+            assert self.has_snap() is False
             trashcan.dump(self.base_path)
+
+    def trash_uuid_dir(self, uuid):
+        create_trashcan(self.fs, self.spec)
+
+        with open_trashcan(self.fs, self.spec) as trashcan:
+            trashcan.dump(self.get_incar_path(uuid))
+
+
+    # ----- helper methods for snap code -----
+
+
+    def get_v3_snap_names(self):
+        snap_names = []
+        for uuid in self.get_v3_incars():
+            path = self.get_snap_base_path(uuid)
+            snap_names += self.list_snaps(path)
+        return snap_names
+
+    def get_v3_incar_of_snap(self, snap_name):
+        for uuid in self.get_v3_incars():
+            path = self.get_snap_base_path(uuid)
+            if snap_name in self.list_snaps(path):
+                return uuid
+
+    # Listing all snaps can be expensive due to possibility of multiple snaps in
+    # multiple incarnations. This methods returns as soon as it finds the given
+    # snap instead of listing all snaps and then finding the given snap in the list.
+    # So, use this method, instead, for finding a snap.
+    def has_v3_snap(self, snap_name=None):
+        if snap_name:
+            uuid = self.get_v3_incar_of_snap(snap_name)
+            path = self.get_snap_path(snap_name, uuid)
+            return self.path_exists(path)
+
+        for uuid in self.get_v3_incars():
+            path = self.get_snap_base_path(uuid)
+            if not self.is_dir_empty(path):
+                return True
+        else:
+            return False
+
+
+    # ----- methods for snaps -----
+
+
+    def create_snap(self, snap_name):
+        snap_name = to_utf8(snap_name)
+
+        if self.has_snap(snap_name):
+            raise VolumeException(EEXIST, f'snap "{snap_name}" already exists')
+
+        SubvolumeV2.create_snapshot(self, snap_name)
+
+    # TOOD,v3: remove this method? subvol snap rm cmd needs to tested before
+    # that.
+    @property
+    def purgeable(self):
+        return False if not self.retained or self.list_snapshots() else True
+
+    def stat_subvol_data_path(self):
+        '''
+        stat() path where data of subvol users is stored.
+
+        This method overrides the v2 method, it must raise
+        cephfs.ObjectNotFound if path(s) don't exists.
+        '''
+        try:
+            self.fs.stat(self.get_mnt_path())
+        except ObjectNotFound:
+            # when subvol is present but it has no incars
+            self.fs.stat(self.base_path)
+
+    def rm_snap(self, snap_name, force):
+        snap_name = to_utf8(snap_name)
+
+        # UUID can be none if snap is absent but don't raise any exception in
+        # this case since command's behaviour is expected to be idempotent.
+        if not (snap_path := self.find_snap(snap_name)):
+            raise VolumeException(ENOENT, f'snap "{snap_name}" does not exist')
+
+        SubvolumeV2.remove_snapshot(self, snap_name, force)
+        if self.is_retained():
+            if not self.has_snap():
+                self.trash_base_dir()
+                return True
+        else:
+            uuid = basename(dirname(dirname(snap_path)))
+            if not self.has_v3_snap(uuid):
+                self.trash_uuid_dir(uuid)
+                return True
+        return False
+
+    def has_snap(self, snap_name=None, uuid=None):
+        return self.has_v3_snap(snap_name, uuid):
+
+    def get_snap_names(self):
+        return self.get_v3_snap_names()
+
+    def find_snap(self, snap_name):
+        '''
+        Find incarnation of the snapshot, including pre-v3 incarnations, and
+        return path of the snapshot.
+        '''
+        snap_name = to_utf8(snap_name)
+
+        if uuid := self.get_v3_incar_of_snap(snap_name):
+            snap_path = self.get_snap_path(snap_name, uuid)
+        # none of the incarnations had a snap with this name.
+        else:
+            return None
+
+        return snap_path if self.path_exists(snap_path) else None
+
+
+    # ----- methods for subvol removal while retaining snaps -----
+
+
+    def update_meta_file_after_retain(self):
+        self.md.remove_section(self.md.USER_METADATA_SECTION)
+
+        self.md.update_global_section('key', self.get_reatined_path())
+        self.md.update_global_section('state',
+                                      SubvolumeStates.STATE_RETAINED.value)
+
+        self.md.flush()
+
+    def remove_but_retain_snaps(self):
+        assert self.state != SubvolumeStates.STATE_RETAINED
+
+        try:
+            self.update_meta_file_after_retain()
+            self.fs.rename(self.get_mnt_path(), self.get_retained_path())
+            self.auth_md.delete_subvolume_metadata_file(self.group.name,
+                                                        self.name)
+        except MetadataMgrException as e:
+            log.error(f"failed to write config: {e}")
+            raise VolumeException(e)

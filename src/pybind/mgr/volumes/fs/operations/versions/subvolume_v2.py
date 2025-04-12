@@ -117,7 +117,7 @@ class SubvolumeV2(SubvolumeV1):
         return os.path.join(self.base_path, self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
 
     def snapshot_data_path(self, snapname):
-        snap_base_path = self.snapshot_path(snapname)
+        snap_base_path = self.get_snap_path(snapname)
         uuid_str = None
         try:
             with self.fs.opendir(snap_base_path) as dir_handle:
@@ -298,12 +298,17 @@ class SubvolumeV2(SubvolumeV1):
             }
 
         return {SubvolumeOpType.REMOVE_FORCE,
+                SubvolumeOpType.LIST,
                 SubvolumeOpType.CLONE_CREATE,
                 SubvolumeOpType.CLONE_STATUS,
                 SubvolumeOpType.CLONE_CANCEL,
                 SubvolumeOpType.CLONE_INTERNAL,
                 SubvolumeOpType.CLONE_SOURCE,
                 SubvolumeOpType.CLONE_FAILED}
+
+    # created so that subvol v3 class can override it
+    def stat_subvol_data_path(self):
+        self.fs.stat(self.path)
 
     def open(self, op_type):
         if not isinstance(op_type, SubvolumeOpType):
@@ -333,13 +338,9 @@ class SubvolumeV2(SubvolumeV1):
                         f'operation "{op_type.value}"')
 
             if estate != SubvolumeStates.STATE_RETAINED:
-                subvol_path = self.path
-                log.debug("refreshed metadata, checking subvolume path '{0}'".format(subvol_path))
-                st = self.fs.stat(subvol_path)
-
-                self.uid = int(st.st_uid)
-                self.gid = int(st.st_gid)
-                self.mode = int(st.st_mode & ~stat.S_IFMT(st.st_mode))
+                subvol_data_path = self.path
+                log.debug("refreshed metadata, checking subvolume path '{0}'".format(subvol_data_path))
+                self.stat_subvol_data_path()
         except MetadataMgrException as me:
             if me.errno == -errno.ENOENT:
                 raise VolumeException(-errno.ENOENT, "subvolume '{0}' does not exist".format(self.subvolname))
@@ -347,15 +348,16 @@ class SubvolumeV2(SubvolumeV1):
         except cephfs.ObjectNotFound:
             if op_type in (SubvolumeOpType.REMOVE_FORCE, SubvolumeOpType.SNAP_REMOVE_FORCE):
                 log.debug("since --force is passed, ignoring missing subvolume '"
-                          f"path '{subvol_path}' for subvolume "
+                          f"path '{subvol_data_path}' for subvolume "
                           f"{self.subvolname}'")
                 return
             elif op_type == SubvolumeOpType.CLONE_FAILED:
                 log.debug('since clone failed, letting that register in .meta '
                           'file and ignoring missing subvolume path '
-                          f'{subvol_path} for subvolume {self.subvolname}')
+                          f'{subvol_data_path} for subvolume {self.subvolname}')
                 return
-            log.debug("missing subvolume path '{0}' for subvolume '{1}'".format(subvol_path, self.subvolname))
+            log.debug(f"missing subvolume path '{subvol_data_path}' for '
+                      f'subvolume '{self.name}'")
             raise VolumeException(-errno.ENOENT, "mount path missing for subvolume '{0}'".format(self.subvolname))
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
