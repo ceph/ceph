@@ -3,6 +3,7 @@
     <button type="button"
             class="btn-close float-end"
             aria-label="Close"
+            i18n-aria-label
             (click)="activeModal.close()">
     </button>
   </div>
@@ -14,7 +15,7 @@
       <strong>{{ projectConstants.projectName }}</strong>
     </h3>
     <div class="product-versions">
-      <strong>Version</strong>
+      <strong i18n>Version</strong>
       <br>
       {{ versionNumber }}
       {{ versionHash }}
@@ -23,17 +24,17 @@
     </div>
     <br>
     <dl>
-      <dt>Ceph Manager</dt>
+      <dt i18n>Ceph Manager</dt>
       <dd>{{ hostAddr }}</dd>
-      <dt>User</dt>
+      <dt i18n>User</dt>
       <dd>{{ modalVariables.user }}</dd>
-      <dt>User Role</dt>
+      <dt i18n>User Role</dt>
       <dd>{{ modalVariables.role }}</dd>
-      <dt>Browser</dt>
+      <dt i18n>Browser</dt>
       <dd>{{ modalVariables.browserName }}</dd>
-      <dt>Browser Version</dt>
+      <dt i18n>Browser Version</dt>
       <dd>{{ modalVariables.browserVersion }}</dd>
-      <dt>Browser OS</dt>
+      <dt i18n>Browser OS</dt>
       <dd>{{ modalVariables.browserOS }}</dd>
     </dl>
   </div>
