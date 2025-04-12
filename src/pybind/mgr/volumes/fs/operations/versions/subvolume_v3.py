@@ -310,7 +310,16 @@ class SubvolumeV3(SubvolumeV2):
 
 
     def snapshot_data_path(self, snap_name):
-        snap_path = join(self.snapshot_path(snap_name), b'mnt')
+        uuid = self.get_incar_uuid_for_snap(snap_name)
+        if uuid == None:
+            raise VolumeException(-errno.ENOENT,
+                                  f'snapshot \'{snap_name}\' does not exist')
+        elif uuid == self.uuid:
+            snap_path = join(self.snapshot_path(snap_name), b'mnt')
+        else:
+            snap_path = join(self.roots_dir, uuid,
+                             self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
+                             snap_name.encode('utf-8'), b'mnt')
 
         # v2 raises exception if the snapshot path do not exist so do the same
         # to prevent any bugs due to difference in behaviour.
@@ -330,3 +339,19 @@ class SubvolumeV3(SubvolumeV2):
             raise VolumeException(-e.args[0], e.args[1])
 
         return snap_path
+
+    def list_snapshots(self):
+        '''
+        Return list of name of all snapshots from all the incarnations.
+        '''
+        all_snap_names = []
+
+        # list of all incarnations/UUID dirs of this subvolume.
+        incars = listdir(self.fs, self.roots_dir)
+
+        for incar_uuid in incars:
+            # construct path to ".snap" directory for given UUID.
+            snap_dir = join(self.roots_dir, incar_uuid,
+                            self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
+            all_snap_names.extend(listdir(self.fs, snap_dir))
+        return all_snap_names
