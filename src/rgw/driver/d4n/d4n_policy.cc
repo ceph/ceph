@@ -2,7 +2,7 @@
 
 #include "../../../common/async/yield_context.h"
 #include "common/async/blocked_completion.h"
-#include "common/dout.h"
+#include "common/split.h"
 #include "rgw_perf_counters.h"
 
 namespace rgw { namespace d4n {
@@ -36,7 +36,7 @@ auto async_exec(std::shared_ptr<connection> conn,
 }
 
 template <typename... Types>
-void redis_exec(std::shared_ptr<connection> conn,
+static inline void redis_exec(std::shared_ptr<connection> conn,
                 boost::system::error_code& ec,
                 const boost::redis::request& req,
                 boost::redis::response<Types...>& resp, optional_yield y)
@@ -49,26 +49,26 @@ void redis_exec(std::shared_ptr<connection> conn,
   }
 }
 
-int LFUDAPolicy::init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver *_driver) {
+int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver* _driver) {
   response<int, int, int, int> resp;
   static auto obj_callback = [this](
-          const DoutPrefixProvider* dpp, std::string& key, std::string version, bool dirty, uint64_t size, 
-			    time_t creationTime, const rgw_user user, std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
+          const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, 
+			    double creationTime, const rgw_user user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
 			    const rgw_obj_key& obj_key, optional_yield y, std::string& restore_val) {
-    update_dirty_object(dpp, key, version, dirty, size, creationTime, user, etag, bucket_name, bucket_id, obj_key, REFCOUNT_NOOP, y, restore_val);
+    update_dirty_object(dpp, key, version, deleteMarker, size, creationTime, user, etag, bucket_name, bucket_id, obj_key, RefCount::NOOP, y, restore_val);
   };
 
   static auto block_callback = [this](
-          const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, bool dirty, optional_yield y, std::string& restore_val) {
-    update(dpp, key, offset, len, version, dirty, REFCOUNT_NOOP, y, restore_val);
+          const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, optional_yield y, std::string& restore_val) {
+    update(dpp, key, offset, len, version, dirty, RefCount::NOOP, y, restore_val);
   };
 
   cacheDriver->restore_blocks_objects(dpp, obj_callback, block_callback);
 
   driver = _driver;
   if (dpp->get_cct()->_conf->d4n_writecache_enabled) {
+    quit = false;
     tc = std::thread(&CachePolicy::cleaning, this, dpp);
-    tc.detach();
   }
 
   try {
@@ -243,12 +243,12 @@ asio::awaitable<void> LFUDAPolicy::redis_sync(const DoutPrefixProvider* dpp, opt
   }
 }
 
-// Changes state to INVALID for dirty objects. An INVALID state indicates that a delete request has been
-// issued on an object and it must be deleted rather than written to the backend. This lazy deletion occurs
-// in the Cleaning method and prevents data races during concurrent requests. The method below returns "false"
-// if the state has not been set to INVALID, and "true" if it has. The state is not set to INVALID when
-// cleaning is in progress, a process which writes the object to the backend store.
-bool LFUDAPolicy::invalidate_dirty_object(const DoutPrefixProvider* dpp, std::string& key) {
+/* Changes state to INVALID for dirty objects. An INVALID state indicates that a delete request has been
+ issued on an object and it must be deleted rather than written to the backend. This lazy deletion occurs
+ in the Cleaning method and prevents data races during concurrent requests. The method below returns "false"
+ if the state has not been set to INVALID, and "true" if it has. The state is not set to INVALID when
+ cleaning is in progress, a process which writes the object to the backend store. */
+bool LFUDAPolicy::invalidate_dirty_object(const DoutPrefixProvider* dpp, const std::string& key) {
   std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
 
   if (o_entries_map.empty())
@@ -285,18 +285,23 @@ CacheBlock* LFUDAPolicy::get_victim_block(const DoutPrefixProvider* dpp, optiona
   std::string key = entry->key;
   CacheBlock* victim = new CacheBlock();
 
-  victim->cacheObj.bucketName = key.substr(0, key.find('#')); 
-  key.erase(0, key.find('#') + 1);
-  victim->version = key.substr(0, key.find('#'));
-  key.erase(0, key.find('#') + 1);
-  victim->cacheObj.objName = key.substr(0, key.find('#'));
-  key.erase(0, key.find('#') + 1);
-  victim->blockID = std::stoull(key.substr(0, key.find('#')));
-  key.erase(0, key.find('#') + 1);
-  victim->size = std::stoull(key.substr(0, key.find('#'))); // TODO: size not being set correctly in heap
+  auto parts = split(key, "#");
+  std::vector<std::string> block_info;
+  block_info.assign(parts.begin(), parts.end());
+  
+  if (block_info.size() != 5) {
+    ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "(): Key of the top entry in the min heap has not been constructed correctly." << dendl;
+    return nullptr;
+  }
 
-  // check dirty flag of entry to be evicted, if the flag is dirty, all entries on the local node are dirty
-  // check refcount also, if refcount > 0 then no entries are available for eviction
+  victim->cacheObj.bucketName = block_info[0]; 
+  victim->version = block_info[1]; 
+  victim->cacheObj.objName = block_info[2]; 
+  victim->blockID = std::stoull(block_info[3]); 
+  victim->size = std::stoull(block_info[4]); 
+
+  /* check dirty flag of entry to be evicted, if the flag is dirty, all entries on the local node are dirty
+    check refcount also, if refcount > 0 then no entries are available for eviction */
   if (entry->dirty || entry->refcount > 0) {
     ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "(): Top entry in min heap is dirty or with positive refcount, no entry is available for eviction!" << dendl;
     return nullptr;
@@ -305,7 +310,7 @@ CacheBlock* LFUDAPolicy::get_victim_block(const DoutPrefixProvider* dpp, optiona
   return victim;
 }
 
-int LFUDAPolicy::exist_key(std::string key) {
+int LFUDAPolicy::exist_key(const std::string& key) {
   const std::lock_guard l(lfuda_lock);
   if (entries_map.count(key) != 0) {
     return true;
@@ -338,8 +343,8 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
     }
 
     int avgWeight = weightSum / entries_map.size();
-    //the following part takes care of updating the weight (globalWeight) of the block if this is the last copy in a remote setup
-    //and is pushed out to a remote cache where space is available
+    /* the following part takes care of updating the weight (globalWeight) of the block if this is the last copy in a remote setup
+       and is pushed out to a remote cache where space is available */
 #if 0
     if (victim->cacheObj.hostsList.size() == 1 && *(victim->cacheObj.hostsList.begin()) == dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address) { /* Last copy */
       if (victim->globalWeight) {
@@ -397,9 +402,9 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
   return 0;
 }
 
-bool LFUDAPolicy::update_refcount_if_key_exists(const DoutPrefixProvider* dpp, std::string& key, uint32_t flag, optional_yield y)
+bool LFUDAPolicy::update_refcount_if_key_exists(const DoutPrefixProvider* dpp, const std::string& key, uint8_t op, optional_yield y)
 {
-  ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): updating refcount for entry: " << key << dendl;
+  ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "(): updating refcount for entry: " << key << dendl;
   const std::lock_guard l(lfuda_lock);
   auto entry = find_entry(key);
   uint64_t refcount = 0;
@@ -408,10 +413,10 @@ bool LFUDAPolicy::update_refcount_if_key_exists(const DoutPrefixProvider* dpp, s
   }
   refcount = entry->refcount;
   ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "(): old refcount is: " << refcount << dendl;
-  if ((flag & REFCOUNT_INCR) == REFCOUNT_INCR) {
+  if (op == RefCount::INCR) {
     refcount += 1; 
   }
-  if ((flag & REFCOUNT_DECR) == REFCOUNT_DECR) {
+  if (op == RefCount::DECR) {
     if (refcount > 1) {
       refcount -= 1;
     }
@@ -423,7 +428,7 @@ bool LFUDAPolicy::update_refcount_if_key_exists(const DoutPrefixProvider* dpp, s
   return true;
 }
 
-void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, bool dirty, uint32_t refcount_flag, optional_yield y, std::string& restore_val)
+void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, uint8_t op, optional_yield y, std::string& restore_val)
 {
   ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): updating entry: " << key << dendl;
   using handle_type = boost::heap::fibonacci_heap<LFUDAEntry*, boost::heap::compare<EntryComparator<LFUDAEntry>>>::handle_type;
@@ -439,9 +444,9 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64
     ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): restored localWeight is: " << localWeight << dendl;
   }
 
-  // check the dirty flag in the existing entry for the key and the incoming dirty flag. If the
-  // incoming dirty flag is false, that means update() is invoked as part of cleaning process,
-  // so we must not update its localWeight.
+  /* check the dirty flag in the existing entry for the key and the incoming dirty flag. If the
+     incoming dirty flag is false, that means update() is invoked as part of cleaning process,
+     so we must not update its localWeight. */
   if (entry != nullptr) {
     refcount = entry->refcount;
     if ((entry->dirty && !dirty)) {
@@ -450,10 +455,10 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64
     } else {
       localWeight = entry->localWeight + age;
     }
-    if ((refcount_flag & REFCOUNT_INCR) == REFCOUNT_INCR) {
+    if (op == RefCount::INCR) {
       refcount += 1;
     }
-    if ((refcount_flag & REFCOUNT_DECR) == REFCOUNT_DECR) {
+    if (op == RefCount::DECR) {
       if (refcount > 0) {
         refcount -= 1;
       }
@@ -461,7 +466,7 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64
   }  
   _erase(dpp, key, y);
   ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): updated refcount is: " << refcount << dendl;
-  LFUDAEntry *e = new LFUDAEntry(key, offset, len, version, dirty, refcount, localWeight);
+  LFUDAEntry* e = new LFUDAEntry(key, offset, len, version, dirty, refcount, localWeight);
   handle_type handle = entries_heap.push(e);
   e->set_handle(handle);
   entries_map.emplace(key, e);
@@ -475,7 +480,7 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64
   weightSum += ((localWeight < 0) ? 0 : localWeight);
 }
 
-void LFUDAPolicy::update_dirty_object(const DoutPrefixProvider* dpp, std::string& key, std::string version, bool deleteMarker, uint64_t size, double creationTime, const rgw_user user, std::string& etag, const std::string& bucket_name, const std::string& bucket_id, const rgw_obj_key& obj_key, uint32_t refcount_flag, optional_yield y, std::string& restore_val)
+void LFUDAPolicy::update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, double creationTime, const rgw_user& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id, const rgw_obj_key& obj_key, uint8_t op, optional_yield y, std::string& restore_val)
 {
   using handle_type = boost::heap::fibonacci_heap<LFUDAObjEntry*, boost::heap::compare<ObjectComparator<LFUDAObjEntry>>>::handle_type;
   State state{State::INIT};
@@ -489,7 +494,7 @@ void LFUDAPolicy::update_dirty_object(const DoutPrefixProvider* dpp, std::string
   }
 
   const std::lock_guard l(lfuda_cleaning_lock);
-  LFUDAObjEntry *e = new LFUDAObjEntry{key, version, deleteMarker, size, creationTime, user, etag, bucket_name, bucket_id, obj_key};
+  LFUDAObjEntry* e = new LFUDAObjEntry{key, version, deleteMarker, size, creationTime, user, etag, bucket_name, bucket_id, obj_key};
   handle_type handle = object_heap.push(e);
   e->set_handle(handle);
   o_entries_map.emplace(key, std::make_pair(e, state));
@@ -545,7 +550,7 @@ int LFUDAPolicy::delete_data_blocks(const DoutPrefixProvider* dpp, LFUDAObjEntry
     }
     off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
     off_t cur_len = cur_size - fst;
-    std::string oid_in_cache = e->key + CACHE_DELIM + std::to_string(fst) + CACHE_DELIM + std::to_string(cur_len);
+    std::string oid_in_cache = rgw::sal::get_key_in_cache(e->key, std::to_string(fst), std::to_string(cur_len));
 
     int ret = -1;
     std::unique_lock<std::mutex> ll(lfuda_lock);
@@ -556,7 +561,7 @@ int LFUDAPolicy::delete_data_blocks(const DoutPrefixProvider* dpp, LFUDAObjEntry
       }
     }
     ll.unlock();
-    if ((ret = cacheDriver->delete_data(dpp, oid_in_cache, y)) == 0) { // Sam: do we want del or delete_data here?
+    if ((ret = cacheDriver->delete_data(dpp, oid_in_cache, y)) == 0) {
       if (!(ret = erase(dpp, oid_in_cache, y))) {
 	ldpp_dout(dpp, 0) << "Failed to delete policy entry for: " << oid_in_cache << ", ret=" << ret << dendl;
         return -EINVAL;
@@ -620,44 +625,44 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	ldpp_dout(dpp, 10) << __func__ << "(): State is INVALID; deleting object." << dendl;
 	int ret = -1;
 	//check if key exists and get the refcount of block, if greater than zero then modify the creationTime of dirty object to attempt to delete later
-      std::unique_lock<std::mutex> ll(lfuda_lock);
-      auto it = entries_map.find(e->key);
-      if (it != entries_map.end()) {
-        if (it->second->refcount > 0) {
-          l.lock();
-          //deferring the deletion of the invalid object
-          (*e->handle)->creationTime = (*e->handle)->creationTime + interval/2;
-          ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "(): updated creation time is: " << (*e->handle)->creationTime << dendl;
-          object_heap.update(e->handle);
-          l.unlock();
-          continue;
-        }
-        ll.unlock();
-        if ((ret = cacheDriver->delete_data(dpp, e->key, y)) == 0) { // Sam: do we want del or delete_data here?
-          if (!(ret = erase(dpp, e->key, y))) {
-            ldpp_dout(dpp, 0) << "Failed to delete head policy entry for: " << e->key << ", ret=" << ret << dendl; // TODO: what must occur during failure?
-          }
-              } else {
-          ldpp_dout(dpp, 0) << "Failed to delete head object for: " << e->key << ", ret=" << ret << dendl;
-              }
-      } else {
-        //ignore if block not found, as it could have been deleted earlier when refcount for it was 0
-        ll.unlock();
-      }
+	std::unique_lock<std::mutex> ll(lfuda_lock);
+	auto it = entries_map.find(e->key);
+	if (it != entries_map.end()) {
+	  if (it->second->refcount > 0) {
+	    l.lock();
+	    //deferring the deletion of the invalid object
+	    (*e->handle)->creationTime = (*e->handle)->creationTime + interval/2;
+	    ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "(): updated creation time is: " << (*e->handle)->creationTime << dendl;
+	    object_heap.update(e->handle);
+	    l.unlock();
+	    continue;
+	  }
+	  ll.unlock();
+	  if ((ret = cacheDriver->delete_data(dpp, e->key, y)) == 0) {
+	    if (!(ret = erase(dpp, e->key, y))) {
+	      ldpp_dout(dpp, 0) << "Failed to delete head policy entry for: " << e->key << ", ret=" << ret << dendl; // TODO: what must occur during failure?
+	    }
+	  } else {
+	    ldpp_dout(dpp, 0) << "Failed to delete head object for: " << e->key << ", ret=" << ret << dendl;
+	  }
+	} else {
+	  //ignore if block not found, as it could have been deleted earlier when refcount for it was 0
+	  ll.unlock();
+	}
 
 	if (!e->delete_marker) {
 	  ret = delete_data_blocks(dpp, e, y);
 	  if (ret == 0) {
 	    erase_dirty_object(dpp, e->key, null_yield);
 	  } else if (ret == -EBUSY) {
-      l.lock();
-      //deferring the deletion of the invalid object
-      (*e->handle)->creationTime = (*e->handle)->creationTime + interval/2;
-      ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "(): updated creation time is: " << (*e->handle)->creationTime << dendl;
-      object_heap.update(e->handle);
-      l.unlock();
-      continue;
-    } else {
+	    l.lock();
+	    //deferring the deletion of the invalid object
+	    (*e->handle)->creationTime = (*e->handle)->creationTime + interval/2;
+	    ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "(): updated creation time is: " << (*e->handle)->creationTime << dendl;
+	    object_heap.update(e->handle);
+	    l.unlock();
+	    continue;
+	  } else {
 	    ldpp_dout(dpp, 0) << "Failed to delete blocks for: " << e->key << ", ret=" << ret << dendl;
 	  }
 	}
@@ -733,7 +738,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 
 	  op_ret = processor->prepare(null_yield);
 	  if (op_ret < 0) {
-      ldpp_dout(dpp, 20) << __func__ << "processor->prepare() returned ret=" << op_ret << dendl;
+	    ldpp_dout(dpp, 20) << __func__ << "processor->prepare() returned ret=" << op_ret << dendl;
 	    erase_dirty_object(dpp, e->key, null_yield);
 	    continue;
 	  }
@@ -742,9 +747,9 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	  off_t fst = 0;
 	  off_t ofs = 0;
 
-	  rgw::sal::DataProcessor *filter = processor.get();
+	  rgw::sal::DataProcessor* filter = processor.get();
 	  bufferlist bl;
-	  op_ret = cacheDriver->get_attrs(dpp, head_oid_in_cache, obj_attrs, null_yield); //get obj attrs from head
+	  op_ret = cacheDriver->get_attrs(dpp, e->key, obj_attrs, null_yield); //get obj attrs from head
 	  if (op_ret < 0) {
 	    ldpp_dout(dpp, 20) << __func__ << "cacheDriver->get_attrs returned ret=" << op_ret << dendl;
 	    erase_dirty_object(dpp, e->key, null_yield);
@@ -762,11 +767,11 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	  do {
 	    ceph::bufferlist data;
 	    if (fst >= lst){
-	break;
+	      break;
 	    }
 	    off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
 	    off_t cur_len = cur_size - fst;
-	    std::string oid_in_cache = head_oid_in_cache + CACHE_DELIM + std::to_string(fst) + CACHE_DELIM + std::to_string(cur_len);
+	    std::string oid_in_cache = rgw::sal::get_key_in_cache(e->key, std::to_string(fst), std::to_string(cur_len));
 	    ldpp_dout(dpp, 10) << __func__ << "(): oid_in_cache=" << oid_in_cache << dendl;
 	    rgw::sal::Attrs attrs;
 	    cacheDriver->get(dpp, oid_in_cache, 0, cur_len, data, attrs, null_yield);
@@ -785,8 +790,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 
 	    op_ret = filter->process(std::move(data), ofs);
 	    if (op_ret < 0) {
-	ldpp_dout(dpp, 20) << __func__ << "processor->process() returned ret="
-	<< op_ret << dendl;
+	      ldpp_dout(dpp, 20) << __func__ << "processor->process() returned ret=" << op_ret << dendl;
 	      erase_dirty_object(dpp, e->key, null_yield);
 	      continue;
 	    }
@@ -808,8 +812,8 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	    erase_dirty_object(dpp, e->key, null_yield);
 	    continue;
 	  }
-	  //invoke update() with dirty flag set to false, to update in-memory metadata for each block
-	  // reset values
+	  /* invoke update() with dirty flag set to false, to update in-memory metadata for each block
+	     reset values */
 	  lst = e->size;
 	  fst = 0;
 	  do {
@@ -819,7 +823,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	    off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
 	    off_t cur_len = cur_size - fst;
 
-	    std::string oid_in_cache = head_oid_in_cache + CACHE_DELIM + std::to_string(fst) + CACHE_DELIM + std::to_string(cur_len);
+	    std::string oid_in_cache = rgw::sal::get_key_in_cache(e->key, std::to_string(fst), std::to_string(cur_len));
 	    ldpp_dout(dpp, 20) << __func__ << "(): oid_in_cache =" << oid_in_cache << dendl;
 	    //Update in-memory data structure for each block
 	    this->update(dpp, oid_in_cache, 0, 0, e->version, false, 0, y);
@@ -830,12 +834,13 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	    block.size = cur_len;
 	    block.blockID = fst;
             if ((op_ret = cacheDriver->set_attr(dpp, oid_in_cache, RGW_CACHE_ATTR_DIRTY, "0", y)) == 0) {
-		op_ret = blockDir->update_field(dpp, &block, "dirty", "false", null_yield);
-		if (op_ret < 0) {
-		    ldpp_dout(dpp, 0) << __func__ << "updating dirty flag in block directory failed, ret=" << op_ret << dendl;
-		}
+        std::string dirty = "false";
+	      op_ret = blockDir->update_field(dpp, &block, "dirty", dirty, null_yield);
+	      if (op_ret < 0) {
+		ldpp_dout(dpp, 0) << __func__ << "updating dirty flag in block directory failed, ret=" << op_ret << dendl;
+	      }
             } else {
-		ldpp_dout(dpp, 0) << __func__ << "(): Failed to update dirty xattr in cache, ret=" << op_ret << dendl;
+	      ldpp_dout(dpp, 0) << __func__ << "(): Failed to update dirty xattr in cache, ret=" << op_ret << dendl;
             }
 
 	    fst += cur_len;
@@ -843,9 +848,9 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	} //end-else if delete_marker
 
 	//invoke update() with dirty flag set to false, to update in-memory metadata for head
-	this->update(dpp, head_oid_in_cache, 0, 0, e->version, false, 0, y);
+	this->update(dpp, e->key, 0, 0, e->version, false, 0, y);
          
-        if ((ret = cacheDriver->set_attr(dpp, head_oid_in_cache, RGW_CACHE_ATTR_DIRTY, "0", y)) < 0) {
+        if ((ret = cacheDriver->set_attr(dpp, e->key, RGW_CACHE_ATTR_DIRTY, "0", y)) < 0) {
 	  ldpp_dout(dpp, 0) << __func__ << "(): Failed to update dirty attr in cache, ret=" << op_ret << dendl;
         }
 
@@ -874,7 +879,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	      //hash entry for null block
 	      op_ret = blockDir->get(dpp, &null_block, y);
 	      if (op_ret < 0) {
-		      ldpp_dout(dpp, 0) << __func__ << "(): Failed to get latest entry in block directory for: " << null_block.cacheObj.objName << ", ret=" << ret << dendl;
+		ldpp_dout(dpp, 0) << __func__ << "(): Failed to get latest entry in block directory for: " << null_block.cacheObj.objName << ", ret=" << ret << dendl;
 	      } else {
 		if (null_block.version == e->version) {
 		  block.cacheObj.dirty = false;
@@ -893,8 +898,8 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	    .objName = c_obj->get_name(),
 	    .bucketName = c_obj->get_bucket()->get_bucket_id(),
 	  };
-	  //remove the entry from the ordered set using its score, as the object is already cleaned
-	  //need not be part of a transaction as it is being removed based on its score which is its creation time.
+	  /* remove the entry from the ordered set using its score, as the object is already cleaned
+	     need not be part of a transaction as it is being removed based on its score which is its creation time. */
 	  ret = objDir->zremrangebyscore(dpp, &dir_obj, e->creationTime, e->creationTime, y);
 	  if (ret < 0) {
 	    ldpp_dout(dpp, 0) << __func__ << "(): Failed to remove object from ordered set with error: " << ret << dendl;
@@ -910,9 +915,10 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	  instance_block.cacheObj.objName = objName;
 	  instance_block.size = 0;
 	  instance_block.blockID = 0;
-	  op_ret = blockDir->update_field(dpp, &instance_block, "dirty", "false", null_yield);
+    std::string dirty = "false";
+	  op_ret = blockDir->update_field(dpp, &instance_block, "dirty", dirty, null_yield);
 	  if (op_ret < 0) {
-	      ldpp_dout(dpp, 20) << __func__ << "updating dirty flag in block directory for instance block failed!" << dendl;
+	    ldpp_dout(dpp, 20) << __func__ << "updating dirty flag in block directory for instance block failed!" << dendl;
 	  }
 	  //the next steps remove the entry from the ordered set and if needed the latest hash entry also in case of versioned buckets
 	  rgw::d4n::CacheBlock latest_block = block;
@@ -928,19 +934,19 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	    if (latest_block.version == e->version) {
 	      //remove object entry from ordered set of versions
 	      if (c_obj->have_instance()) {
-          blockDir->del(dpp, &latest_block, y);
-          if (ret < 0) {
-            ldpp_dout(dpp, 0) << __func__ << "(): Failed to queue del for latest hash entry: " << latest_block.cacheObj.objName << ", ret=" << ret << dendl;
-            continue;
+		blockDir->del(dpp, &latest_block, y);
+		if (ret < 0) {
+		  ldpp_dout(dpp, 0) << __func__ << "(): Failed to queue del for latest hash entry: " << latest_block.cacheObj.objName << ", ret=" << ret << dendl;
+		  continue;
 		}
 	      }
-        //delete entry from ordered set of objects, as older versions would have been written to the backend store
-        ret = bucketDir->zrem(dpp, e->bucket_id, c_obj->get_name(), y, true);
-        if (ret < 0) {
-          blockDir->discard(dpp, y);
-          ldpp_dout(dpp, 0) << __func__ << "(): Failed to queue zrem for object entry: " << c_obj->get_name() << ", ret=" << ret << dendl;
-          continue;
-        }
+	      //delete entry from ordered set of objects, as older versions would have been written to the backend store
+	      ret = bucketDir->zrem(dpp, e->bucket_id, c_obj->get_name(), y, true);
+	      if (ret < 0) {
+		blockDir->discard(dpp, y);
+		ldpp_dout(dpp, 0) << __func__ << "(): Failed to queue zrem for object entry: " << c_obj->get_name() << ", ret=" << ret << dendl;
+		continue;
+	      }
 	    }
 	    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Removing object name: "<< c_obj->get_name() << " score: " << std::setprecision(std::numeric_limits<double>::max_digits10) << e->creationTime << " from ordered set" << dendl;
 	    rgw::d4n::CacheObj dir_obj = rgw::d4n::CacheObj{
@@ -964,7 +970,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
   } //end-while true
 }
 
-int LRUPolicy::exist_key(std::string key)
+int LRUPolicy::exist_key(const std::string& key)
 {
   const std::lock_guard l(lru_lock);
   if (entries_map.count(key) != 0) {
@@ -994,20 +1000,20 @@ int LRUPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_y
   return 0;
 }
 
-void LRUPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, bool dirty, uint32_t refcount_flag, optional_yield y, std::string& restore_val)
+void LRUPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, uint8_t op, optional_yield y, std::string& restore_val)
 {
   const std::lock_guard l(lru_lock);
   _erase(dpp, key, y);
-  Entry *e = new Entry(key, offset, len, version, dirty, 0);
+  Entry* e = new Entry(key, offset, len, version, dirty, 0);
   entries_lru_list.push_back(*e);
   entries_map.emplace(key, e);
 }
 
-void LRUPolicy::update_dirty_object(const DoutPrefixProvider* dpp, std::string& key, std::string version, bool dirty, uint64_t size, double creationTime, const rgw_user user, std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
-const rgw_obj_key& obj_key, uint32_t refcount_flag, optional_yield y, std::string& restore_val)
+void LRUPolicy::update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, double creationTime, const rgw_user& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
+const rgw_obj_key& obj_key, uint8_t op, optional_yield y, std::string& restore_val)
 {
   const std::lock_guard l(lru_lock);
-  ObjEntry *e = new ObjEntry(key, version, dirty, size, creationTime, user, etag, bucket_name, bucket_id, obj_key);
+  ObjEntry* e = new ObjEntry(key, version, deleteMarker, size, creationTime, user, etag, bucket_name, bucket_id, obj_key);
   o_entries_map.emplace(key, e);
   return;
 }

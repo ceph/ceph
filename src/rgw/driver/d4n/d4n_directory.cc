@@ -88,7 +88,7 @@ int BucketDirectory::zadd(const DoutPrefixProvider* dpp, const std::string& buck
 
     if (!multi) {
       if (std::get<0>(resp).value() != "1") {
-        ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() Response value is: " << std::get<0>(resp).value() << dendl;
+        ldpp_dout(dpp, 10) << "BucketDirectory::" << __func__ << "() Response value is: " << std::get<0>(resp).value() << dendl;
         return -ENOENT;
       }
     }
@@ -119,7 +119,7 @@ int BucketDirectory::zrem(const DoutPrefixProvider* dpp, const std::string& buck
 
     if (!multi) {
       if (std::get<0>(resp).value() != "1") {
-        ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() Response is: " << std::get<0>(resp).value() << dendl;
+        ldpp_dout(dpp, 10) << "BucketDirectory::" << __func__ << "() Response is: " << std::get<0>(resp).value() << dendl;
         return -ENOENT;
       }
     }
@@ -152,7 +152,7 @@ int BucketDirectory::zrange(const DoutPrefixProvider* dpp, const std::string& bu
     }
 
     if (std::get<0>(resp).value().empty()) {
-      ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() Empty response" << dendl;
+      ldpp_dout(dpp, 10) << "BucketDirectory::" << __func__ << "() Empty response" << dendl;
       return -ENOENT;
     }
 
@@ -421,7 +421,7 @@ int ObjectDirectory::get(const DoutPrefixProvider* dpp, CacheObj* object, option
 }
 
 /* Note: This method is not compatible for use on Ubuntu systems. */
-int ObjectDirectory::copy(const DoutPrefixProvider* dpp, CacheObj* object, std::string copyName, std::string copyBucketName, optional_yield y) 
+int ObjectDirectory::copy(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& copyName, const std::string& copyBucketName, optional_yield y)
 {//TODO can we skip it?
   if(m_d4n_trx)
     m_d4n_trx->get_trx_id(dpp,conn,y);
@@ -493,7 +493,7 @@ int ObjectDirectory::del(const DoutPrefixProvider* dpp, CacheObj* object, option
   return 0; 
 }
 
-int ObjectDirectory::update_field(const DoutPrefixProvider* dpp, CacheObj* object, std::string field, std::string value, optional_yield y) 
+int ObjectDirectory::update_field(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& field, std::string& value, optional_yield y)
 {//TODO what should be done here? (temp-read and temp-write)
   int ret = -1;
   if(m_d4n_trx)
@@ -632,7 +632,7 @@ int ObjectDirectory::zrange(const DoutPrefixProvider* dpp, CacheObj* object, int
   return 0;
 }
 
-int ObjectDirectory::zrevrange(const DoutPrefixProvider* dpp, CacheObj* object, std::string start, std::string stop, std::vector<std::string>& members, optional_yield y)
+int ObjectDirectory::zrevrange(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& start, const std::string& stop, std::vector<std::string>& members, optional_yield y)
 {
   m_d4n_trx->get_trx_id(dpp,conn,y);
   std::string key = build_index(object);
@@ -1577,7 +1577,7 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, CacheBlock* block, option
 }
 
 /* Note: This method is not compatible for use on Ubuntu systems. */
-int BlockDirectory::copy(const DoutPrefixProvider* dpp, CacheBlock* block, std::string copyName, std::string copyBucketName, optional_yield y) 
+int BlockDirectory::copy(const DoutPrefixProvider* dpp, CacheBlock* block, const std::string& copyName, const std::string& copyBucketName, optional_yield y)
 {//TODO : what is the role of COPY in transaction?
   if(m_d4n_trx)
     m_d4n_trx->get_trx_id(dpp,conn,y);
@@ -1654,7 +1654,7 @@ int BlockDirectory::del(const DoutPrefixProvider* dpp, CacheBlock* block, option
   return 0; 
 }
 
-int BlockDirectory::update_field(const DoutPrefixProvider* dpp, CacheBlock* block, std::string field, std::string value, optional_yield y) 
+int BlockDirectory::update_field(const DoutPrefixProvider* dpp, CacheBlock* block, const std::string& field, std::string& value, optional_yield y)
 {//TODO : check that
   int ret = -1;
   m_d4n_trx->get_trx_id(dpp,conn,y);
@@ -1721,7 +1721,7 @@ int BlockDirectory::update_field(const DoutPrefixProvider* dpp, CacheBlock* bloc
   return ret;
 }
 
-int BlockDirectory::remove_host(const DoutPrefixProvider* dpp, CacheBlock* block, std::string delValue, optional_yield y) 
+int BlockDirectory::remove_host(const DoutPrefixProvider* dpp, CacheBlock* block, std::string& delValue, optional_yield y)
 {
   m_d4n_trx->get_trx_id(dpp,conn,y);
   std::string key = build_index(block);
