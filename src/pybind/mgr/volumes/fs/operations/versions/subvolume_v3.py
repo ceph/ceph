@@ -1,19 +1,24 @@
 from errno import EINVAL, EAGAIN, ENOTEMPTY, ENOENT
-from os.path import basename
+from os.path import basename, dirname
 from logging import getLogger
 from typing import Final
+from datetime import datetime
 
 from cephfs import Error, InvalidValue, ObjectNotFound
 
 from .subvolume_v2 import SubvolumeV2
-from .subvolume_attrs import SubvolumeTypes
+from .subvolume_attrs import SubvolumeTypes, SubvolumeStates
 from .metadata_manager import MetadataManager
 from .auth_metadata import AuthMetadataManager
 from .op_sm import SubvolumeOpSm
 from ..trash import create_trashcan, open_trashcan
-from ...utils import gen_uuid, verify_uuid, safe_join, to_utf8b
-from ...fs_util import listdir, path_exists, listsnaps
-from ...exception import VolumeException, MetadataMgrException, OpSmException
+from ..clone_index import open_clone_index
+from ..snapshot_util import mksnap, rmsnap
+from ..template import SubvolumeOpType
+from ...utils import gen_uuid, verify_uuid, safe_join, to_utf8b, to_str
+from ...fs_util import listdir, path_exists, listsnaps, is_inherited_snap
+from ...exception import (VolumeException, MetadataMgrException, OpSmException,
+                          IndexException)
 
 
 log = getLogger(__name__)
@@ -43,6 +48,12 @@ class SubvolHelper:
 
     def list_snaps(self, path):
         return to_utf8b(listsnaps(self.fs, self.spec, path))
+
+    def mksnap(self, snap_path):
+        return mksnap(self.fs, snap_path)
+
+    def rmsnap(self, snap_path):
+        return rmsnap(self.fs, snap_path)
 
 
 class SubvolumeV3(SubvolHelper, SubvolumeV2):
@@ -351,6 +362,292 @@ class SubvolumeV3(SubvolHelper, SubvolumeV2):
             trashcan.dump(self.gen_incar_path(uuid))
 
 
+    # ----- helper methods for snap code -----
+
+
+    def get_v3_snap_names(self):
+        snap_names = []
+        for uuid in self.get_incars():
+            path = self.gen_snap_base_path(uuid)
+            snap_names += self.list_snaps(path)
+        return snap_names
+
+    def get_v3_incar_of_snap(self, snap_name):
+        for uuid in self.get_incars():
+            path = self.gen_snap_base_path(uuid)
+            if snap_name in self.list_snaps(path):
+                return uuid
+
+    # Listing all snaps to find one can be unncessary and also expensive due to
+    # possibility of multiple snaps in multiple incarnations. Therefore, use
+    # this method where, instead, listing is stoppped as soon as given snap
+    # name is found instead.
+    def has_v3_snap(self, snap_name=None):
+        if snap_name:
+            uuid = self.get_v3_incar_of_snap(snap_name)
+            path = self.gen_snap_path(snap_name, uuid)
+            return self.path_exists(path)
+
+        for uuid in self.get_incars():
+            path = self.gen_snap_base_path(uuid)
+            if not self.is_dir_empty(path):
+                return True
+        else:
+            return False
+
+
+    # ----- methods for snaps -----
+
+
+    def create_snap(self, snap_name):
+        if self.has_snap(snap_name):
+            return
+
+        grp_snap_path = safe_join(self.group.path, self.spec.SNAP_BASE_DIR,
+                                  snap_name)
+        if self.path_exists(grp_snap_path):
+            raise VolumeException(EINVAL,
+                                  f'subvolumegroup snapshot "{snap_name}" '
+                                  'already exists, can not create subvolume '
+                                  'snapshot with same name')
+
+        self.mksnap(self.gen_snap_path(snap_name))
+
+    def _rm_base_dir_after_snap_removal(self, snap_path):
+        should_purge = False
+
+        if len(self.get_incars()) == 0:
+            self.trash_base_dir()
+            should_purge = True
+
+        return should_purge
+
+    def _rm_incar_dir_after_snap_removal(self, snap_path):
+        should_purge = False
+
+        uuid = basename(dirname(dirname(snap_path)))
+        verify_uuid(uuid)
+        if self.is_incar_retained(uuid) and not self.has_v3_snap(uuid):
+            self.trash_uuid_dir(uuid)
+            should_purge = True
+
+        return should_purge
+
+    def _rm_snap(self, snap_name, snap_path, force):
+        try:
+            self.md.remove_section(self.get_snap_section_name(snap_name))
+            self.md.flush()
+
+            self.rmsnap(snap_path)
+        except MetadataMgrException as e:
+            if force:
+                log.info('Due to "--force", allowing snapshot removal despite '
+                         f'metadata removal failure snap={snap_name} subvol='
+                         f'{self.name} group={self.group.name} Exception: {e}')
+            else:
+                msg = (f'Failed to remove snapshot metadata. snap={snap_name} '
+                       f'subvol={self.subvol_name} group={self.group_name} '
+                       f'Exception: {e}')
+                log.error(msg)
+                raise VolumeException(EAGAIN, msg)
+
+    def check_before_removing_snap(self, snap_name):
+        if self.has_pending_clones(snap_name):
+            raise VolumeException(EAGAIN,
+                                  f'snap "{snap_name}" has pending clones')
+
+        snap_path = self.get_snap_path(snap_name)
+        if not snap_path:
+            raise VolumeException(ENOENT, f'snap "{snap_name}" does not exist')
+
+        return snap_path
+
+    def rm_snap(self, snap_name, force):
+        snap_path = self.check_before_removing_snap(snap_name)
+
+        self._rm_snap(snap_name, snap_path, force)
+
+        should_purge = self._rm_incar_dir_after_snap_removal(snap_path)
+        if should_purge:
+            should_purge = self._rm_base_dir_after_snap_removal(snap_path)
+
+        return should_purge
+
+    def has_snap(self, snap_name=None, uuid=None):
+        return self.has_v3_snap(snap_name, uuid)
+
+    def get_snap_names(self):
+        return self.get_v3_snap_names()
+
+    def get_snap_path(self, snap_name):
+        '''
+        Return path of an existing snapshot. Raise exception if the snapshot
+        does not exist.
+        '''
+        if uuid := self.get_v3_incar_of_snap(snap_name):
+            return self.gen_snap_path(snap_name, uuid)
+
+    def get_snap_data_path(self, snap_name):
+        '''
+        Return path where the actual data of the snapshot resides. Raise
+        exception if the snapshot does not exist.
+        '''
+        if uuid := self.get_v3_incar_of_snap(snap_name):
+            return self.gen_snap_data_path(snap_name, uuid)
+
+    def get_pending_clones_info(self, snap_name):
+        try:
+            if not self.has_pending_clones(snap_name):
+                return {'has_pending_clones': 'no'}
+            else:
+                pending_track_id_list = self.md.filter_keys('clone snaps',
+                                                            snap_name)
+        except MetadataMgrException as e:
+            if e.errno != -ENOENT:
+                raise VolumeException(exception=e)
+            else:
+                pending_track_id_list = []
+
+        try:
+            with open_clone_index(self.fs, self.vol_spec) as index:
+                index_path = to_str(index.path)
+        except IndexException as e:
+            log.warning(f'failed to open clone index "{e}" for snapshot '
+                        f'"{snap_name}"')
+            raise VolumeException(EINVAL, 'failed to open clone index')
+
+        pending_clone_list = []
+        orphan_clones_count = 0
+        for track_id in pending_track_id_list:
+            try:
+                track_id_path = safe_join(index_path, track_id)
+                snap_data_path = to_str(self.fs.readlink(track_id_path, 4096))
+                self.remove_non_existent_pending_clones(track_id_path,
+                                                        snap_data_path,
+                                                        track_id)
+            except Error as e:
+                if abs(e.errno) == ENOENT:
+                    orphan_clones_count += 1
+                    continue
+                else:
+                    raise VolumeException(exception=e)
+
+            subvol_base_path = dirname(dirname(dirname(snap_data_path)))
+            clone_subvol_name = basename(subvol_base_path)
+            group_name = basename(dirname(subvol_base_path))
+
+            details = {'name': clone_subvol_name}
+            if group_name != self.group.NO_GROUP_NAME:
+                details['target_group'] = group_name
+            pending_clone_list.append(details)
+
+        pending_clones_info = {}
+        if len(pending_clone_list) > 0:
+            pending_clones_info['has_pending_clones'] = 'yes'
+            pending_clones_info['pending_clones'] = \
+                    pending_clone_list # type: ignore
+        else:
+            pending_clones_info['has_pending_clones'] = 'no'
+
+        if orphan_clones_count > 0:
+            pending_clones_info['orphan_clones_count'] = \
+                orphan_clones_count # type: ignore
+
+        return pending_clones_info
+
+    def get_snap_info(self, snap_name):
+        if not self.has_snap(snap_name):
+            raise VolumeException(ENOENT,
+                                  f'snapshot "{snap_name}" does not exist')
+        if is_inherited_snap(snap_name):
+            raise VolumeException(EINVAL,
+                                  f'snapshot name "{snap_name}" is invalid')
+
+        snap_path = self.get_snap_data_path(snap_name)
+        try:
+            created_at = self.fs.getxattr(snap_path, 'ceph.snap.btime')
+            created_at = datetime.fromtimestamp(float(created_at))
+            created_at = str(created_at)
+            data_pool = self.fs.getxattr(snap_path, 'ceph.dir.layout.pool')
+            data_pool = to_str(data_pool)
+
+            info_dict = {'created_at': created_at, 'data_pool': data_pool}
+            info_dict.update(self.get_pending_clones_info(snap_name))
+
+            return info_dict
+        except Exception as e:
+            raise VolumeException(exception=e)
+
+
+    # ----- methods for subvol removal while retaining snaps -----
+
+
+    def allowed_ops_by_state(self, vol_state):
+        if vol_state == SubvolumeStates.STATE_COMPLETE:
+            return {op_type for op_type in SubvolumeOpType}
+        elif vol_state == SubvolumeStates.STATE_RETAINED:
+            return {
+                    SubvolumeOpType.CREATE,
+                    SubvolumeOpType.REMOVE,
+                    SubvolumeOpType.REMOVE_FORCE,
+                    SubvolumeOpType.LIST,
+                    SubvolumeOpType.INFO,
+                    SubvolumeOpType.SNAP_CREATE,
+                    SubvolumeOpType.SNAP_REMOVE,
+                    SubvolumeOpType.SNAP_REMOVE_FORCE,
+                    SubvolumeOpType.SNAP_LIST,
+                    SubvolumeOpType.SNAP_GETPATH,
+                    SubvolumeOpType.SNAP_INFO,
+                    SubvolumeOpType.SNAP_PROTECT,
+                    SubvolumeOpType.SNAP_UNPROTECT,
+                    SubvolumeOpType.CLONE_SOURCE,
+                    SubvolumeOpType.CLONE_FAILED
+            }
+        else:
+            return {
+                    SubvolumeOpType.REMOVE_FORCE,
+                    SubvolumeOpType.LIST,
+                    SubvolumeOpType.CLONE_CREATE,
+                    SubvolumeOpType.CLONE_STATUS,
+                    SubvolumeOpType.CLONE_CANCEL,
+                    SubvolumeOpType.CLONE_INTERNAL,
+                    SubvolumeOpType.CLONE_SOURCE,
+                    SubvolumeOpType.CLONE_FAILED
+            }
+
+    def is_incar_retained(self, uuid):
+        if self.creating:
+            return False
+
+        if self.path_exists(self.gen_retained_path(uuid)):
+            return True
+        elif self.path_exists(self.gen_mnt_path(uuid)):
+            return False
+        else:
+            assert False, \
+                ('inar dir contains neither "mnt" nor "retained" dir, this '
+                 'should be impossible')
+
+    def update_meta_file_after_retain(self):
+        self.md.remove_section(self.md.USER_METADATA_SECTION)
+
+        self.md.update_global_section('path', self.gen_retained_path())
+        self.md.update_global_section('state',
+                                      SubvolumeStates.STATE_RETAINED.value)
+
+        self.md.flush()
+
+    def retain_mnt_dir_content(self):
+        assert self.state != SubvolumeStates.STATE_RETAINED
+
+        try:
+            self.update_meta_file_after_retain()
+            self.fs.rename(self.gen_mnt_path(), self.gen_retained_path())
+        except MetadataMgrException as e:
+            log.error(f"failed to write config: {e}")
+            raise VolumeException(exception=e)
+
+
     # ==================================================================
     # Methods that makes code of this class compatible with SubvolumeV2,
     # SubvolumeV1 and SubvolumeBase.
@@ -429,3 +726,6 @@ class SubvolumeV3(SubvolHelper, SubvolumeV2):
 
     def remove_snapshot(self, snap_name, force=False):
         return self.rm_snap(snap_name, force)
+
+    def snapshot_info(self, snap_name):
+        return self.get_snap_info(snap_name)
