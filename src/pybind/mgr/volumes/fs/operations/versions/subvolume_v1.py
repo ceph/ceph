@@ -708,8 +708,8 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     def create_snapshot(self, snapname):
         try:
             group_snapshot_path = os.path.join(self.group.path,
-                                               self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
-                                               snapname.encode('utf-8'))
+                                            self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
+                                            snapname.encode('utf-8'))
             self.fs.stat(group_snapshot_path)
         except cephfs.Error as e:
             if e.args[0] == errno.ENOENT:
