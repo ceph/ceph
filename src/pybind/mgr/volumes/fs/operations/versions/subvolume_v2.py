@@ -292,6 +292,9 @@ class SubvolumeV2(SubvolumeV1):
             }
 
         return {SubvolumeOpType.REMOVE_FORCE,
+                # TODO,v3: reconsider. was added so that 'subvol ls' can list
+                # a subvol in cancelled state. remove this line?
+                SubvolumeOpType.LIST,
                 SubvolumeOpType.CLONE_CREATE,
                 SubvolumeOpType.CLONE_STATUS,
                 SubvolumeOpType.CLONE_CANCEL,

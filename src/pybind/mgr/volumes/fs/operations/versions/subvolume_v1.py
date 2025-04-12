@@ -37,8 +37,7 @@ class V3Compat:
     '''
 
     def has_snaps(self):
-        # will be updated in subsequent commits.
-        return False
+        return self.list_snapshots()
 
 
 class SubvolumeV1(SubvolumeBase, SubvolumeTemplate, V3Compat):
@@ -858,7 +857,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate, V3Compat):
     def list_snapshots(self):
         try:
             dirpath = self.snapshot_base_path()
-            return listsnaps(self.fs, self.vol_spec, dirpath, filter_inherited_snaps=True)
+            return listsnaps(self.fs, self.vol_spec, dirpath)
         except VolumeException as ve:
             if ve.errno == -errno.ENOENT:
                 return []
