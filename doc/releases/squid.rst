@@ -9,6 +9,8 @@ v19.2.2 Squid
 This is the second hotfix release in the Squid series.
 We recommend that all users update to this release.
 
+.. warning: Upgrade to Squid v19.2.2. Do not upgrade to Squid v19.2.1.
+
 Notable Changes
 ---------------
 
@@ -27,7 +29,8 @@ Changelog
 v19.2.1 Squid
 =============
 This is the first backport release in the Squid series.
-We recommend that all users update to this release.
+
+.. warning: Do not upgrade to Squid v19.2.1. Upgrade instead to Squid v19.2.2.
 
 Notable Changes
 ---------------
