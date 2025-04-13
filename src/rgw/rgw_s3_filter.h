@@ -57,7 +57,7 @@ struct rgw_s3_key_value_filter {
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
       encode(kv, bl);
-      decode(type, bl);
+      encode(type, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
