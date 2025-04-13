@@ -374,7 +374,11 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter(l_osd_scrub_ec_read_cnt, "scrub_ec_read_cnt", "scrub ec read calls count");
   osd_plb.add_u64_counter(l_osd_scrub_ec_read_bytes, "scrub_ec_read_bytes", "scrub ec read bytes read");
 
-  // scrub I/O performed for replicated pools
+  // scrub (no EC vs. replicated differentiation)
+  // scrub - replicated pools
+  osd_plb.add_u64_counter(l_osd_scrub_rppool_active_started, "num_scrubs_past_reservation_replicated", "scrubs count replicated");
+  // scrub - EC
+  osd_plb.add_u64_counter(l_osd_scrub_ec_active_started, "num_scrubs_past_reservation_ec", "scrubs count ec");
 
   return osd_plb.create_perf_counters();
 }
@@ -428,7 +432,6 @@ PerfCounters *build_scrub_labeled_perf(CephContext *cct, std::string label)
   scrub_perf.set_prio_default(PerfCountersBuilder::PRIO_INTERESTING);
 
   scrub_perf.add_u64_counter(scrbcnt_started, "num_scrubs_started", "scrubs attempted count");
-  scrub_perf.add_u64_counter(scrbcnt_active_started, "num_scrubs_past_reservation", "scrubs count");
   scrub_perf.add_u64_counter(scrbcnt_failed, "failed_scrubs", "failed scrubs count");
   scrub_perf.add_u64_counter(scrbcnt_successful, "successful_scrubs", "successful scrubs count");
   scrub_perf.add_time_avg(scrbcnt_failed_elapsed, "failed_scrubs_elapsed", "time to scrub failure");

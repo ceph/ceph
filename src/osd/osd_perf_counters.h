@@ -159,6 +159,12 @@ enum osd_counter_idx_t {
   l_osd_scrub_ec_read_cnt, ///< read calls count
   l_osd_scrub_ec_read_bytes, ///< total bytes read
 
+  // scrub (no EC vs. replicated differentiation)
+  // scrub - replicated pools
+  l_osd_scrub_rppool_active_started, ///< scrubs that got past replicas reservation
+  // scrub - EC
+  l_osd_scrub_ec_active_started, /// scrubs that got past secondaries reservation
+
   l_osd_last,
 };
 
@@ -211,8 +217,6 @@ enum {
   // -- basic statistics --
   /// The number of times we started a scrub
   scrbcnt_started,
-  /// # scrubs that got past replicas reservation
-  scrbcnt_active_started,
   /// # successful scrubs
   scrbcnt_successful,
   /// time to complete a successful scrub
