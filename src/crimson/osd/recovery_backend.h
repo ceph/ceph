@@ -214,11 +214,9 @@ public:
     }
     void set_pushed(pg_shard_t shard) {
       auto it = pushes.find(shard);
-      if (it != pushes.end()) {
-	auto &push_promise = it->second;
-	push_promise.set_value();
-	pushes.erase(it);
-      }
+      ceph_assert(it != pushes.end());
+      it->second.set_value();
+      pushes.erase(it);
     }
     void set_pulled() {
       if (pulled) {
