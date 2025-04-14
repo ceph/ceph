@@ -301,7 +301,12 @@ struct ScrubCounterSet {
   osd_counter_idx_t omapgetheader_bytes;  ///< bytes read by omap get header
   osd_counter_idx_t omapget_cnt;  ///< omap get calls count
   osd_counter_idx_t omapget_bytes;  ///< total bytes read by omap get
+  osd_counter_idx_t started_cnt; ///< the number of times we started a scrub
   osd_counter_idx_t active_started_cnt; ///< scrubs that got past reservation
+  osd_counter_idx_t successful_cnt; ///< successful scrubs count
+  osd_counter_idx_t successful_elapsed; ///< time to complete a successful scrub
+  osd_counter_idx_t failed_cnt; ///< failed scrubs count
+  osd_counter_idx_t failed_elapsed; ///< time from start to failure
 };
 
 }  // namespace Scrub

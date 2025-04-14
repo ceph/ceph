@@ -144,7 +144,12 @@ static inline constexpr ScrubCounterSet io_counters_replicated{
   .omapgetheader_bytes = l_osd_scrub_omapgetheader_bytes,
   .omapget_cnt = l_osd_scrub_omapget_cnt,
   .omapget_bytes = l_osd_scrub_omapget_bytes,
-  .active_started_cnt = l_osd_scrub_rppool_active_started
+  .started_cnt = l_osd_scrub_rppool_started,
+  .active_started_cnt = l_osd_scrub_rppool_active_started,
+  .successful_cnt = l_osd_scrub_rppool_successful,
+  .successful_elapsed = l_osd_scrub_rppool_successful_elapsed,
+  .failed_cnt = l_osd_scrub_rppool_failed,
+  .failed_elapsed = l_osd_scrub_rppool_failed_elapsed
 };
 
 static inline constexpr ScrubCounterSet io_counters_ec{
@@ -156,7 +161,12 @@ static inline constexpr ScrubCounterSet io_counters_ec{
   .omapgetheader_bytes = l_osd_scrub_omapgetheader_bytes,
   .omapget_cnt = l_osd_scrub_omapget_cnt,
   .omapget_bytes = l_osd_scrub_omapget_bytes,
-  .active_started_cnt = l_osd_scrub_ec_active_started
+  .started_cnt = l_osd_scrub_ec_started,
+  .active_started_cnt = l_osd_scrub_ec_active_started,
+  .successful_cnt = l_osd_scrub_ec_successful,
+  .successful_elapsed = l_osd_scrub_ec_successful_elapsed,
+  .failed_cnt = l_osd_scrub_ec_failed,
+  .failed_elapsed = l_osd_scrub_ec_failed_elapsed
 };
 }  // namespace Scrub
 
