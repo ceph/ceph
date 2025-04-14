@@ -1558,12 +1558,12 @@ static int32_t libcephfsd_ll_nonblocking_rw(proxy_client_t *client,
 	}
 	io_info = &async_io->io_info;
 
+	memset(io_info, 0, sizeof(struct ceph_ll_io_info));
 	io_info->callback = libcephfsd_ll_nonblocking_rw_cbk;
 	io_info->priv = (void *)(uintptr_t)req->ll_nonblocking_rw.info;
 	io_info->iov = &async_io->iov;
 	io_info->iovcnt = 1;
 	io_info->off = req->ll_nonblocking_rw.off;
-	io_info->result = 0;
 	io_info->write = req->ll_nonblocking_rw.write;
 	io_info->fsync = req->ll_nonblocking_rw.fsync;
 	io_info->syncdataonly = req->ll_nonblocking_rw.syncdataonly;
