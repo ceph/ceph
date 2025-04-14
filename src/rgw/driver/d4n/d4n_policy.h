@@ -203,7 +203,6 @@ class LFUDAPolicy : public CachePolicy {
       if (objDir) delete objDir;
       if (m_d4n_trx) delete m_d4n_trx;
       
-      std::lock_guard l(lfuda_cleaning_lock);
       quit = true;
       cond.notify_all();
       if (tc.joinable()) { tc.join(); }
