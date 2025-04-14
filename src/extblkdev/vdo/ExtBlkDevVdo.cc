@@ -112,15 +112,14 @@ int ExtBlkDevVdo::init(const std::string& alogdevname)
   return get_vdo_stats_handle();
 }
 
-
-int ExtBlkDevVdo::get_state(ceph::ExtBlkDevState& state)
+int ExtBlkDevVdo::get_statfs(store_statfs_t& statfs)
 {
   int64_t block_size = get_vdo_stat("block_size");
   int64_t physical_blocks = get_vdo_stat("physical_blocks");
   int64_t overhead_blocks_used = get_vdo_stat("overhead_blocks_used");
   int64_t data_blocks_used = get_vdo_stat("data_blocks_used");
   int64_t logical_blocks = get_vdo_stat("logical_blocks");
-  int64_t logical_blocks_used = get_vdo_stat("logical_blocks_used");
+  //int64_t logical_blocks_used = get_vdo_stat("logical_blocks_used");
   if (!block_size
       || !physical_blocks
       || !overhead_blocks_used
@@ -136,23 +135,21 @@ int ExtBlkDevVdo::get_state(ceph::ExtBlkDevState& state)
   }
   int64_t avail_blocks =
     physical_blocks - overhead_blocks_used - data_blocks_used;
-  int64_t logical_avail_blocks =
-    logical_blocks - logical_blocks_used;
-  state.set_logical_total(block_size * logical_blocks);
-  state.set_logical_avail(block_size * logical_avail_blocks);
-  state.set_physical_total(block_size * physical_blocks);
-  state.set_physical_avail(block_size * avail_blocks);
+
+  statfs.total = block_size * physical_blocks;
+  statfs.available = block_size * avail_blocks;
+
   return 0;
 }
 
 int ExtBlkDevVdo::collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm)
 {
-  ceph::ExtBlkDevState state;
-  int rc = get_state(state);
+  store_statfs_t statfs;
+  int rc = get_statfs(statfs);
   if(rc != 0){
     return rc;
   }
   (*pm)[prefix + "vdo"] = "true";
-  (*pm)[prefix + "vdo_physical_size"] = stringify(state.get_physical_total());
+  (*pm)[prefix + "vdo_physical_size"] = stringify(statfs.total);
   return 0;
 }
