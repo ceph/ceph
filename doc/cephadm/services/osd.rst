@@ -144,7 +144,7 @@ Run this command to display an inventory of storage devices on all cluster hosts
 
   ceph orch device ls
 
-A storage device is considered _available_ if all of the following
+A storage device is considered *available* if all of the following
 conditions are met:
 
 * The device must have no partitions.
@@ -154,7 +154,7 @@ conditions are met:
 * The device must not contain a Ceph BlueStore OSD.
 * The device must be larger than 5 GB.
 
-Ceph will not provision an OSD on a device that is not _available_.
+Ceph will not provision an OSD on a device that is not *available*.
 
 Creating New OSDs
 -----------------
