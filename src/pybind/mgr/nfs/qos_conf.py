@@ -169,7 +169,7 @@ class QOSBandwidthControl(object):
 
     @staticmethod
     def bw_for_to_dict(bandwidth: int, ret_bw_in_bytes: bool = False) -> str:
-        return bytes_to_human(bandwidth) if not ret_bw_in_bytes else str(bandwidth)
+        return bytes_to_human(bandwidth, mode='binary') if not ret_bw_in_bytes else str(bandwidth)
 
     def to_dict(self, ret_bw_in_bytes: bool = False) -> Dict[str, Any]:
         r: dict[str, Any] = {}
