@@ -446,6 +446,14 @@ class ECBackend : public ECCommon {
     return sinfo.object_size_to_shard_size(size, shard);
   }
 
+  uint64_t get_is_nonprimary_shard(const shard_id_t shard) const {
+    return sinfo.is_nonprimary_shard(shard);
+  }
+
+  bool get_is_hinfo_required() const {
+    return sinfo.get_is_hinfo_required();
+  }
+
   /**
    * ECReadPred
    *
