@@ -376,9 +376,20 @@ PerfCounters *build_osd_logger(CephContext *cct) {
 
   // scrub (no EC vs. replicated differentiation)
   // scrub - replicated pools
-  osd_plb.add_u64_counter(l_osd_scrub_rppool_active_started, "num_scrubs_past_reservation_replicated", "scrubs count replicated");
+  osd_plb.add_u64_counter(l_osd_scrub_rppool_started, "num_scrubs_started_replicated", "replicated scrubs attempted count");
+  osd_plb.add_u64_counter(l_osd_scrub_rppool_active_started, "num_scrubs_past_reservation_replicated", "replicated scrubs count");
+  osd_plb.add_u64_counter(l_osd_scrub_rppool_successful, "successful_scrubs_replicated", "successful replicated scrubs count");
+  osd_plb.add_time_avg(l_osd_scrub_rppool_successful_elapsed, "successful_scrubs_replicated_elapsed", "time to complete a successful replicated scrub");
+  osd_plb.add_u64_counter(l_osd_scrub_rppool_failed, "failed_scrubs_replicated", "failed replicated scrubs count");
+  osd_plb.add_time_avg(l_osd_scrub_rppool_failed_elapsed, "failed_scrubs_replicated_elapsed", "time to scrub failure replicated");
+
   // scrub - EC
+  osd_plb.add_u64_counter(l_osd_scrub_ec_started, "num_scrubs_started_ec", "scrubs attempted count ec");
   osd_plb.add_u64_counter(l_osd_scrub_ec_active_started, "num_scrubs_past_reservation_ec", "scrubs count ec");
+  osd_plb.add_u64_counter(l_osd_scrub_ec_successful, "successful_scrubs_ec", "successful scrubs count ec");
+  osd_plb.add_time_avg(l_osd_scrub_ec_successful_elapsed, "successful_scrubs_ec_elapsed", "time to complete a successful ec scrub");
+  osd_plb.add_u64_counter(l_osd_scrub_ec_failed, "failed_scrubs_ec", "failed scrubs count ec");
+  osd_plb.add_time_avg(l_osd_scrub_ec_failed_elapsed, "failed_scrubs_ec_elapsed", "time to scrub failure ec");
 
   return osd_plb.create_perf_counters();
 }
@@ -430,12 +441,6 @@ PerfCounters *build_scrub_labeled_perf(CephContext *cct, std::string label)
   PerfCountersBuilder scrub_perf(cct, label, scrbcnt_first, scrbcnt_last);
 
   scrub_perf.set_prio_default(PerfCountersBuilder::PRIO_INTERESTING);
-
-  scrub_perf.add_u64_counter(scrbcnt_started, "num_scrubs_started", "scrubs attempted count");
-  scrub_perf.add_u64_counter(scrbcnt_failed, "failed_scrubs", "failed scrubs count");
-  scrub_perf.add_u64_counter(scrbcnt_successful, "successful_scrubs", "successful scrubs count");
-  scrub_perf.add_time_avg(scrbcnt_failed_elapsed, "failed_scrubs_elapsed", "time to scrub failure");
-  scrub_perf.add_time_avg(scrbcnt_successful_elapsed, "successful_scrubs_elapsed", "time to scrub completion");
 
   scrub_perf.add_u64_counter(scrbcnt_preempted, "preemptions", "preemptions on scrubs");
   scrub_perf.add_u64_counter(scrbcnt_chunks_selected, "chunk_selected", "chunk selection during scrubs");

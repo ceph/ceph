@@ -199,7 +199,7 @@ Session::Session(my_context ctx)
   m_perf_set = scrbr->get_labeled_counters();
   m_osd_counters = scrbr->get_osd_perf_counters();
   m_counters_idx = &scrbr->get_unlabeled_counters();
-  m_perf_set->inc(scrbcnt_started);
+  m_osd_counters->inc(m_counters_idx->started_cnt);
 }
 
 Session::~Session()
