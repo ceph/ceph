@@ -1882,6 +1882,9 @@ public:
       !recovery_state.get_missing_loc().readable_with_acting(
 	oid, get_actingset());
   }
+  bool is_missing_any_head_or_clone_of(const hobject_t &hoid) {
+    return recovery_state.is_missing_any_head_or_clone_of(hoid);
+  }
   void maybe_kick_recovery(const hobject_t &soid);
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
   void finish_unreadable_object(const hobject_t oid);
