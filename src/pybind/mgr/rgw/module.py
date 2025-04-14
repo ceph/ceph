@@ -210,7 +210,33 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 RGWAM(self.env).realm_bootstrap(spec, start_radosgw)
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
-            return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
+            # The RGWAM code isn't always consistent about what goes into stdout
+            # and message fields. What is known is there are definitely some cases
+            # where the message field contains useful info and the stdout field
+            # does not, which means just giving the stdout can result in not so useful
+            # return messages, e.g.
+            #
+            # [ceph: root@vm-00 /]# ceph rgw realm bootstrap -i specs/rgw.yaml
+            # Error EEXIST:
+            #
+            # For that reason, we want to include the msg in what we return. Doing so
+            # transformed the same error case that just gave us "Error EEXIST:" into
+            #
+            # [ceph: root@vm-00 /]# ceph rgw realm bootstrap -i specs/rgw.yaml
+            # failed to create system user: Command error (-17): user create --uid sysuser-my_realm_ck
+            # --display-name sysuser-my_realm_ck --system --rgw-zonegroup my_zonegroup_ck --zonegroup-id
+            # 428a28d1-c8a9-4c12-a408-29507ef23842 --rgw-zone my_zone_ck --zone-id 161ee2ab-bc96-4729-a2b5-0d170e347129
+            # stdout:
+            # stderr:could not create user: unable to parse parameters, user: sysuser-my_realm_ck exists
+            # Error EEXIST:
+            #
+            # which is much more useful
+            msg = e.message
+            if msg and e.stdout and (e.stdout not in msg):
+                msg = f'{msg}; {e.stdout}'
+            elif e.stdout:
+                msg = e.stdout
+            return HandleCommandResult(retval=e.retcode, stdout=msg, stderr=e.stderr)
         except PoolCreationError as e:
             self.log.error(f'Pool creation failure: {str(e)}')
             return HandleCommandResult(retval=-errno.EINVAL, stderr=str(e))
