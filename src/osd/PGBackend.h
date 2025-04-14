@@ -430,6 +430,15 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual int get_ec_stripe_chunk_size() const { return 0; };
    virtual uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard) const { return size; };
    virtual void dump_recovery_info(ceph::Formatter *f) const = 0;
+   virtual bool get_is_nonprimary_shard(const shard_id_t shard) const {
+     return false; // Only EC has nonprimary shards.
+   };
+   virtual bool get_is_hinfo_required() const {
+     return false; // Only EC can have hinfo.
+   }
+   virtual bool get_is_ec_optimized() const {
+     return false; // Only EC can have be ec optimized!
+   }
 
  private:
    std::set<hobject_t> temp_contents;
