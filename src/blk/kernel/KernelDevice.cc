@@ -466,12 +466,12 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
   return 0;
 }
 
-int KernelDevice::get_ebd_state(ExtBlkDevState &state) const
+int KernelDevice::get_ebd_statfs(store_statfs_t &statfs) const
 {
   // use compression driver plugin to determine physical size and availability
   // VDO specific get_thin_utilization has moved into VDO plugin
   if (ebd_impl) {
-    return ebd_impl->get_state(state);
+    return ebd_impl->get_statfs(statfs);
   }
   return -ENOENT;
 }

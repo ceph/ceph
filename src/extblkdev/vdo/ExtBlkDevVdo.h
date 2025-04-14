@@ -45,7 +45,7 @@ public:
   int64_t get_vdo_stat(const char *property);
   virtual int init(const std::string& logdevname);
   virtual const std::string& get_devname() const {return name;}
-  virtual int get_state(ceph::ExtBlkDevState& state);
+  virtual int get_statfs(store_statfs_t& statfs);
   virtual int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm);
 };
 
