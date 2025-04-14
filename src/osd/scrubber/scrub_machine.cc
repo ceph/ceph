@@ -257,7 +257,7 @@ ReservingReplicas::ReservingReplicas(my_context ctx)
   // initiate the reservation process
   session.m_reservations.emplace(
       *scrbr, context<PrimaryActive>().last_request_sent_nonce,
-      *session.m_perf_set);
+      *session.m_counters_idx);
 
   if (!session.m_reservations->get_last_sent()) {
     // no replicas to reserve

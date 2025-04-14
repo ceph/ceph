@@ -307,6 +307,14 @@ struct ScrubCounterSet {
   osd_counter_idx_t successful_elapsed; ///< time to complete a successful scrub
   osd_counter_idx_t failed_cnt; ///< failed scrubs count
   osd_counter_idx_t failed_elapsed; ///< time from start to failure
+  // reservation process related:
+  osd_counter_idx_t rsv_successful_cnt; ///< completed reservation processes
+  osd_counter_idx_t rsv_successful_elapsed; ///< time to all-reserved
+  osd_counter_idx_t rsv_aborted_cnt; ///< failed due to an abort
+  osd_counter_idx_t rsv_rejected_cnt; ///< 'rejected' response
+  osd_counter_idx_t rsv_skipped_cnt; ///< high-priority. No reservation
+  osd_counter_idx_t rsv_failed_elapsed; ///< time for reservation to fail
+  osd_counter_idx_t rsv_secondaries_num; ///< number of replicas (EC or rep)
 };
 
 }  // namespace Scrub
