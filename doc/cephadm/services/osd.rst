@@ -153,7 +153,7 @@ conditions are met:
 * The device must not contain a Ceph BlueStore OSD.
 * The device must be larger than 5 GB.
 
-Ceph will not provision an OSD on a device that is not available.
+Ceph will not provision an OSD on a device that is not *available*.
 
 Creating New OSDs
 -----------------
