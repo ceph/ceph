@@ -149,7 +149,15 @@ static inline constexpr ScrubCounterSet io_counters_replicated{
   .successful_cnt = l_osd_scrub_rppool_successful,
   .successful_elapsed = l_osd_scrub_rppool_successful_elapsed,
   .failed_cnt = l_osd_scrub_rppool_failed,
-  .failed_elapsed = l_osd_scrub_rppool_failed_elapsed
+  .failed_elapsed = l_osd_scrub_rppool_failed_elapsed,
+  // replica-reservation-related:
+  .rsv_successful_cnt = l_osd_scrub_rppool_reserv_success,
+  .rsv_successful_elapsed = l_osd_scrub_rppool_reserv_successful_elapsed,
+  .rsv_aborted_cnt = l_osd_scrub_rppool_reserv_aborted,
+  .rsv_rejected_cnt = l_osd_scrub_rppool_reserv_rejected,
+  .rsv_skipped_cnt = l_osd_scrub_rppool_reserv_skipped,
+  .rsv_failed_elapsed = l_osd_scrub_rppool_reserv_failed_elapsed,
+  .rsv_secondaries_num = l_osd_scrub_rppool_reserv_secondaries_num
 };
 
 static inline constexpr ScrubCounterSet io_counters_ec{
@@ -166,7 +174,15 @@ static inline constexpr ScrubCounterSet io_counters_ec{
   .successful_cnt = l_osd_scrub_ec_successful,
   .successful_elapsed = l_osd_scrub_ec_successful_elapsed,
   .failed_cnt = l_osd_scrub_ec_failed,
-  .failed_elapsed = l_osd_scrub_ec_failed_elapsed
+  .failed_elapsed = l_osd_scrub_ec_failed_elapsed,
+  // replica-reservation-related:
+  .rsv_successful_cnt = l_osd_scrub_ec_reserv_success,
+  .rsv_successful_elapsed = l_osd_scrub_ec_reserv_successful_elapsed,
+  .rsv_aborted_cnt = l_osd_scrub_ec_reserv_aborted,
+  .rsv_rejected_cnt = l_osd_scrub_ec_reserv_rejected,
+  .rsv_skipped_cnt = l_osd_scrub_ec_reserv_skipped,
+  .rsv_failed_elapsed = l_osd_scrub_ec_reserv_failed_elapsed,
+  .rsv_secondaries_num = l_osd_scrub_ec_reserv_secondaries_num
 };
 }  // namespace Scrub
 
