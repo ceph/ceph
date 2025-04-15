@@ -298,34 +298,6 @@ class OperationThrottler : public BlockerT<OperationThrottler>,
   friend BlockerT<OperationThrottler>;
   static constexpr const char* type_name = "OperationThrottler";
 
-  template <typename OperationT, typename F>
-  auto with_throttle(
-    OperationT* op,
-    crimson::osd::scheduler::params_t params,
-    F &&f) {
-    if (!max_in_progress) return f();
-    return acquire_throttle(params)
-      .then(std::forward<F>(f))
-      .then([this](auto x) {
-	release_throttle();
-	return x;
-      });
-  }
-
-  template <typename OperationT, typename F>
-  seastar::future<> with_throttle_while(
-    OperationT* op,
-    crimson::osd::scheduler::params_t params,
-    F &&f) {
-    return with_throttle(op, params, f).then([this, params, op, f](bool cont) {
-      return cont
-	? seastar::yield().then([params, op, f, this] {
-	  return with_throttle_while(op, params, f); })
-	: seastar::now();
-    });
-  }
-
-
 public:
   OperationThrottler(ConfigProxy &conf);
 
@@ -348,14 +320,6 @@ public:
       .finally([this] {
 	release_throttle();
       });
-  }
-
-  template <class OpT, class... Args>
-  seastar::future<> with_throttle_while(
-    BlockingEvent::Trigger<OpT>&& trigger,
-    Args&&... args) {
-    return trigger.maybe_record_blocking(
-      with_throttle_while(std::forward<Args>(args)...), *this);
   }
 
 private:
