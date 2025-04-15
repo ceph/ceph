@@ -186,11 +186,6 @@ public:
     return t.root;
   }
 
-  void account_absent_access(Transaction::src_t src) final {
-    ++(get_by_src(stats.cache_absent_by_src, src));
-    ++stats.access.cache_absent;
-  }
-
   /**
    * get_extent_if_cached
    *
@@ -208,7 +203,7 @@ public:
     const auto t_src = t.get_src();
     CachedExtentRef ret;
     auto result = t.get_extent(paddr, &ret);
-    extent_access_stats_t& access_stats = get_by_ext(
+    cache_access_stats_t& access_stats = get_by_ext(
       get_by_src(stats.access_by_src_ext, t_src),
       type);
     if (result == Transaction::get_extent_ret::RETIRED) {
@@ -220,14 +215,14 @@ public:
       if (ret->is_stable()) {
         if (ret->is_dirty()) {
           ++access_stats.trans_dirty;
-          ++stats.access.s.trans_dirty;
+          ++stats.access.trans_dirty;
         } else {
           ++access_stats.trans_lru;
-          ++stats.access.s.trans_lru;
+          ++stats.access.trans_lru;
         }
       } else {
         ++access_stats.trans_pending;
-        ++stats.access.s.trans_pending;
+        ++stats.access.trans_pending;
       }
 
       if (ret->get_length() != len) {
@@ -261,7 +256,6 @@ public:
       SUBDEBUGT(seastore_cache,
         "{} {}~0x{:x} is absent in cache",
         t, type, paddr, len);
-      account_absent_access(t_src);
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
     }
 
@@ -270,16 +264,15 @@ public:
       SUBDEBUGT(seastore_cache,
         "{} {}~0x{:x} ~0x{:x} is absent(placeholder) in cache",
         t, type, paddr, len, ret->get_length());
-      account_absent_access(t_src);
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
     }
 
     if (ret->is_dirty()) {
       ++access_stats.cache_dirty;
-      ++stats.access.s.cache_dirty;
+      ++stats.access.cache_dirty;
     } else {
       ++access_stats.cache_lru;
-      ++stats.access.s.cache_lru;
+      ++stats.access.cache_lru;
     }
 
     if (ret->get_length() != len) {
@@ -402,11 +395,11 @@ public:
       // FIXME: assert(ext.is_stable_clean());
       assert(ext.is_stable());
       assert(T::TYPE == ext.get_type());
-      extent_access_stats_t& access_stats = get_by_ext(
+      cache_access_stats_t& access_stats = get_by_ext(
         get_by_src(stats.access_by_src_ext, t_src),
         T::TYPE);
       ++access_stats.load_absent;
-      ++stats.access.s.load_absent;
+      ++stats.access.load_absent;
 
       t.add_to_read_set(CachedExtentRef(&ext));
       touch_extent(ext, &t_src, t.get_cache_hint());
@@ -475,7 +468,7 @@ public:
 
     const auto t_src = t.get_src();
     auto ext_type = extent->get_type();
-    extent_access_stats_t& access_stats = get_by_ext(
+    cache_access_stats_t& access_stats = get_by_ext(
       get_by_src(stats.access_by_src_ext, t_src),
       ext_type);
 
@@ -487,7 +480,7 @@ public:
         assert(p_extent->is_pending_in_trans(t.get_trans_id()));
         assert(!p_extent->is_stable_writting());
         ++access_stats.trans_pending;
-        ++stats.access.s.trans_pending;
+        ++stats.access.trans_pending;
         if (p_extent->is_mutable()) {
           assert(p_extent->is_fully_loaded());
           assert(!p_extent->is_pending_io());
@@ -502,19 +495,19 @@ public:
         if (t.maybe_add_to_read_set(p_extent)) {
           if (p_extent->is_dirty()) {
             ++access_stats.cache_dirty;
-            ++stats.access.s.cache_dirty;
+            ++stats.access.cache_dirty;
           } else {
             ++access_stats.cache_lru;
-            ++stats.access.s.cache_lru;
+            ++stats.access.cache_lru;
           }
           touch_extent(*p_extent, &t_src, t.get_cache_hint());
         } else {
           if (p_extent->is_dirty()) {
             ++access_stats.trans_dirty;
-            ++stats.access.s.trans_dirty;
+            ++stats.access.trans_dirty;
           } else {
             ++access_stats.trans_lru;
-            ++stats.access.s.trans_lru;
+            ++stats.access.trans_lru;
           }
         }
       }
@@ -522,7 +515,7 @@ public:
       assert(!extent->is_stable_writting());
       assert(extent->is_pending_in_trans(t.get_trans_id()));
       ++access_stats.trans_pending;
-      ++stats.access.s.trans_pending;
+      ++stats.access.trans_pending;
       if (extent->is_mutable()) {
         assert(extent->is_fully_loaded());
         assert(!extent->is_pending_io());
@@ -564,11 +557,11 @@ public:
         t, extent->get_type(), extent->get_paddr(), extent->get_length(),
         partial_off, partial_len, *extent);
       const auto t_src = t.get_src();
-      extent_access_stats_t& access_stats = get_by_ext(
+      cache_access_stats_t& access_stats = get_by_ext(
         get_by_src(stats.access_by_src_ext, t_src),
         extent->get_type());
       ++access_stats.load_present;
-      ++stats.access.s.load_present;
+      ++stats.access.load_present;
       return trans_intr::make_interruptible(
         do_read_extent_maybe_partial(
           std::move(extent), partial_off, partial_len, &t_src));
@@ -878,11 +871,11 @@ private:
     auto f = [&t, this, t_src](CachedExtent &ext) {
       // FIXME: assert(ext.is_stable_clean());
       assert(ext.is_stable());
-      extent_access_stats_t& access_stats = get_by_ext(
+      cache_access_stats_t& access_stats = get_by_ext(
         get_by_src(stats.access_by_src_ext, t_src),
         ext.get_type());
       ++access_stats.load_absent;
-      ++stats.access.s.load_absent;
+      ++stats.access.load_absent;
 
       t.add_to_read_set(CachedExtentRef(&ext));
       touch_extent(ext, &t_src, t.get_cache_hint());
@@ -1763,7 +1756,7 @@ private:
 
     cache_access_stats_t access;
     counter_by_src_t<uint64_t> cache_absent_by_src;
-    counter_by_src_t<counter_by_extent_t<extent_access_stats_t> >
+    counter_by_src_t<counter_by_extent_t<cache_access_stats_t> >
       access_by_src_ext;
 
     uint64_t onode_tree_depth = 0;
@@ -1800,7 +1793,7 @@ private:
   mutable rewrite_stats_t last_reclaim_rewrites;
   mutable cache_access_stats_t last_access;
   mutable counter_by_src_t<uint64_t> last_cache_absent_by_src;
-  mutable counter_by_src_t<counter_by_extent_t<extent_access_stats_t> >
+  mutable counter_by_src_t<counter_by_extent_t<cache_access_stats_t> >
     last_access_by_src_ext;
 
   void account_conflict(Transaction::src_t src1, Transaction::src_t src2) {

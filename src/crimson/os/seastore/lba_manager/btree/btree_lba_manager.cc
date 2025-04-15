@@ -60,12 +60,10 @@ const get_phy_tree_root_node_ret get_phy_tree_root_node<
       return {true,
               c.cache.get_extent_viewable_by_trans(c.trans, lba_root)};
     } else {
-      c.cache.account_absent_access(c.trans.get_src());
       return {false,
               Cache::get_extent_iertr::make_ready_future<CachedExtentRef>()};
     }
   } else {
-    c.cache.account_absent_access(c.trans.get_src());
     return {false,
             Cache::get_extent_iertr::make_ready_future<CachedExtentRef>()};
   }
