@@ -82,11 +82,11 @@ seastar::future<> BackgroundRecoveryT<T>::start()
        return do_recovery();
       }, [](std::exception_ptr) {
        return seastar::make_ready_future<bool>(false);
-      }, pg, epoch_started).then([](bool recovery_done) {
-       if (recovery_done) {
-         return seastar::stop_iteration::yes;
-       } else {
+      }, pg, epoch_started).then([](bool do_recovery) {
+       if (do_recovery) {
          return seastar::stop_iteration::no;
+       } else {
+         return seastar::stop_iteration::yes;
        }
       });
     });
