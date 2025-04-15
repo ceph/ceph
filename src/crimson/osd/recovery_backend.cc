@@ -235,8 +235,8 @@ RecoveryBackend::scan_for_backfill(
   co_await interruptor::parallel_for_each(objects, seastar::coroutine::lambda([FNAME, this, version_map]
     (const hobject_t& object) -> interruptible_future<> {
     DEBUGDPP("querying obj:{}", pg, object);
-    auto obc_manager = pg.obc_loader.get_obc_manager(object);
-    co_await pg.obc_loader.load_and_lock(
+    auto obc_manager = pg.obc_loader.get_obc_manager(
+      object, /* resolve_clone = */ false);
       obc_manager, RWState::RWREAD
     ).handle_error_interruptible(
       crimson::ct_error::assert_all("unexpected error")
