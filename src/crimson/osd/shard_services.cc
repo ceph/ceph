@@ -141,78 +141,74 @@ seastar::future<std::set<std::pair<spg_t, epoch_t>>> PerShardState::identify_spl
     old_pg_num = cur_map->get_pg_num(pg->get_pgid().pool());
   } else {
     DEBUG("{} pool doesn't exist in epoch {}", pg->get_pgid(), cur_map->get_epoch());
-    return seastar::make_ready_future<std::set<std::pair<spg_t, epoch_t>>>(
-	std::set<std::pair<spg_t, epoch_t>>());
+    co_return std::set<std::pair<spg_t, epoch_t>>();
   }
 
   if (!per_shard_pg_num_history.pg_nums.contains(pg->get_pgid().pool())) {
     DEBUG("For pgid {} pool {}  has no history", pg->get_pgid(), pg->get_pgid().pool());
-    return seastar::make_ready_future<std::set<std::pair<spg_t, epoch_t>>>(
-	std::set<std::pair<spg_t, epoch_t>>());
+    co_return std::set<std::pair<spg_t, epoch_t>>();
   }
 
-  return shard_services.get_map(epoch).then(
-    [this, FNAME, old_pg_num, old_map=cur_map, pg] (cached_map_t&& new_map) {
-    auto pgid = pg->get_pgid();
+  auto new_map = co_await shard_services.get_map(epoch);
+  auto pgid = pg->get_pgid();
 
-    // Retrieve history map for the pool
-    const auto& pool_pg_num_history_map = per_shard_pg_num_history.pg_nums[pgid.pool()];
-    std::set<std::pair<spg_t, epoch_t>> split_children;
-    // Used for managing the PGs that need to be checked for splits
-    std::deque<spg_t> check_for_split_queue;
-    check_for_split_queue.push_back(pgid);
-    // To track which PGs have already been processed
-    std::set<spg_t> check_done;
-    while(!check_for_split_queue.empty()) {
-      auto cur_pg = check_for_split_queue.front();
-      check_for_split_queue.pop_front();
-      check_done.insert(cur_pg);
-      unsigned pg_num = old_pg_num;
+  // Retrieve history map for the pool
+  const auto& pool_pg_num_history_map = per_shard_pg_num_history.pg_nums[pgid.pool()];
+  std::set<std::pair<spg_t, epoch_t>> split_children;
+  // Used for managing the PGs that need to be checked for splits
+  std::deque<spg_t> check_for_split_queue;
+  check_for_split_queue.push_back(pgid);
+  // To track which PGs have already been processed
+  std::set<spg_t> check_done;
+  while(!check_for_split_queue.empty()) {
+    auto cur_pg = check_for_split_queue.front();
+    check_for_split_queue.pop_front();
+    check_done.insert(cur_pg);
+    unsigned pg_num = old_pg_num;
 
-      //Iterate over the history of pg_num changes
-      for (auto map_iter = pool_pg_num_history_map.lower_bound(old_map->get_epoch());
-	   map_iter != pool_pg_num_history_map.end();
-	   ++map_iter) {
-	const auto& [new_epoch, new_pg_num] = *map_iter;
-	if (new_epoch > new_map->get_epoch()) {
-	  // don't handle any changes recorded later than new_map's epoch
-	  break;
-	}
-	if (pg_num < new_pg_num) {
-	  // If the current PG's placement state is before pg_num,
-	  // a split might have occurred.
-	  if(cur_pg.ps() < pg_num) {
-	    std::set<spg_t> children;
-	    if (cur_pg.is_split(pg_num, new_pg_num, &children)) {
-	      DEBUG("{} e{} pg_num {} -> {} children {}", cur_pg,
-	      new_epoch, pg_num, new_pg_num, children);
-	      for (auto child : children) {
-		split_children.insert(std::make_pair(child, new_epoch));
-		// If the child has not been processed,
-		// add it to the queue for checking
-		if (!check_done.count(child))
-		  check_for_split_queue.push_back(child);
-	      }
-	    }
-	  } else if (cur_pg.ps() < new_pg_num) {
-	    // Since the current PG's placement state is between pg_num and new_pg_num,
-	    // the current PG is considered a child resulting from the split.
-	    DEBUG("{} e{} pg_num {} -> {} is a child", cur_pg,
-		new_epoch, pg_num, new_pg_num);
-	    split_children.insert(std::make_pair(cur_pg, new_epoch));
-	  } else {
-	    // The current PG's placement state is not less than new_pg_num,
-	    // it is already post-split and we can skip further processing
-	    DEBUG("{} e{} pg_num {} -> {} is post-split, skipping", cur_pg,
-		  new_epoch, pg_num, new_pg_num);
-	  }
-        }
-	pg_num = new_pg_num;
+    //Iterate over the history of pg_num changes
+    for (auto map_iter = pool_pg_num_history_map.lower_bound(cur_map->get_epoch());
+	 map_iter != pool_pg_num_history_map.end();
+	 ++map_iter) {
+      const auto& [new_epoch, new_pg_num] = *map_iter;
+      if (new_epoch > new_map->get_epoch()) {
+	// don't handle any changes recorded later than new_map's epoch
+	break;
       }
+      if (pg_num < new_pg_num) {
+	// If the current PG's placement state is before pg_num,
+	// a split might have occurred.
+	if(cur_pg.ps() < pg_num) {
+	  std::set<spg_t> children;
+	  if (cur_pg.is_split(pg_num, new_pg_num, &children)) {
+	    DEBUG("{} e{} pg_num {} -> {} children {}", cur_pg,
+	          new_epoch, pg_num, new_pg_num, children);
+	    for (auto child : children) {
+	      split_children.insert(std::make_pair(child, new_epoch));
+	      // If the child has not been processed,
+	      // add it to the queue for checking
+	      if (!check_done.count(child))
+		check_for_split_queue.push_back(child);
+	    }
+	  }
+	} else if (cur_pg.ps() < new_pg_num) {
+	  // Since the current PG's placement state is between pg_num and new_pg_num,
+	  // the current PG is considered a child resulting from the split.
+	  DEBUG("{} e{} pg_num {} -> {} is a child", cur_pg,
+	      new_epoch, pg_num, new_pg_num);
+	  split_children.insert(std::make_pair(cur_pg, new_epoch));
+	} else {
+	  // The current PG's placement state is not less than new_pg_num,
+	  // it is already post-split and we can skip further processing
+	  DEBUG("{} e{} pg_num {} -> {} is post-split, skipping", cur_pg,
+		new_epoch, pg_num, new_pg_num);
+	}
+      }
+
+      pg_num = new_pg_num;
     }
-    return seastar::make_ready_future<std::set<std::pair<spg_t, epoch_t>>>(
-	std::move(split_children));
-  });
+  }
+  co_return std::move(split_children);
 }
 
 
