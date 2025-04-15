@@ -3961,6 +3961,11 @@ bool BlueStore::ExtentMap::encode_some(
 	       << std::dec << " hit new spanning blob " << *p << dendl;
       request_reshard(p->blob_start(), p->blob_end());
       must_reshard = true;
+    } else if (p->blob->is_spanning() && p->logical_end() > end) {
+      dout(30) << __func__ << std::hex << offset << "~" << length
+               << std::dec << " extent stands out " << *p << dendl;
+      request_reshard(p->blob_start(), p->blob_end());
+      must_reshard = true;
     }
     if (!must_reshard) {
       denc_varint(0, bound); // blobid
