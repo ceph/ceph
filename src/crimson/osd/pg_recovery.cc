@@ -82,8 +82,8 @@ PGRecovery::start_recovery_ops(
     ceph_assert(pg->is_recovering());
     ceph_assert(!pg->is_backfilling());
 
-    bool done = !pg->get_peering_state().needs_recovery();
-    if (done) {
+    bool do_recovery = pg->get_peering_state().needs_recovery();
+    if (!do_recovery) {
       logger().debug("start_recovery_ops: AllReplicasRecovered for pg: {}",
                      pg->get_pgid());
       using LocalPeeringEvent = crimson::osd::LocalPeeringEvent;
@@ -110,7 +110,7 @@ PGRecovery::start_recovery_ops(
       }
       pg->reset_pglog_based_recovery_op();
     }
-    return seastar::make_ready_future<bool>(done);
+    return seastar::make_ready_future<bool>(do_recovery);
   });
 }
 
