@@ -53,7 +53,7 @@ image_multiplier=1
 repeat_count=1
 feature=0
 
-while getopts "d:f:m:r:s:t:" opt; do
+while getopts "d:f:m:pr:s:t:" opt; do
   case $opt in
     d)
       RBD_MIRROR_SAVE_CLI_OUTPUT=$OPTARG
@@ -63,6 +63,9 @@ while getopts "d:f:m:r:s:t:" opt; do
       ;;
     m)
       image_multiplier=$OPTARG
+      ;;
+    p)
+      RBD_MIRROR_PRINT_TESTS='true'
       ;;
     r)
       repeat_count=$OPTARG
@@ -100,10 +103,12 @@ if [ -n "${scenario_number}" ] && [ -z "${test_name}" ]; then
   echo "Option -s requires -t to be specifed"; exit 1;
 fi
 
-echo "Repeat count: $repeat_count"
-echo "Scenario number: $scenario_number"
-echo "Test name: $test_name"
-echo "Features: $RBD_IMAGE_FEATURES"
+if [ "${RBD_MIRROR_PRINT_TESTS}" != 'true' ]; then
+  echo "Repeat count: $repeat_count"
+  echo "Scenario number: $scenario_number"
+  echo "Test name: $test_name"
+  echo "Features: $RBD_IMAGE_FEATURES"
+fi
 
 RBD_MIRROR_INSTANCES=${RBD_MIRROR_INSTANCES:-1}
 RBD_MIRROR_MODE=snapshot
@@ -193,6 +198,56 @@ test_create_group_with_images_then_mirror()
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
 }
 
+# create mirrored group with images then try some invalid actions
+declare -a test_invalid_actions_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 5)
+
+test_invalid_actions_scenarios=1
+
+test_invalid_actions()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift
+  local group=$1 ; shift
+  local image_prefix=$1 ; shift
+  local image_count=$(($1*"${image_multiplier}")) ; shift
+
+  group_create "${primary_cluster}" "${pool}/${group}"
+  images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  group_images_add "${primary_cluster}" "${pool}/${group}" "${pool}/${image_prefix}" "${image_count}"
+
+  # write to every image in the group
+  local io_count=10240
+  local io_size=4096
+  for loop_instance in $(seq 0 $(("${image_count}"-1))); do
+    write_image "${primary_cluster}" "${pool}" "${image_prefix}${loop_instance}" "${io_count}" "${io_size}"
+  done
+  
+  mirror_group_enable "${primary_cluster}" "${pool}/${group}"
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" "${image_count}"
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying' "${image_count}"
+  wait_for_group_synced "${primary_cluster}" "${pool}/${group}3" "${secondary_cluster}" "${pool}"/"${group}"
+
+  if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+    wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'down+unknown' 0
+  fi
+
+  expect_failure "image belongs to a group" rbd --cluster=${primary_cluster} rm "${pool}/${image_prefix}0"
+
+  #image_remove "${primary_cluster}" "${pool}/${image_prefix}0"  "try_cmd"
+
+  group_remove "${primary_cluster}" "${pool}/${group}"
+  check_daemon_running "${secondary_cluster}"
+
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group}"
+  check_daemon_running "${secondary_cluster}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group}"
+  check_daemon_running "${secondary_cluster}"
+
+  images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+}
+
 # Create a group and enable mirroring.
 # Rename the group on the primary and confirm that the group is renamed on the primary, but not on the secondary
 # Do some more rename testing with a second group - this time checking the new name appears on the secondary
@@ -263,7 +318,15 @@ test_group_rename()
     write_image "${primary_cluster}" "${pool}" "${image_prefix1}${loop_instance}" "${io_count}" "${io_size}"
   done
 
-  mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}"/"${group1}_renamed"
+  #mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}"/"${group1}_renamed"
+
+  # TODO temp workaround waiting for deferred task #8.  When that is delivered the following 4 lines can be deleted and the above 
+  # line uncommented instead
+  local group_snap_id
+  mirror_group_snapshot "${primary_cluster}" "${pool}/${group1}_renamed" group_snap_id
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group1}_renamed" "${image_count}"
+  wait_for_group_snap_present "${secondary_cluster}" "${pool}/${group1}_renamed" "${group_snap_id}"
+  wait_for_group_snap_sync_complete "${secondary_cluster}" "${pool}/${group1}_renamed" "${group_snap_id}"
 
   test_group_present "${primary_cluster}" "${pool}" "${group1}" 0
   test_group_present "${primary_cluster}" "${pool}" "${group1}_renamed" 1 "${image_count}"
@@ -281,6 +344,10 @@ test_group_rename()
   test_group_present "${primary_cluster}" "${pool}" "${group1}" 0
   test_group_present "${primary_cluster}" "${pool}" "${group1}_renamed" 0
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group1}" 
+
+  # TODO temp workaround waiting for deferred task #8.  When that is delivered the following line can be deleted
+  test_group_present "${secondary_cluster}" "${pool}" "${group1}_renamed" 0 || group_remove "${secondary_cluster}" "${pool}/${group1}_renamed"
+
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group1}_renamed" 
 
   # check that the original group has the expected names on both clusters
@@ -3105,6 +3172,10 @@ test_odf_failover_failback()
     get_newest_group_snapshot_id "${primary_cluster}" "${pool}"/"${group0}" group_snap_id_f
     test "${group_snap_id_c}" = "${group_snap_id_e}" || fail "new snap on original secondary"
     test "${group_snap_id_c}" = "${group_snap_id_f}" || fail "group not synced"
+
+    # Waiting for demote snapshot to be synced is not a sufficient check on its own.  
+    # Must wait for up+unknown state to be reported.
+    wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+unknown'
   fi
 
   # promote original primary again
@@ -3514,6 +3585,11 @@ run_test()
   local primary_cluster=cluster2
   local secondary_cluster=cluster1
 
+  if [ "${RBD_MIRROR_PRINT_TESTS}" = 'true' ]; then
+    echo "${test_name}" "${test_scenario}"
+    return 0;
+  fi
+
   # If the tmpdir and cluster conf file exist then reuse the existing cluster 
   # but stop the daemon on the primary if it was left running by the last test
   # and check that there are no unexpected objects left
@@ -3557,6 +3633,7 @@ run_test()
 }
 
 # exercise all scenarios that are defined for the specified test 
+# optional second argument can be a list of scenarios to run
 run_test_all_scenarios()
 {
   local test_name=$1
@@ -3574,7 +3651,11 @@ run_test_all_scenarios()
   else
     working_test_scenarios=$test_scenarios
   fi
-  echo "Scenarios to run : ${working_test_scenarios}"
+
+  if [ "$#" -gt 1 ]
+  then
+    working_test_scenarios=$2
+  fi
 
   local loop
   for loop in $working_test_scenarios; do
@@ -3600,13 +3681,11 @@ run_all_tests()
   run_test_all_scenarios test_create_group_with_large_image
   run_test_all_scenarios test_create_group_with_multiple_images_do_io
   run_test_all_scenarios test_group_and_standalone_images_do_io
-  run_test_all_scenarios test_create_multiple_groups_do_io
   run_test_all_scenarios test_stopped_daemon
   run_test_all_scenarios test_create_group_with_regular_snapshots_then_mirror
   run_test_all_scenarios test_image_move_group
   run_test_all_scenarios test_force_promote
   run_test_all_scenarios test_resync
-  run_test_all_scenarios test_remote_namespace
   run_test_all_scenarios test_multiple_mirror_group_snapshot_whilst_stopped
   run_test_all_scenarios test_create_group_with_image_remove_then_repeat
   run_test_all_scenarios test_enable_disable_repeat
@@ -3618,7 +3697,7 @@ run_all_tests()
   run_test_all_scenarios test_create_group_stop_daemon_then_recreate
   # TODO these next 2 tests are disabled as they fails with incorrect state/description in mirror group status - issue 50
   #run_test_all_scenarios test_enable_mirroring_when_duplicate_group_exists
-  #run_test_all_scenarios test_enable_mirroring_when_duplicate_group_and_images_exists
+  #run_test_all_scenarios test_enable_mirroring_when_duplicate_image_exists
   run_test_all_scenarios test_odf_failover_failback
   run_test_all_scenarios test_resync_marker
   run_test_all_scenarios test_force_promote_before_initial_sync
@@ -3626,6 +3705,10 @@ run_all_tests()
   run_test_all_scenarios test_group_rename
   # TODO this test is disabled until Nithya delivers her bootstrap changes
   #run_test_all_scenarios test_demote_snap_sync
+  # TODO this test is disabled - not yet complete
+  #run_test_all_scenarios test_invalid_actions
+  run_test_all_scenarios test_remote_namespace
+  run_test_all_scenarios test_create_multiple_groups_do_io
 }
 
 if [ -n "${RBD_MIRROR_HIDE_BASH_DEBUGGING}" ]; then
@@ -3638,10 +3721,12 @@ fi
 set -- "${args[@]}"
 
 for loop in $(seq 1 "${repeat_count}"); do
-  echo "run number ${loop} of ${repeat_count}"
+  if [ "${RBD_MIRROR_PRINT_TESTS}" != 'true' ]; then
+    echo "run number ${loop} of ${repeat_count}"
+  fi
   if [ -n "${test_name}" ]; then
     if [ -n "${scenario_number}" ]; then
-      run_test "${test_name}" "${scenario_number}"
+      run_test_all_scenarios "${test_name}" "${scenario_number}"
     else
       run_test_all_scenarios "${test_name}"
     fi  
