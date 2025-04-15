@@ -883,6 +883,7 @@ int BlockDirectory::exist_key(const DoutPrefixProvider* dpp, CacheBlock* block, 
 
 int save_trx_info(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn, std::string key, std::string value, optional_yield y)
 {
+  return 0;//NOTE: skip for now (investigate blocking issues)
   // the key contains debug information about the transaction, and the loaded script sha.
   try {
     if(dpp){ldpp_dout(dpp, 0) << "save_trx_info" << "saving " << key << ":" << value << dendl;}
