@@ -4895,6 +4895,14 @@ options:
   desc: Preallocated buffer for inline shards
   default: 256
   with_legacy: true
+- name: bluestore_debug_extent_map_encode_check
+  type: bool
+  level: dev
+  desc: Check correctness of extents in encode_some
+  default: false
+  with_legacy: false
+  flags:
+  - startup
 - name: bluestore_cache_trim_interval
   type: float
   level: advanced
