@@ -412,17 +412,42 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   }
 
   updateBucketRateLimit() {
+    /**
+     * Whenever we change the owner of bucket from non-tenanted to tenanted
+     * and vice-versa with the rate-limit changes there was issue in sending
+     * bucket name, hence the below logic caters to it.
+     *
+     * Scenario 1: Changing the bucket owner from tenanted to non-tenanted
+     * Scenario 2: Changing the bucket owner from non-tenanted to tenanted
+     * Scenario 3: Keeping the owner(tenanted) same and changing only rate limit
+     */
+    const owner = this.bucketForm.getValue('owner');
+    const bidInput = this.bucketForm.getValue('bid');
+
+    let bid: string;
+
+    const hasOwnerWithDollar = owner.includes('$');
+    const bidHasSlash = bidInput.includes('/');
+
+    if (bidHasSlash && hasOwnerWithDollar) {
+      bid = bidInput;
+    } else if (hasOwnerWithDollar) {
+      const ownerPrefix = owner.split('$')[0];
+      bid = `${ownerPrefix}/${bidInput}`;
+    } else if (bidHasSlash) {
+      bid = bidInput.split('/')[1];
+    } else {
+      bid = bidInput;
+    }
     // Check if bucket ratelimit has been modified.
     const rateLimitConfig: RgwRateLimitConfig = this.rateLimitComponent.getRateLimitFormValue();
     if (!!rateLimitConfig) {
-      this.rgwBucketService
-        .updateBucketRateLimit(this.bucketForm.getValue('bid'), rateLimitConfig)
-        .subscribe(
-          () => {},
-          (error: any) => {
-            this.notificationService.show(NotificationType.error, error);
-          }
-        );
+      this.rgwBucketService.updateBucketRateLimit(bid, rateLimitConfig).subscribe(
+        () => {},
+        (error: any) => {
+          this.notificationService.show(NotificationType.error, error);
+        }
+      );
     }
   }
 
