@@ -314,7 +314,6 @@ public:
   auto with_throttle(
     crimson::osd::scheduler::params_t params,
     F &&f) {
-    if (!max_in_progress) return f();
     return acquire_throttle(params)
       .then(std::forward<F>(f))
       .finally([this] {
