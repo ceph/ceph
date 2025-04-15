@@ -1018,31 +1018,27 @@ void BlueStore::Writer::_do_put_new_blobs(
   extent_map_t& emap = onode->extent_map.extent_map;
   uint32_t blob_size = wctx->target_blob_size;
   while (bd_it != bd_end) {
+    ceph_assert(!bd_it->is_compressed());
     Extent* le;
-    if (!bd_it->is_compressed()) {
-      // only 1st blob to write can have blob_location != logical_offset
-      uint32_t blob_location = p2align(logical_offset, blob_size);
-      BlobRef new_blob;
-      uint32_t in_blob_offset = logical_offset - blob_location;
-      uint32_t ref_end = std::min(ref_end_offset, logical_offset + bd_it->disk_data.length());
-      if (blob_location == logical_offset &&
-          bd_it->disk_data.length() >= blob_size &&
-          ref_end_offset - blob_location >= blob_size) {
-        new_blob = _blob_create_full(bd_it->disk_data);
-        // all already ref'ed
-      } else {
-        new_blob = _blob_create_with_data(in_blob_offset, bd_it->disk_data);
-        new_blob->get_ref(onode->c, in_blob_offset, ref_end - blob_location - in_blob_offset);
-      }
-      le = new Extent(
-        logical_offset, in_blob_offset, ref_end - logical_offset, new_blob);
-      dout(20) << __func__ << " new extent+blob " << le->print(pp_mode) << dendl;
-      emap.insert(*le);
-      logical_offset = ref_end;
+    // only 1st blob to write can have blob_location != logical_offset
+    uint32_t blob_location = p2align(logical_offset, blob_size);
+    BlobRef new_blob;
+    uint32_t in_blob_offset = logical_offset - blob_location;
+    uint32_t ref_end = std::min(ref_end_offset, logical_offset + bd_it->disk_data.length());
+    if (blob_location == logical_offset &&
+        bd_it->disk_data.length() >= blob_size &&
+        ref_end_offset - blob_location >= blob_size) {
+      new_blob = _blob_create_full(bd_it->disk_data);
+      // all already ref'ed
     } else {
-      // compressed
-      ceph_assert(false);
+      new_blob = _blob_create_with_data(in_blob_offset, bd_it->disk_data);
+      new_blob->get_ref(onode->c, in_blob_offset, ref_end - blob_location - in_blob_offset);
     }
+    le = new Extent(
+      logical_offset, in_blob_offset, ref_end - logical_offset, new_blob);
+    dout(20) << __func__ << " new extent+blob " << le->print(pp_mode) << dendl;
+    emap.insert(*le);
+    logical_offset = ref_end;
     bstore->logger->inc(l_bluestore_write_big);
     bstore->logger->inc(l_bluestore_write_big_bytes, le->length);
     ++bd_it;
