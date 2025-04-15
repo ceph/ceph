@@ -50,7 +50,5 @@
   <cds-tooltip [description]="row.account?.name ? (row.type === 'root' ? 'Account root user' :'') : ''"
                [align]="'top'"
                i18n-description
-               i18n>
-    {{row.account?.name}}
-  </cds-tooltip>
+               i18n>{{row.account?.name}}</cds-tooltip>
 </ng-template>
