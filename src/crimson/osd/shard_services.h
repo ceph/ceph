@@ -593,7 +593,6 @@ public:
   }
 
   FORWARD_TO_OSD_SINGLETON(get_pool_info)
-  FORWARD(with_throttle, with_throttle, local_state.throttler)
   FORWARD(get_throttle, get_throttle, local_state.throttler)
 
   FORWARD_TO_OSD_SINGLETON(build_incremental_map_msg)
