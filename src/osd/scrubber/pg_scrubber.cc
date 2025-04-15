@@ -1404,8 +1404,8 @@ int PgScrubber::build_scrub_map_chunk(ScrubMap& map,
 
   // scan objects
   while (!pos.done()) {
-
-    int r = m_pg->get_pgbackend()->be_scan_list(map, pos);
+    int r =
+	m_pg->get_pgbackend()->be_scan_list(get_unlabeled_counters(), map, pos);
     dout(30) << __func__ << " BE returned " << r << dendl;
     if (r == -EINPROGRESS) {
       dout(20) << __func__ << " in progress" << dendl;
