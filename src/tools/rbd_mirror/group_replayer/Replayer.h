@@ -128,7 +128,7 @@ private:
   void load_local_group_snapshots();
   void handle_load_local_group_snapshots(int r);
 
-  void load_remote_group_snapshots();
+  void load_remote_group_snapshots(std::unique_lock<ceph::mutex>* locker);
   void handle_load_remote_group_snapshots(int r);
 
   void validate_image_snaps_sync_complete(const std::string &group_snap_id);
