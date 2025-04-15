@@ -2615,9 +2615,6 @@ void remove_interim_snapshots(IoCtx& group_ioctx,
   }
 
   for (int i = 0, n = image_ctxs->size(); i < n; ++i) {
-    if (!on_finishes[i]) {
-      continue;
-    }
     r = on_finishes[i]->wait();
     delete on_finishes[i];
     on_finishes[i] = nullptr;
@@ -3261,11 +3258,8 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
   }
 
   for (size_t i = 0; i < image_ctxs.size(); i++) {
-    r = 0;
-    if (on_finishes[i]) {
-      r = on_finishes[i]->wait();
-      delete on_finishes[i];
-    }
+    r = on_finishes[i]->wait();
+    delete on_finishes[i];
     if (r < 0) {
       lderr(cct) << "failed promoting image: " << image_ctxs[i]->name << ": "
                  << cpp_strerror(r) << dendl;
@@ -3277,15 +3271,12 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
     }
   }
 
-  if (ret_code < 0) {
+  if (ret_code < 0 && !force) {
     // undo
     ldout(cct, 20) << "undoing group promote: " << ret_code << dendl;
     remove_interim_snapshots(group_ioctx, group_header_oid, &image_ctxs, &group_snap);
     std::fill(snap_ids.begin(), snap_ids.end(), CEPH_NOSNAP);
     group_snap.snaps.clear();
-    if (!quiesce_requests.empty()) {
-      util::notify_unquiesce(image_ctxs, quiesce_requests);
-    }
     close_images(&image_ctxs);
 
     r = prepare_group_images(group_ioctx, group_id, mirror_group.state,
@@ -3306,9 +3297,6 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
     }
 
     for (int i = 0, n = image_ctxs.size(); i < n; ++i) {
-      if (!on_finishes[i]) {
-        continue;
-      }
       r = on_finishes[i]->wait();
       delete on_finishes[i];
       if (r < 0) {
@@ -3321,18 +3309,13 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
     }
   }
 
-  group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
-  r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
-  if (r < 0) {
-    lderr(cct) << "failed to update group snapshot metadata: "
-               << cpp_strerror(r) << dendl;
-  }
-
-  if (!quiesce_requests.empty()) {
-    util::notify_unquiesce(image_ctxs, quiesce_requests);
-  }
-
   if (!ret_code) {
+    group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+    r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
+    if (r < 0) {
+      lderr(cct) << "failed to update group snapshot metadata: "
+                 << cpp_strerror(r) << dendl;
+    }
     C_SaferCond cond;
     auto req = mirror::snapshot::GroupUnlinkPeerRequest<I>::create(
         group_ioctx, group_id, &mirror_peer_uuids, &image_ctxs, &cond);
@@ -3424,11 +3407,8 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
   }
 
   for (size_t i = 0; i < image_ctxs.size(); i++) {
-    r = 0;
-    if (on_finishes[i]) {
-      r = on_finishes[i]->wait();
-      delete on_finishes[i];
-    }
+    r = on_finishes[i]->wait();
+    delete on_finishes[i];
     if (r < 0) {
       lderr(cct) << "failed demoting image: " << image_ctxs[i]->name << ": "
                  << cpp_strerror(r) << dendl;
@@ -3447,9 +3427,6 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
     remove_interim_snapshots(group_ioctx, group_header_oid, &image_ctxs, &group_snap);
     std::fill(snap_ids.begin(), snap_ids.end(), CEPH_NOSNAP);
     group_snap.snaps.clear();
-    if (!quiesce_requests.empty()) {
-      util::notify_unquiesce(image_ctxs, quiesce_requests);
-    }
     close_images(&image_ctxs);
 
     r = prepare_group_images(group_ioctx, group_id, mirror_group.state,
@@ -3471,9 +3448,6 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
     }
 
     for (int i = 0, n = image_ctxs.size(); i < n; ++i) {
-      if (!on_finishes[i]) {
-        continue;
-      }
       r = on_finishes[i]->wait();
       delete on_finishes[i];
       if (r < 0) {
@@ -3486,18 +3460,13 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
     }
   }
 
-  group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
-  r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
-  if (r < 0) {
-    lderr(cct) << "failed to update group snapshot metadata: "
-               << cpp_strerror(r) << dendl;
-  }
-
-  if (!quiesce_requests.empty()) {
-    util::notify_unquiesce(image_ctxs, quiesce_requests);
-  }
-
   if (!ret_code) {
+    group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+    r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
+    if (r < 0) {
+      lderr(cct) << "failed to update group snapshot metadata: "
+                 << cpp_strerror(r) << dendl;
+    }
     C_SaferCond cond;
     auto req = mirror::snapshot::GroupUnlinkPeerRequest<I>::create(
         group_ioctx, group_id, &mirror_peer_uuids, &image_ctxs, &cond);
