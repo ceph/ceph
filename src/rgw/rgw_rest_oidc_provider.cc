@@ -33,7 +33,7 @@ int RGWRestOIDCProvider::verify_permission(optional_yield y)
 
 int RGWRestOIDCProvider::check_caps(const RGWUserCaps& caps)
 {
-  return caps.check_cap("roles", perm);
+  return caps.check_cap("oidc-provider", perm);
 }
 
 void RGWRestOIDCProvider::send_response()
