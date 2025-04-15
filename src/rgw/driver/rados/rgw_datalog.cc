@@ -893,6 +893,12 @@ void RGWDataChangesLog::add_entry(const DoutPrefixProvider* dpp,
 				  const rgw::bucket_log_layout_generation& gen,
 				  int shard_id, asio::yield_context y)
 {
+  if (shard_id >= num_shards) [[unlikely]] {
+    throw sys::system_error{
+      EINVAL, sys::generic_category(),
+      fmt::format("{} is not a valid shard. Valid shards are integers in [0, {})",
+		  shard_id, num_shards)};
+  }
   if (!log_data) {
     return;
   }
@@ -1043,6 +1049,7 @@ DataLogBackends::list(const DoutPrefixProvider *dpp, int shard,
 		      std::span<rgw_data_change_log_entry> entries,
 		      std::string marker)
 {
+  assert(shard < shards);
   const auto [start_id, // Starting generation
 	      start_cursor // Cursor to be used when listing the
 			   // starting generation
@@ -1114,11 +1121,18 @@ int RGWDataChangesLog::list_entries(
   const DoutPrefixProvider *dpp, int shard,
   int max_entries, std::vector<rgw_data_change_log_entry>& entries,
   std::string_view marker, std::string* out_marker, bool* truncated,
-  optional_yield y)
+  std::string* errstr, optional_yield y)
 {
   std::exception_ptr eptr;
   std::tuple<std::span<rgw_data_change_log_entry>,
 	     std::string> out;
+  if (shard >= num_shards) [[unlikely]] {
+    if (errstr) {
+    *errstr = fmt::format("{} is not a valid shard. Valid shards are integers in [0, {})",
+			 shard, num_shards);
+    }
+    return -EINVAL;
+  }
   if (std::ssize(entries) < max_entries) {
     entries.resize(max_entries);
   }
@@ -1233,9 +1247,16 @@ int RGWDataChangesLog::list_entries(const DoutPrefixProvider *dpp,int max_entrie
 }
 
 int RGWDataChangesLog::get_info(const DoutPrefixProvider* dpp, int shard_id,
-				RGWDataChangesLogInfo* info, optional_yield y)
+				RGWDataChangesLogInfo* info,
+				std::string* errstr, optional_yield y)
 {
-  assert(shard_id < num_shards);
+  if (shard_id >= num_shards) [[unlikely]] {
+    if (errstr) {
+      *errstr = fmt::format(
+	"{} is not a valid shard. Valid shards are integers in [0, {})",
+	shard_id, num_shards);
+    }
+  }
   auto be = bes->head();
   std::exception_ptr eptr;
   if (y) {
@@ -1263,6 +1284,7 @@ asio::awaitable<void> DataLogBackends::trim_entries(
   const DoutPrefixProvider *dpp, int shard_id,
   std::string_view marker)
 {
+  assert(shard_id < shards);
   auto [target_gen, cursor] = cursorgen(std::string{marker});
   std::unique_lock l(m);
 
@@ -1286,9 +1308,16 @@ asio::awaitable<void> DataLogBackends::trim_entries(
 }
 
 int RGWDataChangesLog::trim_entries(const DoutPrefixProvider *dpp, int shard_id,
-				    std::string_view marker, optional_yield y)
+				    std::string_view marker, std::string* errstr,
+				    optional_yield y)
 {
-  assert(shard_id < num_shards);
+  if (shard_id >= num_shards) [[unlikely]] {
+    if (errstr) {
+      *errstr = fmt::format(
+	"{} is not a valid shard. Valid shards are integers in [0, {})",
+	shard_id, num_shards);
+    }
+  }
   std::exception_ptr eptr;
   if (y) {
     auto& yield = y.get_yield_context();
@@ -1310,7 +1339,11 @@ int RGWDataChangesLog::trim_entries(const DoutPrefixProvider *dpp, int shard_id,
 
 int RGWDataChangesLog::trim_entries(const DoutPrefixProvider* dpp, int shard_id,
 				    std::string_view marker,
-				    librados::AioCompletion* c) {
+				    librados::AioCompletion* c)
+{
+  if (shard_id >= num_shards) [[unlikely]] {
+    return -EINVAL;
+  }
   asio::co_spawn(rados->get_executor(),
 		 bes->trim_entries(dpp, shard_id, marker),
 		 c);
@@ -1502,6 +1535,7 @@ void RGWDataChangesLog::renew_stop()
 
 void RGWDataChangesLog::mark_modified(int shard_id, const rgw_bucket_shard& bs, uint64_t gen)
 {
+  assert(shard_id < num_shards);
   if (!cct->_conf->rgw_data_notify_interval_msec) {
     return;
   }
