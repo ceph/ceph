@@ -164,7 +164,9 @@ void Replayer<I>::handle_schedule_load_group_snapshots(int r) {
   auto ctx = new LambdaContext(
     [this](int r) {
       load_local_group_snapshots();
+      m_in_flight_op_tracker.finish_op();
     });
+  m_in_flight_op_tracker.start_op();
   m_threads->work_queue->queue(ctx, 0);
 }
 
@@ -293,6 +295,7 @@ void Replayer<I>::init(Context* on_finish) {
            << ", remote_mirror_peer_uuid=" << m_remote_mirror_peer_uuid << dendl;
 
   on_finish->complete(0);
+
   load_local_group_snapshots();
 }
 
@@ -321,6 +324,7 @@ void Replayer<I>::load_local_group_snapshots() {
     }
   }
 
+  //FIXME: This is not accessed under a lock
   if (!m_local_group_snaps.empty()) {
     for (auto &local_snap : m_local_group_snaps) {
       if (local_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
@@ -342,6 +346,7 @@ void Replayer<I>::load_local_group_snapshots() {
   std::unique_lock locker{m_lock};
   m_in_flight_op_tracker.start_op();
   m_local_group_snaps.clear();
+
   auto ctx = create_context_callback<
       Replayer<I>,
       &Replayer<I>::handle_load_local_group_snapshots>(this);
@@ -355,10 +360,12 @@ template <typename I>
 void Replayer<I>::handle_load_local_group_snapshots(int r) {
   dout(10) << "r=" << r << dendl;
 
-  if (is_replay_interrupted()) {
+  std::unique_lock locker{m_lock};
+  if (is_replay_interrupted(&locker)) {
     m_in_flight_op_tracker.finish_op();
     return;
   }
+
   m_in_flight_op_tracker.finish_op();
 
   if (r < 0) {
@@ -383,21 +390,18 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
     return;
   }
 
-  load_remote_group_snapshots();
+  load_remote_group_snapshots(&locker);
 }
 
 template <typename I>
-void Replayer<I>::load_remote_group_snapshots() {
+void Replayer<I>::load_remote_group_snapshots(std::unique_lock<ceph::mutex>* locker) {
   dout(10) << "m_remote_group_id=" << m_remote_group_id << dendl;
 
-  std::unique_lock locker{m_lock};
-  if (is_replay_interrupted(&locker)) {
-    return;
-  }
   m_remote_group_snaps.clear();
   auto ctx = new LambdaContext(
     [this] (int r) {
       handle_load_remote_group_snapshots(r);
+      m_in_flight_op_tracker.finish_op();
   });
 
   m_in_flight_op_tracker.start_op();
@@ -410,11 +414,13 @@ template <typename I>
 void Replayer<I>::handle_load_remote_group_snapshots(int r) {
   dout(10) << "r=" << r << dendl;
 
+  // FIXME: This should take a lock to access variables
+  // For now the m_in_flight_op_tracker should prevent the Replayer
+  // from being deleted under the callback.
+
   if (is_replay_interrupted()) {
-    m_in_flight_op_tracker.finish_op();
     return;
   }
-  m_in_flight_op_tracker.finish_op();
 
   auto last_remote_snap = m_remote_group_snaps.rbegin();
   if (r < 0) {  // may be remote group is deleted?
@@ -630,6 +636,11 @@ void Replayer<I>::scan_for_unsynced_group_snapshots() {
         local_snap->snapshot_namespace);
     auto local_snap_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
         &local_snap->snapshot_namespace);
+
+    if (local_snap_ns) {
+      dout(10) << "local mirror snapshot: id=" << local_snap->id
+               << ", mirror_ns=" << *local_snap_ns << dendl;
+    }
     auto next_remote_snap = m_remote_group_snaps.end();
     if (snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER ||
         (local_snap_ns && (local_snap_ns->is_non_primary() ||
@@ -644,6 +655,7 @@ void Replayer<I>::scan_for_unsynced_group_snapshots() {
       }
     }
     if (found && next_remote_snap == m_remote_group_snaps.end()) {
+      dout(10) << "all remote snaps synced" << dendl;
       syncs_upto_date = true;
       break;
     } else if (next_remote_snap != m_remote_group_snaps.end()) {
