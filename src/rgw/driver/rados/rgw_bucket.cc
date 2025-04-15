@@ -1597,6 +1597,69 @@ static int bucket_stats(rgw::sal::Driver* driver,
   return 0;
 }
 
+static int bucket_restore_stats(rgw::sal::Driver* driver,
+                        const std::string& tenant_name,
+                        const std::string& bucket_name, Formatter* formatter,
+                        const DoutPrefixProvider* dpp, optional_yield y) {
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int restore_completed_count = 0;
+  int restore_in_progress_count = 0;
+  int restore_failed_count = 0;
+  int ret = driver->load_bucket(dpp, rgw_bucket(tenant_name, bucket_name),
+                                &bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  params.list_versions = bucket->versioned();
+  params.allow_unordered = true;
+  do {
+    ret = bucket->list(dpp, params, listing_max_entries, results, null_yield);
+    if (ret < 0) {
+      cerr << "ERROR: driver->list_objects(): " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+    for (vector<rgw_bucket_dir_entry>::iterator iter = results.objs.begin(); iter != results.objs.end(); ++iter) {
+      std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(iter->key.name);
+      if (obj) {
+        ret = obj->get_obj_attrs(null_yield, dpp);
+        if (ret < 0) {
+          cerr << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << std::endl;
+          return ret;
+        }
+        for (map<string, bufferlist>::iterator getattriter = obj->get_attrs().begin(); getattriter != obj->get_attrs().end(); ++getattriter) {
+          bufferlist& bl = getattriter->second;
+          if (getattriter->first == RGW_ATTR_RESTORE_STATUS) {
+            rgw::sal::RGWRestoreStatus rs;
+            try {
+              decode(rs, bl);
+            } catch (const JSONDecoder::err& e) {
+              cerr << "failed to decode JSON input: " << e.what() << std::endl;
+              return -EINVAL;
+            }
+            if (rs == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
+              restore_in_progress_count ++;
+            } else  if (rs == rgw::sal::RGWRestoreStatus::CloudRestored) {
+              restore_completed_count ++;
+            } else if (rs == rgw::sal::RGWRestoreStatus::RestoreFailed) {
+              restore_failed_count ++;
+            }
+          }
+        }
+      }
+    }
+  } while (results.is_truncated);
+  formatter->open_object_section("");
+  formatter->open_object_section("restore_stats");
+  formatter->dump_int("restore_completed_count", restore_completed_count);
+  formatter->dump_int("restore_in_progress_count", restore_in_progress_count);
+  formatter->dump_int("restore_failed_count", restore_failed_count);
+  formatter->close_section();
+  formatter->close_section();
+  return 0;
+}
+
 int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 				  RGWBucketAdminOpState& op_state,
 				  const std::list<std::string>& user_ids,
@@ -1816,6 +1879,12 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
     if (ret < 0) {
       return ret;
     }
+    if (op_state.restore_stats) {
+      ret = bucket_restore_stats(driver, user_id.tenant, bucket_name, formatter, dpp, y);
+      if (ret < 0) {
+        return ret;
+      }
+    }
   } else if (op_state.is_user_op()) {
     const rgw_user& uid = op_state.get_user_id();
     auto user = driver->get_user(uid);
@@ -1874,7 +1943,6 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
       }
     }
     driver->meta_list_keys_complete(handle);
-
     formatter->close_section();
   }
 
