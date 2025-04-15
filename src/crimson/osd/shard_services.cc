@@ -97,34 +97,18 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
     pgs.begin(), pgs.end(),
     [this, &shard_services, epoch](auto& pg) {
       auto old_map = pg.second->get_osdmap();
-      return shard_services.start_operation<PGAdvanceMap>(
-	pg.second,
-	shard_services,
-	epoch,
-	PeeringCtx{}, false, false).second.then(
-     [this, old_map, epoch, &shard_services, pg=pg.second] {
       return identify_splits(
 	shard_services,
-	pg,
+	pg.second,
 	old_map,
-	epoch).then(
-	  [old_map, epoch, &shard_services, pg] (auto&& children) {
-	  if (!children.empty()) {
-	    return shard_services.get_map(epoch).then(
-	      [&shard_services, pg, children] (cached_map_t&& new_map) {
-		return shard_services.start_operation<PGSplitting>(
-		  pg,
-		  shard_services,
-		  new_map,
-		  std::move(children),
-		  PeeringCtx{}).second;
-	    });
-	  } else {
-	    return seastar::now();
-	  }
+	epoch).then([this, epoch, &shard_services, pg=pg.second] (auto&& children) {
+	  return shard_services.start_operation<PGAdvanceMap>(
+	    pg,
+	    shard_services,
+	    epoch,
+	    PeeringCtx{}, false, false,
+	    std::move(children)).second;
         });
-      return seastar::now();
-    });
     return seastar::now();
   });
 }
