@@ -16,7 +16,8 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 @Component({
   selector: 'cd-nfs-rate-limit-form',
   templateUrl: './nfs-rate-limit.component.html',
-  styleUrls: ['./nfs-rate-limit.component.scss']
+  styleUrls: ['./nfs-rate-limit.component.scss'],
+  standalone: false
 })
 export class NfsRateLimitComponent implements OnInit {
   @Input() action: string;
@@ -186,8 +187,8 @@ export class NfsRateLimitComponent implements OnInit {
       ]),
       enable_ops: new UntypedFormControl(false),
       qos_type_ops: new UntypedFormControl('', [this.qosTypeValidator.bind(this)]),
-      max_export_iops: new UntypedFormControl(null, [Validators.min(10), Validators.max(16384)]),
-      max_client_iops: new UntypedFormControl(null, [Validators.min(10), Validators.max(16384)])
+      max_export_iops: new UntypedFormControl(null, [Validators.min(10), Validators.max(1638400)]),
+      max_client_iops: new UntypedFormControl(null, [Validators.min(10), Validators.max(1638400)])
     });
   }
 
