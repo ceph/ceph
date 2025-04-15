@@ -690,11 +690,11 @@ void RGWOp_DATALog_List::execute(optional_yield y) {
   // entry listed
   op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->
     datalog_rados->list_entries(this, shard_id, max_entries, entries,
-				marker, &last_marker, &truncated, y);
+				marker, &last_marker, &truncated, nullptr, y);
 
   RGWDataChangesLogInfo info;
   op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->
-    datalog_rados->get_info(this, shard_id, &info, y);
+    datalog_rados->get_info(this, shard_id, &info, nullptr, y);
 
   last_update = info.last_update;
 }
@@ -757,7 +757,7 @@ void RGWOp_DATALog_ShardInfo::execute(optional_yield y) {
   }
 
   op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->
-    datalog_rados->get_info(this, shard_id, &info, y);
+    datalog_rados->get_info(this, shard_id, &info, nullptr, y);
 }
 
 void RGWOp_DATALog_ShardInfo::send_response() {
@@ -907,7 +907,7 @@ void RGWOp_DATALog_Delete::execute(optional_yield y) {
   }
 
   op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->
-    datalog_rados->trim_entries(this, shard_id, marker, y);
+    datalog_rados->trim_entries(this, shard_id, marker, nullptr, y);
 }
 
 // not in header to avoid pulling in rgw_sync.h
