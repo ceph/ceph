@@ -310,6 +310,30 @@ public:
     return !max_in_progress || in_progress < max_in_progress;
   }
 
+  class ThrottleReleaser {
+    OperationThrottler *parent = nullptr;
+  public:
+    ThrottleReleaser(OperationThrottler *parent) : parent(parent) {}
+    ThrottleReleaser(const ThrottleReleaser &) = delete;
+    ThrottleReleaser(ThrottleReleaser &&rhs) noexcept {
+      std::swap(parent, rhs.parent);
+    }
+
+    ~ThrottleReleaser() {
+      if (parent) {
+	parent->release_throttle();
+      }
+    }
+  };
+
+  auto get_throttle(crimson::osd::scheduler::params_t params) {
+    return acquire_throttle(
+      params
+    ).then([this] {
+      return ThrottleReleaser{this};
+    });
+  }
+
   template <typename F>
   auto with_throttle(
     crimson::osd::scheduler::params_t params,
