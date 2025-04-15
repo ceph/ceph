@@ -1536,6 +1536,12 @@ test_mirror_group_snapshot_schedule() {
     rbd group image add rbd2/ns1/gp1 rbd2/ns1/img1
     rbd group image add rbd2/ns1/gp1 rbd2/ns1/img2
 
+    # group snapshot schedule commands should fail when mirroring is not
+    # enabled on the group
+    expect_fail rbd mirror group snapshot schedule add -p rbd2/ns1 --group gp1 1m
+    expect_fail rbd mirror group snapshot schedule rm -p rbd2/ns1 --group gp1
+    expect_fail rbd mirror group snapshot schedule ls -p rbd2/ns1 --group gp1
+
     test "$(rbd group snap ls rbd2/ns1/gp1 | grep -c mirror.primary)" = '0'
 
     rbd mirror group enable rbd2/ns1/gp1 snapshot
