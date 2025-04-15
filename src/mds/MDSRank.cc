@@ -98,8 +98,7 @@ private:
     // I need to seal off the current segment, and then mark all
     // previous segments for expiry
     auto* sle = mdcache->create_subtree_map();
-    mdlog->submit_entry(sle);
-    seq = sle->get_seq();
+    seq = mdlog->submit_entry(sle);
 
     Context *ctx = new LambdaContext([this](int r) {
         handle_clear_mdlog(r);
@@ -180,10 +179,6 @@ private:
       handle_write_head(r);
     }));
     mdlog->trim_expired_segments(ctx);
-
-    dout(5) << __func__ << ": trimming is complete; wait for journal head write. Journal expire_pos/trim_pos is now "
-            << std::hex << mdlog->get_journaler()->get_expire_pos() << "/"
-            << mdlog->get_journaler()->get_trimmed_pos() << dendl;
   }
 
   void handle_write_head(int r) {
@@ -202,6 +197,10 @@ private:
      */
     ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
     dout(20) << __func__ << ": r=" << r << dendl;
+
+    dout(5) << __func__ << ": trimming is complete; wait for journal head write. Journal expire_pos/trim_pos is now "
+            << std::hex << mdlog->get_journaler()->get_expire_pos() << "/"
+            << mdlog->get_journaler()->get_trimmed_pos() << dendl;
     on_finish->complete(r);
   }
 
