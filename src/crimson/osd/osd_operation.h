@@ -334,17 +334,6 @@ public:
     });
   }
 
-  template <typename F>
-  auto with_throttle(
-    crimson::osd::scheduler::params_t params,
-    F &&f) {
-    return acquire_throttle(params)
-      .then(std::forward<F>(f))
-      .finally([this] {
-	release_throttle();
-      });
-  }
-
 private:
   void dump_detail(Formatter *f) const final;
 
