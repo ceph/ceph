@@ -560,7 +560,7 @@ struct C_GroupGetInfo : public Context {
   }
 
   void finish(int r) override {
-    if (r < 0 && r != -ENOENT) {
+    if (r < 0) {
       on_finish->complete(r);
       return;
     }
