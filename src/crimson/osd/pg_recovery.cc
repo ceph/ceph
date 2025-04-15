@@ -5,6 +5,7 @@
 #include <fmt/ostream.h>
 #include <fmt/ranges.h>
 
+#include "crimson/common/log.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/osd/backfill_facades.h"
 #include "crimson/osd/osd_operations/background_recovery.h"
@@ -15,6 +16,8 @@
 
 #include "osd/osd_types.h"
 #include "osd/PeeringState.h"
+
+SET_SUBSYS(osd);
 
 namespace {
   seastar::logger& logger() {
@@ -525,14 +528,15 @@ PGRecovery::recover_object_with_throttle(
   const hobject_t &soid,
   eversion_t need)
 {
+  LOG_PREFIX(PGRecovery::recover_object_with_throttle);
   crimson::osd::scheduler::params_t params =
     {1, 0, crimson::osd::scheduler::scheduler_class_t::background_best_effort};
   auto &ss = pg->get_shard_services();
-  logger().debug("{} {}", soid, need);
+  DEBUGDPP("{} {}", pg->get_dpp(), soid, need);
   return ss.with_throttle(
     std::move(params),
-    [this, soid, need] {
-    logger().debug("got throttle: {} {}", soid, need);
+    [FNAME, this, soid, need] {
+    DEBUGDPP("got throttle: {} {}", pg->get_dpp(), soid, need);
     auto backend = pg->get_recovery_backend();
     assert(backend);
     return backend->recover_object(soid, need);
