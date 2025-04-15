@@ -2731,8 +2731,16 @@ int RadosObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 {
   RGWRados::Object op_target(store->getRados(), bucket->get_info(), *rados_ctx, get_obj());
   RGWRados::Object::Read read_op(&op_target);
+  rgw_obj target = get_obj();
 
-  return read_attrs(dpp, read_op, y);
+  int r = read_attrs(dpp, read_op, y, &target);
+  if (r < 0) {
+    return r;
+  }
+
+  set_instance(target.key.instance);
+
+  return 0;
 }
 
 int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
