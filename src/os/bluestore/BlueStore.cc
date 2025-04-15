@@ -18008,7 +18008,7 @@ int BlueStore::_do_remove(
       bluestore_blob_t& blob = e.blob->dirty_blob();
       blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
       e.blob->get_dirty_shared_blob() = nullptr;
-      h->extent_map.dirty_range(e.logical_offset, 1);
+      h->extent_map.dirty_range(e.logical_offset, e.length);
     }
   }
   txc->write_onode(h);
