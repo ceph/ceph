@@ -86,7 +86,13 @@ function main() {
     in_jenkins && echo "CI_DEBUG: Running 'build tests'"
     build tests
     echo "make check: successful build on $(git rev-parse HEAD)"
+
+    # XXX: trying to debug https://tracker.ceph.com/issues/70700 where something is corrupting this library
+    #chmod -w lib/libceph-common.so.2
+    ls -l lib/libceph-common.so*
     FOR_MAKE_CHECK=1 run
+    #chmod u+w lib/libceph-common.so.2
+    ls -l lib/libceph-common.so*
 }
 
 if [ "$0" = "$BASH_SOURCE" ]; then
