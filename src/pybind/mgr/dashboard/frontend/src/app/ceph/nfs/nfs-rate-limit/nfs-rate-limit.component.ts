@@ -186,8 +186,8 @@ export class NfsRateLimitComponent implements OnInit {
       ]),
       enable_ops: new UntypedFormControl(false),
       qos_type_ops: new UntypedFormControl('', [this.qosTypeValidator.bind(this)]),
-      max_export_iops: new UntypedFormControl(null, [Validators.min(10), Validators.max(16384)]),
-      max_client_iops: new UntypedFormControl(null, [Validators.min(10), Validators.max(16384)])
+      max_export_iops: new UntypedFormControl(null, [Validators.min(10), Validators.max(409600)]),
+      max_client_iops: new UntypedFormControl(null, [Validators.min(10), Validators.max(409600)])
     });
   }
 
