@@ -469,7 +469,7 @@ public:
   int list_entries(const DoutPrefixProvider *dpp, int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
 		   std::string_view marker, std::string* out_marker,
-		   bool* truncated, optional_yield y);
+		   bool* truncated, std::string* errstr, optional_yield y);
   asio::awaitable<std::tuple<std::vector<rgw_data_change_log_entry>,
 			     RGWDataChangesLogMarker>>
   list_entries(const DoutPrefixProvider *dpp, int max_entries,
@@ -480,11 +480,12 @@ public:
 		   optional_yield y);
 
   int trim_entries(const DoutPrefixProvider *dpp, int shard_id,
-		   std::string_view marker, optional_yield y);
+		   std::string_view marker, std::string* errstr, optional_yield y);
   int trim_entries(const DoutPrefixProvider *dpp, int shard_id,
-		    std::string_view marker, librados::AioCompletion* c);
+		   std::string_view marker, librados::AioCompletion* c);
   int get_info(const DoutPrefixProvider *dpp, int shard_id,
-	       RGWDataChangesLogInfo *info, optional_yield y);
+	       RGWDataChangesLogInfo *info, std::string* errstr,
+	       optional_yield y);
 
   void mark_modified(int shard_id, const rgw_bucket_shard& bs, uint64_t gen);
   auto read_clear_modified() {
