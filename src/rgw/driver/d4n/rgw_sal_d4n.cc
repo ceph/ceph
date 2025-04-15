@@ -37,7 +37,8 @@ static inline Object* nextObject(Object* t)
 }
 
 D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context) : FilterDriver(_next),
-                                                                                       io_context(io_context) 
+                                                                                       io_context(io_context),
+										       y(null_yield)
 {
   rgw::cache::Partition partition_info;
   partition_info.location = g_conf()->rgw_d4n_l1_datacache_persistent_path;
@@ -60,7 +61,8 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   bucketDir = std::make_unique<rgw::d4n::BucketDirectory>(conn);
   policyDriver = std::make_unique<rgw::d4n::PolicyDriver>(conn,
 							  cacheDriver.get(),
-							  "lfuda");
+							  "lfuda",
+                                                          this->y);
 
   std::string address = cct->_conf->rgw_d4n_address;
   config cfg;

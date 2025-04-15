@@ -60,6 +60,7 @@ class D4NFilterDriver : public FilterDriver {
     std::unique_ptr<rgw::d4n::BucketDirectory> bucketDir;
     std::unique_ptr<rgw::d4n::PolicyDriver> policyDriver;
     boost::asio::io_context& io_context;
+    optional_yield y;
 
   public:
     D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context);
@@ -84,6 +85,7 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::BlockDirectory* get_block_dir() { return blockDir.get(); }
     rgw::d4n::BucketDirectory* get_bucket_dir() { return bucketDir.get(); }
     rgw::d4n::PolicyDriver* get_policy_driver() { return policyDriver.get(); }
+    void save_y(optional_yield y) { this->y = y; }
     void shutdown() override;
 };
 
