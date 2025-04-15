@@ -18,7 +18,8 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 @Component({
   selector: 'cd-nfs-cluster-form',
   templateUrl: './nfs-cluster-form.component.html',
-  styleUrls: ['./nfs-cluster-form.component.scss']
+  styleUrls: ['./nfs-cluster-form.component.scss'],
+  standalone: false
 })
 export class NfsClusterFormComponent extends CdForm implements OnInit {
   @ViewChild(NfsRateLimitComponent, { static: false })
