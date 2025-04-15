@@ -771,11 +771,11 @@ void KernelDevice::_discard_thread(uint64_t tid)
       // It will also allow threads to finish in a timely manner.
       constexpr unsigned MAX_LOCAL_DISCARD = 32;
       unsigned count = 0;
-      for (auto p = discard_queued.begin();
-	   p != discard_queued.end() && count < MAX_LOCAL_DISCARD;
-	   ++p, ++count) {
-	discard_processing.insert(p.get_start(), p.get_len());
-	discard_queued.erase(p);
+      for (auto it = discard_queued.begin();
+           it != discard_queued.end() && count < MAX_LOCAL_DISCARD;
+           ++count) {
+        discard_processing.insert(it.get_start(), it.get_len());
+        it = discard_queued.erase(it);
       }
 
       // there are multiple active threads -> must use a counter instead of a flag
