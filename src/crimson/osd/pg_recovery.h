@@ -25,6 +25,9 @@ class PGBackend;
 
 class PGRecovery : public crimson::osd::BackfillState::BackfillListener {
 public:
+  using interruptor =
+    ::crimson::interruptible::interruptor<
+      ::crimson::osd::IOInterruptCondition>;
   template <typename T = void>
   using interruptible_future = RecoveryBackend::interruptible_future<T>;
   PGRecovery(PGRecoveryListener* pg) : pg(pg) {}
@@ -100,7 +103,7 @@ private:
   friend class crimson::osd::UrgentRecovery;
 
   interruptible_future<> recover_object_with_throttle(
-    const hobject_t &soid,
+    hobject_t soid,
     eversion_t need);
 
   interruptible_future<> recover_object(
