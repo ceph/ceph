@@ -6,7 +6,7 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { Permission } from '~/app/shared/models/permissions';
-import { SHARE_URL, SMBShare } from '../smb.model';
+import { SMBShare } from '../smb.model';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -18,6 +18,8 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+
+export const SHARE_PATH = 'cephfs/smb/share';
 
 @Component({
   selector: 'cd-smb-share-list',
@@ -93,7 +95,7 @@ export class SmbShareListComponent implements OnInit {
         name: `${this.actionLabels.CREATE}`,
         permission: 'create',
         icon: Icons.add,
-        routerLink: () => ['/cephfs/smb/share/create', this.clusterId],
+        routerLink: () => [`/${SHARE_PATH}/${URLVerbs.CREATE}`, this.clusterId],
         canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
       },
       {
@@ -101,7 +103,7 @@ export class SmbShareListComponent implements OnInit {
         permission: 'update',
         icon: Icons.edit,
         routerLink: () => [
-          `${SHARE_URL}${URLVerbs.EDIT}`,
+          `/${SHARE_PATH}/${URLVerbs.EDIT}`,
           this.clusterId,
           this.selection.first().name
         ]
@@ -144,7 +146,7 @@ export class SmbShareListComponent implements OnInit {
       itemNames: [`Share: ${share_id} (${name}) from cluster: ${cluster_id}`],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('smb/share/delete', {
+          task: new FinishedTask(`${SHARE_PATH}/${URLVerbs.DELETE}`, {
             share_id: share_id
           }),
           call: this.smbService.deleteShare(cluster_id, share_id)

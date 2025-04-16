@@ -73,7 +73,7 @@ describe('SmbJoinAuthFormComponent', () => {
 
     it('should get resource data and set form fields with it', () => {
       expect(getJoinAuth).toHaveBeenCalled();
-      expect(component.form.value).toEqual({
+      expect(component.form.getRawValue()).toEqual({
         authId: 'foo',
         username: 'user',
         password: 'pass',
