@@ -635,8 +635,9 @@ bool BackfillState::ProgressTracker::enqueue_push(const hobject_t& obj)
 
 void BackfillState::ProgressTracker::enqueue_drop(const hobject_t& obj)
 {
-  registry.try_emplace(
-    obj, registry_item_t{op_stage_t::enqueued_drop, pg_stat_t{}});
+  if (obj <= backfill_state().last_backfill_started)
+    registry.try_emplace(
+      obj, registry_item_t{op_stage_t::enqueued_drop, pg_stat_t{}});
 }
 
 void BackfillState::ProgressTracker::complete_to(
