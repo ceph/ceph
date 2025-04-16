@@ -775,6 +775,28 @@ class TestVolumeCreate(TestVolumesHelper):
             self.run_ceph_cmd(f'osd pool rm {data} {data} '
                                '--yes-i-really-really-mean-it')
 
+    def test_user_created_pool_isnt_deleted(self):
+        '''
+        Test that the user created pool is not deleted by this commmand if it
+        has been passed to it along with a non-existent pool name.
+        '''
+        data_pool = 'cephfs.b.data'
+        non_existent_meta_pool = 'nonexistent-pool'
+
+        self.run_ceph_cmd(f'osd pool create {data_pool}')
+        o = self.get_ceph_cmd_stdout('osd pool ls')
+        self.assertIn(data_pool, o)
+        self.assertNotIn(non_existent_meta_pool, o)
+
+        self.negtest_ceph_cmd(
+            args=f'fs volume create b --data-pool {data_pool} --meta-pool '
+                  f'{non_existent_meta_pool}',
+            retval=errno.ENOENT,
+            errmsgs=f'pool \'{non_existent_meta_pool}\' does not exist')
+
+        o = self.get_ceph_cmd_stdout('osd pool ls')
+        self.assertIn(data_pool, o)
+        self.assertNotIn(non_existent_meta_pool, o)
 
 class TestRenameCmd(TestVolumesHelper):
 
