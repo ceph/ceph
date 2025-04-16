@@ -137,7 +137,12 @@ private:
   void update_peers_last_backfill(
     const hobject_t& new_last_backfill) final;
   bool budget_available() const final;
+
+  // TODO: move to start_peering_event_operation
   void backfilled() final;
+  void request_backfill();
+  void all_replicas_recovered();
+
   friend crimson::osd::BackfillState::PGFacade;
   friend crimson::osd::PG;
   // backfill end
