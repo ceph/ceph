@@ -11,14 +11,7 @@ import { map } from 'rxjs/operators';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 
-import {
-  Filesystem,
-  PROVIDER,
-  SHARE_RESOURCE,
-  SHARE_URL,
-  ShareRequestModel,
-  SMBShare
-} from '../smb.model';
+import { Filesystem, PROVIDER, SHARE_RESOURCE, ShareRequestModel, SMBShare } from '../smb.model';
 import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
 import { CephfsSubvolume } from '~/app/shared/models/cephfs-subvolume.model';
 
@@ -27,6 +20,8 @@ import { NfsService } from '~/app/shared/api/nfs.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
+import { CLUSTER_PATH } from '../smb-cluster-list/smb-cluster-list.component';
+import { SHARE_PATH } from '../smb-share-list/smb-share-list.component';
 
 @Component({
   selector: 'cd-smb-share-form',
@@ -58,7 +53,7 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
   ) {
     super();
     this.resource = $localize`Share`;
-    this.isEdit = this.router.url.startsWith(`${SHARE_URL}${URLVerbs.EDIT}`);
+    this.isEdit = this.router.url.startsWith(`/${SHARE_PATH}/${URLVerbs.EDIT}`);
     this.action = this.isEdit ? this.actionLabels.EDIT : this.actionLabels.CREATE;
   }
   ngOnInit() {
@@ -230,18 +225,17 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
 
   handleTaskRequest(urlVerb: string) {
     const requestModel = this.buildRequest();
-    const BASE_URL = 'smb/share';
     const component = this;
     const share_id = this.smbShareForm.get('share_id').value;
 
     this.taskWrapperService
       .wrapTaskAroundCall({
-        task: new FinishedTask(`${BASE_URL}/${urlVerb}`, { share_id }),
+        task: new FinishedTask(`${SHARE_PATH}/${urlVerb}`, { share_id }),
         call: this.smbService.createShare(requestModel)
       })
       .subscribe({
         complete: () => {
-          this.router.navigate([`cephfs/smb`]);
+          this.router.navigate([CLUSTER_PATH]);
         },
         error: () => {
           component.smbShareForm.setErrors({ cdSubmitButton: true });
