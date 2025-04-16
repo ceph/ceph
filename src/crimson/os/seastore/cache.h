@@ -7,6 +7,10 @@
 
 #include "include/buffer.h"
 
+#ifndef NDEBUG
+#include "include/random.h"
+#endif
+
 #include "crimson/common/errorator.h"
 #include "crimson/common/errorator-loop.h"
 #include "crimson/os/seastore/backref_entry.h"
@@ -227,6 +231,16 @@ public:
         ceph_assert(extent->get_paddr() == paddr);
         assert(extent->cast<LogicalCachedExtent>()->get_laddr() == laddr);
 
+#ifndef NDEBUG
+        // improve test coverage to force lookup the slow path.
+        auto chance = ceph::util::generate_random_number<unsigned>(0, 128);
+        if (chance < 64) {
+          SUBDEBUGT(seastore_cache, "{} {} {}~0x{:x} logical is forced absent on t -- {}",
+                    t, type, laddr, paddr, len, *extent);
+          return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
+        }
+#endif
+
         if (extent->is_stable()) {
           if (extent->is_dirty()) {
             ++access_stats.l_trans_dirty;
@@ -284,6 +298,16 @@ public:
       ceph_assert(extent->get_type() == type);
       ceph_assert(extent->get_paddr() == paddr);
       assert(extent->cast<LogicalCachedExtent>()->get_laddr() == laddr);
+
+#ifndef NDEBUG
+      // improve test coverage to force lookup the slow path.
+      auto chance = ceph::util::generate_random_number<unsigned>(0, 128);
+      if (chance < 64) {
+        SUBDEBUGT(seastore_cache, "{} {} {}~0x{:x} logical is forced absent in cache -- {}",
+                  t, type, laddr, paddr, len, *extent);
+        return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
+      }
+#endif
 
       if (extent->is_dirty()) {
         ++access_stats.l_cache_dirty;
@@ -575,6 +599,16 @@ public:
       auto extent = ret.extent;
       ceph_assert(extent->get_type() == T::TYPE);
 
+#ifndef NDEBUG
+      // improve test coverage to force lookup the slow path.
+      auto chance = ceph::util::generate_random_number<unsigned>(0, 128);
+      if (chance < 64) {
+        SUBTRACET(seastore_cache, "{} {} is forced absent on t -- {}",
+                  t, T::TYPE, laddr, *extent);
+        return std::nullopt;
+      }
+#endif
+
       if (extent->is_stable()) {
         if (extent->is_dirty()) {
           ++access_stats.l_trans_dirty;
@@ -611,6 +645,16 @@ public:
     }
     ceph_assert(extent->get_type() == T::TYPE);
     assert(extent->is_stable());
+
+#ifndef NDEBUG
+    // improve test coverage to force lookup the slow path.
+    auto chance = ceph::util::generate_random_number<unsigned>(0, 128);
+    if (chance < 64) {
+      SUBTRACET(seastore_cache, "{} {} is forced absent in cache -- {}",
+                t, T::TYPE, laddr, *extent);
+      return std::nullopt;
+    }
+#endif
 
     if (extent->is_dirty()) {
       ++access_stats.l_cache_dirty;
