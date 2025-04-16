@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <include/expected.hpp>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -170,8 +171,7 @@ TEST_F(WebCacheTest, LookupOrAddsToCache) {
 
 TEST_F(WebCacheTest, LookupOrDoesNotAddToCacheWhenFetchErrors) {
   auto future = _uut->lookup_or(a_key, []() {
-    return WebCache<std::string, std::string>::Result(
-        std::make_shared<std::string>("test"),
+    return tl::unexpected(
         std::error_code(ENOENT, std::system_category()));
   });
   ASSERT_FALSE(_uut->lookup(a_key).has_value());
@@ -179,8 +179,7 @@ TEST_F(WebCacheTest, LookupOrDoesNotAddToCacheWhenFetchErrors) {
 
 TEST_F(WebCacheTest, LookupOrReturnsFetchError) {
   auto future = _uut->lookup_or(a_key, []() {
-    return WebCache<std::string, std::string>::Result(
-        std::make_shared<std::string>("test"),
+    return tl::unexpected(
         std::error_code(ENOSYS, std::system_category()));
   });
   ASSERT_EQ(ENOSYS, future.get().error().value());
