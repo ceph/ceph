@@ -212,6 +212,15 @@ public:
         t, type, paddr, len);
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
     } else if (result == Transaction::get_extent_ret::PRESENT) {
+      if (ret->get_length() != len) {
+        SUBDEBUGT(seastore_cache,
+          "{} {}~0x{:x} is present on t with inconsistent length 0x{:x} -- {}",
+          t, type, paddr, len, ret->get_length(), *ret);
+        return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
+      }
+
+      ceph_assert(ret->get_type() == type);
+
       if (ret->is_stable()) {
         if (ret->is_dirty()) {
           ++access_stats.trans_dirty;
@@ -225,14 +234,6 @@ public:
         ++stats.access.trans_pending;
       }
 
-      if (ret->get_length() != len) {
-        SUBDEBUGT(seastore_cache,
-          "{} {}~0x{:x} is present on t with inconsistent length 0x{:x} -- {}",
-          t, type, paddr, len, ret->get_length(), *ret);
-        return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
-      }
-
-      ceph_assert(ret->get_type() == type);
       if (!ret->is_fully_loaded()) {
         SUBDEBUGT(seastore_cache,
           "{} {}~0x{:x} is present on t without fully loaded -- {}",
@@ -267,14 +268,6 @@ public:
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
     }
 
-    if (ret->is_dirty()) {
-      ++access_stats.cache_dirty;
-      ++stats.access.cache_dirty;
-    } else {
-      ++access_stats.cache_lru;
-      ++stats.access.cache_lru;
-    }
-
     if (ret->get_length() != len) {
       SUBDEBUGT(seastore_cache,
         "{} {}~0x{:x} is present in cache with inconsistent length 0x{:x} -- {}",
@@ -283,6 +276,15 @@ public:
     }
 
     ceph_assert(ret->get_type() == type);
+
+    if (ret->is_dirty()) {
+      ++access_stats.cache_dirty;
+      ++stats.access.cache_dirty;
+    } else {
+      ++access_stats.cache_lru;
+      ++stats.access.cache_lru;
+    }
+
     t.add_to_read_set(ret);
     touch_extent(*ret, &t_src, t.get_cache_hint());
     if (!ret->is_fully_loaded()) {
