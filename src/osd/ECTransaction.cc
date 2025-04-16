@@ -51,7 +51,9 @@ void ECTransaction::Generate::encode_and_write() {
   // If partial writes are not supported, pad out to_write to a full stripe.
   if (!sinfo.supports_partial_writes()) {
     for (auto &&[shard, eset]: plan.will_write) {
-      if (sinfo.get_raw_shard(shard) >= sinfo.get_k()) continue;
+      if (sinfo.get_raw_shard(shard) >= sinfo.get_k()) {
+        continue;
+      }
 
       for (auto [off, len]: eset) {
         to_write.zero_pad(shard, off, len);
@@ -176,87 +178,89 @@ ECTransaction::WritePlanObj::WritePlanObj(
   write_superset.align(CEPH_PAGE_SIZE);
 
   shard_id_set writable_parity_shards = shard_id_set::intersection(sinfo.get_parity_shards(), writable_shards);
-  for (auto shard : writable_parity_shards) {
-    will_write[shard].insert(write_superset);
-  }
-
-  ECUtil::shard_extent_set_t reads(sinfo.get_k_plus_m());
-  ECUtil::shard_extent_set_t read_mask(sinfo.get_k_plus_m());
-
-  if (!sinfo.supports_partial_writes()) {
-    for (shard_id_t shard; shard < sinfo.get_k_plus_m(); ++shard) {
+  if (write_superset.size() > 0) {
+    for (auto shard : writable_parity_shards) {
       will_write[shard].insert(write_superset);
     }
-    will_write.align(sinfo.get_chunk_size());
-    reads = will_write;
-    sinfo.ro_size_to_read_mask(sinfo.ro_offset_to_next_stripe_ro_offset(orig_size), read_mask);
-    reads.intersection_of(read_mask);
-    do_parity_delta_write = false;
-  } else {
-    will_write.align(CEPH_PAGE_SIZE);
-    ECUtil::shard_extent_set_t pdw_reads(will_write);
 
-    sinfo.ro_size_to_read_mask(ECUtil::align_page_next(orig_size), read_mask);
+    ECUtil::shard_extent_set_t reads(sinfo.get_k_plus_m());
+    ECUtil::shard_extent_set_t read_mask(sinfo.get_k_plus_m());
 
-    /* Next we need to add the reads required for a conventional write */
-    for (auto shard : sinfo.get_data_shards()) {
-      reads[shard].insert(write_superset);
-      if (will_write.contains(shard)) {
-        reads[shard].subtract(will_write.at(shard));
+    if (!sinfo.supports_partial_writes()) {
+      for (shard_id_t shard; shard < sinfo.get_k_plus_m(); ++shard) {
+        will_write[shard].insert(write_superset);
       }
-      if (reads[shard].empty()) {
-        reads.erase(shard);
+      will_write.align(sinfo.get_chunk_size());
+      reads = will_write;
+      sinfo.ro_size_to_read_mask(sinfo.ro_offset_to_next_stripe_ro_offset(orig_size), read_mask);
+      reads.intersection_of(read_mask);
+      do_parity_delta_write = false;
+    } else {
+      will_write.align(CEPH_PAGE_SIZE);
+      ECUtil::shard_extent_set_t pdw_reads(will_write);
+
+      sinfo.ro_size_to_read_mask(ECUtil::align_page_next(orig_size), read_mask);
+
+      /* Next we need to add the reads required for a conventional write */
+      for (auto shard : sinfo.get_data_shards()) {
+        reads[shard].insert(write_superset);
+        if (will_write.contains(shard)) {
+          reads[shard].subtract(will_write.at(shard));
+        }
+        if (reads[shard].empty()) {
+          reads.erase(shard);
+        }
       }
+
+      /* We now need to add in the partial page ro writes. This is not particularly
+       * efficient as the are many divs in here, but non-4k aligned writes are
+       * not very efficient anyway
+       */
+      for (auto &&[off, len] : partial_page_ro_writes) {
+        sinfo.ro_range_to_shard_extent_set(
+          off, len, reads);
+      }
+
+      reads.intersection_of(read_mask);
+
+      /* Here we decide if we want to do a conventional write or a parity delta write. */
+      if (sinfo.supports_parity_delta_writes() && !object_in_cache &&
+          orig_size == projected_size && !reads.empty()) {
+
+        shard_id_set read_shards = reads.get_shard_id_set();
+        shard_id_set pdw_read_shards = pdw_reads.get_shard_id_set();
+
+        if (pdw_write_mode != 0) {
+          do_parity_delta_write = (pdw_write_mode == 2);
+        } else if (!shard_id_set::difference(pdw_read_shards, readable_shards).empty()) {
+          // Some kind of reconstruct would be needed for PDW, so don't bother.
+          do_parity_delta_write = false;
+        } else if (!shard_id_set::difference(read_shards, readable_shards).empty()) {
+          // Some kind of reconstruct is needed for conventional, but NOT for PDW!
+          do_parity_delta_write = true;
+        } else {
+          /* Everything we need for both is available, opt for which ever is less
+           * reads.
+           */
+          do_parity_delta_write = pdw_read_shards.size() < read_shards.size();
+        }
+
+        if (do_parity_delta_write) {
+          to_read = std::move(pdw_reads);
+          reads.clear(); // So we don't stash it at the end.
+        }
+          }
+
+      /* NOTE: We intentionally leave un-writable shards in the write plan.  As
+       * it is actually less efficient to take them out:- PDWs still need to
+       * compute the deltas and conventional writes still need to calcualte the
+       * parity. The transaction will be dropped by generate_transactions.
+       */
     }
 
-    /* We now need to add in the partial page ro writes. This is not particularly
-     * efficient as the are many divs in here, but non-4k aligned writes are
-     * not very efficient anyway
-     */
-    for (auto &&[off, len] : partial_page_ro_writes) {
-      sinfo.ro_range_to_shard_extent_set(
-        off, len, reads);
+    if (!reads.empty()) {
+      to_read = std::move(reads);
     }
-
-    reads.intersection_of(read_mask);
-
-    /* Here we decide if we want to do a conventional write or a parity delta write. */
-    if (sinfo.supports_parity_delta_writes() && !object_in_cache &&
-        orig_size == projected_size && !reads.empty()) {
-
-      shard_id_set read_shards = reads.get_shard_id_set();
-      shard_id_set pdw_read_shards = pdw_reads.get_shard_id_set();
-
-      if (pdw_write_mode != 0) {
-        do_parity_delta_write = (pdw_write_mode == 2);
-      } else if (!shard_id_set::difference(pdw_read_shards, readable_shards).empty()) {
-        // Some kind of reconstruct would be needed for PDW, so don't bother.
-        do_parity_delta_write = false;
-      } else if (!shard_id_set::difference(read_shards, readable_shards).empty()) {
-        // Some kind of reconstruct is needed for conventional, but NOT for PDW!
-        do_parity_delta_write = true;
-      } else {
-        /* Everything we need for both is available, opt for which ever is less
-         * reads.
-         */
-        do_parity_delta_write = pdw_read_shards.size() < read_shards.size();
-      }
-
-      if (do_parity_delta_write) {
-        to_read = std::move(pdw_reads);
-        reads.clear(); // So we don't stash it at the end.
-      }
-    }
-
-    /* NOTE: We intentionally leave un-writable shards in the write plan.  As
-     * it is actually less efficient to take them out:- PDWs still need to
-     * compute the deltas and conventional writes still need to calcualte the
-     * parity. The transaction will be dropped by generate_transactions.
-     */
-  }
-
-  if (!reads.empty()) {
-    to_read = std::move(reads);
   }
 
   /* validate post conditions:
@@ -267,18 +271,21 @@ ECTransaction::WritePlanObj::WritePlanObj(
 }
 
 void ECTransaction::Generate::all_shards_written() {
+  ceph_assert(!written_shards_final);
   if (entry) {
     entry->written_shards.insert_range(shard_id_t(0), sinfo.get_k_plus_m());
   }
 }
 
 void ECTransaction::Generate::shard_written(const shard_id_t shard) {
+  ceph_assert(!written_shards_final);
   if (entry) {
     entry->written_shards.insert(shard);
   }
 }
 
 void ECTransaction::Generate::shards_written(const shard_id_set &shards) {
+  ceph_assert(!written_shards_final);
   if (entry) {
     entry->written_shards.insert(shards);
   }
@@ -374,8 +381,9 @@ void ECTransaction::Generate::process_init() {
           ghobject_t(oid, ghobject_t::NO_GEN, shard));
       }
 
-      if (plan.hinfo && plan.shinfo)
+      if (plan.hinfo && plan.shinfo) {
         plan.hinfo->update_to(*plan.shinfo);
+      }
 
       if (obc) {
         auto cobciter = t.obc_map.find(cop.source);
@@ -393,8 +401,9 @@ void ECTransaction::Generate::process_init() {
           coll_t(spg_t(pgid, shard)),
           ghobject_t(oid, ghobject_t::NO_GEN, shard));
       }
-      if (plan.hinfo && plan.shinfo)
+      if (plan.hinfo && plan.shinfo) {
         plan.hinfo->update_to(*plan.shinfo);
+      }
       if (obc) {
         auto cobciter = t.obc_map.find(rop.source);
         ceph_assert(cobciter == t.obc_map.end());
@@ -455,6 +464,13 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     plan(plan),
     read_sem(&sinfo),
     to_write(&sinfo) {
+
+  vector<unsigned> old_transaction_counts(sinfo.get_k_plus_m());
+
+  for (auto &&[shard, t] : transactions) {
+    old_transaction_counts[int(shard)] = t.get_num_ops();
+  }
+
   auto obiter = t.obc_map.find(oid);
   if (obiter != t.obc_map.end()) {
     obc = obiter->second;
@@ -508,6 +524,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   ceph_assert(!(op.clear_omap) && !(op.omap_header) && op.omap_updates.empty());
 
   if (op.alloc_hint) {
+    all_shards_written();
     alloc_hint(op, transactions, pgid, oid, sinfo);
   }
 
@@ -520,7 +537,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     }
   }
   debug(oid, "to_write", to_write, dpp);
-  ldpp_dout(dpp, 20) << "generate_transactions: plan: " << plan << dendl;
+  ldpp_dout(dpp, 20) << " generate_transactions: plan: " << plan << dendl;
 
   if (op.truncate && op.truncate->first < plan.orig_size) {
     truncate();
@@ -528,15 +545,6 @@ ECTransaction::Generate::Generate(PGTransaction &t,
 
   overlay_writes();
   appends_and_clone_ranges();
-
-  // On a size change, we want to update OI on all shards
-  if (plan.orig_size != plan.projected_size) {
-    all_shards_written();
-  } else {
-    // All priumary shards must always be written, regardless of the write plan.
-    shards_written(sinfo.get_parity_shards());
-    shard_written(shard_id_t(0));
-  }
 
   if (!to_write.empty()) {
     encode_and_write();
@@ -553,18 +561,51 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     entry->mod_desc.append(ECUtil::align_page_next(plan.orig_size));
   }
 
+  if (op.is_delete()) {
+    handle_deletes();
+  }
+
+  // On a size change, we want to update OI on all shards
+  if (plan.orig_size != plan.projected_size) {
+    all_shards_written();
+  } else {
+    // All primary shards must always be written, regardless of the write plan.
+    shards_written(sinfo.get_parity_shards());
+    shard_written(shard_id_t(0));
+  }
+
   written_and_present_shards();
 
   if (!op.attr_updates.empty()) {
     attr_updates();
   }
 
-  if (entry && !xattr_rollback.empty()) {
+  if (!entry) {
+    return;
+  }
+
+  if (!xattr_rollback.empty()) {
     entry->mod_desc.setattrs(xattr_rollback);
   }
 
-  if (!op.is_delete()) {
-    handle_deletes();
+  /* It is essential for rollback that every shard with a non-empty transaction
+   * is recorded in written_shards. In fact written shards contains every
+   * shard that would have a transaction if it were present. This is why we do
+   * not simply construct written shards here.
+   */
+  for (auto &&[shard, t] : transactions) {
+    if (t.get_num_ops() > old_transaction_counts[int(shard)] &&
+        !entry->is_written_shard(shard)) {
+      ldpp_dout(dpp, 20) << __func__ << " Transaction for shard " << shard << ": ";
+      Formatter *f = Formatter::create("json");
+      f->open_object_section("t");
+      t.dump(f);
+      f->close_section();
+      f->flush(*_dout);
+      delete f;
+      *_dout << dendl;
+      ceph_abort_msg("Written shard not set, but messages present. ");
+    }
   }
 }
 
@@ -768,6 +809,7 @@ void ECTransaction::Generate::written_and_present_shards() {
     if (entry->written_shards.size() == sinfo.get_k_plus_m()) {
       // More efficient to encode an empty set for all shards
       entry->written_shards.clear();
+      written_shards_final = true;
     }
     // Calculate set of present shards
     for (auto &&[shard, t]: transactions) {
@@ -822,17 +864,6 @@ void ECTransaction::Generate::written_and_present_shards() {
                          << " written=" << entry->written_shards
                          << " shard_versions=" << oi.shard_versions << dendl;
     }
-
-    /* It is essential for rollback that every shard with a non-empty transaction
-     * is recorded in written_shards. In fact written shards contains every
-     * shard that would have a transaction if it were present. This is why we do
-     * not simply construct written shards here.
-     */
-    for (auto &&[shard, t] : transactions) {
-      if (entry && (!t.empty() || !sinfo.is_nonprimary_shard(shard))) {
-        ceph_assert(entry->is_written_shard(shard));
-      }
-    }
   }
 }
 
@@ -842,12 +873,13 @@ void ECTransaction::Generate::attr_updates() {
     if (update) {
       to_set[attr] = *(update);
     } else {
-      all_shards_written();
       for (auto &&[shard, t]: transactions) {
-        t.rmattr(
-          coll_t(spg_t(pgid, shard)),
-          ghobject_t(oid, ghobject_t::NO_GEN, shard),
-          attr);
+        if (!sinfo.is_nonprimary_shard(shard)) {
+          t.rmattr(
+            coll_t(spg_t(pgid, shard)),
+            ghobject_t(oid, ghobject_t::NO_GEN, shard),
+            attr);
+        }
       }
     }
     if (obc) {

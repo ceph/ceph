@@ -99,6 +99,7 @@ class Generate {
   std::vector<std::pair<uint64_t, uint64_t>> rollback_extents;
   std::vector<shard_id_set> rollback_shards;
   uint32_t fadvise_flags = 0;
+  bool written_shards_final{false};
 
   void all_shards_written();
   void shard_written(const shard_id_t shard);
