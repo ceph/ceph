@@ -133,6 +133,57 @@ class MapsCollectionStatus {
 };
 
 
+// links to the two sets of I/O performance counters used by PgScrubber
+// (one to be used when in a replicated pool, and one for EC))
+static inline constexpr ScrubCounterSet io_counters_replicated{
+  .getattr_cnt = l_osd_scrub_rppool_getattr_cnt,
+  .stats_cnt = l_osd_scrub_rppool_stats_cnt,
+  .read_cnt = l_osd_scrub_rppool_read_cnt,
+  .read_bytes = l_osd_scrub_rppool_read_bytes,
+  .omapgetheader_cnt = l_osd_scrub_omapgetheader_cnt,
+  .omapgetheader_bytes = l_osd_scrub_omapgetheader_bytes,
+  .omapget_cnt = l_osd_scrub_omapget_cnt,
+  .omapget_bytes = l_osd_scrub_omapget_bytes,
+  .started_cnt = l_osd_scrub_rppool_started,
+  .active_started_cnt = l_osd_scrub_rppool_active_started,
+  .successful_cnt = l_osd_scrub_rppool_successful,
+  .successful_elapsed = l_osd_scrub_rppool_successful_elapsed,
+  .failed_cnt = l_osd_scrub_rppool_failed,
+  .failed_elapsed = l_osd_scrub_rppool_failed_elapsed,
+  // replica-reservation-related:
+  .rsv_successful_cnt = l_osd_scrub_rppool_reserv_success,
+  .rsv_successful_elapsed = l_osd_scrub_rppool_reserv_successful_elapsed,
+  .rsv_aborted_cnt = l_osd_scrub_rppool_reserv_aborted,
+  .rsv_rejected_cnt = l_osd_scrub_rppool_reserv_rejected,
+  .rsv_skipped_cnt = l_osd_scrub_rppool_reserv_skipped,
+  .rsv_failed_elapsed = l_osd_scrub_rppool_reserv_failed_elapsed,
+  .rsv_secondaries_num = l_osd_scrub_rppool_reserv_secondaries_num
+};
+
+static inline constexpr ScrubCounterSet io_counters_ec{
+  .getattr_cnt = l_osd_scrub_ec_getattr_cnt,
+  .stats_cnt = l_osd_scrub_ec_stats_cnt,
+  .read_cnt = l_osd_scrub_ec_read_cnt,
+  .read_bytes = l_osd_scrub_ec_read_bytes,
+  .omapgetheader_cnt = l_osd_scrub_omapgetheader_cnt,
+  .omapgetheader_bytes = l_osd_scrub_omapgetheader_bytes,
+  .omapget_cnt = l_osd_scrub_omapget_cnt,
+  .omapget_bytes = l_osd_scrub_omapget_bytes,
+  .started_cnt = l_osd_scrub_ec_started,
+  .active_started_cnt = l_osd_scrub_ec_active_started,
+  .successful_cnt = l_osd_scrub_ec_successful,
+  .successful_elapsed = l_osd_scrub_ec_successful_elapsed,
+  .failed_cnt = l_osd_scrub_ec_failed,
+  .failed_elapsed = l_osd_scrub_ec_failed_elapsed,
+  // replica-reservation-related:
+  .rsv_successful_cnt = l_osd_scrub_ec_reserv_success,
+  .rsv_successful_elapsed = l_osd_scrub_ec_reserv_successful_elapsed,
+  .rsv_aborted_cnt = l_osd_scrub_ec_reserv_aborted,
+  .rsv_rejected_cnt = l_osd_scrub_ec_reserv_rejected,
+  .rsv_skipped_cnt = l_osd_scrub_ec_reserv_skipped,
+  .rsv_failed_elapsed = l_osd_scrub_ec_reserv_failed_elapsed,
+  .rsv_secondaries_num = l_osd_scrub_ec_reserv_secondaries_num
+};
 }  // namespace Scrub
 
 
@@ -391,7 +442,9 @@ class PgScrubber : public ScrubPgIF,
   int get_whoami() const final;
   spg_t get_spgid() const final { return m_pg->get_pgid(); }
   PG* get_pg() const final { return m_pg; }
-  PerfCounters& get_counters_set() const final;
+  PerfCounters* get_osd_perf_counters() const final;
+  const Scrub::ScrubCounterSet& get_unlabeled_counters() const final;
+  PerfCounters* get_labeled_counters() const final;
 
   /// delay next retry of this PG after a replica reservation failure
   void flag_reservations_failure();
