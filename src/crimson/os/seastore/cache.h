@@ -202,6 +202,9 @@ public:
     extent_types_t type) {
     LOG_PREFIX(Cache::get_extent_if_cached);
     const auto t_src = t.get_src();
+    cache_access_stats_t& access_stats = get_by_ext(
+      get_by_src(stats.access_by_src_ext, t_src),
+      type);
 
     if (is_logical_type(type)) {
       auto ret = t.get_logical_extent(laddr);
@@ -212,6 +215,7 @@ public:
         return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
       } else if (ret.state == Transaction::get_extent_ret::PRESENT) {
         auto extent = ret.extent;
+
         if (extent->get_length() != len) {
           SUBDEBUGT(seastore_cache,
             "{} {} {}~0x{:x} logical is present on t with inconsistent length 0x{:x} -- {}",
@@ -222,6 +226,20 @@ public:
         ceph_assert(extent->get_type() == type);
         ceph_assert(extent->get_paddr() == paddr);
         assert(extent->cast<LogicalCachedExtent>()->get_laddr() == laddr);
+
+        if (extent->is_stable()) {
+          if (extent->is_dirty()) {
+            ++access_stats.l_trans_dirty;
+            ++stats.access.l_trans_dirty;
+          } else {
+            ++access_stats.l_trans_lru;
+            ++stats.access.l_trans_lru;
+          }
+        } else {
+          ++access_stats.l_trans_pending;
+          ++stats.access.l_trans_pending;
+        }
+
         if (!extent->is_fully_loaded()) {
           SUBDEBUGT(seastore_cache,
             "{} {} {}~0x{:x} logical is present on t without fully loaded -- {}",
@@ -248,6 +266,14 @@ public:
       }
       assert(!is_retired_placeholder_type(extent->get_type()));
 
+      if (extent->is_dirty()) {
+        ++access_stats.l_cache_dirty;
+        ++stats.access.l_cache_dirty;
+      } else {
+        ++access_stats.l_cache_lru;
+        ++stats.access.l_cache_lru;
+      }
+
       if (extent->get_length() != len) {
         SUBDEBUGT(seastore_cache,
           "{} {} {}~0x{:x} logical is present in cache with inconsistent length 0x{:x} -- {}",
@@ -258,6 +284,15 @@ public:
       ceph_assert(extent->get_type() == type);
       ceph_assert(extent->get_paddr() == paddr);
       assert(extent->cast<LogicalCachedExtent>()->get_laddr() == laddr);
+
+      if (extent->is_dirty()) {
+        ++access_stats.l_cache_dirty;
+        ++stats.access.l_cache_dirty;
+      } else {
+        ++access_stats.l_cache_lru;
+        ++stats.access.l_cache_lru;
+      }
+
       t.add_to_read_set(extent);
       touch_extent(*extent, &t_src, t.get_cache_hint());
       if (!extent->is_fully_loaded()) {
@@ -279,9 +314,6 @@ public:
     // !is_logical_type(type)
     CachedExtentRef ret;
     auto result = t.get_extent(paddr, &ret);
-    cache_access_stats_t& access_stats = get_by_ext(
-      get_by_src(stats.access_by_src_ext, t_src),
-      type);
     if (result == Transaction::get_extent_ret::RETIRED) {
       SUBDEBUGT(seastore_cache,
         "{} {} {}~0x{:x} physical is retired on t",
@@ -531,6 +563,10 @@ public:
     static_assert(!is_retired_placeholder_type(T::TYPE));
     LOG_PREFIX(Cache::get_logical_extent);
     const auto t_src = t.get_src();
+    cache_access_stats_t& access_stats = get_by_ext(
+      get_by_src(stats.access_by_src_ext, t_src),
+      T::TYPE);
+
     auto ret = t.get_logical_extent(laddr);
     if (ret.state == Transaction::get_extent_ret::RETIRED) {
       SUBERRORT(seastore_cache, "{} {} is retired on t", t, T::TYPE, laddr);
@@ -538,6 +574,20 @@ public:
     } else if (ret.state == Transaction::get_extent_ret::PRESENT) {
       auto extent = ret.extent;
       ceph_assert(extent->get_type() == T::TYPE);
+
+      if (extent->is_stable()) {
+        if (extent->is_dirty()) {
+          ++access_stats.l_trans_dirty;
+          ++stats.access.l_trans_dirty;
+        } else {
+          ++access_stats.l_trans_lru;
+          ++stats.access.l_trans_lru;
+        }
+      } else {
+        ++access_stats.l_trans_pending;
+        ++stats.access.l_trans_pending;
+      }
+
       if (!extent->is_fully_loaded()) {
         SUBDEBUGT(seastore_cache,
           "{} {} is present on t without fully loaded, reading ... -- {}",
@@ -561,6 +611,15 @@ public:
     }
     ceph_assert(extent->get_type() == T::TYPE);
     assert(extent->is_stable());
+
+    if (extent->is_dirty()) {
+      ++access_stats.l_cache_dirty;
+      ++stats.access.l_cache_dirty;
+    } else {
+      ++access_stats.l_cache_lru;
+      ++stats.access.l_cache_lru;
+    }
+
     t.add_to_read_set(extent);
     touch_extent(*extent, &t_src, t.get_cache_hint());
     if (!extent->is_fully_loaded()) {

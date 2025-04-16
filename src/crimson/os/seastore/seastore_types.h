@@ -2981,6 +2981,12 @@ std::ostream& operator<<(std::ostream&, const dirty_io_stats_printer_t&);
  *   get_caching_extent_by_type() -- test only
  */
 struct cache_access_stats_t {
+  uint64_t l_trans_pending = 0;
+  uint64_t l_trans_dirty = 0;
+  uint64_t l_trans_lru = 0;
+  uint64_t l_cache_dirty = 0;
+  uint64_t l_cache_lru = 0;
+
   uint64_t trans_pending = 0;
   uint64_t trans_dirty = 0;
   uint64_t trans_lru = 0;
@@ -2989,6 +2995,14 @@ struct cache_access_stats_t {
 
   uint64_t load_absent = 0;
   uint64_t load_present = 0;
+
+  uint64_t get_l_trans_hit() const {
+    return l_trans_pending + l_trans_dirty + l_trans_lru;
+  }
+
+  uint64_t get_l_cache_hit() const {
+    return l_cache_dirty + l_cache_lru;
+  }
 
   uint64_t get_trans_hit() const {
     return trans_pending + trans_dirty + trans_lru;
@@ -3002,8 +3016,16 @@ struct cache_access_stats_t {
     return get_cache_hit() + load_absent;
   }
 
-  uint64_t get_total_access() const {
+  uint64_t get_trans_access() const {
     return get_trans_hit() + get_cache_access();
+  }
+
+  uint64_t get_l_cache_access() const {
+    return get_l_cache_hit() + get_trans_access();
+  }
+
+  uint64_t get_total_access() const {
+    return get_l_trans_hit() + get_l_cache_access();
   }
 
   bool is_empty() const {
@@ -3011,6 +3033,11 @@ struct cache_access_stats_t {
   }
 
   void add(const cache_access_stats_t& o) {
+    l_trans_pending += o.l_trans_pending;
+    l_trans_dirty += o.l_trans_dirty;
+    l_trans_lru += o.l_trans_lru;
+    l_cache_dirty += o.l_cache_dirty;
+    l_cache_lru += o.l_cache_lru;
     trans_pending += o.trans_pending;
     trans_dirty += o.trans_dirty;
     trans_lru += o.trans_lru;
@@ -3021,6 +3048,11 @@ struct cache_access_stats_t {
   }
 
   void minus(const cache_access_stats_t& o) {
+    l_trans_pending -= o.l_trans_pending;
+    l_trans_dirty -= o.l_trans_dirty;
+    l_trans_lru -= o.l_trans_lru;
+    l_cache_dirty -= o.l_cache_dirty;
+    l_cache_lru -= o.l_cache_lru;
     trans_pending -= o.trans_pending;
     trans_dirty -= o.trans_dirty;
     trans_lru -= o.trans_lru;
@@ -3031,6 +3063,11 @@ struct cache_access_stats_t {
   }
 
   void divide_by(unsigned d) {
+    l_trans_pending /= d;
+    l_trans_dirty /= d;
+    l_trans_lru /= d;
+    l_cache_dirty /= d;
+    l_cache_lru /= d;
     trans_pending /= d;
     trans_dirty /= d;
     trans_lru /= d;

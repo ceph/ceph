@@ -1054,12 +1054,30 @@ std::ostream& operator<<(std::ostream& out, const cache_access_stats_printer_t& 
     out << fmt::format(dfmt, total_access/1000)
         << "K, ";
   }
+  double ltrans_hit = static_cast<double>(p.stats.get_l_trans_hit());
+  double lcache_hit = static_cast<double>(p.stats.get_l_cache_hit());
+  double lcache_access = static_cast<double>(p.stats.get_l_cache_access());
   double trans_hit = static_cast<double>(p.stats.get_trans_hit());
+  double trans_access = static_cast<double>(p.stats.get_trans_access());
   double cache_hit = static_cast<double>(p.stats.get_cache_hit());
   double cache_access = static_cast<double>(p.stats.get_cache_access());
   double load_absent = static_cast<double>(p.stats.load_absent);
-  out << "trans-hit="
-      << fmt::format(dfmt, trans_hit/total_access*100)
+  out << "ltrans-hit="
+      << fmt::format(dfmt, ltrans_hit/total_access*100)
+      << "%(pend"
+      << fmt::format(dfmt, p.stats.l_trans_pending/ltrans_hit)
+      << ",dirt"
+      << fmt::format(dfmt, p.stats.l_trans_dirty/ltrans_hit)
+      << ",lru"
+      << fmt::format(dfmt, p.stats.l_trans_lru/ltrans_hit)
+      << "), lcache-hit="
+      << fmt::format(dfmt, lcache_hit/lcache_access*100)
+      << "%(dirt"
+      << fmt::format(dfmt, p.stats.l_cache_dirty/lcache_hit)
+      << ",lru"
+      << fmt::format(dfmt, p.stats.l_cache_lru/lcache_hit)
+      << "), trans-hit="
+      << fmt::format(dfmt, trans_hit/trans_access*100)
       << "%(pend"
       << fmt::format(dfmt, p.stats.trans_pending/trans_hit)
       << ",dirt"
