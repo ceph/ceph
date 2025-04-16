@@ -45,6 +45,14 @@ public:
   {}
 
   ~ErasureCodeJerasure() override {}
+
+  uint64_t get_supported_optimizations() const override {
+    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+      FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
+      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
+      FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
+  }
+
   
   unsigned int get_chunk_count() const override {
     return k + m;
@@ -56,12 +64,26 @@ public:
 
   unsigned int get_chunk_size(unsigned int stripe_width) const override;
 
+  [[deprecated]]
   int encode_chunks(const std::set<int> &want_to_encode,
-		    std::map<int, ceph::buffer::list> *encoded) override;
+        std::map<int, ceph::buffer::list> *encoded) override;
+  int encode_chunks(const shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override;
 
+  [[deprecated]]
   int decode_chunks(const std::set<int> &want_to_read,
 		    const std::map<int, ceph::buffer::list> &chunks,
 		    std::map<int, ceph::buffer::list> *decoded) override;
+  int decode_chunks(const shard_id_set &want_to_read,
+                    shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override;
+
+  void encode_delta(const ceph::bufferptr &old_data,
+                    const ceph::bufferptr &new_data,
+                    ceph::bufferptr *delta_maybe_in_place);
+
+  void apply_delta(const shard_id_map<ceph::bufferptr> &in,
+                           shard_id_map<ceph::bufferptr> &out) = 0;
 
   int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
 
@@ -75,6 +97,18 @@ public:
   virtual unsigned get_alignment() const = 0;
   virtual void prepare() = 0;
   static bool is_prime(int value);
+
+  void matrix_apply_delta(const shard_id_map<bufferptr> &in,
+                          shard_id_map<bufferptr> &out,
+                          int k, int w, int *matrix);
+
+  void schedule_apply_delta(const shard_id_map<bufferptr> &in,
+                            shard_id_map<bufferptr> &out,
+                            int k, int w, int packetsize,
+                            int ** simple_schedule);
+
+  void do_scheduled_ops(char **ptrs, int **operations, int packetsize, int s, int d);
+
 protected:
   virtual int parse(ceph::ErasureCodeProfile &profile, std::ostream *ss);
 };
@@ -102,6 +136,8 @@ public:
                                char **data,
                                char **coding,
                                int blocksize) override;
+  void apply_delta(const shard_id_map<ceph::bufferptr> &in,
+                   shard_id_map<ceph::bufferptr> &out) override;
   unsigned get_alignment() const override;
   size_t get_minimum_granularity() override
   {
@@ -136,6 +172,8 @@ public:
                                char **data,
                                char **coding,
                                int blocksize) override;
+  void apply_delta(const shard_id_map<ceph::bufferptr> &in,
+                   shard_id_map<ceph::bufferptr> &out) override;
   unsigned get_alignment() const override;
   size_t get_minimum_granularity() override
   {
@@ -152,12 +190,14 @@ class ErasureCodeJerasureCauchy : public ErasureCodeJerasure {
 public:
   int *bitmatrix;
   int **schedule;
+  int **simple_schedule;
   int packetsize;
 
   explicit ErasureCodeJerasureCauchy(const char *technique) :
     ErasureCodeJerasure(technique),
     bitmatrix(0),
     schedule(0),
+    simple_schedule(0),
     packetsize(0)
   {
     DEFAULT_K = "7";
@@ -173,6 +213,8 @@ public:
                                char **data,
                                char **coding,
                                int blocksize) override;
+  void apply_delta(const shard_id_map<ceph::bufferptr> &in,
+                   shard_id_map<ceph::bufferptr> &out) override;
   unsigned get_alignment() const override;
   size_t get_minimum_granularity() override
   {
@@ -205,12 +247,14 @@ class ErasureCodeJerasureLiberation : public ErasureCodeJerasure {
 public:
   int *bitmatrix;
   int **schedule;
+  int **simple_schedule;
   int packetsize;
 
   explicit ErasureCodeJerasureLiberation(const char *technique = "liberation") :
     ErasureCodeJerasure(technique),
     bitmatrix(0),
     schedule(0),
+    simple_schedule(0),
     packetsize(0)
   {
     DEFAULT_K = "2";
@@ -226,6 +270,8 @@ public:
                                char **data,
                                char **coding,
                                int blocksize) override;
+  void apply_delta(const shard_id_map<ceph::bufferptr> &in,
+                   shard_id_map<ceph::bufferptr> &out) override;
   unsigned get_alignment() const override;
   size_t get_minimum_granularity() override
   {

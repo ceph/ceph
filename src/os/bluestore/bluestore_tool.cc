@@ -214,6 +214,25 @@ void log_dump(
   delete fs;
 }
 
+void super_dump(
+  CephContext *cct,
+  const string& path,
+  const vector<string>& devs)
+{
+  validate_path(cct, path, true);
+  BlueFS *fs = new BlueFS(cct);
+
+  add_devices(fs, cct, devs);
+  int r = fs->super_dump();
+  if (r < 0) {
+    cerr << "super_dump failed" << ": "
+         << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  delete fs;
+}
+
 void inferring_bluefs_devices(vector<string>& devs, std::string& path)
 {
   cout << "inferring bluefs devices from bluestore path" << std::endl;
@@ -340,6 +359,7 @@ int main(int argc, char **argv)
         "set-label-key, "
         "rm-label-key, "
         "prime-osd-dir, "
+        "bluefs-super-dump, "
         "bluefs-log-dump, "
         "free-dump, "
         "free-score, "
@@ -347,10 +367,10 @@ int main(int argc, char **argv)
         "bluefs-stats, "
         "reshard, "
         "show-sharding, "
-	"trim, "
-        "zap-device"
-)
-    ;
+        "trim, "
+        "zap-device, "
+        "revert-wal-to-plain"
+    );
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
 
@@ -466,7 +486,10 @@ int main(int argc, char **argv)
     }
   }
 
-  if (action == "fsck" || action == "repair" || action == "quick-fix" || action == "allocmap" || action == "qfsck" || action == "restore_cfb") {
+  if (action == "fsck" || action == "repair" ||
+      action == "quick-fix" || action == "allocmap" ||
+      action == "qfsck" || action == "restore_cfb" ||
+      action == "revert-wal-to-plain") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
@@ -513,6 +536,7 @@ int main(int argc, char **argv)
   }
   if (action == "bluefs-export" || 
       action == "bluefs-import" || 
+      action == "bluefs-super-dump" ||
       action == "bluefs-log-dump") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
@@ -680,7 +704,8 @@ int main(int argc, char **argv)
   }
   else if (action == "fsck" ||
       action == "repair" ||
-      action == "quick-fix") {
+      action == "quick-fix" ||
+      action == "revert-wal-to-plain") {
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
     int r;
@@ -688,6 +713,8 @@ int main(int argc, char **argv)
       r = bluestore.fsck(fsck_deep);
     } else if (action == "repair") {
       r = bluestore.repair(fsck_deep);
+    } else if (action == "revert-wal-to-plain") {
+      r = bluestore.revert_wal_to_plain();
     } else {
       r = bluestore.quick_fix();
     }
@@ -1001,6 +1028,8 @@ int main(int argc, char **argv)
     delete fs;
   } else if (action == "bluefs-log-dump") {
     log_dump(cct.get(), path, devs);
+  } else if (action == "bluefs-super-dump") {
+    super_dump(cct.get(), path, devs);
   } else if (action == "bluefs-bdev-new-db" || action == "bluefs-bdev-new-wal") {
     map<string, int> cur_devs_map;
     bool need_db = action == "bluefs-bdev-new-db";

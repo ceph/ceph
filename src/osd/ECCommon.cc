@@ -12,10 +12,11 @@
  *
  */
 
+#include "ECCommon.h"
+
 #include <iostream>
 #include <sstream>
 
-#include "ECCommon.h"
 #include "ECInject.h"
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPushReply.h"
@@ -23,6 +24,7 @@
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
+#include "common/debug.h"
 #include "ECMsgTypes.h"
 #include "PGLog.h"
 
@@ -33,6 +35,11 @@
 #define DOUT_PREFIX_ARGS this
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
+
+/* This file is soon going to be replaced (before next release), so we are going
+ * to simply ignore all deprecated warnings.
+ * */
+IGNORE_DEPRECATED
 
 using std::dec;
 using std::hex;
@@ -107,7 +114,7 @@ ostream &operator<<(ostream &lhs, const ECCommon::read_result_t &rhs)
 ostream &operator<<(ostream &lhs, const ECCommon::ReadOp &rhs)
 {
   lhs << "ReadOp(tid=" << rhs.tid;
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   if (rhs.op && rhs.op->get_req()) {
     lhs << ", op=";
     rhs.op->get_req()->print(lhs);
@@ -125,7 +132,7 @@ ostream &operator<<(ostream &lhs, const ECCommon::ReadOp &rhs)
 void ECCommon::ReadOp::dump(Formatter *f) const
 {
   f->dump_unsigned("tid", tid);
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   if (op && op->get_req()) {
     f->dump_stream("op") << *(op->get_req());
   }
@@ -146,7 +153,7 @@ ostream &operator<<(ostream &lhs, const ECCommon::RMWPipeline::Op &rhs)
       << " tt=" << rhs.trim_to
       << " tid=" << rhs.tid
       << " reqid=" << rhs.reqid;
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   if (rhs.client_op && rhs.client_op->get_req()) {
     lhs << " client_op=";
     rhs.client_op->get_req()->print(lhs);
@@ -329,8 +336,8 @@ void ECCommon::ReadPipeline::get_min_want_to_read_shards(
   const auto distance =
     std::min(right_chunk_index - left_chunk_index, (uint64_t)sinfo.get_k());
   for(uint64_t i = 0; i < distance; i++) {
-    auto raw_shard = (left_chunk_index + i) % sinfo.get_k();
-    want_to_read->insert(sinfo.get_shard(raw_shard));
+    raw_shard_id_t raw_shard((left_chunk_index + i) % sinfo.get_k());
+    want_to_read->insert(static_cast<int>(sinfo.get_shard(raw_shard)));
   }
 }
 
@@ -414,7 +421,7 @@ void ECCommon::ReadPipeline::start_read_op(
       std::move(to_read))).first->second;
   dout(10) << __func__ << ": starting " << op << dendl;
   if (_op) {
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
     op.trace = _op->pg_trace;
 #endif
     op.trace.event("start ec read");
@@ -497,8 +504,8 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
 void ECCommon::ReadPipeline::get_want_to_read_shards(
   std::set<int> *want_to_read) const
 {
-  for (int i = 0; i < (int)sinfo.get_k(); ++i) {
-    want_to_read->insert(sinfo.get_shard(i));
+  for (raw_shard_id_t i; i < (int)sinfo.get_k(); ++i) {
+    want_to_read->insert(static_cast<int>(sinfo.get_shard(i)));
   }
 }
 
@@ -561,8 +568,8 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
       uint64_t chunk_size = read_pipeline.sinfo.get_chunk_size();
       uint64_t trim_offset = 0;
       for (auto shard : wanted_to_read) {
-	if (read_pipeline.sinfo.get_raw_shard(shard) * chunk_size <
-	    aligned_offset_in_stripe) {
+        int s = static_cast<int>(read_pipeline.sinfo.get_raw_shard(shard_id_t(shard)));
+        if ( s * chunk_size < aligned_offset_in_stripe) {
 	  trim_offset += chunk_size;
 	} else {
 	  break;
@@ -1101,3 +1108,5 @@ ECUtil::HashInfoRef ECCommon::UnstableHashInfoRegistry::get_hash_info(
   }
   return ref;
 }
+
+END_IGNORE_DEPRECATED

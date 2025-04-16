@@ -1,10 +1,18 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 
+#include "ECUtil.h"
+
+#include <sstream>
+
 #include <errno.h>
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 #include "include/encoding.h"
-#include "ECUtil.h"
+
+/* This file is soon going to be replaced (before next release), so we are going
+ * to simply ignore all deprecated warnings.
+ * */
+IGNORE_DEPRECATED
 
 using namespace std;
 using ceph::bufferlist;
@@ -258,3 +266,5 @@ const string &ECUtil::get_hinfo_key()
 {
   return HINFO_KEY;
 }
+
+END_IGNORE_DEPRECATED

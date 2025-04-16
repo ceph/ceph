@@ -15,6 +15,9 @@
  *
  */
 
+#include "osd_types.h"
+#include "osd_perf_counters.h"
+
 #include <algorithm>
 #include <list>
 #include <map>
@@ -31,15 +34,18 @@
 #include "include/ceph_features.h"
 #include "include/encoding.h"
 #include "include/stringify.h"
+
+#include "crush/CrushWrapper.h"
 extern "C" {
+#include "crush/crush.h" // for CRUSH_ITEM_NONE
 #include "crush/hash.h"
 }
 
+#include "common/ceph_context.h"
 #include "common/Formatter.h"
 #include "common/StackStringStream.h"
 #include "include/utime_fmt.h"
 #include "OSDMap.h"
-#include "osd_types.h"
 #include "osd_types_fmt.h"
 #include "os/Transaction.h"
 
@@ -1499,7 +1505,7 @@ void pool_opts_t::encode(ceph::buffer::list& bl, uint64_t features) const
 
 void pool_opts_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   __u32 n;
   decode(n, bl);
   opts.clear();
@@ -1636,6 +1642,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("stripe_width", get_stripe_width());
   f->dump_unsigned("expected_num_objects", expected_num_objects);
   f->dump_bool("fast_read", fast_read);
+  f->dump_stream("nonprimary_shards") << nonprimary_shards;
   f->open_object_section("options");
   opts.dump(f);
   f->close_section(); // options
@@ -1854,7 +1861,7 @@ uint32_t pg_pool_t::get_random_pg_position(pg_t pg, uint32_t seed) const
 void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
 {
   using ceph::encode;
-  if ((features & CEPH_FEATURE_PGPOOL3) == 0) {
+  if (!HAVE_SIGNIFICANT_FEATURE(features, PGPOOL3)) {
     // this encoding matches the old struct ceph_pg_pool
     __u8 struct_v = 2;
     encode(struct_v, bl);
@@ -1883,7 +1890,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  if ((features & CEPH_FEATURE_OSDENC) == 0) {
+  if (!HAVE_SIGNIFICANT_FEATURE(features, OSDENC)) {
     __u8 struct_v = 4;
     encode(struct_v, bl);
     encode(type, bl);
@@ -1906,7 +1913,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  if ((features & CEPH_FEATURE_OSD_POOLRESEND) == 0) {
+  if (!HAVE_SIGNIFICANT_FEATURE(features, OSD_POOLRESEND)) {
     // we simply added last_force_op_resend here, which is a fully
     // backward compatible change.  however, encoding the same map
     // differently between monitors triggers scrub noise (even though
@@ -1955,19 +1962,19 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 31;
+  uint8_t v = 32;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
-  if (!HAVE_FEATURE(features, SERVER_TENTACLE)) {
-    if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
+  if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_TENTACLE)) {
+    if (!HAVE_SIGNIFICANT_FEATURE(features, NEW_OSDOP_ENCODING)) {
       // this was the first post-hammer thing we added; if it's missing, encode
       // like hammer.
       v = 21;
-    } else if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+    } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_LUMINOUS)) {
       v = 24;
-    } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+    } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_MIMIC)) {
       v = 26;
-    } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+    } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_NAUTILUS)) {
       v = 27;
     } else if (!is_stretch_pool()) {
       v = 29;
@@ -2074,12 +2081,15 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     auto maybe_peering_crush_data1 = maybe_peering_crush_data();
     encode(maybe_peering_crush_data1, bl);
   }
+  if (v >= 32) {
+    encode(nonprimary_shards, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(31, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(32, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -2270,6 +2280,11 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
                  peering_crush_mandatory_member) = *peering_crush_data;
     }
   }
+  if (struct_v >= 32) {
+    decode(nonprimary_shards, bl);
+  } else {
+    nonprimary_shards.clear();
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -2371,6 +2386,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.erasure_code_profile = "profile in osdmap";
   a.expected_num_objects = 123456;
   a.fast_read = false;
+  a.nonprimary_shards.clear();
   a.application_metadata = {{"rbd", {{"key", "value"}}}};
   o.push_back(new pg_pool_t(a));
 
@@ -3611,7 +3627,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 void pg_info_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(32, 26, bl);
+  ENCODE_START(33, 26, bl);
   encode(pgid.pgid, bl);
   encode(last_update, bl);
   encode(last_complete, bl);
@@ -3627,12 +3643,13 @@ void pg_info_t::encode(ceph::buffer::list &bl) const
   encode(last_backfill, bl);
   encode(true, bl); // was last_backfill_bitwise
   encode(last_interval_started, bl);
+  encode(partial_writes_last_complete, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START(32, bl);
+  DECODE_START(33, bl);
   decode(pgid.pgid, bl);
   decode(last_update, bl);
   decode(last_complete, bl);
@@ -3661,6 +3678,9 @@ void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
   } else {
     last_interval_started = last_epoch_started;
   }
+  if (struct_v >= 33) {
+    decode(partial_writes_last_complete, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -3675,6 +3695,16 @@ void pg_info_t::dump(Formatter *f) const
   f->dump_stream("log_tail") << log_tail;
   f->dump_int("last_user_version", last_user_version);
   f->dump_stream("last_backfill") << last_backfill;
+  f->open_array_section("partial_writes_last_complete");
+  for (const auto & [shard, versionrange] : partial_writes_last_complete) {
+    auto & [from, to] = versionrange;
+    f->open_object_section("shard");
+    f->dump_int("id", int(shard));
+    f->dump_stream("from") << from;
+    f->dump_stream("to") << to;
+    f->close_section();
+  }
+  f->close_section();
   f->open_array_section("purged_snaps");
   for (interval_set<snapid_t>::const_iterator i=purged_snaps.begin();
        i != purged_snaps.end();
@@ -3743,7 +3773,7 @@ void pg_notify_t::encode(ceph::buffer::list &bl) const
 
 void pg_notify_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START(3, bl);
+  DECODE_START(4, bl);
   decode(query_epoch, bl);
   decode(epoch_sent, bl);
   decode(info, bl);
@@ -4193,6 +4223,8 @@ bool PastIntervals::is_new_interval(
   uint32_t new_crush_barrier,
   int32_t old_crush_member,
   int32_t new_crush_member,
+  bool old_allow_ec_optimizations,
+  bool new_allow_ec_optimizations,
   pg_t pgid) {
   return old_acting_primary != new_acting_primary ||
     new_acting != old_acting ||
@@ -4216,7 +4248,8 @@ bool PastIntervals::is_new_interval(
     old_crush_count != new_crush_count ||
     old_crush_target != new_crush_target ||
     old_crush_barrier != new_crush_barrier ||
-    old_crush_member != new_crush_member;
+    old_crush_member != new_crush_member ||
+    old_allow_ec_optimizations != new_allow_ec_optimizations;
 }
 
 bool PastIntervals::is_new_interval(
@@ -4265,6 +4298,7 @@ bool PastIntervals::is_new_interval(
 		    plast->peering_crush_bucket_target, pi->peering_crush_bucket_target,
 		    plast->peering_crush_bucket_barrier, pi->peering_crush_bucket_barrier,
 		    plast->peering_crush_mandatory_member, pi->peering_crush_mandatory_member,
+		    plast->allows_ecoptimizations(), pi->allows_ecoptimizations(),
 		    pgid);
 }
 
@@ -4595,7 +4629,7 @@ void ObjectModDesc::visit(Visitor *visitor) const
   auto bp = bl.cbegin();
   try {
     while (!bp.end()) {
-      DECODE_START(max_required_version, bp);
+      DECODE_START_UNCHECKED(max_required_version, bp);
       uint8_t code;
       decode(code, bp);
       switch (code) {
@@ -4920,7 +4954,7 @@ void pg_log_entry_t::decode_with_checksum(ceph::buffer::list::const_iterator& p)
 
 void pg_log_entry_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(14, 4, bl);
+  ENCODE_START(15, 4, bl);
   encode(op, bl);
   encode(soid, bl);
   encode(version, bl);
@@ -4953,12 +4987,14 @@ void pg_log_entry_t::encode(ceph::buffer::list &bl) const
   if (op != ERROR)
     encode(return_code, bl);
   encode(op_returns, bl);
+  encode(written_shards, bl);
+  encode(present_shards, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(14, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(15, 4, 4, bl);
   decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -5024,6 +5060,10 @@ void pg_log_entry_t::decode(ceph::buffer::list::const_iterator &bl)
     }
     decode(op_returns, bl);
   }
+  if (struct_v >= 15) {
+    decode(written_shards, bl);
+    decode(present_shards, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -5073,6 +5113,8 @@ void pg_log_entry_t::dump(Formatter *f) const
       f->dump_unsigned("snap", *p);
     f->close_section();
   }
+  f->dump_stream("written_shards") << written_shards;
+  f->dump_stream("present_shards") << present_shards;
   {
     f->open_object_section("mod_desc");
     mod_desc.dump(f);
@@ -5876,6 +5918,7 @@ void SnapSet::encode(ceph::buffer::list& bl) const
   ENCODE_START(3, 2, bl);
   encode(seq, bl);
   encode(true, bl);  // head_exists
+  std::vector<snapid_t> snaps;
   encode(snaps, bl);
   encode(clones, bl);
   encode(clone_overlap, bl);
@@ -5889,6 +5932,7 @@ void SnapSet::decode(ceph::buffer::list::const_iterator& bl)
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(seq, bl);
   bl += 1u;  // skip legacy head_exists (always true)
+  std::vector<snapid_t> snaps;
   decode(snaps, bl);
   decode(clones, bl);
   decode(clone_overlap, bl);
@@ -5936,12 +5980,8 @@ void SnapSet::generate_test_instances(list<SnapSet*>& o)
   o.push_back(new SnapSet);
   o.push_back(new SnapSet);
   o.back()->seq = 123;
-  o.back()->snaps.push_back(123);
-  o.back()->snaps.push_back(12);
   o.push_back(new SnapSet);
   o.back()->seq = 123;
-  o.back()->snaps.push_back(123);
-  o.back()->snaps.push_back(12);
   o.back()->clones.push_back(12);
   o.back()->clone_size[12] = 12345;
   o.back()->clone_overlap[12];
@@ -5950,8 +5990,7 @@ void SnapSet::generate_test_instances(list<SnapSet*>& o)
 
 ostream& operator<<(ostream& out, const SnapSet& cs)
 {
-  return out << cs.seq << "=" << cs.snaps << ":"
-	     << cs.clone_snaps;
+  return out << cs.seq << "=" << cs.clone_snaps;
 }
 
 void SnapSet::from_snap_set(const librados::snap_set_t& ss, bool legacy)
@@ -5989,13 +6028,6 @@ void SnapSet::from_snap_set(const librados::snap_set_t& ss, bool legacy)
   clones.reserve(_clones.size());
   for (auto p = _clones.begin(); p != _clones.end(); ++p)
     clones.push_back(*p);
-
-  // descending
-  snaps.clear();
-  snaps.reserve(_snaps.size());
-  for (auto p = _snaps.rbegin();
-       p != _snaps.rend(); ++p)
-    snaps.push_back(*p);
 }
 
 uint64_t SnapSet::get_clone_bytes(snapid_t clone) const
@@ -6006,23 +6038,6 @@ uint64_t SnapSet::get_clone_bytes(snapid_t clone) const
   const interval_set<uint64_t> &overlap = clone_overlap.find(clone)->second;
   ceph_assert(size >= (uint64_t)overlap.size());
   return size - overlap.size();
-}
-
-void SnapSet::filter(const pg_pool_t &pinfo)
-{
-  vector<snapid_t> oldsnaps;
-  oldsnaps.swap(snaps);
-  for (auto i = oldsnaps.cbegin(); i != oldsnaps.cend(); ++i) {
-    if (!pinfo.is_removed_snap(*i))
-      snaps.push_back(*i);
-  }
-}
-
-SnapSet SnapSet::get_filtered(const pg_pool_t &pinfo) const
-{
-  SnapSet ss = *this;
-  ss.filter(pinfo);
-  return ss;
 }
 
 // -- watch_info_t --
@@ -6424,7 +6439,7 @@ void object_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   for (auto i = watchers.cbegin(); i != watchers.cend(); ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(17, 8, bl);
+  ENCODE_START(18, 8, bl);
   encode(soid, bl);
   encode(myoloc, bl);	//Retained for compatibility
   encode((__u32)0, bl); // was category, no longer used
@@ -6458,13 +6473,14 @@ void object_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   if (has_manifest()) {
     encode(manifest, bl);
   }
+  encode(shard_versions, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(ceph::buffer::list::const_iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(17, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(18, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   decode(soid, bl);
   decode(myoloc, bl);
@@ -6550,6 +6566,9 @@ void object_info_t::decode(ceph::buffer::list::const_iterator& bl)
       decode(manifest, bl);
     }
   }
+  if (struct_v >= 18) {
+    decode(shard_versions, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -6586,6 +6605,14 @@ void object_info_t::dump(Formatter *f) const
     *css << p->first.second;
     f->open_object_section(css->strv());
     p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("shard_versions");
+  for (auto p = shard_versions.cbegin(); p != shard_versions.cend(); ++p) {
+    f->open_object_section("shard");
+    f->dump_int("id", int(p->first));
+    f->dump_stream("version") << p->second;
     f->close_section();
   }
   f->close_section();

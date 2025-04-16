@@ -176,6 +176,7 @@ enum {
   l_bluestore_onode_shard_misses,
   l_bluestore_extents,
   l_bluestore_blobs,
+  l_bluestore_spanning_blobs,
   //****************************************
 
   // buffer cache stats
@@ -208,7 +209,6 @@ enum {
 
   // other client ops latencies
   //****************************************
-  l_bluestore_omap_seek_to_first_lat,
   l_bluestore_omap_upper_bound_lat,
   l_bluestore_omap_lower_bound_lat,
   l_bluestore_omap_next_lat,
@@ -1101,7 +1101,8 @@ public:
     decltype(BlueStore::Blob::id) allocate_spanning_blob_id();
     void reshard(
       KeyValueDB *db,
-      KeyValueDB::Transaction t);
+      KeyValueDB::Transaction t,
+      uint32_t segment_size);
 
     /// initialize Shards from the onode
     void init_shards(bool loaded, bool dirty);
@@ -1354,6 +1355,7 @@ public:
     bool cached;              ///< Onode is logically in the cache
                               /// (it can be pinned and hence physically out
                               /// of it at the moment though)
+    uint16_t prev_spanning_cnt = 0; /// spanning blobs count
     ExtentMap extent_map;
     BufferSpace bc;             ///< buffer cache
 
@@ -1378,30 +1380,6 @@ public:
 	    bluestore_extent_map_inline_shard_prealloc_size),
 	bc(*this) {
     }
-    Onode(Collection* c, const ghobject_t& o,
-      const std::string& k)
-      : c(c),
-        oid(o),
-        key(k),
-        exists(false),
-        cached(false),
-        extent_map(this,
-	  c->store->cct->_conf->
-	    bluestore_extent_map_inline_shard_prealloc_size),
-	bc(*this) {
-    }
-    Onode(Collection* c, const ghobject_t& o,
-      const char* k)
-      : c(c),
-        oid(o),
-        key(k),
-        exists(false),
-        cached(false),
-        extent_map(this,
-	  c->store->cct->_conf->
-	    bluestore_extent_map_inline_shard_prealloc_size),
-	bc(*this) {
-    }
     Onode(CephContext* cct)
       : c(nullptr),
         exists(false),
@@ -1416,20 +1394,25 @@ public:
       if (c) {
         std::lock_guard l(c->cache->lock);
         bc._clear(c->cache);
+        if (prev_spanning_cnt > 0) {
+          c->store->logger->dec(l_bluestore_spanning_blobs, prev_spanning_cnt);
+        }
       }
     }
 
     static void decode_raw(
       BlueStore::Onode* on,
       const bufferlist& v,
-      ExtentMap::ExtentDecoder& dencoder);
+      ExtentMap::ExtentDecoder& dencoder,
+      bool use_onode_segmentation);
 
     static Onode* create_decode(
       CollectionRef c,
       const ghobject_t& oid,
       const std::string& key,
       const ceph::buffer::list& v,
-      bool allow_empty = false);
+      bool allow_empty,
+      bool use_onode_segmentation);
 
     void dump(ceph::Formatter* f) const;
 
@@ -1754,35 +1737,6 @@ public:
     void flush_all_but_last();
 
     Collection(BlueStore *ns, OnodeCacheShard *oc, BufferCacheShard *bc, coll_t c);
-  };
-
-  class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
-
-    PerfCounters* logger = nullptr;
-    CollectionRef c;
-    OnodeRef o;
-    KeyValueDB::Iterator it;
-    std::string head, tail;
-
-    std::string _stringify() const;
-  public:
-    OmapIteratorImpl(PerfCounters* l, CollectionRef c, OnodeRef& o, KeyValueDB::Iterator it);
-    virtual ~OmapIteratorImpl();
-    int seek_to_first() override;
-    int upper_bound(const std::string &after) override;
-    int lower_bound(const std::string &to) override;
-    bool valid() override;
-    int next() override;
-    std::string key() override;
-    ceph::buffer::list value() override;
-    std::string_view value_as_sv() override;
-    std::string tail_key() override {
-      return tail;
-    }
-
-    int status() override {
-      return 0;
-    }
   };
 
   struct volatile_statfs{
@@ -2521,6 +2475,9 @@ private:
   std::atomic<uint64_t> comp_max_blob_size = {0};
 
   std::atomic<uint64_t> max_blob_size = {0};  ///< maximum blob size
+  std::atomic<uint32_t> segment_size = {0}; ///< snapshot of conf value "bluestore_onode_segment_size"
+                                            /// When 0 onode_bluestore_t v2 is in force, otherwise v3 is used.
+                                            /// Ability to disable is important for efficient testing.
 
   uint64_t kv_ios = 0;
   uint64_t kv_throttle_costs = 0;
@@ -3177,6 +3134,7 @@ public:
   int repair(bool deep) override {
     return _fsck(deep ? FSCK_DEEP : FSCK_REGULAR, true);
   }
+  int revert_wal_to_plain();
   int quick_fix() override {
     return _fsck(FSCK_SHALLOW, true);
   }
@@ -3452,11 +3410,6 @@ public:
     const ghobject_t &oid,   ///< [in] Object containing omap
     const std::set<std::string> &keys, ///< [in] Keys to check
     std::set<std::string> *out         ///< [out] Subset of keys defined on oid
-    ) override;
-
-  ObjectMap::ObjectMapIterator get_omap_iterator(
-    CollectionHandle &c,   ///< [in] collection
-    const ghobject_t &oid  ///< [in] object
     ) override;
 
   int omap_iterate(
@@ -4487,6 +4440,7 @@ class RocksDBBlueFSVolumeSelector : public BlueFSVolumeSelector
   uint64_t level0_size = 0;
   uint64_t level_base = 0;
   uint64_t level_multiplier = 0;
+  size_t extra_level = 0;
   enum {
     OLD_POLICY,
     USE_SOME_EXTRA
@@ -4524,9 +4478,11 @@ public:
       uint64_t prev_levels = _level0_size;
       uint64_t cur_level = _level_base;
       uint64_t cur_threshold = prev_levels + cur_level;
+      extra_level = 1;
       do {
 	uint64_t next_level = cur_level * _level_multiplier;
         uint64_t next_threshold = prev_levels + cur_level + next_level;
+        ++extra_level;
         if (_db_total <= next_threshold) {
 	  cur_threshold *= reserved_factor;
           db_avail4slow = cur_threshold < _db_total ? _db_total - cur_threshold : 0;
@@ -4539,6 +4495,7 @@ public:
       } while (true);
     } else {
       db_avail4slow = reserved < _db_total ? _db_total - reserved : 0;
+      extra_level = 0;
     }
   }
 

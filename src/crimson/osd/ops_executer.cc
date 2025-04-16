@@ -903,6 +903,7 @@ pg_log_entry_t OpsExecuter::prepare_head_update(
 {
   LOG_PREFIX(OpsExecuter::prepare_head_update);
   assert(obc->obs.oi.soid.snap >= CEPH_MAXSNAP);
+  assert(obc->obs.oi.soid.is_head());
 
   update_clone_overlap();
   if (cloning_ctx) {
@@ -911,7 +912,6 @@ pg_log_entry_t OpsExecuter::prepare_head_update(
   if (snapc.seq > obc->ssc->snapset.seq) {
      // update snapset with latest snap context
      obc->ssc->snapset.seq = snapc.seq;
-     obc->ssc->snapset.snaps.clear();
   }
 
   pg_log_entry_t ret{

@@ -368,6 +368,12 @@ prometheus_stats_interval = 10
 verify_nqns = True
 verify_keys = True
 verify_listener_ip = True
+# This is a development flag, do not change it
+abort_on_errors = True
+# This is a development flag, do not change it
+omap_file_ignore_unlock_errors = False
+# This is a development flag, do not change it
+omap_file_lock_on_read = True
 omap_file_lock_duration = 20
 omap_file_lock_retries = 30
 omap_file_lock_retry_sleep_interval = 1.0
@@ -380,7 +386,7 @@ max_hosts_per_namespace = 8
 max_namespaces_with_netmask = 1000
 max_subsystems = 128
 max_hosts = 2048
-max_namespaces = 1024
+max_namespaces = 2048
 max_namespaces_per_subsystem = 256
 max_hosts_per_subsystem = 128
 
@@ -397,6 +403,8 @@ log_directory = /var/log/ceph/
 [discovery]
 addr = 192.168.100.100
 port = 8009
+# This is a development flag, do not change it
+abort_on_errors = True
 
 [ceph]
 pool = {pool}
@@ -415,7 +423,7 @@ tgt_path = /usr/local/bin/nvmf_tgt
 rpc_socket_dir = /var/tmp/
 rpc_socket_name = spdk.sock
 timeout = 60.0
-bdevs_per_cluster = 32
+cluster_connections = 32
 protocol_log_level = WARNING
 conn_retries = 10
 transports = tcp

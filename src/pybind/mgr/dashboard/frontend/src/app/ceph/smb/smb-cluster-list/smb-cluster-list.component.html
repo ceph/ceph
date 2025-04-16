@@ -1,5 +1,9 @@
+<cd-smb-tabs></cd-smb-tabs>
+
 <ng-container *ngIf="smbClusters$ | async as smbClusters">
   <cd-table
+    headerTitle="Clusters"
+    headerDescription="Logical management units that may map to one or more managed Samba service"
     [data]="smbClusters"
     columnMode="flex"
     [columns]="columns"

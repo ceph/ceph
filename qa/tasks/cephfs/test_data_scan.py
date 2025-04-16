@@ -542,6 +542,7 @@ class TestDataScan(CephFSTestCase):
         self.fs.data_scan(["scan_extents"], worker_count=workers)
         self.fs.data_scan(["scan_inodes"], worker_count=workers)
         self.fs.data_scan(["scan_links"])
+        self.fs.data_scan(["cleanup"], worker_count=workers)
 
         workload.mangle()
 

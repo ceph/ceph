@@ -13,10 +13,13 @@
  *
  */
 
+#include "OSD.h"
+
 #include "acconfig.h"
 
 #include <cctype>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <iterator>
 
@@ -45,7 +48,6 @@
 #include "include/random.h"
 #include "include/scope_guard.h"
 
-#include "OSD.h"
 #include "OSDMap.h"
 #include "Watch.h"
 #include "osdc/Objecter.h"
@@ -54,6 +56,7 @@
 #include "common/ceph_argparse.h"
 #include "common/ceph_releases.h"
 #include "common/ceph_time.h"
+#include "common/debug.h"
 #include "common/version.h"
 #include "common/async/blocked_completion.h"
 #include "common/pick_address.h"
@@ -124,6 +127,7 @@
 #include "global/pidfile.h"
 
 #include "include/color.h"
+#include "log/Log.h"
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"
 
@@ -2134,6 +2138,7 @@ void OSD::write_superblock(CephContext* cct, OSDSuperblock& sb, ObjectStore::Tra
 
   bufferlist bl;
   encode(sb, bl);
+  t.truncate(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0);
   t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
   std::map<std::string, ceph::buffer::list> attrs;
   attrs.emplace(OSD_SUPERBLOCK_OMAP_KEY, bl);
@@ -3893,14 +3898,9 @@ int OSD::init()
   if (superblock.compat_features.merge(initial)) {
     // Are we adding SNAPMAPPER2?
     if (diff.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER2)) {
-      dout(1) << __func__ << " upgrade snap_mapper (first start as octopus)"
-	      << dendl;
-      auto ch = service.meta_ch;
-      auto hoid = make_snapmapper_oid();
-      unsigned max = cct->_conf->osd_target_transaction_size;
-      r = SnapMapper::convert_legacy(cct, store.get(), ch, hoid, max);
-      if (r < 0)
-	goto out;
+      derr << __func__ << " snap_mapper upgrade from pre-octopus"
+	   << " is no longer supported" << dendl;
+      ceph_abort();
     }
     // We need to persist the new compat_set before we
     // do anything else
@@ -4705,6 +4705,9 @@ int OSD::shutdown()
     // then, wait on osd_op_tp to drain (TBD: should probably add a timeout)
     osd_op_tp.drain();
     osd_op_tp.stop();
+
+    dout(10) << "stopping agent" << dendl;
+    service.agent_stop();
 
     utime_t  start_time_umount = ceph_clock_now();
     store->prepare_for_fast_shutdown();
@@ -10071,6 +10074,9 @@ std::vector<std::string> OSD::get_tracked_keys() const noexcept
     "osd_object_clean_region_max_num_intervals"s,
     "osd_scrub_min_interval"s,
     "osd_scrub_max_interval"s,
+    "osd_deep_scrub_interval"s,
+    "osd_deep_scrub_interval_cv"s,
+    "osd_scrub_interval_randomize_ratio"s,
     "osd_op_thread_timeout"s,
     "osd_op_thread_suicide_timeout"s,
     "osd_max_scrubs"s
@@ -10198,13 +10204,16 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
 
   if (changed.count("osd_scrub_min_interval") ||
       changed.count("osd_scrub_max_interval") ||
-      changed.count("osd_deep_scrub_interval")) {
+      changed.count("osd_deep_scrub_interval") ||
+      changed.count("osd_deep_scrub_interval_cv") ||
+      changed.count("osd_scrub_interval_randomize_ratio")) {
     service.get_scrub_services().on_config_change();
     dout(0) << fmt::format(
-		   "{}: scrub interval change (min:{} deep:{} max:{})",
+		   "{}: scrub interval change (min:{} deep:{} max:{} ratio:{})",
 		   __func__, cct->_conf->osd_scrub_min_interval,
 		   cct->_conf->osd_deep_scrub_interval,
-		   cct->_conf->osd_scrub_max_interval)
+		   cct->_conf->osd_scrub_max_interval,
+		   cct->_conf->osd_scrub_interval_randomize_ratio)
 	    << dendl;
   }
 

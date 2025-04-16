@@ -543,7 +543,7 @@ class ObjectCacher {
 			    int64_t *amount, int *max_count);
 
   void trim();
-  void flush(ZTracer::Trace *trace, loff_t amount=0);
+  void flush(ZTracer::Trace *trace, loff_t amount=0, int max_bhs=0);
 
   /**
    * flush a range of buffers

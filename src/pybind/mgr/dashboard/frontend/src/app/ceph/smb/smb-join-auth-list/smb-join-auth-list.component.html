@@ -1,4 +1,8 @@
+<cd-smb-tabs></cd-smb-tabs>
+
 <cd-table
+  headerTitle="Active directory access resources"
+  headerDescription="Logical management units for authorization on active directory (AD) servers"
   [data]="joinAuth$ | async"
   columnMode="flex"
   [columns]="columns"

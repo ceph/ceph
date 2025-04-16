@@ -303,22 +303,22 @@ target_include_directories(ceph_test_rgw_gc_log
 target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} radostest-cxx)
 install(TARGETS ceph_test_rgw_gc_log DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+add_executable(unittest_rgw_shard_io test_rgw_shard_io.cc)
+add_ceph_unittest(unittest_rgw_shard_io)
+target_link_libraries(unittest_rgw_shard_io ${rgw_libs} unit-main ${UNITTEST_LIBS})
+
 add_ceph_test(test-ceph-diff-sorted.sh
   ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-diff-sorted.sh)
-
-# unittest_cls_fifo_legacy
-add_executable(unittest_cls_fifo_legacy test_cls_fifo_legacy.cc)
-target_include_directories(unittest_cls_fifo_legacy
-  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
-target_link_libraries(unittest_cls_fifo_legacy radostest-cxx ${UNITTEST_LIBS}
-  ${rgw_libs})
 
 # unittest_log_backing
 add_executable(unittest_log_backing test_log_backing.cc)
 target_include_directories(unittest_log_backing
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
-target_link_libraries(unittest_log_backing radostest-cxx ${UNITTEST_LIBS}
+target_link_libraries(unittest_log_backing
+  libneorados
+  neoradostest-support
+  ${UNITTEST_LIBS}
   ${rgw_libs})
 
 add_executable(unittest_rgw_lua test_rgw_lua.cc)
@@ -360,3 +360,15 @@ target_include_directories(unittest_rgw_posix_driver
 target_link_libraries(unittest_rgw_posix_driver  ${UNITTEST_LIBS}
   ${rgw_libs} ${LMDB_LIBRARIES})
 endif(WITH_RADOSGW_POSIX)
+
+# ceph_test_datalog
+add_executable(ceph_test_datalog test_datalog.cc)
+target_include_directories(ceph_test_datalog
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
+target_link_libraries(ceph_test_datalog
+  libneorados
+  neoradostest-support
+  ${UNITTEST_LIBS}
+  ${rgw_libs})
+install(TARGETS ceph_test_datalog DESTINATION ${CMAKE_INSTALL_BINDIR})

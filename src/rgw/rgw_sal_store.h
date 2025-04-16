@@ -37,7 +37,6 @@ struct RGWObjState {
   bool has_data{false};
   bufferlist data;
   bool prefetch_data{false};
-  bool keep_tail{false};
   bool is_olh{false};
   bufferlist olh_tag;
   uint64_t pg_ver{false};
@@ -73,7 +72,6 @@ struct RGWObjState {
       data = rhs.data;
     }
     prefetch_data = rhs.prefetch_data;
-    keep_tail = rhs.keep_tail;
     is_olh = rhs.is_olh;
     objv_tracker = rhs.objv_tracker;
     pg_ver = rhs.pg_ver;
@@ -301,8 +299,6 @@ class StoreObject : public Object {
     virtual bool is_prefetch_data() override { return state.prefetch_data; }
     virtual void set_compressed() override { state.compressed = true; }
     virtual bool is_compressed() override { return state.compressed; }
-    virtual bool is_sync_completed(const DoutPrefixProvider* dpp,
-      const ceph::real_time& obj_mtime) override { return false; }
     virtual void invalidate() override {
       rgw_obj obj = state.obj;
       bool is_atomic = state.is_atomic;

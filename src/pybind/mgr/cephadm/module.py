@@ -2300,6 +2300,10 @@ Then run the following:
         tgt_host['status'] = ""
         self.inventory._inventory[hostname] = tgt_host
         self.inventory.save()
+        # make sure we refresh state for this host now that it's out
+        # of maintenance mode. Maintenance mode is a time where users
+        # could have theoretically made a lot of changes to the host.
+        self._invalidate_all_host_metadata_and_kick_serve(hostname)
 
         self.set_maintenance_healthcheck()
 
@@ -2383,6 +2387,11 @@ Then run the following:
 
         self._kick_serve_loop()
 
+    def _invalidate_all_host_metadata_and_kick_serve(self, hostname: str) -> None:
+        # invalidates all metadata for a given host and kicks serve loop
+        self.cache.refresh_all_host_info(hostname)
+        self._kick_serve_loop()
+
     @handle_orch_error
     def describe_service(self, service_type: Optional[str] = None, service_name: Optional[str] = None,
                          refresh: bool = False) -> List[orchestrator.ServiceDescription]:
@@ -2411,7 +2420,7 @@ Then run the following:
             else:
                 size = spec.placement.get_target_count(self.cache.get_schedulable_hosts())
 
-            sm[nm] = orchestrator.ServiceDescription(
+            svc_desc = orchestrator.ServiceDescription(
                 spec=spec,
                 size=size,
                 running=0,
@@ -2422,11 +2431,21 @@ Then run the following:
                 ports=spec.get_port_start(),
             )
 
+            if spec.service_type == 'rgw':
+                try:
+                    rgw_service = RgwService(self)
+                    ports = rgw_service.get_active_ports(spec.service_name())
+                    if ports:
+                        svc_desc.ports = ports
+                except Exception as e:
+                    logger.warning(f"Failed to get the RGW ports for {spec.service_id}: {e}")
+
             if spec.service_type == 'ingress':
                 # ingress has 2 daemons running per host
                 # but only if it's the full ingress service, not for keepalive-only
                 if not cast(IngressSpec, spec).keepalive_only:
-                    sm[nm].size *= 2
+                    svc_desc.size *= 2
+            sm[nm] = svc_desc
 
         # factor daemons into status
         for h, dm in self.cache.get_daemons_with_volatile_status():
@@ -3648,11 +3667,6 @@ Then run the following:
 
         host_count = len(self.inventory.keys())
         max_count = self.max_count_per_host
-
-        if spec.service_type == 'oauth2-proxy':
-            mgmt_gw_daemons = self.cache.get_daemons_by_service('mgmt-gateway')
-            if not mgmt_gw_daemons:
-                raise OrchestratorError("The 'oauth2-proxy' service depends on the 'mgmt-gateway' service, but it is not configured.")
 
         if spec.service_type == 'nvmeof':
             nvmeof_spec = cast(NvmeofServiceSpec, spec)

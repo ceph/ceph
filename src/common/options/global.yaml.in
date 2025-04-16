@@ -1810,7 +1810,7 @@ options:
 - name: mon_warn_pg_not_scrubbed_ratio
   type: float
   level: advanced
-  desc: Percentage of the scrub max interval past the scrub max interval to warn
+  desc: Raise a health warning when shallow scrubs are delayed by this percentage of the shallow scrub interval. Note that this must be set at mgr or with global scope. Set this configurable with the command "ceph config set mgr mon_warn_pg_not_scrubbed_ratio <ratio_value>".
   default: 0.5
   see_also:
   - osd_scrub_max_interval
@@ -1819,7 +1819,7 @@ options:
 - name: mon_warn_pg_not_deep_scrubbed_ratio
   type: float
   level: advanced
-  desc: Percentage of the deep scrub interval past the deep scrub interval to warn
+  desc: Percentage of the deep scrub interval past the deep scrub interval to warn - Set this configurable with the command "ceph config set mgr mon_warn_pg_not_deep_scrubbed_ratio <ratio_value>"
   default: 0.75
   see_also:
   - osd_deep_scrub_interval
@@ -4248,6 +4248,15 @@ options:
   level: advanced
   default: false
   with_legacy: true
+- name: bluefs_wal_envelope_mode
+  type: bool
+  level: advanced
+  desc: Enables a faster backend in BlueFS for WAL writes.
+  long_desc: In envelope mode BlueFS files do not need to update metadata. When applied to RocksDB WAL files,
+    it reduces by ~50% the amount of fdatasync syscalls.
+    Downgrading from an envelope mode to legacy mode requires `ceph-bluestore-tool --command downgrade-wal-to-v1`.
+  default: true
+  with_legacy: false
 - name: bluefs_allocator
   type: str
   level: dev
@@ -5103,7 +5112,7 @@ options:
   type: bool
   level: advanced
   desc: Random selection of write path mode
-  long_desc: For testing purposes. If true, value of bluestore_write_v2 is randomly selected.
+  long_desc: For testing purposes. If true, value of bluestore_write_v2 is randomly selected on each mount.
   default: false
   see_also:
   - bluestore_write_v2
@@ -5174,7 +5183,7 @@ options:
     Only applied when OSD is doing ``--mkfs``.
   default: true
   verbatim: |
-    #ifdef WITH_SEASTAR
+    #ifdef WITH_CRIMSON
     // This is necessary as the Seastar's allocator imposes restrictions
     // on the number of threads that entered malloc/free/*. Unfortunately,
     // RocksDB sharding in BlueStore dramatically lifted the number of
@@ -6688,6 +6697,37 @@ options:
   desc: How long cleaner should sleep before re-checking utilization
   default: 5
   with_legacy: true
+- name: bluestore_onode_segment_size
+  type: size
+  level: advanced
+  desc: Size of segment for onode.
+  long_desc: When object size grows too large BlueStore splits allocation metadata into
+    smaller RocksDB keys (shards). When multiple blobs overlap each other
+    some of them might belong to more than one shard. The encoding for such case
+    is inefficient (spanning blobs). Segmentation of data prevents blobs from crossing
+    specific separation lines, preventing spanning blobs altogether.
+    The smaller values give better split on onode shards.
+    The larger values minimize space loss for padding in compression.
+    Recommended values 256K, 512K, 1024K. Value 0 disables segmentation.
+    Actual segment size cannot be smaller than "compression_max_blob_size" pool option, if set.
+  default: 0
+  see_also:
+  - bluestore_extent_map_shard_max_size
+  - bluestore_extent_map_shard_target_size
+  - bluestore_debug_onode_segmentation_random
+  with_legacy: false
+- name: bluestore_debug_onode_segmentation_random
+  type: bool
+  level: dev
+  desc: Random selection of onode segmentation
+  long_desc: For testing purposes. On each mount 50% roll decides whether to use
+    bluestore_onode_segment_size or set it to 0 (disable).
+  default: false
+  see_also:
+  - bluestore_onode_segment_size
+  flags:
+  - startup
+  with_legacy: false
 - name: jaeger_tracing_enable
   type: bool
   level: advanced
@@ -6717,4 +6757,11 @@ options:
   level: dev
   desc: Enables exception throwing instead of process abort on transaction submission error.
   default: false
+  with_legacy: false
+- name: ceph_assert_supresssions
+  type: str
+  desc: Suppress specific ceph_assert instances to let the execution continue with unknown, potentially DESTRUCTIVE consequences.
+  fmt_desc: Comma-separated list of locations of ceph_assert in the source code.
+    The format is ``{file}:{line} [, {file}:{line}]``
+  level: dev
   with_legacy: false

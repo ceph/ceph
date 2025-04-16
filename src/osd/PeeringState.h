@@ -5,13 +5,16 @@
 
 #include <boost/statechart/custom_reaction.hpp>
 #include <boost/statechart/event.hpp>
-#include <boost/statechart/simple_state.hpp>
 #include <boost/statechart/state.hpp>
 #include <boost/statechart/state_machine.hpp>
 #include <boost/statechart/transition.hpp>
 #include <boost/statechart/event_base.hpp>
 #include <string>
 #include <atomic>
+#include <map>
+#include <optional>
+#include <ostream>
+#include <vector>
 
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
@@ -20,13 +23,16 @@
 #include "PGStateUtils.h"
 #include "PGPeeringEvent.h"
 #include "osd_types.h"
-#include "osd_types_fmt.h"
 #include "os/ObjectStore.h"
 #include "OSDMap.h"
 #include "MissingLoc.h"
-#include "osd/osd_perf_counters.h"
+#include "msg/Message.h"
+#include "msg/MessageRef.h"
+#include "common/ceph_mutex.h"
 #include "common/config_cacher.h"
-#include "common/ostream_temp.h"
+#include "common/snap_types.h" // for class SnapContext
+
+class OstreamTemp;
 
 struct PGPool {
   epoch_t cached_epoch;
@@ -79,7 +85,7 @@ struct PeeringCtx;
 
 // [primary only] content recovery state
 struct BufferedRecoveryMessages {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
   std::map<int, std::vector<MessageURef>> message_map;
 #else
   std::map<int, std::vector<MessageRef>> message_map;
@@ -287,7 +293,7 @@ public:
     virtual uint64_t get_snap_trimq_size() const = 0;
 
     /// Send cluster message to osd
-    #ifdef WITH_SEASTAR
+    #ifdef WITH_CRIMSON
     virtual void send_cluster_message(
       int osd, MessageURef m, epoch_t epoch, bool share_map_update=false) = 0;
     #else
@@ -2434,6 +2440,10 @@ public:
   }
   unsigned int get_num_missing() const {
     return pg_log.get_missing().num_missing();
+  }
+  bool is_missing_any_head_or_clone_of(const hobject_t &hoid) {
+    const auto& missing = pg_log.get_missing();
+    return missing.is_missing_any_head_or_clone_of(hoid);
   }
 
   const MissingLoc &get_missing_loc() const {

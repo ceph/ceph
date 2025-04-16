@@ -13,79 +13,77 @@
  *
  */
 
-#include <asm-generic/errno-base.h>
-#include <errno.h>
-#include <fmt/core.h>
-#include <stdlib.h>
+#include <cerrno>
+#include <cstdlib>
 #include <string>
-#include <system_error>
-#include <filesystem>
+
 #include <unistd.h>
-#include <sstream>
+
 #include <boost/algorithm/string.hpp>
 #include <boost/process.hpp>
 
-#include "common/async/blocked_completion.h"
-#include "include/function2.hpp"
+#include <fmt/core.h>
 
-#include "common/Clock.h"
+#include "common/async/blocked_completion.h"
+
 #include "common/ceph_time.h"
+#include "common/Clock.h"
 #include "common/errno.h"
 
-#include "role.h"
-#include "rgw_obj_types.h"
-#include "rgw_rados.h"
-#include "rgw_sal.h"
-#include "rgw_sal_rados.h"
-#include "rgw_bucket.h"
-#include "rgw_multi.h"
-#include "rgw_acl.h"
-#include "rgw_acl_s3.h"
-#include "rgw_aio.h"
-#include "rgw_aio_throttle.h"
-#include "rgw_tools.h"
-#include "rgw_tracer.h"
-#include "rgw_oidc_provider.h"
+#include "librados/AioCompletionImpl.h"
 
-#include "rgw_zone.h"
-#include "rgw_rest_conn.h"
-#include "rgw_service.h"
+#include "cls/rgw/cls_rgw_client.h"
+
+#include "rgw_acl.h"
+#include "rgw_aio_throttle.h"
+#include "rgw_bucket.h"
+#include "rgw_bucket_logging.h"
 #include "rgw_lc.h"
 #include "rgw_lc_tier.h"
+#include "rgw_lc_tier.h"
 #include "rgw_mdlog.h"
-#include "rgw_rest_admin.h"
+#include "rgw_multi.h"
+#include "rgw_obj_types.h"
+#include "rgw_oidc_provider.h"
+#include "rgw_rados.h"
 #include "rgw_rest_bucket.h"
-#include "rgw_rest_metadata.h"
-#include "rgw_rest_log.h"
 #include "rgw_rest_config.h"
+#include "rgw_rest_conn.h"
+#include "rgw_rest_log.h"
+#include "rgw_rest_metadata.h"
 #include "rgw_rest_ratelimit.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_user.h"
-#include "rgw_lc_tier.h"
-#include "rgw_bucket_logging.h"
-#include "services/svc_sys_obj.h"
-#include "services/svc_mdlog.h"
-#include "services/svc_cls.h"
+#include "rgw_sal.h"
+#include "rgw_sal_rados.h"
+#include "rgw_service.h"
+#include "rgw_tools.h"
+#include "rgw_tracer.h"
+#include "rgw_zone.h"
+
 #include "services/svc_bilog_rados.h"
 #include "services/svc_bi_rados.h"
-#include "services/svc_zone.h"
-#include "services/svc_tier_rados.h"
-#include "services/svc_quota.h"
+#include "services/svc_cls.h"
 #include "services/svc_config_key.h"
-#include "services/svc_zone_utils.h"
-#include "services/svc_user.h"
+#include "services/svc_mdlog.h"
+#include "services/svc_quota.h"
+#include "services/svc_sys_obj.h"
 #include "services/svc_sys_obj_cache.h"
-#include "cls/rgw/cls_rgw_client.h"
+#include "services/svc_tier_rados.h"
+#include "services/svc_user.h"
+#include "services/svc_zone.h"
+#include "services/svc_zone_utils.h"
 
 #include "account.h"
 #include "buckets.h"
 #include "group.h"
 #include "groups.h"
-#include "roles.h"
-#include "users.h"
 #include "rgw_pubsub.h"
+#include "role.h"
+#include "roles.h"
 #include "topic.h"
 #include "topics.h"
+#include "users.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -209,8 +207,36 @@ int RadosBucket::create(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 0) << "WARNING: failed to unlink bucket: ret=" << ret
 		       << dendl;
     }
-  } else if (ret == -EEXIST || (ret == 0 && existed)) {
+  } else if (ret == -EEXIST) {
     ret = -ERR_BUCKET_EXISTS;
+  } else if (ret == 0) {
+    /* this is to handle the following race condition:
+     * a concurrent DELETE bucket request deletes the bucket entry point and
+     * unlinks it (if the bucket pre-exists) before it's linked in this
+     * bucket creation request. */
+
+    if (existed) {
+      ret = -ERR_BUCKET_EXISTS;
+    }
+
+    RGWBucketEntryPoint ep;
+    RGWObjVersionTracker objv_tracker;
+    int r = store->ctl()->bucket->read_bucket_entrypoint_info(info.bucket,
+                                                            &ep,
+                                                            y,
+                                                            dpp,
+                                                            RGWBucketCtl::Bucket::GetParams()
+                                                            .set_objv_tracker(&objv_tracker));
+    if (r == -ENOENT) {
+      ret = 0;
+
+      ldpp_dout(dpp, 5) << "WARNING: the bucket entry point has been deleted by a concurrent DELETE bucket request."
+                        << " Unlinking the bucket." << dendl;
+      r = unlink(dpp, params.owner, y);
+      if (r < 0) {
+        ldpp_dout(dpp, 0) << "WARNING: failed to unlink bucket: ret=" << r << dendl;
+      }
+    }
   }
 
   return ret;
@@ -421,7 +447,7 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
 
   // if we deleted children above we will force delete, as any that
   // remain is detritus from a prior bug
-  ret = store->getRados()->delete_bucket(info, ot, y, dpp, !delete_children);
+  ret = store->getRados()->delete_bucket(info, get_attrs(), ot, y, dpp, !delete_children);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: could not remove bucket " <<
       info.bucket.name << dendl;
@@ -468,7 +494,7 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
     return ret;
 
   const auto& index = info.get_current_index();
-  ret = read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
+  ret = read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
   if (ret < 0)
     return ret;
 
@@ -612,13 +638,13 @@ int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
   return ret;
 }
 
-int RadosBucket::read_stats(const DoutPrefixProvider *dpp,
+int RadosBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			    const bucket_index_layout_generation& idx_layout,
 			    int shard_id, std::string* bucket_ver, std::string* master_ver,
 			    std::map<RGWObjCategory, RGWStorageStats>& stats,
 			    std::string* max_marker, bool* syncstopped)
 {
-  return store->getRados()->get_bucket_stats(dpp, info, idx_layout, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
+  return store->getRados()->get_bucket_stats(dpp, y, info, idx_layout, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
 }
 
 int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp,
@@ -771,19 +797,21 @@ int RadosBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, std::list
   return store->getRados()->remove_objs_from_index(dpp, info, objs_to_unlink);
 }
 
-int RadosBucket::check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats)
+int RadosBucket::check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                             std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
+                             std::map<RGWObjCategory, RGWStorageStats>& calculated_stats)
 {
-  return store->getRados()->bucket_check_index(dpp, info, &existing_stats, &calculated_stats);
+  return store->getRados()->bucket_check_index(dpp, y, info, &existing_stats, &calculated_stats);
 }
 
-int RadosBucket::rebuild_index(const DoutPrefixProvider *dpp)
+int RadosBucket::rebuild_index(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return store->getRados()->bucket_rebuild_index(dpp, info);
+  return store->svc()->bi_rados->rebuild_index(dpp, y, info);
 }
 
-int RadosBucket::set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout)
+int RadosBucket::set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y, uint64_t timeout)
 {
-  return store->getRados()->cls_obj_set_bucket_tag_timeout(dpp, info, timeout);
+  return store->svc()->bi_rados->set_tag_timeout(dpp, y, info, timeout);
 }
 
 int RadosBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)
@@ -1044,7 +1072,7 @@ int RadosBucket::get_logging_object_name(std::string& obj_name,
   rgw_pool data_pool;
   const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
   if (!store->getRados()->get_obj_data_pool(get_placement_rule(), rgw_obj{get_key(), obj_name_oid}, &data_pool)) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_name() <<
+    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_key() <<
       "' when getting logging object name" << dendl;
     return -EIO;
   }
@@ -1060,6 +1088,10 @@ int RadosBucket::get_logging_object_name(std::string& obj_name,
                                nullptr,
                                nullptr);
   if (ret < 0) {
+    if (ret == -ENOENT) {
+      ldpp_dout(dpp, 20) << "INFO: logging object name '" << obj_name_oid << "' not found. ret = " << ret << dendl;
+      return ret;
+    }
     ldpp_dout(dpp, 1) << "ERROR: failed to get logging object name from '" << obj_name_oid << "'. ret = " << ret << dendl;
     return ret;
   }
@@ -1076,7 +1108,7 @@ int RadosBucket::set_logging_object_name(const std::string& obj_name,
   rgw_pool data_pool;
   const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
   if (!store->getRados()->get_obj_data_pool(get_placement_rule(), rgw_obj{get_key(), obj_name_oid}, &data_pool)) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_name() <<
+    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_key() <<
       "' when setting logging object name"  << dendl;
     return -EIO;
   }
@@ -1108,7 +1140,7 @@ int RadosBucket::remove_logging_object_name(const std::string& prefix,
   rgw_pool data_pool;
   const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
   if (!store->getRados()->get_obj_data_pool(get_placement_rule(), rgw_obj{get_key(), obj_name_oid}, &data_pool)) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_name() <<
+    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_key() <<
       "' when setting logging object name"  << dendl;
     return -EIO;
   }
@@ -1131,7 +1163,7 @@ int RadosBucket::remove_logging_object(const std::string& obj_name, optional_yie
   const auto placement_rule = get_placement_rule();
 
   if (!store->getRados()->get_obj_data_pool(placement_rule, head_obj, &data_pool)) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_name() <<
+    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_key() <<
       "' when deleting logging object"  << dendl;
     return -EIO;
   }
@@ -1150,8 +1182,8 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
   const auto placement_rule = get_placement_rule();
 
   if (!store->getRados()->get_obj_data_pool(placement_rule, head_obj, &data_pool)) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_name() <<
-      "' when comitting logging object"  << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_key() <<
+      "' when committing logging object"  << dendl;
     return -EIO;
   }
 
@@ -1169,7 +1201,7 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
                      dpp,
                      &obj_attrs,
                      nullptr); ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to read logging data when comitting object '" << temp_obj_name
+    ldpp_dout(dpp, 1) << "ERROR: failed to read logging data when committing object '" << temp_obj_name
       << ". error: " << ret << dendl;
     return ret;
   } else if (ret == -ENOENT) {
@@ -1188,13 +1220,13 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
                                 nullptr, // no special placment for tail
                                 get_key(),
                                 head_obj); ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to create manifest when comitting logging object. error: " <<
+    ldpp_dout(dpp, 1) << "ERROR: failed to create manifest when committing logging object. error: " <<
       ret << dendl;
     return ret;
   }
 
   if (const auto ret = manifest_gen.create_next(size); ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to add object to manifest when comitting logging object. error: " <<
+    ldpp_dout(dpp, 1) << "ERROR: failed to add object to manifest when committing logging object. error: " <<
       ret << dendl;
     return ret;
   }
@@ -1224,7 +1256,10 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
   // TODO: head_obj_wop.meta.ptag
   // the owner of the logging object is the bucket owner
   // not the user that wrote the log that triggered the commit
-  const ACLOwner owner{bucket_info.owner, ""}; // TODO: missing display name
+  ACLOwner owner{bucket_info.owner, ""};
+  if (auto i = get_attrs().find(RGW_ATTR_ACL); i != get_attrs().end()) {
+    std::ignore = store->getRados()->decode_policy(dpp, i->second, &owner);
+  }
   head_obj_wop.meta.owner = owner;
   const auto etag = TOPNSPC::crypto::digest<TOPNSPC::crypto::MD5>(bl_data).to_str();
   bufferlist bl_etag;
@@ -1234,7 +1269,7 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
   jspan_context trace{false, false};
   if (const auto ret = head_obj_wop.write_meta(0, size, obj_attrs, rctx, trace); ret < 0) {
   ldpp_dout(dpp, 1) << "ERROR: failed to commit logging object '" << temp_obj_name <<
-    "' to bucket id '" << get_info().bucket <<"'. error: " << ret << dendl;
+    "' to bucket '" << get_key() <<"'. error: " << ret << dendl;
     return ret;
   }
   ldpp_dout(dpp, 20) << "INFO: committed logging object '" << temp_obj_name <<
@@ -1272,7 +1307,7 @@ int RadosBucket::write_logging_object(const std::string& obj_name,
   rgw_pool data_pool;
   rgw_obj obj{get_key(), obj_name};
   if (!store->getRados()->get_obj_data_pool(get_placement_rule(), obj, &data_pool)) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_name() <<
+    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_key() <<
       "' when writing logging object" << dendl;
     return -EIO;
   }
@@ -2259,6 +2294,11 @@ int RadosStore::meta_remove(const DoutPrefixProvider* dpp, std::string& metadata
   return ctl()->meta.mgr->remove(metadata_key, y, dpp);
 }
 
+void RadosStore::shutdown(void) {
+  svc()->datalog_rados->blocking_shutdown();
+  return;
+}
+
 void RadosStore::finalize(void)
 {
   if (rados)
@@ -2497,7 +2537,8 @@ RadosObject::~RadosObject()
 }
 
 bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
-   const ceph::real_time& obj_mtime)
+                                    optional_yield y,
+                                    const ceph::real_time& obj_mtime)
 {
   const auto& bucket_info = get_bucket()->get_info();
   if (bucket_info.is_indexless()) {
@@ -2514,7 +2555,7 @@ bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
 
   const int shard_id = RGWSI_BucketIndex_RADOS::bucket_shard_index(get_key(), shard_count);
 
-  int ret = store->svc()->bilog_rados->log_list(dpp, bucket_info, log_layout, shard_id,
+  int ret = store->svc()->bilog_rados->log_list(dpp, y, bucket_info, log_layout, shard_id,
     marker, 1, entries, &truncated);
 
   if (ret < 0) {
@@ -3427,6 +3468,7 @@ RadosObject::RadosDeleteOp::RadosDeleteOp(RadosObject *_source) :
 	parent_op(&op_target)
 { }
 
+
 int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
 {
   parent_op.params.bucket_owner = params.bucket_owner;
@@ -3448,15 +3490,16 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
       parent_op.params.check_objv = params.objv_tracker->version_for_check();
   }
 
-  int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP);
-  if (ret < 0)
+  int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP);
+  if (ret < 0) {
     return ret;
+  }
 
   result.delete_marker = parent_op.result.delete_marker;
   result.version_id = parent_op.result.version_id;
 
   return ret;
-}
+} // RadosObject::RadosDeleteOp::delete_obj
 
 int RadosObject::delete_object(const DoutPrefixProvider* dpp,
 			       optional_yield y,
@@ -3468,15 +3511,18 @@ int RadosObject::delete_object(const DoutPrefixProvider* dpp,
   RGWRados::Object::Delete del_op(&del_target);
 
   del_op.params.bucket_owner = bucket->get_info().owner;
-  del_op.params.versioning_status = (flags & FLAG_PREVENT_VERSIONING)
-                                    ? 0 : bucket->get_info().versioning_status();
+  del_op.params.versioning_status =
+    (flags & FLAG_PREVENT_VERSIONING)
+    ? 0
+    : bucket->get_info().versioning_status();
   del_op.params.remove_objs = remove_objs;
   if (objv) {
       del_op.params.check_objv = objv->version_for_check();
   }
 
-  return del_op.delete_obj(y, dpp, flags & FLAG_LOG_OP);
-}
+  // convert flags to bool params
+  return del_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP);
+} // RadosObject::delete_object
 
 int RadosObject::copy_object(const ACLOwner& owner,
 				const rgw_user& remote_user,
@@ -3841,6 +3887,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
     multipart_upload_info upload_info;
     upload_info.dest_placement = dest_placement;
     upload_info.cksum_type = cksum_type;
+    upload_info.cksum_flags = cksum_flags;
 
     if (obj_legal_hold) {
       upload_info.obj_legal_hold_exist = true;
@@ -4256,6 +4303,7 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
     return -EIO;
   }
   cksum_type = upload_info.cksum_type;
+  cksum_flags = upload_info.cksum_flags;
   placement = upload_info.dest_placement;
   upload_information = upload_info;
   *rule = &placement;

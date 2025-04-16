@@ -15,7 +15,7 @@
 #include "include/Context.h"
 #include "common/ThrottleInterface.h"
 #include "common/Timer.h"
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
 #else
 #include "common/perf_counters_collection.h"

@@ -31,7 +31,7 @@
 #include <map>
 #include <deque>
 #include <queue>
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
@@ -40,8 +40,7 @@
 #include <iostream>
 #include <sstream>
 #include <limits>
-
-#include <boost/variant.hpp>
+#include <variant>
 
 #include "indirect_intrusive_heap.h"
 #include "../support/src/run_every.h"
@@ -92,7 +91,7 @@ namespace crimson {
 
     // the AtLimit constructor parameter can either accept AtLimit or a value
     // for RejectThreshold (which implies AtLimit::Reject)
-    using AtLimitParam = boost::variant<AtLimit, RejectThreshold>;
+    using AtLimitParam = std::variant<AtLimit, RejectThreshold>;
 
     struct ClientInfo {
       double reservation;  // minimum
@@ -761,7 +760,7 @@ namespace crimson {
       ClientInfoFunc        client_info_f;
       static constexpr bool is_dynamic_cli_info_f = U1;
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
       static constexpr int data_mtx = 0;
       struct DataGuard { DataGuard(int) {} };
 #else
@@ -807,7 +806,7 @@ namespace crimson {
       RejectThreshold  reject_threshold = 0;
 
       double           anticipation_timeout;
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
       bool finishing;
 #else
       std::atomic_bool finishing;
@@ -837,7 +836,7 @@ namespace crimson {
       // given type T, or a default value of T otherwise
       template <typename T, typename Variant>
       static T get_or_default(const Variant& param, T default_value) {
-	const T *p = boost::get<T>(&param);
+	const T *p = std::get_if<T>(&param);
 	return p ? *p : default_value;
       }
 
@@ -1302,17 +1301,17 @@ namespace crimson {
 	};
 
 	typename super::NextReqType   type;
-	boost::variant<Retn,Time>     data;
+	std::variant<Retn,Time>     data;
 
 	bool is_none() const { return type == super::NextReqType::none; }
 
 	bool is_retn() const { return type == super::NextReqType::returning; }
 	Retn& get_retn() {
-	  return boost::get<Retn>(data);
+	  return std::get<Retn>(data);
 	}
 
 	bool is_future() const { return type == super::NextReqType::future; }
-	Time getTime() const { return boost::get<Time>(data); }
+	Time getTime() const { return std::get<Time>(data); }
       };
 
 
@@ -1483,7 +1482,7 @@ namespace crimson {
 	    auto tag = super::pop_process_request(this->ready_heap,
 				     process_f(result, PhaseType::priority));
 	    // need to use retn temporarily
-	    auto& retn = boost::get<typename PullReq::Retn>(result.data);
+	    auto& retn = std::get<typename PullReq::Retn>(result.data);
 	    super::reduce_reservation_tags(retn.client, tag);
 	  }
 	  ++this->prop_sched_count;
@@ -1510,7 +1509,7 @@ namespace crimson {
       }
     }; // class PullPriorityQueue
 
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
     // TODO: PushPriorityQueue is not ported to seastar yet
     // PUSH version
     template<typename C, typename R, bool IsDelayed=false, bool U1=false, unsigned B=2>
@@ -1812,6 +1811,6 @@ namespace crimson {
 	}
       }
     }; // class PushPriorityQueue
-#endif // !WITH_SEASTAR
+#endif // !WITH_CRIMSON
   } // namespace dmclock
 } // namespace crimson

@@ -35,7 +35,7 @@ except AttributeError:
             return date
         except ValueError:
             msg = f'''The date string {data_string} does not match the required format
-            {SNAP_DB_TS_FORMAT}. For more flexibel date parsing upgrade to
+            {SNAP_DB_TS_FORMAT}. For more flexible date parsing upgrade to
             python3.7 or install
             https://github.com/movermeyer/backports.datetime_fromisoformat'''
             log.error(msg)

@@ -8,11 +8,13 @@
 #include <cmath>
 #include <iostream>
 #include <span>
+#include <sstream>
 #include <vector>
 
 #include "debug.h"
 
 #include "common/ceph_time.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDRepScrub.h"
@@ -2342,12 +2344,10 @@ void PgScrubber::dump_active_scrubber(ceph::Formatter* f) const
   f->dump_int("shallow_errors", m_shallow_errors);
   f->dump_int("deep_errors", m_deep_errors);
   f->dump_int("fixed", m_fixed_count);
-  {
-    Formatter::ArraySection waiting_on_whom{*f, "waiting_on_whom"sv};
-    for (const auto& p : m_maps_status.get_awaited()) {
-      f->dump_stream("shard") << p;
-    }
-  }
+  f->with_array_section(
+      "waiting_on_whom"sv, m_maps_status.get_awaited(),
+      [](Formatter& f, const pg_shard_t& sh) { f.dump_stream("shard") << sh; });
+
   if (m_scrub_job->blocked) {
     f->dump_string("schedule", "blocked");
   } else {
@@ -2480,13 +2480,9 @@ void PgScrubber::handle_query_state(ceph::Formatter* f)
   f->dump_stream("scrubber.max_end") << m_max_end;
   f->dump_stream("scrubber.subset_last_update") << m_subset_last_update;
   f->dump_bool("scrubber.deep", m_is_deep);
-  {
-    Formatter::ArraySection waiting_on_whom{*f, "waiting_on_whom"sv};
-    for (const auto& p : m_maps_status.get_awaited()) {
-      f->dump_stream("shard") << p;
-    }
-  }
-
+  f->with_array_section(
+      "waiting_on_whom"sv, m_maps_status.get_awaited(),
+      [](Formatter& f, const pg_shard_t& sh) { f.dump_stream("shard") << sh; });
   f->dump_string("comment", "DEPRECATED - may be removed in the next release");
 }
 
@@ -2795,7 +2791,7 @@ void PgScrubber::update_scrub_stats(ceph::coarse_real_clock::time_point now_is)
 
 // ///////////////////// preemption_data_t //////////////////////////////////
 
-PgScrubber::preemption_data_t::preemption_data_t(PG* pg) : m_pg{pg},
+PgScrubber::preemption_data_t::preemption_data_t(PG* pg) :
   osd_scrub_max_preemptions{pg->cct->_conf, "osd_scrub_max_preemptions"}
 {
   m_left = *osd_scrub_max_preemptions;

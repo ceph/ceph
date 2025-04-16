@@ -3162,10 +3162,11 @@ public:
   auto alloc_bucket_instance_meta_handler(rgw::sal::Driver* driver,
                                           RGWSI_Zone* svc_zone,
                                           RGWSI_Bucket* svc_bucket,
-                                          RGWSI_BucketIndex* svc_bi)
+                                          RGWSI_BucketIndex* svc_bi,
+                                          RGWDataChangesLog *svc_datalog)
       -> std::unique_ptr<RGWMetadataHandler> override {
     return create_archive_bucket_instance_metadata_handler(
-        driver, svc_zone, svc_bucket, svc_bi);
+        driver, svc_zone, svc_bucket, svc_bi, svc_datalog);
   }
 };
 
@@ -4063,58 +4064,6 @@ void rgw_bucket_entry_owner::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("DisplayName", display_name, obj);
 }
 
-struct bucket_list_entry {
-  bool delete_marker;
-  rgw_obj_key key;
-  bool is_latest;
-  real_time mtime;
-  string etag;
-  uint64_t size;
-  string storage_class;
-  rgw_bucket_entry_owner owner;
-  uint64_t versioned_epoch;
-  string rgw_tag;
-
-  bucket_list_entry() : delete_marker(false), is_latest(false), size(0), versioned_epoch(0) {}
-
-  void decode_json(JSONObj *obj) {
-    JSONDecoder::decode_json("IsDeleteMarker", delete_marker, obj);
-    JSONDecoder::decode_json("Key", key.name, obj);
-    JSONDecoder::decode_json("VersionId", key.instance, obj);
-    JSONDecoder::decode_json("IsLatest", is_latest, obj);
-    string mtime_str;
-    JSONDecoder::decode_json("RgwxMtime", mtime_str, obj);
-
-    struct tm t;
-    uint32_t nsec;
-    if (parse_iso8601(mtime_str.c_str(), &t, &nsec)) {
-      ceph_timespec ts;
-      ts.tv_sec = (uint64_t)internal_timegm(&t);
-      ts.tv_nsec = nsec;
-      mtime = real_clock::from_ceph_timespec(ts);
-    }
-    JSONDecoder::decode_json("ETag", etag, obj);
-    JSONDecoder::decode_json("Size", size, obj);
-    JSONDecoder::decode_json("StorageClass", storage_class, obj);
-    JSONDecoder::decode_json("Owner", owner, obj);
-    JSONDecoder::decode_json("VersionedEpoch", versioned_epoch, obj);
-    JSONDecoder::decode_json("RgwxTag", rgw_tag, obj);
-    if (key.instance == "null" && !versioned_epoch) {
-      key.instance.clear();
-    }
-  }
-
-  RGWModifyOp get_modify_op() const {
-    if (delete_marker) {
-      return CLS_RGW_OP_LINK_OLH_DM;
-    } else if (!key.instance.empty() && key.instance != "null") {
-      return CLS_RGW_OP_LINK_OLH;
-    } else {
-      return CLS_RGW_OP_ADD;
-    }
-  }
-};
-
 struct bucket_list_result {
   string name;
   string prefix;
@@ -4520,20 +4469,6 @@ public:
             tn->log(0, "entry with empty obj name, skipping");
             goto done;
           }
-
-          // make sure versioned object only lands on versioned bucket and non-versioned object only lands on non-versioned bucket
-          if (key.instance.empty() == sync_pipe.dest_bucket_info.versioned()) {
-            set_status("skipping entry due to versioning mismatch");
-            tn->log(0, SSTR("skipping entry due to versioning mismatch: " << key));
-            goto done;
-          }
-          // if object lock is enabled on either, the other should follow as well
-          if (sync_pipe.source_bucket_info.obj_lock_enabled() != sync_pipe.dest_bucket_info.obj_lock_enabled()) {
-            set_status("skipping entry due to object lock mismatch");
-            tn->log(0, SSTR("skipping entry due to object lock mismatch: " << key));
-            goto done;
-          }
-
           if (error_injection &&
               rand() % 10000 < cct->_conf->rgw_sync_data_inject_err_probability * 10000.0) {
             tn->log(0, SSTR(": injecting data sync error on key=" << key.name));

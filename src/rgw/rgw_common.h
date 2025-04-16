@@ -27,6 +27,8 @@
 #include <boost/container/flat_set.hpp>
 
 #include "common/dout_fmt.h"
+#include "include/neorados/RADOS.hpp"
+
 #include "common/ceph_crypto.h"
 #include "common/random_string.h"
 #include "common/tracer.h"
@@ -980,6 +982,14 @@ struct RGWObjVersionTracker {
   /// This function is defined in `rgw_rados.cc` rather than `rgw_common.cc`.
   void prepare_op_for_read(librados::ObjectReadOperation* op);
 
+  /// This function is to be called on any read operation. If we have
+  /// a non-empty `read_version`, assert on the OSD that the object
+  /// has the same version. Also reads the version into `read_version`.
+  ///
+  /// This function is defined in `rgw_rados.cc` rather than
+  /// `rgw_common.cc`.
+  void prepare_read(neorados::ReadOp& op);
+
   /// This function is to be called on any write operation. If we have
   /// a non-empty read operation, assert on the OSD that the object
   /// has the same version. If we have a non-empty `write_version`,
@@ -988,6 +998,15 @@ struct RGWObjVersionTracker {
   /// This function is defined in `rgw_rados.cc` rather than
   /// `rgw_common.cc`.
   void prepare_op_for_write(librados::ObjectWriteOperation* op);
+
+  /// This function is to be called on any write operation. If we have
+  /// a non-empty read operation, assert on the OSD that the object
+  /// has the same version. If we have a non-empty `write_version`,
+  /// set the object to it. Otherwise increment the version on the OSD.
+  ///
+  /// This function is defined in `rgw_rados.cc` rather than
+  /// `rgw_common.cc`.
+  void prepare_write(neorados::WriteOp& op);
 
   /// This function is to be called after the completion of any write
   /// operation on which `prepare_op_for_write` was called. If we did
@@ -1024,12 +1043,6 @@ struct RGWObjVersionTracker {
   void generate_new_write_ver(CephContext* cct);
 };
 
-inline std::ostream& operator<<(std::ostream& out, const obj_version &v)
-{
-  out << v.tag << ":" << v.ver;
-  return out;
-}
-
 inline std::ostream& operator<<(std::ostream& out, const RGWObjVersionTracker &ot)
 {
   out << "{r=" << ot.read_version << ",w=" << ot.write_version << "}";
@@ -1043,6 +1056,7 @@ enum RGWBucketFlags {
   BUCKET_DATASYNC_DISABLED = 0X8,
   BUCKET_MFA_ENABLED = 0X10,
   BUCKET_OBJ_LOCK_ENABLED = 0X20,
+  BUCKET_DELETED = 0X40,
 };
 
 class RGWSI_Zone;
@@ -1102,6 +1116,7 @@ struct RGWBucketInfo {
   bool mfa_enabled() const { return (versioning_status() & BUCKET_MFA_ENABLED) != 0; }
   bool datasync_flag_enabled() const { return (flags & BUCKET_DATASYNC_DISABLED) == 0; }
   bool obj_lock_enabled() const { return (flags & BUCKET_OBJ_LOCK_ENABLED) != 0; }
+  bool bucket_deleted() const { return (flags & BUCKET_DELETED) != 0; }
 
   bool has_swift_versioning() const {
     /* A bucket may be versioned through one mechanism only. */
@@ -1539,9 +1554,10 @@ struct multipart_upload_info
   RGWObjectRetention obj_retention;
   RGWObjectLegalHold obj_legal_hold;
   rgw::cksum::Type cksum_type {rgw::cksum::Type::none};
+  uint16_t cksum_flags{rgw::cksum::Cksum::FLAG_CKSUM_NONE};
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(dest_placement, bl);
     encode(obj_retention_exist, bl);
     encode(obj_legal_hold_exist, bl);
@@ -1549,11 +1565,12 @@ struct multipart_upload_info
     encode(obj_legal_hold, bl);
     uint16_t ct{uint16_t(cksum_type)};
     encode(ct, bl);
+    encode(cksum_flags, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 1, 1, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 1, 1, bl);
     decode(dest_placement, bl);
     if (struct_v >= 2) {
       decode(obj_retention_exist, bl);
@@ -1564,6 +1581,9 @@ struct multipart_upload_info
 	uint16_t ct;
 	decode(ct, bl);
 	cksum_type = rgw::cksum::Type(ct);
+	if (struct_v >= 4) {
+	  decode(cksum_flags, bl);
+	}
       }
     } else {
       obj_retention_exist = false;

@@ -23,12 +23,28 @@ type Gateway = {
   status_desc: string;
 };
 
+enum TABS {
+  'gateways',
+  'overview'
+}
+
 @Component({
   selector: 'cd-nvmeof-gateway',
   templateUrl: './nvmeof-gateway.component.html',
   styleUrls: ['./nvmeof-gateway.component.scss']
 })
 export class NvmeofGatewayComponent implements OnInit {
+  selectedTab: TABS;
+  selectedGatewayGroup: string = null;
+
+  onSelected(tab: TABS) {
+    this.selectedTab = tab;
+  }
+
+  public get Tabs(): typeof TABS {
+    return TABS;
+  }
+
   @ViewChild('statusTpl', { static: true })
   statusTpl: TemplateRef<any>;
 
@@ -96,6 +112,7 @@ export class NvmeofGatewayComponent implements OnInit {
   onGroupSelection(selected: ComboBoxItem) {
     selected.selected = true;
     this.groupService = selected.serviceName;
+    this.selectedGatewayGroup = selected.content;
     this.getGateways();
   }
 

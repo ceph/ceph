@@ -27,6 +27,7 @@
 
 #include "cls/cas/cls_cas_ops.h"
 #include "common/CDC.h"
+#include "common/debug.h"
 #include "common/EventTrace.h"
 #include "common/ceph_crypto.h"
 #include "common/config.h"
@@ -4907,15 +4908,6 @@ int PrimaryLogPG::trim_object(
     head_obc->obs.oi = object_info_t(head_oid);
     t->remove(head_oid);
   } else {
-    if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
-      // filter SnapSet::snaps for the benefit of pre-octopus
-      // peers. This is perhaps overly conservative in that I'm not
-      // certain they need this, but let's be conservative here.
-      dout(10) << coid << " filtering snapset on " << head_oid << dendl;
-      snapset.filter(pool.info);
-    } else {
-      snapset.snaps.clear();
-    }
     dout(10) << coid << " writing updated snapset on " << head_oid
 	     << ", snapset is " << snapset << dendl;
     ctx->log.push_back(
@@ -7741,18 +7733,26 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	uint32_t num = 0;
 	bool truncated = false;
 	if (oi.is_omap()) {
-	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
-	    ch, ghobject_t(soid)
-	    );
-	  ceph_assert(iter);
-	  iter->upper_bound(start_after);
-	  for (num = 0; iter->valid(); ++num, iter->next()) {
-	    if (num >= max_return ||
-		bl.length() >= cct->_conf->osd_max_omap_bytes_per_request) {
-	      truncated = true;
-	      break;
-	    }
-	    encode(iter->key(), bl);
+          const auto result = osd->store->omap_iterate(
+            ch, ghobject_t(soid),
+            ObjectStore::omap_iter_seek_t{
+              .seek_position = start_after,
+              .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
+            },
+            [&bl, &num, max_return,
+	     max_bytes=cct->_conf->osd_max_omap_bytes_per_request]
+            (std::string_view key, std::string_view value) mutable {
+	      if (num >= max_return || bl.length() >= max_bytes) {
+                return ObjectStore::omap_iter_ret_t::STOP;
+	      }
+	      encode(key, bl);
+	      ++num;
+              return ObjectStore::omap_iter_ret_t::NEXT;
+            });
+          if (result < 0) {
+	    ceph_abort();
+	  } else if (const auto more = static_cast<bool>(result); more) {
+	    truncated = true;
 	  }
 	} // else return empty out_set
 	encode(num, osd_op.outdata);
@@ -7789,7 +7789,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	bufferlist bl;
 	if (oi.is_omap()) {
 	  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
-	  result = osd->store->omap_iterate(
+	  const auto result = osd->store->omap_iterate(
 	    ch, ghobject_t(soid),
 	    // try to seek as many keys-at-once as possible for the sake of performance.
 	    // note complexity should be logarithmic, so seek(n/2) + seek(n/2) is worse
@@ -8793,11 +8793,6 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
   if (snapc.seq > ctx->new_snapset.seq) {
     // update snapset with latest snap context
     ctx->new_snapset.seq = snapc.seq;
-    if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
-      ctx->new_snapset.snaps = snapc.snaps;
-    } else {
-      ctx->new_snapset.snaps.clear();
-    }
   }
   dout(20) << "make_writeable " << soid
 	   << " done, snapset=" << ctx->new_snapset << dendl;
@@ -9397,27 +9392,33 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
 				    &reply_obj.omap_header);
       }
       bufferlist omap_data;
-      ObjectMap::ObjectMapIterator iter =
-	osd->store->get_omap_iterator(ch, ghobject_t(oi.soid));
-      ceph_assert(iter);
-      iter->upper_bound(cursor.omap_offset);
-      for (; iter->valid(); iter->next()) {
-	++omap_keys;
-	encode(iter->key(), omap_data);
-	encode(iter->value(), omap_data);
-	left -= iter->key().length() + 4 + iter->value().length() + 4;
-	if (left <= 0)
-	  break;
+      const auto result = osd->store->omap_iterate(
+        ch, ghobject_t(oi.soid),
+        ObjectStore::omap_iter_seek_t{
+          .seek_position = cursor.omap_offset,
+          .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
+        },
+        [&omap_data, &omap_keys, &left, &cursor]
+        (std::string_view key, std::string_view value) mutable {
+	  ++omap_keys;
+	  encode(key, omap_data);
+	  encode(value, omap_data);
+	  left -= key.length() + 4 + value.length() + 4;
+	  if (left <= 0) {
+	    cursor.omap_offset = key;
+            return ObjectStore::omap_iter_ret_t::STOP;
+	  }
+          return ObjectStore::omap_iter_ret_t::NEXT;
+        });
+      if (result < 0) {
+	ceph_abort();
+      } else if (const auto more = static_cast<bool>(result); !more) {
+	cursor.omap_complete = true;
+	dout(20) << " got omap" << dendl;
       }
       if (omap_keys) {
 	encode(omap_keys, reply_obj.omap_data);
 	reply_obj.omap_data.claim_append(omap_data);
-      }
-      if (iter->valid()) {
-	cursor.omap_offset = iter->key();
-      } else {
-	cursor.omap_complete = true;
-	dout(20) << " got omap" << dendl;
       }
     }
   }
@@ -10222,11 +10223,6 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
 
     OpContextUPtr tctx = simple_opc_create(obc);
     tctx->at_version = get_next_version();
-    if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
-      filter_snapc(tctx->new_snapset.snaps);
-    } else {
-      tctx->new_snapset.snaps.clear();
-    }
     vector<snapid_t> new_clones;
     map<snapid_t, vector<snapid_t>> new_clone_snaps;
     for (vector<snapid_t>::iterator i = tctx->new_snapset.clones.begin();
@@ -10898,17 +10894,7 @@ int PrimaryLogPG::start_flush(
 	   << " " << (blocking ? "blocking" : "non-blocking/best-effort")
 	   << dendl;
 
-  bool preoctopus_compat =
-    get_osdmap()->require_osd_release < ceph_release_t::octopus;
-  SnapSet snapset;
-  if (preoctopus_compat) {
-    // for pre-octopus compatibility, filter SnapSet::snaps.  not
-    // certain we need this, but let's be conservative.
-    snapset = obc->ssc->snapset.get_filtered(pool.info);
-  } else {
-    // NOTE: change this to a const ref when we remove this compat code
-    snapset = obc->ssc->snapset;
-  }
+  const SnapSet& snapset = obc->ssc->snapset;
 
   if ((obc->obs.oi.has_manifest() && obc->obs.oi.manifest.is_chunked())
       || force_dedup) {
@@ -10921,7 +10907,7 @@ int PrimaryLogPG::start_flush(
   // verify there are no (older) check for dirty clones
   {
     dout(20) << " snapset " << snapset << dendl;
-    vector<snapid_t>::reverse_iterator p = snapset.clones.rbegin();
+    vector<snapid_t>::const_reverse_iterator p = snapset.clones.rbegin();
     while (p != snapset.clones.rend() && *p >= soid.snap)
       ++p;
     if (p != snapset.clones.rend()) {
@@ -11032,7 +11018,7 @@ int PrimaryLogPG::start_flush(
     }
 
     snapid_t prev_snapc = 0;
-    for (vector<snapid_t>::reverse_iterator citer = snapset.clones.rbegin();
+    for (vector<snapid_t>::const_reverse_iterator citer = snapset.clones.rbegin();
 	 citer != snapset.clones.rend();
 	 ++citer) {
       if (*citer < soid.snap) {

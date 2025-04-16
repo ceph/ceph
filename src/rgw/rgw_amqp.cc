@@ -2,10 +2,17 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_amqp.h"
+#if __has_include(<rabbitmq-c/amqp.h>)
+#include <rabbitmq-c/amqp.h>
+#include <rabbitmq-c/ssl_socket.h>
+#include <rabbitmq-c/tcp_socket.h>
+#include <rabbitmq-c/framing.h>
+#else
 #include <amqp.h>
 #include <amqp_ssl_socket.h>
 #include <amqp_tcp_socket.h>
 #include <amqp_framing.h>
+#endif // __has_include(<rabbitmq-c/amqp.h>)
 #include "include/ceph_assert.h"
 #include <sstream>
 #include <cstring>

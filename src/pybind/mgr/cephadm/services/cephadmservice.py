@@ -1135,11 +1135,26 @@ class RgwService(CephService):
         if extra_ssl_cert_provided and spec.generate_cert:
             raise OrchestratorError("Cannot provide ssl_certificate in combination with generate_cert")
 
+        # pick ip RGW should bind to
+        ip_to_bind_to = ''
+        if spec.only_bind_port_on_networks and spec.networks:
+            assert daemon_spec.host is not None
+            ip_to_bind_to = self.mgr.get_first_matching_network_ip(daemon_spec.host, spec) or ''
+            if ip_to_bind_to:
+                daemon_spec.port_ips = {str(port): ip_to_bind_to}
+            else:
+                logger.warning(
+                    f'Failed to find ip in {spec.networks} for host {daemon_spec.host}. '
+                    f'{daemon_spec.name()} will bind to all IPs'
+                )
+        elif daemon_spec.ip:
+            ip_to_bind_to = daemon_spec.ip
+
         if ftype == 'beast':
             if spec.ssl:
-                if daemon_spec.ip:
+                if ip_to_bind_to:
                     args.append(
-                        f"ssl_endpoint={build_url(host=daemon_spec.ip, port=port).lstrip('/')}")
+                        f"ssl_endpoint={build_url(host=ip_to_bind_to, port=port).lstrip('/')}")
                 else:
                     args.append(f"ssl_port={port}")
                 if spec.generate_cert:
@@ -1147,15 +1162,15 @@ class RgwService(CephService):
                 elif not extra_ssl_cert_provided:
                     args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}")
             else:
-                if daemon_spec.ip:
-                    args.append(f"endpoint={build_url(host=daemon_spec.ip, port=port).lstrip('/')}")
+                if ip_to_bind_to:
+                    args.append(f"endpoint={build_url(host=ip_to_bind_to, port=port).lstrip('/')}")
                 else:
                     args.append(f"port={port}")
         elif ftype == 'civetweb':
             if spec.ssl:
-                if daemon_spec.ip:
+                if ip_to_bind_to:
                     # note the 's' suffix on port
-                    args.append(f"port={build_url(host=daemon_spec.ip, port=port).lstrip('/')}s")
+                    args.append(f"port={build_url(host=ip_to_bind_to, port=port).lstrip('/')}s")
                 else:
                     args.append(f"port={port}s")  # note the 's' suffix on port
                 if spec.generate_cert:
@@ -1163,8 +1178,8 @@ class RgwService(CephService):
                 elif not extra_ssl_cert_provided:
                     args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}")
             else:
-                if daemon_spec.ip:
-                    args.append(f"port={build_url(host=daemon_spec.ip, port=port).lstrip('/')}")
+                if ip_to_bind_to:
+                    args.append(f"port={build_url(host=ip_to_bind_to, port=port).lstrip('/')}")
                 else:
                     args.append(f"port={port}")
         else:
@@ -1306,6 +1321,39 @@ class RgwService(CephService):
         config, parent_deps = super().generate_config(daemon_spec)
         rgw_deps = parent_deps + self.get_dependencies(self.mgr, svc_spec)
         return config, rgw_deps
+
+    def get_active_ports(self, service_name: str) -> List[int]:
+        """
+        Fetch active RGW frontend ports by parsing config entries for a given service.
+        """
+        ports = set()
+        daemons = self.mgr.cache.get_daemons_by_service(service_name)
+        for d in daemons:
+            who = f"client.{d.name()}"
+            try:
+                ret, out, err = self.mgr.check_mon_command({
+                    'prefix': 'config get',
+                    'who': who,
+                    'name': 'rgw_frontends'
+                })
+
+                if ret == 0 and out:
+                    logger.debug(f"who: {who}, out: {out}")
+                    ports.update(self._extract_ports_from_frontend(out.strip()))
+            except Exception as e:
+                logger.warning(f"Failed to get the config details for {who}: {e}")
+                continue
+
+        return sorted(ports)
+
+    def _extract_ports_from_frontend(self, frontend_str: str) -> set[int]:
+
+        ports = set()
+        for val in frontend_str.split():
+            if val.startswith("port="):
+                ports.add(int(val.split("=")[1]))
+
+        return ports
 
 
 @register_cephadm_service

@@ -5,7 +5,7 @@
 #include "common/perf_counters.h"
 #include "include/types.h" // for operator<<(std::vector)
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
 #else
 #include "common/perf_counters_collection.h"

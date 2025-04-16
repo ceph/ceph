@@ -98,6 +98,7 @@ private:
        NvmeGwId &gw_id, NvmeGroupKey& group_key);
   epoch_t get_ack_map_epoch(bool gw_created, const NvmeGroupKey& group_key);
   void recreate_gw_epoch();
+  void restore_pending_map_info(NVMeofGwMap & tmp_map);
 };
 
 #endif /* MON_NVMEGWMONITOR_H_ */

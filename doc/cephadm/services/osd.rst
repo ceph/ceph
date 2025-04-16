@@ -144,7 +144,7 @@ Run this command to display an inventory of storage devices on all cluster hosts
 
   ceph orch device ls
 
-A storage device is considered _available_ if all of the following
+A storage device is considered *available* if all of the following
 conditions are met:
 
 * The device must have no partitions.
@@ -154,7 +154,7 @@ conditions are met:
 * The device must not contain a Ceph BlueStore OSD.
 * The device must be larger than 5 GB.
 
-Ceph will not provision an OSD on a device that is not _available_.
+Ceph will not provision an OSD on a device that is not *available*.
 
 Creating New OSDs
 -----------------
@@ -1214,6 +1214,13 @@ This example applies to two hosts: ``ceph01`` and ``ceph04``.
 *This procedure was developed by Eugen Block in Feburary of 2025, and a blog
 post pertinent to its development can be seen here:*
 `Eugen Block's "Cephadm: Activate existing OSDs" blog post <https://heiterbiswolkig.blogs.nde.ag/2025/02/06/cephadm-activate-existing-osds/>`_.
+
+.. note::
+    It is usually not safe to run ``ceph orch restart osd.myosdservice`` on a
+    running cluster, as attention is not paid to CRUSH failure domains, and
+    parallel OSD restarts may lead to temporary data unavailability or in rare
+    cases even data loss.
+
 
 Further Reading
 ===============

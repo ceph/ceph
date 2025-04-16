@@ -2,7 +2,6 @@ tasks:
 - install:
 - ceph:
 - rgw:
-    storage classes: LUKEWARM, FROZEN
     client.0:
       port: 8000
     client.1:
@@ -49,7 +48,6 @@ tasks:
 - s3tests:
     client.0:
       rgw_server: client.0
-      storage classes: LUKEWARM, FROZEN
       extra_attrs: ["cloud_transition"]
       lc_debug_interval: 10
       lifecycle_tests: True
@@ -57,7 +55,6 @@ tasks:
     #client.2:
       #force-branch: ceph-master
       #rgw_server: client.2
-      #storage classes: LUKEWARM, FROZEN
       #extra_attrs: ["cloud_transition"]
       #lc_debug_interval: 10
       #cloudtier_tests: True

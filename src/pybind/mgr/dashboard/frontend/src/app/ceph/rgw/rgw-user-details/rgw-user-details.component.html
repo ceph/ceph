@@ -88,6 +88,36 @@
       </tbody>
     </table>
 
+    <ng-container *ngIf="selection.account && selection.account?.id">
+      <legend i18n>Account Details</legend>
+      <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
+             id="accountsDetails">
+        <tbody>
+          <tr>
+            <td i18n
+                class="bold w-25">Account ID</td>
+            <td class="w-75">{{ selection.account?.id }}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold w-25">Name</td>
+            <td class="w-75">{{ selection.account?.name }}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold w-25">Tenant</td>
+            <td class="w-75">{{ selection.account?.tenant || '-'}}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold w-25">User type</td>
+            <td class="w-75"
+                i18n>{{ user?.type === 'root' ? 'Account root user' : 'rgw user' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </ng-container>
+
     <!-- User quota -->
     <div *ngIf="user.user_quota">
       <legend i18n>User quota</legend>

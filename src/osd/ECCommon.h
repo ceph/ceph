@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <boost/intrusive/set.hpp>
 #include <boost/intrusive/list.hpp>
 #include <fmt/format.h>
 
@@ -22,7 +21,7 @@
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECUtil.h"
 #include "ECTypes.h"
-#if WITH_SEASTAR
+#if WITH_CRIMSON
 #include "ExtentCache.h"
 #include "crimson/osd/object_context.h"
 #include "os/Transaction.h"

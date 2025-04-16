@@ -2,7 +2,6 @@ tasks:
 - install:
 - ceph:
 - rgw:
-    storage classes: LUKEWARM, FROZEN
     client.0:
       port: 8000
     client.1:
@@ -25,7 +24,6 @@ tasks:
 - s3tests:
     client.0:
       rgw_server: client.0
-      storage classes: LUKEWARM, FROZEN
       extra_attrs: ["cloud_restore"]
       lc_debug_interval: 10
       rgw_restore_debug_interval: 20

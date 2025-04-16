@@ -77,18 +77,19 @@ seastar::future<> BackgroundRecoveryT<T>::start()
       std::chrono::milliseconds(std::lround(delay * 1000)));
   }
   return maybe_delay.then([ref, this] {
-    return this->template with_blocking_event<OperationThrottler::BlockingEvent>(
-      [ref, this] (auto&& trigger) {
-      return ss.with_throttle_while(
-        std::move(trigger),
-        this, get_scheduler_params(), [this] {
-          return interruptor::with_interruption([this] {
-            return do_recovery();
-          }, [](std::exception_ptr) {
-            return seastar::make_ready_future<bool>(false);
-          }, pg, epoch_started);
-        });
+    return seastar::repeat([ref, this] {
+      return interruptor::with_interruption([this] {
+       return do_recovery();
+      }, [](std::exception_ptr) {
+       return seastar::make_ready_future<bool>(false);
+      }, pg, epoch_started).then([](bool do_recovery) {
+       if (do_recovery) {
+         return seastar::stop_iteration::no;
+       } else {
+         return seastar::stop_iteration::yes;
+       }
       });
+    });
   });
 }
 
@@ -117,7 +118,8 @@ UrgentRecovery::do_recovery()
   ).then_interruptible([this] {
     return with_blocking_event<RecoveryBackend::RecoveryBlockingEvent,
 			       interruptor>([this] (auto&& trigger) {
-      return pg->get_recovery_handler()->recover_missing(trigger, soid, need);
+      return pg->get_recovery_handler()->recover_missing(
+	trigger, soid, need, false);
     }).then_interruptible([] {
       return seastar::make_ready_future<bool>(false);
     });

@@ -4,11 +4,11 @@
   <cd-alert-panel *ngIf="permissions.configOpt.create && !rgwModuleStatus"
                   type="info"
                   spacingClass="mb-3"
-                  class="d-flex align-items-center"
-                  i18n>In order to access the import/export feature, the rgw module must be enabled
-    <button class="btn btn-light mx-2"
-            type="button"
-            (click)="enableRgwModule()">Enable</button>
+                  i18n
+                  class="align-items-center"
+                  actionName="Enable"
+                  (action)="enableRgwModule()">
+      In order to access the import/export/Setup Multi-site Replication feature, the rgw module must be enabled.
   </cd-alert-panel>
   <cd-alert-panel   *ngIf="restartGatewayMessage"
                     type="warning"

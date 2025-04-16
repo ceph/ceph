@@ -4,10 +4,33 @@ Squid
 
 Squid is the 19th stable release of Ceph.
 
+v19.2.2 Squid
+=============
+This is the second hotfix release in the Squid series.
+We recommend that all users update to this release.
+
+.. warning: Upgrade to Squid v19.2.2. Do not upgrade to Squid v19.2.1.
+
+Notable Changes
+---------------
+
+* This hotfix release resolves an RGW data loss bug when CopyObject is used to copy an object onto itself. 
+  S3 clients typically do this when they want to change the metadata of an existing object. 
+  Due to a regression caused by an earlier fix for https://tracker.ceph.com/issues/66286, 
+  any tail objects associated with such objects are erroneously marked for garbage collection. 
+  RGW deployments on Squid are encouraged to upgrade as soon as possible to minimize the damage. 
+  The experimental rgw-gap-list tool can help to identify damaged objects.
+
+Changelog
+---------
+
+* squid: rgw: keep the tails when copying object to itself (`pr#62711 <https://github.com/ceph/ceph/pull/62711>`_, cbodley)
+
 v19.2.1 Squid
 =============
 This is the first backport release in the Squid series.
-We recommend that all users update to this release.
+
+.. warning: Do not upgrade to Squid v19.2.1. Upgrade instead to Squid v19.2.2.
 
 Notable Changes
 ---------------

@@ -63,7 +63,8 @@ import {
   RadioModule,
   SelectModule,
   UIShellModule,
-  TreeviewModule
+  TreeviewModule,
+  TabsModule
 } from 'carbon-components-angular';
 
 // Icons
@@ -98,7 +99,8 @@ import { UnsavedChangesGuard } from '~/app/shared/services/unsaved-changes-guard
     NumberModule,
     ModalModule,
     DatePickerModule,
-    ComboBoxModule
+    ComboBoxModule,
+    TabsModule
   ],
   declarations: [
     RbdListComponent,

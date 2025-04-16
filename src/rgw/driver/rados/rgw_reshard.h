@@ -117,7 +117,8 @@ public:
               bool verbose = false, std::ostream *out = nullptr,
               ceph::Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
-  int get_status(const DoutPrefixProvider *dpp, std::list<cls_rgw_bucket_instance_entry> *status);
+  int get_status(const DoutPrefixProvider *dpp, optional_yield y,
+                 std::list<cls_rgw_bucket_instance_entry> *status);
   int cancel(const DoutPrefixProvider* dpp, optional_yield y);
   int renew_lock_if_needed(const DoutPrefixProvider *dpp);
 
@@ -238,7 +239,6 @@ public:
   int get(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry);
   int remove(const DoutPrefixProvider *dpp, const cls_rgw_reshard_entry& entry, optional_yield y);
   int list(const DoutPrefixProvider *dpp, int logshard_num, std::string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated);
-  int clear_bucket_resharding(const DoutPrefixProvider *dpp, const std::string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
 
   /* reshard thread */
   int process_entry(const cls_rgw_reshard_entry& entry, int max_entries,

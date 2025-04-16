@@ -1,10 +1,14 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "PGPeeringEvent.h"
-#include "common/ceph_releases.h"
-#include "common/dout.h"
 #include "PeeringState.h"
+#include "PGPeeringEvent.h"
+#include "osd_perf_counters.h"
+#include "common/ceph_releases.h"
+#include "common/debug.h"
+#include "common/ostream_temp.h"
+#include "crush/crush.h" // for CRUSH_ITEM_NONE
+#include "crush/CrushWrapper.h"
 
 #include "messages/MOSDPGRemove.h"
 #include "messages/MBackfillReserve.h"
@@ -534,10 +538,14 @@ bool PeeringState::should_restart_peering(
   int newupprimary,
   int newactingprimary,
   const vector<int>& newup,
-  const vector<int>& newacting,
+  const vector<int>& _newacting,
   OSDMapRef lastmap,
   OSDMapRef osdmap)
 {
+  const vector<int> newacting = osdmap->pgtemp_undo_primaryfirst(
+					  pool.info,
+					  info.pgid.pgid,
+					  _newacting);
   if (PastIntervals::is_new_interval(
 	primary.osd,
 	newactingprimary,
@@ -816,7 +824,9 @@ void PeeringState::init_primary_up_acting(
   int new_acting_primary)
 {
   actingset.clear();
-  acting = newacting;
+  acting = get_osdmap()->pgtemp_undo_primaryfirst(pool.info,
+						  info.pgid.pgid,
+						  newacting);
   for (uint8_t i = 0; i < acting.size(); ++i) {
     if (acting[i] != CRUSH_ITEM_NONE)
       actingset.insert(
@@ -2441,13 +2451,23 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
                << " from oversized want " << want << dendl;
     want.pop_back();
   }
-  if (want != acting) {
-    psdout(10) << "want " << want << " != acting " << acting
+  if ((want != acting) ||
+      pool.info.is_nonprimary_shard(pg_whoami.shard)) {
+    if (pool.info.is_nonprimary_shard(pg_whoami.shard)) {
+      psdout(10) << "shard " << pg_whoami.shard << " cannot be primary, want "
+	       << pg_vector_string(want)
+	       << " acting " << pg_vector_string(acting)
 	       << ", requesting pg_temp change" << dendl;
+    } else {
+      psdout(10) << "want " << pg_vector_string(want)
+	       << " != acting " << pg_vector_string(acting)
+	       << ", requesting pg_temp change" << dendl;
+    }
     want_acting = want;
 
     if (!cct->_conf->osd_debug_no_acting_change) {
-      if (want_acting == up) {
+      if ((want_acting == up) &&
+	  !pool.info.is_nonprimary_shard(pg_whoami.shard)) {
 	// There can't be any pending backfill if
 	// want is the same as crush map up OSDs.
 	ceph_assert(want_backfill.empty());
@@ -2775,7 +2795,7 @@ void PeeringState::activate(
 
       psdout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
-      #ifdef WITH_SEASTAR
+      #ifdef WITH_CRIMSON
       MURef<MOSDPGLog> m;
       #else
       MRef<MOSDPGLog> m;

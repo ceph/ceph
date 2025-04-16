@@ -22,7 +22,7 @@ try:
 except ModuleNotFoundError:
     logging.error("Module 'xmltodict' is not installed.")
 
-from mgr_util import build_url, name_to_config_section
+from mgr_util import build_url
 
 from .. import mgr
 from ..awsauth import S3Auth
@@ -100,9 +100,12 @@ def _determine_rgw_addr(daemon_info: Dict[str, Any]) -> RgwDaemon:
     Parse RGW daemon info to determine the configured host (IP address) and port.
     """
     daemon = RgwDaemon()
-    rgw_dns_name = CephService.send_command('mon', 'config get',
-                                            who=name_to_config_section('rgw.' + daemon_info['metadata']['id']),  # noqa E501 #pylint: disable=line-too-long
-                                            key='rgw_dns_name').rstrip()
+    rgw_dns_name = ''
+    if (
+        Settings.RGW_HOSTNAME_PER_DAEMON
+        and daemon_info['metadata']['id'] in Settings.RGW_HOSTNAME_PER_DAEMON
+    ):
+        rgw_dns_name = Settings.RGW_HOSTNAME_PER_DAEMON[daemon_info['metadata']['id']]
 
     daemon.port, daemon.ssl = _parse_frontend_config(daemon_info['metadata']['frontend_config#0'])
 
@@ -279,7 +282,9 @@ class RgwClient(RestClient):
         return (Settings.RGW_API_ACCESS_KEY,
                 Settings.RGW_API_SECRET_KEY,
                 Settings.RGW_API_ADMIN_RESOURCE,
-                Settings.RGW_API_SSL_VERIFY)
+                Settings.RGW_API_SSL_VERIFY,
+                Settings.RGW_HOSTNAME_PER_DAEMON
+                )
 
     @staticmethod
     def instance(userid: Optional[str] = None,
@@ -1859,6 +1864,14 @@ class RgwMultisite:
         else:
             self.update_period()
 
+    def modify_retain_head(self, tier_config: dict) -> List[str]:
+        tier_config_items = []
+        for key, value in tier_config.items():
+            if isinstance(value, bool):
+                value = str(value).lower()
+            tier_config_items.append(f'{key}={value}')
+        return tier_config_items
+
     def add_placement_targets(self, zonegroup_name: str, placement_targets: List[Dict]):
         rgw_add_placement_cmd = ['zonegroup', 'placement', 'add']
         STANDARD_STORAGE_CLASS = "STANDARD"
@@ -1877,9 +1890,7 @@ class RgwMultisite:
             ):
                 tier_config = placement_target.get('tier_config', {})
                 if tier_config:
-                    tier_config_items = (
-                        f'{key}={value}' for key, value in tier_config.items()
-                    )
+                    tier_config_items = self.modify_retain_head(tier_config)
                     tier_config_str = ','.join(tier_config_items)
                     cmd_add_placement_options += [
                         '--tier-type', 'cloud-s3', '--tier-config', tier_config_str
@@ -1952,9 +1963,7 @@ class RgwMultisite:
             ):
                 tier_config = placement_target.get('tier_config', {})
                 if tier_config:
-                    tier_config_items = (
-                        f'{key}={value}' for key, value in tier_config.items()
-                    )
+                    tier_config_items = self.modify_retain_head(tier_config)
                     tier_config_str = ','.join(tier_config_items)
                     cmd_add_placement_options += [
                         '--tier-type', 'cloud-s3', '--tier-config', tier_config_str

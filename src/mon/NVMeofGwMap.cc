@@ -285,6 +285,16 @@ void NVMeofGwMap::track_deleting_gws(const NvmeGroupKey& group_key,
   }
 }
 
+void NVMeofGwMap::skip_failovers_for_group(const NvmeGroupKey& group_key)
+{
+  const auto skip_failovers = g_conf().get_val<std::chrono::seconds>
+    ("mon_nvmeofgw_skip_failovers_interval");
+  for (auto& gw_created: created_gws[group_key]) {
+    gw_created.second.allow_failovers_ts = std::chrono::system_clock::now()
+        + skip_failovers;
+  }
+}
+
 int NVMeofGwMap::process_gw_map_gw_no_subsys_no_listeners(
   const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool &propose_pending)
 {
@@ -523,9 +533,14 @@ void  NVMeofGwMap::find_failover_candidate(
 #define MIN_NUM_ANA_GROUPS 0xFFF
   int min_num_ana_groups_in_gw = 0;
   int current_ana_groups_in_gw = 0;
+  std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
   NvmeGwId min_loaded_gw_id = ILLEGAL_GW_ID;
   auto& gws_states = created_gws[group_key];
   auto gw_state = gws_states.find(gw_id);
+  if (gw_state->second.allow_failovers_ts > now) {
+    dout(4) << "gw " << gw_id << " skip-failovers is set " << dendl;
+    return;
+  }
 
   // this GW may handle several ANA groups and  for each
   // of them need to found the candidate GW

@@ -1,7 +1,6 @@
 set(libos_srcs
   ObjectStore.cc
   Transaction.cc
-  DBObjectMap.cc
   memstore/MemStore.cc
   kstore/KStore.cc
   kstore/kstore_types.cc

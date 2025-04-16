@@ -674,6 +674,18 @@ int RGWAsyncPutBucketInstanceInfo::_send_request(const DoutPrefixProvider *dpp)
   return 0;
 }
 
+int RGWAsyncRemoveBucketInstanceInfo::_send_request(const DoutPrefixProvider *dpp)
+{
+  auto r = store->ctl()->bucket->remove_bucket_instance_info(bucket, bucket_info,
+						       null_yield, dpp);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to remove bucket instance info for "
+		      << bucket_info.bucket << dendl;
+    return r;
+  }
+  return 0;
+}
+
 RGWRadosBILogTrimCR::RGWRadosBILogTrimCR(
   const DoutPrefixProvider *dpp,
   rgw::sal::RadosStore* store,
@@ -704,6 +716,7 @@ int RGWRadosBILogTrimCR::send_request(const DoutPrefixProvider *dpp)
   encode(call, in);
 
   librados::ObjectWriteOperation op;
+  op.assert_exists();
   op.exec(RGW_CLASS, RGW_BI_LOG_TRIM, in);
 
   cn = stack->create_completion_notifier();
@@ -1002,7 +1015,7 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
 }
 
 RGWRadosTimelogAddCR::RGWRadosTimelogAddCR(const DoutPrefixProvider *_dpp, rgw::sal::RadosStore* _store, const string& _oid,
-                      const cls_log_entry& entry) : RGWSimpleCoroutine(_store->ctx()),
+                      const cls::log::entry& entry) : RGWSimpleCoroutine(_store->ctx()),
                                                 dpp(_dpp),
                                                 store(_store),
                                                 oid(_oid), cn(NULL)
@@ -1188,6 +1201,59 @@ int RGWDataPostNotifyCR::operate(const DoutPrefixProvider* dpp)
     if (retcode < 0) {
       return set_cr_error(retcode);
     }
+    return set_cr_done();
+  }
+  return 0;
+}
+  
+RGWStatRemoteBucketCR::RGWStatRemoteBucketCR(const DoutPrefixProvider *dpp,
+				    rgw::sal::RadosStore* const store,
+            const rgw_zone_id source_zone,
+            const rgw_bucket& bucket,
+            RGWHTTPManager* http,
+            std::vector<rgw_zone_id> zids,
+            std::vector<bucket_unordered_list_result>& peer_result)
+      : RGWCoroutine(store->ctx()), dpp(dpp), store(store),
+      source_zone(source_zone), bucket(bucket), http(http),
+      zids(std::move(zids)), peer_result(peer_result) {}
+  
+int RGWStatRemoteBucketCR::operate(const DoutPrefixProvider *dpp) {
+  reenter(this) {
+    yield {
+      auto result = peer_result.begin();
+      for (auto& zid : zids) {
+        auto& zone_conn_map = store->getRados()->svc.zone->get_zone_conn_map();
+        auto ziter = zone_conn_map.find(zid);
+        if (ziter == zone_conn_map.end()) {
+          ldpp_dout(dpp, 0) << "WARNING: no connection to zone " << ziter->first << dendl;
+          continue;
+        }
+        ldpp_dout(dpp, 20) << "query bucket from: " << ziter->first << dendl;
+        RGWRESTConn *conn = ziter->second;
+
+        rgw_http_param_pair pairs[] = { { "versions" , NULL },
+					{ "format" , "json" },
+					{ "objs-container" , "true" },
+          { "max-keys", "1" },
+          { "allow-unordered", "true"},
+          { "key-marker" , NULL },
+					{ "version-id-marker" , NULL },
+	                                { NULL, NULL } };
+        string p = string("/") + bucket.get_key(':', 0);
+        spawn(new RGWReadRESTResourceCR<bucket_unordered_list_result>(store->ctx(), &*conn, &*http, p, pairs, &*result), false);
+        ++result;
+      }
+    }
+
+    while (num_spawned()) {
+      yield wait_for_child();
+      collect(&child_ret, nullptr);
+      if (child_ret < 0) {
+        drain_all();
+        return set_cr_error(child_ret);
+      }
+    }
+
     return set_cr_done();
   }
   return 0;
