@@ -146,22 +146,6 @@ ECTransaction::WritePlanObj::WritePlanObj(
   invalidates_cache = op.has_source(&source) || op.is_delete();
 
   op.buffer_updates.to_interval_set(unaligned_ro_writes);
-  /* We can get multiple truncates/appends in a single tranaction. These get
-   * simplified to two values - a minimum and a maximum. It is not guaranteed
-   * that this region has writes.  We create writes for this region so as to
-   * essentially write zeros (or holes) in that region.
-   */
-
-  if (op.truncate) {
-    uint64_t start = op.truncate->first;
-    uint64_t end = projected_size;
-    if (projected_size > op.truncate->second ) {
-      end = op.truncate->second;
-    }
-    if (end > start) {
-      unaligned_ro_writes.insert(start, end - start);
-    }
-  }
 
   /* Calculate any non-aligned pages. These need to be read and written */
   extent_set aligned_ro_writes(unaligned_ro_writes);
@@ -618,15 +602,30 @@ void ECTransaction::Generate::truncate() {
   debug(oid, "truncate_erase", to_write, dpp);
 
   if (entry && !op.is_fresh_object()) {
-    uint64_t restore_from = sinfo.ro_offset_to_prev_chunk_offset(
-      op.truncate->first);
-    uint64_t restore_len = sinfo.aligned_ro_offset_to_chunk_offset(
-      plan.orig_size -
-      sinfo.ro_offset_to_prev_stripe_ro_offset(op.truncate->first));
-    shard_id_set all_shards; // intentionally left blank!
-    rollback_extents.emplace_back(make_pair(restore_from, restore_len));
-    rollback_shards.emplace_back(all_shards);
-    for (auto &&[shard, t]: transactions) {
+    // Truncate each shard to match the new *actual* size
+    ECUtil::shard_extent_set_t truncate_eset(sinfo.get_k_plus_m());
+    ECUtil::shard_extent_set_t new_size_eset(sinfo.get_k_plus_m());
+    sinfo.ro_size_to_read_mask(plan.orig_size, truncate_eset);
+    sinfo.ro_range_to_shard_extent_set_with_parity(0, op.truncate->first,
+                                         new_size_eset);
+    truncate_eset.subtract(new_size_eset);
+
+    uint64_t clone_start = std::numeric_limits<uint64_t>::max();
+    uint64_t clone_end = 0;
+
+    shard_id_set clone_shards; // intentionally left blank!
+
+    for (auto &&[shard, eset]: truncate_eset) {
+      clone_shards.insert(shard);
+      if (!transactions.contains(shard)) {
+        continue;
+      }
+
+      auto &t = transactions.at(shard);
+      uint64_t start = eset.range_start();
+      uint64_t start_align_prev = ECUtil::align_page_prev(start);
+      uint64_t start_align_next = ECUtil::align_page_next(start);
+      uint64_t end = eset.range_end();
       t.touch(
         coll_t(spg_t(pgid, shard)),
         ghobject_t(oid, entry->version.version, shard));
@@ -634,18 +633,36 @@ void ECTransaction::Generate::truncate() {
         coll_t(spg_t(pgid, shard)),
         ghobject_t(oid, ghobject_t::NO_GEN, shard),
         ghobject_t(oid, entry->version.version, shard),
-        restore_from,
-        restore_len,
-        restore_from);
-    }
-  }
+        start_align_prev,
+        end - start_align_prev,
+        start_align_prev);
 
-  for (auto &&[shard, t]: transactions) {
-    t.truncate(
-      coll_t(spg_t(pgid, shard)),
-      ghobject_t(oid, ghobject_t::NO_GEN, shard),
-      sinfo.ro_offset_to_shard_offset(plan.orig_size,
-                                      sinfo.get_raw_shard(shard)));
+      // First truncate to exactly the right size.
+      t.truncate(
+        coll_t(spg_t(pgid, shard)),
+        ghobject_t(oid, ghobject_t::NO_GEN, shard),
+        start);
+
+      /* We have truncated to the correct size, but we guarantee aligned
+       * shard sizes. So here, we truncate back up to an aligned size if needed.
+       */
+      if (start != start_align_next) {
+        t.truncate(
+          coll_t(spg_t(pgid, shard)),
+          ghobject_t(oid, ghobject_t::NO_GEN, shard),
+          start_align_next);
+      }
+
+      if (clone_start > start_align_prev) {
+        clone_start = start_align_prev;
+      }
+      if (clone_end < end) {
+        clone_end = end;
+      }
+    }
+    shards_written(clone_shards);
+    rollback_extents.emplace_back(make_pair(clone_start, clone_end));
+    rollback_shards.emplace_back(clone_shards);
   }
 }
 
