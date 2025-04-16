@@ -38,20 +38,21 @@ void PGRecovery::start_pglogbased_recovery()
   pg->set_pglog_based_recovery_op(op.get());
 }
 
-PGRecovery::interruptible_future<bool>
+PGRecovery::interruptible_future<seastar::stop_iteration>
 PGRecovery::start_recovery_ops(
   RecoveryBackend::RecoveryBlockingEvent::TriggerI& trigger,
   PglogBasedRecovery &recover_op,
   size_t max_to_start)
 {
   LOG_PREFIX(PGRecovery::start_recovery_ops);
+
   assert(pg->is_primary());
   assert(pg->is_peered());
 
   if (pg->has_reset_since(recover_op.get_epoch_started()) ||
       recover_op.is_cancelled()) {
     DEBUGDPP("recovery {} cancelled.", pg->get_pgid(), recover_op);
-    co_return false;
+    co_return seastar::stop_iteration::yes;
   }
   ceph_assert(pg->is_recovering());
 
@@ -77,7 +78,7 @@ PGRecovery::start_recovery_ops(
   if (pg->has_reset_since(recover_op.get_epoch_started()) ||
       recover_op.is_cancelled()) {
     DEBUGDPP("recovery {} cancelled.", pg->get_pgid(), recover_op);
-    co_return false;
+    co_return seastar::stop_iteration::yes;
   }
   ceph_assert(pg->is_recovering());
   ceph_assert(!pg->is_backfilling());
@@ -93,9 +94,9 @@ PGRecovery::start_recovery_ops(
     } else {
       all_replicas_recovered();
     }
-    co_return false;
+    co_return seastar::stop_iteration::yes;
   }
-  co_return true;
+  co_return seastar::stop_iteration::no;
 }
 
 size_t PGRecovery::start_primary_recovery_ops(
