@@ -34,7 +34,7 @@ public:
   virtual ~PGRecovery() {}
   void start_pglogbased_recovery();
 
-  interruptible_future<bool> start_recovery_ops(
+  interruptible_future<seastar::stop_iteration> start_recovery_ops(
     RecoveryBackend::RecoveryBlockingEvent::TriggerI&,
     crimson::osd::PglogBasedRecovery &recover_op,
     size_t max_to_start);
