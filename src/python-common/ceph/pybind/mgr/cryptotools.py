@@ -29,7 +29,8 @@ def password_hash(args: Namespace) -> None:
     else:
         salt = salt_password.encode('utf8')
 
-    print(bcrypt.hashpw(password.encode('utf8'), salt).decode())
+    hash_str = bcrypt.hashpw(password.encode('utf8'), salt).decode('utf-8')
+    json.dump({'hash': hash_str}, sys.stdout)
 
 
 def create_self_signed_cert(args: Namespace) -> None:
@@ -108,7 +109,8 @@ def verify_cacrt_content(args: Namespace) -> None:
     # Certificate still valid, calculate and return days until expiration
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        print((end_date - datetime.datetime.utcnow()).days)
+        days_until_exp = (end_date - datetime.datetime.utcnow()).days
+        json.dump({'days_until_expiration': int(days_until_exp)}, sys.stdout)
 
 
 def get_cert_issuer_info(args: Namespace) -> None:
@@ -123,12 +125,11 @@ def get_cert_issuer_info(args: Namespace) -> None:
             org_name = c[1].decode()
         elif c[0].decode() == 'CN':  # common name comp
             cn = c[1].decode()
+    json.dump({'org_name': org_name, 'cn': cn}, sys.stdout)
 
-    if args.org_name:
-        print(org_name)
 
-    if args.cn:
-        print(cn)
+def _fail_message(msg: str) -> None:
+    json.dump({'error': msg}, sys.stdout)
 
 
 def verify_tls(args: Namespace) -> None:
@@ -142,12 +143,12 @@ def verify_tls(args: Namespace) -> None:
         _key = crypto.load_privatekey(crypto.FILETYPE_PEM, key)
         _key.check()
     except (ValueError, crypto.Error) as e:
-        print('Invalid private key: %s' % str(e))
+        _fail_message('Invalid private key: %s' % str(e))
     try:
         crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
         _crt = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
     except ValueError as e:
-        print('Invalid certificate key: %s' % str(e))
+        _fail_message('Invalid certificate key: %s' % str(e))
 
     try:
         context = SSL.Context(SSL.TLSv1_METHOD)
@@ -158,9 +159,9 @@ def verify_tls(args: Namespace) -> None:
 
         context.check_privatekey()
     except crypto.Error as e:
-        print('Private key and certificate do not match up: %s' % str(e))
+        _fail_message('Private key and certificate do not match up: %s' % str(e))
     except SSL.Error as e:
-        print(f'Invalid cert/key pair: {e}')
+        _fail_message(f'Invalid cert/key pair: {e}')
 
 
 if __name__ == "__main__":
