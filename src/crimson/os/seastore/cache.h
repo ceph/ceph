@@ -196,11 +196,87 @@ public:
     get_extent_if_cached_iertr::future<CachedExtentRef>;
   get_extent_if_cached_ret get_extent_if_cached(
     Transaction &t,
+    laddr_t laddr,
     paddr_t paddr,
     extent_len_t len,
     extent_types_t type) {
     LOG_PREFIX(Cache::get_extent_if_cached);
     const auto t_src = t.get_src();
+
+    if (is_logical_type(type)) {
+      auto ret = t.get_logical_extent(laddr);
+      if (ret.state == Transaction::get_extent_ret::RETIRED) {
+        SUBDEBUGT(seastore_cache,
+          "{} {} {}~0x{:x} logical is retired on t",
+          t, type, laddr, paddr, len);
+        return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
+      } else if (ret.state == Transaction::get_extent_ret::PRESENT) {
+        auto extent = ret.extent;
+        if (extent->get_length() != len) {
+          SUBDEBUGT(seastore_cache,
+            "{} {} {}~0x{:x} logical is present on t with inconsistent length 0x{:x} -- {}",
+            t, type, laddr, paddr, len, extent->get_length(), *extent);
+          return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
+        }
+
+        ceph_assert(extent->get_type() == type);
+        ceph_assert(extent->get_paddr() == paddr);
+        assert(extent->cast<LogicalCachedExtent>()->get_laddr() == laddr);
+        if (!extent->is_fully_loaded()) {
+          SUBDEBUGT(seastore_cache,
+            "{} {} {}~0x{:x} logical is present on t without fully loaded -- {}",
+            t, type, laddr, paddr, len, *extent);
+          return trans_intr::make_interruptible(
+            do_read_extent_maybe_partial<CachedExtent>(
+              extent->cast<CachedExtent>(), 0, extent->get_length(), &t_src));
+        }
+
+        SUBDEBUGT(seastore_cache,
+          "{} {} {}~0x{:x} logical is present on t -- {}",
+          t, type, laddr, paddr, len, *extent);
+        return extent->wait_io().then([extent] {
+          return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>(extent);
+        });
+      }
+      assert(ret.state == Transaction::get_extent_ret::ABSENT);
+      auto extent = logical_index.find(laddr);
+      if (!extent) {
+        SUBDEBUGT(seastore_cache,
+          "{} {} {}~0x{:x} logical is absent in cache",
+          t, type, laddr, paddr, len);
+        return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
+      }
+      assert(!is_retired_placeholder_type(extent->get_type()));
+
+      if (extent->get_length() != len) {
+        SUBDEBUGT(seastore_cache,
+          "{} {} {}~0x{:x} logical is present in cache with inconsistent length 0x{:x} -- {}",
+          t, type, laddr, paddr, len, extent->get_length(), *extent);
+        return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
+      }
+
+      ceph_assert(extent->get_type() == type);
+      ceph_assert(extent->get_paddr() == paddr);
+      assert(extent->cast<LogicalCachedExtent>()->get_laddr() == laddr);
+      t.add_to_read_set(extent);
+      touch_extent(*extent, &t_src, t.get_cache_hint());
+      if (!extent->is_fully_loaded()) {
+        SUBDEBUGT(seastore_cache,
+          "{} {} {}~0x{:x} logical is present without fully loaded in cache -- {}",
+          t, type, laddr, paddr, len, *extent);
+        return trans_intr::make_interruptible(
+          do_read_extent_maybe_partial<CachedExtent>(
+            extent->cast<CachedExtent>(), 0, extent->get_length(), &t_src));
+      }
+
+      SUBDEBUGT(seastore_cache, "{} {} {}~0x{:x} logical is present in cache -- {}",
+                t, type, laddr, paddr, len, *extent);
+      return extent->wait_io().then([extent] {
+        return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>(extent);
+      });
+    }
+
+    // !is_logical_type(type)
     CachedExtentRef ret;
     auto result = t.get_extent(paddr, &ret);
     cache_access_stats_t& access_stats = get_by_ext(
@@ -208,14 +284,14 @@ public:
       type);
     if (result == Transaction::get_extent_ret::RETIRED) {
       SUBDEBUGT(seastore_cache,
-        "{} {}~0x{:x} is retired on t",
-        t, type, paddr, len);
+        "{} {} {}~0x{:x} physical is retired on t",
+        t, type, laddr, paddr, len);
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
     } else if (result == Transaction::get_extent_ret::PRESENT) {
       if (ret->get_length() != len) {
         SUBDEBUGT(seastore_cache,
-          "{} {}~0x{:x} is present on t with inconsistent length 0x{:x} -- {}",
-          t, type, paddr, len, ret->get_length(), *ret);
+          "{} {} {}~0x{:x} physical is present on t with inconsistent length 0x{:x} -- {}",
+          t, type, laddr, paddr, len, ret->get_length(), *ret);
         return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
       }
 
@@ -236,16 +312,16 @@ public:
 
       if (!ret->is_fully_loaded()) {
         SUBDEBUGT(seastore_cache,
-          "{} {}~0x{:x} is present on t without fully loaded -- {}",
-          t, type, paddr, len, *ret);
+          "{} {} {}~0x{:x} physical is present on t without fully loaded -- {}",
+          t, type, laddr, paddr, len, *ret);
         return trans_intr::make_interruptible(
           do_read_extent_maybe_partial<CachedExtent>(
             ret->cast<CachedExtent>(), 0, ret->get_length(), &t_src));
       }
 
-      SUBTRACET(seastore_cache,
-        "{} {}~0x{:x} is present on t -- {}",
-        t, type, paddr, len, *ret);
+      SUBDEBUGT(seastore_cache,
+        "{} {} {}~0x{:x} physical is present on t -- {}",
+        t, type, laddr, paddr, len, *ret);
       return ret->wait_io().then([ret] {
         return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>(ret);
       });
@@ -255,23 +331,23 @@ public:
     ret = query_cache(paddr);
     if (!ret) {
       SUBDEBUGT(seastore_cache,
-        "{} {}~0x{:x} is absent in cache",
-        t, type, paddr, len);
+        "{} {} {}~0x{:x} physical is absent in cache",
+        t, type, laddr, paddr, len);
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
     }
 
     if (is_retired_placeholder_type(ret->get_type())) {
       // retired_placeholder is not really cached yet
       SUBDEBUGT(seastore_cache,
-        "{} {}~0x{:x} ~0x{:x} is absent(placeholder) in cache",
-        t, type, paddr, len, ret->get_length());
+        "{} {} {}~0x{:x} ~0x{:x} physical is absent(placeholder) in cache",
+        t, type, laddr, paddr, len, ret->get_length());
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
     }
 
     if (ret->get_length() != len) {
       SUBDEBUGT(seastore_cache,
-        "{} {}~0x{:x} is present in cache with inconsistent length 0x{:x} -- {}",
-        t, type, paddr, len, ret->get_length(), *ret);
+        "{} {} {}~0x{:x} physical is present in cache with inconsistent length 0x{:x} -- {}",
+        t, type, laddr, paddr, len, ret->get_length(), *ret);
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
     }
 
@@ -289,8 +365,8 @@ public:
     touch_extent(*ret, &t_src, t.get_cache_hint());
     if (!ret->is_fully_loaded()) {
       SUBDEBUGT(seastore_cache,
-        "{} {}~0x{:x} is present without fully loaded in cache -- {}",
-        t, type, paddr, len, *ret);
+        "{} {} {}~0x{:x} physical is present without fully loaded in cache -- {}",
+        t, type, laddr, paddr, len, *ret);
       return trans_intr::make_interruptible(
         do_read_extent_maybe_partial<CachedExtent>(
           ret->cast<CachedExtent>(), 0, ret->get_length(), &t_src));
@@ -298,8 +374,8 @@ public:
 
     // present in cache(fully loaded) and is not a retired_placeholder
     SUBDEBUGT(seastore_cache,
-      "{} {}~0x{:x} is present in cache -- {}",
-      t, type, paddr, len, *ret);
+      "{} {} {}~0x{:x} physical is present in cache -- {}",
+      t, type, laddr, paddr, len, *ret);
     return ret->wait_io().then([ret] {
       return get_extent_if_cached_iertr::make_ready_future<
         CachedExtentRef>(ret);
@@ -360,7 +436,7 @@ public:
       };
       return trans_intr::make_interruptible(
         do_get_caching_extent<T>(
-          offset, length, [](T &){}, std::move(f), &t_src)
+          offset, length, [](T &){}, std::move(f), &t_src, false)
       );
     }
   }
@@ -409,7 +485,7 @@ public:
     return trans_intr::make_interruptible(
       do_get_caching_extent<T>(
         offset, length, partial_off, partial_len,
-        std::forward<Func>(extent_init_func), std::move(f), &t_src)
+        std::forward<Func>(extent_init_func), std::move(f), &t_src, false)
     );
   }
 
@@ -441,6 +517,65 @@ public:
     Func &&extent_init_func) {
     return get_absent_extent<T>(t, offset, length, 0, length,
       std::forward<Func>(extent_init_func));
+  }
+
+  /**
+   * get_logical_extent
+   *
+   * Returns a logical extent at laddr if in cache
+   */
+  template <typename T>
+  std::optional<get_extent_iertr::future<TCachedExtentRef<T>>>
+  get_logical_extent(Transaction &t, laddr_t laddr) {
+    static_assert(is_logical_type(T::TYPE));
+    static_assert(!is_retired_placeholder_type(T::TYPE));
+    LOG_PREFIX(Cache::get_logical_extent);
+    const auto t_src = t.get_src();
+    auto ret = t.get_logical_extent(laddr);
+    if (ret.state == Transaction::get_extent_ret::RETIRED) {
+      SUBERRORT(seastore_cache, "{} {} is retired on t", t, T::TYPE, laddr);
+      ceph_abort("impossible");
+    } else if (ret.state == Transaction::get_extent_ret::PRESENT) {
+      auto extent = ret.extent;
+      ceph_assert(extent->get_type() == T::TYPE);
+      if (!extent->is_fully_loaded()) {
+        SUBDEBUGT(seastore_cache,
+          "{} {} is present on t without fully loaded, reading ... -- {}",
+          t, T::TYPE, laddr, *extent);
+        return trans_intr::make_interruptible(
+          do_read_extent_maybe_partial<T>(
+            extent->cast<T>(), 0, extent->get_length(), &t_src));
+      }
+
+      SUBTRACET(seastore_cache, "{} {} is present on t -- {}",
+                t, T::TYPE, laddr, *extent);
+      return extent->wait_io().then([extent] {
+        return extent->cast<T>();
+      });
+    }
+    assert(ret.state == Transaction::get_extent_ret::ABSENT);
+    auto extent = logical_index.find(laddr);
+    if (!extent) {
+      SUBTRACET(seastore_cache, "{} {} is absent in cache", t, T::TYPE, laddr);
+      return std::nullopt;
+    }
+    ceph_assert(extent->get_type() == T::TYPE);
+    assert(extent->is_stable());
+    t.add_to_read_set(extent);
+    touch_extent(*extent, &t_src, t.get_cache_hint());
+    if (!extent->is_fully_loaded()) {
+      SUBDEBUGT(seastore_cache,
+        "{} {} is present on cache without fully loaded, reading ... -- {}",
+        t, T::TYPE, laddr, *extent);
+      return trans_intr::make_interruptible(
+        do_read_extent_maybe_partial<T>(
+          extent->cast<T>(), 0, extent->get_length(), &t_src));
+    }
+
+    SUBTRACET(seastore_cache, "{} {} is present in cache -- ", t, T::TYPE, laddr);
+    return extent->wait_io().then([extent] {
+      return extent->cast<T>();
+    });
   }
 
   bool is_viewable_extent_stable(
@@ -670,9 +805,11 @@ private:
     extent_len_t partial_len,      ///< [in] length of piece in extent
     Func &&extent_init_func,       ///< [in] init func for extent
     OnCache &&on_cache,
-    const Transaction::src_t* p_src
+    const Transaction::src_t* p_src,
+    bool is_replay
   ) {
     LOG_PREFIX(Cache::do_get_caching_extent);
+    static_assert(!is_retired_placeholder_type(T::TYPE));
     auto cached = query_cache(offset);
     if (!cached) {
       // partial read
@@ -690,6 +827,11 @@ private:
       // touch_extent() should be included in on_cache,
       // required by add_extent()
       on_cache(*ret);
+      if constexpr (is_logical_type(T::TYPE)) {
+        if (!is_replay) {
+          logical_index.insert(static_cast<LogicalCachedExtent&>(*ret));
+        } // else(replay): add until init_cached_extent() when the laddr is ready.
+      }
       return read_extent<T>(
 	std::move(ret), partial_off, partial_len, p_src);
     }
@@ -709,6 +851,7 @@ private:
       extent_init_func(*ret);
       on_cache(*ret);
       extents_index.replace(*ret, *cached);
+      // No retired_placeholders in logical_index
 
       // replace placeholder in transactions
       while (!cached->read_transactions.empty()) {
@@ -746,12 +889,13 @@ private:
     extent_len_t length,           ///< [in] length
     Func &&extent_init_func,       ///< [in] init func for extent
     OnCache &&on_cache,
-    const Transaction::src_t* p_src
+    const Transaction::src_t* p_src,
+    bool is_replay
   ) {
     return do_get_caching_extent<T>(offset, length, 0, length,
       std::forward<Func>(extent_init_func),
       std::forward<OnCache>(on_cache),
-      p_src);
+      p_src, is_replay);
   }
 
   // This is a workaround std::move_only_function not being available,
@@ -789,7 +933,8 @@ private:
     extent_len_t length,
     extent_init_func_t &&extent_init_func,
     extent_init_func_t &&on_cache,
-    const Transaction::src_t* p_src);
+    const Transaction::src_t* p_src,
+    bool is_replay);
 
   /**
    * get_caching_extent_by_type
@@ -843,7 +988,7 @@ private:
       return trans_intr::make_interruptible(
 	do_get_caching_extent_by_type(
 	  type, offset, laddr, length,
-	  std::move(extent_init_func), std::move(f), &t_src)
+	  std::move(extent_init_func), std::move(f), &t_src, false)
       );
     }
   }
@@ -885,7 +1030,7 @@ private:
     return trans_intr::make_interruptible(
       do_get_caching_extent_by_type(
 	type, offset, laddr, length,
-	std::move(extent_init_func), std::move(f), &t_src)
+	std::move(extent_init_func), std::move(f), &t_src, false)
     );
   }
 
@@ -1024,6 +1169,7 @@ public:
               result->gen,
 	      t.get_trans_id());
     t.add_fresh_extent(ret);
+    // t.add_logical_fresh_extent() will be called upon inserted in the lba tree.
     SUBDEBUGT(seastore_cache,
               "allocated {} 0x{:x}B extent at {}, hint={}, gen={} -- {}",
               t, T::TYPE, length, result->paddr,
@@ -1069,6 +1215,7 @@ public:
                 result.gen,
                 t.get_trans_id());
       t.add_fresh_extent(ret);
+      // t.add_logical_fresh_extent() will be called upon inserted in the lba tree.
       SUBDEBUGT(seastore_cache,
                 "allocated {} 0x{:x}B extent at {}, hint={}, gen={} -- {}",
                 t, T::TYPE, length, result.paddr,
@@ -1116,6 +1263,7 @@ public:
     auto extent = ext->template cast<T>();
     extent->set_laddr(remap_laddr);
     t.add_fresh_extent(ext);
+    // t.add_logical_fresh_extent() will be called upon inserted in the lba tree.
     SUBTRACET(seastore_cache, "allocated {} 0x{:x}B, hint={}, has ptr? {} -- {}",
       t, T::TYPE, remap_length, remap_laddr, original_bptr.has_value(), *extent);
     return extent;
@@ -1288,10 +1436,14 @@ public:
         ).si_then([this, FNAME, &t, e](bool is_alive) {
           if (!is_alive) {
             SUBDEBUGT(seastore_cache, "extent is not alive, remove extent -- {}", t, *e);
-            remove_extent(e, nullptr);
+            // skip_logical = true, extents are not added to logical_index yet.
+            remove_extent(e, nullptr, true);
 	    e->set_invalid(t);
           } else {
             SUBDEBUGT(seastore_cache, "extent is alive -- {}", t, *e);
+            if (e->is_logical()) {
+              logical_index.insert(static_cast<LogicalCachedExtent&>(*e));
+            }
           }
         });
       });
@@ -1490,6 +1642,10 @@ private:
   ExtentPlacementManager& epm;
   RootBlockRef root;               ///< ref to current root
   ExtentIndex extents_index;             ///< set of live extents
+
+  // Set of live extents by direct laddr,
+  // The implementations must follow extents_index except retired_placeholder
+  LogicalExtentIndex<true> logical_index;
 
   journal_seq_t last_commit = JOURNAL_SEQ_MIN;
 
@@ -1877,7 +2033,8 @@ private:
   /// Remove extent from extents handling dirty and refcounting
   void remove_extent(
       CachedExtentRef ref,
-      const Transaction::src_t* p_src);
+      const Transaction::src_t* p_src,
+      bool skip_logical=false);
 
   /// Retire extent
   void commit_retire_extent(Transaction& t, CachedExtentRef ref);

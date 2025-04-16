@@ -352,6 +352,7 @@ TransactionManager::update_lba_mappings(
       pre_allocated_extents.end(),
       chksum_func);
 
+    // laddr -> extent shouldn't be modified here
     return lba_manager->update_mappings(
       t, lextents
     ).si_then([&pextents, this] {
@@ -692,7 +693,7 @@ TransactionManager::get_extents_if_live(
   // as parallel transactions may split the extent at the same time.
   ceph_assert(paddr.get_addr_type() == paddr_types_t::SEGMENT);
 
-  return cache->get_extent_if_cached(t, paddr, len, type
+  return cache->get_extent_if_cached(t, laddr, paddr, len, type
   ).si_then([this, FNAME, type, paddr, laddr, len, &t](auto extent)
 	    -> get_extents_if_live_ret {
     if (extent) {

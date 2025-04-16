@@ -1090,6 +1090,10 @@ public:
     memcpy((char *)&value, p.get_pos_add(sizeof(Unsigned)), sizeof(Unsigned));
   }
 
+  std::size_t get_hash() const {
+    return std::hash<Unsigned>{}(value);
+  }
+
   // laddr_offset_t contains one base laddr and one block not aligned
   // offset(< laddr_t::UNIT_SIZE). It is the return type of plus/minus
   // overloads for laddr_t and loffset_t.
@@ -3055,6 +3059,17 @@ struct cache_stats_t {
     dirty_sizes.add(o.dirty_sizes);
     dirty_io.add(o.dirty_io);
     access.add(o.access);
+  }
+};
+
+} // namespace crimson::os::seastore
+
+namespace std {
+
+template <>
+struct hash<crimson::os::seastore::laddr_t> {
+  std::size_t operator()(const crimson::os::seastore::laddr_t& laddr) const {
+    return laddr.get_hash();
   }
 };
 
