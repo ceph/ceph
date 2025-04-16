@@ -39,6 +39,7 @@
 #include "common/ceph_time.h"
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
+#include "include/expected.hpp"
 
 // A cache for data living on other systems like Key Management Systems
 // Goals/Features
@@ -86,23 +87,7 @@ template <typename Key, typename Value>
 class WebCache {
  public:
   using ValuePtr = std::shared_ptr<const Value>;
-  struct Result {
-    ValuePtr _value;
-    std::error_code _error;
-
-    Result(ValuePtr value, std::error_code error)
-        : _value(value), _error(error) {}
-    explicit Result(ValuePtr value) : _value(value) {}
-    explicit Result(std::error_code error) : _value(nullptr), _error(error) {}
-    Result(const Result&) = delete;
-    Result& operator=(const Result&) = delete;
-    Result(Result&&) = default;
-    Result& operator=(Result&&) = default;
-    ~Result() = default;
-
-    ValuePtr value() const { return _value; };
-    [[nodiscard]] std::error_code error() const { return _error; };
-  };
+  using Result = tl::expected<ValuePtr, std::error_code>;
 
  protected:
   struct Node {
@@ -462,7 +447,7 @@ WebCache<Key, Value>::lookup_or(
       auto fetched = val_fn();
       const auto finished = ceph::mono_clock::now();
       perf_tinc(Metric::fetch_lat, finished - start);
-      if (!fetched.error()) {
+      if (fetched) {
 	std::lock_guard<std::shared_mutex> lock(_cache_mutex);
 	insert_unmutexed(key, fetched.value());
       } else {
