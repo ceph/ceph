@@ -153,7 +153,7 @@ TEST_F(WebCacheTest, CacheTakesValOwnership) {
   ASSERT_EQ(2, retrieved.use_count());
 }
 
-TEST_F(WebCacheTest, SimpleLookupOr) {
+TEST_F(WebCacheTest, SimpleLookupOrFn) {
   auto future = _uut->lookup_or(a_key, []() {
     return WebCache<std::string, std::string>::Result(
         std::make_shared<std::string>("test"));
@@ -161,7 +161,12 @@ TEST_F(WebCacheTest, SimpleLookupOr) {
   ASSERT_EQ("test", *future.get().value());
 }
 
-TEST_F(WebCacheTest, LookupOrAddsToCache) {
+TEST_F(WebCacheTest, SimpleLookupOr) {
+  auto value = _uut->lookup_or(a_key, std::make_shared<std::string>("test"));
+  ASSERT_EQ("test", *value);
+}
+
+TEST_F(WebCacheTest, LookupOrAddsToCacheFn) {
   auto future = _uut->lookup_or(a_key, []() {
     return WebCache<std::string, std::string>::Result(
         std::make_shared<std::string>("test"));
@@ -169,7 +174,12 @@ TEST_F(WebCacheTest, LookupOrAddsToCache) {
   ASSERT_EQ("test", *_uut->lookup(a_key).value());
 }
 
-TEST_F(WebCacheTest, LookupOrDoesNotAddToCacheWhenFetchErrors) {
+TEST_F(WebCacheTest, LookupOrAddsToCache) {
+  auto future = _uut->lookup_or(a_key, std::make_shared<std::string>("test"));
+  ASSERT_EQ("test", *_uut->lookup(a_key).value());
+}
+
+TEST_F(WebCacheTest, LookupOrDoesNotAddToCacheWhenFetchErrorsFn) {
   auto future = _uut->lookup_or(a_key, []() {
     return tl::unexpected(
         std::error_code(ENOENT, std::system_category()));
@@ -415,7 +425,7 @@ TEST_F(WebCacheRandomizedTest, RandomCallMainOperations) {
     keys.emplace(std::to_string(base[dist(gen)]));
   }
 
-  std::discrete_distribution<> op_dist({89, 1, 10});
+  std::discrete_distribution<> op_dist({60, 30, 1, 9});
 
   std::mutex mutex;
   std::vector<std::thread> threads;
@@ -439,10 +449,13 @@ TEST_F(WebCacheRandomizedTest, RandomCallMainOperations) {
             });
             fut.wait();
           } break;
-          case 1:  // clear cache
+          case 1: {  // lookup_or
+            auto value = _uut->lookup_or(key, a_valptr);
+          } break;
+          case 2:  // clear cache
             _uut->clear();
             break;
-          case 2:  // expire
+          case 3:  // expire
             _uut->expire_erase(1s);
             break;
           default:

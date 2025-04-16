@@ -189,6 +189,9 @@ class WebCache {
   std::shared_future<Result> lookup_or(
       Key const& key, std::function<Result()> val_fn);
 
+  // TODO(irq0) replace previous lookup_or with this
+  ValuePtr lookup_or(Key const& key, ValuePtr val);
+
   size_t size() const;
   size_t clear();
 
@@ -381,6 +384,34 @@ ceph::real_time WebCache<Key, Value>::add(const Key& key, ValuePtr value) {
 }
 
 template <typename Key, typename Value>
+WebCache<Key, Value>::ValuePtr WebCache<Key, Value>::lookup_or(
+    const Key& key, ValuePtr new_val) {
+  {
+    std::shared_lock<std::shared_mutex> cache_lock(_cache_mutex);
+    auto maybe_value = lookup_unmutexed(key);
+    if (maybe_value.has_value()) {
+      perf_inc(Metric::hit);
+      return maybe_value.value();
+    }
+  }
+
+  // miss, take unique lock
+  // check again or insert new val
+  {
+    std::lock_guard<std::shared_mutex> lock(_cache_mutex);
+    auto maybe_value = lookup_unmutexed(key);
+    if (maybe_value.has_value()) {
+      perf_inc(Metric::hit);
+      return maybe_value.value();
+    }
+
+    perf_inc(Metric::miss);
+    insert_unmutexed(key, new_val);
+    return new_val;
+  }
+}
+
+template <typename Key, typename Value>
 std::shared_future<typename WebCache<Key, Value>::Result>
 WebCache<Key, Value>::lookup_or(
     const Key& key, std::function<Result()> val_fn) {
@@ -448,8 +479,12 @@ WebCache<Key, Value>::lookup_or(
       const auto finished = ceph::mono_clock::now();
       perf_tinc(Metric::fetch_lat, finished - start);
       if (fetched) {
-	std::lock_guard<std::shared_mutex> lock(_cache_mutex);
-	insert_unmutexed(key, fetched.value());
+        std::lock_guard<std::shared_mutex> lock(_cache_mutex);
+        // we might have had a concurrent insert lookup_or(key, _value_)
+        auto maybe_value = lookup_unmutexed(key);
+        if (!maybe_value.has_value()) {
+          insert_unmutexed(key, fetched.value());
+        }
       } else {
         perf_inc(Metric::fetch_error);
       }
