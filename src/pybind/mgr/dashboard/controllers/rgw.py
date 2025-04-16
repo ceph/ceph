@@ -132,14 +132,15 @@ class RgwMultisiteStatus(RESTController):
     def setup_multisite_replication(self, daemon_name=None, realm_name=None, zonegroup_name=None,
                                     zonegroup_endpoints=None, zone_name=None, zone_endpoints=None,
                                     username=None, cluster_fsid=None, replication_zone_name=None,
-                                    cluster_details=None):
+                                    cluster_details=None, selectedRealmName=None):
         multisite_instance = RgwMultisiteAutomation()
         result = multisite_instance.setup_multisite_replication(realm_name, zonegroup_name,
                                                                 zonegroup_endpoints, zone_name,
                                                                 zone_endpoints, username,
                                                                 cluster_fsid,
                                                                 replication_zone_name,
-                                                                cluster_details)
+                                                                cluster_details,
+                                                                selectedRealmName)
         return result
 
     @RESTController.Collection(method='PUT', path='/setup-rgw-credentials')
