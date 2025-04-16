@@ -36,7 +36,7 @@ int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
   std::string_view instance;
 
   // split tenant/name
-  auto pos = name.find('/');
+  auto pos = name.find('/g');
   if (pos != string::npos) {
     auto tenant = name.substr(0, pos);
     bucket->tenant.assign(tenant.begin(), tenant.end());
@@ -184,23 +184,17 @@ int rgw_chown_bucket_and_objects(rgw::sal::Driver* driver, rgw::sal::Bucket* buc
   return ret;
 }
 
-uint64_t get_usage(const std::string &bucket_name) {
-
-    //hstTODO: add unique identifiers for bucket as arguments
-    // in bucket_cache.h GetBucketResult gbr = get_bucket(nullptr, bname, BucketCache<D, B>::FLAG_LOCK);
-    // Create a bucket instance
-    RGWBucket bucket(bucket_name);
-
-    // Retrieve the bucket's metadata
-    RGWBucketInfo bucket_info;
-    int ret = bucket.get_info(bucket_info); // Assuming get_info fetches the metadata
-
-    if (ret < 0) {
-        // Handle error 
-        // hstTODO: add a log for it 
-        return 0; // Return 0 if unable to retrieve usage
-    }
-
-    // Return the bytes used from the bucket's metadata
-    return bucket_info.size_rounded; 
+int RGWBucket::get_usage_stats(uint64_t *num_objs, uint64_t *total_bytes) {
+  if (!store) {
+    return -EINVAL;
+  }
+  // Fetch bucket stats from the RGW store (through RGWRados)
+  RGWBucketStats stats;
+  int ret = store->get_bucket_stats(this->bucket, &stats);
+  if (ret < 0) {
+    return ret;
+  }
+  *num_objs = stats.num_objects;
+  *total_bytes = stats.num_bytes;
+  return 0;
 }

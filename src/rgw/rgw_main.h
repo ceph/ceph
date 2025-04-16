@@ -57,6 +57,9 @@ namespace rgw {
 namespace lua { class Background; }
 namespace sal { class ConfigStore; }
 
+class RGWExporter;
+extern RGWExporter *g_rgw_exporter;
+
 class RGWLib;
 class AppMain {
   /* several components should be initalized only if librgw is

@@ -14,6 +14,7 @@
 #include "rgw_common.h"
 #include "rgw_lib.h"
 #include "rgw_log.h"
+#include "rgw_exporter.h"
 
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
@@ -38,7 +39,7 @@ public:
     exit(1);
   }
 };
-
+/*
 // Global pointer to the exporter instance
 RGWExporter* rgw_exporter = nullptr;
 
@@ -69,7 +70,7 @@ void rgw_main_shutdown() {
         rgw_exporter = nullptr;
     }
 }
-
+*/
 static int usage()
 {
   cout << "usage: radosgw [options...]" << std::endl;
@@ -171,6 +172,14 @@ int main(int argc, char *argv[])
   main.init_perfcounters();
   main.init_http_clients();
 
+  bool enable_user_metrics = cct->_conf->rgw_user_counters_cache;
+  bool enable_bucket_metrics = cct->_conf->rgw_bucket_counters_cache;
+  if (enable_user_metrics || enable_bucket_metrics) {
+    // Create the global exporter
+    g_rgw_exporter = new RGWExporter(cct, store->getRados());
+    g_rgw_exporter->start();
+  }
+
   r = main.init_storage();
   if (r < 0) {
     mutex.lock();
@@ -210,6 +219,12 @@ int main(int argc, char *argv[])
 
   derr << "shutting down" << dendl;
 
+  if (g_rgw_exporter) {
+    g_rgw_exporter->stop();
+    delete g_rgw_exporter;
+    g_rgw_exporter = nullptr;
+  }
+  
   const auto finalize_async_signals = []() {
     unregister_async_signal_handler(SIGHUP, rgw::signal::sighup_handler);
     unregister_async_signal_handler(SIGTERM, rgw::signal::handle_sigterm);

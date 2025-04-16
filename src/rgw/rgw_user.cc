@@ -5,6 +5,10 @@
 
 #include "include/types.h"
 #include "rgw_user.h"
+#include "rgw_sal.h"
+#include "rgw_exporter.h"
+#include "rgw_rados.h"
+#include "rgw_bucket.h"
 
 // until everything is moved from rgw_common
 #include "rgw_common.h"
@@ -110,20 +114,28 @@ void rgw_get_anon_user(RGWUserInfo& info)
   info.access_keys.clear();
 }
 
-uint64_t RGWUser ::get_usage(const std::string &user_name) {
-  // Create a user instance
-  RGWUser  user(user_name);
-
-  // Retrieve the user's metadata
-  RGWUser Info user_info;
-  int ret = user.get_info(user_info); // Assuming get_info fetches the metadata
-  
-  if (ret < 0) {
-  // Handle error
-  // hstTODO: add a log for it 
-  return 0; // Return 0 if unable to retrieve usage
+int RGWUser::get_usage_stats(uint64_t *num_objs, uint64_t *total_bytes) {
+  if (!store) {
+    return -EINVAL;
   }
-  
-  // Return the bytes used from the user's metadata
-  return user_info.size_rounded; // Assuming bytes_used is a field in RGWUser Info
+  // List all buckets owned by this user
+  std::list<rgw_bucket> buckets;
+  int ret = store->list_buckets(this->user, buckets);
+  if (ret < 0) {
+    return ret;
+  }
+  uint64_t total_obj_count = 0;
+  uint64_t total_size = 0;
+  // Sum up usage from each bucket
+  for (auto& b : buckets) {
+    RGWBucketStats stats;
+    int r = store->get_bucket_stats(b, &stats);
+    if (r == 0) {
+      total_obj_count += stats.num_objects;
+      total_size += stats.num_bytes;
+    }
+  }
+  *num_objs = total_obj_count;
+  *total_bytes = total_size;
+  return 0;
 }
