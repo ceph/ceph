@@ -57,10 +57,17 @@ struct ScrubMachineListener {
   virtual PG* get_pg() const = 0;
 
   /**
-   * access the set of performance counters relevant to this scrub
+   * the OSD's performance counters interface ("logger")
+   */
+  virtual PerfCounters* get_osd_perf_counters() const = 0;
+
+  virtual const Scrub::ScrubCounterSet& get_unlabeled_counters() const = 0;
+
+  /**
+   * the set of labeled performance counters relevant to this scrub
    * (one of the four sets of counters maintained by the OSD)
    */
-  virtual PerfCounters& get_counters_set() const = 0;
+  virtual PerfCounters* get_labeled_counters() const = 0;
 
   using scrubber_callback_t = std::function<void(void)>;
   using scrubber_callback_cancel_token_t = Context*;

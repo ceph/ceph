@@ -562,9 +562,16 @@ struct Session : sc::state<Session, PrimaryActive, ReservingReplicas>,
   /// it's an RAII wrapper around the state of 'holding reservations')
   std::optional<ReplicaReservations> m_reservations{std::nullopt};
 
-  /// the relevant set of performance counters for this session
+  /// the relevant set of labeled performance counters for this session
   /// (relevant, i.e. for this pool type X scrub level)
   PerfCounters* m_perf_set{nullptr};
+
+  /// the OSD's unlabeled performance counters access point
+  PerfCounters* m_osd_counters{nullptr};
+
+  /// the set of performance counters for this session (relevant, i.e. for
+  /// this pool type)
+  const ScrubCounterSet* m_counters_idx{nullptr};
 
   /// the time when the session was initiated
   ScrubTimePoint m_session_started_at{ScrubClock::now()};
