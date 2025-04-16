@@ -462,6 +462,7 @@ BuildRequires:	lz4-devel >= 1.7
 # distro-conditional make check dependencies
 %if 0%{with make_check}
 BuildRequires:	golang
+BuildRequires:  catch2-devel
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 BuildRequires:	golang-github-prometheus
 BuildRequires:	libtool-ltdl-devel
