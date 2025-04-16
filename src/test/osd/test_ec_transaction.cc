@@ -369,3 +369,35 @@ TEST(ectransaction, test_overwrite_with_missing)
   ref_write[shard_id_t(1)].insert(0, 8192);
   ASSERT_EQ(ref_write, plan.will_write);
 }
+
+TEST(ectransaction, truncate_to_bigger_without_write)
+{
+  hobject_t h;
+  PGTransaction::ObjectOperation op;
+
+  op.truncate = std::pair(8192, 8192);
+
+  pg_pool_t pool;
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  ECUtil::stripe_info_t sinfo(2, 2, 8192, &pool);
+  shard_id_set shards;
+  shards.insert_range(shard_id_t(), 4);
+  ECTransaction::WritePlanObj plan(
+    h,
+    op,
+    sinfo,
+    shards,
+    shards,
+    false,
+    4096,
+    std::nullopt,
+    std::nullopt,
+    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
+    nullptr,
+    0);
+
+  generic_derr << "plan " << plan << dendl;
+
+  ASSERT_FALSE(plan.to_read);
+  ASSERT_EQ(0u, plan.will_write.shard_count());
+}
