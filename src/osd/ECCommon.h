@@ -181,7 +181,8 @@ struct ECCommon {
       } else {
         os << ", noattrs";
       }
-      os << ", buffers_read=" << buffers_read << ")";
+      os << ", buffers_read=" << buffers_read;
+      os << ", processed_read_requests=" << processed_read_requests << ")";
     }
   };
 

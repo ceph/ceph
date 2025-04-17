@@ -1290,6 +1290,8 @@ void ECBackend::handle_sub_read_reply(
       rop.to_read.at(oid).shard_want_to_read.
           populate_shard_id_set(want_to_read);
 
+      dout(20) << __func__ << " read_result: " << read_result << dendl;
+
       int err = ec_impl->minimum_to_decode(want_to_read, have, dummy_minimum,
                                             nullptr);
       if (err) {
