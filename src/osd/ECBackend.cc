@@ -1622,7 +1622,7 @@ void ECBackend::objects_read_async(
   extent_set es;
   for (const auto &[read, ctx]: to_read) {
     pair<uint64_t, uint64_t> tmp;
-    if (!cct->_conf->osd_ec_partial_reads || fast_read) {
+    if (!cct->_conf->osd_ec_partial_reads) {
       tmp = sinfo.ro_offset_len_to_stripe_ro_offset_len(read.offset, read.size);
     } else {
       tmp.first = read.offset;
