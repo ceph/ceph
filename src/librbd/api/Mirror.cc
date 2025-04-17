@@ -2851,16 +2851,6 @@ int Mirror<I>::group_enable(IoCtx& group_ioctx, const char *group_name,
     ldout(cct, 20) << "undoing group enable: " << ret_code << dendl;
     remove_interim_snapshots(group_ioctx, group_header_oid,
                              &image_ctxs, &group_snap);
-    for (size_t i = 0; i < image_ctxs.size(); i++) {
-      if (snap_ids[i] == CEPH_NOSNAP) {
-        continue;
-      }
-      r = image_disable(image_ctxs[i], false, true);
-      if (r < 0) {
-        lderr(cct) << "failed to disable mirroring on image: "
-                   << image_ctxs[i]->name << cpp_strerror(r) << dendl;
-      }
-    }
   } else {
     mirror_group.state = cls::rbd::MIRROR_GROUP_STATE_ENABLED;
     r = cls_client::mirror_group_set(&group_ioctx, group_id, mirror_group);
