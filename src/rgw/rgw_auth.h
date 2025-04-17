@@ -769,7 +769,8 @@ public:
                                       std::vector<IAM::Policy> policies,
                                       const std::string& subuser,
                                       const std::optional<uint32_t>& perm_mask,
-                                      const std::string& access_key_id) const = 0;
+                                      const std::string& access_key_id,
+                                      bool is_impersonating) const = 0;
     };
 };
 
