@@ -8,6 +8,7 @@
 
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/peering_event.h"
+#include "crimson/osd/pg_map.h"
 #include "osd/osd_types.h"
 #include "crimson/common/type_helpers.h"
 
@@ -46,7 +47,10 @@ public:
   seastar::future<> start();
   void split_stats(std::set<Ref<PG>> child_pgs,
 		   const std::set<spg_t> &child_pgids);
-  //PipelineHandle &get_handle() { return handle; }
+  PipelineHandle &get_handle() { return handle; }
+  std::tuple<
+    PGMap::PGCreationBlockingEvent
+  > tracking_events;
 };
 
 }

@@ -13,6 +13,7 @@
 #include "crimson/osd/osd_operations/pg_splitting.h"
 #include "crimson/osd/osd_operation_external_tracking.h"
 #include "osd/PeeringState.h"
+#include "osd/PGPeeringEvent.h"
 
 SET_SUBSYS(osd);
 
@@ -58,10 +59,10 @@ seastar::future<> PGSplitting::start()
       DEBUG(" PG {} mapped to {}", child_pg.pgid, core);
       DEBUG(" {} map epoch: {}", child_pg.pgid, pg_epoch);
       return shard_services.get_map(pg_epoch).then(
-	[this, child_pg] (auto&& map) {
-	  return shard_services.make_pg(std::move(map), child_pg, true);
-        });
-    }).then([this, FNAME] (Ref<PG> child_pg) {
+       [this, child_pg] (auto&& map) {
+         return shard_services.make_pg(std::move(map), child_pg, true);
+      });
+    }).then([this, FNAME] (Ref<PG> child_pg) mutable {
       DEBUG(" Parent PG: {}", pg->get_pgid());
       DEBUG(" Child PG ID: {}", child_pg->get_pgid());
 
@@ -72,27 +73,35 @@ seastar::future<> PGSplitting::start()
       unsigned split_bits = child_pg->get_pgid().get_split_bits(new_pg_num);
       DEBUG(" pg num is {}, m_seed is {}, split bits is {}", new_pg_num, child_pg->get_pgid().ps(), split_bits);
       return pg->split_colls(child_pg->get_pgid(), split_bits, child_pg->get_pgid().ps(),
-        &child_pg->get_pgpool().info, rctx.transaction).then(
-	[this, FNAME, child_pg=std::move(child_pg), split_bits] () {
-          DEBUG(" {} split collection done", child_pg->get_pgid());
-	  // Update the child PG's info from the parent PG
-	  pg->split_into(child_pg->get_pgid().pgid, child_pg, split_bits);
-	  split_pgs.insert(child_pg);
+			     &child_pg->get_pgpool().info, rctx.transaction).then(
+	[this, FNAME, child_pg=std::move(child_pg), split_bits] () mutable {
+	DEBUG(" {} split collection done", child_pg->get_pgid());
+	// Update the child PG's info from the parent PG
+	pg->split_into(child_pg->get_pgid().pgid, child_pg, split_bits);
+	return this->template with_blocking_event<PGMap::PGCreationBlockingEvent>(
+	    [this, child_pg, FNAME] (auto&& trigger) {
+	    auto fut = shard_services.create_split_pg(
+		std::move(trigger),
+		child_pg->get_pgid());
+
+	  return shard_services.start_operation<PGAdvanceMap>(
+	    child_pg, shard_services, shard_services.get_map()->get_epoch(),
+	    std::move(rctx), true, true).second.then([this, FNAME, fut=std::move(fut)] () mutable {
+	      return fut.safe_then([this, FNAME] (Ref<PG> child_pgref) {
+		DEBUG(" Child PG creation done! {}", child_pgref->get_pgid());
+		split_pgs.insert(child_pgref);
+	      }).handle_error(crimson::ct_error::ecanceled::handle([FNAME, this](auto) {
+		   DEBUG("PG creation canceled");
+		   return seastar::now();
+	      }));
+	  });
 	});
       });
+    });
   }).then([this, FNAME] {
     // Split the parent PG's stats into the children PGs.
     split_stats(split_pgs, children_pgids);
-    return seastar::do_for_each(split_pgs, [this, FNAME] (auto& child_pg) {
-      // For each child PG initiate PGAdvanceMap operation in order to start the PGs.
-      DEBUG(" {} advance map from {} to {}", child_pg->get_pgid(), child_pg->get_osdmap_epoch(),
-	  shard_services.get_map()->get_epoch());
-      return shard_services.start_operation<PGAdvanceMap>(
-        child_pg, shard_services, shard_services.get_map()->get_epoch(),
-	std::move(rctx), true, true).second.then([] {
-	  return seastar::now();
-	});
-    });
+    return seastar::now();
   });
 }
 
