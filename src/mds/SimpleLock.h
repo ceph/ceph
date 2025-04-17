@@ -16,10 +16,16 @@
 #ifndef CEPH_SIMPLELOCK_H
 #define CEPH_SIMPLELOCK_H
 
+#include <ostream>
+#include <set>
+#include <string_view>
+#include <vector>
+
 #include <boost/intrusive_ptr.hpp>
 
 #include "MDSCacheObject.h"
 #include "MDSContext.h"
+#include "Mutation.h" // for MutationRef (complete definition is needed)
 
 // -- lock types --
 // see CEPH_LOCK_*
