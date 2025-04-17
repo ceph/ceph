@@ -15,12 +15,18 @@
 #ifndef CEPH_MDS_LOCKER_H
 #define CEPH_MDS_LOCKER_H
 
+#include <map>
+#include <memory>
+#include <set>
+#include <string_view>
+
 #include "common/ref.h"
 #include "include/types.h"
 
 #include "CInode.h"
 #include "MDSContext.h"
 #include "Mutation.h"
+#include "SimpleLock.h"
 
 struct LeaseStat;
 struct SnapRealm;
