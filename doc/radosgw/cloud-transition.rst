@@ -210,7 +210,7 @@ For example
           of ``--tier-type=cloud-s3`` or ``--tier-type=cloud-s3-glacier``
           is created it cannot be later modified to any other storage class type.
 
-The tier configuration can be then performed using the following command::
+The tier configuration can be then performed using the following command:
 
 .. prompt:: bash #
 
@@ -222,7 +222,7 @@ The tier configuration can be then performed using the following command::
 The ``key`` in the configuration specifies the config variable to be updated, and
 the ``val`` specifies its new value.
 
-For example::
+For example:
 
 .. prompt:: bash #
 
@@ -239,7 +239,7 @@ Nested tier configuration values can be accessed using periods. This notation
 works similarly to how nested fields are accessed in JSON with tools like ``jq``.
 Note that the use of period separators ``(.)`` is specific to key access within ``--tier-config``,
 and should not be confused with Ceph RGW patterns for realm/zonegroup/zone. 
-For example::
+For example:
 
 .. prompt:: bash #
 
@@ -252,7 +252,7 @@ For example::
 Configuration array entries can be accessed by specifying the specific entry to
 be referenced enclosed in square brackets, and adding a new array entry can be
 performed with an empty array `[]`.
-For example, creating a new ``acl`` array entry::
+For example, creating a new ``acl`` array entry:
 
 .. prompt:: bash #
 
@@ -265,7 +265,7 @@ For example, creating a new ``acl`` array entry::
 
 An entry can be removed by supplying ``--tier-config-rm={key}``.
 
-For example::
+For example:
 
 .. prompt:: bash #
 
@@ -279,7 +279,7 @@ For example::
                                               --storage-class CLOUDTIER \
                                               --tier-config-rm=target_path
 
-The storage class can be removed using the following command::
+The storage class can be removed using the following command:
 
 .. prompt:: bash #
 
@@ -369,7 +369,7 @@ with an ``InvalidObjectState`` error. Any other operations against original
 source objects will be for its metadata entries only keeping transitioned
 objects intact.
 
-For example::
+For example:
 
 .. prompt:: bash $
 
