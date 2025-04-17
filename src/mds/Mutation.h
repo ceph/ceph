@@ -29,7 +29,6 @@
 
 #include "MDSContext.h"
 
-#include "SimpleLock.h"
 #include "Capability.h"
 
 #include "common/StackStringStream.h"
@@ -45,6 +44,7 @@ class CDentry;
 class MDSCacheObject;
 class Session;
 class ScatterLock;
+class SimpleLock;
 struct sr_t;
 struct MDLockCache;
 
@@ -84,15 +84,7 @@ public:
       return lock < r.lock;
     }
 
-    void print(std::ostream& out) const {
-      CachedStackStringStream css;
-      *css << "0x" << std::hex << flags;
-      out << "LockOp(l=" << *lock << ",f=" << css->strv();
-      if (wrlock_target != MDS_RANK_NONE) {
-        out << ",wt=" << wrlock_target;
-      }
-      out << ")";
-    }
+    void print(std::ostream& out) const;
 
     SimpleLock* lock;
     mutable unsigned flags;
