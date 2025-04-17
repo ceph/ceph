@@ -1227,20 +1227,10 @@ void ECBackend::handle_sub_read_reply(
       rop.complete.emplace(hoid, &sinfo);
     }
     auto &complete = rop.complete.at(hoid);
-    for (auto &&[shard, read]: std::as_const(req.shard_reads)) {
-      if (complete.errors.contains(read.pg_shard)) continue;
-
-      complete.processed_read_requests[shard].union_of(read.extents);
-
-      if (!rop.complete.contains(hoid) ||
-        !complete.buffers_read.contains(shard)) {
-        if (!read.extents.empty()) continue; // Complete the actual read first.
-
-        // If we are first here, populate the completion.
-        if (!rop.complete.contains(hoid)) {
-          rop.complete.emplace(hoid, read_result_t(&sinfo));
-        }
-      }
+    const shard_read_t &read = req.shard_reads.at(from.shard);
+    if (!complete.errors.contains(from)) {
+      dout(20) << __func__ <<" read:" << read << dendl;
+      complete.processed_read_requests[from.shard].union_of(read.extents);
     }
   }
   for (auto &&[hoid, attr]: op.attrs_read) {
@@ -1307,7 +1297,7 @@ void ECBackend::handle_sub_read_reply(
               // We found that new reads are required to do a decode.
               need_resend = true;
               continue;
-            } else if (r >  0) {
+            } else if (r > 0) {
               // No new reads were requested. This means that some parity
               // shards can be assumed to be zeros.
               err = 0;
@@ -1342,7 +1332,8 @@ void ECBackend::handle_sub_read_reply(
             rop.complete.at(oid).errors.clear();
           }
         }
-        // avoid re-read for completed object as we may send remaining reads for uncopmpleted objects
+        // avoid re-read for completed object as we may send remaining reads for
+        // uncompleted objects
         rop.to_read.at(oid).shard_reads.clear();
         rop.to_read.at(oid).want_attrs = false;
         ++is_complete;
@@ -1601,21 +1592,21 @@ void ECBackend::submit_transaction(
 }
 
 int ECBackend::objects_read_sync(
-  const hobject_t &hoid,
-  uint64_t off,
-  uint64_t len,
-  uint32_t op_flags,
-  bufferlist *bl) {
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len,
+    uint32_t op_flags,
+    bufferlist *bl) {
   return -EOPNOTSUPP;
 }
 
 void ECBackend::objects_read_async(
-  const hobject_t &hoid,
-  uint64_t object_size,
-  const list<pair<ec_align_t,
-                  pair<bufferlist*, Context*>>> &to_read,
-  Context *on_complete,
-  bool fast_read) {
+    const hobject_t &hoid,
+    uint64_t object_size,
+    const list<pair<ec_align_t,
+                    pair<bufferlist*, Context*>>> &to_read,
+    Context *on_complete,
+    bool fast_read) {
   map<hobject_t, std::list<ec_align_t>> reads;
 
   uint32_t flags = 0;
