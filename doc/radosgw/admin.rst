@@ -356,7 +356,7 @@ To remove a Swift secret key, run a command of the following form:
 Add or Remove Admin Capabilities
 --------------------------------
 
-The Ceph Storage Cluster provides an administrative API that enables users to
+The Ceph Storage Cluster provides an `Admin Ops API`_ that enables users to
 execute administrative functions via the REST API. By default, users do NOT
 have access to this API. To enable a user to exercise administrative
 functionality, provide the user with administrative capabilities.
@@ -892,3 +892,4 @@ example commands:
 .. _radosgw-admin: ../../man/8/radosgw-admin/
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
 .. _Ceph Object Gateway Config Reference: ../config-ref/
+.. _Admin Ops API: ../adminops/
