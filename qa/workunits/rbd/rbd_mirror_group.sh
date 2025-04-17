@@ -444,7 +444,7 @@ fi
 wait_for_group_present ${CLUSTER1} ${POOL}/${NS1} ${group} 0
 remove_image_retry ${CLUSTER2} ${POOL}/${NS1} ${image}
 wait_for_image_present ${CLUSTER1} ${POOL}/${NS1} ${image} 'deleted'
-group_remove ${CLUSTER1} ${POOL}/${NS1}/${group}
+group_remove ${CLUSTER2} ${POOL}/${NS1}/${group}
 wait_for_group_not_present ${CLUSTER1} ${POOL} ${NS1}/${group}
 mirror_group_disable ${CLUSTER2} ${POOL}/${NS2}/${group}
 wait_for_image_present ${CLUSTER1} ${POOL}/${NS2} ${image} 'deleted'
