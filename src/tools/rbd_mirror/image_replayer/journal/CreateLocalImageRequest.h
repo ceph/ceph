@@ -17,6 +17,7 @@ namespace mirror {
 
 class PoolMetaCache;
 class ProgressContext;
+struct GroupCtx;
 template <typename> struct Threads;
 
 namespace image_replayer {
@@ -32,20 +33,23 @@ public:
   static CreateLocalImageRequest* create(
       Threads<ImageCtxT>* threads,
       librados::IoCtx& local_io_ctx,
+      GroupCtx *local_group_ctx,
       ImageCtxT* remote_image_ctx,
       const std::string& global_image_id,
       PoolMetaCache* pool_meta_cache,
       ProgressContext* progress_ctx,
       StateBuilder<ImageCtxT>* state_builder,
       Context* on_finish) {
-    return new CreateLocalImageRequest(threads, local_io_ctx, remote_image_ctx,
-                                       global_image_id, pool_meta_cache,
-                                       progress_ctx, state_builder, on_finish);
+    return new CreateLocalImageRequest(threads, local_io_ctx, local_group_ctx,
+                                       remote_image_ctx, global_image_id,
+                                       pool_meta_cache, progress_ctx,
+                                       state_builder, on_finish);
   }
 
   CreateLocalImageRequest(
       Threads<ImageCtxT>* threads,
       librados::IoCtx& local_io_ctx,
+      GroupCtx *local_group_ctx,
       ImageCtxT* remote_image_ctx,
       const std::string& global_image_id,
       PoolMetaCache* pool_meta_cache,
@@ -55,6 +59,7 @@ public:
     : BaseRequest(on_finish),
       m_threads(threads),
       m_local_io_ctx(local_io_ctx),
+      m_local_group_ctx(local_group_ctx),
       m_remote_image_ctx(remote_image_ctx),
       m_global_image_id(global_image_id),
       m_pool_meta_cache(pool_meta_cache),
@@ -87,6 +92,7 @@ private:
 
   Threads<ImageCtxT>* m_threads;
   librados::IoCtx& m_local_io_ctx;
+  GroupCtx *m_local_group_ctx;
   ImageCtxT* m_remote_image_ctx;
   std::string m_global_image_id;
   PoolMetaCache* m_pool_meta_cache;
