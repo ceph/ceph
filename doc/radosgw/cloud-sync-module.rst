@@ -238,7 +238,6 @@ For example, creating a new profile for buckets starting with {prefix}:
    radosgw-admin zone modify --rgw-zonegroup={zone-group-name} \
                                --rgw-zone={zone-name} \
                                --tier-config=profiles[].source_bucket={prefix}'*'
-
    radosgw-admin zone modify --rgw-zonegroup={zone-group-name} \
                                --rgw-zone={zone-name} \
                                --tier-config=profiles[-1].connection_id={conn_id},profiles[-1].acls_id={acls_id}

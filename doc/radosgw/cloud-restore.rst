@@ -2,7 +2,7 @@
 Cloud Restore
 =============
 
-The :doc:`cloud-transition>` feature makes it possible to transition objects to a remote
+The :doc:`cloud-transition` feature makes it possible to transition objects to a remote
 cloud service. The ``cloud-restore`` feature described below enables restoration
 of those transitioned objects from the remote S3 endpoints into the local
 RGW deployment.
@@ -217,7 +217,7 @@ Example 3:
    aws s3api get-object --bucket bucket1 --key doc3.rtf ....
 
 
-This will restore the object `doc3.rtf`` for ``read_through_restore_days`` days.
+This will restore the object ``doc3.rtf`` for ``read_through_restore_days`` days.
 
 Note: The above CLI command may time out if object restoration takes too long.
 You can verify the restore status before reissuing the command.
