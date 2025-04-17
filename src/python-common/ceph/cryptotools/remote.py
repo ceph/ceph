@@ -24,7 +24,7 @@ import logging
 import subprocess
 
 
-_ctmodule = 'ceph.pybind.mgr.cryptotools'
+_ctmodule = 'ceph.cryptotools.cryptotools'
 
 logger = logging.getLogger('ceph.cryptotools.remote')
 
