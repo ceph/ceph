@@ -5951,7 +5951,8 @@ int group_remove(cls_method_context_t hctx, const string &group_id) {
     return r;
   }
 
-  if (group.state != cls::rbd::MIRROR_GROUP_STATE_DISABLING) {
+  if (group.state != cls::rbd::MIRROR_GROUP_STATE_DISABLING &&
+      group.state != cls::rbd::MIRROR_GROUP_STATE_ENABLING) {
     return -EBUSY;
   }
 
