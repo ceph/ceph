@@ -173,7 +173,6 @@ void ECExtentCache::Object::erase_line(uint64_t offset) {
   check_seset_empty_for_range(requesting, offset, line_size);
   do_not_read.erase_stripe(offset, line_size);
   lines.erase(offset);
-  delete_maybe();
 }
 
 void ECExtentCache::Object::invalidate(const OpRef &invalidating_op) {
