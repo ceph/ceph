@@ -520,7 +520,8 @@ std::string prepare_primary_mirror_snap_name(CephContext *cct,
 
 int get_last_mirror_snapshot_state(librados::IoCtx &group_ioctx,
                                    const std::string &group_id,
-                                   cls::rbd::MirrorSnapshotState *state) {
+                                   cls::rbd::MirrorSnapshotState *state,
+                                   cls::rbd::GroupSnapshotState *sync) {
   std::vector<cls::rbd::GroupSnapshot> snaps;
 
   C_SaferCond cond;
@@ -539,6 +540,9 @@ int get_last_mirror_snapshot_state(librados::IoCtx &group_ioctx,
     if (ns != nullptr) {
       // XXXMG: check primary_mirror_uuid matches?
       *state = ns->state;
+      if (sync != nullptr) {
+        *sync = it->state;
+      }
       return 0;
     }
   }
@@ -2597,13 +2601,6 @@ void remove_interim_snapshots(IoCtx& group_ioctx,
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << dendl;
 
-  int r = cls_client::group_snap_remove(&group_ioctx, group_header_oid,
-      group_snap->id);
-  if (r < 0) {
-    lderr(cct) << "failed to remove group snapshot metadata: "
-               << cpp_strerror(r) << dendl;
-  }
-
   std::vector<C_SaferCond*> on_finishes(image_ctxs->size(), nullptr);
   for (size_t i = 0; i < image_ctxs->size(); ++i) {
     auto snap_id = group_snap->snaps[i].snap_id;
@@ -2636,6 +2633,7 @@ void remove_interim_snapshots(IoCtx& group_ioctx,
     on_finishes[i] = on_finish;
   }
 
+  int r;
   for (int i = 0, n = image_ctxs->size(); i < n; ++i) {
     if (!on_finishes[i]) {
       continue;
@@ -2649,6 +2647,13 @@ void remove_interim_snapshots(IoCtx& group_ioctx,
                  << cpp_strerror(r) << dendl;
       // just report error, but don't abort the process
     }
+  }
+
+  r = cls_client::group_snap_remove(&group_ioctx, group_header_oid,
+                                    group_snap->id);
+  if (r < 0) {
+    lderr(cct) << "failed to remove group snapshot metadata: "
+               << cpp_strerror(r) << dendl;
   }
 }
 
@@ -2954,7 +2959,7 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
   }
 
   cls::rbd::MirrorSnapshotState state;
-  r = get_last_mirror_snapshot_state(group_ioctx, group_id, &state);
+  r = get_last_mirror_snapshot_state(group_ioctx, group_id, &state, nullptr);
   if (r == -ENOENT) {
     ldout(cct, 10) << "mirroring for group " << group_name
                    << " already disabled" << dendl;
@@ -3094,7 +3099,8 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
   }
 
   cls::rbd::MirrorSnapshotState state;
-  r = get_last_mirror_snapshot_state(group_ioctx, group_id, &state);
+  cls::rbd::GroupSnapshotState sync;
+  r = get_last_mirror_snapshot_state(group_ioctx, group_id, &state, &sync);
   if (r == -ENOENT) {
     state = cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED; // XXXMG?
     r = 0;
@@ -3106,9 +3112,11 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
   if (state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
     lderr(cct) << "group " << group_name << " is already primary" << dendl;
     return -EINVAL;
-  } else if (state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY && !force) {
+  } else if (!force && (state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY ||
+                        sync != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE)) {
     lderr(cct) << "group " << group_name
-               << " is still primary within a remote cluster" << dendl;
+               << " is primary within a remote cluster or demotion is not propagated yet"
+               << dendl;
     return -EBUSY;
   }
 
@@ -3273,10 +3281,9 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
   int ret_code = 0;
   std::vector<uint64_t> snap_ids(image_ctxs.size(), CEPH_NOSNAP);
   std::vector<C_SaferCond*> on_finishes(image_ctxs.size(), nullptr);
-  C_SaferCond* on_finish;
 
   for (size_t i = 0; i < image_ctxs.size(); i++) {
-    on_finish = new C_SaferCond;
+    C_SaferCond* on_finish = new C_SaferCond;
     image_promote(image_ctxs[i], group_snap_id, force, &snap_ids[i], on_finish);
     on_finishes[i] = on_finish;
   }
@@ -3299,44 +3306,7 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
     // undo
     ldout(cct, 20) << "undoing group promote: " << ret_code << dendl;
     remove_interim_snapshots(group_ioctx, group_header_oid, &image_ctxs, &group_snap);
-    std::fill(snap_ids.begin(), snap_ids.end(), CEPH_NOSNAP);
-    group_snap.snaps.clear();
-    close_images(&image_ctxs);
-
-    r = prepare_group_images(group_ioctx, group_id, mirror_group.state,
-                             &image_ctxs, &group_snap, quiesce_requests,
-                             cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED,
-                             &mirror_peer_uuids,
-                             SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE);
-    if (r != 0) {
-      return r;
-    }
-    for (size_t i = 0; i < image_ctxs.size(); ++i) {
-      ImageCtx *ictx = image_ctxs[i];
-      ldout(cct, 20) << "demoting individual image: "
-                     << ictx->name.c_str() << dendl;
-      on_finish = new C_SaferCond;
-      image_demote(ictx, group_snap_id, &snap_ids[i], on_finish);
-      on_finishes[i] = on_finish;
-    }
-
-    for (int i = 0, n = image_ctxs.size(); i < n; ++i) {
-      if (!on_finishes[i]) {
-        continue;
-      }
-      r = on_finishes[i]->wait();
-      delete on_finishes[i];
-      if (r < 0) {
-        lderr(cct) << "failed demoting image: " << image_ctxs[i]->name << ": "
-                   << cpp_strerror(r) << dendl;
-        // just report error, but don't abort the process
-      } else{
-        group_snap.snaps[i].snap_id = snap_ids[i];
-      }
-    }
-  }
-
-  if (!ret_code) {
+  } else if (!ret_code) {
     group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
     r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
     if (r < 0) {
@@ -3388,7 +3358,7 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
   }
 
   cls::rbd::MirrorSnapshotState state;
-  r = get_last_mirror_snapshot_state(group_ioctx, group_id, &state);
+  r = get_last_mirror_snapshot_state(group_ioctx, group_id, &state, nullptr);
   if (r == -ENOENT) {
     state = cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY;
     r = 0;
@@ -3546,7 +3516,7 @@ int Mirror<I>::group_resync(IoCtx& group_ioctx, const char *group_name) {
   }
 
   cls::rbd::MirrorSnapshotState state;
-  r = get_last_mirror_snapshot_state(group_ioctx, group_id, &state);
+  r = get_last_mirror_snapshot_state(group_ioctx, group_id, &state, nullptr);
   if (r == -ENOENT) {
     state = cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY;
     r = 0;
@@ -3811,7 +3781,7 @@ int Mirror<I>::group_info_list(librados::IoCtx& io_ctx,
       info.state = static_cast<rbd_mirror_group_state_t>(group.state);
 
       cls::rbd::MirrorSnapshotState promotion_state;
-      r = get_last_mirror_snapshot_state(io_ctx, group_id, &promotion_state);
+      r = get_last_mirror_snapshot_state(io_ctx, group_id, &promotion_state, nullptr);
       if (r == -ENOENT) {
 	promotion_state = cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY;
       } else if (r < 0) {
