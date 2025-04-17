@@ -1018,7 +1018,7 @@ void BlueStore::Writer::_do_put_new_blobs(
   extent_map_t& emap = onode->extent_map.extent_map;
   uint32_t blob_size = wctx->target_blob_size;
   while (bd_it != bd_end) {
-    Extent* le;
+    Extent* le = nullptr;
     if (!bd_it->is_compressed()) {
       // only 1st blob to write can have blob_location != logical_offset
       uint32_t blob_location = p2align(logical_offset, blob_size);
