@@ -396,8 +396,41 @@ following form:
 .. prompt:: bash
 
    radosgw-admin caps rm --uid=johndoe --caps={caps}
-  
 
+Admin and System Users
+----------------------
+
+Users with the ``--admin`` or ``--system`` flag have global read and write
+permissions. These permissions apply to all APIs including S3 and Swift,
+unlike Admin Capabilities, and cannot be denied by IAM policy.
+
+The ``--system`` flag should only be used as documented in `Multisite Configuration`_.
+
+The ``--admin`` flag can be useful for troubleshooting and recovery. For
+example, if a user accidentally removes their permissions to a bucket or
+object, the admin user's credentials can be used to issue the S3/Swift API
+requests necessary to restore them.
+
+.. warning:: When not in use, consider deleting the admin user or disabling
+   its access keys. Do not give admin permissions to untrusted users.
+
+To create an admin user:
+
+.. prompt:: bash
+
+   radosgw-admin user create --uid={username} --display-name="{display-name}" --admin
+
+To add the admin flag to an existing user:
+
+.. prompt:: bash
+
+   radosgw-admin user modify --uid={username} --admin
+
+To remove the admin flag from an existing user:
+
+.. prompt:: bash
+
+   radosgw-admin user modify --uid={username} --admin=0
 
 Quota Management
 ================
@@ -902,3 +935,4 @@ example commands:
 .. _Ceph Object Gateway Config Reference: ../config-ref/
 .. _Accounts: ../account/
 .. _Admin Ops API: ../adminops/
+.. _Multisite Configuration: ../multisite/
