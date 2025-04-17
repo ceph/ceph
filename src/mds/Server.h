@@ -15,6 +15,7 @@
 #ifndef CEPH_MDS_SERVER_H
 #define CEPH_MDS_SERVER_H
 
+#include "Mutation.h"
 #include "mds/mdstypes.h" // for xattr_map
 
 #include <common/DecayCounter.h>
@@ -22,15 +23,17 @@
 
 #include "include/common_fwd.h"
 #include "include/Context.h" // for C_GatherBase
+#include "include/mempool.h"
 
 #include "CInode.h"
-#include "Mutation.h"
 
 #ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
 #else
 #include "common/perf_counters_collection.h"
 #endif
+
+#include <boost/intrusive_ptr.hpp>
 
 #include <map>
 #include <memory>
@@ -63,6 +66,7 @@ class MClientReclaim;
 class MClientReclaimReply;
 class MLock;
 class MMDSPeerRequest;
+class filepath;
 
 enum {
   l_mdss_first = 1000,
