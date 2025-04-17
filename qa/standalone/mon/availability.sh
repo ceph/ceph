@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Copyright (C) 2024 Red Hat <contact@redhat.com>
+# Copyright (C) 2024 IBM <contact@ibm.com>
 #
 # Author: Shraddha Agrawal <shraddhaag@ibm.com> 
 #

@@ -99,11 +99,11 @@ void MgrStatMonitor::calc_pool_availability()
          << poolid << dendl;
       continue;
     }
-    if (pool_availability[poolid].is_avail){
-      if (!digest.pool_pg_unavailable_map[poolid].empty()){
+    if (pool_availability[poolid].is_avail) {
+      if (!digest.pool_pg_unavailable_map[poolid].empty()) {
         // avail to unavail
         dout(20) << __func__ 
-		 << "Pool status: Available to Unavailable" << dendl;
+		 << ": Pool " << poolid << " status: Available to Unavailable" << dendl;
         pool_availability[poolid].is_avail = false;
         pool_availability[poolid].num_failures += 1;
         pool_availability[poolid].last_downtime = now;
@@ -112,23 +112,23 @@ void MgrStatMonitor::calc_pool_availability()
       } else {
         // avail to avail
         dout(20) << __func__ 
-		 << "Pool status: Available to Available" << dendl;
+		 << ": Pool " << poolid << " status: Available to Available" << dendl;
         pool_availability[poolid].uptime +=
           now - pool_availability[poolid].last_uptime;
         pool_availability[poolid].last_uptime = now;
       }
     } else {
-      if (!digest.pool_pg_unavailable_map[poolid].empty()){
+      if (!digest.pool_pg_unavailable_map[poolid].empty()) {
         // unavail to unavail
         dout(20) << __func__ 
-		 << "Pool status: Unavailable to Unavailable" << dendl;
+		 << ": Pool " << poolid << " status: Unavailable to Unavailable" << dendl;
         pool_availability[poolid].downtime +=
           now - pool_availability[poolid].last_downtime;
         pool_availability[poolid].last_downtime = now;
       } else {
         // unavail to avail
         dout(20) << __func__ 
-		 << "Pool status: Unavailable to Available" << dendl;
+		 << ": Pool " << poolid << " status: Unavailable to Available" << dendl;
         pool_availability[poolid].is_avail = true;
         pool_availability[poolid].last_uptime = now;
         pool_availability[poolid].uptime +=

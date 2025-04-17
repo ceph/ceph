@@ -14359,8 +14359,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       tbl << TextTable::endrow;
     }
     rdata.append(stringify(tbl));
-  }
-  else if (prefix == "osd force-create-pg") {
+  } else if (prefix == "osd force-create-pg") {
     pg_t pgid;
     string pgidstr;
     err = parse_pgid(cmdmap, ss, pgid, pgidstr);
