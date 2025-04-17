@@ -106,7 +106,7 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
 	    pg,
 	    shard_services,
 	    epoch,
-	    PeeringCtx{}, false, false,
+	    PeeringCtx{}, false,
 	    std::move(children)).second;
         });
     return seastar::now();
@@ -793,7 +793,7 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 	    rctx->transaction
 	  ).then([this, pg=pg, rctx=std::move(rctx)] {
 	    return start_operation<PGAdvanceMap>(
-	      pg, *this, get_map()->get_epoch(), std::move(*rctx), true, false
+	      pg, *this, get_map()->get_epoch(), std::move(*rctx), true
 	    ).second.then([pg=pg] {
 	      return seastar::make_ready_future<Ref<PG>>(pg);
 	    });
@@ -830,6 +830,17 @@ ShardServices::wait_for_pg(
   PGMap::PGCreationBlockingEvent::TriggerI&& trigger, spg_t pgid)
 {
   return local_state.pg_map.wait_for_pg(std::move(trigger), pgid).first;
+}
+
+ShardServices::wait_for_pg_ret
+ShardServices::create_split_pg(
+    PGMap::PGCreationBlockingEvent::TriggerI&& trigger,
+    spg_t pgid)
+{
+  auto fut = local_state.pg_map.wait_for_pg(
+      std::move(trigger), pgid).first;
+  local_state.pg_map.set_creating(pgid);
+  return fut;
 }
 
 seastar::future<Ref<PG>> ShardServices::load_pg(spg_t pgid)
