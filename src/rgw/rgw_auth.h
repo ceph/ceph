@@ -48,9 +48,9 @@ public:
    * applier that is being used. */
   virtual uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const = 0;
 
-  /* Verify whether a given identity *can be treated as* an admin of rgw_owner
-  * specified in @o. On error throws rgw::auth::Exception storing the reason. */
-  virtual bool is_admin_of(const rgw_owner& o) const = 0;
+  /* Verify whether a given identity *can be treated as* an admin.
+   * On error throws rgw::auth::Exception storing the reason. */
+  virtual bool is_admin() const = 0;
 
   /* Verify whether a given identity is the rgw_owner specified in @o.
    * On internal error throws rgw::auth::Exception storing the reason. */
@@ -480,7 +480,7 @@ public:
     return RGW_PERM_NONE;
   }
 
-  bool is_admin_of(const rgw_owner& o) const override {
+  bool is_admin() const override {
     return false;
   }
 
@@ -664,7 +664,7 @@ public:
 
   ACLOwner get_aclowner() const override;
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
-  bool is_admin_of(const rgw_owner& o) const override;
+  bool is_admin() const override;
   bool is_owner_of(const rgw_owner& o) const override;
   bool is_root() const override;
   bool is_identity(const Principal& p) const override;
@@ -730,7 +730,7 @@ public:
 
   ACLOwner get_aclowner() const override;
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
-  bool is_admin_of(const rgw_owner& o) const override;
+  bool is_admin() const override;
   bool is_owner_of(const rgw_owner& o) const override;
   bool is_root() const override;
   bool is_identity(const Principal& p) const override;
@@ -813,7 +813,7 @@ public:
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return 0;
   }
-  bool is_admin_of(const rgw_owner& o) const override {
+  bool is_admin() const override {
     return false;
   }
   bool is_owner_of(const rgw_owner& o) const override;
@@ -861,7 +861,7 @@ public:
     return RGW_PERM_NONE;
   }
 
-  bool is_admin_of(const rgw_owner& o) const override {
+  bool is_admin() const override {
     return false;
   }
 
