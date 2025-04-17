@@ -69,7 +69,7 @@ struct Mirror {
   static int peer_site_set_attributes(librados::IoCtx& io_ctx,
                                       const std::string &uuid,
                                       const Attributes& attributes);
-  static const char *pool_or_namespace(ImageCtxT *ictx);
+  static const char *pool_or_namespace(librados::IoCtx& ioctx);
 
   static int image_global_status_list(librados::IoCtx& io_ctx,
                                       const std::string &start_id, size_t max,
