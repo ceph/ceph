@@ -149,6 +149,7 @@ private:
 
   void start_group_replayer(GroupReplayer<ImageCtxT> *group_replayer);
   void queue_start_group_replayers();
+  void start_group_replayers(const std::unique_lock<ceph::mutex>&);
   void start_group_replayers(int r);
 
   void stop_group_replayer(GroupReplayer<ImageCtxT> *group_replayer,
