@@ -26,7 +26,8 @@ struct onode_layout_t {
   // snapshots.
   // TODO: implement flexible-sized onode value to store inline ss_attr
   // effectively.
-  static constexpr int MAX_SS_LENGTH = 1;
+  // The expected decode size of SnapSet when there's no snapshot
+  static constexpr int MAX_SS_LENGTH = 35;
 
   ceph_le32 size{0};
   ceph_le32 oi_size{0};
