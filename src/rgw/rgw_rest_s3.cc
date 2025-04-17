@@ -417,7 +417,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     auto action = s->object->get_instance().empty() ? rgw::IAM::s3GetObjectTagging : rgw::IAM::s3GetObjectVersionTagging;
     // since we are already under s->system_request, if the request is not impersonating,
     // it can be assumed that it is not a user-mode replication.
-    bool keep_tags = s->auth.identity->is_admin_of(s->user->get_id()) || verify_object_permission(this, s, action);
+    bool keep_tags = s->auth.identity->is_admin() || verify_object_permission(this, s, action);
 
     // remove tags from attrs if the user doesn't have permission
     bufferlist tags_bl;

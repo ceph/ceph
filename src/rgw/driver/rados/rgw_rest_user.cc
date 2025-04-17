@@ -122,7 +122,7 @@ void RGWOp_User_Info::execute(optional_yield y)
   // dump_keys is false if user-info-without-keys is 'read' and
   // the user is not the system user or an admin user
   int keys_perm = s->user->get_info().caps.check_cap("users", RGW_CAP_READ);
-  if (keys_perm == 0 || op_state.system || s->auth.identity->is_admin_of(uid)) {
+  if (keys_perm == 0 || op_state.system || s->auth.identity->is_admin()) {
     dump_keys = true;
     ldpp_dout(s, 20) << "dump_keys is set to true" << dendl;
   }

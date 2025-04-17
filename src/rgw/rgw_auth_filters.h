@@ -73,8 +73,8 @@ public:
     return get_decoratee().get_perms_from_aclspec(dpp, aclspec);
   }
 
-  bool is_admin_of(const rgw_owner& o) const override {
-    return get_decoratee().is_admin_of(o);
+  bool is_admin() const override {
+    return get_decoratee().is_admin();
   }
 
   bool is_owner_of(const rgw_owner& o) const override {
@@ -281,12 +281,12 @@ public:
     return DecoratedApplier<T>::get_tenant();
   }
 
-  bool is_admin_of(const rgw_owner& o) const override {
+  bool is_admin() const override {
     if (is_system && !is_impersonating) {
       return true;
     }
 
-    return DecoratedApplier<T>::is_admin_of(o);
+    return DecoratedApplier<T>::is_admin();
   }
 };
 
