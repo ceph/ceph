@@ -6805,7 +6805,7 @@ options:
   fmt_desc: Comma-separated list of locations of ceph_assert in the source code.
     The format is ``{file}:{line} [, {file}:{line}]``
   level: dev
-  with_legacy: false
+  with_legacy: true
 - name: ec_extent_cache_size
   type: uint
   level: advanced

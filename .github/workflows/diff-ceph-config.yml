@@ -1,0 +1,95 @@
+name: Check if any ceph configuration has been changed
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+
+# The following permissions are needed to write a comment to repo
+permissions:
+    issues: write
+    contents: write
+    pull-requests: write
+
+jobs:
+  pull_request:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout ceph.git
+        uses: actions/checkout@v4
+        with:
+          path: ceph
+          sparse-checkout: src/script
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13' 
+
+      - name: Install python packages
+        run: |
+          pip3 install -r ./src/script/config-diff/requirements.txt
+        working-directory: ceph
+
+      - name: execute config diff tool
+        id: diff_tool
+        run:  |
+          rm diff_result.json
+          python3 ./src/script/config-diff/config_diff.py diff-branch-remote-repo --ref-repo ${{ github.event.pull_request.base.repo.clone_url }} --ref-branch ${{ github.event.pull_request.base.ref }} --remote-repo ${{ github.event.pull_request.head.repo.clone_url }} --cmp-branch ${{ github.event.pull_request.head.ref }} >> diff_result.json
+        working-directory: ceph
+      
+      - name: Post output as a comment
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const diffOutputPath = path.join('ceph', 'diff_result.json');
+            const diffOutput = fs.readFileSync(diffOutputPath, 'utf8');
+            const diffJson = JSON.parse(diffOutput);
+
+            // Check if the structure matches {"added": {}, "deleted": {}, "modified": {}}
+            // Do not create comment if there are no configuration changes
+            const isEmptyDiff = Object.keys(diffJson.added).length === 0 &&
+                Object.keys(diffJson.deleted).length === 0 &&
+                Object.keys(diffJson.modified).length === 0;
+
+            if (isEmptyDiff) {
+                console.log("No changes detected. Skipping comment creation.");
+            } else {
+                const commentBody = `### Config Diff Tool Output\n\`\`\`\n${diffOutput}\n\`\`\`\n\nThe above configuration changes are found in the PR, please update the relevant release documentation if necessary.`;
+                const comments = await github.paginate(
+                    github.rest.issues.listComments, {
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        issue_number: context.payload.pull_request.number,
+                        per_page: 100,
+                    }
+                )
+                const existingComment = comments.find(comment => comment.body.includes("### Config Diff Tool Output"));
+            
+                if (existingComment) {
+                    console.log("A config diff comment already exists, updating it...");
+                    // Update the existing comment
+                    github.rest.issues.updateComment({
+                        comment_id: existingComment.id,
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        body: commentBody
+                    });
+                } else {
+                    console.log("Creating a new config diff comment...");
+                    // Create a new comment
+                    github.rest.issues.createComment({
+                        issue_number: context.payload.pull_request.number,
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        body: commentBody
+                    });
+                }
+
+                // Set the status as FAILED, if any configutation changes are detected
+                console.log("Configuration changes detected: ", JSON.stringify(diffJson));
+                core.setFailed("Configuration Changes Detected, Update release documents - if necessary");
+            }

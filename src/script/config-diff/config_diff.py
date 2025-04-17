@@ -34,8 +34,7 @@ def sparse_branch_checkout(
     Raises:
         SystemExit: If any command fails during execution.
     """
-
-    if clone_folder_name != REF_CLONE_FOLDER or clone_folder_name != CMP_CLONE_FOLDER:
+    if clone_folder_name != REF_CLONE_FOLDER and clone_folder_name != CMP_CLONE_FOLDER:
         print("Invalid cloning folder name, only 'ref-config' and 'cmp-config' values allowed")
         sys.exit()
 
@@ -337,8 +336,8 @@ def diff_branch(ref_repo: str, ref_branch: str, cmp_branch: str, is_verbose: boo
     )
 
     final_result = diff_config()
-    with open("diff_result.json", "w") as output_file:
-        json.dump(final_result, output_file, indent=4)
+    json.dump(final_result, sys.stdout, indent=4)
+    print()
 
     cleanup_files(verbose=is_verbose)
 
@@ -363,8 +362,8 @@ def diff_tags(ref_repo: str, ref_tag: str, cmp_tag: str, is_verbose: bool):
     )
 
     final_result = diff_config()
-    with open("diff_result.json", "w") as output_file:
-        json.dump(final_result, output_file, indent=4)
+    json.dump(final_result, sys.stdout, indent=4)
+    print()
 
     cleanup_files(verbose=is_verbose)
 
@@ -394,8 +393,8 @@ def diff_branch_remote_repo(
     )
 
     final_result = diff_config()
-    with open("diff_result.json", "w") as output_file:
-        json.dump(final_result, output_file, indent=4)
+    json.dump(final_result, sys.stdout, indent=4)
+    print()
 
     cleanup_files(verbose=is_verbose)
 

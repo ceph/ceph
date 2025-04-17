@@ -18,7 +18,7 @@ python3 config_diff.py <mode> [options]
 
 ### Modes
 
-1. **`diff-branch`**: Compare configuration options between two branches in the same repository.
+1. **`diff-branch`**: Compare configuration options between two branches in the same Ceph repository.
    ```bash
    python3 config_diff.py diff-branch --ref-branch <branch1> --cmp-branch <branch2> [--ref-repo <repo-url>] [--verbose]
    ```
@@ -28,7 +28,7 @@ python3 config_diff.py <mode> [options]
    - `--ref-repo`: (Optional) The repository URL. Defaults to the Ceph upstream repository.
    - `--verbose`: (Optional) Enable verbose mode.
 
-2. **`diff-tag`**: Compare configuration options between two tags in the same repository.
+2. **`diff-tag`**: Compare configuration options between two tags in the same Ceph repository.
    ```bash
    python3 config_diff.py diff-tag --ref-tag <tag1> --cmp-tag <tag2> [--ref-repo <repo-url>] [--verbose]
    ```
@@ -68,7 +68,7 @@ python3 config_diff.py <mode> [options]
 
 ## Output
 
-The program generates a JSON file named diff_result.json containing the following structure:
+The program generates a JSON output containing the following structure:
 
 ```json
 {
