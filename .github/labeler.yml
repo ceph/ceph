@@ -345,3 +345,6 @@ script:
   - src/script/**
   - admin/**
   - doc/scripts/**
+
+config-change:
+  - src/common/options/**
