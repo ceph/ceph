@@ -18,13 +18,19 @@
 #include <list>
 #include <map>
 #include <set>
+#include <sstream>
 #include <string_view>
+#include <vector>
 
 #include "common/config.h"
+#include "common/debug.h"
+#include "common/ref.h" // for cref_t
 #include "common/RefCountedObj.h"
 #include "include/compat.h"
+#include "include/Context.h" // for C_GatherBuilder
 #include "include/counter.h"
 #include "include/elist.h"
+#include "include/filepath.h"
 #include "include/types.h"
 #include "include/lru.h"
 #include "include/compact_set.h"
@@ -32,9 +38,11 @@
 #include "MDSCacheObject.h"
 #include "MDSContext.h"
 #include "flock.h"
+#include "inode_backtrace.h" // for inode_backtrace_t
 
 #include "BatchOp.h"
 #include "CDentry.h"
+#include "ScrubHeader.h"
 #include "SimpleLock.h"
 #include "ScatterLock.h"
 #include "LocalLockC.h"
@@ -44,9 +52,14 @@
 
 #include "messages/MClientCaps.h"
 
+#include <boost/intrusive_ptr.hpp>
+
 #define dout_context g_ceph_context
 
+struct sr_t;
+class BatchOp;
 class Context;
+class CDentry;
 class CDir;
 class CInode;
 class MDCache;
@@ -55,6 +68,11 @@ struct SnapRealm;
 class Session;
 struct ObjectOperation;
 class EMetaBlob;
+class MClientCaps;
+struct MutationImpl;
+struct MDRequestImpl;
+typedef boost::intrusive_ptr<MutationImpl> MutationRef;
+typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;
 
 struct cinode_lock_info_t {
   int lock;

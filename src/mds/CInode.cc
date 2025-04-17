@@ -20,6 +20,8 @@
 #include "CInode.h"
 #include "CDir.h"
 #include "CDentry.h"
+#include "BatchOp.h"
+#include "SnapRealm.h"
 
 #include "MDSRank.h"
 #include "MDCache.h"
@@ -37,16 +39,22 @@
 #include "LogSegment.h"
 
 #include "common/Clock.h"
-
+#include "common/ceph_json.h"
 #include "common/config.h"
+#include "common/errno.h"
 #include "global/global_context.h"
 #include "include/denc.h"
 #include "include/ceph_assert.h"
+#include "include/int_types.h"
+#include "include/random.h" // for ceph::util::generate_random_number()
 
 #include "mds/MDSContinuation.h"
 #include "mds/InoTable.h"
 #include "cephfs_features.h"
 #include "osdc/Objecter.h"
+
+#include "messages/MClientCaps.h"
+#include "messages/MClientReply.h" // for struct InodeStat
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
