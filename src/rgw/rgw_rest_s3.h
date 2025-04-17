@@ -1159,6 +1159,7 @@ public:
 };
 
 class LocalEngine : public AWSEngine {
+  typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
   rgw::sal::Driver* driver;
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
