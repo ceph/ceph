@@ -739,6 +739,17 @@ ShardServices::wait_for_pg(
   return local_state.pg_map.wait_for_pg(std::move(trigger), pgid).first;
 }
 
+ShardServices::wait_for_pg_ret
+ShardServices::create_split_pg(
+    PGMap::PGCreationBlockingEvent::TriggerI&& trigger,
+    spg_t pgid)
+{
+  auto fut = local_state.pg_map.wait_for_pg(
+      std::move(trigger), pgid).first;
+  local_state.pg_map.set_creating(pgid);
+  return fut;
+}
+
 seastar::future<Ref<PG>> ShardServices::load_pg(spg_t pgid)
 
 {

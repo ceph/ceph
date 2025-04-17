@@ -540,6 +540,10 @@ public:
   using wait_for_pg_ret = wait_for_pg_ertr::future<Ref<PG>>;
   wait_for_pg_ret wait_for_pg(
     PGMap::PGCreationBlockingEvent::TriggerI&&, spg_t pgid);
+  wait_for_pg_ret create_split_pg(
+    PGMap::PGCreationBlockingEvent::TriggerI&& trigger,
+    spg_t pgid);
+
   seastar::future<Ref<PG>> load_pg(spg_t pgid);
 
   /// Dispatch and reset ctx transaction
