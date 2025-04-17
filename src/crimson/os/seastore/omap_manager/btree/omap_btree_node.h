@@ -26,8 +26,9 @@ enum class mutation_status_t : uint8_t {
   SUCCESS = 0,
   WAS_SPLIT = 1,
   NEED_MERGE = 2,
-  FAIL = 3
-};
+  FAIL = 3,
+  WAS_MERGED = 4
+ };
 
 struct OMapNode : LogicalChildNode {
   using base_iertr = OMapManager::base_iertr;
@@ -66,6 +67,13 @@ struct OMapNode : LogicalChildNode {
     omap_context_t oc,
     const std::string &key,
     const ceph::bufferlist &value) = 0;
+
+  using rm_key_range_iertr = base_iertr;
+  using rm_key_range_ret = rm_key_range_iertr::future<mutation_result_t>;
+  virtual rm_key_range_ret rm_key_range(
+    omap_context_t oc,
+    const std::string &first,
+    const std::string &last) = 0;
 
   using rm_key_iertr = base_iertr;
   using rm_key_ret = rm_key_iertr::future<mutation_result_t>;

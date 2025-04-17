@@ -1123,6 +1123,20 @@ public:
     }
     leaf_remove(iter);
   }
+  void journal_leaf_remove_range(
+    const_iterator _fiter,
+    const_iterator _liter,
+    delta_leaf_buffer_t *recorder) {
+    assert(_fiter != iter_end() && _liter != iter_end());
+    auto fiter = iterator(this, _fiter.index);
+    auto liter = iterator(this, _liter.index);
+    for(auto iter = fiter; iter < (liter + 1); iter++) {
+      if (recorder) {
+        recorder->remove(iter->get_key());
+      }
+    }
+    leaf_remove_range(fiter, liter);
+  }
 
   StringKVLeafNodeLayout() : buf(nullptr) {}
 
@@ -1502,7 +1516,16 @@ private:
     }
     set_size(get_size() - 1);
   }
+  void leaf_remove_range(iterator fiter, iterator liter) {
+    assert(fiter != iter_end());
 
+    if ((liter + 1) != iter_end()) {
+      auto adjust_len = fiter->get_right_ptr_end() - (liter + 1)->get_right_ptr_end();
+      copy_from_local(adjust_len, fiter, liter + 1, iter_end());
+    }
+
+    set_size(get_size() - (liter - fiter + 1));
+  }
   /**
    * get_key_ptr
    *

@@ -212,34 +212,25 @@ BtreeOMapManager::omap_rm_key_range(
   LOG_PREFIX(BtreeOMapManager::omap_rm_key_range);
   DEBUGT("{} ~ {}", t, first, last);
   assert(first <= last);
-  return seastar::do_with(
-    std::make_optional<std::string>(first),
-    std::make_optional<std::string>(last),
-    [this, &omap_root, &t, config](auto &first, auto &last) {
-    return omap_list(
-      omap_root,
-      t,
-      first,
-      last,
-      config);
-  }).si_then([this, &omap_root, &t](auto results) {
-    LOG_PREFIX(BtreeOMapManager::omap_rm_key_range);
-    auto &[complete, kvs] = results;
-    std::vector<std::string> keys;
-    for (const auto& [k, _] : kvs) {
-      keys.push_back(k);
+  return get_omap_root(
+    get_omap_context(t, omap_root),
+    omap_root
+  ).si_then([this, &t, &first, &last, &omap_root](auto root) {
+    return root->rm_key_range(get_omap_context(t, omap_root), first, last);
+  }).si_then([this, &omap_root, &t](auto mresult) -> omap_rm_key_range_ret {
+    if (mresult.status == mutation_status_t::SUCCESS) {
+      return seastar::now();
+    } else if (mresult.status == mutation_status_t::NEED_MERGE) {
+      auto root = *(mresult.need_merge);
+      if (root->get_node_size() == 1 && omap_root.depth != 1) {
+        return handle_root_merge(
+	        get_omap_context(t, omap_root), omap_root, mresult);
+      } else {
+        return seastar::now();
+      }
+    } else {
+      return seastar::now();
     }
-    DEBUGT("total {} keys to remove", t, keys.size());
-    return seastar::do_with(
-      std::move(keys),
-      [this, &omap_root, &t](auto& keys) {
-      return trans_intr::do_for_each(
-	keys.begin(),
-	keys.end(),
-	[this, &omap_root, &t](auto& key) {
-	return omap_rm_key(omap_root, t, key);
-      });
-    });
   });
 }
 
