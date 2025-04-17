@@ -3371,6 +3371,8 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
     r = 0;
   }
   if (r < 0) {
+    lderr(cct) << "failed to get last mirror snapshot state: "
+               << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -3402,7 +3404,6 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
   int ret_code = 0;
   std::vector<uint64_t> snap_ids(image_ctxs.size(), CEPH_NOSNAP);
   std::vector<C_SaferCond*> on_finishes(image_ctxs.size(), nullptr);
-  C_SaferCond* on_finish;
 
   for (size_t i = 0; i < image_ctxs.size(); i++) {
     C_SaferCond* on_finish = new C_SaferCond;
@@ -3429,62 +3430,34 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
     // undo
     ldout(cct, 20) << "undoing group demote: " << ret_code << dendl;
     remove_interim_snapshots(group_ioctx, group_header_oid, &image_ctxs, &group_snap);
-    std::fill(snap_ids.begin(), snap_ids.end(), CEPH_NOSNAP);
-    group_snap.snaps.clear();
-    close_images(&image_ctxs);
-
-    r = prepare_group_images(group_ioctx, group_id, mirror_group.state,
-                             &image_ctxs, &group_snap, quiesce_requests,
-                             cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED,
-                             &mirror_peer_uuids,
-                             SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE);
-    if (r != 0) {
-      return r;
-    }
+    // don't let the non-primary feature bit prevent image updates
     for (size_t i = 0; i < image_ctxs.size(); ++i) {
       ImageCtx *ictx = image_ctxs[i];
-      ldout(cct, 20) << "promoting individual images: "
-                     << ictx->name.c_str() << dendl;
-
-      on_finish = new C_SaferCond;
-      image_promote(ictx, group_snap_id, false, &snap_ids[i], on_finish);  // No force?
-      on_finishes[i] = on_finish;
+      ictx->image_lock.lock();
+      ictx->read_only_mask &= ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+      ictx->image_lock.unlock();
     }
-
-    for (int i = 0, n = image_ctxs.size(); i < n; ++i) {
-      if (!on_finishes[i]) {
-        continue;
-      }
-      r = on_finishes[i]->wait();
-      delete on_finishes[i];
-      if (r < 0) {
-        lderr(cct) << "failed promoting image: " << image_ctxs[i]->name
-                   << ": " << cpp_strerror(r) << dendl;
-        // just report error, but don't abort the process
-      } else {
-        group_snap.snaps[i].snap_id = snap_ids[i];
-      }
-    }
-  }
-
-  if (!ret_code) {
+  } else if (!ret_code) {
     group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
     r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
     if (r < 0) {
       lderr(cct) << "failed to update group snapshot metadata: "
                  << cpp_strerror(r) << dendl;
+    } else {
+      C_SaferCond cond;
+      auto req = mirror::snapshot::GroupUnlinkPeerRequest<I>::create(
+          group_ioctx, group_id, &mirror_peer_uuids, &image_ctxs, &cond);
+      req->send();
+      cond.wait();
+
+      // mask the bit for treating the non-primary feature as read-only
+      for (size_t i = 0; i < image_ctxs.size(); ++i) {
+        ImageCtx *ictx = image_ctxs[i];
+        ictx->image_lock.lock();
+        ictx->read_only_mask |= IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+        ictx->image_lock.unlock();
+      }
     }
-    C_SaferCond cond;
-    auto req = mirror::snapshot::GroupUnlinkPeerRequest<I>::create(
-        group_ioctx, group_id, &mirror_peer_uuids, &image_ctxs, &cond);
-    req->send();
-    cond.wait();
-  }
-  for (size_t i = 0; i < image_ctxs.size(); ++i) {
-    ImageCtx *ictx = image_ctxs[i];
-    ictx->image_lock.lock();
-    ictx->read_only_mask |= IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
-    ictx->image_lock.unlock();
   }
   close_images(&image_ctxs);
 
@@ -3529,6 +3502,8 @@ int Mirror<I>::group_resync(IoCtx& group_ioctx, const char *group_name) {
     r = 0;
   }
   if (r < 0) {
+    lderr(cct) << "failed to get last mirror snapshot state: "
+               << cpp_strerror(r) << dendl;
     return r;
   }
 
