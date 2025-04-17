@@ -60,12 +60,10 @@ const get_phy_tree_root_node_ret get_phy_tree_root_node<
       return {true,
               c.cache.get_extent_viewable_by_trans(c.trans, lba_root)};
     } else {
-      c.cache.account_absent_access(c.trans.get_src());
       return {false,
               Cache::get_extent_iertr::make_ready_future<CachedExtentRef>()};
     }
   } else {
-    c.cache.account_absent_access(c.trans.get_src());
     return {false,
             Cache::get_extent_iertr::make_ready_future<CachedExtentRef>()};
   }
@@ -445,6 +443,7 @@ BtreeLBAManager::_alloc_extents(
 		//     TM::alloc_data_extents()
 		alloc_info.extent->set_laddr(iter.get_key());
 	      }
+	      c.trans.add_logical_fresh_extent(*alloc_info.extent);
 	    }
 	    ceph_assert(inserted);
 	    rets.emplace_back(iter.get_pin(c));
@@ -900,6 +899,7 @@ BtreeLBAManager::_update_mapping(
 	      assert(!nextent->has_parent_tracker());
 	      iter.get_leaf_node()->update_child_ptr(
 		iter.get_leaf_pos(), nextent);
+              c.trans.add_logical_fresh_extent(*nextent);
 	    }
 	    assert(!nextent || 
 	           (nextent->has_parent_tracker() &&

@@ -1090,6 +1090,10 @@ public:
     memcpy((char *)&value, p.get_pos_add(sizeof(Unsigned)), sizeof(Unsigned));
   }
 
+  std::size_t get_hash() const {
+    return std::hash<Unsigned>{}(value);
+  }
+
   // laddr_offset_t contains one base laddr and one block not aligned
   // offset(< laddr_t::UNIT_SIZE). It is the return type of plus/minus
   // overloads for laddr_t and loffset_t.
@@ -1448,7 +1452,7 @@ constexpr bool is_logical_metadata_type(extent_types_t type) {
          type <= extent_types_t::COLL_BLOCK;
 }
 
-constexpr bool is_logical_type(extent_types_t type) {
+constexpr bool is_logical_real_type(extent_types_t type) {
   if ((type >= extent_types_t::ROOT_META &&
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
       type == extent_types_t::TEST_BLOCK) {
@@ -1464,6 +1468,20 @@ constexpr bool is_logical_type(extent_types_t type) {
 
 constexpr bool is_retired_placeholder_type(extent_types_t type) {
   return type == extent_types_t::RETIRED_PLACEHOLDER;
+}
+
+constexpr bool is_logical_type(extent_types_t type) {
+  if ((type >= extent_types_t::ROOT_META &&
+       type <= extent_types_t::RETIRED_PLACEHOLDER) ||
+      type == extent_types_t::TEST_BLOCK) {
+    assert(is_logical_real_type(type) ||
+           is_retired_placeholder_type(type));
+    return true;
+  } else {
+    assert(!is_logical_real_type(type) &&
+           !is_retired_placeholder_type(type));
+    return false;
+  }
 }
 
 constexpr bool is_root_type(extent_types_t type) {
@@ -1506,12 +1524,12 @@ constexpr bool is_backref_mapped_type(extent_types_t type) {
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
       type == extent_types_t::TEST_BLOCK ||
       type == extent_types_t::TEST_BLOCK_PHYSICAL) {
-    assert(is_logical_type(type) ||
+    assert(is_logical_real_type(type) ||
 	   is_lba_node(type) ||
 	   type == extent_types_t::TEST_BLOCK_PHYSICAL);
     return true;
   } else {
-    assert(!is_logical_type(type) &&
+    assert(!is_logical_real_type(type) &&
 	   !is_lba_node(type) &&
 	   type != extent_types_t::TEST_BLOCK_PHYSICAL);
     return false;
@@ -1522,11 +1540,11 @@ constexpr bool is_real_type(extent_types_t type) {
   if (type <= extent_types_t::OBJECT_DATA_BLOCK ||
       (type >= extent_types_t::TEST_BLOCK &&
        type <= extent_types_t::BACKREF_LEAF)) {
-    assert(is_logical_type(type) ||
+    assert(is_logical_real_type(type) ||
            is_physical_type(type));
     return true;
   } else {
-    assert(!is_logical_type(type) &&
+    assert(!is_logical_real_type(type) &&
            !is_physical_type(type));
     return false;
   }
@@ -2962,7 +2980,13 @@ std::ostream& operator<<(std::ostream&, const dirty_io_stats_printer_t&);
  *   get_caching_extent() -- test only
  *   get_caching_extent_by_type() -- test only
  */
-struct extent_access_stats_t {
+struct cache_access_stats_t {
+  uint64_t l_trans_pending = 0;
+  uint64_t l_trans_dirty = 0;
+  uint64_t l_trans_lru = 0;
+  uint64_t l_cache_dirty = 0;
+  uint64_t l_cache_lru = 0;
+
   uint64_t trans_pending = 0;
   uint64_t trans_dirty = 0;
   uint64_t trans_lru = 0;
@@ -2972,6 +2996,14 @@ struct extent_access_stats_t {
   uint64_t load_absent = 0;
   uint64_t load_present = 0;
 
+  uint64_t get_l_trans_hit() const {
+    return l_trans_pending + l_trans_dirty + l_trans_lru;
+  }
+
+  uint64_t get_l_cache_hit() const {
+    return l_cache_dirty + l_cache_lru;
+  }
+
   uint64_t get_trans_hit() const {
     return trans_pending + trans_dirty + trans_lru;
   }
@@ -2980,19 +3012,32 @@ struct extent_access_stats_t {
     return cache_dirty + cache_lru;
   }
 
-  uint64_t get_estimated_cache_access() const {
+  uint64_t get_cache_access() const {
     return get_cache_hit() + load_absent;
   }
 
-  uint64_t get_estimated_total_access() const {
-    return get_trans_hit() + get_cache_hit() + load_absent;
+  uint64_t get_trans_access() const {
+    return get_trans_hit() + get_cache_access();
+  }
+
+  uint64_t get_l_cache_access() const {
+    return get_l_cache_hit() + get_trans_access();
+  }
+
+  uint64_t get_total_access() const {
+    return get_l_trans_hit() + get_l_cache_access();
   }
 
   bool is_empty() const {
-    return get_estimated_total_access() == 0;
+    return get_total_access() == 0;
   }
 
-  void add(const extent_access_stats_t& o) {
+  void add(const cache_access_stats_t& o) {
+    l_trans_pending += o.l_trans_pending;
+    l_trans_dirty += o.l_trans_dirty;
+    l_trans_lru += o.l_trans_lru;
+    l_cache_dirty += o.l_cache_dirty;
+    l_cache_lru += o.l_cache_lru;
     trans_pending += o.trans_pending;
     trans_dirty += o.trans_dirty;
     trans_lru += o.trans_lru;
@@ -3002,7 +3047,12 @@ struct extent_access_stats_t {
     load_present += o.load_present;
   }
 
-  void minus(const extent_access_stats_t& o) {
+  void minus(const cache_access_stats_t& o) {
+    l_trans_pending -= o.l_trans_pending;
+    l_trans_dirty -= o.l_trans_dirty;
+    l_trans_lru -= o.l_trans_lru;
+    l_cache_dirty -= o.l_cache_dirty;
+    l_cache_lru -= o.l_cache_lru;
     trans_pending -= o.trans_pending;
     trans_dirty -= o.trans_dirty;
     trans_lru -= o.trans_lru;
@@ -3013,6 +3063,11 @@ struct extent_access_stats_t {
   }
 
   void divide_by(unsigned d) {
+    l_trans_pending /= d;
+    l_trans_dirty /= d;
+    l_trans_lru /= d;
+    l_cache_dirty /= d;
+    l_cache_lru /= d;
     trans_pending /= d;
     trans_dirty /= d;
     trans_lru /= d;
@@ -3020,43 +3075,6 @@ struct extent_access_stats_t {
     cache_lru /= d;
     load_absent /= d;
     load_present /= d;
-  }
-};
-struct extent_access_stats_printer_t {
-  double seconds;
-  const extent_access_stats_t& stats;
-};
-std::ostream& operator<<(std::ostream&, const extent_access_stats_printer_t&);
-
-struct cache_access_stats_t {
-  extent_access_stats_t s;
-  uint64_t cache_absent = 0;
-
-  uint64_t get_cache_access() const {
-    return s.get_cache_hit() + cache_absent;
-  }
-
-  uint64_t get_total_access() const {
-    return s.get_trans_hit() + get_cache_access();
-  }
-
-  bool is_empty() const {
-    return get_total_access() == 0;
-  }
-
-  void add(const cache_access_stats_t& o) {
-    s.add(o.s);
-    cache_absent += o.cache_absent;
-  }
-
-  void minus(const cache_access_stats_t& o) {
-    s.minus(o.s);
-    cache_absent -= o.cache_absent;
-  }
-
-  void divide_by(unsigned d) {
-    s.divide_by(d);
-    cache_absent /= d;
   }
 };
 struct cache_access_stats_printer_t {
@@ -3078,6 +3096,17 @@ struct cache_stats_t {
     dirty_sizes.add(o.dirty_sizes);
     dirty_io.add(o.dirty_io);
     access.add(o.access);
+  }
+};
+
+} // namespace crimson::os::seastore
+
+namespace std {
+
+template <>
+struct hash<crimson::os::seastore::laddr_t> {
+  std::size_t operator()(const crimson::os::seastore::laddr_t& laddr) const {
+    return laddr.get_hash();
   }
 };
 
