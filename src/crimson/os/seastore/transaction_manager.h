@@ -188,6 +188,8 @@ public:
     }
   };
 
+  template <typename T>
+  using lextent_init_func_t = std::function<void (T&)>;
   /**
    * read_extent
    *
@@ -201,20 +203,22 @@ public:
   read_extent_ret<T> read_extent(
     Transaction &t,
     laddr_t offset,
-    extent_len_t length) {
+    extent_len_t length,
+    lextent_init_func_t<T> maybe_init = [](T&) {}) {
     LOG_PREFIX(TransactionManager::read_extent);
     SUBDEBUGT(seastore_tm, "{}~0x{:x} {} ...",
               t, offset, length, T::TYPE);
     return get_pin(
       t, offset
-    ).si_then([this, FNAME, &t, offset, length] (auto pin)
+    ).si_then([this, FNAME, &t, offset, length,
+	      maybe_init=std::move(maybe_init)] (auto pin) mutable
       -> read_extent_ret<T> {
       if (length != pin->get_length() || !pin->get_val().is_real()) {
         SUBERRORT(seastore_tm, "{}~0x{:x} {} got wrong pin {}",
                   t, offset, length, T::TYPE, *pin);
         ceph_abort("Impossible");
       }
-      return this->read_pin<T>(t, std::move(pin));
+      return this->read_pin<T>(t, std::move(pin), std::move(maybe_init));
     });
   }
 
@@ -226,20 +230,22 @@ public:
   template <typename T>
   read_extent_ret<T> read_extent(
     Transaction &t,
-    laddr_t offset) {
+    laddr_t offset,
+    lextent_init_func_t<T> maybe_init = [](T&) {}) {
     LOG_PREFIX(TransactionManager::read_extent);
     SUBDEBUGT(seastore_tm, "{} {} ...",
               t, offset, T::TYPE);
     return get_pin(
       t, offset
-    ).si_then([this, FNAME, &t, offset] (auto pin)
+    ).si_then([this, FNAME, &t, offset,
+	      maybe_init=std::move(maybe_init)] (auto pin) mutable
       -> read_extent_ret<T> {
       if (!pin->get_val().is_real()) {
         SUBERRORT(seastore_tm, "{} {} got wrong pin {}",
                   t, offset, T::TYPE, *pin);
         ceph_abort("Impossible");
       }
-      return this->read_pin<T>(t, std::move(pin));
+      return this->read_pin<T>(t, std::move(pin), std::move(maybe_init));
     });
   }
 
@@ -248,7 +254,8 @@ public:
     Transaction &t,
     LBAMappingRef pin,
     extent_len_t partial_off,
-    extent_len_t partial_len)
+    extent_len_t partial_len,
+    lextent_init_func_t<T> maybe_init = [](T&) {})
   {
     static_assert(is_logical_type(T::TYPE));
     assert(is_aligned(partial_off, get_block_size()));
@@ -284,7 +291,8 @@ public:
       pin->maybe_fix_pos();
       fut = base_iertr::make_ready_future<LBAMappingRef>(std::move(pin));
     }
-    return fut.si_then([&t, this, direct_partial_off, partial_len](auto npin) {
+    return fut.si_then([&t, this, direct_partial_off, partial_len,
+			maybe_init=std::move(maybe_init)](auto npin) mutable {
       // checking the lba child must be atomic with creating
       // and linking the absent child
       auto ret = get_extent_if_linked<T>(t, std::move(npin));
@@ -293,10 +301,15 @@ public:
         ).si_then([direct_partial_off, partial_len, this, &t](auto extent) {
           return cache->read_extent_maybe_partial(
             t, std::move(extent), direct_partial_off, partial_len);
-        });
+        }).si_then([maybe_init=std::move(maybe_init)](auto extent) {
+	  maybe_init(*extent);
+	  return extent;
+	});
       } else {
 	return this->pin_to_extent<T>(
-          t, std::move(std::get<0>(ret)), direct_partial_off, partial_len);
+          t, std::move(std::get<0>(ret)),
+	  direct_partial_off, partial_len,
+	  std::move(maybe_init));
       }
     }).si_then([FNAME, maybe_indirect_info, is_clone, &t](TCachedExtentRef<T> ext) {
       if (maybe_indirect_info.has_value()) {
@@ -314,10 +327,14 @@ public:
   template <typename T>
   base_iertr::future<maybe_indirect_extent_t<T>> read_pin(
     Transaction &t,
-    LBAMappingRef pin)
+    LBAMappingRef pin,
+    lextent_init_func_t<T> maybe_init = [](T&) {})
   {
     auto& pin_ref = *pin;
-    return read_pin<T>(t, std::move(pin), 0, pin_ref.get_length());
+    return read_pin<T>(
+      t, std::move(pin), 0,
+      pin_ref.get_length(),
+      std::move(maybe_init));
   }
 
   /// Obtain mutable copy of extent
@@ -914,6 +931,10 @@ public:
     return epm->get_stat();
   }
 
+  ExtentTransViewRetriever& get_etvr() {
+    return *cache;
+  }
+
   ~TransactionManager();
 
 private:
@@ -1010,7 +1031,8 @@ private:
     Transaction &t,
     LBAMappingRef pin,
     extent_len_t direct_partial_off,
-    extent_len_t partial_len) {
+    extent_len_t partial_len,
+    lextent_init_func_t<T> &&maybe_init) {
     static_assert(is_logical_type(T::TYPE));
     using ret = pin_to_extent_ret<T>;
     auto &pref = *pin;
@@ -1030,7 +1052,7 @@ private:
       direct_length,
       direct_partial_off,
       partial_len,
-      [&pref]
+      [&pref, maybe_init=std::move(maybe_init)]
       (T &extent) mutable {
 	assert(extent.is_logical());
 	assert(!extent.has_laddr());
@@ -1039,6 +1061,7 @@ private:
 	assert(pref.get_parent());
 	pref.link_child(&extent);
 	extent.maybe_set_intermediate_laddr(pref);
+	maybe_init(extent);
       }
     ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) mutable -> ret {
       if (ref->is_fully_loaded()) {

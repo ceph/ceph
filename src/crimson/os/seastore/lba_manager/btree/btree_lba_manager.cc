@@ -103,6 +103,7 @@ BtreeLBAMapping::get_logical_extent(Transaction &t)
     : get_key();
   auto v = p.template get_child<LogicalChildNode>(ctx.trans, ctx.cache, pos, k);
   if (!v.has_child()) {
+    ctx.cache.account_absent_access(ctx.trans.get_src());
     this->child_pos = v.get_child_pos();
   }
   return v;
