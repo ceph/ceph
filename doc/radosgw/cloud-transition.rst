@@ -273,7 +273,6 @@ For example:
                                               --placement-id default-placement \
                                               --storage-class CLOUDTIER \
                                               --tier-config-rm=acls.source_id=testid
-
    radosgw-admin zonegroup placement modify --rgw-zonegroup default \
                                               --placement-id default-placement \
                                               --storage-class CLOUDTIER \
@@ -310,10 +309,6 @@ For example:
       }
   ]
 
-
-   radosgw-admin zonegroup placement rm --rgw-zonegroup default \
-                                          --placement-id default-placement \
-                                          --storage-class CLOUDTIER
 
 Object Modification and Limitations
 -----------------------------------
