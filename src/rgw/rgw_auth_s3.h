@@ -60,10 +60,11 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                             std::vector<IAM::Policy> policies,
                             const std::string& subuser,
                             const std::optional<uint32_t>& perm_mask,
-                            const std::string& access_key_id) const override {
+                            const std::string& access_key_id,
+                            bool is_impersonating) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
       LocalApplier(cct, std::move(user), std::move(account), std::move(policies),
-                   subuser, perm_mask, access_key_id));
+                   subuser, perm_mask, access_key_id), is_impersonating);
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
@@ -182,10 +183,11 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
                             std::vector<IAM::Policy> policies,
                             const std::string& subuser,
                             const std::optional<uint32_t>& perm_mask,
-                            const std::string& access_key_id) const override {
+                            const std::string& access_key_id,
+                            bool is_impersonating) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
       LocalApplier(cct, std::move(user), std::move(account), std::move(policies),
-                   subuser, perm_mask, access_key_id));
+                   subuser, perm_mask, access_key_id), is_impersonating);
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }

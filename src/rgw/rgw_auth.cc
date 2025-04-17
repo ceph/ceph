@@ -1325,7 +1325,8 @@ rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const re
     auto apl = \
       apl_factory->create_apl_local(cct, s, std::move(user), std::nullopt, {},
                                     rgw::auth::LocalApplier::NO_SUBUSER,
-                                    std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY);
+                                    std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY,
+                                    false /* is_impersonating */);
     return result_t::grant(std::move(apl));
   }
 }
