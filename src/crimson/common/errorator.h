@@ -946,14 +946,16 @@ public:
     assert_all() = default;
 
     template <class ErrorT, EnableIf<ErrorT>...>
-    no_touch_error_marker operator()(ErrorT&&) {
+    no_touch_error_marker operator()(ErrorT&& raw_error) {
       static_assert(contains_once_v<std::decay_t<ErrorT>>,
                     "discarding disallowed ErrorT");
-      if (msg) {
-        ceph_abort_msg(msg);
-      } else {
-        ceph_abort();
-      }
+      ErrorT::template handle([this] (const std::error_code& error_v) {
+        if (msg) {
+          ceph_abort_msgf("%s: %s", msg, error_v.message().c_str());
+        } else {
+          ceph_abort_msg(error_v.message().c_str());
+        }
+      })(std::forward<ErrorT>(raw_error));
       return no_touch_error_marker{};
     }
   };
@@ -1317,15 +1319,17 @@ namespace ct_error {
       : pre_assert(std::move(f)) {}
 
     template <class ErrorT>
-    no_touch_error_marker operator()(ErrorT&&) {
+    no_touch_error_marker operator()(ErrorT&& raw_error) {
       if (pre_assert) {
         pre_assert();
       }
-      if (msg) {
-        ceph_abort(msg);
-      } else {
-        ceph_abort();
-      }
+      ErrorT::template handle([this] (const std::error_code& error_v) {
+        if (msg) {
+          ceph_abort_msgf("%s: %s", msg, error_v.message().c_str());
+        } else {
+          ceph_abort_msg(error_v.message().c_str());
+        }
+      })(std::forward<ErrorT>(raw_error));
       return no_touch_error_marker{};
     }
   };
