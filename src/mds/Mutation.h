@@ -15,8 +15,13 @@
 #ifndef CEPH_MDS_MUTATION_H
 #define CEPH_MDS_MUTATION_H
 
+#include <list>
+#include <map>
 #include <optional>
+#include <ostream>
+#include <set>
 #include <unordered_map>
+#include <vector>
 
 #include "include/interval_set.h"
 #include "include/elist.h"
