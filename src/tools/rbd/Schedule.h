@@ -17,7 +17,8 @@ namespace ceph { class Formatter; }
 namespace rbd {
 
 void add_level_spec_options(
-  boost::program_options::options_description *options, bool allow_image=true);
+  boost::program_options::options_description *options, bool allow_image=true,
+  bool allow_group=false);
 int get_level_spec_args(const boost::program_options::variables_map &vm,
                         std::map<std::string, std::string> *args);
 void normalize_level_spec_args(std::map<std::string, std::string> *args);
@@ -46,7 +47,9 @@ std::ostream& operator<<(std::ostream& os, Schedule &s);
 
 class ScheduleList {
 public:
-  ScheduleList(bool allow_images=true) : allow_images(allow_images) {
+  ScheduleList(bool allow_images=true, bool allow_groups=false) :
+    allow_images(allow_images), allow_groups(allow_groups) {
+      //TODO: throw exception when both allow_images and allow_groups are True
   }
 
   int parse(const std::string &list);
@@ -57,6 +60,7 @@ public:
 
 private:
   bool allow_images;
+  bool allow_groups;
   std::map<std::string, Schedule> schedules;
 };
 
