@@ -693,12 +693,9 @@ void InstanceReplayer<I>::queue_start_group_replayers() {
 }
 
 template <typename I>
-void InstanceReplayer<I>::start_group_replayers(int r) {
-  dout(10) << dendl;
-
-  std::lock_guard locker{m_lock};
+void InstanceReplayer<I>::start_group_replayers(
+    const std::unique_lock<ceph::mutex>&) {
   if (m_on_shut_down != nullptr) {
-    m_async_op_tracker.finish_op();
     return;
   }
 
@@ -730,7 +727,15 @@ void InstanceReplayer<I>::start_group_replayers(int r) {
   m_service_daemon->add_or_update_namespace_attribute(
     m_local_io_ctx.get_id(), m_local_io_ctx.get_namespace(),
     SERVICE_DAEMON_GROUP_ERROR_COUNT_KEY, error_count);
+}
 
+template <typename I>
+void InstanceReplayer<I>::start_group_replayers(int r) {
+  dout(10) << dendl;
+  {
+    std::unique_lock locker{m_lock};
+    start_group_replayers(locker);
+  }
   m_async_op_tracker.finish_op();
 }
 
