@@ -211,8 +211,8 @@ class SubvolumeBase(object):
             attrs["normalization"] = None
 
         try:
-            case_insensitive = self.fs.getxattr(pathname, 'ceph.dir.caseinsensitive').decode('utf-8')
-            attrs["case_insensitive"] = case_insensitive == "0"
+            casesensitive = self.fs.getxattr(pathname, 'ceph.dir.casesensitive').decode('utf-8')
+            attrs["case_insensitive"] = casesensitive == "0"
         except cephfs.NoData:
             attrs["case_insensitive"] = False
 
