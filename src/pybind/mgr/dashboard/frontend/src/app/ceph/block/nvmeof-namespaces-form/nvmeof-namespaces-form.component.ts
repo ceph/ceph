@@ -87,12 +87,10 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       .subscribe((res: NvmeofSubsystemNamespace) => {
         const convertedSize = this.dimlessBinaryPipe.transform(res.rbd_image_size).split(' ');
         this.currentBytes = res.rbd_image_size;
-        this.nsForm.get('image').setValue(res.rbd_image_name);
         this.nsForm.get('pool').setValue(res.rbd_pool_name);
         this.nsForm.get('unit').setValue(convertedSize[1]);
         this.nsForm.get('image_size').setValue(convertedSize[0]);
         this.nsForm.get('image_size').addValidators(Validators.required);
-        this.nsForm.get('image').disable();
         this.nsForm.get('pool').disable();
       });
   }
@@ -100,10 +98,10 @@ export class NvmeofNamespacesFormComponent implements OnInit {
   initForCreate() {
     this.poolService.getList().subscribe((resp: Pool[]) => {
       this.rbdPools = resp.filter(this.rbdService.isRBDPool);
+      if (this.rbdPools?.length) {
+        this.nsForm.get('pool').setValue(this.rbdPools[0].pool_name);
+      }
     });
-    if (this.rbdPools?.length) {
-      this.nsForm.get('pool').setValue(this.rbdPools[0].pool_name);
-    }
   }
 
   ngOnInit() {
