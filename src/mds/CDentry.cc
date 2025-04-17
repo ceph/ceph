@@ -18,13 +18,16 @@
 #include "CInode.h"
 #include "CDir.h"
 #include "SnapClient.h"
-
+#include "SnapRealm.h"
 #include "MDSRank.h"
 #include "MDCache.h"
 #include "Locker.h"
 #include "LogSegment.h"
 
 #include "messages/MLock.h"
+
+#include "common/debug.h"
+#include "common/strescape.h" // for binstrprint()
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
