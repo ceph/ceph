@@ -160,7 +160,7 @@ public:
     return 0;
   };
 
-  bool is_admin_of(const rgw_owner& o) const override {
+  bool is_admin() const override {
     ceph_abort();
     return false;
   }

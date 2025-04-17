@@ -428,7 +428,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
       return ret;
     }
 
-    if (s->auth.identity->is_admin_of(bucket_policy.get_owner().id)) {
+    if (s->auth.identity->is_admin()) {
       return -ENOENT;
     }
 
@@ -1858,7 +1858,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
    * stored inside different accounts. */
   if (s->system_request) {
     ldpp_dout(this, 2) << "overriding permissions due to system operation" << dendl;
-  } else if (s->auth.identity->is_admin_of(s->user->get_id())) {
+  } else if (s->auth.identity->is_admin()) {
     ldpp_dout(this, 2) << "overriding permissions due to admin operation" << dendl;
   } else if (!verify_object_permission(this, s, part->get_obj(), s->user_acl,
 				       bucket_acl, obj_policy, bucket_policy,
