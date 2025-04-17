@@ -1,0 +1,61 @@
+name: Check if any ceph configuration has been changed
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - edited
+      - reopened
+
+# The following permissions are needed to write a comment to repo
+permissions:
+    issues: write
+    contents: read
+    pull-requests: write
+
+jobs:
+  pull_request:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout ceph.git
+        uses: actions/checkout@v4
+        with:
+          path: ceph
+          sparse-checkout: src/script
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install python packages
+        run: |
+          pip3 install -r ./src/script/config-diff/requirements.txt
+        working-directory: ceph
+
+      - name: execute config diff tool
+        id: diff_tool
+        env:
+          REF_REPO: ${{ github.event.pull_request.base.repo.clone_url }}
+          REF_BRANCH: ${{ github.event.pull_request.base.ref }}
+          REMOTE_REPO: ${{ github.event.pull_request.head.repo.clone_url }}
+          REMOTE_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run:  |
+          {
+            echo 'DIFF_JSON<<EOF'
+            python3 ./src/script/config-diff/config_diff.py diff-branch-remote-repo --ref-repo $REF_REPO --ref-branch $REF_BRANCH  --remote-repo $REMOTE_REPO --cmp-branch $REMOTE_BRANCH --posix-diff
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+        working-directory: ceph
+
+      - name: Post output as a comment
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIFF_JSON_OUTPUT: ${{ steps.diff_tool.outputs.DIFF_JSON }}
+        with:
+          script: |
+            const configDiff = process.env.DIFF_JSON_OUTPUT;
+            const postComment = require('./ceph/.github/workflows/scripts/config-diff-post-comment.js');
+            postComment({ github, context, core, configDiff });
