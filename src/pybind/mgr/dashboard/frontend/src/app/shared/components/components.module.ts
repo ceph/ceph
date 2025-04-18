@@ -37,7 +37,8 @@ import {
   ComboBoxModule,
   ProgressIndicatorModule
 } from 'carbon-components-angular';
-
+import EditIcon from '@carbon/icons/es/edit/20';
+import CodeIcon from '@carbon/icons/es/code/16';
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
 import { DirectivesModule } from '../directives/directives.module';
 import { PipesModule } from '../pipes/pipes.module';
@@ -208,6 +209,6 @@ import CopyIcon from '@carbon/icons/es/copy/32';
 })
 export class ComponentsModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([InfoIcon, CopyIcon]);
+    this.iconService.registerAll([InfoIcon, CopyIcon, EditIcon, CodeIcon]);
   }
 }

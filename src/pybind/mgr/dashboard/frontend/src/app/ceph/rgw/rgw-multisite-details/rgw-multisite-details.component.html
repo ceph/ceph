@@ -56,8 +56,10 @@
        i18n>Topology Viewer</div>
   <div class="row">
     <div class="col-sm-6 col-lg-6 tree-container">
-      <i *ngIf="loadingIndicator"
-         [ngClass]="[icons.large, icons.spinner, icons.spin]"></i>
+      <svg *ngIf="loadingIndicator"
+           [cdsIcon]="icons.spinner"
+           [size]="icons.size32"
+           class="loader cds--btn__icon spin "></svg>
       <cds-tree-view #tree
                      [isMultiSelect]="false"
                      (select)="onNodeSelected($event)">
@@ -81,12 +83,24 @@
               <span *ngIf="node?.data?.name"
                     class="me-3">
                 <span *ngIf="(node?.data?.show_warning)">
-                  <i  class="text-danger"
-                      i18n-title
-                      [title]="node?.data?.warning_message"
-                      [ngClass]="icons.danger"></i>
+                  <svg [cdsIcon]="icons.danger"
+                       i18n-title
+                       [size]="icons.size16"
+                       [title]="node?.data?.warning_message"
+                       class="cds-danger-color cds--btn__icon"></svg>
                 </span>
-                <i [ngClass]="node?.data?.icon"></i>
+                <svg  *ngIf="node?.data?.icon == 'scales'"
+                      [cdsIcon]="icons.reweight"
+                      [size]="icons.size20"
+                      class="cds--btn__icon"></svg>
+                <svg *ngIf="node?.data?.icon == 'cube'"
+                     [cdsIcon]="icons.deploy"
+                     [size]="icons.size20"
+                     class="cds--btn__icon"></svg>
+                <svg *ngIf="node?.data?.icon == 'fa fa-cubes'"
+                     [cdsIcon]="icons.parentChild"
+                     [size]="icons.size20"
+                     class="cds--btn__icon"></svg>
                 {{ node?.data?.name }}
               </span>
               <span class="badge badge-success me-2"
@@ -109,7 +123,9 @@
                         class="btn btn-light dropdown-toggle-split ms-1"
                         (click)="openModal(node, true)"
                         [disabled]="getDisable() || node?.data?.secondary_zone">
-                  <i [ngClass]="[icons.edit]"></i>
+                  <svg [cdsIcon]="icons.edit"
+                       [size]="icons.size16"
+                       class="cds-info-color cds--btn__icon"></svg>
                 </button>
               </div>
               <ng-container *ngIf="isDeleteDisabled(node) as nodeDeleteData">
@@ -119,7 +135,9 @@
                           class="btn btn-light ms-1"
                           [disabled]="nodeDeleteData.isDisabled || node?.data?.secondary_zone"
                           (click)="delete(node)">
-                    <i [ngClass]="[icons.destroy]"></i>
+                    <svg [cdsIcon]="icons.destroy"
+                         [size]="icons.size16"
+                         class="cds-info-color cds--btn__icon"></svg>
                   </button>
                 </div>
               </ng-container>
