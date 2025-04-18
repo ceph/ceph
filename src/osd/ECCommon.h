@@ -47,6 +47,7 @@ typedef crimson::osd::ObjectContextRef ObjectContextRef;
 #include "common/dout.h"
 
 //forward declaration
+struct ECBackend;
 struct ECSubWrite;
 struct PGLog;
 struct RecoveryMessages;
@@ -762,16 +763,17 @@ struct ECCommon {
         std::map<int, MOSDPGPushReply*> replies) = 0;
     void dispatch_recovery_messages(RecoveryMessages &m, int priority);
 
-    PGBackend::RecoveryHandle *open_recovery_op();
+    struct ECRecoveryHandle;
+    ECRecoveryHandle *open_recovery_op();
     void run_recovery_op(
-        struct ECRecoveryHandle &h,
+        ECRecoveryHandle &h,
         int priority);
     int recover_object(
         const hobject_t &hoid,
         eversion_t v,
         ObjectContextRef head,
         ObjectContextRef obc,
-        PGBackend::RecoveryHandle *h);
+        ECRecoveryHandle *h);
     void continue_recovery_op(
         RecoveryBackend::RecoveryOp &op,
         RecoveryMessages *m);
