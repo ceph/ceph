@@ -33,6 +33,7 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <string>
 
 class Worker;
@@ -40,7 +41,8 @@ class ConnectedSocketImpl {
  public:
   virtual ~ConnectedSocketImpl() {}
   virtual int is_connected() = 0;
-  virtual ssize_t read(char*, size_t) = 0;
+  virtual ssize_t read(std::span<char> dest) = 0;
+  virtual ssize_t readv(std::span<const std::span<char>> dest);
   virtual ssize_t send(ceph::buffer::list &bl, bool more) = 0;
   virtual void shutdown() = 0;
   virtual void close() = 0;
@@ -104,8 +106,16 @@ class ConnectedSocket {
   /// Read the input stream with copy.
   ///
   /// Copy an object returning data sent from the remote endpoint.
-  ssize_t read(char* buf, size_t len) {
-    return _csi->read(buf, len);
+  ssize_t read(std::span<char> buffer) {
+    return _csi->read(buffer);
+  }
+  /// Read the input stream with copy.
+  ///
+  /// Copy an object returning data sent from the remote endpoint.
+  //
+  // This is the scatter-gather version of read().
+  ssize_t readv(std::span<const std::span<char>> dest) {
+    return _csi->readv(dest);
   }
   /// Gets the output stream.
   ///
