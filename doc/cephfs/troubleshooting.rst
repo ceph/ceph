@@ -128,6 +128,38 @@ things to do:
 
   That prevents any clients from establishing new sessions with the MDS.
 
+* **Dont tweak max_mds** Modifying the FS setting variable ``max_mds`` is
+  sometimes perceived as a good step during troubleshooting or recovery effort.
+  Instead, doing so might further destabilize the cluster. If ``max_mds`` must
+  be changed in such circumstances, run the command to change ``max_mds`` with
+  the confirmation flag (``--yes-i-really-mean-it``)
+
+.. _pause-purge-threads:
+* **Turn off async purge threads** The volumes plugin spawns threads for
+  asynchronously purging trashed/deleted subvolumes. To help troubleshooting or
+  recovery effort, these purge threads can be disabled using:
+
+.. code:: bash
+
+    ceph config set mgr mgr/volumes/pause_purging true
+
+  To resume purging run::
+
+    ceph config set mgr mgr/volumes/pause_purging false
+
+.. _pause-clone-threads:
+* **Turn off async cloner threads** The volumes plugin spawns threads for
+  asynchronously cloning subvolume snapshots. To help troubleshooting or
+  recovery effort, these cloner threads can be disabled using:
+
+.. code:: bash
+
+    ceph config set mgr mgr/volumes/pause_cloning true
+
+  To resume cloning run::
+
+    ceph config set mgr mgr/volumes/pause_cloning false
+
 
 
 Expediting MDS journal trim
