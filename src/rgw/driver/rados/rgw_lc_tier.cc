@@ -822,10 +822,8 @@ void RGWLCCloudStreamPut::send_ready(const DoutPrefixProvider *dpp, const rgw_re
 }
 
 void RGWLCCloudStreamPut::handle_headers(const map<string, string>& headers) {
-  for (const auto& h : headers) {
-    if (h.first == "ETAG") {
-      etag = h.second;
-    }
+  if (auto h = headers.find("ETAG"); h != headers.end()) {
+    etag = h->second;
   }
 }
 
