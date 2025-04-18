@@ -14,6 +14,7 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #include "jwt-cpp/jwt.h"
+#include "jwt-cpp/traits/kazuho-picojson/traits.h"
 #pragma clang diagnostic pop
 #pragma GCC diagnostic pop
 #include "rgw_oidc_provider.h"
@@ -30,6 +31,7 @@ class WebTokenEngine : public rgw::auth::Engine {
   using Pair = std::pair<std::string, std::string>;
   using token_t = std::unordered_multimap<string, string>;
   using principal_tags_t = std::set<Pair>;
+  using traits = jwt::traits::kazuho_picojson;
 
   const rgw::auth::TokenExtractor* const extractor;
   const rgw::auth::WebIdentityApplier::Factory* const apl_factory;
@@ -53,7 +55,8 @@ class WebTokenEngine : public rgw::auth::Engine {
   std::tuple<boost::optional<WebTokenEngine::token_t>, boost::optional<WebTokenEngine::principal_tags_t>>
   get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
 
-  void validate_signature (const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const std::string& algorithm, const std::string& iss, const std::vector<std::string>& thumbprints, optional_yield y) const;
+  bool validate_jwt_with_rsa_bare_key(const DoutPrefixProvider* dpp, const jwt::decoded_jwt<traits>& token, const std::string &algorithm, const std::string& n, const std::string& e) const;
+  void validate_signature (const DoutPrefixProvider* dpp, const jwt::decoded_jwt<traits>& decoded, const std::string& algorithm, const std::string& iss, const std::vector<std::string>& thumbprints, optional_yield y) const;
 
   result_t authenticate(const DoutPrefixProvider* dpp,
                         const std::string& token,
@@ -61,7 +64,13 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   template <typename T>
   void recurse_and_insert(const string& key, const jwt::claim& c, T& t) const;
-  WebTokenEngine::token_t get_token_claims(const jwt::decoded_jwt& decoded) const;
+  WebTokenEngine::token_t get_token_claims(const jwt::decoded_jwt<traits>& decoded) const;
+
+  int create_connection(const DoutPrefixProvider* dpp, const std::string& hostname, int port) const;
+  std::string connect_to_host_get_cert_chain(const DoutPrefixProvider* dpp, const std::string& hostname, int port = 443) const;
+  std::string get_top_level_domain_from_host(const DoutPrefixProvider* dpp, const std::string& hostname) const;
+  std::string extract_last_certificate(const DoutPrefixProvider* dpp, const std::string& pem_chain) const;
+  void shutdown_ssl(const DoutPrefixProvider* dpp, SSL* ssl, SSL_CTX* ctx) const;
 
 public:
   WebTokenEngine(CephContext* const cct,
