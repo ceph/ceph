@@ -2848,7 +2848,7 @@ def command_bootstrap(ctx):
     if not installed:
         logger.warning('Log rotation will not occur because the logrotate service is not installed. Please install it to enable log rotation.')
     else:
-        logger.info('enable logrotate.timer service')
+        logger.info('Enabling the logrotate.timer service to perform daily log rotation.')
         enable_service(ctx, 'logrotate.timer')
     return ctx.error_code
 
