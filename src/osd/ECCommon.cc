@@ -63,6 +63,11 @@ static ostream &_prefix(std::ostream *_dout,
 }
 
 static ostream &_prefix(std::ostream *_dout,
+                        ECCommon::RecoveryBackend *pgb) {
+  return pgb->get_parent()->gen_dbg_prefix(*_dout);
+}
+
+static ostream &_prefix(std::ostream *_dout,
                         struct ClientReadCompleter const *read_completer
   );
 
