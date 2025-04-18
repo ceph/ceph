@@ -218,6 +218,7 @@ struct dir_result_t {
     ordered_count = 0;
     cache_index = 0;
     buffer.clear();
+    fd = -1;
   }
 
   InodeRef inode;
