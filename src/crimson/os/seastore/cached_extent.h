@@ -857,6 +857,7 @@ private:
 
   /// used to wait while in-progress commit completes
   std::optional<seastar::shared_promise<>> io_wait_promise;
+
   void set_io_wait() {
     ceph_assert(!io_wait_promise);
     io_wait_promise = seastar::shared_promise<>();
@@ -1385,13 +1386,16 @@ class LBAMapping;
  */
 class LogicalCachedExtent : public CachedExtent {
 public:
-  template <typename... T>
-  LogicalCachedExtent(T&&... t) : CachedExtent(std::forward<T>(t)...) {}
+  using CachedExtent::CachedExtent;
+  LogicalCachedExtent(const LogicalCachedExtent &other)
+    : CachedExtent(other),
+      seen_by_users(other.seen_by_users) {}
 
   void on_rewrite(Transaction &t, CachedExtent &extent, extent_len_t off) final {
     assert(get_type() == extent.get_type());
     auto &lextent = (LogicalCachedExtent&)extent;
     set_laddr((lextent.get_laddr() + off).checked_to_laddr());
+    seen_by_users = lextent.seen_by_users;
     do_on_rewrite(t, lextent);
   }
 
@@ -1441,6 +1445,10 @@ public:
 
   virtual ~LogicalCachedExtent() {}
 
+  bool has_seen_by_users() const {
+    return seen_by_users;
+  }
+
 protected:
 
   virtual void apply_delta(const ceph::bufferlist &bl) = 0;
@@ -1461,6 +1469,10 @@ private:
   // the logical address of the extent, and if shared,
   // it is the intermediate_base, see BtreeLBAMapping comments.
   laddr_t laddr = L_ADDR_NULL;
+  /// whether the extent has been seen by users since OSD startup
+  bool seen_by_users = false;
+
+  friend class crimson::os::seastore::TransactionManager;
 };
 
 using LogicalCachedExtentRef = TCachedExtentRef<LogicalCachedExtent>;
