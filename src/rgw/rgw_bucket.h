@@ -13,6 +13,11 @@
 #include "include/types.h"
 #include "rgw_common.h"
 #include "rgw_sal.h"
+#include "driver/rados/rgw_bucket.h"       // for RGWBucketInfo
+#include "rgw_rest.h"
+#include "rgw_exporter.h"
+#include "rgw_rados.h"
+
 
 extern void init_bucket(rgw_bucket *b, const char *t, const char *n, const char *dp, const char *ip, const char *m, const char *id);
 
