@@ -36,35 +36,27 @@ static inline Object* nextObject(Object* t)
 D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context) : FilterDriver(_next),
                                                                                        io_context(io_context) 
 {
-  conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
-
   rgw::cache::Partition partition_info;
   partition_info.location = g_conf()->rgw_d4n_l1_datacache_persistent_path;
   partition_info.name = "d4n";
   partition_info.type = "read-cache";
   partition_info.size = g_conf()->rgw_d4n_l1_datacache_size;
-
-  cacheDriver = new rgw::cache::SSDDriver(partition_info);
-  objDir = new rgw::d4n::ObjectDirectory(conn);
-  blockDir = new rgw::d4n::BlockDirectory(conn);
-  policyDriver = new rgw::d4n::PolicyDriver(conn, cacheDriver, "lfuda");
+  cacheDriver = std::make_unique<rgw::cache::SSDDriver>(partition_info);
 }
 
-D4NFilterDriver::~D4NFilterDriver()
-{
-  // call cancel() on the connection's executor
-  boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
-
-  delete cacheDriver;
-  delete objDir; 
-  delete blockDir; 
-  delete policyDriver;
-}
+D4NFilterDriver::~D4NFilterDriver() = default;
 
 int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
   namespace net = boost::asio;
   using boost::redis::config;
+
+  conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
+  objDir = std::make_unique<rgw::d4n::ObjectDirectory>(conn);
+  blockDir = std::make_unique<rgw::d4n::BlockDirectory>(conn);
+  policyDriver = std::make_unique<rgw::d4n::PolicyDriver>(conn,
+							  cacheDriver.get(),
+							  "lfuda");
 
   std::string address = cct->_conf->rgw_d4n_address;
   config cfg;
@@ -258,6 +250,19 @@ std::unique_ptr<Writer> D4NFilterDriver::get_atomic_writer(const DoutPrefixProvi
 							   olh_epoch, unique_tag);
 
   return std::make_unique<D4NFilterWriter>(std::move(writer), this, obj, dpp, true, y);
+}
+
+void D4NFilterDriver::shutdown()
+{
+  // call cancel() on the connection's executor
+  boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
+
+  cacheDriver.reset();
+  objDir.reset();
+  blockDir.reset();
+  policyDriver.reset();
+
+  next->shutdown();
 }
 
 std::unique_ptr<Object::ReadOp> D4NFilterObject::get_read_op()
