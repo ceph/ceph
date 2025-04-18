@@ -437,6 +437,7 @@ omap_load_extent(
       extent.init_range(std::move(begin), std::move(end));
       if (extent.T::base_child_t::is_parent_valid()
 	  || extent.is_btree_root()) {
+	assert(extent.has_seen_by_users() || extent.is_btree_root());
 	return;
       }
       assert(chp);
