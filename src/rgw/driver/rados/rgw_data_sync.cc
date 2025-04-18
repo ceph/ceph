@@ -898,9 +898,8 @@ int RGWRemoteDataLog::init_sync_status(const DoutPrefixProvider *dpp, int num_sh
 
 static string full_data_sync_index_shard_oid(const rgw_zone_id& source_zone, int shard_id)
 {
-  char buf[datalog_sync_full_sync_index_prefix.size() + 1 + source_zone.id.size() + 1 + 16];
-  snprintf(buf, sizeof(buf), "%s.%s.%d", datalog_sync_full_sync_index_prefix.c_str(), source_zone.id.c_str(), shard_id);
-  return string(buf);
+  return fmt::format("{}.{}.{}", datalog_sync_full_sync_index_prefix,
+		     source_zone.id, shard_id);
 }
 
 struct read_metadata_list {
@@ -3277,9 +3276,10 @@ int RGWRemoteDataLog::run_sync(const DoutPrefixProvider *dpp, int num_shards)
 {
   // construct and start bid manager for data sync fairness
   const auto& control_pool = sc.env->driver->svc()->zone->get_zone_params().control_pool;
-  char buf[data_sync_bids_oid.size() + sc.source_zone.id.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%s", data_sync_bids_oid.c_str(), sc.source_zone.id.c_str());
-  auto control_obj = rgw_raw_obj{control_pool, string(buf)};
+  auto control_obj = rgw_raw_obj{
+    control_pool,
+    fmt::format("{}.{}", data_sync_bids_oid, sc.source_zone.id)
+  };
 
   auto bid_manager = rgw::sync_fairness::create_rados_bid_manager(
       driver, control_obj, num_shards);
@@ -3384,18 +3384,14 @@ std::ostream& RGWDataSyncStatusManager::gen_prefix(std::ostream& out) const
 
 string RGWDataSyncStatusManager::sync_status_oid(const rgw_zone_id& source_zone)
 {
-  char buf[datalog_sync_status_oid_prefix.size() + source_zone.id.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%s", datalog_sync_status_oid_prefix.c_str(), source_zone.id.c_str());
-
-  return string(buf);
+  return fmt::format("{}.{}", datalog_sync_status_oid_prefix, source_zone.id);
 }
 
-string RGWDataSyncStatusManager::shard_obj_name(const rgw_zone_id& source_zone, int shard_id)
+string RGWDataSyncStatusManager::shard_obj_name(const rgw_zone_id& source_zone,
+						int shard_id)
 {
-  char buf[datalog_sync_status_shard_prefix.size() + source_zone.id.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%s.%d", datalog_sync_status_shard_prefix.c_str(), source_zone.id.c_str(), shard_id);
-
-  return string(buf);
+  return fmt::format("{}.{}.{}", datalog_sync_status_shard_prefix,
+		     source_zone.id, shard_id);
 }
 
 class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {

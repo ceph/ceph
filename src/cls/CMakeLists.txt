@@ -69,6 +69,8 @@ set(cls_lock_client_srcs
 add_library(cls_lock_client STATIC ${cls_lock_client_srcs})
 
 
+CHECK_CXX_COMPILER_FLAG("-Werror=vla" COMPILER_SUPPORTS_VLA)
+
 # cls_otp
 if (WITH_RADOSGW)
   set(cls_otp_srcs otp/cls_otp.cc)
@@ -83,12 +85,16 @@ if (WITH_RADOSGW)
     INSTALL_RPATH ""
     CXX_VISIBILITY_PRESET hidden)
   install(TARGETS cls_otp DESTINATION ${cls_dir})
+  target_compile_options(cls_otp PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
 
   set(cls_otp_client_srcs
     otp/cls_otp_client.cc
     otp/cls_otp_types.cc
     )
   add_library(cls_otp_client STATIC ${cls_otp_client_srcs})
+  target_compile_options(cls_otp_client PUBLIC
+    $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
 endif (WITH_RADOSGW)
 
 # cls_refcount
@@ -209,6 +215,8 @@ if (WITH_RADOSGW)
     SOVERSION "1"
     INSTALL_RPATH ""
     CXX_VISIBILITY_PRESET hidden)
+  target_compile_options(cls_rgw PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
   install(TARGETS cls_rgw DESTINATION ${cls_dir})
 
   set(cls_rgw_client_srcs
@@ -219,6 +227,8 @@ if (WITH_RADOSGW)
   target_include_directories(cls_rgw_client
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
+  target_compile_options(cls_rgw_client PUBLIC
+    $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
 
 endif (WITH_RADOSGW)
 
@@ -316,6 +326,8 @@ if (WITH_RADOSGW)
     SOVERSION "1"
     INSTALL_RPATH ""
     CXX_VISIBILITY_PRESET hidden)
+  target_compile_options(cls_rgw_gc PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
   install(TARGETS cls_rgw_gc DESTINATION ${cls_dir})
 
   set(cls_rgw_gc_client_srcs
@@ -325,6 +337,8 @@ if (WITH_RADOSGW)
   target_include_directories(cls_rgw_gc_client
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
+  target_compile_options(cls_rgw_gc_client PUBLIC
+    $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
 endif (WITH_RADOSGW)
 
 
