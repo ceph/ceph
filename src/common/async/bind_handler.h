@@ -32,7 +32,7 @@ namespace ceph::async {
  *
  * @see bind_handler
  */
-template <typename Handler, typename Tuple>
+template<typename Handler, typename Tuple>
 struct CompletionHandler {
   Handler handler;
   Tuple args;
@@ -104,6 +104,12 @@ auto bind_handler(Handler&& h, Args&& ...args)
 {
   return CompletionHandler{std::forward<Handler>(h),
                            std::make_tuple(std::forward<Args>(args)...)};
+}
+
+template <typename Handler, typename ...Args>
+auto bind_handler(Handler&& h, std::tuple<Args...> t)
+{
+  return CompletionHandler{std::forward<Handler>(h), std::move(t)};
 }
 
 } // namespace ceph::async
