@@ -335,6 +335,7 @@ networks:
 - 10.0.0.0/8
 - 192.168.0.0/16
 spec:
+  rgw_exit_timeout_secs: 60
   rgw_frontend_type: civetweb
   rgw_realm: default-rgw-realm
   rgw_zone: eu-central-1
