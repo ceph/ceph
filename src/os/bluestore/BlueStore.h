@@ -2524,6 +2524,8 @@ private:
 
   bool per_pool_stat_collection = true;
 
+  bool use_last_allocator_lookup_position = true;
+
   struct MempoolThread : public Thread {
   public:
     BlueStore *store;
@@ -2781,6 +2783,7 @@ private:
   void _set_finisher_num();
   void _set_per_pool_omap();
   void _update_osd_memory_options();
+  void _update_allocator_lookup_policy();
 
   int _open_bdev(bool create);
   // Verifies if disk space is enough for reserved + min bluefs
