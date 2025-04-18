@@ -1536,6 +1536,19 @@ def exec_test():
     ceph_cluster.set_ceph_conf("global", "mds root ino uid", "%s" % os.getuid())
     ceph_cluster.set_ceph_conf("global", "mds root ino gid", "%s" % os.getgid())
 
+    # dump the overridden 'client snapdir' into the ceph conf so that the
+    # fuse client picks it up when mounting
+    def _get_client_snapdir(ctx):
+        overrides = ctx.config.get('overrides', {})
+        ceph = overrides.get('ceph', {})
+        conf = ceph.get('conf', {})
+        client_conf = conf.get('client', {})
+        client_snapdir = client_conf.get('client_snapdir', '.snap')
+        return client_snapdir
+
+    sdn = _get_client_snapdir(ctx)
+    ceph_cluster.set_ceph_conf('client', 'client snapdir', sdn)
+
     # Monkeypatch get_package_version to avoid having to work out what kind of distro we're on
     def _get_package_version(remote, pkg_name):
         # Used in cephfs tests to find fuse version.  Your development workstation *does* have >=2.9, right?
