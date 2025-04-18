@@ -4387,6 +4387,8 @@ void Client::finish_cap_snap(Inode *in, CapSnap &capsnap, int used)
 {
   ldout(cct, 10) << __func__ << " " << *in << " capsnap " << (void *)&capsnap << " used " << ccap_string(used) << dendl;
   capsnap.size = in->size;
+  capsnap.fscrypt_auth = in->fscrypt_auth;
+  capsnap.fscrypt_file = in->fscrypt_file;
   capsnap.mtime = in->mtime;
   capsnap.atime = in->atime;
   capsnap.ctime = in->ctime;
@@ -4441,6 +4443,8 @@ void Client::send_flush_snap(Inode *in, MetaSession *session,
   m->head.xattr_version = capsnap.xattr_version;
   encode(capsnap.xattrs, m->xattrbl);
 
+  m->fscrypt_file = capsnap.fscrypt_auth;
+  m->fscrypt_file = capsnap.fscrypt_file;
   m->ctime = capsnap.ctime;
   m->btime = capsnap.btime;
   m->mtime = capsnap.mtime;
