@@ -50,15 +50,12 @@ struct preemption_t {
 struct blocked_range_t {
   blocked_range_t(OSDService* osds,
 		  ceph::timespan waittime,
-		  ScrubMachineListener& scrubber,
-		  spg_t pg_id);
+		  ScrubMachineListener& scrubber);
   ~blocked_range_t();
 
   OSDService* m_osds;
   ScrubMachineListener& m_scrubber;
 
-  /// used to identify ourselves to the PG, when no longer blocked
-  spg_t m_pgid;
   Context* m_callbk;
 
   // once timed-out, we flag the OSD's scrub-queue as having
@@ -220,4 +217,8 @@ struct ScrubMachineListener {
 
   /// sending cluster-log warnings
   virtual void log_cluster_warning(const std::string& msg) const = 0;
+
+  /// get a counting-ref to the PG itself.
+  /// (used mainly when a sub-object of the Scrubber creates callbacks)
+  virtual PGRef get_pgref() = 0;
 };
