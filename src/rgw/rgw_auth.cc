@@ -782,6 +782,7 @@ bool rgw::auth::WebIdentityApplier::is_identity(const Principal& p) const
 
 const std::string rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER;
 const std::string rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY;
+const std::string rgw::auth::RemoteApplier::AuthInfo::NO_KEYSTONE_USER;
 
 /* rgw::auth::RemoteAuthApplier */
 ACLOwner rgw::auth::RemoteApplier::get_aclowner() const
@@ -954,6 +955,7 @@ void rgw::auth::RemoteApplier::write_ops_log_entry(rgw_log_entry& entry) const
   if (account) {
     entry.account_id = account->id;
   }
+  entry.user = info.keystone_user;
 }
 
 /* TODO(rzarzynski): we need to handle display_name changes. */
