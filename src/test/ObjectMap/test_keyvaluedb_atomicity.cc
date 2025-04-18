@@ -68,7 +68,7 @@ void *write(void *_db) {
     val << i << std::endl;
     bufferptr bp(val.str().c_str(), val.str().size() + 1);
     to_set[key.str()].push_back(bp);
-    
+
     KeyValueDB::Transaction t = db->get_transaction();
     for (int j = 0; j < NUM_COPIES; ++j) {
       t->set(prefix_gen(j), to_set);
