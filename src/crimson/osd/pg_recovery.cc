@@ -508,11 +508,12 @@ void PGRecovery::request_primary_scan(
 {
   logger().debug("{}", __func__);
   using crimson::common::local_conf;
-  std::ignore = pg->get_recovery_backend()->scan_for_backfill(
+  std::ignore = pg->get_recovery_backend()->scan_for_backfill_primary(
     begin,
     local_conf()->osd_backfill_scan_min,
-    local_conf()->osd_backfill_scan_max
-  ).then_interruptible([this] (BackfillInterval bi) {
+    local_conf()->osd_backfill_scan_max,
+    pg->get_peering_state().get_backfill_targets()
+  ).then_interruptible([this] (PrimaryBackfillInterval bi) {
     logger().debug("request_primary_scan:{}", __func__);
     using BackfillState = crimson::osd::BackfillState;
     backfill_state->process_event(

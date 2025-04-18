@@ -97,9 +97,10 @@ ScrubBackend::ScrubBackend(ScrubBeListener& scrubber,
               : (m_depth == scrub_level_t::deep ? "deep-scrub"sv : "scrub"sv));
 }
 
-uint64_t ScrubBackend::logical_to_ondisk_size(uint64_t logical_size) const
+uint64_t ScrubBackend::logical_to_ondisk_size(uint64_t logical_size,
+                                 shard_id_t shard_id) const
 {
-  return m_pg.logical_to_ondisk_size(logical_size);
+  return m_pg.logical_to_ondisk_size(logical_size, shard_id);
 }
 
 void ScrubBackend::update_repair_status(bool should_repair)
@@ -470,6 +471,13 @@ auth_selection_t ScrubBackend::select_auth_object(const hobject_t& ho,
       // do not emit the returned error message to the log
       dout(15) << fmt::format("{}: {} not found on shard {}", __func__, ho, l)
                << dendl;
+    } else if (shard_ret.possible_auth == shard_as_auth_t::usable_t::not_usable_no_err) {
+      dout(20) << fmt::format("{}: skipping not_usable_no_err {} {} {}",
+                        __func__,
+                        l,
+                        shard_ret.oi.version,
+                        shard_ret.oi.soid)
+               << dendl;
     } else {
 
       dout(30) << fmt::format("{}: consider using {} srv: {} oi soid: {}",
@@ -619,7 +627,7 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
   // We won't pick an auth copy if the snapset is missing or won't decode.
   ceph_assert(!obj.is_snapdir());
 
-  if (obj.is_head()) {
+  if (obj.is_head() && !m_pg.get_is_nonprimary_shard(j_shard)) {
     auto k = smap_obj.attrs.find(SS_ATTR);
     if (dup_error_cond(err,
                        false,
@@ -655,7 +663,7 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
     }
   }
 
-  if (!m_is_replicated) {
+  if (m_pg.get_is_hinfo_required()) {
     auto k = smap_obj.attrs.find(ECUtil::get_hinfo_key());
     if (dup_error_cond(err,
                        false,
@@ -723,12 +731,12 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
     }
   }
 
-  if (test_error_cond(smap_obj.size != logical_to_ondisk_size(oi.size),
-                      shard_info,
+  uint64_t ondisk_size = logical_to_ondisk_size(oi.size, srd.shard);
+  if (test_error_cond(smap_obj.size != ondisk_size, shard_info,
                       &shard_info_wrapper::set_obj_size_info_mismatch)) {
 
     errstream << sep(err) << "candidate size " << smap_obj.size << " info size "
-              << logical_to_ondisk_size(oi.size) << " mismatch";
+              << ondisk_size << " mismatch";
   }
 
   std::optional<uint32_t> digest;
@@ -742,9 +750,13 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
   }
 
   ceph_assert(!err);
+
   // note that the error text is made available to the caller, even
-  // for a successful shard selection
-  return shard_as_auth_t{oi, j, errstream.str(), digest};
+  // for a successful shard selection.
+  // Non-primary shards cannot be used as authoritative, but this is not
+  // considered a failure.
+  return shard_as_auth_t{oi, j, errstream.str(), digest,
+                         m_pg.get_is_nonprimary_shard(j_shard)};
 }
 
 // re-implementation of PGBackend::be_compare_scrubmaps()
@@ -1056,7 +1068,8 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
                                                      auth_sel.shard_map[srd],
                                                      obj_result,
                                                      ss,
-                                                     ho.has_snapset());
+                                                     ho.has_snapset(),
+                                                     srd);
 
       dout(20) << fmt::format(
 		    "{}: {}{} <{}:{}> shards: {} {} {}", __func__,
@@ -1159,7 +1172,8 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
                                        shard_info_wrapper& shard_result,
                                        inconsistent_obj_wrapper& obj_result,
                                        stringstream& errstream,
-                                       bool has_snapset)
+                                       bool has_snapset,
+                                       const pg_shard_t &shard)
 {
   fmt::memory_buffer out;
   bool error{false};
@@ -1214,6 +1228,16 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
     }
   }
 
+  // if (auth_oi.get_version_for_shard(candidate_shard) != candidate.version) {
+  //   fmt::format_to(std::back_inserter(out),
+  //                  "{}candidate_oi_version {} != auth_oi_version {} from auth oi {}",
+  //                  sep(error),
+  //                  candidate.version,
+  //                  auth_oi.get_version_for_shard(candidate_shard),
+  //                  auth_oi);
+  //   shard_result.set_info_corrupted();
+  // }
+
   // ------------------------------------------------------------------------
 
   if (candidate.stat_error) {
@@ -1226,24 +1250,48 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
   // ------------------------------------------------------------------------
 
   if (!shard_result.has_info_missing() && !shard_result.has_info_corrupted()) {
-
     auto can_attr = candidate.attrs.find(OI_ATTR);
     ceph_assert(can_attr != candidate.attrs.end());
     const bufferlist& can_bl = can_attr->second;
 
-    auto auth_attr = auth.attrs.find(OI_ATTR);
-    ceph_assert(auth_attr != auth.attrs.end());
-    const bufferlist& auth_bl = auth_attr->second;
+    if (auth_oi.get_version_for_shard(shard.shard) == auth_oi.version) {
+      // The expected version of the shard and the authoritative shard are the
+      // same, so we can do a simple memcmp of the OI attr.
+      auto auth_attr = auth.attrs.find(OI_ATTR);
+      ceph_assert(auth_attr != auth.attrs.end());
+      const bufferlist& auth_bl = auth_attr->second;
 
-    if (!can_bl.contents_equal(auth_bl)) {
-      fmt::format_to(std::back_inserter(out),
-		     "{}object info inconsistent ",
-		     sep(error));
-      obj_result.set_object_info_inconsistency();
+      if (!can_bl.contents_equal(auth_bl)) {
+        object_info_t oi(can_bl);
+        fmt::format_to(std::back_inserter(out),
+                       "{}object info inconsistent auth_io={} candidate_oi={}",
+                       sep(error), auth_oi, oi);
+        obj_result.set_object_info_inconsistency();
+      }
+    } else try {
+      // This means that this shard is expected to have an old copy of the IO
+      // so the buffer comparison above will not work. The authoritative shard
+      // contains the correct version number, so we check that matches.  We
+      // also check the size, as that is the only other piece of data that the
+      // nonprimary OIs require.
+      object_info_t oi(can_bl);
+      if (oi.version != auth_oi.get_version_for_shard(shard.shard) ||
+            oi.size != auth_oi.size) {
+        fmt::format_to(std::back_inserter(out),
+                       "{}object info version incorrect auth_io={} candidate_oi={}",
+                       sep(error), auth_oi, oi);
+        obj_result.set_object_info_inconsistency();
+      }
+    } catch (ceph::buffer::error& e) {
+        // Can the above actually fail?  Out of paranoia, mark as inconsistent.
+        fmt::format_to(std::back_inserter(out),
+                "{}object info corrupt auth_oi={}",
+                sep(error), auth_oi);
+        obj_result.set_object_info_inconsistency();
     }
   }
 
-  if (has_snapset) {
+  if (has_snapset && !m_pg.get_is_nonprimary_shard(shard)) {
     if (!shard_result.has_snapset_missing() &&
         !shard_result.has_snapset_corrupted()) {
 
@@ -1266,7 +1314,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
   // ------------------------------------------------------------------------
 
-  if (!m_is_replicated) {
+  if (m_pg.get_is_hinfo_required() && !m_pg.get_is_nonprimary_shard(shard)) {
     if (!shard_result.has_hinfo_missing() &&
         !shard_result.has_hinfo_corrupted()) {
 
@@ -1288,10 +1336,8 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
   }
 
   // ------------------------------------------------------------------------
-
   // sizes:
-
-  uint64_t oi_size = logical_to_ondisk_size(auth_oi.size);
+  uint64_t oi_size = logical_to_ondisk_size(auth_oi.size, shard.shard);
   if (oi_size != candidate.size) {
     fmt::format_to(std::back_inserter(out),
                    "{}size {} != size {} from auth oi {}",
@@ -1302,7 +1348,9 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
     shard_result.set_size_mismatch_info();
   }
 
-  if (auth.size != candidate.size) {
+  // In optimized EC, the different shards are different sizes, so this test
+  // does not work.  All sizes should have been checked above.
+  if (!m_pg.get_is_ec_optimized() && auth.size != candidate.size) {
     fmt::format_to(std::back_inserter(out),
                    "{}size {} != size {} from shard {}",
                    sep(error),
@@ -1326,44 +1374,46 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
   }
 
   // ------------------------------------------------------------------------
-
   // comparing the attributes:
+  // Other than OI, Only potential primaries have the attribues.
 
-  for (const auto& [k, v] : auth.attrs) {
-    if (k == OI_ATTR || k[0] != '_') {
-      // We check system keys separately
-      continue;
+  if (!m_pg.get_is_nonprimary_shard(shard)) {
+    for (const auto& [k, v] : auth.attrs) {
+      if (k == OI_ATTR || k[0] != '_') {
+        // We check system keys separately
+        continue;
+      }
+
+      auto cand = candidate.attrs.find(k);
+      if (cand == candidate.attrs.end()) {
+        fmt::format_to(std::back_inserter(out),
+                       "{}attr name mismatch '{}'",
+                       sep(error),
+                       k);
+        obj_result.set_attr_name_mismatch();
+      } else if (!cand->second.contents_equal(v)) {
+        fmt::format_to(std::back_inserter(out),
+                       "{}attr value mismatch '{}'",
+                       sep(error),
+                       k);
+        obj_result.set_attr_value_mismatch();
+      }
     }
 
-    auto cand = candidate.attrs.find(k);
-    if (cand == candidate.attrs.end()) {
-      fmt::format_to(std::back_inserter(out),
-		     "{}attr name mismatch '{}'",
-		     sep(error),
-		     k);
-      obj_result.set_attr_name_mismatch();
-    } else if (!cand->second.contents_equal(v)) {
-      fmt::format_to(std::back_inserter(out),
-		     "{}attr value mismatch '{}'",
-		     sep(error),
-		     k);
-      obj_result.set_attr_value_mismatch();
-    }
-  }
+    for (const auto& [k, v] : candidate.attrs) {
+      if (k == OI_ATTR || k[0] != '_') {
+        // We check system keys separately
+        continue;
+      }
 
-  for (const auto& [k, v] : candidate.attrs) {
-    if (k == OI_ATTR || k[0] != '_') {
-      // We check system keys separately
-      continue;
-    }
-
-    auto in_auth = auth.attrs.find(k);
-    if (in_auth == auth.attrs.end()) {
-      fmt::format_to(std::back_inserter(out),
-		     "{}attr name mismatch '{}'",
-		     sep(error),
-		     k);
-      obj_result.set_attr_name_mismatch();
+      auto in_auth = auth.attrs.find(k);
+      if (in_auth == auth.attrs.end()) {
+        fmt::format_to(std::back_inserter(out),
+		       "{}attr name mismatch '{}'",
+		       sep(error),
+		       k);
+        obj_result.set_attr_name_mismatch();
+      }
     }
   }
 
@@ -1468,12 +1518,13 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map)
     }
 
     if (oi) {
-      if (logical_to_ondisk_size(oi->size) != p->second.size) {
+      // NOTE: Fix planned as part of the optimized EC work.
+      if (logical_to_ondisk_size(oi->size, shard_id_t(0) /*srd.shard*/) != p->second.size) {
         clog.error() << m_mode_desc << " " << m_pg_id << " " << soid
                       << " : on disk size (" << p->second.size
                       << ") does not match object info size (" << oi->size
                       << ") adjusted for ondisk to ("
-                      << logical_to_ondisk_size(oi->size) << ")";
+                      << logical_to_ondisk_size(oi->size, shard_id_t(0)/*srd.shard*/) << ")";
         soid_error.set_size_mismatch();
         this_chunk->m_error_counts.shallow_errors++;
       }

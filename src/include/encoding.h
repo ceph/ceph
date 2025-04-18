@@ -236,7 +236,7 @@ inline void encode_nohead(const std::string& s, bufferlist& bl)
 {
   encode_nohead(std::string_view(s), bl);
 }
-inline void decode_nohead(int len, std::string& s, bufferlist::const_iterator& p)
+inline void decode_nohead(unsigned len, std::string& s, bufferlist::const_iterator& p)
 {
   s.clear();
   p.copy(len, s);
@@ -318,7 +318,7 @@ inline void encode_nohead(const bufferlist& s, bufferlist& bl)
 {
   bl.append(s);
 }
-inline void decode_nohead(int len, bufferlist& s, bufferlist::const_iterator& p)
+inline void decode_nohead(unsigned len, bufferlist& s, bufferlist::const_iterator& p)
 {
   s.clear();
   p.copy(len, s);
@@ -463,7 +463,7 @@ inline std::enable_if_t<!traits::supported>
 encode_nohead(const std::set<T,Comp,Alloc>& s, bufferlist& bl);
 template<class T, class Comp, class Alloc, typename traits=denc_traits<T>>
 inline std::enable_if_t<!traits::supported>
-decode_nohead(int len, std::set<T,Comp,Alloc>& s, bufferlist::iterator& p);
+decode_nohead(unsigned len, std::set<T,Comp,Alloc>& s, bufferlist::iterator& p);
 template<class T, class Comp, class Alloc, typename traits=denc_traits<T>>
 inline std::enable_if_t<!traits::supported>
 encode(const boost::container::flat_set<T, Comp, Alloc>& s, bufferlist& bl);
@@ -476,7 +476,7 @@ encode_nohead(const boost::container::flat_set<T, Comp, Alloc>& s,
 	      bufferlist& bl);
 template<class T, class Comp, class Alloc, typename traits=denc_traits<T>>
 inline std::enable_if_t<!traits::supported>
-decode_nohead(int len, boost::container::flat_set<T, Comp, Alloc>& s,
+decode_nohead(unsigned len, boost::container::flat_set<T, Comp, Alloc>& s,
 	      bufferlist::iterator& p);
 template<class T, class Comp, class Alloc>
 inline void encode(const std::multiset<T,Comp,Alloc>& s, bufferlist& bl);
@@ -496,7 +496,7 @@ inline std::enable_if_t<!traits::supported>
 encode_nohead(const std::vector<T,Alloc>& v, bufferlist& bl);
 template<class T, class Alloc, typename traits=denc_traits<T>>
 inline std::enable_if_t<!traits::supported>
-decode_nohead(int len, std::vector<T,Alloc>& v, bufferlist::const_iterator& p);
+decode_nohead(unsigned len, std::vector<T,Alloc>& v, bufferlist::const_iterator& p);
 template<class T,class Alloc>
 inline void encode(const std::vector<std::shared_ptr<T>,Alloc>& v,
 		   bufferlist& bl,
@@ -522,7 +522,7 @@ inline std::enable_if_t<!traits::supported>
 encode_nohead(const boost::container::small_vector<T,N,Alloc>& v, bufferlist& bl);
 template<class T, std::size_t N, class Alloc, typename traits=denc_traits<T>>
 inline std::enable_if_t<!traits::supported>
-decode_nohead(int len, boost::container::small_vector<T,N,Alloc>& v, bufferlist::const_iterator& p);
+decode_nohead(unsigned len, boost::container::small_vector<T,N,Alloc>& v, bufferlist::const_iterator& p);
 // std::map
 template<class T, class U, class Comp, class Alloc,
 	 typename t_traits=denc_traits<T>, typename u_traits=denc_traits<U>>
@@ -550,7 +550,7 @@ encode_nohead(const std::map<T,U,Comp,Alloc>& m, bufferlist& bl, uint64_t featur
 template<class T, class U, class Comp, class Alloc,
 	 typename t_traits=denc_traits<T>, typename u_traits=denc_traits<U>>
 inline std::enable_if_t<!t_traits::supported || !u_traits::supported>
-decode_nohead(int n, std::map<T,U,Comp,Alloc>& m, bufferlist::const_iterator& p);
+decode_nohead(unsigned n, std::map<T,U,Comp,Alloc>& m, bufferlist::const_iterator& p);
 template<class T, class U, class Comp, class Alloc,
 	 typename t_traits=denc_traits<T>, typename u_traits=denc_traits<U>>
   inline std::enable_if_t<!t_traits::supported || !u_traits::supported>
@@ -580,7 +580,7 @@ encode_nohead(const boost::container::flat_map<T,U,Comp,Alloc>& m,
 template<class T, class U, class Comp, class Alloc,
 	 typename t_traits=denc_traits<T>, typename u_traits=denc_traits<U>>
 inline std::enable_if_t<!t_traits::supported || !u_traits::supported>
-decode_nohead(int n, boost::container::flat_map<T,U,Comp,Alloc>& m,
+decode_nohead(unsigned n, boost::container::flat_map<T,U,Comp,Alloc>& m,
 	      bufferlist::const_iterator& p);
 template<class T, class U, class Comp, class Alloc>
 inline void encode(const std::multimap<T,U,Comp,Alloc>& m, bufferlist& bl);
@@ -844,9 +844,9 @@ inline typename std::enable_if<!traits::supported>::type
 }
 template<class T, class Comp, class Alloc, typename traits>
 inline std::enable_if_t<!traits::supported>
-  decode_nohead(int len, std::set<T,Comp,Alloc>& s, bufferlist::const_iterator& p)
+  decode_nohead(unsigned len, std::set<T,Comp,Alloc>& s, bufferlist::const_iterator& p)
 {
-  for (int i=0; i<len; i++) {
+  for (unsigned i=0; i<len; i++) {
     T v;
     decode(v, p);
     s.insert(v);
@@ -888,11 +888,11 @@ encode_nohead(const boost::container::flat_set<T, Comp, Alloc>& s,
 }
 template<class T, class Comp, class Alloc, typename traits>
 inline std::enable_if_t<!traits::supported>
-decode_nohead(int len, boost::container::flat_set<T, Comp, Alloc>& s,
+decode_nohead(unsigned len, boost::container::flat_set<T, Comp, Alloc>& s,
 	      bufferlist::iterator& p)
 {
   s.reserve(len);
-  for (int i=0; i<len; i++) {
+  for (unsigned i=0; i<len; i++) {
     T v;
     decode(v, p);
     s.insert(v);
@@ -959,7 +959,7 @@ inline std::enable_if_t<!traits::supported>
 }
 template<class T, class Alloc, typename traits>
 inline std::enable_if_t<!traits::supported>
-  decode_nohead(int len, std::vector<T,Alloc>& v, bufferlist::const_iterator& p)
+  decode_nohead(unsigned len, std::vector<T,Alloc>& v, bufferlist::const_iterator& p)
 {
   v.resize(len);
   for (__u32 i=0; i<v.size(); i++) 
@@ -1005,7 +1005,7 @@ inline std::enable_if_t<!traits::supported>
 }
 template<class T, std::size_t N, class Alloc, typename traits>
 inline std::enable_if_t<!traits::supported>
-  decode_nohead(int len, boost::container::small_vector<T,N,Alloc>& v, bufferlist::const_iterator& p)
+  decode_nohead(unsigned len, boost::container::small_vector<T,N,Alloc>& v, bufferlist::const_iterator& p)
 {
   v.resize(len);
   for (auto& i : v)
@@ -1159,7 +1159,7 @@ inline std::enable_if_t<!t_traits::supported || !u_traits::supported>
 template<class T, class U, class Comp, class Alloc,
 	 typename t_traits, typename u_traits>
 inline std::enable_if_t<!t_traits::supported || !u_traits::supported>
-  decode_nohead(int n, std::map<T,U,Comp,Alloc>& m, bufferlist::const_iterator& p)
+  decode_nohead(unsigned n, std::map<T,U,Comp,Alloc>& m, bufferlist::const_iterator& p)
 {
   m.clear();
   while (n--) {
@@ -1172,7 +1172,7 @@ inline std::enable_if_t<!t_traits::supported || !u_traits::supported>
 template <std::move_constructible T, std::move_constructible U, class Comp, class Alloc,
     typename t_traits, typename u_traits>
 inline std::enable_if_t<!t_traits::supported || !u_traits::supported>
-decode_nohead(int n, std::map<T, U, Comp, Alloc>& m, bufferlist::const_iterator& p)
+decode_nohead(unsigned n, std::map<T, U, Comp, Alloc>& m, bufferlist::const_iterator& p)
 {
   m.clear();
   while (n--) {
@@ -1264,7 +1264,7 @@ template<class T, class U, class Comp, class Alloc,
 template<class T, class U, class Comp, class Alloc,
 	 typename t_traits, typename u_traits>
 inline std::enable_if_t<!t_traits::supported || !u_traits::supported>
-  decode_nohead(int n, boost::container::flat_map<T,U,Comp,Alloc>& m,
+  decode_nohead(unsigned n, boost::container::flat_map<T,U,Comp,Alloc>& m,
 		bufferlist::const_iterator& p)
 {
   m.clear();

@@ -71,9 +71,11 @@ public:
     errors |= err_t::SHARD_EC_SIZE_MISMATCH;
   }
   void set_info_missing() {
+    ceph_abort_msg("FAIL REVIEW");
     errors |= err_t::INFO_MISSING;
   }
   void set_info_corrupted() {
+    ceph_abort_msg("FAIL REVIEW");
     errors |= err_t::INFO_CORRUPTED;
   }
   void set_snapset_missing() {
