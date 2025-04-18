@@ -684,6 +684,16 @@ struct ECCommon {
     ECBackend *ecbackend;
 
     ECListener *get_parent() const { return parent; }
+<<<<<<< HEAD
+=======
+    const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
+    epoch_t get_osdmap_epoch() const { return get_parent()->pgb_get_osdmap_epoch(); }
+    const pg_info_t &get_info() { return get_parent()->get_info(); }
+#ifndef WITH_CRIMSON
+    void add_temp_obj(const hobject_t &oid) { get_parent()->add_temp_obj(oid); }
+    void clear_temp_obj(const hobject_t &oid) { get_parent()->clear_temp_obj(oid); }
+#endif
+>>>>>>> ff479293046 (fixup?: crimson, osd: shuffle the ECCommon and link it with crimson)
 
     const OSDMapRef &get_osdmap() const {
       return get_parent()->pgb_get_osdmap();
