@@ -1244,7 +1244,6 @@ void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool 
 
   nest_info_t rstatdiff;
   frag_info_t fragstatdiff;
-  bool touched_mtime, touched_chattr;
   version_t rstat_version = inode->get_projected_inode()->rstat.version;
   version_t dirstat_version = inode->get_projected_inode()->dirstat.version;
 
@@ -1257,8 +1256,7 @@ void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool 
     if (dir->get_fnode()->accounted_rstat.version == rstat_version)
       rstatdiff.add_delta(dir->get_fnode()->accounted_rstat, dir->get_fnode()->rstat);
     if (dir->get_fnode()->accounted_fragstat.version == dirstat_version)
-      fragstatdiff.add_delta(dir->get_fnode()->accounted_fragstat, dir->get_fnode()->fragstat,
-			     &touched_mtime, &touched_chattr);
+      fragstatdiff.add_delta(dir->get_fnode()->accounted_fragstat, dir->get_fnode()->fragstat);
 
     dir->prepare_old_fragment(dentry_waiters, replay);
 
