@@ -216,7 +216,7 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
         id(user.user_id),
         display_name(user.display_name),
         path(user.path),
-        user_is_admin(user.admin),
+        user_is_admin(user.admin || user.system),
         type(user.type),
         account(std::move(account)),
         policies(std::move(policies))

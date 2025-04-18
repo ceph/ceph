@@ -2703,6 +2703,11 @@ int RGWUserPermHandler::Bucket::init(RGWUserPermHandler *handler,
 
 bool RGWUserPermHandler::Bucket::verify_bucket_permission(const rgw_obj_key& obj_key, const uint64_t op) const
 {
+  if (ps->identity->is_admin()) {
+    ldpp_dout(dpp, 4) << "admin user, no need to check permissions" << dendl;
+    return true;
+  }
+
   const rgw_obj obj(ps->bucket_info.bucket, obj_key);
   const auto arn = rgw::ARN(obj);
 
@@ -2734,6 +2739,11 @@ bool RGWUserPermHandler::Bucket::verify_bucket_permission(const rgw_obj_key& obj
 
 rgw::IAM::Effect RGWUserPermHandler::Bucket::evaluate_iam_policies(const rgw_obj_key& obj_key, const uint64_t op) const
 {
+  if (ps->identity->is_admin()) {
+    ldpp_dout(dpp, 4) << "admin user, no need to check permissions" << dendl;
+    return rgw::IAM::Effect::Allow;
+  }
+
   const rgw_obj obj(ps->bucket_info.bucket, obj_key);
   const auto arn = rgw::ARN(obj);
   const bool account_root = (ps->identity->get_identity_type() == TYPE_ROOT);
