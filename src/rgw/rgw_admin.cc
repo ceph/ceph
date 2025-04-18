@@ -7227,8 +7227,13 @@ int main(int argc, const char **argv)
       cerr << "ERROR: num-shards and object must be specified."
 	   << std::endl;
       return EINVAL;
+    } else if (num_shards <= 0) {
+      cerr << "ERROR: non-positive value supplied for num-shards: " <<
+	num_shards << std::endl;
+      return EINVAL;
     }
-    auto shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(object, num_shards);
+    auto shard =
+      RGWSI_BucketIndex_RADOS::bucket_shard_index(object, num_shards);
     formatter->open_object_section("obj_shard");
     encode_json("shard", shard, formatter.get());
     formatter->close_section();
