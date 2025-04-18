@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
- * Copyright (C) 2025 IBM 
+ * Copyright (C) 2025 IBM
  */
 
 #include <cerrno>
@@ -48,6 +48,9 @@ extern "C" {
 
 #include "radosgw-admin/orphan.h"
 #include "radosgw-admin/sync_checkpoint.h"
+
+#include "rgw/async_utils.h"
+
 #include "rgw_user.h"
 #include "rgw_otp.h"
 #include "rgw_rados.h"
@@ -123,6 +126,7 @@ static const DoutPrefixProvider* dpp() {
   } while (0)
 
 using namespace std;
+using rgw::run_coro;
 
 inline int posix_errortrans(int r)
 {
@@ -3528,23 +3532,6 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
     opt_var = var;
   }
 }
-
-int run_coro(asio::awaitable<void> coro, std::string_view name) {
-  try {
-    // Blocking in startup code, not ideal, but won't hurt anything.
-    asio::co_spawn(static_cast<rgw::sal::RadosStore*>(driver)->get_io_context(),
-		   std::move(coro),
-		   async::use_blocked);
-  } catch (boost::system::system_error& e) {
-    ldpp_dout(dpp(), -1) << name << ": failed: " << e.what() << dendl;
-    return ceph::from_error_code(e.code());
-  } catch (std::exception& e) {
-    ldpp_dout(dpp(), -1) << name << ": failed: " << e.what() << dendl;
-    return -EIO;
-  }
-  return 0;
-}
-
 
 // This has an uncaught exception. Even if the exception is caught, the program
 // would need to be terminated, so the warning is simply suppressed.
@@ -10989,10 +10976,13 @@ next:
     if (specified_shard_id) {
       shard = shard_id;
     }
-    ret = run_coro(datalog->admin_sem_list(shard, max_entries, marker,
+    std::string err;
+    ret = run_coro(dpp(), context_pool,
+		   datalog->admin_sem_list(shard, max_entries, marker,
 					   cout, *formatter),
-		   "datalog seamphore list");
+		   &err);
     if (ret < 0) {
+      std::cerr << "datalog semaphore list: " << err << std::endl;
       return ret;
     }
   }
@@ -11002,18 +10992,21 @@ next:
       std::cerr << "Specify the semaphore key with --marker." << std::endl;
       return -EINVAL;
     }
+    std::string errstr;
     auto datalog = static_cast<rgw::sal::RadosStore*>(driver)
       ->svc()->datalog_rados;
-    ret = run_coro(datalog->admin_sem_reset(marker, count.value_or(0)),
-		   "datalog seamphore reset");
+    ret = rgw::run_coro(dpp(), context_pool,
+			datalog->admin_sem_reset(marker, count.value_or(0)),
+			&errstr);
     if (ret < 0) {
+      std::cerr << "datalog semaphore reset: " << errstr << std::endl;
       return ret;
     }
   }
 
   if (opt_cmd == OPT::DATALOG_LIST) {
     formatter->open_array_section("entries");
-    bool truncated;
+    bool truncated = false;
     int count = 0;
     if (max_entries < 0)
       max_entries = 1000;
@@ -11045,13 +11038,20 @@ next:
     do {
       std::vector<rgw_data_change_log_entry> entries;
       if (specified_shard_id) {
-        ret = datalog_svc->list_entries(dpp(), shard_id, max_entries - count,
-					entries, marker,
-					&marker, &truncated,
-					&errstr, null_yield);
+	ret = run_coro(
+	  dpp(),
+	  context_pool,
+	  datalog_svc->list_entries(dpp(), shard_id, max_entries - count,
+				    marker),
+	  std::tie(entries, marker, truncated),
+	  &errstr);
       } else {
-        ret = datalog_svc->list_entries(dpp(), max_entries - count, entries,
-					log_marker, &truncated, null_yield);
+	ret = run_coro(
+	  dpp(),
+	  context_pool,
+	  datalog_svc->list_entries(dpp(), max_entries - count, log_marker),
+	  std::tie(entries, log_marker, truncated),
+	  &errstr);
       }
       if (ret < 0) {
         cerr << "ERROR: datalog_svc->list_entries(): " << errstr << ": "
@@ -11082,9 +11082,18 @@ next:
     for (; i < g_ceph_context->_conf->rgw_data_log_num_shards; i++) {
       vector<cls::log::entry> entries;
 
+      std::string errstr;
       RGWDataChangesLogInfo info;
-      static_cast<rgw::sal::RadosStore*>(driver)->svc()->
-	datalog_rados->get_info(dpp(), i, &info, nullptr, null_yield);
+
+      int r = run_coro(dpp(), context_pool,
+		       static_cast<rgw::sal::RadosStore*>(driver)->svc()->
+		       datalog_rados->get_info(dpp(), i),
+		       info, &errstr);
+
+      if (r < 0) {
+	std::cerr << "datalog status: " << errstr << std::endl;
+	return -r;
+      }
 
       ::encode_json("info", info, formatter.get());
 
@@ -11146,11 +11155,14 @@ next:
       return EINVAL;
     }
 
+    std::string errstr;
     auto datalog = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
-    ret = datalog->trim_entries(dpp(), shard_id, marker, nullptr, null_yield);
+    ret = run_coro(dpp(), context_pool,
+		   datalog->trim_entries(dpp(), shard_id, marker),
+		   &errstr);
 
     if (ret < 0 && ret != -ENODATA) {
-      cerr << "ERROR: trim_entries(): " << cpp_strerror(-ret) << std::endl;
+      cerr << "ERROR: trim_entries(): " << errstr << std::endl;
       return -ret;
     }
   }
@@ -11161,9 +11173,12 @@ next:
       return -EINVAL;
     }
     auto datalog = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
-    ret = datalog->change_format(dpp(), *opt_log_type, null_yield);
+    std::string errstr;
+    ret = run_coro(dpp(), context_pool,
+		   datalog->change_format(dpp(), *opt_log_type),
+		   &errstr);
     if (ret < 0) {
-      cerr << "ERROR: change_format(): " << cpp_strerror(-ret) << std::endl;
+      cerr << "ERROR: change_format(): " << errstr << std::endl;
       return -ret;
     }
   }
@@ -11171,10 +11186,13 @@ next:
   if (opt_cmd == OPT::DATALOG_PRUNE) {
     auto datalog = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
     std::optional<uint64_t> through;
-    ret = datalog->trim_generations(dpp(), through, null_yield);
+    std::string errstr;
+    ret = run_coro(dpp(), context_pool,
+		   datalog->trim_generations(dpp(), through),
+		   &errstr);
 
     if (ret < 0) {
-      cerr << "ERROR: trim_generations(): " << cpp_strerror(-ret) << std::endl;
+      cerr << "ERROR: trim_generations(): " << errstr << std::endl;
       return -ret;
     }
 
