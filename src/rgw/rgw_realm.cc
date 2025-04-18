@@ -253,13 +253,19 @@ void RGWRealm::dump(Formatter *f) const
   RGWSystemMetaObj::dump(f);
   encode_json("current_period", current_period, f);
   encode_json("epoch", epoch, f);
+  encode_json("cross_zonegroup", to_string(cross_zonegroup), f);
+  encode_json("same_zonegroup", to_string(same_zonegroup), f);
 }
-
 
 void RGWRealm::decode_json(JSONObj *obj)
 {
   RGWSystemMetaObj::decode_json(obj);
   JSONDecoder::decode_json("current_period", current_period, obj);
   JSONDecoder::decode_json("epoch", epoch, obj);
+  if (std::string str; JSONDecoder::decode_json("cross_zonegroup", str, obj)) {
+    cross_zonegroup = rgw::parse_can_sync(str);
+  }
+  if (std::string str; JSONDecoder::decode_json("same_zonegroup", str, obj)) {
+    same_zonegroup = rgw::parse_can_sync(str);
+  }
 }
-
