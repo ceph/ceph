@@ -341,8 +341,14 @@ int Inode::caps_file_wanted()
 {
   int want = 0;
   for (const auto &[mode, cnt] : open_by_mode)
-    if (cnt)
+    if (cnt) {
       want |= ceph_caps_for_mode(mode);
+
+      //want Fr cap during fscrypt rmw
+      if ((mode == CEPH_FILE_MODE_WR) && fscrypt_ctx) {
+        want |= CEPH_CAP_FILE_RD;
+      }
+    }
   return want;
 }
 
@@ -830,4 +836,47 @@ void Inode::mark_caps_clean()
   dirty_cap_item.remove_myself();
 }
 
+FSCryptContextRef Inode::init_fscrypt_ctx(FSCrypt *fscrypt)
+{
+  auto res = fscrypt->init_ctx(fscrypt_auth);
+  // at this point, if fscrypt is enabled, the fscrypt_auth is not empty
+  // and we can set the S_ENCRYPTED flag
+  set_is_encrypted_flag();
+  return res;
+}
 
+void Inode::gen_inherited_fscrypt_auth(std::vector<uint8_t> *fsa)
+{
+  if (!fscrypt_ctx) {
+#warning need to make sure that we do not skip entire subtree somehow
+    return;
+  }
+
+  FSCryptContext new_ctx = *fscrypt_ctx;
+
+  new_ctx.generate_new_nonce();
+
+  bufferlist bl;
+  new_ctx.encode(bl);
+
+  fsa->resize(bl.length());
+  memcpy(fsa->data(), bl.c_str(), bl.length());
+}
+
+uint64_t Inode::effective_size() const
+{
+  if (fscrypt_file.size() < sizeof(uint64_t)) {
+    return size;
+  }
+
+  return *(ceph_le64 *)fscrypt_file.data();
+}
+
+void Inode::set_effective_size(uint64_t size)
+{
+  if (fscrypt_file.size() < sizeof(uint64_t)) {
+    fscrypt_file.resize(sizeof(uint64_t));
+  }
+
+  *(ceph_le64 *)fscrypt_file.data() = size;
+}
