@@ -15,7 +15,9 @@
 
 #pragma once
 
+#ifndef WITH_CRIMSON
 #include "osd_internal_types.h"
+#endif
 #include "OSDMap.h"
 #include "common/WorkQueue.h"
 #include "PGLog.h"
