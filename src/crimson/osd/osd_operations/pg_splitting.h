@@ -8,6 +8,7 @@
 
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/peering_event.h"
+#include "crimson/osd/pg_map.h"
 #include "osd/osd_types.h"
 #include "crimson/common/type_helpers.h"
 
@@ -20,49 +21,40 @@ namespace crimson::osd {
 class ShardServices;
 class PG;
 
-class PGAdvanceMap : public PhasedOperationT<PGAdvanceMap> {
+class PGSplitting : public PhasedOperationT<PGSplitting> {
 public:
-  static constexpr OperationTypeCode type = OperationTypeCode::pg_advance_map;
+  static constexpr OperationTypeCode type = OperationTypeCode::pg_splitting;
 
 protected:
   Ref<PG> pg;
   ShardServices &shard_services;
   PipelineHandle handle;
 
-  std::optional<epoch_t> from;
-  epoch_t to;
-
+  OSDMapRef new_map;
+  std::set<std::pair<spg_t, epoch_t>> children;
+  std::set<spg_t> children_pgids;
   PeeringCtx rctx;
-  const bool do_init;
-  const bool split_child;
-  std::optional<std::set<std::pair<spg_t, epoch_t>>> split_children;
+  std::set<Ref<PG>> split_pgs;
 
 public:
-  PGAdvanceMap(
-    Ref<PG> pg, ShardServices &shard_services, epoch_t to,
-    PeeringCtx &&rctx, bool do_init, bool split_child,
-    std::optional<std::set<std::pair<spg_t, epoch_t>>> split_children = std::nullopt);
-  ~PGAdvanceMap();
+  PGSplitting(
+    Ref<PG> pg, ShardServices &shard_services, OSDMapRef new_map, std::set<std::pair<spg_t, epoch_t>> children,
+    PeeringCtx &&rctx);
+  ~PGSplitting();
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter *f) const final;
   seastar::future<> start();
+  void split_stats(std::set<Ref<PG>> child_pgs,
+		   const std::set<spg_t> &child_pgids);
   PipelineHandle &get_handle() { return handle; }
-
   std::tuple<
-    PGPeeringPipeline::Process::BlockingEvent
+    PGMap::PGCreationBlockingEvent
   > tracking_events;
-
-  epoch_t get_epoch_sent_at() const {
-    return to;
-  }
-
-private:
-  PGPeeringPipeline &peering_pp(PG &pg);
 };
 
 }
 
 #if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::osd::PGAdvanceMap> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::osd::PGSplitting> : fmt::ostream_formatter {};
 #endif

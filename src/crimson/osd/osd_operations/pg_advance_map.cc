@@ -9,6 +9,7 @@
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
+#include "crimson/osd/osd_operations/pg_splitting.h"
 #include "crimson/osd/osd_operation_external_tracking.h"
 #include <boost/iterator/counting_iterator.hpp>
 #include "osd/PeeringState.h"
@@ -23,9 +24,11 @@ namespace crimson::osd {
 
 PGAdvanceMap::PGAdvanceMap(
   Ref<PG> pg, ShardServices &shard_services, epoch_t to,
-  PeeringCtx &&rctx, bool do_init)
+  PeeringCtx &&rctx, bool do_init, bool split_child,
+  std::optional<std::set<std::pair<spg_t, epoch_t>>> split_children)
   : pg(pg), shard_services(shard_services), to(to),
-    rctx(std::move(rctx)), do_init(do_init)
+    rctx(std::move(rctx)), do_init(do_init), split_child(split_child),
+    split_children(split_children)
 {
   logger().debug("{}: created", *this);
 }
@@ -41,6 +44,9 @@ void PGAdvanceMap::print(std::ostream &lhs) const
   if (do_init) {
     lhs << " do_init";
   }
+  if (split_child) {
+    lhs << " pg is a split child";
+  }
   lhs << ")";
 }
 
@@ -53,6 +59,9 @@ void PGAdvanceMap::dump_detail(Formatter *f) const
   }
   f->dump_int("to", to);
   f->dump_bool("do_init", do_init);
+  if (split_child) {
+    f->dump_bool("split_child", split_child);
+  }
   f->close_section();
 }
 
@@ -97,7 +106,21 @@ seastar::future<> PGAdvanceMap::start()
 	    logger().debug("{}: advancing map to {}",
 			   *this, next_map->get_epoch());
 	    pg->handle_advance_map(next_map, rctx);
-	    return seastar::now();
+	    if (split_children.has_value()) {
+	      logger().debug("{}: split PGs detected", *this);
+	      auto split_pgs = split_children.value();
+              return shard_services.start_operation<PGSplitting>(
+		  pg,
+		  shard_services,
+		  next_map,
+		  std::move(split_pgs),
+		  PeeringCtx{}).second.then([this] {
+		    logger().debug("{}: splitting done!", *this);
+		    return seastar::now();
+		  });
+	    } else {
+	      return seastar::now();
+	    }
 	  });
       }).then([this] {
 	pg->handle_activate_map(rctx);

@@ -9,6 +9,7 @@
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
+#include "crimson/osd/osd_operations/pg_splitting.h"
 #include "crimson/osd/osd_operations/recovery_subrequest.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
 #include "crimson/osd/osd_operations/snaptrim_event.h"
@@ -356,4 +357,10 @@ struct EventBackendRegistry<osd::SnapTrimObjSubEvent> {
   }
 };
 
+template <>
+struct EventBackendRegistry<osd::PGSplitting> {
+  static std::tuple<> get_backends() {
+    return {};
+  }
+};
 } // namespace crimson

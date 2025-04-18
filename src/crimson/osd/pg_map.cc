@@ -211,7 +211,6 @@ void PGMap::pg_created(spg_t pgid, Ref<PG> pg)
   DEBUG("Created {}", pgid);
   ceph_assert(!pgs.count(pgid));
   pgs.emplace(pgid, pg);
-
   auto creating_iter = pgs_creating.find(pgid);
   ceph_assert(creating_iter != pgs_creating.end());
   auto promise = std::move(creating_iter->second.promise);
