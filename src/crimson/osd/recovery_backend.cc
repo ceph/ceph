@@ -446,7 +446,7 @@ RecoveryBackend::handle_scan(
 }
 
 RecoveryBackend::interruptible_future<>
-RecoveryBackend::handle_backfill_op(
+RecoveryBackend::handle_recovery_op(
   Ref<MOSDFastDispatchOp> m,
   crimson::net::ConnectionXcoreRef conn)
 {

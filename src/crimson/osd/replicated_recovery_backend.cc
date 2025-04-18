@@ -1357,8 +1357,8 @@ ReplicatedRecoveryBackend::handle_recovery_op(
     return handle_push_reply(
 	boost::static_pointer_cast<MOSDPGPushReply>(m));
   default:
-    // delegate backfill messages to parent class
-    return handle_backfill_op(std::move(m), conn);
+    // delegate to parent class for handling backend-agnostic recovery ops.
+    return RecoveryBackend::handle_recovery_op(std::move(m), conn);
   }
 }
 
