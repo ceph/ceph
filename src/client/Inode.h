@@ -99,6 +99,8 @@ struct CapSnap {
   gid_t      gid = 0;
   std::map<std::string,bufferptr> xattrs;
   version_t xattr_version = 0;
+  std::vector<uint8_t> fscrypt_auth;
+  std::vector<uint8_t> fscrypt_file;
 
   bufferlist inline_data;
   version_t inline_version = 0;
