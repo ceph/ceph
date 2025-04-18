@@ -8,7 +8,7 @@ Multisite Sync Policy
 
 Multisite bucket-granularity sync policy provides fine grained control of data movement between buckets in different zones. It extends the zone sync mechanism. Previously buckets were being treated symmetrically, that is -- each (data) zone holds a mirror of that bucket that should be the same as all the other zones. Whereas leveraging the bucket-granularity sync policy is possible for buckets to diverge, and a bucket can pull data from other buckets (ones that don't share its name or its ID) in different zone.  The sync process was assuming therefore that the bucket sync source and the bucket sync destination were always referring to the same bucket, now that is not the case anymore.
 
-The sync policy supersedes the old zonegroup coarse configuration (sync_from*). The sync policy can be configured at the zonegroup level (and if it is configured it replaces the old style config), but it can also be configured at the bucket level.
+The sync policy supersedes the old zonegroup coarse configuration (``sync_from*``). The sync policy can be configured at the zonegroup level (and if it is configured it replaces the old style config), but it can also be configured at the bucket level.
 
 In the sync policy multiple groups that can contain lists of data-flow configurations can be defined, as well as lists of pipe configurations. The data-flow defines the flow of data between the different zones. It can define symmetrical data flow, in which multiple zones sync data from each other, and it can define directional data flow, in which the data moves in one way from one zone to another.
 
@@ -34,13 +34,13 @@ A wildcard zone, and a wildcard bucket parameter in the policy defines all relev
 .. important:: Any changes to the zonegroup policy needs to be applied on the
                zonegroup master zone, and require period update and commit. Changes
                to the bucket policy needs to be applied on the zonegroup master
-               zone. The changes are dynamically handled by rgw.
+               zone. The changes are dynamically handled by RGW.
 
 
 S3 Replication API
 ~~~~~~~~~~~~~~~~~~
 
-The S3 bucket replication api has also been implemented, and allows users to create replication rules between different buckets. Note though that while the AWS replication feature allows bucket replication within the same zone, rgw does not allow it at the moment.  However, the rgw api also added a new 'Zone' array that allows users to select to what zones the specific bucket will be synced.
+The S3 bucket replication API has also been implemented, and allows users to create replication rules between different buckets. Note though that while the AWS replication feature allows bucket replication within the same zone, RGW does not allow it at the moment.  However, the RGW API also added a new 'Zone' array that allows users to select to what zones the specific bucket will be synced.
 
 
 Sync Policy Control Reference
@@ -106,7 +106,7 @@ To remove a sync policy group:
 Create Sync Flow
 ~~~~~~~~~~~~~~~~
 
-- To create or update directional sync flow:
+To create or update directional sync flow:
 
 .. prompt:: bash #
 
@@ -118,7 +118,7 @@ Create Sync Flow
                                           --dest-zone=<dest_zone>
 
 
-- To create or update symmetrical sync flow:
+To create or update symmetrical sync flow:
 
 .. prompt:: bash #
 
@@ -135,7 +135,7 @@ Where zones are a comma separated list of all the zones that need to add to the 
 Remove Sync Flow Zones
 ~~~~~~~~~~~~~~~~~~~~~~
 
-- To remove directional sync flow:
+To remove directional sync flow:
 
 .. prompt:: bash #
 
@@ -147,7 +147,7 @@ Remove Sync Flow Zones
                                           --dest-zone=<dest_zone>
 
 
-- To remove specific zones from symmetrical sync flow:
+To remove specific zones from symmetrical sync flow:
 
 .. prompt:: bash #
 
@@ -161,7 +161,7 @@ Remove Sync Flow Zones
 Where zones are a comma separated list of all zones to remove from the flow.
 
                                              
-- To remove symmetrical sync flow:
+To remove symmetrical sync flow:
 
 .. prompt:: bash #
 
@@ -248,7 +248,7 @@ The system in these examples includes 3 zones: ``us-east`` (the master zone), ``
 Example 1: Two Zones, Complete Mirror
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This is similar to older (pre ``Octopus``) sync capabilities, but being done via the new sync policy engine. Note that changes to the zonegroup sync policy require a period update and commit.
+This is similar to older (pre Octopus) sync capabilities, but being done via the new sync policy engine. Note that changes to the zonegroup sync policy require a period update and commit.
 
 
 .. prompt:: bash [us-east]#
@@ -360,7 +360,7 @@ Also similar to older sync capabilities. In here we add a third zone, ``us-west-
    radosgw-admin period update --commit
 
 
-Note that us-west has two dests:
+Note that ``us-west`` has two destinations:
 
 .. prompt:: bash [us-west]#
 
@@ -413,7 +413,7 @@ Note that us-west has two dests:
     }
 
 
-Whereas us-west-2 has only source and no destinations:
+Whereas ``us-west-2`` has only source and no destinations:
 
 .. prompt:: bash [us-west-2]#
 
@@ -498,7 +498,7 @@ Set ``buck4`` to pull data from ``buck5``:
 
 
 can also limit it to specific zones, for example the following will
-only sync data originated in us-west:
+only sync data originated in ``us-west``:
 
 .. prompt:: bash [us-east]#
 
@@ -567,7 +567,7 @@ Note that there are resolved hints, which means that the bucket ``buck5`` found 
 Example 6: Sync to Different Bucket
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The same mechanism can work for configuring data to be synced to (vs.  synced from as in the previous example). Note that internally data is still pulled from the source at the destination zone:
+The same mechanism can work for configuring data to be synced to (vs. synced from as in the previous example). Note that internally data is still pulled from the source at the destination zone:
 
 Set ``buck6`` to "push" data to ``buck5``:
 
