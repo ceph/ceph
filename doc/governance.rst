@@ -131,6 +131,8 @@ Responsibilities
  * Manage a `component team`_ in Ceph
  * Ensure PRs are reviewed and merged
  * Ensure severe bug fixes are backported
+ * Maintain roadmap for the component
+ * Update slides and present about component
  * Run standups
  * Bug triage, scrubs
  * etc.
@@ -138,6 +140,88 @@ Responsibilities
 Team leads are selected by the executive council, generally based on
 the recommendation by team members and outgoing lead.  Periodic
 rotation of lead responsibility among team members is encouraged.
+
+Current Component Leads
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Name
+     - Component
+     - Description
+   * - Adam King
+     - Cephadm
+     - Ceph's native orchestrator (install, upgrade...)
+   * - Venky Shankar
+     - CephFS
+     - Shared filesystem
+   * - Matan Breizman
+     - Crimson
+     - Next generation implementation of the OSD
+   * - Yingxin Cheng
+     - Seastore
+     - Next generation storage underlying the OSD
+   * - Afreen Misbah
+     - Dashboard
+     - Ceph's user interface for management and monitoring
+   * - Radoslaw Zarzynski
+     - RADOS
+     - Ceph's low level storage foundation
+   * - Ilya Dryomov
+     - RBD
+     - Block storage for containers and VMs
+   * - Adam Emerson, Eric Ivancich
+     - RGW
+     - S3/Swift compatible object storage
+
+
+General Leads
+=============
+
+These are general areas rather than specific subsystems within Ceph.
+Each is unique.
+
+Documentation
+-------------
+
+Responsibilities
+^^^^^^^^^^^^^^^^
+* Update the documentation to describe new capabilities.
+* Solicit user feedback and respond to it.
+* Maintain communications channels so that members of the upstream community
+  have confidence that their documentation concerns are recognized and
+  addressed.
+* Correct the structure of sentences as needed.
+* Ensure that the .rst files and the .md files that constitute the
+  documentation are properly formatted and that Sphinx renders them as
+  intended.
+* Ensure that correct information is backported from the ``main`` branch to the
+  documentation release branches.
+* Communicate with component leads and other authorities to ensure the
+  technical accuracy of the documentation. Alter the documentation as necessary
+  when inaccuracies are discovered.
+* Report persistent Jenkins-check failures to the #sepia channel.
+* Enhance the ability of the community to contribute to documentation.
+* Facilitate timely PR reviews.
+* Facilitate the ceph.io blog site.
+* Documentation kaizen: restructure and refactor documentation. Modernize
+  obsolete content. Reflect the evolving Ceph landscape.
+
+Current Lead: Zac Dover
+
+Performance
+-----------
+
+Responsibilities
+^^^^^^^^^^^^^^^^
+* Monitor performance-related PRs
+* Analyze the performance of new changes and releases
+* Facilitate discussion around performance topics in the Performance Weekly meetings
+* ...
+
+Current Lead: Mark Nelson
+
 
 The Ceph Foundation
 -------------------
