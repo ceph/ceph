@@ -39,7 +39,8 @@ ReplicatedBackend::_read(const hobject_t& hoid,
 MURef<MOSDRepOp> ReplicatedBackend::new_repop_msg(
   const pg_shard_t &pg_shard,
   const hobject_t &hoid,
-  const bufferlist &encoded_txn,
+  bufferlist &encoded_txn_p_bl,
+  bufferlist &encoded_txn_d_bl,
   const osd_op_params_t &osd_op_p,
   epoch_t min_epoch,
   epoch_t map_epoch,
@@ -59,7 +60,13 @@ MURef<MOSDRepOp> ReplicatedBackend::new_repop_msg(
     tid,
     osd_op_p.at_version);
   if (send_op) {
-    m->set_data(encoded_txn);
+    if (encoded_txn_d_bl.length() != 0) {
+      m->set_txn_payload(encoded_txn_p_bl);
+      m->set_data(encoded_txn_d_bl);
+    } else {
+      // Pre-tentacle format - everything in data
+      m->set_data(encoded_txn_p_bl);
+    }
   } else {
     ceph::os::Transaction t;
     bufferlist bl;
@@ -97,8 +104,8 @@ ReplicatedBackend::submit_transaction(
       pg_shards.size(),
       osd_op_p.at_version,
       pg.get_last_complete()).first;
-  bufferlist encoded_txn;
-  encode(txn, encoded_txn);
+  bufferlist encoded_txn_p_bl, encoded_txn_d_bl;
+  txn.encode(encoded_txn_p_bl, encoded_txn_d_bl, pg.min_peer_features());
 
   bool is_delete = false;
   for (auto &le : log_entries) {
@@ -120,11 +127,11 @@ ReplicatedBackend::submit_transaction(
     MURef<MOSDRepOp> m;
     if (pg.should_send_op(pg_shard, hoid)) {
       m = new_repop_msg(
-	pg_shard, hoid, encoded_txn, osd_op_p,
+	pg_shard, hoid, encoded_txn_p_bl, encoded_txn_d_bl, osd_op_p,
 	min_epoch, map_epoch, log_entries, true, tid);
     } else {
       m = new_repop_msg(
-	pg_shard, hoid, encoded_txn, osd_op_p,
+	pg_shard, hoid, encoded_txn_p_bl, encoded_txn_d_bl, osd_op_p,
 	min_epoch, map_epoch, log_entries, false, tid);
       if (pg.is_missing_on_peer(pg_shard, hoid)) {
 	if (_new_clone) {
