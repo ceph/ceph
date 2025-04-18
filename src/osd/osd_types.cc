@@ -28,12 +28,16 @@
 #include <utility>
 #include <vector>
 
+#include "librados/ListObjectImpl.h"
 
 #include <boost/assign/list_of.hpp>
 
 #include "include/ceph_features.h"
 #include "include/encoding.h"
+#include "include/encoding_optional.h"
+#include "include/encoding_tuple.h"
 #include "include/stringify.h"
+#include "common/strtol.h" // for ritoa()
 
 #include "crush/CrushWrapper.h"
 extern "C" {
@@ -43,6 +47,8 @@ extern "C" {
 
 #include "common/ceph_context.h"
 #include "common/Formatter.h"
+#include "common/JSONFormatter.h"
+#include "common/snap_types.h"
 #include "common/StackStringStream.h"
 #include "include/utime_fmt.h"
 #include "OSDMap.h"
@@ -245,6 +251,10 @@ void osd_reqid_t::generate_test_instances(list<osd_reqid_t*>& o)
   o.push_back(new osd_reqid_t(entity_name_t::CLIENT(123), 1, 45678));
 }
 
+std::ostream& operator<<(std::ostream& out, const osd_reqid_t& r) {
+  return out << r.name << "." << r.inc << ":" << r.tid;
+}
+
 // -- object_locator_t --
 
 void object_locator_t::encode(ceph::buffer::list& bl) const
@@ -308,6 +318,16 @@ void object_locator_t::generate_test_instances(list<object_locator_t*>& o)
   o.push_back(new object_locator_t(12, "n1", "key2"));
 }
 
+std::ostream& operator<<(std::ostream& out, const object_locator_t& loc)
+{
+  out << "@" << loc.pool;
+  if (!loc.nspace.empty())
+    out << ";" << loc.nspace;
+  if (!loc.key.empty())
+    out << ":" << loc.key;
+  return out;
+}
+
 // -- request_redirect_t --
 void request_redirect_t::encode(ceph::buffer::list& bl) const
 {
@@ -347,6 +367,11 @@ void request_redirect_t::generate_test_instances(list<request_redirect_t*>& o)
   o.push_back(new request_redirect_t(loc, 0));
   o.push_back(new request_redirect_t(loc, "redir_obj"));
   o.push_back(new request_redirect_t(loc));
+}
+
+std::ostream& operator<<(std::ostream& out, const request_redirect_t& redir) {
+  out << "object " << redir.redirect_object << ", locator{" << redir.redirect_locator << "}";
+  return out;
 }
 
 void objectstore_perf_stat_t::dump(Formatter *f) const
@@ -707,6 +732,13 @@ void osd_stat_t::generate_test_instances(std::list<osd_stat_t*>& o)
   gen_interfaces = {
 	987654321, { 100, 200, 300 }, { 90, 190, 290 }, { 110, 210, 310 }, 101 };
   o.back()->hb_pingtime[30] = gen_interfaces;
+}
+
+std::ostream& operator<<(std::ostream& out, const osd_stat_t& s) {
+  return out << "osd_stat(" << s.statfs << ", "
+	     << "peers " << s.hb_peers
+	     << " op hist " << s.op_queue_age_hist.h
+	     << ")";
 }
 
 // -- pg_t --
@@ -1104,6 +1136,11 @@ void coll_t::generate_test_instances(list<coll_t*>& o)
   o.push_back(new coll_t());
 }
 
+std::ostream& operator<<(std::ostream& out, const coll_t& c) {
+  out << c.to_str();
+  return out;
+}
+
 // ---
 
 std::string pg_vector_string(const vector<int32_t> &a)
@@ -1282,6 +1319,15 @@ string eversion_t::get_key_name() const
   get_key_name(&key[0]);
   key.resize(31); // remove the null terminator
   return key;
+}
+
+// key must point to the beginning of a block of 32 chars
+void eversion_t::get_key_name(char* key) const {
+  // Below is equivalent of sprintf("%010u.%020llu");
+  key[31] = 0;
+  ritoa<uint64_t, 10, 20>(version, key + 31);
+  key[10] = '.';
+  ritoa<uint32_t, 10, 10>(epoch, key + 10);
 }
 
 // -- pool_snap_info_t --
@@ -4738,6 +4784,36 @@ struct DumpVisitor : public ObjectModDesc::Visitor {
   }
 };
 
+void ObjectModDesc::setattrs(std::map<std::string, std::optional<ceph::buffer::list>> &old_attrs) {
+  if (!can_local_rollback || rollback_info_completed)
+    return;
+  ENCODE_START(1, 1, bl);
+  append_id(SETATTRS);
+  encode(old_attrs, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ObjectModDesc::update_snaps(const std::set<snapid_t> &old_snaps) {
+  if (!can_local_rollback || rollback_info_completed)
+    return;
+  ENCODE_START(1, 1, bl);
+  append_id(UPDATE_SNAPS);
+  encode(old_snaps, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ObjectModDesc::rollback_extents(version_t gen, const std::vector<std::pair<uint64_t, uint64_t> > &extents) {
+  ceph_assert(can_local_rollback);
+  ceph_assert(!rollback_info_completed);
+  if (max_required_version < 2)
+    max_required_version = 2;
+  ENCODE_START(2, 2, bl);
+  append_id(ROLLBACK_EXTENTS);
+  encode(gen, bl);
+  encode(extents, bl);
+  ENCODE_FINISH(bl);
+}
+
 void ObjectModDesc::dump(Formatter *f) const
 {
   f->open_object_section("object_mod_desc");
@@ -5462,6 +5538,31 @@ ostream& operator<<(ostream& out, const pg_missing_item& i)
   return out;
 }
 
+// -- pg_nls_response_template --
+
+template<>
+void pg_nls_response_template<librados::ListObjectImpl>::generate_test_instances(std::list<pg_nls_response_template<librados::ListObjectImpl>*>& o) {
+  o.push_back(new pg_nls_response_template);
+  o.push_back(new pg_nls_response_template);
+  o.back()->handle = hobject_t(object_t("hi"), "key", 1, 2, -1, "");
+  o.back()->entries.push_back(librados::ListObjectImpl("", "one", ""));
+  o.back()->entries.push_back(librados::ListObjectImpl("", "two", "twokey"));
+  o.back()->entries.push_back(librados::ListObjectImpl("", "three", ""));
+  o.push_back(new pg_nls_response_template);
+  o.back()->handle = hobject_t(object_t("hi"), "key", 3, 4, -1, "");
+  o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1one", ""));
+  o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1two", "n1twokey"));
+  o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1three", ""));
+  o.push_back(new pg_nls_response_template);
+  o.back()->handle = hobject_t(object_t("hi"), "key", 5, 6, -1, "");
+  o.back()->entries.push_back(librados::ListObjectImpl("", "one", ""));
+  o.back()->entries.push_back(librados::ListObjectImpl("", "two", "twokey"));
+  o.back()->entries.push_back(librados::ListObjectImpl("", "three", ""));
+  o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1one", ""));
+  o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1two", "n1twokey"));
+  o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1three", ""));
+}
+
 // -- object_copy_cursor_t --
 
 void object_copy_cursor_t::encode(ceph::buffer::list& bl) const
@@ -6038,6 +6139,21 @@ uint64_t SnapSet::get_clone_bytes(snapid_t clone) const
   const interval_set<uint64_t> &overlap = clone_overlap.find(clone)->second;
   ceph_assert(size >= (uint64_t)overlap.size());
   return size - overlap.size();
+}
+
+SnapContext SnapSet::get_ssc_as_of(snapid_t as_of) const {
+  SnapContext out;
+  out.seq = as_of;
+  for (auto p = clone_snaps.rbegin();
+       p != clone_snaps.rend();
+       ++p) {
+    for (auto snap : p->second) {
+      if (snap <= as_of) {
+	out.snaps.push_back(snap);
+      }
+    }
+  }
+  return out;
 }
 
 // -- watch_info_t --
@@ -7247,6 +7363,50 @@ void ScrubMap::object::generate_test_instances(list<object*>& o)
     barbl.push_back(ceph::buffer::copy("barval", 6));
     o.back()->attrs["bar"] = std::move(barbl);
   }
+}
+
+// -- pool_pg_num_history_t --
+
+void pool_pg_num_history_t::prune(epoch_t oldest_epoch) {
+  auto i = deleted_pools.begin();
+  while (i != deleted_pools.end()) {
+    if (i->first >= oldest_epoch) {
+      break;
+    }
+    pg_nums.erase(i->second);
+    i = deleted_pools.erase(i);
+  }
+  for (auto& j : pg_nums) {
+    auto k = j.second.lower_bound(oldest_epoch);
+    // keep this and the entry before it (just to be paranoid)
+    if (k != j.second.begin()) {
+      --k;
+      j.second.erase(j.second.begin(), k);
+    }
+  }
+}
+
+void pool_pg_num_history_t::encode(ceph::buffer::list& bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(epoch, bl);
+  encode(pg_nums, bl);
+  encode(deleted_pools, bl);
+  ENCODE_FINISH(bl);
+}
+
+void pool_pg_num_history_t::decode(ceph::buffer::list::const_iterator& p) {
+  DECODE_START(1, p);
+  decode(epoch, p);
+  decode(pg_nums, p);
+  decode(deleted_pools, p);
+  DECODE_FINISH(p);
+}
+
+std::ostream& operator<<(std::ostream& out, const pool_pg_num_history_t& h) {
+  return out << "pg_num_history(e" << h.epoch
+	     << " pg_nums " << h.pg_nums
+	     << " deleted_pools " << h.deleted_pools
+	     << ")";
 }
 
 // -- OSDOp --

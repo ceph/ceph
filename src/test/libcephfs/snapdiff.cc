@@ -20,6 +20,7 @@
 #include "include/stringify.h"
 #include "common/ceph_context.h"
 #include "common/config_proxy.h"
+#include "common/JSONFormatter.h"
 #include "json_spirit/json_spirit.h"
 #include "boost/format/alt_sstream.hpp"
 #include <errno.h>
@@ -33,6 +34,7 @@
 #include <limits.h>
 #include <dirent.h>
 #include <optional>
+#include <random>
 
 using namespace std;
 class TestMount {

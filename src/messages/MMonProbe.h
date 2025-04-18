@@ -18,6 +18,7 @@
 
 #include "include/ceph_features.h"
 #include "common/ceph_releases.h"
+#include "include/encoding_set.h"
 #include "msg/Message.h"
 #include "mon/MonMap.h"
 

@@ -272,7 +272,7 @@ protected:
 
   bool already_replayed = false;
 
-  MDSContext::vec waitfor_replay;
+  std::vector<MDSContext*> waitfor_replay;
 
   // -- segments --
   std::map<uint64_t,LogSegment*> segments;

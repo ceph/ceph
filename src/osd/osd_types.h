@@ -39,6 +39,9 @@
 #include "msg/msg_types.h"
 #include "include/common_fwd.h" // for CephContext
 #include "include/compat.h"
+#include "include/container_ios.h"
+#include "include/encoding_list.h"
+#include "include/encoding_vector.h"
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/CompatSet.h"
@@ -48,12 +51,12 @@
 #include "include/inline_memory.h"
 #include "common/Formatter.h"
 #include "common/hobject.h"
-#include "common/snap_types.h"
-#include "common/strtol.h" // for ritoa()
 #include "HitSet.h"
 #include "librados/ListObjectImpl.h"
 #include "pg_features.h"
 #include "ECTypes.h"
+
+class SnapContext;
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -231,9 +234,7 @@ public:
   virtual ~IsPGReadablePredicate() {}
 };
 
-inline std::ostream& operator<<(std::ostream& out, const osd_reqid_t& r) {
-  return out << r.name << "." << r.inc << ":" << r.tid;
-}
+std::ostream& operator<<(std::ostream& out, const osd_reqid_t& r);
 
 inline bool operator==(const osd_reqid_t& l, const osd_reqid_t& r) {
   return (l.name == r.name) && (l.inc == r.inc) && (l.tid == r.tid);
@@ -317,15 +318,7 @@ inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
   return !(l == r);
 }
 
-inline std::ostream& operator<<(std::ostream& out, const object_locator_t& loc)
-{
-  out << "@" << loc.pool;
-  if (!loc.nspace.empty())
-    out << ";" << loc.nspace;
-  if (!loc.key.empty())
-    out << ":" << loc.key;
-  return out;
-}
+std::ostream& operator<<(std::ostream& out, const object_locator_t& loc);
 
 struct request_redirect_t {
 private:
@@ -360,10 +353,7 @@ public:
 };
 WRITE_CLASS_ENCODER(request_redirect_t)
 
-inline std::ostream& operator<<(std::ostream& out, const request_redirect_t& redir) {
-  out << "object " << redir.redirect_object << ", locator{" << redir.redirect_locator << "}";
-  return out;
-}
+std::ostream& operator<<(std::ostream& out, const request_redirect_t& redir);
 
 // Internal OSD op flags - set by the OSD based on the op types
 enum {
@@ -806,10 +796,7 @@ public:
 
 WRITE_CLASS_ENCODER(coll_t)
 
-inline std::ostream& operator<<(std::ostream& out, const coll_t& c) {
-  out << c.to_str();
-  return out;
-}
+std::ostream& operator<<(std::ostream& out, const coll_t& c);
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<coll_t> : fmt::ostream_formatter {};
@@ -915,13 +902,7 @@ public:
   std::string get_key_name() const;
 
   // key must point to the beginning of a block of 32 chars
-  inline void get_key_name(char* key) const {
-    // Below is equivalent of sprintf("%010u.%020llu");
-    key[31] = 0;
-    ritoa<uint64_t, 10, 20>(version, key + 31);
-    key[10] = '.';
-    ritoa<uint32_t, 10, 10>(epoch, key + 10);
-  }
+  void get_key_name(char* key) const;
 
   void encode(ceph::buffer::list &bl) const {
 #if defined(CEPH_LITTLE_ENDIAN)
@@ -2667,12 +2648,7 @@ inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
   return !(l == r);
 }
 
-inline std::ostream& operator<<(std::ostream& out, const osd_stat_t& s) {
-  return out << "osd_stat(" << s.statfs << ", "
-	     << "peers " << s.hb_peers
-	     << " op hist " << s.op_queue_age_hist.h
-	     << ")";
-}
+std::ostream& operator<<(std::ostream& out, const osd_stat_t& s);
 
 /*
  * summation over an entire pool
@@ -4106,14 +4082,7 @@ public:
     encode(old_size, bl);
     ENCODE_FINISH(bl);
   }
-  void setattrs(std::map<std::string, std::optional<ceph::buffer::list>> &old_attrs) {
-    if (!can_local_rollback || rollback_info_completed)
-      return;
-    ENCODE_START(1, 1, bl);
-    append_id(SETATTRS);
-    encode(old_attrs, bl);
-    ENCODE_FINISH(bl);
-  }
+  void setattrs(std::map<std::string, std::optional<ceph::buffer::list>> &old_attrs);
   bool rmobject(version_t deletion_version) {
     if (!can_local_rollback || rollback_info_completed)
       return false;
@@ -4142,26 +4111,9 @@ public:
     append_id(CREATE);
     ENCODE_FINISH(bl);
   }
-  void update_snaps(const std::set<snapid_t> &old_snaps) {
-    if (!can_local_rollback || rollback_info_completed)
-      return;
-    ENCODE_START(1, 1, bl);
-    append_id(UPDATE_SNAPS);
-    encode(old_snaps, bl);
-    ENCODE_FINISH(bl);
-  }
+  void update_snaps(const std::set<snapid_t> &old_snaps);
   void rollback_extents(
-    version_t gen, const std::vector<std::pair<uint64_t, uint64_t> > &extents) {
-    ceph_assert(can_local_rollback);
-    ceph_assert(!rollback_info_completed);
-    if (max_required_version < 2)
-      max_required_version = 2;
-    ENCODE_START(2, 2, bl);
-    append_id(ROLLBACK_EXTENTS);
-    encode(gen, bl);
-    encode(extents, bl);
-    ENCODE_FINISH(bl);
-  }
+    version_t gen, const std::vector<std::pair<uint64_t, uint64_t> > &extents);
 
   // cannot be rolled back
   void mark_unrollbackable() {
@@ -5402,27 +5354,7 @@ struct pg_nls_response_template {
     }
     f->close_section();
   }
-  static void generate_test_instances(std::list<pg_nls_response_template<T>*>& o) {
-    o.push_back(new pg_nls_response_template<T>);
-    o.push_back(new pg_nls_response_template<T>);
-    o.back()->handle = hobject_t(object_t("hi"), "key", 1, 2, -1, "");
-    o.back()->entries.push_back(librados::ListObjectImpl("", "one", ""));
-    o.back()->entries.push_back(librados::ListObjectImpl("", "two", "twokey"));
-    o.back()->entries.push_back(librados::ListObjectImpl("", "three", ""));
-    o.push_back(new pg_nls_response_template<T>);
-    o.back()->handle = hobject_t(object_t("hi"), "key", 3, 4, -1, "");
-    o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1one", ""));
-    o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1two", "n1twokey"));
-    o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1three", ""));
-    o.push_back(new pg_nls_response_template<T>);
-    o.back()->handle = hobject_t(object_t("hi"), "key", 5, 6, -1, "");
-    o.back()->entries.push_back(librados::ListObjectImpl("", "one", ""));
-    o.back()->entries.push_back(librados::ListObjectImpl("", "two", "twokey"));
-    o.back()->entries.push_back(librados::ListObjectImpl("", "three", ""));
-    o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1one", ""));
-    o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1two", "n1twokey"));
-    o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1three", ""));
-  }
+  static void generate_test_instances(std::list<pg_nls_response_template<T>*>& o);
 };
 
 using pg_nls_response_t = pg_nls_response_template<librados::ListObjectImpl>;
@@ -5727,32 +5659,15 @@ struct SnapSet {
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<SnapSet*>& o);
 
-  SnapContext get_ssc_as_of(snapid_t as_of) const {
-    SnapContext out;
-    out.seq = as_of;
-    for (auto p = clone_snaps.rbegin();
-	 p != clone_snaps.rend();
-	 ++p) {
-      for (auto snap : p->second) {
-	if (snap <= as_of) {
-	  out.snaps.push_back(snap);
-	}
-      }
-    }
-    return out;
-  }
-
+  SnapContext get_ssc_as_of(snapid_t as_of) const;
 };
 WRITE_CLASS_ENCODER(SnapSet)
 
 std::ostream& operator<<(std::ostream& out, const SnapSet& cs);
 
-inline static const bool should_whiteout(
+const bool should_whiteout(
   const SnapSet &ss,
-  const SnapContext &client_snapc) {
-  return !ss.clones.empty() ||
-    (!client_snapc.snaps.empty() && client_snapc.snaps[0] > ss.seq);
-}
+  const SnapContext &client_snapc);
 
 #define OI_ATTR "_"
 #define SS_ATTR "snapset"
@@ -6710,39 +6625,10 @@ struct pool_pg_num_history_t {
   }
 
   /// prune history based on oldest osdmap epoch in the cluster
-  void prune(epoch_t oldest_epoch) {
-    auto i = deleted_pools.begin();
-    while (i != deleted_pools.end()) {
-      if (i->first >= oldest_epoch) {
-	break;
-      }
-      pg_nums.erase(i->second);
-      i = deleted_pools.erase(i);
-    }
-    for (auto& j : pg_nums) {
-      auto k = j.second.lower_bound(oldest_epoch);
-      // keep this and the entry before it (just to be paranoid)
-      if (k != j.second.begin()) {
-	--k;
-	j.second.erase(j.second.begin(), k);
-      }
-    }
-  }
+  void prune(epoch_t oldest_epoch);
 
-  void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(epoch, bl);
-    encode(pg_nums, bl);
-    encode(deleted_pools, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& p) {
-    DECODE_START(1, p);
-    decode(epoch, p);
-    decode(pg_nums, p);
-    decode(deleted_pools, p);
-    DECODE_FINISH(p);
-  }
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const {
     f->dump_unsigned("epoch", epoch);
     f->open_object_section("pools");
@@ -6772,12 +6658,7 @@ struct pool_pg_num_history_t {
   static void generate_test_instances(std::list<pool_pg_num_history_t*>& ls) {
     ls.push_back(new pool_pg_num_history_t);
   }
-  friend std::ostream& operator<<(std::ostream& out, const pool_pg_num_history_t& h) {
-    return out << "pg_num_history(e" << h.epoch
-	       << " pg_nums " << h.pg_nums
-	       << " deleted_pools " << h.deleted_pools
-	       << ")";
-  }
+  friend std::ostream& operator<<(std::ostream& out, const pool_pg_num_history_t& h);
 };
 WRITE_CLASS_ENCODER(pool_pg_num_history_t)
 
