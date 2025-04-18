@@ -463,30 +463,25 @@ public:
 		int shard_id, optional_yield y);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
   asio::awaitable<std::tuple<std::vector<rgw_data_change_log_entry>,
-			     std::string>>
+			     std::string, bool>>
   list_entries(const DoutPrefixProvider* dpp, int shard, int max_entries,
 	       std::string marker);
-  int list_entries(const DoutPrefixProvider *dpp, int shard, int max_entries,
-		   std::vector<rgw_data_change_log_entry>& entries,
-		   std::string_view marker, std::string* out_marker,
-		   bool* truncated, std::string* errstr, optional_yield y);
   asio::awaitable<std::tuple<std::vector<rgw_data_change_log_entry>,
-			     RGWDataChangesLogMarker>>
+			     RGWDataChangesLogMarker, bool>>
   list_entries(const DoutPrefixProvider *dpp, int max_entries,
 	       RGWDataChangesLogMarker marker);
-  int list_entries(const DoutPrefixProvider *dpp, int max_entries,
-		   std::vector<rgw_data_change_log_entry>& entries,
-		   RGWDataChangesLogMarker& marker, bool* ptruncated,
-		   optional_yield y);
-
-  int trim_entries(const DoutPrefixProvider *dpp, int shard_id,
-		   std::string_view marker, std::string* errstr, optional_yield y);
-  int trim_entries(const DoutPrefixProvider *dpp, int shard_id,
-		   std::string_view marker, librados::AioCompletion* c);
-  int get_info(const DoutPrefixProvider *dpp, int shard_id,
-	       RGWDataChangesLogInfo *info, std::string* errstr,
-	       optional_yield y);
-
+  asio::awaitable<RGWDataChangesLogInfo>
+  get_info(const DoutPrefixProvider* dpp, int shard_id);
+  asio::awaitable<void>
+  trim_entries(const DoutPrefixProvider *dpp, int shard_id,
+	       std::string_view marker);
+  void trim_entries(const DoutPrefixProvider *dpp, int shard_id,
+		    std::string_view marker, librados::AioCompletion* c);
+  asio::awaitable<void>
+  trim_generations(const DoutPrefixProvider *dpp,
+		   std::optional<uint64_t>& through);
+  asio::awaitable<void>
+  change_format(const DoutPrefixProvider *dpp, log_type type);
   void mark_modified(int shard_id, const rgw_bucket_shard& bs, uint64_t gen);
   auto read_clear_modified() {
     std::unique_lock wl{modified_lock};
@@ -509,11 +504,6 @@ public:
   std::string get_sem_set_oid(int shard_id) const;
 
 
-  int change_format(const DoutPrefixProvider *dpp, log_type type,
-		    optional_yield y);
-  int trim_generations(const DoutPrefixProvider *dpp,
-		       std::optional<uint64_t>& through,
-		       optional_yield y);
   asio::awaitable<std::pair<bc::flat_map<std::string, uint64_t>,
 			    std::string>>
   read_sems(int index, std::string cursor);
