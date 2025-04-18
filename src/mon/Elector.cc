@@ -461,6 +461,8 @@ void Elector::begin_peer_ping(int peer)
 
   if (!mon->get_quorum_mon_features().contains_all(
 				      ceph::features::mon::FEATURE_PINGING)) {
+    dout(30) << "mon quorum features: " << mon->get_quorum_mon_features() << dendl;
+    dout(20) << "mon does not support pinging ... return " << dendl;
     return;
   }
 
@@ -513,6 +515,8 @@ void Elector::ping_check(int peer)
   utime_t& acked_ping = peer_acked_ping[peer];
   utime_t& newest_ping = peer_sent_ping[peer];
   if (!acked_ping.is_zero() && acked_ping < now - ping_timeout) {
+    dout(30) << "peer " << peer << " has not acked a ping in "
+      << ping_timeout << " seconds" << dendl;
     peer_tracker.report_dead_connection(peer, now - acked_ping);
     acked_ping = now;
     begin_dead_ping(peer);
@@ -520,9 +524,15 @@ void Elector::ping_check(int peer)
   }
 
   if (acked_ping == newest_ping) {
-    if (!send_peer_ping(peer, &now)) return;
+    if (!send_peer_ping(peer, &now)) {
+      dout(30) << "failed to send ping to peer " 
+        << peer << " stop ping checking ..." << dendl;
+      return;
+    }
   }
 
+  dout(30) << "peer " << peer << " acked our ping at: " << acked_ping
+    << " newest ping sent at: " << newest_ping << dendl;
   mon->timer.add_event_after(ping_timeout / PING_DIVISOR,
 			     new C_MonContext{mon, [this, peer](int) {
 				 ping_check(peer);
@@ -574,13 +584,14 @@ void Elector::handle_ping(MonOpRequestRef op)
   switch(m->op) {
   case MMonPing::PING:
     {
+      dout(30) << "sending PING_REPLY to " << prank << dendl;
       MMonPing *reply = new MMonPing(MMonPing::PING_REPLY, m->stamp, peer_tracker.get_encoded_bl());
       m->get_connection()->send_message(reply);
     }
     break;
 
   case MMonPing::PING_REPLY:
-
+    dout(30) << "recieved PING_REPLY from " << prank << dendl;
     const utime_t& previous_acked = peer_acked_ping[prank];
     const utime_t& newest = peer_sent_ping[prank];
 
@@ -591,17 +602,25 @@ void Elector::handle_ping(MonOpRequestRef op)
     }
 
     if (m->stamp > previous_acked) {
-      dout(20) << "m->stamp > previous_acked" << dendl;
+      dout(30) << "peer " << prank << " acked our ping at: " << m->stamp << dendl;
       peer_tracker.report_live_connection(prank, m->stamp - previous_acked);
       peer_acked_ping[prank] = m->stamp;
     } else{
-      dout(20) << "m->stamp <= previous_acked .. we don't report_live_connection" << dendl;
+      dout(30) << "peer " << prank << " acked our ping at: " << m->stamp
+         << " but we already acked at: " << previous_acked -  m->stamp  
+         << " before ... ignoring" << dendl;
     }
     utime_t now = ceph_clock_now();
-    dout(30) << "now: " << now << " m->stamp: " << m->stamp << " ping_timeout: "
-      << ping_timeout << " PING_DIVISOR: " << PING_DIVISOR << dendl;
+    dout(30) << "peer " << prank << " took " << now - m->stamp 
+      << " to ack our ping" << " time_limit: " 
+        << ping_timeout / PING_DIVISOR << dendl;
     if (now - m->stamp > ping_timeout / PING_DIVISOR) {
-      if (!send_peer_ping(prank, &now)) return;
+      dout(30) << "peer " << prank << " took too long to ack our ping"
+        << " ... sending another" << dendl;
+      if (!send_peer_ping(prank, &now)) {
+        dout(30) << "failed to send ping to peer " << prank << dendl;
+        return;
+      }
     }
     break;
   }
@@ -720,6 +739,11 @@ void Elector::start_participating()
 bool Elector::peer_tracker_is_clean()
 {
   return peer_tracker.is_clean(mon->rank, paxos_size());
+}
+
+std::set<std::pair<unsigned, unsigned>> Elector::get_netsplit_peer_tracker(std::set<unsigned> &mons_down)
+{
+  return peer_tracker.get_netsplit(mons_down);
 }
 
 bool Elector::is_tiebreaker(int rank) const
