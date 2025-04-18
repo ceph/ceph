@@ -8,6 +8,8 @@
 #include "osd/PGTransaction.h"
 #include "osd/ECTransaction.h"
 
+SET_SUBSYS(osd);
+
 namespace {
   seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_osd);
@@ -500,15 +502,16 @@ void ECBackend::objects_read_and_reconstruct(
 ECBackend::ll_read_ierrorator::future<>
 ECBackend::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
 {
+  LOG_PREFIX(ECBackend::handle_rep_read_op);
   return seastar::do_with(ECSubReadReply{},
-		          [m=std::move(m), this] (auto&& reply) {
+		          [m=std::move(m), FNAME, this] (auto&& reply) {
     const ECSubRead &op = m->op;
     reply.from = whoami;
     reply.tid = op.tid;
     using read_ertr = crimson::os::FuturizedStore::Shard::read_errorator;
-    return interruptor::do_for_each(op.to_read, [&op, &reply, this] (auto read_item) {
+    return interruptor::do_for_each(op.to_read, [FNAME, &op, &reply, this] (auto read_item) {
       const auto& [obj, op_list] = read_item;
-      return interruptor::do_for_each(op_list, [&op, &reply, obj, this] (auto op_spec) {
+      return interruptor::do_for_each(op_list, [FNAME, &op, &reply, obj, this] (auto op_spec) {
         const auto& [off, size, flags] = op_spec;
         return maybe_chunked_read(
           obj, op, off, size, flags
