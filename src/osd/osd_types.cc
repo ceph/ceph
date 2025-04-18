@@ -211,7 +211,7 @@ ostream &operator<<(ostream &lhs, const pg_shard_t &rhs)
     return lhs << "?";
   if (rhs.shard == shard_id_t::NO_SHARD)
     return lhs << rhs.get_osd();
-  return lhs << rhs.get_osd() << '(' << (unsigned)(rhs.shard) << ')';
+  return lhs << rhs.get_osd() << '(' << int(rhs.shard) << ')';
 }
 
 void dump(Formatter* f, const osd_alerts_t& alerts)
@@ -3689,7 +3689,7 @@ void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
 void pg_info_t::dump(Formatter *f) const
 {
   f->dump_stream("pgid") << pgid;
-  f->dump_stream("shared") << pgid.shard;
+  f->dump_stream("shard") << pgid.shard;
   f->dump_stream("last_update") << last_update;
   f->dump_stream("last_complete") << last_complete;
   f->dump_stream("log_tail") << log_tail;
@@ -3820,8 +3820,8 @@ ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
       << " " << notify.info;
   if (notify.from != shard_id_t::NO_SHARD ||
       notify.to != shard_id_t::NO_SHARD)
-    lhs << " " << (unsigned)notify.from
-	<< "->" << (unsigned)notify.to;
+    lhs << " " << int(notify.from)
+	<< "->" << int(notify.to);
   lhs << " " << notify.past_intervals;
   return lhs << ")";
 }
@@ -4668,11 +4668,25 @@ void ObjectModDesc::visit(Visitor *visitor) const
 	break;
       }
       case ROLLBACK_EXTENTS: {
-	vector<pair<uint64_t, uint64_t> > extents;
+	vector<pair<uint64_t, uint64_t>> extents;
 	version_t gen;
+	uint64_t object_size;
+	vector<shard_id_set> shards;
 	decode(gen, bp);
 	decode(extents, bp);
-	visitor->rollback_extents(gen,extents);
+	if (struct_v < 3) {
+	  // Object size is used by optimized EC pools that do not pad objects to a
+	  // multiple of the strip size. Rollback clone operations for each shard
+	  // need to be truncated to not exceed the object size. Legacy EC pools
+	  // do not store the object_size, but because objects are padded do not
+	  // need to truncate the clones. Setting object_size to max avoids
+	  // truncation.
+	  object_size = std::numeric_limits<uint64_t>::max();
+	} else {
+	  decode(object_size, bp);
+	  decode(shards, bp);
+	}
+	visitor->rollback_extents(gen, extents, object_size, shards);
 	break;
       }
       default:
@@ -4728,11 +4742,16 @@ struct DumpVisitor : public ObjectModDesc::Visitor {
     f->close_section();
   }
   void rollback_extents(
-    version_t gen,
-    const vector<pair<uint64_t, uint64_t> > &extents) override {
+    const version_t gen,
+    const vector<pair<uint64_t, uint64_t>> &extents,
+    const uint64_t object_size,
+    const vector<shard_id_set> &shards) override {
     f->open_object_section("op");
     f->dump_string("code", "ROLLBACK_EXTENTS");
     f->dump_unsigned("gen", gen);
+    f->dump_unsigned("object_size", object_size);
+    f->dump_stream("extents") << extents;
+    f->dump_stream("shards") << shards;
     f->dump_stream("snaps") << extents;
     f->close_section();
   }
