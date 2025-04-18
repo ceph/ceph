@@ -6,7 +6,9 @@ import time
 from typing import Any, Dict, List, Optional, Union
 
 import cherrypy
-from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError  # type: ignore
+from ceph.deployment.drive_group import DriveGroupSpec  # type: ignore; pylint: disable=import-error
+from ceph.deployment.drive_group import \
+    DriveGroupValidationError  # type: ignore; pylint: disable=import-error
 from mgr_util import get_most_recent_rate
 
 from .. import mgr
