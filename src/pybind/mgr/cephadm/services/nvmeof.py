@@ -25,6 +25,10 @@ class NvmeofService(CephService):
     TYPE = 'nvmeof'
     PROMETHEUS_PORT = 10008
 
+    @property
+    def needs_monitoring(self) -> bool:
+        return True
+
     def config(self, spec: NvmeofServiceSpec) -> None:  # type: ignore
         assert self.TYPE == spec.service_type
         # Looking at src/pybind/mgr/cephadm/services/iscsi.py
