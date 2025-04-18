@@ -17,6 +17,8 @@
 
 #include <type_traits>
 
+#include <boost/asio/execution/executor.hpp>
+
 #include <boost/asio/disposition.hpp>
 #include <boost/asio/execution_context.hpp>
 
@@ -32,7 +34,6 @@ template<typename ExecutionContext>
 concept execution_context =
   std::is_convertible_v<ExecutionContext&,
                         boost::asio::execution_context&>;
-
 /// A concept for Asio 'disposition's, a generalization of error
 /// codes/exception pointers, etc.
 template<typename T>
