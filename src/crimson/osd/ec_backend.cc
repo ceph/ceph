@@ -40,7 +40,7 @@ ECBackend::ECBackend(pg_shard_t whoami,
 		     ECListener &eclistener)
   : PGBackend{whoami, coll, shard_services, dpp},
     ec_impl{create_ec_impl(ec_profile)},
-    sinfo{ec_impl->get_data_chunk_count(), stripe_width},
+    sinfo(ec_impl, stripe_width),
     fast_read{fast_read},
     allows_ecoverwrites{allows_ecoverwrites},
     unstable_hashinfo_registry{shard_services.get_cct(), ec_impl},
