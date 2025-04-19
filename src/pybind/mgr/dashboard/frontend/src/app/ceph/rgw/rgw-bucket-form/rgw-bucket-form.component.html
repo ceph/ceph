@@ -189,9 +189,7 @@
         <cds-checkbox name="lock_enabled"
                       formControlName="lock_enabled"
                       id="lock_enabled"
-                      [disabled]="editing"
                       i18n>Enable
-
           <cd-help-text>
             <span>Enables locking for the objects in the bucket. Locking can only be enabled while creating a bucket.</span>
           </cd-help-text>
@@ -268,7 +266,6 @@
         <cds-checkbox name="encryption_enabled"
                       formControlName="encryption_enabled"
                       id="encryption_enabled"
-                      [disabled]="!kmsConfigured && !s3Configured"
                       i18n>Enable
           <cd-help-text aria-label="encryption helper">
             <span>Enables encryption for the objects in the bucket.
@@ -278,7 +275,7 @@
           </cd-help-text>
         </cds-checkbox>
       </div>
-
+    
       <div *ngIf="bucketForm.getValue('encryption_enabled')">
         <div class="form-item">
           <cds-radio-group formControlName="encryption_type">
@@ -288,7 +285,7 @@
                      [disabled]="!kmsConfigured">Connect to an external key management service</cds-radio>
           </cds-radio-group>
         </div>
-
+      
         <div *ngIf="bucketForm.getValue('encryption_type') === 'aws:kms'">
           <div class="form-item">
             <cds-select label="KMS Provider"
@@ -313,7 +310,6 @@
                     i18n>This field is required.</span>
             </ng-template>
           </div>
-
           <div class="form-item">
             <cds-text-label for="keyId"
                             cdRequiredField="Key Id"
@@ -341,15 +337,14 @@
       <div class="form-item">
         <legend class="cd-header"
                 i18n>Replication</legend>
-        <ng-container *ngIf="{status: multisiteStatus$, isDefaultZg: isDefaultZoneGroup$ | async} as multisiteStatus; else loadingTpl">
+        <ng-container *ngIf="multisiteData$ | async as multisiteData; else loadingTpl">
           <cds-checkbox name="replication"
-                        formControlName="replication"
-                        id="replication"
-                        [disabled]="!multisiteStatus.isDefaultZg && !multisiteStatus.status.available"
-                        i18n-helperText
-                        i18n>Enable
-            <cd-help-text>Enables replication for the objects in the bucket.</cd-help-text>
-          </cds-checkbox>
+              formControlName="replication"
+              id="replication"
+              i18n-helperText
+              i18n>Enable
+  <cd-help-text>Enables replication for the objects in the bucket.</cd-help-text>
+</cds-checkbox>
 
           <cd-alert-panel type="info"
                           class="me-1"
