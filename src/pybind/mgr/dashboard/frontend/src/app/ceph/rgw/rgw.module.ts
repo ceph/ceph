@@ -98,6 +98,7 @@ import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-
 import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
 import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
+import { NfsClusterFormComponent } from '../nfs/nfs-cluster-form/nfs-cluster-form.component';
 
 @NgModule({
   imports: [
@@ -381,7 +382,12 @@ const routes: Routes = [
     children: [
       { path: '', component: NfsClusterComponent },
       {
-        path: URLVerbs.CREATE,
+        path: `${URLVerbs.EDIT}/:cluster_id`,
+        component: NfsClusterFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      },
+      {
+        path: `${URLVerbs.CREATE}/:cluster_id`,
         component: NfsFormComponent,
         data: { breadcrumbs: ActionLabels.CREATE }
       },
