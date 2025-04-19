@@ -25,13 +25,15 @@ class PGBackend;
 
 class PGRecovery : public crimson::osd::BackfillState::BackfillListener {
 public:
+  using interruptor =
+    crimson::interruptible::interruptor<crimson::osd::IOInterruptCondition>;
   template <typename T = void>
   using interruptible_future = RecoveryBackend::interruptible_future<T>;
   PGRecovery(PGRecoveryListener* pg) : pg(pg) {}
   virtual ~PGRecovery() {}
   void start_pglogbased_recovery();
 
-  interruptible_future<bool> start_recovery_ops(
+  interruptible_future<seastar::stop_iteration> start_recovery_ops(
     RecoveryBackend::RecoveryBlockingEvent::TriggerI&,
     crimson::osd::PglogBasedRecovery &recover_op,
     size_t max_to_start);
@@ -134,7 +136,12 @@ private:
   void update_peers_last_backfill(
     const hobject_t& new_last_backfill) final;
   bool budget_available() const final;
+
+  // TODO: move to start_peering_event_operation
   void backfilled() final;
+  void request_backfill();
+  void all_replicas_recovered();
+
   friend crimson::osd::BackfillState::PGFacade;
   friend crimson::osd::PG;
   // backfill end
