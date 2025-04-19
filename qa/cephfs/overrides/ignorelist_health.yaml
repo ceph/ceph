@@ -2,9 +2,11 @@ overrides:
   ceph:
     log-ignorelist:
       - FS_DEGRADED
+      - filesystem is degraded
       - FS_INLINE_DATA_DEPRECATED
       - FS_WITH_FAILED_MDS
       - MDS_ALL_DOWN
+      - filesystem is offline
       - MDS_DAMAGE
       - MDS_DEGRADED
       - MDS_FAILED
