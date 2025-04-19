@@ -407,6 +407,7 @@ class SelectErasurePool : public ProgramOptionReader<std::string> {
   inline bool get_allow_pool_ec_optimizations() {
     return !disable_pool_ec_optimizations;
   }
+  inline bool is_replica_pool() { return replica_pool; }
   inline std::optional<Profile> getProfile() { return profile; }
 
  private:
@@ -419,6 +420,7 @@ class SelectErasurePool : public ProgramOptionReader<std::string> {
   bool allow_pool_scrubbing;
   bool test_recovery;
   bool disable_pool_ec_optimizations;
+  bool replica_pool;
 
   bool first_use;
 
