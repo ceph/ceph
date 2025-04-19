@@ -3904,6 +3904,13 @@ def test_bucket_create_location_constraint():
                                     CreateBucketConfiguration={'LocationConstraint': zg.name})
                 assert e.response['ResponseMetadata']['HTTPStatusCode'] == 400
 
+def run_per_zonegroup(func):
+    def wrapper(*args, **kwargs):
+        for zonegroup in realm.current_period.zonegroups:
+            func(zonegroup, *args, **kwargs)
+
+    return wrapper
+
 def allow_bucket_replication(function):
     def wrapper(*args, **kwargs):
         zonegroup = realm.master_zonegroup()
@@ -4864,3 +4871,34 @@ def test_bucket_delete_with_sync_policy_object_prefix():
     remove_sync_policy_group(c1, "sync-group")
 
     return
+
+@run_per_zonegroup
+def test_copy_obj_between_zonegroups(zonegroup):
+    if len(realm.current_period.zonegroups) < 2:
+        raise SkipTest('need at least 2 zonegroups to run this test')
+
+    source_zone = ZonegroupConns(zonegroup).rw_zones[0]
+    source_bucket = source_zone.create_bucket(gen_bucket_name())
+
+    objname = 'dummy'
+    k = new_key(source_zone, source_bucket.name, objname)
+    k.set_contents_from_string('foo')
+
+    for zg in realm.current_period.zonegroups:
+        if zg.name == zonegroup.name:
+            continue
+
+        dest_zone = ZonegroupConns(zg).rw_zones[0]
+        dest_bucket = dest_zone.create_bucket(gen_bucket_name())
+        realm_meta_checkpoint(realm)
+
+        # copy object
+        dest_zone.s3_client.copy_object(
+            Bucket=dest_bucket.name,
+            CopySource=f'{source_bucket.name}/{objname}',
+            Key=objname
+        )
+
+        # check that object exists in destination bucket
+        k = get_key(dest_zone, dest_bucket, objname)
+        assert_equal(k.get_contents_as_string().decode('utf-8'), 'foo')
