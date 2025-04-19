@@ -55,6 +55,7 @@ extern "C" {
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_datalog.h"
+#include "rgw_http_errors.h"
 #include "rgw_lc.h"
 #include "rgw_log.h"
 #include "rgw_formats.h"
@@ -2188,20 +2189,26 @@ stringstream& push_ss(stringstream& ss, list<string>& l, int tab = 0)
   return ss;
 }
 
+static std::string str_error(int err_no)
+{
+  auto s3_err_str = err_no >= RGW_ERR_MIN ? rgw_errno_to_code(rgw_http_s3_errors, err_no) : "";
+  return (s3_err_str != "" ? s3_err_str : cpp_strerror(err_no));
+}
+
 static void get_md_sync_status(list<string>& status)
 {
   RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor);
 
   int ret = sync.init(dpp());
   if (ret < 0) {
-    status.push_back(string("failed to retrieve sync info: sync.init() failed: ") + cpp_strerror(-ret));
+    status.push_back(string("failed to retrieve sync info: sync.init() failed: ") + str_error(-ret));
     return;
   }
 
   rgw_meta_sync_status sync_status;
   ret = sync.read_sync_status(dpp(), &sync_status);
   if (ret < 0) {
-    status.push_back(string("failed to read sync status: ") + cpp_strerror(-ret));
+    status.push_back(string("failed to read sync status: ") + str_error(-ret));
     return;
   }
 
@@ -2260,7 +2267,7 @@ static void get_md_sync_status(list<string>& status)
 
   ret = sync.read_master_log_shards_info(dpp(), master_period, &master_shards_info);
   if (ret < 0) {
-    status.push_back(string("failed to fetch master sync status: ") + cpp_strerror(-ret));
+    status.push_back(string("failed to fetch master sync status: ") + str_error(-ret));
     return;
   }
 
@@ -2293,7 +2300,7 @@ static void get_md_sync_status(list<string>& status)
     map<int, rgw_mdlog_shard_data> master_pos;
     ret = sync.read_master_log_shards_next(dpp(), sync_status.sync_info.period, shards_behind, &master_pos);
     if (ret < 0) {
-      derr << "ERROR: failed to fetch master next positions (" << cpp_strerror(-ret) << ")" << dendl;
+      derr << "ERROR: failed to fetch master next positions (" << str_error(-ret) << ")" << dendl;
     } else {
       for (auto iter : master_pos) {
         rgw_mdlog_shard_data& shard_data = iter.second;
@@ -2350,7 +2357,7 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
 
   int ret = sync.init(dpp());
   if (ret < 0) {
-    push_ss(ss, status, tab) << string("failed to retrieve sync info: ") + cpp_strerror(-ret);
+    push_ss(ss, status, tab) << string("failed to retrieve sync info: ") + str_error(-ret);
     flush_ss(ss, status);
     return;
   }
@@ -2358,14 +2365,14 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
   rgw_data_sync_status sync_status;
   ret = sync.read_sync_status(dpp(), &sync_status);
   if (ret < 0 && ret != -ENOENT) {
-    push_ss(ss, status, tab) << string("failed read sync status: ") + cpp_strerror(-ret);
+    push_ss(ss, status, tab) << string("failed read sync status: ") + str_error(-ret);
     return;
   }
 
   set<int> recovering_shards;
   ret = sync.read_recovering_shards(dpp(), sync_status.sync_info.num_shards, recovering_shards);
   if (ret < 0 && ret != ENOENT) {
-    push_ss(ss, status, tab) << string("failed read recovering shards: ") + cpp_strerror(-ret);
+    push_ss(ss, status, tab) << string("failed read recovering shards: ") + str_error(-ret);
     return;
   }
 
@@ -2422,7 +2429,7 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
 
   ret = sync.read_source_log_shards_info(dpp(), &source_shards_info);
   if (ret < 0) {
-    push_ss(ss, status, tab) << string("failed to fetch source sync status: ") + cpp_strerror(-ret);
+    push_ss(ss, status, tab) << string("failed to fetch source sync status: ") + str_error(-ret);
     return;
   }
 
@@ -2451,7 +2458,7 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
     ret = sync.read_source_log_shards_next(dpp(), shards_behind, &master_pos);
 
     if (ret < 0) {
-      derr << "ERROR: failed to fetch next positions (" << cpp_strerror(-ret) << ")" << dendl;
+      derr << "ERROR: failed to fetch next positions (" << str_error(-ret) << ")" << dendl;
     } else {
       for (auto iter : master_pos) {
         rgw_datalog_shard_data& shard_data = iter.second;
