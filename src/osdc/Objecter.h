@@ -2933,8 +2933,15 @@ private:
   int _op_cancel(ceph_tid_t tid, int r);
 
   int get_read_flags(int flags) {
-    return flags | global_op_flags | extra_read_flags.load(std::memory_order_relaxed) |
-                   CEPH_OSD_FLAG_READ;
+    int ret = flags | global_op_flags |
+              extra_read_flags.load(std::memory_order_relaxed) |
+              CEPH_OSD_FLAG_READ;
+
+    // If the op is rwordered, strip out the balanced and localized flags.
+    if (flags & CEPH_OSD_FLAG_RWORDERED) {
+      ret &= ~(CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS);
+    }
+    return ret;
   }
 
 public:

@@ -2044,10 +2044,19 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
   }
 
+  // check for op with rwordered and rebalance reads
+  if (m->has_flag(CEPH_OSD_FLAG_BALANCE_READS) &&
+      op->rwordered()) {
+    dout(4) << __func__ << ": rebalance reads with rwordered not allowed "
+       << *m << dendl;
+    osd->reply_op_error(op, -EINVAL);
+    return;
+  }
+
   if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
 			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
       op->may_read() &&
-      !(op->may_write() || op->may_cache())) {
+      !(op->may_write() || op->may_cache() || op->rwordered())) {
     // balanced reads; any replica will do
     if (!(is_primary() || is_nonprimary())) {
       osd->handle_misdirected_op(this, op);
