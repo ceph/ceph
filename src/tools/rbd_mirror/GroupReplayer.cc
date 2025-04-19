@@ -295,9 +295,9 @@ template <typename I>
 group_replayer::HealthState GroupReplayer<I>::get_health_state() const {
   std::lock_guard locker{m_lock};
 
-  if (!m_status_state) {
+  if (!m_mirror_group_status_state) {
     return group_replayer::HEALTH_STATE_OK;
-  } else if (*m_status_state ==
+  } else if (*m_mirror_group_status_state ==
                cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN) {
     return group_replayer::HEALTH_STATE_WARNING;
   }
@@ -515,12 +515,13 @@ void GroupReplayer<I>::on_stop_replay(int r, const std::string &desc)
 
     m_stop_requested = true;
     m_state = STATE_STOPPING;
-    m_status_state = cls::rbd::MIRROR_GROUP_STATUS_STATE_STOPPED;
-    m_state_desc = "";
   }
 
   cancel_update_mirror_group_replay_status();
   cancel_image_replayers_check();
+  set_state_description(r, desc);
+  update_mirror_group_status(true, boost::none);
+
   shut_down(r);
 }
 
@@ -562,8 +563,9 @@ void GroupReplayer<I>::bootstrap_group() {
   m_bootstrap_request = request;
   locker.unlock();
 
-  set_mirror_group_status_update(
-    cls::rbd::MIRROR_GROUP_STATUS_STATE_STARTING_REPLAY, "bootstrapping");
+  set_state_description(0, "bootstrapping");
+  update_mirror_group_status(false, boost::none);
+
   request->send();
 }
 
@@ -673,8 +675,7 @@ void GroupReplayer<I>::handle_create_group_replayer(int r) {
     schedule_update_mirror_group_replay_status();
   }
 
-  set_mirror_group_status_update(
-     cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING, "replaying");
+  update_mirror_group_status(true, boost::none);
 
   if (on_finish) {
     on_finish->complete(0);
@@ -684,10 +685,7 @@ void GroupReplayer<I>::handle_create_group_replayer(int r) {
 // TODO: Move this to group_replayer::Replayer?
 template <typename I>
 void GroupReplayer<I>::start_image_replayers() {
-  dout(10) << m_image_replayers.size() << dendl;
-
-  set_mirror_group_status_update(
-    cls::rbd::MIRROR_GROUP_STATUS_STATE_STARTING_REPLAY, "starting replay");
+  dout(10) << "num image_replayers=" << m_image_replayers.size() << dendl;
 
   auto ctx = create_context_callback<
     GroupReplayer, &GroupReplayer<I>::handle_start_image_replayers>(this);
@@ -833,7 +831,6 @@ void GroupReplayer<I>::finish_start_fail(int r, const std::string &desc) {
       std::lock_guard locker{m_lock};
       ceph_assert(m_state == STATE_STARTING);
       m_state = STATE_STOPPING;
-      m_status_state = cls::rbd::MIRROR_GROUP_STATUS_STATE_STOPPED;
       m_state_desc = desc;
       if (r < 0) {
 	if (r == -ECANCELED) {
@@ -843,13 +840,14 @@ void GroupReplayer<I>::finish_start_fail(int r, const std::string &desc) {
 	  dout(10) << "mirroring group removed" << dendl;
 	} else if (r == -EREMOTEIO) {
 	  dout(10) << "mirroring group demoted" << dendl;
-	  m_status_state = cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN;
 	} else {
 	  derr << "start failed: " << cpp_strerror(r) << dendl;
-	  m_status_state = cls::rbd::MIRROR_GROUP_STATUS_STATE_ERROR;
 	}
       }
     }
+    set_state_description(r, desc);
+    update_mirror_group_status(false, boost::none);
+
     shut_down(r);
   });
 
@@ -876,7 +874,7 @@ void GroupReplayer<I>::shut_down(int r) {
   // chain the shut down sequence (reverse order)
   Context *ctx = new LambdaContext(
     [this, r](int _r) {
-      set_mirror_group_status_update(*m_status_state, m_state_desc);
+      update_mirror_group_status(true, STATE_STOPPED);
       handle_shut_down(r);
     });
 
@@ -1070,6 +1068,7 @@ template <typename I>
 void GroupReplayer<I>::schedule_update_mirror_group_replay_status() {
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
   ceph_assert(ceph_mutex_is_locked_by_me(m_threads->timer_lock));
+
   if (m_state != STATE_REPLAYING) {
     return;
   }
@@ -1095,8 +1094,7 @@ void GroupReplayer<I>::handle_update_mirror_group_replay_status(int r) {
   m_update_status_task = nullptr;
 
   auto ctx = new LambdaContext([this](int) {
-      update_mirror_group_replay_status();
-
+      update_mirror_group_status(false, boost::none);
       {
 	std::unique_lock locker{m_lock};
 	std::unique_lock timer_locker{m_threads->timer_lock};
@@ -1124,18 +1122,82 @@ void GroupReplayer<I>::cancel_update_mirror_group_replay_status() {
 
 template <typename I>
 void GroupReplayer<I>::set_mirror_group_status_update(
-    cls::rbd::MirrorGroupStatusState state, const std::string &desc) {
-  dout(20) << "state=" << state << ", description=" << desc << dendl;
+  bool force, const OptionalState &opt_state) {
+  dout(15) << "force=" << force << ", "
+           << "state=" << opt_state << dendl;
 
   reregister_admin_socket_hook();
 
+  State state;
+  std::string state_desc;
+  int last_r;
+  bool stopping_replay;
+  bool skip_image_status_update = false;
+
+  auto mirror_group_status_state = boost::make_optional(
+    false, cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN);
+
+  {
+    std::lock_guard locker{m_lock};
+    state = m_state;
+    state_desc = m_state_desc;
+    mirror_group_status_state = m_mirror_group_status_state;
+    last_r = m_last_r;
+    stopping_replay = (m_replayer != nullptr);
+  }
+
+  if (opt_state) {
+    state = *opt_state;
+  }
   cls::rbd::MirrorGroupSiteStatus local_status;
-  local_status.state = state;
-  local_status.description = desc;
   local_status.up = true;
 
+  switch (state) {
+  case STATE_STARTING:
+    local_status.state = cls::rbd::MIRROR_GROUP_STATUS_STATE_STARTING_REPLAY;
+    local_status.description = "starting replay";
+    break;
+  case STATE_REPLAYING:
+    local_status.state = cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING;
+    {
+      std::string desc;
+      ceph_assert(m_replayer != nullptr);
+      if (!m_replayer->get_replay_status(&desc)) {
+        dout(15) << "waiting for replay status" << dendl;
+        return;
+      }
+      local_status.description = "replaying, " + desc;
+      mirror_group_status_state = boost::make_optional(
+        false, cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN);
+      skip_image_status_update = true; // FIXME
+    }
+    break;
+  case STATE_STOPPING:
+    if (stopping_replay) {
+      local_status.state = cls::rbd::MIRROR_GROUP_STATUS_STATE_STOPPING_REPLAY;
+      local_status.description = state_desc.empty() ? "stopping replay" : state_desc;
+      break;
+    }
+    // FALLTHROUGH
+  case STATE_STOPPED:
+    if (last_r == -EREMOTEIO) {
+      local_status.state = cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN;
+      local_status.description = state_desc;
+      mirror_group_status_state = local_status.state;
+    } else if (last_r < 0 && last_r != -ECANCELED) {
+      local_status.state = cls::rbd::MIRROR_GROUP_STATUS_STATE_ERROR;
+      local_status.description = state_desc;
+      mirror_group_status_state = local_status.state;
+    } else {
+      local_status.state = cls::rbd::MIRROR_GROUP_STATUS_STATE_STOPPED;
+      local_status.description = state_desc.empty() ? "stopped" : state_desc;
+      mirror_group_status_state = boost::none;
+    }
+    break;
+  default:
+    ceph_assert(!"invalid state");
+  }
   auto remote_status = local_status;
-
   {
     std::lock_guard locker{m_lock};
     for (auto &[_, ir] : m_image_replayers) {
@@ -1147,6 +1209,7 @@ void GroupReplayer<I>::set_mirror_group_status_update(
           mirror_image.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY;
         }
       } else if (ir->is_stopped()) {
+        // FIXME: This does not capture the IR in error state
         mirror_image.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_STOPPED;
       } else {
         mirror_image.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY;
@@ -1166,8 +1229,8 @@ void GroupReplayer<I>::set_mirror_group_status_update(
   auto images_status = local_status.mirror_images;
   // catch and bubble-up all the image level errors to group status
   if (!images_status.empty() &&
-      ((m_local_group_ctx.primary && state == cls::rbd::MIRROR_GROUP_STATUS_STATE_STOPPED) ||
-      (!m_local_group_ctx.primary && state == cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING))) {
+      ((m_local_group_ctx.primary && local_status.state == cls::rbd::MIRROR_GROUP_STATUS_STATE_STOPPED) ||
+      (!m_local_group_ctx.primary && local_status.state == cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING))) {
     for (auto &image_site_status : images_status) {
       if (image_site_status.second.state == cls::rbd::MIRROR_IMAGE_STATUS_STATE_ERROR) {
         dout(10) << "ImageReplayer with global image id: " << image_site_status.first.global_image_id
@@ -1176,60 +1239,59 @@ void GroupReplayer<I>::set_mirror_group_status_update(
             << dendl;
         local_status.state = cls::rbd::MIRROR_GROUP_STATUS_STATE_ERROR;
         local_status.description = "image in error state";
+        mirror_group_status_state = local_status.state;
         break;
       }
     }
   }
-
-  m_local_status_updater->set_mirror_group_status(m_global_group_id,
-                                                  local_status, true, false);
-  if (m_remote_group_peer.mirror_status_updater != nullptr) {
-    m_remote_group_peer.mirror_status_updater->set_mirror_group_status(
-        m_global_group_id, remote_status, true, false);
-  }
-
   {
     std::lock_guard locker{m_lock};
-    m_status_state = local_status.state;
-    m_state_desc = local_status.description;
+    m_mirror_group_status_state = mirror_group_status_state;
+  }
+
+  // prevent the status from ping-ponging when failed replays are restarted
+  if (mirror_group_status_state &&
+      *mirror_group_status_state == cls::rbd::MIRROR_GROUP_STATUS_STATE_ERROR) {
+    local_status.state = *mirror_group_status_state;
+  }
+  // prevent the status from ping-ponging when failed replays are restarted
+  if (mirror_group_status_state &&
+      *mirror_group_status_state == cls::rbd::MIRROR_GROUP_STATUS_STATE_ERROR) {
+    local_status.state = *mirror_group_status_state;
+  }
+
+  m_local_status_updater->set_mirror_group_status(m_global_group_id,
+                                                  local_status, force,
+                                                  skip_image_status_update);
+  if (m_remote_group_peer.mirror_status_updater != nullptr) {
+    m_remote_group_peer.mirror_status_updater->set_mirror_group_status(
+        m_global_group_id, remote_status, force, skip_image_status_update);
   }
 }
 
 template <typename I>
-void GroupReplayer<I>::update_mirror_group_replay_status() {
-  dout(10) << dendl;
+void GroupReplayer<I>::update_mirror_group_status(
+    bool force, const OptionalState &opt_state) {
+  dout(15) << "force=" << force << ", "
+           << "state=" << opt_state << dendl;
 
-  reregister_admin_socket_hook();
-
-  cls::rbd::MirrorGroupStatusState status_state;
-
-  if (is_replaying()) {
-    status_state = cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING;
-  } else {
-    dout(10) << "not replaying: ignoring update" << dendl;
-    return;
+  {
+    std::lock_guard locker{m_lock};
+    if (!force && !is_stopped_() && !is_running_()) {
+      dout(15) << "shut down in-progress: ignoring update" << dendl;
+      return;
+    }
   }
 
-  ceph_assert(m_replayer != nullptr);
-  std::string replay_desc;
-  if (!m_replayer->get_replay_status(&replay_desc)) {
-    dout(15) << "waiting for replay status" << dendl;
-    return;
-  }
-
-  cls::rbd::MirrorGroupSiteStatus site_status;
-  site_status.state = status_state;
-  site_status.up = true;
-  site_status.description = "replaying, " + replay_desc;
-
-  m_local_status_updater->set_mirror_group_status(m_global_group_id,
-                                                  site_status, false,
-                                                  true);
-  if (m_remote_group_peer.mirror_status_updater != nullptr) {
-    m_remote_group_peer.mirror_status_updater->set_mirror_group_status(
-        m_global_group_id, site_status, false, true);
-  }
+  m_in_flight_op_tracker.start_op();
+  auto ctx = new LambdaContext(
+    [this, force, opt_state](int r) {
+      set_mirror_group_status_update(force, opt_state);
+      m_in_flight_op_tracker.finish_op();
+    });
+  m_threads->work_queue->queue(ctx, 0);
 }
+
 
 } // namespace mirror
 } // namespace rbd
