@@ -1,8 +1,13 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import _ from 'lodash';
+import { Observable, of as observableOf } from 'rxjs';
 import { ApiClient } from './api-client';
-import { Topic } from '~/app/shared/models/topic.model';
+import { CreateTopic, Topic } from '~/app/shared/models/topic.model';
+import { RgwDaemonService } from './rgw-daemon.service';
+import { HttpParams } from '@angular/common/http';
+import { catchError, mapTo } from 'rxjs/operators';
+
 
 @Injectable({
   providedIn: 'root'
@@ -10,7 +15,7 @@ import { Topic } from '~/app/shared/models/topic.model';
 export class RgwTopicService extends ApiClient {
   baseURL = 'api/rgw/topic';
 
-  constructor(private http: HttpClient) {
+  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {
     super();
   }
 
@@ -19,6 +24,37 @@ export class RgwTopicService extends ApiClient {
   }
 
   getTopic(name: string) {
-    return this.http.get(`${this.baseURL}/${name}`);
+    return this.http.get<Topic>(`${this.baseURL}/${name}`);
   }
+
+  create(createParam: CreateTopic) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.post(`${this.baseURL}`, createParam, { params: params });
+    });
+  }
+
+  update(createParam: CreateTopic) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.post(`${this.baseURL}`, createParam, { params: params });
+    });
+  }
+  delete(name: string) {
+    return this.http.delete(`${this.baseURL}/${name}`, {
+      observe: 'response'
+    });
+  }
+
+  validatetopicName(name: string) {
+    return this.getTopic(name).pipe(
+      mapTo(true),
+      catchError((error: Event) => {
+        if (_.isFunction(error.preventDefault)) {
+          error.preventDefault();
+        }
+        return observableOf(false);
+      })
+    );
+  }
+
+  
 }

@@ -22,7 +22,7 @@ try:
 except ModuleNotFoundError:
     logging.error("Module 'xmltodict' is not installed.")
 
-from mgr_util import build_url
+from mgr_util import build_url, name_to_config_section
 
 from .. import mgr
 from ..awsauth import S3Auth
@@ -1121,6 +1121,7 @@ class RgwClient(RestClient):
 
     @RestClient.api_post('?Action=CreateTopic&Name={name}')
     def create_topic(self, request=None, name: str = '',
+                     daemon_name: str = '',
                      push_endpoint: Optional[str] = '', opaque_data: Optional[str] = '',
                      persistent: Optional[bool] = False, time_to_live: Optional[str] = '',
                      max_retries: Optional[str] = '', retry_sleep_duration: Optional[str] = '',
@@ -1165,11 +1166,63 @@ class RgwClient(RestClient):
             params['kafka_brokers'] = kafka_brokers
         if mechanism:
             params['mechanism'] = mechanism
+
+        full_daemon_name = 'rgw.' + daemon_name
+        key = 'rgw_allow_notification_secrets_in_cleartext'
+        value = 'true'
+        CephService.send_command('mon', 'config set',
+                                 who=name_to_config_section(full_daemon_name),
+                                 name=key, value=value)
         try:
             result = request(params=params)
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
 
+        return result
+
+    @RestClient.api_put('/{bucket_name}?notification')
+    def set_notification(self, bucket_name, notification, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request(data=notification)  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
+    @RestClient.api_get('/{bucket_name}?notification')
+    def get_notification(self, bucket_name, notification_id=None, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request(
+                raw_content=True, headers={'Accept': 'text/xml'}).decode()  # type: ignore
+            notification_config = xmltodict.parse(result)
+            if notification_config is not None:
+                notification_configuration = notification_config.get(
+                    'NotificationConfiguration', {}
+                )
+                topic_configuration = notification_configuration.get('TopicConfiguration')
+                if isinstance(topic_configuration, dict):
+                    notification_configuration['TopicConfiguration'] = [topic_configuration]
+
+                notification_config['NotificationConfiguration'] = notification_configuration
+
+            return notification_config['NotificationConfiguration']['TopicConfiguration'] 
+
+        except RequestException as e:
+            if e.content:
+                root = ET.fromstring(e.content)
+                code = root.find('Code')
+                if code is not None and code.text == 'NoSuchNotificationConfiguration':
+                    return None
+            raise DashboardException(msg=str(e), component='rgw')
+
+    @RestClient.api_delete('/{bucket_name}?notification')
+    def delete_notification(self, bucket_name, notification_id, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request()
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
         return result
 
 

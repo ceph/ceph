@@ -1,0 +1,1011 @@
+  <div cdsCol
+       *cdFormLoading="loading"
+       [columnNumbers]="{ md: 6 }">
+  <form name="topicForm"
+        #formDir="ngForm"
+        [formGroup]="topicForm"
+        novalidate>
+  <div i18n="form title"
+       class="form-header">
+       {{ action | titlecase }} {{connect}} {{ resource | upperFirst }}
+  </div>
+  <div cdsRow
+       class="form-item form-item-append">
+  <div cdsCol
+       i18n>
+     Configure the push endpoint parameters to send notifications. On successful creation, you'll receive the topic's unique Amazon Resource Name (ARN).
+  </div>
+  </div>
+  <div class="form-item form-item-append"
+       cdsRow>
+  <!-- owner -->
+  <div cdsCol>
+  <cds-select formControlName="owner"
+              for="owner"
+              label="User"
+              cdRequiredField="Owner"
+              [invalid]="topicForm.controls.owner.invalid && topicForm.controls.owner.dirty"
+              id="owner"
+              [helperText]="ownerText"
+              [invalidText]="ownerError"
+              i18n-helperText>
+  <option i18n
+          *ngIf="owners === null"
+          value="null">Loading...
+  </option>
+  <option i18n
+          *ngIf="owners !== null"
+          value="null">-- Select a user --</option>
+  <option *ngFor="let data of owners"
+          i18n
+          [value]="data"
+          >{{ data }}</option>
+  </cds-select>
+  <ng-template #ownerError>
+    <span class="invalid-feedback"
+          *ngIf="topicForm.showError('owner', formDir, 'required')"
+          i18n>This field is required.</span>
+    </ng-template>
+    <ng-template #ownerText>
+    <span i18n>
+     Select the owner of the topic. This owner will define and control the topic’s settings.
+    </span>
+    </ng-template>
+  </div>
+  <!-- Topic Type-->
+  <div cdsCol>
+  <cds-select formControlName="endpointType"
+              for="endpointType"
+              label="Topic type"
+              placeholder="Select a Topic type"
+              cdRequiredField="Topic Type"
+              id="endpointType"
+              i18n-placeholder
+              (change)="onSelectChange($event);"
+              [invalid]="topicForm.controls.endpointType.invalid && topicForm.controls.endpointType.dirty"
+              [invalidText]="topictypeError"
+              [helperText]="endpointTypeText"
+              i18n-helperText>
+  <option i18n
+          value="">
+     -- Select a Topic type --</option>
+  <option *ngFor="let data of endpointType"
+          i18n>{{ data | upperFirst }}</option>
+  </cds-select>
+  <ng-template #topictypeError>
+  <span class="invalid-feedback"
+        *ngIf="topicForm.showError('endpointType', formDir, 'required')"
+        i18n>This topic type field is required.</span>
+  </ng-template>
+  <ng-template #endpointTypeText>
+    <span i18n>
+     Select the topic type. This user will manage and configure the topic’s settings.
+    </span>
+  </ng-template>
+  </div>
+  </div>
+<ng-container *ngIf="(selectedOption ==='HTTP')" >
+  <div class="form-item form-item-append"
+       cdsRow>
+  <!-- Topic Name -->
+  <div cdsCol>
+  <cds-text-label labelInputID="name"
+                  i18n
+                  i18n-helperText
+                  cdRequiredField="Topic Name"
+                  [invalid]="topicForm.controls.name.invalid && topicForm.controls.name.dirty"
+                  [invalidText]="nameError"
+                  [helperText]="topichelpertext">Topic Name
+  <input cdsText
+         type="text"
+         placeholder="Topic Name..."
+         i18n-placeholder
+         id="name"
+         autoFocus
+         formControlName="name"
+         [invalid]="topicForm.controls.name.invalid && topicForm.controls.name.dirty"/>
+  </cds-text-label>
+  <ng-template #nameError>
+  <span class="invalid-feedback"
+        *ngIf="topicForm.showError('name', formDir, 'required')"
+        i18n>This field is required.</span>
+  <span class="invalid-feedback"
+        *ngIf="topicForm.showError('name', formDir, 'notUnique')"
+        i18n>The name is already in use. Please choose a different one</span>
+  </ng-template>
+  <!-- Optional Helper Text -->
+  <ng-template #topichelpertext>
+  <span i18n>
+    Please enter a valid topic name.
+  </span>
+  </ng-template>
+  </div>
+  <div cdsCol>
+  </div>
+  </div>
+  <div cdsRow
+       class="form-item form-item-append">
+  <div cdsCol
+       i18n
+       class="cd-header">Genrate push endpoint </div>
+  </div>
+  <div class="form-item form-item-append"
+       cdsRow>
+  <!-- Enable SSL -->
+  <div cdsCol
+       [columnNumbers]="{sm: 4}">
+  <cds-checkbox id="enable_ssl"
+                formControlName="enable_ssl"
+                name="enable_ssl"
+                (checkedChange)="onSecureSslChange($event)"
+                >
+  <ng-container i18n> Enable SSL</ng-container>
+  <cd-help-text i18n>
+    Enabling SSL ensures that your connection is encrypted and secure. You must have a valid SSL certificate installed on your server.
+  </cd-help-text>
+  </cds-checkbox>
+  </div>
+  <!-- Verify ssl -->
+  <div cdsCol
+       [columnNumbers]="{sm: 4}">
+  <cds-checkbox id="verify_ssl"
+                formControlName="verify_ssl"
+                name="verify_ssl">
+  <ng-container i18n>Verify SSL</ng-container>
+  <cd-help-text i18n>Enabling SSL verification ensures that the server's SSL certificate is valid and trusted.</cd-help-text>
+  </cds-checkbox>
+  </div>
+  <!-- Closud Event-->
+  <div cdsCol
+       [columnNumbers]="{sm: 4}">
+  <cds-checkbox id="cloud_events"
+                formControlName="cloud_events"
+                name="cloud_events">
+  <ng-container i18n>Cloud events</ng-container>
+  <cd-help-text i18n>Select this option if you want to capture cloud events as triggers for notifications.</cd-help-text>
+  </cds-checkbox>
+  </div>
+  </div>
+  <div cdsRow
+       class="form-item form-item-append">
+  <!-- Fqdn-->
+  <div cdsCol>
+  <cds-text-label labelInputID="fqdn"
+                  cdRequiredField="FQDN"
+                  [invalid]="topicForm.controls.fqdn.invalid && topicForm.controls.fqdn.dirty"
+                  [invalidText]="fqdnError"
+                  [helperText]="fqdnText"
+                  i18n-helperText
+                  i18n>FQDN
+  <input cdsText
+         type="text"
+         placeholder="FQDN..."
+         i18n-placeholder
+         id="fqdn"
+         autoFocus
+         formControlName="fqdn"
+         [invalid]="topicForm.controls.fqdn.invalid && topicForm.controls.fqdn.dirty"
+         (change)="generatePushEndpoint()"/>
+  </cds-text-label>
+  <ng-template #fqdnError>
+  <span class="invalid-feedback"
+        *ngIf="topicForm.showError('fqdn', formDir, 'required')">This field is required</span>
+  </ng-template>
+  <ng-template #fqdnText>
+  <span i18n>
+   Enter the FQDN to configure the topic's settings and behavior.
+  </span>
+  </ng-template>
+  </div>
+  <!-- Port-->
+  <div cdsCol>
+  <cds-text-label labelInputID="Port"
+                  i18n
+                  i18n-helperText
+                  cdRequiredField="Port"
+                  [invalid]="topicForm.controls.port.invalid && topicForm.controls.port.dirty"
+                  [invalidText]="portError"
+                  [helperText]="portText">Port
+  <input cdsText
+         type="number"
+         placeholder="Port..."
+         i18n-placeholder
+         id="Port"
+         autoFocus
+         formControlName="port"
+         (change)="generatePushEndpoint()"
+         [invalid]="topicForm.controls.port.invalid && topicForm.controls.port.dirty"/>
+  </cds-text-label>
+  <ng-template #portError>
+  <span class="invalid-feedback"
+        *ngIf="topicForm.showError('port', formDir, 'required')">This field is required</span>
+  <span class="invalid-feedback"
+        *ngIf="topicForm.controls.port.hasError('pattern') && topicForm.controls.port.touched"
+        i18n> Port must be a valid integer</span>
+  </ng-template>
+  <ng-template #portText>
+  <span i18n>
+   Enter the port number for the push endpoint.
+  </span>
+  </ng-template>
+  </div>
+  </div>
+  <div cdsRow
+       class="form-item form-item-append">
+  <div cdsCol>
+  <!--push_endpoint -->
+  <cds-text-label labelInputID="push_endpoint"
+                  i18n
+                  i18n-helperText
+                  cdRequiredField="Push endpoint"
+                  [invalid]="topicForm.controls.push_endpoint.invalid && topicForm.controls.push_endpoint.dirty"
+                  [invalidText]="endpointError"
+                  [helperText]="endpoint"
+                  >Push Endpoint
+  <input cdsText
+         type="text"
+         placeholder="http[s]://<fqdn>[:<port]..."
+         i18n-placeholder
+         autoFocus
+         id="push_endpoint"
+         formControlName="push_endpoint"
+         [invalid]="topicForm.controls.push_endpoint.invalid && topicForm.controls.push_endpoint.dirty"/>
+  </cds-text-label>
+  <ng-template #endpointError>
+  <span class="invalid-feedback"
+        *ngIf="topicForm.showError('push_endpoint', formDir, 'required')"
+        i18n>This field is required.</span>
+  </ng-template>
+  <ng-template #endpoint>
+  <span i18n>
+     Specify the endpoint URL for receiving push notifications.
+  </span>
+  </ng-template>
+  </div>
+  <div cdsCol>
+  </div>
+  </div>
+  </ng-container>
+  <!-- Amqp-->
+  <ng-container *ngIf="(selectedOption ==='AMQP')">
+    <div class="form-item form-item-append"
+         cdsRow>
+  <!-- Topic Name -->
+  <div cdsCol>
+  <cds-text-label labelInputID="name"
+                  i18n
+                  i18n-helperText
+                  cdRequiredField="Topic Name"
+                  [invalid]="topicForm.controls.name.invalid && topicForm.controls.name.dirty"
+                  [invalidText]="nameError"
+                  [helperText]="topichelpertext"
+                  >Topic Name
+  <input cdsText
+         type="text"
+         placeholder="Topic Name..."
+         i18n-placeholder
+         id="name"
+         autoFocus
+         formControlName="name"
+         [invalid]="topicForm.controls.name.invalid && topicForm.controls.name.dirty"/>
+  </cds-text-label>
+  <ng-template #nameError>
+  <span class="invalid-feedback"
+        *ngIf="topicForm.showError('name', formDir, 'required')"
+        i18n>This field is required</span>
+  <span class="invalid-feedback"
+        *ngIf="topicForm.showError('name', formDir, 'notUnique')"
+        i18n>The name is already in use. Please choose a different one.</span>
+  </ng-template>
+  <!--  Helper Text -->
+  <ng-template #topichelpertext>
+  <span i18n>
+          Please enter a valid topic name.
+  </span>
+  </ng-template>
+  </div>
+  <div cdsCol>
+  </div>
+  </div>
+  <div cdsRow
+       class="form-item form-item-append">
+  <div cdsCol
+       i18n
+       class="form-group-header">Generate push end point</div>
+  </div>
+  <div cdsRow
+       class="form-item form-item-append">
+  <!-- Enable Ssl-->
+  <div cdsCol
+       [columnNumbers]="{sm: 4}">
+  <cds-checkbox id="enable_ssl"
+                formControlName="enable_ssl"
+                name="enable_ssl"
+                (checkedChange)="onSecureSslChange($event)">
+  <ng-container i18n>Enable SSL</ng-container>
+  <cd-help-text i18n>Enabling SSL ensures that your connection is encrypted and secure. You must have a valid SSL certificate installed on your server.
+  </cd-help-text>
+  </cds-checkbox>
+  </div>
+  </div>
+  <div cdsRow
+       class="form-item form-item-append">
+  <!-- User-->
+  <div cdsCol>
+  <cds-text-label labelInputID="User"
+                  i18n
+                  [helperText]="user">User
+  <input cdsText
+         type="text"
+         placeholder="User..."
+         i18n-placeholder
+         id="user"
+         autoFocus
+         formControlName="user"
+         (change)="generatePushEndpoint()"/>
+  </cds-text-label>
+  <ng-template #user>
+  <span i18n>
+   This field is optional. Provide a username if desired. The default user is "guest"
+  </span>
+  </ng-template>
+  </div>
+  <!-- password-->
+  <div cdsCol>
+  <cds-password-label labelInputID="password"
+                      label="Password..."
+                      [invalid]="!topicForm.controls.password.valid && topicForm.controls.password.dirty"
+                      [invalidText]="passwordError"
+                      [helperText]="passwordText"
+                      i18n>Password
+  <cd-helper  class="text-pre-wrap"
+              html="{{ passwordhelperText}}"> </cd-helper>
+  <input cdsPassword
+         type="password"
+         placeholder="Password..."
+         id="password"
+         autocomplete="new-password"
+         formControlName="password"
+         (change)="generatePushEndpoint()">
+  </cds-password-label>
+  <ng-template #passwordError>
+  <span class="invalid-feedback"
+        *ngIf="userForm.showError('password', formDir, 'required')"
+        i18n>This field is required.</span>
+  <span class="invalid-feedback"
+        *ngIf="userForm.showError('password', formDir, 'passwordPolicy')">
+      {{ passwordValuation }}
+  </span>
+  </ng-template>
+  <ng-template  #passwordText>
+  <span i18n>
+    This field is optional. Provide a password if desired. The default password is "guest"
+  </span>
+  </ng-template>
+  </div>
+  </div>
+  <div class="form-item form-item-append"
+       cdsRow>
+  <!--Fqdn-->
+  <div cdsCol>
+  <cds-text-label labelInputID="fqdn"
+                  cdRequiredField="FQDN"
+                  [invalid]="topicForm.controls.fqdn.invalid && topicForm.controls.fqdn.dirty"
+                  [invalidText]="fqdnError"
+                  [helperText]="fqdnText"
+                  i18n
+                  i18n-helperText
+                  >FQDN
+  <input cdsText
+         type="text"
+         placeholder="FQDN..."
+         i18n-placeholder
+         id="fqdn"
+         autoFocus
+         i18n-helperText
+         formControlName="fqdn"
+         (change)="generatePushEndpoint()"
+         [invalid]="topicForm.controls.fqdn.invalid && topicForm.controls.fqdn.dirty"/>
+  </cds-text-label>
+  <ng-template #fqdnError>
+  <span class="invalid-feedback"
+        *ngIf="topicForm.showError('fqdn', formDir, 'required')">This field is required</span>
+  </ng-template>
+  <ng-template #fqdnText>
+  <span i18n>
+          Enter the FQDN to configure the topic's settings and behavior.
+  </span>
+  </ng-template>
+  </div>
+  <!--Port-->
+  <div cdsCol>
+  <cds-text-label labelInputID="Port"
+                  i18n
+                  cdRequiredField="Port"
+                  [invalid]="topicForm.controls.port.invalid && topicForm.controls.port.dirty"
+                  [invalidText]="portError"
+                  [helperText]="portText">Port
+  <input cdsText
+         type="number"
+         placeholder="Port..."
+         i18n-placeholder
+         id="Port"
+         autoFocus
+         formControlName="port"
+         (change)="generatePushEndpoint()"
+         [invalid]="topicForm.controls.port.invalid && topicForm.controls.port.dirty"/>
+  </cds-text-label>
+  <ng-template #portError>
+  <span class="invalid-feedback"
+        i18n
+        *ngIf="topicForm.showError('port', formDir, 'required')">This field is required.</span>
+  <span class="invalid-feedback"
+        i18n
+        *ngIf="topicForm.controls.port.hasError('pattern') && topicForm.controls.port.touched"> Port must be a valid integer</span>
+  </ng-template>
+  <ng-template #portText>
+  <span i18n>
+     Enter the port number for the push endpoint.
+  </span>
+  </ng-template>
+  </div>
+  </div>
+  <div cdsRow
+       class="form-item form-item-append">
+  <!--Vhost-->
+  <div cdsCol>
+  <cds-text-label labelInputID="Vhost"
+                  i18n>Vhost
+  <input cdsText
+         type="text"
+         placeholder="Vhost..."
+         i18n-placeholder
+         id="vhost"
+         autoFocus
+         (change)="generatePushEndpoint()"
+         formControlName="vhost"/>
+  </cds-text-label>
+  </div>
+  <div cdsCol>
+  </div>
+  </div>
+  <div cdsRow
+       class="form-item form-item-append">
+  <!--push_endpoint -->
+  <div cdsCol>
+  <cds-text-label labelInputID="push_endpoint"
+                  i18n
+                  cdRequiredField="Push endpoint"
+                  [invalid]="topicForm.controls.push_endpoint.invalid && topicForm.controls.push_endpoint.dirty"
+                  [invalidText]="endpointError"
+                  [helperText]="endpoint"
+                  >Push endpoint
+  <input cdsText
+         type="text"
+         placeholder="amqp[s]://[<user>:<password>@]<fqdn>[:<port>][/<vhost>]..."
+         i18n-placeholder
+         id="push_endpoint"
+         autoFocus
+         formControlName="push_endpoint"
+         [invalid]="topicForm.controls.push_endpoint.invalid && topicForm.controls.push_endpoint.dirty"/>
+  </cds-text-label>
+  <ng-template #endpointError>
+  <span class="invalid-feedback"
+        *ngIf="topicForm.showError('push_endpoint', formDir, 'required')"
+        i18n>This field is required.</span>
+  </ng-template>
+  <!--  Helper Text -->
+  <ng-template #endpoint>
+  <span  i18n>
+  Specify the endpoint URL for receiving push notifications.
+  </span>
+  </ng-template>
+  </div>
+  <div cdsCol>
+  </div>
+  </div>
+  <div cdsRow
+       class="form-item form-item-append">
+    <div cdsCol
+         i18n
+         class="form-group-header">
+      AMQP  attributes
+    </div>
+  </div>
+  <div class="form-item form-item-append"
+       cdsRow>
+  <!-- Verify Ssl-->
+  <div cdsCol
+       [columnNumbers]="{sm: 4}">
+  <cds-checkbox id="verify_ssl"
+                formControlName="verify_ssl"
+                name="verify_ssl"
+                >
+  <ng-container i18n>Verify SSL</ng-container>
+  <cd-help-text i18n>Enabling SSL verification ensures that the server's SSL certificate is valid and trusted</cd-help-text>
+  </cds-checkbox>
+  </div>
+  </div>
+  <div class="form-item form-item-append"
+       cdsRow>
+  <!-- Ca location-->
+  <div cdsCol>
+    <cds-text-label labelInputID="Ca-location"
+                    i18n>CA location
+    <input cdsText
+           type="text"
+           placeholder="CA location..."
+           i18n-placeholder
+           id="ca_location"
+           autoFocus
+           formControlName="ca_location"/>
+    </cds-text-label>
+  </div>
+  <!-- Amqp exchange-->
+  <div cdsCol>
+  <cds-text-label labelInputID="Ca-location"
+                  i18n>Amqp exchange
+  <input cdsText
+         type="text"
+         placeholder="Amqp exchange..."
+         i18n-placeholder
+         autoFocus
+         id="amqp_exchange"
+         formControlName="amqp_exchange"/>
+  </cds-text-label>
+  </div>
+  </div>
+  <div class="form-item form-item-append"
+       cdsRow>
+  <!-- Amqp ack level -->
+  <div cdsCol>
+  <cds-select formControlName="amqp_ack_level"
+              for="amqp_ack_level"
+              label="AMQP ack level"
+              id="amqp_ack_level"
+              autoFocus
+              (ngModelChange)="onLevelChange($event)"
+              i18n-helperText>
+  <option *ngFor="let data of amqp_ack_level"
+          i18n>{{ data }}</option>
+  </cds-select>
+  </div>
+  <div cdsCol>
+  </div>
+  </div>
+  </ng-container>
+  <ng-container *ngIf="(selectedOption ==='KAFKA')">
+  <div class="form-item form-item-append"
+       cdsRow>
+  <!-- Topic Name -->
+  <div cdsCol>
+  <cds-text-label labelInputID="name"
+                  i18n
+                  i18n-helperText
+                  cdRequiredField="Topic Name"
+                  [invalid]="topicForm.controls.name.invalid && topicForm.controls.name.dirty"
+                  [invalidText]="nameError"
+                  [helperText]="topichelpertext">Topic Name
+  <input cdsText
+         type="text"
+         placeholder="Topic Name..."
+         i18n-placeholder
+         id="name"
+         autoFocus
+         formControlName="name"
+         [invalid]="topicForm.controls.name.invalid && topicForm.controls.name.dirty"/>
+  </cds-text-label>
+  <ng-template #nameError>
+  <span class="invalid-feedback"
+        *ngIf="topicForm.showError('name', formDir, 'required')"
+        i18n>This field is required</span>
+  <span class="invalid-feedback"
+        *ngIf="topicForm.showError('name', formDir, 'notUnique')"
+        i18n>Name already in use. Please select different name to proceed.</span>
+  </ng-template>
+  </div>
+  <div cdsCol>
+  </div>
+  </div>
+  <div class="form-item form-item-append"
+       cdsRow>
+  <div cdsCol
+       i18n
+       class="form-group-header">
+   Generate push endpoint</div>
+  </div>
+
+  <div class="form-item form-item-append"
+       cdsRow>
+  <!-- User-->
+  <div cdsCol>
+  <cds-text-label labelInputID="User"
+                  i18n
+                  [helperText]="userText"
+                  >User
+  <input cdsText
+         type="text"
+         placeholder="User..."
+         i18n-placeholder
+         id="user"
+         autoFocus
+         formControlName="user"/>
+  </cds-text-label>
+  <ng-template #userText>
+  <span i18n>
+      This field is optional provide a password if desired and  default password is "guest"
+  </span>
+  </ng-template>
+  </div>
+  <!-- Password-->
+  <div cdsCol>
+  <cds-password-label labelInputID="password"
+                      label="Password..."
+                      [invalid]="!topicForm.controls.password.valid && topicForm.controls.password.dirty"
+                      [invalidText]="passwordError"
+                      [helperText]="passwordText"
+                      i18n>Password
+  <cd-helper  class="text-pre-wrap"
+              html="{{ passwordhelperText}}"> </cd-helper>
+  <input cdsPassword
+         type="password"
+         placeholder="Password..."
+         id="password"
+         formControlName="password"
+         (change)="generatePushEndpoint()">
+  </cds-password-label>
+  <ng-template #passwordError>
+  <span class="invalid-feedback"
+        *ngIf="userForm.showError('password', formDir, 'required')"
+        i18n>This field is required.</span>
+  </ng-template>
+  <ng-template #passwordText>
+  <span i18n>
+    This field is optional. Provide a password if desired. The default password is "guest"
+  </span>
+  </ng-template>
+  </div>
+  </div>
+  <div class="form-item form-item-append"
+       cdsRow>
+  <!-- Fqdn-->
+  <div cdsCol>
+  <cds-text-label labelInputID="fqdn"
+                  cdRequiredField="FQDN"
+                  [invalid]="topicForm.controls.fqdn.invalid && topicForm.controls.fqdn.dirty"
+                  [invalidText]="fqdnError"
+                  [helperText]="fqdnText"
+                  i18n>FQDN
+  <input cdsText
+         type="text"
+         placeholder="FQDN..."
+         i18n-placeholder
+         id="fqdn"
+         autoFocus
+         formControlName="fqdn"
+         (change)="generatePushEndpoint()"
+         [invalid]="topicForm.controls.fqdn.invalid && topicForm.controls.fqdn.dirty"/>
+  </cds-text-label>
+  <ng-template #fqdnError>
+  <span class="invalid-feedback"
+        *ngIf="topicForm.showError('fqdn', formDir, 'required')">This field is required</span>
+  </ng-template>
+  <ng-template #fqdnText>
+  <span i18n>
+     Enter the Fully Qualified Domain Name (FQDN) for the endpoint. Make sure the domain is valid to receive push notifications.
+  </span>
+  </ng-template>
+  </div>
+  <!-- Port-->
+  <div cdsCol>
+  <cds-text-label labelInputID="Port"
+                  i18n
+                  cdRequiredField="Port"
+                  [invalid]="topicForm.controls.port.invalid && topicForm.controls.port.dirty"
+                  [invalidText]="portError"
+                  [helperText]="portText"
+                  >Port
+  <input cdsText
+         type="text"
+         placeholder="Port..."
+         i18n-placeholder
+         id="Port"
+         autoFocus
+         formControlName="port"
+         (change)="generatePushEndpoint()"
+         [invalid]="topicForm.controls.port.invalid && topicForm.controls.port.dirty"/>
+  </cds-text-label>
+  <ng-template #portError>
+    <span class="invalid-feedback"
+          *ngIf="topicForm.showError('port', formDir, 'required')"
+          i18n>
+     This field is required.
+    </span>
+    <span class="invalid-feedback"
+          *ngIf="topicForm.controls.port.hasError('pattern') && topicForm.controls.port.touched"> Port must be a valid integer</span>
+  </ng-template>
+  <ng-template #portText>
+  <span i18n>
+     Enter the port number for the push endpoint.
+  </span>
+  </ng-template>
+  </div>
+  </div>
+  <div class="form-item form-item-append"
+       cdsRow>
+  <!--push_endpoint -->
+  <div cdsCol>
+  <cds-text-label labelInputID="push_endpoint"
+                  i18n
+                  cdRequiredField="Push endpoint"
+                  [invalid]="topicForm.controls.push_endpoint.invalid && topicForm.controls.push_endpoint.dirty"
+                  [invalidText]="endpointError"
+                  [helperText]="endpoint"
+                  >Push endpoint
+  <input cdsText
+         type="text"
+         placeholder="kafka://[<user>:<password>@]<fqdn>[:<port>]..."
+         i18n-placeholder
+         id="push_endpoint"
+         autoFocus
+         formControlName="push_endpoint"
+         [invalid]="topicForm.controls.push_endpoint.invalid && topicForm.controls.push_endpoint.dirty"/>
+  </cds-text-label>
+  <ng-template #endpointError>
+  <span class="invalid-feedback"
+        *ngIf="topicForm.showError('push_endpoint', formDir, 'required')"
+        i18n>This field is required.</span>
+  </ng-template>
+  <ng-template #endpoint>
+  <span i18n>
+    Specify the endpoint URL for receiving push notifications.
+  </span>
+  </ng-template>
+  </div>
+  <div cdsCol></div>
+  </div>
+  <div cdsRow
+       class="form-item form-item-append">
+  <div cdsCol
+       i18n
+       class="form-group-header">
+      Kafka  attributes
+  </div>
+  </div>
+    <div class="form-item form-item-append"
+         cdsRow>
+  <div cdsCol>
+  <cds-checkbox id="use"
+                formControlName="use_ssl"
+                name="use_ssl"
+                autoFocus
+                >
+  <ng-container i18n>Use SSL</ng-container>
+  <cd-help-text i18n>Enabling SSL encrypts communication between your Kafka client and broker, ensuring the confidentiality and integrity of your messages. You must configure valid SSL certificates on both the client and server to use this feature.</cd-help-text>
+  </cds-checkbox>
+  </div>
+  </div>
+  <div class="form-item form-item-append"
+       cdsRow>
+  <!-- Ca-location-->
+  <div cdsCol>
+  <cds-text-label labelInputID="Ca-location"
+                  i18n>CA location
+  <input cdsText
+         type="text"
+         placeholder="CA location..."
+         i18n-placeholder
+         autoFocus
+         id="ca_location"
+         formControlName="ca_location"/>
+  </cds-text-label>
+  </div>
+  <!-- mechanism-->
+  <div cdsCol>
+  <cds-select formControlName="mechanism"
+              for="mechanism"
+              label="Mechanism"
+              id="mechanism"
+              autoFocus
+              i18n-helperText>
+  <option i18n
+          value="">-- Select a KAFKA mechanism --</option>
+  <option *ngFor="let data of kafka_mechanism"
+          i18n>{{ data }}</option>
+  </cds-select>
+  </div>
+  </div>
+  <div cdsRow
+       class="form-item form-item-append">
+  <!-- kafka-brokers-->
+  <div cdsCol>
+  <cds-text-label labelInputID="kafka_brokers"
+                  i18n>Kafka brokers
+  <input cdsText
+         type="text"
+         placeholder="Kafka brokers..."
+         i18n-placeholder
+         autoFocus
+         id="kafka_brokers"
+         formControlName="kafka_brokers"/>
+  </cds-text-label>
+  </div>
+  <!-- Kafka ack level -->
+  <div cdsCol>
+  <cds-select formControlName="kafka_ack_level"
+              for="kafka_ack_level"
+              label="Kafka ack level"
+              id="kafka_ack_level"
+              autoFocus
+              i18n-helperText>
+  <option *ngFor="let data of kafka_ack_level"
+          i18n>{{ data }}</option>
+  </cds-select>
+  </div>
+  </div>
+  </ng-container>
+  <ng-container  *ngIf="(selectedOption ==='HTTP' || selectedOption ==='AMQP' || selectedOption ==='KAFKA' )" >
+  <div cdsRow
+       class="form-item form-item-append">
+  <div cdsCol
+       i18n
+       class="form-group-header"> Additional common attributes</div>
+  </div>
+  <div cdsRow
+       class="form-item form-item-append">
+  <!-- Persistent-->
+  <div cdsCol
+       [columnNumbers]="{sm: 4}">
+  <cds-checkbox id="persistent"
+                formControlName="persistent"
+                name="persistent"
+                >
+  <ng-container i18n>Persistent</ng-container>
+  <cd-help-text i18n> Select the checkbox to ensure notifications are retried.</cd-help-text>
+  </cds-checkbox>
+  </div>
+  </div>
+  <div cdsRow
+       class="form-item form-item-append">
+  <!-- Opaque data-->
+  <div cdsCol>
+  <cds-text-label labelInputID="opaque_data"
+                  i18n
+                  [helperText]="opaqueData"
+                  >Opaque data
+  <input cdsText
+         type="text"
+         placeholder="Opaque data..."
+         i18n-placeholder
+         autoFocus
+         id="opaqueData"
+         formControlName="OpaqueData"/>
+  </cds-text-label>
+  <ng-template #opaqueData>
+  <span i18n>
+     Provide opaque data to be included in notifications
+  </span>
+  </ng-template>
+  </div>
+  <!-- Time to live-->
+  <div cdsCol>
+  <cds-text-label labelInputID="time_to_live"
+                  i18n
+                  [helperText]="timeTolive"
+                  >Time to live
+  <input cdsText
+         type="number"
+         placeholder="Time to live..."
+         i18n-placeholder
+         autoFocus
+         id="time_to_live"
+         formControlName="time_to_live"/>
+  </cds-text-label>
+  <ng-template #timeTolive>
+  <span i18n>
+     Set the time limit (in seconds) for retaining notifications.
+  </span>
+  </ng-template>
+  </div>
+  <!-- Max retries-->
+  <div cdsCol>
+  <cds-text-label labelInputID="max_retries"
+                  i18n
+                  [helperText]="maxRetries"
+                  >Max retries
+  <input cdsText
+         type="number"
+         placeholder="Max retries..."
+         i18n-placeholder
+         autoFocus
+         id="max_retries"
+         formControlName="max_retries"/>
+  </cds-text-label>
+  <ng-template #maxRetries>
+  <span i18n>
+     Set the max retries max retries before expiring notifications.
+  </span>
+  </ng-template>
+  </div>
+  <!-- Retry sleep duration-->
+  <div cdsCol>
+  <cds-text-label labelInputID="retry_sleep_duration"
+                  [helperText]="retrysleep"
+                  i18n>Retry sleep duration
+  <input cdsText
+         type="number"
+         placeholder="Retry sleep duration..."
+         i18n-placeholder
+         autoFocus
+         id="retry_sleep_duration"
+         formControlName="retry_sleep_duration"/>
+  </cds-text-label>
+  <ng-template #retrysleep>
+  <span i18n>
+     Set retry sleep duration to control the frequency of retrying the notifications.
+  </span>
+  </ng-template>
+  </div>
+  </div>
+  <div cdsRow
+       class="form-item form-item-append">
+  <!-- policy-->
+  <div cdsCol>
+  <cds-textarea-label i18n>
+    {{'Policy'}}
+  <textarea cdsTextArea
+            #topicPolicyTextArea
+            row="4"
+            cols="200"
+            placeholder="Policy"
+            formControlName="policy"
+            aria-label="textarea"
+            (change)="textAreaOnChange('topicPolicyTextArea')"></textarea>
+  </cds-textarea-label>
+  <cd-help-text i18n>JSON formatted document
+  </cd-help-text>
+  <div cdsRow>
+  <div cdsCol>
+  <cds-button-set class="mt-1">
+  <button cdsButton="tertiary"
+          id="example-generator-button"
+          (click)="openUrl('https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-bucket-policies.html?icmpid=docs_amazons3_console')"
+          i18n>Policy examples
+  <svg cdsIcon="launch"
+       size="16"
+       class="cds--btn__icon"></svg>
+  </button>
+  <button cdsButton="tertiary"
+          id="example-generator-button"
+          (click)="openUrl('https://awspolicygen.s3.amazonaws.com/policygen.html')"
+          i18n>Policy generator
+  <svg cdsIcon="launch"
+       size="16"
+       class="cds--btn__icon"></svg>
+  </button>
+  </cds-button-set>
+  </div>
+  <div cdsCol>
+  <cds-button-set class="float-end mt-1">
+  <button cdsButton="tertiary"
+          id="clear-bucket-policy"
+          (click)="clearTextArea('policy', '{}')"
+          i18n>Clear
+  <svg cdsIcon="close"
+       size="32"
+       class="cds--btn__icon"></svg>
+  </button>
+  </cds-button-set>
+  </div>
+  </div>
+  </div>
+  </div>
+  </ng-container>
+  <div class="card-footer">
+  <cd-form-button-panel (submitActionEvent)="submitAction()"
+                        [form]="topicForm"
+                        [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                        wrappingClass="text-right"></cd-form-button-panel>
+  </div>
+  </form>
+  </div>
