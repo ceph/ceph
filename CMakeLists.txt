@@ -527,7 +527,7 @@ option(WITH_RADOSGW_DBSTORE "DBStore backend for RADOS Gateway" ON)
 option(WITH_RADOSGW_MOTR "CORTX-Motr backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_DAOS "DAOS backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_D4N "D4N wrapper for RADOS Gateway" ON)
-option(WITH_RADOSGW_POSIX "POSIX backend for Rados Gateway" ON)
+option(WITH_RADOSGW_POSIX "POSIX backend for RADOS Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
 option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)
 option(WITH_RADOSGW_BACKTRACE_LOGGING "Enable backtraces in rgw logs" OFF)
@@ -835,3 +835,27 @@ add_tags(ctags
   EXCLUDE_OPTS ${CTAG_EXCLUDES}
   EXCLUDES "*.js" "*.css" ".tox" "python-common/build")
 add_custom_target(tags DEPENDS ctags)
+
+# Catch2 C++ Unit Test support:
+option(WITH_CATCH2 "Enable Catch2 unit tests" ON)
+option(PREFER_SYSTEM_CATCH2 "Enable Catch2 unit tests (use system packages, if found)" OFF)
+option(WITH_SYSTEM_CATCH2 "Enable Catch2 unit tests (require system packages)" OFF)
+
+if(WITH_CATCH2 OR WITH_SYSTEM_CATCH2 OR PREFER_SYSTEM_CATCH2)
+  include(${CMAKE_MODULE_PATH}/CPM.cmake)
+
+  if(PREFER_SYSTEM_CATCH2)
+   set(CPM_USE_LOCAL_PACKAGES ON)
+  endif()
+
+  if(WITH_SYSTEM_CATCH2)
+   set(CPM_LOCAL_PACKAGES_ONLY ON)
+  endif()
+
+  CPMAddPackage("gh:catchorg/Catch2@3.8.1")
+
+  list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
+
+  message("-- Enabled Catch2 support")
+endif()
+
