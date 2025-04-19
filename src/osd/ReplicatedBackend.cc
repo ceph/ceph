@@ -624,7 +624,7 @@ void ReplicatedBackend::submit_transaction(
     pg_committed_to,
     true,
     op_t);
-  
+
   op_t.register_on_commit(
     parent->bless_context(
       new C_OSD_OnOpCommit(this, &op)));
@@ -745,14 +745,15 @@ static uint32_t crc32_netstring(const uint32_t orig_crc, std::string_view data)
 }
 
 int ReplicatedBackend::be_deep_scrub(
+  const Scrub::ScrubCounterSet& io_counters,
   const hobject_t &poid,
   ScrubMap &map,
   ScrubMapBuilder &pos,
   ScrubMap::object &o)
 {
   dout(10) << __func__ << " " << poid << " pos " << pos << dendl;
-  int r;
-  uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
+  auto& perf_logger = *(get_parent()->get_logger());
+  const uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
                            CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
                            CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE;
 
@@ -763,6 +764,7 @@ int ReplicatedBackend::be_deep_scrub(
     sleeptime.sleep();
   }
 
+  int r{0};
   ceph_assert(poid == pos.ls[pos.pos]);
   if (!pos.data_done()) {
     if (pos.data_pos == 0) {
@@ -771,6 +773,7 @@ int ReplicatedBackend::be_deep_scrub(
 
     const uint64_t stride = cct->_conf->osd_deep_scrub_stride;
 
+    perf_logger.inc(io_counters.read_cnt);
     bufferlist bl;
     r = store->read(
       ch,
@@ -788,6 +791,7 @@ int ReplicatedBackend::be_deep_scrub(
     if (r > 0) {
       pos.data_hash << bl;
     }
+    perf_logger.inc(io_counters.read_bytes, r);
     pos.data_pos += r;
     if (static_cast<uint64_t>(r) == stride) {
       dout(20) << __func__ << "  " << poid << " more data, digest so far 0x"
@@ -806,6 +810,7 @@ int ReplicatedBackend::be_deep_scrub(
   if (pos.omap_pos.empty()) {
     pos.omap_hash = -1;
 
+    perf_logger.inc(io_counters.omapgetheader_cnt);
     bufferlist hdrbl;
     r = store->omap_get_header(
       ch,
@@ -822,10 +827,13 @@ int ReplicatedBackend::be_deep_scrub(
       bool encoded = false;
       dout(25) << "CRC header " << cleanbin(hdrbl, encoded, true) << dendl;
       pos.omap_hash = hdrbl.crc32c(pos.omap_hash);
+      perf_logger.inc(io_counters.omapgetheader_bytes, hdrbl.length());
     }
   }
 
   // omap
+
+  perf_logger.inc(io_counters.omapget_cnt);
   using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
   auto result = store->omap_iterate(
     ch,
@@ -858,6 +866,9 @@ int ReplicatedBackend::be_deep_scrub(
   } else if (const auto more = static_cast<bool>(result); more) {
     return -EINPROGRESS;
   }
+
+  // we have the full omap now. Finalize the perf counting
+  perf_logger.inc(io_counters.omapget_bytes, pos.omap_bytes);
 
   if (pos.omap_keys > cct->_conf->
 	osd_deep_scrub_large_omap_object_key_threshold ||
