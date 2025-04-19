@@ -591,6 +591,16 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char
 
 int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
 {
+  // testing valgrind uninitialized value 
+  int a;
+  if(a==0) {
+	  ldpp_dout(this, 10) << " test valgrind a = 0" << dendl;
+	}
+  else if(a==1) {
+	  ldpp_dout(this, 10) << " test valgrind a = 1" << dendl;
+  }
+
+
   std::string input_tag{"InputSerialization"};
   std::string output_tag{"OutputSerialization"};
   if (chunk_number !=0) {
