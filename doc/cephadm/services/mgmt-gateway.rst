@@ -128,6 +128,7 @@ A ``mgmt-gateway`` service can be applied using a specification. An example in Y
         - ceph0
     spec:
      port: 5000
+     ssl: True
      ssl_protocols:
        - TLSv1.2
        - TLSv1.3
@@ -136,13 +137,13 @@ A ``mgmt-gateway`` service can be applied using a specification. An example in Y
        - AES128-SHA
        - AES256-SHA
        - ...
-     ssl_certificate: |
+     ssl_cert: |
        -----BEGIN CERTIFICATE-----
        MIIDtTCCAp2gAwIBAgIYMC4xNzc1NDQxNjEzMzc2MjMyXzxvQ7EcMA0GCSqGSIb3
        DQEBCwUAMG0xCzAJBgNVBAYTAlVTMQ0wCwYDVQQIDARVdGFoMRcwFQYDVQQHDA5T
        [...]
        -----END CERTIFICATE-----
-    ssl_certificate_key: |
+     ssl_key: |
        -----BEGIN PRIVATE KEY-----
        MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC5jdYbjtNTAKW4
        /CwQr/7wOiLGzVxChn3mmCIF3DwbL/qvTFTX2d8bDf6LjGwLYloXHscRfxszX/4h
