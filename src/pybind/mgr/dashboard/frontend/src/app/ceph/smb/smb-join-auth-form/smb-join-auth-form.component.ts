@@ -13,6 +13,7 @@ import { JOIN_AUTH_RESOURCE, SMBCluster, SMBJoinAuth } from '../smb.model';
 import { Observable } from 'rxjs';
 import { JOINAUTH_URL } from '../smb-join-auth-list/smb-join-auth-list.component';
 import { Location } from '@angular/common';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
 
 @Component({
   selector: 'cd-smb-join-auth-form',
@@ -66,7 +67,16 @@ export class SmbJoinAuthFormComponent extends CdForm implements OnInit {
   createForm() {
     this.form = this.formBuilder.group({
       authId: new FormControl('', {
-        validators: [Validators.required]
+        validators: [Validators.required],
+        asyncValidators: [
+          CdValidators.unique(
+            this.smbService.joinAuthExists,
+            this.smbService,
+            null,
+            null,
+            this.form?.get('authId')?.value
+          )
+        ]
       }),
       username: new FormControl('', {
         validators: [Validators.required]
