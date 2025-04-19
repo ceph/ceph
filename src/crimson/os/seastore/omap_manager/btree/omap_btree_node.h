@@ -120,6 +120,7 @@ struct OMapNode : LogicalChildNode {
     if (!this->end.empty()) {
       // this is a duplicated init.
       assert(end == this->end);
+      assert(has_seen_by_users());
       return;
     }
     if (begin == BEGIN_KEY && end == END_KEY) {

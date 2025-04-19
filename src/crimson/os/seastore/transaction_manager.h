@@ -301,8 +301,9 @@ public:
         ).si_then([direct_partial_off, partial_len, this, &t](auto extent) {
           return cache->read_extent_maybe_partial(
             t, std::move(extent), direct_partial_off, partial_len);
-        }).si_then([maybe_init=std::move(maybe_init)](auto extent) {
+        }).si_then([maybe_init=std::move(maybe_init), &t](auto extent) {
 	  maybe_init(*extent);
+	  extent->seen_by_users = (t.get_src() <= Transaction::src_t::READ);
 	  return extent;
 	});
       } else {
@@ -389,6 +390,7 @@ public:
       len,
       placement_hint,
       INIT_GENERATION);
+    ext->seen_by_users = (t.get_src() <= Transaction::src_t::READ);
     return lba_manager->alloc_extent(
       t,
       laddr_hint,
@@ -424,6 +426,9 @@ public:
       len,
       placement_hint,
       INIT_GENERATION);
+    for (auto &ext : exts) {
+      ext->seen_by_users = (t.get_src() <= Transaction::src_t::READ);
+    }
     return lba_manager->alloc_extents(
       t,
       laddr_hint,
@@ -550,6 +555,8 @@ public:
 	  } else {
 	    auto ret = get_extent_if_linked<T>(t, pin->duplicate());
 	    if (ret.index() == 1) {
+	      // We are not setting "seen_by_users" as this extent is
+	      // about to be retired soon.
 	      return std::move(std::get<1>(ret));
 	    } else {
 	      // absent
@@ -594,6 +601,7 @@ public:
 	      remap_len,
 	      original_laddr,
 	      original_bptr);
+	    extent->seen_by_users = (t.get_src() <= Transaction::src_t::READ);
 	    extents.emplace_back(std::move(extent));
 	  }
 	});
@@ -1052,7 +1060,7 @@ private:
       direct_length,
       direct_partial_off,
       partial_len,
-      [&pref, maybe_init=std::move(maybe_init)]
+      [&pref, maybe_init=std::move(maybe_init), &t]
       (T &extent) mutable {
 	assert(extent.is_logical());
 	assert(!extent.has_laddr());
@@ -1062,6 +1070,7 @@ private:
 	pref.link_child(&extent);
 	extent.maybe_set_intermediate_laddr(pref);
 	maybe_init(extent);
+	extent.seen_by_users = (t.get_src() <= Transaction::src_t::READ);
       }
     ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) mutable -> ret {
       if (ref->is_fully_loaded()) {
