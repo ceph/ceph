@@ -4100,3 +4100,106 @@ TEST(LibCephFS, SubdirLookupAfterReaddir_ll) {
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_shutdown(cmount);
 }
+
+void nonblocking_io_complete(struct ceph_ll_io_info *io_info)
+  {
+    if (io_info->write) {
+      printf("Bytes written = %d\n", static_cast<int>(io_info->result));
+    } else {
+      printf("Bytes read = %d\n", static_cast<int>(io_info->result));
+    }
+}
+
+TEST(LibCephFS, CheckAsyncIOWithTwoClients) {
+  
+  std::vector<int> io_flags;
+  io_flags.push_back(1);
+  io_flags.push_back(0);
+  for(auto io_flag: io_flags) {
+    int ret;
+    pid_t mypid = getpid();
+    char filename[256];
+    sprintf(filename, "check_async_io_with_two_clients", mypid);
+    struct ceph_mount_info *w_cmount = NULL, *r_cmount = NULL;
+    UserPerm *w_perms, *r_perms = NULL;
+    Inode *w_parent, *w_inode, *r_parent, *r_inode = NULL;
+    struct ceph_statx stx = { 0 };
+    struct ceph_ll_io_info io_info;
+    struct iovec iov;
+    struct Fh *w_fh, *r_fh;
+    char buf[131072];
+
+    ASSERT_EQ(ceph_create(&w_cmount, NULL), 0);
+    ASSERT_EQ(ceph_conf_read_file(w_cmount, NULL), 0);
+    ASSERT_EQ(ceph_conf_parse_env(w_cmount, NULL), 0);
+    ASSERT_EQ(ceph_mount(w_cmount, NULL), 0);
+
+    ASSERT_EQ(ceph_create(&r_cmount, NULL), 0);
+    ASSERT_EQ(ceph_conf_read_file(r_cmount, NULL), 0);
+    ASSERT_EQ(ceph_conf_parse_env(r_cmount, NULL), 0);
+    ASSERT_EQ(ceph_mount(r_cmount, NULL), 0);
+
+    w_perms = ceph_mount_perms(w_cmount);
+    ASSERT_EQ(ceph_ll_lookup_root(w_cmount, &w_parent), 0);
+
+    r_perms = ceph_mount_perms(r_cmount);
+    ASSERT_EQ(ceph_ll_lookup_root(r_cmount, &r_parent), 0);
+
+    ASSERT_EQ(ceph_ll_create(w_cmount, w_parent, filename, 0744,
+      O_RDWR | O_CREAT | O_EXCL | O_NONBLOCK | O_NOFOLLOW, &w_inode,
+      &w_fh, &stx, CEPH_STATX_INO, 0, w_perms), 0);
+
+    ASSERT_EQ(ceph_ll_lookup(r_cmount, r_parent, filename, &r_inode,
+      &stx, CEPH_STATX_INO, 0, r_perms), 0);
+    
+    ASSERT_EQ(ceph_ll_open(r_cmount, r_inode,
+      O_RDONLY | O_NONBLOCK | O_NOFOLLOW, &r_fh, r_perms), 0);
+
+    if (io_flag) {
+      iov.iov_base = buf;
+      iov.iov_len = sizeof(buf);
+
+      io_info.callback = nonblocking_io_complete;
+      io_info.iov = &iov;
+      io_info.iovcnt = 1;
+      io_info.off = 0;
+      io_info.result = 0;
+
+      io_info.fh = w_fh;
+      io_info.write = true;
+
+      ASSERT_EQ(ceph_ll_nonblocking_readv_writev(w_cmount, &io_info), 0);
+
+      sleep(1);
+
+      io_info.fh = r_fh;
+      io_info.write = false;
+
+      ASSERT_EQ(ceph_ll_nonblocking_readv_writev(r_cmount, &io_info), 0);
+
+      sleep(1);
+    } else {
+      ret = ceph_ll_write(w_cmount, w_fh, 0, sizeof(buf), buf);
+      printf("Bytes written = %d\n", ret);
+
+      ret = ceph_ll_read(r_cmount, r_fh, 0, sizeof(buf), buf);
+      printf("Bytes read = %d\n", ret);
+    }
+
+    ASSERT_EQ(ceph_ll_close(w_cmount, w_fh), 0);
+    ASSERT_EQ(ceph_ll_close(r_cmount, r_fh), 0);
+
+    ASSERT_EQ(ceph_ll_unlink(w_cmount, w_parent, filename, w_perms), 0);
+    
+    ceph_ll_put(w_cmount, w_parent);
+    ceph_unmount(w_cmount);
+    ceph_release(w_cmount);
+
+    ceph_ll_put(r_cmount, r_parent);
+    ceph_unmount(r_cmount);
+    ceph_release(r_cmount);
+
+    w_cmount = NULL;
+    r_cmount = NULL;
+  }
+}
