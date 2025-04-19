@@ -2463,7 +2463,7 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
     if (ret == -EEXIST) {
        /* we need to reread the info and return it, caller will have a use for it */
       RGWBucketInfo orig_info;
-      int r = get_bucket_info(&svc, bucket.tenant, bucket.name, orig_info, NULL, y, NULL);
+      int r = get_bucket_info(&svc, bucket.tenant, bucket.name, orig_info, NULL, y, dpp);
       if (r < 0) {
         if (r == -ENOENT) {
           continue;
