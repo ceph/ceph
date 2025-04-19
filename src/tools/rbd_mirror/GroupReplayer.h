@@ -178,6 +178,7 @@ private:
     }
   };
 
+  typedef boost::optional<State> OptionalState;
   typedef boost::optional<cls::rbd::MirrorGroupStatusState>
       OptionalMirrorGroupStatusState;
 
@@ -203,7 +204,7 @@ private:
   mutable ceph::mutex m_lock;
   State m_state = STATE_STOPPED;
   std::string m_state_desc;
-  OptionalMirrorGroupStatusState m_status_state =
+  OptionalMirrorGroupStatusState m_mirror_group_status_state =
     boost::make_optional(false, cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN);
   int m_last_r = 0;
 
@@ -286,13 +287,14 @@ private:
   void remove_group_status(bool force, Context *on_finish);
   void remove_group_status_remote(bool force, Context *on_finish);
 
-  void set_mirror_group_status_update(cls::rbd::MirrorGroupStatusState state,
-                                      const std::string &desc);
 
   void schedule_update_mirror_group_replay_status();
   void handle_update_mirror_group_replay_status(int r);
   void cancel_update_mirror_group_replay_status();
-  void update_mirror_group_replay_status();
+
+  void update_mirror_group_status(bool force, const OptionalState &opt_state);
+  void set_mirror_group_status_update(bool force,
+                                      const OptionalState &opt_state);
 
   void wait_for_ops();
   void handle_wait_for_ops(int r);
