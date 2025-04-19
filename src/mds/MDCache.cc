@@ -13454,7 +13454,7 @@ class C_MDC_DataUninlinedSubmitted : public MDCacheLogContext {
 
   void finish(int r) {
     auto mds = get_mds(); // to keep dout happy
-    auto in = mds->server->rdlock_path_pin_ref(mdr, true);
+    auto in = mdr->in[0];
 
     ceph_assert(in != nullptr);
 
@@ -13471,6 +13471,7 @@ class C_MDC_DataUninlinedSubmitted : public MDCacheLogContext {
     h->record_uninline_passed();
     in->uninline_finished();
     mdr->apply();
+    in->auth_unpin(this); // for uninline data
     mds->server->respond_to_request(mdr, r);
   }
 };
@@ -13487,7 +13488,9 @@ struct C_IO_DataUninlined : public MDSIOContext {
 
   void finish(int r) override {
     auto mds = get_mds(); // to keep dout/derr happy
-    auto in = mds->server->rdlock_path_pin_ref(mdr, true);
+    auto in = mdr->in[0];
+
+    ceph_assert(in != nullptr);
 
     // return faster if operation has failed (non-zero) status
     if (r) {
@@ -13501,6 +13504,7 @@ struct C_IO_DataUninlined : public MDSIOContext {
       in->make_path_string(path);
       h->record_uninline_status(in->ino(), r, path);
       in->uninline_finished();
+      in->auth_unpin(this); // for uninline data
       mds->server->respond_to_request(mdr, r);
       return;
     }
@@ -13542,11 +13546,9 @@ struct C_IO_DataUninlined : public MDSIOContext {
 
 void MDCache::uninline_data_work(MDRequestRef mdr)
 {
-  CInode *in = mds->server->rdlock_path_pin_ref(mdr, true);
+  CInode *in = mdr->in[0];
 
-  if (!in) {
-    return;
-  }
+  ceph_assert(in != nullptr);
 
   MutationImpl::LockOpVec lov;
   lov.add_xlock(&in->authlock);
@@ -13561,6 +13563,7 @@ void MDCache::uninline_data_work(MDRequestRef mdr)
   if (!in->has_inline_data()) {
     dout(20) << "(uninline_data) inode doesn't have inline data anymore " << *in << dendl;
     in->uninline_finished();
+    in->auth_unpin(this); // for uninline_data
     mds->server->respond_to_request(mdr, 0);
     return;
   }
