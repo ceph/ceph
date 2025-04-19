@@ -1996,8 +1996,7 @@ public:
         set_status("sync lock notification");
         yield call(sync_env->bid_manager->notify_cr());
         if (retcode < 0) {
-          tn->log(5, SSTR("ERROR: failed to notify bidding information" << retcode));
-          return set_cr_error(retcode);
+          tn->log(5, SSTR("ERROR: failed to notify bidding information retcode=" << retcode));
         }
 
         set_status("sleeping");
