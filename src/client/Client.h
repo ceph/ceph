@@ -380,6 +380,8 @@ public:
 		     std::vector<std::pair<uint64_t,uint64_t>> *blocks);
   int file_blockdiff_finish(struct scan_state_t *state);
 
+  void get_perf_counters(struct perf_counters *pc);
+
   /*
    * Get the next snapshot delta entry.
    *
