@@ -1080,6 +1080,8 @@ std::string mirror_group_state(librbd::mirror_group_state_t state) {
       return "enabled";
     case RBD_MIRROR_GROUP_DISABLED:
       return "disabled";
+    case RBD_MIRROR_GROUP_CREATING:
+      return "creating";
     default:
       return "unknown";
   }
