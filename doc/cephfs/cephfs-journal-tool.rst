@@ -23,9 +23,9 @@ Syntax
 
 ::
 
-    cephfs-journal-tool journal <inspect|import|export|reset>
-    cephfs-journal-tool header <get|set>
-    cephfs-journal-tool event <get|splice|apply> [filter] <list|json|summary|binary>
+    cephfs-journal-tool [options] journal <inspect|import|export|reset>
+    cephfs-journal-tool [options] header <get|set> <field> <value>
+    cephfs-journal-tool [options] event <get|splice|apply> [filter] <list|json|summary|binary>
 
 
 The tool operates in three modes: ``journal``, ``header`` and ``event``,
@@ -43,11 +43,13 @@ This should be your starting point to assess the state of a journal.
   present and can be decoded.
 
 * ``import`` and ``export`` read and write binary dumps of the journal
-  in a sparse file format.  Pass the filename as the last argument.  The
-  export operation may not work reliably for journals which are damaged (missing
+  in a sparse file format. Pass the filename as the last argument. The import operation checks
+  if the imported journal fsid matches with the online cluster fsid. Using ``--force`` skips
+  the fsid check. The export operation may not work reliably for journals which are damaged (missing
   objects).
 
-* ``reset`` truncates a journal, discarding any information within it.
+* ``reset`` truncates a journal, discarding any information within it. Using ``--force`` does a
+  hard reset without trying to recover from on-disk.
 
 
 Example: journal inspect
@@ -92,8 +94,8 @@ Header mode
 
 * ``get`` outputs the current content of the journal header
 
-* ``set`` modifies an attribute of the header.  Allowed attributes are
-  ``trimmed_pos``, ``expire_pos`` and ``write_pos``.
+* ``set`` modifies an attribute of the header.  Allowed attribute fields are
+  ``trimmed_pos``, ``expire_pos``,  ``write_pos`` and ``pool_id``.
 
 Example: header get/set
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -237,3 +239,10 @@ Example: event mode
     # cephfs-journal-tool event get binary --path bin_events
     Wrote output to binary files in directory 'bin_events'
 
+Options
+~~~~~~~
+
+* ``--rank=<filesystem>:{mds-rank|all}`` Used to specify the filesystem, the mds rank or "all" ranks.
+* ``--journal=<mdlog|purge_queue>`` The Journal type. ``purge_queue`` means this journal is used to
+  queue for purge operation. The default value is ``mdlog``, which is the only option that supports
+  event mode.
