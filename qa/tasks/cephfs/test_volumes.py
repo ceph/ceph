@@ -10,6 +10,7 @@ import unittest
 from hashlib import md5
 from textwrap import dedent
 from io import StringIO
+from pathlib import Path
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
@@ -6445,6 +6446,190 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         self._wait_for_trash_empty()
         # Clean tmp config file
         self.mount_a.run_shell(['sudo', 'rm', '-f', tmp_meta_path], omit_sudo=False)
+
+    def test_subvolume_snapshot_with_use_global_snaprealm_seq_config_disabled(self):
+        """
+        To verify that the subvolume snapshots doesn't unnecessarily cow old inodes of
+        parent directories of subvolume snapshot path when mds_use_global_snaprealm_seq_for_subvol
+        is disabled
+        """
+
+        # Disable the config
+        self.config_set('mds', 'mds_use_global_snaprealm_seq_for_subvol', False)
+        self.assertEqual(self.config_get('mds', 'mds_use_global_snaprealm_seq_for_subvol'), 'false')
+
+        subvolname = self._gen_subvol_name()
+        group = self._gen_subvol_grp_name()
+        snapshot = self._gen_subvol_snap_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create 25 subvolumes in group.
+        for i in range(1, 26):
+            self._fs_cmd("subvolume", "create", self.volname, f"{subvolname}_{i}", group, "--mode=777")
+
+        # create 2 snapshots of each subvolume
+        for i in range(1, 26):
+            self._fs_cmd("subvolume", "snapshot", "create", self.volname, f"{subvolname}_{i}", f"{snapshot}_1", group)
+            self._do_subvolume_io(f"{subvolname}_{i}", subvolume_group=f"{group}", number_of_files=1)
+            self._fs_cmd("subvolume", "snapshot", "create", self.volname, f"{subvolname}_{i}", f"{snapshot}_2", group)
+            self._do_subvolume_io(f"{subvolname}_{i}", subvolume_group=f"{group}", number_of_files=1, file_size=2)
+
+        # get paths to validate old_inodes
+        sv1_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {self.volname} {subvolname}_1 {group}')[1:].strip()
+        sv1_path = Path(sv1_path) #/volumes/<group>/<subvol>/<uuid>
+        sv1_dir_path = sv1_path.parent #/volumes/<group>/<subvol>
+        group_path = sv1_path.parent.parent #/volumes/<group>
+        volumes_path = sv1_path.parent.parent.parent #/volumes
+        root_path = sv1_path.parent.parent.parent.parent #/
+
+        # dump inodes to validate old_inodes
+        subvol_inode = self.mount_a.path_to_ino(sv1_dir_path)
+        group_inode = self.mount_a.path_to_ino(group_path)
+        volumes_inode = self.mount_a.path_to_ino(volumes_path)
+        root_inode = self.mount_a.path_to_ino(root_path)
+        subvol_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(subvol_inode)])
+        group_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(group_inode)])
+        volumes_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(volumes_inode)])
+        root_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(root_inode)])
+
+        # Validate number of old_inodes
+        self.assertEqual(len(subvol_inode_dump["old_inodes"]), 2)
+        self.assertEqual(len(group_inode_dump["old_inodes"]), 0)
+        self.assertEqual(len(volumes_inode_dump["old_inodes"]), 0)
+        self.assertEqual(len(root_inode_dump["old_inodes"]), 0)
+
+        # cleanup
+        for i in range(1, 26):
+            self._fs_cmd("subvolume", "snapshot", "rm", self.volname, f"{subvolname}_{i}", f"{snapshot}_1", group)
+            self._fs_cmd("subvolume", "snapshot", "rm", self.volname, f"{subvolname}_{i}", f"{snapshot}_2", group)
+        for i in range(1, 26):
+            self._fs_cmd("subvolume", "rm", self.volname, f"{subvolname}_{i}", group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_snapshot_with_use_global_snaprealm_seq_config_enabled(self):
+        """
+        To verify that the subvolume snapshots unnecessarily cow old inodes of parent
+        directories of subvolume snapshot path when mds_use_global_snaprealm_seq_for_subvol
+        is enabled
+        """
+
+        # Enable the config
+        self.config_set('mds', 'mds_use_global_snaprealm_seq_for_subvol', True)
+        self.assertEqual(self.config_get('mds', 'mds_use_global_snaprealm_seq_for_subvol'), 'true')
+
+        subvolname = self._gen_subvol_name()
+        group = self._gen_subvol_grp_name()
+        snapshot = self._gen_subvol_snap_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create 25 subvolumes in group.
+        for i in range(1, 26):
+            self._fs_cmd("subvolume", "create", self.volname, f"{subvolname}_{i}", group, "--mode=777")
+
+        # create 2 snapshots of each subvolume
+        for i in range(1, 26):
+            self._fs_cmd("subvolume", "snapshot", "create", self.volname, f"{subvolname}_{i}", f"{snapshot}_1", group)
+            self._fs_cmd("subvolume", "snapshot", "create", self.volname, f"{subvolname}_{i}", f"{snapshot}_2", group)
+
+        # get paths to validate old_inodes
+        sv1_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {self.volname} {subvolname}_1 {group}')[1:].strip()
+        sv1_path = Path(sv1_path) #/volumes/<group>/<subvol>/<uuid>
+        sv1_dir_path = sv1_path.parent #/volumes/<group>/<subvol>
+        group_path = sv1_path.parent.parent #/volumes/<group>
+        volumes_path = sv1_path.parent.parent.parent #/volumes
+        root_path = sv1_path.parent.parent.parent.parent #/
+
+        # dump inodes to validate old_inodes
+        subvol_inode = self.mount_a.path_to_ino(sv1_dir_path)
+        group_inode = self.mount_a.path_to_ino(group_path)
+        volumes_inode = self.mount_a.path_to_ino(volumes_path)
+        root_inode = self.mount_a.path_to_ino(root_path)
+        subvol_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(subvol_inode)])
+        group_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(group_inode)])
+        volumes_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(volumes_inode)])
+        root_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(root_inode)])
+
+        # Validate number of old_inodes
+        self.assertEqual(len(subvol_inode_dump["old_inodes"]), 2)
+        self.assertGreaterEqual(len(group_inode_dump["old_inodes"]), 1)
+        self.assertGreaterEqual(len(volumes_inode_dump["old_inodes"]), 0)
+        self.assertGreaterEqual(len(root_inode_dump["old_inodes"]), 0)
+
+        # cleanup
+        for i in range(1, 26):
+            self._fs_cmd("subvolume", "snapshot", "rm", self.volname, f"{subvolname}_{i}", f"{snapshot}_1", group)
+            self._fs_cmd("subvolume", "snapshot", "rm", self.volname, f"{subvolname}_{i}", f"{snapshot}_2", group)
+        for i in range(1, 26):
+            self._fs_cmd("subvolume", "rm", self.volname, f"{subvolname}_{i}", group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_root_snapshot_with_use_global_snaprealm_seq_config_disabled(self):
+        """
+        To verify that the snapshots between root and subvolume snapshot directory triggers cow of
+        old inodes based on global snaprealm's seq number for snpashots between root and subvolume
+        directory. Also verify, it uses subvolume snaprealm's seq number for subvolume snapshots.
+        """
+
+        # Disable the config
+        self.config_set('mds', 'mds_use_global_snaprealm_seq_for_subvol', False)
+        self.assertEqual(self.config_get('mds', 'mds_use_global_snaprealm_seq_for_subvol'), 'false')
+
+        subvolname = self._gen_subvol_name()
+        group = self._gen_subvol_grp_name()
+        snapshot = self._gen_subvol_snap_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create 25 subvolumes in group.
+        for i in range(1, 26):
+            self._fs_cmd("subvolume", "create", self.volname, f"{subvolname}_{i}", group, "--mode=777")
+
+        # Take root snapshot
+        self.mount_a.run_shell(['mkdir', './.snap/root_s1'])
+
+        # create 2 snapshots of each subvolume
+        for i in range(1, 26):
+            self._fs_cmd("subvolume", "snapshot", "create", self.volname, f"{subvolname}_{i}", f"{snapshot}_1", group)
+            self._do_subvolume_io(f"{subvolname}_{i}", subvolume_group=f"{group}", number_of_files=1)
+            self._fs_cmd("subvolume", "snapshot", "create", self.volname, f"{subvolname}_{i}", f"{snapshot}_2", group)
+            self._do_subvolume_io(f"{subvolname}_{i}", subvolume_group=f"{group}", number_of_files=1, file_size=2)
+
+        # get paths to validate old_inodes
+        sv1_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {self.volname} {subvolname}_1 {group}')[1:].strip()
+        sv1_path = Path(sv1_path) #/volumes/<group>/<subvol>/<uuid>
+        sv1_dir_path = sv1_path.parent #/volumes/<group>/<subvol>
+        group_path = sv1_path.parent.parent #/volumes/<group>
+        volumes_path = sv1_path.parent.parent.parent #/volumes
+        root_path = sv1_path.parent.parent.parent.parent #/
+
+        # dump inodes to validate old_inodes
+        subvol_inode = self.mount_a.path_to_ino(sv1_dir_path)
+        group_inode = self.mount_a.path_to_ino(group_path)
+        volumes_inode = self.mount_a.path_to_ino(volumes_path)
+        root_inode = self.mount_a.path_to_ino(root_path)
+        subvol_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(subvol_inode)])
+        group_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(group_inode)])
+        volumes_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(volumes_inode)])
+        root_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(root_inode)])
+
+        # Validate number of old_inodes
+        self.assertGreaterEqual(len(subvol_inode_dump["old_inodes"]), 2)
+        self.assertGreaterEqual(len(group_inode_dump["old_inodes"]), 1)
+        self.assertGreaterEqual(len(volumes_inode_dump["old_inodes"]), 1)
+        self.assertGreaterEqual(len(root_inode_dump["old_inodes"]), 1)
+
+        # cleanup
+        for i in range(1, 26):
+            self._fs_cmd("subvolume", "snapshot", "rm", self.volname, f"{subvolname}_{i}", f"{snapshot}_1", group)
+            self._fs_cmd("subvolume", "snapshot", "rm", self.volname, f"{subvolname}_{i}", f"{snapshot}_2", group)
+        for i in range(1, 26):
+            self._fs_cmd("subvolume", "rm", self.volname, f"{subvolname}_{i}", group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
 
 class TestSubvolumeSnapshotClones(TestVolumesHelper):
