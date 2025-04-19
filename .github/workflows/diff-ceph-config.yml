@@ -1,0 +1,63 @@
+name: Check if any ceph configuration has been changed
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+
+# The following permissions are needed to write a comment to repo
+# TODO: Is there any better way?    
+permissions:
+    contents: write
+    pull-requests: write
+
+jobs:
+  pull_request:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout ceph.git
+        uses: actions/checkout@v4
+        with:
+          path: ceph
+          sparse-checkout: src/script
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13' 
+
+      - name: Install python packages
+        run: |
+          pip3 install -r ./src/script/config-diff/requirements.txt
+        # ASK: can we change the working directory to the script folder?
+        working-directory: ceph
+
+      - name: execute config diff tool
+        id: diff_tool
+        run:  python3 ./src/script/config-diff/config_diff.py diff-branch-remote-repo --ref-repo ${{ github.event.pull_request.base.repo.git_url }} --ref-branch ${{ github.event.pull_request.base.ref }} --remote-repo ${{ github.event.pull_request.head.repo.git_url }} --cmp-branch ${{ github.event.pull_request.head.ref }}
+        working-directory: ceph
+      
+      - name: Post output as a comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const diffOutput = fs.readFileSync('diff_result.json', 'utf8');
+            const diffJson = JSON.parse(diffOutput);
+
+            // Check if the structure matches {"added": {}, "deleted": {}, "modified": {}}
+            const isEmptyDiff = Object.keys(diffJson.added).length === 0 &&
+                                Object.keys(diffJson.deleted).length === 0 &&
+                                Object.keys(diffJson.modified).length === 0;
+
+            if (isEmptyDiff) {
+              console.log("No changes detected. Skipping comment creation.");
+            } else {
+              github.rest.issues.createComment({
+                issue_number: context.payload.pull_request.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `### Config Diff Tool Output\n\`\`\`\n${diffOutput}\n\`\`\``
+              });
+            }
