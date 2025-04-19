@@ -3439,7 +3439,7 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
     if (inline_bl.length() == 0) {
       unsigned n;
       // we need to encode inline_bl to measure encoded length
-      bool never_happen = encode_some(0, OBJECT_MAX_SIZE, inline_bl, &n);
+      bool never_happen = encode_some(0, OBJECT_MAX_SIZE, inline_bl, &n, force);
       inline_bl.reassign_to_mempool(mempool::mempool_bluestore_inline_bl);
       ceph_assert(!never_happen);
       size_t len = inline_bl.length();
@@ -3483,7 +3483,7 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
       encoded_shards.emplace_back(dirty_shard_t(&(*shard)));
       bufferlist& bl = encoded_shards.back().bl;
       if (encode_some(shard->shard_info->offset, endoff - shard->shard_info->offset,
-      		bl, &shard->extents)) {
+          bl, &shard->extents, force)) {
         if (force) {
           _dump_extent_map<-1>(cct, *this);
           derr << __func__ << "  encode_some needs reshard" << dendl;
@@ -3921,7 +3921,8 @@ bool BlueStore::ExtentMap::encode_some(
   uint32_t offset,
   uint32_t length,
   bufferlist& bl,
-  unsigned *pn)
+  unsigned *pn,
+  bool force)
 {
   Extent dummy(offset);
   auto start = extent_map.lower_bound(dummy);
@@ -3934,10 +3935,17 @@ bool BlueStore::ExtentMap::encode_some(
   unsigned n = 0;
   size_t bound = 0;
   bool must_reshard = false;
+  uint32_t prev_offset_end = 0;
   for (auto p = start;
        p != extent_map.end() && p->logical_offset < end;
        ++p, ++n) {
     ceph_assert(p->logical_offset >= offset);
+    if (p->logical_offset < prev_offset_end) {
+      using P = BlueStore::printer;
+      dout(-1) << "FAILED ENCODE_SOME overlap: " << std::endl << onode->print(P::NICK + P::SDISK + P::SUSE + P::SBUF) << dendl;
+      ceph_abort();
+    }
+    prev_offset_end = p->logical_end();
     p->blob->last_encoded_id = -1;
     if (!p->blob->is_spanning() && p->blob_escapes_range(offset, length)) {
       dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
@@ -3980,6 +3988,12 @@ bool BlueStore::ExtentMap::encode_some(
 	 p != extent_map.end() && p->logical_offset < end;
 	 ++p, ++n) {
       unsigned blobid;
+      if (p->logical_end() > end && force) {
+        using P = BlueStore::printer;
+        dout(-1) << "FAILED ENCODE_SOME spans shard force=" << force << ": " << std::endl
+          << onode->print(P::NICK + P::SDISK + P::SUSE + P::SBUF) << dendl;
+        ceph_abort();
+      }
       bool include_blob = false;
       if (p->blob->is_spanning()) {
 	blobid = p->blob->id << BLOBID_SHIFT_BITS;

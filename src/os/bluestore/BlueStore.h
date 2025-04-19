@@ -1040,7 +1040,7 @@ public:
     void dump(ceph::Formatter* f) const;
 
     bool encode_some(uint32_t offset, uint32_t length, ceph::buffer::list& bl,
-		     unsigned *pn);
+		     unsigned *pn, bool force);
 
     class ExtentDecoder {
       uint64_t pos = 0;
