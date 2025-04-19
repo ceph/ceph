@@ -12,7 +12,6 @@ if(${WITH_CEPHFS})
     client
     global
     ceph-common
-    cephfs
     ${UNITTEST_LIBS}
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
