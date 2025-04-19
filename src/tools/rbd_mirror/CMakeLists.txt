@@ -27,6 +27,12 @@ set(rbd_mirror_internal
   Throttler.cc
   Types.cc
   group_replayer/BootstrapRequest.cc
+  group_replayer/CreateLocalGroupRequest.cc
+  group_replayer/GroupMirrorStateUpdateRequest.cc
+  group_replayer/GroupStateBuilder.cc
+  group_replayer/PrepareLocalGroupRequest.cc
+  group_replayer/PrepareRemoteGroupRequest.cc
+  group_replayer/RemoveLocalGroupRequest.cc
   group_replayer/Replayer.cc
   image_deleter/SnapshotPurgeRequest.cc
   image_deleter/TrashMoveRequest.cc

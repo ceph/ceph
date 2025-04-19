@@ -7,6 +7,7 @@
 #include "include/rados/librados.hpp"
 #include "cls/rbd/cls_rbd_types.h"
 #include "tools/rbd_mirror/CancelableRequest.h"
+#include "tools/rbd_mirror/group_replayer/Types.h"
 
 #include <atomic>
 #include <list>
@@ -31,6 +32,8 @@ template <typename> struct Threads;
 
 namespace group_replayer {
 
+template <typename> class GroupStateBuilder;
+
 template <typename ImageCtxT = librbd::ImageCtx>
 class BootstrapRequest : public CancelableRequest {
 public:
@@ -46,19 +49,15 @@ public:
       journal::CacheManagerHandler *cache_manager_handler,
       PoolMetaCache *pool_meta_cache,
       bool *resync_requested,
-      std::string *local_group_id,
-      std::string *remote_group_id,
-      std::map<std::string, cls::rbd::GroupSnapshot> *local_group_snaps,
       GroupCtx *local_group_ctx,
       std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *image_replayers,
-      std::map<std::pair<int64_t, std::string>, ImageReplayer<ImageCtxT> *> *image_replayer_index,
+      GroupStateBuilder<ImageCtxT> **state_builder,
       Context *on_finish) {
     return new BootstrapRequest(
       threads, local_io_ctx, remote_io_ctx, global_group_id, local_mirror_uuid,
       instance_watcher, local_status_updater, remote_status_updater,
-      cache_manager_handler, pool_meta_cache, resync_requested, local_group_id,
-      remote_group_id, local_group_snaps, local_group_ctx, image_replayers,
-      image_replayer_index, on_finish);
+      cache_manager_handler, pool_meta_cache, resync_requested,
+      local_group_ctx, image_replayers, state_builder, on_finish);
   }
 
   BootstrapRequest(
@@ -73,12 +72,9 @@ public:
       journal::CacheManagerHandler *cache_manager_handler,
       PoolMetaCache *pool_meta_cache,
       bool *resync_requested,
-      std::string *local_group_id,
-      std::string *remote_group_id,
-      std::map<std::string, cls::rbd::GroupSnapshot> *local_group_snaps,
       GroupCtx *local_group_ctx,
       std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *image_replayers,
-      std::map<std::pair<int64_t, std::string>, ImageReplayer<ImageCtxT> *> *image_replayer_index,
+      GroupStateBuilder<ImageCtxT> **state_builder,
       Context* on_finish);
 
   void send() override;
@@ -90,72 +86,27 @@ private:
    *
    * <start>
    *    |
-   *    v
-   * GET_REMOTE_GROUP_ID  * * * * * * * * * * *
-   *    |                 (noent)             *
-   *    v                                     v
-   * GET_REMOTE_GROUP_NAME  * * * * * * * * * *
-   *    |                 (noent)             *
-   *    v                                     v
-   * GET_REMOTE_MIRROR_GROUP  * * * * * * * * *
-   *    |           (noent or not primary)    *
-   *    v                                     v
-   * LIST_REMOTE_GROUP_SNAPSHOTS  * * * * * * *
-   *    |                             (noent) *
-   *    v                                     v
-   * LIST_REMOTE_GROUP  * * * * * * * * * * * *
-   *    |  (repeat if neeeded)        (noent) *
-   *    v                                     v
-   * GET_REMOTE_MIRROR_IMAGE  * * * * * * * * *
-   *    |  (repeat for every image)   (noent) *
-   *    |                                     v
-   *    |/< * * * * * * * * * * * * * * * * * *
-   *    v
-   * GET_LOCAL_GROUP_ID * * * * * * * * * * * *
-   *    |               (noent)               *
-   *    v                                     *
-   * GET_LOCAL_GROUP_NAME                     *
+   *    v                           (error)
+   * PREPARE_LOCAL_GROUP  * * * * * * * * * * *
    *    |                                     *
-   *    v                                     v
-   * GET_LOCAL_MIRROR_GROUP <------------- GET_LOCAL_GROUP_ID_BY_NAME
-   *    |                                     * (noent)
-   *    v               (noent)               *
-   * LIST_LOCAL_GROUP_SNAPSHOTS  * * *        *
-   *    |                            *        *
-   *    v               (noent)      *        *
-   * LIST_LOCAL_GROUP  * * * * * * * *        *
-   *    |  (repeat if neeeded)       *        *
-   *    v                            *        *
-   * GET_LOCAL_MIRROR_IMAGE          *        *
-   *    |  (repeat for every image)  *        *
-   *    v                            *        *
-   * REMOVE_LOCAL_IMAGE_FROM_GROUP   *        *
-   *    |                       ^    *        *
-   *    v                       |    *        v
-   * MOVE_LOCAL_IMAGE_TO_TRASH -/    *     CREATE_LOCAL_GROUP_ID
-   *    |         (repeat for every  *        |
-   *    |              stale image)  *        v
-   *    |\----\                      * * > CREATE_LOCAL_GROUP
-   *    |     | (if stale                     |
-   *    |     v  or removing)                 |
-   *    |  DISABLE_LOCAL_MIRROR_GROUP         |
-   *    |     |                               |
-   *    |     v                               v
-   *    |  REMOVE_LOCAL_MIRROR_GROUP ----> CREATE_LOCAL_MIRROR_GROUP
-   *    |     |                   (if stale)  |
-   *    |     v                               v
-   *    |  REMOVE_LOCAL_GROUP              NOFTIFY_MIRRORING_WATCHER
-   *    |     |        (if removing)          |
-   *    |     v                               |
-   *    |  REMOVE_LOCAL_GROUP_ID              |
-   *    |     |        (if removing)          |
-   *    v     v                               |
-   * <finish> <-------------------------------/
+   *    v                            (error)  *
+   * PREPARE_REMOTE_GROUP_NAME  * * * * * * * *
+   *    |                                     *
+   *    | (remote dne)                        *
+   *    \------------> REMOVE_LOCAL_GROUP * * *
+   *    |             (if local non-primary)  *
+   *    |                                     *
+   *    | (local dne)                         *
+   *    \------------> CREATE_LOCAL_GROUP * * *
+   *    |              (if remote primary)    *
+   *    v                       |             *
+   * CREATE_IMAGE_REPLAYERS <---/             *
+   *    |                                     *
+   *    v                                     *
+   * <finish> < * * * * * * * * * * * * * * * *
    *
    * @endverbatim
    */
-
-  typedef std::pair<int64_t /*pool_id*/, std::string /*global_image_id*/> GlobalImageId;
 
   Threads<ImageCtxT>* m_threads;
   librados::IoCtx &m_local_io_ctx;
@@ -168,111 +119,39 @@ private:
   journal::CacheManagerHandler *m_cache_manager_handler;
   PoolMetaCache *m_pool_meta_cache;
   bool *m_resync_requested;
-  std::string *m_local_group_id;
-  std::string *m_remote_group_id;
-  std::map<std::string, cls::rbd::GroupSnapshot> *m_local_group_snaps;
   GroupCtx *m_local_group_ctx;
   std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *m_image_replayers;
-  std::map<std::pair<int64_t, std::string>, ImageReplayer<ImageCtxT> *> *m_image_replayer_index;
+  GroupStateBuilder<ImageCtxT> **m_state_builder = nullptr;
   Context *m_on_finish;
 
+  mutable ceph::mutex m_lock;
   std::atomic<bool> m_canceled = false;
 
-  std::string m_group_name;
-  bool m_local_group_id_by_name = false;
-  cls::rbd::MirrorGroup m_remote_mirror_group;
-  cls::rbd::MirrorGroup m_local_mirror_group;
-  std::vector<cls::rbd::GroupSnapshot> remote_group_snaps;
-  std::vector<cls::rbd::GroupSnapshot> local_group_snaps;
-  bool m_remote_mirror_group_primary = false;
-  bool m_local_mirror_group_primary = false;
-  std::list<cls::rbd::GroupImageStatus> m_images;
-  librados::IoCtx m_image_io_ctx;
-
-  std::map<GlobalImageId, std::string> m_remote_images;
-  std::set<GlobalImageId> m_local_images;
-  std::map<GlobalImageId, std::string> m_local_trash_images;
+  std::string m_local_group_name;
+  std::string m_prepare_local_group_name;
+  std::string m_prepare_remote_group_name;
+  bool m_local_group_removed = false;
 
   bufferlist m_out_bl;
 
-  bool has_remote_image(int64_t local_pool_id,
-                        const std::string &global_image_id) const;
+  void prepare_local_group();
+  void handle_prepare_local_group(int r);
 
-  void get_remote_group_id();
-  void handle_get_remote_group_id(int r);
+  void prepare_remote_group();
+  void handle_prepare_remote_group(int r);
 
-  void get_remote_group_name();
-  void handle_get_remote_group_name(int r);
-
-  void get_remote_mirror_group();
-  void handle_get_remote_mirror_group(int r);
-
-  void get_remote_mirror_image();
-  void handle_get_remote_mirror_image(int r);
-
-  void list_remote_group_snapshots();
-  void handle_list_remote_group_snapshots(int r);
-
-  void list_remote_group();
-  void handle_list_remote_group(int r);
-
-  void get_local_group_id();
-  void handle_get_local_group_id(int r);
-
-  void get_local_group_id_by_name();
-  void handle_get_local_group_id_by_name(int r);
-
-  void get_local_group_name();
-  void handle_get_local_group_name(int r);
-
-  void get_local_mirror_group();
-  void handle_get_local_mirror_group(int r);
-
-  void list_local_group_snapshots();
-  void handle_list_local_group_snapshots(int r);
-
-  void list_local_group();
-  void handle_list_local_group(int r);
-
-  void get_local_mirror_image();
-  void handle_get_local_mirror_image(int r);
-
-  void remove_local_image_from_group();
-  void handle_remove_local_image_from_group(int r);
-
-  void move_local_image_to_trash();
-  void handle_move_local_image_to_trash(int r);
-
-  void remove_local_mirror_image();
-  void handle_remove_local_mirror_image(int r);
-
-  void disable_local_mirror_group();
-  void handle_disable_local_mirror_group(int r);
-
-  void remove_local_mirror_group();
-  void handle_remove_local_mirror_group(int r);
-
-  void remove_local_group();
-  void handle_remove_local_group(int r);
-
-  void remove_local_group_id();
-  void handle_remove_local_group_id(int r);
-
-  void create_local_group_id();
-  void handle_create_local_group_id(int r);
+  void get_local_group_meta();
+  void handle_get_local_group_meta(int r);
 
   void create_local_group();
   void handle_create_local_group(int r);
 
-  void create_local_mirror_group();
-  void handle_create_local_mirror_group(int r);
-
-  void notify_mirroring_watcher();
-  void handle_notify_mirroring_watcher(int r);
-
-  void finish(int r);
+  void remove_local_group();
+  void handle_remove_local_group(int r);
 
   int create_replayers();
+
+  void finish(int r);
 };
 
 } // namespace group_replayer
