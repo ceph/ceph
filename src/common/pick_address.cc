@@ -674,6 +674,5 @@ bool is_addr_in_subnet(
       return true;
     }
   }
-  lderr(cct) << "address " << addr << " is not in networks '" << networks << "'" << dendl;
   return false;
 }
