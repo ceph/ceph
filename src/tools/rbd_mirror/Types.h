@@ -183,7 +183,7 @@ struct GroupCtx {
     virtual ~Listener() {
     }
 
-    virtual void stop() = 0;
+    virtual void handle_notification() = 0;
   };
 
   std::string name;
