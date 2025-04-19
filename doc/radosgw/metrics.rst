@@ -152,7 +152,7 @@ Op metrics can also be tracked per-user or per-bucket. These metrics are exporte
         ...
     ]
 
-:ref:`rgw-multitenancy` allows to use buckets and users of the same name simultaneously. If a user or bucket lies under a tenant, a label for tenant in the form  Tenant = {tenantid} is added to the metric.
+:ref:`rgw-multitenancy` allows to use buckets and users of the same name simultaneously. If a user or bucket lies under a tenant, a label for tenant in the form Tenant = {tenantid} is added to the metric.
 
 In a large system with many users and buckets, it may not be tractable to export all metrics to Prometheus. For that reason, the collection of these labeled metrics is disabled by default.
 
