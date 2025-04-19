@@ -7008,9 +7008,21 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_DELETE:
       ++ctx->num_write;
       result = 0;
-      tracepoint(osd, do_osd_op_pre_delete, soid.oid.name.c_str(), soid.snap.val);
+      tracepoint(osd, do_osd_op_pre_delete, soid.oid.name.c_str(),
+                 soid.snap.val);
       {
-	result = _delete_oid(ctx, false, ctx->ignore_cache);
+        int64_t omap_count_hint = -1, db_delete_range_threshold_hint = -1;
+        if (bp != osd_op.indata.end()) {
+          try {
+            decode(omap_count_hint, bp);
+            decode(db_delete_range_threshold_hint, bp);
+          } catch (ceph::buffer::error& e) {
+            result = -EINVAL;
+            goto fail;
+          }
+        }
+        result = _delete_oid(ctx, false, ctx->ignore_cache, omap_count_hint,
+                             db_delete_range_threshold_hint);
       }
       break;
 
@@ -8258,9 +8270,10 @@ int PrimaryLogPG::_verify_no_head_clones(const hobject_t& soid,
 }
 
 inline int PrimaryLogPG::_delete_oid(
-  OpContext *ctx,
-  bool no_whiteout,     // no whiteouts, no matter what.
-  bool try_no_whiteout) // try not to whiteout
+    OpContext *ctx,
+    bool no_whiteout, // no whiteouts, no matter what.
+    bool try_no_whiteout, int64_t omap_count_hint,
+    int64_t db_delete_range_threshold_hint) // try not to whiteout
 {
   SnapSet& snapset = ctx->new_snapset;
   ObjectState& obs = ctx->new_obs;
@@ -8296,7 +8309,7 @@ inline int PrimaryLogPG::_delete_oid(
   if (!obs.exists || (obs.oi.is_whiteout() && whiteout))
     return -ENOENT;
 
-  t->remove(soid);
+  t->remove(soid, omap_count_hint, db_delete_range_threshold_hint);
 
   if (oi.size > 0) {
     interval_set<uint64_t> ch;
