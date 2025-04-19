@@ -356,6 +356,9 @@ public:
   const std::set<pg_shard_t> &get_acting_recovery_backfill() const {
     return recovery_state.get_acting_recovery_backfill();
   }
+  const shard_id_set &get_acting_recovery_backfill_shard_id_set() const {
+    return recovery_state.get_acting_recovery_backfill_shard_id_set();
+  }
   bool is_acting(pg_shard_t osd) const {
     return recovery_state.is_acting(osd);
   }
@@ -1126,6 +1129,9 @@ protected:
     }
     void trim(const pg_log_entry_t &entry) override {
       pg->get_pgbackend()->trim(entry, t);
+    }
+    void partial_write(pg_info_t *info, const pg_log_entry_t &entry) override {
+      pg->get_pgbackend()->partial_write(info, entry);
     }
   };
 
