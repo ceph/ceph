@@ -12,25 +12,33 @@
  *
  */
 
-#include <array>
-#include <string_view>
+#include "MDSRank.h"
+#include "osdc/Journaler.h"
+
 #include <typeinfo>
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/fair_mutex.h"
 #include "common/likely.h"
+#include "common/Timer.h"
 #include "common/async/blocked_completion.h"
 #include "common/cmdparse.h"
+#include "log/Log.h"
 
 #include "messages/MClientRequestForward.h"
 #include "messages/MMDSLoadTargets.h"
+#include "messages/MMDSMap.h"
 #include "messages/MMDSTableRequest.h"
 #include "messages/MMDSMetrics.h"
 
 #include "mgr/MgrClient.h"
 
+#include "MDCache.h"
+#include "MDLog.h"
 #include "MDSDaemon.h"
 #include "MDSMap.h"
 #include "MetricAggregator.h"
+#include "Server.h"
 #include "SnapClient.h"
 #include "SnapServer.h"
 #include "MDBalancer.h"
@@ -38,13 +46,12 @@
 #include "Locker.h"
 #include "InoTable.h"
 #include "mon/MonClient.h"
+#include "osdc/Objecter.h"
 #include "common/HeartbeatMap.h"
 #include "ScrubStack.h"
 #include "events/ESubtreeMap.h"
 #include "events/ELid.h"
 #include "Mutation.h"
-
-#include "MDSRank.h"
 
 #include "QuiesceDbManager.h"
 #include "QuiesceAgent.h"
@@ -1419,6 +1426,10 @@ void MDSRank::send_message(const ref_t<Message>& m, const ConnectionRef& c)
 {
   ceph_assert(c);
   c->send_message2(m);
+}
+
+void MDSRank::kick_waiters_for_any_client_connection() {
+  finish_contexts(g_ceph_context, waiting_for_any_client_connection);
 }
 
 class C_MDS_RetrySendMessageMDS : public MDSInternalContext {
