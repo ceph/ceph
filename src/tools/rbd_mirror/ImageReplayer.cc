@@ -650,7 +650,7 @@ void ImageReplayer<I>::on_stop_replay(int r, const std::string &desc)
 
   cancel_update_mirror_image_replay_status();
   set_state_description(r, desc);
-  update_mirror_image_status(false, boost::none);
+  update_mirror_image_status(true, boost::none);
   shut_down(0);
 }
 
