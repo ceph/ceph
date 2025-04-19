@@ -41,6 +41,7 @@ import AddFilled from '@carbon/icons/es/add--filled/32';
 import SubtractFilled from '@carbon/icons/es/subtract--filled/32';
 import Reset from '@carbon/icons/es/reset/32';
 import EyeIcon from '@carbon/icons/es/view/16';
+import { UnsavedChangesGuard } from '~/app/shared/services/unsaved-changes-guard.service';
 @NgModule({
   imports: [
     CommonModule,
@@ -97,11 +98,15 @@ const routes: Routes = [
       {
         path: URLVerbs.CREATE,
         component: UserFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
+
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
         path: `${URLVerbs.EDIT}/:username`,
         component: UserFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
+
         data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
@@ -114,11 +119,15 @@ const routes: Routes = [
       {
         path: URLVerbs.CREATE,
         component: RoleFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
+
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
         path: `${URLVerbs.EDIT}/:name`,
         component: RoleFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
+
         data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
@@ -126,6 +135,8 @@ const routes: Routes = [
 ];
 
 @NgModule({
-  imports: [AuthModule, RouterModule.forChild(routes)]
+  imports: [AuthModule, RouterModule.forChild(routes)],
+  providers: [UnsavedChangesGuard]
+
 })
 export class RoutedAuthModule {}

@@ -13,7 +13,7 @@ import { Observable } from 'rxjs';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -27,7 +27,7 @@ import { USERSGROUPS_URL } from '../smb-usersgroups-list/smb-usersgroups-list.co
   templateUrl: './smb-usersgroups-form.component.html',
   styleUrls: ['./smb-usersgroups-form.component.scss']
 })
-export class SmbUsersgroupsFormComponent extends CdForm implements OnInit, OnDestroy {
+export class SmbUsersgroupsFormComponent extends CdFormCanDeactivate implements OnInit {
   form: CdFormGroup;
   action: string;
   resource: string;
@@ -82,36 +82,44 @@ export class SmbUsersgroupsFormComponent extends CdForm implements OnInit, OnDes
     }
   }
 
-  ngOnDestroy() {
-    this.smbService.setDataUploaded(null);
-  }
+getFormGroup(): CdFormGroup {
+  return this.form;
+}
 
-  fillForm(usersGroups: SMBUsersGroups) {
-    this.form.get('usersGroupsId').setValue(usersGroups.users_groups_id);
-    this.form.get('linkedToCluster').setValue(usersGroups.linked_to_cluster);
-    this.users.controls.forEach((userField: CdFormGroup) => {
-      if (!userField.controls.name.value && userField.controls.password) {
-        userField.patchValue({
-          name: usersGroups.values.users[0].name,
-          password: usersGroups.values.users[0].password
-        });
-        usersGroups.values.users.shift();
-      }
-    });
-    this.groups.controls.forEach((groupField: CdFormGroup) => {
-      if (!groupField.controls.name.value) {
-        groupField.patchValue({
-          name: usersGroups.values.users[0].name
-        });
-        usersGroups.values.groups.shift();
-      }
-    });
-    usersGroups.values.users.forEach((user: User) => {
-      this.addUser(user);
-    });
-    usersGroups.values.groups.forEach((group: Group) => {
-      this.addGroup(group);
-    });
+ngOnDestroy() {
+  this.smbService.setDataUploaded(null);
+}
+
+fillForm(usersGroups: SMBUsersGroups) {
+  this.form.get('usersGroupsId').setValue(usersGroups.users_groups_id);
+  this.form.get('linkedToCluster').setValue(usersGroups.linked_to_cluster);
+
+  this.users.controls.forEach((userField: CdFormGroup) => {
+    if (!userField.controls.name.value && userField.controls.password) {
+      userField.patchValue({
+        name: usersGroups.values.users[0].name,
+        password: usersGroups.values.users[0].password
+      });
+      usersGroups.values.users.shift();
+    }
+  });
+
+  this.groups.controls.forEach((groupField: CdFormGroup) => {
+    if (!groupField.controls.name.value) {
+      groupField.patchValue({
+        name: usersGroups.values.users[0].name
+      });
+      usersGroups.values.groups.shift();
+    }
+  });
+
+  usersGroups.values.users.forEach((user: User) => {
+    this.addUser(user);
+  });
+  
+  usersGroups.values.groups.forEach((group: Group) => {
+    this.addGroup(group);
+  });
   }
 
   createForm() {

@@ -12,7 +12,7 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { CephfsSubvolumeInfo } from '~/app/shared/models/cephfs-subvolume.model';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { OctalToHumanReadablePipe } from '~/app/shared/pipes/octal-to-human-readable.pipe';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
 import { Observable } from 'rxjs';
@@ -22,7 +22,7 @@ import { Observable } from 'rxjs';
   templateUrl: './cephfs-subvolume-form.component.html',
   styleUrls: ['./cephfs-subvolume-form.component.scss']
 })
-export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
+export class CephfsSubvolumeFormComponent extends CdFormCanDeactivate implements OnInit {
   subvolumeForm: CdFormGroup;
 
   action: string;
@@ -93,6 +93,10 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
     this.createForm();
 
     this.isEdit ? this.populateForm() : this.loadingReady();
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.subvolumeForm;
   }
 
   createForm() {

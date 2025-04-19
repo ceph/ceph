@@ -15,7 +15,6 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import {
@@ -39,6 +38,7 @@ import { Pool } from '../pool';
 import { PoolFormData } from './pool-form-data';
 import { PoolEditModeResponseModel } from '../../block/mirroring/pool-edit-mode-modal/pool-edit-mode-response.model';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 
 interface FormFieldDescription {
   externalFieldName: string;
@@ -54,7 +54,7 @@ interface FormFieldDescription {
   templateUrl: './pool-form.component.html',
   styleUrls: ['./pool-form.component.scss']
 })
-export class PoolFormComponent extends CdForm implements OnInit {
+export class PoolFormComponent extends CdFormCanDeactivate implements OnInit {
   @ViewChild('crushInfoTabs') crushInfoTabs: NgbNav;
   @ViewChild('crushDeletionBtn') crushDeletionBtn: NgbTooltip;
   @ViewChild('ecpInfoTabs') ecpInfoTabs: NgbNav;
@@ -111,6 +111,10 @@ export class PoolFormComponent extends CdForm implements OnInit {
     this.resource = $localize`pool`;
     this.authenticate();
     this.createForm();
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.form;
   }
 
   authenticate() {

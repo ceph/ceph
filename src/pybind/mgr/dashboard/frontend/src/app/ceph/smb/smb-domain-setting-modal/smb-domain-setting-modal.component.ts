@@ -8,7 +8,7 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { SmbService } from '~/app/shared/api/smb.service';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { DomainSettings, JoinSource, SMBJoinAuth } from '../smb.model';
 import { Observable } from 'rxjs';
 import { Router } from '@angular/router';
@@ -19,7 +19,7 @@ import { JOINAUTH_URL } from '../smb-join-auth-list/smb-join-auth-list.component
   templateUrl: './smb-domain-setting-modal.component.html',
   styleUrls: ['./smb-domain-setting-modal.component.scss']
 })
-export class SmbDomainSettingModalComponent extends CdForm implements OnInit {
+export class SmbDomainSettingModalComponent extends CdFormCanDeactivate implements OnInit {
   domainSettingsForm: CdFormGroup;
   realmNames: string[];
   joinAuths$: Observable<SMBJoinAuth[]>;
@@ -75,6 +75,10 @@ export class SmbDomainSettingModalComponent extends CdForm implements OnInit {
     } else {
       this.action = this.actionLabels.EDIT;
     }
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.domainSettingsForm;
   }
 
   submit() {
