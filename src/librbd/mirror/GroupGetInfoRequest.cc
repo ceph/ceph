@@ -23,7 +23,19 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 void GroupGetInfoRequest<I>::send() {
-  get_id();
+  auto cct = reinterpret_cast<CephContext *>(m_group_ioctx.cct());
+  ldout(cct, 10) << dendl;
+
+  if (m_group_name.empty() && m_group_id.empty()) {
+    lderr(cct) << "both group name and group id cannot be empty" << dendl;
+    finish(-EINVAL);
+  }
+
+  if (m_group_id.empty()) {
+    get_id();
+  } else {
+    get_info();
+  }
 }
 
 template <typename I>
@@ -89,7 +101,7 @@ void GroupGetInfoRequest<I>::handle_get_info(int r) {
   ldout(cct, 10) << "r=" << r << dendl;
   
   m_mirror_group->state = cls::rbd::MIRROR_GROUP_STATE_DISABLED;
-  *m_promotion_state = PROMOTION_STATE_NON_PRIMARY;
+  *m_promotion_state = PROMOTION_STATE_UNKNOWN;
 
   if (r == 0) {
     auto it = m_outbl.cbegin();
@@ -102,9 +114,16 @@ void GroupGetInfoRequest<I>::handle_get_info(int r) {
     return;
   }
   if (r < 0) {
-    lderr(cct) << "failed to get mirror info of group '" << m_group_name
+    lderr(cct) << "failed to get mirror info of group '" << m_group_id
                << "': " << cpp_strerror(r) << dendl;
     finish(r);
+    return;
+  }
+
+  if (m_mirror_group->state == cls::rbd::MIRROR_GROUP_STATE_CREATING) {
+    // No snapshots will have been created and it is likely that the
+    // group has not been created either.
+    finish(0);
     return;
   }
 
@@ -131,8 +150,9 @@ void GroupGetInfoRequest<I>::handle_get_last_mirror_snapshot_state(int r) {
   auto cct = reinterpret_cast<CephContext *>(m_group_ioctx.cct());
   ldout(cct, 10) << dendl;
 
-  if (r < 0) {
-    lderr(cct) << "failed to list group snapshots of group '" << m_group_name
+  // This could return -ENOENT if the group creation was interrupted
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to list group snapshots of group '" << m_group_id
                << "': " << cpp_strerror(r) << dendl;
     finish(r);
     return;
