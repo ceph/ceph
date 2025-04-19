@@ -178,6 +178,7 @@ void GroupUnlinkPeerRequest<I>::remove_peer_uuid(
     &group_snap.snapshot_namespace);
   ns->mirror_peer_uuids.erase(mirror_peer_uuid);
 
+  m_group_snap_id = group_snap.id;
   librados::ObjectWriteOperation op;
   librbd::cls_client::group_snap_set(&op, group_snap);
   int r = m_group_io_ctx.aio_operate(
