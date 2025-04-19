@@ -606,8 +606,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             return "Unable to create NFS daemon, check logs for more traceback\n" + str(e.with_traceback(None))
 
     @handle_orch_error
-    def remove_daemons(self, names: List[str]) -> List[str]:
-        return self.rook_cluster.remove_pods(names)
+    def remove_daemons(self, names: List[str]) -> Tuple[int, str]:
+        result = self.rook_cluster.remove_pods(names)
+        return 0, '\n'.join(result)
 
     def add_host_label(self, host: str, label: str) -> OrchResult[str]:
         return self.rook_cluster.add_host_label(host, label)

@@ -411,6 +411,22 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         locs = [d['location'] for d in self.get('devices')['devices'] if d['devid'] == dev_id]
         return [DeviceLightLoc(**loc) for loc in sum(locs, [])]
 
+    EXIT_CODE_MAP = {
+        1: errno.EBUSY,
+        2: errno.EINVAL,
+        3: errno.ENOTSUP,
+        4: errno.EAGAIN,
+        5: errno.EALREADY,
+        6: errno.EPERM,
+        7: errno.EIO,
+    }
+
+    def _format_handle_command_result(self, rc: int, msg: str) -> HandleCommandResult:
+        if rc == 0:
+            return HandleCommandResult(stdout=msg)
+        errno_val = -self.EXIT_CODE_MAP.get(rc, errno.EIO)
+        return HandleCommandResult(stderr=msg, retval=errno_val)
+
     @_cli_read_command(prefix='device ls-lights')
     def _device_ls(self) -> HandleCommandResult:
         """List currently active device indicator lights"""
@@ -787,7 +803,13 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         """Check if the specified host can be safely stopped without reducing availability"""""
         completion = self.host_ok_to_stop(hostname)
         raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+
+        if not completion or completion.result is None:
+            self.log.error("Unexpected result from host_ok_to_stop")
+            return HandleCommandResult(stderr="No result from host_ok_to_stop", retval=-errno.EIO)
+
+        rc, msg = completion.result
+        return self._format_handle_command_result(rc, msg)
 
     @_cli_write_command('orch host maintenance enter')
     def _host_maintenance_enter(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> HandleCommandResult:
@@ -797,7 +819,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         completion = self.enter_host_maintenance(hostname, force=force, yes_i_really_mean_it=yes_i_really_mean_it)
         raise_if_exception(completion)
 
-        return HandleCommandResult(stdout=completion.result_str())
+        if completion.result is None:
+            return HandleCommandResult(stderr="No result from enter_host_maintenance", retval=-errno.EIO)
+
+        rc, msg = completion.result
+        return self._format_handle_command_result(rc, msg)
 
     @_cli_write_command('orch host maintenance exit')
     def _host_maintenance_exit(self, hostname: str, force: bool = False, offline: bool = False) -> HandleCommandResult:
@@ -807,7 +833,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         completion = self.exit_host_maintenance(hostname, force, offline)
         raise_if_exception(completion)
 
-        return HandleCommandResult(stdout=completion.result_str())
+        if not completion or completion.result is None:
+            return HandleCommandResult(stderr="No result from exit_host_maintenance", retval=-errno.EIO)
+
+        rc, msg = completion.result
+        return self._format_handle_command_result(rc, msg)
 
     @_cli_write_command('orch host rescan')
     def _host_rescan(self, hostname: str, with_summary: bool = False) -> HandleCommandResult:
@@ -1783,14 +1813,19 @@ Usage:
         """Remove specific daemon(s)"""
         for name in names:
             if '.' not in name:
-                raise OrchestratorError('%s is not a valid daemon name' % name)
+                return self._format_handle_command_result(2, f"{name} is not a valid daemon name")
             (daemon_type) = name.split('.')[0]
             if not force and daemon_type in ['osd', 'mon', 'prometheus']:
-                raise OrchestratorError(
-                    'must pass --force to REMOVE daemon with potentially PRECIOUS DATA for %s' % name)
+                return self._format_handle_command_result(
+                    6, f"--force required to remove daemon with PRECIOUS DATA: {name}"
+                )
         completion = self.remove_daemons(names)
         raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        if not completion or completion.result is None:
+            return HandleCommandResult(stderr="No result from remove_daemons", retval=-errno.EIO)
+
+        rc, msg = completion.result
+        return self._format_handle_command_result(rc, msg)
 
     @_cli_write_command('orch rm')
     def _service_rm(self,
