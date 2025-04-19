@@ -1608,6 +1608,17 @@ protected:
   RGWObjectRetention *obj_retention;
   RGWObjectLegalHold *obj_legal_hold;
 
+  // remote copy progress helper
+  struct ProgressTracker {
+    std::mutex mtx;
+    std::condition_variable cv;
+    std::queue<off_t> ofs_queue;
+    std::atomic<bool> done{false};
+
+    ProgressTracker() {}
+  };
+  std::optional<ProgressTracker> progress_tracker;
+
   int init_common();
 
 public:
@@ -1648,6 +1659,13 @@ public:
   void pre_exec() override;
   void execute(optional_yield y) override;
   void progress_cb(off_t ofs);
+  void progress_cb_handler();
+  ProgressTracker& get_progress_tracker() {
+    if (!progress_tracker) {
+      progress_tracker.emplace();
+    }
+    return *progress_tracker;
+  }
 
   virtual int check_storage_class(const rgw_placement_rule& src_placement) {
     return 0;
