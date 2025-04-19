@@ -31,6 +31,7 @@ template <typename> struct Threads;
 
 namespace group_replayer {
   template <typename> class BootstrapRequest;
+  template <typename> class GroupStateBuilder;
 }
 
 /**
@@ -114,7 +115,8 @@ public:
     return m_global_group_id;
   }
   inline const std::string& get_local_group_id() const {
-    return m_local_group_id;
+    ceph_assert(m_state_builder != nullptr);
+    return m_state_builder->local_group_id;
   }
 
   void start(Context *on_finish = nullptr, bool manual = false,
@@ -173,8 +175,8 @@ private:
     Listener(GroupReplayer *group_replayer) : group_replayer(group_replayer) {
     }
 
-    void stop() {
-      group_replayer->stop(nullptr, false);
+    void handle_notification() {
+      group_replayer->handle_replayer_notification();
     }
   };
 
@@ -199,6 +201,7 @@ private:
   std::string m_local_group_id;
   std::string m_remote_group_id;
 
+  // FIXME: Find a better way
   bool m_destroy_replayers = false;
 
   mutable ceph::mutex m_lock;
@@ -210,7 +213,6 @@ private:
 
   Context *m_on_start_finish = nullptr;
   std::list<Context *> m_on_stop_contexts;
-  Context *m_on_stop_finish = nullptr;
   bool m_stop_requested = false;
   bool m_resync_requested = false;
   bool m_restart_requested = false;
@@ -226,15 +228,12 @@ private:
   Context* m_replayer_check_task = nullptr;
   Context* m_update_status_task = nullptr;
 
+  group_replayer::GroupStateBuilder<ImageCtxT> *m_state_builder = nullptr;
   group_replayer::BootstrapRequest<ImageCtxT> *m_bootstrap_request = nullptr;
   group_replayer::Replayer<ImageCtxT> *m_replayer = nullptr;
   std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> m_image_replayers;
 
   Listener m_listener = {this};
-  std::map<std::pair<int64_t, std::string>, ImageReplayer<ImageCtxT> *> m_image_replayer_index;
-  std::map<std::string, cls::rbd::GroupSnapshot> m_local_group_snaps;
-  std::map<std::string, std::map<ImageReplayer<ImageCtxT> *, Context *>> m_create_snap_requests;
-  std::set<std::string> m_pending_snap_create;
 
   static std::string state_to_string(const State &state) {
     switch (state) {
@@ -296,8 +295,7 @@ private:
   void set_mirror_group_status_update(bool force,
                                       const OptionalState &opt_state);
 
-  void wait_for_ops();
-  void handle_wait_for_ops(int r);
+  void handle_replayer_notification();
 
   void shut_down(int r);
   void handle_shut_down(int r);
