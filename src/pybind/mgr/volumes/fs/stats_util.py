@@ -43,8 +43,19 @@ def get_num_ratio_str(num1, num2):
 def get_amount_copied(src_path, dst_path, fs_handle):
     rbytes = 'ceph.dir.rbytes'
 
-    size_t = int(fs_handle.getxattr(src_path, rbytes))
-    size_c = int(fs_handle.getxattr(dst_path, rbytes))
+    try:
+        size_t = int(fs_handle.getxattr(src_path, rbytes))
+    except:
+        log.info('get_amount_copied(): source path "{src_path}" went missing, '
+                  'couldn\'t run getxattr on it')
+        return
+
+    try:
+        size_c = int(fs_handle.getxattr(dst_path, rbytes))
+    except:
+        log.info('get_amount_copied(): destination path "{dst_path}" went '
+                 'missing, couldn\'t run getxattr on it')
+        return
 
     percent: Optional[float]
     if size_t == 0 or size_c == 0:
@@ -57,17 +68,34 @@ def get_amount_copied(src_path, dst_path, fs_handle):
 
 
 def get_percent_copied(src_path, dst_path, fs_handle):
-    _, _, percent = get_amount_copied(src_path, dst_path, fs_handle)
-    return percent
+    retval = get_amount_copied(src_path, dst_path, fs_handle)
+    if not retval:
+        return retval
+    else:
+        _, _, percent = retval
+        return percent
 
 
 def get_stats(src_path, dst_path, fs_handle):
     rentries = 'ceph.dir.rentries'
-    rentries_t = int(fs_handle.getxattr(src_path, rentries))
-    rentries_c = int(fs_handle.getxattr(dst_path, rentries))
 
-    size_t, size_c, percent = get_amount_copied(src_path, dst_path, fs_handle)
+    try:
+        rentries_t = int(fs_handle.getxattr(src_path, rentries))
+    except:
+        log.info('get_stats(): source path "{src_path}" went missing, '
+                 'couldn\'t run getxattr on it')
 
+    try:
+        rentries_c = int(fs_handle.getxattr(dst_path, rentries))
+    except:
+        log.info('get_stats(): destination path "{dst_path}" went missing, '
+                 'couldn\'t run getxattr on it')
+
+    retval = get_amount_copied(src_path, dst_path, fs_handle)
+    if not retval:
+        return {}
+
+    size_t, size_c, percent = retval
     return {
         'percentage cloned': percent,
         'amount cloned': get_size_ratio_str(size_c, size_t),
@@ -259,6 +287,8 @@ class CloneProgressReporter:
                     fs_handle:
                 percent = get_percent_copied(clone.src_path, clone.dst_path,
                                              fs_handle)
+                if not percent:
+                    return
                 if clone in clones[:total_ongoing_clones]:
                     sum_percent_ongoing += percent
                 if show_onpen_bar:
