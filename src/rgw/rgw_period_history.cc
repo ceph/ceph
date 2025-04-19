@@ -85,7 +85,7 @@ class RGWPeriodHistory::Impl final {
   ~Impl();
 
   Cursor get_current() const { return current_cursor; }
-  Cursor attach(const DoutPrefixProvider *dpp, RGWPeriod&& period, optional_yield y);
+  Cursor attach(const DoutPrefixProvider *dpp, RGWPeriod&& period, optional_yield y, rgw::sal::ConfigStore* cfgstore);
   Cursor insert(RGWPeriod&& period);
   Cursor lookup(epoch_t realm_epoch);
 
@@ -149,7 +149,8 @@ RGWPeriodHistory::Impl::~Impl()
   histories.clear_and_dispose(std::default_delete<History>{});
 }
 
-Cursor RGWPeriodHistory::Impl::attach(const DoutPrefixProvider *dpp, RGWPeriod&& period, optional_yield y)
+Cursor RGWPeriodHistory::Impl::attach(const DoutPrefixProvider *dpp, RGWPeriod&& period, optional_yield y,
+                                      rgw::sal::ConfigStore* cfgstore)
 {
   if (current_history == histories.end()) {
     return Cursor{-EINVAL};
@@ -185,7 +186,7 @@ Cursor RGWPeriodHistory::Impl::attach(const DoutPrefixProvider *dpp, RGWPeriod&&
     }
 
     // pull the period outside of the lock
-    int r = puller->pull(dpp, predecessor_id, period, y);
+    int r = puller->pull(dpp, predecessor_id, period, y, cfgstore);
     if (r < 0) {
       return Cursor{r};
     }
@@ -342,9 +343,10 @@ Cursor RGWPeriodHistory::get_current() const
 {
   return impl->get_current();
 }
-Cursor RGWPeriodHistory::attach(const DoutPrefixProvider *dpp, RGWPeriod&& period, optional_yield y)
+Cursor RGWPeriodHistory::attach(const DoutPrefixProvider *dpp, RGWPeriod&& period, optional_yield y,
+                                rgw::sal::ConfigStore* cfgstore)
 {
-  return impl->attach(dpp, std::move(period), y);
+  return impl->attach(dpp, std::move(period), y, cfgstore);
 }
 Cursor RGWPeriodHistory::insert(RGWPeriod&& period)
 {

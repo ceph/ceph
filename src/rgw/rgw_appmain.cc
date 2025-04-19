@@ -252,7 +252,7 @@ int rgw::AppMain::init_storage()
           run_quota,
           run_sync,
           g_conf().get_val<bool>("rgw_dynamic_resharding"),
-	  true, true, null_yield, // run notification thread
+	        true, true, null_yield, env.cfgstore, // run notification thread
           g_conf()->rgw_cache_enabled);
   if (!env.driver) {
     return -EIO;
@@ -522,7 +522,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
 
   if (env.driver->get_name() == "rados") {
     // add a watcher to respond to realm configuration changes
-    pusher = std::make_unique<RGWPeriodPusher>(dpp, env.driver, null_yield);
+    pusher = std::make_unique<RGWPeriodPusher>(dpp, env.driver, env.cfgstore, null_yield);
     fe_pauser = std::make_unique<RGWFrontendPauser>(fes, pusher.get());
     rgw_pauser = std::make_unique<RGWPauser>();
     rgw_pauser->add_pauser(fe_pauser.get());
