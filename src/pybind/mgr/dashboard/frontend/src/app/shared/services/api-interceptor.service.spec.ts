@@ -142,7 +142,7 @@ describe('ApiInterceptorService', () => {
         {
           status: 0,
           statusText: 'Unknown Error',
-          message: 'Http failure response for (unknown url): 0 Unknown Error',
+          message: 'HTTP failure response for (unknown url): 0 Unknown Error',
           name: 'HttpErrorResponse',
           ok: false,
           url: null
@@ -150,7 +150,7 @@ describe('ApiInterceptorService', () => {
         createCdNotification(
           0,
           '0 - Unknown Error',
-          'Http failure response for api/xyz: 0 Unknown Error'
+          'HTTP failure response for api/xyz: 0 Unknown Error'
         )
       );
     });
@@ -161,7 +161,7 @@ describe('ApiInterceptorService', () => {
         {
           status: 502
         },
-        createCdNotification(0, '502 - Unknown Error', 'Http failure response for api/xyz: 502 ')
+        createCdNotification(0, '502 - Unknown Error', 'HTTP failure response for api/xyz: 502 ')
       );
     });
 
