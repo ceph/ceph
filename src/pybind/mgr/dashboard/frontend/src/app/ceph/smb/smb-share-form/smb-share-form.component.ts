@@ -7,6 +7,7 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 
 import _ from 'lodash';
 import { map } from 'rxjs/operators';
+import { Observable } from 'rxjs';
 
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -17,6 +18,7 @@ import {
   SHARE_RESOURCE,
   SHARE_URL,
   ShareRequestModel,
+  SMBCluster,
   SMBShare
 } from '../smb.model';
 import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
@@ -44,7 +46,11 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
   isEdit = false;
   share_id: string;
   shareResponse: SMBShare;
-
+  smbClusters$: Observable<SMBCluster[]>;
+  selectedFsName: string;
+  selectedSubvolGroup: string;
+  selectedSubvol: string;
+  constIdd: string;
   constructor(
     private formBuilder: CdFormBuilder,
     public smbService: SmbService,
@@ -66,9 +72,7 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
       this.share_id = params.shareId;
       this.clusterId = params.clusterId;
     });
-    this.nfsService.filesystems().subscribe((data: Filesystem[]) => {
-      this.allFsNames = data;
-    });
+    this.smbClusters$ = this.smbService.listClusters();
     this.createForm();
     if (this.isEdit) {
       this.smbService.getShare(this.clusterId, this.share_id).subscribe((resp: SMBShare) => {
@@ -89,6 +93,18 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
         this.getSubVolGrp(this.shareResponse.cephfs.volume);
       });
     }
+
+    this.route.params.subscribe(
+      (params: { fs_name: string; subvolume_group: string; subvolume?: string }) => {
+        this.selectedFsName = params.fs_name;
+        this.selectedSubvolGroup = params.subvolume_group;
+        if (params.subvolume) this.selectedSubvol = params.subvolume;
+        this.getData(this.selectedFsName);
+      }
+    );
+    if (!this.isEdit) {
+      this.resolveRouteParams();
+    }
     this.loadingReady();
   }
 
@@ -107,8 +123,32 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
         validators: [Validators.required]
       }),
       browseable: new FormControl(true),
-      readonly: new FormControl(false)
+      readonly: new FormControl(false),
+      cluster_id: new FormControl('')
     });
+  }
+
+  getData(fsName: string) {
+    this.nfsService.filesystems().subscribe((data: Filesystem[]) => {
+      this.allFsNames = data;
+      const vol = this.allFsNames.find((vol) => vol.name === fsName);
+      if (vol) {
+        this.smbShareForm.get('volume').setValue(vol.name);
+      }
+    });
+  }
+
+  resolveFilesystems(filesystems: any[]) {
+    this.allFsNames = filesystems;
+  }
+
+  resolveRouteParams() {
+    if (!_.isEmpty(this.selectedFsName)) {
+      this.smbShareForm.patchValue({
+        volume: this.selectedFsName
+      });
+      this.getSubVolGrp(this.selectedFsName);
+    }
   }
 
   volumeChangeHandler() {
@@ -142,6 +182,11 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
             }
           }
         }
+        const subvolgrp = this.allsubvolgrps.find((grp) => grp.name === this.selectedSubvolGroup);
+        if (subvolgrp) {
+          this.smbShareForm.get('subvolume_group').setValue(subvolgrp.name);
+          this.getSubVol();
+        }
       });
     }
   }
@@ -168,6 +213,11 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
               this.setSubVolPath();
             }
           }
+        }
+        const subvol = this.allsubvols.find((vol) => vol.name === this.selectedSubvol);
+        if (subvolgrp && subvol) {
+          this.smbShareForm.get('subvolume').setValue(subvol.name);
+          this.setSubVolPath();
         }
       });
     }
@@ -200,10 +250,17 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
     const rawFormValue = _.cloneDeep(this.smbShareForm.value);
     const correctedPath = rawFormValue.inputPath;
     const shareId = this.smbShareForm.get('share_id')?.value;
+
+    if (this.clusterId) {
+      this.constIdd = this.smbShareForm.get('cluster_id').value;
+    } else {
+
+      this.constIdd = this.smbShareForm.get('cluster_id').value;
+    }
     const requestModel: ShareRequestModel = {
       share_resource: {
         resource_type: SHARE_RESOURCE,
-        cluster_id: this.clusterId,
+        cluster_id: this.constIdd,
         share_id: shareId,
         cephfs: {
           volume: rawFormValue.volume,

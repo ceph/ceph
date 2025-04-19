@@ -175,6 +175,17 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
         disable: () => !this.selection?.hasSingleSelection
       },
       {
+        name: this.actionLabels.SMB_EXPORT,
+        permission: 'create',
+        icon: Icons.nfsExport,
+        routerLink: () => [
+          '/cephfs/smb/share/create',
+          this.fsName,
+          this.activeGroupName,
+          { subvolume: this.selection?.first()?.name }
+        ]
+      },
+      {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
         icon: Icons.destroy,
