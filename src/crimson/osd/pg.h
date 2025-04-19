@@ -479,7 +479,7 @@ public:
     }
     void partial_write(pg_info_t *info, const pg_log_entry_t &entry) override {
       // TODO
-      ceph_abort_msg("not implemented yet");
+      ceph_assert(entry.written_shards.empty() && info->partial_writes_last_complete.empty());
     }
   };
   PGLog::LogEntryHandlerRef get_log_handler(
