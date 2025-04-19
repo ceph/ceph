@@ -227,6 +227,31 @@ class GrafanaService(CephadmService):
                 service_url
             )
 
+    def reset_config(self, daemon: DaemonDescription) -> None:
+
+        if daemon.hostname is None:
+            return
+        try:
+            current_api_host = self.mgr.check_mon_command({"prefix": "dashboard get-grafana-api-url"}).stdout.strip()
+            daemon_addr = daemon.ip if daemon.ip else self.mgr.get_fqdn(daemon.hostname)
+            daemon_port = daemon.ports[0] if daemon.ports else self.DEFAULT_SERVICE_PORT
+            service_url = build_url(scheme='https', host=daemon_addr, port=daemon_port)
+
+            if current_api_host == service_url:
+                remaining_daemons = [d for d in self.mgr.cache.get_daemons_by_service(self.TYPE)
+                                     if d.name() != daemon.name()]
+                if remaining_daemons:
+                    self.config_dashboard(remaining_daemons)
+                    logger.info("Updated dashboard API settings to point to the remaining daemon")
+                else:
+                    self.mgr.check_mon_command({"prefix": "dashboard reset-grafana-api-url"})
+                    self.mgr.check_mon_command({"prefix": "dashboard reset-grafana-api-ssl-verify"})
+                    logger.info("Reset dashboard API settings as no Grafana daemons are remaining")
+            else:
+                logger.info(f"Grafana daemon {daemon.name()} removed; no changes")
+        except Exception as e:
+            logger.error(f"Error in Grafana pre_remove: {str(e)}")
+
     def pre_remove(self, daemon: DaemonDescription) -> None:
         """
         Called before grafana daemon is removed.
@@ -235,6 +260,7 @@ class GrafanaService(CephadmService):
             # delete cert/key entires for this grafana daemon
             self.mgr.cert_mgr.rm_cert('grafana_cert', host=daemon.hostname)
             self.mgr.cert_mgr.rm_key('grafana_key', host=daemon.hostname)
+        self.reset_config(daemon)
 
     def ok_to_stop(self,
                    daemon_ids: List[str],
