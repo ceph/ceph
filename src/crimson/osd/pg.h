@@ -733,6 +733,9 @@ public:
   ShardServices& get_shard_services() final {
     return shard_services;
   }
+  DoutPrefixProvider& get_dpp() final {
+    return *this;
+  }
   seastar::future<> stop();
 private:
   class C_PG_FinishRecovery : public Context {
