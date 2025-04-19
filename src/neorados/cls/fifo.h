@@ -1734,8 +1734,10 @@ public:
 		      sys::error_code{});
 	   co_return sys::error_code{};
 	 } catch (const sys::system_error& e) {
-	   ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-			      << " trim failed: " << e.what() << dendl;
+	   if (ceph::from_error_code(e.code()) != -ENODATA) {
+	     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
+	                        << " trim failed: " << e.what() << dendl;
+	   }
 	   co_return e.code();
 	 }
        }, rados.get_executor()),
