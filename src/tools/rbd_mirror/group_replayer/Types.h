@@ -14,6 +14,8 @@ enum HealthState {
   HEALTH_STATE_ERROR
 };
 
+typedef std::pair<int64_t /*pool_id*/, std::string /*global_image_id*/> GlobalImageId;
+
 } // namespace group_replayer
 } // namespace mirror
 } // namespace rbd
