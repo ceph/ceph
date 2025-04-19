@@ -111,7 +111,7 @@ int ErasureCode::sanity_check_k_m(int k, int m, ostream *ss)
     *ss << "m=" << m << " must be >= 1" << std::endl;
     return -EINVAL;
   }
-  int max_k_plus_m = std::numeric_limits<decltype(shard_id_t::id)>::max();
+  auto max_k_plus_m = std::numeric_limits<decltype(shard_id_t::id)>::max();
   if (k+m > max_k_plus_m) {
     *ss << "(k+m)=" << (k+m) << " must be <= " << max_k_plus_m << std::endl;
     return -EINVAL;
@@ -136,7 +136,7 @@ int ErasureCode::_minimum_to_decode(const set<int> &want_to_read,
                                    set<int> *minimum)
 {
   if (includes(available_chunks.begin(), available_chunks.end(),
-	       want_to_read.begin(), want_to_read.end())) {
+               want_to_read.begin(), want_to_read.end())) {
     *minimum = want_to_read;
   } else {
     unsigned int k = get_data_chunk_count();
@@ -447,7 +447,7 @@ int ErasureCode::_decode(const shard_id_set &want_to_read,
       (*decoded)[i].rebuild_aligned(SIMD_ALIGN);
     }
     bufferlist &bl = (*decoded)[i];
-    if (bl.length() != bl.begin().get_current_ptr().length()) {
+    if (!bl.is_contiguous()) {
       bl.rebuild();
     }
   }

@@ -104,10 +104,11 @@ int ErasureCodeIsa::decode_chunks(const set<int> &want_to_read,
       erasures[erasures_count] = i;
       erasures_count++;
     }
-    if (i < k)
+    if (i < k) {
       data[i] = (*decoded)[i].c_str();
-    else
+    } else {
       coding[i - k] = (*decoded)[i].c_str();
+    }
   }
   erasures[erasures_count] = -1;
   ceph_assert(erasures_count > 0);
@@ -122,21 +123,29 @@ int ErasureCodeIsa::encode_chunks(const shard_id_map<bufferptr> &in,
   uint64_t size = 0;
 
   for (auto &&[shard, ptr] : in) {
-    if (size == 0) size = ptr.length();
-    else ceph_assert(size == ptr.length());
+    if (size == 0) {
+      size = ptr.length();
+    } else {
+      ceph_assert(size == ptr.length());
+    }
     chunks[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
   }
 
   for (auto &&[shard, ptr] : out) {
-    if (size == 0) size = ptr.length();
-    else ceph_assert(size == ptr.length());
+    if (size == 0) {
+      size = ptr.length();
+    } else {
+      ceph_assert(size == ptr.length());
+    }
     chunks[static_cast<int>(shard)] = ptr.c_str();
   }
 
   char *zeros = nullptr;
 
   for (shard_id_t i; i < k + m; ++i) {
-    if (in.contains(i) || out.contains(i)) continue;
+    if (in.contains(i) || out.contains(i)) {
+      continue;
+    }
 
     if (zeros == nullptr) {
       zeros = (char*)malloc(size);
@@ -148,14 +157,16 @@ int ErasureCodeIsa::encode_chunks(const shard_id_map<bufferptr> &in,
 
   isa_encode(&chunks[0], &chunks[k], size);
 
-  if (zeros != nullptr) free(zeros);
+  if (zeros != nullptr) {
+    free(zeros);
+  }
 
   return 0;
 }
 
 int ErasureCodeIsa::decode_chunks(const shard_id_set &want_to_read,
                                   shard_id_map<bufferptr> &in,
-				  shard_id_map<bufferptr> &out)
+                                  shard_id_map<bufferptr> &out)
 {
   unsigned int size = 0;
   shard_id_set erasures_set;
@@ -169,33 +180,48 @@ int ErasureCodeIsa::decode_chunks(const shard_id_set &want_to_read,
   memset(coding, 0, sizeof(char*) * m);
 
   for (auto &&[shard, ptr] : in) {
-    if (size == 0) size = ptr.length();
-    else ceph_assert(size == ptr.length());
-    if (shard < k) {
-      data[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
+    if (size == 0) {
+      size = ptr.length();
+    } else {
+      ceph_assert(size == ptr.length());
     }
-    else {
-      coding[static_cast<int>(shard) - k] = const_cast<char*>(ptr.c_str());
+
+    if (shard < k) {
+      data[static_cast<int>(shard)] = ptr.c_str();
+    } else {
+      coding[static_cast<int>(shard) - k] = ptr.c_str();
     }
     erasures_set.erase(shard);
   }
 
   for (auto &&[shard, ptr] : out) {
-    if (size == 0) size = ptr.length();
-    else ceph_assert(size == ptr.length());
+    if (size == 0) {
+      size = ptr.length();
+    } else {
+      ceph_assert(size == ptr.length());
+    }
+
     if (shard < k) {
-      data[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
+      data[static_cast<int>(shard)] = ptr.c_str();
+    } else {
+      coding[static_cast<int>(shard) - k] = ptr.c_str();
     }
-    else {
-      coding[static_cast<int>(shard) - k] = const_cast<char*>(ptr.c_str());
-    }
+    erasures_set.insert(shard);
   }
 
   for (int i = 0; i < k + m; i++) {
     char **buf = i < k ? &data[i] : &coding[i - k];
     if (*buf == nullptr) {
       *buf = (char *)malloc(size);
+      ceph_assert(buf != nullptr);
       to_free.insert(shard_id_t(i));
+      /* If buffer was not provided, is not an erasure (i.e. in the out map),
+       * and a data shard, then it can be assumed to be zero. This is most
+       * likely due to EC shards being different sizes.
+       */
+      if (i < k && !erasures_set.contains(shard_id_t(i))) {
+        memset(*buf, 0, size);
+      }
     }
   }
 
@@ -222,7 +248,7 @@ void
 ErasureCodeIsa::isa_xor(char **data, char *coding, int blocksize, int data_vectors)
 {
   ceph_assert(data_vectors <= MAX_K);
-  char * xor_bufs[MAX_K + 1];
+  char *xor_bufs[MAX_K + 1];
   for (int i = 0; i < data_vectors; i++) {
     xor_bufs[i] = data[i];
   }
@@ -232,7 +258,10 @@ ErasureCodeIsa::isa_xor(char **data, char *coding, int blocksize, int data_vecto
   // Otherwise, use byte_xor()
   bool aligned = true;
   for (int i = 0; i <= data_vectors; i++) {
-    aligned &= is_aligned(xor_bufs[i], EC_ISA_ADDRESS_ALIGNMENT);
+    if (!is_aligned(xor_bufs[i], EC_ISA_ADDRESS_ALIGNMENT)) {
+      aligned = false;
+      break;
+    }
   }
 
   if (aligned) {
@@ -289,13 +318,13 @@ ErasureCodeIsaDefault::encode_delta(const bufferptr &old_data,
                                   const bufferptr &new_data,
                                   bufferptr *delta_maybe_in_place)
 {
-  constexpr int data_vectors = 2;
-  char * data[data_vectors];
+  constexpr int NUM_DATA_VECTORS = 2;
+  char * data[NUM_DATA_VECTORS];
   data[0] = const_cast<char*>(old_data.c_str());
   data[1] = const_cast<char*>(new_data.c_str());
   char * coding = delta_maybe_in_place->c_str();
 
-  isa_xor(data, coding, delta_maybe_in_place->length(), data_vectors);
+  isa_xor(data, coding, delta_maybe_in_place->length(), NUM_DATA_VECTORS);
 }
 
 // -----------------------------------------------------------------------------
@@ -308,23 +337,29 @@ ErasureCodeIsaDefault::apply_delta(const shard_id_map<bufferptr> &in,
   const unsigned blocksize = first->second.length();
 
   for (auto const& [datashard, databuf] : in) {
-    if (datashard < k) {
-      for (auto const& [codingshard, codingbuf] : out) {
-        if (codingshard >= k) {
-          ceph_assert(codingbuf.length() == blocksize);
-          if (m==1) {
-            constexpr int data_vectors = 2;
-            char * data[data_vectors];
-            data[0] = const_cast<char*>(databuf.c_str());
-            data[1] = const_cast<char*>(codingbuf.c_str());
-            char * coding = const_cast<char*>(codingbuf.c_str());
-            isa_xor(data, coding, blocksize, data_vectors);
-          } else {
-            unsigned char* data = reinterpret_cast<unsigned char*>(const_cast<char*>(databuf.c_str()));
-            unsigned char* coding = reinterpret_cast<unsigned char*>(const_cast<char*>(codingbuf.c_str()));
-            ec_encode_data_update(blocksize, k, 1, static_cast<int>(datashard), encode_tbls + (32 * k * (static_cast<int>(codingshard) - k)), data, &coding);
-          }
-        }
+    if (datashard >= k) {
+      continue;
+    }
+    for (auto const& [codingshard, codingbuf] : out) {
+      if (codingshard < k) {
+        continue;
+      }
+      ceph_assert(codingbuf.length() == blocksize);
+      if (m == 1) {
+        constexpr int NUM_DATA_VECTORS = 2;
+        char * data[NUM_DATA_VECTORS];
+        data[0] = const_cast<char*>(databuf.c_str());
+        data[1] = codingbuf.c_str();
+        char * coding = codingbuf.c_str();
+        isa_xor(data, coding, blocksize, NUM_DATA_VECTORS);
+      } else {
+        unsigned char* data = reinterpret_cast<unsigned char*>(const_cast<char*>(databuf.c_str()));
+        unsigned char* coding = reinterpret_cast<unsigned char*>(codingbuf.c_str());
+        // We always update one parity at a time, so specify 1 row, and a pointer to the
+        // correct row in encode_tbls for this particular parity
+        ec_encode_data_update(blocksize, k, 1, static_cast<int>(datashard),
+                              encode_tbls + (32 * k * (static_cast<int>(codingshard) - k)),
+                              data, &coding);
       }
     }
   }
