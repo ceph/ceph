@@ -668,6 +668,9 @@ class FilesystemBase(MDSClusterBase):
     def set_allow_referent_inodes(self, yes):
         self.set_var("allow_referent_inodes", yes)
 
+    def set_use_global_snaprealm(self, yes):
+        self.set_var("use_global_snaprealm", yes)
+
     def set_bal_rank_mask(self, bal_rank_mask):
         self.set_var("bal_rank_mask", bal_rank_mask)
 
