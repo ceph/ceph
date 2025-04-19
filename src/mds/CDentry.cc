@@ -195,7 +195,7 @@ version_t CDentry::pre_dirty(version_t min)
 }
 
 
-void CDentry::_mark_dirty(LogSegment *ls)
+void CDentry::_mark_dirty(LogSegmentRef ls)
 {
   // state+pin
   if (!state_test(STATE_DIRTY)) {
@@ -209,7 +209,7 @@ void CDentry::_mark_dirty(LogSegment *ls)
     ls->dirty_dentries.push_back(&item_dirty);
 }
 
-void CDentry::mark_dirty(version_t pv, LogSegment *ls) 
+void CDentry::mark_dirty(version_t pv, LogSegmentRef ls) 
 {
   dout(10) << __func__ << " " << *this << dendl;
 
@@ -787,6 +787,27 @@ bool CDentry::check_corruption(bool load)
     return true;
   }
   return false;
+}
+
+void CDentry::decode_import(ceph::buffer::list::const_iterator& blp, LogSegmentRef ls) {
+  DECODE_START(1, blp);
+  decode(first, blp);
+  __u32 nstate;
+  decode(nstate, blp);
+  decode(version, blp);
+  decode(projected_version, blp);
+  decode(lock, blp);
+  decode(get_replicas(), blp);
+
+  // twiddle
+  state &= MASK_STATE_IMPORT_KEPT;
+  mark_auth();
+  if (nstate & STATE_DIRTY)
+    _mark_dirty(ls);
+  if (is_replicated())
+    get(PIN_REPLICATED);
+  replica_nonce = 0;
+  DECODE_FINISH(blp);
 }
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(CDentry, co_dentry, mds_co);

@@ -18,10 +18,31 @@
 #include "CDentry.h"
 #include "CInode.h"
 #include "CDir.h"
+#include "LogSegment.h"
 
 using namespace std;
 
 // MutationImpl
+MutationImpl::MutationImpl() : TrackedOp(nullptr, ceph_clock_now()) {}
+
+MutationImpl::MutationImpl(OpTracker *tracker, utime_t initiated,
+             const metareqid_t &ri, __u32 att /* =0 */,
+	     mds_rank_t peer_to /* =MDS_RANK_NONE */)
+  : TrackedOp(tracker, initiated),
+    reqid(ri), attempt(att),
+    peer_to_mds(peer_to) {}
+
+MutationImpl::~MutationImpl()
+{
+  ceph_assert(!locking);
+  ceph_assert(!lock_cache);
+  ceph_assert(num_pins == 0);
+  ceph_assert(num_auth_pins == 0);
+}
+
+void MutationImpl::print(std::ostream &out) const {
+  out << "mutation(" << this << ")";
+}
 
 void MutationImpl::pin(MDSCacheObject *o)
 {
