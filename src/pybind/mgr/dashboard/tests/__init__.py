@@ -73,6 +73,10 @@ class KVStoreMockMixin(object):
     def get_key(cls, key):
         return cls.CONFIG_KEY_DICT.get(key, None)
 
+    @classmethod
+    def set_key(cls, key, value):
+        cls.CONFIG_KEY_DICT[key] = value
+
 
 # pylint: disable=protected-access
 class CLICommandTestMixin(KVStoreMockMixin):
