@@ -110,6 +110,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   rgw_pool user_swift_pool;
   rgw_pool user_uid_pool;
   rgw_pool roles_pool;
+  rgw_pool policy_pool;
   rgw_pool reshard_pool;
   rgw_pool otp_pool;
   rgw_pool oidc_pool;
@@ -174,6 +175,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     std::map<std::string, std::string, ltstr_nocase> old_tier_config;
     encode(old_tier_config, bl);
     encode(roles_pool, bl);
+    encode(policy_pool, bl);
     encode(reshard_pool, bl);
     encode(otp_pool, bl);
     encode(tier_config, bl);
@@ -228,6 +230,11 @@ struct RGWZoneParams : RGWSystemMetaObj {
     } else {
       roles_pool = name + ".rgw.meta:roles";
     }
+    if (struct_v >= 9) {
+        decode(policy_pool, bl);
+      } else {
+        policy_pool = name + ".rgw.meta:policy";
+      }
     if (struct_v >= 10) {
       decode(reshard_pool, bl);
     } else {
