@@ -28,6 +28,7 @@
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDScrub2.h"
+#include "messages/MOSDPGPCT.h"
 #include "messages/MPGStats.h"
 
 #include "os/Transaction.h"
@@ -53,9 +54,11 @@
 #include "crimson/osd/pg_meta.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
+#include "crimson/osd/osd_operations/pgpct_request.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operations/recovery_subrequest.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
+#include "crimson/osd/osd_operations/replicated_request_reply.h"
 #include "crimson/osd/osd_operations/scrub_events.h"
 #include "crimson/osd/osd_operation_external_tracking.h"
 #include "crimson/crush/CrushLocation.h"
@@ -994,6 +997,9 @@ OSD::do_ms_dispatch(
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
     return handle_update_log_missing_reply(conn, boost::static_pointer_cast<
       MOSDPGUpdateLogMissingReply>(m));
+  case MSG_OSD_PG_PCT:
+    return handle_pg_pct(conn, boost::static_pointer_cast<
+      MOSDPGPCT>(m));
   default:
     return std::nullopt;
   }
@@ -1399,47 +1405,45 @@ seastar::future<> OSD::handle_update_log_missing(
   crimson::net::ConnectionRef conn,
   Ref<MOSDPGUpdateLogMissing> m)
 {
-  return pg_shard_manager.start_pg_operation<LogMissingRequest>(
+  return pg_shard_manager.start_pg_operation_active<LogMissingRequest>(
     std::move(conn),
-    std::move(m)).second;
+    std::move(m));
 }
 
 seastar::future<> OSD::handle_update_log_missing_reply(
   crimson::net::ConnectionRef conn,
   Ref<MOSDPGUpdateLogMissingReply> m)
 {
-  return pg_shard_manager.start_pg_operation<LogMissingRequestReply>(
+  return pg_shard_manager.start_pg_operation_active<LogMissingRequestReply>(
     std::move(conn),
-    std::move(m)).second;
+    std::move(m));
+}
+
+seastar::future<> OSD::handle_pg_pct(
+  crimson::net::ConnectionRef conn,
+  Ref<MOSDPGPCT> m)
+{
+  return pg_shard_manager.start_pg_operation_active<PGPCTRequest>(
+    std::move(conn),
+    std::move(m));
 }
 
 seastar::future<> OSD::handle_rep_op(
   crimson::net::ConnectionRef conn,
   Ref<MOSDRepOp> m)
 {
-  m->finish_decode();
-  return pg_shard_manager.start_pg_operation<RepRequest>(
+  return pg_shard_manager.start_pg_operation_active<RepRequest>(
     std::move(conn),
-    std::move(m)).second;
+    std::move(m));
 }
 
 seastar::future<> OSD::handle_rep_op_reply(
   crimson::net::ConnectionRef conn,
   Ref<MOSDRepOpReply> m)
 {
-  LOG_PREFIX(OSD::handle_rep_op_reply);
-  spg_t pgid = m->get_spg();
-  return pg_shard_manager.with_pg(
-    pgid,
-    [FNAME, m=std::move(m)](auto &&pg) {
-      if (pg) {
-	m->finish_decode();
-	pg->handle_rep_op_reply(*m);
-      } else {
-	WARN("stale reply: {}", *m);
-      }
-      return seastar::now();
-    });
+  return pg_shard_manager.start_pg_operation_active<ReplicatedRequestReply>(
+    std::move(conn),
+    std::move(m));
 }
 
 seastar::future<> OSD::handle_scrub_command(
@@ -1463,9 +1467,9 @@ seastar::future<> OSD::handle_scrub_message(
   crimson::net::ConnectionRef conn,
   Ref<MOSDFastDispatchOp> m)
 {
-  return pg_shard_manager.start_pg_operation<
+  return pg_shard_manager.start_pg_operation_active<
     crimson::osd::ScrubMessage
-    >(m, conn, m->get_min_epoch(), m->get_spg()).second;
+    >(m, conn, m->get_min_epoch(), m->get_spg());
 }
 
 seastar::future<> OSD::handle_mark_me_down(
@@ -1483,8 +1487,8 @@ seastar::future<> OSD::handle_recovery_subreq(
   crimson::net::ConnectionRef conn,
   Ref<MOSDFastDispatchOp> m)
 {
-  return pg_shard_manager.start_pg_operation<RecoverySubRequest>(
-    conn, std::move(m)).second;
+  return pg_shard_manager.start_pg_operation_active<RecoverySubRequest>(
+    conn, std::move(m));
 }
 
 vector<DaemonHealthMetric> OSD::get_health_metrics()

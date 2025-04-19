@@ -60,8 +60,8 @@ void ClientRequest::complete_request(PG &pg)
 ClientRequest::ClientRequest(
   ShardServices &_shard_services, crimson::net::ConnectionRef conn,
   Ref<MOSDOp> &&m)
-  : shard_services(&_shard_services),
-    l_conn(std::move(conn)),
+  : RemoteOperation(std::move(conn)),
+    shard_services(&_shard_services),
     m(std::move(m)),
     begin_time(std::chrono::steady_clock::now()),
     instance_handle(new instance_handle_t)
@@ -321,7 +321,7 @@ ClientRequest::recover_missing_snaps(
   co_await std::move(resolve_oids);
 
   for (auto &oid : ret) {
-    auto unfound = co_await do_recover_missing(pg, oid, m->get_reqid());
+    auto unfound = co_await pg->do_recover_missing(oid, m->get_reqid());
     if (unfound) {
       DEBUGDPP("{} unfound, hang it for now", *pg, oid);
       co_await interruptor::make_interruptible(
@@ -347,8 +347,8 @@ ClientRequest::process_op(
       "Skipping recover_missings on non primary pg for soid {}",
       *pg, m->get_hobj());
   } else {
-    auto unfound = co_await do_recover_missing(
-      pg, m->get_hobj().get_head(), m->get_reqid());
+    auto unfound = co_await pg->do_recover_missing(
+      m->get_hobj().get_head(), m->get_reqid());
     if (unfound) {
       DEBUGDPP("{} unfound, hang it for now", *pg, m->get_hobj().get_head());
       co_await interruptor::make_interruptible(
@@ -486,7 +486,7 @@ ClientRequest::do_process(
     co_return;
   }
 
-  OpsExecuter ox(pg, obc, op_info, *m, r_conn, snapc);
+  OpsExecuter ox(pg, obc, op_info, *m, get_remote_connection(), snapc);
   auto ret = co_await pg->run_executer(
     ox, obc, op_info, m->ops
   ).si_then([]() -> std::optional<std::error_code> {

@@ -9,7 +9,7 @@
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/common/type_helpers.h"
-#include "messages/MOSDPGUpdateLogMissingReply.h"
+#include "messages/MOSDPGPCT.h"
 
 namespace ceph {
   class Formatter;
@@ -22,12 +22,12 @@ class ShardServices;
 class OSD;
 class PG;
 
-class LogMissingRequestReply final :
-    public PhasedOperationT<LogMissingRequestReply>,
+class PGPCTRequest final :
+    public PhasedOperationT<PGPCTRequest>,
     public RemoteOperation {
 public:
-  static constexpr OperationTypeCode type = OperationTypeCode::logmissing_request_reply;
-  LogMissingRequestReply(crimson::net::ConnectionRef&&, Ref<MOSDPGUpdateLogMissingReply>&&);
+  static constexpr OperationTypeCode type = OperationTypeCode::pgpct_request;
+  PGPCTRequest(crimson::net::ConnectionRef&&, Ref<MOSDPGPCT>&&);
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
@@ -38,9 +38,7 @@ public:
   }
   PipelineHandle &get_handle() { return handle; }
   epoch_t get_epoch() const { return req->get_min_epoch(); }
-  epoch_t get_epoch_sent_at() const {
-    return req->get_map_epoch();
-  }
+  epoch_t get_epoch_sent_at() const { return req->get_map_epoch(); }
 
   ConnectionPipeline &get_connection_pipeline();
 
@@ -49,24 +47,29 @@ public:
   seastar::future<> with_pg(
     ShardServices &shard_services, Ref<PG> pg);
 
+  interruptible_future<> with_pg_interruptible(
+    PG& pg);
+
   std::tuple<
     StartEvent,
     ConnectionPipeline::AwaitActive::BlockingEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
     ConnectionPipeline::GetPGMapping::BlockingEvent,
     PerShardPipeline::CreateOrWaitPG::BlockingEvent,
+    PGRepopPipeline::Process::BlockingEvent,
+    PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
     PGMap::PGCreationBlockingEvent,
     OSD_OSDMapGate::OSDMapBlocker::BlockingEvent
   > tracking_events;
 
 private:
-  // must be after `conn` to ensure the ConnectionPipeline's is alive
+  // must be after `conn` to ensure the ConnectionPipeline is alive
   PipelineHandle handle;
-  Ref<MOSDPGUpdateLogMissingReply> req;
+  Ref<MOSDPGPCT> req;
 };
 
 }
 
 #if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::osd::LogMissingRequestReply> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::osd::PGPCTRequest> : fmt::ostream_formatter {};
 #endif
