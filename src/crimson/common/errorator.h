@@ -225,7 +225,7 @@ struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
         pre_assert();
       }
       if (msg) {
-        ceph_abort(msg);
+        ceph_abort_msg(msg);
       } else {
         ceph_abort();
       }
@@ -319,13 +319,17 @@ struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
         }
       }
       if (msg) {
-        ceph_abort(msg);
+        ceph_abort_msg(msg);
       } else {
         ceph_abort();
       }
       return no_touch_error_marker{};
     }
   };
+
+  auto exception_ptr() {
+    return ep;
+  }
 
 private:
   std::exception_ptr ep;
@@ -356,6 +360,10 @@ class maybe_handle_error_t {
   ErrorVisitorT errfunc;
 
 public:
+  // NOTE: `__cxa_exception_type()` is an extension of the language.
+  // It should be available both in GCC and Clang but a fallback
+  // (based on `std::rethrow_exception()` and `catch`) can be made
+  // to handle other platforms if necessary.
   maybe_handle_error_t(ErrorVisitorT&& errfunc, std::exception_ptr ep)
     : type_info(*ep.__cxa_exception_type()),
       result(FuturatorT::make_exception_future(std::move(ep))),
@@ -366,11 +374,34 @@ public:
   void handle() {
     static_assert(std::is_invocable<ErrorVisitorT, ErrorT>::value,
                   "provided Error Visitor is not exhaustive");
+
+    // Forbid any error handlers that are returning void.
+    // See: https://tracker.ceph.com/issues/69406
     using return_t = std::invoke_result_t<ErrorVisitorT, ErrorT>;
     static_assert(!std::is_same_v<return_t, void>,
                   "error handlers mustn't return void");
+
+    // The code below checks for exact match only while
+    // `catch` would allow to match against a base class as well.
+    // However, this shouldn't be a big issue for `errorator` as
+    // ErrorVisitorT are already checked for exhaustiveness at compile-time.
+    // TODO: why/when is this possible?
+    if (type_info != ErrorT::error_t::get_exception_ptr_type_info()) {
+        return;
+    }
+
+    auto ep = take_exception_from_future();
+
+    // Any assert_* handler we have:
+    // assert_failure, assert_all and assert_all_func_t
+    // are expected to return void since we actually abort in them.
+    // This is why we need a way to diffreciate between them and between
+    // non-aborting error handlers (e.g handle) - for that we use the dedicated
+    // label of: no_touch_error_marker. Otherwise we would fail the above
+    // static assertion.
     if constexpr (std::is_same_v<return_t, no_touch_error_marker>) {
-      return;
+      std::ignore = std::invoke(std::forward<ErrorVisitorT>(errfunc),
+                                ErrorT::error_t::from_exception_ptr(std::move(ep)));
     } else {
       // In C++ throwing an exception isn't the sole way to signal
       // error with it. This approach nicely fits cold, infrequent cases
@@ -382,33 +413,31 @@ public:
       // pointee's type with `__cxa_exception_type()` instead of costly
       // re-throwing (via `std::rethrow_exception()`) and matching with
       // `catch`. The limitation here is lack of support for hierarchies
-      // of exceptions. The code below checks for exact match only while
-      // `catch` would allow to match against a base class as well.
-      // However, this shouldn't be a big issue for `errorator` as Error
-      // Visitors are already checked for exhaustiveness at compile-time.
-      //
-      // NOTE: `__cxa_exception_type()` is an extension of the language.
-      // It should be available both in GCC and Clang but a fallback
-      // (based on `std::rethrow_exception()` and `catch`) can be made
-      // to handle other platforms if necessary.
-      if (type_info == ErrorT::error_t::get_exception_ptr_type_info()) {
-        // set `state::invalid` in internals of `seastar::future` to not
-        // call `report_failed_future()` during `operator=()`.
-        [[maybe_unused]] auto &&ep = std::move(result).get_exception();
-        if constexpr (std::is_assignable_v<decltype(result), return_t>) {
-          result = std::invoke(std::forward<ErrorVisitorT>(errfunc),
-                               ErrorT::error_t::from_exception_ptr(std::move(ep)));
-        } else {
-          result = FuturatorT::invoke(
-            std::forward<ErrorVisitorT>(errfunc),
-            ErrorT::error_t::from_exception_ptr(std::move(ep)));
-        }
+      // of exceptions.
+
+       // TODO: add missing explanation
+      if constexpr (std::is_assignable_v<decltype(result), return_t>) {
+        result = std::invoke(std::forward<ErrorVisitorT>(errfunc),
+                             ErrorT::error_t::from_exception_ptr(std::move(ep)));
+      } else {
+        result = FuturatorT::invoke(
+          std::forward<ErrorVisitorT>(errfunc),
+          ErrorT::error_t::from_exception_ptr(std::move(ep)));
       }
     }
   }
 
   auto get_result() && {
     return std::move(result);
+  }
+
+  // seastar::future::get_exception()&& calls take_exception() internally.
+  // This will result in the future state to be "state::invalid".
+  // That way when using seastar::future `operator=()`,
+  // report_failed_future() won't be called.
+  std::exception_ptr take_exception_from_future() {
+    auto&& ep = std::move(result).get_exception();
+    return ep;
   }
 };
 
@@ -969,8 +998,8 @@ public:
       static_assert(contains_once_v<std::decay_t<ErrorT>>,
                     "discarding disallowed ErrorT");
       try {
-        std::rethrow_exception(e.ep);
-      } catch(const typename ErrorT::error_type_t& err) {
+        std::rethrow_exception(e.exception_ptr());
+      } catch(const typename std::decay_t<ErrorT>::error_type_t& err) {
         f(err);
       }
       ceph_abort();
@@ -1322,7 +1351,7 @@ namespace ct_error {
         pre_assert();
       }
       if (msg) {
-        ceph_abort(msg);
+        ceph_abort_msg(msg);
       } else {
         ceph_abort();
       }
