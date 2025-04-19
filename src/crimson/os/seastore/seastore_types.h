@@ -2962,7 +2962,7 @@ std::ostream& operator<<(std::ostream&, const dirty_io_stats_printer_t&);
  *   get_caching_extent() -- test only
  *   get_caching_extent_by_type() -- test only
  */
-struct extent_access_stats_t {
+struct cache_access_stats_t {
   uint64_t trans_pending = 0;
   uint64_t trans_dirty = 0;
   uint64_t trans_lru = 0;
@@ -2980,19 +2980,19 @@ struct extent_access_stats_t {
     return cache_dirty + cache_lru;
   }
 
-  uint64_t get_estimated_cache_access() const {
+  uint64_t get_cache_access() const {
     return get_cache_hit() + load_absent;
   }
 
-  uint64_t get_estimated_total_access() const {
-    return get_trans_hit() + get_cache_hit() + load_absent;
+  uint64_t get_total_access() const {
+    return get_trans_hit() + get_cache_access();
   }
 
   bool is_empty() const {
-    return get_estimated_total_access() == 0;
+    return get_total_access() == 0;
   }
 
-  void add(const extent_access_stats_t& o) {
+  void add(const cache_access_stats_t& o) {
     trans_pending += o.trans_pending;
     trans_dirty += o.trans_dirty;
     trans_lru += o.trans_lru;
@@ -3002,7 +3002,7 @@ struct extent_access_stats_t {
     load_present += o.load_present;
   }
 
-  void minus(const extent_access_stats_t& o) {
+  void minus(const cache_access_stats_t& o) {
     trans_pending -= o.trans_pending;
     trans_dirty -= o.trans_dirty;
     trans_lru -= o.trans_lru;
@@ -3020,43 +3020,6 @@ struct extent_access_stats_t {
     cache_lru /= d;
     load_absent /= d;
     load_present /= d;
-  }
-};
-struct extent_access_stats_printer_t {
-  double seconds;
-  const extent_access_stats_t& stats;
-};
-std::ostream& operator<<(std::ostream&, const extent_access_stats_printer_t&);
-
-struct cache_access_stats_t {
-  extent_access_stats_t s;
-  uint64_t cache_absent = 0;
-
-  uint64_t get_cache_access() const {
-    return s.get_cache_hit() + cache_absent;
-  }
-
-  uint64_t get_total_access() const {
-    return s.get_trans_hit() + get_cache_access();
-  }
-
-  bool is_empty() const {
-    return get_total_access() == 0;
-  }
-
-  void add(const cache_access_stats_t& o) {
-    s.add(o.s);
-    cache_absent += o.cache_absent;
-  }
-
-  void minus(const cache_access_stats_t& o) {
-    s.minus(o.s);
-    cache_absent -= o.cache_absent;
-  }
-
-  void divide_by(unsigned d) {
-    s.divide_by(d);
-    cache_absent /= d;
   }
 };
 struct cache_access_stats_printer_t {

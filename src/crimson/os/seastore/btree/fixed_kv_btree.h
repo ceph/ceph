@@ -1503,7 +1503,6 @@ private:
         return on_found(child->template cast<internal_node_t>());
       });
     }
-    c.cache.account_absent_access(c.trans.get_src());
 
     auto child_pos = v.get_child_pos();
     auto next_iter = node_iter + 1;
@@ -1575,7 +1574,6 @@ private:
         return on_found(child->template cast<leaf_node_t>());
       });
     }
-    c.cache.account_absent_access(c.trans.get_src());
 
     auto child_pos = v.get_child_pos();
     auto next_iter = node_iter + 1;
@@ -2135,7 +2133,6 @@ private:
         return do_merge(child->template cast<NodeType>());
       });
     }
-    c.cache.account_absent_access(c.trans.get_src());
 
     auto child_pos = v.get_child_pos();
     return get_node<NodeType>(
