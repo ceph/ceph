@@ -380,6 +380,27 @@ vinodeno_t Client::map_faked_ino(ino_t ino)
   return _map_faked_ino(ino);
 }
 
+std::string Client::remove_feature_bits(const std::string& input) {
+  std::vector<int> feature_bits_list = CEPHFS_FEATURES_CLIENT_SUPPORTED;
+  std::string lis;
+  std::stringstream css(input);
+
+  while(getline(css, lis, ',')) {
+    int feature = std::stoi(lis);
+    feature_bits_list.erase(remove(feature_bits_list.begin(), feature_bits_list.end(), feature), feature_bits_list.end());
+  }
+
+  std::stringstream res;
+  for (size_t i = 0; i < final_features_bits_list.size(); ++i) {
+    res << final_features_bits_list[i];
+    if (i != final_features_bits_list.size() - 1) {
+      res << ",";
+    }
+  }
+  return res.str();
+}
+
+
 // cons/des
 
 Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
@@ -428,7 +449,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     acl_type = POSIX_ACL;
 
   if (auto str = cct->_conf->client_debug_inject_features; !str.empty()) {
-    myfeatures = feature_bitset_t(str);
+    myfeatures = feature_bitset_t(remove_feature_bits(str));
   } else {
     myfeatures = feature_bitset_t(CEPHFS_FEATURES_CLIENT_SUPPORTED);
   }
