@@ -126,6 +126,17 @@ class PerShardState {
   seastar::future<> broadcast_map_to_pgs(
     ShardServices &shard_services,
     epoch_t epoch);
+  seastar::future<std::set<std::pair<spg_t, epoch_t>>> identify_splits(
+    ShardServices &shard_services,
+    Ref<PG> pg,
+    cached_map_t cur_map,
+    epoch_t epoch);
+  seastar::future<std::set<std::pair<spg_t, epoch_t>>> identify_merges(
+    ShardServices &shard_services,
+    Ref<PG> pg,
+    cached_map_t cur_map,
+    epoch_t epoch);
+
 
   Ref<PG> get_pg(spg_t pgid);
   template <typename F>
@@ -189,6 +200,7 @@ class PerShardState {
   std::map<int, HeartbeatStampsRef> heartbeat_stamps;
 
   seastar::future<> update_shard_superblock(OSDSuperblock superblock);
+  seastar::future<> update_shard_pg_num_history(pool_pg_num_history_t pg_num_history);
 
   // Time state
   const ceph::mono_time startup_time;
@@ -200,6 +212,8 @@ class PerShardState {
   OSDSuperblock per_shard_superblock;
   std::list<OSDPerfMetricQuery> m_perf_queries;
   std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> m_perf_limits;
+
+  pool_pg_num_history_t per_shard_pg_num_history;
 
 public:
   PerShardState(
@@ -275,6 +289,11 @@ private:
     superblock = std::move(_superblock);
   }
 
+  pool_pg_num_history_t pg_num_history;
+  void set_singleton_pg_num_history(pool_pg_num_history_t _pg_num_history) {
+    pg_num_history = std::move(_pg_num_history);
+  }
+
   seastar::future<MURef<MOSDMap>> build_incremental_map_msg(
     epoch_t first,
     epoch_t last);
@@ -336,9 +355,29 @@ private:
                     epoch_t e, bufferlist&& bl);
   void store_inc_map_bl(ceph::os::Transaction& t,
                     epoch_t e, bufferlist&& bl);
-  seastar::future<> store_maps(ceph::os::Transaction& t,
-                               epoch_t start, Ref<MOSDMap> m);
+  seastar::future<std::map<epoch_t, local_cached_map_t>> store_maps(
+    ceph::os::Transaction& t,
+    epoch_t start, Ref<MOSDMap> m);
   void trim_maps(ceph::os::Transaction& t, OSDSuperblock& superblock);
+
+  // -- PG merging --
+  std::map<pg_t, eversion_t> ready_to_merge_source; // pg -> version
+  std::map<pg_t,std::tuple<eversion_t,epoch_t,epoch_t>> ready_to_merge_target;  // pg -> (version,les,lec)
+  std::set<pg_t> not_ready_to_merge_source;
+  std::map<pg_t,pg_t> not_ready_to_merge_target;
+  std::set<pg_t> sent_ready_to_merge_source;
+  seastar::future<> set_ready_to_merge_source(pg_t pgid,
+                                 eversion_t version);
+  seastar::future<> set_ready_to_merge_target(pg_t pgid,
+                                 eversion_t version,
+                                 epoch_t last_epoch_started,
+                                 epoch_t last_epoch_clean);
+  seastar::future<> set_not_ready_to_merge_source(pg_t source);
+  seastar::future<> set_not_ready_to_merge_target(pg_t target, pg_t source);
+  void clear_ready_to_merge(pg_t pgid);
+  seastar::future<> send_ready_to_merge();
+  void clear_sent_ready_to_merge();
+  void prune_sent_ready_to_merge(const cached_map_t osdmap);
 };
 
 /**
@@ -481,6 +520,10 @@ public:
     return {get_reactor_utilization()};
   }
 
+  auto create_split_pg_mapping(spg_t pgid, core_id_t core) {
+    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid, core);
+  }
+
   auto remove_pg(spg_t pgid) {
     local_state.pg_map.remove_pg(pgid);
     return pg_to_shard_mapping.remove_pg_mapping(pgid);
@@ -591,6 +634,24 @@ public:
 	return make_local_shared_foreign(std::move(fmap));
       });
   }
+
+  /// merge epoch -> target pgid -> source pgid -> pg
+  std::map<epoch_t,std::map<spg_t,std::map<spg_t,Ref<PG>>>> merge_waiters;
+  std::map<spg_t, OSDMapRef> merge_target_pgs;
+  seastar::future<> register_for_merge(Ref<PG> pg,
+                                       OSDMapRef new_map,
+                                       OSDMapRef old_map);
+  bool add_merge_waiter(OSDMapRef nextmap, spg_t target, Ref<PG> source,
+                        unsigned need);
+
+  FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_source)
+  FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_target)
+  FORWARD_TO_OSD_SINGLETON(set_not_ready_to_merge_source)
+  FORWARD_TO_OSD_SINGLETON(set_not_ready_to_merge_target)
+  FORWARD_TO_OSD_SINGLETON(clear_ready_to_merge)
+  FORWARD_TO_OSD_SINGLETON(send_ready_to_merge)
+  FORWARD_TO_OSD_SINGLETON(clear_sent_ready_to_merge)
+  FORWARD_TO_OSD_SINGLETON(prune_sent_ready_to_merge)
 
   FORWARD_TO_OSD_SINGLETON(get_pool_info)
   FORWARD(with_throttle, with_throttle, local_state.throttler)
