@@ -351,10 +351,10 @@ class IngressService(CephService):
         else:
             for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
                 if subnet == spec.vrrp_interface_network:
-                    vrrp_interface = [list(ifaces.keys())[0]] * len(interfaces)
+                    vrrp_interfaces = [list(ifaces.keys())[0]] * len(interfaces)
                     logger.info(
                         f'vrrp will be configured on {host} interface '
-                        f'{vrrp_interface} (which is in subnet {subnet})'
+                        f'{vrrp_interfaces} (which is in subnet {subnet})'
                     )
                     break
             else:
