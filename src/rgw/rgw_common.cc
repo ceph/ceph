@@ -7,7 +7,6 @@
 #include <string>
 #include <boost/tokenizer.hpp>
 
-#include "json_spirit/json_spirit.h"
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 #include "common/versioned_variant.h"

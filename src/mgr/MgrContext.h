@@ -20,6 +20,8 @@
 #include "common/Cond.h"
 #include "mon/MonClient.h"
 
+#include <boost/json.hpp>
+
 class Command
 {
 protected:
@@ -49,22 +51,22 @@ public:
   virtual ~Command() {}
 };
 
-
 class JSONCommand : public Command
 {
 public:
-  json_spirit::mValue json_result;
+  boost::json::value json_result;
 
   void wait() override
   {
     Command::wait();
 
-    if (r == 0) {
-      bool read_ok = json_spirit::read(
-          outbl.to_str(), json_result);
-      if (!read_ok) {
-        r = -EINVAL;
-      }
+    if (0 != r) {
+      return;
+    }
+
+    boost::system::error_code ec;
+    if (json_result = boost::json::parse(outbl.to_str(), ec); ec) {
+	r = -EINVAL;
     }
   }
 };
