@@ -1,26 +1,13 @@
-if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
-  # See https://tracker.ceph.com/issues/70254
-  add_executable(unittest-transaction-manager
-    test_block.cc
-    test_transaction_manager.cc
-    ../gtest_seastar.cc)
-    add_ceph_unittest(unittest-transaction-manager
-    --memory 256M --smp 1)
-  target_link_libraries(
-    unittest-transaction-manager
-    ${CMAKE_DL_LIBS}
-    crimson-seastore)
-
-    add_executable(unittest-omap-manager
-    test_omap_manager.cc
-    ../gtest_seastar.cc)
-  add_ceph_unittest(unittest-omap-manager
-    --memory 256M --smp 1)
-  target_link_libraries(
-    unittest-omap-manager
-    ${CMAKE_DL_LIBS}
-    crimson-seastore)
-endif(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
+add_executable(unittest-transaction-manager
+  test_block.cc
+  test_transaction_manager.cc
+  ../gtest_seastar.cc)
+add_ceph_unittest(unittest-transaction-manager
+  --memory 1G --smp 8)
+target_link_libraries(
+  unittest-transaction-manager
+  ${CMAKE_DL_LIBS}
+  crimson-seastore)
 
 add_executable(unittest-btree-lba-manager
   test_btree_lba_manager.cc
@@ -56,7 +43,7 @@ add_executable(unittest-object-data-handler
   ../gtest_seastar.cc
   ${PROJECT_SOURCE_DIR}/src/crimson/osd/lsan_suppressions.cc)
 add_ceph_unittest(unittest-object-data-handler
-  --memory 256M --smp 1)
+  --memory 1G --smp 8)
 target_link_libraries(
   unittest-object-data-handler
   crimson::gtest
@@ -77,11 +64,21 @@ target_link_libraries(
   crimson-os
   crimson-common)
 
+add_executable(unittest-omap-manager
+  test_omap_manager.cc
+  ../gtest_seastar.cc)
+add_ceph_unittest(unittest-omap-manager
+  --memory 1G --smp 8)
+target_link_libraries(
+  unittest-omap-manager
+  ${CMAKE_DL_LIBS}
+  crimson-seastore)
+
 add_executable(unittest-seastore
   test_seastore.cc
   ../gtest_seastar.cc)
 add_ceph_unittest(unittest-seastore
-  --memory 256M --smp 1)
+  --memory 1G --smp 8)
 target_link_libraries(
   unittest-seastore
   ${CMAKE_DL_LIBS}
