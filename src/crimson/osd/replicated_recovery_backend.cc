@@ -81,13 +81,14 @@ ReplicatedRecoveryBackend::maybe_push_shards(
         msg->min_epoch = pg.get_last_peering_reset();
         msg->pushes.push_back(std::move(push));
         msg->set_priority(pg.get_recovery_op_priority());
+        seastar::future<> push_future = get_recovering(soid).wait_for_pushes(shard);
         return interruptor::make_interruptible(
             shard_services.send_to_osd(shard.osd,
                                        std::move(msg),
                                        pg.get_osdmap_epoch()))
         .then_interruptible(
-          [this, soid, shard] {
-          return get_recovering(soid).wait_for_pushes(shard);
+          [push_future = std::move(push_future)]() mutable {
+          return std::move(push_future);
         });
       });
     });

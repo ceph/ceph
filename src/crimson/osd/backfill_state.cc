@@ -635,8 +635,9 @@ bool BackfillState::ProgressTracker::enqueue_push(const hobject_t& obj)
 
 void BackfillState::ProgressTracker::enqueue_drop(const hobject_t& obj)
 {
-  registry.try_emplace(
-    obj, registry_item_t{op_stage_t::enqueued_drop, pg_stat_t{}});
+  if (obj <= backfill_state().last_backfill_started)
+    registry.try_emplace(
+      obj, registry_item_t{op_stage_t::enqueued_drop, pg_stat_t{}});
 }
 
 void BackfillState::ProgressTracker::complete_to(
@@ -655,17 +656,21 @@ void BackfillState::ProgressTracker::complete_to(
   }
   auto new_last_backfill = peering_state().earliest_backfill();
   for (auto it = std::begin(registry);
-       it != std::end(registry) &&
-         it->second.stage != op_stage_t::enqueued_push;
-       it = registry.erase(it)) {
-    auto& [soid, item] = *it;
-    assert(item.stats);
-    peering_state().update_complete_backfill_object_stats(
-      soid,
-      *item.stats);
-    assert(soid > new_last_backfill);
-    new_last_backfill = soid;
+       it != std::end(registry);) {
+    if (it->second.stage == op_stage_t::enqueued_push) {
+      ++it;
+    } else {
+      auto& [soid, item] = *it;
+      assert(item.stats);
+      peering_state().update_complete_backfill_object_stats(
+        soid,
+        *item.stats);
+      assert(soid > new_last_backfill);
+      new_last_backfill = soid;
+      it = registry.erase(it);
+   }
   }
+
   if (may_push_to_max &&
       Enqueuing::all_enqueued(peering_state(),
                               backfill_state().backfill_info,
