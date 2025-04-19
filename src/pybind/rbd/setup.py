@@ -1,11 +1,11 @@
 import os
-import pkgutil
+import importlib.util
 import shutil
 import subprocess
 import sys
 import tempfile
 import textwrap
-if not pkgutil.find_loader('setuptools'):
+if not importlib.util.find_spec('setuptools'):
     from distutils.core import setup
     from distutils.extension import Extension
 else:
