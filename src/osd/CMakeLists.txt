@@ -67,6 +67,7 @@ target_link_libraries(osd
   PUBLIC dmclock::dmclock Boost::MPL
   PRIVATE
     legacy-option-headers
+    json_spirit
     os heap_profiler cpu_profiler ${FMT_LIB} ${CMAKE_DL_LIBS})
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp pg-tp)

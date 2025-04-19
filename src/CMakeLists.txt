@@ -501,7 +501,7 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:common_mountcephfs_objs>
   $<TARGET_OBJECTS:crush_objs>)
 set(ceph_common_deps
-  json_spirit erasure_code extblkdev arch crc32
+  erasure_code extblkdev arch crc32
   ${LIB_RESOLV}
   Boost::thread
   Boost::system
@@ -585,6 +585,8 @@ if (WIN32)
 else()
   add_library(ceph-common ${CEPH_SHARED} ${ceph_common_objs})
 endif()
+
+target_link_libraries(ceph-common json_spirit)
 
 target_link_libraries(ceph-common ${ceph_common_deps})
 if(ENABLE_COVERAGE)
