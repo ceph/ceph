@@ -145,6 +145,4 @@ export const USERSGROUPS_RESOURCE = 'ceph.smb.usersgroups' as const;
 
 export const PROVIDER = 'samba-vfs';
 
-export const SHARE_URL = '/cephfs/smb/share/';
-
 type Clustering = 'default' | 'never' | 'always';

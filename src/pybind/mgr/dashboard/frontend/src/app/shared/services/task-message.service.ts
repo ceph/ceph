@@ -404,28 +404,6 @@ export class TaskMessageService {
     'nfs/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nfs(metadata)
     ),
-    // smb
-    'smb/cluster/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
-      this.smbCluster(metadata)
-    ),
-    'smb/ad/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
-      this.smbJoinAuth(metadata)
-    ),
-    'smb/ad/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
-      this.smbJoinAuth(metadata)
-    ),
-    'smb/ad/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
-      this.smbJoinAuth(metadata)
-    ),
-    'smb/standalone/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
-      this.smbUsersgroups(metadata)
-    ),
-    'smb/standalone/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
-      this.smbUsersgroups(metadata)
-    ),
-    'smb/standalone/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
-      this.smbUsersgroups(metadata)
-    ),
     // Grafana tasks
     'grafana/dashboards/update': this.newTaskMessage(
       this.commonOperations.update,
@@ -511,26 +489,44 @@ export class TaskMessageService {
       (metadata) => this.snapshotSchedule(metadata)
     ),
     // smb
-    'smb/cluster/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+    'cephfs/smb/cluster/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.smbCluster(metadata)
     ),
-    'smb/share/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
-      this.smbShare(metadata)
-    ),
-    'smb/share/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+    'cephfs/smb/cluster/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
       this.smbCluster(metadata)
     ),
-    'smb/share/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+    'cephfs/smb/cluster/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.smbCluster(metadata)
+    ),
+    'cephfs/smb/share/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.smbShare(metadata)
     ),
-    'cephfs/smb/joinauth/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
-      this.smbJoinAuth(metadata)
+    'cephfs/smb/share/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.smbShare(metadata)
+    ),
+    'cephfs/smb/share/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.smbShare(metadata)
+    ),
+    'cephfs/smb/active-directory/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata) => this.smbJoinAuth(metadata)
+    ),
+    'cephfs/smb/active-directory/edit': this.newTaskMessage(
+      this.commonOperations.update,
+      (metadata) => this.smbJoinAuth(metadata)
+    ),
+    'cephfs/smb/active-directory/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata) => this.smbJoinAuth(metadata)
     ),
     'cephfs/smb/standalone/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.smbUsersgroups(metadata)
     ),
-    'smb/cluster/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
-      this.smbCluster(metadata)
+    'cephfs/smb/standalone/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.smbUsersgroups(metadata)
+    ),
+    'cephfs/smb/standalone/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.smbUsersgroups(metadata)
     )
   };
 
@@ -595,7 +591,11 @@ export class TaskMessageService {
   }
 
   smbCluster(metadata: { cluster_id: string }) {
-    return $localize`SMB Cluster  '${metadata.cluster_id}'`;
+    return $localize`SMB cluster  '${metadata.cluster_id}'`;
+  }
+
+  smbShare(metadata: Record<'share_id', string>) {
+    return $localize`SMB share '${metadata?.share_id}'`;
   }
 
   smbJoinAuth(metadata: { authId: string }) {
@@ -647,10 +647,6 @@ export class TaskMessageService {
 
   snapshotSchedule(metadata: any) {
     return $localize`snapshot schedule for path '${metadata?.path}'`;
-  }
-
-  smbShare(metadata: Record<'share_id', string>) {
-    return $localize`SMB share '${metadata?.share_id}'`;
   }
 
   crudMessageId(id: string) {
