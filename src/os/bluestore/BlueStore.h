@@ -1005,11 +1005,13 @@ public:
       needs_reshard_begin = needs_reshard_end = 0;
     }
     void request_reshard(uint32_t begin, uint32_t end) {
-      if (begin < needs_reshard_begin) {
-	needs_reshard_begin = begin;
+      if (needs_reshard_end == 0) {
+        needs_reshard_begin = begin;
+      } else if (begin < needs_reshard_begin) {
+        needs_reshard_begin = begin;
       }
       if (end > needs_reshard_end) {
-	needs_reshard_end = end;
+        needs_reshard_end = end;
       }
     }
     // signals that there was a modification on range <begin, end)
