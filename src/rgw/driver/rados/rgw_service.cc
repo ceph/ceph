@@ -54,7 +54,8 @@ int RGWServices_Def::init(CephContext *cct,
 			  bool background_tasks,
 			  optional_yield y,
                           const DoutPrefixProvider *dpp,
-                          rgw::sal::ConfigStore* cfgstore)
+                          rgw::sal::ConfigStore* cfgstore,
+                          const rgw::SiteConfig* site)
 {
   finisher = std::make_unique<RGWSI_Finisher>(cct);
   bucket_sobj = std::make_unique<RGWSI_Bucket_SObj>(cct);
@@ -66,7 +67,7 @@ int RGWServices_Def::init(CephContext *cct,
   datalog_rados = std::make_unique<RGWDataChangesLog>(cct);
   mdlog = std::make_unique<RGWSI_MDLog>(cct, run_sync, cfgstore);
   notify = std::make_unique<RGWSI_Notify>(cct);
-  zone = std::make_unique<RGWSI_Zone>(cct, cfgstore);
+  zone = std::make_unique<RGWSI_Zone>(cct, cfgstore, site);
   zone_utils = std::make_unique<RGWSI_ZoneUtils>(cct);
   quota = std::make_unique<RGWSI_Quota>(cct);
   sync_modules = std::make_unique<RGWSI_SyncModules>(cct);
@@ -268,7 +269,7 @@ int RGWServices::do_init(CephContext *_cct, rgw::sal::RadosStore* driver, bool h
   cct = _cct;
   site = &_site;
 
-  int r = _svc.init(cct, driver, have_cache, raw, run_sync, background_tasks, y, dpp, cfgstore);
+  int r = _svc.init(cct, driver, have_cache, raw, run_sync, background_tasks, y, dpp, cfgstore, site);
   if (r < 0) {
     return r;
   }

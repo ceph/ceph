@@ -20,7 +20,8 @@
 using namespace std;
 using namespace rgw_zone_defaults;
 
-RGWSI_Zone::RGWSI_Zone(CephContext *cct, rgw::sal::ConfigStore* _cfgstore) : RGWServiceInstance(cct), cfgstore(_cfgstore)
+RGWSI_Zone::RGWSI_Zone(CephContext *cct, rgw::sal::ConfigStore* _cfgstore, const rgw::SiteConfig* _site)
+        : RGWServiceInstance(cct), cfgstore(_cfgstore), site(_site)
 {
 }
 
@@ -137,26 +138,18 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 
   assert(sysobj_svc->is_started()); /* if not then there's ordering issue */
 
-  ret = rgw::read_realm(dpp, y, cfgstore, realm->get_id(), realm->get_name(), *realm);
-  if (ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 0) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
-    return ret;
+  if (site->get_realm().has_value()) {
+    *realm = site->get_realm().value();
   }
 
   ldpp_dout(dpp, 20) << "realm  " << realm->get_name() << " " << realm->get_id() << dendl;
+  if (site->get_period().has_value()) {
+    *current_period = site->get_period().value();
+  }
   current_period->set_realm_id(realm->get_id());
-  ret = cfgstore->read_period(dpp, y, current_period->get_id(), current_period->epoch, *current_period);
-  if (ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 0) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
 
-  ret = cfgstore->read_default_zone(dpp, y, realm->get_id(), *zone_params, nullptr);
-  bool found_zone = (ret == 0);
-  if (ret < 0 && ret != -ENOENT) {
-    lderr(cct) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
+  *zone_params = site->get_zone_params();
+  bool found_zone = true;
 
   cur_zone_id = rgw_zone_id(zone_params->get_id());
 
