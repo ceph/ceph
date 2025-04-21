@@ -391,7 +391,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(irate(ceph_osd_op_w_in_bytes{cluster=~\"$cluster\", }[5m]))",
+               "expr": "sum(rate(ceph_osd_op_w_in_bytes{cluster=~\"$cluster\", }[$__rate_interval]))",
                "format": "time_series",
                "instant": true,
                "interval": "$interval",
@@ -469,7 +469,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(irate(ceph_osd_op_r_out_bytes{cluster=~\"$cluster\", }[5m]))",
+               "expr": "sum(rate(ceph_osd_op_r_out_bytes{cluster=~\"$cluster\", }[$__rate_interval]))",
                "format": "time_series",
                "instant": true,
                "interval": "$interval",
@@ -1014,7 +1014,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(irate(ceph_osd_op_w{cluster=~\"$cluster\", }[1m]))",
+               "expr": "sum(rate(ceph_osd_op_w{cluster=~\"$cluster\", }[$__rate_interval]))",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -1093,7 +1093,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(irate(ceph_osd_op_r{cluster=~\"$cluster\", }[1m]))",
+               "expr": "sum(rate(ceph_osd_op_r{cluster=~\"$cluster\", }[$__rate_interval]))",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -1285,6 +1285,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -1404,6 +1405,7 @@
             }
          },
          "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": "$datasource",
@@ -1435,6 +1437,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -1513,10 +1516,11 @@
             }
          },
          "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(irate(ceph_osd_op_w_in_bytes{cluster=~\"$cluster\", }[5m]))",
+               "expr": "sum(rate(ceph_osd_op_w_in_bytes{cluster=~\"$cluster\", }[$__rate_interval]))",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -1527,7 +1531,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(irate(ceph_osd_op_r_out_bytes{cluster=~\"$cluster\", }[5m]))",
+               "expr": "sum(rate(ceph_osd_op_r_out_bytes{cluster=~\"$cluster\", }[$__rate_interval]))",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -1542,6 +1546,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -1620,10 +1625,11 @@
             }
          },
          "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(irate(ceph_osd_op_w{cluster=~\"$cluster\", }[1m]))",
+               "expr": "sum(rate(ceph_osd_op_w{cluster=~\"$cluster\", }[$__rate_interval]))",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -1634,7 +1640,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(irate(ceph_osd_op_r{cluster=~\"$cluster\", }[1m]))",
+               "expr": "sum(rate(ceph_osd_op_r{cluster=~\"$cluster\", }[$__rate_interval]))",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -1649,6 +1655,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -1722,6 +1729,7 @@
             }
          },
          "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": "$datasource",
@@ -1739,6 +1747,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -1824,6 +1833,7 @@
             }
          },
          "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": "$datasource",
@@ -1843,6 +1853,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -1916,6 +1927,7 @@
             }
          },
          "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": "$datasource",
@@ -1933,6 +1945,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -2006,6 +2019,7 @@
             }
          },
          "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": "$datasource",
@@ -2023,6 +2037,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -2096,6 +2111,7 @@
             }
          },
          "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": "$datasource",
@@ -2131,6 +2147,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -2219,6 +2236,7 @@
             }
          },
          "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": "$datasource",
@@ -2237,6 +2255,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -2327,6 +2346,7 @@
             }
          },
          "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": "$datasource",
@@ -2548,6 +2568,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -2639,6 +2660,7 @@
             }
          },
          "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": "$datasource",
@@ -2679,6 +2701,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -2751,10 +2774,11 @@
             }
          },
          "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(irate(ceph_osd_recovery_ops{cluster=~\"$cluster\", }[$interval]))",
+               "expr": "sum(rate(ceph_osd_recovery_ops{cluster=~\"$cluster\", }[$__rate_interval]))",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -3118,7 +3142,7 @@
                "targets": [
                   {
                      "datasource": "$datasource",
-                     "expr": "rate(ceph_osd_op_r_latency_sum{cluster=~\"$cluster\", }[5m]) / rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster\", }[5m]) >= 0",
+                     "expr": "rate(ceph_osd_op_r_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]) / rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster\", }[$__rate_interval]) >= 0",
                      "format": "time_series",
                      "instant": false,
                      "interval": "$interval",
@@ -3243,7 +3267,7 @@
                "targets": [
                   {
                      "datasource": "$datasource",
-                     "expr": "rate(ceph_osd_op_w_latency_sum{cluster=~\"$cluster\", }[5m]) / rate(ceph_osd_op_w_latency_count{cluster=~\"$cluster\", }[5m]) >= 0",
+                     "expr": "rate(ceph_osd_op_w_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]) / rate(ceph_osd_op_w_latency_count{cluster=~\"$cluster\", }[$__rate_interval]) >= 0",
                      "format": "time_series",
                      "instant": false,
                      "interval": "$interval",
@@ -3278,6 +3302,7 @@
             },
             {
                "datasource": "$datasource",
+               "description": "",
                "fieldConfig": {
                   "defaults": {
                      "color": {
@@ -3350,10 +3375,11 @@
                   }
                },
                "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
                "targets": [
                   {
                      "datasource": "$datasource",
-                     "expr": "avg(rate(ceph_osd_op_r_latency_sum{cluster=~\"$cluster\", }[5m]) / rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster\", }[5m]) >= 0)",
+                     "expr": "avg(rate(ceph_osd_op_r_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]) / rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster\", }[$__rate_interval]) >= 0)",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "Read",
@@ -3361,7 +3387,7 @@
                   },
                   {
                      "datasource": "$datasource",
-                     "expr": "avg(rate(ceph_osd_op_w_latency_sum{cluster=~\"$cluster\", }[5m]) / rate(ceph_osd_op_w_latency_count{cluster=~\"$cluster\", }[5m]) >= 0)",
+                     "expr": "avg(rate(ceph_osd_op_w_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]) / rate(ceph_osd_op_w_latency_count{cluster=~\"$cluster\", }[$__rate_interval]) >= 0)",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "Write",
@@ -3373,6 +3399,7 @@
             },
             {
                "datasource": "$datasource",
+               "description": "",
                "fieldConfig": {
                   "defaults": {
                      "color": {
@@ -3448,6 +3475,7 @@
                   }
                },
                "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
                "targets": [
                   {
                      "datasource": "$datasource",
@@ -3702,7 +3730,7 @@
          },
          {
             "auto": true,
-            "auto_count": 10,
+            "auto_count": 300,
             "auto_min": "1m",
             "current": {
                "text": "$__auto_interval_interval",

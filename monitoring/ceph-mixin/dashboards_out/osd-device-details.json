@@ -71,6 +71,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -91,7 +92,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 1,
+                  "lineWidth": 0,
                   "pointSize": 0,
                   "scaleDistribution": {
                      "type": "linear"
@@ -161,6 +162,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -181,7 +183,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 1,
+                  "lineWidth": 0,
                   "pointSize": 0,
                   "scaleDistribution": {
                      "type": "linear"
@@ -251,6 +253,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -271,7 +274,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 1,
+                  "lineWidth": 0,
                   "pointSize": 0,
                   "scaleDistribution": {
                      "type": "linear"
@@ -360,6 +363,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -380,7 +384,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 1,
+                  "lineWidth": 0,
                   "pointSize": 0,
                   "scaleDistribution": {
                      "type": "linear"
@@ -450,6 +454,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -470,7 +475,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 1,
+                  "lineWidth": 0,
                   "pointSize": 0,
                   "scaleDistribution": {
                      "type": "linear"
@@ -540,6 +545,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -560,7 +566,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 1,
+                  "lineWidth": 0,
                   "pointSize": 0,
                   "scaleDistribution": {
                      "type": "linear"
@@ -630,6 +636,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -650,7 +657,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 1,
+                  "lineWidth": 0,
                   "pointSize": 0,
                   "scaleDistribution": {
                      "type": "linear"

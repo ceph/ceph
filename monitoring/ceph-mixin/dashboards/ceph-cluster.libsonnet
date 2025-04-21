@@ -39,7 +39,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       current='$__auto_interval_interval',
       refresh=2,
       label='Interval',
-      auto_count=10,
+      auto_count=300,
       auto_min='1m',
       options=[
         { selected: true, text: 'auto', value: '$__auto_interval_interval' },
@@ -175,7 +175,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         { color: 'green' },
       ])
       .addTarget($.addTargetSchema(
-        expr='sum(irate(ceph_osd_op_w_in_bytes{%(matchers)s}[5m]))' % $.matchers(),
+        expr='sum(rate(ceph_osd_op_w_in_bytes{%(matchers)s}[$__rate_interval]))' % $.matchers(),
         instant=true,
         interval='$interval',
         datasource='$datasource',
@@ -198,7 +198,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         { color: '#9ac48a', value: 0 },
       ])
       .addTarget($.addTargetSchema(
-        expr='sum(irate(ceph_osd_op_r_out_bytes{%(matchers)s}[5m]))' % $.matchers(),
+        expr='sum(rate(ceph_osd_op_r_out_bytes{%(matchers)s}[$__rate_interval]))' % $.matchers(),
         instant=true,
         interval='$interval',
         datasource='$datasource',
@@ -495,7 +495,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='sum(irate(ceph_osd_op_w{%(matchers)s}[1m]))' % $.matchers(),
+          expr='sum(rate(ceph_osd_op_w{%(matchers)s}[$__rate_interval]))' % $.matchers(),
           legendFormat='',
           datasource='$datasource',
           instant=true,
@@ -526,7 +526,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='sum(irate(ceph_osd_op_r{%(matchers)s}[1m]))' % $.matchers(),
+          expr='sum(rate(ceph_osd_op_r{%(matchers)s}[$__rate_interval]))' % $.matchers(),
           legendFormat='',
           datasource='$datasource',
           instant=true,
@@ -729,7 +729,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addTargets(
         [
           $.addTargetSchema(
-            expr='sum(irate(ceph_osd_op_w_in_bytes{%(matchers)s}[5m]))' % $.matchers(),
+            expr='sum(rate(ceph_osd_op_w_in_bytes{%(matchers)s}[$__rate_interval]))' % $.matchers(),
             datasource='$datasource',
             interval='$interval',
             legendFormat='Write',
@@ -737,7 +737,7 @@ local g = import 'grafonnet/grafana.libsonnet';
             range=true,
           ),
           $.addTargetSchema(
-            expr='sum(irate(ceph_osd_op_r_out_bytes{%(matchers)s}[5m]))' % $.matchers(),
+            expr='sum(rate(ceph_osd_op_r_out_bytes{%(matchers)s}[$__rate_interval]))' % $.matchers(),
             datasource='$datasource',
             interval='$interval',
             legendFormat='Read',
@@ -772,7 +772,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addTargets(
         [
           $.addTargetSchema(
-            expr='sum(irate(ceph_osd_op_w{%(matchers)s}[1m]))' % $.matchers(),
+            expr='sum(rate(ceph_osd_op_w{%(matchers)s}[$__rate_interval]))' % $.matchers(),
             datasource='$datasource',
             interval='$interval',
             legendFormat='Write',
@@ -780,7 +780,7 @@ local g = import 'grafonnet/grafana.libsonnet';
             range=true,
           ),
           $.addTargetSchema(
-            expr='sum(irate(ceph_osd_op_r{%(matchers)s}[1m]))' % $.matchers(),
+            expr='sum(rate(ceph_osd_op_r{%(matchers)s}[$__rate_interval]))' % $.matchers(),
             datasource='$datasource',
             interval='$interval',
             legendFormat='Read',
@@ -1298,7 +1298,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='sum(irate(ceph_osd_recovery_ops{%(matchers)s}[$interval]))' % $.matchers(),
+          expr='sum(rate(ceph_osd_recovery_ops{%(matchers)s}[$__rate_interval]))' % $.matchers(),
           datasource='$datasource',
           interval='$interval',
           legendFormat='OPS',
@@ -1443,7 +1443,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           yBucketSize=null,
           pluginVersion='9.4.7',
         ).addTarget($.addTargetSchema(
-          expr='rate(ceph_osd_op_r_latency_sum{%(matchers)s}[5m]) / rate(ceph_osd_op_r_latency_count{%(matchers)s}[5m]) >= 0' % $.matchers(),
+          expr='rate(ceph_osd_op_r_latency_sum{%(matchers)s}[$__rate_interval]) / rate(ceph_osd_op_r_latency_count{%(matchers)s}[$__rate_interval]) >= 0' % $.matchers(),
           datasource='$datasource',
           interval='$interval',
           instant=false,
@@ -1494,7 +1494,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           yBucketSize=null,
           pluginVersion='9.4.7',
         ).addTarget($.addTargetSchema(
-          expr='rate(ceph_osd_op_w_latency_sum{%(matchers)s}[5m]) / rate(ceph_osd_op_w_latency_count{%(matchers)s}[5m]) >= 0' % $.matchers(),
+          expr='rate(ceph_osd_op_w_latency_sum{%(matchers)s}[$__rate_interval]) / rate(ceph_osd_op_w_latency_count{%(matchers)s}[$__rate_interval]) >= 0' % $.matchers(),
           datasource='$datasource',
           interval='$interval',
           legendFormat='',
@@ -1525,12 +1525,12 @@ local g = import 'grafonnet/grafana.libsonnet';
         ])
         .addTargets([
           $.addTargetSchema(
-            expr='avg(rate(ceph_osd_op_r_latency_sum{%(matchers)s}[5m]) / rate(ceph_osd_op_r_latency_count{%(matchers)s}[5m]) >= 0)' % $.matchers(),
+            expr='avg(rate(ceph_osd_op_r_latency_sum{%(matchers)s}[$__rate_interval]) / rate(ceph_osd_op_r_latency_count{%(matchers)s}[$__rate_interval]) >= 0)' % $.matchers(),
             datasource='$datasource',
             legendFormat='Read',
           ),
           $.addTargetSchema(
-            expr='avg(rate(ceph_osd_op_w_latency_sum{%(matchers)s}[5m]) / rate(ceph_osd_op_w_latency_count{%(matchers)s}[5m]) >= 0)' % $.matchers(),
+            expr='avg(rate(ceph_osd_op_w_latency_sum{%(matchers)s}[$__rate_interval]) / rate(ceph_osd_op_w_latency_count{%(matchers)s}[$__rate_interval]) >= 0)' % $.matchers(),
             datasource='$datasource',
             legendFormat='Write',
           ),

@@ -696,7 +696,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     ])
     .addTarget(
       $.addTargetSchema(
-        expr="sum(irate(ceph_nvmeof_bdev_reads_completed_total{instance=~'$gateway'}[$__rate_interval]))",
+        expr="sum(rate(ceph_nvmeof_bdev_reads_completed_total{instance=~'$gateway'}[$__rate_interval]))",
         format='time_series',
         instant=null,
         legendFormat='Read',
@@ -706,7 +706,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     )
     .addTarget(
       $.addTargetSchema(
-        expr="sum(irate(ceph_nvmeof_bdev_writes_completed_total{instance=~'$gateway'}[$__rate_interval]))",
+        expr="sum(rate(ceph_nvmeof_bdev_writes_completed_total{instance=~'$gateway'}[$__rate_interval]))",
         format='time_series',
         instant=false,
         legendFormat='Write',
@@ -735,7 +735,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     ])
     .addTarget(
       $.addTargetSchema(
-        expr="sum (irate(ceph_nvmeof_bdev_read_bytes_total{instance=~'$gateway'}[$__rate_interval]))",
+        expr="sum (rate(ceph_nvmeof_bdev_read_bytes_total{instance=~'$gateway'}[$__rate_interval]))",
         format='time_series',
         instant=false,
         legendFormat='Read',
@@ -745,7 +745,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     )
     .addTarget(
       $.addTargetSchema(
-        expr="sum (irate(ceph_nvmeof_bdev_written_bytes_total{instance=~'$gateway'}[$__rate_interval]))",
+        expr="sum (rate(ceph_nvmeof_bdev_written_bytes_total{instance=~'$gateway'}[$__rate_interval]))",
         format='time_series',
         instant=false,
         legendFormat='Write',
