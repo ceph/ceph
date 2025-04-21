@@ -2950,7 +2950,10 @@ int RGWHandler_REST_SWIFT::postauth_init(optional_yield y)
       && s->user->get_id().id == RGW_USER_ANON_ID) {
     s->bucket_tenant = s->account_name;
   } else {
-    s->bucket_tenant = s->auth.identity->get_tenant();
+    /* tenant must be taken from request. Can't use auth.identity->get_tenant(),
+       because there are cases when users from different tenant may be granted
+       access via ACL to this bucket */
+    s->bucket_tenant = s->user->get_tenant();
   }
   s->bucket_name = t->url_bucket;
 
