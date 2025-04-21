@@ -636,6 +636,8 @@ public:
     LBAMapping pos,
     LBAMapping mapping,
     laddr_t hint,
+    extent_len_t offset,
+    extent_len_t len,
     bool updateref) {
     LOG_PREFIX(TransactionManager::clone_pin);
     SUBDEBUGT(seastore_tm, "{} clone to hint {} ... pos={}, updateref={}",
@@ -643,17 +645,20 @@ public:
     return seastar::do_with(
       std::move(pos),
       std::move(mapping),
-      [FNAME, this, &t, hint, updateref](auto &pos, auto &mapping) {
+      [offset, len, FNAME, this, &t, hint, updateref](auto &pos, auto &mapping) {
       return lba_manager->refresh_lba_mapping(t, std::move(pos)
       ).si_then([this, &t, &pos, &mapping](auto m) {
 	pos = std::move(m);
 	return lba_manager->refresh_lba_mapping(t, std::move(mapping));
-      }).si_then([FNAME, this, &pos, &t, hint, updateref](auto mapping) {
+      }).si_then([offset, len, FNAME, this, &pos,
+		  &t, hint, updateref](auto mapping) {
 	return lba_manager->clone_mapping(
 	  t,
 	  std::move(pos),
 	  std::move(mapping),
 	  hint,
+	  offset,
+	  len,
 	  updateref
 	).si_then([FNAME, &t](auto ret) {
 	  SUBDEBUGT(seastore_tm, "cloned as {}", t, ret.cloned_mapping);
@@ -709,9 +714,11 @@ public:
 	    crimson::ct_error::assert_all{"unexpected error"}
 	  );
 	}
+	auto len = mapping.get_length();
 	return clone_pin(
 	  t, std::move(pos), std::move(mapping),
-	  (base + offset).checked_to_laddr(), updateref
+	  (base + offset).checked_to_laddr(),
+	  0, len, updateref
 	).si_then([&t, this, &offset, &pos, &mapping](auto ret) {
 	  offset += ret.cloned_mapping.get_length();
 	  return next_mapping(t, std::move(ret.cloned_mapping)
