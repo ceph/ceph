@@ -113,7 +113,7 @@ class CryptoCaller:
         """
         result = self._run(
             ['create_self_signed_cert'],
-            input_data=json.dumps({'dname': dname, 'pkey': pkey}),
+            input_data=json.dumps({'dname': dname, 'private_key': pkey}),
             capture_output=True,
             check=True,
         )
