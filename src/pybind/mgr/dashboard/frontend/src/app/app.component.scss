@@ -1,0 +1,14 @@
+/* Style for the toggle button */
+button.bx--btn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 99999;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+/* Style for the active state (when the terminal is shown) */
+button.bx--btn.active {
+  background-color: #005d6e; /* Change to any color to indicate active */
+  transform: scale(1.1);
+}

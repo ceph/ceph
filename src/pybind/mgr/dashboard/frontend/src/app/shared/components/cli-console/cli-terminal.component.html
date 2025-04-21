@@ -1,0 +1,54 @@
+<div *ngIf="show" class="cli-terminal-backdrop">
+  <div class="cli-terminal-modal">
+    <div class="cli-terminal-header">
+      <span>Ceph CLI Terminal</span>
+      <button class="btn-close" (click)="close()">✕</button>
+    </div>
+    <div class="cli-terminal-container">
+      <!-- Input Row -->
+      <div class="cli-terminal-input-row">
+        <span class="cli-terminal-prompt">$</span>
+
+        <input
+          type="text"
+          [(ngModel)]="command"
+          (keyup.enter)="runCommand()"
+          (ngModelChange)="onInputChange()"
+          class="cli-terminal-input"
+          placeholder="Enter command"
+          autofocus
+        />
+
+        <button class="btn btn-primary" (click)="runCommand()">Run</button>
+
+        <button class="btn btn-outline" (click)="clearHistory()">Clear</button>
+
+        <label class="cli-terminal-watch">
+          <input
+            type="checkbox"
+            [(ngModel)]="watch"
+            (change)="toggleWatch()"
+          />
+          Watch
+        </label>
+      </div>
+      <!-- Autocomplete Suggestions -->
+      <div *ngIf="filteredCommands.length > 0" class="autocomplete-suggestions">
+        <ul>
+          <li *ngFor="let cmd of filteredCommands" (click)="this.selectCommand(cmd)">
+            {{ cmd }}
+          </li>
+        </ul>
+      </div>
+      <!-- Output -->
+      <div class="cli-terminal-output">
+        <div *ngFor="let entry of history.slice().reverse()">
+          <hr />
+          <div class="cli-terminal-cmd">$ {{ entry.cmd }}</div>
+          <pre *ngIf="entry.stdout">&gt; {{ entry.stdout }}</pre>
+          <pre *ngIf="entry.stderr" class="error">&gt; {{ entry.stderr }}</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

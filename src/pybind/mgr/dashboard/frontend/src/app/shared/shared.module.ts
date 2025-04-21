@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
-import { ReactiveFormsModule } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { FormlyModule } from '@ngx-formly/core';
 import { FormlyBootstrapModule } from '@ngx-formly/bootstrap';
 
@@ -17,15 +17,16 @@ import { FormlyObjectTypeComponent } from './forms/crud-form/formly-object-type/
 import { FormlyInputTypeComponent } from './forms/crud-form/formly-input-type/formly-input-type.component';
 import { FormlyTextareaTypeComponent } from './forms/crud-form/formly-textarea-type/formly-textarea-type.component';
 import { BlockUIModule, BlockUIService } from 'ng-block-ui';
+import { CliTerminalComponent } from './components/cli-console/cli-terminal.component';
 
 @NgModule({
   imports: [
     CommonModule,
+    FormsModule,
     PipesModule,
     ComponentsModule,
     DataTableModule,
     DirectivesModule,
-
     ReactiveFormsModule,
     FormlyModule.forRoot({
       types: [
@@ -38,8 +39,8 @@ import { BlockUIModule, BlockUIService } from 'ng-block-ui';
     FormlyBootstrapModule,
     BlockUIModule.forRoot()
   ],
-  declarations: [FormlyTextareaTypeComponent],
-  exports: [ComponentsModule, PipesModule, DataTableModule, DirectivesModule],
+  declarations: [FormlyTextareaTypeComponent, CliTerminalComponent],
+  exports: [ComponentsModule, PipesModule, DataTableModule, DirectivesModule, CliTerminalComponent],
   providers: [AuthStorageService, AuthGuardService, FormatterService, CssHelper, BlockUIService]
 })
 export class SharedModule {}
