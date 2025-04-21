@@ -930,10 +930,8 @@ private:
     template <typename ErrorT, EnableIf<ErrorT>...>
     decltype(auto) operator()(ErrorT&& e) {
       using decayed_t = std::decay_t<decltype(e)>;
-      auto&& handler =
-        decayed_t::error_t::handle(std::forward<ErrorFunc>(func));
-      static_assert(std::is_invocable_v<decltype(handler), ErrorT>);
-      return std::invoke(std::move(handler), std::forward<ErrorT>(e));
+      return decayed_t::error_t::handle(std::forward<ErrorFunc>(func))
+                                       (std::forward<ErrorT>(e));
     }
   };
 
@@ -978,10 +976,9 @@ public:
       using decayed_t = std::decay_t<ErrorT>;
       static_assert(contains_once_v<decayed_t>,
                     "discarding disallowed ErrorT");
-      auto&& handler = decayed_t::error_t::handle([this] (auto&& error_v) {
+      decayed_t::error_t::handle([this] (auto&& error_v) {
         ceph_abort_msgf("%s: %s", msg ? msg : "", error_v.message().c_str());
-      });
-      std::invoke(std::move(handler), std::forward<ErrorT>(raw_error));
+      })(std::forward<ErrorT>(raw_error));
       return no_touch_error_marker{};
     }
   };
@@ -1350,10 +1347,9 @@ namespace ct_error {
         pre_assert();
       }
       using decayed_t = std::decay_t<ErrorT>;
-      auto&& handler = decayed_t::error_t::handle([this] (auto&& error_v) {
+      decayed_t::error_t::handle([this] (auto&& error_v) {
         ceph_abort_msgf("%s: %s", msg ? msg : "", error_v.message().c_str());
-      });
-      std::invoke(std::move(handler), std::forward<ErrorT>(raw_error));
+      })(std::forward<ErrorT>(raw_error));
       return no_touch_error_marker{};
     }
   };
@@ -1364,9 +1360,8 @@ namespace ct_error {
       error_func = std::forward<ErrorFunc>(error_func)
     ] (auto&& e) mutable -> decltype(auto) {
       using decayed_t = std::decay_t<decltype(e)>;
-      auto&& handler =
-        decayed_t::error_t::handle(std::forward<ErrorFunc>(error_func));
-      return std::invoke(std::move(handler), std::forward<decltype(e)>(e));
+      return decayed_t::error_t::handle(std::forward<ErrorFunc>(error_func))
+                                       (std::forward<decltype(e)>(e));
     };
   };
 }
