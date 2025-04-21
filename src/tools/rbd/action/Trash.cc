@@ -99,12 +99,13 @@ int execute_move(const po::variables_map &vm,
   if (r < 0) {
     std::cerr << "rbd: deferred delete error: " << cpp_strerror(r)
               << std::endl;
+    return r;
   }
 
   if (expires_at != "now") {
     std::cout << "rbd: image " << image_name << " will expire at " << exp_time << std::endl;
   }
-  return r;
+  return 0;
 }
 
 void get_remove_arguments(po::options_description *positional,
