@@ -385,6 +385,18 @@ class TestConvertToModel:
         result = empty_func()
         assert result == {}
 
+    def test_finalize(self, disable_message_to_dict):
+        # pylint: disable=unused-argument
+        def finalizer(output):
+            output['name'] = output['name'].upper()
+            return output
+
+        @convert_to_model(Boy, finalize=finalizer)
+        def get_person() -> dict:
+            return {"name": "Alice", "age": 30}
+
+        assert get_person()['name'] == "ALICE"
+
 
 class TestPick:
     def test_basic_field_access(self):

@@ -1,6 +1,5 @@
 import functools
 import logging
-from collections.abc import Iterable
 from typing import Any, Callable, Dict, Generator, List, NamedTuple, Optional, Type
 
 from ..exceptions import DashboardException
@@ -72,61 +71,8 @@ else:
                 self.channel = grpc.insecure_channel(self.gateway_addr)
             self.stub = pb2_grpc.GatewayStub(self.channel)
 
-    def make_namedtuple_from_object(cls: Type[NamedTuple], obj: Any) -> NamedTuple:
-        return cls(
-            **{
-                field: getattr(obj, field)
-                for field in cls._fields
-                if hasattr(obj, field)
-            }
-        )  # type: ignore
-
     Model = Dict[str, Any]
-
-    def map_model(
-        model: Type[NamedTuple],
-        first: Optional[str] = None,
-    ) -> Callable[..., Callable[..., Model]]:
-        def decorator(func: Callable[..., Message]) -> Callable[..., Model]:
-            @functools.wraps(func)
-            def wrapper(*args, **kwargs) -> Model:
-                message = func(*args, **kwargs)
-                if first:
-                    try:
-                        message = getattr(message, first)[0]
-                    except IndexError:
-                        raise DashboardException(
-                            msg="Not Found", http_status_code=404, component="nvmeof"
-                        )
-
-                return make_namedtuple_from_object(model, message)._asdict()
-
-            return wrapper
-
-        return decorator
-
     Collection = List[Model]
-
-    def map_collection(
-        model: Type[NamedTuple],
-        pick: str,  # pylint: disable=redefined-outer-name
-        finalize: Optional[Callable[[Message, Collection], Collection]] = None,
-    ) -> Callable[..., Callable[..., Collection]]:
-        def decorator(func: Callable[..., Message]) -> Callable[..., Collection]:
-            @functools.wraps(func)
-            def wrapper(*args, **kwargs) -> Collection:
-                message = func(*args, **kwargs)
-                collection: Iterable = getattr(message, pick)
-                out = [
-                    make_namedtuple_from_object(model, i)._asdict() for i in collection
-                ]
-                if finalize:
-                    return finalize(message, out)
-                return out
-
-            return wrapper
-
-        return decorator
 
     import errno
 
@@ -266,21 +212,28 @@ else:
             ]
         return obj
 
-    def convert_to_model(model: Type[NamedTuple]) -> Callable[..., Callable[..., Model]]:
+    def convert_to_model(model: Type[NamedTuple],
+                         finalize: Optional[Callable[[Dict], Dict]] = None
+                         ) -> Callable[..., Callable[..., Model]]:
         def decorator(func: Callable[..., Message]) -> Callable[..., Model]:
             @functools.wraps(func)
             def wrapper(*args, **kwargs) -> Model:
                 message = func(*args, **kwargs)
                 msg_dict = MessageToDict(message, including_default_value_fields=True,
                                          preserving_proto_field_name=True)
-                return namedtuple_to_dict(obj_to_namedtuple(msg_dict, model))
+
+                result = namedtuple_to_dict(obj_to_namedtuple(msg_dict, model))
+                if finalize:
+                    return finalize(result)
+                return result
 
             return wrapper
 
         return decorator
 
     # pylint: disable-next=redefined-outer-name
-    def pick(field: str, first: bool = False) -> Callable[..., Callable[..., object]]:
+    def pick(field: str, first: bool = False,
+             ) -> Callable[..., Callable[..., object]]:
         def decorator(func: Callable[..., Dict]) -> Callable[..., object]:
             @functools.wraps(func)
             def wrapper(*args, **kwargs) -> object:

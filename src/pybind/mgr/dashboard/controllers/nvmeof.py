@@ -24,7 +24,7 @@ NVME_SCHEMA = {
 
 try:
     from ..services.nvmeof_client import NVMeoFClient, convert_to_model, \
-        empty_response, handle_nvmeof_error, map_collection, pick
+        empty_response, handle_nvmeof_error, pick
 except ImportError as e:
     logger.error("Failed to import NVMeoFClient and related components: %s", e)
 else:
@@ -529,6 +529,11 @@ else:
                 )
             )
 
+    def _update_hosts(hosts_info_resp):
+        if hosts_info_resp.get('allow_any_host'):
+            hosts_info_resp['hosts'].insert(0, {"nqn": "*"})
+        return hosts_info_resp
+
     @APIRouter("/nvmeof/subsystem/{nqn}/host", Scope.NVME_OF)
     @APIDoc("NVMe-oF Subsystem Host Allowlist Management API",
             "NVMe-oF Subsystem Host Allowlist")
@@ -540,15 +545,9 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
+        @pick('hosts')
         @NvmeofCLICommand("nvmeof host list")
-        @map_collection(
-            model.Host,
-            pick="hosts",
-            # Display the "allow any host" option as another host item
-            finalize=lambda i, o: [model.Host(nqn="*")._asdict()] + o
-            if i.allow_any_host
-            else o,
-        )
+        @convert_to_model(model.HostsInfo, finalize=_update_hosts)
         @handle_nvmeof_error
         def list(self, nqn: str, gw_group: Optional[str] = None, traddr: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.list_hosts(
