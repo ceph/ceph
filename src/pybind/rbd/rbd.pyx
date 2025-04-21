@@ -267,6 +267,12 @@ class ImageHasSnapshots(OSError):
                 "RBD image has snapshots (%s)" % message, errno)
 
 
+class ImageMemberOfGroup(OSError):
+    def __init__(self, message, errno=None):
+        super(ImageMemberOfGroup, self).__init__(
+                "RBD image is member of group (%s)" % message, errno)
+
+
 class FunctionNotSupported(OSError):
     def __init__(self, message, errno=None):
         super(FunctionNotSupported, self).__init__(
@@ -316,6 +322,7 @@ cdef errno_to_exception = {
     errno.EROFS      : ReadOnlyImage,
     errno.EBUSY      : ImageBusy,
     errno.ENOTEMPTY  : ImageHasSnapshots,
+    errno.EMLINK     : ImageMemberOfGroup,
     errno.ENOSYS     : FunctionNotSupported,
     errno.EDOM       : ArgumentOutOfRange,
     errno.ESHUTDOWN  : ConnectionShutdown,
@@ -335,6 +342,7 @@ cdef group_errno_to_exception = {
     errno.EROFS      : ReadOnlyImage,
     errno.EBUSY      : ImageBusy,
     errno.ENOTEMPTY  : ImageHasSnapshots,
+    errno.EMLINK     : ImageMemberOfGroup,
     errno.ENOSYS     : FunctionNotSupported,
     errno.EDOM       : ArgumentOutOfRange,
     errno.ESHUTDOWN  : ConnectionShutdown,

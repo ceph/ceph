@@ -21,7 +21,7 @@ from rados import (Rados,
                    LIBRADOS_OP_FLAG_FADVISE_RANDOM)
 from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  ImageBusy, ImageHasSnapshots, ReadOnlyImage,
-                 FunctionNotSupported, ArgumentOutOfRange,
+                 FunctionNotSupported, ArgumentOutOfRange, ImageMemberOfGroup,
                  ECANCELED, OperationCanceled,
                  DiskQuotaExceeded, ConnectionShutdown, PermissionError,
                  RBD_FEATURE_LAYERING, RBD_FEATURE_STRIPINGV2,
@@ -2978,6 +2978,15 @@ class TestGroups(object):
         RBD().trash_move(ioctx, image_name, 0)
         eq([], list(self.group.list_images()))
         RBD().trash_restore(ioctx, image_id, image_name)
+
+    def test_group_image_list_remove(self):
+        # need a closed image to get ImageMemberOfGroup instead of ImageBusy
+        self.image_names.append(create_image())
+        eq([], list(self.group.list_images()))
+        self.group.add_image(ioctx, image_name)
+        eq([image_name], [img['name'] for img in self.group.list_images()])
+        assert_raises(ImageMemberOfGroup, RBD().remove, ioctx, image_name)
+        eq([image_name], [img['name'] for img in self.group.list_images()])
 
     def test_group_image_many_images(self):
         eq([], list(self.group.list_images()))
