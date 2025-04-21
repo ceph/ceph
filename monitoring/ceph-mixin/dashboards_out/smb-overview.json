@@ -667,9 +667,8 @@
          "type": "stat"
       },
       {
-         "datasource": {
-            "uid": "${datasource}"
-         },
+         "datasource": "${datasource}",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -742,7 +741,8 @@
                "sort": "none"
             }
          },
-         "pluginVersion": "11.6.0",
+         "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": {
@@ -776,9 +776,8 @@
          "type": "timeseries"
       },
       {
-         "datasource": {
-            "uid": "${datasource}"
-         },
+         "datasource": "${datasource}",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -851,7 +850,8 @@
                "sort": "none"
             }
          },
-         "pluginVersion": "11.6.0",
+         "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": {
@@ -871,9 +871,8 @@
          "type": "timeseries"
       },
       {
-         "datasource": {
-            "uid": "${datasource}"
-         },
+         "datasource": "${datasource}",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -946,7 +945,8 @@
                "sort": "none"
             }
          },
-         "pluginVersion": "11.6.0",
+         "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": {
