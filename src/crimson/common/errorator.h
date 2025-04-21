@@ -220,15 +220,13 @@ struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
     assert_failure(Func&& f)
       : pre_assert(std::forward<Func>(f)) {}
 
-    no_touch_error_marker operator()(const unthrowable_wrapper&) {
-      if (pre_assert) {
-        pre_assert();
-      }
-      if (msg) {
-        ceph_abort_msg(msg);
-      } else {
-        ceph_abort();
-      }
+    no_touch_error_marker operator()(const unthrowable_wrapper& raw_error) {
+      handle([this] (auto&& error_v) {
+        if (pre_assert) {
+          pre_assert();
+        }
+        ceph_abort_msgf("%s: %s", msg ? msg : "", error_v.message().c_str());
+      })(raw_error);
       return no_touch_error_marker{};
     }
   };
@@ -310,19 +308,17 @@ struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
     assert_failure(Func&& f)
       : pre_assert(std::forward<Func>(f)) {}
 
-    no_touch_error_marker operator()(stateful_error_t<ErrorT>&& e) {
-      if (pre_assert) {
-        try {
-          std::rethrow_exception(e.ep);
-        } catch (const ErrorT& err) {
-          pre_assert(err);
+    no_touch_error_marker operator()(stateful_error_t<ErrorT>&& raw_error) {
+      handle([this] (auto&& error_v) {
+        if (pre_assert) {
+          try {
+            std::rethrow_exception(e.ep);
+          } catch (const ErrorT& err) {
+            pre_assert(err);
+          }
         }
-      }
-      if (msg) {
-        ceph_abort_msg(msg);
-      } else {
-        ceph_abort();
-      }
+        ceph_abort_msgf("%s: %s", msg ? msg : "", error_v.message().c_str());
+      })(std::move(raw_error));
       return no_touch_error_marker{};
     }
   };
