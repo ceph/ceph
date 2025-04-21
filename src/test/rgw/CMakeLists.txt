@@ -375,7 +375,11 @@ install(TARGETS ceph_test_datalog DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(WITH_CATCH2)
  add_executable(catch2-rgw-general
-  ${CMAKE_CURRENT_SOURCE_DIR}/catch2-rgw-general.cc)
+  catch2-rgw-general.cc)
+
+ target_include_directories(catch2-rgw-general
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
 
  target_link_libraries(catch2-rgw-general PRIVATE
   rgw_common
@@ -383,7 +387,7 @@ if(WITH_CATCH2)
   ceph-common
   ${rgw_libs}
   ${EXTRALIBS}
-  Catch2::Catch2 Catch2WithMain)
+  Catch2WithMain)
 
  install(TARGETS catch2-rgw-general DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif(WITH_CATCH2)
