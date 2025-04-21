@@ -251,6 +251,16 @@ private:
     object_data_t &object_data,
     extent_len_t size);
 
+  write_iertr::future<LBAMapping> prepare_head_data_reservation(
+    context_t ctx,
+    object_data_t &object_data,
+    extent_len_t size);
+
+  write_iertr::future<LBAMapping> prepare_clone_data_reservation(
+    context_t ctx,
+    object_data_t &object_data,
+    extent_len_t size);
+
   /// Trims data past size
   clear_ret trim_data_reservation(
     context_t ctx,
@@ -263,6 +273,17 @@ private:
     lba_mapping_list_t &pins,
     laddr_t data_base);
 
+  laddr_t get_clone_direct_base(
+    const context_t &ctx,
+    const laddr_t &base) const {
+    assert(ctx.onode.is_snap());
+    return (base + max_object_size).checked_to_laddr();
+  }
+
+  extent_len_t get_reservation_length(const hobject_t &hobj) const {
+    // make clone objects direct/indirect are adjacent in the laddr space
+    return max_object_size * hobj.get_reservation_factor();
+  }
 private:
   /**
    * max_object_size
