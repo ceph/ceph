@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 import logging
-from typing import Annotated, Any, Dict, Optional
+from typing import Any, Dict, Optional
 
 import cherrypy
-from ceph_argparse import CephSizeBytes
 from orchestrator import OrchestratorError
 
 from .. import mgr
@@ -386,8 +385,8 @@ else:
             rbd_image_name: str,
             rbd_pool: str = "rbd",
             create_image: Optional[bool] = True,
-            size: Optional[int] = None,
-            rbd_image_size: Optional[Annotated[int, CephSizeBytes()]] = None,
+            size: Optional[int] = 1024,
+            rbd_image_size: Optional[int] = None,
             trash_image: Optional[bool] = False,
             block_size: int = 512,
             load_balancing_group: Optional[int] = None,
