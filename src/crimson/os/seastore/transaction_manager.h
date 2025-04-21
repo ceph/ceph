@@ -311,8 +311,9 @@ public:
           return std::move(extent);
         });
       } else {
+	auto &r = std::get<0>(ret);
 	return this->pin_to_extent<T>(
-          t, std::move(std::get<0>(ret)),
+          t, std::move(r.mapping), std::move(r.child_pos),
 	  direct_partial_off, partial_len,
 	  std::move(maybe_init));
       }
@@ -981,8 +982,13 @@ private:
 
   shard_stats_t& shard_stats;
 
+  using LBALeafNode = lba_manager::btree::LBALeafNode;
+  struct unlinked_child_t {
+    LBAMappingRef mapping;
+    child_pos_t<LBALeafNode> child_pos;
+  };
   template <typename T>
-  std::variant<LBAMappingRef, get_child_ifut<T>>
+  std::variant<unlinked_child_t, get_child_ifut<T>>
   get_extent_if_linked(
     Transaction &t,
     LBAMappingRef pin)
@@ -1005,7 +1011,9 @@ private:
 	return extent->template cast<T>();
       });
     } else {
-      return pin;
+      return unlinked_child_t{
+	std::move(pin),
+	v.get_child_pos()};
     }
   }
 
@@ -1027,7 +1035,7 @@ private:
         return ext;
       });
     } else {
-      return pin_to_extent_by_type(t, std::move(pin), type);
+      return pin_to_extent_by_type(t, std::move(pin), v.get_child_pos(), type);
     }
   }
 
@@ -1059,6 +1067,7 @@ private:
   pin_to_extent_ret<T> pin_to_extent(
     Transaction &t,
     LBAMappingRef pin,
+    child_pos_t<LBALeafNode> child_pos,
     extent_len_t direct_partial_off,
     extent_len_t partial_len,
     lextent_init_func_t<T> &&maybe_init) {
@@ -1083,14 +1092,15 @@ private:
       direct_length,
       direct_partial_off,
       partial_len,
-      [&pref, maybe_init=std::move(maybe_init)]
+      [&pref, maybe_init=std::move(maybe_init),
+       child_pos=std::move(child_pos)]
       (T &extent) mutable {
 	assert(extent.is_logical());
 	assert(!extent.has_laddr());
 	assert(!extent.has_been_invalidated());
 	assert(!pref.has_been_invalidated());
 	assert(pref.get_parent());
-	pref.link_child(&extent);
+	child_pos.link_child(&extent);
 	extent.maybe_set_intermediate_laddr(pref);
 	maybe_init(extent);
 	extent.set_seen_by_users();
@@ -1140,6 +1150,7 @@ private:
   pin_to_extent_by_type_ret pin_to_extent_by_type(
       Transaction &t,
       LBAMappingRef pin,
+      child_pos_t<LBALeafNode> child_pos,
       extent_types_t type)
   {
     LOG_PREFIX(TransactionManager::pin_to_extent_by_type);
@@ -1163,7 +1174,7 @@ private:
       pref.get_val(),
       direct_key,
       direct_length,
-      [&pref](CachedExtent &extent) mutable {
+      [&pref, child_pos=std::move(child_pos)](CachedExtent &extent) mutable {
 	assert(extent.is_logical());
 	auto &lextent = static_cast<LogicalChildNode&>(extent);
 	assert(!lextent.has_laddr());
@@ -1171,7 +1182,7 @@ private:
 	assert(!pref.has_been_invalidated());
 	assert(pref.get_parent());
 	assert(!pref.get_parent()->is_pending());
-	pref.link_child(&lextent);
+	child_pos.link_child(&lextent);
 	lextent.maybe_set_intermediate_laddr(pref);
         // No change to extent::seen_by_user because this path is only
         // for background cleaning.
