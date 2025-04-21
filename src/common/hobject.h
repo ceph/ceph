@@ -206,6 +206,12 @@ public:
     return ret;
   }
 
+#ifdef WITH_CRIMSON
+  uint16_t get_reservation_factor() const {
+    return is_snap() ? 2 : 1;
+  }
+#endif
+
   /// @return true if object is snapdir
   bool is_snapdir() const {
     return snap == CEPH_SNAPDIR;

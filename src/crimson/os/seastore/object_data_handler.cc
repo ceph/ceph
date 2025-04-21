@@ -88,6 +88,75 @@ auto with_objects_data(
 }
 
 ObjectDataHandler::write_iertr::future<LBAMapping>
+ObjectDataHandler::prepare_head_data_reservation(
+  context_t ctx,
+  object_data_t &object_data,
+  extent_len_t size)
+{
+  assert(!ctx.onode.is_snap());
+  LOG_PREFIX(ObjectDataHandler::prepare_head_data_reservation);
+  DEBUGT("reserving: {}~0x{:x}",
+        ctx.t,
+        ctx.onode.get_data_hint(),
+        max_object_size);
+  return ctx.tm.reserve_region(
+    ctx.t,
+    ctx.onode.get_data_hint(),
+    max_object_size
+  ).si_then([&object_data, this](auto pin) {
+    ceph_assert(pin.get_length() == max_object_size);
+    object_data.update_reserved(
+      pin.get_key(),
+      max_object_size);
+    return pin;
+  }).handle_error_interruptible(
+    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    write_iertr::pass_further{}
+  );
+}
+
+ObjectDataHandler::write_iertr::future<LBAMapping>
+ObjectDataHandler::prepare_clone_data_reservation(
+  context_t ctx,
+  object_data_t &object_data,
+  extent_len_t size)
+{
+  assert(ctx.onode.is_snap());
+  LOG_PREFIX(ObjectDataHandler::prepare_head_data_reservation);
+  DEBUGT("reserving: {}~0x{:x}",
+        ctx.t,
+        ctx.onode.get_data_hint(),
+        max_object_size);
+  return ctx.tm.reserve_region(
+    ctx.t,
+    ctx.onode.get_data_hint(),
+    get_reservation_length(ctx.onode.get_hobj())
+  ).si_then([ctx, this](auto pin) {
+    ceph_assert(pin.get_length() == get_reservation_length(ctx.onode.get_hobj()));
+    return ctx.tm.remove(ctx.t, std::move(pin)
+    ).si_then([this, base=pin.get_key(), ctx](auto pos) {
+      return ctx.tm.reserve_region(
+        ctx.t,
+        std::move(pos),
+        get_clone_direct_base(ctx, base),
+        max_object_size);
+    }).si_then([this, base=pin.get_key(), ctx](auto pos) {
+      return ctx.tm.reserve_region(
+       ctx.t, std::move(pos), base, max_object_size);
+    });
+  }).si_then([&object_data, this](auto pin) {
+    assert(pin.get_length() == max_object_size);
+    object_data.update_reserved(
+      pin.get_key(),
+      pin.get_length());
+    return pin;
+  }).handle_error_interruptible(
+    write_iertr::pass_further{},
+    crimson::ct_error::assert_all{"unexpected error"}
+  );
+}
+
+ObjectDataHandler::write_iertr::future<LBAMapping>
 ObjectDataHandler::prepare_data_reservation(
   context_t ctx,
   object_data_t &object_data,
@@ -103,24 +172,11 @@ ObjectDataHandler::prepare_data_reservation(
            object_data.get_reserved_data_len());
     return write_iertr::make_ready_future<LBAMapping>();
   } else {
-    DEBUGT("reserving: {}~0x{:x}",
-           ctx.t,
-           ctx.onode.get_data_hint(),
-           max_object_size);
-    return ctx.tm.reserve_region(
-      ctx.t,
-      ctx.onode.get_data_hint(),
-      max_object_size
-    ).si_then([max_object_size=max_object_size, &object_data](auto pin) {
-      ceph_assert(pin.get_length() == max_object_size);
-      object_data.update_reserved(
-	pin.get_key(),
-	pin.get_length());
-      return pin;
-    }).handle_error_interruptible(
-      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
-      write_iertr::pass_further{}
-    );
+    if (ctx.onode.is_snap()) {
+      return prepare_clone_data_reservation(ctx, object_data, size);
+    } else {
+      return prepare_head_data_reservation(ctx, object_data, size);
+    }
   }
 }
 
