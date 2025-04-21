@@ -13,11 +13,9 @@ behavior of specific drive, NIC, or chassis models in isolation.
 Enabling
 --------
 
-The *localpool* module is enabled with:
+The *localpool* module is enabled with::
 
-.. prompt:: bash #
-
-   ceph mgr module enable localpool
+  ceph mgr module enable localpool
 
 Configuring
 -----------
@@ -33,11 +31,9 @@ The *localpool* module understands the following options:
    :default: by-$subtreetype-
 
 These options are set via the config-key interface.  For example, to
-change the replication level to 2x with only 64 PGs:
+change the replication level to 2x with only 64 PGs, ::
 
-.. prompt:: bash #
-
-   ceph config set mgr mgr/localpool/num_rep 2
-   ceph config set mgr mgr/localpool/pg_num 64
+  ceph config set mgr mgr/localpool/num_rep 2
+  ceph config set mgr mgr/localpool/pg_num 64
 
 .. mgr_module:: None

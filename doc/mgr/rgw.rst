@@ -9,11 +9,9 @@ the different related entities.
 Enabling
 --------
 
-The *rgw* module is enabled with:
+The *rgw* module is enabled with::
 
-.. prompt:: bash #
-
-   ceph mgr module enable rgw
+  ceph mgr module enable rgw
 
 
 RGW Realm Operations
@@ -27,13 +25,13 @@ supports both passing the arguments through the cmd line or as a spec file:
 
 .. prompt:: bash #
 
-   ceph rgw realm bootstrap [--realm-name] [--zonegroup-name] [--zone-name] [--port] [--placement] [--start-radosgw]
+  ceph rgw realm bootstrap [--realm-name] [--zonegroup-name] [--zone-name] [--port] [--placement] [--start-radosgw]
 
 The command supports providing the configuration through a spec file (`-i option`):
 
 .. prompt:: bash #
 
-   ceph rgw realm bootstrap -i myrgw.yaml
+  ceph rgw realm bootstrap -i myrgw.yaml
 
 Following is an example of RGW multisite spec file:
 
@@ -70,11 +68,11 @@ Realm Credentials Token
 Users can list the available tokens for the created (or already existing) realms.
 The token is a base64 string that encapsulates the realm information and its
 master zone endpoint authentication data. Following is an example of
-the ``ceph rgw realm tokens`` output:
+the `ceph rgw realm tokens` output:
 
 .. prompt:: bash #
 
-   ceph rgw realm tokens | jq
+  ceph rgw realm tokens | jq
 
 .. code-block:: json
 
@@ -109,7 +107,7 @@ Following is an example of zone spec file:
 
 .. prompt:: bash #
 
-   ceph rgw zone create -i zone-spec.yaml
+  ceph rgw zone create -i zone-spec.yaml
 
 .. note:: The spec file used by RGW has the same format as the one used by the orchestrator. Thus,
           the user can provide any orchestration supported rgw parameters including advanced
@@ -117,28 +115,28 @@ Following is an example of zone spec file:
 
 Commands
 --------
-.. prompt:: bash #
+::
 
-   ceph rgw realm bootstrap -i spec.yaml
+  ceph rgw realm bootstrap -i spec.yaml
 
 Create a new realm + zonegroup + zone and deploy rgw daemons via the
 orchestrator using the information specified in the YAML file.
 
-.. prompt:: bash #
+::
 
-   ceph rgw realm tokens
+  ceph rgw realm tokens
 
 List the tokens of all the available realms
 
-.. prompt:: bash #
+::
 
-   ceph rgw zone create -i spec.yaml
+  ceph rgw zone create -i spec.yaml
 
 Join an existing realm by creating a new secondary zone (using the realm token)
 
-.. prompt:: bash #
+::
 
-   ceph rgw admin [*]
+  ceph rgw admin [*]
 
 RGW admin command
 
@@ -178,6 +176,6 @@ Upgrading root ca certificates
 #. From the primary node, ensure that the ``curl`` command can be run by the
    user:
 
-   .. prompt:: bash [primary-node]$ 
+   .. prompt:: bash [root@primary-node]# 
 
       curl https://<host_ip>:443

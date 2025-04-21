@@ -6,36 +6,26 @@ This is a simple module skeleton for documentation purposes.
 Enabling
 --------
 
-The *hello* module is enabled with:
+The *hello* module is enabled with::
 
-.. prompt:: bash #
+  ceph mgr module enable hello
 
-   ceph mgr module enable hello
+To check that it is enabled, run::
 
-To check that it is enabled, run:
+  ceph mgr module ls
 
-.. prompt:: bash #
+After editing the module file (found in ``src/pybind/mgr/hello/module.py``), you can see changes by running::
 
-   ceph mgr module ls
+  ceph mgr module disable hello
+  ceph mgr module enable hello
 
-After editing the module file (found in ``src/pybind/mgr/hello/module.py``), you can see changes by running:
+or::
 
-.. prompt:: bash #
+  init-ceph restart mgr
 
-   ceph mgr module disable hello
-   ceph mgr module enable hello
+To execute the module, run::
 
-or:
-
-.. prompt:: bash #
-
-   init-ceph restart mgr
-
-To execute the module, run:
-
-.. prompt:: bash #
-
-   ceph hello
+  ceph hello
 
 The log is found at::
 

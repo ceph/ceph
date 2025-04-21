@@ -13,9 +13,9 @@ ceph-mgr module developer's guide
 Creating a module
 -----------------
 
-In ``pybind/mgr/``, create a python module.  Within your module, create a class
+In pybind/mgr/, create a python module.  Within your module, create a class
 that inherits from ``MgrModule``.  For ceph-mgr to detect your module, your
-directory must contain a file called ``module.py``.
+directory must contain a file called `module.py`.
 
 The most important methods to override are:
 
@@ -38,11 +38,9 @@ Installing a module
 
 Once your module is present in the location set by the
 ``mgr module path`` configuration setting, you can enable it
-via the ``ceph mgr module enable`` command:
+via the ``ceph mgr module enable`` command::
 
-.. prompt:: bash #
-
-   ceph mgr module enable mymodule
+  ceph mgr module enable mymodule
 
 Note that the MgrModule interface is not stable, so any modules maintained
 outside of the Ceph tree are liable to break when run against any newer
@@ -60,12 +58,10 @@ import the ``logging`` package and get a logger instance with the
 Each module has a ``log_level`` option that specifies the current Python
 logging level of the module.
 To change or query the logging level of the module use the following Ceph
-commands:
+commands::
 
-.. prompt:: bash #
-
-   ceph config get mgr mgr/<module_name>/log_level
-   ceph config set mgr mgr/<module_name>/log_level <info|debug|critical|error|warning|>
+  ceph config get mgr mgr/<module_name>/log_level
+  ceph config set mgr mgr/<module_name>/log_level <info|debug|critical|error|warning|>
 
 The logging level used upon the module's start is determined by the current
 logging level of the mgr daemon, unless if the ``log_level`` option was
@@ -78,11 +74,9 @@ level is mapped to the module python logging level as follows:
 * <= +inf is DEBUG
 
 We can unset the module log level and fallback to the mgr daemon logging level
-by running the following command:
+by running the following command::
 
-.. prompt:: bash #
-
-   ceph config set mgr mgr/<module_name>/log_level ''
+  ceph config set mgr mgr/<module_name>/log_level ''
 
 By default, modules' logging messages are processed by the Ceph logging layer
 where they will be recorded in the mgr daemon's log file.
@@ -93,9 +87,7 @@ log file with the following name pattern::
 
    <mgr_daemon_log_file_name>.<module_name>.log
 
-To enable the file logging on a module use the following command:
-
-.. prompt:: bash #
+To enable the file logging on a module use the following command::
 
    ceph config set mgr mgr/<module_name>/log_to_file true
 
@@ -104,9 +96,7 @@ being written to the mgr daemon's log file and are only written to the
 module's log file.
 
 It's also possible to check the status and disable the file logging with the
-following commands:
-
-.. prompt:: bash #
+following commands::
 
    ceph config get mgr mgr/<module_name>/log_to_file
    ceph config set mgr mgr/<module_name>/log_to_file false
@@ -421,13 +411,13 @@ You must declare your available configuration options in the
         Option(name="my_option")
     ]
 
-If you try to use ``set_module_option`` or ``get_module_option`` on options
-not declared in ``MODULE_OPTIONS``, an exception will be raised.
+If you try to use set_module_option or get_module_option on options not declared
+in ``MODULE_OPTIONS``, an exception will be raised.
 
 You may choose to provide setter commands in your module to perform
 high level validation.  Users can also modify configuration using
-the normal ``ceph config set`` command, where the configuration options
-for a mgr module are named like ``mgr/<module name>/<option>``.
+the normal `ceph config set` command, where the configuration options
+for a mgr module are named like `mgr/<module name>/<option>`.
 
 If a configuration option is different depending on which node the mgr
 is running on, then use *localized* configuration (
@@ -442,16 +432,16 @@ use the KV store instead of configuration options (see next section).
 Hints for using config options:
 
 * Reads are fast: ceph-mgr keeps a local in-memory copy, so in many cases
-  you can just do a ``get_module_option`` every time you use a option, rather than
+  you can just do a get_module_option every time you use a option, rather than
   copying it out into a variable.
 * Writes block until the value is persisted (i.e. round trip to the monitor),
   but reads from another thread will see the new value immediately.
-* If a user has used ``config set`` from the command line, then the new
-  value will become visible to ``get_module_option`` immediately, although the
-  mon->mgr update is asynchronous, so ``config set`` will return a fraction
+* If a user has used `config set` from the command line, then the new
+  value will become visible to `get_module_option` immediately, although the
+  mon->mgr update is asynchronous, so `config set` will return a fraction
   of a second before the new value is visible on the mgr.
 * To delete a config value (i.e. revert to default), just pass ``None`` to
-  ``set_module_option``.
+  set_module_option.
 
 .. automethod:: MgrModule.get_module_option
 .. automethod:: MgrModule.set_module_option
@@ -694,7 +684,7 @@ we need to
 Following is a sample session, in which the Ceph version is queried by
 inputting ``print(mgr.version)`` at the prompt. And later
 ``timeit`` module is imported to measure the execution time of
-``mgr.get_mgr_id()``.
+`mgr.get_mgr_id()`.
 
 .. code-block:: console
 
