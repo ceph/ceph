@@ -417,7 +417,8 @@ protected:
 	iter, t.add_transactional_view<copy_dests_t>(t));
     }
     auto &copy_dests = static_cast<copy_dests_t&>(*iter);
-    auto [it, inserted] = copy_dests.dests_by_key.insert(dest);
+    [[maybe_unused]] auto [it, inserted] =
+      copy_dests.dests_by_key.insert(dest);
     assert(inserted || it->get() == dest.get());
   }
 
