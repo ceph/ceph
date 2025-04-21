@@ -312,15 +312,36 @@ int remove(const DoutPrefixProvider* dpp,
 
   constexpr bool need_stats = false;
   rgw::sal::BucketList buckets;
-  ret = driver->list_buckets(dpp, info.id, info.tenant, marker, marker,
-                             max_items, need_stats, buckets, y);
-  if (ret < 0) {
-    return ret;
-  }
-  if (!buckets.buckets.empty()) {
-    err_msg = "The account cannot be deleted until all buckets are removed.";
-    return -ENOTEMPTY;
-  }
+  do {
+    ret = driver->list_buckets(dpp, info.id, info.tenant,
+                               buckets.next_marker, "",
+                               max_items, need_stats, buckets, y);
+    if (ret < 0) {
+      err_msg = "Unable to list account buckets";
+      return ret;
+    }
+
+    if (!buckets.buckets.empty() && !op_state.purge_data) {
+      err_msg = "The account cannot be deleted until all buckets are removed.";
+      return -EEXIST; // change to code that maps to 409: conflict
+    }
+
+    for (const auto& ent : buckets.buckets) {
+      std::unique_ptr<rgw::sal::Bucket> bucket;
+      ret = driver->load_bucket(dpp, ent.bucket, &bucket, y);
+      if (ret < 0) {
+        err_msg = fmt::format("unable to load bucket {}", ent.bucket.name);
+        return ret;
+      }
+
+      constexpr bool delete_objects = true;
+      ret = bucket->remove(dpp, delete_objects, y);
+      if (ret < 0) {
+        err_msg = fmt::format("unable to delete bucket {}", ent.bucket.name);
+        return ret;
+      }
+    }
+  } while (!buckets.next_marker.empty());
 
   rgw::sal::RoleList roles;
   ret = driver->list_account_roles(dpp, y, info.id, path_prefix,
