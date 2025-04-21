@@ -23,23 +23,21 @@ depends on. The insights reports contains the following:
 Enabling
 --------
 
-The *insights* module is enabled with:
+The *insights* module is enabled with::
 
-.. prompt:: bash #
-
-   ceph mgr module enable insights
+  ceph mgr module enable insights
 
 Commands
 --------
-.. prompt:: bash #
+::
 
-   ceph insights
+  ceph insights
 
 Generate the full report.
 
-.. prompt:: bash #
+::
 
-   ceph insights prune-health <hours>
+  ceph insights prune-health <hours>
 
 Remove historical health data older than <hours>. Passing `0` for <hours> will
 clear all health data.
