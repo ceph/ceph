@@ -965,8 +965,7 @@ public:
   class assert_all {
     const char* const msg = nullptr;
   public:
-    template <std::size_t N>
-    assert_all(const char (&msg)[N])
+    assert_all(const char* msg)
       : msg(msg) {
     }
     assert_all() = default;
@@ -1332,8 +1331,7 @@ namespace ct_error {
   class assert_all {
     const char* const msg = nullptr;
   public:
-    template <std::size_t N>
-    assert_all(const char (&msg)[N])
+    assert_all(const char* msg)
       : msg(msg) {
     }
     assert_all() = default;
