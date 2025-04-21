@@ -105,6 +105,8 @@ public:
     LBAMapping pos,
     LBAMapping mapping,
     laddr_t laddr,
+    extent_len_t offset,
+    extent_len_t len,
     bool updateref) final;
 
 #ifdef UNIT_TESTS_BUILT
