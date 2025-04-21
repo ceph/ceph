@@ -209,7 +209,7 @@ def verify_tls(args: Namespace) -> None:
     json.dump({'ok': True}, sys.stdout)  # need to emit something on success
 
 
-if __name__ == "__main__":
+def main():
     # create the top-level parser
     parser = argparse.ArgumentParser(prog='cryptotools.py')
     subparsers = parser.add_subparsers(required=True)
@@ -220,8 +220,12 @@ if __name__ == "__main__":
 
     # create the parser for the "create_self_signed_cert" command
     parser_cssc = subparsers.add_parser('create_self_signed_cert')
-    parser_cssc.add_argument('--private_key', required=False, action='store_true')
-    parser_cssc.add_argument('--certificate', required=False, action='store_true')
+    parser_cssc.add_argument(
+        '--private_key', required=False, action='store_true'
+    )
+    parser_cssc.add_argument(
+        '--certificate', required=False, action='store_true'
+    )
     parser_cssc.set_defaults(func=create_self_signed_cert)
 
     # create the parser for the "certificate_days_to_expire" command
@@ -243,3 +247,7 @@ if __name__ == "__main__":
     # parse the args and call whatever function was selected
     args = parser.parse_args()
     args.func(args)
+
+
+if __name__ == "__main__":
+    main()
