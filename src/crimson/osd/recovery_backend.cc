@@ -246,7 +246,7 @@ RecoveryBackend::scan_for_backfill(
       crimson::ct_error::enoent::handle([](auto) {
 	return false;
       }),
-      crimson::ct_error::assert_all("unexpected error")
+      crimson::ct_error::assert_all(fmt::format("{} {} error when loading obc", pg, FNAME).c_str())
     );
     if (!found) {
       // if the object does not exist here, it must have been removed
