@@ -2587,7 +2587,7 @@ class TestSubvolumes(TestVolumesHelper):
     def test_subvolume_create_with_case_insensitive(self):
         # create subvolume
         subvolume = self._gen_subvol_name()
-        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--case-insensitive")
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--casesensitive=0")
 
         # make sure it exists
         subvolpath = self._get_subvolume_path(self.volname, subvolume)

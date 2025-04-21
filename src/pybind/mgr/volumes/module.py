@@ -144,7 +144,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=namespace_isolated,type=CephBool,req=false '
                    'name=earmark,type=CephString,req=false '
                    'name=normalization,type=CephChoices,strings=nfd|nfc|nfkd|nfkc,req=false '
-                   'name=case_insensitive,type=CephBool,req=false ',
+                   'name=casesensitive,type=CephBool,req=false ',
             'desc': "Create a CephFS subvolume in a volume, and optionally, "
                     "with a specific size (in bytes), a specific data pool layout, "
                     "a specific mode, in a specific subvolume group and in separate "
@@ -736,7 +736,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                         namespace_isolated=cmd.get('namespace_isolated', False),
                                         earmark=cmd.get('earmark', None),
                                         normalization=cmd.get('normalization', None),
-                                        case_insensitive=cmd.get('case_insensitive', False))
+                                        casesensitive=cmd.get('casesensitive', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_rm(self, inbuf, cmd):
