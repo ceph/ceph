@@ -364,7 +364,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  obj_ctx.set_atomic(head_obj);
+  obj_ctx.set_atomic(head_obj, true);
 
   RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
 
@@ -726,7 +726,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   if (r < 0) {
     return r;
   }
-  obj_ctx.set_atomic(head_obj);
+  obj_ctx.set_atomic(head_obj, true);
   RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
   //For Append obj, disable versioning
   op_target.set_versioning_disabled(true);

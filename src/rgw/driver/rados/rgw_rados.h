@@ -207,7 +207,7 @@ public:
   RGWObjStateManifest *get_state(const rgw_obj& obj);
 
   void set_compressed(const rgw_obj& obj);
-  void set_atomic(const rgw_obj& obj);
+  void set_atomic(const rgw_obj& obj, bool atomic);
   void set_prefetch_data(const rgw_obj& obj);
   void invalidate(const rgw_obj& obj);
 };
@@ -1428,9 +1428,9 @@ public:
   int append_async(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, size_t size, bufferlist& bl);
 
 public:
-  void set_atomic(void *ctx, const rgw_obj& obj) {
+  void set_atomic(void *ctx, const rgw_obj& obj, bool atomic) {
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
-    rctx->set_atomic(obj);
+    rctx->set_atomic(obj, atomic);
   }
   void set_prefetch_data(void *ctx, const rgw_obj& obj) {
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);

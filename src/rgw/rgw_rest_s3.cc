@@ -5283,7 +5283,7 @@ bool RGWHandler_REST_S3Website::web_dir() const {
 
   std::unique_ptr<rgw::sal::Object> obj = s->bucket->get_object(rgw_obj_key(subdir_name));
 
-  obj->set_atomic();
+  obj->set_atomic(true);
 
   RGWObjState* state = nullptr;
   if (obj->get_obj_state(s, &state, s->yield) < 0) {

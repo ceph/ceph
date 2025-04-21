@@ -942,7 +942,7 @@ int DaosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
   }
 
   // Update object attrs
-  set_atomic();
+  set_atomic(true);
   attrs[attr_name] = attr_val;
 
   ret = set_dir_entry_attrs(dpp, &ent, &attrs);
