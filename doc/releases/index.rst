@@ -74,6 +74,7 @@ Release timeline
 .. _18.2.2: reef#v18-2-2-reef
 .. _18.2.4: reef#v18-2-4-reef
 .. _18.2.5: reef#v18-2-5-reef
+.. _18.2.6: reef#v18-2-6-reef
 
 .. _Quincy: quincy
 .. _17.2.0: quincy#v17-2-0-quincy
