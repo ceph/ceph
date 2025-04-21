@@ -1569,7 +1569,7 @@ private:
           *parent_entry.node,
           parent_entry.pos,
           *child);
-        auto &cnode = (typename internal_node_t::base_t &)*child;
+        [[maybe_unused]] auto &cnode = (typename internal_node_t::base_t &)*child;
         assert(cnode.get_node_meta().begin == node_iter.get_key());
         assert(cnode.get_node_meta().end > node_iter.get_key());
         return on_found(child->template cast<leaf_node_t>());

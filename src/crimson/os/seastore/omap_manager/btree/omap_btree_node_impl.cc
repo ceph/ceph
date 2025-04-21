@@ -293,7 +293,7 @@ OMapInnerNode::list(
 	      }
             }
             if (child_result.size() && last && iter == liter - 1) {
-	      auto biter = --(child_result.end());
+	      [[maybe_unused]] auto biter = --(child_result.end());
 	      if (config.last_inclusive) {
 		assert(biter->first <= *last);
 	      } else {
