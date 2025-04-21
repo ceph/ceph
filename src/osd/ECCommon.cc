@@ -481,12 +481,19 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
     ceph_assert(reads_sent);
   }
 
+  std::optional<ECSubRead> local_read_op;
   std::vector<std::pair<int, Message*>> m;
   m.reserve(messages.size());
   for (auto &&[pg_shard, read]: messages) {
     rop.in_progress.insert(pg_shard);
     shard_to_read_map[pg_shard].insert(rop.tid);
     read.tid = tid;
+#ifdef WITH_CRIMSON // crimson only
+    if (pg_shard == get_parent()->whoami_shard()) {
+      local_read_op = std::move(read);
+      continue;
+    }
+#endif
     auto *msg = new MOSDECSubOpRead;
     msg->set_priority(priority);
     msg->pgid = spg_t(get_info().pgid.pgid, pg_shard.shard);
@@ -501,11 +508,22 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       msg->trace.keyval("shard", pg_shard.shard.id);
     }
     m.push_back(std::make_pair(pg_shard.osd, msg));
+    dout(10) << __func__ << ": will send msg " << *msg
+             << " to osd." << pg_shard << dendl;
   }
   if (!m.empty()) {
     get_parent()->send_message_osd_cluster(m, get_osdmap_epoch());
   }
 
+#if WITH_CRIMSON
+  if (local_read_op) {
+    dout(10) << __func__ << ": doing local read for " << rop << dendl;
+    handle_sub_read_n_reply(
+      get_parent()->whoami_shard(),
+      *local_read_op,
+      rop.trace);
+  }
+#endif
   dout(10) << __func__ << ": started " << rop << dendl;
 }
 
