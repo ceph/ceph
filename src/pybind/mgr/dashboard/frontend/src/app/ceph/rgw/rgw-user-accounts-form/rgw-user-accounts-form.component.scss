@@ -1,0 +1,21 @@
+@use '@carbon/layout';
+
+::ng-deep .cds--form__helper-text {
+  white-space: pre-line;
+}
+
+.quota-heading {
+  margin-bottom: layout.$spacing-03;
+}
+
+.quota-sub-block {
+  margin: layout.$spacing-03 0 0 layout.$spacing-06;
+
+  .input-wrapper {
+    margin: layout.$spacing-03 0 0 layout.$spacing-01;
+
+    &:first-of-type {
+      margin-bottom: layout.$spacing-06;
+    }
+  }
+}

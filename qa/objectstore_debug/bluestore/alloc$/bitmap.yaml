@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        bluestore allocator: bitmap
+
