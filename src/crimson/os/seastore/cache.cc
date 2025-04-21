@@ -1151,13 +1151,19 @@ CachedExtentRef Cache::duplicate_for_write(
   LOG_PREFIX(Cache::duplicate_for_write);
   assert(i->is_fully_loaded());
 
+#ifndef NDEBUG
+  if (i->is_logical()) {
+    assert(static_cast<LogicalCachedExtent&>(*i).has_laddr());
+    assert(static_cast<LogicalCachedExtent&>(*i).is_seen_by_users());
+  }
+#endif
+
   if (i->is_mutable()) {
     return i;
   }
 
   if (i->is_exist_clean()) {
     assert(i->is_logical());
-    assert(static_cast<LogicalCachedExtent&>(*i).has_laddr());
     i->version++;
     i->state = CachedExtent::extent_state_t::EXIST_MUTATION_PENDING;
     i->last_committed_crc = i->calc_crc32c();
@@ -1188,10 +1194,11 @@ CachedExtentRef Cache::duplicate_for_write(
   ret->version++;
   ret->state = CachedExtent::extent_state_t::MUTATION_PENDING;
   if (i->is_logical()) {
-    auto& lextent = static_cast<LogicalCachedExtent&>(*i);
-    assert(lextent.has_laddr());
+    auto& stable_extent = static_cast<LogicalCachedExtent&>(*i);
     assert(ret->is_logical());
-    static_cast<LogicalCachedExtent&>(*ret).set_laddr(lextent.get_laddr());
+    auto& mutate_extent = static_cast<LogicalCachedExtent&>(*ret);
+    mutate_extent.set_laddr(stable_extent.get_laddr());
+    assert(mutate_extent.is_seen_by_users());
   }
 
   t.add_mutated_extent(ret);

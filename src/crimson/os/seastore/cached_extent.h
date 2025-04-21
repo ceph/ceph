@@ -857,10 +857,12 @@ private:
 
   /// used to wait while in-progress commit completes
   std::optional<seastar::shared_promise<>> io_wait_promise;
+
   void set_io_wait() {
     ceph_assert(!io_wait_promise);
     io_wait_promise = seastar::shared_promise<>();
   }
+
   void complete_io() {
     ceph_assert(io_wait_promise);
     io_wait_promise->set_value();
@@ -1385,17 +1387,36 @@ class LBAMapping;
  */
 class LogicalCachedExtent : public CachedExtent {
 public:
-  template <typename... T>
-  LogicalCachedExtent(T&&... t) : CachedExtent(std::forward<T>(t)...) {}
+  using CachedExtent::CachedExtent;
+
+  LogicalCachedExtent(const LogicalCachedExtent& other)
+    : CachedExtent(other),
+     seen_by_users(other.seen_by_users) {}
+
+  LogicalCachedExtent(const LogicalCachedExtent& other, share_buffer_t s)
+    : CachedExtent(other, s),
+     seen_by_users(other.seen_by_users) {}
 
   void on_rewrite(Transaction &t, CachedExtent &extent, extent_len_t off) final {
     assert(get_type() == extent.get_type());
     auto &lextent = (LogicalCachedExtent&)extent;
     set_laddr((lextent.get_laddr() + off).checked_to_laddr());
+    seen_by_users = lextent.seen_by_users;
     do_on_rewrite(t, lextent);
   }
 
   virtual void do_on_rewrite(Transaction &t, LogicalCachedExtent &extent) {}
+
+  bool is_seen_by_users() const {
+    return seen_by_users;
+  }
+
+  // handled under TransactionManager,
+  // user should not set this by themselves.
+  void set_seen_by_users() {
+    assert(!seen_by_users);
+    seen_by_users = true;
+  }
 
   bool has_laddr() const {
     return laddr != L_ADDR_NULL;
@@ -1461,6 +1482,12 @@ private:
   // the logical address of the extent, and if shared,
   // it is the intermediate_base, see BtreeLBAMapping comments.
   laddr_t laddr = L_ADDR_NULL;
+
+  // whether the extent has been seen by users since OSD startup,
+  // otherwise, an extent can still be alive if it's dirty or pinned by lru.
+  //
+  // user must initialize the logical extent upon the first access.
+  bool seen_by_users = false;
 };
 
 using LogicalCachedExtentRef = TCachedExtentRef<LogicalCachedExtent>;

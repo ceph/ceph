@@ -2197,6 +2197,10 @@ constexpr bool is_valid_transaction(transaction_type_t type) {
   return type < transaction_type_t::MAX;
 }
 
+constexpr bool is_user_transaction(transaction_type_t type) {
+  return type <= transaction_type_t::READ;
+}
+
 constexpr bool is_background_transaction(transaction_type_t type) {
   return (type >= transaction_type_t::TRIM_DIRTY &&
           type < transaction_type_t::MAX);
