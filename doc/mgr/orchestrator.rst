@@ -54,7 +54,7 @@ Here is how the names relate:
 Status
 ======
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph orch status [--detail]
 
@@ -108,12 +108,12 @@ following short list explains the meaning of the ``name`` parameter:
 
 Creating/growing/shrinking/removing services:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
-    ceph orch apply mds <fs_name> [--placement=<placement>] [--dry-run]
-    ceph orch apply rgw <name> [--realm=<realm>] [--zone=<zone>] [--port=<port>] [--ssl] [--placement=<placement>] [--dry-run]
-    ceph orch apply nfs <name> <pool> [--namespace=<namespace>] [--placement=<placement>] [--dry-run]
-    ceph orch rm <service_name> [--force]
+   ceph orch apply mds <fs_name> [--placement=<placement>] [--dry-run]
+   ceph orch apply rgw <name> [--realm=<realm>] [--zone=<zone>] [--port=<port>] [--ssl] [--placement=<placement>] [--dry-run]
+   ceph orch apply nfs <name> <pool> [--namespace=<namespace>] [--placement=<placement>] [--dry-run]
+   ceph orch rm <service_name> [--force]
 
 where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
 
@@ -121,9 +121,9 @@ e.g., ``ceph orch apply mds myfs --placement="3 host1 host2 host3"``
 
 Service Commands:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
-    ceph orch <start|stop|restart|redeploy|reconfig> <service_name>
+   ceph orch <start|stop|restart|redeploy|reconfig> <service_name>
 
 .. note:: These commands apply only to cephadm containerized daemons.
 
@@ -160,35 +160,35 @@ Configuring the Orchestrator CLI
 
 Enable the orchestrator by using the ``set backend`` command to select the orchestrator module that will be used:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
-    ceph orch set backend <module>
+   ceph orch set backend <module>
 
 Example - Configuring the Orchestrator CLI
 ------------------------------------------
 
 For example, to enable the Rook orchestrator module and use it with the CLI:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
-    ceph mgr module enable rook
-    ceph orch set backend rook
+   ceph mgr module enable rook
+   ceph orch set backend rook
 
 Confirm that the backend is properly configured:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
-    ceph orch status
+   ceph orch status
 
 Disable the Orchestrator
 ------------------------
 
 To disable the orchestrator, use the empty string ``""``:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
-    ceph orch set backend ""
-    ceph mgr module disable rook
+   ceph orch set backend ""
+   ceph mgr module disable rook
 
 Current Implementation Status
 =============================
