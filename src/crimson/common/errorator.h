@@ -1331,21 +1331,15 @@ namespace ct_error {
 
   class assert_all {
     const char* const msg = nullptr;
-    std::function<void()> pre_assert;
   public:
     template <std::size_t N>
     assert_all(const char (&msg)[N])
       : msg(msg) {
     }
     assert_all() = default;
-    assert_all(std::function<void()> &&f)
-      : pre_assert(std::move(f)) {}
 
     template <class ErrorT>
     no_touch_error_marker operator()(ErrorT&& raw_error) {
-      if (pre_assert) {
-        pre_assert();
-      }
       using decayed_t = std::decay_t<ErrorT>;
       decayed_t::error_t::handle([this] (auto&& error_v) {
         ceph_abort_msgf("%s: %s", msg ? msg : "", error_v.message().c_str());
