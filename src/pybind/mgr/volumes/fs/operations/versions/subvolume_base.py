@@ -212,9 +212,9 @@ class SubvolumeBase(object):
 
         try:
             casesensitive = self.fs.getxattr(pathname, 'ceph.dir.casesensitive').decode('utf-8')
-            attrs["case_insensitive"] = casesensitive == "0"
+            attrs["casesensitive"] = casesensitive == "1"
         except cephfs.NoData:
-            attrs["case_insensitive"] = False
+            attrs["casesensitive"] = True
 
         return attrs
 
@@ -314,8 +314,8 @@ class SubvolumeBase(object):
             except cephfs.Error as e:
                 raise VolumeException(-e.args[0], e.args[1])
 
-        case_insensitive = attrs.get("case_insensitive")
-        if case_insensitive:
+        casesensitive = attrs.get("casesensitive")
+        if casesensitive is False:
             try:
                 self.fs.setxattr(path, "ceph.dir.casesensitive", "0".encode('utf-8'), 0)
             except cephfs.Error as e:
@@ -515,12 +515,12 @@ class SubvolumeBase(object):
             normalization = "none"
 
         try:
-            case_insensitive = self.fs.getxattr(subvolpath,
+            casesensitive = self.fs.getxattr(subvolpath,
                                                 'ceph.dir.casesensitive'
                                                 ).decode('utf-8')
-            case_insensitive = case_insensitive == "0"
+            casesensitive = casesensitive == "1"
         except cephfs.NoData:
-            case_insensitive = False
+            casesensitive = True
 
         subvol_info = {
                 'path': subvolpath,
@@ -543,7 +543,7 @@ class SubvolumeBase(object):
                 'state': self.state.value,
                 'earmark': earmark,
                 'normalization': normalization,
-                'case_insensitive': case_insensitive,
+                'casesensitive': casesensitive,
         }
 
         subvol_src_info = self._get_clone_source()

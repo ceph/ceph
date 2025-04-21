@@ -227,13 +227,13 @@ class VolumeClient(CephfsClient["Module"]):
         isolate_nspace = kwargs['namespace_isolated']
         earmark    = kwargs['earmark'] or ''  # if not set, default to empty string --> no earmark
         normalization = kwargs['normalization']
-        case_insensitive = kwargs['case_insensitive']
+        casesensitive = kwargs['casesensitive']
 
         oct_mode = octal_str_to_decimal_int(mode)
 
         try:
             create_subvol(
-                self.mgr, fs_handle, self.volspec, group, subvolname, size, isolate_nspace, pool, oct_mode, uid, gid, earmark, normalization, case_insensitive)
+                self.mgr, fs_handle, self.volspec, group, subvolname, size, isolate_nspace, pool, oct_mode, uid, gid, earmark, normalization, casesensitive)
         except VolumeException as ve:
             # kick the purge threads for async removal -- note that this
             # assumes that the subvolume is moved to trashcan for cleanup on error.
@@ -253,7 +253,7 @@ class VolumeClient(CephfsClient["Module"]):
         isolate_nspace = kwargs['namespace_isolated']
         earmark    = kwargs['earmark'] or ''  # if not set, default to empty string --> no earmark
         normalization = kwargs['normalization']
-        case_insensitive = kwargs['case_insensitive']
+        casesensitive = kwargs['casesensitive']
 
         try:
             with open_volume(self, volname) as fs_handle:
@@ -270,7 +270,7 @@ class VolumeClient(CephfsClient["Module"]):
                                 'quota': size,
                                 'earmark': earmark,
                                 'normalization': normalization,
-                                'case_insensitive': case_insensitive,
+                                'casesensitive': casesensitive,
                             }
                             subvolume.set_attrs(subvolume.path, attrs)
                     except VolumeException as ve:
