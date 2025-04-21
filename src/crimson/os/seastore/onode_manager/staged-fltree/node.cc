@@ -428,9 +428,8 @@ eagain_ifuture<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_tra
   return c.nm.get_super(c.t, root_tracker
   ).handle_error_interruptible(
     eagain_iertr::pass_further{},
-    crimson::ct_error::input_output_error::assert_failure([FNAME, c] {
-      ERRORT("EIO during get_super()", c.t);
-    })
+    crimson::ct_error::input_output_error::assert_failure(fmt::format(
+        "{} EIO during get_super()", FNAME).c_str())
   ).si_then([c, &root_tracker, FNAME](auto&& _super) {
     assert(_super);
     auto root_addr = _super->get_root_laddr();
@@ -691,26 +690,8 @@ eagain_ifuture<Ref<Node>> Node::load(
   return c.nm.read_extent(c.t, addr
   ).handle_error_interruptible(
     eagain_iertr::pass_further{},
-    crimson::ct_error::input_output_error::assert_failure(
-        [FNAME, c, addr, expect_is_level_tail] {
-      ERRORT("EIO -- addr={}, is_level_tail={}",
-             c.t, addr, expect_is_level_tail);
-    }),
-    crimson::ct_error::invarg::assert_failure(
-        [FNAME, c, addr, expect_is_level_tail] {
-      ERRORT("EINVAL -- addr={}, is_level_tail={}",
-             c.t, addr, expect_is_level_tail);
-    }),
-    crimson::ct_error::enoent::assert_failure(
-        [FNAME, c, addr, expect_is_level_tail] {
-      ERRORT("ENOENT -- addr={}, is_level_tail={}",
-             c.t, addr, expect_is_level_tail);
-    }),
-    crimson::ct_error::erange::assert_failure(
-        [FNAME, c, addr, expect_is_level_tail] {
-      ERRORT("ERANGE -- addr={}, is_level_tail={}",
-             c.t, addr, expect_is_level_tail);
-    })
+    crimson::ct_error::assert_all(fmt::format(
+      "{} -- addr={}, is_level_tail={}", FNAME, addr, expect_is_level_tail).c_str())
   ).si_then([FNAME, c, addr, expect_is_level_tail](auto extent)
 	      -> eagain_ifuture<Ref<Node>> {
     assert(extent);
@@ -2145,9 +2126,8 @@ eagain_ifuture<Ref<LeafNode>> LeafNode::allocate_root(
     return c.nm.get_super(c.t, root_tracker
     ).handle_error_interruptible(
       eagain_iertr::pass_further{},
-      crimson::ct_error::input_output_error::assert_failure([FNAME, c] {
-        ERRORT("EIO during get_super()", c.t);
-      })
+      crimson::ct_error::input_output_error::assert_failure(fmt::format(
+        "{} EIO during get_super()", FNAME).c_str())
     ).si_then([c, root](auto&& super) {
       assert(super);
       root->make_root_new(c, std::move(super));
