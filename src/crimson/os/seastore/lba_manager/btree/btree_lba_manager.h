@@ -688,7 +688,7 @@ private:
 	auto ait = alloc_infos.begin();
 	for (; mit != mappings.end(); mit++, ait++) {
 	  auto mapping = static_cast<BtreeLBAMapping*>(mit->release());
-	  auto &alloc_info = *ait;
+	  [[maybe_unused]] auto &alloc_info = *ait;
 	  assert(mapping->get_key() == alloc_info.key);
 	  assert(mapping->get_raw_val().get_laddr() ==
 	    alloc_info.val.get_laddr());
