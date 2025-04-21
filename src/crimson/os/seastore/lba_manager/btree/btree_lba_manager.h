@@ -84,11 +84,7 @@ public:
       raw_val(val.pladdr),
       map_val(val),
       parent_modifications(parent->modifications)
-  {
-    if (!parent->is_pending()) {
-      this->child_pos = {parent, pos};
-    }
-  }
+  {}
 
   lba_map_val_t get_map_val() const {
     return map_val;
