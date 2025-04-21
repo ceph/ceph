@@ -82,6 +82,11 @@ class ECBackend : public ECCommon {
       ECSubReadReply *reply,
       const ZTracer::Trace &trace
     );
+  void handle_sub_read_n_reply(
+    pg_shard_t from,
+    ECSubRead &op,
+    const ZTracer::Trace &trace
+    ) override;
   void handle_sub_write_reply(
       pg_shard_t from,
       const ECSubWriteReply &op,
