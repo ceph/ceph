@@ -84,11 +84,12 @@ class NFSCluster:
             virtual_ip_for_ganesha: Optional[str] = None
             keepalive_only: bool = False
             enable_haproxy_protocol: bool = False
+            if ingress_mode != IngressType.haproxy_standard:
+                virtual_ip_for_ganesha = virtual_ip.split('/')[0]
             if ingress_mode == IngressType.haproxy_protocol:
                 enable_haproxy_protocol = True
             elif ingress_mode == IngressType.keepalive_only:
                 keepalive_only = True
-                virtual_ip_for_ganesha = virtual_ip.split('/')[0]
                 ganesha_port = port
                 frontend_port = None
 
