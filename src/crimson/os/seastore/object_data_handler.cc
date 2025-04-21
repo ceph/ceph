@@ -1095,9 +1095,11 @@ ObjectDataHandler::clone_ret clone_mappings(
 	  crimson::ct_error::assert_all{"unexpected error"}
 	);
       }
+      auto len = mapping.get_length();
       return ctx.tm.clone_pin(
 	ctx.t, std::move(pos), std::move(mapping),
-	(base + offset).checked_to_laddr(), updateref
+	(base + offset).checked_to_laddr(),
+	0, len, updateref
       ).si_then([ctx, &offset, &pos, &mapping](auto ret) {
 	offset += ret.cloned_mapping.get_length();
 	return ctx.tm.next_mapping(ctx.t, std::move(ret.cloned_mapping)

@@ -730,6 +730,8 @@ public:
     LBAMapping pos,
     LBAMapping mapping,
     laddr_t hint,
+    extent_len_t offset,
+    extent_len_t len,
     bool updateref) {
     LOG_PREFIX(TransactionManager::clone_pin);
     SUBDEBUGT(seastore_tm, "{} clone to hint {} ... pos={}, updateref={}",
@@ -739,6 +741,8 @@ public:
       std::move(pos),
       std::move(mapping),
       hint,
+      offset,
+      len,
       updateref
     ).si_then([FNAME, &t](auto ret) {
       SUBDEBUGT(seastore_tm, "cloned as {}", t, ret.cloned_mapping);
