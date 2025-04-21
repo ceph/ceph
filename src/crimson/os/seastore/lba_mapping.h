@@ -84,10 +84,6 @@ public:
   virtual get_child_ret_t<lba_manager::btree::LBALeafNode, LogicalChildNode>
   get_logical_extent(Transaction &t) = 0;
 
-  void link_child(LogicalChildNode *c) {
-    ceph_assert(child_pos);
-    child_pos->link_child(c);
-  }
   virtual LBAMappingRef refresh_with_pending_parent() = 0;
 
   // For reserved mappings, the return values are
@@ -112,9 +108,6 @@ protected:
   extent_len_t len = 0;
   fixed_kv_node_meta_t<laddr_t> range;
   uint16_t pos = std::numeric_limits<uint16_t>::max();
-
-  std::optional<child_pos_t<
-    lba_manager::btree::LBALeafNode>> child_pos = std::nullopt;
 };
 
 std::ostream &operator<<(std::ostream &out, const LBAMapping &rhs);
