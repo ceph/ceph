@@ -75,7 +75,11 @@ ECBackend::ECBackend(
   ECSwitch *s,
   ECExtentCache::LRU &ec_extent_cache_lru)
   : parent(pg), cct(cct), switcher(s),
+#ifdef WITH_CRIMSON
+    read_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(), *this),
+#else
     read_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener()),
+#endif
     rmw_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(),
                  *this, ec_extent_cache_lru),
     recovery_backend(cct, switcher->coll, ec_impl, this->sinfo, read_pipeline,
@@ -568,6 +572,16 @@ void ECBackend::handle_sub_read(
   }
   reply->from = get_parent()->whoami_shard();
   reply->tid = op.tid;
+}
+
+void ECBackend::handle_sub_read_n_reply(
+  pg_shard_t from,
+  ECSubRead &op,
+  const ZTracer::Trace &trace)
+{
+  ECSubReadReply reply;
+  handle_sub_read(from, op, &reply, trace);
+  handle_sub_read_reply(from, reply, trace);
 }
 
 void ECBackend::handle_sub_write_reply(
