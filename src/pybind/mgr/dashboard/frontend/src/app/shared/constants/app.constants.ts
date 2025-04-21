@@ -370,3 +370,6 @@ export const SSL_CIPHERS = [
   'POLY1305',
   'DHE'
 ];
+
+export const USER = 'user';
+export const VERSION_PREFIX = 'ceph version';
