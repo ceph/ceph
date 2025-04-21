@@ -93,13 +93,15 @@ function(do_build_boost root_dir version)
     message(SEND_ERROR "unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
   endif()
 
-  # build b2 and prepare the project-config.jam for boost
+  # prepare the project-config.jam for boost
+  set(bjam <SOURCE_DIR>/b2)
   set(configure_command
     ./bootstrap.sh --prefix=<INSTALL_DIR>
     --with-libraries=${boost_with_libs}
-    --with-toolset=${toolset})
+    --with-toolset=${toolset}
+    --with-bjam=${bjam})
 
-  set(b2 ./b2)
+  set(b2 ${bjam})
   if(BOOST_J)
     message(STATUS "BUILDING Boost Libraries at j ${BOOST_J}")
     list(APPEND b2 -j${BOOST_J})
@@ -183,6 +185,13 @@ function(do_build_boost root_dir version)
     BUILD_BYPRODUCTS ${Boost_LIBRARIES}
     INSTALL_COMMAND ${install_command}
     PREFIX "${root_dir}")
+  ExternalProject_Add_Step(Boost build-bjam
+    COMMAND ./tools/build/src/engine/build.sh --cxx=${CMAKE_CXX_COMPILER} ${toolset}
+    COMMAND ${CMAKE_COMMAND} -E copy ./tools/build/src/engine/b2 ${bjam}
+    DEPENDEES download
+    DEPENDERS configure
+    COMMENT "Building B2 engine.."
+    WORKING_DIRECTORY <SOURCE_DIR>)
 endfunction()
 
 set(Boost_context_DEPENDENCIES thread chrono system date_time)
