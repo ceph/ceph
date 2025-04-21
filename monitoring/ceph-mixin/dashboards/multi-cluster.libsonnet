@@ -440,7 +440,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='sum(irate(ceph_pool_wr{cluster=~"$cluster"}[$__interval]))',
+          expr='sum(rate(ceph_pool_wr{cluster=~"$cluster"}[$__rate_interval]))',
           datasource={ type: 'prometheus', uid: '$datasource' },
           hide=false,
           exemplar=false,
@@ -449,7 +449,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           range=true,
         ),
         $.addTargetSchema(
-          expr='sum(irate(ceph_pool_rd{cluster=~"$cluster"}[$__interval]))',
+          expr='sum(rate(ceph_pool_rd{cluster=~"$cluster"}[$__rate_interval]))',
           datasource={ type: 'prometheus', uid: '$datasource' },
           hide=false,
           exemplar=false,
@@ -617,7 +617,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='sum(irate(ceph_pool_rd_bytes{cluster=~"$cluster"}[$__interval]))',
+          expr='sum(rate(ceph_pool_rd_bytes{cluster=~"$cluster"}[$__rate_interval]))',
           datasource={ type: 'prometheus', uid: '$datasource' },
           hide=false,
           exemplar=false,
@@ -626,7 +626,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           range=true,
         ),
         $.addTargetSchema(
-          expr='sum(irate(ceph_pool_wr_bytes{cluster=~"$cluster"}[$__interval]))',
+          expr='sum(rate(ceph_pool_wr_bytes{cluster=~"$cluster"}[$__rate_interval]))',
           datasource={ type: 'prometheus', uid: '$datasource' },
           hide=false,
           exemplar=false,
@@ -651,7 +651,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='sum(irate(ceph_osd_recovery_ops{cluster=~"$cluster"}[$__interval]))',
+          expr='sum(rate(ceph_osd_recovery_ops{cluster=~"$cluster"}[$__rate_interval]))',
           datasource={ type: 'prometheus', uid: '$datasource' },
           hide=false,
           exemplar=false,
@@ -891,7 +891,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         .addTargets(
           [
             $.addTargetSchema(
-              expr='topk(10, sum by (cluster) (irate(ceph_osd_op_w[$__interval]))  \n+ sum by (cluster) (irate(ceph_osd_op_r[$__interval])) )',
+              expr='topk(10, sum by (cluster) (rate(ceph_osd_op_w[$__rate_interval]))  \n+ sum by (cluster) (rate(ceph_osd_op_r[$__rate_interval])) )',
               datasource='$datasource',
               instant=false,
               legendFormat='{{cluster}}',
