@@ -2827,14 +2827,13 @@ int Mirror<I>::group_enable(IoCtx& group_ioctx, const char *group_name,
   }
 
   if (ret_code) {
-    remove_interim_snapshots(group_ioctx, group_header_oid,
-                             &image_ctxs, &group_snap);
     goto cleanup;
   }
 
   for (size_t i = 0; i < image_ctxs.size(); i++) {
     r = image_enable(image_ctxs[i], group_snap_id, mirror_image_mode, false,
                      &snap_ids[i]);
+    group_snap.snaps[i].snap_id = snap_ids[i];
     if (r < 0) {
       lderr(cct) << "failed enabling image: "
                  << image_ctxs[i]->name << ": " << cpp_strerror(r) << dendl;
@@ -2843,9 +2842,10 @@ int Mirror<I>::group_enable(IoCtx& group_ioctx, const char *group_name,
         break;
       }
     }
-    group_snap.snaps[i].snap_id = snap_ids[i];
   }
 
+
+cleanup:
   if (ret_code) {
     // undo
     ldout(cct, 20) << "undoing group enable: " << ret_code << dendl;
@@ -2868,7 +2868,6 @@ int Mirror<I>::group_enable(IoCtx& group_ioctx, const char *group_name,
     }
   }
 
-cleanup:
   if (!quiesce_requests.empty()) {
     util::notify_unquiesce(image_ctxs, quiesce_requests);
   }
