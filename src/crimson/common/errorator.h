@@ -209,22 +209,14 @@ struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
 
   class assert_failure {
     const char* const msg = nullptr;
-    std::function<void()> pre_assert;
   public:
-    template <std::size_t N>
-    assert_failure(const char (&msg)[N])
+    assert_failure(const char* msg)
       : msg(msg) {
     }
     assert_failure() = default;
-    template <typename Func>
-    assert_failure(Func&& f)
-      : pre_assert(std::forward<Func>(f)) {}
 
     no_touch_error_marker operator()(const unthrowable_wrapper& raw_error) {
       handle([this] (auto&& error_v) {
-        if (pre_assert) {
-          pre_assert();
-        }
         ceph_abort_msgf("%s: %s", msg ? msg : "", error_v.message().c_str());
       })(raw_error);
       return no_touch_error_marker{};
@@ -297,26 +289,14 @@ struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
 
   class assert_failure {
     const char* const msg = nullptr;
-    std::function<void(const ErrorT&)> pre_assert;
   public:
-    template <std::size_t N>
-    assert_failure(const char (&msg)[N])
+    assert_failure(const char* msg)
       : msg(msg) {
     }
     assert_failure() = default;
-    template <typename Func>
-    assert_failure(Func&& f)
-      : pre_assert(std::forward<Func>(f)) {}
 
     no_touch_error_marker operator()(stateful_error_t<ErrorT>&& raw_error) {
       handle([this] (auto&& error_v) {
-        if (pre_assert) {
-          try {
-            std::rethrow_exception(e.ep);
-          } catch (const ErrorT& err) {
-            pre_assert(err);
-          }
-        }
         ceph_abort_msgf("%s: %s", msg ? msg : "", error_v.message().c_str());
       })(std::move(raw_error));
       return no_touch_error_marker{};
