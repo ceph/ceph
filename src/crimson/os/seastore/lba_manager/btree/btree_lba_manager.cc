@@ -99,11 +99,7 @@ BtreeLBAMapping::get_logical_extent(Transaction &t)
   auto k = this->is_indirect()
     ? this->get_intermediate_base()
     : get_key();
-  auto v = p.template get_child<LogicalChildNode>(ctx.trans, ctx.cache, pos, k);
-  if (!v.has_child()) {
-    this->child_pos = v.get_child_pos();
-  }
-  return v;
+  return p.template get_child<LogicalChildNode>(ctx.trans, ctx.cache, pos, k);
 }
 
 bool BtreeLBAMapping::is_stable() const
