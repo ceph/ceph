@@ -15291,8 +15291,12 @@ int Client::_vxattrcb_fscrypt_file_set(Inode *in, const void *val, size_t size,
   std::vector<uint8_t>	aux;
 
   aux.resize(sizeof(uint64_t));
-  memcpy(aux.data(), val, size);
+  uint64_t the_size;
 
+  memcpy(&the_size, val, size);
+  *(ceph_le64 *)aux.data() = the_size;
+
+  // TODO: rework _do_setattr to pass mask CEPH_SETATTR_FSCRYPT_FILE
   return _do_setattr(in, &stx, CEPH_SETATTR_SIZE, perms, nullptr, &aux);
 }
 
