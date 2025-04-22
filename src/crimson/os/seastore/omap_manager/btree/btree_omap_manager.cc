@@ -76,7 +76,6 @@ BtreeOMapManager::handle_root_split(
     omap_node_meta_t meta{omap_root.depth + 1};
     nroot->init_range(BEGIN_KEY, END_KEY);
     nroot->set_meta(meta);
-    left->init_range(BEGIN_KEY, pivot);
     nroot->insert_child_ptr(
       nroot->iter_begin().get_offset(),
       dynamic_cast<BaseChildNode<OMapInnerNode, std::string>*>(left.get()));
@@ -85,7 +84,6 @@ BtreeOMapManager::handle_root_split(
     nroot->insert_child_ptr(
       (nroot->iter_begin() + 1).get_offset(),
       dynamic_cast<BaseChildNode<OMapInnerNode, std::string>*>(right.get()));
-    right->init_range(pivot, END_KEY);
     nroot->journal_inner_insert(nroot->iter_begin() + 1, right->get_laddr(),
                                 pivot, nroot->maybe_get_delta_buffer());
     omap_root.update(nroot->get_laddr(), omap_root.get_depth() + 1, omap_root.hint,
