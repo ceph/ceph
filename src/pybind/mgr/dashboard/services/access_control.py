@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 from string import ascii_lowercase, ascii_uppercase, digits, punctuation
 from typing import List, Optional, Sequence
 
-import bcrypt
 from mgr_module import CLICheckNonemptyFileInput, CLIReadCommand, CLIWriteCommand
 from mgr_util import password_hash
 
@@ -23,6 +22,8 @@ from ..exceptions import PasswordPolicyException, PermissionNotValid, \
     UserAlreadyExists, UserDoesNotExist
 from ..security import Permission, Scope
 from ..settings import Settings
+
+import ceph.cryptotools.remote
 
 logger = logging.getLogger('access_control')
 DEFAULT_FILE_DESC = 'password/secret'
@@ -929,7 +930,10 @@ def ac_user_set_password_hash(_, username: str, inbuf: str):
     hashed_password = inbuf
     try:
         # make sure the hashed_password is actually a bcrypt hash
-        bcrypt.checkpw(b'', hashed_password.encode('utf-8'))
+        # catch a ValueError if hashed_password is not valid.
+        cc = ceph.cryptotools.remote.CryptoCaller()
+        cc.verify_password('', hashed_password)
+
         user = mgr.ACCESS_CTRL_DB.get_user(username)
         user.set_password_hash(hashed_password)
 
