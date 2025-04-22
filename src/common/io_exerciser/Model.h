@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <string>
+
 #include <boost/asio/io_context.hpp>
 
 #include "IoOp.h"
@@ -20,6 +23,8 @@
 
 namespace ceph {
 namespace io_exerciser {
+
+class IoOp;
 
 class Model {
  protected:
