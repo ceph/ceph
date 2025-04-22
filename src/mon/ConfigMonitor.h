@@ -23,6 +23,7 @@ class ConfigMonitor : public PaxosService
   std::map<std::string,ceph::buffer::list> current;
 
   void encode_pending_to_kvmon();
+  void _trim_config_history();
 
 public:
   ConfigMonitor(Monitor &m, Paxos &p, const std::string& service_name);

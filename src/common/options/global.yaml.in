@@ -1888,6 +1888,15 @@ options:
   services:
   - mon
   with_legacy: true
+- name: mon_config_history_size
+  type: size
+  level: advanced
+  desc: Defines the number of config history entries to be kept in the Monitors' store 
+  fmt_desc: The maximum number of config history entries to be kept
+  default: 5
+  services:
+  - mon
+  with_legacy: true
 - name: mon_sync_timeout
   type: float
   level: advanced
