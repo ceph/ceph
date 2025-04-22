@@ -2,6 +2,10 @@
 
 #include "ObjectModel.h"
 #include "erasure-code/consistency/ConsistencyChecker.h"
+#include "librados/AioCompletionImpl.h"
+#include "common/ceph_mutex.h"
+
+namespace boost::asio { class io_context; }
 
 /* Overview
  *
