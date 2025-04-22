@@ -53,9 +53,9 @@ Cluster Commands
 Create Cluster
 ++++++++++++++
 
-.. prompt:: bash #
+.. code:: bash
 
-   ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--define-user-pass=<define_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>] [--clustering=<clustering>] [--password-filter=<password_filter>] [--password-filter-out=<password_filter_out>]
+    $ ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--define-user-pass=<define_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>] [--clustering=<clustering>] [--password-filter=<password_filter>] [--password-filter-out=<password_filter_out>]
 
 Create a new logical cluster, identified by the cluster id value. The cluster
 create command must specify the authentication mode the cluster will use. This
@@ -117,9 +117,9 @@ password_filter_out
 Remove Cluster
 ++++++++++++++
 
-.. prompt:: bash #
+.. code:: bash
 
-   ceph smb cluster rm <cluster_id> [--password-filter=<password_filter>]
+    $ ceph smb cluster rm <cluster_id> [--password-filter=<password_filter>]
 
 Remove a logical SMB cluster from the Ceph cluster.
 
@@ -138,9 +138,9 @@ password_filter
 List Clusters
 ++++++++++++++
 
-.. prompt:: bash #
+.. code:: bash
 
-   ceph smb cluster ls [--format=<format>]
+    $ ceph smb cluster ls [--format=<format>]
 
 Print a listing of cluster ids. The output defaults to JSON, select YAML
 encoding with the ``--format=yaml`` option.
@@ -152,9 +152,9 @@ Share Commands
 Create Share
 ++++++++++++
 
-.. prompt:: bash #
+.. code:: bash
 
-   ceph smb share create <cluster_id> <share_id> <cephfs_volume> <path> [--share-name=<share_name>] [--subvolume=<subvolume>] [--readonly]
+    $ ceph smb share create <cluster_id> <share_id> <cephfs_volume> <path> [--share-name=<share_name>] [--subvolume=<subvolume>] [--readonly]
 
 Create a new SMB share, hosted by the named cluster, that maps to the given
 CephFS volume and path.
@@ -182,9 +182,9 @@ readonly
 Remove Share
 ++++++++++++
 
-.. prompt:: bash #
+.. code:: bash
 
-   ceph smb share rm <cluster_id> <share_id>
+    $ ceph smb share rm <cluster_id> <share_id>
 
 Remove an SMB Share from the cluster.
 
@@ -192,9 +192,9 @@ Remove an SMB Share from the cluster.
 List Shares
 +++++++++++
 
-.. prompt:: bash #
+.. code:: bash
 
-   ceph smb share ls <cluster_id> [--format=<format>]
+    $ ceph smb share ls <cluster_id> [--format=<format>]
 
 Print a listing of share ids. The output defaults to JSON, select YAML
 encoding with the ``--format=yaml`` option.
@@ -210,16 +210,16 @@ Resource specifications can be written in either JSON or YAML. These resource
 specifications can be applied to the cluster using the ``ceph smb apply``
 command, for example:
 
-.. prompt:: bash #
+.. code:: bash
 
-   ceph smb apply -i /path/to/resources.yaml
+    $ ceph smb apply -i /path/to/resources.yaml
 
 In addition to the resource specification the ``apply`` sub-command accepts
 options that control how the input and output of the command behave:
 
-.. prompt:: bash #
+.. code:: bash
 
-   ceph smb apply [--format=<format>] [--password-filter=<password_filter>] [--password-filter-out=<password_filter_out>] -i <input>
+    $ ceph smb apply [--format=<format>] [--password-filter=<password_filter>] [--password-filter-out=<password_filter_out>] -i <input>
 
 Options:
 
@@ -245,16 +245,16 @@ input
 Resources that have already been applied to the Ceph cluster configuration can
 be viewed using the ``ceph smb show`` command. For example:
 
-.. prompt:: bash #
+.. code:: bash
 
-   ceph smb show ceph.smb.cluster.cluster1
+    $ ceph smb show ceph.smb.cluster.cluster1
 
 The ``show`` command can show all resources, resources of a given type, or specific
 resource items. Options can be provided that control the output of the command.
 
-.. prompt:: bash #
+.. code:: bash
 
-   ceph smb show [resource_name...] [--format=<format>] [--results=<results>] [--password-filter=<password_filter>]
+    $ ceph smb show [resource_name...] [--format=<format>] [--results=<results>] [--password-filter=<password_filter>]
 
 Options:
 
@@ -292,9 +292,9 @@ password_filter
 
 For example:
 
-.. prompt:: bash #
+.. code:: bash
 
-   ceph smb show ceph.smb.cluster.bob ceph.smb.share.bob
+    $ ceph smb show ceph.smb.cluster.bob ceph.smb.share.bob
 
 Will show one cluster resource (if it exists) for the cluster "bob" as well as
 all share resources associated with the cluster "bob".
@@ -807,9 +807,9 @@ configuration file. First, create the YAML with the contents:
 Save this text to a YAML file named ``resources.yaml`` and make it available
 on a cluster admin host. Then run:
 
-.. prompt:: bash #
+.. code:: bash
 
-   ceph smb apply -i resources.yaml
+    $ ceph smb apply -i resources.yaml
 
 The command will print a summary of the changes made and begin to automatically
 deploy the needed resources. See `Accessing Shares`_ for more information
@@ -838,9 +838,9 @@ action with a new file ``removed.yaml`` containing:
 
 By issuing the command:
 
-.. prompt:: bash #
+.. code:: bash
 
-   ceph smb apply -i removed.yaml
+    $ ceph smb apply -i removed.yaml
 
 
 SMB Cluster Management

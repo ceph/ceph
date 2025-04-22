@@ -5,7 +5,7 @@ The MDS Autoscaler Module monitors file systems to ensure sufficient MDS
 daemons are available. It works by adjusting the placement specification for
 the orchestrator backend of the MDS service. To enable, use:
 
-.. prompt:: bash #
+.. sh:
 
    ceph mgr module enable mds_autoscaler
 
