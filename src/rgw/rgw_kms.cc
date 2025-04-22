@@ -282,10 +282,6 @@ protected:
     }
 
     secret_req.append_header("X-Vault-Token", vault_token);
-    if (!vault_token.empty()){
-      secret_req.append_header("X-Vault-Token", vault_token);
-      vault_token.replace(0, vault_token.length(), vault_token.length(), '\000');
-    }
 
     string vault_namespace = kctx.k_namespace();
     if (!vault_namespace.empty()){
