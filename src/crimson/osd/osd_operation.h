@@ -300,34 +300,6 @@ class OperationThrottler : public BlockerT<OperationThrottler>,
   friend BlockerT<OperationThrottler>;
   static constexpr const char* type_name = "OperationThrottler";
 
-  template <typename OperationT, typename F>
-  auto with_throttle(
-    OperationT* op,
-    crimson::osd::scheduler::params_t params,
-    F &&f) {
-    if (!max_in_progress) return f();
-    return acquire_throttle(params)
-      .then(std::forward<F>(f))
-      .then([this](auto x) {
-	release_throttle();
-	return x;
-      });
-  }
-
-  template <typename OperationT, typename F>
-  seastar::future<> with_throttle_while(
-    OperationT* op,
-    crimson::osd::scheduler::params_t params,
-    F &&f) {
-    return with_throttle(op, params, f).then([this, params, op, f](bool cont) {
-      return cont
-	? seastar::yield().then([params, op, f, this] {
-	  return with_throttle_while(op, params, f); })
-	: seastar::now();
-    });
-  }
-
-
 public:
   OperationThrottler(ConfigProxy &conf);
 
@@ -340,24 +312,28 @@ public:
     return !max_in_progress || in_progress < max_in_progress;
   }
 
-  template <typename F>
-  auto with_throttle(
-    crimson::osd::scheduler::params_t params,
-    F &&f) {
-    if (!max_in_progress) return f();
-    return acquire_throttle(params)
-      .then(std::forward<F>(f))
-      .finally([this] {
-	release_throttle();
-      });
-  }
+  class ThrottleReleaser {
+    OperationThrottler *parent = nullptr;
+  public:
+    ThrottleReleaser(OperationThrottler *parent) : parent(parent) {}
+    ThrottleReleaser(const ThrottleReleaser &) = delete;
+    ThrottleReleaser(ThrottleReleaser &&rhs) noexcept {
+      std::swap(parent, rhs.parent);
+    }
 
-  template <class OpT, class... Args>
-  seastar::future<> with_throttle_while(
-    BlockingEvent::Trigger<OpT>&& trigger,
-    Args&&... args) {
-    return trigger.maybe_record_blocking(
-      with_throttle_while(std::forward<Args>(args)...), *this);
+    ~ThrottleReleaser() {
+      if (parent) {
+	parent->release_throttle();
+      }
+    }
+  };
+
+  auto get_throttle(crimson::osd::scheduler::params_t params) {
+    return acquire_throttle(
+      params
+    ).then([this] {
+      return ThrottleReleaser{this};
+    });
   }
 
 private:
