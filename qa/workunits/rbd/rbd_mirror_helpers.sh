@@ -298,6 +298,7 @@ expect_failure()
 
     if "$@" > ${out} 2>&1 ; then
         cat ${out} >&2
+        echo "Command did not fail"
         return 1
     fi
 
@@ -307,6 +308,7 @@ expect_failure()
 
     if ! grep -q "${expected}" ${out} ; then
         cat ${out} >&2
+        echo "Command did not fail with expected message"
         return 1
     fi
 
@@ -2712,7 +2714,7 @@ wait_for_test_group_snap_sync_complete()
         sleep ${s}
         test_group_snap_sync_complete "${cluster}" "${group_spec}" "${group_snap_id}" && return 0
 
-        if [ "$s" -gt 32 ]; then
+        if  (( $(bc <<<"$s > 32") )); then
             # query the snap progress for each image in the group - debug info to check that sync is progressing
             list_image_snaps_for_group "${cluster}" "${group_spec}"
         fi
@@ -2972,7 +2974,7 @@ wait_for_group_status_in_pool_dir()
             "${state_pattern}" "${image_count}" "${description_pattern}" &&
             return 0
     done
-    fail 1 "failed to reach expected status"
+    fail "failed to reach expected status"
     return 1
 }
 
@@ -3004,7 +3006,7 @@ wait_for_peer_group_status_in_pool_dir()
         sleep ${s}
         test_peer_group_status_in_pool_dir "${cluster}" "${group_spec}" "${state_pattern}" "${description_pattern}" && return 0
     done
-    fail 1 "failed to reach expected peer status"
+    fail "failed to reach expected peer status"
     return 1
 }
 
