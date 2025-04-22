@@ -55,16 +55,14 @@ class CryptoCaller:
     def _run(
         self,
         args: List[str],
-        input_data: Union[str, bytes, None] = None,
+        input_data: Union[str, None] = None,
         capture_output: bool = False,
         check: bool = False,
     ) -> subprocess.CompletedProcess:
         if input_data is None:
             _input = None
-        elif isinstance(input_data, str):
-            _input = input_data.encode('utf-8')
         else:
-            _input = input_data
+            _input = input_data.encode('utf-8')
         cmd = ['python3', '-m', _ctmodule] + list(args)
         logger.warning('CryptoCaller will run: %r', cmd)
         try:
