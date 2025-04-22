@@ -130,6 +130,12 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
         disable: () => !this.selection.hasSingleSelection
       },
       {
+        name: this.actionLabels.SMB_SHARE,
+        permission: 'create',
+        icon: Icons.nfsExport,
+        routerLink: () => ['/cephfs/smb/share/create']
+      },
+      {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
         icon: Icons.destroy,
