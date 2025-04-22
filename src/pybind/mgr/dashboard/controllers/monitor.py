@@ -116,7 +116,7 @@ class Monitor(BaseController):
         for mon in mon_status["monmap"]["mons"]:
             mon["stats"] = {}
             for counter in counters:
-                data = mgr.get_counter("mon", mon["name"], counter)
+                data = mgr.get_unlabeled_counter("mon", mon["name"], counter)
                 if data is not None:
                     mon["stats"][counter.split(".")[1]] = data[counter]
                 else:
