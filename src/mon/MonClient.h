@@ -198,8 +198,6 @@ public:
     conn->start(epoch, entity_name);
   }
 
-  void send_subscribe();
-
 private:
   std::shared_ptr<MonConnection> conn;
   MonSub sub;
@@ -362,10 +360,14 @@ public:
     return !conn_ptr;
   }
 
+
+  void send_subscribe();
+
 private:
   std::string mon_name;
   std::unique_ptr<MonConnection> conn_ptr;
   ConnectionStatus status;            // Status of the connection
+  MonSub sub;
 };
 
 // Manager for auxiliary connections
@@ -439,6 +441,15 @@ public:
     aux_list.emplace(addr, std::move(conn));
   }
 
+  auto begin() { return aux_list.begin(); }
+  auto end() { return aux_list.end(); }
+
+  auto begin() const { return aux_list.begin(); }
+  auto end() const { return aux_list.end(); }
+
+  auto cbegin() const { return aux_list.cbegin(); }
+  auto cend() const { return aux_list.cend(); } 
+
 private:
   std::map<entity_addrvec_t, AuxConnection> aux_list;
 };
@@ -498,6 +509,7 @@ private:
   std::map<entity_addrvec_t, MonConnection> pending_cons;
   std::set<unsigned> tried;
   AuxConnectionManager aux_list;
+  std::map<entity_addrvec_t, std::string> failed_cons;
 
   EntityName entity_name;
 
@@ -521,7 +533,7 @@ private:
   bool ms_handle_refused(Connection *con) override { return false; }
 
   void handle_monmap(MMonMap *m);
-  void handle_quorum_peon(MMonMap *m);
+  void handle_quorum_not_active(MMonMap *m);
   void handle_config(MConfig *m);
 
   void handle_auth(MAuthReply *m);
@@ -582,6 +594,28 @@ private:
       }
     }
     return pending_cons.end();
+  }
+
+  void _erase_pending_cons(
+    const entity_addrvec_t &addr) {
+    for (auto it = pending_cons.begin(); it != pending_cons.end(); ) {
+      if (it->first.get_legacy_str() == addr.get_legacy_str()) {
+        it = pending_cons.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
+  //find aux connections
+  std::map<entity_addrvec_t, AuxConnection>::iterator _find_aux_con(
+    const ConnectionRef& con) {
+    for (auto i = aux_list.begin(); i != aux_list.end(); ++i) {
+      if (i->second.get_connection_ptr()->get_con() == con) {
+       return i;
+      }
+    }
+    return aux_list.end();
   }
 
 public:
@@ -717,7 +751,6 @@ public:
    *             expired (default: conf->client_mount_timeout).
    */
   int ping_monitor(const std::string &mon_id, std::string *result_reply);
-  int quorum_send_subscribe();
 
   void send_mon_message(Message *m) {
     send_mon_message(MessageRef{m, false});

@@ -2147,7 +2147,6 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
     }
   } else {
     if (monmap->contains(m->name)) {
-      dout(10) << " mon." << m->name << " is outside the quorum" << dendl;
       outside_quorum.insert(m->name);
     } else {
       dout(10) << " mostly ignoring mon." << m->name << ", not part of monmap" << dendl;
@@ -4163,8 +4162,8 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
   } else if (session->proxy_con) {
     dout(10) << "forward_request won't double fwd request " << *req << dendl;
   } else if (!session->closed) {
-    // ms_inject_drop_mon_forward_msgs - if negative drop any mon forward messages
-    // if positive drop random percentage of mon forward messages
+    // Drop a random fraction of mon forward messages.
+    // Value must be between 0.0 and 1.0.
     if (*ms_inject_drop_mon_forward_msgs > 0.0 &&
       rand() % 10000 < 10000 * *ms_inject_drop_mon_forward_msgs) {
       dout(20) << __func__ << " inject drop mon forward request " << *req << dendl;
@@ -5374,8 +5373,6 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
   for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
        ++p) {
-    dout(20) << __func__ << " " << p->first << " start " << p->second.start
-             << " flags " << p->second.flags << dendl;
     if (p->first == "monmap" || p->first == "config") {
       // these require no caps
     } else if (!s->is_capable("mon", MON_CAP_R)) {
@@ -5430,6 +5427,8 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
 	osdmon()->check_pg_creates_sub(s->sub_map["osd_pg_creates"]);
       }
     } else if (p->first == "monmap") {
+      dout(10) << __func__ << ": monmap sub '" << p->first << "' from session "
+         << s->addrs << dendl;
       monmon()->check_sub(s->sub_map[p->first]);
     } else if (logmon()->sub_name_to_id(p->first) >= 0) {
       logmon()->check_sub(s->sub_map[p->first]);
@@ -5438,6 +5437,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
     } else if (p->first == "servicemap") {
       mgrstatmon()->check_sub(s->sub_map[p->first]);
     } else if (p->first == "config") {
+      dout(10) << __func__ << ": config sub '" << p->first << "'" << dendl;
       configmon()->check_sub(s);
     } else if (p->first.find("kv:") == 0) {
       kvmon()->check_sub(s->sub_map[p->first]);
@@ -5549,9 +5549,10 @@ void Monitor::send_latest_monmap(Connection *con)
     << " type:" << con->get_peer_type()
     << " id:" << con->get_peer_id()
     << " quorum: " << get_quorum()
+    << " epoch: " << monmap->get_epoch()
     << dendl;
   monmap->encode(bl, con->get_features());
-  con->send_message(new MMonMap(bl, get_quorum()));
+  con->send_message(new MMonMap(bl, monmap->get_epoch(), get_quorum()));
 }
 
 void Monitor::check_quorum_subs_and_send_updates()
