@@ -8,50 +8,52 @@
 namespace crimson::os::seastore {
 
 class BackrefMapping {
-  op_context_t ctx;
-  CachedExtentRef parent;
-  fixed_kv_node_meta_t<paddr_t> range;
-  laddr_t value;
-  extent_len_t len = 0;
-  uint16_t pos = std::numeric_limits<uint16_t>::max();
-  extent_types_t type;
+  BackrefCursorRef cursor;
+
+  BackrefMapping(BackrefCursorRef cursor)
+      : cursor(std::move(cursor)) {}
+
 public:
-  BackrefMapping(
-    extent_types_t type,
-    op_context_t ctx,
-    CachedExtentRef parent,
-    uint16_t pos,
-    laddr_t value,
-    extent_len_t len,
-    fixed_kv_node_meta_t<paddr_t> meta)
-      : ctx(ctx),
-	parent(parent),
-	range(meta),
-	value(value),
-	len(len),
-	pos(pos),
-	type(type)
-  {}
+  static BackrefMapping create(BackrefCursorRef cursor) {
+    return BackrefMapping(std::move(cursor));
+  }
+
+  BackrefMapping() = default;
+
+  BackrefMapping(const BackrefMapping &) = delete;
+  BackrefMapping(BackrefMapping &&) = default;
+
+  BackrefMapping &operator=(const BackrefMapping &) = delete;
+  BackrefMapping &operator=(BackrefMapping &&) = default;
+
+  ~BackrefMapping() = default;
+
+  bool is_viewable() const {
+    assert(cursor);
+    return cursor->is_viewable();
+  }
 
   extent_len_t get_length() const {
-    ceph_assert(range.end > range.begin);
-    return len;
+    assert(cursor);
+    return cursor->get_length();
   }
 
   laddr_t get_val() const {
-    return value;
+    assert(cursor);
+    return cursor->get_laddr();
   }
 
   paddr_t get_key() const {
-    return range.begin;
+    assert(cursor);
+    return cursor->get_paddr();
   }
 
   extent_types_t get_type() const {
-    return type;
+    assert(cursor);
+    return cursor->get_type();
   }
 };
 
-using BackrefMappingRef = std::unique_ptr<BackrefMapping>;
-using backref_pin_list_t = std::list<BackrefMappingRef>;
+using backref_mapping_list_t = std::list<BackrefMapping>;
 
 } // namespace crimson::os::seastore
