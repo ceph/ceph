@@ -23,8 +23,8 @@
 #include "include/buffer.h"
 #include "include/encoding.h" // for WRITE_CLASS_ENCODER()
 #include "include/msgr.h" // for CEPH_ENTITY_*
-#include "msg/msg_types.h"
 
+class entity_name_t;
 namespace ceph { class Formatter; }
 
 /* Represents a Ceph entity name.
