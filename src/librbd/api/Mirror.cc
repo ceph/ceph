@@ -2960,12 +2960,12 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
   }
 
   int ret_code = 0;
-  for (auto image_ctx : image_ctxs) {
-    ldout(cct, 10) << "attempting to disable image with id " << image_ctx->id
+  for (size_t i = 0; i < image_ctxs.size(); i++) {
+    ldout(cct, 10) << "attempting to disable image with id " << image_ctxs[i]->id
                    << ": " << cpp_strerror(r) << dendl;
-    r = image_disable(image_ctx, force, true);
+    r = image_disable(image_ctxs[i], force, true);
     if (r < 0) {
-      lderr(cct) << "failed to disable mirroring on image: " << image_ctx->name
+      lderr(cct) << "failed to disable mirroring on image: " << image_ctxs[i]->name
                  << cpp_strerror(r) << dendl;
       if (ret_code == 0) {
         ret_code = r;
@@ -2979,7 +2979,7 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
 
   // undo an image disable might not be of our interest. If needed, user must
   // issue the same command again.
-  if (r < 0) {
+  if (ret_code < 0) {
     lderr(cct) << "failed to disable one or more images: "
                << cpp_strerror(r) << dendl;
     return r;
