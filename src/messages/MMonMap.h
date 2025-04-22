@@ -27,13 +27,15 @@ private:
   static constexpr int COMPAT_VERSION = 0;
 public:
   ceph::buffer::list monmapbl;
+  epoch_t monmap_epoch;
   std::set<int> quorum;
 
   MMonMap() :
     Message{CEPH_MSG_MON_MAP, HEAD_VERSION, COMPAT_VERSION} { }
-  explicit MMonMap(ceph::buffer::list &bl, std::set<int> q) :
+  explicit MMonMap(ceph::buffer::list &bl, epoch_t e, std::set<int> q) :
     Message{CEPH_MSG_MON_MAP, HEAD_VERSION, COMPAT_VERSION} {
     monmapbl = std::move(bl);
+    monmap_epoch = e;
     quorum = std::move(q);
   }
 private:
