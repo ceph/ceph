@@ -67,11 +67,16 @@ class read_set_item_t {
   using set_hook_t = boost::intrusive::set_member_hook<
     boost::intrusive::link_mode<
       boost::intrusive::auto_unlink>>;
-  set_hook_t trans_hook;
-  using set_hook_options = boost::intrusive::member_hook<
+  set_hook_t trans_hook; // used to attach transactions to extents
+  set_hook_t extent_hook; // used to attach extents to transactions
+  using trans_hook_options = boost::intrusive::member_hook<
     read_set_item_t,
     set_hook_t,
     &read_set_item_t::trans_hook>;
+  using extent_hook_options = boost::intrusive::member_hook<
+    read_set_item_t,
+    set_hook_t,
+    &read_set_item_t::extent_hook>;
 
 public:
   struct extent_cmp_t {
@@ -101,9 +106,14 @@ public:
 
   using trans_set_t =  boost::intrusive::set<
     read_set_item_t,
-    set_hook_options,
+    trans_hook_options,
     boost::intrusive::constant_time_size<false>,
     boost::intrusive::compare<trans_cmp_t>>;
+  using extent_set_t =  boost::intrusive::set<
+    read_set_item_t,
+    extent_hook_options,
+    boost::intrusive::constant_time_size<false>,
+    boost::intrusive::compare<extent_cmp_t>>;
 
   T *t = nullptr;
   CachedExtentRef ref;
@@ -115,9 +125,7 @@ public:
 };
 
 template <typename T>
-using read_extent_set_t = std::set<
-  read_set_item_t<T>,
-  typename read_set_item_t<T>::extent_cmp_t>;
+using read_extent_set_t = typename read_set_item_t<T>::extent_set_t;
 
 template <typename T>
 using read_trans_set_t = typename read_set_item_t<T>::trans_set_t;

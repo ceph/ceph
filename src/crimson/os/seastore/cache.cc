@@ -1231,6 +1231,7 @@ record_t Cache::prepare_record(
   auto trans_src = t.get_src();
   assert(!t.is_weak());
   assert(trans_src != Transaction::src_t::READ);
+  assert(t.read_set.size() + t.num_replace_placeholder == t.read_items.size());
 
   auto& efforts = get_by_src(stats.committed_efforts_by_src,
                              trans_src);
@@ -1247,7 +1248,7 @@ record_t Cache::prepare_record(
                i.ref->get_type()).increment(i.ref->get_length());
     read_stat.increment(i.ref->get_length());
   }
-  t.read_set.clear();
+  t.clear_read_set();
   t.write_set.clear();
 
   record_t record(record_type_t::JOURNAL, trans_src);
