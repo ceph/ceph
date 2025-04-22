@@ -1450,7 +1450,7 @@ void MonmapMonitor::check_sub(Subscription *sub)
   const auto epoch = mon.monmap->get_epoch();
   dout(10) << __func__
 	   << " monmap next " << sub->next
-	   << " have " << epoch << dendl;
+	   << " have " << epoch << " session:" << sub->session->name << " addr:" << sub->session->addrs << dendl;
   if (sub->next <= epoch) {
     mon.send_latest_monmap(sub->session->con.get());
     if (sub->onetime) {
@@ -1460,7 +1460,11 @@ void MonmapMonitor::check_sub(Subscription *sub)
     } else {
       sub->next = epoch + 1;
     }
+  } else {
+    dout(10) << __func__ << " not ready yet send anyway" << dendl;
+    mon.send_latest_monmap(sub->session->con.get());
   }
+
 }
 
 void MonmapMonitor::tick()
