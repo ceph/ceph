@@ -5,6 +5,7 @@
 
 #include <boost/intrusive_ptr.hpp>
 #include "include/ceph_assert.h"
+#include "include/timegm.h" // for internal_timegm()
 #include "rgw_coroutine.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
