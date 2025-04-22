@@ -12,18 +12,30 @@
  * 
  */
 
+#include "SessionMap.h"
+#include "Capability.h"
+#include "CDentry.h" // for struct ClientLease
+#include "CInode.h"
 #include "MDSRank.h"
 #include "MDCache.h"
 #include "Mutation.h"
-#include "SessionMap.h"
 #include "osdc/Filer.h"
+#include "osdc/Objecter.h"
 #include "common/Finisher.h"
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/DecayCounter.h"
+#include "common/perf_counters.h"
 #include "include/ceph_assert.h"
 #include "include/stringify.h"
+
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -31,6 +43,21 @@
 #define dout_prefix *_dout << "mds." << rank << ".sessionmap "
 
 using namespace std;
+
+void Session::touch_cap(Capability *cap) {
+  session_cache_liveness.hit(1.0);
+  caps.push_front(&cap->item_session_caps);
+}
+
+void Session::touch_cap_bottom(Capability *cap) {
+  session_cache_liveness.hit(1.0);
+  caps.push_back(&cap->item_session_caps);
+}
+
+void Session::touch_lease(ClientLease *r) {
+  session_cache_liveness.hit(1.0);
+  leases.push_back(&r->item_session_lease);
+}
 
 namespace {
 class SessionMapIOContext : public MDSIOContextBase
@@ -48,6 +75,18 @@ class SessionMapIOContext : public MDSIOContextBase
 SessionMap::SessionMap(MDSRank *m)
   : mds(m),
     mds_session_metadata_threshold(g_conf().get_val<Option::size_t>("mds_session_metadata_threshold")) {
+}
+
+SessionMap::~SessionMap()
+{
+  for (auto p : by_state)
+      delete p.second;
+
+  if (logger) {
+    g_ceph_context->get_perfcounters_collection()->remove(logger);
+  }
+
+  delete logger;
 }
 
 void SessionMap::register_perfcounters()
@@ -640,6 +679,24 @@ void SessionMapStore::dump(Formatter *f) const
     f->dump_object("session", *p.second);
   }
   f->close_section(); // Sessions
+}
+
+Session* SessionMapStore::get_or_add_session(const entity_inst_t& i) {
+  Session *s;
+  auto session_map_entry = session_map.find(i.name);
+  if (session_map_entry != session_map.end()) {
+    s = session_map_entry->second;
+  } else {
+    s = session_map[i.name] = new Session(ConnectionRef());
+    s->info.inst = i;
+    s->last_cap_renew = Session::clock::now();
+    if (logger) {
+      logger->set(l_mdssm_session_count, session_map.size());
+      logger->inc(l_mdssm_session_add);
+    }
+  }
+
+  return s;
 }
 
 void SessionMapStore::generate_test_instances(std::list<SessionMapStore*>& ls)

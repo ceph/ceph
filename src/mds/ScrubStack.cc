@@ -13,10 +13,18 @@
  */
 
 #include "ScrubStack.h"
-#include "common/Finisher.h"
+#include "CDir.h"
+#include "RetryMessage.h"
+#include "SnapRealm.h"
+#include "common/debug.h"
+#include "common/Formatter.h"
+#include "mds/MDLog.h"
 #include "mds/MDSRank.h"
 #include "mds/MDCache.h"
 #include "mds/MDSContinuation.h"
+#include "mds/SnapRealm.h"
+#include "messages/MMDSScrub.h"
+#include "messages/MMDSScrubStats.h"
 #include "osdc/Objecter.h"
 
 #define dout_context g_ceph_context

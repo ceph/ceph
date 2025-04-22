@@ -12,12 +12,16 @@
  * 
  */
 
+#include "PurgeQueue.h"
+#include "BatchOp.h"
+#include "mds/MDSMap.h"
+
 #include "common/debug.h"
+#include "common/Formatter.h"
 #include "mds/mdstypes.h"
 #include "mds/CInode.h"
-#include "mds/MDCache.h"
-
-#include "PurgeQueue.h"
+#include "osdc/Objecter.h"
+#include "osdc/Striper.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_mds
@@ -99,6 +103,22 @@ void PurgeItem::decode(bufferlist::const_iterator &p)
   DECODE_FINISH(p);
 }
 
+void PurgeItem::dump(Formatter *f) const
+{
+  f->dump_int("action", action);
+  f->dump_int("ino", ino);
+  f->dump_int("size", size);
+  f->open_object_section("layout");
+  layout.dump(f);
+  f->close_section();
+  f->open_object_section("SnapContext");
+  snapc.dump(f);
+  f->close_section();
+  f->open_object_section("fragtree");
+  fragtree.dump(f);
+  f->close_section();
+}
+
 void PurgeItem::generate_test_instances(std::list<PurgeItem*>& ls) {
   ls.push_back(new PurgeItem());
   ls.push_back(new PurgeItem());
@@ -110,6 +130,7 @@ void PurgeItem::generate_test_instances(std::list<PurgeItem*>& ls) {
   ls.back()->snapc = SnapContext();
   ls.back()->stamp = utime_t(3, 4);
 }
+
 // if Objecter has any slow requests, take that as a hint and
 // slow down our rate of purging
 PurgeQueue::PurgeQueue(
