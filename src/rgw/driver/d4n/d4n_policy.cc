@@ -950,9 +950,8 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 		}
 	      }
 	      //delete entry from ordered set of objects, as older versions would have been written to the backend store
-	      ret = bucketDir->zrem(dpp, e->bucket_id, c_obj->get_name(), y, true);
+	      ret = bucketDir->zrem(dpp, e->bucket_id, c_obj->get_name(), y);
 	      if (ret < 0) {
-		blockDir->discard(dpp, y);
 		ldpp_dout(dpp, 0) << __func__ << "(): Failed to queue zrem for object entry: " << c_obj->get_name() << ", ret=" << ret << dendl;
 		continue;
 	      }
@@ -962,7 +961,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	      .objName = c_obj->get_name(),
 	      .bucketName = c_obj->get_bucket()->get_bucket_id(),
 	    };
-	    ret = objDir->zremrangebyscore(dpp, &dir_obj, e->creationTime, e->creationTime, y, true);
+	    ret = objDir->zremrangebyscore(dpp, &dir_obj, e->creationTime, e->creationTime, y);
 	    if (ret < 0) {
 	      ldpp_dout(dpp, 0) << __func__ << "(): Failed to remove object from ordered set with error: " << ret << dendl;
 	      continue;
