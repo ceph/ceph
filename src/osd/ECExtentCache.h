@@ -155,6 +155,7 @@ class ECExtentCache {
     ECUtil::shard_extent_map_t result;
     bool complete = false;
     bool invalidates_cache = false;
+    bool did_invalidate_cache = false;
     bool reading = false;
     bool read_done = false;
     uint64_t projected_size = 0;
@@ -225,7 +226,6 @@ private:
     uint64_t projected_size = 0;
     uint64_t line_size = 0;
     bool reading = false;
-    bool cache_invalidated = false;
     bool cache_invalidate_expected = false;
 
     void request(OpRef &op);
