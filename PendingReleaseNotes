@@ -107,6 +107,10 @@
   `PutBucketPolicy`. Additionally, the root user will always have access to modify
   the bucket policy, even if the current policy explicitly denies access.
 
+* CephFS: The ``ceph fs subvolume snapshot getpath`` command now allows users
+  to get the path of a snapshot of a subvolume. If the snapshot is not present
+  ``ENOENT`` is returned.
+
 * CephFS: The ``ceph fs volume create`` command now allows users to pass
   metadata and data pool names to be used for creating the volume. If either
   is not passed or if either is a non-empty pool, the command will abort.
