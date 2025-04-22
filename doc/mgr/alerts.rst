@@ -16,58 +16,44 @@ as well.
 Enabling
 --------
 
-The *alerts* module is enabled with:
+The *alerts* module is enabled with::
 
-.. prompt:: bash #
-
-   ceph mgr module enable alerts
+  ceph mgr module enable alerts
 
 Configuration
 -------------
 
 To configure SMTP, all of the following config options must be set
-(When setting ``mgr/alerts/smtp_destination``, you can use commas to separate multiple):
+(When setting ``mgr/alerts/smtp_destination``, you can use commas to separate multiple)::
 
-.. prompt:: bash #
+  ceph config set mgr mgr/alerts/smtp_host *<smtp-server>*
+  ceph config set mgr mgr/alerts/smtp_destination *<email-address-to-send-to>*
+  ceph config set mgr mgr/alerts/smtp_sender *<from-email-address>*
 
-   ceph config set mgr mgr/alerts/smtp_host *<smtp-server>*
-   ceph config set mgr mgr/alerts/smtp_destination *<email-address-to-send-to>*
-   ceph config set mgr mgr/alerts/smtp_sender *<from-email-address>*
+By default, the module will use SSL and port 465.  To change that,::
 
-By default, the module will use SSL and port 465.  To change that:
+  ceph config set mgr mgr/alerts/smtp_ssl false   # if not SSL
+  ceph config set mgr mgr/alerts/smtp_port *<port-number>*  # if not 465
 
-.. prompt:: bash #
+To authenticate to the SMTP server, you must set the user and password::
 
-   ceph config set mgr mgr/alerts/smtp_ssl false   # if not SSL
-   ceph config set mgr mgr/alerts/smtp_port *<port-number>*  # if not 465
-
-To authenticate to the SMTP server, you must set the user and password:
-
-.. prompt:: bash #
-
-   ceph config set mgr mgr/alerts/smtp_user *<username>*
-   ceph config set mgr mgr/alerts/smtp_password *<password>*
+  ceph config set mgr mgr/alerts/smtp_user *<username>*
+  ceph config set mgr mgr/alerts/smtp_password *<password>*
 
 By default, the name in the ``From:`` line is simply ``Ceph``.  To
-change that (e.g., to identify which cluster this is):
+change that (e.g., to identify which cluster this is),::
 
-.. prompt:: bash #
-
-   ceph config set mgr mgr/alerts/smtp_from_name 'Ceph Cluster Foo'
+  ceph config set mgr mgr/alerts/smtp_from_name 'Ceph Cluster Foo'
 
 By default, the module will check the cluster health once per minute
 and, if there is a change, send a message.  To change that
-frequency:
+frequency,::
 
-.. prompt:: bash #
-
-   ceph config set mgr mgr/alerts/interval *<interval>*   # e.g., "5m" for 5 minutes
+  ceph config set mgr mgr/alerts/interval *<interval>*   # e.g., "5m" for 5 minutes
 
 Commands
 --------
 
-To force an alert to be send immediately:
+To force an alert to be send immediately,::
 
-.. prompt:: bash #
-
-   ceph alerts send
+  ceph alerts send

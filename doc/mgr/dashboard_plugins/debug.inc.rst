@@ -6,7 +6,7 @@ Debug
 This plugin allows to customize the behaviour of the dashboard according to the
 debug mode. It can be enabled, disabled or checked with the following command:
 
-.. prompt:: bash #
+.. prompt:: bash $
 
    ceph dashboard debug status
 
@@ -14,7 +14,7 @@ debug mode. It can be enabled, disabled or checked with the following command:
 
   Debug: 'disabled'
 
-.. prompt:: bash #
+.. prompt:: bash $
 
    ceph dashboard debug enable
 
@@ -22,7 +22,7 @@ debug mode. It can be enabled, disabled or checked with the following command:
 
   Debug: 'enabled'
 
-.. prompt:: bash #
+.. prompt:: bash $
 
    ceph dashboard debug disable
 

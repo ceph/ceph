@@ -6,17 +6,13 @@ it in the Ceph cluster for later analysis.
 Enabling
 --------
 
-The *crash* module is enabled with:
+The *crash* module is enabled with::
 
-.. prompt:: bash #
+  ceph mgr module enable crash
 
-   ceph mgr module enable crash
+The *crash* upload key is generated with::
 
-The *crash* upload key is generated with:
-
-.. prompt:: bash #
-
-   ceph auth get-or-create client.crash mon 'profile crash' mgr 'profile crash'
+  ceph auth get-or-create client.crash mon 'profile crash' mgr 'profile crash'
 
 On each node, you should store this key in
 ``/etc/ceph/ceph.client.crash.keyring``.
@@ -43,57 +39,57 @@ and a keyring needs to be in ``/etc/ceph``.
 
 Commands
 --------
-.. prompt:: bash #
+::
 
-   ceph crash post -i <metafile>
+  ceph crash post -i <metafile>
 
 Save a crash dump.  The metadata file is a JSON blob stored in the crash
 dir as ``meta``.  As usual, the ceph command can be invoked with ``-i -``,
 and will read from stdin.
 
-.. prompt:: bash #
+::
 
-   ceph crash rm <crashid>
+  ceph crash rm <crashid>
 
 Remove a specific crash dump.
 
-.. prompt:: bash #
+::
 
-   ceph crash ls
+  ceph crash ls
 
 List the timestamp/uuid crashids for all new and archived crash info.
 
-.. prompt:: bash #
+::
 
-   ceph crash ls-new
+  ceph crash ls-new
 
 List the timestamp/uuid crashids for all newcrash info.
 
-.. prompt:: bash #
+::
 
-   ceph crash stat
+  ceph crash stat
 
 Show a summary of saved crash info grouped by age.
 
-.. prompt:: bash #
+::
 
-   ceph crash info <crashid>
+  ceph crash info <crashid>
 
 Show all details of a saved crash.
 
-.. prompt:: bash #
+::
 
    ceph crash prune <keep>
 
 Remove saved crashes older than 'keep' days.  <keep> must be an integer.
 
-.. prompt:: bash #
+::
 
    ceph crash archive <crashid>
 
 Archive a crash report so that it is no longer considered for the ``RECENT_CRASH`` health check and does not appear in the ``crash ls-new`` output (it will still appear in the ``crash ls`` output).
 
-.. prompt:: bash #
+::
 
    ceph crash archive-all
 
