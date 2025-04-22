@@ -14,6 +14,7 @@
 
 #include "common/entity_name.h"
 #include "common/ceph_strings.h"
+#include "common/Formatter.h"
 
 #include <sstream>
 
