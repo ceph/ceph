@@ -11,17 +11,12 @@ using namespace std;
 using namespace ECUtil;
 
 void ECExtentCache::Object::request(OpRef &op) {
-  /* After a cache invalidation, we allow through a single cache-invalidating
-   * IO.
+  /* Record that this object is invalidating cache, to avoid any further
+   * read attempts (which will be discarded).
    */
   if (op->invalidates_cache) {
-    if (cache_invalidated) {
-      op->invalidates_cache = false;
-    } else {
-      cache_invalidate_expected = true;
-    }
+    cache_invalidate_expected = true;
   }
-  cache_invalidated = false;
 
   extent_set eset = op->get_pin_eset(line_size);
 
@@ -42,6 +37,11 @@ void ECExtentCache::Object::request(OpRef &op) {
   }
 
   bool read_required = false;
+
+  // If this op previously invalidate cache, the cache had better be empty.
+  if (op->did_invalidate_cache) {
+    ceph_assert(do_not_read.empty());
+  }
 
   /* Deal with reads if there are any.
    * If any cache invalidation ops have been added, there is no point adding any
@@ -87,15 +87,16 @@ void ECExtentCache::Object::request(OpRef &op) {
     pg.sinfo.ro_size_to_read_mask(projected_size, read_mask);
     obj_hole.subtract(read_mask);
     do_not_read.insert(obj_hole);
-  } else if (op->projected_size < projected_size) {
-    // Invalidate the object's cache when we see any object reduce in size.
-    op->invalidates_cache = true;
   }
 
   projected_size = op->projected_size;
 
-  if (read_required) send_reads();
-  else op->read_done = true;
+  if (read_required) {
+    send_reads();
+  }
+  else {
+    op->read_done = true;
+  }
 }
 
 void ECExtentCache::Object::send_reads() {
@@ -183,7 +184,7 @@ void ECExtentCache::Object::invalidate(const OpRef &invalidating_op) {
     line->size = 0;
   }
 
-  /* Remove all entries from the LRU */
+  // Remove all entries from the LRU
   pg.lru.remove_object(oid);
 
   ceph_assert(!reading);
@@ -198,13 +199,13 @@ void ECExtentCache::Object::invalidate(const OpRef &invalidating_op) {
    */
   projected_size = invalidating_op->projected_size;
 
-  // Cache can now be replayed and invalidate teh cache!
+  // Invalidate cache has been honoured, so no need to repeat.
   invalidating_op->invalidates_cache = false;
+  invalidating_op->did_invalidate_cache = true;
 
-  cache_invalidated = true;
   cache_invalidate_expected = false;
 
-  /* We now need to reply all outstanding ops, so as to regenerate the read */
+  // We now need to reply all outstanding ops to regenerate the read
   for (auto &op : pg.waiting_ops) {
     if (op->object.oid == oid) {
       op->read_done = false;
@@ -330,6 +331,10 @@ void ECExtentCache::on_change2() const {
 
 void ECExtentCache::execute(list<OpRef> &op_list) {
   for (auto &op : op_list) {
+    if (op->projected_size < op->object.projected_size) {
+      // Invalidate the object's cache when we see any object reduce in size.
+      op->invalidates_cache = true;
+    }
     op->object.request(op);
   }
   waiting_ops.insert(waiting_ops.end(), op_list.begin(), op_list.end());
@@ -348,7 +353,8 @@ list<ECExtentCache::LRU::Key>::iterator ECExtentCache::LRU::erase(
     update_mempool(-1, 0 - size_change);
   }
   size -= size_change;
-  map.erase(*it);
+  size_t removed = map.erase(*it);
+  ceph_assert(removed == 1);
   return lru.erase(it);
 }
 

@@ -532,7 +532,7 @@ struct ECCommon {
             << " temp_cleared=" << temp_cleared
             << " remote_read_result=" << remote_shard_extent_map
             << " pending_commits=" << pending_commits
-            << " plan.to_read=" << plan
+            << " plans=" << plan
             << ")";
       }
     };
