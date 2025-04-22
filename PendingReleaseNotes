@@ -205,6 +205,11 @@
 * RADOS: A performance botteneck in the balancer mgr module has been fixed.
   Related Tracker: https://tracker.ceph.com/issues/68657
 
+* mon: Introducing the mon_config_history_size setting, which defines the number of configuration history
+  entries to retain for each central option — including manual changes and autotuner adjustments (e.g., osd_memory_target). This helps control the trimming of config history and prevents the MON_DISK_BIG issue.
+  Related trackers:
+  - https://tracker.ceph.com/issues/67453
+  
 >=19.0.0
 
 * cephx: key rotation is now possible using `ceph auth rotate`. Previously,
