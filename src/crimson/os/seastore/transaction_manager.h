@@ -670,9 +670,9 @@ public:
   /*
    * clone_mapping
    *
-   * create an indirect lba mapping pointing to the physical
+   * create an indirect lba mapping pointing to the direct
    * lba mapping whose key is intermediate_key. Resort to btree_lba_manager.h
-   * for the definition of "indirect lba mapping" and "physical lba mapping".
+   * for the definition of "indirect lba mapping" and "direct lba mapping".
    * Note that the cloned extent must be stable
    */
   using clone_extent_iertr = alloc_extent_iertr;
