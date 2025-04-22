@@ -721,7 +721,7 @@ public:
       left_operation(overwrite_operation_t::UNKNOWN),
       right_operation(overwrite_operation_t::UNKNOWN),
       block_size(block_size),
-      // TODO: introduce PhysicalNodeMapping::is_fresh()
+      // TODO: introduce LBAMapping::is_fresh()
       // Note: fresh write can be merged with overwrite if they overlap.
       is_left_fresh(!pins.front()->is_stable()),
       is_right_fresh(!pins.back()->is_stable()) {
