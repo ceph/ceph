@@ -33,6 +33,17 @@ def password_hash(args: Namespace) -> None:
     json.dump({'hash': hash_str}, sys.stdout)
 
 
+def verify_password(args: Namespace) -> None:
+    data = json.loads(sys.stdin.read())
+    password = data.encode('utf-8')
+    hashed_password = data.encode('utf-8')
+    try:
+        ok = bcrypt.checkpw(password, hashed_password)
+    except ValueError as err:
+        _fail_message(str(err))
+    json.dump({'ok': ok}, sys.stdout)
+
+
 def create_self_signed_cert(args: Namespace) -> None:
 
     # Generate private key
@@ -191,6 +202,10 @@ if __name__ == "__main__":
     # create the parser for the "verify_tls" command
     parser_verify_tls = subparsers.add_parser('verify_tls')
     parser_verify_tls.set_defaults(func=verify_tls)
+
+    # password verification
+    parser_verify_password = subparsers.add_parser('verify_password')
+    parser_verify_password.set_defaults(func=verify_password)
 
     # parse the args and call whatever function was selected
     args = parser.parse_args()

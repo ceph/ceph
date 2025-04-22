@@ -167,3 +167,18 @@ class CryptoCaller:
         if not pw_hash:
             raise CryptoCallError('no password hash')
         return pw_hash
+
+    def verify_password(self, password: str, hashed_password: str) -> bool:
+        """Verify a password matches the hashed password. Returns true if
+        password and hashed_password match.
+        """
+        pwdata = {"password": password, "hashed_password": hashed_password}
+        result = self._run(
+            ["verify_password"],
+            input_data=json.dumps(pwdata),
+            capture_output=True,
+            check=True,
+        )
+        result_obj = self._result_json(result)
+        ok = result_obj.get("ok", False)
+        return ok
