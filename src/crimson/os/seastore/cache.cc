@@ -1247,7 +1247,7 @@ record_t Cache::prepare_record(
                i.ref->get_type()).increment(i.ref->get_length());
     read_stat.increment(i.ref->get_length());
   }
-  t.read_set.clear();
+  t.read_items.clear();
   t.write_set.clear();
 
   record_t record(record_type_t::JOURNAL, trans_src);
