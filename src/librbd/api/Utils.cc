@@ -209,6 +209,7 @@ int group_snap_remove(librados::IoCtx& group_ioctx, const std::string& group_id,
   for (int i = 0; i < snap_count; ++i) {
     r = on_finishes[i]->wait();
     delete on_finishes[i];
+    on_finishes[i] = nullptr;
     if (r < 0) {
       ictxs[i] = nullptr;
       if (r != -ENOENT) {
@@ -252,6 +253,7 @@ int group_snap_remove(librados::IoCtx& group_ioctx, const std::string& group_id,
   for (int i = 0; i < snap_count; ++i) {
     r = on_finishes[i]->wait();
     delete on_finishes[i];
+    on_finishes[i] = nullptr;
     if (r < 0 && r != -ENOENT) {
       // if previous attempts to remove this snapshot failed then the image's
       // snapshot may not exist
@@ -276,6 +278,9 @@ int group_snap_remove(librados::IoCtx& group_ioctx, const std::string& group_id,
 
 finish:
   for (int i = 0; i < snap_count; ++i) {
+    if (on_finishes[i] != nullptr) {
+      delete on_finishes[i];
+    }
     if (ictxs[i] != nullptr) {
       ictxs[i]->state->close();
     }

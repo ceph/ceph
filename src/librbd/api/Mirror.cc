@@ -2960,34 +2960,23 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
     ldout(cct, 5) << "group mirroring not supported by OSD" << dendl;
     return r;
   } else if (r == -ENOENT) {
-    ldout(cct, 10) << "mirroring for group " << group_name
-                   << " already disabled" << dendl;
+    ldout(cct, 10) << "ignoring disable command: mirroring is not enabled for "
+                   << "this group" << dendl;
     return 0;
   } else if (r < 0) {
     lderr(cct) << "failed to retrieve mirror group metadata: "
                << cpp_strerror(r) << dendl;
     return r;
-  } else if (mirror_group.mirror_image_mode !=
-             cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
-    auto mode = static_cast<rbd_mirror_image_mode_t>(
-        mirror_group.mirror_image_mode);
-    lderr(cct) << "cannot disable, mirror mode is set to: " << mode << dendl;
-    return -EOPNOTSUPP;
   }
 
   cls::rbd::MirrorSnapshotState state;
   r = get_last_mirror_snapshot_state(group_ioctx, group_id, &state, nullptr);
-  if (r == -ENOENT) {
-    ldout(cct, 10) << "mirroring for group " << group_name
-                   << " already disabled" << dendl;
-    return 0;
-  } else if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to get last mirror snapshot state: "
                << cpp_strerror(r) << dendl;
     return r;
-  }
-
-  if (state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY && !force) {
+  } else if ((r == -ENOENT || state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY)
+             && !force) {
     lderr(cct) << "mirrored group " << group_name
                << " is not primary, add force option to disable mirroring"
                << dendl;
@@ -3010,13 +2999,13 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
   }
 
   int ret_code = 0;
-  for (auto image_ctx : image_ctxs) {
-    ldout(cct, 10) << "attempting to disable image with id " << image_ctx->id
-                   << ": " << cpp_strerror(r) << dendl;
-    r = image_disable(image_ctx, force, true);
+  for (size_t i = 0; i < image_ctxs.size(); i++) {
+    ldout(cct, 10) << "attempting to disable image with id "
+                   << image_ctxs[i]->id << ": " << cpp_strerror(r) << dendl;
+    r = image_disable(image_ctxs[i], force, true);
     if (r < 0) {
-      lderr(cct) << "failed to disable mirroring on image: " << image_ctx->name
-                 << cpp_strerror(r) << dendl;
+      lderr(cct) << "failed to disable mirroring on image: "
+                 << image_ctxs[i]->name << cpp_strerror(r) << dendl;
       if (ret_code == 0) {
         ret_code = r;
       }
@@ -3029,10 +3018,10 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
 
   // undo an image disable might not be of our interest. If needed, user must
   // issue the same command again.
-  if (r < 0) {
+  if (ret_code < 0) {
     lderr(cct) << "failed to disable one or more images: "
-               << cpp_strerror(r) << dendl;
-    return r;
+               << cpp_strerror(ret_code) << dendl;
+    return ret_code;
   }
 
   std::vector<cls::rbd::GroupSnapshot> snaps;
@@ -3043,22 +3032,23 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
   req->send();
   r = cond.wait();
   if (r < 0) {
-    lderr(cct) << "failed to list group snapshots: "
+    lderr(cct) << "failed to list group snapshots, retry later: "
                << cpp_strerror(r) << dendl;
-    // ignore
+    return r;
   }
 
+  std::string group_header_oid = librbd::util::group_header_name(group_id);
   for (auto &snap : snaps) {
     auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
         &snap.snapshot_namespace);
     if (ns == nullptr) {
       continue;
     }
-    r = util::group_snap_remove(group_ioctx, group_id, snap);
+    r = cls_client::group_snap_remove(&group_ioctx, group_header_oid, snap.id);
     if (r < 0) {
       lderr(cct) << "failed to remove group snapshot metadata: "
                  << cpp_strerror(r) << dendl;
-      // ignore
+      return r;
     }
   }
 
