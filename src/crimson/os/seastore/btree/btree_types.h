@@ -192,4 +192,142 @@ struct __attribute__((packed)) backref_map_val_le_t {
 
 } // namespace backerf
 
+/**
+ * BtreeCursor
+ *
+ * BtreeCursor is the type-erased wrapper for FixedKVBtree::iterator, stores
+ * a key-value mapping's location and the snapshot of its data at construction
+ * time.
+ */
+template <typename key_t, typename val_t>
+struct BtreeCursor {
+  BtreeCursor(
+    op_context_t &ctx,
+    CachedExtentRef parent,
+    uint64_t modifications,
+    key_t key,
+    std::optional<val_t> val,
+    btreenode_pos_t pos)
+      : ctx(ctx),
+	parent(std::move(parent)),
+	modifications(modifications),
+	key(key),
+	val(std::move(val)),
+	pos(pos)
+  {
+    if constexpr (std::is_same_v<key_t, laddr_t>) {
+      static_assert(std::is_same_v<val_t, lba_manager::btree::lba_map_val_t>,
+        "the value type of laddr_t for BtreeCursor should be lba_map_val_t");
+    } else {
+      static_assert(std::is_same_v<key_t, paddr_t>,
+        "the key type of BtreeCursor should be either laddr_t or paddr_t");
+      static_assert(std::is_same_v<val_t, backref::backref_map_val_t>,
+        "the value type should be either lba_map_val_t or backref_map_val_t");
+    }
+  }
+
+  op_context_t ctx;
+  CachedExtentRef parent;
+  uint64_t modifications;
+  key_t key;
+  std::optional<val_t> val;
+  btreenode_pos_t pos;
+
+  // NOTE: The overhead of calling is_viewable() might be not negligible in the
+  // case of the parent extent is stable and shared by multiple transactions.
+  // The best practice is to only hold cursors whose parent is pending in
+  // current transaction in the long term.
+  bool is_viewable() const;
+
+  bool is_end() const {
+    auto max_key = min_max_t<key_t>::max;
+    assert((key != max_key) == (bool)val);
+    return key == max_key;
+  }
+
+  extent_len_t get_length() const {
+    assert(!is_end());
+    return val->len;
+  }
+};
+
+struct LBACursor : BtreeCursor<laddr_t, lba_manager::btree::lba_map_val_t> {
+  using Base = BtreeCursor<laddr_t, lba_manager::btree::lba_map_val_t>;
+  using Base::BtreeCursor;
+  bool is_indirect() const {
+    assert(!is_end());
+    return val->pladdr.is_laddr();
+  }
+  laddr_t get_laddr() const {
+    return key;
+  }
+  paddr_t get_paddr() const {
+    assert(!is_indirect());
+    assert(!is_end());
+    return val->pladdr.get_paddr();
+  }
+  laddr_t get_intermediate_key() const {
+    assert(is_indirect());
+    assert(!is_end());
+    return val->pladdr.get_laddr();
+  }
+  checksum_t get_checksum() const {
+    assert(!is_end());
+    assert(!is_indirect());
+    return val->checksum;
+  }
+  extent_ref_count_t get_refcount() const {
+    assert(!is_end());
+    assert(!is_indirect());
+    return val->refcount;
+  }
+  std::unique_ptr<LBACursor> duplicate() const {
+    return std::make_unique<LBACursor>(*this);
+  }
+};
+using LBACursorRef = std::unique_ptr<LBACursor>;
+
+struct BackrefCursor : BtreeCursor<paddr_t, backref::backref_map_val_t> {
+  using Base = BtreeCursor<paddr_t, backref::backref_map_val_t>;
+  using Base::BtreeCursor;
+  paddr_t get_paddr() const {
+    return key;
+  }
+  laddr_t get_laddr() const {
+    assert(!is_end());
+    return val->laddr;
+  }
+  extent_types_t get_type() const {
+    assert(!is_end());
+    return val->type;
+  }
+};
+using BackrefCursorRef = std::unique_ptr<BackrefCursor>;
+
+template <typename key_t, typename val_t>
+std::ostream &operator<<(
+  std::ostream &out, const BtreeCursor<key_t, val_t> &cursor)
+{
+  if constexpr (std::is_same_v<key_t, laddr_t>) {
+    out << "LBACursor(";
+  } else {
+    out << "BackrefCursor(";
+  }
+  out << (void*)cursor.parent.get()
+      << "@" << cursor.pos
+      << "#" << cursor.modifications
+      << ",";
+  if (cursor.is_end()) {
+    return out << "END)";
+  }
+  return out << "," << cursor.key
+	     << "~" << *cursor.val
+	     << ")";
+}
+
 } // namespace crimson::os::seastore
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::LBACursor> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::BackrefCursor> : fmt::ostream_formatter {};
+#endif
