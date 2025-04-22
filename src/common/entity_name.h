@@ -15,11 +15,17 @@
 #ifndef CEPH_COMMON_ENTITY_NAME_H
 #define CEPH_COMMON_ENTITY_NAME_H
 
+#include <array>
+#include <cstdint>
+#include <string>
 #include <string_view>
 
-#include <ifaddrs.h>
-
+#include "include/buffer.h"
+#include "include/encoding.h" // for WRITE_CLASS_ENCODER()
+#include "include/msgr.h" // for CEPH_ENTITY_*
 #include "msg/msg_types.h"
+
+namespace ceph { class Formatter; }
 
 /* Represents a Ceph entity name.
  *
