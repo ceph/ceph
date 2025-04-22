@@ -176,9 +176,11 @@ class HealthTest(DashboardTestCase):
                     'id': int
                 })),
                 'stats': JObj({
-                    'total_avail_bytes': int,
                     'total_bytes': int,
+                    'total_avail_bytes': int,
                     'total_used_bytes': int,
+                    'total_raw_bytes': int,
+                    'total_avail_raw_bytes': int,
                     'total_used_raw_bytes': int,
                     'total_used_raw_ratio': float,
                     'num_osds': int,
