@@ -138,7 +138,7 @@ class CloneProgressReporterHelper(TestVolumesHelper):
 
         clone_pevs = {}
         for k, v in progress_events.items():
-            if 'mgr-vol-ongoing-clones' in k or 'mgr-vol-total-clones' in k:
+            if 'mgr-vol-ongoing-clone' in k or 'mgr-vol-total-clone' in k:
                 clone_pevs[k] = v
 
         return clone_pevs
