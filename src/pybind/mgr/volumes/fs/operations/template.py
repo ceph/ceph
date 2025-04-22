@@ -49,6 +49,7 @@ class SubvolumeOpType(Enum):
     SNAP_CREATE           = 'snap-create'
     SNAP_REMOVE           = 'snap-rm'
     SNAP_LIST             = 'snap-ls'
+    SNAP_GETPATH          = 'snap-getpath'
     SNAP_INFO             = 'snap-info'
     SNAP_PROTECT          = 'snap-protect'
     SNAP_UNPROTECT        = 'snap-unprotect'
