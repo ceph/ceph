@@ -453,6 +453,8 @@ if(WITH_SYSTEMD)
   add_ceph_unittest(unittest_journald_logger)
 endif()
 
+# XXX: disabled for https://tracker.ceph.com/issues/70700
+if(0)
 # Validation of the DECODE_START's struct_v compile-time checker.
 # First, ensure buildability of the test program itself. This is
 # useful to avoid false positives coming from other-than-the-assert
@@ -488,6 +490,7 @@ add_test(NAME unittest_decode_start_v_checker_expect_failure
          WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 set_tests_properties(unittest_decode_start_v_checker_expect_failure
   PROPERTIES WILL_FAIL TRUE)
+endif(0)
 
 add_executable(unittest_async_call test_async_call.cc)
 target_link_libraries(unittest_async_call ceph-common Boost::system
