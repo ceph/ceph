@@ -2,11 +2,13 @@ import logging
 import time
 import os
 import signal
+import errno
 
 log = logging.getLogger(__name__)
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.filesystem import ObjectNotFound
+from teuthology.exceptions import CommandFailedError
 
 class TestReferentInode(CephFSTestCase):
     MDSS_REQUIRED = 1
@@ -577,3 +579,55 @@ class TestReferentInode(CephFSTestCase):
 
     def test_referent_no_caps(self):
         pass
+
+class TestNoGlobalSnaprealm(CephFSTestCase):
+    MDSS_REQUIRED = 1
+    CLIENTS_REQUIRED = 1
+    ALLOW_REFERENT_INODES = True
+
+    def test_use_global_snaprealm_option(self):
+        """
+        test_use_global_snaprealm_option - Test the fs option 'use_global_snaprealm'
+        """
+        mds_map = self.fs.get_mds_map()
+        # validate it's enabled by default
+        self.assertTrue(mds_map["flags_state"]["use_global_snaprealm"])
+        self.run_ceph_cmd(f'fs set {self.fs.name} use_global_snaprealm false')
+        mds_map = self.fs.get_mds_map()
+        self.assertFalse(mds_map["flags_state"]["use_global_snaprealm"])
+
+    def test_use_global_snaprealm_referent_dependency(self):
+        """
+        test_use_global_snaprealm_referent_dependency - Test the fs option 'use_global_snaprealm' and 'allow_referent_inodes' dependency
+        """
+        # referent inodes is enabled by default with this test
+        mds_map = self.fs.get_mds_map()
+        self.assertTrue(mds_map["flags_state"]["use_global_snaprealm"])
+        # validate 'use_global_snaprealm' enable/disable when referent inodes is enabled. This is allowed
+        self.run_ceph_cmd(f'fs set {self.fs.name} use_global_snaprealm false')
+        mds_map = self.fs.get_mds_map()
+        self.assertFalse(mds_map["flags_state"]["use_global_snaprealm"])
+
+        self.run_ceph_cmd(f'fs set {self.fs.name} use_global_snaprealm true')
+        mds_map = self.fs.get_mds_map()
+        self.assertTrue(mds_map["flags_state"]["use_global_snaprealm"])
+
+        # Disable global snaprealm and check allow_referent_inodes can't be disabled
+        self.fs.set_use_global_snaprealm(False)
+        with self.assertRaises(CommandFailedError) as ce:
+            self.run_ceph_cmd(f'fs set {self.fs.name} allow_referent_inodes false')
+        self.assertEqual(ce.exception.exitstatus, errno.EOPNOTSUPP)
+
+        # when global snaprealm is enabled, referent inodes can be disabled
+        self.fs.set_use_global_snaprealm(True)
+        self.run_ceph_cmd(f'fs set {self.fs.name} allow_referent_inodes false')
+        mds_map = self.fs.get_mds_map()
+        self.assertFalse(mds_map["flags_state"]["allow_referent_inodes"])
+
+        # Validate - global snaprealm can't be disabled without enabling referent inodes
+        with self.assertRaises(CommandFailedError) as ce:
+            self.run_ceph_cmd(f'fs set {self.fs.name} use_global_snaprealm false')
+        self.assertEqual(ce.exception.exitstatus, errno.EOPNOTSUPP)
+
+        self.run_ceph_cmd(f'fs set {self.fs.name} allow_referent_inodes true')
+        self.run_ceph_cmd(f'fs set {self.fs.name} use_global_snaprealm false')
