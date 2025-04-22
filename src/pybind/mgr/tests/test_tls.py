@@ -41,7 +41,6 @@ class TLSchecks(unittest.TestCase):
         new_key = crypto.PKey()
         new_key.generate_key(crypto.TYPE_RSA, 2048)
         new_key = crypto.dump_privatekey(crypto.FILETYPE_PEM, new_key).decode('utf-8')
-
         self.assertRaises(ServerConfigException, verify_tls, crt, new_key)
 
     def test_get_cert_issuer_info(self):
