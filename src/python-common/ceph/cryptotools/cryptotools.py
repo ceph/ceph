@@ -129,7 +129,8 @@ def get_cert_issuer_info(args: Namespace) -> None:
 
 
 def _fail_message(msg: str) -> None:
-    json.dump({'error': msg}, sys.stdout)
+    json.dump({'error': msg}, sys.stderr)
+    sys.exit(1)
 
 
 def verify_tls(args: Namespace) -> None:
