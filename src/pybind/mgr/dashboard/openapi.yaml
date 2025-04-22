@@ -9111,6 +9111,7 @@ paths:
                   description: RBD pool name
                   type: string
                 size:
+                  default: 1024
                   description: RBD image size
                   type: integer
                 traddr:
