@@ -140,8 +140,9 @@ export class NavigationComponent implements OnInit, OnDestroy {
   }
   
   onMenuClick(event: MouseEvent) {
-    const clickedElement = event.target as HTMLElement;
-    const menuElement = clickedElement.closest('cds-sidenav-menu');
+ const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+   const menuElement: Element = target.closest('cds-sidenav-menu');
 
     if (menuElement) {
       const clientViewBounding = menuElement.getBoundingClientRect();
