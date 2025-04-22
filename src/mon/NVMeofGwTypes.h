@@ -153,6 +153,8 @@ struct NvmeGwMonState {
   */
   std::chrono::system_clock::time_point allow_failovers_ts =
              std::chrono::system_clock::now();
+  std::chrono::system_clock::time_point last_gw_down_ts =
+             std::chrono::system_clock::now() - std::chrono::seconds(30);
   NvmeGwMonState(): ana_grp_id(REDUNDANT_GW_ANA_GROUP_ID) {}
 
   NvmeGwMonState(NvmeAnaGrpId id)
@@ -173,6 +175,9 @@ struct NvmeGwMonState {
   void active_state(NvmeAnaGrpId grpid) {
     sm_state[grpid]       = gw_states_per_group_t::GW_ACTIVE_STATE;
     blocklist_data[grpid].osd_epoch = 0;
+  }
+  void set_last_gw_down_ts(){
+    last_gw_down_ts = std::chrono::system_clock::now();
   }
 };
 
