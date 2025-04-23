@@ -233,17 +233,49 @@ ECTransaction::WritePlanObj::WritePlanObj(
           to_read = std::move(pdw_reads);
           reads.clear(); // So we don't stash it at the end.
         }
-          }
+      }
 
       /* NOTE: We intentionally leave un-writable shards in the write plan.  As
        * it is actually less efficient to take them out:- PDWs still need to
-       * compute the deltas and conventional writes still need to calcualte the
+       * compute the deltas and conventional writes still need to calculate the
        * parity. The transaction will be dropped by generate_transactions.
        */
     }
 
     if (!reads.empty()) {
       to_read = std::move(reads);
+    }
+  }
+
+  /* Plan for truncates. A truncate can reduce a stripe to a partial stripe.
+   * This means we must update the parity buffers.  To do this, we must
+   * read the existing data on the partial stripe.
+   */
+  if (op.truncate && op.truncate->first < orig_size) {
+    ECUtil::shard_extent_set_t truncate_read(sinfo.get_k_plus_m());
+    extent_set truncate_write;
+    uint64_t prev_stripe = sinfo.ro_offset_to_prev_stripe_ro_offset(op.truncate->first);
+    uint64_t next_align = ECUtil::align_next(op.truncate->first);
+    sinfo.ro_range_to_shard_extent_set_with_superset(
+      prev_stripe, next_align - prev_stripe,
+      truncate_read, truncate_write);
+
+    /* We must always update the entire parity chunk, even if we only read
+     * a small amount of one shard.
+     */
+    truncate_write.align(sinfo.get_chunk_size());
+
+    if (!truncate_read.empty()) {
+      if (to_read) {
+        to_read->insert(truncate_read);
+      } else {
+        to_read = std::move(truncate_read);
+      }
+
+      // We only need to update the parity buffer for the write
+      for (auto && shard : sinfo.get_parity_shards()) {
+        will_write[shard] = truncate_write;
+      }
     }
   }
 
@@ -595,8 +627,12 @@ ECTransaction::Generate::Generate(PGTransaction &t,
 
 void ECTransaction::Generate::truncate() {
   ceph_assert(!op.is_fresh_object());
-  // causes encode to invent zeros
-  to_write.erase_after_ro_offset(plan.orig_size);
+  /* We always read aligned. If the new size is not aligned, there will be
+   * some data in the read buffer that needs to be zeroed before the parity
+   * is calculate.  By simply removing the buffer, the parity encode functions
+   * will assume zeros.
+   */
+  to_write.erase_after_ro_offset(op.truncate->first);
   all_shards_written();
 
   debug(oid, "truncate_erase", to_write, dpp);
