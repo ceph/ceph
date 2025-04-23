@@ -360,7 +360,7 @@ static int read_bucket_policy(const DoutPrefixProvider *dpp,
                               rgw_bucket& bucket,
 			      optional_yield y)
 {
-  if (!s->system_request && bucket_info.flags & BUCKET_SUSPENDED) {
+  if (!s->auth.identity->is_admin() && bucket_info.flags & BUCKET_SUSPENDED) {
     ldpp_dout(dpp, 0) << "NOTICE: bucket " << bucket_info.bucket.name
         << " is suspended" << dendl;
     return -ERR_USER_SUSPENDED;
@@ -397,7 +397,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   std::unique_ptr<rgw::sal::Object> mpobj;
   rgw_obj obj;
 
-  if (!s->system_request && bucket_info.flags & BUCKET_SUSPENDED) {
+  if (!s->auth.identity->is_admin() && bucket_info.flags & BUCKET_SUSPENDED) {
     ldpp_dout(dpp, 0) << "NOTICE: bucket " << bucket_info.bucket.name
         << " is suspended" << dendl;
     return -ERR_USER_SUSPENDED;
@@ -604,7 +604,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     // send a PutBucketPolicy or DeleteBucketPolicy request as an admin/system
     // user. We can allow such requests, because even if the policy denied
     // access, admin/system users override that error from verify_permission().
-    if (!s->system_request) {
+    if (!s->auth.identity->is_admin()) {
       ret = -EACCES;
     }
   }
@@ -1856,9 +1856,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
 
   /* We can use global user_acl because LOs cannot have segments
    * stored inside different accounts. */
-  if (s->system_request) {
-    ldpp_dout(this, 2) << "overriding permissions due to system operation" << dendl;
-  } else if (s->auth.identity->is_admin()) {
+  if (s->auth.identity->is_admin()) {
     ldpp_dout(this, 2) << "overriding permissions due to admin operation" << dendl;
   } else if (!verify_object_permission(this, s, part->get_obj(), s->user_acl,
 				       bucket_acl, obj_policy, bucket_policy,
