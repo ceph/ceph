@@ -8,6 +8,8 @@
 
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/peering_event.h"
+#include "crimson/osd/pg_map.h"
+#include "crimson/osd/osdmap_service.h"
 #include "osd/osd_types.h"
 #include "crimson/common/type_helpers.h"
 
@@ -35,6 +37,10 @@ protected:
   PeeringCtx rctx;
   const bool do_init;
 
+  // For splitting
+  std::set<spg_t> children_pgids;
+  std::set<Ref<PG>> split_pgs;
+
 public:
   PGAdvanceMap(
     Ref<PG> pg, ShardServices &shard_services, epoch_t to,
@@ -46,8 +52,17 @@ public:
   seastar::future<> start();
   PipelineHandle &get_handle() { return handle; }
 
+  using cached_map_t = OSDMapService::cached_map_t;
+  seastar::future<> check_for_splits(epoch_t old_epoch,
+                                     cached_map_t next_map);
+  seastar::future<> split_pg(std::set<spg_t> split_children,
+                             cached_map_t next_map);
+  void split_stats(std::set<Ref<PG>> child_pgs,
+		   const std::set<spg_t> &child_pgids);
+
   std::tuple<
-    PGPeeringPipeline::Process::BlockingEvent
+    PGPeeringPipeline::Process::BlockingEvent,
+    PGMap::PGCreationBlockingEvent
   > tracking_events;
 
   epoch_t get_epoch_sent_at() const {
@@ -56,6 +71,9 @@ public:
 
 private:
   PGPeeringPipeline &peering_pp(PG &pg);
+  seastar::future<> handle_split_pg_creation(
+    Ref<PG> child_pg,
+    cached_map_t next_map);
 };
 
 }

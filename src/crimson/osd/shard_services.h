@@ -127,7 +127,6 @@ class PerShardState {
     ShardServices &shard_services,
     epoch_t epoch);
 
-
   Ref<PG> get_pg(spg_t pgid);
   template <typename F>
   void for_each_pg(F &&f) const {
