@@ -189,7 +189,8 @@ typedef enum {
 typedef enum {
   RBD_MIRROR_IMAGE_DISABLING = 0,
   RBD_MIRROR_IMAGE_ENABLED = 1,
-  RBD_MIRROR_IMAGE_DISABLED = 2
+  RBD_MIRROR_IMAGE_DISABLED = 2,
+  RBD_MIRROR_IMAGE_CREATING = 3
 } rbd_mirror_image_state_t;
 
 typedef struct {
