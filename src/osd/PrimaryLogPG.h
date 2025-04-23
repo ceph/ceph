@@ -392,6 +392,9 @@ public:
   const std::set<pg_shard_t> &get_acting_recovery_backfill_shards() const override {
     return get_acting_recovery_backfill();
   }
+  const shard_id_set &get_acting_recovery_backfill_shard_id_set() const override {
+    return PG::get_acting_recovery_backfill_shard_id_set();
+  }
   const std::set<pg_shard_t> &get_acting_shards() const override {
     return recovery_state.get_actingset();
   }
@@ -1531,7 +1534,8 @@ public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
 	       const PGPool &_pool,
 	       const std::map<std::string,std::string>& ec_profile,
-	       spg_t p);
+	       spg_t p,
+               ECExtentCache::LRU &ec_extent_cache_lru);
   ~PrimaryLogPG() override;
 
   void do_command(

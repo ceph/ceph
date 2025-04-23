@@ -26,9 +26,12 @@
 #define CEPH_ERASURE_CODE_ISA_L_H
 
 // -----------------------------------------------------------------------------
+#include <string_view>
 #include "erasure-code/ErasureCode.h"
 #include "ErasureCodeIsaTableCache.h"
 // -----------------------------------------------------------------------------
+
+using namespace std::literals;
 
 #define EC_ISA_ADDRESS_ALIGNMENT 32u
 
@@ -51,6 +54,7 @@ public:
 
   ErasureCodeIsaTableCache &tcache;
   const char *technique;
+  uint64_t flags;
 
   ErasureCodeIsa(const char *_technique,
                  ErasureCodeIsaTableCache &_tcache) :
@@ -60,6 +64,15 @@ public:
   tcache(_tcache),
   technique(_technique)
   {
+    flags = FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+            FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
+            FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
+            FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
+
+    if (technique == "reed_sol_van"sv ||
+        technique == "default"sv) {
+      flags |= FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED;
+    }
   }
 
   
@@ -68,10 +81,7 @@ public:
   }
 
   uint64_t get_supported_optimizations() const override {
-    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
-      FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
-      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
-      FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
+    return flags;
   }
 
   unsigned int

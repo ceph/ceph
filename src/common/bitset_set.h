@@ -260,8 +260,9 @@ class bitset_set {
 
   /** @return true if the container contains Key k. */
   bool contains(KeyT k) const {
-    ceph_assert(unsigned_cast(k) < max_bits);
-    ceph_assert(int(k) >= 0);
+    if (unsigned_cast(k) >= max_bits) {
+      return false;
+    }
     return (words[int(k) / bits_per_uint64_t]
       & 1ULL << (int(k) % bits_per_uint64_t));
   }

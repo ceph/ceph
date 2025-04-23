@@ -741,6 +741,9 @@ public:
       std::stringstream &ss,
       ceph::Formatter *f);
 
+  int enable_pool_ec_optimizations(pg_pool_t &pool,
+                                   std::stringstream *ss,
+                                   bool enable);
   int prepare_command_pool_set(const cmdmap_t& cmdmap,
                                std::stringstream& ss);
 

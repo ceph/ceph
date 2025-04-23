@@ -1154,7 +1154,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.object_is_indexed());
     EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
     EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
@@ -1162,7 +1162,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_EQ(1U, missing.get_rmissing().size());
 
     // adding the same object replaces the previous one
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
@@ -1179,7 +1179,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.object_is_indexed());
     EXPECT_FALSE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
     EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
@@ -1187,7 +1187,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_EQ(1U, missing.get_rmissing().size());
 
     // adding the same object replaces the previous one
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
@@ -1204,7 +1204,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.object_is_indexed());
     EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
     EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
@@ -1213,7 +1213,7 @@ TEST(pg_missing_t, add_next_event)
 
     // adding the same object with a different version
     e.prior_version = prior_version;
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(1U, missing.num_missing());
@@ -1230,7 +1230,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.object_is_indexed());
     EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
     EXPECT_EQ(version, missing.get_items().at(oid).need);
@@ -1249,12 +1249,12 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.object_is_indexed());
     EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
 
     e.op = pg_log_entry_t::DELETE;
     EXPECT_TRUE(e.is_delete());
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_TRUE(missing.get_items().at(oid).is_delete());
     EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
@@ -1274,14 +1274,14 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.object_is_indexed());
     EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_FALSE(missing.get_items().at(oid).is_delete());
 
     e.op = pg_log_entry_t::LOST_DELETE;
     e.version.version++;
     EXPECT_TRUE(e.is_delete());
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_TRUE(missing.get_items().at(oid).is_delete());
     EXPECT_EQ(prior_version, missing.get_items().at(oid).have);

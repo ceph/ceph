@@ -558,6 +558,7 @@ public:
   TrivialEvent(MakeStray)
   TrivialEvent(NeedActingChange)
   TrivialEvent(IsIncomplete)
+  TrivialEvent(RepeatGetLog)
   TrivialEvent(IsDown)
 
   TrivialEvent(AllReplicasRecovered)
@@ -1312,6 +1313,7 @@ public:
 
   struct GetLog : boost::statechart::state< GetLog, Peering >, NamedState {
     pg_shard_t auth_log_shard;
+    bool repeat_getlog = false;
     boost::intrusive_ptr<MOSDPGLog> msg;
 
     explicit GetLog(my_context ctx);
@@ -1324,7 +1326,8 @@ public:
       boost::statechart::custom_reaction< GotLog >,
       boost::statechart::custom_reaction< AdvMap >,
       boost::statechart::transition< NeedActingChange, WaitActingChange >,
-      boost::statechart::transition< IsIncomplete, Incomplete >
+      boost::statechart::transition< IsIncomplete, Incomplete >,
+      boost::statechart::transition< RepeatGetLog, GetLog>
       > reactions;
     boost::statechart::result react(const AdvMap&);
     boost::statechart::result react(const QueryState& q);
@@ -1443,6 +1446,7 @@ public:
 
   /// union of acting, recovery, and backfill targets
   std::set<pg_shard_t> acting_recovery_backfill;
+  shard_id_set acting_recovery_backfill_shard_id_set;
 
   std::vector<HeartbeatStampsRef> hb_stamps;
 
@@ -1559,6 +1563,7 @@ public:
   std::set<pg_shard_t> peer_activated;
 
   std::set<pg_shard_t> backfill_targets;       ///< osds to be backfilled
+  shard_id_set backfill_target_shard_id_set;
   std::set<pg_shard_t> async_recovery_targets; ///< osds to be async recovered
 
   /// osds which might have objects on them which are unfound on the primary
@@ -1580,6 +1585,7 @@ public:
 
   void update_heartbeat_peers();
   void query_unfound(Formatter *f, std::string state);
+  void update_peer_info(const pg_shard_t &from, const pg_info_t &oinfo);
   bool proc_replica_notify(const pg_shard_t &from, const pg_notify_t &notify);
   void remove_down_peer_info(const OSDMapRef &osdmap);
   void check_recovery_sources(const OSDMapRef& map);
@@ -1665,6 +1671,7 @@ private:
   std::map<pg_shard_t, pg_info_t>::const_iterator find_best_info(
     const std::map<pg_shard_t, pg_info_t> &infos,
     bool restrict_to_up_acting,
+    bool exclude_nonprimary_shards,
     bool *history_les_bound) const;
 
   static void calc_ec_acting(
@@ -1737,6 +1744,7 @@ private:
   bool choose_acting(pg_shard_t &auth_log_shard,
 		     bool restrict_to_up_acting,
 		     bool *history_les_bound,
+		     bool *repeat_getlog,
 		     bool request_pg_temp_change_only = false);
 
   bool search_for_missing(
@@ -1756,6 +1764,7 @@ private:
     pg_log_t&& olog, pg_shard_t from);
 
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
+  void consider_rollback_pwlc(eversion_t last_complete);
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo,
 		       pg_log_t&& olog, pg_missing_t&& omissing,
 		       pg_shard_t from);
@@ -1979,7 +1988,7 @@ public:
 
   /// Update missing set to reflect e (TODOSAM: not sure why this is needed)
   void add_local_next_event(const pg_log_entry_t& e) {
-    pg_log.missing_add_next_entry(e);
+    pg_log.missing_add_next_entry(e, pool.info, pg_whoami.shard);
   }
 
   /// Update log trim boundary
@@ -2296,6 +2305,10 @@ public:
   const std::set<pg_shard_t> &get_backfill_targets() const {
     return backfill_targets;
   }
+  const shard_id_set &get_backfill_target_shard_id_set() const
+  {
+    return backfill_target_shard_id_set;
+  }
   bool is_async_recovery_target(pg_shard_t peer) const {
     return async_recovery_targets.count(peer);
   }
@@ -2304,6 +2317,9 @@ public:
   }
   const std::set<pg_shard_t> &get_acting_recovery_backfill() const {
     return acting_recovery_backfill;
+  }
+  const shard_id_set &get_acting_recovery_backfill_shard_id_set() const {
+    return acting_recovery_backfill_shard_id_set;
   }
 
   const PGLog &get_pg_log() const {
