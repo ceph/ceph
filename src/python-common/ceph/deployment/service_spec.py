@@ -1417,6 +1417,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  # unused and duplicate of tgt_path below, consider removing
                  spdk_path: Optional[str] = None,
                  spdk_mem_size: Optional[int] = None,
+                 spdk_huge_pages: Optional[int] = None,
                  tgt_path: Optional[str] = None,
                  spdk_timeout: Optional[float] = 60.0,
                  spdk_log_level: Optional[str] = '',
@@ -1568,6 +1569,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.spdk_path = spdk_path or '/usr/local/bin/nvmf_tgt'
         #: ``spdk_mem_size`` memory size in MB for DPDK
         self.spdk_mem_size = spdk_mem_size
+        #: ``spdk_huge_pages`` huge pages count to be be used by SPDK
+        self.spdk_huge_pages = spdk_huge_pages
         #: ``tgt_path`` nvmeof target path
         self.tgt_path = tgt_path or '/usr/local/bin/nvmf_tgt'
         #: ``spdk_timeout`` SPDK connectivity timeout
@@ -1744,6 +1747,12 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_boolean(self.log_files_rotation_enabled, "Log files rotation enabled")
         verify_boolean(self.verbose_log_messages, "Verbose log messages")
         verify_boolean(self.enable_monitor_client, "Enable monitor client")
+        verify_positive_int(self.spdk_mem_size, "SPDK memory size")
+        verify_positive_int(self.spdk_huge_pages, "SPDK huge pages count")
+        if self.spdk_mem_size and self.spdk_huge_pages:
+            raise SpecValidationError(
+                '"spdk_mem_size" and "spdk_huge_pages" are mutually exclusive'
+                )
 
 
 yaml.add_representer(NvmeofServiceSpec, ServiceSpec.yaml_representer)
