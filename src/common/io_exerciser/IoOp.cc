@@ -10,6 +10,7 @@ using DoneOp = ceph::io_exerciser::DoneOp;
 using BarrierOp = ceph::io_exerciser::BarrierOp;
 using CreateOp = ceph::io_exerciser::CreateOp;
 using RemoveOp = ceph::io_exerciser::RemoveOp;
+using ConsistencyOp = ceph::io_exerciser::ConsistencyOp;
 using SingleReadOp = ceph::io_exerciser::SingleReadOp;
 using DoubleReadOp = ceph::io_exerciser::DoubleReadOp;
 using TripleReadOp = ceph::io_exerciser::TripleReadOp;
@@ -96,6 +97,16 @@ ceph::io_exerciser::ReadWriteOp<opType, numIOs>::ReadWriteOp(
       }
     }
   }
+}
+
+ConsistencyOp::ConsistencyOp() : TestOp<OpType::Consistency>() {}
+
+std::unique_ptr<ConsistencyOp> ConsistencyOp::generate() {
+  return std::make_unique<ConsistencyOp>();
+}
+
+std::string ConsistencyOp::to_string(uint64_t block_size) const {
+  return "Consistency";
 }
 
 template <OpType opType, int numIOs>

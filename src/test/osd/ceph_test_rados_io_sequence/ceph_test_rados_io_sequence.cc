@@ -195,6 +195,8 @@ po::options_description get_options_description() {
       "number of objects to exercise in parallel")(
       "testrecovery",
       "Inject errors during sequences to test recovery processes of OSDs")(
+      "checkconsistency",
+      "Test objects for consistency during IO sequences. Disabled by default.")(
       "interactive", "interactive mode, execute IO commands from stdin")(
       "allow_pool_autoscaling",
       "Allows pool autoscaling. Disabled by default.")(
@@ -947,8 +949,9 @@ ceph::io_sequence::tester::TestObject::TestObject(
     SelectObjectSize& sos, SelectNumThreads& snt, SelectSeqRange& ssr,
     ceph::util::random_number_generator<int>& rng, ceph::mutex& lock,
     ceph::condition_variable& cond, bool dryrun, bool verbose,
-    std::optional<int> seqseed, bool testrecovery)
-    : rng(rng), verbose(verbose), seqseed(seqseed), testrecovery(testrecovery) {
+    std::optional<int> seqseed, bool testrecovery, bool checkconsistency)
+    : rng(rng), verbose(verbose), seqseed(seqseed),
+      testrecovery(testrecovery), checkconsistency(checkconsistency) {
   if (dryrun) {
     exerciser_model = std::make_unique<ceph::io_exerciser::ObjectModel>(
         oid, sbs.select(), rng());
@@ -1001,10 +1004,10 @@ ceph::io_sequence::tester::TestObject::TestObject(
   if (testrecovery) {
     seq = ceph::io_exerciser::EcIoSequence::generate_sequence(
         curseq, obj_size_range, pool_km, pool_mappinglayers,
-        seqseed.value_or(rng()));
+        seqseed.value_or(rng()), checkconsistency);
   } else {
     seq = ceph::io_exerciser::IoSequence::generate_sequence(
-        curseq, obj_size_range, seqseed.value_or(rng()));
+        curseq, obj_size_range, seqseed.value_or(rng()), checkconsistency);
   }
 
   op = seq->next();
@@ -1040,10 +1043,10 @@ bool ceph::io_sequence::tester::TestObject::next() {
         if (testrecovery) {
           seq = ceph::io_exerciser::EcIoSequence::generate_sequence(
               curseq, obj_size_range, pool_km, pool_mappinglayers,
-              seqseed.value_or(rng()));
+              seqseed.value_or(rng()), checkconsistency);
         } else {
           seq = ceph::io_exerciser::IoSequence::generate_sequence(
-              curseq, obj_size_range, seqseed.value_or(rng()));
+              curseq, obj_size_range, seqseed.value_or(rng()), checkconsistency);
         }
 
         dout(0) << "== " << exerciser_model->get_oid() << " " << curseq << " "
@@ -1098,6 +1101,7 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
   object_name = vm["object"].as<std::string>();
   interactive = vm.contains("interactive");
   testrecovery = vm.contains("testrecovery");
+  checkconsistency = vm.contains("checkconsistency");
 
   allow_pool_autoscaling = vm.contains("allow_pool_autoscaling");
   allow_pool_balancer = vm.contains("allow_pool_balancer");
@@ -1131,7 +1135,7 @@ void ceph::io_sequence::tester::TestRunner::help() {
 }
 
 void ceph::io_sequence::tester::TestRunner::list_sequence(bool testrecovery) {
-  // List seqeunces
+  // List sequences
   std::pair<int, int> obj_size_range = sos.select();
   ceph::io_exerciser::Sequence s = ceph::io_exerciser::Sequence::SEQUENCE_BEGIN;
   std::unique_ptr<ceph::io_exerciser::IoSequence> seq;
@@ -1151,11 +1155,11 @@ void ceph::io_sequence::tester::TestRunner::list_sequence(bool testrecovery) {
   do {
     if (testrecovery) {
       seq = ceph::io_exerciser::EcIoSequence::generate_sequence(
-        s, obj_size_range, km, mappinglayers, seqseed.value_or(rng()));
+        s, obj_size_range, km, mappinglayers, seqseed.value_or(rng()), checkconsistency);
     }
     else {
       seq = ceph::io_exerciser::IoSequence::generate_sequence(
-        s, obj_size_range, seqseed.value_or(rng()));
+        s, obj_size_range, seqseed.value_or(rng()), checkconsistency);
     }
 
     dout(0) << s << " " << seq->get_name_with_seqseed() << dendl;
@@ -1413,7 +1417,7 @@ bool ceph::io_sequence::tester::TestRunner::run_automated_test() {
       test_objects.push_back(
           std::make_shared<ceph::io_sequence::tester::TestObject>(
               name, rados, asio, sbs, spo, sos, snt, ssr, rng, lock, cond,
-              dryrun, verbose, seqseed, testrecovery));
+              dryrun, verbose, seqseed, testrecovery, checkconsistency));
     }
     catch (const std::runtime_error &e) {
       std::cerr << "Error: " << e.what() << std::endl;

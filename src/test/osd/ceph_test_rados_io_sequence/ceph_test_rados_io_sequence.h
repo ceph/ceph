@@ -443,7 +443,8 @@ class TestObject {
              bool dryrun,
              bool verbose,
              std::optional<int> seqseed,
-             bool testRecovery);
+             bool testRecovery,
+             bool checkConsistency);
 
   int get_num_io();
   bool readyForIo();
@@ -466,6 +467,7 @@ class TestObject {
   std::optional<std::pair<std::string_view, std::string_view>>
       pool_mappinglayers;
   bool testrecovery;
+  bool checkconsistency;
 };
 
 class TestRunner {
@@ -504,6 +506,7 @@ class TestRunner {
   bool interactive;
 
   bool testrecovery;
+  bool checkconsistency;
 
   bool allow_pool_autoscaling;
   bool allow_pool_balancer;
