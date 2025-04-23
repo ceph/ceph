@@ -27,9 +27,9 @@ def password_hash(args: Namespace) -> None:
     if not salt_password:
         salt = bcrypt.gensalt()
     else:
-        salt = salt_password.encode('utf8')
+        salt = salt_password.encode()
 
-    hash_str = bcrypt.hashpw(password.encode('utf8'), salt).decode('utf-8')
+    hash_str = bcrypt.hashpw(password.encode(), salt).decode()
     json.dump({'hash': hash_str}, sys.stdout)
 
 
@@ -75,7 +75,7 @@ def _get_cert_issuer_info(crt: str) -> Tuple[Optional[str], Optional[str]]:
     """Basic validation of a CA cert
     """
 
-    crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
+    crt_buffer = crt.encode() if isinstance(crt, str) else crt
     (org_name, cn) = (None, None)
     cert = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
     components = cert.get_issuer().get_components()
@@ -91,14 +91,14 @@ def _get_cert_issuer_info(crt: str) -> Tuple[Optional[str], Optional[str]]:
 def verify_cacrt_content(args: Namespace) -> None:
     crt = sys.stdin.read()
 
-    crt_buffer = crt.encode("utf-8") if isinstance(crt, str) else crt
+    crt_buffer = crt.encode() if isinstance(crt, str) else crt
     x509 = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
     no_after = x509.get_notAfter()
     if not no_after:
         print("Certificate does not have an expiration date.", file=sys.stderr)
         sys.exit(1)
 
-    end_date = datetime.datetime.strptime(no_after.decode('ascii'), '%Y%m%d%H%M%SZ')
+    end_date = datetime.datetime.strptime(no_after.decode(), '%Y%m%d%H%M%SZ')
 
     if x509.has_expired():
         org, cn = _get_cert_issuer_info(crt)
@@ -116,7 +116,7 @@ def verify_cacrt_content(args: Namespace) -> None:
 def get_cert_issuer_info(args: Namespace) -> None:
     crt = sys.stdin.read()
 
-    crt_buffer = crt.encode("utf-8") if isinstance(crt, str) else crt
+    crt_buffer = crt.encode() if isinstance(crt, str) else crt
     (org_name, cn) = (None, None)
     cert = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
     components = cert.get_issuer().get_components()
@@ -145,7 +145,7 @@ def verify_tls(args: Namespace) -> None:
     except (ValueError, crypto.Error) as e:
         _fail_message('Invalid private key: %s' % str(e))
     try:
-        crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
+        crt_buffer = crt.encode() if isinstance(crt, str) else crt
         _crt = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
     except ValueError as e:
         _fail_message('Invalid certificate key: %s' % str(e))
