@@ -86,6 +86,12 @@ class NvmeofService(CephService):
         # Indicate to the daemon whether to utilize huge pages
         if spec.spdk_mem_size:
             daemon_spec.extra_files['spdk_mem_size'] = str(spec.spdk_mem_size)
+        elif spec.spdk_huge_pages:
+            try:
+                huge_pages_value = int(spec.spdk_huge_pages)
+                daemon_spec.extra_files['spdk_huge_pages'] = str(huge_pages_value)
+            except ValueError:
+                logger.error(f"Invalid value for SPDK huge pages: {spec.spdk_huge_pages}")
 
         if spec.enable_auth:
             if (
