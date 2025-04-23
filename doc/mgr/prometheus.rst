@@ -4,21 +4,21 @@
 Prometheus Module
 =================
 
-Provides a Prometheus exporter to pass on Ceph performance counters
-from the collection point in ceph-mgr.  Ceph-mgr receives MMgrReport
-messages from all MgrClient processes (mons and OSDs, for instance)
-with performance counter schema data and actual counter data, and keeps
-a circular buffer of the last N samples.  This module creates an HTTP
-endpoint (like all Prometheus exporters) and retrieves the latest sample
-of every counter when polled (or "scraped" in Prometheus terminology).
-The HTTP path and query parameters are ignored; all extant counters
-for all reporting entities are returned in text exposition format.
-(See the Prometheus `documentation <https://prometheus.io/docs/instrumenting/exposition_formats/#text-format-details>`_.)
+The Manager ``prometheus`` module implements a Prometheus exporter to expose
+Ceph performance counters from the collection point in the Manager.  The
+Manager receives ``MMgrReport`` messages from all ``MgrClient`` processes
+(including mons and OSDs) with performance counter schema data and counter
+data, and maintains a circular buffer of the latest samples.  This module
+listens on an HTTP endpoint and retrieves the latest sample of every counter
+when scraped.  The HTTP path and query parameters are ignored. All extant
+counters for all reporting entities are returned in the Prometheus exposition
+format.  (See the Prometheus `documentation
+<https://prometheus.io/docs/instrumenting/exposition_formats/#text-format-details>`_.)
 
-Enabling prometheus output
+Enabling Prometheus output
 ==========================
 
-The *prometheus* module is enabled with:
+Enable the ``prometheus`` module by running the below command :
 
 .. prompt:: bash $
 
@@ -29,7 +29,7 @@ Configuration
 
 .. note::
 
-    The Prometheus manager module needs to be restarted for configuration changes to be applied.
+    The ``prometheus`` Manager module must be restarted to apply configuration changes.
 
 .. mgr_module:: prometheus
 .. confval:: server_addr
@@ -44,7 +44,7 @@ Configuration
 .. confval:: exclude_perf_counters
 
 By default the module will accept HTTP requests on port ``9283`` on all IPv4
-and IPv6 addresses on the host.  The port and listen address are both
+and IPv6 addresses on the host.  The port and listen address are
 configurable with ``ceph config set``, with keys
 ``mgr/prometheus/server_addr`` and ``mgr/prometheus/server_port``.  This port
 is registered with Prometheus's `registry
@@ -57,8 +57,8 @@ is registered with Prometheus's `registry
 
 .. warning::
 
-    The :confval:`mgr/prometheus/scrape_interval` of this module should always be set to match
-    Prometheus' scrape interval to work properly and not cause any issues.
+    The :confval:`mgr/prometheus/scrape_interval` of this module should match
+    Prometheus' scrape interval to work properly.
 
 The scrape interval in the module is used for caching purposes
 and to determine when a cache is stale.
@@ -77,27 +77,27 @@ To set a different scrape interval in the Prometheus module, set
 On large clusters (>1000 OSDs), the time to fetch the metrics may become
 significant.  Without the cache, the Prometheus manager module could, especially
 in conjunction with multiple Prometheus instances, overload the manager and lead
-to unresponsive or crashing Ceph manager instances.  Hence, the cache is enabled
+to unresponsive or crashing Ceph Manager instances.  Hence, the cache is enabled
 by default.  This means that there is a possibility that the cache becomes
 stale.  The cache is considered stale when the time to fetch the metrics from
 Ceph exceeds the configured :confval:`mgr/prometheus/scrape_interval`.
 
 If that is the case, **a warning will be logged** and the module will either
-
-* respond with a 503 HTTP status code (service unavailable) or,
-* it will return the content of the cache, even though it might be stale.
+respond with a 503 HTTP status code (service unavailable) or
+it will return the content of the cache, even though it might be stale.
 
 This behavior can be configured. By default, it will return a 503 HTTP status
 code (service unavailable). You can set other options using the ``ceph config
 set`` commands.
 
-To tell the module to respond with possibly stale data, set it to ``return``:
+To configure the module to respond with possibly stale data, set
+the cache strategy to ``return``:
 
 .. prompt:: bash $
 
     ceph config set mgr mgr/prometheus/stale_cache_strategy return
 
-To tell the module to respond with "service unavailable", set it to ``fail``:
+To configure the module to respond with "service unavailable", set it to ``fail``:
 
 .. prompt:: bash $
 
@@ -109,15 +109,15 @@ If you are confident that you don't require the cache, you can disable it:
 
    ceph config set mgr mgr/prometheus/cache false
 
-If you are using the prometheus module behind some kind of reverse proxy or
-loadbalancer, you can simplify discovering the active instance by switching
+If you are using the ``prometheus`` module behind a reverse proxy or
+load balancer, you can simplify discovery of the active instance by switching
 to ``error``-mode:
 
 .. prompt:: bash $
 
    ceph config set mgr mgr/prometheus/standby_behaviour error
 
-If set, the prometheus module will respond with a HTTP error when requesting ``/``
+If set, the ``prometheus`` module will respond with a HTTP error when requesting ``/``
 from the standby instance. The default error code is 500, but you can configure
 the HTTP response code with:
 
@@ -138,11 +138,11 @@ To switch back to the default behaviour, simply set the config key to ``default`
 Ceph Health Checks
 ------------------
 
-The mgr/prometheus module also tracks and maintains a history of Ceph health checks,
-exposing them to the Prometheus server as discrete metrics. This allows Prometheus
-alert rules to be configured for specific health check events.
+The Manager ``prometheus`` module tracks and maintains a history of Ceph health checks,
+exposing them to the Prometheus server as discrete metrics. This allows Alertmanager
+rules to be configured for specific health check events.
 
-The metrics take the following form;
+The metrics take the following form:
 
 ::
 
@@ -152,15 +152,15 @@ The metrics take the following form;
     ceph_health_detail{name="OSD_DOWN",severity="HEALTH_WARN"} 1.0
     ceph_health_detail{name="PG_DEGRADED",severity="HEALTH_WARN"} 1.0
 
-The health check history is made available through the following commands;
+The health check history may be retrieved and cleared by running the following commands:
 
 ::
 
-    healthcheck history ls [--format {plain|json|json-pretty}]
-    healthcheck history clear
+    ceph healthcheck history ls [--format {plain|json|json-pretty}]
+    ceph healthcheck history clear
 
-The ``ls`` command provides an overview of the health checks that the cluster has
-encountered, or since the last ``clear`` command was issued. The example below;
+The ``ceph healthcheck ls`` command provides an overview of the health checks that the cluster has
+encountered since the last ``clear`` command was issued:
 
 ::
 
@@ -175,33 +175,33 @@ encountered, or since the last ``clear`` command was issued. The example below;
 RBD IO statistics
 -----------------
 
-The module can optionally collect RBD per-image IO statistics by enabling
-dynamic OSD performance counters. The statistics are gathered for all images
-in the pools that are specified in the ``mgr/prometheus/rbd_stats_pools``
+The ``prometheus`` module can optionally collect RBD per-image IO statistics by enabling
+dynamic OSD performance counters. Statistics are gathered for all images
+in the pools that are specified by the ``mgr/prometheus/rbd_stats_pools``
 configuration parameter. The parameter is a comma or space separated list
-of ``pool[/namespace]`` entries. If the namespace is not specified the
+of ``pool[/namespace]`` entries. If the RBD namespace is not specified,
 statistics are collected for all namespaces in the pool.
 
-Example to activate the RBD-enabled pools ``pool1``, ``pool2`` and ``poolN``:
+To enable collection of stats for RBD pools named ``pool1``, ``pool2`` and ``poolN``:
 
 .. prompt:: bash $
 
    ceph config set mgr mgr/prometheus/rbd_stats_pools "pool1,pool2,poolN"
 
-The wildcard can be used to indicate all pools or namespaces:
+A wildcard can be used to indicate all pools or namespaces:
 
 .. prompt:: bash $
 
    ceph config set mgr mgr/prometheus/rbd_stats_pools "*"
 
-The module makes the list of all available images scanning the specified
-pools and namespaces and refreshes it periodically. The period is
+The module maintains a list of all available images by scanning the specified
+pools and namespaces. The refresh period is
 configurable via the ``mgr/prometheus/rbd_stats_pools_refresh_interval``
-parameter (in sec) and is 300 sec (5 minutes) by default. The module will
+parameter, which defaults to 300 seconds (5 minutes). The module will
 force refresh earlier if it detects statistics from a previously unknown
 RBD image.
 
-Example to turn up the sync interval to 10 minutes:
+To set the sync interval to 10 minutes run the following command:
 
 .. prompt:: bash $
 
@@ -210,8 +210,8 @@ Example to turn up the sync interval to 10 minutes:
 Ceph daemon performance counters metrics
 -----------------------------------------
 
-With the introduction of ``ceph-exporter`` daemon, the prometheus module will no longer export Ceph daemon
-perf counters as prometheus metrics by default. However, one may re-enable exporting these metrics by setting
+With the introduction of the ``ceph-exporter`` daemon, the ``prometheus`` module will no longer export Ceph daemon
+perf counters as Prometheus metrics by default. However, one may re-enable exporting these metrics by setting
 the module option ``exclude_perf_counters`` to ``false``:
 
 .. prompt:: bash $
@@ -221,42 +221,40 @@ the module option ``exclude_perf_counters`` to ``false``:
 Statistic names and labels
 ==========================
 
-The names of the stats are exactly as Ceph names them, with
+These Prometheus stats names are the Ceph native names with
 illegal characters ``.``, ``-`` and ``::`` translated to ``_``,
-and ``ceph_`` prefixed to all names.
+and ``ceph_`` prepended.
 
+All daemon statistics have a ``ceph_daemon`` label with a value
+that identifies the type and ID of the daemon they come from,
+for example ``osd.123``.
+A given metric may be reported by multiple types of daemon, so for
+example when when querying an OSD RocksDB stats, you may constrain
+the query with a pattern of the form ``ceph_daemon=~'osd.*'`` so that Monitor
+RocksDB metrics are excluded.
 
-All *daemon* statistics have a ``ceph_daemon`` label such as "osd.123"
-that identifies the type and ID of the daemon they come from.  Some
-statistics can come from different types of daemon, so when querying
-e.g. an OSD's RocksDB stats, you would probably want to filter
-on ceph_daemon starting with "osd" to avoid mixing in the monitor
-rocksdb stats.
-
-
-The *cluster* statistics (i.e. those global to the Ceph cluster)
-have labels appropriate to what they report on.  For example,
+Cluster statistics (i.e. those global to the Ceph cluster)
+have labels appropriate to the entity for which they are reported.  For example,
 metrics relating to pools have a ``pool_id`` label.
 
-
-The long running averages that represent the histograms from core Ceph
-are represented by a pair of ``<name>_sum`` and ``<name>_count`` metrics.
+Long-running averages that represent Ceph statistic histograms
+are represented by paired ``<name>_sum`` and ``<name>_count`` metrics.
 This is similar to how histograms are represented in `Prometheus <https://prometheus.io/docs/concepts/metric_types/#histogram>`_
-and they can also be treated `similarly <https://prometheus.io/docs/practices/histograms/>`_.
+and they are  treated `similarly <https://prometheus.io/docs/practices/histograms/>`_.
 
 Pool and OSD metadata series
 ----------------------------
 
-Special series are output to enable displaying and querying on
+Series are exported to facilitate displaying and querying on
 certain metadata fields.
 
-Pools have a ``ceph_pool_metadata`` field like this:
+Pools have a ``ceph_pool_metadata`` metric of the following form:
 
 ::
 
     ceph_pool_metadata{pool_id="2",name="cephfs_metadata_a"} 1.0
 
-OSDs have a ``ceph_osd_metadata`` field like this:
+OSDs have a ``ceph_osd_metadata`` metric of the following form:
 
 ::
 
@@ -266,28 +264,29 @@ OSDs have a ``ceph_osd_metadata`` field like this:
 Correlating drive statistics with node_exporter
 -----------------------------------------------
 
-The prometheus output from Ceph is designed to be used in conjunction
-with the generic host monitoring from the Prometheus node_exporter.
+Ceph cluster Prometheus metrics are used in conjunction
+with generic host metrics from the Prometheus ``node_exporter``.
 
-To enable correlation of Ceph OSD statistics with node_exporter's
-drive statistics, special series are output like this:
+To enable correlation of Ceph OSD statistics with ``node_exporter``'s
+drive statistics, Ceph creates series of the below form:
 
 ::
 
     ceph_disk_occupation_human{ceph_daemon="osd.0", device="sdd", exported_instance="myhost"}
 
-To use this to get disk statistics by OSD ID, use either the ``and`` operator or
-the ``*`` operator in your prometheus query. All metadata metrics (like ``
-ceph_disk_occupation_human`` have the value 1 so they act neutral with ``*``. Using ``*``
-allows to use ``group_left`` and ``group_right`` grouping modifiers, so that
-the resulting metric has additional labels from one side of the query.
+To query drive metrics by OSD ID, use either the ``and`` operator or
+the ``*`` operator in your Prometheus query. All metadata
+metrics (like ``ceph_disk_occupation_human``) have the value ``1`` so that they
+combine in a neutral fashion with the PromQL ``*`` operator. Using ``*``
+allows the use of the ``group_left`` and ``group_right`` grouping modifiers
+so that the results have additional labels from one side of the query.
 
-See the
-`prometheus documentation`__ for more information about constructing queries.
+See the `prometheus documentation`__ for more information about constructing
+PromQL queries and exploring interactively via the Prometheus expression browser..
 
 __ https://prometheus.io/docs/prometheus/latest/querying/basics
 
-The goal is to run a query like
+For example we can run a query like the below:
 
 ::
 
@@ -296,19 +295,19 @@ The goal is to run a query like
 
 Out of the box the above query will not return any metrics since the ``instance`` labels of
 both metrics don't match. The ``instance`` label of ``ceph_disk_occupation_human``
-will be the currently active MGR node.
+will be the currently active Manager.
 
-The following two section outline two approaches to remedy this.
+The following sections outline two approaches to remedy this.
 
 .. note::
 
-    If you need to group on the `ceph_daemon` label instead of `device` and
-    `instance` labels, using `ceph_disk_occupation_human` may not work reliably.
-    It is advised that you use `ceph_disk_occupation` instead.
+    If you need to group on the ``ceph_daemon`` label instead of ``device`` and
+    ``instance`` labels, using ``ceph_disk_occupation_human`` may not work reliably.
+    It is advised that you use ``ceph_disk_occupation`` instead.
 
-    The difference is that `ceph_disk_occupation_human` may group several OSDs
-    into the value of a single `ceph_daemon` label in cases where multiple OSDs
-    share a disk.
+    The difference is that ``ceph_disk_occupation_human`` may group several OSDs
+    into the value of a single ``ceph_daemon`` label in cases where multiple OSDs
+    share a device.
 
 Use label_replace
 =================
@@ -317,7 +316,7 @@ The ``label_replace`` function (cp.
 `label_replace documentation <https://prometheus.io/docs/prometheus/latest/querying/functions/#label_replace>`_)
 can add a label to, or alter a label of, a metric within a query.
 
-To correlate an OSD and its disks write rate, the following query can be used:
+To correlate an OSD with its drives' write rate, a query of the following form can be used:
 
 ::
 
@@ -336,19 +335,19 @@ honor_labels
 ------------
 
 To enable Ceph to output properly-labeled data relating to any host,
-use the ``honor_labels`` setting when adding the ceph-mgr endpoints
-to your prometheus configuration.
+use the ``honor_labels`` setting when adding the Manager endpoints
+to your Prometheus configuration.
 
-This allows Ceph to export the proper ``instance`` label without prometheus
-overwriting it. Without this setting, Prometheus applies an ``instance`` label
-that includes the hostname and port of the endpoint that the series came from.
-Because Ceph clusters have multiple manager daemons, this results in an
-``instance`` label that changes spuriously when the active manager daemon
+This instructs Ceph to export the proper ``instance`` labels without Prometheus
+overwriting them at ingest. Without this setting, Prometheus applies an ``instance`` label
+that includes the hostname and port of the endpoint from which each metric is scraped.
+Because Ceph clusters have multiple Manager daemons, this results in an
+``instance`` label that changes  when the active Manager daemon
 changes.
 
-If this is undesirable a custom ``instance`` label can be set in the
-Prometheus target configuration: you might wish to set it to the hostname
-of your first mgr daemon, or something completely arbitrary like "ceph_cluster".
+If this is undesirable, a custom ``instance`` label can be set in the
+Prometheus target configuration. You might wish to set it to the hostname
+of your first Manager, or something arbitrary like ``ceph_cluster``.
 
 node_exporter hostname labels
 -----------------------------
@@ -357,17 +356,17 @@ Set your ``instance`` labels to match what appears in Ceph's OSD metadata
 in the ``instance`` field.  This is generally the short hostname of the node.
 
 This is only necessary if you want to correlate Ceph stats with host stats,
-but you may find it useful to do it in all cases in case you want to do
-the correlation in the future.
+but you may find it useful to do so to facilitate correlation of
+historical data in the future.
 
 Example configuration
 ---------------------
 
-This example shows a single node configuration running ceph-mgr and
-node_exporter on a server called ``senta04``. Note that this requires one
+This example shows a deployment with a Manager and ``node_exporter`` placed
+on a server named ``senta04``. Note that this requires one
 to add an appropriate and unique ``instance`` label to each ``node_exporter`` target.
 
-This is just an example: there are other ways to configure prometheus
+This is just an example: there are other ways to configure Prometheus
 scrape targets and label rewrite rules.
 
 prometheus.yml
@@ -423,15 +422,15 @@ node_targets.yml
 Notes
 =====
 
-Counters and gauges are exported; currently histograms and long-running
-averages are not.  It's possible that Ceph's 2-D histograms could be
-reduced to two separate 1-D histograms, and that long-running averages
-could be exported as Prometheus' Summary type.
+Counters and gauges are exported. Histograms and long-running
+averages are currently not exported.  It is possible that Ceph's 2-D histograms
+could be reduced to two separate 1-D histograms, and that long-running averages
+could be exported as metrics of Prometheus' ``Summary`` type.
 
-Timestamps, as with many Prometheus exporters, are established by
-the server's scrape time (Prometheus expects that it is polling the
-actual counter process synchronously).  It is possible to supply a
+Timestamps, as with many exporters, are set by Prometheus at ingest to
+the Prometheus server's scrape time. Prometheus expects that it is polling the
+actual counter process synchronously.  It is possible to supply a
 timestamp along with the stat report, but the Prometheus team strongly
-advises against this.  This means that timestamps will be delayed by
-an unpredictable amount; it's not clear if this will be problematic,
-but it's worth knowing about.
+advises against this.  This would mean that timestamps would be delayed by
+an unpredictable amount. It is not clear if this would be problematic,
+but it is worth knowing about.
