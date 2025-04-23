@@ -1260,26 +1260,23 @@ asio::awaitable<void> DataLogBackends::trim_entries(
 {
   auto [target_gen, cursor] = cursorgen(std::string{marker});
   std::unique_lock l(m);
+
   const auto head_gen = (end() - 1)->second->gen_id;
   const auto tail_gen = begin()->first;
- if (target_gen < tail_gen)
-   
+  if (target_gen < tail_gen)
     co_return;
-  auto r = 0;
+
   for (auto be = lower_bound(0)->second;
-       be->gen_id <= target_gen && be->gen_id <= head_gen && r >= 0;
+       be->gen_id <= target_gen && be->gen_id <= head_gen;
        be = upper_bound(be->gen_id)->second) {
     l.unlock();
     auto c = be->gen_id == target_gen ? cursor : be->max_marker();
     co_await be->trim(dpp, shard_id, c);
-    if (r == -ENOENT)
-      r = -ENODATA;
-    if (r == -ENODATA && be->gen_id < target_gen)
-      r = 0;
     if (be->gen_id == target_gen)
       break;
     l.lock();
   };
+
   co_return;
 }
 
