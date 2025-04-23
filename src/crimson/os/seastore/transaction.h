@@ -121,7 +121,7 @@ public:
 
   void add_absent_to_retired_set(CachedExtentRef ref) {
     assert(ref->get_paddr().is_absolute());
-    bool added = do_add_to_read_set(ref);
+    bool added = do_bidirectional_attach(ref);
     ceph_assert(added);
     add_present_to_retired_set(ref);
   }
@@ -164,7 +164,7 @@ public:
     if (is_weak()) {
       return false;
     }
-    return do_add_to_read_set(ref);
+    return do_bidirectional_attach(ref);
   }
 
   void add_to_read_set(CachedExtentRef ref) {
@@ -174,7 +174,7 @@ public:
       return;
     }
 
-    bool added = do_add_to_read_set(ref);
+    bool added = do_bidirectional_attach(ref);
     ceph_assert(added);
   }
 
@@ -430,7 +430,7 @@ public:
     root.reset();
     offset = 0;
     delayed_temp_offset = 0;
-    read_items.clear();
+    clear_read_set();
     fresh_backref_extents = 0;
     invalidate_clear_write_set();
     mutated_block_list.clear();
@@ -573,6 +573,12 @@ private:
   friend class Cache;
   friend Ref make_test_transaction();
 
+  void clear_read_set() {
+    read_items.clear();
+    assert(read_set.empty());
+    // Automatically unlink this transaction from CachedExtent::read_transactions
+  }
+
   std::pair<get_extent_ret, CachedExtentRef> do_get_extent(paddr_t addr) {
     LOG_PREFIX(Transaction::do_get_extent);
     // it's possible that both write_set and retired_set contain
@@ -600,7 +606,7 @@ private:
     }
   }
 
-  auto lookup_read_set(CachedExtentRef ref) const {
+  auto lookup_extent_attachment(CachedExtentRef ref) const {
     assert(ref->is_valid());
     assert(!is_weak());
     auto it = ref->read_transactions.lower_bound(
@@ -610,11 +616,54 @@ private:
     return std::make_pair(exists, it);
   }
 
-  bool do_add_to_read_set(CachedExtentRef ref) {
+  bool do_attach_to_extent(CachedExtentRef ref) {
     assert(!is_weak());
     assert(ref->is_stable());
-    auto [exists, it] = lookup_read_set(ref);
+    assert(ref->get_paddr().is_record_relative());
+    auto [exists, it] = lookup_extent_attachment(ref);
     if (exists) {
+      return false;
+    }
+    // do_attach_to_extent can't be used on
+    // extents already added to the read_set
+    assert(!read_set.count(ref->get_paddr(), extent_cmp_t{}));
+    read_items.emplace_back(this, ref);
+    auto [iter, inserted] =
+      ref->read_transactions.insert(read_items.back());
+    assert(inserted);
+    return true;
+  }
+
+  void do_attach_to_trans(CachedExtentRef ref) {
+    if (is_weak()) {
+      return;
+    }
+    // do_attach_to_trans can't be used on stable_writing extents
+    assert(ref->is_stable_written());
+    auto [exists, it] = lookup_extent_attachment(ref);
+    // do_attach_to_trans must be used after do_attach_to_extent
+    assert(exists);
+    if (it->is_attached_to_trans()) {
+      assert(read_set.count(ref->get_paddr(), extent_cmp_t{}));
+      return;
+    }
+    assert(!read_set.count(ref->get_paddr(), extent_cmp_t{}));
+    auto [iter, inserted] = read_set.insert(*it);
+    assert(inserted);
+  }
+
+  bool do_bidirectional_attach(CachedExtentRef ref) {
+    assert(!is_weak());
+    assert(ref->is_stable());
+    // initial pending extents can't be attached
+    // bidirectionally because their paddrs may
+    // not be determined as of this moment
+    assert(!ref->get_paddr().is_record_relative());
+    auto [exists, it] = lookup_extent_attachment(ref);
+    if (exists) {
+      // do_bidirectional_attach can't be used with extents
+      // that are attached unidirectionally
+      assert(read_set.count(ref->get_paddr(), extent_cmp_t{}));
       return false;
     }
 
