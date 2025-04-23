@@ -556,7 +556,9 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
       const hobject_t &hoid,
       ECCommon::read_result_t &&res,
       ECCommon::read_request_t &req) override {
+#ifndef WITH_CRIMSON
     auto *cct = read_pipeline.cct;
+#endif
     dout(20) << __func__ << " completing hoid=" << hoid
              << " res=" << res << " req=" << req << dendl;
     extent_map result;
