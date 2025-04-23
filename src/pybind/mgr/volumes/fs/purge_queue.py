@@ -111,6 +111,7 @@ class ThreadPoolPurgeQueueMixin(AsyncJobs):
 
         self.vc = volume_client
         self.purge_rate = None
+        self.disable_purge_progress_bars = False
 
     def get_next_job(self, volname, running_jobs):
         return get_trash_entry_for_volume(self.fs_client, self.vc.volspec, volname, running_jobs)
@@ -118,3 +119,6 @@ class ThreadPoolPurgeQueueMixin(AsyncJobs):
     def execute_job(self, volname, job, should_cancel):
         purge_trash_entry_for_volume(self.fs_client, self.vc.volspec, volname,
                                      job, should_cancel, self)
+
+    def reconfigure_disable_purge_progress_bars(self, disable_purge_progress_bars):
+        self.disable_purge_progress_bars = disable_purge_progress_bars
