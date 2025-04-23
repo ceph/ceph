@@ -20,20 +20,27 @@
 
 // the only unittest we can do is to test the comibnation of
 // invalid parameters in libcephfs functions that can use zerocopy
+// ceph_ll_readv_writev and ceph_ll_nonblocking_readv_writev doesn't support
+// zerocopy, only the _v2 API does
 TEST(libcephfs, zerocopy_sanity_invalid_params) {
-  struct ceph_mount_info *mount_info = nullptr;
-  auto res = ceph_create(&mount_info, "test_mount");
+  struct ceph_mount_info *cmount = nullptr;
+  auto res = ceph_create(&cmount, NULL);
   ASSERT_EQ(0, res);
-  struct ceph_ll_io_info io_info;
-  struct iovec iov;
-  io_info.iov = &iov;
-  io_info.iovcnt = 0;
-  io_info.write = false;
+  ceph_ll_io_info_v2 io_info;
+  iovec iov;
+  io_info.base_info.iov = &iov;
+  io_info.base_info.iovcnt = 0;
+  io_info.base_info.write = false;
   io_info.zerocopy = true;
-
-  res = ceph_ll_readv_writev(mount_info, &io_info);
+  res = ceph_ll_readv_writev_v2(cmount, &io_info.base_info, sizeof(ceph_ll_io_info_v2));
   ASSERT_EQ(res, -EINVAL);
 
-  res = ceph_ll_nonblocking_readv_writev(mount_info, &io_info);
+  res = ceph_ll_nonblocking_readv_writev_v2(cmount, &io_info.base_info, sizeof(ceph_ll_io_info_v2));
+  ASSERT_EQ(res, -EINVAL);
+
+  res = ceph_ll_readv_writev_v2(cmount, &io_info.base_info, sizeof(ceph_ll_io_info) - 1);
+  ASSERT_EQ(res, -EINVAL);
+
+  res = ceph_ll_nonblocking_readv_writev_v2(cmount, &io_info.base_info, sizeof(ceph_ll_io_info) - 1);
   ASSERT_EQ(res, -EINVAL);
 }
