@@ -3168,7 +3168,11 @@ Then run the following:
             host_fqdns.append('dashboard_servers')
 
         cert, key = self.cert_mgr.generate_cert(host_fqdns, self.get_mgr_ip())
-        return {'cert': cert, 'key': key}
+        _, mgmt_gw_enabled, _ = self._get_security_config()
+        return {'mtls': mgmt_gw_enabled,
+                'cert': cert,
+                'key': key,
+                'root_ca': self.cert_mgr.get_root_ca()}
 
     @handle_orch_error
     def set_prometheus_access_info(self, user: str, password: str) -> str:
