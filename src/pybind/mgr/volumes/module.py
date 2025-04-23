@@ -627,7 +627,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'pause_cloning',
             type='bool',
             default=False,
-            desc='Pause asynchronous cloner threads')
+            desc='Pause asynchronous cloner threads'),
+        Option(
+            'disable_purge_progress_bars',
+            type='bool',
+            default=False,
+            desc='Don\'t print progress bar for purge threads')
     ]
 
     def __init__(self, *args, **kwargs):
@@ -639,6 +644,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self.snapshot_clone_no_wait = None
         self.pause_purging = False
         self.pause_cloning = False
+        self.disable_purge_progress_bars = False
         self.lock = threading.Lock()
         super(Module, self).__init__(*args, **kwargs)
         # Initialize config option members
@@ -685,6 +691,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                             self.vc.cloner.pause()
                         else:
                             self.vc.cloner.resume()
+                    elif opt['name'] == "disable_purge_progress_bars":
+                        self.vc.purge_queue.reconfigure_disable_purge_progress_bars(self.disable_purge_progress_bars)
 
 
     def handle_command(self, inbuf, cmd):
