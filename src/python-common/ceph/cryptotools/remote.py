@@ -62,7 +62,7 @@ class CryptoCaller:
         if input_data is None:
             _input = None
         else:
-            _input = input_data.encode('utf-8')
+            _input = input_data.encode()
         cmd = ['python3', '-m', _ctmodule] + list(args)
         logger.warning('CryptoCaller will run: %r', cmd)
         try:
@@ -82,7 +82,7 @@ class CryptoCaller:
         return result_obj
 
     def _result_str(self, result: subprocess.CompletedProcess) -> str:
-        return result.stdout.decode('utf-8')
+        return result.stdout.decode()
 
     def map_error(self, err: Exception) -> Optional[Exception]:
         """Convert between error types raised by the subprocesses
