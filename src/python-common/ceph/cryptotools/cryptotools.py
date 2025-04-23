@@ -129,12 +129,11 @@ def get_cert_issuer_info(args: Namespace) -> None:
 
 
 def _fail_message(msg: str) -> None:
-    json.dump({'error': msg}, sys.stderr)
-    sys.exit(1)
+    json.dump({'error': msg}, sys.stdout)
+    sys.exit(0)
 
 
 def verify_tls(args: Namespace) -> None:
-
     data = json.loads(sys.stdin.read())
 
     crt = data['crt']
@@ -163,6 +162,7 @@ def verify_tls(args: Namespace) -> None:
         _fail_message('Private key and certificate do not match up: %s' % str(e))
     except SSL.Error as e:
         _fail_message(f'Invalid cert/key pair: {e}')
+    json.dump({'ok': True}, sys.stdout)  # need to emit something on success
 
 
 if __name__ == "__main__":

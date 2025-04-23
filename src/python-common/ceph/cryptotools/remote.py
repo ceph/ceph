@@ -121,12 +121,13 @@ class CryptoCaller:
         """Given a TLS certificate and a private key raise an error
         if the combination is not valid.
         """
-        self._run(
+        result = self._run(
             ['verify_tls'],
             input_data=json.dumps({'crt': crt, 'key': key}),
             capture_output=True,
             check=True,
         )
+        self._result_json(result)  # for errors only
 
     def verify_cacrt_content(self, crt: str) -> int:
         """Verify a CA Certificate return the number of days until expiration."""
