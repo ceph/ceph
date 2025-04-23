@@ -154,6 +154,11 @@ public:
       Context *on_complete,
       bool fast_read = false);
 
+  bool ec_can_decode(const std::set<int> &available_shards) const;
+  std::map<int, bufferlist> ec_encode_acting_set(const bufferlist &in_bl) const;
+  std::map<int, bufferlist> ec_decode_acting_set(
+      const std::map<int, bufferlist> &shard_map, int chunk_size) const;
+
 private:
   friend struct ECRecoveryHandle;
 
@@ -381,8 +386,14 @@ END_IGNORE_DEPRECATED
   unsigned get_ec_data_chunk_count() const {
     return ec_impl->get_data_chunk_count();
   }
+  unsigned get_ec_stripe_width() const {
+    return ec_impl->get_data_chunk_count() + ec_impl->get_coding_chunk_count();
+  }
   int get_ec_stripe_chunk_size() const {
     return sinfo.get_chunk_size();
+  }
+  bool get_ec_supports_crc_encode_decode() const {
+    return false;
   }
   uint64_t object_size_to_shard_size(const uint64_t size) const {
     if (size == std::numeric_limits<uint64_t>::max()) {

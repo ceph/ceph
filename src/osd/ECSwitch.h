@@ -320,12 +320,78 @@ public:
     return legacy.get_ec_data_chunk_count();
   }
 
+  unsigned get_ec_stripe_width() const override {
+    if (is_optimized()) {
+      return optimized.get_ec_stripe_width();
+    }
+    return legacy.get_ec_stripe_width();
+  }
+
   int get_ec_stripe_chunk_size() const override
   {
     if (is_optimized()) {
       return optimized.get_ec_stripe_chunk_size();
     }
     return legacy.get_ec_stripe_chunk_size();
+  }
+
+  bool get_ec_supports_crc_encode_decode() const override
+  {
+    if (is_optimized()) {
+      return optimized.get_ec_supports_crc_encode_decode();
+    }
+    return legacy.get_ec_supports_crc_encode_decode();
+  }
+
+  bool ec_can_decode(const shard_id_set &available_shards) const override {
+    if (is_optimized()) {
+      return optimized.ec_can_decode(available_shards);
+    }
+
+    // Convert into a set type supported by Legacy EC
+    std::set<int> available_shard_set{};
+    for (auto &shard_id : available_shards) {
+      available_shard_set.insert(shard_id.id);
+    }
+
+    return legacy.ec_can_decode(available_shard_set);
+  }
+
+  shard_id_map<bufferlist> ec_encode_acting_set(const bufferlist &in_bl) const override {
+    if (is_optimized()) {
+      return optimized.ec_encode_acting_set(in_bl);
+    }
+    // Convert into a map type supported by Legacy EC
+    std::map<int, bufferlist> legacy_encoded_map =
+        legacy.ec_encode_acting_set(in_bl);
+
+    // Convert return type back from legacy EC type
+    shard_id_map<bufferlist> encoded_map(legacy_encoded_map.size());
+    for (const auto &[shard_id, bl] : legacy_encoded_map) {
+      encoded_map[shard_id_t(shard_id)] = bl;
+    }
+    return encoded_map;
+  }
+
+  shard_id_map<bufferlist> ec_decode_acting_set(
+      const shard_id_map<bufferlist> &shard_map, int chunk_size) const override {
+    if (is_optimized()) {
+      return optimized.ec_decode_acting_set(shard_map, chunk_size);
+    }
+    // Convert into a set type supported by Legacy EC
+    std::map<int, bufferlist> legacy_shard_map;
+    for (const auto &[shard_id, bl] : shard_map) {
+      legacy_shard_map[shard_id.id] = bl;
+    }
+    std::map<int, bufferlist> legacy_decoded_map =
+        legacy.ec_decode_acting_set(legacy_shard_map, chunk_size);
+
+    // Convert return type back from legacy EC type
+    shard_id_map<bufferlist> decoded_map(legacy_decoded_map.size());
+    for (const auto &[shard_id, bl] : legacy_decoded_map) {
+      decoded_map[shard_id_t(shard_id)] = bl;
+    }
+    return decoded_map;
   }
 
   int objects_get_attrs(

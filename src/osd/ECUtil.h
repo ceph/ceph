@@ -539,6 +539,10 @@ public:
     return pool->allows_ecoverwrites();
   }
 
+  bool supports_ec_optimisations() const {
+    return pool->allows_ecoptimizations();
+  }
+
   bool supports_sub_chunks() const {
     return (plugin_flags &
       ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS) != 0;
