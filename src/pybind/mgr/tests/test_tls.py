@@ -31,7 +31,7 @@ class TLSchecks(unittest.TestCase):
         crt, key = create_self_signed_cert()
 
         # fudge the key, to force an error to be detected during verify_tls
-        fudged = f"{key[:-35]}c0ffee==\n{key[-25:]}".encode('utf-8')
+        fudged = f"{key[:-35]}c0ffee==\n{key[-25:]}"
         self.assertRaises(ServerConfigException, verify_tls, crt, fudged)
 
     def test_mismatched_tls(self):
