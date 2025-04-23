@@ -56,7 +56,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   LOG_PREFIX(Cache::retire_extent_addr);
   TRACET("retire {}~0x{:x}", t, paddr, length);
 
-  assert(paddr.is_real() && !paddr.is_block_relative());
+  assert(paddr.is_real_location());
 
   CachedExtentRef ext;
   auto result = t.get_extent(paddr, &ext);

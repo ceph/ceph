@@ -647,23 +647,22 @@ public:
     return get_device_id() == DEVICE_ID_ROOT;
   }
 
-  /**
-   * is_real
-   *
-   * indicates whether addr reflects a physical location, absolute, relative,
-   * or delayed.  FAKE segments also count as real so as to reflect the way in
-   * which unit tests use them.
-   */
-  bool is_real() const {
-    return !is_zero() && !is_null() && !is_root();
-  }
-
   bool is_absolute() const {
     return get_addr_type() != paddr_types_t::RESERVED;
   }
 
   bool is_fake() const {
     return get_device_id() == DEVICE_ID_FAKE;
+  }
+
+  /**
+   * is_real_location
+   *
+   * indicates whether addr reflects a real location (valid in lba) --
+   * absolute, record-relative, or delayed.
+   */
+  bool is_real_location() const {
+    return is_absolute() || is_delayed() || is_record_relative();
   }
 
   auto operator<=>(const paddr_t &) const = default;
