@@ -118,6 +118,14 @@ public:
   T *t = nullptr;
   CachedExtentRef ref;
 
+  bool is_extent_attached_to_trans() const {
+    return extent_hook.is_linked();
+  }
+
+  bool is_trans_attached_to_extent() const {
+    return trans_hook.is_linked();
+  }
+
   read_set_item_t(T *t, CachedExtentRef ref);
   read_set_item_t(const read_set_item_t &) = delete;
   read_set_item_t(read_set_item_t &&) = default;
