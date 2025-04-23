@@ -127,12 +127,12 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
     out << device_id_printer_t{id}
         << ",0x"
         << std::hex << s.get_device_off() << std::dec;
-  } else if (rhs.get_addr_type() == paddr_types_t::SEGMENT) {
+  } else if (rhs.is_absolute_segmented()) {
     auto &s = rhs.as_seg_paddr();
     out << s.get_segment_id()
         << ",0x"
         << std::hex << s.get_segment_off() << std::dec;
-  } else if (rhs.get_addr_type() == paddr_types_t::RANDOM_BLOCK) {
+  } else if (rhs.is_absolute_random_block()) {
     auto &s = rhs.as_blk_paddr();
     out << device_id_printer_t{s.get_device_id()}
         << ",0x"

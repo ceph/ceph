@@ -691,7 +691,7 @@ TransactionManager::get_extents_if_live(
 
   // This only works with segments to check if alive,
   // as parallel transactions may split the extent at the same time.
-  ceph_assert(paddr.get_addr_type() == paddr_types_t::SEGMENT);
+  ceph_assert(paddr.is_absolute_segmented());
 
   return cache->get_extent_if_cached(t, paddr, len, type
   ).si_then([this, FNAME, type, paddr, laddr, len, &t](auto extent)
@@ -727,7 +727,7 @@ TransactionManager::get_extents_if_live(
           {
             DEBUGT("got pin, try read in parallel ... -- {}", t, *pin);
             auto pin_paddr = pin->get_val();
-            if (pin_paddr.get_addr_type() != paddr_types_t::SEGMENT) {
+            if (!pin_paddr.is_absolute_segmented()) {
               return seastar::now();
             }
             auto &pin_seg_paddr = pin_paddr.as_seg_paddr();
