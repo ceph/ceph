@@ -184,6 +184,27 @@ std::ostream &operator<<(std::ostream &, const parent_tracker_t<T> &);
 template <typename T>
 using parent_tracker_ref = boost::intrusive_ptr<parent_tracker_t<T>>;
 
+class ExtentTransViewRetriever {
+public:
+  template <typename T>
+  get_child_ifut<T> get_extent_viewable_by_trans(
+    Transaction &t,
+    TCachedExtentRef<T> ext)
+  {
+    return get_extent_viewable_by_trans(t, CachedExtentRef(ext.get())
+    ).si_then([](auto ext) {
+      return ext->template cast<T>();
+    });
+  }
+  virtual bool is_viewable_extent_data_stable(Transaction &, CachedExtentRef) = 0;
+  virtual bool is_viewable_extent_stable(Transaction &, CachedExtentRef) = 0;
+  virtual ~ExtentTransViewRetriever() {}
+protected:
+  virtual get_child_iertr::future<CachedExtentRef> get_extent_viewable_by_trans(
+    Transaction &t,
+    CachedExtentRef extent) = 0;
+};
+
 template <typename ParentT, typename key_t>
 class BaseChildNode {
 public:
@@ -237,27 +258,6 @@ bool is_valid_child_ptr(BaseChildNode<T, node_key_t>* child) {
   return child != nullptr && child != get_reserved_ptr<T, node_key_t>();
 }
 
-class ExtentTransViewRetriever {
-public:
-  template <typename T>
-  get_child_ifut<T> get_extent_viewable_by_trans(
-    Transaction &t,
-    TCachedExtentRef<T> ext)
-  {
-    return get_extent_viewable_by_trans(t, CachedExtentRef(ext.get())
-    ).si_then([](auto ext) {
-      return ext->template cast<T>();
-    });
-  }
-  virtual bool is_viewable_extent_data_stable(Transaction &, CachedExtentRef) = 0;
-  virtual bool is_viewable_extent_stable(Transaction &, CachedExtentRef) = 0;
-  virtual ~ExtentTransViewRetriever() {}
-protected:
-  virtual get_child_iertr::future<CachedExtentRef> get_extent_viewable_by_trans(
-    Transaction &t,
-    CachedExtentRef extent) = 0;
-};
-
 // ParentNodes are nodes in the tree that have children,
 // including leaf nodes that has other types of extents
 // as the children, e.g. LBALeafNodes have logical extents
@@ -302,27 +302,14 @@ class ParentNode {
    * 	cannot be rewritten) because their parents must be mutated upon remapping.
    */
 public:
-  TCachedExtentRef<T> find_pending_version(Transaction &t, node_key_t key) {
+  std::pair<bool, TCachedExtentRef<T>> resolve_transaction(
+    Transaction &t, node_key_t key) {
     auto &me = down_cast();
-    assert(me.is_stable());
-    auto mut_iter = me.mutation_pending_extents.find(
-      t.get_trans_id(), trans_spec_view_t::cmp_t());
-    if (mut_iter != me.mutation_pending_extents.end()) {
-      assert(copy_dests_by_trans.find(t.get_trans_id()) ==
-	copy_dests_by_trans.end());
-      return static_cast<T*>(&(*mut_iter));
+    ceph_assert(me.is_valid());
+    if (me.is_viewable_by_trans(t).first) {
+      return {false, &me};
     }
-    auto iter = copy_dests_by_trans.find(
-      t.get_trans_id(), trans_spec_view_t::cmp_t());
-    ceph_assert(iter != copy_dests_by_trans.end());
-    auto &copy_dests = static_cast<copy_dests_t&>(*iter);
-    auto it = copy_dests.dests_by_key.lower_bound(key);
-    if (it == copy_dests.dests_by_key.end() || (*it)->get_begin() > key) {
-      ceph_assert(it != copy_dests.dests_by_key.begin());
-      --it;
-    }
-    ceph_assert((*it)->get_begin() <= key && key < (*it)->get_end());
-    return *it;
+    return {true, find_pending_version(t, key)};
   }
 
   template <typename ChildT>
@@ -404,6 +391,30 @@ protected:
     auto &me = down_cast();
     maybe_expand_children(me.get_size());
   }
+
+  TCachedExtentRef<T> find_pending_version(Transaction &t, node_key_t key) {
+    auto &me = down_cast();
+    assert(me.is_stable());
+    auto mut_iter = me.mutation_pending_extents.find(
+      t.get_trans_id(), trans_spec_view_t::cmp_t());
+    if (mut_iter != me.mutation_pending_extents.end()) {
+      assert(copy_dests_by_trans.find(t.get_trans_id()) ==
+	copy_dests_by_trans.end());
+      return static_cast<T*>(&(*mut_iter));
+    }
+    auto iter = copy_dests_by_trans.find(
+      t.get_trans_id(), trans_spec_view_t::cmp_t());
+    ceph_assert(iter != copy_dests_by_trans.end());
+    auto &copy_dests = static_cast<copy_dests_t&>(*iter);
+    auto it = copy_dests.dests_by_key.lower_bound(key);
+    if (it == copy_dests.dests_by_key.end() || (*it)->get_begin() > key) {
+      ceph_assert(it != copy_dests.dests_by_key.begin());
+      --it;
+    }
+    ceph_assert((*it)->get_begin() <= key && key < (*it)->get_end());
+    return *it;
+  }
+
   void add_copy_dest(Transaction &t, TCachedExtentRef<T> dest) {
     ceph_assert(down_cast().is_stable());
     ceph_assert(dest->is_pending());
@@ -985,6 +996,24 @@ private:
 // as the parents, so they are ChildNodes.
 template <typename ParentT, typename T, typename key_t>
 class ChildNode : public BaseChildNode<ParentT, key_t> {
+public:
+  using get_parent_node_iertr = get_child_iertr;
+  using get_parent_node_ret =
+    get_parent_node_iertr::future<TCachedExtentRef<ParentT>>;
+  get_parent_node_ret get_parent_node(
+    Transaction &t,
+    ExtentTransViewRetriever &etvr)
+  {
+    auto &me = down_cast();
+    if (this->has_parent_tracker()) {
+      return this->_get_parent_node(t, etvr, me.get_begin());
+    } else {
+      assert(me.is_mutation_pending());
+      auto prior = me.get_prior_instance()->template cast<T>();
+      return prior->_get_parent_node(t, etvr, prior->get_begin());
+    }
+  }
+
 protected:
   void on_invalidated() {
     this->reset_parent_tracker();
@@ -1012,6 +1041,18 @@ private:
   }
   const T& down_cast() const {
     return *static_cast<const T*>(this);
+  }
+
+  get_parent_node_ret _get_parent_node(
+    Transaction &t,
+    ExtentTransViewRetriever &etvr,
+    key_t key)
+  {
+    return etvr.get_extent_viewable_by_trans<ParentT>(
+      t, this->peek_parent_node()
+    ).si_then([&t, key](auto extent) {
+      return extent->resolve_transaction(t, key).second;
+    });
   }
 
   void _take_parent_from_prior() {
