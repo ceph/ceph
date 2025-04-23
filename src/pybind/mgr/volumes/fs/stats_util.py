@@ -442,6 +442,9 @@ class PurgeProgressBar(VolumesProgressBar):
         self.pev_id = 'mgr-vol-ongoing-purge'
 
     def initiate(self):
+        if self.volclient.purge_queue.disable_purge_progress_bars:
+            return
+
         super().initiate()
 
         # init_subvol_count = initial num of trash entries
@@ -473,6 +476,9 @@ class PurgeProgressBar(VolumesProgressBar):
         return subvol_count, file_count
 
     def _update_progress_bars(self):
+        if self.volclient.purge_queue.disable_purge_progress_bars:
+            return
+
         latest_subvol_count, latest_file_count = self._get_trash_stats()
         log.debug(f'Latest stats: {latest_subvol_count} subvols, '
                   f'{latest_file_count} files')
