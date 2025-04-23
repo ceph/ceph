@@ -583,6 +583,11 @@ class PurgeProgressBar(VolumesProgressBar):
         self.prev_msg = msg
         self.prev_fraction = fraction
 
+        # if purge progress bar is disabled, don't print it but let this thread
+        # generate stats as they might be needed by "fs purge status" command.
+        if self.volclient.purge_queue.disable_purge_progress_bars:
+            return
+
         self._update_progress_bar_event(self.pev_id, msg, fraction)
         log.debug(f'finished updating purge progress bar with message: {msg}')
 
