@@ -2993,9 +2993,9 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
   req->send();
   r = cond.wait();
   if (r < 0) {
-    lderr(cct) << "failed to list group snapshots: "
+    lderr(cct) << "failed to list group snapshots, retry later: "
                << cpp_strerror(r) << dendl;
-    // ignore
+    return r;
   }
 
   for (auto &snap : snaps) {
@@ -3008,7 +3008,7 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
     if (r < 0) {
       lderr(cct) << "failed to remove group snapshot metadata: "
                  << cpp_strerror(r) << dendl;
-      // ignore
+      return r;
     }
   }
 
