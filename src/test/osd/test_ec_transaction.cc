@@ -401,3 +401,43 @@ TEST(ectransaction, truncate_to_bigger_without_write)
   ASSERT_FALSE(plan.to_read);
   ASSERT_EQ(0u, plan.will_write.shard_count());
 }
+
+TEST(ectransaction, truncate_to_smalelr_without_write) {
+  hobject_t h;
+  PGTransaction::ObjectOperation op;
+
+  op.truncate = std::pair(EC_ALIGN_SIZE/4, EC_ALIGN_SIZE/4);
+
+  pg_pool_t pool;
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  ECUtil::stripe_info_t sinfo(2, 2, EC_ALIGN_SIZE*2, &pool);
+  shard_id_set shards;
+  shards.insert_range(shard_id_t(), 4);
+  ECTransaction::WritePlanObj plan(
+    h,
+    op,
+    sinfo,
+    shards,
+    shards,
+    false,
+    16*EC_ALIGN_SIZE,
+    std::nullopt,
+    std::nullopt,
+    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
+    nullptr,
+    0);
+
+  generic_derr << "plan " << plan << dendl;
+
+  ASSERT_TRUE(plan.to_read);
+  ECUtil::shard_extent_set_t ref_read(sinfo.get_k_plus_m());
+  ref_read[shard_id_t(0)].insert(0, EC_ALIGN_SIZE);
+  ASSERT_EQ(ref_read, plan.to_read);
+
+  // Writes should cover parity only.
+  ECUtil::shard_extent_set_t ref_write(sinfo.get_k_plus_m());
+  ref_write[shard_id_t(2)].insert(0, EC_ALIGN_SIZE);
+  ref_write[shard_id_t(3)].insert(0, EC_ALIGN_SIZE);
+  ASSERT_EQ(ref_write, plan.will_write);
+}
+
