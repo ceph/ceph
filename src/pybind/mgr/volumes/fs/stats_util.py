@@ -435,6 +435,9 @@ class PurgeProgressReporter(AsyncJobProgressReporter):
     def initiate_reporting(self):
         super().initiate_reporting()
 
+        if self.volclient.purge_queue.disable_purge_progress_bars:
+            return
+
         subvol_count, file_count = self._get_trash_info()
         log.debug('collected stats of purge first time')
 
@@ -468,6 +471,9 @@ class PurgeProgressReporter(AsyncJobProgressReporter):
         return subvol_count, file_count
 
     def _update_progress_bars(self):
+        if self.volclient.purge_queue.disable_purge_progress_bars:
+            return
+
         subvol_count, file_count = self._get_trash_info()
         log.debug('collected stats of purge second time')
         if self.init_file_count == 0 and file_count != 0:
