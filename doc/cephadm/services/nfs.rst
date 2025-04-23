@@ -49,9 +49,24 @@ Alternatively, an NFS service can be applied using a YAML specification.
         - host2
     spec:
       port: 12345
+      monitoring_port: 567
+      monitoring_ip_addrs:
+        host1: 10.0.0.123
+        host2: 10.0.0.124
+      monitoring_networks:
+      - 192.168.124.0/24
+
 
 In this example, we run the server on the non-default ``port`` of
 12345 (instead of the default 2049) on ``host1`` and ``host2``.
+The default monitoring port can be customized using the ``monitoring_port``
+parameter. Additionally, you can specify the ``monitoring_ip_addrs`` or
+``monitoring_networks`` parameters to bind the monitoring port to a specific
+IP address or network. If ``monitoring_ip_addrs`` is provided and the specified
+IP address is assigned to the host, that IP address will be used. If the IP
+address is not present and ``monitoring_networks`` is specified, an IP address
+that matches one of the specified networks will be used. If neither condition
+is met, the default binding will happen on all available network interfaces.
 
 The specification can then be applied by running the following command:
 
