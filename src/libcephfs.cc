@@ -2213,17 +2213,88 @@ struct ceph_ll_readv_writev_buffer {
 
 extern "C"  void LL_onfinish_release(void *);
 
+/**
+ * Helper struct, wraps the ceph_ll_io_info and ceph_ll_io_info_v2 structs.
+ * There are no getters/setters for the v1 struct since it will be always available embedded in the v2 struct
+ * For v2 struct members there are getters/setters defined, to hide edge cases handling from the caller
+ * I am not sure either setters should "hide" the v2 == nullptr case or use ceph_assert().
+ * As for the version field initialization - since for using v1 struct we don't need version, we set it only from v2
+ * struct default ctor. In general, the caller is responsible for correctly setting the version - e.g. if they use v2
+ * struct they must init this field with 2.
+ */
+struct ceph_ll_io_info_wrapper {
+  int64_t init(ceph_ll_io_info* info, const size_t info_size) {
+    if (!info || info_size < sizeof(ceph_ll_io_info)) {
+      return -EINVAL;
+    }
+    v1 = info;
+    v2 = (info_size >= sizeof(ceph_ll_io_info_v2) ? reinterpret_cast<ceph_ll_io_info_v2*>(info) : nullptr);
+    return 0;
+  }
+
+  ceph_ll_io_info* get_info() {
+    return v1;
+  }
+
+  auto get_release() const -> void (*)(void*) {
+    return v2 ? v2->release : nullptr;
+  }
+
+  void* get_release_data() const {
+    return v2 ? v2->release_data : nullptr;
+  }
+
+  bool get_zerocopy() const {
+    return v2 ? v2->zerocopy : false;
+  }
+
+  int get_iovmax() const {
+    return v2 ? v2->iovmax : 0;
+  }
+
+  void set_release(void (*release) (void *)) {
+    if (v2) {
+      v2->release = release;
+    }
+  }
+
+  void set_release_data(void* release_data) {
+    if (v2) {
+      v2->release_data = release_data;
+    }
+  }
+
+  void set_zerocopy(bool zc) {
+    if (v2) {
+      v2->zerocopy = zc;
+    }
+  }
+
+  void set_iovmax(int iovmax) {
+    if (v2) {
+      v2->iovmax = iovmax;
+    }
+  }
+
+private:
+  ceph_ll_io_info *v1 = nullptr;
+  ceph_ll_io_info_v2 *v2 = nullptr;
+};
+
 class LL_Onfinish : public Context {
 public:
-  LL_Onfinish(struct ceph_ll_io_info *io_info)
-    : buf(), io_info(io_info) {}
+  LL_Onfinish(struct ceph_ll_io_info *io_info, size_t info_size)
+    : buf(), io_info(io_info), info_size(info_size) {}
   struct ceph_ll_readv_writev_buffer buf;
 private:
   // no ownership on io_info. should be released by the caller
   struct ceph_ll_io_info *io_info;
+  size_t info_size;
   void complete(int r) override {
     finish(r); // fills in io_info->result which may be different than r
-    if (io_info->result < 0 || io_info->write || !io_info->zerocopy) {
+    ceph_ll_io_info_wrapper info_wrapper;
+    info_wrapper.init(io_info, info_size);
+    if (info_wrapper.get_info()->result < 0 || info_wrapper.get_info()->write || !info_wrapper.get_zerocopy()) {
       // this is an error, write, or a non-zerocopy read, delete...
       // for a succesful zero-copy read, we need to keep this object until the
       // caller is done with the buffers so it can use this as a hook to release
@@ -2232,27 +2303,28 @@ private:
     }
   }
   void finish(int r) override {
-    if (!io_info->write && r > 0) {
-      if (io_info->zerocopy) {
-        int r2 = buf.prepare_iovs(io_info->iovmax);
-
+    ceph_ll_io_info_wrapper info_wrapper;
+    info_wrapper.init(io_info, info_size);
+    if (!info_wrapper.get_info()->write && r > 0) {
+      if (info_wrapper.get_zerocopy()) {
+        int r2 = buf.prepare_iovs(info_wrapper.get_iovmax());
         if (r2 < 0) {
-          io_info->result = r;
-          io_info->callback(io_info);
+          info_wrapper.get_info()->result = r;
+          info_wrapper.get_info()->callback(io_info);
           return;
         }
         
-        io_info->iovcnt = buf.iovcnt;
-        io_info->iov = buf.iov;
+        info_wrapper.get_info()->iovcnt = buf.iovcnt;
+        info_wrapper.get_info()->iov = buf.iov;
         // This is a zero-copy read, set up for returning zero copy buffer
-        io_info->release = LL_onfinish_release;
-        io_info->release_data = this;
+        info_wrapper.set_release(LL_onfinish_release);
+        info_wrapper.set_release_data(this);
       } else {
-        copy_bufferlist_to_iovec(io_info->iov, io_info->iovcnt, &buf.bl, r);
+        copy_bufferlist_to_iovec(info_wrapper.get_info()->iov, info_wrapper.get_info()->iovcnt, &buf.bl, r);
       }
     }
-    io_info->result = r;
-    io_info->callback(io_info);
+    info_wrapper.get_info()->result = r;
+    info_wrapper.get_info()->callback(io_info);
   }
 };
 
@@ -2268,22 +2340,33 @@ extern "C" void LL_onfinish_release(void *release_data)
 extern "C" int64_t ceph_ll_nonblocking_readv_writev(class ceph_mount_info *cmount,
 						    struct ceph_ll_io_info *io_info)
 {
+  return ceph_ll_nonblocking_readv_writev_v2(cmount, io_info, sizeof(ceph_ll_io_info));
+}
+
+extern "C" int64_t ceph_ll_nonblocking_readv_writev_v2(class ceph_mount_info *cmount,
+                struct ceph_ll_io_info *io_info, size_t info_size)
+{
+  ceph_ll_io_info_wrapper info_wrapper;
+  auto res = (info_wrapper.init(io_info, info_size));
+  if (res) {
+    return res;
+  }
   // a zero copy read MUST provide a length 1 iovec,
   // where the buffer is a nullptr and the length is the requested read length
-  if (!io_info->write && io_info->zerocopy && io_info->iovcnt != 1) {
+  if (!info_wrapper.get_info()->write && info_wrapper.get_zerocopy() && info_wrapper.get_info()->iovcnt != 1) {
     return -EINVAL;
   }
 
-  LL_Onfinish *onfinish = new LL_Onfinish(io_info);
+  LL_Onfinish *onfinish = new LL_Onfinish(io_info, info_size);
 
   // Note the above instantiates a ceph_ll_readv_writev_buffer which will be
   // used by a sucessful zero-copy read. The caller will then call
   // LL_onfinish_release when done with the read buffers.
 
   return (cmount->get_client()->ll_preadv_pwritev(
-			io_info->fh, io_info->iov, io_info->iovcnt,
-			io_info->off, io_info->write, onfinish, &onfinish->buf.bl,
-			io_info->fsync, io_info->syncdataonly, io_info->zerocopy));
+      info_wrapper.get_info()->fh, info_wrapper.get_info()->iov, info_wrapper.get_info()->iovcnt,
+      info_wrapper.get_info()->off, info_wrapper.get_info()->write, onfinish, &onfinish->buf.bl,
+      info_wrapper.get_info()->fsync, info_wrapper.get_info()->syncdataonly, info_wrapper.get_zerocopy()));
 }
 
 extern "C" void ceph_ll_readv_writev_release(void *release_data)
@@ -2296,47 +2379,57 @@ extern "C" void ceph_ll_readv_writev_release(void *release_data)
 }
 
 extern "C" int64_t ceph_ll_readv_writev(class ceph_mount_info *cmount,
-				     struct ceph_ll_io_info *io_info)
+             struct ceph_ll_io_info *io_info) {
+  return ceph_ll_readv_writev_v2(cmount, io_info, sizeof(ceph_ll_io_info));
+}
+
+extern "C" int64_t ceph_ll_readv_writev_v2(class ceph_mount_info *cmount,
+				     struct ceph_ll_io_info *io_info, size_t info_size)
 {
+  ceph_ll_io_info_wrapper info_wrapper;
+  auto res = info_wrapper.init(io_info, info_size);
+  if (res) {
+    return res;
+  }
   // buffer needed only for reads, no need to allocate for writes
   ceph_ll_readv_writev_buffer *buf =
-    io_info->write ? nullptr : new ceph_ll_readv_writev_buffer;
+    info_wrapper.get_info()->write ? nullptr : new ceph_ll_readv_writev_buffer;
 
   // a zero copy read MUST provide a length 1 iovec,
   // where the buffer is a nullptr and the length is the requested read length
-  if (!io_info->write && io_info->zerocopy && io_info->iovcnt != 1) {
+  if (!info_wrapper.get_info()->write && info_wrapper.get_zerocopy() && info_wrapper.get_info()->iovcnt != 1) {
     return -EINVAL;
   }
 
-  io_info->result = (cmount->get_client()->ll_preadv_pwritev(
-			io_info->fh, io_info->iov, io_info->iovcnt,
-			io_info->off, io_info->write, nullptr, buf ? &buf->bl : nullptr,
-			io_info->fsync, io_info->syncdataonly, io_info->zerocopy));
+  info_wrapper.get_info()->result = (cmount->get_client()->ll_preadv_pwritev(
+			info_wrapper.get_info()->fh, info_wrapper.get_info()->iov, info_wrapper.get_info()->iovcnt,
+			info_wrapper.get_info()->off, info_wrapper.get_info()->write, nullptr, buf ? &buf->bl : nullptr,
+			info_wrapper.get_info()->fsync, info_wrapper.get_info()->syncdataonly, info_wrapper.get_zerocopy()));
 
-  if (!io_info->write && io_info->result > 0) {
-    if (io_info->zerocopy) {
-      buf->prepare_iovs(io_info->iovmax);
-      io_info->iovcnt = buf->iovcnt;
-      io_info->iov = buf->iov;
+  if (!info_wrapper.get_info()->write && info_wrapper.get_info()->result > 0) {
+    if (info_wrapper.get_zerocopy()) {
+      buf->prepare_iovs(info_wrapper.get_iovmax());
+      info_wrapper.get_info()->iovcnt = buf->iovcnt;
+      info_wrapper.get_info()->iov = buf->iov;
       // This is a zero-copy read, set up for returning zero copy buffer
-      io_info->release = ceph_ll_readv_writev_release;
+      info_wrapper.set_release(ceph_ll_readv_writev_release);
       // the caller is responsible to call the io_info->release(io_info->release_data)
       // when ready
-      io_info->release_data = buf;
+      info_wrapper.set_release_data(buf);
     } else {
-      copy_bufferlist_to_iovec(io_info->iov, io_info->iovcnt, &buf->bl,
-                               io_info->result);
+      copy_bufferlist_to_iovec(info_wrapper.get_info()->iov, info_wrapper.get_info()->iovcnt, &buf->bl,
+                               info_wrapper.get_info()->result);
     }
   }
 
   // Note caller of a successful zero-copy read will end up calling
   // ceph_ll_readv_writev_release to release the buffers, otherwise clean it
   // up now since it is no longer needed.
-  if (io_info->write || io_info->result <= 0 || !io_info->zerocopy)
+  if (info_wrapper.get_info()->write || info_wrapper.get_info()->result <= 0 || !info_wrapper.get_zerocopy())
     delete buf;
 
-  io_info->callback(io_info);
-  return io_info->result;
+  info_wrapper.get_info()->callback(io_info);
+  return info_wrapper.get_info()->result;
 }
 
 extern "C" int ceph_ll_close(class ceph_mount_info *cmount, Fh* fh)

@@ -119,19 +119,23 @@ struct ceph_snapdiff_entry_t {
 };
 
 struct ceph_ll_io_info {
-  void (*callback) (struct ceph_ll_io_info *cb_info);
-  void (*release) (void *);
-  void *release_data;
-  void *priv; // private for caller
-  struct Fh *fh;
-  struct iovec *iov;
-  int iovcnt;
-  int iovmax; // maximum iovcnt is allowed, 0 for no limit
-  int64_t off;
-  int64_t result;
-  bool write;
-  bool fsync;
-  bool syncdataonly;
+	void (*callback) (struct ceph_ll_io_info *cb_info);
+	void *priv; // private for caller
+	struct Fh *fh;
+	struct iovec *iov;
+	int iovcnt;
+	int64_t off;
+	int64_t result;
+	bool write;
+	bool fsync;
+	bool syncdataonly;
+};
+
+struct ceph_ll_io_info_v2 {
+	struct ceph_ll_io_info base_info;
+	void (*release) (void *);
+	void *release_data;
+	int iovmax; // maximum iovcnt is allowed, 0 for no limit
   bool zerocopy;
 };
 
@@ -2030,8 +2034,12 @@ int64_t ceph_ll_writev(struct ceph_mount_info *cmount, struct Fh *fh,
 		       const struct iovec *iov, int iovcnt, int64_t off);
 int64_t ceph_ll_readv_writev(struct ceph_mount_info *cmount,
 			  struct ceph_ll_io_info *io_info);
+int64_t ceph_ll_readv_writev_v2(struct ceph_mount_info *cmount,
+				struct ceph_ll_io_info *io_info, size_t info_size);
 int64_t ceph_ll_nonblocking_readv_writev(struct ceph_mount_info *cmount,
 					 struct ceph_ll_io_info *io_info);
+int64_t ceph_ll_nonblocking_readv_writev_v2(struct ceph_mount_info *cmount,
+					 struct ceph_ll_io_info *io_info, size_t info_size);
 int ceph_ll_close(struct ceph_mount_info *cmount, struct Fh* filehandle);
 int ceph_ll_iclose(struct ceph_mount_info *cmount, struct Inode *in, int mode);
 /**
