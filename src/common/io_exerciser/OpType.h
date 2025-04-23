@@ -17,6 +17,7 @@ enum class OpType {
   Barrier,               // Barrier - all prior I/Os must complete
   Create,                // Create object and pattern with data
   Remove,                // Remove object
+  Consistency,           // Check consistency of an object
   Read,                  // Read
   Read2,                 // Two reads in a single op
   Read3,                 // Three reads in a single op

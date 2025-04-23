@@ -10,6 +10,7 @@
 #include "common/json/OSDStructures.h"
 
 using RadosIo = ceph::io_exerciser::RadosIo;
+using ConsistencyChecker = ceph::consistency::ConsistencyChecker;
 
 namespace {
 template <typename S>
@@ -40,7 +41,7 @@ int send_mon_command(S& s, librados::Rados& rados, const char* name,
 RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
                  const std::string& pool, const std::string& oid,
                  const std::optional<std::vector<int>>& cached_shard_order,
-                 uint64_t block_size, int seed, int threads, ceph::mutex& lock,
+                 uint64_t block_size, uint64_t chunk_size, int seed, int threads, ceph::mutex& lock,
                  ceph::condition_variable& cond, bool ec_optimizations)
     : Model(oid, block_size),
       rados(rados),
@@ -48,12 +49,14 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
       om(std::make_unique<ObjectModel>(oid, block_size, seed)),
       db(data_generation::DataGenerator::create_generator(
           data_generation::GenerationType::HeaderedSeededRandom, *om)),
+      cc(std::make_unique<ConsistencyChecker>(rados, asio, pool)),
       pool(pool),
       cached_shard_order(cached_shard_order),
       threads(threads),
       lock(lock),
       cond(cond),
-      outstanding_io(0) {
+      outstanding_io(0),
+      chunk_size(chunk_size) {
   int rc;
   rc = rados.ioctx_create(pool.c_str(), io);
   ceph_assert(rc == 0);
@@ -188,6 +191,16 @@ void RadosIo::applyIoOp(IoOp& op) {
                               std::move(wop), 0, nullptr, remove_cb);
       break;
     }
+
+    case OpType::Consistency: {
+      start_io();
+      bool is_consistent =
+          cc->single_read_and_check_consistency(oid, block_size, 0, 0, chunk_size);
+      ceph_assert(is_consistent);
+      finish_io();
+      break;
+    }
+
     case OpType::Read:
       [[fallthrough]];
     case OpType::Read2:

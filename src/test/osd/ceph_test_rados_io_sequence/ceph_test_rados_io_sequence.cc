@@ -25,6 +25,10 @@
 #include "common/json/BalancerStructures.h"
 #include "common/json/ConfigStructures.h"
 #include "common/json/OSDStructures.h"
+// #include "common/split.h"
+// #include "common/strtol.h"  // for strict_iecstrtoll()
+// #include "erasure-code/ErasureCodePlugin.h"
+#include "erasure-code/consistency/ConsistencyChecker.h"
 #include "fmt/format.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
@@ -53,6 +57,7 @@ using TruncateOp = ceph::io_exerciser::TruncateOp;
 using SingleFailedWriteOp = ceph::io_exerciser::SingleFailedWriteOp;
 using DoubleFailedWriteOp = ceph::io_exerciser::DoubleFailedWriteOp;
 using TripleFailedWriteOp = ceph::io_exerciser::TripleFailedWriteOp;
+using ConsistencyChecker = ceph::consistency::ConsistencyChecker;
 
 namespace {
 struct Size {};
@@ -179,6 +184,8 @@ po::options_description get_options_description() {
       "number of objects to exercise in parallel")(
       "testrecovery",
       "Inject errors during sequences to test recovery processes of OSDs")(
+      "checkconsistency",
+      "Test objects for consistency during IO sequences. Disabled by default.")(
       "interactive", "interactive mode, execute IO commands from stdin")(
       "allow_pool_autoscaling",
       "Allows pool autoscaling. Disabled by default.")(
@@ -924,8 +931,9 @@ ceph::io_sequence::tester::TestObject::TestObject(
     SelectObjectSize& sos, SelectNumThreads& snt, SelectSeqRange& ssr,
     ceph::util::random_number_generator<int>& rng, ceph::mutex& lock,
     ceph::condition_variable& cond, bool dryrun, bool verbose,
-    std::optional<int> seqseed, bool testrecovery)
-    : rng(rng), verbose(verbose), seqseed(seqseed), testrecovery(testrecovery) {
+    std::optional<int> seqseed, bool testrecovery, bool checkconsistency)
+    : rng(rng), verbose(verbose), seqseed(seqseed),
+      testrecovery(testrecovery), checkconsistency(checkconsistency) {
   if (dryrun) {
     exerciser_model = std::make_unique<ceph::io_exerciser::ObjectModel>(
         oid, sbs.select(), rng());
@@ -964,8 +972,9 @@ ceph::io_sequence::tester::TestObject::TestObject(
       cached_shard_order = reply.acting;
     }
 
+    int chunk_size = spo.getProfile()->chunk_size.value_or(0);
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(
-        rados, asio, pool, oid, cached_shard_order, sbs.select(), rng(),
+        rados, asio, pool, oid, cached_shard_order, sbs.select(), chunk_size, rng(),
         threads, lock, cond, spo.get_allow_pool_ec_optimizations());
     dout(0) << "= " << oid << " pool=" << pool << " threads=" << threads
             << " blocksize=" << exerciser_model->get_block_size() << " ="
@@ -978,10 +987,10 @@ ceph::io_sequence::tester::TestObject::TestObject(
   if (testrecovery) {
     seq = ceph::io_exerciser::EcIoSequence::generate_sequence(
         curseq, obj_size_range, pool_km, pool_mappinglayers,
-        seqseed.value_or(rng()));
+        seqseed.value_or(rng()), checkconsistency);
   } else {
     seq = ceph::io_exerciser::IoSequence::generate_sequence(
-        curseq, obj_size_range, seqseed.value_or(rng()));
+        curseq, obj_size_range, seqseed.value_or(rng()), checkconsistency);
   }
 
   op = seq->next();
@@ -1017,10 +1026,10 @@ bool ceph::io_sequence::tester::TestObject::next() {
         if (testrecovery) {
           seq = ceph::io_exerciser::EcIoSequence::generate_sequence(
               curseq, obj_size_range, pool_km, pool_mappinglayers,
-              seqseed.value_or(rng()));
+              seqseed.value_or(rng()), checkconsistency);
         } else {
           seq = ceph::io_exerciser::IoSequence::generate_sequence(
-              curseq, obj_size_range, seqseed.value_or(rng()));
+              curseq, obj_size_range, seqseed.value_or(rng()), checkconsistency);
         }
 
         dout(0) << "== " << exerciser_model->get_oid() << " " << curseq << " "
@@ -1075,6 +1084,7 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
   object_name = vm["object"].as<std::string>();
   interactive = vm.contains("interactive");
   testrecovery = vm.contains("testrecovery");
+  checkconsistency = vm.contains("checkconsistency");
 
   allow_pool_autoscaling = vm.contains("allow_pool_autoscaling");
   allow_pool_balancer = vm.contains("allow_pool_balancer");
@@ -1108,7 +1118,7 @@ void ceph::io_sequence::tester::TestRunner::help() {
 }
 
 void ceph::io_sequence::tester::TestRunner::list_sequence(bool testrecovery) {
-  // List seqeunces
+  // List sequences
   std::pair<int, int> obj_size_range = sos.select();
   ceph::io_exerciser::Sequence s = ceph::io_exerciser::Sequence::SEQUENCE_BEGIN;
   std::unique_ptr<ceph::io_exerciser::IoSequence> seq;
@@ -1124,10 +1134,10 @@ void ceph::io_sequence::tester::TestRunner::list_sequence(bool testrecovery) {
       }
     }
     seq = ceph::io_exerciser::EcIoSequence::generate_sequence(
-        s, obj_size_range, km, mappinglayers, seqseed.value_or(rng()));
+        s, obj_size_range, km, mappinglayers, seqseed.value_or(rng()), checkconsistency);
   } else {
     seq = ceph::io_exerciser::IoSequence::generate_sequence(
-        s, obj_size_range, seqseed.value_or(rng()));
+        s, obj_size_range, seqseed.value_or(rng()), checkconsistency);
   }
 
   do {
@@ -1232,8 +1242,9 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
     ceph::messaging::osd::OSDMapReply osd_map_reply{};
     osd_map_reply.decode_json(&p);
 
+    int chunk_size = spo.getProfile()->chunk_size.value_or(0);
     model = std::make_unique<ceph::io_exerciser::RadosIo>(
-        rados, asio, pool, object_name, osd_map_reply.acting, sbs.select(), rng(),
+        rados, asio, pool, object_name, osd_map_reply.acting, sbs.select(), chunk_size, rng(),
         1,  // 1 thread
         lock, cond,
         spo.get_allow_pool_ec_optimizations());
@@ -1384,7 +1395,7 @@ bool ceph::io_sequence::tester::TestRunner::run_automated_test() {
     test_objects.push_back(
         std::make_shared<ceph::io_sequence::tester::TestObject>(
             name, rados, asio, sbs, spo, sos, snt, ssr, rng, lock, cond, dryrun,
-            verbose, seqseed, testrecovery));
+            verbose, seqseed, testrecovery, checkconsistency));
   }
   if (!dryrun) {
     rados.wait_for_latest_osdmap();
