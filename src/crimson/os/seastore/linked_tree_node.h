@@ -185,6 +185,27 @@ std::ostream &operator<<(std::ostream &, const parent_tracker_t<T> &);
 template <typename T>
 using parent_tracker_ref = boost::intrusive_ptr<parent_tracker_t<T>>;
 
+class ExtentTransViewRetriever {
+public:
+  template <typename T>
+  get_child_ifut<T> get_extent_viewable_by_trans(
+    Transaction &t,
+    TCachedExtentRef<T> ext)
+  {
+    return get_extent_viewable_by_trans(t, CachedExtentRef(ext.get())
+    ).si_then([](auto ext) {
+      return ext->template cast<T>();
+    });
+  }
+  virtual bool is_viewable_extent_data_stable(Transaction &, CachedExtentRef) = 0;
+  virtual bool is_viewable_extent_stable(Transaction &, CachedExtentRef) = 0;
+  virtual ~ExtentTransViewRetriever() {}
+protected:
+  virtual get_child_iertr::future<CachedExtentRef> get_extent_viewable_by_trans(
+    Transaction &t,
+    CachedExtentRef extent) = 0;
+};
+
 template <typename ParentT, typename key_t>
 class BaseChildNode {
 public:
@@ -196,6 +217,17 @@ public:
   }
   bool is_parent_valid() const {
     return parent_tracker && parent_tracker->is_valid();
+  }
+  using get_parent_node_iertr = get_child_iertr;
+  using get_parent_node_ret =
+    get_parent_node_iertr::future<TCachedExtentRef<ParentT>>;
+  get_parent_node_ret get_parent_node(
+    Transaction &t,
+    ExtentTransViewRetriever &etvr)
+  {
+    assert(parent_tracker);
+    return etvr.get_extent_viewable_by_trans<ParentT>(
+      t, parent_tracker->get_parent());
   }
   // this method should only be used for asserts and logs, because
   // the parent node might be stable writing and should "wait_io"
@@ -237,27 +269,6 @@ template <typename T, typename node_key_t>
 bool is_valid_child_ptr(BaseChildNode<T, node_key_t>* child) {
   return child != nullptr && child != get_reserved_ptr<T, node_key_t>();
 }
-
-class ExtentTransViewRetriever {
-public:
-  template <typename T>
-  get_child_ifut<T> get_extent_viewable_by_trans(
-    Transaction &t,
-    TCachedExtentRef<T> ext)
-  {
-    return get_extent_viewable_by_trans(t, CachedExtentRef(ext.get())
-    ).si_then([](auto ext) {
-      return ext->template cast<T>();
-    });
-  }
-  virtual bool is_viewable_extent_data_stable(Transaction &, CachedExtentRef) = 0;
-  virtual bool is_viewable_extent_stable(Transaction &, CachedExtentRef) = 0;
-  virtual ~ExtentTransViewRetriever() {}
-protected:
-  virtual get_child_iertr::future<CachedExtentRef> get_extent_viewable_by_trans(
-    Transaction &t,
-    CachedExtentRef extent) = 0;
-};
 
 // ParentNodes are nodes in the tree that have children,
 // including leaf nodes that has other types of extents
