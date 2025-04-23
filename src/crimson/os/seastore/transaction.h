@@ -188,11 +188,16 @@ public:
       pre_alloc_list.emplace_back(ref);
       fresh_block_stats.increment(ref->get_length());
     } else {
+#ifdef UNIT_TESTS_BUILT
       if (likely(ref->get_paddr() == make_record_relative_paddr(0))) {
 	ref->set_paddr(make_record_relative_paddr(offset));
       } else {
 	ceph_assert(ref->get_paddr().is_fake());
       }
+#else
+      assert(ref->get_paddr() == make_record_relative_paddr(0));
+      ref->set_paddr(make_record_relative_paddr(offset));
+#endif
       offset += ref->get_length();
       inline_block_list.push_back(ref);
       fresh_block_stats.increment(ref->get_length());
