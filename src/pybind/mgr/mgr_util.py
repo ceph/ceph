@@ -682,6 +682,7 @@ def verify_tls(crt, key):
     cc = ceph.cryptotools.remote.CryptoCaller()
     _key = key.decode() if isinstance(key, bytes) else key  # type: ignore[attr-defined]
     try:
+        days_to_expiration = cc.verify_cacrt_content(crt)
         cc.verify_tls(crt, _key)
     except ValueError as err:
         raise ServerConfigException(str(err))
