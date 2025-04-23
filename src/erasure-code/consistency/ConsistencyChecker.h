@@ -25,8 +25,8 @@ namespace ceph {
         ceph::consistency::ECReader reader;
         ceph::consistency::RadosCommands commands;
         ceph::consistency::Pool pool;
+        std::vector<ConsistencyCheckResult> results;
         bool buffers_match(const bufferlist& b1, const bufferlist& b2);
-        std::vector<ReadResult>* get_read_results();
         std::pair<bufferlist, bufferlist> split_data_and_parity(const bufferlist& read, 
                                                                 ErasureCodeProfile profile);
 
@@ -36,8 +36,9 @@ namespace ceph {
                            const std::string& pool_name);
         void queue_ec_read(Read read);
         bool check_object_consistency(const bufferlist& inbl, int stripe_unit);
-        void print_results(std::vector<ConsistencyCheckResult> results, std::ostream& out);
-        void single_read_and_check_consistency(const std::string& oid,
+        void print_results(std::ostream& out);
+        void clear_results();
+        bool single_read_and_check_consistency(const std::string& oid,
                                                int block_size,
                                                int offset,
                                                int length,

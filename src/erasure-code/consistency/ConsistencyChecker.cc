@@ -33,28 +33,28 @@ ConsistencyChecker::ConsistencyChecker(librados::Rados &rados,
  * @param offset int Which offset to read from
  * @param length int How much data of each shard to read
  * @param stripe_unit int Size of each chunk of the object
+ * @return bool true if consistent, otherwise false
  */
-void ConsistencyChecker::single_read_and_check_consistency(const std::string& oid,
+bool ConsistencyChecker::single_read_and_check_consistency(const std::string& oid,
                                                            int block_size,
                                                            int offset,
                                                            int length,
                                                            int stripe_unit)
 {
+  clear_results();
   auto read = Read(oid, block_size, offset, length);
   queue_ec_read(read);
 
-  auto read_results = get_read_results();
-  std::vector<ConsistencyCheckResult> consistency_results;
+  auto read_results = reader.get_results();
+  ceph_assert(read_results->size() == 1);
 
-  for (auto r : *read_results) {
-    std::string oid = r.first;
-    bool is_consistent = check_object_consistency(r.second, stripe_unit);
-    consistency_results.push_back(ConsistencyCheckResult(oid, is_consistent));
-    commands.inject_clear_parity_read_on_primary_osd(pool.get_pool_name(),
-                                                     oid);
-  }
+  ReadResult res = (*read_results)[0];
 
-  print_results(consistency_results, std::cout);
+  bool is_consistent = check_object_consistency(res.second, stripe_unit);
+  results.push_back(ConsistencyCheckResult(oid, is_consistent));
+  commands.inject_clear_parity_read_on_primary_osd(pool.get_pool_name(),
+                                                   oid);
+  return is_consistent;
 }
 
 /**
@@ -87,8 +87,7 @@ bool ConsistencyChecker::check_object_consistency(const bufferlist& inbl, int st
   return buffers_match(outbl, data_and_parity.second);
 }
 
-void ConsistencyChecker::print_results(std::vector<ConsistencyCheckResult> results, 
-                                       std::ostream& out)
+void ConsistencyChecker::print_results(std::ostream& out)
 {
   out << "Results:" << std::endl;
   for (auto r : results) {
@@ -121,7 +120,8 @@ bool ConsistencyChecker::buffers_match(const bufferlist& b1,
   return (b1.contents_equal(b2));
 }
 
-std::vector<ReadResult>* ConsistencyChecker::get_read_results()
+void ConsistencyChecker::clear_results()
 {
-  return reader.get_results();
+  reader.clear_results();
+  results.clear();
 }

@@ -47,6 +47,7 @@ namespace ceph {
         void finish_io(void);
         void wait_for_io(void);
         std::vector<ReadResult>* get_results(void);
+        void clear_results(void);
     };
   }
 }

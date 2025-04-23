@@ -75,6 +75,7 @@ int main(int argc, char **argv)
 
   auto checker = ceph::consistency::ConsistencyChecker(rados, asio, pool);
   checker.single_read_and_check_consistency(oid, blocksize, offset, length, stripe_unit);
+  checker.print_results(std::cout);
 
   exit(0);
 }

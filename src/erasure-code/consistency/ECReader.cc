@@ -99,3 +99,11 @@ std::vector<ReadResult>* ECReader::get_results()
   wait_for_io();
   return &results;
 }
+
+/**
+ * Clear the results vector.
+ */
+void ECReader::clear_results()
+{
+  results.clear();
+}
