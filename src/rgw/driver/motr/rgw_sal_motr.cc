@@ -557,12 +557,15 @@ int MotrBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, opti
   params.list_versions = true;
   params.allow_unordered = true;
 
+  const bool own_bucket = store->get_zone()->get_zonegroup().get_id() == info.zonegroup;
+
   ListResults results;
+  results.is_truncated = own_bucket; // if we don't have the index, we're done
 
   // 1. Check if Bucket has objects.
   // If bucket contains objects and delete_children is true, delete all objects.
   // Else throw error that bucket is not empty.
-  do {
+  while (results.is_truncated) {
     results.objs.clear();
 
     // Check if bucket has objects.
@@ -591,12 +594,14 @@ int MotrBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, opti
 	      return ret;
       }
     }
-  } while(results.is_truncated);
+  }
 
   // 2. Abort Mp uploads on the bucket.
-  ret = abort_multiparts(dpp, store->ctx());
-  if (ret < 0) {
-    return ret;
+  if (own_bucket) {
+    ret = abort_multiparts(dpp, store->ctx());
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   // 3. Remove mp index??
@@ -608,9 +613,11 @@ int MotrBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, opti
   }
 
   // 4. Sync user stats.
-  ret = this->sync_owner_stats(dpp, y);
-  if (ret < 0) {
-     ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
+  if (own_bucket) {
+    ret = this->sync_owner_stats(dpp, y);
+    if (ret < 0) {
+      ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
+    }
   }
 
   // 5. Remove the bucket from user info index. (unlink user)
