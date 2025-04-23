@@ -40,7 +40,6 @@ struct ECListener {
   virtual void cancel_pull(
     const hobject_t &soid) = 0;
 
-#ifndef WITH_CRIMSON
   // XXX
   virtual pg_shard_t primary_shard() const = 0;
   virtual bool pgb_is_primary() const = 0;
@@ -54,16 +53,16 @@ struct ECListener {
     const eversion_t &v
     ) = 0;
 
-     /**
-      * Called with the transaction recovering oid
-      */
-     virtual void on_local_recover(
-       const hobject_t &oid,
-       const ObjectRecoveryInfo &recovery_info,
-       ObjectContextRef obc,
-       bool is_delete,
-       ceph::os::Transaction *t
-       ) = 0;
+  /**
+   * Called with the transaction recovering oid
+   */
+  virtual void on_local_recover(
+    const hobject_t &oid,
+    const ObjectRecoveryInfo &recovery_info,
+    ObjectContextRef obc,
+    bool is_delete,
+    ceph::os::Transaction *t
+    ) = 0;
 
   /**
    * Called when transaction recovering oid is durable and
@@ -96,21 +95,20 @@ struct ECListener {
     const std::map<std::string, ceph::buffer::list, std::less<>> &attrs) = 0;
 #endif
 
-     virtual bool check_failsafe_full() = 0;
-     virtual hobject_t get_temp_recovery_object(const hobject_t& target,
+  virtual bool check_failsafe_full() = 0;
+  virtual hobject_t get_temp_recovery_object(const hobject_t& target,
 						eversion_t version) = 0;
+#ifndef WITH_CRIMSON
      virtual bool pg_is_remote_backfilling() = 0;
      virtual void pg_add_local_num_bytes(int64_t num_bytes) = 0;
      //virtual void pg_sub_local_num_bytes(int64_t num_bytes) = 0;
      virtual void pg_add_num_bytes(int64_t num_bytes) = 0;
      //virtual void pg_sub_num_bytes(int64_t num_bytes) = 0;
-     virtual void inc_osd_stat_repaired() = 0;
 #endif
+   virtual void inc_osd_stat_repaired() = 0;
    virtual void add_temp_obj(const hobject_t &oid) = 0;
    virtual void clear_temp_obj(const hobject_t &oid) = 0;
-#ifndef WITH_CRIMSON
    virtual epoch_t get_last_peering_reset_epoch() const = 0;
-#endif
 
   // XXX
 #ifndef WITH_CRIMSON
