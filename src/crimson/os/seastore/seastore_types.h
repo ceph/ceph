@@ -643,8 +643,21 @@ public:
     return get_device_id() == DEVICE_ID_ROOT;
   }
 
+  /**
+   * is_absolute()
+   *
+   * indicates whether addr reflects an absolute location
+   * which can be found on disk.
+   *
+   * Note, fake paddrs should work like the absolute ones.
+   */
   bool is_absolute() const {
+#ifdef UNIT_TESTS_BUILT
+    return get_addr_type() != paddr_types_t::RESERVED ||
+           is_fake();
+#else
     return get_addr_type() != paddr_types_t::RESERVED;
+#endif
   }
 
   bool is_absolute_random_block() const {
