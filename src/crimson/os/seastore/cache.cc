@@ -1269,8 +1269,7 @@ record_t Cache::prepare_record(
 	assert(can_inplace_rewrite(i->prior_instance->get_type()));
 	assert(i->prior_instance->dirty_from_or_retired_at == JOURNAL_SEQ_MIN);
 	assert(i->prior_instance->state == CachedExtent::extent_state_t::CLEAN);
-	assert(i->prior_instance->get_paddr().get_addr_type() ==
-	  paddr_types_t::RANDOM_BLOCK);
+	assert(i->prior_instance->get_paddr().is_absolute_random_block());
 	i->version = 1;
       }
 
@@ -1310,7 +1309,7 @@ record_t Cache::prepare_record(
       auto stype = segment_type_t::NULL_SEG;
 
       // FIXME: This is specific to the segmented implementation
-      if (i->get_paddr().get_addr_type() == paddr_types_t::SEGMENT) {
+      if (i->get_paddr().is_absolute_segmented()) {
         auto sid = i->get_paddr().as_seg_paddr().get_segment_id();
         auto sinfo = get_segment_info(sid);
         if (sinfo) {
@@ -2063,7 +2062,7 @@ Cache::replay_delta(
       DEBUG("replay extent delta at {} {} ... -- {}, prv_extent={}",
             journal_seq, record_base, delta, *extent);
 
-      if (delta.paddr.get_addr_type() == paddr_types_t::SEGMENT ||
+      if (delta.paddr.is_absolute_segmented() ||
 	  !can_inplace_rewrite(delta.type)) {
 	ceph_assert_always(extent->last_committed_crc == delta.prev_crc);
 	assert(extent->version == delta.pversion);
@@ -2071,7 +2070,7 @@ Cache::replay_delta(
 	extent->set_modify_time(modify_time);
 	ceph_assert_always(extent->last_committed_crc == delta.final_crc);
       } else {
-	assert(delta.paddr.get_addr_type() == paddr_types_t::RANDOM_BLOCK);
+	assert(delta.paddr.is_absolute_random_block());
 	// see prepare_record(), inplace rewrite might cause version mismatch
 	extent->apply_delta_and_adjust_crc(record_base, delta.bl);
 	extent->set_modify_time(modify_time);
