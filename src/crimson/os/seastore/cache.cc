@@ -1302,10 +1302,11 @@ record_t Cache::prepare_record(
                 t, delta_length, *i);
       assert(t.root == i);
       root = t.root;
+      assert(root->get_paddr().is_root());
       record.push_back(
 	delta_info_t{
 	  extent_types_t::ROOT,
-	  P_ADDR_NULL,
+	  P_ADDR_ROOT,
 	  L_ADDR_NULL,
 	  0,
 	  0,
@@ -1886,13 +1887,16 @@ void Cache::init()
     root = nullptr;
   }
   root = CachedExtent::make_cached_extent_ref<RootBlock>();
-  root->init(CachedExtent::extent_state_t::CLEAN,
+  // Make it simpler to keep root dirty
+  root->init(CachedExtent::extent_state_t::DIRTY,
              P_ADDR_ROOT,
              PLACEMENT_HINT_NULL,
              NULL_GENERATION,
-	     TRANS_ID_NULL);
+             TRANS_ID_NULL);
+  root->set_modify_time(seastar::lowres_system_clock::now());
   INFO("init root -- {}", *root);
-  extents_index.insert(*root);
+  add_extent(root);
+  add_to_dirty(root, nullptr);
 }
 
 Cache::mkfs_iertr::future<> Cache::mkfs(Transaction &t)
