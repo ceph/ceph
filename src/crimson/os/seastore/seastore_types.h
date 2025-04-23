@@ -651,6 +651,14 @@ public:
     return get_addr_type() != paddr_types_t::RESERVED;
   }
 
+  bool is_absolute_random_block() const {
+    return get_addr_type() == paddr_types_t::RANDOM_BLOCK;
+  }
+
+  bool is_absolute_segmented() const {
+    return get_addr_type() == paddr_types_t::SEGMENT;
+  }
+
   bool is_fake() const {
     return get_device_id() == DEVICE_ID_FAKE;
   }
