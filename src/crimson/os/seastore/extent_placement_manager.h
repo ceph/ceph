@@ -558,9 +558,11 @@ public:
 
   bool get_checksum_needed(paddr_t addr) {
     // checksum offloading only for blocks physically stored in the device
+#ifdef UNIT_TESTS_BUILT
     if (addr.is_fake()) {
       return true;
     }
+#endif
     assert(addr.is_absolute());
     return !devices_by_id[addr.get_device_id()]->is_end_to_end_data_protection();
   }
