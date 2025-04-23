@@ -124,6 +124,7 @@ class CryptoCaller:
         self._run(
             ['verify_tls'],
             input_data=json.dumps({'crt': crt, 'key': key}),
+            capture_output=True,
             check=True,
         )
 
