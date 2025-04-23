@@ -12,14 +12,20 @@
  * 
  */
 
+#include "MDCache.h"
+#include "RetryMessage.h"
+#include "RetryRequest.h"
+
 #include <errno.h>
+
+#include <deque>
 #include <ostream>
 #include <string>
 #include <string_view>
 #include <map>
 #include <memory>
+#include <queue>
 
-#include "MDCache.h"
 #include "MDSRank.h"
 #include "Server.h"
 #include "Locker.h"
@@ -27,8 +33,10 @@
 #include "MDBalancer.h"
 #include "Migrator.h"
 #include "ScrubStack.h"
+#include "BatchOp.h"
 
 #include "SnapClient.h"
+#include "SnapRealm.h"
 
 #include "MDSMap.h"
 
@@ -41,18 +49,43 @@
 #include "include/filepath.h"
 #include "include/util.h"
 
+#include "messages/MCacheExpire.h"
 #include "messages/MClientCaps.h"
+#include "messages/MClientQuota.h"
+#include "messages/MClientRequest.h"
+#include "messages/MClientSnap.h"
+#include "messages/MDentryLink.h"
+#include "messages/MDentryUnlink.h"
+#include "messages/MDirUpdate.h"
+#include "messages/MDiscover.h"
+#include "messages/MDiscoverReply.h"
+#include "messages/MGatherCaps.h"
+#include "messages/MMDSCacheRejoin.h"
+#include "messages/MMDSFindIno.h"
+#include "messages/MMDSFindInoReply.h"
+#include "messages/MMDSFragmentNotify.h"
+#include "messages/MMDSFragmentNotifyAck.h"
+#include "messages/MMDSOpenIno.h"
+#include "messages/MMDSOpenInoReply.h"
+#include "messages/MMDSPeerRequest.h"
+#include "messages/MMDSResolve.h"
+#include "messages/MMDSResolveAck.h"
+#include "messages/MMDSSnapUpdate.h"
 
 #include "msg/Message.h"
 #include "msg/Messenger.h"
 
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "common/safe_io.h"
 
 #include "osdc/Journaler.h"
 #include "osdc/Filer.h"
+#include "osdc/Objecter.h"
+#include "osdc/Striper.h"
 
+#include "events/EMetaBlob.h"
 #include "events/ESubtreeMap.h"
 #include "events/ELid.h"
 #include "events/EUpdate.h"

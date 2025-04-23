@@ -767,8 +767,8 @@ The following is the general form of commands that set rate limit parameters:
 .. prompt:: bash #
 
    radosgw-admin ratelimit set --ratelimit-scope=bucket --bucket=<bucket> \
-                                <[--max-read-ops=<num ops>] [--max-read-bytes=<num bytes>] \
-                                [--max-write-ops=<num ops>] [--max-write-bytes=<num bytes>]>
+                                 <[--max-read-ops=<num ops>] [--max-read-bytes=<num bytes>] \
+                                 [--max-write-ops=<num ops>] [--max-write-bytes=<num bytes>]>
 
 An example of using ``radosgw-admin ratelimit set`` to set a rate limit for a
 bucket might look like this: 

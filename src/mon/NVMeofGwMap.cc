@@ -234,9 +234,34 @@ int NVMeofGwMap::do_delete_gw(
 void  NVMeofGwMap::gw_performed_startup(const NvmeGwId &gw_id,
       const NvmeGroupKey& group_key, bool &propose_pending)
 {
+  std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
   dout(4) << "GW  performed the full startup " << gw_id << dendl;
   propose_pending = true;
   increment_gw_epoch( group_key);
+  auto &st = created_gws[group_key][gw_id];
+  const auto skip_failovers_sec = g_conf().get_val<std::chrono::seconds>
+    ("mon_nvmeofgw_skip_failovers_interval");
+  const auto beacon_grace_sec =
+    g_conf().get_val<std::chrono::seconds>("mon_nvmeofgw_beacon_grace");
+ /*
+    This is a heuristic that meant to identify "cephadm redeploy" of the nvmeof gws.
+    We would like to identify that redeploy is going on, because it helps us to prevent
+    redundant failover and failback actions.
+    It is very important to minimize fo/fb during redeploy, because during redeploy
+    all GWs go down and up again, and the amount of fo/fb that could be driven by that
+    is big, which also triggers a lot of changes on the hosts the are nvmeof connected
+    to the gws, even up to the point that the host will get stuck.
+    This heuristic assumes that if a gw disappears and shows back in less than
+    REDEPLOY_TIMEOUT seconds, then it might be that a redeploy started, so we will
+    do a failover for this GW, but will not do failover for the next REDEPLOY_TIMEOUT.
+    Then again for the next GW that disappears and so on.
+    If it works as designed, than regardless of the number of GWs, redeploy will only
+    cause one fo/fb. */
+  if ((now - (st.last_gw_down_ts - beacon_grace_sec)) < skip_failovers_sec) {
+    skip_failovers_for_group(group_key);
+    dout(4) << "startup: set skip-failovers for group " << gw_id << " group "
+	         << group_key << dendl;
+  }
 }
 
 void NVMeofGwMap::increment_gw_epoch(const NvmeGroupKey& group_key)
@@ -332,6 +357,7 @@ int NVMeofGwMap::process_gw_map_gw_down(
     dout(10) << "GW down " << gw_id << dendl;
     auto& st = gw_state->second;
     st.set_unavailable_state();
+    st.set_last_gw_down_ts();
     for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
       fsm_handle_gw_down(
 	gw_id, group_key, state_itr.second,

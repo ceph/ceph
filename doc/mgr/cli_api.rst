@@ -7,47 +7,33 @@ benchmarked for further testing.
 Enabling
 --------
 
-The *cli api commands* module is enabled with:
+The *cli api commands* module is enabled with::
 
-.. prompt:: bash #
+  ceph mgr module enable cli_api
 
-   ceph mgr module enable cli_api
+To check that it is enabled, run::
 
-To check that it is enabled, run:
-
-.. prompt:: bash #
-
-   ceph mgr module ls | grep cli_api
+  ceph mgr module ls | grep cli_api
 
 Usage
 --------
 
-To run a mgr module command, run:
+To run a mgr module command, run::
 
-.. prompt:: bash #
+  ceph mgr cli <command> <param>
 
-   ceph mgr cli <command> <param>
+For example, use the following command to print the list of servers::
 
-For example, use the following command to print the list of servers:
+  ceph mgr cli list_servers
 
-.. prompt:: bash #
+List all available mgr module commands with::
 
-   ceph mgr cli list_servers
+  ceph mgr cli --help
 
-List all available mgr module commands with:
+To benchmark a command, run::
 
-.. prompt:: bash #
+  ceph mgr cli_benchmark <number of calls> <number of threads> <command> <param>
 
-   ceph mgr cli --help
+For example, use the following command to benchmark the command to get osd_map::
 
-To benchmark a command, run:
-
-.. prompt:: bash #
-
-   ceph mgr cli_benchmark <number of calls> <number of threads> <command> <param>
-
-For example, use the following command to benchmark the command to get osd_map:
-
-.. prompt:: bash #
-
-   ceph mgr cli_benchmark 100 10 get osd_map
+  ceph mgr cli_benchmark 100 10 get osd_map
