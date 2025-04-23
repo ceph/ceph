@@ -94,8 +94,7 @@ void RGWProcess::RGWWQ::_process(RGWRequest *req, ThreadPool::TPHandle &) {
 }
 bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   // we dont want to limit health check or system or admin requests
-  const auto& is_admin_or_system = s->user->get_info();
-  if ((s->op_type ==  RGW_OP_GET_HEALTH_CHECK) || is_admin_or_system.admin || is_admin_or_system.system)
+  if ((s->op_type ==  RGW_OP_GET_HEALTH_CHECK) || s->system_request)
     return false;
   std::string userfind;
   RGWRateLimitInfo global_user;
