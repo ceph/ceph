@@ -132,7 +132,9 @@ def infer_local_ceph_image(
     ]
     # collect the running ceph daemon image ids
     images_in_use_by_daemon = set(
-        d.image_id for d, n in matching_daemons if n == daemon_name
+        d.image_id
+        for d, n in matching_daemons
+        if (n == daemon_name and d is not None)
     )
     images_in_use = set(
         d.image_id for d, _ in matching_daemons if d is not None
