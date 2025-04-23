@@ -13,6 +13,7 @@
  */
 
 #include "MDSTableServer.h"
+#include "MDSContext.h"
 #include "MDSRank.h"
 #include "MDLog.h"
 #include "msg/Messenger.h"

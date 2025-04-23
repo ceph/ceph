@@ -94,7 +94,7 @@ class CephService(object):
 
     @classmethod
     def get_service_perf_counters(cls, service_type: str, service_id: str) -> Dict[str, Any]:
-        schema_dict = mgr.get_perf_schema(service_type, service_id)
+        schema_dict = mgr.get_unlabeled_perf_schema(service_type, service_id)
         schema = schema_dict["{}.{}".format(service_type, service_id)]
         counters = []
         for key, value in sorted(schema.items()):
@@ -105,7 +105,7 @@ class CephService(object):
                     service_type, service_id, key)
                 counter['unit'] = mgr._unit_to_str(value['units'])
             else:
-                counter['value'] = mgr.get_latest(
+                counter['value'] = mgr.get_unlabeled_counter_latest(
                     service_type, service_id, key)
                 counter['unit'] = ''
             counters.append(counter)
@@ -467,9 +467,9 @@ class CephService(object):
     @classmethod
     def get_rates(cls, svc_type, svc_name, path):
         """
-        :return: the derivative of mgr.get_counter()
+        :return: the derivative of mgr.get_unlabeled_counter()
         :rtype: list[tuple[int, float]]"""
-        data = mgr.get_counter(svc_type, svc_name, path)[path]
+        data = mgr.get_unlabeled_counter(svc_type, svc_name, path)[path]
         return get_time_series_rates(data)
 
     @classmethod

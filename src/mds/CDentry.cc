@@ -18,7 +18,8 @@
 #include "CInode.h"
 #include "CDir.h"
 #include "SnapClient.h"
-
+#include "SnapRealm.h"
+#include "BatchOp.h"
 #include "MDSRank.h"
 #include "MDCache.h"
 #include "Locker.h"
@@ -26,12 +27,49 @@
 
 #include "messages/MLock.h"
 
+#include "common/debug.h"
+#include "common/strescape.h" // for binstrprint()
+#include "include/filepath.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << dir->mdcache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
 
 using namespace std;
+
+CDentry::CDentry(std::string_view n, __u32 h,
+		 mempool::mds_co::string alternate_name,
+		 snapid_t f, snapid_t l) :
+  hash(h),
+  first(f), last(l),
+  item_dirty(this),
+  lock(this, &lock_type),
+  versionlock(this, &versionlock_type),
+  name(n),
+  alternate_name(std::move(alternate_name))
+{}
+
+CDentry::CDentry(std::string_view n, __u32 h,
+		 mempool::mds_co::string alternate_name,
+		 inodeno_t ino, inodeno_t referent_ino,
+		 unsigned char dt, snapid_t f, snapid_t l) :
+  hash(h),
+  first(f), last(l),
+  item_dirty(this),
+  lock(this, &lock_type),
+  versionlock(this, &versionlock_type),
+  name(n),
+  alternate_name(std::move(alternate_name))
+{
+  linkage.remote_ino = ino;
+  linkage.remote_d_type = dt;
+  linkage.referent_ino = referent_ino;
+}
+
+CDentry::~CDentry() {
+  ceph_assert(batch_ops.empty());
+}
 
 ostream& CDentry::print_db_line_prefix(ostream& out) const
 {

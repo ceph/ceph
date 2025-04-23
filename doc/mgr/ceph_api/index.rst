@@ -53,11 +53,9 @@ be obtained, and it may then be reused for subsequent requests. The
     { "token": "<redacted_token>", ...}
 
 The token obtained must be passed together with every API request in the
-``Authorization`` HTTP header:
+``Authorization`` HTTP header::
 
-.. prompt:: bash $
-
-   curl -H "Authorization: Bearer <token>" ...
+  curl -H "Authorization: Bearer <token>" ...
 
 Authentication and authorization can be further configured from the
 Ceph CLI, the Ceph-Dashboard UI and the Ceph API itself (please refer to

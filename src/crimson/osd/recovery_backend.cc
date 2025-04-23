@@ -235,12 +235,25 @@ RecoveryBackend::scan_for_backfill(
   co_await interruptor::parallel_for_each(objects, seastar::coroutine::lambda([FNAME, this, version_map]
     (const hobject_t& object) -> interruptible_future<> {
     DEBUGDPP("querying obj:{}", pg, object);
-    auto obc_manager = pg.obc_loader.get_obc_manager(object);
-    co_await pg.obc_loader.load_and_lock(
+    auto obc_manager = pg.obc_loader.get_obc_manager(
+      object, /* resolve_clone = */ false);
+
+    auto found = co_await pg.obc_loader.load_and_lock(
       obc_manager, RWState::RWREAD
-    ).handle_error_interruptible(
+    ).si_then([] {
+      return true;
+    }).handle_error_interruptible(
+      crimson::ct_error::enoent::handle([](auto) {
+	return false;
+      }),
       crimson::ct_error::assert_all("unexpected error")
     );
+    if (!found) {
+      // if the object does not exist here, it must have been removed
+      // between the collection_list_partial and here.  This can happen
+      // for the first item in the range, which is usually last_backfill.
+      co_return;
+    }
 
     if (obc_manager.get_obc()->obs.exists) {
       auto version = obc_manager.get_obc()->obs.oi.version;

@@ -10,27 +10,21 @@ Usually, you would set up a ceph-mgr daemon using a tool such
 as ceph-ansible.  These instructions describe how to set up
 a ceph-mgr daemon manually.
 
-First, create an authentication key for your daemon:
+First, create an authentication key for your daemon::
 
-.. prompt:: bash #
-
-   ceph auth get-or-create mgr.$name mon 'allow profile mgr' osd 'allow *' mds 'allow *'
+    ceph auth get-or-create mgr.$name mon 'allow profile mgr' osd 'allow *' mds 'allow *'
 
 Place that key as file named ``keyring`` into ``mgr data`` path, which for a cluster "ceph"
 and mgr $name "foo" would be ``/var/lib/ceph/mgr/ceph-foo`` respective ``/var/lib/ceph/mgr/ceph-foo/keyring``.
 
-Start the ceph-mgr daemon:
+Start the ceph-mgr daemon::
 
-.. prompt:: bash #
-
-   ceph-mgr -i $name
+    ceph-mgr -i $name
 
 Check that the mgr has come up by looking at the output
-of ``ceph status``, which should now include a mgr status line:
+of ``ceph status``, which should now include a mgr status line::
 
-.. prompt:: bash #
-
-   mgr active: $name
+    mgr active: $name
 
 Client authentication
 ---------------------
@@ -39,7 +33,7 @@ The manager is a new daemon which requires new CephX capabilities. If you upgrad
 a cluster from an old version of Ceph, or use the default install/deploy tools,
 your admin client should get this capability automatically. If you use tooling from
 elsewhere, you may get EACCES errors when invoking certain ceph cluster commands.
-To fix that, add a ``mgr allow \*`` stanza to your client's cephx capabilities by
+To fix that, add a "mgr allow \*" stanza to your client's cephx capabilities by
 `Modifying User Capabilities`_.
 
 High availability
@@ -101,12 +95,9 @@ information about what functionality each module provides.
 
 Here is an example of enabling the :term:`Dashboard` module:
 
-.. prompt:: bash #
+.. code-block:: console
 
-   ceph mgr module ls
-
-::
-
+	$ ceph mgr module ls
 	{
 		"enabled_modules": [
 			"status"
@@ -116,13 +107,8 @@ Here is an example of enabling the :term:`Dashboard` module:
 		]
 	}
 
-.. prompt:: bash #
-
-   ceph mgr module enable dashboard
-   ceph mgr module ls
-
-::
-
+	$ ceph mgr module enable dashboard
+	$ ceph mgr module ls
 	{
 		"enabled_modules": [
 			"status",
@@ -132,12 +118,7 @@ Here is an example of enabling the :term:`Dashboard` module:
 		]
 	}
 
-.. prompt:: bash #
-
-   ceph mgr services
-
-::
-
+	$ ceph mgr services
 	{
 		"dashboard": "http://myserver.com:7789/"
 	}
@@ -176,11 +157,9 @@ Calling module commands
 Where a module implements command line hooks, the commands will
 be accessible as ordinary Ceph commands.  Ceph will automatically incorporate
 module commands into the standard CLI interface and route them appropriately to
-the module.
+the module.::
 
-.. prompt:: bash #
-
-   ceph <command | help>
+    ceph <command | help>
 
 Configuration
 -------------

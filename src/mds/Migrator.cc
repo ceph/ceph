@@ -19,6 +19,7 @@
 #include "CDir.h"
 #include "CDentry.h"
 #include "Locker.h"
+#include "RetryMessage.h"
 #include "Server.h"
 
 #include "MDBalancer.h"

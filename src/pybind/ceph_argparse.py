@@ -173,7 +173,7 @@ class CephArgtype(object):
             assert len(type_args) == 1
             attrs['n'] = 'N'
             return CephArgtype.to_argdesc(type_args[0], attrs, positional=positional)
-        elif orig_type is Tuple:
+        elif orig_type in (Tuple, tuple):
             assert len(type_args) >= 1
             inner_tp = type_args[0]
             assert type_args.count(inner_tp) == len(type_args), \

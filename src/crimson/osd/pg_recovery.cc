@@ -5,6 +5,8 @@
 #include <fmt/ostream.h>
 #include <fmt/ranges.h>
 
+#include "crimson/common/coroutine.h"
+#include "crimson/common/log.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/osd/backfill_facades.h"
 #include "crimson/osd/osd_operations/background_recovery.h"
@@ -15,6 +17,8 @@
 
 #include "osd/osd_types.h"
 #include "osd/PeeringState.h"
+
+SET_SUBSYS(osd);
 
 namespace {
   seastar::logger& logger() {
@@ -522,21 +526,19 @@ void PGRecovery::request_primary_scan(
 
 PGRecovery::interruptible_future<>
 PGRecovery::recover_object_with_throttle(
-  const hobject_t &soid,
+  hobject_t soid,
   eversion_t need)
 {
-  crimson::osd::scheduler::params_t params =
-    {1, 0, crimson::osd::scheduler::scheduler_class_t::background_best_effort};
-  auto &ss = pg->get_shard_services();
-  logger().debug("{} {}", soid, need);
-  return ss.with_throttle(
-    std::move(params),
-    [this, soid, need] {
-    logger().debug("got throttle: {} {}", soid, need);
-    auto backend = pg->get_recovery_backend();
-    assert(backend);
-    return backend->recover_object(soid, need);
-  });
+  LOG_PREFIX(PGRecovery::recover_object_with_throttle);
+  DEBUGDPP("{} {}", pg->get_dpp(), soid, need);
+  auto releaser = co_await interruptor::make_interruptible(
+    pg->get_shard_services().get_throttle(
+      crimson::osd::scheduler::params_t{
+	1, 0, crimson::osd::scheduler::scheduler_class_t::background_best_effort
+      }));
+  DEBUGDPP("got throttle: {} {}", pg->get_dpp(), soid, need);
+  co_await pg->get_recovery_backend()->recover_object(soid, need);
+  co_return;
 }
 
 void PGRecovery::enqueue_push(

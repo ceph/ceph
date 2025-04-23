@@ -5,6 +5,8 @@
 #include "common/debug.h"
 #include "mdstypes.h"
 
+#include <iostream>
+
 #define dout_subsys ceph_subsys_mds
 
 using std::list;
@@ -12,6 +14,14 @@ using std::pair;
 using std::multimap;
 
 static multimap<ceph_filelock, ceph_lock_state_t*> global_waiting_locks;
+
+std::ostream& operator<<(std::ostream& out, const ceph_filelock& l) {
+  out << "start: " << l.start << ", length: " << l.length
+      << ", client: " << l.client << ", owner: " << l.owner
+      << ", pid: " << l.pid << ", type: " << (int)l.type
+      << std::endl;
+  return out;
+}
 
 static void remove_global_waiting(ceph_filelock &fl, ceph_lock_state_t *lock_state)
 {
@@ -34,6 +44,18 @@ ceph_lock_state_t::~ceph_lock_state_t()
       remove_global_waiting(p->second, this);
     }
   }
+}
+
+void ceph_lock_state_t::encode(ceph::bufferlist& bl) const {
+  using ceph::encode;
+  encode(held_locks, bl);
+  encode(client_held_lock_counts, bl);
+}
+
+void ceph_lock_state_t::decode(ceph::bufferlist::const_iterator& bl) {
+  using ceph::decode;
+  decode(held_locks, bl);
+  decode(client_held_lock_counts, bl);
 }
 
 void ceph_lock_state_t::dump(ceph::Formatter *f) const {
@@ -640,4 +662,22 @@ ceph_lock_state_t::contains_exclusive_lock(list<multimap<uint64_t,
     if (CEPH_LOCK_EXCL == (*iter)->second.type) return &(*iter)->second;
   }
   return NULL;
+}
+
+std::ostream& operator<<(std::ostream &out, const ceph_lock_state_t &l) {
+  out << "ceph_lock_state_t. held_locks.size()=" << l.held_locks.size()
+      << ", waiting_locks.size()=" << l.waiting_locks.size()
+      << ", client_held_lock_counts -- " << l.client_held_lock_counts
+      << "\n client_waiting_lock_counts -- " << l.client_waiting_lock_counts
+      << "\n held_locks -- ";
+    for (auto iter = l.held_locks.begin();
+         iter != l.held_locks.end();
+         ++iter)
+      out << iter->second;
+    out << "\n waiting_locks -- ";
+    for (auto iter =l.waiting_locks.begin();
+         iter != l.waiting_locks.end();
+         ++iter)
+      out << iter->second << "\n";
+  return out;
 }

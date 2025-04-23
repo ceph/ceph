@@ -10,24 +10,18 @@ Enabling
 ========
 
 Run the following command to enable the *diskprediction_local* module in the Ceph
-environment:
+environment::
 
-.. prompt:: bash #
-
-   ceph mgr module enable diskprediction_local
+    ceph mgr module enable diskprediction_local
 
 
-To enable the local predictor:
+To enable the local predictor::
 
-.. prompt:: bash #
+    ceph config set global device_failure_prediction_mode local
 
-   ceph config set global device_failure_prediction_mode local
+To disable prediction::
 
-To disable prediction:
-
-.. prompt:: bash #
-
-   ceph config set global device_failure_prediction_mode none
+    ceph config set global device_failure_prediction_mode none
 
 
 *diskprediction_local* requires at least six datasets of device health metrics to
@@ -36,19 +30,17 @@ collected only if health monitoring is :ref:`enabled <enabling-monitoring>`.
 
 Run the following command to retrieve the life expectancy of given device.
 
-.. prompt:: bash #
+::
 
-   ceph device predict-life-expectancy <device id>
+    ceph device predict-life-expectancy <device id>
 
 Configuration
 =============
 
 The module performs the prediction on a daily basis by default. You can adjust
-this interval with:
+this interval with::
 
-.. prompt:: bash #
-
-   ceph config set mgr mgr/diskprediction_local/predict_interval <interval-in-seconds>
+  ceph config set mgr mgr/diskprediction_local/predict_interval <interval-in-seconds>
 
 Debugging
 =========
@@ -63,5 +55,5 @@ use the following command.
         debug mgr = 20
 
 With logging set to debug for the manager the module will print out logging
-message with prefix ``mgr[diskprediction]`` for easy filtering.
+message with prefix *mgr[diskprediction]* for easy filtering.
 
