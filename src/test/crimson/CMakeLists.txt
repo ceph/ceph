@@ -110,6 +110,12 @@ target_link_libraries(
 add_ceph_unittest(unittest-seastar-errorator
   --memory 256M --smp 1)
 
+add_executable(unittest-seastar-errorator-abort
+  test_errorator_abort.cc)
+target_link_libraries(
+  unittest-seastar-errorator-abort
+  crimson::gtest)
+
 add_executable(unittest-crimson-coroutine
   test_crimson_coroutine.cc)
 target_link_libraries(
