@@ -73,9 +73,9 @@
                   <select class="form-select"
                           id="selectedRealm"
                           formControlName="selectedRealm">
-                  <option *ngFor="let realm of realmsInfo"
-                          [value]="realm.realm">
-                        {{ realm.realm }}
+                  <option *ngFor="let realm of realmList"
+                          [value]="realm">
+                        {{ realm }}
                   </option>
                   </select>
                 </div>
@@ -335,7 +335,8 @@
 
 <ng-template #progressTemplate>
   <cd-progress [value]="executingTask?.progress"
-               [description]="executingTask?.name?.replace('progress/Multisite-Setup:', '')">
+               [description]="executingTask?.name?.replace('progress/Multisite-Setup:', '')?.split('||')[0]?.trim()"
+               [subDescription]="executingTask?.name?.replace('progress/Multisite-Setup:', '')?.split('||')[1]?.trim()">
   </cd-progress>
 </ng-template>
 
@@ -380,6 +381,13 @@
 </ng-template>
 
 <ng-template #reviewTemplate>
+  <cd-alert-panel type="warning"
+                  [showTitle]="false">
+    <span i18n>
+      During the automation process, the RGW module will be enabled on both the source and target clusters, if it is not already enabled.
+      This action may cause a temporary downtime (5-10 seconds) on each cluster.
+    </span>
+  </cd-alert-panel>
   <ng-container [ngSwitch]="multisiteSetupForm.get('configType').value">
     <ng-container *ngSwitchCase="'newRealm'">
       <ng-container *ngTemplateOutlet="newRealmInfo"></ng-container>
