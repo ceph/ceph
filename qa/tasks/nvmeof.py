@@ -321,7 +321,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
         self.max_thrash_daemons = int(self.config.get('max_thrash', len(self.daemons) - 1))
 
         # Limits on thrashing each daemon
-        self.daemon_max_thrash_times = int(self.config.get('daemon_max_thrash_times', 5))
+        self.daemon_max_thrash_times = int(self.config.get('daemon_max_thrash_times', 4))
         self.daemon_max_thrash_period = int(self.config.get('daemon_max_thrash_period', 30 * 60)) # seconds
 
         self.min_thrash_delay = int(self.config.get('min_thrash_delay', 60))
@@ -436,7 +436,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
         if killed_method == "ceph_daemon_stop":
             daemon.remote.run(args=[
                 "ceph", "orch", "daemon", "restart",
-                name
+                name, "--force"
             ])
         # note: temporarily use 'daemon start' to restart
         # daemons instead of 'systemctl start'
