@@ -680,8 +680,8 @@ def get_cert_issuer_info(crt: str) -> Tuple[Optional[str], Optional[str]]:
 def verify_tls(crt, key):
     # type: (str, str) -> int
     cc = ceph.cryptotools.remote.CryptoCaller()
-    days_to_expiration = cc.verify_cacrt_content(crt)
     try:
+        days_to_expiration = cc.verify_cacrt_content(crt)
         cc.verify_tls(crt, key)
     except ValueError as err:
         raise ServerConfigException(str(err))
