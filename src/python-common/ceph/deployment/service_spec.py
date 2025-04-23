@@ -1141,6 +1141,8 @@ class NFSServiceSpec(ServiceSpec):
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
                  port: Optional[int] = None,
+                 monitoring_networks: Optional[List[str]] = None,
+                 monitoring_ip_addrs: Optional[Dict[str, str]] = None,
                  monitoring_port: Optional[int] = None,
                  virtual_ip: Optional[str] = None,
                  enable_nlm: bool = False,
@@ -1158,7 +1160,15 @@ class NFSServiceSpec(ServiceSpec):
             extra_entrypoint_args=extra_entrypoint_args, custom_configs=custom_configs)
 
         self.port = port
+
+        # monitoring_ip_addrs is a dictionary where each key is a hostname and the corresponding
+        # value is the IP address {hostname: ip} that the monitor should bind to on that host.
+        # monitoring_networks is a list of networks where the monitor is allowed to bind.
+        # user can pass one parameter to bind monitor on specific IP.
+        self.monitoring_ip_addrs = monitoring_ip_addrs
+        self.monitoring_networks = monitoring_networks
         self.monitoring_port = monitoring_port
+
         self.virtual_ip = virtual_ip
         self.enable_haproxy_protocol = enable_haproxy_protocol
         self.idmap_conf = idmap_conf
