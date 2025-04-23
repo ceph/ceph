@@ -2,8 +2,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/uio.h>
 #include <getopt.h>
 #include <endian.h>
+#include <string.h>
+#include <stdarg.h>
 
 #include "include/cephfs/libcephfs.h"
 
@@ -1825,10 +1828,54 @@ static int32_t server_start(proxy_manager_t *manager)
 				 accept_connection, check_stop);
 }
 
+static void log_format(struct iovec *iov, char *buffer, size_t size,
+		       const char *fmt, const char *err, ...)
+{
+	va_list args;
+	int32_t len;
+
+	va_start(args, err);
+	len = vsnprintf(buffer, size, fmt, args);
+	va_end(args);
+
+	if (len < 0) {
+		iov->iov_base = (void *)err;
+		iov->iov_len = strlen(err);
+	} else {
+		if (len >= size) {
+			memcpy(buffer + size - 6, "[...]", 6);
+			len = size - 1;
+		}
+
+		iov->iov_base = buffer;
+		iov->iov_len = len;
+	}
+}
+
 static void log_print(proxy_log_handler_t *handler, int32_t level, int32_t err,
 		      const char *msg)
 {
-	printf("[%d] %s\n", level, msg);
+	static const char level_chars[] = "CEWID";
+
+	char emsg[256];
+	char header[8];
+	struct iovec iov[3];
+
+	log_format(&iov[0], header, sizeof(header), "[%c] ", "[?] ",
+		   level_chars[level]);
+
+	iov[1].iov_base = (void *)msg;
+	iov[1].iov_len = strlen(msg);
+
+	if (err != 0) {
+		log_format(&iov[2], emsg, sizeof(emsg), " (error %d: %s)\n",
+			   " (error ?)\n", err, strerror(err));
+	} else {
+		iov[2].iov_base = "\n";
+		iov[2].iov_len = 1;
+	}
+
+	writev(STDOUT_FILENO, iov, 3);
 }
 
 static struct option main_opts[] = {
