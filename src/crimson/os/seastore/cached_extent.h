@@ -760,7 +760,7 @@ public:
   }
 
   bool is_inline() const {
-    return poffset.is_relative();
+    return poffset.is_record_relative();
   }
 
   paddr_t get_prior_paddr_and_reset() {

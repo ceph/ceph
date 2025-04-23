@@ -71,8 +71,8 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
     ceph_abort();
   }
 
-  // any relative paddr must have been on the transaction
-  assert(!paddr.is_relative());
+  // any record-relative or delayed paddr must have been on the transaction
+  assert(paddr.is_absolute());
 
   // absent from transaction
   // retiring is not included by the cache hit metrics
@@ -97,6 +97,8 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
 void Cache::retire_absent_extent_addr(
   Transaction &t, paddr_t paddr, extent_len_t length)
 {
+  assert(paddr.is_absolute());
+
   CachedExtentRef ext;
 #ifndef NDEBUG
   auto result = t.get_extent(paddr, &ext);
@@ -1461,7 +1463,7 @@ record_t Cache::prepare_record(
   for (auto &i: t.ool_block_list) {
     TRACET("fresh ool extent -- {}", t, *i);
     ceph_assert(i->is_valid());
-    assert(!i->is_inline());
+    assert(i->get_paddr().is_absolute());
     get_by_ext(efforts.fresh_ool_by_ext,
                i->get_type()).increment(i->get_length());
     if (is_backref_mapped_type(i->get_type())) {
@@ -1975,9 +1977,10 @@ Cache::replay_delta(
     decode(alloc_delta, delta.bl);
     backref_entry_refs_t backref_entries;
     for (auto &alloc_blk : alloc_delta.alloc_blk_ranges) {
-      if (alloc_blk.paddr.is_relative()) {
-	assert(alloc_blk.paddr.is_record_relative());
+      if (alloc_blk.paddr.is_record_relative()) {
 	alloc_blk.paddr = record_base.add_relative(alloc_blk.paddr);
+      } else {
+        ceph_assert(alloc_blk.paddr.is_absolute());
       }
       DEBUG("replay alloc_blk {}~0x{:x} {}, journal_seq: {}",
 	alloc_blk.paddr, alloc_blk.len, alloc_blk.laddr, journal_seq);

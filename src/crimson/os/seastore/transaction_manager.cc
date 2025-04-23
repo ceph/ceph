@@ -151,9 +151,10 @@ TransactionManager::mount()
             extent_len_t len,
             extent_types_t type,
             laddr_t laddr) {
+          assert(paddr.is_absolute());
           if (is_backref_node(type)) {
             assert(laddr == L_ADDR_NULL);
-	    assert(backref_key != P_ADDR_NULL);
+	    assert(backref_key.is_absolute() || backref_key == P_ADDR_MIN);
             backref_manager->cache_new_backref_extent(paddr, backref_key, type);
             cache->update_tree_extents_num(type, 1);
             epm->mark_space_used(paddr, len);
