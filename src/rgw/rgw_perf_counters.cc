@@ -59,6 +59,11 @@ void add_rgw_frontend_counters(PerfCountersBuilder *pcb) {
   pcb->add_u64_counter(l_rgw_lua_script_ok, "lua_script_ok", "Successful executions of Lua scripts");
   pcb->add_u64_counter(l_rgw_lua_script_fail, "lua_script_fail", "Failed executions of Lua scripts");
   pcb->add_u64(l_rgw_lua_current_vms, "lua_current_vms", "Number of Lua VMs currently being executed");
+
+  pcb->add_u64_counter(l_rgw_user_used_bytes, "user_used_bytes", "User used bytes");
+  pcb->add_u64_counter(l_rgw_user_num_objects, "user_num_objects", "User number of objects");
+  pcb->add_u64_counter(l_rgw_bucket_used_bytes, "bucket_used_bytes", "Bucket used bytes");
+  pcb->add_u64_counter(l_rgw_bucket_num_objects, "bucket_num_objects", "Bucket number of objects");
 }
 
 void add_rgw_op_counters(PerfCountersBuilder *lpcb) {
@@ -236,12 +241,28 @@ int rgw_perf_start(CephContext *cct)
   if (user_counters_cache_enabled) {
     uint64_t target_size = cct->_conf.get_val<uint64_t>("rgw_user_counters_cache_size");
     user_counters_cache = new PerfCountersCache(cct, target_size, create_rgw_op_counters);
+
+    // Register user usage counters
+    PerfCountersBuilder pcb_user(cct, "rgw_user_usage", l_rgw_user_used_bytes, l_rgw_user_num_objects);
+    pcb_user.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+    pcb_user.add_u64(l_rgw_user_used_bytes, "user_used_bytes", "Total bytes used by user");
+    pcb_user.add_u64(l_rgw_user_num_objects, "user_num_objects", "Total number of objects for user");
+    PerfCounters *user_usage_counters = pcb_user.create_perf_counters();
+    cct->get_perfcounters_collection()->add(user_usage_counters);
   }
 
   bool bucket_counters_cache_enabled = cct->_conf.get_val<bool>("rgw_bucket_counters_cache");
   if (bucket_counters_cache_enabled) {
     uint64_t target_size = cct->_conf.get_val<uint64_t>("rgw_bucket_counters_cache_size");
     bucket_counters_cache = new PerfCountersCache(cct, target_size, create_rgw_op_counters);
+
+    // Register bucket usage counters
+    PerfCountersBuilder pcb_bucket(cct, "rgw_bucket_usage", l_rgw_bucket_used_bytes, l_rgw_bucket_num_objects);
+    pcb_bucket.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+    pcb_bucket.add_u64(l_rgw_bucket_used_bytes, "bucket_used_bytes", "Total bytes used by bucket");
+    pcb_bucket.add_u64(l_rgw_bucket_num_objects, "bucket_num_objects", "Total number of objects in bucket");
+    PerfCounters *bucket_usage_counters = pcb_bucket.create_perf_counters();
+    cct->get_perfcounters_collection()->add(bucket_usage_counters);
   }
 
   global_op_counters_init(cct);
