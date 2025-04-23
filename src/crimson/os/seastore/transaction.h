@@ -217,28 +217,26 @@ public:
   }
 
   void mark_delayed_extent_ool(CachedExtentRef& ref) {
+    assert(ref->get_paddr().is_delayed());
     ool_block_list.push_back(ref);
   }
 
   void update_delayed_ool_extent_addr(LogicalCachedExtentRef& ref,
                                       paddr_t final_addr) {
-    write_set.erase(*ref);
     assert(ref->get_paddr().is_delayed());
+    assert(final_addr.is_absolute());
+    write_set.erase(*ref);
     ref->set_paddr(final_addr, /* need_update_mapping: */ true);
-    assert(!ref->get_paddr().is_null());
-    assert(!ref->is_inline());
     write_set.insert(*ref);
   }
 
   void mark_allocated_extent_ool(CachedExtentRef& ref) {
     assert(ref->get_paddr().is_absolute());
-    assert(!ref->is_inline());
     ool_block_list.push_back(ref);
   }
 
   void mark_inplace_rewrite_extent_ool(LogicalCachedExtentRef ref) {
     assert(ref->get_paddr().is_absolute_random_block());
-    assert(!ref->is_inline());
     inplace_ool_block_list.push_back(ref);
   }
 

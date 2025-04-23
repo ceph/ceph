@@ -1520,7 +1520,7 @@ private:
     paddr_t paddr,
     paddr_t key,
     extent_types_t type) {
-    assert(!paddr.is_relative());
+    assert(paddr.is_absolute());
     auto [iter, inserted] = backref_extents.emplace(paddr, key, type);
     boost::ignore_unused(inserted);
     assert(inserted);

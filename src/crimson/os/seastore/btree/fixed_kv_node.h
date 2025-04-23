@@ -68,12 +68,14 @@ struct FixedKVNode : CachedExtent {
      * Upon commit, these now block relative addresses will be interpretted
      * against the real final address.
      */
-    if (!get_paddr().is_absolute()) {
+    if (get_paddr().is_record_relative()) {
       // backend_type_t::SEGMENTED
-      assert(get_paddr().is_record_relative());
       resolve_relative_addrs(
 	make_record_relative_paddr(0).block_relative_to(get_paddr()));
-    } // else: backend_type_t::RANDOM_BLOCK
+    } else {
+      // backend_type_t::RANDOM_BLOCK
+      assert(get_paddr().is_absolute());
+    }
   }
 
   void on_delta_write(paddr_t record_block_offset) final {
