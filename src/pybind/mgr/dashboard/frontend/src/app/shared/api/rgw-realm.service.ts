@@ -81,4 +81,10 @@ export class RgwRealmService {
       return this.http.get(`${this.url}/get_realm_tokens`);
     });
   }
+
+  getValidRealms() {
+    return this.rgwDaemonService.request(() => {
+      return this.http.get(`${this.url}/get_valid_realms`);
+    });
+  }
 }
