@@ -1433,23 +1433,15 @@ std::string Client::_unwrap_name(Inode& diri, const std::string& dname, const st
 
   auto fscrypt_denc = fscrypt->get_fname_denc(diri.fscrypt_ctx, &diri.fscrypt_key_validator, true);
   if (fscrypt_denc) {
-    if (newaltn.empty()) {
-      std::string plaintext;
-      int r = fscrypt_denc->get_decrypted_fname(newdname, "", &plaintext);
-      if (r < 0) {
-        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
-        return "???";
-      }
-      newdname = std::move(plaintext);
-    } else {
-      /* the dname is irrelevant, the altname has what we want to present to the application */
-      std::string plaintext;
-      int r = fscrypt_denc->get_decrypted_fname(newaltn, "", &plaintext);
-      if (r < 0) {
-        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
-        return "???";
-      }
-      newdname = std::move(plaintext);
+    std::string plaintext;
+    int r = fscrypt_denc->get_decrypted_fname(newdname, newaltn, &plaintext);
+    if (r < 0) {
+      ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
+      return "???";
+    }
+
+    newdname = std::move(plaintext);
+    if (!newaltn.empty()) {
       newaltn = newdname;
     }
   }
