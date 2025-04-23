@@ -89,7 +89,13 @@ public:
     const hobject_t& soid,
     eversion_t need) = 0;
 
-  interruptible_future<BackfillInterval> scan_for_backfill(
+  interruptible_future<PrimaryBackfillInterval> scan_for_backfill_primary(
+    const hobject_t from,
+    std::int64_t min,
+    std::int64_t max,
+    const std::set<pg_shard_t> &backfill_targets);
+
+  interruptible_future<ReplicaBackfillInterval> scan_for_backfill_replica(
     const hobject_t from,
     std::int64_t min,
     std::int64_t max);
