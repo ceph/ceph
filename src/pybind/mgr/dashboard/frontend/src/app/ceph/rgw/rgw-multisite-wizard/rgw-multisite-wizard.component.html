@@ -276,7 +276,8 @@
 
 <ng-template #progressTemplate>
   <cd-progress [value]="executingTask?.progress"
-               [description]="executingTask?.name?.replace('progress/Multisite-Setup:', '')">
+               [description]="executingTask?.name?.replace('progress/Multisite-Setup:', '')?.split('||')[0]?.trim()"
+               [subDescription]="executingTask?.name?.replace('progress/Multisite-Setup:', '')?.split('||')[1]?.trim()">
   </cd-progress>
 </ng-template>
 
@@ -321,6 +322,12 @@
 </ng-template>
 
 <ng-template #reviewTemplate>
+  <cd-alert-panel type="warning"
+                  [showTitle]="false">
+    <span i18n>During the automation process, the RGW module will be enabled on the selected cluster if it is not already enabled.
+      This action may cause a temporary downtime (5-10 seconds) on the selected cluster.
+      </span>
+  </cd-alert-panel>
   <div class="form-group row">
     <label class="cd-col-form-label"
            i18n>Realm Name:</label>

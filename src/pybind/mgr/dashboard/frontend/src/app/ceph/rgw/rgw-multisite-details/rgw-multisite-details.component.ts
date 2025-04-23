@@ -286,7 +286,8 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
         icon: Icons.wrench,
         name: this.actionLabels.SETUP_MULTISITE_REPLICATION,
         click: () =>
-          this.router.navigate([BASE_URL, { outlets: { modal: 'setup-multisite-replication' } }])
+          this.router.navigate([BASE_URL, { outlets: { modal: 'setup-multisite-replication' } }]),
+        disable: () => !this.rgwModuleStatus
       }
     ];
 
