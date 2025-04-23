@@ -133,6 +133,16 @@
   ISA-L is recommended for new pools because the Jerasure library is
   no longer maintained.
 
+* CephFS: The ``ceph fs purge status`` command now allows users to check the
+  progress made by purge threads in purging deleted subvolumes by displaying
+  related statistics. The statistics include the number and percentage of
+  subvolumes and files that have been purged, the amount of data that has been
+  purged, and the unlink+rmdir rate per second.
+
+* CephFS: The ``ceph status`` command now also prints a progress bar when
+  purging of deleted subvolumes is ongoing. The progress bar is accompanied by
+  a message that shows the numbers of subvolumes and files being purged.
+
 * RGW: Added support for the `RestrictPublicBuckets` property of the S3 `PublicAccessBlock`
   configuration.
 
