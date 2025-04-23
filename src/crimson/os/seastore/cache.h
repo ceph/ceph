@@ -255,6 +255,7 @@ public:
       });
     }
 
+    assert(paddr.is_absolute());
     // get_extent_ret::ABSENT from transaction
     ret = query_cache(paddr);
     if (!ret) {
@@ -590,6 +591,7 @@ public:
 // Interfaces only for tests.
 public:
   CachedExtentRef test_query_cache(paddr_t offset) {
+    assert(offset.is_absolute());
     return query_cache(offset);
   }
 
@@ -678,6 +680,7 @@ private:
     const Transaction::src_t* p_src
   ) {
     LOG_PREFIX(Cache::do_get_caching_extent);
+    assert(offset.is_absolute());
     auto cached = query_cache(offset);
     if (!cached) {
       // partial read
@@ -1484,6 +1487,7 @@ private:
       const Transaction::src_t* p_src,
       cache_hint_t hint)
   {
+    assert(ext.get_paddr().is_absolute());
     if (hint == CACHE_HINT_NOCACHE && is_logical_type(ext.get_type())) {
       return;
     }
@@ -1919,6 +1923,7 @@ private:
     assert(!extent->is_range_loaded(offset, length));
     assert(is_aligned(offset, get_block_size()));
     assert(is_aligned(length, get_block_size()));
+    assert(extent->get_paddr().is_absolute());
     extent->set_io_wait();
     auto old_length = extent->get_loaded_length();
     load_ranges_t to_read = extent->load_ranges(offset, length);

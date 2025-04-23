@@ -731,11 +731,14 @@ void Cache::add_extent(CachedExtentRef ref)
   assert(ref->is_valid());
   assert(ref->user_hint == PLACEMENT_HINT_NULL);
   assert(ref->rewrite_generation == NULL_GENERATION);
+  assert(ref->get_paddr().is_absolute() ||
+         ref->get_paddr().is_root());
   extents_index.insert(*ref);
 }
 
 void Cache::mark_dirty(CachedExtentRef ref)
 {
+  assert(ref->get_paddr().is_absolute());
   if (ref->is_dirty()) {
     assert(ref->primary_ref_list_hook.is_linked());
     return;
@@ -754,6 +757,8 @@ void Cache::add_to_dirty(
   assert(!ref->primary_ref_list_hook.is_linked());
   ceph_assert(ref->get_modify_time() != NULL_TIME);
   assert(ref->is_fully_loaded());
+  assert(ref->get_paddr().is_absolute() ||
+         ref->get_paddr().is_root());
 
   // Note: next might not be at extent_state_t::DIRTY,
   // also see CachedExtent::is_stable_writting()
@@ -783,6 +788,8 @@ void Cache::remove_from_dirty(
   assert(ref->is_dirty());
   ceph_assert(ref->primary_ref_list_hook.is_linked());
   assert(ref->is_fully_loaded());
+  assert(ref->get_paddr().is_absolute() ||
+         ref->get_paddr().is_root());
 
   auto extent_length = ref->get_length();
   stats.dirty_bytes -= extent_length;
@@ -864,9 +871,12 @@ void Cache::remove_extent(
     const Transaction::src_t* p_src)
 {
   assert(ref->is_valid());
+  assert(ref->get_paddr().is_absolute() ||
+         ref->get_paddr().is_root());
   if (ref->is_dirty()) {
     remove_from_dirty(ref, p_src);
   } else if (!ref->is_placeholder()) {
+    assert(ref->get_paddr().is_absolute());
     lru.remove_from_lru(*ref);
   }
   extents_index.erase(*ref);
@@ -889,6 +899,7 @@ void Cache::commit_replace_extent(
     CachedExtentRef prev)
 {
   assert(next->get_paddr() == prev->get_paddr());
+  assert(next->get_paddr().is_absolute() || next->get_paddr().is_root());
   assert(next->version == prev->version + 1);
   extents_index.replace(*next, *prev);
 
@@ -2006,6 +2017,7 @@ Cache::replay_delta(
   if (is_root_type(delta.type)) {
     TRACE("replay root delta at {} {}, remove extent ... -- {}, prv_root={}",
           journal_seq, record_base, delta, *root);
+    ceph_assert(delta.paddr.is_root());
     remove_extent(root, nullptr);
     root->apply_delta_and_adjust_crc(record_base, delta.bl);
     root->dirty_from_or_retired_at = journal_seq;
@@ -2019,6 +2031,7 @@ Cache::replay_delta(
     return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
       std::make_pair(true, root));
   } else {
+    ceph_assert(delta.paddr.is_absolute());
     auto _get_extent_if_cached = [this](paddr_t addr)
       -> get_extent_ertr::future<CachedExtentRef> {
       // replay is not included by the cache hit metrics
