@@ -78,12 +78,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return c.nm.alloc_extent(c.t, hint, extent_size
     ).handle_error_interruptible(
       eagain_iertr::pass_further{},
-      crimson::ct_error::input_output_error::assert_failure(
-          [FNAME, c, extent_size, is_level_tail, level] {
-        SUBERRORT(seastore_onode,
-            "EIO -- extent_size={}, is_level_tail={}, level={}",
-            c.t, extent_size, is_level_tail, level);
-      })
+      crimson::ct_error::input_output_error::assert_failure(fmt::format(
+        "{} extent_size={}, is_level_tail={}, level={}",
+        FNAME, extent_size, is_level_tail, level).c_str())
     ).si_then([is_level_tail, level](auto extent) {
       assert(extent);
       assert(extent->is_initial_pending());

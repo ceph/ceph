@@ -280,18 +280,16 @@ seastar::future<> OSD::mkfs(
   co_await store.start();
 
   co_await store.mkfs(osd_uuid).handle_error(
-    crimson::stateful_ec::assert_failure([FNAME] (const auto& ec) {
-      ERROR("error creating empty object store in {}: ({}) {}",
-	    local_conf().get_val<std::string>("osd_data"),
-	    ec.value(), ec.message());
-    }));
+    crimson::stateful_ec::assert_failure(fmt::format(
+      "{} error creating empty object store in {}",
+       FNAME, local_conf().get_val<std::string>("osd_data")).c_str())
+  );
 
   co_await store.mount().handle_error(
-    crimson::stateful_ec::assert_failure([FNAME](const auto& ec) {
-      ERROR("error mounting object store in {}: ({}) {}",
-	    local_conf().get_val<std::string>("osd_data"),
-	    ec.value(), ec.message());
-    }));
+    crimson::stateful_ec::assert_failure(fmt::format(
+      "{} error mounting object store in {}",
+      FNAME, local_conf().get_val<std::string>("osd_data")).c_str())
+  );
 
   {
     auto meta_coll = co_await open_or_create_meta_coll(store);
@@ -477,11 +475,10 @@ seastar::future<> OSD::start()
 	whoami, get_shard_services(),
 	*monc, *hb_front_msgr, *hb_back_msgr});
     return store.mount().handle_error(
-      crimson::stateful_ec::assert_failure([FNAME] (const auto& ec) {
-        ERROR("error mounting object store in {}: ({}) {}",
-	      local_conf().get_val<std::string>("osd_data"),
-	      ec.value(), ec.message());
-      }));
+      crimson::stateful_ec::assert_failure(fmt::format(
+        "{} error mounting object store in {}",
+        FNAME, local_conf().get_val<std::string>("osd_data")).c_str())
+    );
   }).then([this, FNAME] {
     auto stats_seconds = local_conf().get_val<int64_t>("crimson_osd_stat_interval");
     if (stats_seconds > 0) {
