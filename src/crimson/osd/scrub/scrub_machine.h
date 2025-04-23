@@ -6,6 +6,7 @@
 #include <string>
 #include <ranges>
 
+#include <boost/optional.hpp>
 #include <boost/statechart/custom_reaction.hpp>
 #include <boost/statechart/deferral.hpp>
 #include <boost/statechart/event.hpp>
