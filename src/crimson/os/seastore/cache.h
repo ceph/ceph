@@ -476,6 +476,7 @@ public:
       ext_type);
 
     CachedExtent* p_extent;
+    bool unidirectional_attached = false;
     if (extent->is_stable()) {
       p_extent = extent->get_transactional_view(t);
       if (p_extent != extent.get()) {
@@ -495,7 +496,13 @@ public:
       } else {
         // stable from trans-view
         assert(!p_extent->is_pending_in_trans(t.get_trans_id()));
-        if (t.maybe_add_to_read_set(p_extent)) {
+	if (p_extent->get_paddr().is_record_relative() &&
+	    t.do_attach_to_extent(p_extent)) {
+	  unidirectional_attached = true;
+	  ++access_stats.cache_lru;
+	  ++stats.access.cache_lru;
+	} else if (!p_extent->get_paddr().is_record_relative() &&
+		   t.maybe_add_to_read_set(p_extent)) {
           if (p_extent->is_dirty()) {
             ++access_stats.cache_dirty;
             ++stats.access.cache_dirty;
@@ -538,7 +545,13 @@ public:
 
     return trans_intr::make_interruptible(
       p_extent->wait_io()
-    ).then_interruptible([p_extent] {
+    ).then_interruptible([p_extent, unidirectional_attached, &t, this, &t_src] {
+      if (unidirectional_attached) {
+	touch_extent(*p_extent, &t_src, t.get_cache_hint());
+      }
+      if (p_extent->is_stable()) {
+	t.do_attach_to_trans(p_extent);
+      }
       return get_extent_iertr::make_ready_future<CachedExtentRef>(
         CachedExtentRef(p_extent));
     });
