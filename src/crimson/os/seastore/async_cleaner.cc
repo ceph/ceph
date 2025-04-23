@@ -1524,7 +1524,8 @@ bool SegmentCleaner::check_usage()
       if (paddr.get_addr_type() == paddr_types_t::SEGMENT) {
         if (is_backref_node(type)) {
 	  assert(laddr == L_ADDR_NULL);
-	  assert(backref_key != P_ADDR_NULL);
+	  assert(backref_key.is_absolute_segmented()
+                 || backref_key == P_ADDR_MIN);
           tracker->allocate(
             paddr.as_seg_paddr().get_segment_id(),
             paddr.as_seg_paddr().get_segment_off(),
@@ -1832,7 +1833,8 @@ bool RBMCleaner::check_usage()
 	if (rbm->get_device_id() == paddr.get_device_id()) {
 	  if (is_backref_node(type)) {
 	    assert(laddr == L_ADDR_NULL);
-	    assert(backref_key != P_ADDR_NULL);
+	    assert(backref_key.is_absolute_random_block()
+	           || backref_key == P_ADDR_MIN);
 	    tracker.allocate(
 	      paddr,
 	      len);

@@ -1937,8 +1937,7 @@ Cache::replay_delta(
    * safetly skip these deltas because the extent must already
    * have been rewritten.
    */
-  if (delta.paddr != P_ADDR_NULL &&
-      delta.paddr.get_addr_type() == paddr_types_t::SEGMENT) {
+  if (delta.paddr.is_absolute_segmented()) {
     auto& seg_addr = delta.paddr.as_seg_paddr();
     auto seg_info = get_segment_info(seg_addr.get_segment_id());
     if (seg_info) {

@@ -184,7 +184,7 @@ public:
       delayed_temp_offset += ref->get_length();
       delayed_alloc_list.emplace_back(ref);
       fresh_block_stats.increment(ref->get_length());
-    } else if (ref->get_paddr().is_absolute()) {
+    } else if (ref->get_paddr().is_absolute_random_block()) {
       pre_alloc_list.emplace_back(ref);
       fresh_block_stats.increment(ref->get_length());
     } else {
@@ -237,7 +237,7 @@ public:
   }
 
   void mark_inplace_rewrite_extent_ool(LogicalCachedExtentRef ref) {
-    assert(ref->get_paddr().is_absolute());
+    assert(ref->get_paddr().is_absolute_random_block());
     assert(!ref->is_inline());
     inplace_ool_block_list.push_back(ref);
   }
@@ -245,7 +245,7 @@ public:
   void add_inplace_rewrite_extent(CachedExtentRef ref) {
    ceph_assert(!is_weak());
    ceph_assert(ref);
-   ceph_assert(ref->get_paddr().is_absolute());
+   ceph_assert(ref->get_paddr().is_absolute_random_block());
    assert(ref->state == CachedExtent::extent_state_t::DIRTY);
    pre_inplace_rewrite_list.emplace_back(ref->cast<LogicalCachedExtent>());
   }
