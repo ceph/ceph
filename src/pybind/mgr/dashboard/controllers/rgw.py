@@ -1200,10 +1200,16 @@ class RgwRealm(RESTController):
 
     @allow_empty_body
     # pylint: disable=W0613
-    def list(self):
-        multisite_instance = RgwMultisite()
-        result = multisite_instance.list_realms()
-        return result
+    def list(self, replicable: Optional[bool] = None):
+        if replicable:
+            try:
+                multisite_automation_instance = RgwMultisiteAutomation()
+                return multisite_automation_instance.get_replicable_realms_list()
+            except NoRgwDaemonsException as e:
+                raise DashboardException(e, http_status_code=404, component='rgw')
+        else:
+            multisite_instance = RgwMultisite()
+            return multisite_instance.list_realms()
 
     @allow_empty_body
     # pylint: disable=W0613
