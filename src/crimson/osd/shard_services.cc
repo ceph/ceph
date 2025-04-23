@@ -21,7 +21,6 @@
 #include "crimson/os/cyanstore/cyan_store.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
-#include "crimson/osd/osd_operations/pg_splitting.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_meta.h"
 #include <boost/iterator/counting_iterator.hpp>
