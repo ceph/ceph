@@ -1235,6 +1235,16 @@ class RgwRealm(RESTController):
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')
 
+    @Endpoint()
+    @ReadPermission
+    def get_valid_realms(self):
+        try:
+            multisite_automation_instance = RgwMultisiteAutomation()
+            result = multisite_automation_instance.get_valid_realms_list()
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
     @Endpoint(method='POST')
     @UpdatePermission
     @allow_empty_body
