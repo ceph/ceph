@@ -188,7 +188,7 @@ public:
     laddr_t addr) final {
     return update_refcount(t, addr, -1, true
     ).si_then([](auto res) {
-      return std::move(res.ref_update_res);
+      return ref_update_result_t(res);
     });
   }
 
@@ -408,18 +408,69 @@ private:
   seastar::metrics::metric_group metrics;
   void register_metrics();
 
-  /**
-   * update_refcount
-   *
-   * Updates refcount, returns resulting refcount
-   */
-  struct update_refcount_ret_bare_t {
-    ref_update_result_t ref_update_res;
-    BtreeLBAMappingRef mapping;
+  struct update_mapping_ret_bare_t {
+    update_mapping_ret_bare_t()
+	: update_mapping_ret_bare_t(LBACursorRef(nullptr)) {}
+
+    update_mapping_ret_bare_t(LBACursorRef cursor)
+	: ret(std::move(cursor)) {}
+
+    update_mapping_ret_bare_t(laddr_t laddr, lba_map_val_t value)
+	: ret(removed_mapping_t{laddr, value}) {}
+
+    struct removed_mapping_t {
+      laddr_t laddr;
+      lba_map_val_t map_value;
+    };
+    std::variant<removed_mapping_t, LBACursorRef> ret;
+
+    bool is_removed_mapping() const {
+      return ret.index() == 0;
+    }
+
+    bool is_alive_mapping() const {
+      if (ret.index() == 1) {
+	assert(std::get<1>(ret));
+	return true;
+      } else {
+	return false;
+      }
+    }
+
+    const removed_mapping_t& get_removed_mapping() const {
+      assert(is_removed_mapping());
+      return std::get<0>(ret);
+    }
+
+    const LBACursor& get_cursor() const {
+      assert(is_alive_mapping());
+      return *std::get<1>(ret);
+    }
+
+    LBACursorRef take_cursor() {
+      assert(is_alive_mapping());
+      return std::move(std::get<1>(ret));
+    }
+
+    explicit operator ref_update_result_t() const {
+      if (is_removed_mapping()) {
+	auto v = get_removed_mapping();
+	auto &val = v.map_value;
+	ceph_assert(val.pladdr.is_paddr());
+	return {v.laddr, val.refcount, val.pladdr, val.len};
+      } else {
+	assert(is_alive_mapping());
+	auto &c = get_cursor();
+	assert(c.val);
+	ceph_assert(!c.is_indirect());
+	return {c.get_laddr(), c.val->refcount, c.val->pladdr, c.val->len};
+      }
+    }
   };
+
   using update_refcount_iertr = ref_iertr;
   using update_refcount_ret = update_refcount_iertr::future<
-    update_refcount_ret_bare_t>;
+    update_mapping_ret_bare_t>;
   update_refcount_ret update_refcount(
     Transaction &t,
     laddr_t addr,
@@ -431,10 +482,6 @@ private:
    *
    * Updates mapping, removes if f returns nullopt
    */
-  struct update_mapping_ret_bare_t {
-    lba_map_val_t map_value;
-    BtreeLBAMappingRef mapping;
-  };
   using _update_mapping_iertr = ref_iertr;
   using _update_mapping_ret = ref_iertr::future<
     update_mapping_ret_bare_t>;
@@ -521,7 +568,7 @@ private:
     ceph_assert(delta > 0);
     return update_refcount(t, addr, delta, false
     ).si_then([](auto res) {
-      return std::move(res.ref_update_res);
+      return ref_update_result_t(res);
     });
   }
 
@@ -582,7 +629,7 @@ private:
     const LBACursor& indirect_cursor);
 
   using _decref_intermediate_ret = ref_iertr::future<
-    std::optional<ref_update_result_t>>;
+    update_mapping_ret_bare_t>;
   _decref_intermediate_ret _decref_intermediate(
     Transaction &t,
     laddr_t addr,
