@@ -136,10 +136,14 @@ void GroupUnlinkPeerRequest<I>::process_snapshot(cls::rbd::GroupSnapshot group_s
   ldout(m_cct, 10) << "snap id: " << group_snap.id << dendl;
   bool found = false;
   bool has_newer_mirror_snap = false;
+  bool is_snap_incomplete = false;
 
   for (auto it = m_group_snaps.begin(); it != m_group_snaps.end(); it++) {
     if (it->id  == group_snap.id) {
       found = true;
+      if (it->state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+        is_snap_incomplete = true;
+      }
     } else if (found) {
       auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
 	  &it->snapshot_namespace);
@@ -157,7 +161,7 @@ void GroupUnlinkPeerRequest<I>::process_snapshot(cls::rbd::GroupSnapshot group_s
   }
 
   if (has_newer_mirror_snap) {
-    remove_group_snapshot(group_snap); 
+    remove_group_snapshot(group_snap, is_snap_incomplete);
   } else {
     remove_peer_uuid(group_snap, mirror_peer_uuid);
   }
@@ -203,8 +207,41 @@ void GroupUnlinkPeerRequest<I>::handle_remove_peer_uuid(int r) {
 
 template <typename I>
 void GroupUnlinkPeerRequest<I>::remove_group_snapshot(
-                              cls::rbd::GroupSnapshot group_snap) {
+                              cls::rbd::GroupSnapshot group_snap,
+                              bool is_snap_incomplete) {
   ldout(m_cct, 10) << "group snap id: " << group_snap.id << dendl;
+
+  auto ctx = create_context_callback<
+      GroupUnlinkPeerRequest,
+      &GroupUnlinkPeerRequest<I>::handle_remove_group_snapshot>(this);
+
+  m_group_snap_id = group_snap.id;
+
+  C_Gather *gather_ctx = new C_Gather(m_cct, ctx);
+  if (is_snap_incomplete) {
+    for (size_t i = 0; i < m_image_ctxs->size(); ++i) {
+      ImageCtx *ictx = (*m_image_ctxs)[i];
+      for (auto it = ictx->snap_info.rbegin();
+           it != ictx->snap_info.rend(); it++) {
+        if (it->first == CEPH_NOSNAP) {
+          continue;
+        }
+        auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+            &it->second.snap_namespace);
+        if (mirror_ns == nullptr) {
+          continue;
+        }
+        if (mirror_ns->group_snap_id == m_group_snap_id) {
+          ldout(m_cct, 10) << "removing individual snapshot: "
+                           << it->first << ", from image id:"
+                           << ictx->id << dendl;
+          remove_image_snapshot(ictx, it->first, gather_ctx);
+        }
+      }
+    }
+    gather_ctx->activate();
+    return;
+  }
 
   //TODO: Handle dynamic group membership
   if (!m_image_ctxs->empty() && m_image_ctx_map.empty()) {
@@ -214,13 +251,6 @@ void GroupUnlinkPeerRequest<I>::remove_group_snapshot(
     }
   }
 
-  auto ctx = create_context_callback<
-      GroupUnlinkPeerRequest,
-      &GroupUnlinkPeerRequest<I>::handle_remove_group_snapshot>(this);
-
-  m_group_snap_id = group_snap.id;
-
-  C_Gather *gather_ctx = new C_Gather(m_cct, ctx);
   for (auto &snap : group_snap.snaps) {
     if (snap.snap_id == CEPH_NOSNAP) {
       continue;
@@ -240,9 +270,7 @@ void GroupUnlinkPeerRequest<I>::remove_group_snapshot(
                      << snap.image_id << dendl;
     remove_image_snapshot(ictx, snap.snap_id, gather_ctx);
   }
-
   gather_ctx->activate();
-
 }
 
 template <typename I>
@@ -264,7 +292,7 @@ void GroupUnlinkPeerRequest<I>::remove_snap_metadata() {
   ldout(m_cct, 10) << dendl;
 
   librados::ObjectWriteOperation op;
-  cls_client::group_snap_remove(&op,m_group_snap_id);
+  cls_client::group_snap_remove(&op, m_group_snap_id);
 
   auto aio_comp = create_rados_callback<
     GroupUnlinkPeerRequest<I>,

@@ -73,7 +73,8 @@ private:
                         std::string mirror_peer_uuid);
   void handle_remove_peer_uuid(int r);
 
-  void remove_group_snapshot(cls::rbd::GroupSnapshot group_snap);
+  void remove_group_snapshot(cls::rbd::GroupSnapshot group_snap,
+                             bool is_snap_incomplete);
   void handle_remove_group_snapshot(int r);
 
   void remove_snap_metadata();
