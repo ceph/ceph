@@ -7,6 +7,10 @@
 #include "common/ceph_json.h"
 #include "include/denc.h"
 
+void inodeno_t::dump(ceph::Formatter *f) const {
+  f->dump_unsigned("val", val);
+}
+
 void dump(const ceph_file_layout& l, ceph::Formatter *f)
 {
   f->dump_unsigned("stripe_unit", l.fl_stripe_unit);

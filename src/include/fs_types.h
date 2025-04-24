@@ -8,11 +8,14 @@
 #include <iostream>
 #include <string>
 
-#include "common/Formatter.h"
 #include "include/buffer.h"
 #include "include/ceph_fs.h" // for struct ceph_file_layout
 #include "include/encoding.h"
 #include "include/hash.h" // for rjhash
+
+namespace ceph {
+  class Formatter;
+}
 
 class JSONObj;
 
@@ -42,9 +45,7 @@ struct inodeno_t {
     using ceph::decode;
     decode(val, p);
   }
-  void dump(ceph::Formatter *f) const {
-    f->dump_unsigned("val", val);
-  }
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<inodeno_t*>& ls) {
     ls.push_back(new inodeno_t(1));
     ls.push_back(new inodeno_t(123456789));
@@ -95,9 +96,6 @@ inline bool file_mode_is_readonly(int mode) {
 #define MAX_DENTRY_LEN 255
 
 // --
-namespace ceph {
-  class Formatter;
-}
 void dump(const ceph_file_layout& l, ceph::Formatter *f);
 void dump(const ceph_dir_layout& l, ceph::Formatter *f);
 
