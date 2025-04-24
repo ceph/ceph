@@ -200,7 +200,7 @@ void ECBackend::RecoveryBackend::handle_recovery_push(
   bool is_repair) {
   if (get_parent()->check_failsafe_full()) {
     dout(10) << __func__ << " Out of space (failsafe) processing push request."
- << dendl;
+             << dendl;
     ceph_abort();
   }
 
@@ -242,7 +242,7 @@ void ECBackend::RecoveryBackend::handle_recovery_push(
   }
 
   if (op.before_progress.first) {
-    ceph_assert(op.attrset.count(string("_")));
+    ceph_assert(op.attrset.contains(OI_ATTR));
     m->t.setattrs(
       coll,
       tobj,
@@ -290,9 +290,9 @@ void ECBackend::RecoveryBackend::handle_recovery_push(
 }
 
 void ECBackend::RecoveryBackend::handle_recovery_push_reply(
-  const PushReplyOp &op,
-  pg_shard_t from,
-  RecoveryMessages *m) {
+    const PushReplyOp &op,
+    pg_shard_t from,
+    RecoveryMessages *m) {
   if (!recovery_ops.count(op.soid))
     return;
   RecoveryOp &rop = recovery_ops[op.soid];
@@ -302,11 +302,11 @@ void ECBackend::RecoveryBackend::handle_recovery_push_reply(
 }
 
 void ECBackend::RecoveryBackend::handle_recovery_read_complete(
-  const hobject_t &hoid,
-  ECUtil::shard_extent_map_t &&buffers_read,
-  std::optional<map<string, bufferlist, less<>>> attrs,
-  const ECUtil::shard_extent_set_t &want_to_read,
-  RecoveryMessages *m) {
+    const hobject_t &hoid,
+    ECUtil::shard_extent_map_t &&buffers_read,
+    std::optional<map<string, bufferlist, less<>>> attrs,
+    const ECUtil::shard_extent_set_t &want_to_read,
+    RecoveryMessages *m) {
   dout(10) << __func__ << ": returned " << hoid << " " << buffers_read << dendl;
   ceph_assert(recovery_ops.contains(hoid));
   RecoveryBackend::RecoveryOp &op = recovery_ops[hoid];
@@ -393,8 +393,10 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
     }
   }
 
-  dout(20) << __func__ << ": oid=" << op.hoid << " "
-           << op.returned_data->debug_string(2048, 8) << dendl;
+  dout(20) << __func__ << ": oid=" << op.hoid << dendl;
+  dout(30) << __func__ << "EC_DEBUG_BUFFERS: "
+           << op.returned_data->debug_string(2048, 8)
+           << dendl;
 
   continue_recovery_op(op, m);
 }
@@ -1050,8 +1052,7 @@ void ECBackend::handle_sub_read(
 		  << dendl;
         } else {
           get_parent()->clog_error() << "Error " << r
-            << " reading object "
-            << hoid;
+            << " reading object " << hoid;
           dout(5) << __func__ << ": Error " << r
 		  << " reading " << hoid << dendl;
         }
@@ -1085,8 +1086,7 @@ void ECBackend::handle_sub_read(
         if (!hinfo) {
           r = -EIO;
           get_parent()->clog_error() << "Corruption detected: object "
-            << hoid
-            << " is missing hash_info";
+            << hoid << " is missing hash_info";
           dout(5) << __func__ << ": No hinfo for " << hoid << dendl;
           goto error;
         }
@@ -1102,8 +1102,8 @@ void ECBackend::handle_sub_read(
               << hex << h.digest() << " expected 0x" << hinfo->
               get_chunk_hash(shard) << dec;
             dout(5) << __func__ << ": Bad hash for " << hoid << " digest 0x"
-		    << hex << h.digest() << " expected 0x" << hinfo->
-get_chunk_hash(shard) << dec << dendl;
+		    << hex << h.digest() << " expected 0x"
+                    << hinfo->get_chunk_hash(shard) << dec << dendl;
             r = -EIO;
             goto error;
           }
@@ -1172,9 +1172,9 @@ void ECBackend::handle_sub_write_reply(
 }
 
 void ECBackend::handle_sub_read_reply(
-  pg_shard_t from,
-  ECSubReadReply &op,
-  const ZTracer::Trace &trace) {
+    pg_shard_t from,
+    ECSubReadReply &op,
+    const ZTracer::Trace &trace) {
   trace.event("ec sub read reply");
   dout(10) << __func__ << ": reply " << op << dendl;
   map<ceph_tid_t, ReadOp>::iterator iter = read_pipeline.tid_to_read_map.
@@ -1246,7 +1246,7 @@ void ECBackend::handle_sub_read_reply(
   for (auto &&[hoid, attr]: op.attrs_read) {
     ceph_assert(!op.errors.count(hoid));
     // if read error better not have sent an attribute
-    if (!rop.to_read.count(hoid)) {
+    if (!rop.to_read.contains(hoid)) {
       // We canceled this read! @see filter_read_op
       dout(20) << __func__ << " to_read skipping" << dendl;
       continue;
@@ -1289,6 +1289,8 @@ void ECBackend::handle_sub_read_reply(
       shard_id_set want_to_read;
       rop.to_read.at(oid).shard_want_to_read.
           populate_shard_id_set(want_to_read);
+
+      dout(20) << __func__ << " read_result: " << read_result << dendl;
 
       int err = ec_impl->minimum_to_decode(want_to_read, have, dummy_minimum,
                                             nullptr);

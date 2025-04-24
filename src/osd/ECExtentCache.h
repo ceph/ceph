@@ -304,7 +304,6 @@ private:
   const ECUtil::stripe_info_t &sinfo;
   std::list<OpRef> waiting_ops;
   void cache_maybe_ready();
-  uint32_t counter = 0;
   uint32_t active_ios = 0;
   CephContext *cct;
 
@@ -360,7 +359,6 @@ private:
 
   void execute(std::list<OpRef> &op_list);
   [[nodiscard]] bool idle() const;
-  uint32_t get_and_reset_counter();
 
   void add_on_write(std::function<void(void)> &&cb) const {
     if (waiting_ops.empty()) {

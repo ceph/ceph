@@ -35,19 +35,11 @@ using ceph::encode;
 using ceph::ErasureCodeInterfaceRef;
 
 void debug(const hobject_t &oid, const std::string &str,
-           const ECUtil::shard_extent_map_t &map, DoutPrefixProvider *dpp
-  ) {
-#if DEBUG_EC_BUFFERS
+           const ECUtil::shard_extent_map_t &map, DoutPrefixProvider *dpp) {
   ldpp_dout(dpp, 20)
-    << "EC_DEBUG_BUFFERS: generate_transactions: "
-    << "oid: " << oid
-    << " " << str << " " << map.debug_string(2048, 8) << dendl;
-#else
-  ldpp_dout(dpp, 20)
-    << "generate_transactions: "
-    << "oid: " << oid
-    << str << map << dendl;
-#endif
+    << " generate_transactions: " << "oid: " << oid << str << map << dendl;
+  ldpp_dout(dpp, 30)
+    << "EC_DEBUG_BUFFERS: " << map.debug_string(2048, 8) << dendl;
 }
 
 void ECTransaction::Generate::encode_and_write() {
@@ -663,14 +655,18 @@ void ECTransaction::Generate::appends_and_clone_ranges() {
       }
       uint64_t new_shard_size = eset.range_end();
 
-      if (new_shard_size == old_shard_size) continue;
+      if (new_shard_size == old_shard_size) {
+        continue;
+      }
 
       uint64_t write_end = 0;
       if (plan.will_write.contains(shard)) {
         write_end = plan.will_write.at(shard).range_end();
       }
 
-      if (write_end == new_shard_size) continue;
+      if (write_end == new_shard_size) {
+        continue;
+      }
 
       /* If code is executing here, it means that the written part of the
        * shard does not reflect the size that EC believes the shard to be.
@@ -793,18 +789,18 @@ void ECTransaction::Generate::written_and_present_shards() {
         for (shard_id_t shard; shard < sinfo.get_k_plus_m(); ++shard) {
           if (sinfo.is_nonprimary_shard(shard)) {
             if (entry->is_written_shard(shard) || plan.orig_size != plan.
-              projected_size) {
-                // Written - erase per shard version
-                if (oi.shard_versions.erase(shard)) {
-                  update = true;
-                }
-              } else if (!oi.shard_versions.count(shard)) {
-                // Unwritten shard, previously up to date
-                oi.shard_versions[shard] = oi.prior_version;
+                projected_size) {
+              // Written - erase per shard version
+              if (oi.shard_versions.erase(shard)) {
                 update = true;
-              } else {
-                // Unwritten shard, already out of date
               }
+            } else if (!oi.shard_versions.count(shard)) {
+              // Unwritten shard, previously up to date
+              oi.shard_versions[shard] = oi.prior_version;
+              update = true;
+            } else {
+              // Unwritten shard, already out of date
+            }
           } else {
             // Primary shards are always written and use oi.version
           }
@@ -817,7 +813,8 @@ void ECTransaction::Generate::written_and_present_shards() {
         // Update cached OI
         obc->obs.oi.shard_versions = oi.shard_versions;
       }
-      ldpp_dout(dpp, 20) << __func__ << "shard_info: version=" << entry->version
+      ldpp_dout(dpp, 20) << __func__ << " shard_info: oid=" << oid
+                         << " version=" << entry->version
                          << " present=" << entry->present_shards
                          << " written=" << entry->written_shards
                          << " shard_versions=" << oi.shard_versions << dendl;
