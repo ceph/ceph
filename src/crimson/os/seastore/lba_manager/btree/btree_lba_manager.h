@@ -248,6 +248,11 @@ public:
     paddr_t addr,
     laddr_t laddr,
     extent_len_t len) final;
+
+  refresh_lba_mapping_ret refresh_lba_mapping(
+    Transaction &t,
+    LBAMapping mapping) final;
+
 private:
   Cache &cache;
 
@@ -488,6 +493,13 @@ private:
     Transaction &t,
     laddr_t addr,
     extent_len_t len);
+
+  using refresh_lba_cursor_iertr = base_iertr;
+  using refresh_lba_cursor_ret = refresh_lba_cursor_iertr::future<>;
+  refresh_lba_cursor_ret refresh_lba_cursor(
+    op_context_t c,
+    LBABtree &btree,
+    LBACursorRef &cursor);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 
