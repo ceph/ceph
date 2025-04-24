@@ -153,46 +153,14 @@ TEST_F(WebCacheTest, CacheTakesValOwnership) {
   ASSERT_EQ(2, retrieved.use_count());
 }
 
-TEST_F(WebCacheTest, SimpleLookupOrFn) {
-  auto future = _uut->lookup_or(a_key, []() {
-    return WebCache<std::string, std::string>::Result(
-        std::make_shared<std::string>("test"));
-  });
-  ASSERT_EQ("test", *future.get().value());
-}
-
 TEST_F(WebCacheTest, SimpleLookupOr) {
   auto value = _uut->lookup_or(a_key, std::make_shared<std::string>("test"));
   ASSERT_EQ("test", *value);
 }
 
-TEST_F(WebCacheTest, LookupOrAddsToCacheFn) {
-  auto future = _uut->lookup_or(a_key, []() {
-    return WebCache<std::string, std::string>::Result(
-        std::make_shared<std::string>("test"));
-  });
-  ASSERT_EQ("test", *_uut->lookup(a_key).value());
-}
-
 TEST_F(WebCacheTest, LookupOrAddsToCache) {
   auto future = _uut->lookup_or(a_key, std::make_shared<std::string>("test"));
   ASSERT_EQ("test", *_uut->lookup(a_key).value());
-}
-
-TEST_F(WebCacheTest, LookupOrDoesNotAddToCacheWhenFetchErrorsFn) {
-  auto future = _uut->lookup_or(a_key, []() {
-    return tl::unexpected(
-        std::error_code(ENOENT, std::system_category()));
-  });
-  ASSERT_FALSE(_uut->lookup(a_key).has_value());
-}
-
-TEST_F(WebCacheTest, LookupOrReturnsFetchError) {
-  auto future = _uut->lookup_or(a_key, []() {
-    return tl::unexpected(
-        std::error_code(ENOSYS, std::system_category()));
-  });
-  ASSERT_EQ(ENOSYS, future.get().error().value());
 }
 
 TEST_F(WebCacheTest, ExpireEraseOne) {
@@ -375,21 +343,65 @@ TEST_F(WebCacheConcurrencyTest, BasicAddUnique) {
   }
 }
 
-TEST_F(WebCacheConcurrencyTest, stampede) {
-  reset_cache_system_mode(100);
+// Example: Mitigate cache stampedes using std::call_once
+TEST_F(WebCacheConcurrencyTest, StampedeSyncCallOnce) {
+  struct CacheValue {
+    std::once_flag once;
+    std::string value;
+  };
+  webcache::WebCache<std::string, CacheValue> cache(
+      _cct.get(), "test_web_cache", 100);
   std::atomic_int fetches = 0;
   const auto num_threads =
       std::max(std::thread::hardware_concurrency() * 100, 100U);
   std::vector<std::thread> threads;
   for (size_t i = 0; i < num_threads; ++i) {
     threads.emplace_back([&]() {
-      auto future = _uut->lookup_or(a_key, [&]() {
+      std::shared_ptr<CacheValue> cache_value =
+          cache.lookup_or(a_key, std::make_shared<CacheValue>());
+      std::call_once(cache_value->once, [cache_value, &fetches]() {
         fetches++;
         std::this_thread::sleep_for(1000ms);
-        return WebCache<std::string, std::string>::Result(
-            std::make_shared<std::string>("test"));
+        cache_value->value = "test";
       });
-      future.wait();
+    });
+  }
+  for (auto& th : threads) {
+    th.join();
+  }
+  ASSERT_EQ(fetches.load(), 1);
+}
+
+// Example: Mitigate cache stampedes using a mutex per value
+TEST_F(WebCacheConcurrencyTest, StampedeMutex) {
+  struct CacheValue {
+    std::mutex mutex;
+    std::string value;
+    std::function<std::string()> fn;
+    CacheValue(std::function<std::string()> fn) : fn(fn) {}
+    std::string get() {
+      std::unique_lock<std::mutex> lock(mutex);
+      if (value.empty()) {
+        value = fn();
+      }
+      return value;
+    }
+  };
+  webcache::WebCache<std::string, CacheValue> cache(
+      _cct.get(), "test_web_cache", 100);
+  std::atomic_int fetches = 0;
+  const auto num_threads =
+      std::max(std::thread::hardware_concurrency() * 100, 100U);
+  std::vector<std::thread> threads;
+  for (size_t i = 0; i < num_threads; ++i) {
+    threads.emplace_back([&]() {
+      std::shared_ptr<CacheValue> cache_value =
+          cache.lookup_or(a_key, std::make_shared<CacheValue>([&fetches]() {
+                            fetches++;
+                            std::this_thread::sleep_for(1000ms);
+                            return "test";
+                          }));
+      cache_value->get();
     });
   }
   for (auto& th : threads) {
@@ -425,7 +437,7 @@ TEST_F(WebCacheRandomizedTest, RandomCallMainOperations) {
     keys.emplace(std::to_string(base[dist(gen)]));
   }
 
-  std::discrete_distribution<> op_dist({60, 30, 1, 9});
+  std::discrete_distribution<> op_dist({90, 1, 9});
 
   std::mutex mutex;
   std::vector<std::thread> threads;
@@ -443,19 +455,12 @@ TEST_F(WebCacheRandomizedTest, RandomCallMainOperations) {
 
         switch (op) {
           case 0: {  // lookup_or
-            auto fut = _uut->lookup_or(key, [&]() {
-              std::this_thread::sleep_for(100ms);
-              return WebCache<std::string, std::string>::Result(a_valptr);
-            });
-            fut.wait();
-          } break;
-          case 1: {  // lookup_or
             auto value = _uut->lookup_or(key, a_valptr);
           } break;
-          case 2:  // clear cache
+          case 1:  // clear cache
             _uut->clear();
             break;
-          case 3:  // expire
+          case 2:  // expire
             _uut->expire_erase(1s);
             break;
           default:
