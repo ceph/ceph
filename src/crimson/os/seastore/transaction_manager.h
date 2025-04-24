@@ -636,10 +636,9 @@ public:
 	  std::vector<remap_entry_t>(remaps.begin(), remaps.end()),
 	  std::move(extents)
 	).si_then([FNAME, &t](auto ret) {
-	  SUBDEBUGT(seastore_tm, "remapped {} pins",
-	            t, ret.remapped_mappings.size());
+	  SUBDEBUGT(seastore_tm, "remapped {} pins", t, ret.size());
 	  return Cache::retire_extent_iertr::make_ready_future<
-	    std::vector<LBAMappingRef>>(std::move(ret.remapped_mappings));
+	    std::vector<LBAMapping>>(std::move(ret));
 	});
       }).handle_error_interruptible(
 	remap_pin_iertr::pass_further{},
