@@ -18,12 +18,16 @@
 
 #include <algorithm>
 #include <atomic>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/executor_work_guard.hpp>
 #include <initializer_list>
 #include <iterator>
 #include <numeric>
 #include <random>
+#include <thread>
 #include <utility>
 
+#include "common/async/call_once.h"
 #include "common/ceph_argparse.h"
 #include "common/cohort_lru.h"
 #include "common/random_string.h"
@@ -258,6 +262,54 @@ struct WebCacheLookupOrAdapter : public CacheAdapter {
   }
 };
 
+// Run io context event loops in a thread per hardware concurrency.
+// cache() by spawn'ing coroutine doing lookup_or and retrieving
+// result using ceph::async::call_once()
+struct WebCacheLookupOrAsyncAdapter : public CacheAdapter {
+  using CacheResult = tl::expected<std::string, int>;
+  using CacheValue = ceph::async::once_result<CacheResult>;
+  using Cache = webcache::WebCache<std::string, CacheValue>;
+
+  Cache _cache;
+  boost::asio::io_context _context;
+  std::vector<std::jthread> _threads;
+  boost::asio::executor_work_guard<boost::asio::io_context::executor_type>
+      _guard;
+
+  explicit WebCacheLookupOrAsyncAdapter(size_t size)
+      : _cache(g_ceph_context, "benchmark", size),
+        _context(),
+        _guard(boost::asio::make_work_guard(_context)) {
+    _threads.reserve(std::thread::hardware_concurrency());
+    for (int i = 0; i < std::thread::hardware_concurrency(); ++i) {
+      _threads.emplace_back([&]() { _context.run(); });
+    }
+  }
+
+  ~WebCacheLookupOrAsyncAdapter() override {
+    _guard.reset();
+    _cache.perf()->reset();
+  }
+
+  void cache(const std::string& key, const std::string& value) override {
+    boost::asio::spawn(
+        _context,
+        [this, key, value](boost::asio::yield_context yield) {
+	  std::shared_ptr<CacheValue> cache_value =
+	      _cache.lookup_or(key, std::make_shared<CacheValue>());
+          auto result = call_once(
+              *cache_value, yield, [&]() -> CacheResult { return value; });
+        },
+        boost::asio::detached);
+  }
+
+  double hit_miss_ratio() override {
+    return static_cast<double>(_cache.perf()->get(static_cast<int>(webcache::Metric::hit))) /
+	(static_cast<double>(_cache.perf()->get(static_cast<int>(webcache::Metric::hit))) +
+	 static_cast<double>(_cache.perf()->get(static_cast<int>(webcache::Metric::miss))));
+  }
+};
+
 /// }}}
 
 // Benchmarks {{{
@@ -315,11 +367,13 @@ void register_benchmarks() {
            std::make_pair("UNIQUE cohort", BM_UniqueAdd<CohortLRUAdapter>),
            std::make_pair("UNIQUE web   ", BM_UniqueAdd<WebCacheAdapter>),
            std::make_pair("UNIQUE web-LO", BM_UniqueAdd<WebCacheLookupOrAdapter>),
+           std::make_pair("UNIQUE web-A ", BM_UniqueAdd<WebCacheLookupOrAsyncAdapter>),
            std::make_pair("PARETO shared", BM_Pareto<SharedLRUAdapter>),
            std::make_pair("PARETO simple", BM_Pareto<SimpleLRUAdapter>),
            std::make_pair("PARETO cohort", BM_Pareto<CohortLRUAdapter>),
            std::make_pair("PARETO web   ", BM_Pareto<WebCacheAdapter>),
            std::make_pair("PARETO web-LO", BM_Pareto<WebCacheLookupOrAdapter>),
+           std::make_pair("PARETO web-A ", BM_Pareto<WebCacheLookupOrAsyncAdapter>),
        }) {
     auto* bench = benchmark::RegisterBenchmark(name, test);
     bench->Args({SMALL_CACHE, CACHE_OP_COUNT})
