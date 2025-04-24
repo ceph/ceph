@@ -206,6 +206,38 @@ void GroupUnlinkPeerRequest<I>::remove_group_snapshot(
                               cls::rbd::GroupSnapshot group_snap) {
   ldout(m_cct, 10) << "group snap id: " << group_snap.id << dendl;
 
+  auto ctx = create_context_callback<
+      GroupUnlinkPeerRequest,
+      &GroupUnlinkPeerRequest<I>::handle_remove_group_snapshot>(this);
+
+  m_group_snap_id = group_snap.id;
+
+  C_Gather *gather_ctx = new C_Gather(m_cct, ctx);
+  if (group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+    for (size_t i = 0; i < m_image_ctxs->size(); ++i) {
+      ImageCtx *ictx = (*m_image_ctxs)[i];
+      for (auto it = ictx->snap_info.rbegin();
+           it != ictx->snap_info.rend(); it++) {
+        if (it->first == CEPH_NOSNAP) {
+          continue;
+        }
+        auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+            &it->second.snap_namespace);
+        if (mirror_ns == nullptr) {
+          continue;
+        }
+        if (mirror_ns->group_snap_id == m_group_snap_id) {
+          ldout(m_cct, 10) << "removing individual snapshot: "
+                           << it->first << ", from image id:"
+                           << ictx->id << dendl;
+          remove_image_snapshot(ictx, it->first, gather_ctx);
+        }
+      }
+    }
+    gather_ctx->activate();
+    return;
+  }
+
   //TODO: Handle dynamic group membership
   if (!m_image_ctxs->empty() && m_image_ctx_map.empty()) {
     for (size_t i = 0; i < m_image_ctxs->size(); ++i) {
@@ -214,13 +246,6 @@ void GroupUnlinkPeerRequest<I>::remove_group_snapshot(
     }
   }
 
-  auto ctx = create_context_callback<
-      GroupUnlinkPeerRequest,
-      &GroupUnlinkPeerRequest<I>::handle_remove_group_snapshot>(this);
-
-  m_group_snap_id = group_snap.id;
-
-  C_Gather *gather_ctx = new C_Gather(m_cct, ctx);
   for (auto &snap : group_snap.snaps) {
     if (snap.snap_id == CEPH_NOSNAP) {
       continue;
@@ -240,9 +265,7 @@ void GroupUnlinkPeerRequest<I>::remove_group_snapshot(
                      << snap.image_id << dendl;
     remove_image_snapshot(ictx, snap.snap_id, gather_ctx);
   }
-
   gather_ctx->activate();
-
 }
 
 template <typename I>
