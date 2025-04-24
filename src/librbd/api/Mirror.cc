@@ -2486,6 +2486,10 @@ int prepare_group_images(IoCtx& group_ioctx,
         lderr(cct) << "group image resides in a different pool, mirroring is not supported"
                    << dendl;
         return -ENOTSUP;
+      } else if (image_ctx->parent != nullptr) {
+        lderr(cct) << "group cannot contain clone images, mirroring is not supported"
+                   << dendl;
+        return -ENOTSUP;
       }
     }
   }
