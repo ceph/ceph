@@ -327,34 +327,7 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
         return ret;
       }
     }
-    const auto src_bucket_id = src_bucket->get_key();
-    const auto& bucket_attrs = src_bucket->get_attrs();
-    auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING);
-    if (iter == bucket_attrs.end()) {
-      ldpp_dout(this, 1) << "WARNING: no logging configured on bucket '" << src_bucket_id << "'" << dendl;
-      return 0;
-    }
-    try {
-      configuration.enabled = true;
-      decode(configuration, iter->second);
-    } catch (buffer::error& err) {
-      ldpp_dout(this, 1) << "WARNING: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
-        << "' for bucket '" << src_bucket_id << "', error: " << err.what() << dendl;
-      return -EINVAL;
-    }
-
-    rgw_bucket target_bucket_id;
-    if (const auto ret = rgw::bucketlogging::get_bucket_id(configuration.target_bucket, s->bucket_tenant, target_bucket_id); ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to parse target bucket '" << configuration.target_bucket << "', ret = " << ret << dendl;
-      return ret;
-    }
-
-    if (const auto ret = driver->load_bucket(this, target_bucket_id,
-                                 &target_bucket, y); ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to get target bucket '" << target_bucket_id << "', ret = " << ret << dendl;
-      return ret;
-    }
-    return 0;
+    return rgw::bucketlogging::get_target_and_conf_from_source(this, driver, src_bucket.get(), s->bucket_tenant, configuration, target_bucket, y);
   }
 
   int verify_permission(optional_yield y) override {
