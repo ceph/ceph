@@ -263,12 +263,21 @@ public:
     paddr_t addr,
     laddr_t laddr,
     extent_len_t len) final;
+
+  refresh_lba_mapping_ret refresh_lba_mapping(
+    Transaction &t,
+    LBAMapping mapping) final;
+
 private:
   Cache &cache;
 
   struct {
     uint64_t num_alloc_extents = 0;
     uint64_t num_alloc_extents_iter_nexts = 0;
+    uint64_t num_refresh_parent_total = 0;
+    uint64_t num_refresh_invalid_parent = 0;
+    uint64_t num_refresh_unviewable_parent = 0;
+    uint64_t num_refresh_modified_viewable_parent = 0;
   } stats;
 
   struct alloc_mapping_info_t {
@@ -510,6 +519,13 @@ private:
     Transaction &t,
     laddr_t addr,
     extent_len_t len);
+
+  using refresh_lba_cursor_iertr = base_iertr;
+  using refresh_lba_cursor_ret = refresh_lba_cursor_iertr::future<>;
+  refresh_lba_cursor_ret refresh_lba_cursor(
+    op_context_t c,
+    LBABtree &btree,
+    LBACursor &cursor);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 

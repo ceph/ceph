@@ -277,10 +277,9 @@ public:
     SUBDEBUGT(seastore_tm, "{} {} 0x{:x}~0x{:x} direct_off=0x{:x} ...",
               t, T::TYPE, pin, partial_off, partial_len, direct_partial_off);
 
-    auto fut = base_iertr::make_ready_future<LBAMapping>();
-    // TODO: refresh pin
-    return fut.si_then([&t, this, direct_partial_off, partial_len,
-			maybe_init=std::move(maybe_init)](auto npin) mutable {
+    return lba_manager->refresh_lba_mapping(t, std::move(pin)
+    ).si_then([&t, this, direct_partial_off, partial_len,
+	       maybe_init=std::move(maybe_init)](auto npin) mutable {
       // checking the lba child must be atomic with creating
       // and linking the absent child
       auto ret = get_extent_if_linked<T>(t, std::move(npin));
@@ -525,12 +524,12 @@ public:
                 t, original_laddr, original_len, original_paddr, remaps.size(), pin);
       // The according extent might be stable or pending.
       auto fut = base_iertr::now();
-      if (!pin->is_indirect()) {
-        ceph_assert(!pin->is_clone());
-
-	// TODO: refresh pin
-
-	fut = fut.si_then([this, &t, &pin] {
+      if (!pin.is_indirect()) {
+        ceph_assert(!pin.is_clone());
+	fut = fut.si_then([this, &t, &pin]() mutable {
+	  return lba_manager->refresh_lba_mapping(t, std::move(pin));
+	}).si_then([this, &t, &pin](auto newpin) {
+	  pin = std::move(newpin);
 	  if (full_extent_integrity_check) {
 	    return read_pin<T>(t, pin.duplicate()
             ).si_then([](auto maybe_indirect_extent) {

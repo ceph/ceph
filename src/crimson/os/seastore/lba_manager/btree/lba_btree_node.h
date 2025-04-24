@@ -278,9 +278,6 @@ struct LBALeafNode
   }
 
   std::ostream &print_detail(std::ostream &out) const final;
-
-  void maybe_fix_mapping_pos(BtreeLBAMapping &mapping);
-  std::unique_ptr<BtreeLBAMapping> get_mapping(op_context_t c, laddr_t laddr);
 };
 using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
 
