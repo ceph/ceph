@@ -86,8 +86,8 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
       {
         permission: 'delete',
         icon: Icons.destroy,
-        click: () => this.removeSMBClusterModal(),
-        name: this.actionLabels.REMOVE
+        click: () => this.deleteSMBClusterModal(),
+        name: this.actionLabels.DELETE
       }
     ];
 
@@ -110,19 +110,19 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
     this.selection = selection;
   }
 
-  removeSMBClusterModal() {
+  deleteSMBClusterModal() {
     const cluster_id = this.selection.first().cluster_id;
 
     this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`Cluster`,
       itemNames: [cluster_id],
-      actionDescription: $localize`remove`,
+      actionDescription: $localize`delete`,
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('smb/cluster/remove', {
+          task: new FinishedTask('smb/cluster/delete', {
             cluster_id: cluster_id
           }),
-          call: this.smbService.removeCluster(cluster_id)
+          call: this.smbService.deleteCluster(cluster_id)
         })
     });
   }

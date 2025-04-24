@@ -11,6 +11,9 @@
       class="form-header"
     >
       {{ action | titlecase }} {{ resource | upperFirst }}
+      <cd-help-text>
+        Create users and groups for authorization on standalone servers
+      </cd-help-text>
     </div>
 
     <cds-file-uploader
@@ -37,7 +40,7 @@
         i18n-helperText
         [invalid]="form.controls.usersGroupsId.invalid && form.controls.usersGroupsId.dirty"
         [invalidText]="usersgroupsError"
-      >Users and groups access resource name
+      >Standalone access resource name
         <input
           cdsText
           type="text"
