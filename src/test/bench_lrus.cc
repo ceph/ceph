@@ -236,20 +236,32 @@ struct CohortLRUAdapter : public CacheAdapter {
 // Web Cache {{{
 
 struct WebCacheAdapter : public CacheAdapter {
-  webcache::WebCache<std::string, std::string> _cache;
+  using CacheValue = std::string;
+  using Cache = webcache::WebCache<std::string, CacheValue>;
+  Cache _cache;
 
-  explicit WebCacheAdapter(size_t size) : _cache(size) {}
+  explicit WebCacheAdapter(size_t size)
+      : _cache(g_ceph_context, "benchmark", size) {}
   void cache(const std::string& key, const std::string& value) override {
     if (!_cache.lookup(key).has_value()) {
-    _cache.add(key, std::make_shared<std::string>(value));
+      _cache.add(key, std::make_shared<std::string>(value));
+    }
   }
+
+  ~WebCacheAdapter() override { _cache.perf()->reset(); }
+
+  double hit_miss_ratio() override {
+    return static_cast<double>(
+               _cache.perf()->get(static_cast<int>(webcache::Metric::hit))) /
+           (static_cast<double>(
+                _cache.perf()->get(static_cast<int>(webcache::Metric::hit))) +
+            static_cast<double>(
+                _cache.perf()->get(static_cast<int>(webcache::Metric::miss))));
   }
 };
 
-struct WebCacheLookupOrAdapter : public CacheAdapter {
-  webcache::WebCache<std::string, std::string> _cache;
-
-  explicit WebCacheLookupOrAdapter(size_t size) : _cache(size) {}
+struct WebCacheLookupOrAdapter : public WebCacheAdapter {
+  explicit WebCacheLookupOrAdapter(size_t size) : WebCacheAdapter(size) {}
   void cache(const std::string& key, const std::string& value) override {
     _cache
         .lookup_or(
@@ -271,13 +283,14 @@ struct WebCacheLookupOrAsyncAdapter : public CacheAdapter {
   using Cache = webcache::WebCache<std::string, CacheValue>;
 
   Cache _cache;
+
   boost::asio::io_context _context;
   std::vector<std::jthread> _threads;
   boost::asio::executor_work_guard<boost::asio::io_context::executor_type>
       _guard;
 
   explicit WebCacheLookupOrAsyncAdapter(size_t size)
-      : _cache(g_ceph_context, "benchmark", size),
+      : _cache(g_ceph_context, "bechmark", size),
         _context(),
         _guard(boost::asio::make_work_guard(_context)) {
     _threads.reserve(std::thread::hardware_concurrency());
@@ -295,18 +308,20 @@ struct WebCacheLookupOrAsyncAdapter : public CacheAdapter {
     boost::asio::spawn(
         _context,
         [this, key, value](boost::asio::yield_context yield) {
-	  std::shared_ptr<CacheValue> cache_value =
-	      _cache.lookup_or(key, std::make_shared<CacheValue>());
+          std::shared_ptr<CacheValue> cache_value =
+              _cache.lookup_or(key, std::make_shared<CacheValue>());
           auto result = call_once(
               *cache_value, yield, [&]() -> CacheResult { return value; });
         },
         boost::asio::detached);
   }
-
   double hit_miss_ratio() override {
-    return static_cast<double>(_cache.perf()->get(static_cast<int>(webcache::Metric::hit))) /
-	(static_cast<double>(_cache.perf()->get(static_cast<int>(webcache::Metric::hit))) +
-	 static_cast<double>(_cache.perf()->get(static_cast<int>(webcache::Metric::miss))));
+    return static_cast<double>(
+               _cache.perf()->get(static_cast<int>(webcache::Metric::hit))) /
+           (static_cast<double>(
+                _cache.perf()->get(static_cast<int>(webcache::Metric::hit))) +
+            static_cast<double>(
+                _cache.perf()->get(static_cast<int>(webcache::Metric::miss))));
   }
 };
 
