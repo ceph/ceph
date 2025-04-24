@@ -140,16 +140,17 @@ struct SharedLRUAdapter : public CacheAdapter {
     bool existed = false;
     auto* copy = new std::string(value);
     const auto ptr = _cache.add(key, copy, &existed);
-      if (existed) {
-	hits++;
-	delete copy;
-      } else {
-	misses++;
-      }
+    if (existed) {
+      hits++;
+      delete copy;
+    } else {
+      misses++;
     }
+  }
 
   double hit_miss_ratio() override {
-    return static_cast<double>(hits) / (static_cast<double>(hits) + static_cast<double>(misses));
+    return static_cast<double>(hits) /
+           (static_cast<double>(hits) + static_cast<double>(misses));
   }
 };
 
@@ -163,8 +164,8 @@ struct SimpleLRUAdapter : public CacheAdapter {
   void cache(const std::string& key, const std::string& value) override {
     std::string out;
     if (!_cache.lookup(key, &out)) {
-    _cache.add(key, value);
-  }
+      _cache.add(key, value);
+    }
   }
 };
 
@@ -223,7 +224,7 @@ struct CohortLRUAdapter : public CacheAdapter {
 
   void cache(const std::string& key, const std::string& value) override {
     cohortlru::Factory prototype(key, value);
-      uint32_t iflags{cohort::lru::FLAG_INITIAL};
+    uint32_t iflags{cohort::lru::FLAG_INITIAL};
     auto o = static_cast<cohortlru::Object*>(
         _cache.insert(&prototype, cohort::lru::Edge::MRU, iflags));
     ceph_assert(o->m_key == key);
@@ -260,17 +261,64 @@ struct WebCacheAdapter : public CacheAdapter {
   }
 };
 
-struct WebCacheLookupOrAdapter : public WebCacheAdapter {
-  explicit WebCacheLookupOrAdapter(size_t size) : WebCacheAdapter(size) {}
+struct WebCacheLookupOrAdapter : public CacheAdapter {
+  struct CacheValue {
+    std::once_flag once;
+    std::string value;
+  };
+  using Cache = webcache::WebCache<std::string, CacheValue>;
+  Cache _cache;
+
+  explicit WebCacheLookupOrAdapter(size_t size)
+      : _cache(g_ceph_context, "benchmark", size) {}
+
+  ~WebCacheLookupOrAdapter() override { _cache.perf()->reset(); }
+
   void cache(const std::string& key, const std::string& value) override {
-    _cache
-        .lookup_or(
-            key,
-            []() {
-              return webcache::WebCache<std::string, std::string>::Result(
-                  std::make_shared<std::string>("some-value"));
-            })
-        .wait();
+    std::shared_ptr<CacheValue> cache_value =
+        _cache.lookup_or(key, std::make_shared<CacheValue>());
+
+    std::call_once(cache_value->once, [&]() { cache_value->value = value; });
+  }
+  double hit_miss_ratio() override {
+    return static_cast<double>(
+               _cache.perf()->get(static_cast<int>(webcache::Metric::hit))) /
+           (static_cast<double>(
+                _cache.perf()->get(static_cast<int>(webcache::Metric::hit))) +
+            static_cast<double>(
+                _cache.perf()->get(static_cast<int>(webcache::Metric::miss))));
+  }
+};
+
+struct WebCacheLookupOrFutureAdapter : public CacheAdapter {
+  struct CacheValue {
+    std::promise<std::string> promise;
+    std::shared_future<std::string> future;
+    CacheValue(const std::string& value)
+        : promise(), future(promise.get_future()) {
+      promise.set_value(value);
+    }
+  };
+  using Cache = webcache::WebCache<std::string, CacheValue>;
+  Cache _cache;
+
+  explicit WebCacheLookupOrFutureAdapter(size_t size)
+      : _cache(g_ceph_context, "bechmark", size) {}
+
+  ~WebCacheLookupOrFutureAdapter() override { _cache.perf()->reset(); }
+
+  void cache(const std::string& key, const std::string& value) override {
+    std::shared_ptr<CacheValue> cache_value =
+        _cache.lookup_or(key, std::make_shared<CacheValue>(value));
+    cache_value->future.wait();
+  }
+  double hit_miss_ratio() override {
+    return static_cast<double>(
+               _cache.perf()->get(static_cast<int>(webcache::Metric::hit))) /
+           (static_cast<double>(
+                _cache.perf()->get(static_cast<int>(webcache::Metric::hit))) +
+            static_cast<double>(
+                _cache.perf()->get(static_cast<int>(webcache::Metric::miss))));
   }
 };
 
@@ -381,13 +429,15 @@ void register_benchmarks() {
            std::make_pair("UNIQUE simple", BM_UniqueAdd<SimpleLRUAdapter>),
            std::make_pair("UNIQUE cohort", BM_UniqueAdd<CohortLRUAdapter>),
            std::make_pair("UNIQUE web   ", BM_UniqueAdd<WebCacheAdapter>),
-           std::make_pair("UNIQUE web-LO", BM_UniqueAdd<WebCacheLookupOrAdapter>),
+           std::make_pair("UNIQUE web-O", BM_UniqueAdd<WebCacheLookupOrAdapter>),
+           std::make_pair("UNIQUE web-F ", BM_UniqueAdd<WebCacheLookupOrFutureAdapter>),
            std::make_pair("UNIQUE web-A ", BM_UniqueAdd<WebCacheLookupOrAsyncAdapter>),
            std::make_pair("PARETO shared", BM_Pareto<SharedLRUAdapter>),
            std::make_pair("PARETO simple", BM_Pareto<SimpleLRUAdapter>),
            std::make_pair("PARETO cohort", BM_Pareto<CohortLRUAdapter>),
            std::make_pair("PARETO web   ", BM_Pareto<WebCacheAdapter>),
-           std::make_pair("PARETO web-LO", BM_Pareto<WebCacheLookupOrAdapter>),
+           std::make_pair("PARETO web-O ", BM_Pareto<WebCacheLookupOrAdapter>),
+           std::make_pair("PARETO web-F ", BM_Pareto<WebCacheLookupOrFutureAdapter>),
            std::make_pair("PARETO web-A ", BM_Pareto<WebCacheLookupOrAsyncAdapter>),
        }) {
     auto* bench = benchmark::RegisterBenchmark(name, test);
