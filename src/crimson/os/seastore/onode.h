@@ -88,6 +88,12 @@ public:
   laddr_t get_shared_region_base() const {
     return get_layout().shared_region_base;
   }
+  bool is_head() const {
+    return hobj.is_head();
+  }
+  bool is_clone() const {
+    return hobj.is_snap();
+  }
   virtual bool is_alive() const = 0;
   virtual const onode_layout_t &get_layout() const = 0;
   virtual ~Onode() = default;
