@@ -17,6 +17,7 @@
 #include <xxhash.h>
 
 #include <algorithm>
+#include <atomic>
 #include <initializer_list>
 #include <iterator>
 #include <numeric>
@@ -120,20 +121,32 @@ struct CacheAdapter {
   // Simulate common cache operation: lookup value by key, if it isn't
   // cached add it
   virtual void cache(const std::string& key, const std::string& value) = 0;
+
+  virtual double hit_miss_ratio() { return -23.42; };
 };
 
 // Shared LRU {{{
 struct SharedLRUAdapter : public CacheAdapter {
   SharedLRU<std::string, std::string> _cache;
+
+  std::atomic_int hits;
+  std::atomic_int misses;
   explicit SharedLRUAdapter(size_t size) : _cache(g_ceph_context, size) {}
   void cache(const std::string& key, const std::string& value) override {
     bool existed = false;
     auto* copy = new std::string(value);
     const auto ptr = _cache.add(key, copy, &existed);
       if (existed) {
-      delete copy;
+	hits++;
+	delete copy;
+      } else {
+	misses++;
       }
     }
+
+  double hit_miss_ratio() override {
+    return static_cast<double>(hits) / (static_cast<double>(hits) + static_cast<double>(misses));
+  }
 };
 
 // }}}
@@ -261,6 +274,7 @@ void BM_UniqueAdd(benchmark::State& state) {
     }
   }
   if (state.thread_index() == 0) {
+    state.counters["hit/miss"] = cache->hit_miss_ratio();
     delete cache;
   }
 }
@@ -285,6 +299,7 @@ void BM_Pareto(benchmark::State& state) {
     }
   }
   if (state.thread_index() == 0) {
+    state.counters["hit/miss"] = cache->hit_miss_ratio();
     delete cache;
   }
 }
