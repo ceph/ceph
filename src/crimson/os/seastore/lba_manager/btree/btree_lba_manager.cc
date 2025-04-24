@@ -788,6 +788,106 @@ BtreeLBAManager::_decref_intermediate(
   });
 }
 
+BtreeLBAManager::remap_ret
+BtreeLBAManager::remap_mappings(
+  Transaction &t,
+  LBAMapping orig_mapping,
+  std::vector<remap_entry_t> remaps,
+  std::vector<LogicalChildNodeRef> extents)
+{
+  LOG_PREFIX(BtreeLBAManager::remap_mappings);
+  struct state_t {
+    LBAMapping orig_mapping;
+    std::vector<remap_entry_t> remaps;
+    std::vector<LogicalChildNodeRef> extents;
+    std::vector<alloc_mapping_info_t> alloc_infos;
+    std::vector<LBAMapping> ret;
+  };
+  return seastar::do_with(
+    state_t(std::move(orig_mapping), std::move(remaps), std::move(extents), {}, {}),
+    [this, &t, FNAME](state_t &state)
+  {
+    return update_refcount(
+      t, state.orig_mapping.get_key(), -1, false
+    ).si_then([this, &t, &state, FNAME](auto ret) {
+      // Remapping the shared direct mapping is prohibited,
+      // the refcount of indirect mapping should always be 1.
+      ceph_assert(ret.is_removed_mapping());
+
+      auto orig_laddr = state.orig_mapping.get_key();
+      if (!state.orig_mapping.is_indirect()) {
+	auto &addr = ret.get_removed_mapping().map_value.pladdr;
+	ceph_assert(addr.is_paddr() && !addr.get_paddr().is_zero());
+	return alloc_extents(
+	  t,
+	  (state.remaps.front().offset + orig_laddr).checked_to_laddr(),
+	  std::move(state.extents),
+	  EXTENT_DEFAULT_REF_COUNT
+	).si_then([&state](auto ret) {
+	  state.ret = std::move(ret);
+	  return remap_iertr::make_ready_future();
+	});
+      }
+
+      extent_len_t orig_len = state.orig_mapping.get_length();
+      auto intermediate_key = state.orig_mapping.get_intermediate_key();
+      ceph_assert(intermediate_key != L_ADDR_NULL);
+      DEBUGT("remap indirect mapping {}", t, state.orig_mapping);
+      for (auto &remap : state.remaps) {
+	DEBUGT("remap 0x{:x}~0x{:x}", t, remap.offset, remap.len);
+	ceph_assert(remap.len != 0);
+	ceph_assert(remap.offset + remap.len <= orig_len);
+	auto remapped_laddr = (orig_laddr + remap.offset)
+	    .checked_to_laddr();
+	auto remapped_intermediate_key = (intermediate_key + remap.offset)
+	    .checked_to_laddr();
+	state.alloc_infos.emplace_back(
+	  alloc_mapping_info_t::create_indirect(
+	    remapped_laddr, remap.len, remapped_intermediate_key));
+      }
+
+      return alloc_sparse_mappings(
+	t, state.alloc_infos.front().key, state.alloc_infos,
+	alloc_policy_t::deterministic
+      ).si_then([&t, &state, this](std::list<LBACursorRef> cursors) {
+	return seastar::futurize_invoke([&t, &state, this] {
+	  if (state.remaps.size() > 1) {
+	    auto base = state.orig_mapping.get_intermediate_base();
+	    return update_refcount(
+	      t, base, state.remaps.size() - 1, false
+	    ).si_then([](update_mapping_ret_bare_t ret) {
+	      return ret.take_cursor();
+	    });
+	  } else {
+	    return remap_iertr::make_ready_future<
+	      LBACursorRef>(state.orig_mapping.direct_cursor->duplicate());
+	  }
+	}).si_then([&state, cursors=std::move(cursors)](auto direct) mutable {
+	  for (auto &cursor : cursors) {
+	    state.ret.emplace_back(LBAMapping::create_indirect(
+	      direct->duplicate(), std::move(cursor)));
+	  }
+	  return remap_iertr::make_ready_future();
+	});
+      });
+    }).si_then([&state] {
+      assert(state.ret.size() == state.remaps.size());
+#ifndef NDEBUG
+      auto mapping_it = state.ret.begin();
+      auto remap_it = state.remaps.begin();
+      for (;mapping_it != state.ret.end(); mapping_it++, remap_it++) {
+	auto &mapping = *mapping_it;
+	auto &remap = *remap_it;
+	assert(mapping.get_key() == state.orig_mapping.get_key() + remap.offset);
+	assert(mapping.get_length() == remap.len);
+      }
+#endif
+      return remap_iertr::make_ready_future<
+	std::vector<LBAMapping>>(std::move(state.ret));
+    });
+  });
+}
+
 BtreeLBAManager::update_refcount_ret
 BtreeLBAManager::update_refcount(
   Transaction &t,
