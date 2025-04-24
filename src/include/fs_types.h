@@ -5,7 +5,7 @@
 
 #include <cstdint>
 #include <list>
-#include <iostream>
+#include <iosfwd>
 #include <string>
 
 #include "include/buffer.h"
@@ -70,9 +70,7 @@ struct denc_traits<inodeno_t> {
   }
 };
 
-inline std::ostream& operator<<(std::ostream& out, const inodeno_t& ino) {
-  return out << std::hex << "0x" << ino.val << std::dec;
-}
+std::ostream& operator<<(std::ostream& out, const inodeno_t& ino);
 
 namespace std {
 template<>
