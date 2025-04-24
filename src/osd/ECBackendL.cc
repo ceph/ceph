@@ -1727,6 +1727,7 @@ int ECBackendL::objects_get_attrs(
 }
 
 int ECBackendL::be_deep_scrub(
+  const Scrub::ScrubCounterSet& io_counters,
   const hobject_t &poid,
   ScrubMap &map,
   ScrubMapBuilder &pos,
@@ -1754,6 +1755,8 @@ int ECBackendL::be_deep_scrub(
   if (stride % sinfo.get_chunk_size())
     stride += sinfo.get_chunk_size() - (stride % sinfo.get_chunk_size());
 
+  auto& perf_logger = *(get_parent()->get_logger());
+  perf_logger.inc(io_counters.read_cnt);
   bufferlist bl;
   r = switcher->store->read(
     switcher->ch,
@@ -1778,6 +1781,7 @@ int ECBackendL::be_deep_scrub(
   if (r > 0) {
     pos.data_hash << bl;
   }
+  perf_logger.inc(io_counters.read_bytes, r);
   pos.data_pos += r;
   if (r == (int)stride) {
     return -EINPROGRESS;

@@ -436,6 +436,7 @@ public:
   bool auto_repair_supported() const { return true; }
 
   int be_deep_scrub(
+    const Scrub::ScrubCounterSet& io_counters,
     const hobject_t &poid,
     ScrubMap &map,
     ScrubMapBuilder &pos,
