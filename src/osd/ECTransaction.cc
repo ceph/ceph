@@ -132,16 +132,10 @@ ECTransaction::WritePlanObj::WritePlanObj(
   will_write(sinfo.get_k_plus_m()),
   hinfo(hinfo),
   shinfo(shinfo),
-  orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
+  orig_size(orig_size), // On-disk object sizes are rounded up to the next page.
+  projected_size(soi?soi->size:(oi?oi->size:0))
 {
   extent_set unaligned_ro_writes;
-
-  projected_size = oi ? oi->size : 0;
-
-  if (soi) {
-    projected_size = soi->size;
-  }
-
   hobject_t source;
   invalidates_cache = op.has_source(&source) || op.is_delete();
 
