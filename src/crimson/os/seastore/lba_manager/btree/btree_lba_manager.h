@@ -562,26 +562,24 @@ private:
     });
   }
 
-  using _get_mapping_ret = get_mapping_iertr::future<BtreeLBAMappingRef>;
-  _get_mapping_ret _get_mapping(
+  using _get_cursor_ret = get_mapping_iertr::future<LBACursorRef>;
+  _get_cursor_ret get_cursor(
     op_context_t c,
     LBABtree& btree,
     laddr_t offset);
 
-  using _get_mappings_ret = get_mappings_iertr::future<std::list<BtreeLBAMappingRef>>;
-  _get_mappings_ret _get_mappings(
+  using _get_cursors_ret = get_mappings_iertr::future<std::list<LBACursorRef>>;
+  _get_cursors_ret get_cursors(
     op_context_t c,
     LBABtree& btree,
     laddr_t offset,
     extent_len_t length);
 
-  using get_indirect_pin_ret = get_mappings_iertr::future<BtreeLBAMappingRef>;
-  get_indirect_pin_ret get_indirect_pin(
+  using resolve_indirect_cursor_ret = get_mappings_iertr::future<LBACursorRef>;
+  resolve_indirect_cursor_ret resolve_indirect_cursor(
     op_context_t c,
     LBABtree& btree,
-    laddr_t key,
-    laddr_t intermediate_key,
-    extent_len_t length);
+    const LBACursor& indirect_cursor);
 
   using _decref_intermediate_ret = ref_iertr::future<
     std::optional<ref_update_result_t>>;
