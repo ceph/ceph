@@ -721,6 +721,100 @@ BtreeLBAManager::get_physical_extent_if_live(
     });
 }
 
+BtreeLBAManager::refresh_lba_mapping_ret
+BtreeLBAManager::refresh_lba_mapping(Transaction &t, LBAMapping mapping)
+{
+  assert(mapping.is_linked_direct());
+  if (mapping.is_viewable()) {
+    return refresh_lba_mapping_iertr::make_ready_future<
+      LBAMapping>(std::move(mapping));
+  }
+  auto c = get_context(t);
+  return with_btree_state<LBABtree, LBAMapping>(
+    cache,
+    c,
+    std::move(mapping),
+    [c, this](LBABtree &btree, LBAMapping &mapping) mutable
+  {
+    return refresh_lba_cursor(c, btree, *mapping.direct_cursor
+    ).si_then([c, this, &btree, &mapping] {
+      if (mapping.indirect_cursor) {
+	return refresh_lba_cursor(c, btree, *mapping.indirect_cursor);
+      }
+      return refresh_lba_cursor_iertr::make_ready_future();
+#ifndef NDEBUG
+    }).si_then([&mapping] {
+      assert(mapping.is_viewable());
+#endif
+    });
+  });
+}
+
+BtreeLBAManager::refresh_lba_cursor_ret
+BtreeLBAManager::refresh_lba_cursor(
+  op_context_t c,
+  LBABtree &btree,
+  LBACursor &cursor)
+{
+  LOG_PREFIX(BtreeLBAManager::refresh_lba_cursor);
+  stats.num_refresh_parent_total++;
+
+  if (!cursor.parent->is_valid()) {
+    stats.num_refresh_invalid_parent++;
+    TRACET("cursor {} parent is invalid, re-search from scratch",
+	   c.trans, cursor);
+    return btree.lower_bound(c, cursor.get_laddr()
+    ).si_then([&cursor](LBABtree::iterator iter) {
+      auto leaf = iter.get_leaf_node();
+      cursor.parent = leaf;
+      cursor.modifications = leaf->modifications;
+      cursor.pos = iter.get_leaf_pos();
+      if (!cursor.is_end()) {
+	ceph_assert(!iter.is_end());
+	ceph_assert(iter.get_key() == cursor.get_laddr());
+	cursor.val = iter.get_val();
+	assert(cursor.is_viewable());
+      }
+    });
+  }
+
+  auto [viewable, state] = cursor.parent->is_viewable_by_trans(c.trans);
+  auto leaf = cursor.parent->cast<LBALeafNode>();
+
+  TRACET("cursor: {} viewable: {} state: {}",
+	 c.trans, cursor, viewable, state);
+
+  if (!viewable) {
+    stats.num_refresh_unviewable_parent++;
+    leaf = leaf->find_pending_version(c.trans, cursor.get_laddr());
+    cursor.parent = leaf;
+  }
+
+  if (!viewable ||
+      leaf->modified_since(cursor.modifications)) {
+    if (viewable) {
+      stats.num_refresh_modified_viewable_parent++;
+    }
+
+    cursor.modifications = leaf->modifications;
+    if (cursor.is_end()) {
+      cursor.pos = leaf->get_size();
+      assert(!cursor.val);
+    } else {
+      auto i = leaf->lower_bound(cursor.get_laddr());
+      cursor.pos = i.get_offset();
+      cursor.val = i.get_val();
+
+      auto iter = LBALeafNode::iterator(leaf.get(), cursor.pos);
+      ceph_assert(iter.get_key() == cursor.key);
+      ceph_assert(iter.get_val() == cursor.val);
+      assert(cursor.is_viewable());
+    }
+  }
+
+  return refresh_lba_cursor_iertr::make_ready_future();
+}
+
 void BtreeLBAManager::register_metrics()
 {
   LOG_PREFIX(BtreeLBAManager::register_metrics);
@@ -739,6 +833,26 @@ void BtreeLBAManager::register_metrics()
         "alloc_extents_iter_nexts",
         stats.num_alloc_extents_iter_nexts,
         sm::description("total number of iterator next operations during extent allocation")
+      ),
+      sm::make_counter(
+        "refresh_parent_total",
+        stats.num_refresh_parent_total,
+        sm::description("total number of refreshed cursors")
+      ),
+      sm::make_counter(
+        "refresh_invalid_parent",
+        stats.num_refresh_invalid_parent,
+        sm::description("total number of refreshed cursors with invalid parents")
+      ),
+      sm::make_counter(
+        "refresh_unviewable_parent",
+        stats.num_refresh_unviewable_parent,
+        sm::description("total number of refreshed cursors with unviewable parents")
+      ),
+      sm::make_counter(
+        "refresh_modified_viewable_parent",
+        stats.num_refresh_modified_viewable_parent,
+        sm::description("total number of refreshed cursors with viewable but modified parents")
       ),
     }
   );

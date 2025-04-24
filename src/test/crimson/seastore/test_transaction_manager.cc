@@ -726,6 +726,12 @@ struct transaction_manager_test_t :
       }).unsafe_get();
   }
 
+  LBAMapping refresh_lba_mapping(test_transaction_t &t, LBAMapping mapping) {
+    return with_trans_intr(*t.t, [this, mapping=std::move(mapping)](auto &t) mutable {
+      return lba_manager->refresh_lba_mapping(t, std::move(mapping));
+    }).unsafe_get();
+  }
+
   bool try_submit_transaction(test_transaction_t t) {
     using ertr = with_trans_ertr<TransactionManager::submit_transaction_iertr>;
     using ret = ertr::future<bool>;
@@ -2135,8 +2141,7 @@ TEST_P(tm_single_device_test_t, invalid_lba_mapping_detect)
       assert(pin.is_viewable());
       std::ignore = alloc_extent(t, get_laddr_hint((LEAF_NODE_CAPACITY + 1) * 4096), 4096, 'a');
       assert(!pin.is_viewable());
-      // TODO: refresh pin
-      // pin->maybe_fix_pos();
+      pin = refresh_lba_mapping(t, pin.duplicate());
       auto extent2 = with_trans_intr(*(t.t), [&pin](auto& trans) {
         auto v = pin.get_logical_extent(trans);
         assert(v.has_child());
