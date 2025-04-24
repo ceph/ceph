@@ -636,11 +636,11 @@ BtreeLBAManager::update_mapping(
     },
     &nextent
   ).si_then([&t, laddr, prev_addr, prev_len, addr, len, checksum, FNAME](auto res) {
-      auto &result = res.map_value;
+      assert(res.is_alive_mapping());
       DEBUGT("laddr={}, paddr {}~0x{:x} => {}~0x{:x}, crc=0x{:x} done -- {}",
-             t, laddr, prev_addr, prev_len, addr, len, checksum, result);
+             t, laddr, prev_addr, prev_len, addr, len, checksum, res.get_cursor());
       return update_mapping_iertr::make_ready_future<
-	extent_ref_count_t>(result.refcount);
+	extent_ref_count_t>(res.get_cursor().get_refcount());
     },
     update_mapping_iertr::pass_further{},
     /* ENOENT in particular should be impossible */
@@ -681,9 +681,8 @@ BtreeLBAManager::update_mappings(
       nullptr   // all the extents should have already been
                 // added to the fixed_kv_btree
     ).si_then([&t, laddr, prev_addr, len, addr, checksum, FNAME](auto res) {
-        auto &result = res.map_value;
         DEBUGT("laddr={}, paddr {}~0x{:x} => {}, crc=0x{:x} done -- {}",
-               t, laddr, prev_addr, len, addr, checksum, result);
+               t, laddr, prev_addr, len, addr, checksum, res.get_cursor());
         return update_mapping_iertr::make_ready_future();
       },
       update_mapping_iertr::pass_further{},
@@ -759,45 +758,32 @@ BtreeLBAManager::_decref_intermediate(
     return btree.upper_bound_right(
       c, addr
     ).si_then([&btree, addr, len, c](auto iter) {
-      return seastar::do_with(
-	std::move(iter),
-	[&btree, addr, len, c](auto &iter) {
-	ceph_assert(!iter.is_end());
-	laddr_t key = iter.get_key();
-	ceph_assert(key <= addr);
-	auto val = iter.get_val();
-	ceph_assert(key + val.len >= addr + len);
-	ceph_assert(val.pladdr.is_paddr());
-	ceph_assert(val.refcount >= 1);
-	val.refcount -= 1;
+      ceph_assert(!iter.is_end());
+      laddr_t key = iter.get_key();
+      ceph_assert(key <= addr);
+      auto val = iter.get_val();
+      ceph_assert(key + val.len >= addr + len);
+      ceph_assert(val.pladdr.is_paddr());
+      ceph_assert(val.refcount >= 1);
+      val.refcount -= 1;
 
-	LOG_PREFIX(BtreeLBAManager::_decref_intermediate);
-	TRACET("decreased refcount of intermediate key {} -- {}",
-	  c.trans,
-	  key,
-	  val);
+      LOG_PREFIX(BtreeLBAManager::_decref_intermediate);
+      TRACET("decreased refcount of intermediate key {} -- {}",
+	     c.trans, key, val);
 
-	if (!val.refcount) {
-	  return btree.remove(c, iter
-	  ).si_then([key, val] {
-	    auto res = ref_update_result_t{
-	      key,
-	      val.refcount,
-	      val.pladdr.get_paddr(),
-	      val.len
-	    };
-	    return ref_iertr::make_ready_future<
-	      std::optional<ref_update_result_t>>(
-	        std::make_optional<ref_update_result_t>(res));
-	  });
-	} else {
-	  return btree.update(c, iter, val
-	  ).si_then([](auto) {
-	    return ref_iertr::make_ready_future<
-	      std::optional<ref_update_result_t>>(std::nullopt);
-	  });
-	}
-      });
+      if (val.refcount == 0) {
+	return btree.remove(c, iter
+	).si_then([key, val] {
+	  return ref_iertr::make_ready_future<
+	    update_mapping_ret_bare_t>(key, val);
+	});
+      } else {
+	return btree.update(c, iter, val
+	).si_then([c](auto iter) {
+	  return ref_iertr::make_ready_future<
+	    update_mapping_ret_bare_t>(iter.get_cursor(c));
+	});
+      }
     });
   });
 }
@@ -822,38 +808,26 @@ BtreeLBAManager::update_refcount(
     },
     nullptr
   ).si_then([&t, addr, delta, FNAME, this, cascade_remove](auto res) {
-    auto &map_value = res.map_value;
-    auto &mapping = res.mapping;
-    DEBUGT("laddr={}, delta={} done -- {}", t, addr, delta, map_value);
-    auto fut = ref_iertr::make_ready_future<
-      std::optional<ref_update_result_t>>();
-    if (!map_value.refcount && map_value.pladdr.is_laddr() && cascade_remove) {
-      fut = _decref_intermediate(
-	t,
-	map_value.pladdr.get_laddr(),
-	map_value.len
+    DEBUGT("laddr={}, delta={} done -- {}",
+	   t, addr, delta,
+	   res.is_alive_mapping()
+	     ? res.get_cursor().val
+	     : res.get_removed_mapping().map_value);
+    if (res.is_removed_mapping() && cascade_remove &&
+	res.get_removed_mapping().map_value.pladdr.is_laddr()) {
+      auto &val = res.get_removed_mapping().map_value;
+      TRACET("decref intermediate {} -> {}",
+	     t, addr, val.pladdr.get_laddr());
+      return _decref_intermediate(t, val.pladdr.get_laddr(), val.len
+      ).handle_error_interruptible(
+	update_mapping_iertr::pass_further{},
+	crimson::ct_error::assert_all{
+	  "unexpect ENOENT"
+	}
       );
     }
-    return fut.si_then([addr, map_value, mapping=std::move(mapping)]
-		       (auto decref_intermediate_res) mutable {
-      if (map_value.pladdr.is_laddr()
-	  && decref_intermediate_res) {
-	return update_refcount_ret_bare_t{
-	  *decref_intermediate_res,
-	  std::move(mapping)
-	};
-      } else {
-	return update_refcount_ret_bare_t{
-	  ref_update_result_t{
-	    addr,
-	    map_value.refcount,
-	    map_value.pladdr,
-	    map_value.len
-	  },
-	  std::move(mapping)
-	};
-      }
-    });
+    return update_mapping_iertr::make_ready_future<
+      update_mapping_ret_bare_t>(std::move(res));
   });
 }
 
@@ -865,7 +839,7 @@ BtreeLBAManager::_update_mapping(
   LogicalChildNode* nextent)
 {
   auto c = get_context(t);
-  return with_btree_ret<LBABtree, update_mapping_ret_bare_t>(
+  return with_btree<LBABtree>(
     cache,
     c,
     [f=std::move(f), c, addr, nextent](auto &btree) mutable {
@@ -885,18 +859,15 @@ BtreeLBAManager::_update_mapping(
 	  return btree.remove(
 	    c,
 	    iter
-	  ).si_then([ret] {
-	    return update_mapping_ret_bare_t{
-	      std::move(ret),
-	      BtreeLBAMappingRef(nullptr)
-	    };
+	  ).si_then([addr, ret] {
+	    return update_mapping_ret_bare_t(addr, ret);
 	  });
 	} else {
 	  return btree.update(
 	    c,
 	    iter,
 	    ret
-	  ).si_then([c, ret, nextent](auto iter) {
+	  ).si_then([c, nextent](auto iter) {
 	    if (nextent) {
 	      // nextent is provided iff unlinked,
               // also see TM::rewrite_logical_extent()
@@ -907,10 +878,7 @@ BtreeLBAManager::_update_mapping(
 	    assert(!nextent || 
 	           (nextent->has_parent_tracker() &&
 		    nextent->get_parent_node().get() == iter.get_leaf_node().get()));
-	    return update_mapping_ret_bare_t{
-	      std::move(ret),
-	      iter.get_pin(c)
-	    };
+	    return update_mapping_ret_bare_t(iter.get_cursor(c));
 	  });
 	}
       });
