@@ -97,7 +97,7 @@ class CryptoCaller:
     def create_private_key(self) -> str:
         """Create a new TLS private key, returning it as a string."""
         result = self._run(
-            ['create_self_signed_cert', '--private_key'],
+            ['create_private_key'],
             capture_output=True,
             check=True,
         )
