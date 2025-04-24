@@ -2522,6 +2522,10 @@ int prepare_group_images(IoCtx& group_ioctx,
         lderr(cct) << "cannot enable mirroring: image is in a different pool"
           << dendl;
         return -ENOTSUP;
+      } else if (image_ctx->parent != nullptr) {
+        lderr(cct) << "cannot enable mirroring: group cannot contain clone images"
+                   << dendl;
+        return -ENOTSUP;
       }
     }
 
