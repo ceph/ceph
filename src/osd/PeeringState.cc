@@ -2685,7 +2685,7 @@ bool PeeringState::search_for_missing(
     tinfo.partial_writes_last_complete = info.partial_writes_last_complete;
     if (!tinfo.partial_writes_last_complete.empty()) {
       psdout(20) << "sending info to " << from
-		 << " pwcl=" << tinfo.partial_writes_last_complete
+		 << " pwlc=" << tinfo.partial_writes_last_complete
 		 << " info=" << tinfo
 		 << dendl;
     }

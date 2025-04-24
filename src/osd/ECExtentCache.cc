@@ -334,18 +334,11 @@ void ECExtentCache::execute(list<OpRef> &op_list) {
     op->object.request(op);
   }
   waiting_ops.insert(waiting_ops.end(), op_list.begin(), op_list.end());
-  counter++;
   cache_maybe_ready();
 }
 
 bool ECExtentCache::idle() const {
   return active_ios == 0;
-}
-
-uint32_t ECExtentCache::get_and_reset_counter() {
-  uint32_t ret = counter;
-  counter = 0;
-  return ret;
 }
 
 list<ECExtentCache::LRU::Key>::iterator ECExtentCache::LRU::erase(
