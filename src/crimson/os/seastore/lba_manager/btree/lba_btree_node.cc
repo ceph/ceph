@@ -44,39 +44,6 @@ void LBALeafNode::resolve_relative_addrs(paddr_t base)
   }
 }
 
-void LBALeafNode::maybe_fix_mapping_pos(BtreeLBAMapping &mapping)
-{
-  assert(mapping.get_parent() == this);
-  auto key = mapping.is_indirect()
-    ? mapping.get_intermediate_base()
-    : mapping.get_key();
-  if (key != iter_idx(mapping.get_pos()).get_key()) {
-    auto iter = lower_bound(key);
-    {
-      // a mapping that no longer exist or has its value
-      // modified is considered an outdated one, and
-      // shouldn't be used anymore
-      ceph_assert(iter != end());
-      assert(iter.get_val() == mapping.get_map_val());
-    }
-    mapping._new_pos(iter.get_offset());
-  }
-}
-
-BtreeLBAMappingRef LBALeafNode::get_mapping(
-  op_context_t c, laddr_t laddr)
-{
-  auto iter = lower_bound(laddr);
-  ceph_assert(iter != end() && iter->get_key() == laddr);
-  auto val = iter.get_val();
-  return std::make_unique<BtreeLBAMapping>(
-    c,
-    this,
-    iter.get_offset(),
-    val,
-    lba_node_meta_t{laddr, (laddr + val.len).checked_to_laddr(), 0});
-}
-
 void LBALeafNode::update(
   internal_const_iterator_t iter,
   lba_map_val_t val)
