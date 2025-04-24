@@ -209,10 +209,6 @@ public:
   }
 };
 
-// Setting to 1 turns on very large amounts of level 0 debug containing the
-// contents of buffers. Even on level 20 this is not really wanted.
-#define DEBUG_EC_BUFFERS 1
-
 namespace ECUtil {
 class shard_extent_map_t;
 
@@ -314,7 +310,9 @@ struct shard_extent_set_t {
   /** return the sum of extent_set.size */
   uint64_t size() const {
     uint64_t size = 0;
-    for (auto &&[_, e] : map) size += e.size();
+    for (auto &&[_, e] : map) {
+      size += e.size();
+    }
 
     return size;
   }
