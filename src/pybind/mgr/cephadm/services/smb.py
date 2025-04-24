@@ -24,6 +24,10 @@ class SMBService(CephService):
     DEFAULT_EXPORTER_PORT = 9922
     smb_pool = '.smb'  # minor layering violation. try to clean up later.
 
+    @property
+    def needs_monitoring(self) -> bool:
+        return True
+
     def config(self, spec: ServiceSpec) -> None:
         assert self.TYPE == spec.service_type
         smb_spec = cast(SMBSpec, spec)
