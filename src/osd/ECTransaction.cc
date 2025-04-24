@@ -529,11 +529,14 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   overlay_writes();
   appends_and_clone_ranges();
 
-  /* The write plan is permitted to drop parity shards when the shard is
-   * missing. However, written_shards must contain all parity shards.
-   * Note that the write plan will *not* drop data shards.
-   */
-  shards_written(sinfo.get_parity_shards());
+  // On a size change, we want to update OI on all shards
+  if (plan.orig_size != plan.projected_size) {
+    all_shards_written();
+  } else {
+    // All priumary shards must always be written, regardless of the write plan.
+    shards_written(sinfo.get_parity_shards());
+    shard_written(shard_id_t(0));
+  }
 
   if (!to_write.empty()) {
     encode_and_write();
@@ -550,6 +553,8 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     entry->mod_desc.append(ECUtil::align_page_next(plan.orig_size));
   }
 
+  written_and_present_shards();
+
   if (!op.attr_updates.empty()) {
     attr_updates();
   }
@@ -561,8 +566,6 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   if (!op.is_delete()) {
     handle_deletes();
   }
-
-  written_and_present_shards();
 }
 
 void ECTransaction::Generate::truncate() {
@@ -873,7 +876,6 @@ void ECTransaction::Generate::attr_updates() {
       ceph_assert(!entry);
     }
   }
-  all_shards_written();
   for (auto &&[shard, t]: transactions) {
     if (!sinfo.is_nonprimary_shard(shard)) {
       // Primary shard - Update all attributes
