@@ -48,7 +48,8 @@ class WritePlanObj {
       const unsigned pdw_write_mode);
 
   void print(std::ostream &os) const {
-    os << "to_read: " << to_read
+    os << "hoid: " << hoid
+       << " to_read: " << to_read
        << " will_write: " << will_write
        << " hinfo: " << hinfo
        << " shinfo: " << shinfo
