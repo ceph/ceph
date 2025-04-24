@@ -132,6 +132,13 @@ void DemoteRequest<I>::demote() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
+  /* Error Injection
+  if (m_image_ctx.name == "test_image2") {
+    lderr(cct) << "Skipping demotion for test_image2" << dendl;
+     handle_demote(-EINVAL);
+     return;
+  } */
+
   auto ctx = create_context_callback<
     DemoteRequest<I>, &DemoteRequest<I>::handle_demote>(this);
   if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {

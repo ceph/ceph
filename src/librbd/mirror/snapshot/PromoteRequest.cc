@@ -293,6 +293,13 @@ void PromoteRequest<I>::create_promote_snapshot() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 15) << dendl;
 
+  /* Error Injection Case 2: group promote fail snap created
+  if (m_image_ctx->name == "test_image2") {
+    lderr(cct) << "Skipping promotion for test_image2" << dendl;
+    handle_create_promote_snapshot(-EINVAL);
+    return;
+  } */
+
   auto ctx = create_context_callback<
     PromoteRequest<I>,
     &PromoteRequest<I>::handle_create_promote_snapshot>(this);
@@ -311,6 +318,11 @@ void PromoteRequest<I>::handle_create_promote_snapshot(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 15) << "r=" << r << dendl;
 
+  /* Error Injection Case 1: group promote fail no snap created
+   std::cout << m_image_ctx->name << std::endl;
+  if(m_image_ctx->name == "test_image2"){
+    r = -1;
+  } */
   if (r < 0) {
     lderr(cct) << "failed to create promote snapshot: " << cpp_strerror(r)
                << dendl;

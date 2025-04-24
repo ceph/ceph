@@ -2838,6 +2838,10 @@ int Mirror<I>::group_enable(IoCtx& group_ioctx, const char *group_name,
     r = image_enable(image_ctxs[i], group_snap_id, mirror_image_mode, false,
                      &snap_ids[i]);
     group_snap.snaps[i].snap_id = snap_ids[i];
+    /*  Error Injection
+    if (i == image_ctxs.size() - 1 ) {
+      r = -1;
+    } */
     if (r < 0) {
       lderr(cct) << "failed enabling image: "
                  << image_ctxs[i]->name << ": " << cpp_strerror(r) << dendl;
@@ -2968,6 +2972,10 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
     ldout(cct, 10) << "attempting to disable image with id " << image_ctxs[i]->id
                    << ": " << cpp_strerror(r) << dendl;
     r = image_disable(image_ctxs[i], force, true);
+    /*  Error Injection
+    if (i == image_ctxs.size() - 1 ) {
+      r = -1;
+    } */
     if (r < 0) {
       lderr(cct) << "failed to disable mirroring on image: " << image_ctxs[i]->name
                  << cpp_strerror(r) << dendl;
@@ -2996,6 +3004,8 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
                                                    &snaps, &cond);
   req->send();
   r = cond.wait();
+   /* Error Injection */
+  //r = -1;
   if (r < 0) {
     lderr(cct) << "failed to list group snapshots, retry later: "
                << cpp_strerror(r) << dendl;

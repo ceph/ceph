@@ -647,6 +647,7 @@ void GroupCreatePrimaryRequest<I>::handle_create_image_snaps(int r) {
     m_group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
     *m_snap_id = m_group_snap.id;
 
+    /* Error Injection */
     set_snap_metadata();
   }
 }
