@@ -402,7 +402,8 @@ public:
     return lba_manager->alloc_extent(
       t,
       laddr_hint,
-      *ext
+      *ext,
+      EXTENT_DEFAULT_REF_COUNT
     ).si_then([ext=std::move(ext), &t, FNAME](auto &&) mutable {
       SUBDEBUGT(seastore_tm, "allocated {}", t, *ext);
       return alloc_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
