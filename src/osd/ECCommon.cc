@@ -488,18 +488,17 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
     extent_map result;
     if (res.r == 0) {
       ceph_assert(res.errors.empty());
-#if DEBUG_EC_BUFFERS
-      dout(20) << __func__ << ": before decode: " << res.buffers_read.debug_string(2048, 8) << dendl;
-#endif
+      dout(30) << __func__ << ": before decode: "
+               << res.buffers_read.debug_string(2048, 8)
+               << dendl;
       /* Decode any missing buffers */
       int r = res.buffers_read.decode(read_pipeline.ec_impl,
                                   req.shard_want_to_read,
                                   req.object_size);
       ceph_assert( r == 0 );
-
-#if DEBUG_EC_BUFFERS
-      dout(20) << __func__ << ": after decode: " << res.buffers_read.debug_string(2048, 8) << dendl;
-#endif
+      dout(30) << __func__ << ": after decode: "
+               << res.buffers_read.debug_string(2048, 8)
+               << dendl;
 
       for (auto &&read: req.to_read) {
         result.insert(read.offset, read.size,
@@ -867,10 +866,7 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
 
   if (extent_cache.idle()) {
     if (op->version > get_parent()->get_log().get_can_rollback_to()) {
-      const int transactions_since_last_idle = extent_cache.
-          get_and_reset_counter();
-      dout(20) << __func__ << " version=" << op->version << " ec_counter=" <<
-          transactions_since_last_idle << dendl;
+      dout(20) << __func__ << "cache idle" << op->version << dendl;
       // submit a dummy, transaction-empty op to kick the rollforward
       const auto tid = get_parent()->get_tid();
       const auto nop = std::make_shared<ECDummyOp>();
