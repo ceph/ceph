@@ -28,6 +28,7 @@ export class BucketTieringUtils {
       placement_target: targetName,
       storage_class: tierTarget.val.storage_class,
       retain_head_object: tierTarget.val.retain_head_object,
+      allow_read_through: tierTarget.val.allow_read_through,
       ...tierTarget.val.s3
     };
   }
