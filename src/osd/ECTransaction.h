@@ -48,14 +48,16 @@ class WritePlanObj {
       const unsigned pdw_write_mode);
 
   void print(std::ostream &os) const {
-    os << "to_read: " << to_read
+    os << "{hoid: " << hoid
+       << " to_read: " << to_read
        << " will_write: " << will_write
        << " hinfo: " << hinfo
        << " shinfo: " << shinfo
        << " orig_size: " << orig_size
        << " projected_size: " << projected_size
        << " invalidates_cache: " << invalidates_cache
-       << " do_pdw: " << do_parity_delta_write;
+       << " do_pdw: " << do_parity_delta_write
+       << "}";
   }
 };
 
@@ -64,7 +66,7 @@ struct WritePlan {
   std::list<WritePlanObj> plans;
 
   void print(std::ostream &os) const {
-    os << " { plans : ";
+    os << " plans: [";
     bool first = true;
     for (auto && p : plans) {
       if (first) {
@@ -74,7 +76,7 @@ struct WritePlan {
       }
       os << p;
     }
-    os << "}";
+   os << "]";
   }
 };
 
