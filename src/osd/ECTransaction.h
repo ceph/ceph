@@ -29,7 +29,7 @@ class WritePlanObj {
   const ECUtil::HashInfoRef hinfo;
   const ECUtil::HashInfoRef shinfo;
   const uint64_t orig_size;
-  uint64_t projected_size;
+  const uint64_t projected_size;
   bool invalidates_cache;
   bool do_parity_delta_write = false;
 
@@ -74,7 +74,7 @@ struct WritePlan {
       } else {
         os << ", ";
       }
-      os << p;
+      os << "{" << p << "}";
     }
    os << "]";
   }
