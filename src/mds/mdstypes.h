@@ -19,6 +19,7 @@
 #include "include/fs_types.h"
 
 #include "include/ceph_assert.h"
+#include "include/cephfs/dump.h"
 #include "include/cephfs/types.h"
 
 #define MDS_PORT_CACHE   0x200
