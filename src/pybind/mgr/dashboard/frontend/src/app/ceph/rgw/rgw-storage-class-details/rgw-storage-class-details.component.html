@@ -12,8 +12,7 @@
               Target Path
               <cd-helper class="text-pre-wrap">
                 <span i18n>
-                  The target path specifies a prefix to which the source bucket-name/object-name is
-                  appended.
+                 {{ targetPathText }}
                 </span>
               </cd-helper>
             </td>
@@ -24,7 +23,7 @@
               Access key
               <cd-helper class="text-pre-wrap">
                 <span i18n>
-                  Access key is the remote cloud S3 access key used for a specific connection.
+                  {{ targetAccessKeyText }}
                 </span>
               </cd-helper>
             </td>
@@ -50,7 +49,7 @@
             <td class="bold">
               Secret key
               <cd-helper class="text-pre-wrap">
-                <span i18n> Secret is the secret key for the remote cloud S3 service. </span>
+                <span i18n> {{ targetSecretKeyText }} </span>
               </cd-helper>
             </td>
             <td>
@@ -72,48 +71,54 @@
             </td>
           </tr>
           <tr>
-            <td
-                class="bold">
+            <td class="bold">
               Host Style
               <cd-helper class="text-pre-wrap">
-                <span i18n>The URL format for accessing the remote S3 endpoint: 'Path' for a path-based URL
-                  or 'Virtual' for a domain-based URL.</span>
+                <span i18n>{{ hostStyleText }}</span
+                >
               </cd-helper>
             </td>
             <td>{{ selection?.host_style }}</td>
           </tr>
           <tr>
-            <td
-                class="bold">
+            <td class="bold">
               Multipart Minimum Part Size
               <cd-helper class="text-pre-wrap">
                 <span i18n>
-                  Minimum parts size to use when transitioning objects using multipart upload.
+                  {{ multipartMinPartText }}
                 </span>
               </cd-helper>
             </td>
             <td>{{ selection?.multipart_min_part_size }}</td>
           </tr>
           <tr>
-            <td
-                class="bold">
+            <td class="bold">
               Multipart Sync Threshold
               <cd-helper class="text-pre-wrap">
                 <span i18n>
-                  Objects this size or larger will be transitioned to the cloud using multipart
-                  upload.
+                 {{ multipartSyncThreholdText }}
                 </span>
               </cd-helper>
             </td>
             <td>{{ selection?.multipart_sync_threshold }}</td>
           </tr>
           <tr>
-            <td
-                class="bold">
-              Retain Head Object
+            <td class="bold">
+              <span i18n>Allow Read Through </span>
               <cd-helper class="text-pre-wrap">
                 <span i18n>
-                  Retain object metadata after transition to the cloud (default: false).
+                  {{ allowReadThroughText }}
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.allow_read_through }}</td>
+          </tr>
+          <tr>
+            <td class="bold">
+              Head Object (Stub File)
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  {{ retainHeadObjectText }}
                 </span>
               </cd-helper>
             </td>

@@ -47,6 +47,7 @@ describe('RgwStorageClassService', () => {
             secret: 'test56',
             target_path: 'tsest-dnyanee',
             retain_head_object: false,
+            allow_read_through: true,
             region: 'ams3d',
             multipart_sync_threshold: 33554432,
             multipart_min_part_size: 33554432
