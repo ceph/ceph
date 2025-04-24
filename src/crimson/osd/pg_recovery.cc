@@ -623,32 +623,28 @@ void PGRecovery::on_pg_clean()
   backfill_state.reset();
 }
 
+// PGListener wrapper to PG::start_peering_event_operation
+template <typename T>
+void PGRecovery::start_peering_event_operation_listener(T &&evt, float delay) {
+  (void) pg->schedule_event_after(PGPeeringEventRef(
+    std::make_shared<PGPeeringEvent>(
+      pg->get_osdmap_epoch(),
+      pg->get_osdmap_epoch(),
+      std::forward<T>(evt))), delay);
+}
+
 void PGRecovery::backfilled()
 {
   LOG_PREFIX(PGRecovery::backfilled);
   DEBUGDPP("", pg->get_pgid());
-  using LocalPeeringEvent = crimson::osd::LocalPeeringEvent;
-  std::ignore = pg->get_shard_services().start_operation<LocalPeeringEvent>(
-    static_cast<crimson::osd::PG*>(pg),
-    pg->get_pg_whoami(),
-    pg->get_pgid(),
-    pg->get_osdmap_epoch(),
-    pg->get_osdmap_epoch(),
-    PeeringState::Backfilled{});
+  start_peering_event_operation_listener(PeeringState::Backfilled());
 }
 
 void PGRecovery::request_backfill()
 {
   LOG_PREFIX(PGRecovery::request_backfill);
   DEBUGDPP("", pg->get_pgid());
-  using LocalPeeringEvent = crimson::osd::LocalPeeringEvent;
-  std::ignore = pg->get_shard_services().start_operation<LocalPeeringEvent>(
-    static_cast<crimson::osd::PG*>(pg),
-    pg->get_pg_whoami(),
-    pg->get_pgid(),
-    pg->get_osdmap_epoch(),
-    pg->get_osdmap_epoch(),
-    PeeringState::RequestBackfill{});
+  start_peering_event_operation_listener(PeeringState::RequestBackfill());
 }
 
 
@@ -656,14 +652,7 @@ void PGRecovery::all_replicas_recovered()
 {
   LOG_PREFIX(PGRecovery::all_replicas_recovered);
   DEBUGDPP("", pg->get_pgid());
-  using LocalPeeringEvent = crimson::osd::LocalPeeringEvent;
-  std::ignore = pg->get_shard_services().start_operation<LocalPeeringEvent>(
-    static_cast<crimson::osd::PG*>(pg),
-    pg->get_pg_whoami(),
-    pg->get_pgid(),
-    pg->get_osdmap_epoch(),
-    pg->get_osdmap_epoch(),
-    PeeringState::AllReplicasRecovered{});
+  start_peering_event_operation_listener(PeeringState::AllReplicasRecovered());
 }
 
 void PGRecovery::backfill_suspended()
