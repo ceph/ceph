@@ -77,7 +77,7 @@ public:
     Transaction &t,
     laddr_t hint,
     LogicalChildNode &nextent,
-    extent_ref_count_t refcount = EXTENT_DEFAULT_REF_COUNT) = 0;
+    extent_ref_count_t refcount) = 0;
 
   using alloc_extents_ret = alloc_extent_iertr::future<
     std::vector<LBAMappingRef>>;
