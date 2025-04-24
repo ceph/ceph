@@ -79,14 +79,11 @@ public:
     return seastar::do_with(
       std::move(alloc_infos),
       [&t, hint, this](auto &alloc_infos) {
-      return _alloc_extents(
-	t,
-	hint,
-	alloc_infos
-      ).si_then([](auto mappings) {
-	assert(mappings.size() == 1);
-	auto mapping = std::move(mappings.front());
-	return mapping;
+      return alloc_contiguous_mappings(
+	t, hint, alloc_infos, alloc_policy_t::linear_search
+      ).si_then([](auto cursors) {
+	assert(cursors.size() == 1);
+	return LBAMapping::create_direct(std::move(cursors.front()));
       });
     });
   }
@@ -101,29 +98,27 @@ public:
     std::vector<alloc_mapping_info_t> alloc_infos = {
       alloc_mapping_info_t::create_indirect(
 	laddr, len, intermediate_key)};
-    return alloc_cloned_mappings(
-      t,
-      laddr,
-      std::move(alloc_infos)
-    ).si_then([&t, this, intermediate_base](auto imappings) {
-      assert(imappings.size() == 1);
-      auto &imapping = imappings.front();
-      return update_refcount(t, intermediate_base, 1, false
-      ).si_then([imapping=std::move(imapping)](auto p) mutable {
-	auto mapping = std::move(p.mapping);
-	ceph_assert(mapping->is_stable());
-	ceph_assert(imapping->is_indirect());
-	mapping->make_indirect(
-	  imapping->get_key(),
-	  imapping->get_length(),
-	  imapping->get_intermediate_key());
-	return seastar::make_ready_future<
-	  LBAMappingRef>(std::move(mapping));
-      });
-    }).handle_error_interruptible(
-      crimson::ct_error::input_output_error::pass_further{},
-      crimson::ct_error::assert_all{"unexpect enoent"}
-    );
+    return seastar::do_with(
+      std::move(alloc_infos),
+      [this, &t, laddr, intermediate_base](auto &infos) {
+	return alloc_sparse_mappings(
+	  t, laddr, infos, alloc_policy_t::deterministic
+	).si_then([this, &t, intermediate_base](auto cursors) {
+	  ceph_assert(cursors.size() == 1);
+	  ceph_assert(cursors.front()->is_indirect());
+	  return update_refcount(t, intermediate_base, 1, false
+	  ).si_then([cursors=std::move(cursors)](auto p) mutable {
+	    assert(p.is_alive_mapping());
+	    auto mapping = LBAMapping::create_indirect(
+	      p.take_cursor(), std::move(cursors.front()));
+	    ceph_assert(mapping.is_stable());
+	    return alloc_extent_iertr::make_ready_future<
+	      LBAMapping>(std::move(mapping));
+	  });
+	});
+      }).handle_error_interruptible(
+	crimson::ct_error::input_output_error::pass_further{},
+	crimson::ct_error::assert_all{"unexpect enoent"});
   }
 
   alloc_extent_ret alloc_extent(
@@ -145,15 +140,12 @@ public:
 	ext)};
     return seastar::do_with(
       std::move(alloc_infos),
-      [this, &t, hint, refcount](auto &alloc_infos) {
-      return _alloc_extents(
-	t,
-	hint,
-	alloc_infos
-      ).si_then([](auto mappings) {
-	assert(mappings.size() == 1);
-	auto mapping = std::move(mappings.front());
-	return mapping;
+      [this, &t, hint](auto &alloc_infos) {
+      return alloc_contiguous_mappings(
+	t, hint, alloc_infos, alloc_policy_t::linear_search
+      ).si_then([](auto cursors) {
+	assert(cursors.size() == 1);
+	return LBAMapping::create_direct(std::move(cursors.front()));
       });
     });
   }
@@ -165,8 +157,11 @@ public:
     extent_ref_count_t refcount) final
   {
     std::vector<alloc_mapping_info_t> alloc_infos;
+    assert(!extents.empty());
+    auto has_laddr = extents.front()->has_laddr();
     for (auto &extent : extents) {
       assert(extent);
+      assert(extent->has_laddr() == has_laddr);
       alloc_infos.emplace_back(
 	alloc_mapping_info_t::create_direct(
 	  extent->has_laddr() ? extent->get_laddr() : L_ADDR_NULL,
@@ -178,8 +173,35 @@ public:
     }
     return seastar::do_with(
       std::move(alloc_infos),
-      [this, &t, hint](auto &alloc_infos) {
-      return _alloc_extents(t, hint, alloc_infos);
+      [this, &t, hint, has_laddr](auto &alloc_infos)
+    {
+      if (has_laddr) {
+	return alloc_sparse_mappings(
+	  t, hint, alloc_infos, alloc_policy_t::deterministic)
+#ifndef NDEBUG
+	.si_then([&alloc_infos](std::list<LBACursorRef> cursors) {
+	  assert(alloc_infos.size() == cursors.size());
+	  auto info_p = alloc_infos.begin();
+	  auto cursor_p = cursors.begin();
+	  for (; info_p != alloc_infos.end(); info_p++, cursor_p++) {
+	    auto &cursor = *cursor_p;
+	    assert(cursor->get_laddr() == info_p->key);
+	  }
+	  return alloc_extent_iertr::make_ready_future<
+	    std::list<LBACursorRef>>(std::move(cursors));
+	})
+#endif
+	  ;
+      } else {
+	return alloc_contiguous_mappings(
+	  t, hint, alloc_infos, alloc_policy_t::linear_search);
+      }
+    }).si_then([](std::list<LBACursorRef> cursors) {
+      std::vector<LBAMapping> ret;
+      for (auto &cursor : cursors) {
+	ret.emplace_back(LBAMapping::create_direct(std::move(cursor)));
+      }
+      return ret;
     });
   }
 
@@ -194,118 +216,9 @@ public:
 
   remap_ret remap_mappings(
     Transaction &t,
-    LBAMappingRef orig_mapping,
+    LBAMapping orig_mapping,
     std::vector<remap_entry_t> remaps,
-    std::vector<LogicalChildNodeRef> extents) final {
-    LOG_PREFIX(BtreeLBAManager::remap_mappings);
-    assert((orig_mapping->is_indirect())
-      == (remaps.size() != extents.size()));
-    return seastar::do_with(
-      lba_remap_ret_t{},
-      std::move(remaps),
-      std::move(extents),
-      std::move(orig_mapping),
-      [&t, FNAME, this](auto &ret, const auto &remaps,
-			auto &extents, auto &orig_mapping) {
-      return update_refcount(t, orig_mapping->get_key(), -1, false
-      ).si_then([&ret, this, &extents, &remaps,
-		&t, &orig_mapping, FNAME](auto r) {
-	ret.ruret = std::move(r.ref_update_res);
-	if (!orig_mapping->is_indirect()) {
-	  ceph_assert(ret.ruret.refcount == 0 &&
-	    ret.ruret.addr.is_paddr() &&
-	    !ret.ruret.addr.get_paddr().is_zero());
-	}
-	auto fut = alloc_extent_iertr::make_ready_future<
-	  std::vector<LBAMappingRef>>();
-	laddr_t orig_laddr = orig_mapping->get_key();
-	if (orig_mapping->is_indirect()) {
-	  std::vector<alloc_mapping_info_t> alloc_infos;
-	  for (auto &remap : remaps) {
-	    extent_len_t orig_len = orig_mapping->get_length();
-	    paddr_t orig_paddr = orig_mapping->get_val();
-	    laddr_t intermediate_base = orig_mapping->is_indirect()
-	      ? orig_mapping->get_intermediate_base()
-	      : L_ADDR_NULL;
-	    laddr_t intermediate_key = orig_mapping->is_indirect()
-	      ? orig_mapping->get_intermediate_key()
-	      : L_ADDR_NULL;
-	    auto remap_offset = remap.offset;
-	    auto remap_len = remap.len;
-	    auto remap_laddr = (orig_laddr + remap_offset).checked_to_laddr();
-	    ceph_assert(intermediate_base != L_ADDR_NULL);
-	    ceph_assert(intermediate_key != L_ADDR_NULL);
-	    ceph_assert(remap_len < orig_len);
-	    ceph_assert(remap_offset + remap_len <= orig_len);
-	    ceph_assert(remap_len != 0);
-	    SUBDEBUGT(seastore_lba,
-	      "remap laddr: {}, remap paddr: {}, remap length: {},"
-	      " intermediate_base: {}, intermediate_key: {}", t,
-	      remap_laddr, orig_paddr, remap_len,
-	      intermediate_base, intermediate_key);
-	    auto remapped_intermediate_key = (intermediate_key + remap_offset).checked_to_laddr();
-	    alloc_infos.emplace_back(
-	      alloc_mapping_info_t::create_indirect(
-		remap_laddr,
-		remap_len,
-		remapped_intermediate_key));
-	  }
-	  fut = alloc_cloned_mappings(
-	    t,
-	    (remaps.front().offset + orig_laddr).checked_to_laddr(),
-	    std::move(alloc_infos)
-	  ).si_then([&orig_mapping](auto imappings) mutable {
-	    std::vector<LBAMappingRef> mappings;
-	    for (auto &imapping : imappings) {
-	      auto mapping = orig_mapping->duplicate();
-	      auto bmapping = static_cast<BtreeLBAMapping*>(mapping.get());
-	      bmapping->adjust_mutable_indirect_attrs(
-		imapping->get_key(),
-		imapping->get_length(),
-		imapping->get_intermediate_key());
-	      mappings.emplace_back(std::move(mapping));
-	    }
-	    return seastar::make_ready_future<std::vector<LBAMappingRef>>(
-	      std::move(mappings));
-	  });
-	} else { // !orig_mapping->is_indirect()
-	  fut = alloc_extents(
-	    t,
-	    (remaps.front().offset + orig_laddr).checked_to_laddr(),
-	    std::move(extents),
-	    EXTENT_DEFAULT_REF_COUNT);
-	}
-
-	return fut.si_then([&ret, &remaps, &orig_mapping](auto &&refs) {
-	  assert(refs.size() == remaps.size());
-#ifndef NDEBUG
-	  auto ref_it = refs.begin();
-	  auto remap_it = remaps.begin();
-	  for (;ref_it != refs.end(); ref_it++, remap_it++) {
-	    auto &ref = *ref_it;
-	    auto &remap = *remap_it;
-	    assert(ref->get_key() == orig_mapping->get_key() + remap.offset);
-	    assert(ref->get_length() == remap.len);
-	  }
-#endif
-	  ret.remapped_mappings = std::move(refs);
-	  return seastar::now();
-	});
-      }).si_then([&remaps, &t, &orig_mapping, this] {
-	if (remaps.size() > 1 && orig_mapping->is_indirect()) {
-	  auto intermediate_base = orig_mapping->get_intermediate_base();
-	  return _incref_extent(t, intermediate_base, remaps.size() - 1
-	  ).si_then([](auto) {
-	    return seastar::now();
-	  });
-	}
-	return ref_iertr::now();
-      }).si_then([&ret, &remaps] {
-	assert(ret.remapped_mappings.size() == remaps.size());
-	return seastar::make_ready_future<lba_remap_ret_t>(std::move(ret));
-      });
-    });
-  }
+    std::vector<LogicalChildNodeRef> extents) final;
 
   /**
    * init_cached_extent
@@ -569,43 +482,6 @@ private:
     return update_refcount(t, addr, delta, false
     ).si_then([](auto res) {
       return ref_update_result_t(res);
-    });
-  }
-
-  alloc_extent_iertr::future<std::vector<BtreeLBAMappingRef>> alloc_cloned_mappings(
-    Transaction &t,
-    laddr_t laddr,
-    std::vector<alloc_mapping_info_t> alloc_infos)
-  {
-#ifndef NDEBUG
-    for (auto &alloc_info : alloc_infos) {
-      assert(alloc_info.value.pladdr.get_laddr() != L_ADDR_NULL);
-      assert(alloc_info.value.refcount == EXTENT_DEFAULT_REF_COUNT);
-    }
-#endif
-    return seastar::do_with(
-      std::move(alloc_infos),
-      [this, &t, laddr](auto &alloc_infos) {
-      return _alloc_extents(
-	t,
-	laddr,
-	alloc_infos
-      ).si_then([&alloc_infos](auto mappings) {
-	assert(alloc_infos.size() == mappings.size());
-	std::vector<BtreeLBAMappingRef> rets;
-	auto mit = mappings.begin();
-	auto ait = alloc_infos.begin();
-	for (; mit != mappings.end(); mit++, ait++) {
-	  auto mapping = static_cast<BtreeLBAMapping*>(mit->release());
-	  [[maybe_unused]] auto &alloc_info = *ait;
-	  assert(mapping->get_key() == alloc_info.key);
-	  assert(mapping->get_raw_val().get_laddr() ==
-	    alloc_info.value.pladdr.get_laddr());
-	  assert(mapping->get_length() == alloc_info.value.len);
-	  rets.emplace_back(mapping);
-	}
-	return rets;
-      });
     });
   }
 
