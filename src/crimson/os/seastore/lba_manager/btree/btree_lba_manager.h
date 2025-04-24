@@ -447,9 +447,71 @@ private:
     update_func_t &&f,
     LogicalChildNode*);
 
-  alloc_extents_ret _alloc_extents(
+  struct insert_position_t {
+    laddr_t laddr;
+    LBABtree::iterator insert_iter;
+  };
+  enum class alloc_policy_t {
+    deterministic, // no conflict
+    linear_search,
+  };
+  using search_insert_position_iertr = base_iertr;
+  using search_insert_position_ret =
+      search_insert_position_iertr::future<insert_position_t>;
+  search_insert_position_ret search_insert_position(
+    op_context_t c,
+    LBABtree &btree,
+    laddr_t hint,
+    extent_len_t length,
+    alloc_policy_t policy);
+
+  using alloc_mappings_iertr = base_iertr;
+  using alloc_mappings_ret =
+      alloc_mappings_iertr::future<std::list<LBACursorRef>>;
+  /**
+   * alloc_contiguous_mappings
+   *
+   * Insert a range of contiguous mappings into the LBA btree.
+   *
+   * hint is a non-null laddr hint for allocation. All alloc_infos' key
+   * should be L_ADDR_NULL, the final laddr is relative to the allocated
+   * laddr based on preceding mappings' total length.
+   */
+  alloc_mappings_ret alloc_contiguous_mappings(
     Transaction &t,
     laddr_t hint,
+    std::vector<alloc_mapping_info_t> &alloc_infos,
+    alloc_policy_t policy);
+
+  /**
+   * alloc_sparse_mappings
+   *
+   * Insert a range of sparse mappings into the LBA btree.
+   *
+   * hint is a non-null laddr hint for allocation. All of alloc_infos' key
+   * are non-null laddr hints and must be incremental, each mapping's final
+   * laddr maintains same offset to allocated laddr as original to hint.
+   */
+  alloc_mappings_ret alloc_sparse_mappings(
+    Transaction &t,
+    laddr_t hint,
+    std::vector<alloc_mapping_info_t> &alloc_infos,
+    alloc_policy_t policy);
+
+  /**
+   * insert_mappings
+   *
+   * Insert all lba mappings built from alloc_infos into LBA btree before
+   * iter and return the inserted LBACursors.
+   *
+   * NOTE: There is no guarantee that the returned cursors are all valid
+   * since the successive insertion is possible to invalidate the parent
+   * extent of predecessively returned LBACursor.
+   */
+  alloc_mappings_ret insert_mappings(
+    op_context_t c,
+    LBABtree &btree,
+    LBABtree::iterator iter,
     std::vector<alloc_mapping_info_t> &alloc_infos);
 
   ref_ret _incref_extent(
