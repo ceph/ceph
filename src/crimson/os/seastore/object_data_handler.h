@@ -248,16 +248,19 @@ private:
   /// Ensures object_data reserved region is prepared
   write_iertr::future<LBAMapping> prepare_data_reservation(
     context_t ctx,
+    Onode &onode,
     object_data_t &object_data,
     extent_len_t size);
 
   write_iertr::future<LBAMapping> prepare_head_data_reservation(
     context_t ctx,
+    Onode &onode,
     object_data_t &object_data,
     extent_len_t size);
 
   write_iertr::future<LBAMapping> prepare_clone_data_reservation(
     context_t ctx,
+    Onode &onode,
     object_data_t &object_data,
     extent_len_t size);
 
@@ -274,9 +277,9 @@ private:
     laddr_t data_base);
 
   laddr_t get_clone_direct_base(
-    const context_t &ctx,
+    const Onode &onode,
     const laddr_t &base) const {
-    assert(ctx.onode.is_snap());
+    assert(onode.is_snap());
     return (base + max_object_size).checked_to_laddr();
   }
 
