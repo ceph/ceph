@@ -24,7 +24,7 @@ describe('SmbTabsComponent', () => {
   it('should display the heading text in the tab', () => {
     const tabs = fixture.debugElement.queryAll(By.css('cds-tab'));
     expect(tabs.length).toBe(4);
-    expect(tabs[0].attributes['heading']).toBe('Clusters');
+    expect(tabs[0].attributes['heading']).toBe('Cluster');
     expect(tabs[1].attributes['heading']).toBe('Active Directory');
     expect(tabs[2].attributes['heading']).toBe('Standalone');
     expect(tabs[3].attributes['heading']).toBe('Overview');
