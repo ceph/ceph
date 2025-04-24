@@ -19,6 +19,22 @@ SET_SUBSYS(seastore_lba);
  * - TRACE: read operations, DEBUG details
  */
 
+template <> struct fmt::formatter<
+  crimson::os::seastore::lba_manager::btree::LBABtree::iterator>
+    : public fmt::formatter<std::string_view>
+{
+  using Iter = crimson::os::seastore::lba_manager::btree::LBABtree::iterator;
+
+  template <typename FmtCtx>
+  auto format(const Iter &iter, FmtCtx &ctx) const
+      -> decltype(ctx.out()) {
+    if (iter.is_end()) {
+      return fmt::format_to(ctx.out(), "end");
+    }
+    return fmt::format_to(ctx.out(), "{}~{}", iter.get_key(), iter.get_val());
+  }
+};
+
 namespace crimson::os::seastore {
 
 template <typename T>
@@ -275,149 +291,179 @@ BtreeLBAManager::_get_mapping(
   });
 }
 
-BtreeLBAManager::alloc_extents_ret
-BtreeLBAManager::_alloc_extents(
+BtreeLBAManager::search_insert_position_ret
+BtreeLBAManager::search_insert_position(
+  op_context_t c,
+  LBABtree &btree,
+  laddr_t hint,
+  extent_len_t length,
+  alloc_policy_t policy)
+{
+  LOG_PREFIX(BtreeLBAManager::search_insert_position);
+  auto lookup_attempts = stats.num_alloc_extents_iter_nexts;
+  using OptIter = std::optional<LBABtree::iterator>;
+  return seastar::do_with(
+    hint, OptIter(std::nullopt),
+    [this, c, &btree, hint, length, lookup_attempts, policy, FNAME]
+    (laddr_t &last_end, OptIter &insert_iter)
+  {
+    return LBABtree::iterate_repeat(
+      c,
+      btree.upper_bound_right(c, hint),
+      [this, c, hint, length, lookup_attempts, policy,
+       &last_end, &insert_iter, FNAME](auto &iter)
+    {
+      ++stats.num_alloc_extents_iter_nexts;
+      if (iter.is_end() ||
+	  iter.get_key() >= (last_end + length)) {
+	if (policy == alloc_policy_t::deterministic) {
+	  ceph_assert(hint == last_end);
+	}
+	DEBUGT("hint: {}~0x{:x}, allocated laddr: {}, insert position: {}, "
+	       "done with {} attempts",
+	       c.trans, hint, length, last_end, iter,
+	       stats.num_alloc_extents_iter_nexts - lookup_attempts);
+	insert_iter.emplace(iter);
+	return search_insert_position_iertr::make_ready_future<
+	  seastar::stop_iteration>(seastar::stop_iteration::yes);
+      }
+      ceph_assert(policy == alloc_policy_t::linear_search);
+      last_end = (iter.get_key() + iter.get_val().len).checked_to_laddr();
+      TRACET("hint: {}~0x{:x}, current iter: {}, repeat ...",
+	     c.trans, hint, length, iter);
+      return search_insert_position_iertr::make_ready_future<
+	seastar::stop_iteration>(seastar::stop_iteration::no);
+    }).si_then([&last_end, &insert_iter] {
+      ceph_assert(insert_iter);
+      return search_insert_position_iertr::make_ready_future<
+	insert_position_t>(last_end, *std::move(insert_iter));
+    });
+  });
+}
+
+BtreeLBAManager::alloc_mappings_ret
+BtreeLBAManager::alloc_contiguous_mappings(
   Transaction &t,
   laddr_t hint,
-  std::vector<alloc_mapping_info_t> &alloc_infos)
+  std::vector<alloc_mapping_info_t> &alloc_infos,
+  alloc_policy_t policy)
 {
   ceph_assert(hint != L_ADDR_NULL);
   extent_len_t total_len = 0;
-#ifndef NDEBUG
-  bool laddr_null = (alloc_infos.front().key == L_ADDR_NULL);
-  laddr_t last_end = hint;
   for (auto &info : alloc_infos) {
-    assert((info.key == L_ADDR_NULL) == (laddr_null));
-    if (!laddr_null) {
-      assert(info.key >= last_end);
-      last_end = (info.key + info.value.len).checked_to_laddr();
-    }
+    assert(info.key == L_ADDR_NULL);
+    total_len += info.value.len;
   }
-#endif
-  if (alloc_infos.front().key == L_ADDR_NULL) {
-    for (auto &info : alloc_infos) {
-      total_len += info.value.len;
-    }
-  } else {
-    auto end = alloc_infos.back().key + alloc_infos.back().value.len;
-    total_len = end.get_byte_distance<extent_len_t>(hint);
-  }
-
-  struct state_t {
-    laddr_t last_end;
-
-    std::optional<typename LBABtree::iterator> insert_iter;
-    std::optional<typename LBABtree::iterator> ret;
-
-    state_t(laddr_t hint) : last_end(hint) {}
-  };
-
-  LOG_PREFIX(BtreeLBAManager::_alloc_extents);
-  TRACET("{}~{}, hint={}, num of extents: {}",
-    t, alloc_infos.front().value.pladdr, total_len, hint, alloc_infos.size());
 
   auto c = get_context(t);
-  stats.num_alloc_extents += alloc_infos.size();
-  auto lookup_attempts = stats.num_alloc_extents_iter_nexts;
-  return seastar::do_with(
-    std::vector<LBAMappingRef>(),
-    [this, FNAME, &alloc_infos, hint, &t, total_len, c,
-    lookup_attempts](auto &rets) {
-    return crimson::os::seastore::with_btree_state<LBABtree, state_t>(
-      cache,
-      c,
-      hint,
-      [this, c, hint, total_len, addr=alloc_infos.front().value.pladdr.get_paddr(), &rets,
-      lookup_attempts, &t, &alloc_infos, FNAME](auto &btree, auto &state) {
-      return LBABtree::iterate_repeat(
-	c,
-	btree.upper_bound_right(c, hint),
-	[this, &state, total_len, addr, &t, hint,
-	lookup_attempts, FNAME](auto &pos) {
-	++stats.num_alloc_extents_iter_nexts;
-	if (pos.is_end()) {
-	  DEBUGT("{}~{}, hint={}, state: end, done with {} attempts, insert at {}",
-		 t, addr, total_len, hint,
-		 stats.num_alloc_extents_iter_nexts - lookup_attempts,
-		 state.last_end);
-	  state.insert_iter = pos;
-	  return typename LBABtree::iterate_repeat_ret_inner(
-	    interruptible::ready_future_marker{},
-	    seastar::stop_iteration::yes);
-	} else if (pos.get_key() >= (state.last_end + total_len)) {
-	  DEBUGT("{}~{}, hint={}, state: {}~{}, done with {} attempts, insert at {} -- {}",
-		 t, addr, total_len, hint,
-		 pos.get_key(), pos.get_val().len,
-		 stats.num_alloc_extents_iter_nexts - lookup_attempts,
-		 state.last_end,
-		 pos.get_val());
-	  state.insert_iter = pos;
-	  return typename LBABtree::iterate_repeat_ret_inner(
-	    interruptible::ready_future_marker{},
-	    seastar::stop_iteration::yes);
-	} else {
-	  state.last_end = (pos.get_key() + pos.get_val().len).checked_to_laddr();
-	  TRACET("{}~{}, hint={}, state: {}~{}, repeat ... -- {}",
-		 t, addr, total_len, hint,
-		 pos.get_key(), pos.get_val().len,
-		 pos.get_val());
-	  return typename LBABtree::iterate_repeat_ret_inner(
-	    interruptible::ready_future_marker{},
-	    seastar::stop_iteration::no);
+  return with_btree<LBABtree>(
+    cache,
+    c,
+    [this, c, hint, &alloc_infos, total_len, policy](auto &btree)
+  {
+    return search_insert_position(c, btree, hint, total_len, policy
+    ).si_then([this, c, &alloc_infos, &btree](insert_position_t res) {
+      extent_len_t offset = 0;
+      for (auto &info : alloc_infos) {
+	info.key = (res.laddr + offset).checked_to_laddr();
+	offset += info.value.len;
+      }
+      return insert_mappings(
+	c, btree, std::move(res.insert_iter), alloc_infos);
+    });
+  });
+}
+
+BtreeLBAManager::alloc_mappings_ret
+BtreeLBAManager::alloc_sparse_mappings(
+  Transaction &t,
+  laddr_t hint,
+  std::vector<alloc_mapping_info_t> &alloc_infos,
+  alloc_policy_t policy)
+{
+  ceph_assert(hint != L_ADDR_NULL);
+#ifndef NDEBUG
+  assert(alloc_infos.front().key != L_ADDR_NULL);
+  for (size_t i = 1; i < alloc_infos.size(); i++) {
+    auto &prev = alloc_infos[i - 1];
+    auto &cur = alloc_infos[i];
+    assert(cur.key != L_ADDR_NULL);
+    assert(prev.key + prev.value.len <= cur.key);
+  }
+#endif
+  auto total_len = hint.get_byte_distance<extent_len_t>(
+    alloc_infos.back().key + alloc_infos.back().value.len);
+  auto c = get_context(t);
+  return with_btree<LBABtree>(
+    cache,
+    c,
+    [this, c, hint, &alloc_infos, total_len, policy](auto &btree)
+  {
+    return search_insert_position(c, btree, hint, total_len, policy
+    ).si_then([this, c, hint, &alloc_infos, &btree, policy](auto res) {
+      if (policy != alloc_policy_t::deterministic) {
+	for (auto &info : alloc_infos) {
+	  auto offset = info.key.get_byte_distance<extent_len_t>(hint);
+	  info.key = (res.laddr + offset).checked_to_laddr();
 	}
-      }).si_then([c, addr, hint, &btree, &state, &alloc_infos,
-		  total_len, &rets, FNAME] {
-	return trans_intr::do_for_each(
-	  alloc_infos,
-	  [c, addr, hint, &btree, &state, FNAME,
-	  total_len, &rets, refcount](auto &alloc_info) {
-	  if (alloc_info.key != L_ADDR_NULL) {
-	    state.last_end = alloc_info.key;
+      } // deterministic guarantees hint == res.laddr
+      return insert_mappings(
+	c, btree, std::move(res.insert_iter), alloc_infos);
+    });
+  });
+}
+
+BtreeLBAManager::alloc_mappings_ret
+BtreeLBAManager::insert_mappings(
+  op_context_t c,
+  LBABtree &btree,
+  LBABtree::iterator iter,
+  std::vector<alloc_mapping_info_t> &alloc_infos)
+{
+  return seastar::do_with(
+    std::move(iter), std::list<LBACursorRef>(),
+    [c, &btree, &alloc_infos]
+    (LBABtree::iterator &iter, std::list<LBACursorRef> &ret)
+  {
+    return trans_intr::do_for_each(
+      alloc_infos.begin(),
+      alloc_infos.end(),
+      [c, &btree, &iter, &ret](auto &info)
+    {
+      assert(info.key != L_ADDR_NULL);
+      return btree.insert(
+	c, iter, info.key, info.value
+      ).si_then([c, &iter, &ret, &info](auto p) {
+	ceph_assert(p.second);
+	iter = std::move(p.first);
+	auto &leaf_node = *iter.get_leaf_node();
+	leaf_node.insert_child_ptr(
+	  iter.get_leaf_pos(),
+	  info.extent,
+	  leaf_node.get_size() - 1 /*the size before the insert*/);
+	if (is_valid_child_ptr(info.extent)) {
+	  ceph_assert(info.value.pladdr.is_paddr());
+	  assert(info.value.pladdr == iter.get_val().pladdr);
+	  assert(info.value.len == iter.get_val().len);
+	  assert(info.extent->is_logical());
+	  if (info.extent->has_laddr()) {
+	    // see TM::remap_pin()
+	    assert(info.key == info.extent->get_laddr());
+	    assert(info.key == iter.get_key());
+	  } else {
+	    // see TM::alloc_non_data_extent()
+	    //     TM::alloc_data_extents()
+	    info.extent->set_laddr(iter.get_key());
 	  }
-	  return btree.insert(
-	    c,
-	    *state.insert_iter,
-	    state.last_end,
-	    alloc_info.value
-	  ).si_then([&state, c, addr, total_len, hint, FNAME,
-		    &alloc_info, &rets](auto &&p) {
-	    auto [iter, inserted] = std::move(p);
-	    auto &leaf_node = *iter.get_leaf_node();
-	    leaf_node.insert_child_ptr(
-	      iter.get_leaf_pos(),
-	      alloc_info.extent,
-	      leaf_node.get_size() - 1 /*the size before the insert*/);
-	    TRACET("{}~{}, hint={}, inserted at {}",
-		   c.trans, addr, total_len, hint, state.last_end);
-	    if (is_valid_child_ptr(alloc_info.extent)) {
-	      ceph_assert(alloc_info.value.pladdr.is_paddr());
-	      assert(alloc_info.value.pladdr == iter.get_val().pladdr);
-	      assert(alloc_info.value.len == iter.get_val().len);
-	      assert(alloc_info.extent->is_logical());
-	      if (alloc_info.extent->has_laddr()) {
-	        // see TM::remap_pin()
-		assert(alloc_info.key == alloc_info.extent->get_laddr());
-		assert(alloc_info.key == iter.get_key());
-	      } else {
-		// see TM::alloc_non_data_extent()
-		//     TM::alloc_data_extents()
-		alloc_info.extent->set_laddr(iter.get_key());
-	      }
-	    }
-	    ceph_assert(inserted);
-	    rets.emplace_back(iter.get_pin(c));
-	    return iter.next(c).si_then([&state, &alloc_info](auto it) {
-	      state.insert_iter = it;
-	      if (alloc_info.key == L_ADDR_NULL) {
-		state.last_end = (state.last_end + alloc_info.value.len).checked_to_laddr();
-	      }
-	    });
-	  });
+	}
+	ret.push_back(iter.get_cursor(c));
+	return iter.next(c).si_then([&iter](auto p) {
+	  iter = std::move(p);
 	});
       });
-    }).si_then([&rets](auto &&state) {
-      return alloc_extent_iertr::make_ready_future<
-	std::vector<LBAMappingRef>>(std::move(rets));
+    }).si_then([&ret] {
+      return alloc_mappings_iertr::make_ready_future<
+	std::list<LBACursorRef>>(std::move(ret));
     });
   });
 }
