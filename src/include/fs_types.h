@@ -4,11 +4,14 @@
 #define CEPH_INCLUDE_FS_TYPES_H
 
 #include <cstdint>
+#include <list>
 #include <iostream>
+#include <string>
 
 #include "common/Formatter.h"
 #include "include/buffer.h"
 #include "include/ceph_fs.h" // for struct ceph_file_layout
+#include "include/encoding.h"
 #include "include/hash.h" // for rjhash
 
 class JSONObj;
