@@ -2048,7 +2048,7 @@ Usage:
     @_cli_write_command('orch apply mgmt-gateway')
     def _apply_mgmt_gateway(self,
                             port: Optional[int] = None,
-                            disable_https: Optional[bool] = False,
+                            ssl: Optional[bool] = True,
                             enable_auth: Optional[bool] = False,
                             virtual_ip: Optional[str] = None,
                             placement: Optional[str] = None,
@@ -2066,7 +2066,7 @@ Usage:
             unmanaged=unmanaged,
             port=port,
             virtual_ip=virtual_ip,
-            disable_https=disable_https,
+            ssl=ssl,
             enable_auth=enable_auth,
             preview_only=dry_run
         )
