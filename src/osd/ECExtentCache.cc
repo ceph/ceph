@@ -331,10 +331,6 @@ void ECExtentCache::on_change2() const {
 
 void ECExtentCache::execute(list<OpRef> &op_list) {
   for (auto &op : op_list) {
-    if (op->projected_size < op->object.projected_size) {
-      // Invalidate the object's cache when we see any object reduce in size.
-      op->invalidates_cache = true;
-    }
     op->object.request(op);
   }
   waiting_ops.insert(waiting_ops.end(), op_list.begin(), op_list.end());
