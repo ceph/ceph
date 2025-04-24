@@ -45,7 +45,7 @@ public:
    * lba value.
    */
   using get_mappings_iertr = base_iertr;
-  using get_mappings_ret = get_mappings_iertr::future<lba_pin_list_t>;
+  using get_mappings_ret = get_mappings_iertr::future<lba_mapping_list_t>;
   virtual get_mappings_ret get_mappings(
     Transaction &t,
     laddr_t offset, extent_len_t length) = 0;
@@ -59,7 +59,7 @@ public:
    */
   using get_mapping_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
-  using get_mapping_ret = get_mapping_iertr::future<LBAMappingRef>;
+  using get_mapping_ret = get_mapping_iertr::future<LBAMapping>;
   virtual get_mapping_ret get_mapping(
     Transaction &t,
     laddr_t offset) = 0;
@@ -72,7 +72,7 @@ public:
    * is called on the LBAMapping.
    */
   using alloc_extent_iertr = base_iertr;
-  using alloc_extent_ret = alloc_extent_iertr::future<LBAMappingRef>;
+  using alloc_extent_ret = alloc_extent_iertr::future<LBAMapping>;
   virtual alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
@@ -80,7 +80,7 @@ public:
     extent_ref_count_t refcount) = 0;
 
   using alloc_extents_ret = alloc_extent_iertr::future<
-    std::vector<LBAMappingRef>>;
+    std::vector<LBAMapping>>;
   virtual alloc_extents_ret alloc_extents(
     Transaction &t,
     laddr_t hint,
@@ -126,12 +126,8 @@ public:
       len = _len;
     }
   };
-  struct lba_remap_ret_t {
-    ref_update_result_t ruret;
-    std::vector<LBAMappingRef> remapped_mappings;
-  };
   using remap_iertr = ref_iertr;
-  using remap_ret = remap_iertr::future<lba_remap_ret_t>;
+  using remap_ret = remap_iertr::future<std::vector<LBAMapping>>;
 
   /**
    * remap_mappings
@@ -141,7 +137,7 @@ public:
    */
   virtual remap_ret remap_mappings(
     Transaction &t,
-    LBAMappingRef orig_mapping,
+    LBAMapping orig_mapping,
     std::vector<remap_entry_t> remaps,
     std::vector<LogicalChildNodeRef> extents  // Required if and only
 						 // if pin isn't indirect
