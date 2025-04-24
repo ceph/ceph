@@ -1415,8 +1415,6 @@ public:
     laddr = nladdr;
   }
 
-  void maybe_set_intermediate_laddr(LBAMapping &mapping);
-
   void apply_delta_and_adjust_crc(
     paddr_t base, const ceph::bufferlist &bl) final {
     apply_delta(bl);
