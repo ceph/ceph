@@ -7788,27 +7788,19 @@ int main(int argc, const char **argv)
     if (ret < 0) {
       return -ret;
     }
-    const auto& bucket_attrs = bucket->get_attrs();
-    auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING);
-    if (iter == bucket_attrs.end()) {
-      cerr << "WARNING: no logging configured on bucket" << std::endl;
+
+    rgw::bucketlogging::configuration configuration;
+    std::unique_ptr<rgw::sal::Bucket> target_bucket;
+    ret =  rgw::bucketlogging::get_target_and_conf_from_source(dpp(), driver, bucket.get(), tenant, configuration, target_bucket, null_yield);
+    if (ret < 0 && ret != -ENODATA) {
+      cerr << "ERROR: failed to get target bucket and logging conf from source bucket '"
+        << bucket_name << "': " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    } else if (ret == -ENODATA) {
+      cerr << "ERROR: bucket '" << bucket_name << "' does not have logging enabled" << std::endl;
       return 0;
     }
-    rgw::bucketlogging::configuration configuration;
-    try {
-      configuration.enabled = true;
-      decode(configuration, iter->second);
-    } catch (buffer::error& err) {
-      cerr << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
-        << "'. error: " << err.what() << std::endl;
-      return  EINVAL;
-    }
-    std::unique_ptr<rgw::sal::Bucket> target_bucket;
-    ret = init_bucket(tenant, configuration.target_bucket, "", &target_bucket);
-    if (ret < 0) {
-      cerr << "ERROR: failed to get target logging bucket '" << configuration.target_bucket << "'" << std::endl;
-      return -ret;
-    }
+
     std::string obj_name;
     RGWObjVersionTracker objv_tracker;
     ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, null_yield, dpp(), &objv_tracker);
