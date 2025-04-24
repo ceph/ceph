@@ -497,12 +497,8 @@ struct transaction_manager_test_t :
   TestBlockRef read_pin(
     test_transaction_t &t,
     LBAMapping pin) {
-    auto addr = pin.is_indirect()
-      ? pin.get_intermediate_base()
-      : pin.get_key();
-    auto len = pin.is_indirect()
-      ? pin.get_intermediate_length()
-      : pin.get_length();
+    auto addr = pin.get_intermediate_base();
+    auto len = pin.get_intermediate_length();
     ceph_assert(test_mappings.contains(addr, t.mapping_delta));
     ceph_assert(test_mappings.get(addr, t.mapping_delta).desc.len == len);
 
@@ -585,7 +581,7 @@ struct transaction_manager_test_t :
     using ertr = with_trans_ertr<TransactionManager::base_iertr>;
     bool indirect = pin.is_indirect();
     auto addr = pin.get_key();
-    auto im_addr = indirect ? pin.get_intermediate_base() : L_ADDR_NULL;
+    auto im_addr = pin.get_intermediate_base();
     auto ext = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->read_pin<TestBlock>(trans, std::move(pin));
     }).safe_then([](auto ret) {
@@ -1108,9 +1104,7 @@ struct transaction_manager_test_t :
     }
     auto o_laddr = opin.get_key();
     bool indirect_opin = opin.is_indirect();
-    auto data_laddr = indirect_opin
-      ? opin.get_intermediate_base()
-      : o_laddr;
+    auto data_laddr = opin.get_intermediate_base();
     auto pin = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->remap_pin<TestBlock>(
         trans, std::move(opin), std::array{
