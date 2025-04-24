@@ -1,5 +1,6 @@
 """Remote execution of cryptographic functions for the ceph mgr
 """
+
 # NB. This module exists to enapsulate the logic around running
 # the cryptotools module that are forked off of the parent process
 # to avoid the pyo3 subintepreters problem.
@@ -23,18 +24,16 @@ import json
 import logging
 import subprocess
 
+from .caller import CryptoCaller, CryptoCallError
+
 
 _ctmodule = 'ceph.cryptotools.cryptotools'
 
 logger = logging.getLogger('ceph.cryptotools.remote')
 
 
-class CryptoCallError(ValueError):
-    pass
-
-
-class CryptoCaller:
-    """CryptoCaller encapsulates cryptographic functions used by the
+class ProcessCryptoCaller(CryptoCaller):
+    """ProcessCryptoCaller encapsulates cryptographic functions used by the
     ceph mgr into a suite of functions that can be executed in a
     different process.
     Running the crypto functions in a separate process avoids conflicts

@@ -32,7 +32,7 @@ else:
 from typing import Tuple, Any, Callable, Optional, Dict, TYPE_CHECKING, TypeVar, List, Iterable, Generator, Generic, Iterator
 
 from ceph.deployment.utils import wrap_ipv6
-import ceph.cryptotools.remote
+from ceph.cryptotools.select import get_crypto_caller
 
 T = TypeVar('T')
 
@@ -637,7 +637,7 @@ def create_self_signed_cert(organisation: str = 'Ceph',
     else:
         dname = {"O": organisation, "CN": common_name}
 
-    cc = ceph.cryptotools.remote.CryptoCaller()
+    cc = get_crypto_caller()
     pkey = cc.create_private_key()
     cert = cc.create_self_signed_cert(dname, pkey)
     return cert, pkey
@@ -645,7 +645,7 @@ def create_self_signed_cert(organisation: str = 'Ceph',
 
 def certificate_days_to_expire(crt: str) -> int:
     try:
-        cc = ceph.cryptotools.remote.CryptoCaller()
+        cc = get_crypto_caller()
         return cc.certificate_days_to_expire(crt)
     except ValueError as err:
         raise ServerConfigException(f'Invalid certificate: {err}')
@@ -670,7 +670,7 @@ def verify_cacrt(cert_fname):
 
 def get_cert_issuer_info(crt: str) -> Tuple[Optional[str], Optional[str]]:
     """Basic validation of a ca cert"""
-    cc = ceph.cryptotools.remote.CryptoCaller()
+    cc = get_crypto_caller()
     try:
         return cc.get_cert_issuer_info(crt)
     except ValueError as err:
@@ -679,7 +679,7 @@ def get_cert_issuer_info(crt: str) -> Tuple[Optional[str], Optional[str]]:
 
 def verify_tls(crt, key):
     # type: (str, str) -> int
-    cc = ceph.cryptotools.remote.CryptoCaller()
+    cc = get_crypto_caller()
     try:
         days_to_expiration = cc.certificate_days_to_expire(crt)
         cc.verify_tls(crt, key)
@@ -926,5 +926,5 @@ def password_hash(password: Optional[str], salt_password: Optional[str] = None) 
     if not salt_password:
         salt_password = ''
 
-    cc = ceph.cryptotools.remote.CryptoCaller()
+    cc = get_crypto_caller()
     return cc.password_hash(password, salt_password)

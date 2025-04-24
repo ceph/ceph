@@ -23,7 +23,7 @@ from ..exceptions import PasswordPolicyException, PermissionNotValid, \
 from ..security import Permission, Scope
 from ..settings import Settings
 
-import ceph.cryptotools.remote
+from ceph.cryptotools.select import get_crypto_caller
 
 logger = logging.getLogger('access_control')
 DEFAULT_FILE_DESC = 'password/secret'
@@ -931,7 +931,7 @@ def ac_user_set_password_hash(_, username: str, inbuf: str):
     try:
         # make sure the hashed_password is actually a bcrypt hash
         # catch a ValueError if hashed_password is not valid.
-        cc = ceph.cryptotools.remote.CryptoCaller()
+        cc = get_crypto_caller()
         cc.verify_password('', hashed_password)
 
         user = mgr.ACCESS_CTRL_DB.get_user(username)
