@@ -7,7 +7,8 @@
 /*
  * Some non-inline ceph helpers
  */
-#include "include/types.h"
+
+#include "include/ceph_fs.h"
 
 int ceph_flags_to_mode(int flags)
 {
