@@ -137,7 +137,12 @@ ECTransaction::WritePlanObj::WritePlanObj(
 {
   extent_set unaligned_ro_writes;
   hobject_t source;
-  invalidates_cache = op.has_source(&source) || op.is_delete();
+  /* Certain transactions mean that the cache is invalid:
+   * 1. Clone operations invalidate the *target*
+   * 2. ALL delete operations (do NOT use is_delete() here!!!)
+   * 3. Truncates that reduce size.
+   */
+  invalidates_cache = op.has_source(&source) || op.delete_first || projected_size < orig_size;
 
   op.buffer_updates.to_interval_set(unaligned_ro_writes);
 
