@@ -138,7 +138,8 @@ private:
     const hobject_t& new_last_backfill) final;
   bool budget_available() const final;
 
-  // TODO: move to start_peering_event_operation
+  template <typename T>
+  void start_peering_event_operation_listener(T &&evt, float delay = 0);
   void backfilled() final;
   void request_backfill();
   void all_replicas_recovered();
