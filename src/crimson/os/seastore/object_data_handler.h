@@ -253,6 +253,7 @@ private:
 
   write_iertr::future<LBAMapping> prepare_shared_region(
     context_t ctx,
+    Onode &onode,
     laddr_t hint,
     extent_len_t size);
 
@@ -267,6 +268,16 @@ private:
     object_data_t &object_data,
     lba_mapping_list_t &pins,
     laddr_t data_base);
+
+  clone_ret do_rollback(
+    context_t ctx,
+    object_data_t &object_data,
+    object_data_t &d_object_data);
+
+  clone_ret do_clone(
+    context_t ctx,
+    object_data_t &object_data,
+    object_data_t &d_object_data);
 
 private:
   /**
