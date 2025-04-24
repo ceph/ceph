@@ -1751,7 +1751,7 @@ struct perm_state : public perm_state_base {
  * to do the requested action  */
 bool verify_bucket_permission_no_policy(
   const DoutPrefixProvider* dpp,
-  struct perm_state_base * const s,
+  const perm_state_base * const s,
   const RGWAccessControlPolicy& user_acl,
   const RGWAccessControlPolicy& bucket_acl,
   const int perm);
@@ -1787,7 +1787,7 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       req_state * const s,
                                       int perm);
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
-                              struct perm_state_base * const s,
+                              const perm_state_base * const s,
                               const rgw::ARN& arn,
                               bool account_root,
                               const RGWAccessControlPolicy& user_acl,

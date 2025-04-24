@@ -1329,7 +1329,7 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
   return verify_user_permission_no_policy(dpp, &ps, s->user_acl, perm);
 }
 
-bool verify_requester_payer_permission(struct perm_state_base *s)
+bool verify_requester_payer_permission(const perm_state_base *s)
 {
   if (!s->bucket_info.requester_pays)
     return true;
@@ -1350,7 +1350,7 @@ bool verify_requester_payer_permission(struct perm_state_base *s)
 }
 
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
-                              struct perm_state_base * const s,
+                              const perm_state_base * const s,
                               const rgw::ARN& arn,
                               bool account_root,
                               const RGWAccessControlPolicy& user_acl,
@@ -1434,7 +1434,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                                   session_policies, op);
 }
 
-bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct perm_state_base * const s,
+bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, const perm_state_base * const s,
 					const RGWAccessControlPolicy& user_acl,
 					const RGWAccessControlPolicy& bucket_acl,
 					const int perm)

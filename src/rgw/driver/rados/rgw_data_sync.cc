@@ -2701,7 +2701,7 @@ int RGWUserPermHandler::Bucket::init(RGWUserPermHandler *handler,
   return 0;
 }
 
-bool RGWUserPermHandler::Bucket::verify_bucket_permission(const rgw_obj_key& obj_key, const uint64_t op)
+bool RGWUserPermHandler::Bucket::verify_bucket_permission(const rgw_obj_key& obj_key, const uint64_t op) const
 {
   const rgw_obj obj(ps->bucket_info.bucket, obj_key);
   const auto arn = rgw::ARN(obj);
@@ -2732,7 +2732,7 @@ bool RGWUserPermHandler::Bucket::verify_bucket_permission(const rgw_obj_key& obj
                                   {}, op);
 }
 
-rgw::IAM::Effect RGWUserPermHandler::Bucket::evaluate_iam_policies(const rgw_obj_key& obj_key, const uint64_t op)
+rgw::IAM::Effect RGWUserPermHandler::Bucket::evaluate_iam_policies(const rgw_obj_key& obj_key, const uint64_t op) const
 {
   const rgw_obj obj(ps->bucket_info.bucket, obj_key);
   const auto arn = rgw::ARN(obj);
