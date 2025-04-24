@@ -44,20 +44,20 @@
 // A cache for data living on other systems like Key Management Systems
 // Goals/Features
 // (1) Thread safe, bias towards handling highly concurrent lookups
-// (2) Protect the external system from cache stampedes
-// (3) Expire entries by ttl
-// (4) Cache replacement tuned to "web" workloads
+// (2) Expire entries by ttl
+// (3) Cache replacement tuned to "web" workloads
+
+// Cache Stampedes
+// TODO(irq0) document problem and call_once or probabilistic solution
 
 // Algorithm
 //
-// The implementation is based on SIEVE [0] with additional
-// cache stampede mitigation through per-key locks and a TTL reaper
-// that leverages SIEVE's FIFO insertion order
+// The implementation is based on SIEVE [0] with an additional TTL
+// reaper that leverages SIEVE's FIFO insertion order
 //
 // Data Structures
 // - SIEVE FIFO
 // - key lookup table: key -> value ptr
-// - retrieving table: key -> (in flight, value ptr)
 //
 // [0] Zhang, Yazhuo, et al. "{SIEVE} is Simpler than {LRU}: an Efficient
 // {Turn-Key} Eviction Algorithm for Web Caches." 21st USENIX
@@ -88,7 +88,6 @@ class WebCache {
  public:
   // TODO(irq0) let the user choose the value pointer type
   using ValuePtr = std::shared_ptr<Value>;
-  using Result = tl::expected<ValuePtr, std::error_code>;
 
  protected:
   struct Node {
@@ -130,11 +129,6 @@ class WebCache {
   size_t _sieve_hand;
   std::unordered_map<Key, Node> _lookup;
   mutable std::shared_mutex _cache_mutex;
-  std::unordered_map<
-      Key, std::shared_ptr<
-               std::pair<std::promise<Result>, std::shared_future<Result>>>>
-      _fetches;
-  mutable std::mutex _fetches_mutex;
 
  protected:
   // sieve_evict removes the next node using the SIEVE algorithm from
@@ -150,7 +144,7 @@ class WebCache {
   static PerfCounters* initialize_perf_counters(
       CephContext* cct, const std::string& name);
 
-  std::optional<ValuePtr> lookup_unmutexed(Key const& key);
+  std::optional<ValuePtr> lookup_unmutexed(const Key& key);
   ceph::real_time insert_unmutexed(const Key& key, ValuePtr value);
 
   void perf_tinc(Metric metric, ceph::timespan elapsed) {
@@ -177,21 +171,20 @@ class WebCache {
   WebCache(CephContext* cct, const std::string& name, size_t capacity);
 
   // lookup returns the stored value for a given key or not
-  std::optional<ValuePtr> lookup(Key const& key);
+  std::optional<ValuePtr> lookup(const Key& key);
 
   // add caches a key/value pair. If key already exists it does
   // nothing. Return the stored timestamp of the k/v mapping
-  ceph::real_time add(Key const& key, ValuePtr val);
+  ceph::real_time add(const Key& key, ValuePtr val);
 
-  // lookup_or returns a future capturing a value/error for a key. If
-  // there is no such key in the cache use fetch() to retrieve it.
-  // Handle concurrent miss fetch events by making threads wait for
-  // the first thread that missed.
-  std::shared_future<Result> lookup_or(
-      Key const& key, std::function<Result()> val_fn);
+  // lookup_or returns a value for key. If none is cached yet, insert
+  // new_val and return that. A common use is with
+  // ceph::async::call_once to add cache stampede mitigration
+  ValuePtr lookup_or(const Key& key, ValuePtr new_val);
 
-  // TODO(irq0) replace previous lookup_or with this
-  ValuePtr lookup_or(Key const& key, ValuePtr val);
+  // update_tll_if updates an entries TTL if its value matches val.
+  // Return true if we updated an entry. False otherwise.
+  bool update_ttl_if(const Key& key, const Value& val, ceph::timespan ttl);
 
   size_t size() const;
   size_t clear();
@@ -238,17 +231,17 @@ std::jthread make_ttl_reaper(
   return std::jthread([&cache, ttl](std::stop_token stop) {
     const std::string thread_name = fmt::format("{}-ttl-reaper", cache.name());
     ceph_pthread_setname(thread_name.c_str());
-  std::mutex mutex;
-  std::condition_variable cond;
+    std::mutex mutex;
+    std::condition_variable cond;
 
-  std::stop_callback on_stop(stop, [&cond]() { cond.notify_all(); });
+    std::stop_callback on_stop(stop, [&cond]() { cond.notify_all(); });
 
-  while (!stop.stop_requested()) {
-    cache.expire_erase(ttl);
+    while (!stop.stop_requested()) {
+      cache.expire_erase(ttl);
 
-    std::unique_lock<std::mutex> lock(mutex);
-    cond.wait_for(lock, ttl, [&stop] { return stop.stop_requested(); });
-  }
+      std::unique_lock<std::mutex> lock(mutex);
+      cond.wait_for(lock, ttl, [&stop] { return stop.stop_requested(); });
+    }
   });
 }
 
@@ -378,9 +371,9 @@ ceph::real_time WebCache<Key, Value>::add(const Key& key, ValuePtr value) {
       return search->second.added_ts;
     }
 
-  // cache miss
+    // cache miss
     perf_inc(Metric::miss);
-  return insert_unmutexed(key, value);
+    return insert_unmutexed(key, value);
   }
 }
 
@@ -413,90 +406,16 @@ WebCache<Key, Value>::ValuePtr WebCache<Key, Value>::lookup_or(
 }
 
 template <typename Key, typename Value>
-std::shared_future<typename WebCache<Key, Value>::Result>
-WebCache<Key, Value>::lookup_or(
-    const Key& key, std::function<Result()> val_fn) {
-  {
-    std::shared_lock<std::shared_mutex> cache_lock(_cache_mutex);
-    auto maybe_value = lookup_unmutexed(key);
-    if (maybe_value.has_value()) {
-      perf_inc(Metric::hit);
-      std::promise<Result> promise;
-      promise.set_value(Result(maybe_value.value()));
-      return promise.get_future();
-    }
+bool WebCache<Key, Value>::update_ttl_if(
+    const Key& key, const Value& val, ceph::timespan new_ttl) {
+  std::lock_guard<std::shared_mutex> lock(_cache_mutex);
+  if (auto search = _lookup.find(key);
+      (search != _lookup.end() && search->second.value == val)) {
+    // TODO(irq0)    search->second.ttl = new_ttl;
+    return true;
+  } else {
+    return false;
   }
-  // fetch
-  //
-  // >= 1 thread now going for the fetch
-  //
-  // We synchronize on _fetches just a little bit to obtain a ongoing
-  // fetch slot. The first thread gets to create the slot containing a
-  // promise and sharable future for the others. It proceeds with
-  // fetching, adding to cache and making the promise ready Other
-  // threads meanwile obtained futures and are waiting for them to get
-  // ready We return futures to the fetched data - not the cache -
-  // since the cache might evict that value simulaniously.
-
-  std::shared_future<Result> result;
-  {
-    std::unique_lock<std::mutex> fetch_lock(_fetches_mutex);
-    // While waiting for the fetch lock, the fetching thread might
-    // have fetched, fulfilled its promise to the other requests and
-    // updated the cache. To not fetch what is already in cache, check
-    // again
-    {
-      std::shared_lock<std::shared_mutex> cache_lock(_cache_mutex);
-      auto maybe_value = lookup_unmutexed(key);
-      if (maybe_value.has_value()) {
-	fetch_lock.unlock();  // other threads can now proceed getting a slot
-        perf_inc(Metric::hit);
-        std::promise<Result> promise;
-        promise.set_value(Result(maybe_value.value()));
-        return promise.get_future();
-      }
-    }
-
-    perf_inc(Metric::miss);
-    if (auto search = _fetches.find(key); search != _fetches.end()) {
-      perf_inc(Metric::fetch_wait);
-      result = search->second->second;
-    } else {
-      perf_inc(Metric::fetch_get);
-      const auto& [it, took_place] = _fetches.emplace(
-          key,
-          std::make_shared<
-              std::pair<std::promise<Result>, std::shared_future<Result>>>());
-      ceph_assert(took_place);
-      auto& [_, ptr] = *it;
-      auto& promise = ptr->first;
-      auto& future = ptr->second;
-      future = promise.get_future();
-      fetch_lock.unlock();  // other threads can now proceed getting a slot
-
-      // do the fetch in first thread
-      const auto start = ceph::mono_clock::now();
-      auto fetched = val_fn();
-      const auto finished = ceph::mono_clock::now();
-      perf_tinc(Metric::fetch_lat, finished - start);
-      if (fetched) {
-        std::lock_guard<std::shared_mutex> lock(_cache_mutex);
-        // we might have had a concurrent insert lookup_or(key, _value_)
-        auto maybe_value = lookup_unmutexed(key);
-        if (!maybe_value.has_value()) {
-          insert_unmutexed(key, fetched.value());
-        }
-      } else {
-        perf_inc(Metric::fetch_error);
-      }
-      promise.set_value(std::move(fetched));
-      result = future;
-
-      fetch_lock.lock();
-      _fetches.erase(key);
-    }
-  }
-  return result;
 }
 
 template <typename Key, typename Value>
@@ -552,6 +471,7 @@ void WebCache<Key, Value>::sieve_expire_erase_unmutexed(
     ceph::real_time now, std::vector<Node*>& out_expired) {
   // The sieve queue is ordered by ascending insertion time.
   // Find first not expired element from the back and erase from there
+  // TODO(irq0) Fix BUG: This is no longer true if a node was updated with update_ttl_if
   auto expired_begin = sieve_queue.rend();
   for (auto it = sieve_queue.rbegin(); it != sieve_queue.rend(); ++it) {
     Node* node = (*it);
@@ -559,7 +479,7 @@ void WebCache<Key, Value>::sieve_expire_erase_unmutexed(
     const bool expired = age > ttl;
     if (expired) {
       expired_begin = it;
-  } else {
+    } else {
       break;
     }
   }
