@@ -663,14 +663,18 @@ void ECTransaction::Generate::appends_and_clone_ranges() {
       }
       uint64_t new_shard_size = eset.range_end();
 
-      if (new_shard_size == old_shard_size) continue;
+      if (new_shard_size == old_shard_size) {
+        continue;
+      }
 
       uint64_t write_end = 0;
       if (plan.will_write.contains(shard)) {
         write_end = plan.will_write.at(shard).range_end();
       }
 
-      if (write_end == new_shard_size) continue;
+      if (write_end == new_shard_size) {
+        continue;
+      }
 
       /* If code is executing here, it means that the written part of the
        * shard does not reflect the size that EC believes the shard to be.
