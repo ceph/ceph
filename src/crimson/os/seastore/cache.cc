@@ -208,7 +208,7 @@ void Cache::register_metrics()
       sm::make_counter(
         "cache_hit",
         [this] {
-          return stats.access.s.get_cache_hit();
+          return stats.access.get_cache_hit();
         },
         sm::description("total number of cache hits")
       ),
@@ -2417,22 +2417,20 @@ cache_stats_t Cache::get_stats(
     oss << "\ncache total"
         << cache_size_stats_t{extents_index.get_bytes(), extents_index.size()};
 
-    counter_by_src_t<counter_by_extent_t<extent_access_stats_t> >
+    counter_by_src_t<counter_by_extent_t<cache_access_stats_t> >
       _access_by_src_ext = stats.access_by_src_ext;
     counter_by_src_t<cache_access_stats_t> access_by_src;
     for (uint8_t _src=0; _src<TRANSACTION_TYPE_MAX; ++_src) {
       auto src = static_cast<transaction_type_t>(_src);
       cache_access_stats_t& trans_access = get_by_src(access_by_src, src);
-      trans_access.cache_absent = get_by_src(stats.cache_absent_by_src, src);
-      trans_access.cache_absent -= get_by_src(last_cache_absent_by_src, src);
       auto& access_by_ext = get_by_src(_access_by_src_ext, src);
       const auto& last_access_by_ext = get_by_src(last_access_by_src_ext, src);
       for (uint8_t _ext=0; _ext<EXTENT_TYPES_MAX; ++_ext) {
         auto ext = static_cast<extent_types_t>(_ext);
-        extent_access_stats_t& extent_access = get_by_ext(access_by_ext, ext);
+        cache_access_stats_t& extent_access = get_by_ext(access_by_ext, ext);
         const auto& last_extent_access = get_by_ext(last_access_by_ext, ext);
         extent_access.minus(last_extent_access);
-        trans_access.s.add(extent_access);
+        trans_access.add(extent_access);
       }
     }
     oss << "\naccess: total"
@@ -2443,9 +2441,9 @@ cache_stats_t Cache::get_stats(
       if (trans_access.is_empty()) {
         continue;
       }
-      extent_access_stats_t data_access;
-      extent_access_stats_t mdat_access;
-      extent_access_stats_t phys_access;
+      cache_access_stats_t data_access;
+      cache_access_stats_t mdat_access;
+      cache_access_stats_t phys_access;
       const auto& access_by_ext = get_by_src(_access_by_src_ext, src);
       for (uint8_t _ext=0; _ext<EXTENT_TYPES_MAX; ++_ext) {
         auto ext = static_cast<extent_types_t>(_ext);
@@ -2461,11 +2459,11 @@ cache_stats_t Cache::get_stats(
       oss << "\n  " << src << ": "
           << cache_access_stats_printer_t{seconds, trans_access}
           << "\n    data"
-          << extent_access_stats_printer_t{seconds, data_access}
+          << cache_access_stats_printer_t{seconds, data_access}
           << "\n    mdat"
-          << extent_access_stats_printer_t{seconds, mdat_access}
+          << cache_access_stats_printer_t{seconds, mdat_access}
           << "\n    phys"
-          << extent_access_stats_printer_t{seconds, phys_access};
+          << cache_access_stats_printer_t{seconds, phys_access};
     }
 
     INFO("{}", oss.str());
