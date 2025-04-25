@@ -889,7 +889,7 @@ void Cache::commit_retire_extent(
   const auto t_src = t.get_src();
   remove_extent(ref, &t_src);
 
-  ref->dirty_from_or_retired_at = JOURNAL_SEQ_NULL;
+  ref->dirty_from = JOURNAL_SEQ_NULL;
   invalidate_extent(t, *ref);
 }
 
@@ -1286,7 +1286,7 @@ record_t Cache::prepare_record(
       if (i->prior_instance->version == 0 && i->version > 1) {
 	assert(can_inplace_rewrite(i->get_type()));
 	assert(can_inplace_rewrite(i->prior_instance->get_type()));
-	assert(i->prior_instance->dirty_from_or_retired_at == JOURNAL_SEQ_MIN);
+	assert(i->prior_instance->dirty_from == JOURNAL_SEQ_MIN);
 	assert(i->prior_instance->state == CachedExtent::extent_state_t::CLEAN);
 	assert(i->prior_instance->get_paddr().is_absolute_random_block());
 	i->version = 1;
@@ -1517,7 +1517,7 @@ record_t Cache::prepare_record(
     // set the version to zero because the extent state is now clean
     // in order to handle this transparently
     i->version = 0;
-    i->dirty_from_or_retired_at = JOURNAL_SEQ_MIN;
+    i->dirty_from = JOURNAL_SEQ_MIN;
     i->state = CachedExtent::extent_state_t::CLEAN;
     assert(i->is_logical());
     i->clear_modified_region();
@@ -1846,7 +1846,7 @@ void Cache::complete_commit(
     i->state = CachedExtent::extent_state_t::DIRTY;
     assert(i->version > 0);
     if (i->version == 1 || is_root_type(i->get_type())) {
-      i->dirty_from_or_retired_at = start_seq;
+      i->dirty_from = start_seq;
       DEBUGT("commit extent done, become dirty -- {}", t, *i);
     } else {
       DEBUGT("commit extent done -- {}", t, *i);
@@ -1872,10 +1872,6 @@ void Cache::complete_commit(
   }
 
   last_commit = start_seq;
-  for (auto &i: t.retired_set) {
-    auto &extent = i.extent;
-    extent->dirty_from_or_retired_at = start_seq;
-  }
 
   apply_backref_byseq(t.move_backref_entries(), start_seq);
   commit_backref_entries(std::move(backref_entries), start_seq);
@@ -2034,7 +2030,7 @@ Cache::replay_delta(
     ceph_assert(delta.paddr.is_root());
     remove_extent(root, nullptr);
     root->apply_delta_and_adjust_crc(record_base, delta.bl);
-    root->dirty_from_or_retired_at = journal_seq;
+    root->dirty_from = journal_seq;
     root->state = CachedExtent::extent_state_t::DIRTY;
     root->version = 1; // shouldn't be 0 as a dirty extent
     DEBUG("replayed root delta at {} {}, add extent -- {}, root={}",
@@ -2110,7 +2106,7 @@ Cache::replay_delta(
 
       extent->version++;
       if (extent->version == 1) {
-	extent->dirty_from_or_retired_at = journal_seq;
+	extent->dirty_from = journal_seq;
         DEBUG("replayed extent delta at {} {}, become dirty -- {}, extent={}" ,
               journal_seq, record_base, delta, *extent);
       } else {

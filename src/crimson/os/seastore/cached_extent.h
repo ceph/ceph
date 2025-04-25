@@ -467,7 +467,7 @@ public:
 	<< ", trans=" << pending_for_transaction
 	<< ", pending_io=" << is_pending_io()
 	<< ", version=" << version
-	<< ", dirty_from_or_retired_at=" << dirty_from_or_retired_at
+	<< ", dirty_from=" << dirty_from
 	<< ", modify_time=" << sea_time_point_printer_t{modify_time}
 	<< ", paddr=" << get_paddr()
 	<< ", prior_paddr=" << prior_poffset_str
@@ -648,13 +648,7 @@ public:
   /// Return journal location of oldest relevant delta, only valid while DIRTY
   auto get_dirty_from() const {
     ceph_assert(has_delta());
-    return dirty_from_or_retired_at;
-  }
-
-  /// Return journal location of oldest relevant delta, only valid while RETIRED
-  auto get_retired_at() const {
-    ceph_assert(!is_valid());
-    return dirty_from_or_retired_at;
+    return dirty_from;
   }
 
   /// Return true if extent is fully loaded or is about to be fully loaded (call 
@@ -862,12 +856,11 @@ private:
     primary_ref_list_member_options>;
 
   /**
-   * dirty_from_or_retired_at
+   * dirty_from
    *
-   * Encodes ordering token for primary_ref_list -- dirty_from when
-   * dirty or retired_at if retired.
+   * Encodes ordering token for primary_ref_list -- dirty_from when dirty
    */
-  journal_seq_t dirty_from_or_retired_at;
+  journal_seq_t dirty_from;
 
   /// cache data contents, std::nullopt iff partially loaded
   std::optional<ceph::bufferptr> ptr;
@@ -957,7 +950,7 @@ protected:
   /// construct new CachedExtent, will deep copy the buffer
   CachedExtent(const CachedExtent &other)
     : state(other.state),
-      dirty_from_or_retired_at(other.dirty_from_or_retired_at),
+      dirty_from(other.dirty_from),
       length(other.get_length()),
       loaded_length(other.get_loaded_length()),
       version(other.version),
@@ -979,7 +972,7 @@ protected:
   /// construct new CachedExtent, will shallow copy the buffer
   CachedExtent(const CachedExtent &other, share_buffer_t)
     : state(other.state),
-      dirty_from_or_retired_at(other.dirty_from_or_retired_at),
+      dirty_from(other.dirty_from),
       ptr(other.ptr),
       length(other.get_length()),
       loaded_length(other.get_loaded_length()),
