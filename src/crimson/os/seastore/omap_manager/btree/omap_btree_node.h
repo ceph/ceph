@@ -116,17 +116,14 @@ struct OMapNode : LogicalChildNode {
 
   virtual ~OMapNode() = default;
 
-  void init_range(std::string begin, std::string end) {
-    if (!this->end.empty()) {
-      // this is a duplicated init.
-      assert(end == this->end);
-      return;
-    }
-    if (begin == BEGIN_KEY && end == END_KEY) {
+  void init_range(std::string _begin, std::string _end) {
+    assert(begin.empty());
+    assert(end.empty());
+    if (_begin == BEGIN_KEY && _end == END_KEY) {
       root = true;
     }
-    this->begin = std::move(begin);
-    this->end = std::move(end);
+    begin = std::move(_begin);
+    end = std::move(_end);
   }
   const std::string &get_begin() const {
     return begin;
