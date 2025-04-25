@@ -25,6 +25,9 @@ set(dbstore_mgr_srcs
     )
 
 add_library(dbstore_lib ${dbstore_srcs})
+if(COMPILER_SUPPORTS_VLA)
+  target_compile_options(dbstore_lib PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+endif()
 target_include_directories(dbstore_lib
     PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
     PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/store/rados"
@@ -60,6 +63,9 @@ endif()
 include_directories(${CMAKE_INCLUDE_DIR})
 add_library(dbstore STATIC ${dbstore_mgr_srcs})
 target_link_libraries(dbstore ${CMAKE_LINK_LIBRARIES})
+if(COMPILER_SUPPORTS_VLA)
+  target_compile_options(dbstore PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+endif()
 
 # testing purpose
 set(dbstore_main_srcs
@@ -69,3 +75,6 @@ set (CMAKE_LINK_LIBRARIES ${CMAKE_LINK_LIBRARIES} dbstore)
 add_executable(dbstore-bin ${dbstore_main_srcs})
 add_dependencies(dbstore-bin dbstore)
 target_link_libraries(dbstore-bin ${CMAKE_LINK_LIBRARIES})
+if(COMPILER_SUPPORTS_VLA)
+  target_compile_options(dbstore-bin PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+endif()
