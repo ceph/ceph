@@ -88,7 +88,7 @@ def _get_cert_issuer_info(crt: str) -> Tuple[Optional[str], Optional[str]]:
     return (org_name, cn)
 
 
-def verify_cacrt_content(args: Namespace) -> None:
+def certificate_days_to_expire(args: Namespace) -> None:
     crt = sys.stdin.read()
 
     crt_buffer = crt.encode() if isinstance(crt, str) else crt
@@ -180,9 +180,9 @@ if __name__ == "__main__":
     parser_bar.add_argument('--certificate', required=False, action='store_true')
     parser_bar.set_defaults(func=create_self_signed_cert)
 
-    # create the parser for the "verify_cacrt_content" command
-    parser_bar = subparsers.add_parser('verify_cacrt_content')
-    parser_bar.set_defaults(func=verify_cacrt_content)
+    # create the parser for the "certificate_days_to_expire" command
+    parser_bar = subparsers.add_parser('certificate_days_to_expire')
+    parser_bar.set_defaults(func=certificate_days_to_expire)
 
     # create the parser for the "get_cert_issuer_info" command
     parser_bar = subparsers.add_parser('get_cert_issuer_info')
