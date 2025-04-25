@@ -1237,9 +1237,7 @@ private:
       // This can only happen during init_cached_extent
       // or when backref extent being rewritten by gc space reclaiming
       if (!ret->is_pending() && !ret->is_linked()) {
-        assert(ret->is_dirty()
-          || (is_backref_node(ret->get_type())
-            && ret->is_clean()));
+        assert(ret->has_delta() || is_backref_node(ret->get_type()));
         init_internal(*ret);
       }
       auto meta = ret->get_meta();
@@ -1322,9 +1320,7 @@ private:
       // This can only happen during init_cached_extent
       // or when backref extent being rewritten by gc space reclaiming
       if (!ret->is_pending() && !ret->is_linked()) {
-        assert(ret->is_dirty()
-          || (is_backref_node(ret->get_type())
-            && ret->is_clean()));
+        assert(ret->has_delta() || is_backref_node(ret->get_type()));
         init_leaf(*ret);
       }
       auto meta = ret->get_meta();

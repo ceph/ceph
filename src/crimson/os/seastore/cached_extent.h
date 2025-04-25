@@ -590,12 +590,19 @@ public:
     return state == extent_state_t::INITIAL_WRITE_PENDING;
   }
 
-  /// Returns true if extent is clean (does not have deltas on disk)
-  bool is_clean() const {
+  /// Returns iff extent has deltas on disk or pending
+  bool has_delta() const {
     ceph_assert(is_valid());
-    return state == extent_state_t::INITIAL_WRITE_PENDING ||
-           state == extent_state_t::CLEAN ||
-           state == extent_state_t::EXIST_CLEAN;
+    if (state == extent_state_t::INITIAL_WRITE_PENDING
+        || state == extent_state_t::CLEAN
+        || state == extent_state_t::EXIST_CLEAN) {
+      return false;
+    } else {
+      assert(state == extent_state_t::MUTATION_PENDING
+             || state == extent_state_t::DIRTY
+             || state == extent_state_t::EXIST_MUTATION_PENDING);
+      return true;
+    }
   }
 
   // Returs true if extent is stable and clean
@@ -619,12 +626,6 @@ public:
     return state == extent_state_t::EXIST_MUTATION_PENDING;
   }
 
-  /// Returns true if extent is dirty (has deltas on disk)
-  bool is_dirty() const {
-    ceph_assert(is_valid());
-    return !is_clean();
-  }
-
   /// Returns true if extent has not been superceded or retired
   bool is_valid() const {
     return state != extent_state_t::INVALID;
@@ -646,7 +647,7 @@ public:
 
   /// Return journal location of oldest relevant delta, only valid while DIRTY
   auto get_dirty_from() const {
-    ceph_assert(is_dirty());
+    ceph_assert(has_delta());
     return dirty_from_or_retired_at;
   }
 
@@ -713,7 +714,7 @@ public:
     return loaded_length;
   }
 
-  /// Returns version, get_version() == 0 iff is_clean()
+  /// Returns version, get_version() == 0 iff !has_delta()
   extent_version_t get_version() const {
     return version;
   }
