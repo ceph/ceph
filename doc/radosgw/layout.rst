@@ -8,10 +8,10 @@ new developers to get up to speed with the implementation details.
 Introduction
 ------------
 
-Swift offers something called a *container*, which we use interchangeably with
-the S3 term *bucket*, so we say that RGW's buckets implement Swift containers.
+Swift collects user objects into *containers*, which we use interchangeably with
+the S3 term *buckets*, so we say that RGW's buckets implement Swift containers.
 
-This document does not consider how RGW _operates_ on these structures,
+This document does not consider how RGW *operates* on these structures,
 e.g. the use of ``encode()`` and ``decode()`` methods for serialization.
 
 Conceptual View
@@ -24,8 +24,22 @@ metadata, bucket indexes, and (payload) data.
 Metadata
 ^^^^^^^^
 
-We have 3 'sections' of metadata: 'user', 'bucket', and 'bucket.instance'.
-You can use the following commands to introspect metadata entries: ::
+RGW stores multiple types of metadata.  The list of types can be shown
+with the below command. The types as of 2025 April are shown below::
+
+    $ bin/radosgw-admin metadata list
+    [
+        "account",
+        "bucket",
+        "bucket.instance",
+        "group",
+        "otp",
+        "roles",
+        "topic",
+        "user"
+    ]
+
+Use commands of the following forms to inspect metadata entries: ::
 
     $ radosgw-admin metadata list
     $ radosgw-admin metadata list bucket
@@ -36,15 +50,16 @@ You can use the following commands to introspect metadata entries: ::
     $ radosgw-admin metadata get bucket.instance:<bucket>:<bucket_id>
     $ radosgw-admin metadata get user:<user>   # get or set
     
-Some variables have been used in above commands, they are:
+Variables are used in above command examples; when issuing commands you must
+substitute your specific values:
 
-- user: Holds user information
-- bucket: Holds a mapping between bucket name and bucket instance id
-- bucket.instance: Holds bucket instance information[2]
+- ``user``: Holds user information
+- ``bucket``: Holds a mapping between bucket name and bucket instance id
+- ``bucket.instance``: Holds bucket instance information[2]
 
 Every metadata entry is kept on a single RADOS object. See below for implementation details.
 
-Note that the metadata is not indexed. When listing a metadata section we do a
+Note that this metadata is not indexed. When listing a metadata section we do a
 RADOS ``pgls`` operation on the containing pool.
 
 Bucket Index
