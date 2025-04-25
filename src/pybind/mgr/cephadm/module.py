@@ -4120,6 +4120,12 @@ Then run the following:
                                     "Please try again after applying an OSD service that matches "
                                     "the service name to which you want to attach OSDs.")
 
+        # Verify that service_type is of osd type
+        spec = self.spec_store[service_name].spec
+        if spec.service_type != 'osd':
+            raise OrchestratorError(f"Service '{service_name}' is not an OSD service (type: {spec.service_type}). "
+                                    "OSDs can only be assigned to OSD service specs.")
+
         daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_type('osd')
         update_osd = defaultdict(list)
         for daemon in daemons:
