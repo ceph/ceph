@@ -162,8 +162,8 @@ options:
 - name: seastore_max_concurrent_transactions
   type: uint
   level: advanced
-  desc: maximum concurrent transactions that seastore allows
-  default: 8
+  desc: maximum concurrent transactions that seastore allows (per reactor)
+  default: 128
 - name: seastore_main_device_type
   type: str
   level: dev

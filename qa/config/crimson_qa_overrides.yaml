@@ -11,6 +11,7 @@ overrides:
         crimson osd obc lru size: 10
         debug ms: 20
         seastore cache lru size: 64M
+        seastore max concurrent transactions: 8
     flavor: crimson
   workunit:
     env:
