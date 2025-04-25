@@ -703,7 +703,7 @@ private:
     if (!cached) {
       // partial read
       TCachedExtentRef<T> ret = CachedExtent::make_cached_extent_ref<T>(length);
-      ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
+      ret->init(CachedExtent::extent_state_t::CLEAN,
                 offset,
                 PLACEMENT_HINT_NULL,
                 NULL_GENERATION,
@@ -724,7 +724,7 @@ private:
     if (is_retired_placeholder_type(cached->get_type())) {
       // partial read
       TCachedExtentRef<T> ret = CachedExtent::make_cached_extent_ref<T>(length);
-      ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
+      ret->init(CachedExtent::extent_state_t::CLEAN,
                 offset,
                 PLACEMENT_HINT_NULL,
                 NULL_GENERATION,
@@ -1935,8 +1935,7 @@ private:
     const Transaction::src_t* p_src
   ) {
     LOG_PREFIX(Cache::read_extent);
-    assert(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING ||
-           extent->state == CachedExtent::extent_state_t::EXIST_CLEAN ||
+    assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN ||
            extent->state == CachedExtent::extent_state_t::CLEAN);
     assert(!extent->is_range_loaded(offset, length));
     assert(is_aligned(offset, get_block_size()));
@@ -1962,9 +1961,6 @@ private:
       });
     }).safe_then(
       [this, FNAME, extent=std::move(extent), offset, length]() mutable {
-        if (likely(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING)) {
-          extent->state = CachedExtent::extent_state_t::CLEAN;
-        }
         ceph_assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN
           || extent->state == CachedExtent::extent_state_t::CLEAN
           || !extent->is_valid());

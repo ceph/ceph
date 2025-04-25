@@ -272,7 +272,6 @@ class CachedExtent
   enum class extent_state_t : uint8_t {
     INITIAL_WRITE_PENDING, // In Transaction::write_set and fresh_block_list
     MUTATION_PENDING,      // In Transaction::write_set and mutated_block_list
-    CLEAN_PENDING,         // CLEAN, but not yet read out
     CLEAN,                 // In Cache::extent_index, Transaction::read_set
                            //  during write, contents match disk, version == 0
     DIRTY,                 // Same as CLEAN, but contents do not match disk,
@@ -479,8 +478,7 @@ public:
 	<< ", refcount=" << use_count()
 	<< ", user_hint=" << user_hint
 	<< ", rewrite_gen=" << rewrite_gen_printer_t{rewrite_generation};
-    if (state != extent_state_t::INVALID &&
-        state != extent_state_t::CLEAN_PENDING) {
+    if (is_valid() && is_fully_loaded() && !is_stable_clean_pending()) {
       print_detail(out);
     }
     return out << ")";
@@ -559,9 +557,8 @@ public:
 
   /// Returns true if extent is stable, written and shared among transactions
   bool is_stable_written() const {
-    return state == extent_state_t::CLEAN_PENDING ||
-      state == extent_state_t::CLEAN ||
-      state == extent_state_t::DIRTY;
+    return state == extent_state_t::CLEAN
+           || state == extent_state_t::DIRTY;
   }
 
   bool is_stable_writting() const {
@@ -598,15 +595,18 @@ public:
     ceph_assert(is_valid());
     return state == extent_state_t::INITIAL_WRITE_PENDING ||
            state == extent_state_t::CLEAN ||
-           state == extent_state_t::CLEAN_PENDING ||
            state == extent_state_t::EXIST_CLEAN;
   }
 
   // Returs true if extent is stable and clean
   bool is_stable_clean() const {
     ceph_assert(is_valid());
-    return state == extent_state_t::CLEAN ||
-           state == extent_state_t::CLEAN_PENDING;
+    return state == extent_state_t::CLEAN;
+  }
+
+  // Returns true if the buffer is still loading
+  bool is_stable_clean_pending() const {
+    return is_stable_clean() && is_pending_io();
   }
 
   /// Ruturns true if data is persisted while metadata isn't
