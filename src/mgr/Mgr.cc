@@ -169,7 +169,15 @@ void Mgr::background_init(Context *completion)
 
   finisher.queue(new LambdaContext([this, completion](int r){
     init();
-    completion->complete(0);
+    py_module_registry->check_all_modules_started(
+	new LambdaContext([this, completion](int){
+	  {
+	    std::lock_guard l(lock);
+	    initializing = false;
+	    initialized = true;
+	  }
+	completion->complete(0);
+      }));
   }));
 }
 
@@ -387,8 +395,6 @@ void Mgr::init()
 #endif
 
   dout(4) << "Complete." << dendl;
-  initializing = false;
-  initialized = true;
 }
 
 void Mgr::load_all_metadata()

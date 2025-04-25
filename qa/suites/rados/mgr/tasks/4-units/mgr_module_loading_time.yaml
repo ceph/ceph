@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - \(CEPHADM_STRAY_DAEMON\)
+      - \(CEPHADM_STRAY_HOST\)
+      - \(MGR_DOWN\)
+      - evicting unresponsive client
+
+tasks:
+  - workunit:
+      clients:
+        client.0:
+          - mgr/test_mgr_module_loading_time.sh
