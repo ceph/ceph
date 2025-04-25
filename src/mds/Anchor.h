@@ -19,8 +19,6 @@
 #include <set>
 #include <string>
 
-#include "include/types.h"
-#include "mdstypes.h"
 #include "include/buffer.h"
 #include "include/cephfs/rank.h" // for mds_rank_t
 #include "include/frag.h"
