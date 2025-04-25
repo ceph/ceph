@@ -673,6 +673,7 @@ class Orchestrator(object):
             'prometheus': self.apply_prometheus,
             'loki': self.apply_loki,
             'promtail': self.apply_promtail,
+            'alloy': self.apply_alloy,
             'rbd-mirror': self.apply_rbd_mirror,
             'rgw': self.apply_rgw,
             'ingress': self.apply_ingress,
@@ -919,9 +920,13 @@ class Orchestrator(object):
     def apply_loki(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a Loki daemon(s)"""
         raise NotImplementedError()
-
+    
     def apply_promtail(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a Promtail daemon(s)"""
+        raise NotImplementedError()
+
+    def apply_alloy(self, spec: ServiceSpec) -> OrchResult[str]:
+        """Update existing a alloy daemon(s)"""
         raise NotImplementedError()
 
     def apply_crash(self, spec: ServiceSpec) -> OrchResult[str]:
@@ -1054,6 +1059,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'ceph-exporter': 'ceph-exporter',
         'loki': 'loki',
         'promtail': 'promtail',
+        'alloy': 'alloy',
         'crash': 'crash',
         'crashcollector': 'crash',  # Specific Rook Daemon
         'container': 'container',
@@ -1089,6 +1095,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'prometheus': ['prometheus'],
         'loki': ['loki'],
         'promtail': ['promtail'],
+        'alloy': ['alloy'],
         'node-exporter': ['node-exporter'],
         'ceph-exporter': ['ceph-exporter'],
         'crash': ['crash'],
