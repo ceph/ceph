@@ -14,6 +14,8 @@
 #include "Compression.h"
 #include "BlueStore.h"
 #include "include/intarith.h"
+#include "common/debug.h" // for dout()
+#include "common/Formatter.h"
 #include <limits>
 
 template <typename Char>
