@@ -9,24 +9,7 @@ export class AppConstants {
   public static readonly copyright = 'Copyright(c) ' + environment.year + ' Ceph contributors.';
   public static readonly cephLogo = 'assets/Ceph_Logo.svg';
 }
-export enum URLPort {
-  HTTP = '80',
-  HTTPS = '443',
-  AMQP = '5672',
-  AMQPS = '5671',
-  KAFKA = '9092'
-}
-export enum HostURLProtocol {
-  http = 'http',
-  https = 'https',
-  amqp = 'amqp',
-  amqps = 'amqps',
-  kafka = 'kafka',
-  HTTP = 'HTTP',
-  AMQP = 'AMQP',
-  AMQPS = 'AMQPS',
-  KAFKA = 'KAFKA'
-}
+
 export enum URLVerbs {
   /* Create a new item */
   CREATE = 'create',
@@ -263,7 +246,6 @@ export class ActionLabelsI18n {
     this.EXPAND_CLUSTER = $localize`Expand Cluster`;
     this.NFS_EXPORT = $localize`Create NFS Export`;
     this.HEADER = $localize`a`;
-    this.PASSWORDHELPERTEXT = $localize`The default password is guest`;
   }
 }
 
