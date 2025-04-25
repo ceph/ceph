@@ -14,6 +14,8 @@
 
 #include "mds/Anchor.h"
 
+#include <dirent.h> // for DT_DIR
+
 #include "common/Formatter.h"
 #include "include/denc.h"
 
