@@ -16,7 +16,6 @@
 #include <uuid/uuid.h>
 #include <xxhash.h>
 
-#include <algorithm>
 #include <atomic>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/executor_work_guard.hpp>
@@ -36,6 +35,8 @@
 #include "common/web_cache.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
+#include "include/expected.hpp"
+
 
 // Cache implementations in the Ceph codebase:
 // ✅ cohort lru
@@ -290,38 +291,6 @@ struct WebCacheLookupOrAdapter : public CacheAdapter {
   }
 };
 
-struct WebCacheLookupOrFutureAdapter : public CacheAdapter {
-  struct CacheValue {
-    std::promise<std::string> promise;
-    std::shared_future<std::string> future;
-    CacheValue(const std::string& value)
-        : promise(), future(promise.get_future()) {
-      promise.set_value(value);
-    }
-  };
-  using Cache = webcache::WebCache<std::string, CacheValue>;
-  Cache _cache;
-
-  explicit WebCacheLookupOrFutureAdapter(size_t size)
-      : _cache(g_ceph_context, "bechmark", size) {}
-
-  ~WebCacheLookupOrFutureAdapter() override { _cache.perf()->reset(); }
-
-  void cache(const std::string& key, const std::string& value) override {
-    std::shared_ptr<CacheValue> cache_value =
-        _cache.lookup_or(key, std::make_shared<CacheValue>(value));
-    cache_value->future.wait();
-  }
-  double hit_miss_ratio() override {
-    return static_cast<double>(
-               _cache.perf()->get(static_cast<int>(webcache::Metric::hit))) /
-           (static_cast<double>(
-                _cache.perf()->get(static_cast<int>(webcache::Metric::hit))) +
-            static_cast<double>(
-                _cache.perf()->get(static_cast<int>(webcache::Metric::miss))));
-  }
-};
-
 // Run io context event loops in a thread per hardware concurrency.
 // cache() by spawn'ing coroutine doing lookup_or and retrieving
 // result using ceph::async::call_once()
@@ -430,14 +399,12 @@ void register_benchmarks() {
            std::make_pair("UNIQUE cohort", BM_UniqueAdd<CohortLRUAdapter>),
            std::make_pair("UNIQUE web   ", BM_UniqueAdd<WebCacheAdapter>),
            std::make_pair("UNIQUE web-O", BM_UniqueAdd<WebCacheLookupOrAdapter>),
-           std::make_pair("UNIQUE web-F ", BM_UniqueAdd<WebCacheLookupOrFutureAdapter>),
            std::make_pair("UNIQUE web-A ", BM_UniqueAdd<WebCacheLookupOrAsyncAdapter>),
            std::make_pair("PARETO shared", BM_Pareto<SharedLRUAdapter>),
            std::make_pair("PARETO simple", BM_Pareto<SimpleLRUAdapter>),
            std::make_pair("PARETO cohort", BM_Pareto<CohortLRUAdapter>),
            std::make_pair("PARETO web   ", BM_Pareto<WebCacheAdapter>),
            std::make_pair("PARETO web-O ", BM_Pareto<WebCacheLookupOrAdapter>),
-           std::make_pair("PARETO web-F ", BM_Pareto<WebCacheLookupOrFutureAdapter>),
            std::make_pair("PARETO web-A ", BM_Pareto<WebCacheLookupOrAsyncAdapter>),
        }) {
     auto* bench = benchmark::RegisterBenchmark(name, test);
