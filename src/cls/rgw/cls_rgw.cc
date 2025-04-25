@@ -545,7 +545,8 @@ static void get_list_index_key(rgw_bucket_dir_entry& entry, uint64_t epoch, stri
   index_key->append(instance_delim);
   index_key->append(entry.key.instance);
 
-  if (entry.key.snap_id.is_set()) {
+  if (entry.key.snap_id.is_set() &&
+      !entry.key.snap_id.is_min()) {
     string snap_delim("\0s", 2);
     index_key->append(snap_delim);
     index_key->append(entry.key.snap_id.to_string());
@@ -574,7 +575,8 @@ static void _append_obj_versioned_data_key(string *index_key, const cls_rgw_obj_
     string dm("\0d", 2);
     index_key->append(dm);
   }
-  if (key.snap_id.is_set()) {
+  if (key.snap_id.is_set() &&
+      !key.snap_id.is_min()) {
     string dm("\0s", 2);
     index_key->append(dm);
 
@@ -596,7 +598,7 @@ static void encode_obj_index_key(const cls_rgw_obj_key& key, string *index_key, 
 {
   if (key.instance.empty() &&
       (!key.snap_id.is_set() ||
-       key.snap_id.snap_id == rgw_bucket_snap_id::SNAP_MIN)) {
+       key.snap_id.is_min())) {
     *index_key = key.name;
   } else {
     encode_obj_versioned_data_key(key, index_key, delete_marker);
@@ -2027,7 +2029,6 @@ public:
     int ret = read_key_entry(omap, key, &instance_idx, &instance_entry,
                              check_delete_marker && key.instance.empty()); /* this is potentially a delete marker, for null objects we
                                                                               keep separate instance entry for the delete markers */
-
     if (ret < 0) {
       CLS_LOG(0, "ERROR: read_key_entry() idx=%s ret=%d", escape_str(instance_idx).c_str(), ret);
       return ret;
@@ -2325,7 +2326,7 @@ public:
 
   void set_unlink_conf(rgw_bucket_snap_id cur_snap_id,
                        rgw_cls_unlink_instance_op::UnlinkFlags flags) {
-    can_rm = (flags & rgw_cls_unlink_instance_op::UnlinkFlags::RemoveNoncurrentSnap) ||
+    can_rm = (flags & rgw_cls_unlink_instance_op::UnlinkFlags::SnapRemoval) ||
       (instance_entry.meta.snap_id >= cur_snap_id);
     instance_entry.set_snap_info().removed_at = cur_snap_id;
   }
@@ -2385,6 +2386,9 @@ public:
   void update(cls_rgw_obj_key& key, bool delete_marker) {
     olh_data_entry.delete_marker = delete_marker;
     olh_data_entry.key = key;
+    if (key.instance.empty()) {
+      olh_data_entry.null_ver_snap_id.init(key.snap_id);
+    }
   }
 
   int write(rgw_bucket_dir_header& header) {
@@ -2453,7 +2457,8 @@ static int convert_plain_entry_to_versioned(ClsOmapAccess *omap,
                                             bool demote_current,
                                             bool instance_only,
                                             rgw_bucket_snap_id demoted_at_snap,
-                                            rgw_bucket_dir_header& header)
+                                            rgw_bucket_dir_header& header,
+                                            bool *pexisted)
 {
   if (!key.instance.empty()) {
     return -EINVAL;
@@ -2463,6 +2468,7 @@ static int convert_plain_entry_to_versioned(ClsOmapAccess *omap,
 
   string orig_idx;
   int ret = read_key_entry(omap, key, &orig_idx, &entry);
+  bool existed = (ret >= 0);
   if (ret != -ENOENT) {
     if (ret < 0) {
       CLS_LOG(0, "ERROR: read_key_entry() returned ret=%d", ret);
@@ -2495,6 +2501,10 @@ static int convert_plain_entry_to_versioned(ClsOmapAccess *omap,
   ret = write_version_marker(omap, key, header);
   if (ret < 0) {
     return ret;
+  }
+
+  if (pexisted) {
+    *pexisted = existed;
   }
 
   return 0;
@@ -2667,12 +2677,18 @@ static int _rgw_bucket_link_olh(ClsOmapAccess *omap, bufferlist *in, bufferlist 
           return ret;
         }
       }
+
+      if (olh_entry.key.instance.empty() &&
+          !olh_entry.null_ver_snap_id.is_set()) {
+        olh_entry.null_ver_snap_id.init();
+      }
     }
     olh.set_pending_removal(false);
   } else {
     bool instance_only = (op.key.instance.empty() && op.delete_marker);
     cls_rgw_obj_key key(op.key.name);
-    ret = convert_plain_entry_to_versioned(omap, key, promote, instance_only, op.meta.snap_id, header);
+    bool existed;
+    ret = convert_plain_entry_to_versioned(omap, key, promote, instance_only, op.meta.snap_id, header, &existed);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
       return ret;
@@ -2680,6 +2696,11 @@ static int _rgw_bucket_link_olh(ClsOmapAccess *omap, bufferlist *in, bufferlist 
     olh.set_tag(op.olh_tag);
     if (op.key.instance.empty()){
       obj.set_epoch(1);
+    }
+
+    if (existed) { /* a previous plain entry existed, let's set olh null_ver_snap_id to reflect that */
+      auto& olh_entry = olh.get_entry();
+      olh_entry.null_ver_snap_id.init();
     }
   }
 
@@ -2704,9 +2725,6 @@ static int _rgw_bucket_link_olh(ClsOmapAccess *omap, bufferlist *in, bufferlist 
       }
 
     }
-
-    auto& olh_entry = olh.get_entry();
-    olh_entry.null_ver_snap_id = op.key.snap_id;
   }
 
   /* update the olh log */
@@ -2851,7 +2869,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     ret = convert_plain_entry_to_versioned(&omap, key, true, instance_only,
                                            rgw_bucket_snap_id(), /* demoted_at_sap: doesn't matter,
                                                                     as we're about to remove this entry */
-                                           header);
+                                           header, nullptr);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
       return ret;
@@ -5545,7 +5563,7 @@ static int rgw_cls_lc_list_entries(cls_method_context_t hctx, bufferlist *in,
       try {
 	iter = it->second.begin();
 	decode(oe, iter);
-	entry = {oe.first, 0 /* start */, uint32_t(oe.second)};
+	entry = {oe.first, rgw_bucket_snap_id(), 0 /* start */, uint32_t(oe.second)};
       } catch(buffer::error& err) {
 	CLS_LOG(
 	  1, "ERROR: rgw_cls_lc_list_entries(): failed to decode entry\n");

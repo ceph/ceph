@@ -1542,6 +1542,7 @@ WRITE_CLASS_ENCODER(cls_rgw_lc_obj_head)
 
 struct cls_rgw_lc_entry {
   std::string bucket;
+  rgw_bucket_snap_id snap_id;
   uint64_t start_time; // if in_progress
   uint32_t status;
 
@@ -1550,22 +1551,26 @@ struct cls_rgw_lc_entry {
 
   cls_rgw_lc_entry(const cls_rgw_lc_entry& rhs) = default;
 
-  cls_rgw_lc_entry(const std::string& b, uint64_t t, uint32_t s)
-    : bucket(b), start_time(t), status(s) {};
+  cls_rgw_lc_entry(const std::string& b, rgw_bucket_snap_id sid, uint64_t t, uint32_t s)
+    : bucket(b), snap_id(sid), start_time(t), status(s) {};
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(bucket, bl);
     encode(start_time, bl);
     encode(status, bl);
+    encode(snap_id, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(bucket, bl);
     decode(start_time, bl);
     decode(status, bl);
+    if (struct_v >= 2) {
+      decode(snap_id,  bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

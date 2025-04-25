@@ -3509,6 +3509,9 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
   if (params.objv_tracker) {
       parent_op.params.check_objv = params.objv_tracker->version_for_check();
   }
+  if (flags & FLAG_SNAP_OBJ_REMOVE) {
+    parent_op.params.snap_rm = true;
+  }
 
   int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP);
   if (ret < 0) {
@@ -4447,6 +4450,7 @@ int RadosLifecycle::set_entry(const DoutPrefixProvider* dpp, optional_yield y,
   cls_rgw_lc_entry cls_entry;
 
   cls_entry.bucket = entry.bucket;
+  cls_entry.snap_id = entry.snap_id;
   cls_entry.start_time = entry.start_time;
   cls_entry.status = entry.status;
 
@@ -4480,7 +4484,7 @@ int RadosLifecycle::list_entries(const DoutPrefixProvider* dpp, optional_yield y
   }
 
   for (auto& entry : cls_entries) {
-    entries.push_back(LCEntry{entry.bucket, entry.start_time, entry.status});
+    entries.push_back(LCEntry{entry.bucket, entry.snap_id, entry.start_time, entry.status});
   }
 
   return ret;

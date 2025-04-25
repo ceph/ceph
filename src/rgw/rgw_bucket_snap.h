@@ -83,5 +83,9 @@ public:
   void set_enabled(bool flag) {
     enabled = flag;
   }
+
+  std::map<rgw_bucket_snap_id, rgw_bucket_snap> get_removed_snaps() const {
+    return rm_snaps;
+  }
 };
 WRITE_CLASS_ENCODER(RGWBucketSnapMgr)

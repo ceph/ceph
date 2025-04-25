@@ -112,6 +112,10 @@ int RGWBucketSnapMgr::remove_snap(rgw_bucket_snap_id snap_id)
 
 bool RGWBucketSnapMgr::live_snapshot_at_range(rgw_bucket_snap_id min, rgw_bucket_snap_id max) const
 {
+  if (!min.is_set()) {
+    min = rgw_bucket_snap_id::SNAP_MIN;
+  }
+
   if (min >= cur_snap) {
     return true;
   }

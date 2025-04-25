@@ -1007,6 +1007,7 @@ list<cls_rgw_bucket_instance_entry*>& ls)
 void cls_rgw_lc_entry::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);
+  encode_json("snap_id", snap_id, f);
   encode_json("start_time", start_time, f);
   encode_json("status", status, f);
 }

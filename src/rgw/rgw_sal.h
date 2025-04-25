@@ -155,6 +155,7 @@ enum AttrsMod {
 
 static constexpr uint32_t FLAG_LOG_OP = 0x0001;
 static constexpr uint32_t FLAG_PREVENT_VERSIONING = 0x0002;
+static constexpr uint32_t FLAG_SNAP_OBJ_REMOVE = 0x0004;
 
 // if cannot do all elements of op, do as much as possible (e.g.,
 // delete object where head object is missing)
@@ -1623,6 +1624,7 @@ struct LCHead {
  * buckets. */
 struct LCEntry {
   std::string bucket;
+  rgw_bucket_snap_id snap_id;
   uint64_t start_time = 0;
   uint32_t status = 0;
 };
