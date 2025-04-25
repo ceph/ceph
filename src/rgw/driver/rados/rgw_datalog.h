@@ -350,23 +350,27 @@ struct hash<BucketGen> {
 };
 }
 
-class RGWDataChangesLog {
+class RGWDataChangesLog
+  : public std::enable_shared_from_this<RGWDataChangesLog> {
   friend class DataLogTestBase;
   friend DataLogBackends;
   CephContext *cct;
-  neorados::RADOS* rados;
-  std::optional<asio::strand<asio::io_context::executor_type>> cancel_strand;
+  std::optional<neorados::RADOS> rados;
   neorados::IOContext loc;
   rgw::BucketChangeObserver *observer = nullptr;
   bool log_data = false;
   std::unique_ptr<DataLogBackends> bes;
 
-  std::shared_ptr<asio::cancellation_signal> renew_signal =
-    std::make_shared<asio::cancellation_signal>();
-  std::shared_ptr<asio::cancellation_signal> watch_signal =
-    std::make_shared<asio::cancellation_signal>();
-  std::shared_ptr<asio::cancellation_signal> recovery_signal =
-    std::make_shared<asio::cancellation_signal>();
+  using executor_t = asio::io_context::executor_type;
+  executor_t executor;
+  using strand_t = asio::strand<executor_t>;
+  strand_t renew_strand{executor};
+  asio::cancellation_signal renew_signal = asio::cancellation_signal();
+  strand_t watch_strand{executor};
+  asio::cancellation_signal watch_signal = asio::cancellation_signal();
+  strand_t recovery_strand{executor};
+  asio::cancellation_signal recovery_signal = asio::cancellation_signal();
+
   ceph::mono_time last_recovery = ceph::mono_clock::zero();
 
   const int num_shards;
@@ -410,7 +414,8 @@ class RGWDataChangesLog {
 		      ceph::real_time expiration);
 
   std::optional<asio::steady_timer> renew_timer;
-  asio::awaitable<void> renew_run(decltype(renew_signal) renew_signal);
+  asio::awaitable<void> renew_run(
+    std::shared_ptr<RGWDataChangesLog> renew_signal);
   void renew_stop();
 
   std::function<bool(const rgw_bucket& bucket, optional_yield y,
@@ -425,10 +430,10 @@ class RGWDataChangesLog {
 
 public:
 
-  RGWDataChangesLog(CephContext* cct);
+  RGWDataChangesLog(rgw::sal::RadosStore* driver);
   // For testing.
   RGWDataChangesLog(CephContext* cct, bool log_data,
-		    neorados::RADOS* rados,
+		    neorados::RADOS rados,
 		    std::optional<int> num_shards = std::nullopt,
 		    std::optional<uint64_t> sem_max_keys = std::nullopt);
   ~RGWDataChangesLog();
@@ -441,13 +446,12 @@ public:
 			      bool recovery, bool watch, bool renew);
 
   int start(const DoutPrefixProvider *dpp, const RGWZone* _zone,
-	    const RGWZoneParams& zoneparams, rgw::sal::RadosStore* store,
-	    bool background_tasks) noexcept;
+	    const RGWZoneParams& zoneparams, bool background_tasks) noexcept;
   asio::awaitable<bool> establish_watch(const DoutPrefixProvider* dpp,
 					std::string_view oid);
   asio::awaitable<void> process_notification(const DoutPrefixProvider* dpp,
 					     std::string_view oid);
-  asio::awaitable<void> watch_loop(decltype(watch_signal));
+  asio::awaitable<void> watch_loop(std::shared_ptr<RGWDataChangesLog>);
   int choose_oid(const rgw_bucket_shard& bs);
   asio::awaitable<void> add_entry(const DoutPrefixProvider *dpp,
 				  const RGWBucketInfo& bucket_info,
@@ -520,7 +524,7 @@ public:
 		 bc::flat_map<std::string, uint64_t>&& semcount);
   asio::awaitable<void> recover_shard(const DoutPrefixProvider* dpp, int index);
   asio::awaitable<void> recover(const DoutPrefixProvider* dpp,
-				decltype(recovery_signal));
+				std::shared_ptr<RGWDataChangesLog>);
   asio::awaitable<void> shutdown();
   asio::awaitable<void> shutdown_or_timeout();
   void blocking_shutdown();

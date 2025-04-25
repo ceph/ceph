@@ -5445,11 +5445,20 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
 extern "C" {
 
-void* newRadosStore(void* io_context)
+  void* newRadosStore(void* io_context, void* dpp_)
 {
+  auto dpp = static_cast<DoutPrefixProvider*>(dpp_);
   rgw::sal::RadosStore* store = new rgw::sal::RadosStore(
     *static_cast<boost::asio::io_context*>(io_context));
   if (store) {
+    int ret = store->init_neorados(dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to initialize neorados (ret=" << cpp_strerror(-ret) << ")" << dendl;
+      delete store;
+      store = nullptr;
+      return store;
+    }
+
     RGWRados* rados = new RGWRados();
 
     if (!rados) {

@@ -18,7 +18,6 @@
 #include <boost/system/system_error.hpp>
 #include <boost/system/generic_category.hpp>
 
-#include "common/async/parallel_for_each.h"
 #include "include/fs_types.h"
 #include "include/neorados/RADOS.hpp"
 
@@ -357,17 +356,18 @@ public:
   }
 };
 
-RGWDataChangesLog::RGWDataChangesLog(CephContext* cct)
-  : cct(cct),
+RGWDataChangesLog::RGWDataChangesLog(rgw::sal::RadosStore* driver)
+  : cct(driver->ctx()), rados(driver->get_neorados()),
+    executor(driver->get_io_context().get_executor()),
     num_shards(cct->_conf->rgw_data_log_num_shards),
     prefix(get_prefix()),
     changes(cct->_conf->rgw_data_log_changes_size) {}
 
 RGWDataChangesLog::RGWDataChangesLog(CephContext *cct, bool log_data,
-                                     neorados::RADOS *rados,
+                                     neorados::RADOS rados,
                                      std::optional<int> num_shards,
                                      std::optional<uint64_t> sem_max_keys)
-    : cct(cct), rados(rados), log_data(log_data),
+  : cct(cct), rados(rados), log_data(log_data), executor(rados.get_executor()), 
       num_shards(num_shards ? *num_shards :
 		 cct->_conf->rgw_data_log_num_shards),
       prefix(get_prefix()), changes(cct->_conf->rgw_data_log_changes_size),
@@ -439,14 +439,11 @@ void DataLogBackends::handle_empty_to(uint64_t new_tail) {
 int RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
 			     const RGWZone* zone,
 			     const RGWZoneParams& zoneparams,
-			     rgw::sal::RadosStore* store,
 			     bool background_tasks) noexcept
 {
   log_data = zone->log_data;
-  rados = &store->get_neorados();
   try {
-    // Blocking in startup code, not ideal, but won't hurt anything.
-    asio::co_spawn(store->get_io_context(),
+    asio::co_spawn(executor,
 		   start(dpp, zoneparams.log_pool,
 			 background_tasks, background_tasks,
 			 background_tasks),
@@ -473,7 +470,6 @@ RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
 			 bool renew)
 {
   down_flag = false;
-  cancel_strand = asio::make_strand(rados->get_executor());
   ran_background = (recovery || watch || renew);
 
   auto defbacking = to_log_type(
@@ -509,10 +505,10 @@ RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
 
   if (renew) {
     asio::co_spawn(
-      co_await asio::this_coro::executor,
-      renew_run(renew_signal),
-      asio::bind_cancellation_slot(renew_signal->slot(),
-				   asio::bind_executor(*cancel_strand,
+      renew_strand,
+      renew_run(shared_from_this()),
+      asio::bind_cancellation_slot(renew_signal.slot(),
+				   asio::bind_executor(renew_strand,
 						       asio::detached)));
   }
   if (watch) {
@@ -524,20 +520,20 @@ RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
 			      "Unable to establish recovery watch!"};
     }
     asio::co_spawn(
-      co_await asio::this_coro::executor,
-      watch_loop(watch_signal),
-      asio::bind_cancellation_slot(watch_signal->slot(),
-				   asio::bind_executor(*cancel_strand,
+      watch_strand,
+      watch_loop(shared_from_this()),
+      asio::bind_cancellation_slot(watch_signal.slot(),
+				   asio::bind_executor(watch_strand,
 						       asio::detached)));
   }
   if (recovery) {
     // Recovery can run concurrent with normal operation, so we don't
     // have to block startup while we do all that I/O.
     asio::co_spawn(
-      co_await asio::this_coro::executor,
-      recover(dpp, recovery_signal),
-      asio::bind_cancellation_slot(recovery_signal->slot(),
-				   asio::bind_executor(*cancel_strand,
+      recovery_strand,
+      recover(dpp, shared_from_this()),
+      asio::bind_cancellation_slot(recovery_signal.slot(),
+				   asio::bind_executor(recovery_strand,
 						       asio::detached)));
   }
   co_return;
@@ -664,7 +660,9 @@ RGWDataChangesLog::process_notification(const DoutPrefixProvider* dpp,
   }
 }
 
-asio::awaitable<void> RGWDataChangesLog::watch_loop(decltype(watch_signal)) {
+asio::awaitable<void>
+RGWDataChangesLog::watch_loop(std::shared_ptr<RGWDataChangesLog>)
+{
   const DoutPrefix dp(cct, dout_subsys, "rgw data changes log: ");
   const auto oid = get_sem_set_oid(0);
   bool need_rewatch = false;
@@ -1259,21 +1257,18 @@ asio::awaitable<void> RGWDataChangesLog::shutdown() {
   }
   renew_stop();
   // Revisit this later
-  if (renew_signal)
-    asio::dispatch(*cancel_strand,
-		   [this]() {
-		     renew_signal->emit(asio::cancellation_type::terminal);
-		   });
-  if (recovery_signal)
-    asio::dispatch(*cancel_strand,
-		   [this]() {
-		     recovery_signal->emit(asio::cancellation_type::terminal);
-		   });
-  if (watch_signal)
-    asio::dispatch(*cancel_strand,
-		   [this]() {
-		     watch_signal->emit(asio::cancellation_type::terminal);
-		   });
+  asio::dispatch(renew_strand,
+		 [this]() {
+		   renew_signal.emit(asio::cancellation_type::terminal);
+		 });
+  asio::dispatch(recovery_strand,
+		 [this]() {
+		   recovery_signal.emit(asio::cancellation_type::terminal);
+		 });
+  asio::dispatch(watch_strand,
+		 [this]() {
+		   watch_signal.emit(asio::cancellation_type::terminal);
+		 });
   if (watchcookie && rados->check_watch(watchcookie)) {
     auto wc = watchcookie;
     watchcookie = 0;
@@ -1286,15 +1281,6 @@ asio::awaitable<void> RGWDataChangesLog::shutdown_or_timeout() {
   using namespace asio::experimental::awaitable_operators;
   asio::steady_timer t(co_await asio::this_coro::executor, 3s);
   co_await (shutdown() || t.async_wait(asio::use_awaitable));
-  if (renew_signal) {
-    renew_signal->emit(asio::cancellation_type::terminal);
-  }
-  if (recovery_signal) {
-    recovery_signal->emit(asio::cancellation_type::terminal);
-  }
-  if (watch_signal) {
-    watch_signal->emit(asio::cancellation_type::terminal);
-  }
 }
 
 RGWDataChangesLog::~RGWDataChangesLog() {
@@ -1322,7 +1308,8 @@ void RGWDataChangesLog::blocking_shutdown() {
   }
 }
 
-asio::awaitable<void> RGWDataChangesLog::renew_run(decltype(renew_signal)) {
+asio::awaitable<void> RGWDataChangesLog::renew_run(
+  std::shared_ptr<RGWDataChangesLog>) {
   static constexpr auto runs_per_prune = 150;
   auto run = 0;
   renew_timer.emplace(co_await asio::this_coro::executor);
@@ -1595,14 +1582,14 @@ RGWDataChangesLog::recover_shard(const DoutPrefixProvider* dpp, int index)
   co_return;
 }
 
-asio::awaitable<void> RGWDataChangesLog::recover(const DoutPrefixProvider* dpp,
-						 decltype(recovery_signal))
+asio::awaitable<void> RGWDataChangesLog::recover(
+  const DoutPrefixProvider* dpp,
+  std::shared_ptr<RGWDataChangesLog>)
 {
-  auto strand = asio::make_strand(co_await asio::this_coro::executor);
   co_await asio::co_spawn(
-    strand,
-    [this](const DoutPrefixProvider* dpp)-> asio::awaitable<void, decltype(strand)> {
-      auto ex = co_await boost::asio::this_coro::executor;
+    recovery_strand,
+    [this](const DoutPrefixProvider* dpp)-> asio::awaitable<void, strand_t> {
+      auto ex = recovery_strand;
       auto group = async::spawn_group{ex, static_cast<size_t>(num_shards)};
       for (auto i = 0; i < num_shards; ++i) {
 	boost::asio::co_spawn(ex, recover_shard(dpp, i), group);
