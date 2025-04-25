@@ -141,6 +141,7 @@ public:
 
     /// (old, new) -- only valid with no truncate or buffer updates
     std::optional<std::pair<std::set<snapid_t>, std::set<snapid_t>>> updated_snaps;
+    int64_t omap_count_hint = -1, db_delete_range_threshold_hint = -1;
 
     struct alloc_hint_t {
       uint64_t expected_object_size;
@@ -306,14 +307,17 @@ public:
   }
 
   /// Remove -- must not be called on rename target
-  void remove(
-    const hobject_t &hoid          ///< [in] obj to remove
-    ) {
+  void remove(const hobject_t &hoid ///< [in] obj to remove
+              ,
+              int64_t omap_count_hint = -1,
+              int64_t db_delete_range_threshold_hint = -1) {
     auto &op = get_object_op_for_modify(hoid);
     if (!op.is_fresh_object()) {
       ceph_assert(!op.updated_snaps);
       op = ObjectOperation();
       op.delete_first = true;
+      op.omap_count_hint = omap_count_hint;
+      op.db_delete_range_threshold_hint = db_delete_range_threshold_hint;
     } else {
       ceph_assert(!op.is_rename());
       op_map.erase(hoid); // make it a noop if it's a fresh object

@@ -1779,74 +1779,118 @@ void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix
   }
 }
 
-void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
-                                                         const string &start,
-                                                         const string &end)
-{
-  ldout(db->cct, 10) << __func__
-                     << " enter prefix=" << prefix
+void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(
+    const std::string &prefix, const std::string &start, const std::string &end,
+    int64_t key_count_hint, int64_t db_delete_range_threshold_hint) {
+  ldout(db->cct, 10) << __func__ << " enter prefix=" << prefix
                      << " start=" << pretty_binary_string(start)
-		     << " end=" << pretty_binary_string(end) << dendl;
+                     << " end=" << pretty_binary_string(end)
+                     << " key_count_hint=" << key_count_hint
+                     << " db_delete_range_threshold_hint="
+                     << db_delete_range_threshold_hint << dendl;
   auto p_iter = db->cf_handles.find(prefix);
-  uint64_t cnt = db->get_delete_range_threshold();
-  if (p_iter == db->cf_handles.end()) {
-    uint64_t cnt0 = cnt;
+  int64_t l_bound = db_delete_range_threshold_hint == -1 ? 0 : 1000;
+  int64_t h_bound = db->get_delete_range_threshold();
+  int64_t thresh = db_delete_range_threshold_hint;
+
+  if (thresh < 0 || thresh > h_bound) {
+    thresh = h_bound;
+  }
+
+  auto iterate_default_cf = [this](const std::string &prefix,
+                                   const std::string &start,
+                                   const std::string &end, int64_t thresh) {
+    int64_t cnt = thresh;
     bat.SetSavePoint();
     auto it = db->get_iterator(prefix);
     for (it->lower_bound(start);
-	 it->valid() && db->comparator->Compare(it->key(), end) < 0 && (--cnt) != 0;
-	 it->next()) {
+         it->valid() && db->comparator->Compare(it->key(), end) < 0 && cnt > 0;
+         it->next(), --cnt) {
       bat.Delete(db->default_cf, combine_strings(prefix, it->key()));
     }
-    ldout(db->cct, 15) << __func__
-                       << " count = " << cnt0 - cnt
-                       << dendl;
+    ldout(db->cct, 15) << __func__ << " count = " << thresh - cnt << dendl;
     if (cnt == 0) {
-      ldout(db->cct, 10) << __func__ << " p_iter == end(), resorting to DeleteRange"
-			 << dendl;
+      ldout(db->cct, 10) << __func__
+                         << " p_iter == end(), resorting to DeleteRange"
+                         << dendl;
       bat.RollbackToSavePoint();
       bat.DeleteRange(db->default_cf,
-		      rocksdb::Slice(combine_strings(prefix, start)),
-		      rocksdb::Slice(combine_strings(prefix, end)));
+                      rocksdb::Slice(combine_strings(prefix, start)),
+                      rocksdb::Slice(combine_strings(prefix, end)));
     } else {
       bat.PopSavePoint();
     }
-  } else if (cnt == 0) {
-    ceph_assert(p_iter->second.handles.size() >= 1);
-    for (auto cf : p_iter->second.handles) {
-      ldout(db->cct, 10) << __func__ << " p_iter != end(), resorting to DeleteRange"
-			   << dendl;
-	bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
+  };
+
+  auto iterate_shard_cf = [this](const std::string &prefix, int64_t thresh,
+                                 KeyValueDB::IteratorBounds &bounds,
+                                 rocksdb::ColumnFamilyHandle *cf) {
+    string start = *bounds.lower_bound;
+    string end = *bounds.upper_bound;
+    int64_t cnt = thresh;
+    bat.SetSavePoint();
+    auto it = db->new_shard_iterator(cf, prefix, bounds);
+    for (it->lower_bound(start); it->valid() && cnt > 0; it->next(), --cnt) {
+      bat.Delete(cf, it->key());
+    }
+    ldout(db->cct, 10) << __func__ << " count = " << thresh - cnt << dendl;
+    if (cnt == 0) {
+      bat.RollbackToSavePoint();
+      bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
+    } else {
+      bat.PopSavePoint();
+    }
+  };
+
+  if (key_count_hint >= 0) {
+    if (p_iter == db->cf_handles.end()) {
+      if (key_count_hint < std::max(thresh, l_bound)) {
+        iterate_default_cf(prefix, start, end, thresh);
+      } else {
+        bat.DeleteRange(db->default_cf,
+                        rocksdb::Slice(combine_strings(prefix, start)),
+                        rocksdb::Slice(combine_strings(prefix, end)));
+      }
+    } else {
+      auto bounds = KeyValueDB::IteratorBounds();
+      bounds.lower_bound = start;
+      bounds.upper_bound = end;
+      ceph_assert(p_iter->second.handles.size() >= 1);
+      int shard_count = p_iter->second.handles.size();
+      int64_t key_count_hint_per_shard =
+          (key_count_hint + shard_count - 1) / shard_count;
+
+      for (auto cf : p_iter->second.handles) {
+        if (key_count_hint_per_shard < std::max(thresh, l_bound)) {
+          iterate_shard_cf(prefix, thresh, bounds, cf);
+        } else {
+          bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
+        }
+      }
     }
   } else {
-    auto bounds = KeyValueDB::IteratorBounds();
-    bounds.lower_bound = start;
-    bounds.upper_bound = end;
-    ceph_assert(p_iter->second.handles.size() >= 1);
-    for (auto cf : p_iter->second.handles) {
-      cnt = db->get_delete_range_threshold();
-      uint64_t cnt0 = cnt;
-      bat.SetSavePoint();
-      auto it = db->new_shard_iterator(cf, prefix, bounds);
-      for (it->lower_bound(start);
-	   it->valid() && (--cnt) != 0;
-	   it->next()) {
-	bat.Delete(cf, it->key());
-      }
-      ldout(db->cct, 10) << __func__
-                         << " count = " << cnt0 - cnt
-                         << dendl;
-      if (cnt == 0) {
-        ldout(db->cct, 10) << __func__ << " p_iter != end(), resorting to DeleteRange"
-			   << dendl;
-	bat.RollbackToSavePoint();
-	bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
-      } else {
-	bat.PopSavePoint();
+    if (p_iter == db->cf_handles.end()) {
+      iterate_default_cf(prefix, start, end, thresh);
+    } else {
+      auto bounds = KeyValueDB::IteratorBounds();
+      bounds.lower_bound = start;
+      bounds.upper_bound = end;
+      ceph_assert(p_iter->second.handles.size() >= 1);
+
+      for (auto cf : p_iter->second.handles) {
+        iterate_shard_cf(prefix, thresh, bounds, cf);
       }
     }
   }
   ldout(db->cct, 10) << __func__ << " end" << dendl;
+}
+
+void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
+                                                         const string &start,
+                                                         const string &end)
+{
+  uint64_t cnt = db->get_delete_range_threshold();
+  rm_range_keys(prefix, start, end, -1, cnt);
 }
 
 void RocksDBStore::RocksDBTransactionImpl::merge(
