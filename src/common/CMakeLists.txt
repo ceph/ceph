@@ -272,4 +272,9 @@ if(HAVE_KEYUTILS)
   set(parse_secret_srcs
     secret.c)
   add_library(parse_secret_objs OBJECT ${parse_secret_srcs})
+
+  set(keyring_srcs
+    keyring.cc)
+  add_library(keyring STATIC ${keyring_srcs})
+  target_link_libraries(keyring keyutils::keyutils)
 endif()
