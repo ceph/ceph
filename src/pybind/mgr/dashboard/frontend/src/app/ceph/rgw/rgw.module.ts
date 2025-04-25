@@ -129,14 +129,14 @@ import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-li
     InputModule,
     AccordionModule,
     CheckboxModule,
-    SelectModule,
     NumberModule,
     TabsModule,
-    RadioModule,
     TagModule,
     TooltipModule,
     ComboBoxModule,
-    ToggletipModule
+    ToggletipModule,
+    RadioModule,
+    SelectModule
   ],
   exports: [
     RgwDaemonDetailsComponent,
@@ -404,7 +404,19 @@ const routes: Routes = [
   {
     path: 'topic',
     data: { breadcrumbs: 'Topic' },
-    children: [{ path: '', component: RgwTopicListComponent }]
+    children: [
+      { path: '', component: RgwTopicListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: RgwCreateTopicFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:name`,
+        component: RgwCreateTopicFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      }
+    ]
   }
 ];
 

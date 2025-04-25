@@ -14,14 +14,10 @@ from collections import defaultdict
 from enum import Enum
 from subprocess import SubprocessError
 from urllib.parse import urlparse
+from xml.parsers.expat import ExpatError
 
 import requests
-
-try:
-    import xmltodict
-except ModuleNotFoundError:
-    logging.error("Module 'xmltodict' is not installed.")
-
+import xmltodict
 from mgr_util import build_url, name_to_config_section
 
 from .. import mgr
@@ -789,6 +785,75 @@ class RgwClient(RestClient):
 
         return transform(data)
 
+    @staticmethod
+    def notification_dict_to_xml(data):
+        if not data or data == '{}':
+            return ''
+
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except json.JSONDecodeError:
+                raise DashboardException('Could not load json string')
+
+        def process_event(value):
+            events = value if isinstance(value, list) else [value]
+            return ''.join(f'<Event>{escape(str(event))}</Event>\n' for event in events)
+
+        def process_filter(value):
+            xml = '<Filter>\n'
+            for filter_key in ['S3Key', 'S3Metadata', 'S3Tags']:
+                if filter_key in value:
+                    xml += f'<{filter_key}>\n'
+                    for rule in value[filter_key].get('FilterRules', []):
+                        xml += (
+                            '<FilterRule>\n'
+                            f'<Name>{escape(rule["Name"])}</Name>\n'
+                            f'<Value>{escape(rule["Value"])}</Value>\n'
+                            '</FilterRule>\n'
+                        )
+                    xml += f'</{filter_key}>\n'
+            xml += '</Filter>\n'
+            return xml
+
+        def transform(data, parent_key=None):
+            xml = ''
+
+            if isinstance(data, dict):
+                for key, value in data.items():
+                    if key == 'Event':
+                        xml += process_event(value)
+                        continue
+
+                    if key == 'Filter':
+                        xml += process_filter(value)
+                        continue
+
+                    if isinstance(value, list):
+                        for item in value:
+                            xml += f'<{key}>\n{transform(item, key)}</{key}>\n'
+                        continue
+
+                    if isinstance(value, dict):
+                        xml += f'<{key}>\n{transform(value, key)}</{key}>\n'
+                        continue
+
+                    xml += f'<{key}>{escape(str(value))}</{key}>\n'
+
+                return xml
+
+            if isinstance(data, list):
+                for item in data:
+                    xml += transform(item, parent_key)
+                return xml
+
+            return escape(str(data))
+
+        xml_output = '<NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">\n'
+        xml_output += transform(data)
+        xml_output += '</NotificationConfiguration>'
+        return xml_output
+
     @RestClient.api_put('/{bucket_name}?lifecycle')
     def set_lifecycle(self, bucket_name, lifecycle, request=None):
         # pylint: disable=unused-argument
@@ -1171,38 +1236,107 @@ class RgwClient(RestClient):
     def set_notification(self, bucket_name, notification, request=None):
         # pylint: disable=unused-argument
         try:
+            notification = notification.strip()
+            if notification.startswith('{'):
+                try:
+                    notification_dict = json_str_to_object(notification)
+                    notification = self.notification_dict_to_xml(notification_dict)
+                except ValueError:
+                    raise DashboardException(
+                        msg="Invalid JSON in notification configuration",
+                        component='rgw'
+                    )
+            if not notification.startswith('<NotificationConfiguration'):
+                notification = (
+                    f'<NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">\n'
+                    f'{notification}\n'
+                    f'</NotificationConfiguration>'
+                )
             result = request(data=notification)  # type: ignore
         except RequestException as e:
-            raise DashboardException(msg=str(e), component='rgw')
+            msg = str(e)
+            content = getattr(e, 'content', None)
+
+            if content:
+                try:
+                    error_info = json_str_to_object(content)
+                    error_code = error_info.get("Code")
+                    if error_code == "MalformedXML":
+                        msg = "Invalid Notification XML format"
+                    elif error_code == "InvalidArgument":
+                        logger.info("Invalid argument details: %s", error_info)
+                        msg = "Invalid argument in notification request"
+                except json.JSONDecodeError:
+                    logger.info("Failed to parse error content from RGW")
+
+            raise DashboardException(msg=msg, component='rgw')
+
         return result
 
     @RestClient.api_get('/{bucket_name}?notification')
     def get_notification(self, bucket_name, notification_id=None, request=None):
         # pylint: disable=unused-argument
         try:
-            result = request(
-                raw_content=True, headers={'Accept': 'text/xml'}).decode()  # type: ignore
+            result = request(raw_content=True,
+                             headers={'Accept': 'text/xml'}).decode()  # type: ignore
             notification_config = xmltodict.parse(result)
-            if notification_config is not None:
-                notification_configuration = notification_config.get(
-                    'NotificationConfiguration', {}
-                )
-                topic_configuration = notification_configuration.get('TopicConfiguration')
-                if isinstance(topic_configuration, dict):
-                    notification_configuration['TopicConfiguration'] = [topic_configuration]
+            notification_configuration = (
+                notification_config.get('NotificationConfiguration', {})
+                if notification_config else {}
+            )
 
-                notification_config['NotificationConfiguration'] = notification_configuration
-            return notification_config['NotificationConfiguration']['TopicConfiguration']
+            topic_configuration = notification_configuration.get('TopicConfiguration')
+            if not topic_configuration:
+                return []
+
+            if isinstance(topic_configuration, dict):
+                topic_configuration = [topic_configuration]
+
+            def normalize_filter_rules(filter_dict):
+                if not isinstance(filter_dict, dict):
+                    return
+
+                for key in ['S3Key', 'S3Metadata', 'S3Tags']:
+                    if key in filter_dict:
+                        rules = filter_dict[key].get('FilterRule')
+                        if rules and isinstance(rules, dict):
+                            filter_dict[key]['FilterRule'] = [rules]
+            for topic in topic_configuration:
+                topic_filter = topic.get('Filter')
+                if topic_filter:
+                    normalize_filter_rules(topic_filter)
+
+            return topic_configuration
 
         except RequestException as e:
+            logger.warning(
+                "RequestException while fetching notification for bucket '%s': %s",
+                bucket_name, str(e)
+            )
             if e.content:
-                root = ET.fromstring(e.content)
-                code = root.find('Code')
-                if code is not None and code.text == 'NoSuchNotificationConfiguration':
-                    return None
-            raise DashboardException(msg=str(e), component='rgw')
+                try:
+                    root = ET.fromstring(e.content)
+                    code = root.find('Code')
+                    if code is not None and code.text == 'NoSuchNotificationConfiguration':
+                        logger.info(
+                            "No notification configuration found for bucket '%s'",
+                            bucket_name
+                        )
+                        return []
+                except ET.ParseError as e_parse:
+                    logger.error(
+                        "Error parsing XML from exception content: %s", e_parse
+                    )
+            return []
 
-    @RestClient.api_delete('/{bucket_name}?notification')
+        except (UnicodeDecodeError, AttributeError, ExpatError) as e:
+            logger.error(
+                "Error processing notification config for bucket '%s': %s",
+                bucket_name, str(e)
+            )
+            return []
+
+    @RestClient.api_delete('/{bucket_name}?notification={notification_id}')
     def delete_notification(self, bucket_name, notification_id, request=None):
         # pylint: disable=unused-argument
         try:

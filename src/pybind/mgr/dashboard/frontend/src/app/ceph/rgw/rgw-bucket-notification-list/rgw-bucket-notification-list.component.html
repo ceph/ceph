@@ -1,9 +1,10 @@
   <legend i18n>
     Notification Configuration
     <cd-help-text>
-      Configure a bucket notification.
+      Create a notification configuration to trigger alerts for specific bucket events, such as object creation or transitions, based on prefixes or tags.
     </cd-help-text>
   </legend>
+  <ng-container>
   <cd-table #table
             [data]="notification$ | async"
             [columns]="columns"
@@ -13,3 +14,17 @@
             identifier="Id"
             (fetchData)="loadNotification($event)">
   </cd-table>
+  </ng-container>
+  <ng-template #filterTpl 
+               let-config="data.value">
+    <ng-container *ngIf="config">
+      <ng-container *ngFor="let key of ['S3Key', 'S3Metadata', 'S3Tags']">
+        <ng-container *ngIf="config[key]?.FilterRule?.length">
+          <legend class="cds--label">{{ key }}:</legend>
+          <span *ngFor="let rule of config[key].FilterRule">
+            <cds-tag size="sm" 
+                     [type]="'blue'">{{ rule.Name }}: {{ rule.Value }}</cds-tag>
+          </span>
+        </ng-container>
+      </ng-container>
+    </ng-container>
