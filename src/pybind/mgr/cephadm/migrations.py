@@ -14,7 +14,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 7
+LAST_MIGRATION = 8
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +108,11 @@ class Migrations:
         if self.mgr.migration_current == 6:
             if self.migrate_6_7():
                 self.set(7)
+
+        if self.mgr.migration_current == 7:
+            if self.migrate_7_8():
+                if self.all_mgrs_upgraded():
+                    self.set(8)
 
     def migrate_0_1(self) -> bool:
         """
@@ -441,6 +446,72 @@ class Migrations:
         # and appeared to just be generated at daemon deploy time if secure_monitoring_stack
         # was set to true. Therefore we have nothing to migrate for those daemons
         return True
+
+    def migrate_7_8(self) -> bool:
+        """
+        Migration 7 -> 8
+        Replace Promtail with Alloy.
+
+        For this migration:
+        - If mgr daemons are still being upgraded, return True WITHOUT bumping migration_current.
+        (avoids failover to an old mgr that doesn't know Alloy).
+        - Once all mgrs are upgraded, remove all Promtail daemons + service.
+        - Only after confirming Promtail is gone, deploy Alloy on those hosts.
+        """
+        if not self.all_mgrs_upgraded():
+            logger.info("Promtail -> Alloy migration: mgr daemons still upgrading. "
+                        "Marking as complete without bumping migration_current.")
+            return True
+
+        daemons = self.mgr.cache.get_daemons()
+        promtail_hosts = {d.hostname for d in daemons if d.daemon_type == "promtail" and d.hostname}
+
+        if not promtail_hosts:
+            logger.info("Promtail -> Alloy migration: no Promtail daemons found, nothing to do.")
+            return True
+
+        try:
+            promtail_names = [d.name() for d in daemons if d.daemon_type == "promtail"]
+            if promtail_names:
+                logger.info(f"Removing Promtail daemons: {promtail_names}")
+                self.mgr.remove_daemons(promtail_names)
+                self.mgr.remove_service("promtail")
+
+            daemons = self.mgr.cache.get_daemons()
+            remaining_promtails = [d for d in daemons if d.daemon_type == "promtail"]
+            if remaining_promtails:
+                logger.info(f"Promtail -> Alloy migration: still found Promtail daemons "
+                            f"{[d.name() for d in remaining_promtails]}. Skipping Alloy deploy for now.")
+                return False
+
+            alloy_spec = ServiceSpec(
+                service_type="alloy",
+                service_id="alloy",
+                placement=PlacementSpec(
+                    hosts=[HostPlacementSpec(h, '', '') for h in promtail_hosts]
+                ),
+            )
+            logger.info(f"Deploying Alloy service on hosts: {', '.join(promtail_hosts)}")
+            self.mgr.apply_alloy(alloy_spec)
+            logger.info("Promtail -> Alloy migration completed successfully.")
+            return True
+        except Exception as e:
+            logger.error(f"Promtail -> Alloy migration failed: {e}")
+            return False
+
+    def all_mgrs_upgraded(self) -> bool:
+        """
+        Returns True if all mgr daemons are upgraded to the same version.
+        """
+        try:
+            mgr_map = self.mgr.get("mgr_map")
+            versions = {m.get("ceph_version") for m in mgr_map.get("standbys", [])}
+            if "active" in mgr_map:
+                versions.add(mgr_map["active"].get("ceph_version"))
+            return len(versions) == 1
+        except Exception as e:
+            logger.warning(f"Could not determine mgr versions: {e}")
+            return False
 
 
 def queue_migrate_rgw_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, Any]) -> None:
