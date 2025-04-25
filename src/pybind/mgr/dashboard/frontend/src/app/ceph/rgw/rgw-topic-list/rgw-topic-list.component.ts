@@ -11,7 +11,6 @@ import { Permission } from '~/app/shared/models/permissions';
 
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
-
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
