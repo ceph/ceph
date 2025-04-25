@@ -60,12 +60,12 @@ private:
 				boost::asio::use_awaitable);
   }
 
-  virtual asio::awaitable<std::unique_ptr<RGWDataChangesLog>>
+  virtual asio::awaitable<std::shared_ptr<RGWDataChangesLog>>
   create_datalog() = 0;
 
 protected:
 
-  std::unique_ptr<RGWDataChangesLog> datalog;
+  std::shared_ptr<RGWDataChangesLog> datalog;
 
   neorados::RADOS& rados() noexcept { return *rados_; }
   const std::string& pool_name() const noexcept { return pool_name_; }
@@ -170,7 +170,7 @@ protected:
   }
 
   auto recover(const DoutPrefixProvider* dpp) {
-    return datalog->recover(dpp, nullptr);
+    return datalog->recover(dpp, datalog->shared_from_this());
   }
 
   void add_to_cur_cycle(const BucketGen& bg) {
@@ -207,9 +207,9 @@ public:
 
 class DataLogTest : public DataLogTestBase {
 private:
-  asio::awaitable<std::unique_ptr<RGWDataChangesLog>> create_datalog() override {
-    auto datalog = std::make_unique<RGWDataChangesLog>(rados().cct(), true,
-						       &rados());
+  asio::awaitable<std::shared_ptr<RGWDataChangesLog>> create_datalog() override {
+    auto datalog = std::make_shared<RGWDataChangesLog>(rados().cct(), true,
+						       rados());
     co_await datalog->start(dpp(), rgw_pool(pool_name()), false, true, false);
     co_return std::move(datalog);
   }
@@ -217,9 +217,9 @@ private:
 
 class DataLogWatchless : public DataLogTestBase {
 private:
-  asio::awaitable<std::unique_ptr<RGWDataChangesLog>> create_datalog() override {
-    auto datalog = std::make_unique<RGWDataChangesLog>(rados().cct(), true,
-						       &rados());
+  asio::awaitable<std::shared_ptr<RGWDataChangesLog>> create_datalog() override {
+    auto datalog = std::make_shared<RGWDataChangesLog>(rados().cct(), true,
+						       rados());
     co_await datalog->start(dpp(), rgw_pool(pool_name()), false, false, false);
     co_return std::move(datalog);
   }
@@ -227,11 +227,11 @@ private:
 
 class DataLogBulky : public DataLogTestBase {
 private:
-  asio::awaitable<std::unique_ptr<RGWDataChangesLog>> create_datalog() override {
+  asio::awaitable<std::shared_ptr<RGWDataChangesLog>> create_datalog() override {
     // Decrease max push/list and force everything into one shard so we
     // can test iterated increment/decrement/list code.
-    auto datalog = std::make_unique<RGWDataChangesLog>(rados().cct(), true,
-						       &rados(), 1, 7);
+    auto datalog = std::make_shared<RGWDataChangesLog>(rados().cct(), true,
+						       rados(), 1, 7);
     co_await datalog->start(dpp(), rgw_pool(pool_name()), false, true, false);
     co_return std::move(datalog);
   }
