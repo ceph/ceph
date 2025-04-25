@@ -15,6 +15,12 @@
 #pragma once
 #include "include/types.h"
 
+#include <iosfwd>
+#include <map>
+#include <set>
+
+namespace ceph { class Formatter; }
+
 struct ConnectionReport {
   int rank = -1; // mon rank this state belongs to
   std::map<int, bool> current; // true if connected to the other mon
