@@ -44,11 +44,11 @@ The S3 bucket replication API has also been implemented, and allows users to cre
 
 
 Sync Policy Control Reference
-=============================
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 Get Sync Policy
-~~~~~~~~~~~~~~~
+===============
 
 To retrieve the current zonegroup sync policy, or a specific bucket policy:
 
@@ -58,7 +58,7 @@ To retrieve the current zonegroup sync policy, or a specific bucket policy:
 
 
 Create Sync Policy Group
-~~~~~~~~~~~~~~~~~~~~~~~~
+========================
 
 To create a sync policy group:
 
@@ -70,7 +70,7 @@ To create a sync policy group:
 
 
 Modify Sync Policy Group
-~~~~~~~~~~~~~~~~~~~~~~~~
+========================
 
 To modify a sync policy group:
 
@@ -82,7 +82,7 @@ To modify a sync policy group:
 
 
 Show Sync Policy Group
-~~~~~~~~~~~~~~~~~~~~~~
+======================
 
 To show a sync policy group:
 
@@ -93,7 +93,7 @@ To show a sync policy group:
 
 
 Remove Sync Policy Group
-~~~~~~~~~~~~~~~~~~~~~~~~
+========================
 
 To remove a sync policy group:
 
@@ -104,7 +104,7 @@ To remove a sync policy group:
 
 
 Create Sync Flow
-~~~~~~~~~~~~~~~~
+================
 
 To create or update directional sync flow:
 
@@ -133,7 +133,7 @@ Where zones are a comma separated list of all the zones that need to add to the 
 
 
 Remove Sync Flow Zones
-~~~~~~~~~~~~~~~~~~~~~~
+======================
 
 To remove directional sync flow:
 
@@ -172,7 +172,7 @@ To remove symmetrical sync flow:
 
 
 Create Sync Pipe
-~~~~~~~~~~~~~~~~
+================
 
 To create sync group pipe, or update its parameters:
 
@@ -208,7 +208,7 @@ User id can be set for user mode, and will be the user under which the sync oper
 
 
 Remove Sync Pipe
-~~~~~~~~~~~~~~~~
+================
 
 To remove specific sync group pipe params, or the entire pipe:
 
@@ -227,7 +227,7 @@ To remove specific sync group pipe params, or the entire pipe:
 
 
 Sync Info
-~~~~~~~~~
+=========
 
 To get information about the expected sync sources and targets (as defined by the sync policy):
 
@@ -241,12 +241,12 @@ Since a bucket can define a policy that defines data movement from it towards a 
 
 
 Examples
-========
+~~~~~~~~
 
 The system in these examples includes 3 zones: ``us-east`` (the master zone), ``us-west``, ``us-west-2``.
 
 Example 1: Two Zones, Complete Mirror
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+=====================================
 
 This is similar to older (pre Octopus) sync capabilities, but being done via the new sync policy engine. Note that changes to the zonegroup sync policy require a period update and commit.
 
@@ -348,7 +348,7 @@ entries as can be seen in the example.
 
 
 Example 2: Directional, Entire Zone Backup
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+==========================================
 
 Also similar to older sync capabilities. In here we add a third zone, ``us-west-2`` that will be a replica of ``us-west``, but data will not be replicated back from it.
 
@@ -443,7 +443,7 @@ Whereas ``us-west-2`` has only source and no destinations:
       
       
 Example 3: Mirror a Specific Bucket
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+===================================
 
 Using the same group configuration, but this time switching it to ``allowed`` state, which means that sync is allowed but not enabled.
 
@@ -466,7 +466,7 @@ And we will create a bucket level policy rule for existing bucket ``buck2``. Not
 
 
 Example 4: Limit Bucket Sync to Specific Zones
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+==============================================
 
 This will only sync ``buck3`` to ``us-east`` (from any zone that flow allows to sync into ``us-east``).
 
@@ -481,7 +481,7 @@ This will only sync ``buck3`` to ``us-east`` (from any zone that flow allows to 
 
 
 Example 5: Sync From a Different Bucket
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+=======================================
 
 Note that bucket sync only works (currently) across zones and not within the same zone.
 
@@ -565,7 +565,7 @@ Note that there are resolved hints, which means that the bucket ``buck5`` found 
 
 
 Example 6: Sync to Different Bucket
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+===================================
 
 The same mechanism can work for configuring data to be synced to (vs. synced from as in the previous example). Note that internally data is still pulled from the source at the destination zone:
 
@@ -586,7 +586,7 @@ A wildcard bucket name means the current bucket in the context of bucket sync po
 Combined with the configuration in Example 5, we can now write data to ``buck6`` on ``us-east``, data will sync to ``buck5`` on ``us-west``, and from there it will be distributed to ``buck4`` on ``us-east``, and on ``us-west-2``.
 
 Example 7: Source Filters
-~~~~~~~~~~~~~~~~~~~~~~~~~
+=========================
 
 Sync from ``buck8`` to ``buck9``, but only objects that start with ``foo/``:
 
@@ -680,7 +680,7 @@ Prefixes and tags can be combined, in which object will need to have both in ord
 
 
 Example 8: Destination Params: Storage Class
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+============================================
 
 Storage class of the destination objects can be configured:
 
@@ -696,7 +696,7 @@ Storage class of the destination objects can be configured:
 
 
 Example 9: Destination Params: Destination Owner Translation
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+============================================================
 
 Set the destination objects owner as the destination bucket owner.
 This requires specifying the uid of the destination bucket:
@@ -712,7 +712,7 @@ This requires specifying the uid of the destination bucket:
 
 
 Example 10: Destination Params: User Mode
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+=========================================
 
 User mode makes sure that the user has permissions to both read the objects, and write to the destination bucket. This requires that the uid of the user (which in its context the operation executes) is specified.
 
