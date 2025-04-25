@@ -784,7 +784,7 @@ class ServiceSpec(object):
         'nvmeof',
         'osd',
         'prometheus',
-        'promtail',
+        'alloy',
         'rbd-mirror',
         'rgw',
         'smb',
@@ -831,7 +831,7 @@ class ServiceSpec(object):
             'ceph-exporter': CephExporterSpec,
             'prometheus': PrometheusSpec,
             'loki': MonitoringSpec,
-            'promtail': MonitoringSpec,
+            'alloy': MonitoringSpec,
             'snmp-gateway': SNMPGatewaySpec,
             'elasticsearch': TracingSpec,
             'jaeger-agent': TracingSpec,
@@ -2408,7 +2408,7 @@ class MonitoringSpec(ServiceSpec):
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type in ['grafana', 'node-exporter', 'prometheus', 'alertmanager',
-                                'loki', 'promtail']
+                                'loki', 'alloy']
 
         super(MonitoringSpec, self).__init__(
             service_type, service_id,
@@ -2433,7 +2433,7 @@ class MonitoringSpec(ServiceSpec):
                     'alertmanager': 9093,
                     'grafana': 3000,
                     'loki': 3100,
-                    'promtail': 9080}[self.service_type]
+                    'alloy': 9080}[self.service_type]
 
 
 yaml.add_representer(MonitoringSpec, ServiceSpec.yaml_representer)

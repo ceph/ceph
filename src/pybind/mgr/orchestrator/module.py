@@ -184,7 +184,7 @@ class ServiceType(enum.Enum):
     ceph_exporter = 'ceph-exporter'
     prometheus = 'prometheus'
     loki = 'loki'
-    promtail = 'promtail'
+    alloy = 'alloy'
     mds = 'mds'
     rgw = 'rgw'
     nfs = 'nfs'

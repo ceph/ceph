@@ -26,7 +26,7 @@ def _create_image(image_ref: str, key: str) -> ContainerImage:
 class DefaultImages(Enum):
     PROMETHEUS = _create_image('quay.io/prometheus/prometheus:v2.51.0', 'prometheus')
     LOKI = _create_image('docker.io/grafana/loki:3.0.0', 'loki')
-    PROMTAIL = _create_image('docker.io/grafana/promtail:3.0.0', 'promtail')
+    ALLOY = _create_image('docker.io/grafana/alloy:latest', 'alloy')
     NODE_EXPORTER = _create_image('quay.io/prometheus/node-exporter:v1.7.0', 'node_exporter')
     ALERTMANAGER = _create_image('quay.io/prometheus/alertmanager:v0.27.0', 'alertmanager')
     GRAFANA = _create_image('quay.io/ceph/grafana:10.4.16', 'grafana')
@@ -60,7 +60,7 @@ class DefaultImages(Enum):
 class NonCephImageServiceTypes(Enum):
     prometheus = 'prometheus'
     loki = 'loki'
-    promtail = 'promtail'
+    alloy = 'alloy'
     node_exporter = 'node-exporter'
     alertmanager = 'alertmanager'
     grafana = 'grafana'
