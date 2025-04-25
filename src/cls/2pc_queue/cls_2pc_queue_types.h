@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #pragma once
 
+#include "common/Formatter.h"
 #include "include/types.h"
 
 #include <unordered_map>
