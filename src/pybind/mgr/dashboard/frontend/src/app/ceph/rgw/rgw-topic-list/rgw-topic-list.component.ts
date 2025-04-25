@@ -12,7 +12,6 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
@@ -42,7 +41,6 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
   topicsSubject = new BehaviorSubject<Topic[]>([]);
   topics$ = this.topicsSubject.asObservable();
   name: string;
-  topics: Topic[];
   constructor(
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
@@ -148,7 +146,7 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
               },
               complete: () => {
                 observer.complete();
-                this.table.refreshBtn();
+                this.fetchData();
               }
             });
         });

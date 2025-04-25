@@ -1482,11 +1482,9 @@ class RgwTopic(RESTController):
         "Create a new RGW Topic",
         parameters={
             "name": (str, "Name of the topic"),
-            "owner": (str, "Name of the owner"),
-            "daemon_name": (str, "Name of the daemon"),
             "push_endpoint": (str, "Push Endpoint"),
-            "opaque_data": (str, "OpaqueData"),
-            "persistent": (bool, "Persistent"),
+            "opaque_data": (str, " opaque data"),
+            "persistent": (bool, "persistent"),
             "time_to_live": (str, "Time to live"),
             "max_retries": (str, "Max retries"),
             "retry_sleep_duration": (str, "Retry sleep duration"),

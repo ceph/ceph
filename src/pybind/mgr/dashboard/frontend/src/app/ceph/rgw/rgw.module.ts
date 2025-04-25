@@ -2,7 +2,6 @@ import { CommonModule, TitleCasePipe } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
-
 import {
   NgbNavModule,
   NgbPopoverModule,
@@ -113,7 +112,7 @@ import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component
 import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
 import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component';
 import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
-
+import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notification-form.component';
 
 @NgModule({
   imports: [
@@ -215,7 +214,8 @@ import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-li
     RgwTopicListComponent,
     RgwTopicDetailsComponent,
     RgwTopicFormComponent,
-    RgwBucketNotificationListComponent
+    RgwBucketNotificationListComponent,
+    RgwNotificationFormComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -438,20 +438,12 @@ const routes: Routes = [
       { path: '', component: RgwTopicListComponent },
       {
         path: URLVerbs.CREATE,
-<<<<<<< HEAD
         component: RgwTopicFormComponent,
-=======
-        component: RgwCreateTopicFormComponent,
->>>>>>> fac004c0532 (mgr/dashboard: Add RGW topics endpoint creation for create ,delete and list in dashboard)
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
         path: `${URLVerbs.EDIT}/:name`,
-<<<<<<< HEAD
         component: RgwTopicFormComponent,
-=======
-        component: RgwCreateTopicFormComponent,
->>>>>>> fac004c0532 (mgr/dashboard: Add RGW topics endpoint creation for create ,delete and list in dashboard)
         data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]

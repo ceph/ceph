@@ -1225,6 +1225,7 @@ class RgwClient(RestClient):
             params['kafka_brokers'] = kafka_brokers
         if mechanism:
             params['mechanism'] = mechanism
+            
         if push_endpoint and '://' in push_endpoint and '@' in push_endpoint:
             try:
                 full_daemon_name = f'rgw.{daemon_name}'

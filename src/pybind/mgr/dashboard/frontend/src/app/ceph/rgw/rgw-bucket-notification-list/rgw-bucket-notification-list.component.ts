@@ -20,8 +20,14 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Bucket } from '../models/rgw-bucket';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { catchError, tap } from 'rxjs/operators';
-import { TopicConfiguration } from '~/app/shared/models/notification-configuration.model';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { NotificationService } from '~/app/shared/services/notification.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { TopicConfiguration } from '~/app/shared/models/notification-configuration.model';
+import { RgwNotificationFormComponent } from '../rgw-notification-form/rgw-notification-form.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 
 const BASE_URL = 'rgw/bucket';
 @Component({
@@ -48,7 +54,9 @@ export class RgwBucketNotificationListComponent extends ListWithDetails implemen
   constructor(
     private rgwBucketService: RgwBucketService,
     private authStorageService: AuthStorageService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private modalService: ModalCdsService,
+    private notificationService: NotificationService
   ) {
     super();
   }
@@ -78,7 +86,30 @@ export class RgwBucketNotificationListComponent extends ListWithDetails implemen
         cellTemplate: this.filterTpl
       }
     ];
+    const createAction: CdTableAction = {
+      permission: 'create',
+      icon: Icons.add,
+      click: () => this.openNotificationModal(this.actionLabels.CREATE),
+      name: this.actionLabels.CREATE
+    };
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: Icons.edit,
+      disable: () => this.selection.hasMultiSelection,
+      click: () => this.openNotificationModal(this.actionLabels.EDIT),
+      name: this.actionLabels.EDIT
+    };
+    const deleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: Icons.destroy,
+      click: () => this.deleteAction(),
+      disable: () => !this.selection.hasSelection,
+      name: this.actionLabels.DELETE,
+      canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
+    };
+    this.tableActions = [createAction, editAction, deleteAction];
   }
+
   loadNotification(context: CdTableFetchDataContext) {
     this.notification$ = this.rgwBucketService.getBucketNotificationList(this.bucket.bucket).pipe(
       tap((notification: TopicConfiguration) => {
@@ -93,5 +124,52 @@ export class RgwBucketNotificationListComponent extends ListWithDetails implemen
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  openNotificationModal(type: string) {
+    const modalRef = this.modalService.show(RgwNotificationFormComponent, {
+      bucket: this.bucket,
+      selectedNotification: this.selection.first(),
+      editing: type === this.actionLabels.EDIT ? true : false
+    });
+    modalRef?.close?.subscribe(() => this.updateBucketDetails.emit());
+  }
+
+  deleteAction() {
+    const selectedNotificationId = this.selection.selected.map((notification) => notification.Id);
+    if (selectedNotificationId.length === 0) {
+      this.notificationService.show(
+        NotificationType.success,
+        $localize`Please select notifications to delete.`
+      );
+      return;
+    }
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
+      itemDescription: $localize`Notification`,
+      itemNames: selectedNotificationId,
+      actionDescription: $localize`delete`,
+      submitAction: () => this.submitDeleteNotifications(selectedNotificationId)
+    });
+  }
+
+  submitDeleteNotifications(notificationId: string[]) {
+    this.rgwBucketService
+      .deleteNotification(this.bucket.bucket, notificationId.join(','))
+      .subscribe({
+        next: () => {
+          this.notificationService.show(
+            NotificationType.success,
+            $localize`Notifications deleted successfully.`
+          );
+          this.modalService.dismissAll();
+        },
+        error: () => {
+          this.notificationService.show(
+            NotificationType.success,
+            $localize`Failed to delete notifications. Please try again.`
+          );
+        }
+      });
+    this.modalRef?.close?.subscribe(() => this.updateBucketDetails.emit());
   }
 }
