@@ -775,6 +775,7 @@ class RgwBucket(RgwRESTController):
         return self._get_notification(bucket_name, daemon_name, owner)
 
     @RESTController.Collection(method='PUT', path='/notification')
+    @allow_empty_body
     @EndpointDoc("Create or update the bucket notification")
     def set_notification(self, bucket_name: str, notification: str = '', daemon_name=None,
                          owner=None):
