@@ -3,6 +3,9 @@
 #ifndef ROCKS_DB_STORE_H
 #define ROCKS_DB_STORE_H
 
+#include <sys/types.h>
+#include <dirent.h>
+
 #include "include/types.h"
 #include "include/buffer_fwd.h"
 #include "KeyValueDB.h"
