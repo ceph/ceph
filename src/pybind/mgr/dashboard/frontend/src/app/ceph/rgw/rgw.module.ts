@@ -2,7 +2,6 @@ import { CommonModule, TitleCasePipe } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
-
 import {
   NgbNavModule,
   NgbPopoverModule,
@@ -100,6 +99,7 @@ import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component
 import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
 import { RgwCreateTopicFormComponent } from './rgw-create-topic-form/rgw-create-topic-form.component';
 import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
+import { RgwCreateNotificationFormComponent } from './rgw-create-notification-form/rgw-create-notification-form.component';
 
 @NgModule({
   imports: [
@@ -201,7 +201,9 @@ import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-li
     RgwTopicListComponent,
     RgwTopicDetailsComponent,
     RgwCreateTopicFormComponent,
-    RgwBucketNotificationListComponent
+    RgwBucketNotificationListComponent,
+    RgwCreateNotificationFormComponent,
+    RgwCreateTopicFormComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -423,4 +425,6 @@ const routes: Routes = [
 @NgModule({
   imports: [RgwModule, RouterModule.forChild(routes)]
 })
-export class RoutedRgwModule {}
+export class RoutedRgwModule {
+   
+}

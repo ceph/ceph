@@ -8,12 +8,9 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { Permission } from '~/app/shared/models/permissions';
-
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
-
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { BehaviorSubject, Observable, Subscriber } from 'rxjs';
 import { Topic } from '~/app/shared/models/topic.model';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -21,6 +18,8 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { BehaviorSubject, Observable, of, Subscriber } from 'rxjs';
+import { catchError, shareReplay, switchMap } from 'rxjs/operators';
 
 const BASE_URL = 'rgw/topic';
 @Component({
@@ -38,10 +37,9 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
   context: CdTableFetchDataContext;
   errorMessage: string;
   selection: CdTableSelection = new CdTableSelection();
-  topic$: Observable<Topic[]>;
-  subject = new BehaviorSubject<Topic[]>([]);
+  topicsSubject = new BehaviorSubject<Topic[]>([]);
+  topics$ = this.topicsSubject.asObservable();
   name: string;
-  topics: Topic[];
   constructor(
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
@@ -78,6 +76,7 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
         flexGrow: 2
       }
     ];
+
     const getBucketUri = () =>
       this.selection.first() && `${encodeURIComponent(this.selection.first().name)}`;
     const addAction: CdTableAction = {
@@ -105,20 +104,20 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
     };
     this.tableActions = [addAction, editAction, deleteAction];
     this.setTableRefreshTimeout();
+    this.topics$ = this.topicsSubject.pipe(
+      switchMap(() =>
+        this.rgwTopicService.listTopic().pipe(
+          catchError(() => {
+            this.context.error();
+            return of(null);
+          })
+        )
+      ),
+      shareReplay(1)
+    );
   }
-
-  loadTopics(context?: CdTableFetchDataContext): void {
-    this.setTableRefreshTimeout();
-    this.rgwTopicService.listTopic().subscribe({
-      next: (data: Topic[]) => {
-        this.topics = data;
-      },
-      error: () => {
-        if (context) {
-          context.error();
-        }
-      }
-    });
+  fetchData() {
+    this.topicsSubject.next([]);
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -142,11 +141,10 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
             .subscribe({
               error: (error: any) => {
                 observer.error(error);
-                this.table.refreshBtn();
               },
               complete: () => {
                 observer.complete();
-                this.table.refreshBtn();
+                this.fetchData();
               }
             });
         });

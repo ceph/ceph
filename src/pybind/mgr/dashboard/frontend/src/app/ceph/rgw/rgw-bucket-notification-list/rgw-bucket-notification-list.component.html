@@ -12,4 +12,12 @@
             (updateSelection)="updateSelection($event)"
             identifier="Id"
             (fetchData)="loadNotification($event)">
+            <cd-table-actions class="table-actions"
+            [permission]="permission"
+            [selection]="selection"
+            [tableActions]="tableActions">
+  </cd-table-actions>
+  <cd-rgw-bucket-details *cdTableDetail
+                  [selection]="expandedRow">
+  </cd-rgw-bucket-details>       
   </cd-table>

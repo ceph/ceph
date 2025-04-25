@@ -3,9 +3,8 @@ import { Injectable } from '@angular/core';
 import _ from 'lodash';
 import { Observable, of as observableOf } from 'rxjs';
 import { ApiClient } from './api-client';
-import { Topic } from '~/app/shared/models/topic.model';
+import { CreateTopic, Topic } from '~/app/shared/models/topic.model';
 import { catchError, mapTo } from 'rxjs/operators';
-import { CreateTopicModel } from '~/app/ceph/rgw/rgw-create-topic-form/create-topic.model';
 import { RgwDaemonService } from './rgw-daemon.service';
 
 @Injectable({
@@ -18,21 +17,21 @@ export class RgwTopicService extends ApiClient {
     super();
   }
 
-  listTopic(): Observable<Topic[]> {
-    return this.http.get<Topic[]>(this.baseURL);
+  listTopic(): Observable<Topic> {
+    return this.http.get<Topic>(this.baseURL);
   }
 
   getTopic(name: string) {
     return this.http.get<Topic>(`${this.baseURL}/${name}`);
   }
 
-  create(createParam: CreateTopicModel) {
+  create(createParam: CreateTopic) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       return this.http.post(`${this.baseURL}`, createParam, { params: params });
     });
   }
 
-  update(createParam: CreateTopicModel) {
+  update(createParam: CreateTopic) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       return this.http.post(`${this.baseURL}`, createParam, { params: params });
     });
@@ -43,7 +42,7 @@ export class RgwTopicService extends ApiClient {
     });
   }
 
-  validatetopicName(name: string) {
+  exists(name: string) {
     return this.getTopic(name).pipe(
       mapTo(true),
       catchError((error: Event) => {
@@ -54,5 +53,4 @@ export class RgwTopicService extends ApiClient {
       })
     );
   }
- 
 }
