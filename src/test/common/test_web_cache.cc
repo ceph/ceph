@@ -41,13 +41,13 @@ class WebCacheTest : public ::testing::Test {
       : _cct(new CephContext(CEPH_ENTITY_TYPE_ANY)),
         _initialized_capacity(SIEVE_EXAMPLE_CACHE_SIZE),
         _uut(std::make_unique<WebCache<std::string, std::string>>(
-            SIEVE_EXAMPLE_CACHE_SIZE)) {
+            SIEVE_EXAMPLE_CACHE_SIZE, 42s)) {
     _cct->_log->start();
   }
   void TearDown() override { lderr(_cct.get()) << "AFTER: " << *_uut << dendl; }
 
   void reset_cache(size_t capacity) {
-    _uut = std::make_unique<WebCache<std::string, std::string>>(capacity);
+    _uut = std::make_unique<WebCache<std::string, std::string>>(capacity, 42s);
     _initialized_capacity = capacity;
   }
   void reset_cache_system_mode(size_t capacity) {
@@ -461,7 +461,7 @@ TEST_F(WebCacheRandomizedTest, RandomCallMainOperations) {
             _uut->clear();
             break;
           case 2:  // expire
-            _uut->expire_erase(1s);
+            _uut->expire_erase();
             break;
           default:
             ceph_abort("should not happen");
