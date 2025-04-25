@@ -5998,7 +5998,8 @@ int group_status_set(cls_method_context_t hctx, const string &global_group_id,
     return 0;
   }
 
-  if (group.state != cls::rbd::MIRROR_GROUP_STATE_ENABLED) {
+  if (group.state != cls::rbd::MIRROR_GROUP_STATE_ENABLED &&
+      group.state != cls::rbd::MIRROR_GROUP_STATE_CREATING) {
     return 0;
   }
 
