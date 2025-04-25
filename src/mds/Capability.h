@@ -17,8 +17,12 @@
 #define CEPH_CAPABILITY_H
 
 #include "include/buffer_fwd.h"
+#include "include/ceph_fs.h" // for CEPH_CAP_*
 #include "include/counter.h"
 #include "include/mempool.h"
+#include "include/object.h" // for snapid_t
+#include "include/types.h" // for version_t
+#include "include/utime.h"
 #include "include/xlist.h"
 #include "include/elist.h"
 

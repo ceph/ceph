@@ -14,6 +14,10 @@
 
 
 #include "mds/JournalPointer.h"
+
+#include <iomanip>
+#include <ostream>
+
 #include "mds/mdstypes.h"
 
 #include "common/debug.h"

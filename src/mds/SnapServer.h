@@ -15,8 +15,14 @@
 #ifndef CEPH_SNAPSERVER_H
 #define CEPH_SNAPSERVER_H
 
+#include <list>
+#include <map>
+#include <set>
+
 #include "MDSTableServer.h"
 #include "snap.h"
+#include "include/encoding.h"
+#include "include/object.h" // for struct snapid_t
 
 class MDSRank;
 class MRemoveSnaps;

@@ -18,12 +18,15 @@
 #include <iosfwd>
 #include <list>
 #include <map>
+#include <set>
 #include <string>
 #include <string_view>
 
 #include "mdstypes.h"
 #include "common/snap_types.h"
 #include "include/buffer.h"
+#include "include/object.h" // for snapid_t
+#include "include/utime.h"
 
 namespace ceph { class Formatter; }
 

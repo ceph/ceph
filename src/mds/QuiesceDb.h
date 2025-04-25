@@ -22,6 +22,7 @@
 
 #include "mds/mdstypes.h"
 #include "common/ceph_time.h"
+#include "include/cephfs/types.h" // for mds_gid_t
 
 class Context;
 

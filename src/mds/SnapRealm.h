@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_SNAPREALM_H
 #define CEPH_MDS_SNAPREALM_H
 
+#include <map>
+#include <set>
 #include <string_view>
 
 #include "Capability.h"
