@@ -17,28 +17,17 @@
 
 // this is needed for ceph_fs to compile in userland
 #include "int_types.h"
-#include "byteorder.h"
 #include "platform_errno.h"
 
-#include "uuid.h"
-
-#include <netinet/in.h>
-#include <fcntl.h>
 #include <string.h>
 
 #include "ceph_fs.h"
-#include "ceph_frag.h"
-#include "rbd_types.h"
 
 extern "C" {
 #include <stdint.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include "statlite.h"
 }
 
 #include <deque>
-#include <string>
 #include <list>
 #include <set>
 #include <span>
@@ -54,9 +43,6 @@ extern "C" {
 #include <unordered_set>
 
 #include "common/convenience.h" // for ceph::for_each()
-
-#include "object.h"
-#include "intarith.h"
 
 #include "acconfig.h"
 
