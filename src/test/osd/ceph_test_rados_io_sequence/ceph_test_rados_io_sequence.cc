@@ -84,6 +84,22 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   v = boost::any(std::pair<int, int>{first, second});
 }
 
+struct SequencePair {};
+void validate(boost::any& v, const std::vector<std::string>& values,
+              SequencePair* target_type, int) {
+  po::validators::check_first_occurrence(v);
+  const std::string& s = po::validators::get_single_string(values);
+  auto part = ceph::split(s).begin();
+  std::string parse_error;
+  int first = strict_iecstrtoll(*part++, &parse_error);
+  int second = strict_iecstrtoll(*part, &parse_error);
+  if (!parse_error.empty()) {
+    throw po::validation_error(po::validation_error::invalid_option_value);
+  }
+  v = boost::any(std::make_pair(static_cast<ceph::io_exerciser::Sequence>(first),
+                                static_cast<ceph::io_exerciser::Sequence>(second)));
+}
+
 struct PluginString {};
 void validate(boost::any& v, const std::vector<std::string>& values,
               PluginString* target_type, int) {
@@ -155,7 +171,7 @@ po::options_description get_options_description() {
                                                     "show list of sequences")(
       "dryrun,d", "test sequence, do not issue any I/O")(
       "verbose", "more verbose output during test")(
-      "sequence,s", po::value<int>(), "test specified sequence")(
+      "sequence,s", po::value<SequencePair>(), "test specified sequence range")(
       "seed", po::value<int>(), "seed for whole test")(
       "seqseed", po::value<int>(), "seed for sequence")(
       "blocksize,b", po::value<Size>(), "block size (default 2048)")(
@@ -246,17 +262,16 @@ ceph::io_sequence::tester::SelectSeqRange::SelectSeqRange(po::variables_map& vm)
                                     ceph::io_exerciser::Sequence>>(vm,
                                                                    "sequence") {
   if (vm.count(option_name)) {
-    ceph::io_exerciser::Sequence s =
-        static_cast<ceph::io_exerciser::Sequence>(vm["sequence"].as<int>());
-    if (s < ceph::io_exerciser::Sequence::SEQUENCE_BEGIN ||
-        s >= ceph::io_exerciser::Sequence::SEQUENCE_END) {
+    using SeqPair = std::pair<ceph::io_exerciser::Sequence, ceph::io_exerciser::Sequence>;
+    SeqPair s = vm["sequence"].as<SeqPair>();
+    if (s.first < ceph::io_exerciser::Sequence::SEQUENCE_BEGIN ||
+        s.second >= ceph::io_exerciser::Sequence::SEQUENCE_END ||
+        s.first > s.second) {
       dout(0) << "Sequence argument out of range" << dendl;
       throw po::validation_error(po::validation_error::invalid_option_value);
     }
-    ceph::io_exerciser::Sequence e = s;
-    force_value = std::make_optional<
-        std::pair<ceph::io_exerciser::Sequence, ceph::io_exerciser::Sequence>>(
-        std::make_pair(s, ++e));
+    ++s.second;
+    force_value = s;
   }
 }
 
@@ -1112,27 +1127,32 @@ void ceph::io_sequence::tester::TestRunner::list_sequence(bool testrecovery) {
   std::pair<int, int> obj_size_range = sos.select();
   ceph::io_exerciser::Sequence s = ceph::io_exerciser::Sequence::SEQUENCE_BEGIN;
   std::unique_ptr<ceph::io_exerciser::IoSequence> seq;
+  std::optional<std::pair<int, int>> km;
+  std::optional<std::pair<std::string_view, std::string_view>> mappinglayers;
   if (testrecovery) {
     std::optional<ceph::io_sequence::tester::Profile> profile =
         spo.getProfile();
-    std::optional<std::pair<int, int>> km;
-    std::optional<std::pair<std::string_view, std::string_view>> mappinglayers;
     if (profile) {
       km = profile->km;
       if (profile->mapping && profile->layers) {
         mappinglayers = {*spo.getProfile()->mapping, *spo.getProfile()->layers};
       }
     }
-    seq = ceph::io_exerciser::EcIoSequence::generate_sequence(
-        s, obj_size_range, km, mappinglayers, seqseed.value_or(rng()));
-  } else {
-    seq = ceph::io_exerciser::IoSequence::generate_sequence(
-        s, obj_size_range, seqseed.value_or(rng()));
   }
 
   do {
+    if (testrecovery) {
+      seq = ceph::io_exerciser::EcIoSequence::generate_sequence(
+        s, obj_size_range, km, mappinglayers, seqseed.value_or(rng()));
+    }
+    else {
+      seq = ceph::io_exerciser::IoSequence::generate_sequence(
+        s, obj_size_range, seqseed.value_or(rng()));
+    }
+
     dout(0) << s << " " << seq->get_name_with_seqseed() << dendl;
     s = seq->getNextSupportedSequenceId();
+
   } while (s != ceph::io_exerciser::Sequence::SEQUENCE_END);
 }
 
