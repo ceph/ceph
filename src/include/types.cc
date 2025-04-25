@@ -13,6 +13,7 @@
  */
 
 #include "types.h"
+#include "common/Formatter.h"
 
 #include <iomanip>
 
