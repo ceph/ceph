@@ -6,6 +6,8 @@
 
 #include "librbd/cache/pwl/Request.h"
 
+#include <iosfwd>
+
 namespace librbd {
 class BlockGuardCell;
 
