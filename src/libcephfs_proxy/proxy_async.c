@@ -40,7 +40,7 @@ static int32_t libcephfsd_cbk_nonblocking_rw(proxy_async_t *async,
 			}
 
 			memcpy(iov->iov_base, data, iov->iov_len);
-			data += iov->iov_len;
+			data = (char*)data + iov->iov_len;
 			size -= iov->iov_len;
 			iov++;
 			count--;
