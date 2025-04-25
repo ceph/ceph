@@ -6,6 +6,7 @@
   
 #include "acconfig.h"
     
+#include "common/Formatter.h"
 #include "librbd/io/Types.h"
 #include "librbd/cache/pwl/Types.h"
 

@@ -4,6 +4,8 @@
 #include "librbd/cache/ImageWriteback.h"
 #include "librbd/cache/pwl/ssd/LogEntry.h"
 
+#include "include/intarith.h" // for round_up_to()
+
 #define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::pwl::ssd::WriteLogEntry: " \

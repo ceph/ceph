@@ -6,6 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
+#include "include/rados.h" // for CEPH_NOSNAP
 #include "common/bit_vector.hpp"
 #include "librbd/AsyncRequest.h"
 
