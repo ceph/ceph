@@ -23,6 +23,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "common/ref.h" // for cref_t
+#include "include/Context.h"
 #include "include/interval_set.h"
 #include "include/elist.h"
 #include "include/filepath.h"
