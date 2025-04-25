@@ -17,6 +17,7 @@
 #define CEPH_AUTH_CRYPTO_H
 
 #include "include/common_fwd.h"
+#include "include/sha_digest.h"
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/buffer.h"
