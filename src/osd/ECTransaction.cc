@@ -876,7 +876,20 @@ void ECTransaction::Generate::written_and_present_shards() {
     // written
     if (op.attr_updates.contains(OI_ATTR)) {
       object_info_t oi(*(op.attr_updates[OI_ATTR]));
-      bool update = false;
+      // The majority of the updates to OI are made before a transaction is
+      // submitted to ECBackend, these are cached by OBC and are encoded into
+      // the OI attr update for the transaction. By the time the transaction
+      // gets here the OBC cached copy may have been advanced by further in
+      // flight writes that will be committed after this one.
+      //
+      // The exception is oi.shard_versions which is updated here. We therefore
+      // need to update the OI attr update with the latest version from the
+      // cache here (to account for any modifications made by previous in flight
+      // transactions), make any required modifications to shard_versions and
+      // then update the OBC cached copy and the encoded OI attr.
+      bool update = oi.shard_versions != obc->obs.oi.shard_versions;
+      oi.shard_versions = obc->obs.oi.shard_versions;
+
       if (entry->written_shards.empty()) {
         if (!oi.shard_versions.empty()) {
           oi.shard_versions.clear();
