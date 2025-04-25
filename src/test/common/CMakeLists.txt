@@ -121,6 +121,15 @@ add_executable(unittest_web_cache
 add_ceph_unittest(unittest_web_cache)
 target_link_libraries(unittest_web_cache ceph-common)
 
+if(HAVE_KEYUTILS)
+  # unittest_web_cache
+  add_executable(unittest_keyring
+    test_keyring.cc
+    )
+  add_ceph_unittest(unittest_keyring)
+  target_link_libraries(unittest_keyring global keyring)
+endif()
+
 # unittest_sloppy_crc_map
 add_executable(unittest_sloppy_crc_map
   test_sloppy_crc_map.cc
