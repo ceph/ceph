@@ -56,7 +56,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   LOG_PREFIX(Cache::retire_extent_addr);
   TRACET("retire {}~0x{:x}", t, paddr, length);
 
-  assert(paddr.is_real() && !paddr.is_block_relative());
+  assert(paddr.is_real_location());
 
   CachedExtentRef ext;
   auto result = t.get_extent(paddr, &ext);
@@ -71,8 +71,8 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
     ceph_abort();
   }
 
-  // any relative paddr must have been on the transaction
-  assert(!paddr.is_relative());
+  // any record-relative or delayed paddr must have been on the transaction
+  assert(paddr.is_absolute());
 
   // absent from transaction
   // retiring is not included by the cache hit metrics
@@ -97,6 +97,8 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
 void Cache::retire_absent_extent_addr(
   Transaction &t, paddr_t paddr, extent_len_t length)
 {
+  assert(paddr.is_absolute());
+
   CachedExtentRef ext;
 #ifndef NDEBUG
   auto result = t.get_extent(paddr, &ext);
@@ -729,11 +731,14 @@ void Cache::add_extent(CachedExtentRef ref)
   assert(ref->is_valid());
   assert(ref->user_hint == PLACEMENT_HINT_NULL);
   assert(ref->rewrite_generation == NULL_GENERATION);
+  assert(ref->get_paddr().is_absolute() ||
+         ref->get_paddr().is_root());
   extents_index.insert(*ref);
 }
 
 void Cache::mark_dirty(CachedExtentRef ref)
 {
+  assert(ref->get_paddr().is_absolute());
   if (ref->is_dirty()) {
     assert(ref->primary_ref_list_hook.is_linked());
     return;
@@ -752,6 +757,8 @@ void Cache::add_to_dirty(
   assert(!ref->primary_ref_list_hook.is_linked());
   ceph_assert(ref->get_modify_time() != NULL_TIME);
   assert(ref->is_fully_loaded());
+  assert(ref->get_paddr().is_absolute() ||
+         ref->get_paddr().is_root());
 
   // Note: next might not be at extent_state_t::DIRTY,
   // also see CachedExtent::is_stable_writting()
@@ -781,6 +788,8 @@ void Cache::remove_from_dirty(
   assert(ref->is_dirty());
   ceph_assert(ref->primary_ref_list_hook.is_linked());
   assert(ref->is_fully_loaded());
+  assert(ref->get_paddr().is_absolute() ||
+         ref->get_paddr().is_root());
 
   auto extent_length = ref->get_length();
   stats.dirty_bytes -= extent_length;
@@ -862,9 +871,12 @@ void Cache::remove_extent(
     const Transaction::src_t* p_src)
 {
   assert(ref->is_valid());
+  assert(ref->get_paddr().is_absolute() ||
+         ref->get_paddr().is_root());
   if (ref->is_dirty()) {
     remove_from_dirty(ref, p_src);
   } else if (!ref->is_placeholder()) {
+    assert(ref->get_paddr().is_absolute());
     lru.remove_from_lru(*ref);
   }
   extents_index.erase(*ref);
@@ -887,6 +899,7 @@ void Cache::commit_replace_extent(
     CachedExtentRef prev)
 {
   assert(next->get_paddr() == prev->get_paddr());
+  assert(next->get_paddr().is_absolute() || next->get_paddr().is_root());
   assert(next->version == prev->version + 1);
   extents_index.replace(*next, *prev);
 
@@ -1267,8 +1280,7 @@ record_t Cache::prepare_record(
 	assert(can_inplace_rewrite(i->prior_instance->get_type()));
 	assert(i->prior_instance->dirty_from_or_retired_at == JOURNAL_SEQ_MIN);
 	assert(i->prior_instance->state == CachedExtent::extent_state_t::CLEAN);
-	assert(i->prior_instance->get_paddr().get_addr_type() ==
-	  paddr_types_t::RANDOM_BLOCK);
+	assert(i->prior_instance->get_paddr().is_absolute_random_block());
 	i->version = 1;
       }
 
@@ -1290,10 +1302,11 @@ record_t Cache::prepare_record(
                 t, delta_length, *i);
       assert(t.root == i);
       root = t.root;
+      assert(root->get_paddr().is_root());
       record.push_back(
 	delta_info_t{
 	  extent_types_t::ROOT,
-	  P_ADDR_NULL,
+	  P_ADDR_ROOT,
 	  L_ADDR_NULL,
 	  0,
 	  0,
@@ -1308,7 +1321,7 @@ record_t Cache::prepare_record(
       auto stype = segment_type_t::NULL_SEG;
 
       // FIXME: This is specific to the segmented implementation
-      if (i->get_paddr().get_addr_type() == paddr_types_t::SEGMENT) {
+      if (i->get_paddr().is_absolute_segmented()) {
         auto sid = i->get_paddr().as_seg_paddr().get_segment_id();
         auto sinfo = get_segment_info(sid);
         if (sinfo) {
@@ -1407,7 +1420,11 @@ record_t Cache::prepare_record(
     fresh_stat.increment(i->get_length());
     get_by_ext(efforts.fresh_inline_by_ext,
                i->get_type()).increment(i->get_length());
+#ifdef UNIT_TESTS_BUILT
     assert(i->is_inline() || i->get_paddr().is_fake());
+#else
+    assert(i->is_inline());
+#endif
 
     bufferlist bl;
     i->prepare_write();
@@ -1461,7 +1478,7 @@ record_t Cache::prepare_record(
   for (auto &i: t.ool_block_list) {
     TRACET("fresh ool extent -- {}", t, *i);
     ceph_assert(i->is_valid());
-    assert(!i->is_inline());
+    assert(i->get_paddr().is_absolute());
     get_by_ext(efforts.fresh_ool_by_ext,
                i->get_type()).increment(i->get_length());
     if (is_backref_mapped_type(i->get_type())) {
@@ -1870,13 +1887,16 @@ void Cache::init()
     root = nullptr;
   }
   root = CachedExtent::make_cached_extent_ref<RootBlock>();
-  root->init(CachedExtent::extent_state_t::CLEAN,
+  // Make it simpler to keep root dirty
+  root->init(CachedExtent::extent_state_t::DIRTY,
              P_ADDR_ROOT,
              PLACEMENT_HINT_NULL,
              NULL_GENERATION,
-	     TRANS_ID_NULL);
+             TRANS_ID_NULL);
+  root->set_modify_time(seastar::lowres_system_clock::now());
   INFO("init root -- {}", *root);
-  extents_index.insert(*root);
+  add_extent(root);
+  add_to_dirty(root, nullptr);
 }
 
 Cache::mkfs_iertr::future<> Cache::mkfs(Transaction &t)
@@ -1937,8 +1957,7 @@ Cache::replay_delta(
    * safetly skip these deltas because the extent must already
    * have been rewritten.
    */
-  if (delta.paddr != P_ADDR_NULL &&
-      delta.paddr.get_addr_type() == paddr_types_t::SEGMENT) {
+  if (delta.paddr.is_absolute_segmented()) {
     auto& seg_addr = delta.paddr.as_seg_paddr();
     auto seg_info = get_segment_info(seg_addr.get_segment_id());
     if (seg_info) {
@@ -1976,9 +1995,10 @@ Cache::replay_delta(
     decode(alloc_delta, delta.bl);
     backref_entry_refs_t backref_entries;
     for (auto &alloc_blk : alloc_delta.alloc_blk_ranges) {
-      if (alloc_blk.paddr.is_relative()) {
-	assert(alloc_blk.paddr.is_record_relative());
+      if (alloc_blk.paddr.is_record_relative()) {
 	alloc_blk.paddr = record_base.add_relative(alloc_blk.paddr);
+      } else {
+        ceph_assert(alloc_blk.paddr.is_absolute());
       }
       DEBUG("replay alloc_blk {}~0x{:x} {}, journal_seq: {}",
 	alloc_blk.paddr, alloc_blk.len, alloc_blk.laddr, journal_seq);
@@ -2001,6 +2021,7 @@ Cache::replay_delta(
   if (is_root_type(delta.type)) {
     TRACE("replay root delta at {} {}, remove extent ... -- {}, prv_root={}",
           journal_seq, record_base, delta, *root);
+    ceph_assert(delta.paddr.is_root());
     remove_extent(root, nullptr);
     root->apply_delta_and_adjust_crc(record_base, delta.bl);
     root->dirty_from_or_retired_at = journal_seq;
@@ -2014,6 +2035,7 @@ Cache::replay_delta(
     return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
       std::make_pair(true, root));
   } else {
+    ceph_assert(delta.paddr.is_absolute());
     auto _get_extent_if_cached = [this](paddr_t addr)
       -> get_extent_ertr::future<CachedExtentRef> {
       // replay is not included by the cache hit metrics
@@ -2061,7 +2083,7 @@ Cache::replay_delta(
       DEBUG("replay extent delta at {} {} ... -- {}, prv_extent={}",
             journal_seq, record_base, delta, *extent);
 
-      if (delta.paddr.get_addr_type() == paddr_types_t::SEGMENT ||
+      if (delta.paddr.is_absolute_segmented() ||
 	  !can_inplace_rewrite(delta.type)) {
 	ceph_assert_always(extent->last_committed_crc == delta.prev_crc);
 	assert(extent->version == delta.pversion);
@@ -2069,7 +2091,7 @@ Cache::replay_delta(
 	extent->set_modify_time(modify_time);
 	ceph_assert_always(extent->last_committed_crc == delta.final_crc);
       } else {
-	assert(delta.paddr.get_addr_type() == paddr_types_t::RANDOM_BLOCK);
+	assert(delta.paddr.is_absolute_random_block());
 	// see prepare_record(), inplace rewrite might cause version mismatch
 	extent->apply_delta_and_adjust_crc(record_base, delta.bl);
 	extent->set_modify_time(modify_time);

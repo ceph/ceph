@@ -159,7 +159,7 @@ BtreeBackrefManager::new_mapping(
 {
   ceph_assert(
     is_aligned(
-      key.get_addr_type() == paddr_types_t::SEGMENT ?
+      key.is_absolute_segmented() ?
 	key.as_seg_paddr().get_segment_off() :
 	key.as_blk_paddr().get_device_off(),
       cache.get_block_size()));

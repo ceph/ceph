@@ -107,6 +107,7 @@ public:
     RETIRED
   };
   get_extent_ret get_extent(paddr_t addr, CachedExtentRef *out) {
+    assert(addr.is_real_location() || addr.is_root());
     auto [result, ext] = do_get_extent(addr);
     // placeholder in read-set must be in the retired-set
     // at the same time, user should not see a placeholder.
@@ -119,12 +120,14 @@ public:
   }
 
   void add_absent_to_retired_set(CachedExtentRef ref) {
+    assert(ref->get_paddr().is_absolute());
     bool added = do_add_to_read_set(ref);
     ceph_assert(added);
     add_present_to_retired_set(ref);
   }
 
   void add_present_to_retired_set(CachedExtentRef ref) {
+    assert(ref->get_paddr().is_real_location());
     assert(!is_weak());
 #ifndef NDEBUG
     auto [result, ext] = do_get_extent(ref->get_paddr());
@@ -156,6 +159,7 @@ public:
 
   // Returns true if added, false if already added or weak
   bool maybe_add_to_read_set(CachedExtentRef ref) {
+    assert(ref->get_paddr().is_absolute());
     if (is_weak()) {
       return false;
     }
@@ -163,6 +167,8 @@ public:
   }
 
   void add_to_read_set(CachedExtentRef ref) {
+    assert(ref->get_paddr().is_absolute()
+           || ref->get_paddr().is_root());
     if (is_weak()) {
       return;
     }
@@ -173,6 +179,7 @@ public:
 
   void add_fresh_extent(
     CachedExtentRef ref) {
+    assert(ref->get_paddr().is_real_location());
     ceph_assert(!is_weak());
     if (ref->is_exist_clean()) {
       existing_block_stats.inc(ref);
@@ -184,15 +191,20 @@ public:
       delayed_temp_offset += ref->get_length();
       delayed_alloc_list.emplace_back(ref);
       fresh_block_stats.increment(ref->get_length());
-    } else if (ref->get_paddr().is_absolute()) {
+    } else if (ref->get_paddr().is_absolute_random_block()) {
       pre_alloc_list.emplace_back(ref);
       fresh_block_stats.increment(ref->get_length());
     } else {
+#ifdef UNIT_TESTS_BUILT
       if (likely(ref->get_paddr() == make_record_relative_paddr(0))) {
 	ref->set_paddr(make_record_relative_paddr(offset));
       } else {
 	ceph_assert(ref->get_paddr().is_fake());
       }
+#else
+      assert(ref->get_paddr() == make_record_relative_paddr(0));
+      ref->set_paddr(make_record_relative_paddr(offset));
+#endif
       offset += ref->get_length();
       inline_block_list.push_back(ref);
       fresh_block_stats.increment(ref->get_length());
@@ -217,41 +229,41 @@ public:
   }
 
   void mark_delayed_extent_ool(CachedExtentRef& ref) {
+    assert(ref->get_paddr().is_delayed());
     ool_block_list.push_back(ref);
   }
 
   void update_delayed_ool_extent_addr(LogicalCachedExtentRef& ref,
                                       paddr_t final_addr) {
-    write_set.erase(*ref);
     assert(ref->get_paddr().is_delayed());
+    assert(final_addr.is_absolute());
+    write_set.erase(*ref);
     ref->set_paddr(final_addr, /* need_update_mapping: */ true);
-    assert(!ref->get_paddr().is_null());
-    assert(!ref->is_inline());
     write_set.insert(*ref);
   }
 
   void mark_allocated_extent_ool(CachedExtentRef& ref) {
     assert(ref->get_paddr().is_absolute());
-    assert(!ref->is_inline());
     ool_block_list.push_back(ref);
   }
 
   void mark_inplace_rewrite_extent_ool(LogicalCachedExtentRef ref) {
-    assert(ref->get_paddr().is_absolute());
-    assert(!ref->is_inline());
+    assert(ref->get_paddr().is_absolute_random_block());
     inplace_ool_block_list.push_back(ref);
   }
 
   void add_inplace_rewrite_extent(CachedExtentRef ref) {
    ceph_assert(!is_weak());
    ceph_assert(ref);
-   ceph_assert(ref->get_paddr().is_absolute());
+   ceph_assert(ref->get_paddr().is_absolute_random_block());
    assert(ref->state == CachedExtent::extent_state_t::DIRTY);
    pre_inplace_rewrite_list.emplace_back(ref->cast<LogicalCachedExtent>());
   }
 
   void add_mutated_extent(CachedExtentRef ref) {
     ceph_assert(!is_weak());
+    assert(ref->get_paddr().is_absolute() ||
+           ref->get_paddr().is_root());
     assert(ref->is_exist_mutation_pending() ||
 	   read_set.count(ref->prior_instance->get_paddr()));
     mutated_block_list.push_back(ref);
@@ -270,6 +282,7 @@ public:
     assert(!is_retired_placeholder_type(extent.get_type()));
     assert(!is_root_type(extent.get_type()));
     assert(extent.get_paddr() == placeholder.get_paddr());
+    assert(extent.get_paddr().is_absolute());
     {
       auto where = read_set.find(placeholder.get_paddr());
       assert(where != read_set.end());
@@ -324,6 +337,7 @@ public:
   }
 
   bool is_stable_extent_retired(paddr_t paddr, extent_len_t len) {
+    assert(paddr.is_absolute());
     auto iter = retired_set.lower_bound(paddr);
     if (iter == retired_set.end()) {
       return false;

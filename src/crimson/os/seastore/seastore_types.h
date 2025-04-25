@@ -565,10 +565,6 @@ public:
     return static_cast<device_id_t>(internal_paddr >> DEVICE_OFF_BITS);
   }
 
-  paddr_types_t get_addr_type() const {
-    return device_id_to_paddr_type(get_device_id());
-  }
-
   paddr_t add_offset(device_off_t o) const;
 
   paddr_t add_relative(paddr_t o) const;
@@ -648,22 +644,42 @@ public:
   }
 
   /**
-   * is_real
+   * is_absolute()
    *
-   * indicates whether addr reflects a physical location, absolute, relative,
-   * or delayed.  FAKE segments also count as real so as to reflect the way in
-   * which unit tests use them.
+   * indicates whether addr reflects an absolute location
+   * which can be found on disk.
+   *
+   * Note, fake paddrs should work like the absolute ones.
    */
-  bool is_real() const {
-    return !is_zero() && !is_null() && !is_root();
+  bool is_absolute() const {
+#ifdef UNIT_TESTS_BUILT
+    return get_addr_type() != paddr_types_t::RESERVED ||
+           is_fake();
+#else
+    return get_addr_type() != paddr_types_t::RESERVED;
+#endif
   }
 
-  bool is_absolute() const {
-    return get_addr_type() != paddr_types_t::RESERVED;
+  bool is_absolute_random_block() const {
+    return get_addr_type() == paddr_types_t::RANDOM_BLOCK;
+  }
+
+  bool is_absolute_segmented() const {
+    return get_addr_type() == paddr_types_t::SEGMENT;
   }
 
   bool is_fake() const {
     return get_device_id() == DEVICE_ID_FAKE;
+  }
+
+  /**
+   * is_real_location
+   *
+   * indicates whether addr reflects a real location (valid in lba) --
+   * absolute, record-relative, or delayed.
+   */
+  bool is_real_location() const {
+    return is_absolute() || is_delayed() || is_record_relative();
   }
 
   auto operator<=>(const paddr_t &) const = default;
@@ -694,7 +710,7 @@ private:
               encode_device_off(offset)) {
     assert(offset >= DEVICE_OFF_MIN);
     assert(offset <= DEVICE_OFF_MAX);
-    assert(get_addr_type() != paddr_types_t::SEGMENT);
+    assert(!is_absolute_segmented());
   }
 
   paddr_t(internal_paddr_t val);
@@ -703,6 +719,10 @@ private:
   constexpr paddr_t(device_id_t d_id, device_off_t offset, const_construct_t)
     : internal_paddr((static_cast<internal_paddr_t>(d_id) << DEVICE_OFF_BITS) |
                      static_cast<u_device_off_t>(offset)) {}
+
+  paddr_types_t get_addr_type() const {
+    return device_id_to_paddr_type(get_device_id());
+  }
 
   friend struct paddr_le_t;
   friend struct pladdr_le_t;
@@ -820,22 +840,22 @@ inline paddr_t make_delayed_temp_paddr(device_off_t off) {
 }
 
 inline const seg_paddr_t& paddr_t::as_seg_paddr() const {
-  assert(get_addr_type() == paddr_types_t::SEGMENT);
+  assert(is_absolute_segmented());
   return *static_cast<const seg_paddr_t*>(this);
 }
 
 inline seg_paddr_t& paddr_t::as_seg_paddr() {
-  assert(get_addr_type() == paddr_types_t::SEGMENT);
+  assert(is_absolute_segmented());
   return *static_cast<seg_paddr_t*>(this);
 }
 
 inline const blk_paddr_t& paddr_t::as_blk_paddr() const {
-  assert(get_addr_type() == paddr_types_t::RANDOM_BLOCK);
+  assert(is_absolute_random_block());
   return *static_cast<const blk_paddr_t*>(this);
 }
 
 inline blk_paddr_t& paddr_t::as_blk_paddr() {
-  assert(get_addr_type() == paddr_types_t::RANDOM_BLOCK);
+  assert(is_absolute_random_block());
   return *static_cast<blk_paddr_t*>(this);
 }
 
@@ -1002,18 +1022,15 @@ private:
     }
     using ret_t = std::pair<device_off_t, segment_id_t>;
     auto to_pair = [](const paddr_t &addr) -> ret_t {
-      if (addr.get_addr_type() == paddr_types_t::SEGMENT) {
+      if (addr.is_absolute_segmented()) {
 	auto &seg_addr = addr.as_seg_paddr();
 	return ret_t(seg_addr.get_segment_off(), seg_addr.get_segment_id());
-      } else if (addr.get_addr_type() == paddr_types_t::RANDOM_BLOCK) {
+      } else if (addr.is_absolute_random_block()) {
 	auto &blk_addr = addr.as_blk_paddr();
 	return ret_t(blk_addr.get_device_off(), MAX_SEG_ID);
-      } else if (addr.get_addr_type() == paddr_types_t::RESERVED) {
+      } else {
         auto &res_addr = addr.as_res_paddr();
         return ret_t(res_addr.get_device_off(), MAX_SEG_ID);
-      } else {
-	assert(0 == "impossible");
-	return ret_t(0, MAX_SEG_ID);
       }
     };
     auto left = to_pair(offset);
