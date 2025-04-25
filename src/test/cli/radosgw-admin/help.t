@@ -47,7 +47,7 @@
     bi put                           store bucket index object entries
     bi list                          list raw bucket index entries
     bi purge                         purge bucket index entries
-    object rm                        remove object
+    object rm                        remove object; include --yes-i-really-mean-it to force removal from bucket index
     object put                       put object
     object stat                      stat an object for its metadata
     object unlink                    unlink object from bucket index
