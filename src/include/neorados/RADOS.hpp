@@ -1382,6 +1382,10 @@ public:
   executor_type get_executor() const;
   boost::asio::io_context& get_io_context();
 
+  operator bool() {
+    return bool(impl);
+  }
+
 private:
   template<typename CompletionToken>
   auto consign(CompletionToken&& token) {
