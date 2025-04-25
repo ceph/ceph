@@ -237,6 +237,7 @@ public:
     ceph_assert(active_modules);
     return active_modules->get_module_finisher(name);
   }
+  void check_all_modules_started(Context *modules_start_complete);
 
   // <<< (end of ActivePyModules cheeky call-throughs)
 };
