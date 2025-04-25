@@ -23,7 +23,6 @@ namespace {
 
 class TestOnode final : public Onode {
   onode_layout_t layout;
-  bool dirty = false;
 
 public:
   TestOnode(uint32_t ddr, uint32_t dmr) : Onode(ddr, dmr, hobject_t()) {}
@@ -34,10 +33,9 @@ public:
   void with_mutable_layout(Transaction &t, Func&& f) {
     f(layout);
   }
-  bool is_alive() const {
+  bool is_alive() const final {
     return true;
   }
-  bool is_dirty() const { return dirty; }
   laddr_t get_hint() const final {return L_ADDR_MIN; }
   ~TestOnode() final = default;
 

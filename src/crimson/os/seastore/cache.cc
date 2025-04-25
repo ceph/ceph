@@ -739,7 +739,7 @@ void Cache::add_extent(CachedExtentRef ref)
 void Cache::mark_dirty(CachedExtentRef ref)
 {
   assert(ref->get_paddr().is_absolute());
-  if (ref->is_dirty()) {
+  if (ref->has_delta()) {
     assert(ref->primary_ref_list_hook.is_linked());
     return;
   }
@@ -753,7 +753,7 @@ void Cache::add_to_dirty(
     CachedExtentRef ref,
     const Transaction::src_t* p_src)
 {
-  assert(ref->is_dirty());
+  assert(ref->has_delta());
   assert(!ref->primary_ref_list_hook.is_linked());
   ceph_assert(ref->get_modify_time() != NULL_TIME);
   assert(ref->is_fully_loaded());
@@ -785,7 +785,7 @@ void Cache::remove_from_dirty(
     CachedExtentRef ref,
     const Transaction::src_t* p_src)
 {
-  assert(ref->is_dirty());
+  assert(ref->has_delta());
   ceph_assert(ref->primary_ref_list_hook.is_linked());
   assert(ref->is_fully_loaded());
   assert(ref->get_paddr().is_absolute() ||
@@ -817,13 +817,13 @@ void Cache::replace_dirty(
     CachedExtentRef prev,
     const Transaction::src_t& src)
 {
-  assert(prev->is_dirty());
+  assert(prev->has_delta());
   ceph_assert(prev->primary_ref_list_hook.is_linked());
   assert(prev->is_fully_loaded());
 
   // Note: next might not be at extent_state_t::DIRTY,
   // also see CachedExtent::is_stable_writting()
-  assert(next->is_dirty());
+  assert(next->has_delta());
   assert(!next->primary_ref_list_hook.is_linked());
   ceph_assert(next->get_modify_time() != NULL_TIME);
   assert(next->is_fully_loaded());
@@ -849,7 +849,7 @@ void Cache::clear_dirty()
 {
   for (auto i = dirty.begin(); i != dirty.end(); ) {
     auto ptr = &*i;
-    assert(ptr->is_dirty());
+    assert(ptr->has_delta());
     ceph_assert(ptr->primary_ref_list_hook.is_linked());
     assert(ptr->is_fully_loaded());
 
@@ -873,7 +873,7 @@ void Cache::remove_extent(
   assert(ref->is_valid());
   assert(ref->get_paddr().is_absolute() ||
          ref->get_paddr().is_root());
-  if (ref->is_dirty()) {
+  if (ref->has_delta()) {
     remove_from_dirty(ref, p_src);
   } else if (!ref->is_placeholder()) {
     assert(ref->get_paddr().is_absolute());
@@ -907,12 +907,12 @@ void Cache::commit_replace_extent(
   if (is_root_type(prev->get_type())) {
     assert(prev->is_stable_clean()
       || prev->primary_ref_list_hook.is_linked());
-    if (prev->is_dirty()) {
+    if (prev->has_delta()) {
       // add the new dirty root to front
       remove_from_dirty(prev, nullptr/* exclude root */);
     }
     add_to_dirty(next, nullptr/* exclude root */);
-  } else if (prev->is_dirty()) {
+  } else if (prev->has_delta()) {
     replace_dirty(next, prev, t_src);
   } else {
     lru.remove_from_lru(*prev);
@@ -1548,7 +1548,7 @@ record_t Cache::prepare_record(
     // exist mutation pending extents must be in t.mutated_block_list
     add_extent(i);
     const auto t_src = t.get_src();
-    if (i->is_dirty()) {
+    if (i->has_delta()) {
       add_to_dirty(i, &t_src);
     } else {
       touch_extent(*i, &t_src, t.get_cache_hint());
@@ -1795,7 +1795,7 @@ void Cache::complete_commit(
 	   t, is_inline, *i);
     i->invalidate_hints();
     add_extent(i);
-    assert(!i->is_dirty());
+    assert(!i->has_delta());
     const auto t_src = t.get_src();
     touch_extent(*i, &t_src, t.get_cache_hint());
     i->complete_io();
