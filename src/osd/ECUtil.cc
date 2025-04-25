@@ -206,12 +206,11 @@ void shard_extent_map_t::erase_after_ro_offset(uint64_t ro_offset) {
                                       ro_to_erase);
   for (auto &&[shard, eset] : ro_to_erase) {
     if (extent_maps.contains(shard)) {
-      extent_maps[shard].erase(eset.range_start(), eset.range_end());
-    }
-
-    // If the result is empty, delete the extent map.
-    if (extent_maps[shard].empty()) {
-      extent_maps.erase(shard);
+      auto &emap = extent_maps.at(shard);
+      emap.erase(eset.range_start(), eset.range_end());
+      if (emap.empty()) {
+        extent_maps.erase(shard);
+      }
     }
   }
 
