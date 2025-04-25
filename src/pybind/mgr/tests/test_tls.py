@@ -1,4 +1,4 @@
-from mgr_util import create_self_signed_cert, verify_tls, ServerConfigException, get_cert_issuer_info, verify_cacrt_content
+from mgr_util import create_self_signed_cert, verify_tls, ServerConfigException, get_cert_issuer_info, certificate_days_to_expire
 from OpenSSL import crypto, SSL
 
 import unittest
@@ -59,4 +59,4 @@ class TLSchecks(unittest.TestCase):
         # expired certificate
         self.assertRaisesRegex(ServerConfigException,
                                'Certificate issued by "Ceph/cephadm" expired',
-                               verify_cacrt_content, expired_cert)
+                               certificate_days_to_expire, expired_cert)
