@@ -39,7 +39,7 @@ export class LogsComponent implements OnInit, OnDestroy {
   clogText: string;
   auditLogText: string;
   lokiServiceStatus$: Observable<boolean>;
-  promtailServiceStatus$: Observable<boolean>;
+  alloyServiceStatus$: Observable<boolean>;
 
   interval: number;
   priorities: Array<{ name: string; value: string }> = [
@@ -89,7 +89,7 @@ export class LogsComponent implements OnInit, OnDestroy {
         return data.length > 0 && data[0].status === 1;
       })
     );
-    this.promtailServiceStatus$ = this.cephService.getDaemons('promtail').pipe(
+    this.alloyServiceStatus$ = this.cephService.getDaemons('alloy').pipe(
       map((data: any) => {
         return data.length > 0 && data[0].status === 1;
       })
