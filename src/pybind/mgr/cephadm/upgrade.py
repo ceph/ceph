@@ -13,6 +13,7 @@ from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UP
     CEPH_TYPES, CEPH_IMAGE_TYPES, NON_CEPH_IMAGE_TYPES, MONITORING_STACK_TYPES, GATEWAY_TYPES
 from cephadm.ssh import HostConnectionError
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, HostPlacementSpec
 
 from mgr_module import MonCommandFailed
 
@@ -872,26 +873,39 @@ class CephadmUpgrade:
         num = 1
         if target_digests is None:
             target_digests = []
+
+        promtail_hosts = set()
+
         for d_entry in to_upgrade:
             if self.upgrade_state.remaining_count is not None and self.upgrade_state.remaining_count <= 0 and not d_entry[1]:
-                self.mgr.log.info(
-                    f'Hit upgrade limit of {self.upgrade_state.total_count}. Stopping upgrade')
+                logger.info(f'Hit upgrade limit of {self.upgrade_state.total_count}. Stopping upgrade')
                 return
+
             d = d_entry[0]
             assert d.daemon_type is not None
             assert d.daemon_id is not None
             assert d.hostname is not None
 
-            # make sure host has latest container image
+            if d.daemon_type == 'promtail':
+                promtail_hosts.add(d.hostname)
+                logger.info(f'Upgrade: Detected promtail daemon {d.name()} on host {d.hostname}')
+                result = self.mgr.remove_daemons([d.name()])
+                msg = result.result_str()
+                if msg.startswith('Removed'):
+                    logger.info(f'Successfully removed daemon: {d.name()}')
+                    service_result = self.mgr.remove_service(d.service_name())
+                    service_msg = service_result.result_str()
+                    if service_msg.startswith('Removed'):
+                        self._deploy_alloy(promtail_hosts)
+                    continue  # Skip further upgrade for promtail
+
             with self.mgr.async_timeout_handler(d.hostname, 'cephadm inspect-image'):
                 out, errs, code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
                     d.hostname, '', 'inspect-image', [],
                     image=target_image, no_fsid=True, error_ok=True))
             if code or not any(d in target_digests for d in json.loads(''.join(out)).get('repo_digests', [])):
-                logger.info('Upgrade: Pulling %s on %s' % (target_image,
-                                                           d.hostname))
-                self.upgrade_info_str = 'Pulling %s image on host %s' % (
-                    target_image, d.hostname)
+                logger.info('Upgrade: Pulling %s on %s' % (target_image, d.hostname))
+                self.upgrade_info_str = f'Pulling {target_image} image on host {d.hostname}'
                 with self.mgr.async_timeout_handler(d.hostname, 'cephadm pull'):
                     out, errs, code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
                         d.hostname, '', 'pull', [],
@@ -901,29 +915,24 @@ class CephadmUpgrade:
                         'severity': 'warning',
                         'summary': 'Upgrade: failed to pull target image',
                         'count': 1,
-                        'detail': [
-                            'failed to pull %s on host %s' % (target_image,
-                                                              d.hostname)],
+                        'detail': [f'failed to pull {target_image} on host {d.hostname}'],
                     })
                     return
                 r = json.loads(''.join(out))
                 if not any(d in target_digests for d in r.get('repo_digests', [])):
-                    logger.info('Upgrade: image %s pull on %s got new digests %s (not %s), restarting' % (
-                        target_image, d.hostname, r['repo_digests'], target_digests))
-                    self.upgrade_info_str = 'Image %s pull on %s got new digests %s (not %s), restarting' % (
-                        target_image, d.hostname, r['repo_digests'], target_digests)
+                    logger.info(f'Upgrade: image {target_image} pull on {d.hostname} got new digests {r["repo_digests"]} (not {target_digests}), restarting')
+                    self.upgrade_info_str = f'Image {target_image} pull on {d.hostname} got new digests {r["repo_digests"]} (not {target_digests}), restarting'
                     self.upgrade_state.target_digests = r['repo_digests']
                     self._save_upgrade_state()
                     return
 
-                self.upgrade_info_str = 'Currently upgrading %s daemons' % (d.daemon_type)
+                self.upgrade_info_str = f'Currently upgrading {d.daemon_type} daemons'
 
             if len(to_upgrade) > 1:
-                logger.info('Upgrade: Updating %s.%s (%d/%d)' % (d.daemon_type, d.daemon_id, num, min(len(to_upgrade),
-                            self.upgrade_state.remaining_count if self.upgrade_state.remaining_count is not None else 9999999)))
+                logger.info(f'Upgrade: Updating {d.daemon_type}.{d.daemon_id} ({num}/{min(len(to_upgrade), self.upgrade_state.remaining_count if self.upgrade_state.remaining_count is not None else 9999999)})')
             else:
-                logger.info('Upgrade: Updating %s.%s' %
-                            (d.daemon_type, d.daemon_id))
+                logger.info(f'Upgrade: Updating {d.daemon_type}.{d.daemon_id}')
+
             action = 'Upgrading' if not d_entry[1] else 'Redeploying'
             try:
                 daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(d)
@@ -938,15 +947,40 @@ class CephadmUpgrade:
                     'severity': 'warning',
                     'summary': f'{action} daemon {d.name()} on host {d.hostname} failed.',
                     'count': 1,
-                    'detail': [
-                        f'Upgrade daemon: {d.name()}: {e}'
-                    ],
+                    'detail': [f'Upgrade daemon: {d.name()}: {e}'],
                 })
                 return
+
             num += 1
             if self.upgrade_state.remaining_count is not None and not d_entry[1]:
                 self.upgrade_state.remaining_count -= 1
                 self._save_upgrade_state()
+    
+    def _deploy_alloy(self, promtail_hosts: set) -> None:
+        daemons = self.mgr.cache.get_daemons()
+        remaining_promtails = [d for d in daemons if d.daemon_type == 'promtail']
+
+        if not remaining_promtails and promtail_hosts:
+            try:
+                alloy_id = "alloy"
+                alloy_spec = ServiceSpec(
+                    service_type="alloy",
+                    service_id=alloy_id,
+                    placement=PlacementSpec(
+                        hosts=[HostPlacementSpec(host, '', '') for host in promtail_hosts]
+                    )
+                )
+                logger.info(f'All promtail services removed. Deploying Alloy to hosts: {", ".join(promtail_hosts)}')
+                self.mgr.apply_alloy(alloy_spec)
+            except Exception as e:
+                self._fail_upgrade('UPGRADE_ALLOY_DEPLOY_FAILED', {
+                    'severity': 'error',
+                    'summary': 'Failed to deploy Alloy service after promtail removal',
+                    'count': 1,
+                    'detail': [str(e)],
+                })
+        else:
+            logger.info(f'Skipping Alloy deployment. Remaining promtail daemons: {[d.name() for d in remaining_promtails]}')
 
     def _handle_need_upgrade_self(self, need_upgrade_self: bool, upgrading_mgrs: bool) -> None:
         if need_upgrade_self:

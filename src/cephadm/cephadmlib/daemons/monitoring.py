@@ -37,7 +37,8 @@ class Monitoring(ContainerDaemonForm):
         'grafana': [3000],
         'alertmanager': [9093, 9094],
         'loki': [3100],
-        'promtail': [9080],
+        'promtail': [9080],  # Promtail uses the same port as Loki
+        'alloy': [9080],
     }
 
     components = {
@@ -72,6 +73,12 @@ class Monitoring(ContainerDaemonForm):
             'config-json-files': [
                 'promtail.yml',
             ],
+        },
+        'alloy': {
+            'image': DefaultImages.ALLOY.image_ref,
+            'cpus': '1',
+            'memory': '1GB',
+            'args': ["run", "/etc/alloy/alloy", "--storage.path=/var/lib/alloy/data"],
         },
         'node-exporter': {
             'image': DefaultImages.NODE_EXPORTER.image_ref,
@@ -112,7 +119,7 @@ class Monitoring(ContainerDaemonForm):
     def get_version(ctx, container_id, daemon_type):
         # type: (CephadmContext, str, str) -> str
         """
-        :param: daemon_type Either "prometheus", "alertmanager", "loki", "promtail" or "node-exporter"
+        :param: daemon_type Either "prometheus", "alertmanager", "loki", "alloy" or "node-exporter"
         """
         assert daemon_type in (
             'prometheus',
@@ -120,6 +127,7 @@ class Monitoring(ContainerDaemonForm):
             'node-exporter',
             'loki',
             'promtail',
+            'alloy',
         )
         cmd = daemon_type.replace('-', '_')
         code = -1
@@ -175,6 +183,8 @@ class Monitoring(ContainerDaemonForm):
             uid, gid = extract_uid_gid(ctx, file_path='/etc/loki')
         elif daemon_type == 'promtail':
             uid, gid = extract_uid_gid(ctx, file_path='/etc/promtail')
+        elif daemon_type == 'alloy':
+            uid, gid = extract_uid_gid(ctx, file_path='/etc/alloy')
         elif daemon_type == 'alertmanager':
             uid, gid = extract_uid_gid(
                 ctx, file_path=['/etc/alertmanager', '/etc/prometheus']
@@ -240,7 +250,7 @@ class Monitoring(ContainerDaemonForm):
         metadata = self.components[daemon_type]
         r = list(metadata.get('args', []))
         # set ip and port to bind to for nodeexporter,alertmanager,prometheus
-        if daemon_type not in ['grafana', 'loki', 'promtail']:
+        if daemon_type not in ['grafana', 'loki', 'promtail', 'alloy']:
             ip = ''
             port = self.port_map[daemon_type][0]
             meta = fetch_meta(ctx)
@@ -333,6 +343,33 @@ class Monitoring(ContainerDaemonForm):
             mounts[os.path.join(data_dir, 'etc/promtail')] = '/etc/promtail:Z'
             mounts[log_dir] = '/var/log/ceph:z'
             mounts[os.path.join(data_dir, 'data')] = '/promtail:Z'
+        elif daemon_type == 'alloy':
+            # Ensure proper permissions and ownership for the /var/log/ceph directory
+            # when setting up the Alloy daemon.
+            # This step ensures that:
+            # 1. The /var/log/ceph directory is created if it doesn't exist.
+            # 2. The directory's ownership is set to the 'alloy' user (UID 473) and group (GID 473).
+            # 3. The permissions are set to 0o750 to allow the 'alloy' user full access,
+            #    group members to have read and execute access, and others no access.
+            # This is necessary because the container should have access to /var/log/ceph with the
+            # correct ownership and permissions for Alloy to function correctly in the container.
+            etc_path = os.path.join(data_dir, 'etc/alloy')
+            mounts[etc_path] = '/etc/alloy:Z'
+            # Extract UID and GID for the 'alloy' user
+            uid, gid = self.extract_uid_gid(ctx, daemon_type)
+            # Ensure the /var/log/ceph directory exists
+            os.makedirs(log_dir, exist_ok=True)
+            try:
+                # Get the current ownership and permissions of the /var/log/ceph directory
+                stat_info = os.stat(log_dir)
+                # If the ownership doesn't match the expected UID and GID, update it
+                if (stat_info.st_uid, stat_info.st_gid) != (uid, gid):
+                    os.chown(log_dir, uid, gid)  # Set ownership to the 'alloy' user (UID 473, GID 473)
+                    # Set directory permissions to 0o750 (rwx for owner, r-x for group, no access for others)
+                    os.chmod(log_dir, 0o750)
+            except Exception as e:
+                raise Error(f"Failed to fix permissions for {log_dir}: {e}")
+            mounts[log_dir] = '/var/log/ceph:Z'
         elif daemon_type == 'node-exporter':
             mounts[
                 os.path.join(data_dir, 'etc/node-exporter')
