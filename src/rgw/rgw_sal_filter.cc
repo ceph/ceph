@@ -1225,7 +1225,12 @@ int FilterObject::FilterReadOp::prepare(optional_yield y, const DoutPrefixProvid
 {
   /* Copy params into next */
   next->params = params;
-  return next->prepare(y, dpp);
+  int ret = next->prepare(y, dpp);
+  if (ret < 0)
+    return ret;
+
+  params.parts_count = next->params.parts_count;
+  return 0;
 }
 
 int FilterObject::FilterReadOp::read(int64_t ofs, int64_t end, bufferlist& bl,
@@ -1279,6 +1284,9 @@ int FilterMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 				ACLOwner& owner, rgw_placement_rule& dest_placement,
 				rgw::sal::Attrs& attrs)
 {
+  next->obj_legal_hold = obj_legal_hold;
+  next->obj_retention = obj_retention;
+  next->cksum_type = cksum_type;
   return next->init(dpp, y, owner, dest_placement, attrs);
 }
 
@@ -1337,7 +1345,15 @@ int FilterMultipartUpload::get_info(const DoutPrefixProvider *dpp,
 				    optional_yield y, rgw_placement_rule** rule,
 				    rgw::sal::Attrs* attrs)
 {
-  return next->get_info(dpp, y, rule, attrs);
+  auto ret = next->get_info(dpp, y, rule, attrs);
+  if (ret < 0) {
+    return ret;
+  }
+
+  this->obj_legal_hold = next->obj_legal_hold;
+  this->obj_retention = next->obj_retention;
+  this->cksum_type = next->cksum_type;
+  return 0;
 }
 
 std::unique_ptr<Writer> FilterMultipartUpload::get_writer(

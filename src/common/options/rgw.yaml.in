@@ -3821,6 +3821,18 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_d4n_l1_write_open_flags
+  type: uint
+  level: advanced
+  desc: cache files write 'man 2 open' 'file status flags' modifiers
+  long_desc: For example, to configure synchronized I/O, fcntl-linux.h defines (converted from octal)
+    O_SYNC = 1052672
+    O_DSYNC = 4096
+    (0 for no modification of the flags)
+  default: 1052672
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_d4n_libaio_aio_threads
   type: int
   level: advanced
@@ -3859,6 +3871,18 @@ options:
   default: 60
   services:
   - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: d4n_writecache_enabled
+  type: bool
+  level: advanced
+  desc: The d4n write cache
+  default: false
+  services: 
+  - rgw
+  flags:
+  - startup
   with_legacy: true
 - name: rgw_backend_store
   type: str
@@ -4123,6 +4147,16 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_d4n_cache_cleaning_interval
+  type: int
+  level: advanced
+  desc: This is the interval in seconds for invoking write cache cleaning process
+  default: 1000
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
 - name: rgw_topic_persistency_time_to_live
   type: uint
   level: advanced
@@ -4304,4 +4338,14 @@ options:
   flags:
   - startup
   see_also:
+  with_legacy: true
+- name: rgw_d4n_backend_address
+  type: str
+  level: advanced
+  desc: The backend address used by D4N cache 
+  default: 127.0.0.1:6379
+  services: 
+  - rgw
+  flags:
+  - startup
   with_legacy: true

@@ -93,6 +93,7 @@ class RedisDriverFixture: public ::testing::Test {
       ASSERT_NE(cacheDriver, nullptr);
       ASSERT_NE(conn, nullptr);
 
+      env->cct->_conf->rgw_d4n_l1_datacache_address = "127.0.0.1:6379";
       cacheDriver->initialize(env->dpp);
 
       bl.append("test data");
@@ -245,7 +246,7 @@ TEST_F(RedisDriverFixture, GetAsyncYield)
   io.run();
 }
 
-TEST_F(RedisDriverFixture, DelYield)
+TEST_F(RedisDriverFixture, DeleteDataYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
     ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, yield));
@@ -262,7 +263,7 @@ TEST_F(RedisDriverFixture, DelYield)
       EXPECT_EQ(std::get<0>(resp).value(), 1);
     }
 
-    ASSERT_EQ(0, cacheDriver->del(env->dpp, "testName", yield));
+    ASSERT_EQ(0, cacheDriver->delete_data(env->dpp, "testName", yield));
     cacheDriver->shutdown();
 
     {
@@ -326,37 +327,26 @@ TEST_F(RedisDriverFixture, AppendDataYield)
   io.run();
 }
 
-TEST_F(RedisDriverFixture, DeleteDataYield)
+TEST_F(RedisDriverFixture, RenameYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, yield));
-
-    {
-      boost::system::error_code ec;
-      request req;
-      req.push("HEXISTS", "RedisCache/testName", "data");
-      response<int> resp;
-
-      conn->async_exec(req, resp, yield[ec]);
-
-      ASSERT_EQ((bool)ec, false);
-      EXPECT_EQ(std::get<0>(resp).value(), 1);
-    }
-
-    ASSERT_EQ(0, cacheDriver->delete_data(env->dpp, "testName", yield));
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{yield}));
+    ASSERT_EQ(0, cacheDriver->rename(env->dpp, "testName", "newTestName", optional_yield{yield}));
     cacheDriver->shutdown();
 
     {
       boost::system::error_code ec;
       request req;
-      req.push("HEXISTS", "RedisCache/testName", "data");
+      req.push("EXISTS", "RedisCache/testName");
+      req.push("EXISTS", "RedisCache/newTestName");
       req.push("FLUSHALL");
-      response<int, boost::redis::ignore_t> resp;
+      response<int, int, boost::redis::ignore_t> resp;
 
       conn->async_exec(req, resp, yield[ec]);
 
       ASSERT_EQ((bool)ec, false);
       EXPECT_EQ(std::get<0>(resp).value(), 0);
+      EXPECT_EQ(std::get<1>(resp).value(), 1);
     }
 
     conn->cancel();

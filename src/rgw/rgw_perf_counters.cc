@@ -59,6 +59,10 @@ void add_rgw_frontend_counters(PerfCountersBuilder *pcb) {
   pcb->add_u64_counter(l_rgw_lua_script_ok, "lua_script_ok", "Successful executions of Lua scripts");
   pcb->add_u64_counter(l_rgw_lua_script_fail, "lua_script_fail", "Failed executions of Lua scripts");
   pcb->add_u64(l_rgw_lua_current_vms, "lua_current_vms", "Number of Lua VMs currently being executed");
+
+  pcb->add_u64_counter(l_rgw_d4n_cache_hits, "d4n_cache_hits", "D4N cache hits");
+  pcb->add_u64_counter(l_rgw_d4n_cache_misses, "d4n_cache_misses", "D4N cache misses");
+  pcb->add_u64_counter(l_rgw_d4n_cache_evictions, "d4n_cache_evictions", "D4N cache evictions");
 }
 
 void add_rgw_op_counters(PerfCountersBuilder *lpcb) {
