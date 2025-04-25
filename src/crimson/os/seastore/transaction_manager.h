@@ -260,6 +260,8 @@ public:
     static_assert(is_logical_type(T::TYPE));
     assert(is_aligned(partial_off, get_block_size()));
     assert(is_aligned(partial_len, get_block_size()));
+    // must be user-oriented required by maybe_init
+    assert(is_user_transaction(t.get_src()));
 
     extent_len_t direct_partial_off = partial_off;
     bool is_clone = pin->is_clone();
@@ -302,9 +304,12 @@ public:
           return cache->read_extent_maybe_partial(
             t, std::move(extent), direct_partial_off, partial_len);
         }).si_then([maybe_init=std::move(maybe_init)](auto extent) {
-	  maybe_init(*extent);
-	  return extent;
-	});
+          if (!extent->is_seen_by_users()) {
+            maybe_init(*extent);
+            extent->set_seen_by_users();
+          }
+          return std::move(extent);
+        });
       } else {
 	return this->pin_to_extent<T>(
           t, std::move(std::get<0>(ret)),
@@ -381,6 +386,7 @@ public:
     laddr_t laddr_hint,
     extent_len_t len,
     placement_hint_t placement_hint = placement_hint_t::HOT) {
+    static_assert(is_logical_metadata_type(T::TYPE));
     LOG_PREFIX(TransactionManager::alloc_non_data_extent);
     SUBDEBUGT(seastore_tm, "{} hint {}~0x{:x} phint={} ...",
               t, T::TYPE, laddr_hint, len, placement_hint);
@@ -389,6 +395,9 @@ public:
       len,
       placement_hint,
       INIT_GENERATION);
+    // user must initialize the logical extent themselves.
+    assert(is_user_transaction(t.get_src()));
+    ext->set_seen_by_users();
     return lba_manager->alloc_extent(
       t,
       laddr_hint,
@@ -416,6 +425,7 @@ public:
     laddr_t laddr_hint,
     extent_len_t len,
     placement_hint_t placement_hint = placement_hint_t::HOT) {
+    static_assert(is_data_type(T::TYPE));
     LOG_PREFIX(TransactionManager::alloc_data_extents);
     SUBDEBUGT(seastore_tm, "{} hint {}~0x{:x} phint={} ...",
               t, T::TYPE, laddr_hint, len, placement_hint);
@@ -424,6 +434,11 @@ public:
       len,
       placement_hint,
       INIT_GENERATION);
+    // user must initialize the logical extent themselves
+    assert(is_user_transaction(t.get_src()));
+    for (auto& ext : exts) {
+      ext->set_seen_by_users();
+    }
     return lba_manager->alloc_extents(
       t,
       laddr_hint,
@@ -479,6 +494,10 @@ public:
     LBAMappingRef &&pin,
     std::array<remap_entry, N> remaps) {
     static_assert(std::is_base_of_v<LogicalChildNode, T>);
+    // data extents don't need maybe_init yet, currently,
+    static_assert(is_data_type(T::TYPE));
+    // must be user-oriented required by (the potential) maybe_init
+    assert(is_user_transaction(t.get_src()));
 
 #ifndef NDEBUG
     std::sort(remaps.begin(), remaps.end(),
@@ -550,7 +569,14 @@ public:
 	  } else {
 	    auto ret = get_extent_if_linked<T>(t, pin->duplicate());
 	    if (ret.index() == 1) {
-	      return std::move(std::get<1>(ret));
+	      return std::get<1>(ret
+	      ).si_then([](auto extent) {
+	        if (!extent->is_seen_by_users()) {
+	          // Note, no maybe_init available for data extents
+	          extent->set_seen_by_users();
+	        }
+	        return std::move(extent);
+	      });
 	    } else {
 	      // absent
 	      return base_iertr::make_ready_future<TCachedExtentRef<T>>();
@@ -571,6 +597,7 @@ public:
 	    original_bptr = ext->get_bptr();
 	  }
 	  if (ext) {
+	    assert(ext->is_seen_by_users());
 	    cache->retire_extent(t, ext);
 	  } else {
 	    cache->retire_absent_extent_addr(t, original_paddr, original_len);
@@ -594,6 +621,8 @@ public:
 	      remap_len,
 	      original_laddr,
 	      original_bptr);
+	    // user must initialize the logical extent themselves.
+	    extent->set_seen_by_users();
 	    extents.emplace_back(std::move(extent));
 	  }
 	});
@@ -1034,6 +1063,8 @@ private:
     extent_len_t partial_len,
     lextent_init_func_t<T> &&maybe_init) {
     static_assert(is_logical_type(T::TYPE));
+    // must be user-oriented required by maybe_init
+    assert(is_user_transaction(t.get_src()));
     using ret = pin_to_extent_ret<T>;
     auto &pref = *pin;
     auto direct_length = pref.is_indirect() ?
@@ -1062,6 +1093,7 @@ private:
 	pref.link_child(&extent);
 	extent.maybe_set_intermediate_laddr(pref);
 	maybe_init(extent);
+	extent.set_seen_by_users();
       }
     ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) mutable -> ret {
       if (ref->is_fully_loaded()) {
@@ -1114,6 +1146,7 @@ private:
     SUBTRACET(seastore_tm, "getting absent extent from pin {} type {} ...",
               t, *pin, type);
     assert(is_logical_type(type));
+    assert(is_background_transaction(t.get_src()));
     auto &pref = *pin;
     laddr_t direct_key;
     extent_len_t direct_length;
@@ -1140,6 +1173,8 @@ private:
 	assert(!pref.get_parent()->is_pending());
 	pref.link_child(&lextent);
 	lextent.maybe_set_intermediate_laddr(pref);
+        // No change to extent::seen_by_user because this path is only
+        // for background cleaning.
       }
     ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) {
       auto crc = ref->calc_crc32c();
