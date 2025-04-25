@@ -76,7 +76,7 @@ describe('RgwCreateTopicFormComponent', () => {
     component.topicForm.setValue({
       owner: 'dashboard',
       name: 'Test Topic',
-      push_endpoint: 'http://localhost:80',
+      push_endpoint: 'http://localhost:8000',
       OpaqueData: '',
       persistent: '',
       max_retries: '',
@@ -158,7 +158,7 @@ describe('RgwCreateTopicFormComponent', () => {
       name: 'Test Topic',
       owner: 'dashboard',
       dest: {
-        push_endpoint: 'http://localhost:80',
+        push_endpoint: 'http://localhost:8000',
         persistent: true,
         max_retries: 3,
         time_to_live: 100,
@@ -170,12 +170,12 @@ describe('RgwCreateTopicFormComponent', () => {
       policy: '{}'
     };
 
-    jest.spyOn(rgwTopicService, 'get').mockReturnValue(of(topicData as any));
+    jest.spyOn(rgwTopicService, 'getTopic').mockReturnValue(of(topicData as any));
     component.loadTopicData('test-topic-id');
 
     expect(component.topicForm.get('name')?.value).toBe('Test Topic');
     expect(component.topicForm.get('owner')?.value).toBe('dashboard');
-    expect(component.topicForm.get('push_endpoint')?.value).toBe('http://localhost:80');
+    expect(component.topicForm.get('push_endpoint')?.value).toBe('http://localhost:8000');
   });
 
   it('should handle select change and update endpoint', () => {

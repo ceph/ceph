@@ -1,15 +1,14 @@
-  <ng-container *ngIf="topics$ | async as topics"
+<ng-container>
   <cd-table #table
             [autoReload]="false"
-            [data]="topics"
+            [data]="topics$ | async"
             [columns]="columns"
             columnMode="flex"
             selectionType="single"
             [hasDetails]="true"
             (setExpandedRow)="setExpandedRow($event)"
             (updateSelection)="updateSelection($event)"
-            identifier="name"
-            (fetchData)="loadTopics($event)">
+            (fetchData)="fetchData()">
   <cd-table-actions class="table-actions"
                     [permission]="permission"
                     [selection]="selection"

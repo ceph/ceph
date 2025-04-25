@@ -12,7 +12,10 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Bucket, Notification } from '../models/rgw-bucket';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { catchError, tap } from 'rxjs/operators';
-
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+//import { NotificationService } from '~/app/shared/services/notification.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { RgwCreateNotificationFormComponent } from '../rgw-create-notification-form/rgw-create-notification-form.component';
 const BASE_URL = 'rgw/bucket';
 @Component({
   selector: 'cd-rgw-bucket-notification-list',
@@ -34,9 +37,11 @@ export class RgwBucketNotificationListComponent implements OnInit {
   modalRef: any;
 
   constructor(
-    private authStorageService: AuthStorageService,
-    public actionLabels: ActionLabelsI18n,
-    private rgwBucketService: RgwBucketService
+     private rgwBucketService: RgwBucketService,
+     private authStorageService: AuthStorageService,
+     public actionLabels: ActionLabelsI18n,
+     private modalService: ModalCdsService,
+     //private notificationService: NotificationService
   ) {}
 
   ngOnInit() {
@@ -63,6 +68,28 @@ export class RgwBucketNotificationListComponent implements OnInit {
         flexGrow: 1
       }
     ];
+    const createAction: CdTableAction = {
+          permission: 'create',
+          icon: Icons.add,
+          click: () => this.openNotificationModal(this.actionLabels.CREATE),
+          name: this.actionLabels.CREATE
+        };
+        const editAction: CdTableAction = {
+          permission: 'update',
+          icon: Icons.edit,
+          disable: () => this.selection.hasMultiSelection,
+          click: () => this.openNotificationModal(this.actionLabels.EDIT),
+          name: this.actionLabels.EDIT
+        };
+        const deleteAction: CdTableAction = {
+          permission: 'delete',
+          icon: Icons.destroy,
+          click: () => this.deleteAction(),
+          disable: () => !this.selection.hasSelection,
+          name: this.actionLabels.DELETE,
+          canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
+        };
+        this.tableActions = [createAction, editAction, deleteAction];
   }
 
   loadNotification(context: CdTableFetchDataContext) {
@@ -80,4 +107,17 @@ export class RgwBucketNotificationListComponent implements OnInit {
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
   }
+
+  openNotificationModal(type: string) {
+      const modalRef = this.modalService.show(RgwCreateNotificationFormComponent, {
+        bucket: this.bucket,
+        selectedNotification: this.selection.first(),
+        editing: type === this.actionLabels.EDIT ? true : false
+      });
+      modalRef?.close?.subscribe(() => this.updateBucketDetails.emit());
+    }
+
+   deleteAction() {
+     
+    }
 }

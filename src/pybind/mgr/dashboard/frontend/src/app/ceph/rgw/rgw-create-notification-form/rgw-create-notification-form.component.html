@@ -1,0 +1,210 @@
+<cds-modal size="md" [open]="open" (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()" i18n>
+    {{ editing ? 'Edit' : 'Create' }} Notification configuration
+    <cd-help-text [formAllFieldsRequired]="false"></cd-help-text>
+  </cds-modal-header>
+
+  <ng-container>
+    <section cdsModalContent>
+      <form name="notificationForm" #formDir="ngForm" [formGroup]="notificationForm" novalidate>
+        <!-- Id-->
+        <div cdsRow>
+          <div cdsCol>
+            <cds-text-label labelInputID="id" cdRequiredField="Id"
+              [invalid]="!notificationForm.controls.id.valid && notificationForm.controls.id.dirty"
+              [invalidText]="idError" [helperText]="idHelper" i18n>
+              Id
+              <input cdsText type="text" id="id" maxlength="255" formControlName="id" />
+            </cds-text-label>
+            <ng-template #idHelper>
+              <span i18n>Unique identifier for the rule. Max 255 characters.</span>
+            </ng-template>
+            <ng-template #idError>
+              <span *ngIf="notificationForm.showError('id', formDir, 'required')" class="invalid-feedback">
+                <ng-container i18n>This field is required.</ng-container>
+              </span>
+            </ng-template>
+          </div>
+          <!-- Topic -->
+          <div cdsCol>
+            <cds-text-label labelInputID="topic" cdRequiredField="Topic"
+              [invalid]="!notificationForm.controls.topic.valid && notificationForm.controls.topic.dirty"
+              [invalidText]="topicError" [helperText]="topicHelper" i18n>
+              Topic
+              <input cdsText type="text" id="topic" maxlength="255" formControlName="topic" />
+            </cds-text-label>
+            <ng-template #topicHelper>
+              <span i18n>Topic ARN for notifications</span>
+            </ng-template>
+            <ng-template #topicError>
+              <span *ngIf="notificationForm.showError('topic', formDir, 'required')" class="invalid-feedback">
+                <ng-container i18n>This field is required.</ng-container>
+              </span>
+            </ng-template>
+          </div>
+        </div>
+
+        <!-- Events -->
+        <div cdsRow>
+          <div cdsCol [columnNumbers]="{ lg: 8, md: 8 }">
+            <cds-combo-box label="Event" type="multi" formControlName="event" placeholder="Select event..."
+              [items]="eventOption" itemValueKey="content" id="event" cdDynamicInputCombobox
+              (updatedItems)="eventOption = $event" i18n-placeholder>
+              <cds-dropdown-list></cds-dropdown-list>
+            </cds-combo-box>
+          </div>
+        </div>
+        <div formGroupName="filter">
+          <!-- S3 Key Filters -->
+          <div formArrayName="s3Key">
+            <legend class="cd-header" i18n>S3 Key configuration</legend>
+            <div *ngFor="let group of s3KeyFilters.controls; let i = index" [formGroupName]="i">
+              <div cdsRow>
+                <div cdsCol>
+                  <cds-select id="skeyFilterValue-{{ i }}" formControlName="Name" label="Name" i18n-label>
+                  <option *ngFor="let filter of skeyFilterValue" [value]="filter">{{ filter }}</option>
+                </cds-select>
+                </div>
+                <div cdsCol>
+                  <cds-text-label labelInputID="metadataValue-{{ i }}" i18n>
+                    Value
+                    <input cdsText type="text" maxlength="255" formControlName="Value" />
+                  </cds-text-label>
+                </div>
+                <div cdsCol [columnNumbers]="{ lg: 1, md: 1 }"
+                     class="item-action-btn spacing">
+                     <cds-icon-button
+                     kind="primary"
+                     size="sm"
+                     (click)="addRow('s3Key', i)">
+                     <svg
+                       cdsIcon="add"
+                       size="32"
+                       class="cds--btn__icon"></svg>
+                   </cds-icon-button>
+                
+                </div>
+                <div cdsCol
+                     [columnNumbers]="{ lg: 1, md: 1 }"
+                     class="item-action-btn spacing">
+            <cds-icon-button
+              kind="danger"
+              size="sm"
+              (click)="removeRow('s3Key', i)"
+            >
+              <svg
+                cdsIcon="trash-can"
+                size="32"
+                class="cds--btn__icon"></svg>
+            </cds-icon-button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- S3 Metadata Filters -->
+          <div formArrayName="s3Metadata">
+            <legend class="cd-header" i18n>S3 Metadata configuration</legend>
+            <div *ngFor="let group of s3MetadataFilters.controls; let i = index" [formGroupName]="i">
+              <div cdsRow>
+                <div cdsCol>
+                  <cds-text-label labelInputID="metadataValue-{{ i }}" i18n>
+                    Name
+                    <input cdsText type="text" maxlength="255" formControlName="Name" />
+                  </cds-text-label>
+                </div>
+                <div cdsCol>
+                  <cds-text-label labelInputID="metadataValue-{{ i }}" i18n>
+                    Value
+                    <input cdsText type="text" maxlength="255" formControlName="Value" />
+                  </cds-text-label>
+                </div>
+                <div cdsCol [columnNumbers]="{ lg: 1, md: 1 }"
+                     class="item-action-btn spacing">
+                     <cds-icon-button
+                     kind="primary"
+                     size="sm"
+                     (click)="addRow('s3Metadata', i)">
+                     <svg
+                       cdsIcon="add"
+                       size="32"
+                       class="cds--btn__icon"></svg>
+                   </cds-icon-button>
+                
+                </div>
+                <div cdsCol
+                     [columnNumbers]="{ lg: 1, md: 1 }"
+                     class="item-action-btn spacing">
+            <cds-icon-button
+              kind="danger"
+              size="sm"
+              (click)="removeRow('s3Metadata', i)"
+            >
+              <svg
+                cdsIcon="trash-can"
+                size="32"
+                class="cds--btn__icon"></svg>
+            </cds-icon-button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- S3 Tags Filters -->
+          <div formArrayName="s3Tags">
+            <legend class="cd-header" i18n>S3 Tags configuration</legend>
+            <div *ngFor="let group of s3TagsFilters.controls; let i = index" [formGroupName]="i">
+              <div cdsRow>
+                <div cdsCol>
+                  <cds-text-label labelInputID="tagsValue-{{ i }}" i18n>
+                    Name
+                    <input cdsText type="text" maxlength="255" formControlName="Name" />
+                  </cds-text-label>
+                </div>
+                <div cdsCol>
+                  <cds-text-label labelInputID="tagsValue-{{ i }}" i18n>
+                    Value
+                    <input cdsText type="text" maxlength="255" formControlName="Value" />
+                  </cds-text-label>
+                </div>
+                <div cdsCol [columnNumbers]="{ lg: 1, md: 1 }"
+                     class="item-action-btn spacing">
+                     <cds-icon-button
+                     kind="primary"
+                     size="sm"
+                     (click)="addRow('s3Tags', i)">
+                     <svg
+                       cdsIcon="add"
+                       size="32"
+                       class="cds--btn__icon"></svg>
+                   </cds-icon-button>
+                </div>
+                <div cdsCol
+                     [columnNumbers]="{ lg: 1, md: 1 }"
+                     class="item-action-btn spacing">
+            <cds-icon-button
+              kind="danger"
+              size="sm"
+              (click)="removeRow('s3Tags', i)"
+            >
+              <svg
+                cdsIcon="trash-can"
+                size="32"
+                class="cds--btn__icon"></svg>
+            </cds-icon-button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </section>
+  </ng-container>
+
+  <!-- Submit Button -->
+  <cd-form-button-panel
+    (submitActionEvent)="onSubmit()"
+    [form]="notificationForm"
+    [submitText]="editing ? actionLabels.EDIT : actionLabels.CREATE"
+    [modalForm]="true">
+  </cd-form-button-panel>
+</cds-modal>
