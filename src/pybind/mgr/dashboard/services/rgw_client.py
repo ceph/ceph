@@ -22,7 +22,7 @@ try:
 except ModuleNotFoundError:
     logging.error("Module 'xmltodict' is not installed.")
 
-from mgr_util import build_url
+from mgr_util import build_url, name_to_config_section
 
 from .. import mgr
 from ..awsauth import S3Auth

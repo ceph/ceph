@@ -6,29 +6,28 @@ import {
   OnInit,
   ViewChild
 } from '@angular/core';
-import {
-  ActionLabelsI18n,
-  URLVerbs,
-  URLPort,
-  HostURLProtocol
-} from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import {
-  AMQP_ACK_LEVEL,
-  END_POINT_TYPE,
-  KAFKA_ACK_LEVEL,
-  TopicModel
-} from '../rgw-topic-list/topic.model';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { TextAreaJsonFormatterService } from '~/app/shared/services/text-area-json-formatter.service';
 import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { ActivatedRoute, Router } from '@angular/router';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { CreateTopicModel, KAFKA_MECHANISM } from './create-topic.model';
+
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
+import {
+  AMQP_ACK_LEVEL,
+  CreateTopic,
+  END_POINT_TYPE,
+  KAFKA_ACK_LEVEL,
+  KAFKA_MECHANISM,
+  Topic,
+  URLPort,
+  HostURLProtocol
+} from '~/app/shared/models/topic.model';
 
 @Component({
   selector: 'cd-rgw-create-topic-form',
@@ -44,24 +43,17 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
   connect: string;
   resource: string;
   endpointType: string[] = [];
-  amqp_ack_level: string[] = [];
-  kafka_ack_level: string[] = [];
+  amqpAckLevel: string[] = [];
+  kafkaAckLevel: string[] = [];
   selectedOption: string;
-  verify_sslflag: boolean = true;
-  secure_sslflag: boolean = true;
   port: string;
-  useSslFlag: boolean = false;
-  enable_ssl: boolean = false;
-  levelFlag: any;
   owners: string[];
   vhost: string;
-  passwordhelperText: string;
   selectOwner: string;
-  kafka_mechanism: string[] = [];
+  kafkaMechanism: string[] = [];
   editing: boolean = false;
   topicId: string;
   fqdn: string;
-  topicArn: string;
   constructor(
     public actionLabels: ActionLabelsI18n,
     private textAreaJsonFormatterService: TextAreaJsonFormatterService,
@@ -86,29 +78,26 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
   ngOnInit(): void {
     this.connect = this.actionLabels.HEADER;
     this.endpointType = Object.values(END_POINT_TYPE);
-    this.amqp_ack_level = Object.values(AMQP_ACK_LEVEL);
-    this.kafka_ack_level = Object.values(KAFKA_ACK_LEVEL);
+    this.amqpAckLevel = Object.values(AMQP_ACK_LEVEL);
+    this.kafkaAckLevel = Object.values(KAFKA_ACK_LEVEL);
     this.createForm();
     this.topicId = this.editing ? this.router.url.split('/').pop() : '';
-    this.passwordhelperText = $localize`The default password is guest`;
     this.topicForm.get('user')?.valueChanges.subscribe(() => this.setMechanism());
     this.topicForm.get('password')?.valueChanges.subscribe(() => this.setMechanism());
-    this.kafka_mechanism = Object.values(KAFKA_MECHANISM);
-    this.rgwUserService.enumerate().subscribe((data: any) => {
-      this.owners = (<string[]>data).sort();
-      this.loadingReady();
-    });
-
+    this.kafkaMechanism= Object.values(KAFKA_MECHANISM);
     if (this.editing) {
       this.topicId = this.route.snapshot.paramMap.get('name');
       this.loadTopicData(this.topicId);
     } else {
       this.loadingReady();
     }
-    this.setMechanism(); //
+    this.rgwUserService.enumerate().subscribe((data: any) => {
+      this.owners = (<string[]>data).sort();
+    });
+    this.setMechanism();
   }
-  loadTopicData(_topicId: string) {
-    this.rgwTopicService.getTopic(_topicId).subscribe((topic: TopicModel) => {
+  loadTopicData(topicId: string) {
+    this.rgwTopicService.getTopic(topicId).subscribe((topic: Topic) => {
       this.topicForm.get('name')?.disable();
       let url = topic.dest.push_endpoint;
       let hostname = url.split('://')[0];
@@ -132,7 +121,7 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
       name: new UntypedFormControl(
         '',
         [Validators.required],
-        CdValidators.unique(this.rgwTopicService.validatetopicName, this.rgwTopicService)
+        CdValidators.unique(this.rgwTopicService.exists, this.rgwTopicService)
       ),
       push_endpoint: new UntypedFormControl(
         { value: '', disabled: true },
@@ -149,7 +138,7 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
         validators: [Validators.required, Validators.pattern('^[0-9]+$')]
       }),
       verify_ssl: new UntypedFormControl(true),
-      enable_ssl: new UntypedFormControl(this.enable_ssl), // Default to SSL true for HTTP/AMQP
+      enable_ssl: new UntypedFormControl(true), // Default to SSL true for HTTP/AMQP
       cloud_events: new UntypedFormControl(),
       user: new UntypedFormControl(),
       password: new UntypedFormControl(),
@@ -170,9 +159,8 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
     const select = event.target as HTMLSelectElement;
     this.selectedOption = select.value;
     const secureSslChecked = this.topicForm.get('enable_ssl')?.value;
-    this.enable_ssl = true;
     this.vhost = '/';
-    this.setDefaultValue(this.enable_ssl, this.selectedOption);
+    this.setDefaultValue(secureSslChecked, this.selectedOption);
     this.generatePushEndpoint(secureSslChecked);
     this.reset();
   }
@@ -190,7 +178,6 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
   }
   onSecureSslChange(event: any) {
     const secureSslChecked = event;
-    this.secure_sslflag = secureSslChecked;
     if (this.selectedOption === HostURLProtocol.HTTP) {
       this.port = secureSslChecked === true ? URLPort.HTTPS : URLPort.HTTP;
     } else if (this.selectedOption === HostURLProtocol.AMQP) {
@@ -277,12 +264,12 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
   getTopicPolicy() {
     return this.topicForm.getValue('policy') || '{}';
   }
-  extractValues(topic: TopicModel) {
+  extractValues(topic: Topic) {
     let url = topic.dest.push_endpoint;
-    let pushendpointUrl = this.convertFullUrlToObject(url);
-    if (pushendpointUrl.protocol === 'amqp:' || pushendpointUrl.protocol === 'amqps:') {
+    let pushEndpointUrl = this.convertFullUrlToObject(url);
+    if (pushEndpointUrl.protocol === 'amqp:' || pushEndpointUrl.protocol === 'amqps:') {
       this.selectedOption = HostURLProtocol.AMQP;
-    } else if (pushendpointUrl.protocol === 'https:' || pushendpointUrl.protocol === 'http:') {
+    } else if (pushEndpointUrl.protocol === 'https:' || pushEndpointUrl.protocol === 'http:') {
       this.selectedOption = HostURLProtocol.HTTP;
     } else {
       this.selectedOption = HostURLProtocol.KAFKA;
@@ -300,14 +287,19 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
       time_to_live: topic.dest.time_to_live,
       retry_sleep_duration: topic.dest.retry_sleep_duration,
       policy: topic.policy,
-      port: pushendpointUrl.port,
-      fqdn: pushendpointUrl.hostname,
-      vhost: pushendpointUrl.pathname,
-      user: pushendpointUrl.username,
-      password: pushendpointUrl.password,
+      port: pushEndpointUrl.port,
+      fqdn: pushEndpointUrl.hostname,
+      vhost: pushEndpointUrl.pathname,
+      user: pushEndpointUrl.username,
+      password: pushEndpointUrl.password,
       ca_location: pushendpointAddarg.ca_location,
       mechanism: pushendpointAddarg.mechanism,
-      enable_ssl: pushendpointUrl.protocol === 'https:' ? true : false,
+      enable_ssl:
+        pushEndpointUrl.protocol === 'https:' ||
+        pushEndpointUrl.protocol == 'amqps:' ||
+        pushEndpointUrl.protocol === 'kafka'
+          ? true
+          : false,
       verify_ssl: pushendpointAddarg.verify_ssl,
       cloud_events: pushendpointAddarg.cloud_events,
       amqp_exchange: pushendpointAddarg.amqp_exchange,
@@ -330,13 +322,13 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
           : '';
     }
     return {
-      protocol: urlObj.protocol, // e.g., 'https:'
-      hostname: urlObj.hostname, // e.g., 'example.com'
-      pathname: urlObj.pathname, // e.g., '/path/to/resource'
-      hash: urlObj.hash, // e.g., '#section1'
-      port: port, // e.g., '443' for HTTPS or '80' for HTTP
-      username: urlObj.username, // e.g., 'user'
-      password: urlObj.password // e.g., 'password'
+      protocol: urlObj.protocol,
+      hostname: urlObj.hostname,
+      pathname: urlObj.pathname,
+      hash: urlObj.hash,
+      port: port,
+      username: urlObj.username,
+      password: urlObj.password
     };
   }
 
@@ -364,7 +356,7 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
     const formValue = this.topicForm.getRawValue(),
       topicType = formValue.endpointType,
       topicPolicy = this.getTopicPolicy();
-    let payload: CreateTopicModel = {
+    let payload: CreateTopic = {
       name: formValue.name,
       owner: formValue.owner,
       push_endpoint: formValue.push_endpoint,
@@ -399,7 +391,9 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
     }
 
     const notificationTitle = $localize`${
-      this.editing ? 'Topic updated successfully' : 'Topic created successfully'
+      this.editing
+        ? `Topic ${this.topicId} updated successfully`
+        : `Topic ${this.topicId} created successfully`
     }`;
     const action = this.editing
       ? this.rgwTopicService.update(payload)
