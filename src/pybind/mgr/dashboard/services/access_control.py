@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from string import ascii_lowercase, ascii_uppercase, digits, punctuation
 from typing import List, Optional, Sequence
 
+from ceph.cryptotools.select import get_crypto_caller
 from mgr_module import CLICheckNonemptyFileInput, CLIReadCommand, CLIWriteCommand
 from mgr_util import password_hash
 
@@ -22,8 +23,6 @@ from ..exceptions import PasswordPolicyException, PermissionNotValid, \
     UserAlreadyExists, UserDoesNotExist
 from ..security import Permission, Scope
 from ..settings import Settings
-
-from ceph.cryptotools.select import get_crypto_caller
 
 logger = logging.getLogger('access_control')
 DEFAULT_FILE_DESC = 'password/secret'
