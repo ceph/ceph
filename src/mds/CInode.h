@@ -15,6 +15,8 @@
 #ifndef CEPH_CINODE_H
 #define CEPH_CINODE_H
 
+#include <dirent.h> // for IFTODT()
+
 #include <list>
 #include <map>
 #include <set>
