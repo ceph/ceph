@@ -49,7 +49,7 @@
 
 extern "C" {
 #ifdef WITH_RADOSGW_RADOS
-extern rgw::sal::Driver* newRadosStore(boost::asio::io_context* io_context);
+extern rgw::sal::Driver* newRadosStore(void* io_context, const void* dpp);
 #endif
 #ifdef WITH_RADOSGW_DBSTORE
 extern rgw::sal::Driver* newDBStore(CephContext *cct);
@@ -90,7 +90,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 
   if (cfg.store_name.compare("rados") == 0) {
 #ifdef WITH_RADOSGW_RADOS
-    driver = newRadosStore(&io_context);
+    driver = newRadosStore(&io_context, dpp);
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(driver)->getRados();
 
     if ((*rados).set_use_cache(use_cache)
@@ -248,7 +248,7 @@ rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvi
   rgw::sal::Driver* driver = nullptr;
   if (cfg.store_name.compare("rados") == 0) {
 #ifdef WITH_RADOSGW_RADOS
-    driver = newRadosStore(&io_context);
+    driver = newRadosStore(&io_context, dpp);
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(driver)->getRados();
 
     rados->set_context(cct);
