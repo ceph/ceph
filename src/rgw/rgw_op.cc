@@ -148,7 +148,7 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw_owner& effective_owner,
                                   bufferlist* indata, JSONParser* jp,
                                   const req_info& req, rgw_err& err,
-                                  optional_yield y)
+                                  optional_yield y, param_vec_t params)
 {
   const auto& period = site.get_period();
   if (!period) {
@@ -179,8 +179,8 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                           creds, site.get_zonegroup().id, zg->second.api_name};
   bufferlist outdata;
   constexpr size_t max_response_size = 128 * 1024; // we expect a very small response
-  auto result = conn.forward(dpp, effective_owner, req,
-                             max_response_size, indata, &outdata, y);
+  auto result = conn.forward(dpp, effective_owner, req, max_response_size,
+                             std::move(params), indata, &outdata, y);
   if (!result) {
     return result.error();
   }

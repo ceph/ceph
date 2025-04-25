@@ -156,7 +156,8 @@ void RGWRESTConn::populate_params(param_vec_t& params, const rgw_owner* uid, con
 
 auto RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_owner& uid,
                           const req_info& info, size_t max_response,
-                          bufferlist *inbl, bufferlist *outbl, optional_yield y)
+                          param_vec_t extra_params, bufferlist *inbl,
+                          bufferlist *outbl, optional_yield y)
   -> tl::expected<int, int>
 {
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
@@ -166,7 +167,7 @@ auto RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_owner& uid,
     if (ret < 0) {
       return tl::unexpected(ret);
     }
-    param_vec_t params;
+    param_vec_t params = extra_params;
     populate_params(params, &uid, self_zone_group);
     RGWRESTSimpleRequest req(cct, info.method, url, NULL, &params, api_name);
     auto result = req.forward_request(dpp, key, info, max_response, inbl, outbl, y);

@@ -132,7 +132,8 @@ public:
   /* sync request */
   auto forward(const DoutPrefixProvider *dpp, const rgw_owner& uid,
                const req_info& info, size_t max_response,
-               bufferlist *inbl, bufferlist *outbl, optional_yield y)
+               param_vec_t extra_params, bufferlist *inbl,
+               bufferlist *outbl, optional_yield y)
     -> tl::expected<int, int>;
 
   /* sync request */

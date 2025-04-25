@@ -1919,7 +1919,8 @@ static int send_to_remote_gateway(RGWRESTConn* conn, req_info& info,
 
   ceph::bufferlist response;
   rgw_user user;
-  auto result = conn->forward(dpp(), user, info, MAX_REST_RESPONSE, &in_data, &response, null_yield);
+  auto result = conn->forward(dpp(), user, info, MAX_REST_RESPONSE,
+                              param_vec_t{}, &in_data, &response, null_yield);
   if (!result) {
     return result.error();
   }
