@@ -95,6 +95,10 @@ log_file_dir = {{ spec.spdk_log_file_dir }}
 conn_retries = {{ spec.conn_retries }}
 {% if spec.spdk_mem_size %}
 mem_size = {{ spec.spdk_mem_size }}
+{% else %}
+{% if spec.spdk_huge_pages %}
+spdk_huge_pages = {{ spec.spdk_huge_pages }}
+{% endif %}
 {% endif %}
 transports = {{ spec.transports }}
 {% if transport_tcp_options %}
