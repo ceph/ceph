@@ -150,8 +150,8 @@ options:
 - name: seastore_cache_lru_size
   type: size
   level: advanced
-  desc: Size in bytes of extents to keep in cache.
-  default: 64_M
+  desc: Size in bytes of extents to keep in cache (per reactor).
+  default: 2_G
 - name: seastore_obj_data_write_amplification
   type: float
   level: advanced
