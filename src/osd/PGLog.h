@@ -1614,6 +1614,10 @@ public:
 	    continue;
 	  if (i->is_error())
 	    continue;
+	  if (!i->is_written_shard(info.pgid.shard)) {
+	    // optimized EC - partial write that this shard didn't participate in
+	    continue;
+	  }
 	  if (did.count(i->soid)) continue;
 	  did.insert(i->soid);
 
