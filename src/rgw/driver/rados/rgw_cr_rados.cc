@@ -437,7 +437,7 @@ RGWRadosRemoveCR::RGWRadosRemoveCR(rgw::sal::RadosStore* store, const rgw_raw_ob
 int RGWRadosRemoveCR::send_request(const DoutPrefixProvider *dpp)
 {
   auto rados = store->getRados()->get_rados_handle();
-  int r = rados->ioctx_create(obj.pool.name.c_str(), ioctx);
+  int r = rgw_init_ioctx(dpp, rados, obj.pool, ioctx);
   if (r < 0) {
     lderr(cct) << "ERROR: failed to open pool (" << obj.pool.name << ") ret=" << r << dendl;
     return r;
