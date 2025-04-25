@@ -3,6 +3,7 @@
 
 #include "mds/flock.h"
 #include "common/debug.h"
+#include "common/Formatter.h"
 #include "mdstypes.h"
 
 #include <iostream>

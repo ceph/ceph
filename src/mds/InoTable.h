@@ -17,6 +17,7 @@
 #define CEPH_INOTABLE_H
 
 #include "MDSTable.h"
+#include "include/fs_types.h" // for inodeno_t
 #include "include/interval_set.h"
 
 class MDSRank;

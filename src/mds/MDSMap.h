@@ -27,6 +27,7 @@
 
 #include "include/types.h"
 #include "include/ceph_features.h"
+#include "include/cephfs/types.h" // for mds_gid_t, mds_rank_t, MAX_MDS
 #include "include/health.h"
 #include "include/CompatSet.h"
 #include "include/common_fwd.h"
@@ -35,7 +36,7 @@
 #include "common/ceph_releases.h"
 #include "common/config.h"
 
-#include "mds/mdstypes.h"
+#include "mds/mdstypes.h" // feature_bitset_t
 
 namespace ceph { class Formatter; }
 

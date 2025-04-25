@@ -16,6 +16,12 @@
 #ifndef JOURNAL_POINTER_H
 #define JOURNAL_POINTER_H
 
+#include <iosfwd>
+#include <list>
+#include <string>
+
+#include "common/Formatter.h"
+#include "include/fs_types.h" // for inodeno_t
 #include "include/encoding.h"
 #include "mdstypes.h"
 
