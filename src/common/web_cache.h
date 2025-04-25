@@ -89,9 +89,9 @@ class WebCache {
     Key const* key;
     ValuePtr value;
 
-    explicit Node(ValuePtr value)
+    explicit Node(ValuePtr value, ceph::timespan ttl)
         : visited(false),
-          expires_at(ceph::real_clock::now()),
+          expires_at(ceph::real_clock::now() + ttl),
           key(nullptr),
           value(value) {};
     // for testing
@@ -118,6 +118,7 @@ class WebCache {
   std::string _name;
   PerfCounters* _perf;
   size_t _capacity;
+  ceph::timespan _ttl;
   std::list<Node*> _sieve_queue;
   size_t _sieve_hand;
   std::unordered_map<Key, Node> _lookup;
@@ -158,10 +159,10 @@ class WebCache {
 
  public:
   // For testing, custom use
-  explicit WebCache(size_t capacity);
+  explicit WebCache(size_t capacity, ceph::timespan ttl);
 
   // For system use, activates perf counters
-  WebCache(CephContext* cct, const std::string& name, size_t capacity);
+  WebCache(CephContext* cct, const std::string& name, size_t capacity, ceph::timespan ttl = ceph::timespan::zero());
 
   // lookup returns the stored value for a given key or not
   std::optional<ValuePtr> lookup(const Key& key);
@@ -184,7 +185,7 @@ class WebCache {
   size_t clear();
 
   // expire_erase erases all expired cache entries
-  size_t expire_erase(std::chrono::seconds ttl);
+  size_t expire_erase();
 
   const std::string& name() { return _name; }
 
@@ -231,7 +232,7 @@ std::jthread make_ttl_reaper(
     std::stop_callback on_stop(stop, [&cond]() { cond.notify_all(); });
 
     while (!stop.stop_requested()) {
-      cache.expire_erase(ttl);
+      cache.expire_erase();
 
       std::unique_lock<std::mutex> lock(mutex);
       cond.wait_for(lock, ttl, [&stop] { return stop.stop_requested(); });
@@ -272,21 +273,23 @@ WebCache<Key, Value>::Node* WebCache<Key, Value>::sieve_evict() {
 }
 
 template <typename Key, typename Value>
-WebCache<Key, Value>::WebCache(size_t capacity)
+WebCache<Key, Value>::WebCache(size_t capacity, ceph::timespan ttl)
     : _cct(nullptr),
       _perf(nullptr),
       _capacity(capacity),
+      _ttl(ttl),
       _sieve_queue(),
       _sieve_hand(capacity - 1),
       _lookup() {}
 
 template <typename Key, typename Value>
 WebCache<Key, Value>::WebCache(
-    CephContext* cct, const std::string& name, size_t capacity)
+    CephContext* cct, const std::string& name, size_t capacity, ceph::timespan ttl)
     : _cct(cct),
       _name(name),
       _perf(initialize_perf_counters(cct, name)),
       _capacity(capacity),
+      _ttl(ttl),
       _sieve_queue(),
       _sieve_hand(capacity - 1),
       _lookup() {
@@ -425,7 +428,7 @@ ceph::real_time WebCache<Key, Value>::insert_unmutexed(
   // cache insert
   const auto& [it, took_place] = _lookup.emplace(
       std::piecewise_construct, std::forward_as_tuple(key),
-      std::forward_as_tuple(std::forward<ValuePtr>(value)));
+      std::forward_as_tuple(std::forward<ValuePtr>(value), _ttl));
   perf_set(Metric::size, _lookup.size());
   ceph_assert(took_place);
   auto& [stored_key, node] = *it;
@@ -474,9 +477,9 @@ void WebCache<Key, Value>::sieve_expire_erase_unmutexed(
 }
 
 template <typename Key, typename Value>
-size_t WebCache<Key, Value>::expire_erase(std::chrono::seconds ttl) {
+size_t WebCache<Key, Value>::expire_erase() {
   std::lock_guard<std::shared_mutex> lock(_cache_mutex);
-  const auto expiration_cutoff = ceph::real_clock::now() + ttl;
+  const auto expiration_cutoff = ceph::real_clock::now();
   const auto lookup_size_before = _lookup.size();
   std::vector<Node*> expired;
   sieve_expire_erase_unmutexed(_sieve_queue, expiration_cutoff, expired);
