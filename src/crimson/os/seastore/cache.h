@@ -1642,7 +1642,6 @@ private:
         // absent, add to top (back)
         if (extent_loaded_length > 0) {
           current_size += extent_loaded_length;
-          get_by_ext(sizes_by_ext, extent.get_type()).account_in(extent_loaded_length);
           overall_io.in_sizes.account_in(extent_loaded_length);
           if (p_src) {
             get_by_ext(
@@ -1652,6 +1651,7 @@ private:
           }
         } // else: the extent isn't loaded upon touch_extent()/on_cache(),
           //       account the io later in increase_cached_size() upon read_extent()
+	get_by_ext(sizes_by_ext, extent.get_type()).account_in(extent_loaded_length);
         intrusive_ptr_add_ref(&extent);
         lru.push_back(extent);
 
@@ -1670,7 +1670,7 @@ private:
         // present, increase size
         assert(lru.size() > 0);
         current_size += increased_length;
-        get_by_ext(sizes_by_ext, extent.get_type()).account_in(increased_length);
+        get_by_ext(sizes_by_ext, extent.get_type()).account_parital_in(increased_length);
         overall_io.in_sizes.account_in(increased_length);
         if (p_src) {
           get_by_ext(
