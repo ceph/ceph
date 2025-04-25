@@ -14,6 +14,9 @@
 #ifndef COMPRESSION_H_INCLUDED
 #define COMPRESSION_H_INCLUDED
 
+#include <map>
+#include <vector>
+
 #include "BlueStore.h"
 #include "Writer.h"
 
