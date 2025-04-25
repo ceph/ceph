@@ -60,7 +60,7 @@ ECBackend::_read(const hobject_t& hoid,
 {
   LOG_PREFIX(ECBackend::_read);
   const auto [aligned_off, aligned_len] =
-    sinfo.offset_len_to_stripe_bounds(std::make_pair(off, len));
+    sinfo.ro_offset_len_to_stripe_ro_offset_len(off, len);
   std::map<hobject_t, std::list<ec_align_t>> reads;
   reads[hoid].emplace_back(
     ec_align_t{aligned_off, aligned_len, flags});
