@@ -144,7 +144,7 @@ void Replayer<I>::schedule_load_group_snapshots() {
     Replayer<I>,
     &Replayer<I>::handle_schedule_load_group_snapshots>(this);
 
-  m_threads->timer->add_event_after(1, m_load_snapshots_task);
+  m_threads->timer->add_event_after(5, m_load_snapshots_task);
 }
 
 template <typename I>
