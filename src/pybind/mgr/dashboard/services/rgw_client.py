@@ -14,14 +14,10 @@ from collections import defaultdict
 from enum import Enum
 from subprocess import SubprocessError
 from urllib.parse import urlparse
+from xml.parsers.expat import ExpatError
 
 import requests
-
-try:
-    import xmltodict
-except ModuleNotFoundError:
-    logging.error("Module 'xmltodict' is not installed.")
-
+import xmltodict
 from mgr_util import build_url, name_to_config_section
 
 from .. import mgr
@@ -1181,26 +1177,69 @@ class RgwClient(RestClient):
         # pylint: disable=unused-argument
         try:
             result = request(
-                raw_content=True, headers={'Accept': 'text/xml'}).decode()  # type: ignore
-            notification_config = xmltodict.parse(result)
-            if notification_config is not None:
-                notification_configuration = notification_config.get(
-                    'NotificationConfiguration', {}
-                )
-                topic_configuration = notification_configuration.get('TopicConfiguration')
-                if isinstance(topic_configuration, dict):
-                    notification_configuration['TopicConfiguration'] = [topic_configuration]
+                raw_content=True,
+                headers={'Accept': 'text/xml'}
+            ).decode()  # type: ignore
 
-                notification_config['NotificationConfiguration'] = notification_configuration
-            return notification_config['NotificationConfiguration']['TopicConfiguration']
+            notification_config = xmltodict.parse(result)
+            notification_configuration = (
+                notification_config.get('NotificationConfiguration', {})
+                if notification_config else {}
+            )
+
+            topic_configuration = notification_configuration.get('TopicConfiguration')
+            if not topic_configuration:
+                return []
+
+            if isinstance(topic_configuration, dict):
+                topic_configuration = [topic_configuration]
+
+            def normalize_filter_rules(filter_dict):
+                """
+                Ensures 'FilterRule' inside the given dict is always a list if it exists.
+                """
+                if not isinstance(filter_dict, dict):
+                    return
+
+                for key in ['S3Key', 'S3Metadata', 'S3Tags']:
+                    if key in filter_dict:
+                        rules = filter_dict[key].get('FilterRule')
+                        if rules and isinstance(rules, dict):
+                            filter_dict[key]['FilterRule'] = [rules]
+            for topic in topic_configuration:
+                topic_filter = topic.get('Filter')
+                if topic_filter:
+                    normalize_filter_rules(topic_filter)
+
+            return topic_configuration
 
         except RequestException as e:
+            logger.warning(
+                "RequestException while fetching notification for bucket '%s': %s",
+                bucket_name, str(e)
+            )
             if e.content:
-                root = ET.fromstring(e.content)
-                code = root.find('Code')
-                if code is not None and code.text == 'NoSuchNotificationConfiguration':
-                    return None
-            raise DashboardException(msg=str(e), component='rgw')
+                try:
+                    root = ET.fromstring(e.content)
+                    code = root.find('Code')
+                    if code is not None and code.text == 'NoSuchNotificationConfiguration':
+                        logger.info(
+                            "No notification configuration found for bucket '%s'",
+                            bucket_name
+                        )
+                        return []
+                except ET.ParseError as e_parse:
+                    logger.error(
+                        "Error parsing XML from exception content: %s", e_parse
+                    )
+            return []
+
+        except (UnicodeDecodeError, AttributeError, ExpatError) as e:
+            logger.error(
+                "Error processing notification config for bucket '%s': %s",
+                bucket_name, str(e)
+            )
+            return []
 
     @RestClient.api_delete('/{bucket_name}?notification')
     def delete_notification(self, bucket_name, notification_id, request=None):
