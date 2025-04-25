@@ -2,6 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 #pragma once
 
+#include "common/ceph_time.h" // for ceph::coarse_real_time
+#include "common/Formatter.h"
+#include "include/encoding.h"
 #include "include/types.h"
 
 #include <unordered_map>

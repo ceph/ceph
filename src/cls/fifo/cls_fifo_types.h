@@ -34,6 +34,7 @@
 #include "include/types.h"
 
 #include "common/ceph_time.h"
+#include "common/Formatter.h"
 
 class JSONObj;
 

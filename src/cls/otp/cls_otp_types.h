@@ -11,6 +11,7 @@
 #define CLS_OTP_MAX_REPO_SIZE 100
 
 class JSONObj;
+namespace ceph { class Formatter; }
 
 namespace rados {
   namespace cls {
