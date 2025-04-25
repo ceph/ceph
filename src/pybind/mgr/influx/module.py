@@ -39,6 +39,9 @@ class Module(MgrModule):
         Option(name='password',
                default=None,
                desc='password of InfluxDB server user'),
+        Option(name='path',
+               default='',
+               desc='Additional API path for InfluxDB on the server'),
         Option(name='interval',
                type='secs',
                min=5,
@@ -292,6 +295,8 @@ class Module(MgrModule):
             self.get_module_option("username", default=self.config_keys['username'])
         self.config['password'] = \
             self.get_module_option("password", default=self.config_keys['password'])
+        self.config['path'] = \
+            self.get_module_option("path", default=self.config_keys['path'])
         self.config['interval'] = \
             cast(int, self.get_module_option("interval",
                                              default=self.config_keys['interval']))
@@ -322,7 +327,8 @@ class Module(MgrModule):
                                 self.config['password'],
                                 self.config['database'],
                                 self.config['ssl'],
-                                self.config['verify_ssl'])
+                                self.config['verify_ssl'],
+                                path=self.config['path'])
         try:
             yield client
         finally:
