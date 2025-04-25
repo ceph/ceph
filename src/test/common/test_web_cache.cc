@@ -68,8 +68,8 @@ class WebCacheTest : public ::testing::Test {
 };
 
 TEST_F(WebCacheTest, AddReturnsGreaterZeroTs) {
-  auto added_ts = _uut->add(a_key, a_valptr);
-  ASSERT_GT(added_ts, ceph::real_clock::zero());
+  auto expires_ts = _uut->add(a_key, a_valptr);
+  ASSERT_GT(expires_ts, ceph::real_clock::zero());
 }
 
 TEST_F(WebCacheTest, MultipleAddsToEmptyReturnFirstTs) {
@@ -165,7 +165,7 @@ TEST_F(WebCacheTest, LookupOrAddsToCache) {
 
 TEST_F(WebCacheTest, ExpireEraseOne) {
   WebCache<std::string, std::string>::Node alive_node(
-      a_valptr, ceph::real_clock::from_time_t(300));
+      a_valptr, ceph::real_clock::from_time_t(301));
   WebCache<std::string, std::string>::Node expired_node(
       a_valptr, ceph::real_clock::from_time_t(10));
   std::list<WebCache<std::string, std::string>::Node*> nodes = {
@@ -175,10 +175,10 @@ TEST_F(WebCacheTest, ExpireEraseOne) {
                     << ", " << &expired_node << ":" << expired_node << dendl;
   lderr(_cct.get()) << "BEFORE EXPIRE: " << nodes << dendl;
   EXPECT_EQ(2, nodes.size());
-  const auto fake_now = ceph::real_clock::from_time_t(301);
+  const auto expiration_cutoff = ceph::real_clock::from_time_t(300);
   std::vector<WebCache<std::string, std::string>::Node*> expired;
   WebCache<std::string, std::string>::sieve_expire_erase_unmutexed(
-      nodes, 1min, fake_now, expired);
+      nodes, expiration_cutoff, expired);
   lderr(_cct.get()) << "AFTER EXPIRE:  " << nodes << dendl;
   lderr(_cct.get()) << "EXPIRED:       " << expired << dendl;
   EXPECT_EQ(1, nodes.size());
@@ -198,10 +198,10 @@ TEST_F(WebCacheTest, ExpireEraseAll) {
                     << expired_node_2 << dendl;
   lderr(_cct.get()) << "BEFORE EXPIRE: " << nodes << dendl;
   EXPECT_EQ(2, nodes.size());
-  const auto fake_now = ceph::real_clock::from_time_t(300);
+  const auto expiration_cutoff = ceph::real_clock::from_time_t(300);
   std::vector<WebCache<std::string, std::string>::Node*> expired;
   WebCache<std::string, std::string>::sieve_expire_erase_unmutexed(
-      nodes, 1min, fake_now, expired);
+      nodes, expiration_cutoff, expired);
   lderr(_cct.get()) << "AFTER EXPIRE:  " << nodes << dendl;
   lderr(_cct.get()) << "EXPIRED:       " << expired << dendl;
   EXPECT_EQ(0, nodes.size());
@@ -212,10 +212,10 @@ TEST_F(WebCacheTest, ExpireEraseAll) {
 
 TEST_F(WebCacheTest, ExpireEraseEmpty) {
   std::list<WebCache<std::string, std::string>::Node*> nodes = {};
-  const auto fake_now = ceph::real_clock::from_time_t(301);
+  const auto expiration_cutoff = ceph::real_clock::from_time_t(42);
   std::vector<WebCache<std::string, std::string>::Node*> expired;
   WebCache<std::string, std::string>::sieve_expire_erase_unmutexed(
-      nodes, 1min, fake_now, expired);
+      nodes, expiration_cutoff, expired);
   ASSERT_EQ(0, nodes.size());
   ASSERT_EQ(0, expired.size());
 }

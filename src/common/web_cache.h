@@ -92,18 +92,18 @@ class WebCache {
  protected:
   struct Node {
     std::atomic_bool visited;
-    ceph::real_time added_ts;
+    ceph::real_time expires_at;
     Key const* key;
     ValuePtr value;
 
     explicit Node(ValuePtr value)
         : visited(false),
-          added_ts(ceph::real_clock::now()),
+          expires_at(ceph::real_clock::now()),
           key(nullptr),
           value(value) {};
     // for testing
-    Node(ValuePtr value, ceph::real_time added_ts)
-        : visited(false), added_ts(added_ts), key(nullptr), value(value) {};
+    Node(ValuePtr value, ceph::real_time expires_at)
+        : visited(false), expires_at(expires_at), key(nullptr), value(value) {};
 
     Node(Node&&) = default;
     Node& operator=(Node&&) = default;
@@ -114,8 +114,8 @@ class WebCache {
     friend std::ostream& operator<<(
         std::ostream& os, const WebCache<Key, Value>::Node& node) {
       fmt::print(
-          os, "$n[{}->{} v:{} ts:{}]", fmt::ptr(node.key),
-          fmt::ptr(node.value.get()), node.visited.load(), node.added_ts);
+          os, "$n[{}->{} v:{} expires:{}]", fmt::ptr(node.key),
+          fmt::ptr(node.value.get()), node.visited.load(), node.expires_at);
       return os;
     }
   };
@@ -138,8 +138,8 @@ class WebCache {
   // sieve_expire_erase_unmutexed removes all expired nodes from the
   // sieve_queue in place. It writes the expired nodes to out_expired
   static void sieve_expire_erase_unmutexed(
-      std::list<Node*>& sieve_queue, std::chrono::seconds ttl,
-      ceph::real_time now, std::vector<Node*>& out_expired);
+      std::list<Node*>& sieve_queue, ceph::real_time eviction_cutoff,
+      std::vector<Node*>& out_expired);
 
   static PerfCounters* initialize_perf_counters(
       CephContext* cct, const std::string& name);
@@ -182,9 +182,10 @@ class WebCache {
   // ceph::async::call_once to add cache stampede mitigration
   ValuePtr lookup_or(const Key& key, ValuePtr new_val);
 
-  // update_tll_if updates an entries TTL if its value matches val.
+  // update_expiration_if updates an entries TTL if its value matches val.
   // Return true if we updated an entry. False otherwise.
-  bool update_ttl_if(const Key& key, const Value& val, ceph::timespan ttl);
+  bool update_ttl_if(
+      const Key& key, const ValuePtr& val_ptr, ceph::timespan new_ttl);
 
   size_t size() const;
   size_t clear();
@@ -202,10 +203,10 @@ class WebCache {
     const auto now = ceph::real_clock::now();
     os << "$" << cache._name << "[";
     for (size_t i = 0; const auto& node : cache._sieve_queue) {
-      const auto age = now - node->added_ts;
+      const auto ttl = node->expires_at - now;
       fmt::print(
           os, "\"{}\"({}){}{}", *(node->key),
-          std::chrono::duration_cast<std::chrono::seconds>(age),
+          std::chrono::duration_cast<std::chrono::seconds>(ttl),
           (i == cache._sieve_hand) ? "👉" : "", node->visited ? "▮" : "▯");
       ++i;
       if (i < cache._sieve_queue.size()) {
@@ -359,7 +360,7 @@ ceph::real_time WebCache<Key, Value>::add(const Key& key, ValuePtr value) {
     if (auto search = _lookup.find(key); search != _lookup.end()) {
       perf_inc(Metric::hit);
       search->second.visited = true;
-      return search->second.added_ts;
+      return search->second.expires_at;
     }
   }
   {
@@ -368,7 +369,7 @@ ceph::real_time WebCache<Key, Value>::add(const Key& key, ValuePtr value) {
       // cache hit - under write lock
       perf_inc(Metric::hit);
       search->second.visited = true;
-      return search->second.added_ts;
+      return search->second.expires_at;
     }
 
     // cache miss
@@ -407,15 +408,14 @@ WebCache<Key, Value>::ValuePtr WebCache<Key, Value>::lookup_or(
 
 template <typename Key, typename Value>
 bool WebCache<Key, Value>::update_ttl_if(
-    const Key& key, const Value& val, ceph::timespan new_ttl) {
+    const Key& key, const ValuePtr& val, ceph::timespan new_ttl) {
   std::lock_guard<std::shared_mutex> lock(_cache_mutex);
   if (auto search = _lookup.find(key);
       (search != _lookup.end() && search->second.value == val)) {
-    // TODO(irq0)    search->second.ttl = new_ttl;
+    search->second.expires_at = ceph::real_clock::now() + new_ttl;
     return true;
-  } else {
-    return false;
   }
+  return false;
 }
 
 template <typename Key, typename Value>
@@ -449,7 +449,7 @@ ceph::real_time WebCache<Key, Value>::insert_unmutexed(
   auto& [stored_key, node] = *it;
   node.key = &stored_key;
   _sieve_queue.emplace_front(&node);
-  return node.added_ts;
+  return node.expires_at;
 }
 
 template <typename Key, typename Value>
@@ -467,16 +467,15 @@ WebCache<Key, Value>::lookup(const Key& key) {
 
 template <typename Key, typename Value>
 void WebCache<Key, Value>::sieve_expire_erase_unmutexed(
-    std::list<Node*>& sieve_queue, std::chrono::seconds ttl,
-    ceph::real_time now, std::vector<Node*>& out_expired) {
+    std::list<Node*>& sieve_queue, ceph::real_time eviction_cutoff,
+    std::vector<Node*>& out_expired) {
   // The sieve queue is ordered by ascending insertion time.
   // Find first not expired element from the back and erase from there
   // TODO(irq0) Fix BUG: This is no longer true if a node was updated with update_ttl_if
   auto expired_begin = sieve_queue.rend();
   for (auto it = sieve_queue.rbegin(); it != sieve_queue.rend(); ++it) {
     Node* node = (*it);
-    const auto age = now - node->added_ts;
-    const bool expired = age > ttl;
+    const bool expired = node->expires_at <= eviction_cutoff;
     if (expired) {
       expired_begin = it;
     } else {
@@ -495,10 +494,10 @@ void WebCache<Key, Value>::sieve_expire_erase_unmutexed(
 template <typename Key, typename Value>
 size_t WebCache<Key, Value>::expire_erase(std::chrono::seconds ttl) {
   std::lock_guard<std::shared_mutex> lock(_cache_mutex);
-  const auto now = ceph::real_clock::now();
+  const auto expiration_cutoff = ceph::real_clock::now() + ttl;
   const auto lookup_size_before = _lookup.size();
   std::vector<Node*> expired;
-  sieve_expire_erase_unmutexed(_sieve_queue, ttl, now, expired);
+  sieve_expire_erase_unmutexed(_sieve_queue, expiration_cutoff, expired);
   for (auto node : expired) {
     _lookup.erase(*(node->key));
   }
