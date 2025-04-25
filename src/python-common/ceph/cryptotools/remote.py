@@ -129,10 +129,10 @@ class CryptoCaller:
         )
         self._result_json(result)  # for errors only
 
-    def verify_cacrt_content(self, crt: str) -> int:
+    def certificate_days_to_expire(self, crt: str) -> int:
         """Verify a CA Certificate return the number of days until expiration."""
         result = self._run(
-            ["verify_cacrt_content"],
+            ["certificate_days_to_expire"],
             input_data=crt,
             capture_output=True,
             check=True,

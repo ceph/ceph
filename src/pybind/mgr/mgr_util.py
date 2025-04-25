@@ -547,10 +547,10 @@ def create_self_signed_cert(organisation: str = 'Ceph',
     return cert, pkey
 
 
-def verify_cacrt_content(crt: str) -> int:
+def certificate_days_to_expire(crt: str) -> int:
     try:
         cc = ceph.cryptotools.remote.CryptoCaller()
-        return cc.verify_cacrt_content(crt)
+        return cc.certificate_days_to_expire(crt)
     except ValueError as err:
         raise ServerConfigException(f'Invalid certificate: {err}')
 
@@ -566,7 +566,7 @@ def verify_cacrt(cert_fname):
 
     try:
         with open(cert_fname) as f:
-            verify_cacrt_content(f.read())
+            certificate_days_to_expire(f.read())
     except ValueError as e:
         raise ServerConfigException(
             'Invalid certificate {}: {}'.format(cert_fname, str(e)))
@@ -583,7 +583,7 @@ def verify_tls(crt, key):
     # type: (str, str) -> int
     cc = ceph.cryptotools.remote.CryptoCaller()
     try:
-        days_to_expiration = cc.verify_cacrt_content(crt)
+        days_to_expiration = cc.certificate_days_to_expire(crt)
         cc.verify_tls(crt, key)
     except ValueError as err:
         raise ServerConfigException(str(err))
