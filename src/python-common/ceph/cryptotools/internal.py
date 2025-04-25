@@ -68,7 +68,10 @@ class InternalCryptoCaller(CryptoCaller):
 
     def _load_cert(self, crt: Union[str, bytes]) -> Any:
         crt_buffer = crt.encode() if isinstance(crt, str) else crt
-        cert = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
+        try:
+            cert = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
+        except (ValueError, crypto.Error) as e:
+            self.fail('Invalid certificate: %s' % str(e))
         return cert
 
     def _issuer_info(self, cert: Any) -> Tuple[str, str]:
@@ -115,11 +118,7 @@ class InternalCryptoCaller(CryptoCaller):
             _key.check()
         except (ValueError, crypto.Error) as e:
             self.fail('Invalid private key: %s' % str(e))
-        try:
-            _crt = self._load_cert(crt)
-        except ValueError as e:
-            self.fail('Invalid certificate key: %s' % str(e))
-
+        _crt = self._load_cert(crt)
         try:
             context = SSL.Context(SSL.TLSv1_METHOD)
             with warnings.catch_warnings():
