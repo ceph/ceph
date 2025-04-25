@@ -554,6 +554,12 @@ void ActivePyModules::start_one(PyModuleRef py_module)
         << active_module->get_fin_thread_name() << dendl;
       active_module->finisher.start();
     }
+
+    // Signal when we're finally done starting up modules
+    if (pending_modules.empty() && recheck_modules_start) {
+      finisher.queue(recheck_modules_start);
+      recheck_modules_start = nullptr;
+    }
   }));
 }
 
@@ -1758,4 +1764,14 @@ PyObject* ActivePyModules::get_daemon_health_metrics()
       }
       return f.get();
   });
+}
+
+void ActivePyModules::check_all_modules_started(Context *modules_start_complete) {
+  std::lock_guard l(lock);
+  if (pending_modules.empty()) {
+    // Modules are already done starting, signal completion right away
+    finisher.queue(modules_start_complete);
+  } else {
+    recheck_modules_start = modules_start_complete; // signal that we need to check again later
+  }
 }

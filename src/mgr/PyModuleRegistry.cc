@@ -507,3 +507,7 @@ void PyModuleRegistry::handle_config_notify()
     active_modules->config_notify();
   }
 }
+
+void PyModuleRegistry::check_all_modules_started(Context *modules_start_complete) {
+  active_modules->check_all_modules_started(modules_start_complete);
+}
