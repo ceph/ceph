@@ -37,7 +37,7 @@
 #include "common/tracer.h"
 #include "include/ceph_assert.h" // Because intrusive_ptr clobbers our assert...
 #include "include/buffer.h"
-#include "include/types.h"
+#include "include/utime.h"
 #include "msg/Connection.h"
 #include "msg/MessageRef.h"
 #include "msg_types.h"
