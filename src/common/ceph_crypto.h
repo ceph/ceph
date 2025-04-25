@@ -7,6 +7,7 @@
 
 #include "include/common_fwd.h"
 #include "include/buffer.h"
+#include "include/sha_digest.h"
 #include "include/types.h"
 
 #define CEPH_CRYPTO_MD5_DIGESTSIZE 16
