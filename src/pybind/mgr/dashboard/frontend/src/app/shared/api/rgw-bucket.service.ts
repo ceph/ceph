@@ -301,4 +301,14 @@ export class RgwBucketService extends ApiClient {
       return this.http.put(`${this.url}/notification`, null, { params: params });
     });
   }
+
+  deleteNotification(bucket_name: string, notification_id: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        bucket_name: bucket_name,
+        notification_id: notification_id
+      });
+      return this.http.delete(`${this.url}/notification`, { params });
+    });
+  }
 }
