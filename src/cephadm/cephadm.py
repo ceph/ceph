@@ -655,6 +655,9 @@ def create_daemon_dirs(
         elif daemon_type == 'promtail':
             data_dir_root = ident.data_dir(ctx.data_dir)
             config_dir = 'etc/promtail'
+        elif daemon_type == 'alloy':
+            data_dir_root = ident.data_dir(ctx.data_dir)
+            config_dir = 'etc/alloy'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
         elif daemon_type == 'loki':
@@ -2250,7 +2253,7 @@ def prepare_ssh(
                              'Perhaps the ceph version being bootstrapped does not support it')
 
     if ctx.with_centralized_logging:
-        for t in ['loki', 'promtail']:
+        for t in ['loki', 'alloy']:
             logger.info('Deploying %s service with default placement...' % t)
             try:
                 cli(['orch', 'apply', t])
@@ -5009,7 +5012,7 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--with-centralized-logging',
         action='store_true',
-        help='Automatically provision centralized logging (promtail, loki)')
+        help='Automatically provision centralized logging (alloy, loki)')
     parser_bootstrap.add_argument(
         '--apply-spec',
         help='Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)')

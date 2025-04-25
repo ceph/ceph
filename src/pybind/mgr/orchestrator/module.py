@@ -186,6 +186,7 @@ class ServiceType(enum.Enum):
     prometheus = 'prometheus'
     loki = 'loki'
     promtail = 'promtail'
+    alloy = 'alloy'
     mds = 'mds'
     rgw = 'rgw'
     nfs = 'nfs'

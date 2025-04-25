@@ -79,7 +79,7 @@
          i18n>Daemon Logs</a>
       <ng-template ngbNavContent>
         <ng-container *ngIf="showDaemonLogs && lokiServiceStatus$ | async as lokiServiceStatus ; else daemonLogsTpl ">
-          <div *ngIf="promtailServiceStatus$ | async as promtailServiceStatus; else daemonLogsTpl">
+          <div *ngIf="alloyServiceStatus$ | async as alloyServiceStatus; else daemonLogsTpl">
             <cd-grafana i18n-title
                         title="Daemon logs"
                         [grafanaPath]="'explore?'"
@@ -193,8 +193,8 @@
 
 <ng-template #daemonLogsTpl>
   <cd-alert-panel type="info"
-                  title="Loki/Promtail service not running"
+                  title="Loki/Alloy service not running"
                   i18n-title>
-  <ng-container i18n>Please start the loki and promtail service to see these logs.</ng-container>
+  <ng-container i18n>Please start the loki and alloy services to see these logs.</ng-container>
   </cd-alert-panel>
 </ng-template>
