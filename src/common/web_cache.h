@@ -21,8 +21,6 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/ts/netfwd.hpp>
 #include <chrono>
-#include <functional>
-#include <future>
 #include <iterator>
 #include <list>
 #include <memory>
@@ -39,7 +37,6 @@
 #include "common/ceph_time.h"
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
-#include "include/expected.hpp"
 
 // A cache for data living on other systems like Key Management Systems
 // Goals/Features
@@ -70,13 +67,9 @@ namespace webcache {
 
 enum class Metric {
   metrics_start = 84000,
-  fetch_lat,
-  fetch_error,
   hit,
   miss,
   expired,
-  fetch_wait,
-  fetch_get,
   size,
   capacity,
   clear,
@@ -308,21 +301,10 @@ PerfCounters* WebCache<Key, Value>::initialize_perf_counters(
       cct, name, static_cast<int>(Metric::metrics_start),
       static_cast<int>(Metric::metrics_stop));
   pcb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
-  pcb.add_time_avg(
-      static_cast<int>(Metric::fetch_lat), "fetch_lat", "Fetch latency");
-  pcb.add_u64_counter(
-      static_cast<int>(Metric::fetch_error), "fetch_error",
-      "Total number of fetch errors");
   pcb.add_u64_counter(static_cast<int>(Metric::hit), "hit", "Cache hits");
   pcb.add_u64_counter(static_cast<int>(Metric::miss), "miss", "Cache misses");
   pcb.add_u64_counter(
       static_cast<int>(Metric::expired), "expired", "Expired cache entries");
-  pcb.add_u64_counter(
-      static_cast<int>(Metric::fetch_wait), "fetch_wait",
-      "Total number of misses that waited for a fetch get");
-  pcb.add_u64_counter(
-      static_cast<int>(Metric::fetch_get), "fetch_get",
-      "Total number of misses that actually fetched");
   pcb.add_u64(
       static_cast<int>(Metric::size), "size", "Total number of cache entries");
   pcb.add_u64(
