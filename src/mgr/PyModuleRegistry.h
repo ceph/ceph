@@ -238,5 +238,12 @@ public:
     return active_modules->get_module_finisher(name);
   }
 
+  // Sends the "active" beacon right away if all mgr modules
+  // have finished startup. If some modules are still pending
+  // startup, the "active" beacon is scheduled to send later
+  // after all modules are ready.
+  // See "Mgr::background_init()".
+  void check_all_modules_started(Context *modules_start_complete);
+
   // <<< (end of ActivePyModules cheeky call-throughs)
 };
