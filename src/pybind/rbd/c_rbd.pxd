@@ -203,6 +203,7 @@ cdef extern from "rbd/librbd.h" nogil:
         _RBD_MIRROR_GROUP_ENABLING "RBD_MIRROR_GROUP_ENABLING"
         _RBD_MIRROR_GROUP_ENABLED "RBD_MIRROR_GROUP_ENABLED"
         _RBD_MIRROR_GROUP_DISABLED "RBD_MIRROR_GROUP_DISABLED"
+        _RBD_MIRROR_GROUP_CREATING "RBD_MIRROR_GROUP_CREATING"
 
     ctypedef struct rbd_mirror_group_info_t:
         char *global_id
