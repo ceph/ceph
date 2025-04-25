@@ -459,7 +459,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq7::_next() {
   }
   doneread = false;
   donebarrier = false;
-  return DoubleReadOp::generate(offset, 1, obj_size / 2, 1);
+  return DoubleWriteOp::generate(offset, 1, obj_size / 2, 1);
 }
 
 ceph::io_exerciser::Seq8::Seq8(std::pair<int, int> obj_size_range, int seed)
