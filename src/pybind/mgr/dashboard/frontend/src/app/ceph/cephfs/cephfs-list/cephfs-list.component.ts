@@ -1,5 +1,6 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Permissions } from '~/app/shared/models/permissions';
+import { Permission } from '~/app/shared/models/permissions';
 import { Router } from '@angular/router';
 
 import _ from 'lodash';
@@ -45,6 +46,7 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
   selection = new CdTableSelection();
   tableActions: CdTableAction[];
   permissions: Permissions;
+  grafanaPermission: Permission;
   icons = Icons;
   monAllowPoolDelete = false;
   modalRef!: NgbModalRef;
@@ -67,6 +69,7 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
   }
 
   ngOnInit() {
+    this.grafanaPermission = this.authStorageService.getPermissions().grafana;
     this.columns = [
       {
         name: $localize`Name`,
