@@ -11,10 +11,10 @@ The following REST APIs can be used for creating and managing an OpenID Connect 
 
 In order to invoke the REST admin APIs, a user with admin caps needs to be created.
 
-.. code-block:: javascript
+.. prompt:: bash #
 
-  radosgw-admin --uid TESTER --display-name "TestUser" --access_key TESTER --secret test123 user create
-  radosgw-admin caps add --uid="TESTER" --caps="oidc-provider=*"
+   radosgw-admin --uid TESTER --display-name "TestUser" --access_key TESTER --secret test123 user create
+   radosgw-admin caps add --uid="TESTER" --caps="oidc-provider=*"
 
 
 CreateOpenIDConnectProvider
@@ -42,6 +42,7 @@ Request Parameters
 
 
 Example::
+
   POST "<hostname>?Action=Action=CreateOpenIDConnectProvider
     &ThumbprintList.list.1=F7D7B3515DD0D319DD219A43A9EA727AD6065287
     &ClientIDList.list.1=app-profile-jsp
@@ -62,6 +63,7 @@ Request Parameters
 :Type: String
 
 Example::
+
   POST "<hostname>?Action=Action=DeleteOpenIDConnectProvider
     &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart
 
@@ -80,6 +82,7 @@ Request Parameters
 :Type: String
 
 Example::
+
   POST "<hostname>?Action=Action=GetOpenIDConnectProvider
     &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart
 
@@ -94,4 +97,78 @@ Request Parameters
 None
 
 Example::
+
   POST "<hostname>?Action=Action=ListOpenIDConnectProviders
+
+AddClientIDToOpenIDConnectProvider
+----------------------------------
+
+Add a client id to the list of existing client ids registered while creating an OpenIDConnectProvider.
+
+Request Parameters
+~~~~~~~~~~~~~~~~~~
+
+``OpenIDConnectProviderArn``
+
+:Description: ARN of the IDP which is returned by the Create API.
+:Type: String
+
+``ClientID``
+
+:Description: Client Id to add to the existing OpenIDConnectProvider.
+:Type: String
+
+Example::
+
+  POST "<hostname>?Action=Action=AddClientIDToOpenIDConnectProvider
+    &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart
+    &ClientID=app-jee-jsp"
+
+RemoveClientIDFromOpenIDConnectProvider
+----------------------------------
+
+Remove a client id from the list of existing client ids registered while creating an OpenIDConnectProvider.
+
+Request Parameters
+~~~~~~~~~~~~~~~~~~
+
+``OpenIDConnectProviderArn``
+
+:Description: ARN of the IDP which is returned by the Create API.
+:Type: String
+
+``ClientID``
+
+:Description: Client ID to remove from the existing OpenIDConnectProvider.
+:Type: String
+
+Example::
+
+  POST "<hostname>?Action=Action=RemoveClientIDFromOpenIDConnectProvider
+    &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart
+    &ClientID=app-jee-jsp"
+
+UpdateOpenIDConnectProviderThumbprint
+-------------------------------------
+
+Update the existing thumbprint list of an OpenIDConnectProvider with the given list.
+This API removes the existing thumbprint list and replaces that with the input thumbprint list.
+
+Request Parameters
+~~~~~~~~~~~~~~~~~~
+
+``OpenIDConnectProviderArn``
+
+:Description: ARN of the IDP which is returned by the Create API.
+:Type: String
+
+``ThumbprintList.member.N``
+
+:Description: List of OpenID Connect IDP's server certificates' thumbprints. A maximum of 5 thumbprints are allowed.
+:Type: Array of Strings
+
+Example::
+
+  POST "<hostname>?Action=Action=UpdateOpenIDConnectProviderThumbprint
+    &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart
+    &&ThumbprintList.list.1=ABCDB3515DD0D319DD219A43A9EA727AD6061234"
