@@ -9,8 +9,7 @@ describe('RgwCreateNotificationFormComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [RgwCreateNotificationFormComponent]
-    })
-    .compileComponents();
+    }).compileComponents();
 
     fixture = TestBed.createComponent(RgwCreateNotificationFormComponent);
     component = fixture.componentInstance;
