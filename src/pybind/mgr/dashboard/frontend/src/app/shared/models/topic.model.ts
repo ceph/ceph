@@ -1,6 +1,6 @@
-import { ComboBoxItem } from "./combo-box.model";
+import { ComboBoxItem } from './combo-box.model';
 
-interface Destination {
+export interface Destination {
   push_endpoint: string;
   push_endpoint_args: string;
   push_endpoint_topic: string;
@@ -87,19 +87,20 @@ export enum HostURLProtocol {
 }
 export const EVENT_OPTIONS: ComboBoxItem[] = [
   { content: 's3:ObjectCreated:*', name: 's3:ObjectCreated:*' },
-  { content: 's3:ObjectRemoved:*', name: 's3:ObjectRemoved:*' },
-  { content: 's3:ObjectRestore:*', name: 's3:ObjectRestore:*' },
-  { content: 's3:ObjectTagging:*', name: 's3:ObjectTagging:*' },
   { content: 's3:ObjectCreated:Put', name: 's3:ObjectCreated:Put' },
   { content: 's3:ObjectCreated:Post', name: 's3:ObjectCreated:Post' },
   { content: 's3:ObjectCreated:Copy', name: 's3:ObjectCreated:Copy', selected: true },
-  { content: 's3:ObjectCreated:CompleteMultipartUpload', name: 's3:ObjectCreated:CompleteMultipartUpload' },
-  { content: 's3:ObjectRemoved:Delete', name: 's3:ObjectRemoved:Delete' }
+  {
+    content: 's3:ObjectCreated:CompleteMultipartUpload',
+    name: 's3:ObjectCreated:CompleteMultipartUpload'
+  },
+  { content: 's3:ObjectRemoved:Delete', name: 's3:ObjectRemoved:Delete' },
+  { content: 's3:ObjectRemoved:*', name: 's3:ObjectRemoved:*' }
 ];
 
 export enum S3KEYFILTERVALUE {
   select = 'Select S3 key filter',
   prefix = 'prefix',
   suffix = 'suffix',
-  regex = 'regex',
+  regex = 'regex'
 }

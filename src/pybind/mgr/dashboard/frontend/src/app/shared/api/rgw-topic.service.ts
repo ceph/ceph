@@ -1,4 +1,4 @@
-import { HttpClient,HttpParams } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import _ from 'lodash';
 import { Observable, of as observableOf } from 'rxjs';
@@ -17,8 +17,8 @@ export class RgwTopicService extends ApiClient {
     super();
   }
 
-  listTopic(): Observable<Topic> {
-    return this.http.get<Topic>(this.baseURL);
+  listTopic(): Observable<Topic[]> {
+    return this.http.get<Topic[]>(this.baseURL);
   }
 
   getTopic(name: string) {

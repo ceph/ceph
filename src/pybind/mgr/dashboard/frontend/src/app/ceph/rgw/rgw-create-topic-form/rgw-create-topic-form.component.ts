@@ -84,7 +84,7 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
     this.topicId = this.editing ? this.router.url.split('/').pop() : '';
     this.topicForm.get('user')?.valueChanges.subscribe(() => this.setMechanism());
     this.topicForm.get('password')?.valueChanges.subscribe(() => this.setMechanism());
-    this.kafkaMechanism= Object.values(KAFKA_MECHANISM);
+    this.kafkaMechanism = Object.values(KAFKA_MECHANISM);
     if (this.editing) {
       this.topicId = this.route.snapshot.paramMap.get('name');
       this.loadTopicData(this.topicId);

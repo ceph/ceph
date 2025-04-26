@@ -35,10 +35,3 @@ export interface Bucket {
   read_tracker: number;
   bid: string;
 }
-
-export interface Notification {
-  Id: string;
-  Topic: string;
-  Event: string | string[];
-  Filter: string | string[];
-}
