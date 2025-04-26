@@ -2681,6 +2681,15 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
       } else if (value == "SingleZone") {
         // pin the bucket to the local zone id
         createparams.local_zone_id = s->penv.site->get_zone_params().id;
+
+        // if CreateBucket was forwarded from another zone, use that zone's id
+        if (s->system_request && s->penv.site->is_meta_master()) {
+          std::string id = s->info.args.get(RGW_SYS_PARAM_PREFIX "local-zone-id");
+          if (!id.empty()) {
+            ldpp_dout(this, 20) << "using forwarded local_zone_id " << id << dendl;
+            createparams.local_zone_id = std::move(id);
+          }
+        }
       } else {
         s->err.message = "DataRedundancy must be ZoneGroup or SingleZone";
         return -EINVAL;

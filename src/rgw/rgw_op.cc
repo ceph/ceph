@@ -3901,9 +3901,16 @@ void RGWCreateBucket::execute(optional_yield y)
 
   if (!driver->is_meta_master()) {
     // apply bucket creation on the master zone first
+    param_vec_t params;
+    if (!createparams.local_zone_id.empty()) {
+      // zone-local buckets must forward their own zone id
+      params.emplace_back(RGW_SYS_PARAM_PREFIX "local-zone-id",
+                          createparams.local_zone_id);
+    }
     JSONParser jp;
     op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                           &in_data, &jp, s->info, s->err, y);
+                                           &in_data, &jp, s->info, s->err,
+                                           y, std::move(params));
     if (op_ret < 0) {
       return;
     }
