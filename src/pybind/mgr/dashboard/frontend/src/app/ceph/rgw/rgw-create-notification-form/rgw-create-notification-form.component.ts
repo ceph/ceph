@@ -1,17 +1,21 @@
-import { Component, Inject, OnInit, Optional } from '@angular/core';
-import { FormArray, Validators, AbstractControl } from '@angular/forms';
+import { Component, Inject, OnInit, Optional, ChangeDetectorRef } from '@angular/core';
+import { FormArray, Validators, AbstractControl, FormGroup } from '@angular/forms';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { ComboBoxItem } from '~/app/shared/models/combo-box.model';
-import { EVENT_OPTIONS, S3KEYFILTERVALUE } from '~/app/shared/models/topic.model';
+import { EVENT_OPTIONS, S3KEYFILTERVALUE, Topic } from '~/app/shared/models/topic.model';
 import { Bucket } from '../models/rgw-bucket';
-import { Rule } from '../models/rgw-bucket-lifecycle';
-import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { Router } from '@angular/router';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
+import {
+  NotificationConfig,
+  TopicConfiguration
+} from '~/app/shared/models/notification-configuration.model';
 
 @Component({
   selector: 'cd-rgw-create-notification-form',
@@ -22,23 +26,21 @@ export class RgwCreateNotificationFormComponent extends CdForm implements OnInit
   notificationForm: CdFormGroup;
   eventOption: ComboBoxItem[] = EVENT_OPTIONS;
   skeyFilterValue: string[] = [];
-
-  // Define supported event types
-  validEventTypes: string[] = [
-    's3:ObjectCreated:*',
-    's3:ObjectRemoved:*',
-    's3:ObjectRestore:*'
-  ];
-
+  notificationConfig: NotificationConfig;
+  topics: Partial<Topic[]> = [];
+  topicArn: string[] = [];
+  notification_id: string;
   constructor(
     @Inject('bucket') public bucket: Bucket,
-    @Optional() @Inject('selectedNotification') public selectedNotification: Rule,
+    @Optional() @Inject('selectedNotification') public selectedNotification: TopicConfiguration,
     @Optional() @Inject('editing') public editing = false,
     public actionLabels: ActionLabelsI18n,
     private rgwBucketService: RgwBucketService,
+    private rgwTopicService: RgwTopicService,
     private notificationService: NotificationService,
     private fb: CdFormBuilder,
-    private router: Router
+    private router: Router,
+    private cdRef: ChangeDetectorRef
   ) {
     super();
   }
@@ -46,48 +48,87 @@ export class RgwCreateNotificationFormComponent extends CdForm implements OnInit
   ngOnInit() {
     this.skeyFilterValue = Object.values(S3KEYFILTERVALUE);
     this.createNotificationForm();
+    this.getTopicName().then(() => {
+      if (this.editing && this.selectedNotification) {
+        this.notification_id = this.selectedNotification.Id;
+        this.patchNotificationForm(this.selectedNotification);
+      }
+    });
+  }
+  getTopicName(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.rgwTopicService.listTopic().subscribe({
+        next: (topics: Topic[]) => {
+          this.topics = topics;
+          this.topicArn = topics.map((topic: Topic) => topic.arn);
+          resolve();
+        },
+        error: (err) => reject(err)
+      });
+    });
+  }
+  patchNotificationForm(config: any): void {
+    this.cdRef.detectChanges();
+    this.notificationForm.patchValue({
+      id: config.Id,
+      topic: typeof config.Topic === 'object' ? config.Topic.arn : config.Topic,
+      event: config.Event
+    });
+
+    this.setFilterRules('s3Key', config.Filter?.S3Key?.FilterRule);
+    this.setFilterRules('s3Metadata', config.Filter?.S3Metadata?.FilterRule);
+    this.setFilterRules('s3Tags', config.Filter?.S3Tags?.FilterRule);
+  }
+
+  setFilterRules(type: string, rules: any[] = []): void {
+    const formArray = this.getFormArray(type);
+    formArray.clear();
+
+    if (!rules || rules.length === 0) {
+      formArray.push(this.createNameValueGroup());
+      return;
+    }
+
+    rules.forEach((rule) => {
+      formArray.push(this.fb.group({ Name: [rule.Name], Value: [rule.Value] }));
+    });
   }
 
   createNotificationForm() {
     this.notificationForm = this.fb.group({
       id: [null, [Validators.required]],
       topic: [null, [Validators.required]],
-      event: [[], [Validators.required]],
+      event: [[], []],
       filter: this.fb.group({
-        s3Key: this.fb.array([
-          this.createNameValueGroup()
-        ]),
-        s3Metadata: this.fb.array([
-          this.createNameValueGroup()
-        ]),
-        s3Tags: this.fb.array([
-          this.createNameValueGroup()
-        ])
+        s3Key: this.fb.array([this.createNameValueGroup()]),
+        s3Metadata: this.fb.array([this.createNameValueGroup()]),
+        s3Tags: this.fb.array([this.createNameValueGroup()])
       })
     });
   }
 
   private createNameValueGroup(): CdFormGroup {
     return this.fb.group({
-      Name: [null, [Validators.required]],
-      Value: [null, [Validators.required]]
+      Name: [null],
+      Value: [null]
     });
   }
 
   get s3KeyFilters(): FormArray {
-    return this.notificationForm.get('filter.s3Key') as FormArray;
+    return this.getFormArray('s3Key');
   }
 
   get s3MetadataFilters(): FormArray {
-    return this.notificationForm.get('filter.s3Metadata') as FormArray;
+    return this.getFormArray('s3Metadata');
   }
 
   get s3TagsFilters(): FormArray {
-    return this.notificationForm.get('filter.s3Tags') as FormArray;
+    return this.getFormArray('s3Tags');
   }
 
-  private getFormArray(arrayName: string): FormArray {
-    return this.notificationForm.get(`filter.${arrayName}`) as FormArray;
+  getFormArray(arrayName: string): FormArray {
+    const filterGroup = this.notificationForm.controls['filter'] as FormGroup;
+    return filterGroup.controls[arrayName] as FormArray;
   }
 
   addRow(arrayName: string, index: number): void {
@@ -96,10 +137,15 @@ export class RgwCreateNotificationFormComponent extends CdForm implements OnInit
   }
 
   removeRow(arrayName: string, index: number): void {
-    const array = this.getFormArray(arrayName);
-    if (array.length > 1) {
-      array.removeAt(index);
+    const formArray = this.getFormArray(arrayName);
+    if (formArray && formArray.length > 1 && index >= 0 && index < formArray.length) {
+      formArray.removeAt(index);
+    } else if (formArray.length === 1) {
+      const group = formArray.at(0) as FormGroup;
+      group.reset();
     }
+
+    this.cdRef.detectChanges();
   }
 
   showInvalid(field: string): boolean {
@@ -107,89 +153,61 @@ export class RgwCreateNotificationFormComponent extends CdForm implements OnInit
     return control?.invalid && (control.dirty || control.touched);
   }
 
-  onSubmit(): void {
-    if (this.notificationForm.valid) {
-      const data = this.notificationForm.getRawValue();
-      const cleanFilterRules = (rules: any[]) =>
-        rules.filter(rule => rule?.Name && rule?.Value);
-      const keyFilters = cleanFilterRules(data.filter.s3Key);
-      const metadataFilters = cleanFilterRules(data.filter.s3Metadata);
-      const tagFilters = cleanFilterRules(data.filter.s3Tags);
-      const invalidEvents = data.event.filter((event: string) => !this.validEventTypes.includes(event));
-      if (invalidEvents.length > 0) {
-        this.notificationService.show(
-          NotificationType.error,
-          `Invalid event types: ${invalidEvents.join(', ')}`
-        );
-        return;
-      }
-      const topicXml = `
-        <TopicConfiguration>
-          <Id>${data.id}</Id>
-          <Topic>${data.topic}</Topic>
-          ${data.event.map((e: string) => `<Event>${e}</Event>`).join('')}
-          <Filter>
-            ${keyFilters.length ? `
-            <S3Key>
-              ${keyFilters.map(rule => `
-              <FilterRule>
-                <Name>${rule.Name}</Name>
-                <Value>${rule.Value}</Value>
-              </FilterRule>
-              `).join('')}
-            </S3Key>` : ''}
-            ${metadataFilters.length ? `
-            <S3Metadata>
-              ${metadataFilters.map(rule => `
-              <FilterRule>
-                <Name>${rule.Name}</Name>
-                <Value>${rule.Value}</Value>
-              </FilterRule>
-              `).join('')}
-            </S3Metadata>` : ''}
-            ${tagFilters.length ? `
-            <S3Tags>
-              ${tagFilters.map(rule => `
-              <FilterRule>
-                <Name>${rule.Name}</Name>
-                <Value>${rule.Value}</Value>
-              </FilterRule>
-              `).join('')}
-            </S3Tags>` : ''}
-          </Filter>
-        </TopicConfiguration>
-      `;
-      const xmlPayload = `
-        <NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-          ${topicXml}
-        </NotificationConfiguration>
-      `;
-      this.rgwBucketService
-        .setNotification(
-          this.bucket.bucket,
-          xmlPayload, 
-          this.bucket.owner
-        )
-        .subscribe({
-          next: () => {
-            this.notificationService.show(
-              NotificationType.success,
-              $localize`Notification lifecycle created successfully`
-            );
-          },
-          error: (error: any) => {
-            this.notificationService.show(NotificationType.error, error?.error || 'Unknown error');
-            this.notificationForm.setErrors({ cdSubmitButton: true });
-          },
-          complete: () => {
-            this.closeModal();
-          }
-        });
-  
-      console.log('XML Payload:\n', xmlPayload); 
+  onSubmit() {
+    if (!this.notificationForm.valid) {
+      this.notificationForm.markAllAsTouched();
+      this.notificationForm.setErrors({ cdSubmitButton: true });
+      return;
     }
+
+    const formValue = this.notificationForm.getRawValue();
+
+    const buildRules = (rules: any[]) =>
+      rules
+        ?.map((item) => (item.Name && item.Value ? { Name: item.Name, Value: item.Value } : null))
+        .filter((rule) => rule !== null) || [];
+
+    const notificationConfiguration = {
+      TopicConfiguration: {
+        Id: formValue.id,
+        Topic: formValue.topic,
+        Event: formValue.event,
+        Filter: {
+          S3Key: { FilterRules: buildRules(formValue.filter?.s3Key) },
+          S3Metadata: { FilterRules: buildRules(formValue.filter?.s3Metadata) },
+          S3Tags: { FilterRules: buildRules(formValue.filter?.s3Tags) }
+        }
+      }
+    };
+
+    const isUpdate = !!formValue.id;
+    const successMessage = isUpdate
+      ? $localize`Bucket notification updated successfully`
+      : $localize`Bucket notification created successfully`;
+
+    this.rgwBucketService
+      .setNotification(
+        this.bucket.bucket,
+        JSON.stringify(notificationConfiguration),
+        this.bucket.owner
+      )
+      .subscribe({
+        next: () => {
+          this.notificationService.show(NotificationType.success, successMessage);
+        },
+        error: (error: any) => {
+          this.notificationService.show(
+            NotificationType.error,
+            error.message || 'An error occurred while creating the notification.'
+          );
+          this.notificationForm.setErrors({ cdSubmitButton: true });
+        },
+        complete: () => {
+          this.closeModal();
+        }
+      });
   }
-  
+
   goToCreateNotification() {
     this.router.navigate(['rgw/notification/create']);
     this.closeModal();

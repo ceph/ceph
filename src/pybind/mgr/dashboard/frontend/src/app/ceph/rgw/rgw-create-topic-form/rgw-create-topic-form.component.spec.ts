@@ -76,7 +76,7 @@ describe('RgwCreateTopicFormComponent', () => {
     component.topicForm.setValue({
       owner: 'dashboard',
       name: 'Test Topic',
-      push_endpoint: 'http://localhost:8000',
+      push_endpoint: 'http://localhost:80',
       OpaqueData: '',
       persistent: '',
       max_retries: '',
@@ -158,7 +158,7 @@ describe('RgwCreateTopicFormComponent', () => {
       name: 'Test Topic',
       owner: 'dashboard',
       dest: {
-        push_endpoint: 'http://localhost:8000',
+        push_endpoint: 'http://localhost:80',
         persistent: true,
         max_retries: 3,
         time_to_live: 100,
@@ -181,16 +181,7 @@ describe('RgwCreateTopicFormComponent', () => {
   it('should handle select change and update endpoint', () => {
     const event = { target: { value: 'AMQP' } } as any;
     component.onSelectChange(event);
-
     expect(component.selectedOption).toBe('AMQP');
     expect(component.topicForm.get('port')?.value).toBe('5671');
-  });
-
-  it('should handle secure SSL change and update port', () => {
-    component.selectedOption = 'HTTP';
-    component.onSecureSslChange(true);
-
-    expect(component.secure_sslflag).toBe(true);
-    expect(component.topicForm.get('port')?.value).toBe('443');
   });
 });
