@@ -28,7 +28,7 @@ int fetch_access_keys_from_master(const DoutPrefixProvider* dpp, req_state* s,
   bufferlist data;
   JSONParser jp;
   int ret = rgw_forward_request_to_master(dpp, *s->penv.site, s->user->get_id(),
-                                          &data, &jp, s->info, y);
+                                          &data, &jp, s->info, s->err, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "forward_request_to_master returned ret=" << ret << dendl;
     return ret;
@@ -480,7 +480,7 @@ void RGWOp_User_Remove::execute(optional_yield y)
   op_state.set_purge_data(purge_data);
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -555,7 +555,7 @@ void RGWOp_Subuser_Create::execute(optional_yield y)
   op_state.set_key_type(key_type);
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -622,7 +622,7 @@ void RGWOp_Subuser_Modify::execute(optional_yield y)
   op_state.set_key_type(key_type);
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -665,7 +665,7 @@ void RGWOp_Subuser_Remove::execute(optional_yield y)
     op_state.set_purge_keys();
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -812,7 +812,7 @@ void RGWOp_Caps_Add::execute(optional_yield y)
   op_state.set_caps(caps);
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -850,7 +850,7 @@ void RGWOp_Caps_Remove::execute(optional_yield y)
   op_state.set_caps(caps);
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
