@@ -7,23 +7,18 @@ from .registry import registry
 @dataclass
 @registry.register()
 class ClusterInfo(MCMAgentBase):
-    _fsid: str
-    _capacity: Capacity
-    _version: str
-    _health: str
-    __lock: threading.Lock = field(repr=False)
+    _fsid: str = None
+    _capacity: Capacity = None
+    _version: str = None
+    _health: str = None
+    __lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
-    def __init__(self, fsid: str=None, used_bytes: float=0, total_bytes: float=0, health: str=None, version: str=None):
-        self._fsid = fsid
+    def __init__(self, fsid: str = None, used_bytes: float = 0, total_bytes: float = 0, health: str = None, version: str = None):
         self.__lock = threading.Lock()
+        self._fsid = fsid
         self._capacity = Capacity(used_bytes, total_bytes)
         self._version = version
         self._health = health
-
-    def to_json(self):
-        data = asdict(self)
-        data.pop('__lock')
-        return data
 
     @property
     def fsid(self):
@@ -42,9 +37,8 @@ class ClusterInfo(MCMAgentBase):
 
     @capacity.setter
     def capacity(self, value: Capacity):
-        if value:
-            if not isinstance(value, Capacity):
-                raise TypeError("capacity must be an Capacity instance")
+        if not isinstance(value, Capacity):
+            raise TypeError("capacity must be a Capacity instance")
         with self.__lock:
             self._capacity = value
 
@@ -67,3 +61,16 @@ class ClusterInfo(MCMAgentBase):
     def health(self, value: str):
         with self.__lock:
             self._health = value
+
+    def to_json(self) -> dict:
+        with self.__lock:
+            return {
+                "fsid": self._fsid,
+                "capacity": {
+                    "used": self._capacity.used.value,
+                    "total": self._capacity.total.value,
+                    "usage": self._capacity.usage,
+                },
+                "version": self._version,
+                "health": self._health,
+            }

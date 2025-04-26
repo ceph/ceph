@@ -1,4 +1,4 @@
-from .framework import registered_collectors, load_all_collectors, clear_registry
+from .framework import registered_collectors, load_all_collectors
 from .interface import Collector
 from ..models.base import MCMAgentBase
 import threading
@@ -13,8 +13,8 @@ class CollectorManager():
         self.config = config
         self.data_queue = data_queue
         self._entity_registry = entity_registry
-        clear_registry()
         load_all_collectors()
+        print("collectors are: ", registered_collectors, "\n")
         for cls in registered_collectors:
             collector_results_type = getattr(cls, '_collector_data_type', None)
             self.insert_into_collector_and_data_maps(cls, collector_results_type)

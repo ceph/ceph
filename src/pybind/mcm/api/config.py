@@ -1,7 +1,7 @@
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    db_url: str = "postgresql+asyncpg://yugabyte:password@localhost:5433/your_db"
+    db_url: str = "postgresql+asyncpg://anmolb:mcm@localhost:5432/mcm"
 
     class Config:
         env_file = ".env"  # You can load from .env file

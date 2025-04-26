@@ -6,6 +6,6 @@ Base = declarative_base()
 class ClusterInfoDB(Base):
     __tablename__ = "cluster_info"
     fsid = Column(String, primary_key=True, index=True)
-    version = Column(String)
-    health = Column(String)
-    capacity = Column(JSON)
+    version = Column(String, nullable=False)
+    health = Column(String, nullable=False)
+    capacity = Column(JSON, nullable=False)

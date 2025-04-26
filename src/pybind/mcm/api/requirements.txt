@@ -4,3 +4,4 @@ pydantic
 uvicorn
 asyncpg
 python-dotenv
+pydantic-settings

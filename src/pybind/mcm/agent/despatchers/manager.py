@@ -16,7 +16,7 @@ class DespatcherManager():
     def run_dispatcher(self, cls: Despatcher, data: MCMAgentBase):
         try:
             instance = cls(config=self._config)
-            print("data in despatcher is: ", data.to_json(), "\n")
+            print("data in despatcher is: ", data, "\n")
             instance.despatch(data)
         except Exception as e:
             print(f"[ERROR] Dispatcher {cls.__name__} failed: {e}")

@@ -1,10 +1,9 @@
 from fastapi import FastAPI
 from mcm.api.controllers import cluster
-from mcm.api.config import get_settings
 
 # Initialize FastAPI app
 app = FastAPI()
-
+print("registering routers now...\n")
 # Include routers for all cluster related routes
 app.include_router(cluster.router)
 

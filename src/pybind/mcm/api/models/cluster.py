@@ -1,8 +1,8 @@
 from pydantic import BaseModel
 
 class Capacity(BaseModel):
-    total: str
-    used: str
+    total: float
+    used: float
 
 class ClusterInfo(BaseModel):
     fsid: str
