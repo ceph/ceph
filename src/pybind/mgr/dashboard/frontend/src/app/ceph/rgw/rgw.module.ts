@@ -425,6 +425,4 @@ const routes: Routes = [
 @NgModule({
   imports: [RgwModule, RouterModule.forChild(routes)]
 })
-export class RoutedRgwModule {
-   
-}
+export class RoutedRgwModule {}

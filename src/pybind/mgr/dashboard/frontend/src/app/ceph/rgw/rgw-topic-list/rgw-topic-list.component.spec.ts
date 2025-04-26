@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RgwTopicListComponent } from './rgw-topic-list.component';
 import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
 import { SharedModule } from '~/app/shared/shared.module';
-import { configureTestBed } from '~/testing/unit-test-helper';
+import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
 import { RgwTopicDetailsComponent } from '../rgw-topic-details/rgw-topic-details.component';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
