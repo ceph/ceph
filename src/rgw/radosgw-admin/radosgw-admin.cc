@@ -1902,14 +1902,21 @@ static int send_to_remote_gateway(RGWRESTConn* conn, req_info& info,
 
   ceph::bufferlist response;
   rgw_user user;
-  int ret = conn->forward(dpp(), user, info, MAX_REST_RESPONSE, &in_data, &response, null_yield);
-
-  int parse_ret = parser.parse(response.c_str(), response.length());
-  if (parse_ret < 0) {
-    cerr << "failed to parse response" << std::endl;
-    return parse_ret;
+  auto result = conn->forward(dpp(), user, info, MAX_REST_RESPONSE, &in_data, &response, null_yield);
+  if (!result) {
+    return result.error();
   }
-  return ret;
+  int ret = rgw_http_error_to_errno(*result);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = parser.parse(response.c_str(), response.length());
+  if (ret < 0) {
+    cerr << "failed to parse response" << std::endl;
+    return ret;
+  }
+  return 0;
 }
 
 static int send_to_url(const string& url,
@@ -1930,14 +1937,21 @@ static int send_to_url(const string& url,
   RGWRESTSimpleRequest req(g_ceph_context, info.method, url, NULL, &params, opt_region);
 
   bufferlist response;
-  int ret = req.forward_request(dpp(), key, info, MAX_REST_RESPONSE, &in_data, &response, null_yield);
-
-  int parse_ret = parser.parse(response.c_str(), response.length());
-  if (parse_ret < 0) {
-    cout << "failed to parse response" << std::endl;
-    return parse_ret;
+  auto result = req.forward_request(dpp(), key, info, MAX_REST_RESPONSE, &in_data, &response, null_yield);
+  if (!result) {
+    return result.error();
   }
-  return ret;
+  int ret = rgw_http_error_to_errno(*result);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = parser.parse(response.c_str(), response.length());
+  if (ret < 0) {
+    cout << "failed to parse response" << std::endl;
+    return ret;
+  }
+  return 0;
 }
 
 static int send_to_remote_or_url(RGWRESTConn *conn, const string& url,
