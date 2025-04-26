@@ -364,7 +364,8 @@ static void scope_from_api_name(const DoutPrefixProvider *dpp,
   }
 }
 
-int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, const req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service)
+auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, const req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service)
+  -> tl::expected<int, int>
 {
 
   string date_str;
@@ -410,7 +411,7 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const R
   int ret = sign_request(dpp, key, region, s, new_env, new_info, nullptr);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to sign request" << dendl;
-    return ret;
+    return tl::unexpected(ret);
   }
 
   if (s == "iam") {
@@ -452,13 +453,11 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const R
   method = new_info.method;
   url = new_url;
 
-  int r = process(dpp, y);
-  if (r < 0) {
-    if (http_status == 0) {
-      // no http status, generally means the service is not available
-      r = -ERR_SERVICE_UNAVAILABLE;
-    }
-    return r;
+  std::ignore = process(dpp, y);
+
+  if (http_status == 0) {
+    // no http status, generally means the service is not available
+    return tl::unexpected(-ERR_SERVICE_UNAVAILABLE);
   }
 
   response.append((char)0); /* NULL terminate response */
@@ -467,7 +466,7 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const R
     *outbl = std::move(response);
   }
 
-  return status;
+  return http_status;
 }
 
 class RGWRESTStreamOutCB : public RGWGetDataCB {
