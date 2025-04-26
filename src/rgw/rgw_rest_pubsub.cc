@@ -404,7 +404,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
   // master request will replicate the topic creation.
   if (should_forward_request_to_master(s, driver)) {
     op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
+        this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 4)
           << "CreateTopic forward_request_to_master returned ret = " << op_ret
@@ -871,7 +871,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
 void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
   if (should_forward_request_to_master(s, driver)) {
     op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
+        this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 4)
           << "SetTopicAttributes forward_request_to_master returned ret = "
@@ -1015,7 +1015,7 @@ class RGWPSDeleteTopicOp : public RGWOp {
 void RGWPSDeleteTopicOp::execute(optional_yield y) {
   if (should_forward_request_to_master(s, driver)) {
     op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
+        this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, s->err, y);
 
     if (op_ret < 0) {
       ldpp_dout(this, 1)
@@ -1268,7 +1268,7 @@ int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
 void RGWPSCreateNotifOp::execute(optional_yield y) {
   if (should_forward_request_to_master(s, driver)) {
     op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->owner.id, &data, nullptr, s->info, y);
+        this, *s->penv.site, s->owner.id, &data, nullptr, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 4) << "CreateBucketNotification "
                             "forward_request_to_master returned ret = "
@@ -1471,7 +1471,7 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
   if (should_forward_request_to_master(s, driver)) {
     bufferlist indata;
     op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->owner.id, &indata, nullptr, s->info, y);
+        this, *s->penv.site, s->owner.id, &indata, nullptr, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 4) << "DeleteBucketNotification "
                             "forward_request_to_master returned error ret= "
