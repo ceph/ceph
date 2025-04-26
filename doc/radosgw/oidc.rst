@@ -1,6 +1,6 @@
-===============================
+================================
  OpenID Connect Provider in RGW
-===============================
+================================
 
 An entity describing the OpenID Connect Provider needs to be created in RGW, in order to establish trust between the two.
 
@@ -18,7 +18,7 @@ In order to invoke the REST admin APIs, a user with admin caps needs to be creat
 
 
 CreateOpenIDConnectProvider
----------------------------------
+---------------------------
 
 Create an OpenID Connect Provider entity in RGW
 
@@ -67,7 +67,7 @@ Example::
 
 
 GetOpenIDConnectProvider
----------------------------
+------------------------
 
 Gets information about an IDP.
 
@@ -120,7 +120,7 @@ Example::
     &ClientID=app-jee-jsp"
 
 RemoveClientIDFromOpenIDConnectProvider
-----------------------------------
+---------------------------------------
 
 Remove a client id from the list of existing client ids registered while creating an OpenIDConnectProvider.
 
