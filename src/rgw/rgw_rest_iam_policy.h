@@ -29,3 +29,13 @@ public:
   const char* name() const override { return "create_policy"; }
   RGWOpType get_type() override { return RGW_OP_CREATE_POLICY; }
 };
+
+class RGWGetPolicy : public RGWRestPolicy {
+  rgw::IAM::ManagedPolicyInfo info;
+public:
+  RGWGetPolicy() : RGWRestPolicy(rgw::IAM::iamGetPolicy, RGW_CAP_READ){ }
+  int init_processing(optional_yield y) override;
+  void execute(optional_yield y) override;
+  const char* name() const override { return "get_policy"; }
+  RGWOpType get_type() override { return RGW_OP_GET_POLICY; }
+};
