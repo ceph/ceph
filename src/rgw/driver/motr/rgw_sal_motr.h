@@ -1091,6 +1091,11 @@ class MotrStore : public StoreDriver {
                            std::vector<RGWOIDCProviderInfo>& providers) override;
     int store_customer_managed_policy(const DoutPrefixProvider* dpp,
           optional_yield y, const ManagedPolicyInfo& info, bool exclusive) override;
+    int load_customer_managed_policy(const DoutPrefixProvider* dpp,
+                    optional_yield y,
+                    std::string_view account,
+                    std::string_view name,
+                    ManagedPolicyInfo& info) override;
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
         optional_yield y,
         rgw::sal::Object* obj,
