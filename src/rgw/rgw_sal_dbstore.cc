@@ -1506,6 +1506,15 @@ int DBStore::store_customer_managed_policy(const DoutPrefixProvider* dpp,
   return -ENOTSUP;
 }
 
+int DBStore::load_customer_managed_policy(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view name,
+                        rgw::IAM::ManagedPolicyInfo& info) 
+{
+  return -ENOTSUP;
+}
+
   std::unique_ptr<Writer> DBStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,

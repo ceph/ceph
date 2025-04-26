@@ -263,3 +263,96 @@ void RGWCreatePolicy::execute(optional_yield y)
   }
 }
 
+static int validate_policy_arn(const std::string& policy_arn,
+                               std::string_view account_id,
+                               rgw::ARN& arn,
+                               std::string& message)
+{
+  if (policy_arn.empty()) {
+    message = "Missing required element PolicyArn";
+    return -EINVAL;
+  }
+
+  if (policy_arn.size() < 20 || policy_arn.size() > 2048) {
+    message = "PolicyArn must be between 20 and 2048 characters";
+    return -EINVAL;
+  }
+
+  std::string_view str = policy_arn;
+
+  constexpr std::string_view arn_prefix = "arn:";
+  if (!str.starts_with(arn_prefix)) {
+    message = "PolicyArn must start with 'arn:'";
+    return -EINVAL;
+  }
+  str.remove_prefix(arn_prefix.size());
+
+  constexpr std::string_view partition = "aws:";
+  if (!str.starts_with(partition)) {
+    message = "PolicyArn partition must be 'aws'";
+    return -EINVAL;
+  }
+  arn.partition = rgw::Partition::aws;
+  str.remove_prefix(partition.size());
+
+  constexpr std::string_view service = "iam::";
+  if (!str.starts_with(service)) {
+    message = "PolicyArn service must be 'iam'";
+    return -EINVAL;
+  }
+  arn.service = rgw::Service::iam;
+  str.remove_prefix(service.size());
+
+  if (!str.starts_with(account_id)) {
+    message = "PolicyArn account ID must match curent account ID";
+    return -EINVAL;
+  }
+  arn.account = std::string(account_id);
+  str.remove_prefix(account_id.size());
+
+  if (!str.starts_with(":policy/")) {
+    message = "PolicyArn must have ':policy/' after account ID";
+    return -EINVAL;
+  }
+
+  if(str.find("//") != std::string_view::npos || str.back() == '/') {
+    message = "Invalid policy path format";
+    return -EINVAL;
+  }
+  arn.resource = std::string(str);
+
+  return 0;
+}
+
+int RGWGetPolicy::init_processing(optional_yield y)
+{
+  
+  std::string_view account;
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    account = acc->id;
+    std::string provider_arn = s->info.args.get("PolicyArn");
+    return validate_policy_arn(provider_arn, account, arn, s->err.message);
+  }
+  return -ERR_METHOD_NOT_ALLOWED;
+}
+
+void RGWGetPolicy::execute(optional_yield y)
+{
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  op_ret = driver->load_customer_managed_policy(this, y, arn.account, policy_name, info);
+  if(op_ret < 0) {
+    ldpp_dout(this, 20) << "failed to get managed policy info: " << strerror(op_ret) << dendl;
+  } else {
+    s->formatter->open_object_section_in_ns("GetPolicyResponse", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("GetPolicyResult");
+    s->formatter->open_object_section("Policy");
+    dump_ManagedPolicyInfo(info, s->formatter);
+    s->formatter->close_section();
+    s->formatter->close_section();
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
+
