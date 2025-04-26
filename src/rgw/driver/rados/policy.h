@@ -78,4 +78,11 @@ rgw_raw_obj get_name_obj(const RGWZoneParams& zone, const ManagedPolicyInfo& inf
 int write_policy(const DoutPrefixProvider *dpp, optional_yield y, librados::Rados& rados, RGWSI_SysObj &sysobj, 
           const RGWZoneParams &zone, const ManagedPolicyInfo &info, 
           bool exclusive);
+int get_policy(const DoutPrefixProvider *dpp,
+              optional_yield y,
+              RGWSI_SysObj &sysobj,
+              const RGWZoneParams &zone,
+              std::string_view account,
+              std::string_view name,
+              ManagedPolicyInfo &info);
 }
