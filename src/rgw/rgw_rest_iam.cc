@@ -304,8 +304,12 @@ int forward_iam_request_to_master(const DoutPrefixProvider* dpp,
                           std::move(creds), zg->second.id, zg->second.api_name};
   bufferlist outdata;
   constexpr size_t max_response_size = 128 * 1024; // we expect a very small response
-  int ret = conn.forward_iam_request(dpp, req, max_response_size,
-                                     &indata, &outdata, y);
+  auto result = conn.forward_iam(dpp, req, max_response_size,
+                                 &indata, &outdata, y);
+  if (!result) {
+    return result.error();
+  }
+  int ret = rgw_http_error_to_errno(*result);
   if (ret < 0) {
     return ret;
   }
