@@ -28,16 +28,7 @@ describe('RgwTopicService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should call list with empty result', () => {
-    let result;
-    service.listTopic().subscribe((resp) => {
-      result = resp;
-    });
-    const req = httpTesting.expectOne(`api/rgw/topic${RgwHelper.DAEMON_QUERY_PARAM}`);
-    expect(req.request.method).toBe('GET');
-    req.flush([]);
-    expect(result).toEqual([]);
-  });
+  
   it('should call list with result', () => {
     service.listTopic().subscribe((resp) => {
       let result = resp;

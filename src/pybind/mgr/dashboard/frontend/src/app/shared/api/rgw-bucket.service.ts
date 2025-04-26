@@ -294,10 +294,22 @@ export class RgwBucketService extends ApiClient {
       params = params.appendAll({
         bucket_name: bucket_name,
         notification: notification,
-        owner: owner,
+        owner: owner
       });
       return this.http.put(`${this.url}/notification`, null, { params: params });
     });
   }
-
+  deleteNotification(bucket_name: string, notification_id?: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      if (notification_id) {
+        params = params.set('notification', notification_id);
+      } else {
+        // Just set the key without a value (to delete all notifications)
+        params = params.set('notification', '');
+      }
+  
+      return this.http.delete(`${this.url}/${bucket_name}`, { params });
+    });
+  }
+  
 }

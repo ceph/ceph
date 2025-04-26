@@ -13250,65 +13250,63 @@ paths:
             schema:
               properties:
                 amqp_ack_level:
-                  description: Amqp ack level
+                  description: amqp ack level
                   type: string
                 amqp_exchange:
-                  description: Amqp exchange
+                  description: amqp exchange
                   type: string
                 ca_location:
-                  description: Ca location
+                  description: ca location
                   type: string
                 cloud_events:
                   default: false
-                  description: Cloud events
+                  description: cloud events
                   type: string
                 daemon_name:
-                  description: Name of the daemon
                   type: string
                 kafka_ack_level:
-                  description: Kafka ack level
+                  description: kafka ack level
                   type: string
                 kafka_brokers:
-                  description: Kafka brokers
+                  description: kafka brokers
                   type: string
                 max_retries:
-                  description: Max retries
+                  description: max retries
                   type: string
                 mechanism:
-                  description: Mechanism
+                  description: mechanism
                   type: string
                 name:
                   description: Name of the topic
                   type: string
                 opaque_data:
-                  description: OpaqueData
+                  description: ' opaque data'
                   type: string
                 owner:
-                  description: Name of the owner
                   type: string
                 persistent:
                   default: false
-                  description: Persistent
+                  description: persistent
                   type: boolean
                 policy:
-                  description: Policy
+                  description: policy
                   type: string
                 push_endpoint:
                   description: Push Endpoint
                   type: string
                 retry_sleep_duration:
-                  description: Retry sleep duration
+                  description: retry sleep duration
                   type: string
                 time_to_live:
                   description: Time to live
                   type: string
                 use_ssl:
                   default: false
-                  description: Use ssl
+                  description: use ssl
                   type: boolean
                 verify_ssl:
                   default: false
-                  description: Verify ssl
+                  description: verify ssl
                   type: boolean
               required:
               - name

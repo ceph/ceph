@@ -681,7 +681,6 @@ class RgwBucket(RgwRESTController):
             self._set_replication(bucket_name, replication, uid, daemon_name)
         if lifecycle and not lifecycle == '{}':
             self._set_lifecycle(bucket_name, lifecycle, daemon_name, uid)
-
         else:
             self._delete_lifecycle(bucket_name, daemon_name, uid)
         return self._append_bid(result) if result else None
@@ -1473,27 +1472,25 @@ class RgwTopic(RESTController):
         "Create a new RGW Topic",
         parameters={
             "name": (str, "Name of the topic"),
-            "owner": (str, "Name of the owner"),
-            "daemon_name": (str, "Name of the daemon"),
             "push_endpoint": (str, "Push Endpoint"),
-            "opaque_data": (str, "OpaqueData"),
-            "persistent": (bool, "Persistent"),
+            "opaque_data": (str, " opaque data"),
+            "persistent": (bool, "persistent"),
             "time_to_live": (str, "Time to live"),
-            "max_retries": (str, "Max retries"),
-            "retry_sleep_duration": (str, "Retry sleep duration"),
-            "policy": (str, "Policy"),
-            "verify_ssl": (bool, 'Verify ssl'),
-            "cloud_events": (str, 'Cloud events'),
-            "user": (str, 'User'),
-            "password": (str, 'Password'),
-            "vhost": (str, 'Vhost'),
-            "ca_location": (str, 'Ca location'),
-            "amqp_exchange": (str, 'Amqp exchange'),
-            "amqp_ack_level": (str, 'Amqp ack level'),
-            "use_ssl": (bool, 'Use ssl'),
-            "kafka_ack_level": (str, 'Kafka ack level'),
-            "kafka_brokers": (str, 'Kafka brokers'),
-            "mechanism": (str, 'Mechanism'),
+            "max_retries": (str, "max retries"),
+            "retry_sleep_duration": (str, "retry sleep duration"),
+            "policy": (str, "policy"),
+            "verify_ssl": (bool, 'verify ssl'),
+            "cloud_events": (str, 'cloud events'),
+            "user": (str, 'user'),
+            "password": (str, 'password'),
+            "vhost": (str, 'vhost'),
+            "ca_location": (str, 'ca location'),
+            "amqp_exchange": (str, 'amqp exchange'),
+            "amqp_ack_level": (str, 'amqp ack level'),
+            "use_ssl": (bool, 'use ssl'),
+            "kafka_ack_level": (str, 'kafka ack level'),
+            "kafka_brokers": (str, 'kafka brokers'),
+            "mechanism": (str, 'mechanism'),
         },
     )
     def create(
@@ -1521,7 +1518,6 @@ class RgwTopic(RESTController):
         rgw_topic_instance = RgwClient.instance(owner, daemon_name=daemon_name)
         return rgw_topic_instance.create_topic(
             name=name,
-            daemon_name=daemon_name,
             push_endpoint=push_endpoint,
             opaque_data=opaque_data,
             persistent=persistent,

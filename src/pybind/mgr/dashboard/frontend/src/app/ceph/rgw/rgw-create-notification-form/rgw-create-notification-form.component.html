@@ -8,12 +8,13 @@
     <section cdsModalContent>
       <form name="notificationForm" #formDir="ngForm" [formGroup]="notificationForm" novalidate>
         <!-- Id-->
-        <div cdsRow>
+        <div cdsRow
+             class="form-item form-item-append">
           <div cdsCol>
-            <cds-text-label labelInputID="id" cdRequiredField="Id"
+            <cds-text-label labelInputID="id" cdRequiredField="Name"
               [invalid]="!notificationForm.controls.id.valid && notificationForm.controls.id.dirty"
               [invalidText]="idError" [helperText]="idHelper" i18n>
-              Id
+              Name
               <input cdsText type="text" id="id" maxlength="255" formControlName="id" />
             </cds-text-label>
             <ng-template #idHelper>
@@ -27,15 +28,26 @@
           </div>
           <!-- Topic -->
           <div cdsCol>
-            <cds-text-label labelInputID="topic" cdRequiredField="Topic"
-              [invalid]="!notificationForm.controls.topic.valid && notificationForm.controls.topic.dirty"
-              [invalidText]="topicError" [helperText]="topicHelper" i18n>
-              Topic
-              <input cdsText type="text" id="topic" maxlength="255" formControlName="topic" />
-            </cds-text-label>
-            <ng-template #topicHelper>
-              <span i18n>Topic ARN for notifications</span>
-            </ng-template>
+            <cds-select formControlName="topic"
+                        for="topic"
+                        label="Topic"
+                        cdRequiredField="Topic"
+                        [invalid]="notificationForm.controls.topic.invalid && notificationForm.controls.topic.dirty"
+                        id="topic"
+                        helperText="This topic will define and control the notification settings."
+                        [invalidText]="topicError"
+                        i18n-helperText>
+            <option i18n
+                    *ngIf="topicArn === null"
+                    value="null">Loading...
+            </option>
+            <option i18n
+                    *ngIf="topicArn !== null"
+                    value="null">-- Select a topic --</option>
+            <option *ngFor="let data of topicArn"
+                    i18n
+                    [value]="data">{{ data }}</option>
+            </cds-select>
             <ng-template #topicError>
               <span *ngIf="notificationForm.showError('topic', formDir, 'required')" class="invalid-feedback">
                 <ng-container i18n>This field is required.</ng-container>
@@ -45,8 +57,9 @@
         </div>
 
         <!-- Events -->
-        <div cdsRow>
-          <div cdsCol [columnNumbers]="{ lg: 8, md: 8 }">
+        <div cdsRow 
+             class="form-item form-item-append">
+          <div cdsCol>
             <cds-combo-box label="Event" type="multi" formControlName="event" placeholder="Select event..."
               [items]="eventOption" itemValueKey="content" id="event" cdDynamicInputCombobox
               (updatedItems)="eventOption = $event" i18n-placeholder>
@@ -54,21 +67,24 @@
             </cds-combo-box>
           </div>
         </div>
+        <cd-form-advanced-fieldset  title="S3 filter configuration">
         <div formGroupName="filter">
           <!-- S3 Key Filters -->
+          <legend class="cds--label" i18n>S3 Key configuration</legend>
           <div formArrayName="s3Key">
-            <legend class="cd-header" i18n>S3 Key configuration</legend>
             <div *ngFor="let group of s3KeyFilters.controls; let i = index" [formGroupName]="i">
-              <div cdsRow>
+              <div cdsRow  class="form-item form-item-append">
                 <div cdsCol>
                   <cds-select id="skeyFilterValue-{{ i }}" formControlName="Name" label="Name" i18n-label>
                   <option *ngFor="let filter of skeyFilterValue" [value]="filter">{{ filter }}</option>
                 </cds-select>
                 </div>
                 <div cdsCol>
-                  <cds-text-label labelInputID="metadataValue-{{ i }}" i18n>
+                  <cds-text-label labelInputID="skeyFilterValue-{{ i }}" i18n>
                     Value
-                    <input cdsText type="text" maxlength="255" formControlName="Value" />
+                    <input cdsText 
+                           type="text" 
+                           formControlName="Value"/>
                   </cds-text-label>
                 </div>
                 <div cdsCol [columnNumbers]="{ lg: 1, md: 1 }"
@@ -102,20 +118,27 @@
             </div>
           </div>
           <!-- S3 Metadata Filters -->
+          <legend class="cds--label" i18n>S3 Metadata configuration</legend>
           <div formArrayName="s3Metadata">
-            <legend class="cd-header" i18n>S3 Metadata configuration</legend>
             <div *ngFor="let group of s3MetadataFilters.controls; let i = index" [formGroupName]="i">
-              <div cdsRow>
+              <div cdsRow class="form-item form-item-append">
                 <div cdsCol>
-                  <cds-text-label labelInputID="metadataValue-{{ i }}" i18n>
+                  <cds-text-label labelInputID="metadataValue-{{ i }}" 
+                                  i18n>
                     Name
-                    <input cdsText type="text" maxlength="255" formControlName="Name" />
+                    <input cdsText 
+                           type="text"
+                           formControlName="Name"
+                           placeholder="x-amz-meta-xxx..."
+                           i18n-placeholder />
                   </cds-text-label>
                 </div>
                 <div cdsCol>
                   <cds-text-label labelInputID="metadataValue-{{ i }}" i18n>
                     Value
-                    <input cdsText type="text" maxlength="255" formControlName="Value" />
+                    <input cdsText 
+                           type="text" 
+                           formControlName="Value" />
                   </cds-text-label>
                 </div>
                 <div cdsCol [columnNumbers]="{ lg: 1, md: 1 }"
@@ -124,7 +147,7 @@
                      kind="primary"
                      size="sm"
                      (click)="addRow('s3Metadata', i)">
-                     <svg
+                     <svg 
                        cdsIcon="add"
                        size="32"
                        class="cds--btn__icon"></svg>
@@ -150,20 +173,24 @@
           </div>
 
           <!-- S3 Tags Filters -->
+          <legend class="cds--label" i18n>S3 Tags configuration</legend>
           <div formArrayName="s3Tags">
-            <legend class="cd-header" i18n>S3 Tags configuration</legend>
             <div *ngFor="let group of s3TagsFilters.controls; let i = index" [formGroupName]="i">
-              <div cdsRow>
+              <div cdsRow class="form-item form-item-append">
                 <div cdsCol>
                   <cds-text-label labelInputID="tagsValue-{{ i }}" i18n>
                     Name
-                    <input cdsText type="text" maxlength="255" formControlName="Name" />
+                    <input cdsText 
+                           type="text" 
+                           formControlName="Name" />
                   </cds-text-label>
                 </div>
                 <div cdsCol>
                   <cds-text-label labelInputID="tagsValue-{{ i }}" i18n>
                     Value
-                    <input cdsText type="text" maxlength="255" formControlName="Value" />
+                    <input cdsText 
+                           type="text" 
+                           formControlName="Value" />
                   </cds-text-label>
                 </div>
                 <div cdsCol [columnNumbers]="{ lg: 1, md: 1 }"
@@ -196,6 +223,7 @@
             </div>
           </div>
         </div>
+      </cd-form-advanced-fieldset>
       </form>
     </section>
   </ng-container>
