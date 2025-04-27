@@ -540,8 +540,8 @@ function TEST_dump_scrub_schedule() {
             --osd_scrub_interval_randomize_ratio=0 \
             --osd_scrub_backoff_ratio=0.0 \
             --osd_op_queue=wpq \
-            --osd_stats_update_period_not_scrubbing=3 \
-            --osd_stats_update_period_scrubbing=2 \
+            --osd_stats_update_period_not_scrubbing=1 \
+            --osd_stats_update_period_scrubbing=1 \
             --osd_scrub_sleep=0.2"
 
     for osd in $(seq 0 $(expr $OSDS - 1))
@@ -562,7 +562,8 @@ function TEST_dump_scrub_schedule() {
     rm -f $TESTDATA
 
     local pgid="${poolid}.0"
-    local now_is=`date -I"ns"`
+    #local now_is=`date -I"ns"` # note: uses a comma for the ns part
+    local now_is=`date +'%Y-%m-%dT%H:%M:%S.%N%:z'`
 
     # before the scrubbing starts
 
@@ -612,6 +613,7 @@ function TEST_dump_scrub_schedule() {
     ceph tell $pgid schedule-scrub
     sleep 1
     sched_data=()
+
     declare -A expct_scrub_peri_sched=( ['query_is_future']="false" )
     wait_any_cond $pgid 10 $saved_last_stamp expct_scrub_peri_sched "waitingBeingScheduled" sched_data || return 1
 
