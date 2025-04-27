@@ -1902,7 +1902,7 @@ static int send_to_remote_gateway(RGWRESTConn* conn, req_info& info,
 
   ceph::bufferlist response;
   rgw_user user;
-  int ret = conn->forward(dpp(), user, info, nullptr, MAX_REST_RESPONSE, &in_data, &response, null_yield);
+  int ret = conn->forward(dpp(), user, info, MAX_REST_RESPONSE, &in_data, &response, null_yield);
 
   int parse_ret = parser.parse(response.c_str(), response.length());
   if (parse_ret < 0) {

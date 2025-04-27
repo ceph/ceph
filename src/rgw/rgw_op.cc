@@ -155,7 +155,7 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                           creds, site.get_zonegroup().id, zg->second.api_name};
   bufferlist outdata;
   constexpr size_t max_response_size = 128 * 1024; // we expect a very small response
-  int ret = conn.forward(dpp, effective_owner, req, nullptr,
+  int ret = conn.forward(dpp, effective_owner, req,
                          max_response_size, indata, &outdata, y);
   if (ret < 0) {
     return ret;
