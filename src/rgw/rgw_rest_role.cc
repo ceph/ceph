@@ -269,7 +269,7 @@ void RGWCreateRole::execute(optional_yield y)
     }
 
     op_ret = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                           bl_post_body, parser, s->info, y);
+                                           bl_post_body, parser, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
       return;
@@ -368,7 +368,7 @@ void RGWDeleteRole::execute(optional_yield y)
     s->info.args.remove("Version");
 
     op_ret = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                           bl_post_body, parser, s->info, y);
+                                           bl_post_body, parser, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "forward_iam_request_to_master returned ret=" << op_ret << dendl;
       return;
@@ -479,7 +479,7 @@ void RGWModifyRoleTrustPolicy::execute(optional_yield y)
     s->info.args.remove("Version");
 
     op_ret = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                           bl_post_body, parser, s->info, y);
+                                           bl_post_body, parser, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
       return;
@@ -616,7 +616,7 @@ void RGWPutRolePolicy::execute(optional_yield y)
     s->info.args.remove("Version");
 
     op_ret = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                           bl_post_body, parser, s->info, y);
+                                           bl_post_body, parser, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
       return;
@@ -750,7 +750,7 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
     s->info.args.remove("Version");
 
     op_ret = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                           bl_post_body, parser, s->info, y);
+                                           bl_post_body, parser, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
       return;
@@ -825,7 +825,7 @@ void RGWTagRole::execute(optional_yield y)
     }
 
     op_ret = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                           bl_post_body, parser, s->info, y);
+                                           bl_post_body, parser, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
       return;
@@ -934,7 +934,7 @@ void RGWUntagRole::execute(optional_yield y)
     }
 
     op_ret = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                           bl_post_body, parser, s->info, y);
+                                           bl_post_body, parser, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
       return;
@@ -997,7 +997,7 @@ void RGWUpdateRole::execute(optional_yield y)
     s->info.args.remove("Version");
 
     op_ret = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                           bl_post_body, parser, s->info, y);
+                                           bl_post_body, parser, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
       return;
@@ -1107,7 +1107,7 @@ void RGWAttachRolePolicy_IAM::execute(optional_yield y)
     s->info.args.remove("Version");
 
     op_ret = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                           bl_post_body, parser, s->info, y);
+                                           bl_post_body, parser, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
       return;
@@ -1207,7 +1207,7 @@ void RGWDetachRolePolicy_IAM::execute(optional_yield y)
     s->info.args.remove("Version");
 
     op_ret = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                           bl_post_body, parser, s->info, y);
+                                           bl_post_body, parser, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
       return;
