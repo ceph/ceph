@@ -2188,6 +2188,18 @@ def test_role_delete_sync():
         zone.iam_conn.get_role(RoleName=role_name)
         log.info(f'success, zone: {zone.name} has role: {role_name}')
 
+    # attach a role policy that prevents role deletion
+    policy_arn = 'arn:aws:iam::aws:policy/AmazonS3FullAccess'
+    zonegroup_conns.master_zone.iam_conn.attach_role_policy(RoleName=role_name, PolicyArn=policy_arn)
+
+    for zone in zonegroup_conns.zones:
+        e = assert_raises(zone.iam_conn.exceptions.DeleteConflictException,
+                          zone.iam_conn.delete_role, RoleName=role_name)
+        assert e.response['Error']['Code'] == 'DeleteConflict'
+        assert e.response['Error']['Message']
+
+    zonegroup_conns.master_zone.iam_conn.detach_role_policy(RoleName=role_name, PolicyArn=policy_arn)
+
     log.info(f"deleting role: {role_name}")
     zonegroup_conns.master_zone.iam_conn.delete_role(RoleName=role_name)
     zonegroup_meta_checkpoint(zonegroup)
