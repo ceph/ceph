@@ -1611,6 +1611,8 @@ private:
 
     set<hobject_t> in_flight;
     snapid_t snap_to_trim;
+    string prev_trim_key;
+    set<string> prev_pg_prefixes;
 
     explicit Trimming(my_context ctx)
       : my_base(ctx),

@@ -1485,7 +1485,7 @@ public:
     string _stringify() const;
 
   public:
-    OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
+    OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it, bool with_lower_bound);
     int seek_to_first() override;
     int upper_bound(const string &after) override;
     int lower_bound(const string &to) override;
@@ -2672,6 +2672,11 @@ public:
   ObjectMap::ObjectMapIterator get_omap_iterator(
     CollectionHandle &c,   ///< [in] collection
     const ghobject_t &oid  ///< [in] object
+    ) override;
+  ObjectMap::ObjectMapIterator get_omap_iterator(
+    CollectionHandle &c,   ///< [in] collection
+    const ghobject_t &oid,  ///< [in] object
+    bool with_lower_bound   ///< [in] if invoke lower_bound to rocksdb's seek
     ) override;
 
   void set_fsid(uuid_d u) override {

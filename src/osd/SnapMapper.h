@@ -73,7 +73,8 @@ public:
     std::map<std::string, bufferlist> *out) override;
   int get_next(
     const std::string &key,
-    pair<std::string, bufferlist> *next) override;
+    pair<std::string, bufferlist> *next,
+    bool with_lower_bound) override;
 };
 
 /**
@@ -216,8 +217,10 @@ public:
   int get_next_objects_to_trim(
     snapid_t snap,              ///< [in] snap to check
     unsigned max,               ///< [in] max to get
-    vector<hobject_t> *out      ///< [out] next objects to trim (must be empty)
-    );  ///< @return error, -ENOENT if no more objects
+    vector<hobject_t> *out,     ///< [out] next objects to trim (must be empty)
+    std::string &prev_trim_key,       ///< [out] previous trim key
+    std::set<string>& prev_pg_prefixes      ///< [out] previous pg prefixes
+  );  ///< @return error, -ENOENT if no more objects
 
   /// Remove mapping for oid
   int remove_oid(

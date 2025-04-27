@@ -15381,6 +15381,8 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
   snapid_t snap_to_trim = context<Trimming>().snap_to_trim;
   auto &in_flight = context<Trimming>().in_flight;
   ceph_assert(in_flight.empty());
+  auto &prev_trim_key = context<Trimming>().prev_trim_key;
+  auto &prev_pg_prefixes = context<Trimming>().prev_pg_prefixes;
 
   ceph_assert(pg->is_primary() && pg->is_active());
   if (!context< SnapTrimmer >().can_trim()) {
@@ -15397,7 +15399,9 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
   int r = pg->snap_mapper.get_next_objects_to_trim(
     snap_to_trim,
     max,
-    &to_trim);
+    &to_trim,
+    prev_trim_key,
+    prev_pg_prefixes);
   if (r != 0 && r != -ENOENT) {
     lderr(pg->cct) << "get_next_objects_to_trim returned "
 		   << cpp_strerror(r) << dendl;

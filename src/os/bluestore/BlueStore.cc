@@ -4033,14 +4033,16 @@ void BlueStore::MempoolThread::_update_cache_settings()
 #define dout_prefix *_dout << "bluestore.OmapIteratorImpl(" << this << ") "
 
 BlueStore::OmapIteratorImpl::OmapIteratorImpl(
-  CollectionRef c, OnodeRef o, KeyValueDB::Iterator it)
+  CollectionRef c, OnodeRef o, KeyValueDB::Iterator it, bool with_lower_bound)
   : c(c), o(o), it(it)
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.has_omap()) {
     get_omap_key(o->onode.nid, string(), &head);
     get_omap_tail(o->onode.nid, &tail);
-    it->lower_bound(head);
+    if(with_lower_bound) {
+      it->lower_bound(head);
+    }
   }
 }
 
@@ -10479,6 +10481,14 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
   const ghobject_t &oid  ///< [in] object
   )
 {
+  return get_omap_iterator(c_, oid, true);
+}
+ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
+  CollectionHandle &c_,              ///< [in] collection
+  const ghobject_t &oid,  ///< [in] object
+  bool with_lower_bound
+  )
+{
   Collection *c = static_cast<Collection *>(c_.get());
   dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
   if (!c->exists) {
@@ -10494,7 +10504,7 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
   dout(10) << __func__ << " has_omap = " << (int)o->onode.has_omap() <<dendl;
   KeyValueDB::Iterator it = db->get_iterator(
     o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP);
-  return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o, it));
+  return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o, it, with_lower_bound));
 }
 
 // -----------------
