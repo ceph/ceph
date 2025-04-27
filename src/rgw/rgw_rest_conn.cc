@@ -153,7 +153,7 @@ void RGWRESTConn::populate_params(param_vec_t& params, const rgw_owner* uid, con
   populate_zonegroup(params, zonegroup);
 }
 
-int RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_owner& uid, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
+int RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_owner& uid, const req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
 {
   int ret = 0;
 
@@ -165,12 +165,6 @@ int RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_owner& uid, co
       return ret;
     param_vec_t params;
     populate_params(params, &uid, self_zone_group);
-    if (objv) {
-      params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
-      char buf[16];
-      snprintf(buf, sizeof(buf), "%lld", (long long)objv->ver);
-      params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "ver", buf));
-    }
     RGWRESTSimpleRequest req(cct, info.method, url, NULL, &params, api_name);
     ret = req.forward_request(dpp, key, info, max_response, inbl, outbl, y);
     if (ret == -EIO) {
@@ -185,7 +179,7 @@ int RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_owner& uid, co
   return ret;
 }
 
-int RGWRESTConn::forward_iam_request(const DoutPrefixProvider *dpp, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
+int RGWRESTConn::forward_iam_request(const DoutPrefixProvider *dpp, const req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
 {
   int ret = 0;
 
@@ -196,12 +190,6 @@ int RGWRESTConn::forward_iam_request(const DoutPrefixProvider *dpp, const req_in
     if (ret < 0)
       return ret;
     param_vec_t params;
-    if (objv) {
-      params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
-      char buf[16];
-      snprintf(buf, sizeof(buf), "%lld", (long long)objv->ver);
-      params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "ver", buf));
-    }
     std::string service = "iam";
     RGWRESTSimpleRequest req(cct, info.method, url, NULL, &params, api_name);
     // coverity[uninit_use_in_call:SUPPRESS]

@@ -40,7 +40,7 @@ int pull_period(const DoutPrefixProvider *dpp, RGWRESTConn* conn, const std::str
 
   bufferlist data;
 #define MAX_REST_RESPONSE (128 * 1024)
-  int r = conn->forward(dpp, user, info, nullptr, MAX_REST_RESPONSE, nullptr, &data, y);
+  int r = conn->forward(dpp, user, info, MAX_REST_RESPONSE, nullptr, &data, y);
   if (r < 0) {
     return r;
   }
