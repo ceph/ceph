@@ -4,6 +4,7 @@
 #include "MgrStatMonitor.h"
 #include "mon/OSDMonitor.h"
 #include "mon/MgrMonitor.h"
+#include "mon/Monitor.h"
 #include "mon/PGMap.h"
 #include "messages/MGetPoolStats.h"
 #include "messages/MGetPoolStatsReply.h"

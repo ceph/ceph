@@ -13,7 +13,15 @@
  */
 
 #pragma once
+
+#include "include/encoding.h"
 #include "include/types.h"
+
+#include <iosfwd>
+#include <map>
+#include <set>
+
+namespace ceph { class Formatter; }
 
 struct ConnectionReport {
   int rank = -1; // mon rank this state belongs to
