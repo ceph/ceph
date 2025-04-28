@@ -21,6 +21,8 @@
 #include "osd/OSDMap.h"
 #include "common/strtol.h" // for strict_strtoll()
 
+#include <boost/optional.hpp>
+
 using TOPNSPC::common::cmd_getval;
 
 using std::list;

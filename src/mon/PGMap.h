@@ -22,6 +22,7 @@
 #define CEPH_PGMAP_H
 
 #include "include/buffer.h"
+#include "include/ceph_fs.h" // for ceph_statfs
 #include "common/debug.h" // for cmdmap_t
 #include "common/cmdparse.h"
 #include "common/Formatter.h"
