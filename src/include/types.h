@@ -26,8 +26,6 @@
 
 #include <string.h>
 
-#include "ceph_fs.h"
-
 extern "C" {
 #include <stdint.h>
 }
@@ -348,44 +346,6 @@ struct ltstr
   }
 };
 
-
-namespace ceph {
-  class Formatter;
-}
-
-#include "encoding.h"
-
-WRITE_RAW_ENCODER(ceph_fsid)
-WRITE_RAW_ENCODER(ceph_file_layout)
-WRITE_RAW_ENCODER(ceph_dir_layout)
-WRITE_RAW_ENCODER(ceph_mds_session_head)
-WRITE_RAW_ENCODER(ceph_mds_request_head_legacy)
-WRITE_RAW_ENCODER(ceph_mds_request_release)
-WRITE_RAW_ENCODER(ceph_filelock)
-WRITE_RAW_ENCODER(ceph_mds_caps_head)
-WRITE_RAW_ENCODER(ceph_mds_caps_export_body)
-WRITE_RAW_ENCODER(ceph_mds_caps_non_export_body)
-WRITE_RAW_ENCODER(ceph_mds_cap_peer)
-WRITE_RAW_ENCODER(ceph_mds_cap_release)
-WRITE_RAW_ENCODER(ceph_mds_cap_item)
-WRITE_RAW_ENCODER(ceph_mds_lease)
-WRITE_RAW_ENCODER(ceph_mds_snap_head)
-WRITE_RAW_ENCODER(ceph_mds_snap_realm)
-WRITE_RAW_ENCODER(ceph_mds_reply_head)
-WRITE_RAW_ENCODER(ceph_mds_reply_cap)
-WRITE_RAW_ENCODER(ceph_mds_cap_reconnect)
-WRITE_RAW_ENCODER(ceph_mds_snaprealm_reconnect)
-WRITE_RAW_ENCODER(ceph_frag_tree_split)
-WRITE_RAW_ENCODER(ceph_osd_reply_head)
-WRITE_RAW_ENCODER(ceph_osd_op)
-WRITE_RAW_ENCODER(ceph_msg_header)
-WRITE_RAW_ENCODER(ceph_msg_footer)
-WRITE_RAW_ENCODER(ceph_msg_footer_old)
-WRITE_RAW_ENCODER(ceph_mon_subscribe_item)
-
-WRITE_RAW_ENCODER(ceph_mon_statfs)
-WRITE_RAW_ENCODER(ceph_mon_statfs_reply)
-
 // ----------------------
 // some basic types
 
@@ -424,6 +384,8 @@ template <> struct fmt::formatter<byte_u_t> : fmt::ostream_formatter {};
 #endif
 
 std::ostream& operator<<(std::ostream& out, const byte_u_t& b);
+
+struct ceph_mon_subscribe_item;
 std::ostream& operator<<(std::ostream& out, const ceph_mon_subscribe_item& i);
 
 struct weightf_t {
