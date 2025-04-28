@@ -172,5 +172,6 @@ enum RGWOpType {
   /*Customer Managed Policy*/
   RGW_OP_CREATE_POLICY,
   RGW_OP_GET_POLICY,
+  RGW_OP_DELETE_POLICY
 };
 
