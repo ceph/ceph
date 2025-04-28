@@ -27,7 +27,8 @@
 #include "include/ceph_assert.h"   // spirit clobbers it!
 #include "include/encoding.h"
 #include "include/object.h" // for object_t
-#include "include/types.h" // for version_t, shard_id_t
+#include "include/shard_id.h"
+#include "include/types.h" // for version_t
 
 #include "reverse.h"
 
