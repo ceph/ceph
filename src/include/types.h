@@ -508,6 +508,7 @@ struct shard_id_t {
 WRITE_CLASS_ENCODER(shard_id_t)
 std::ostream &operator<<(std::ostream &lhs, const shard_id_t &rhs);
 
+<<<<<<< current
 #if defined(__sun) || defined(_AIX) || defined(__APPLE__) || \
     defined(__FreeBSD__) || defined(_WIN32)
 extern "C" {
@@ -560,4 +561,6 @@ struct errorcode32_t {
 };
 WRITE_CLASS_ENCODER(errorcode32_t)
 
+=======
+>>>>>>> patched
 #endif
