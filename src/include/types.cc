@@ -119,12 +119,3 @@ void shard_id_t::generate_test_instances(std::list<shard_id_t*>& ls) {
   ls.push_back(new shard_id_t(1));
   ls.push_back(new shard_id_t(2));
 }
-
-void errorcode32_t::dump(ceph::Formatter *f) const {
-  f->dump_int("code", code);
-}
-
-void errorcode32_t::generate_test_instances(std::list<errorcode32_t*>& ls) {
-  ls.push_back(new errorcode32_t(1));
-  ls.push_back(new errorcode32_t(2));
-}
