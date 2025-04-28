@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <iosfwd>
+#include "include/buffer_fwd.h"
 #include <include/types.h>
 #include <common/Formatter.h>
 #include "common/ceph_time.h"
@@ -188,7 +189,7 @@ void decode_xml_obj(long& val, XMLObj *obj);
 void decode_xml_obj(unsigned& val, XMLObj *obj);
 void decode_xml_obj(int& val, XMLObj *obj);
 void decode_xml_obj(bool& val, XMLObj *obj);
-void decode_xml_obj(bufferlist& val, XMLObj *obj);
+void decode_xml_obj(ceph::bufferlist& val, XMLObj *obj);
 class utime_t;
 void decode_xml_obj(utime_t& val, XMLObj *obj);
 void decode_xml_obj(ceph::real_time& val, XMLObj *obj);
@@ -342,7 +343,7 @@ void encode_xml(const char *name, long val, ceph::Formatter *f);
 void encode_xml(const char *name, unsigned long val, ceph::Formatter *f);
 void encode_xml(const char *name, long long val, ceph::Formatter *f);
 void encode_xml(const char *name, const utime_t& val, ceph::Formatter *f);
-void encode_xml(const char *name, const bufferlist& bl, ceph::Formatter *f);
+void encode_xml(const char *name, const ceph::bufferlist& bl, ceph::Formatter *f);
 void encode_xml(const char *name, long long unsigned val, ceph::Formatter *f);
 
 template<class T>
