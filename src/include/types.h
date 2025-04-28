@@ -515,45 +515,4 @@ struct shard_id_t {
 WRITE_CLASS_ENCODER(shard_id_t)
 std::ostream &operator<<(std::ostream &lhs, const shard_id_t &rhs);
 
-struct errorcode32_t {
-  using code_t = __s32;
-  code_t code;
-
-  errorcode32_t() : code(0) {}
-  // cppcheck-suppress noExplicitConstructor
-  explicit errorcode32_t(code_t i) : code(i) {}
-
-  operator code_t() const  { return code; }
-  code_t* operator&()      { return &code; }
-  errorcode32_t& operator=(code_t i) {
-    code = i;
-    return *this;
-  }
-  bool operator==(const errorcode32_t&) const = default;
-  auto operator<=>(const errorcode32_t&) const = default;
-
-  inline code_t get_host_to_wire() const {
-    return hostos_to_ceph_errno(code);
-  }
-
-  inline void set_wire_to_host(code_t wire_code) {
-    code = ceph_to_hostos_errno(wire_code);
-  }
-
-  void encode(ceph::buffer::list &bl) const {
-    using ceph::encode;
-    auto new_code = get_host_to_wire();
-    encode(new_code, bl);
-  }
-  void decode(ceph::buffer::list::const_iterator &bl) {
-    using ceph::decode;
-    code_t newcode;
-    decode(newcode, bl);
-    set_wire_to_host(newcode);
-  }
-  void dump(ceph::Formatter *f) const;
-  static std::list<errorcode32_t> generate_test_instances();
-};
-WRITE_CLASS_ENCODER(errorcode32_t)
-
 #endif

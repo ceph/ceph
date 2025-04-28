@@ -19,7 +19,7 @@
 #include <string>
 #include <string_view>
 
-#include "include/types.h" // for errorcode32_t
+#include "include/errorcode32.h"
 #include "msg/Message.h"
 #include "MCommand.h"
 

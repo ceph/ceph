@@ -24,6 +24,7 @@
 
 #include "MOSDOp.h"
 #include "common/errno.h"
+#include "include/errorcode32.h"
 
 /*
  * OSD op reply
