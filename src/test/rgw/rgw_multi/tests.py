@@ -2210,6 +2210,27 @@ def test_role_delete_sync():
                       zone.iam_conn.get_role, RoleName=role_name)
         log.info(f'success, zone: {zone.name} does not have role: {role_name}')
 
+def test_forwarded_put_bucket_policy_error():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+
+    # create a bucket that blocks public policy
+    bucket = gen_bucket_name()
+    primary.create_bucket(bucket)
+    realm_meta_checkpoint(realm)
+
+    # try to write a policy that can't be parsed
+    policy = 'Invalid policy document'
+    try:
+        for zone in zonegroup_conns.rw_zones:
+            e = assert_raises(ClientError, zone.s3_client.put_bucket_policy,
+                              Bucket=bucket, Policy=policy)
+            eq(e.response['Error']['Code'], 'InvalidArgument')
+            assert e.response['Error']['Message']
+    finally:
+        zonegroup_conns.rw_zones[0].delete_bucket(bucket)
+        realm_meta_checkpoint(realm)
 
 def test_replication_status():
     zonegroup = realm.master_zonegroup()
