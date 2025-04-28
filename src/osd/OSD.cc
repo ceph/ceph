@@ -1098,14 +1098,19 @@ float OSDService::compute_adjusted_ratio(osd_stat_t new_stat, float *pratio,
   }
 
   // Check all pgs and adjust kb_used to include all pending backfill data
-  int backfill_adjusted = 0;
+  int64_t backfill_adjusted = 0;
   vector<PGRef> pgs;
   osd->_get_pgs(&pgs);
   for (auto p : pgs) {
-    backfill_adjusted += p->pg_stat_adjust(&new_stat);
+    backfill_adjusted += p->get_pg_stat_adjustment();
   }
   if (backfill_adjusted) {
-    dout(20) << __func__ << " backfill adjusted " << new_stat << dendl;
+    dout(20) << __func__ << " before backfill adjusted " << new_stat << dendl;
+    if (new_stat.statfs.available > backfill_adjusted)
+      new_stat.statfs.available -= backfill_adjusted;
+    else
+      new_stat.statfs.available = 0;
+    dout(20) << __func__ << " after backfill adjusted " << new_stat << dendl;
   }
   float ratio = ((float)new_stat.statfs.get_used_raw()) / ((float)new_stat.statfs.total);
   dout(5) << __func__ << " ratio:" << ratio << " pratio: " << *pratio << dendl;
