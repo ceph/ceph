@@ -113,14 +113,3 @@ std::ostream& operator<<(std::ostream& out, const weightf_t& w)
     return out << std::fixed << std::setprecision(5) << w.v << std::setprecision(p);
  }
 }
-
-void shard_id_t::dump(ceph::Formatter *f) const {
-  f->dump_int("id", id);
-}
-
-std::list<shard_id_t> shard_id_t::generate_test_instances() {
-  std::list<shard_id_t> ls;
-  ls.push_back(shard_id_t(1));
-  ls.push_back(shard_id_t(2));
-  return ls;
-}
