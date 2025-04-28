@@ -17,6 +17,8 @@
 #ifndef CEPH_MSTATFSREPLY_H
 #define CEPH_MSTATFSREPLY_H
 
+#include "include/ceph_fs_encoder.h"
+
 class MStatfsReply : public Message {
 public:
   struct ceph_mon_statfs_reply h{};

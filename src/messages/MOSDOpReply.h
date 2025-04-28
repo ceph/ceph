@@ -25,6 +25,7 @@
 #include "MOSDOp.h"
 #include "common/errno.h"
 #include "include/errorcode32.h"
+#include "include/rados_encoder.h"
 
 /*
  * OSD op reply
