@@ -19,6 +19,7 @@
 #include "common/ceph_argparse.h"
 #include "include/compat.h"
 
+#include "include/client_t.h"
 #include "include/stringify.h"
 #include "include/types.h" // for client_t
 #include "include/ceph_features.h"
