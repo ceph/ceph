@@ -10586,7 +10586,7 @@ void OSD::get_latest_osdmap()
 // --------------------------------
 
 void OSD::set_perf_queries(const ConfigPayload &config_payload) {
-  const OSDConfigPayload &osd_config_payload = boost::get<OSDConfigPayload>(config_payload);
+  const OSDConfigPayload &osd_config_payload = std::get<OSDConfigPayload>(config_payload);
   const std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> &queries = osd_config_payload.config;
   dout(10) << "setting " << queries.size() << " queries" << dendl;
 

@@ -465,7 +465,7 @@ bool MgrClient::handle_mgr_configure(ref_t<MMgrConfigure> m)
     handle_config_payload(m->osd_perf_metric_queries);
   } else if (m->metric_config_message) {
     const MetricConfigMessage &message = *m->metric_config_message;
-    boost::apply_visitor(HandlePayloadVisitor(this), message.payload);
+    std::visit(HandlePayloadVisitor(this), message.payload);
   }
 
   bool starting = (stats_period == 0) && (m->stats_period != 0);
