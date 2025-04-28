@@ -24,6 +24,7 @@
  using namespace libradosstriper;
 #endif
 
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
