@@ -12,7 +12,7 @@
  * 
  */
 
-#include "include/types.h"
+#include "include/rados.h" // for CEPH_OSD_CMPXATTR_OP_EQ
 #include "include/rados/librados.hpp"
 
 using namespace librados;
