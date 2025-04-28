@@ -20,8 +20,10 @@
 #include <memory>
 #include <stdexcept>
 
-#include "auth/Auth.h"
 #include "include/buffer_fwd.h"
+#include "include/common_fwd.h"
+
+struct AuthConnectionMeta;
 
 namespace ceph::math {
 
