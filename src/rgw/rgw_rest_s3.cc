@@ -7022,7 +7022,6 @@ rgw::auth::s3::STSEngine::authenticate(
   const req_state* const s,
   optional_yield y) const
 {
-  bool is_system_request{false};
   if (! s->info.args.exists("x-amz-security-token") &&
       ! s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN") &&
       s->auth.s3_postobj_creds.x_amz_security_token.empty()) {
@@ -7034,6 +7033,7 @@ rgw::auth::s3::STSEngine::authenticate(
     return result_t::reject(ret);
   }
   //Authentication
+  bool is_impersonating = false;
   std::string secret_access_key;
   //Check if access key is not the same passed in by client
   if (token.access_key_id != _access_key_id) {
@@ -7057,7 +7057,7 @@ rgw::auth::s3::STSEngine::authenticate(
       }
       const RGWAccessKey& k = iter->second;
       secret_access_key = k.key;
-      is_system_request = true;
+      is_impersonating = true;
     } else {
       ldpp_dout(dpp, 0) << "Invalid access key" << dendl;
       return result_t::reject(-EPERM);
@@ -7148,7 +7148,7 @@ rgw::auth::s3::STSEngine::authenticate(
     t_attrs.token_issued_at = std::move(token.issued_at);
     t_attrs.principal_tags = std::move(token.principal_tags);
     auto apl = role_apl_factory->create_apl_role(cct, s, std::move(r),
-                                                 std::move(t_attrs), is_system_request);
+                                                 std::move(t_attrs), is_impersonating);
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   } else { // This is for all local users of type TYPE_RGW|ROOT|NONE
     if (token.user.empty()) {
