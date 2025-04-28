@@ -18,6 +18,7 @@
 
 #include <ostream>
 
+#include "include/errorcode32.h"
 #include "msg/Message.h"
 
 
