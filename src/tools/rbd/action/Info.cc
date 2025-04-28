@@ -4,8 +4,9 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
-#include "include/types.h"
+#include "include/rbd_types.h" // for RBD_GROUP_INVALID_POOL
 #include "include/stringify.h"
+#include "include/types.h" // for byte_u_t
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include <iostream>

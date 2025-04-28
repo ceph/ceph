@@ -13,6 +13,7 @@
  */
 
 #include "common.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "log/Log.h"
 
 #include <boost/optional.hpp>
