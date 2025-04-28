@@ -21,6 +21,7 @@
 
 #include "osd/OSDMap.h"
 #include "mds/FSMap.h"
+#include "include/cephfs/types.h" // for fs_cluster_id_t"
 
 #include <string>
 #include <ostream>

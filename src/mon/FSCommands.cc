@@ -20,6 +20,8 @@
 #include "MgrStatMonitor.h"
 #include "mds/cephfs_features.h"
 
+#include <boost/optional.hpp>
+
 using TOPNSPC::common::cmd_getval;
 
 using std::list;

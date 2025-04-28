@@ -19,6 +19,7 @@
 #include "MonitorDBStore.h"
 #include "messages/MMonElection.h"
 #include "messages/MMonPing.h"
+#include "msg/Messenger.h"
 
 #include "common/config.h"
 #include "include/ceph_assert.h"
