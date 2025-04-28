@@ -3426,7 +3426,6 @@ def test_ps_s3_persistent_notification_pushback():
     time.sleep(delay)
     http_server.close()
 
-
 @attr('kafka_test')
 def test_ps_s3_notification_kafka_idle_behaviour():
     """ test pushing kafka s3 notification idle behaviour check """
@@ -3457,106 +3456,110 @@ def test_ps_s3_notification_kafka_idle_behaviour():
 
     s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
     response, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert_equal(status // 100, 2)   # Fixed division
 
-    # create objects in the bucket (async)
-    number_of_objects = 10
-    client_threads = []
-    etags = []
-    start_time = time.time()
-    for i in range(number_of_objects):
-        key = bucket.new_key(str(i))
-        content = str(os.urandom(1024*1024))
-        etag = hashlib.md5(content.encode()).hexdigest()
-        etags.append(etag)
-        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
-        thr.start()
-        client_threads.append(thr)
-    [thr.join() for thr in client_threads]
+    try:
+        # create objects in the bucket (async)
+        number_of_objects = 10
+        client_threads = []
+        etags = []
+        start_time = time.time()
+        for i in range(number_of_objects):
+            key = bucket.new_key(str(i))
+            content = str(os.urandom(1024*1024))
+            etag = hashlib.md5(content.encode()).hexdigest()
+            etags.append(etag)
+            thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+            thr.start()
+            client_threads.append(thr)
+        [thr.join() for thr in client_threads]
 
-    time_diff = time.time() - start_time
-    print('average time for creation + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+        time_diff = time.time() - start_time
+        print('average time for creation + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-    print('wait for 5sec for the messages...')
-    time.sleep(5)
-    keys = list(bucket.list())
-    receiver.verify_s3_events(keys, exact_match=True, etags=etags)
+        print('wait for 5sec for the messages...')
+        time.sleep(5)
+        keys = list(bucket.list())
+        receiver.verify_s3_events(keys, exact_match=True, etags=etags)
 
-    # delete objects from the bucket
-    client_threads = []
-    start_time = time.time()
-    for key in bucket.list():
-        thr = threading.Thread(target = key.delete, args=())
-        thr.start()
-        client_threads.append(thr)
-    [thr.join() for thr in client_threads]
+        # delete objects from the bucket
+        client_threads = []
+        start_time = time.time()
+        for key in bucket.list():
+            thr = threading.Thread(target = key.delete, args=())
+            thr.start()
+            client_threads.append(thr)
+        [thr.join() for thr in client_threads]
 
-    time_diff = time.time() - start_time
-    print('average time for deletion + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+        time_diff = time.time() - start_time
+        print('average time for deletion + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-    print('wait for 5sec for the messages...')
-    time.sleep(5)
-    receiver.verify_s3_events(keys, exact_match=True, deletions=True, etags=etags)
+        print('wait for 5sec for the messages...')
+        time.sleep(5)
+        receiver.verify_s3_events(keys, exact_match=True, deletions=True, etags=etags)
 
-    is_idle = False
+        is_idle = False
 
-    while not is_idle:
-        print('waiting for 10sec for checking idleness')
-        time.sleep(10)
-        cmd = "netstat -nnp | grep 9092 | grep radosgw"
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
-        out = proc.communicate()[0]
-        if len(out) == 0:
-            is_idle = True
-        else:
-            print("radosgw<->kafka connection is not idle")
-            print(out.decode('utf-8'))
+        while not is_idle:
+            print('waiting for 10sec for checking idleness')
+            time.sleep(10)
+            cmd = "netstat -nnp | grep 9092 | grep radosgw"
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
+            out = proc.communicate()[0]
+            if len(out) == 0:
+                is_idle = True
+            else:
+                print("radosgw<->kafka connection is not idle")
+                print(out.decode('utf-8'))
 
-    # do the process of uploading an object and checking for notification again
-    number_of_objects = 10
-    client_threads = []
-    etags = []
-    start_time = time.time()
-    for i in range(number_of_objects):
-        key = bucket.new_key(str(i))
-        content = str(os.urandom(1024*1024))
-        etag = hashlib.md5(content.encode()).hexdigest()
-        etags.append(etag)
-        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
-        thr.start()
-        client_threads.append(thr)
-    [thr.join() for thr in client_threads]
+        # do the process of uploading an object and checking for notification again
+        number_of_objects = 10
+        client_threads = []
+        etags = []
+        start_time = time.time()
+        for i in range(number_of_objects):
+            key = bucket.new_key(str(i))
+            content = str(os.urandom(1024*1024))
+            etag = hashlib.md5(content.encode()).hexdigest()
+            etags.append(etag)
+            thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+            thr.start()
+            client_threads.append(thr)
+        [thr.join() for thr in client_threads]
 
-    time_diff = time.time() - start_time
-    print('average time for creation + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+        time_diff = time.time() - start_time
+        print('average time for creation + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-    print('wait for 5sec for the messages...')
-    time.sleep(5)
-    keys = list(bucket.list())
-    receiver.verify_s3_events(keys, exact_match=True, etags=etags)
+        print('wait for 5sec for the messages...')
+        time.sleep(5)
+        keys = list(bucket.list())
+        receiver.verify_s3_events(keys, exact_match=True, etags=etags)
 
-    # delete objects from the bucket
-    client_threads = []
-    start_time = time.time()
-    for key in bucket.list():
-        thr = threading.Thread(target = key.delete, args=())
-        thr.start()
-        client_threads.append(thr)
-    [thr.join() for thr in client_threads]
+        # delete objects from the bucket
+        client_threads = []
+        start_time = time.time()
+        for key in bucket.list():
+            thr = threading.Thread(target = key.delete, args=())
+            thr.start()
+            client_threads.append(thr)
+        [thr.join() for thr in client_threads]
 
-    time_diff = time.time() - start_time
-    print('average time for deletion + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+        time_diff = time.time() - start_time
+        print('average time for deletion + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-    print('wait for 5sec for the messages...')
-    time.sleep(5)
-    receiver.verify_s3_events(keys, exact_match=True, deletions=True, etags=etags)
+        print('wait for 5sec for the messages...')
+        time.sleep(5)
+        receiver.verify_s3_events(keys, exact_match=True, deletions=True, etags=etags)
 
-    # cleanup
-    s3_notification_conf.del_config()
-    topic_conf1.del_config()
-    # delete the bucket
-    conn.delete_bucket(bucket_name)
-    stop_kafka_receiver(receiver, task)
+        # OPTIONAL: Trigger GC if needed
+        # subprocess.call("radosgw-admin gc process --include-all", shell=True)
+
+    finally:
+        # cleanup
+        s3_notification_conf.del_config()
+        topic_conf1.del_config()
+        conn.delete_bucket(bucket_name)
+        stop_kafka_receiver(receiver, task)
 
 
 @attr('modification_required')
