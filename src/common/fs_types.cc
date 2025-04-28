@@ -4,6 +4,7 @@
 #include "include/fs_types.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
+#include "include/ceph_fs_encoder.h"
 #include "common/ceph_json.h"
 #include "include/denc.h"
 
