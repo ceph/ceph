@@ -27,6 +27,7 @@
 #include "mon/HealthMonitor.h"
 #include "mon/OSDMonitor.h"
 
+#include "messages/MMonCommand.h"
 #include "messages/MMonHealthChecks.h"
 
 #include "common/Formatter.h"

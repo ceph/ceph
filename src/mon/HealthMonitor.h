@@ -14,6 +14,10 @@
 #ifndef CEPH_HEALTH_MONITOR_H
 #define CEPH_HEALTH_MONITOR_H
 
+#include <map>
+#include <set>
+#include <string>
+
 #include "mon/PaxosService.h"
 
 class HealthMonitor : public PaxosService

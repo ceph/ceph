@@ -16,6 +16,7 @@
 #define CEPH_PAXOS_FSMAP_H
 
 #include <chrono>
+#include <map>
 
 #include "mds/FSMap.h"
 #include "mds/MDSMap.h"

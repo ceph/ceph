@@ -16,6 +16,7 @@
 #include "messages/MMgrBeacon.h"
 #include "messages/MMgrMap.h"
 #include "messages/MMgrDigest.h"
+#include "messages/MMonCommand.h"
 
 #include "include/stringify.h"
 #include "mgr/MgrContext.h"
@@ -23,6 +24,7 @@
 #include "OSDMonitor.h"
 #include "ConfigMonitor.h"
 #include "HealthMonitor.h"
+#include "Monitor.h"
 
 #include "common/TextTable.h"
 #include "include/stringify.h"

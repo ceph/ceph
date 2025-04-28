@@ -21,6 +21,7 @@
 
 #include "common/config_fwd.h"
 #include "common/ceph_releases.h"
+#include "include/types.h" // for epoch_t
 
 #include "include/err.h"
 #include "include/types.h"

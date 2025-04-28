@@ -17,6 +17,7 @@
 #include "common/config.h"
 #include "include/stringify.h"
 #include "include/ceph_assert.h"
+#include "messages/PaxosServiceMessage.h"
 #include "mon/MonOpRequest.h"
 
 using std::ostream;
