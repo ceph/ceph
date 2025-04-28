@@ -16,7 +16,6 @@
 #include "MDSRank.h"
 #include "osd/OSDMap.h"
 #include "osdc/Objecter.h"
-#include "mon/MonClient.h"
 
 #include "include/types.h"
 #include "messages/MMDSTableRequest.h"
