@@ -14,6 +14,7 @@
  */
 
 #include "types.h"
+#include "ceph_fs.h"
 #include "common/Formatter.h"
 
 #include <iomanip>

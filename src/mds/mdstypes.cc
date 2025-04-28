@@ -7,6 +7,7 @@
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 #include "common/StackStringStream.h"
+#include "include/ceph_fs_encoder.h"
 
 #include <iomanip>
 #include <iostream>

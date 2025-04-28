@@ -45,6 +45,7 @@
 #include "mds/mdstypes.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
+#include "include/ceph_fs_encoder.h"
 #include "mds/cephfs_features.h"
 #include "messages/MMDSOp.h"
 
