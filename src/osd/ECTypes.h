@@ -20,7 +20,7 @@
 #include <ostream>
 #include <utility>
 
-#include "include/types.h"
+#include "include/shard_id.h"
 #include "common/Formatter.h"
 #include "common/mini_flat_map.h"
 
