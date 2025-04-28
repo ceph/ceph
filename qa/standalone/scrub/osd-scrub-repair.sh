@@ -3748,67 +3748,22 @@ function corrupt_scrub_erasure() {
 
     jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
 {
+  "epoch": 99,
   "inconsistents": [
     {
-      "shards": [
-        {
-          "size": 2048,
-          "errors": [],
-          "shard": 2,
-          "osd": 0,
-          "primary": false
-        },
-        {
-          "object_info": {
-            "oid": {
-              "oid": "EOBJ1",
-              "key": "",
-              "snapid": -2,
-              "hash": 560836233,
-              "max": 0,
-              "pool": 3,
-              "namespace": ""
-            },
-            "version": "27'1",
-            "prior_version": "0'0",
-            "last_reqid": "client.4184.0:1",
-            "user_version": 1,
-            "size": 7,
-            "mtime": "",
-            "local_mtime": "",
-            "lost": 0,
-            "flags": [
-              "dirty",
-              "data_digest"
-            ],
-            "truncate_seq": 0,
-            "truncate_size": 0,
-            "data_digest": "0x2ddbf8f5",
-            "omap_digest": "0xffffffff",
-            "expected_object_size": 0,
-            "expected_write_size": 0,
-            "alloc_hint_flags": 0,
-            "manifest": {
-              "type": 0
-            },
-            "watchers": {}
-          },
-          "size": 9,
-          "shard": 0,
-          "errors": [
-            "size_mismatch_info",
-            "obj_size_info_mismatch"
-          ],
-          "osd": 1,
-          "primary": true
-        },
-        {
-          "size": 2048,
-          "shard": 1,
-          "errors": [],
-          "osd": 2,
-          "primary": false
-        }
+      "object": {
+        "name": "EOBJ1",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 1
+      },
+      "errors": [
+        "size_mismatch"
+      ],
+      "union_shard_errors": [
+        "size_mismatch_info",
+        "obj_size_info_mismatch"
       ],
       "selected_object_info": {
         "oid": {
@@ -3820,13 +3775,13 @@ function corrupt_scrub_erasure() {
           "pool": 3,
           "namespace": ""
         },
-        "version": "27'1",
+        "version": "32'1",
         "prior_version": "0'0",
-        "last_reqid": "client.4184.0:1",
+        "last_reqid": "client.4210.0:1",
         "user_version": 1,
         "size": 7,
-        "mtime": "",
-        "local_mtime": "",
+        "mtime": "2025-04-28T02:18:19.605985-0500",
+        "local_mtime": "2025-04-28T02:18:19.607916-0500",
         "lost": 0,
         "flags": [
           "dirty",
@@ -3842,228 +3797,43 @@ function corrupt_scrub_erasure() {
         "manifest": {
           "type": 0
         },
-        "watchers": {}
+        "watchers": {},
+        "shard_versions": []
       },
-      "union_shard_errors": [
-        "size_mismatch_info",
-        "obj_size_info_mismatch"
-      ],
-      "errors": [
-        "size_mismatch"
-      ],
-      "object": {
-        "version": 1,
-        "snap": "head",
-        "locator": "",
-        "nspace": "",
-        "name": "EOBJ1"
-      }
-    },
-    {
       "shards": [
         {
-          "size": 2048,
-          "errors": [],
-          "shard": 2,
           "osd": 0,
-          "primary": false
-        },
-        {
-          "shard": 0,
-          "errors": [
-            "missing"
-          ],
-          "osd": 1,
-          "primary": true
-        },
-        {
-          "size": 2048,
-          "shard": 1,
-          "errors": [],
-          "osd": 2,
-          "primary": false
-        }
-      ],
-      "selected_object_info": {
-        "oid": {
-          "oid": "EOBJ3",
-          "key": "",
-          "snapid": -2,
-          "hash": 3125668237,
-          "max": 0,
-          "pool": 3,
-          "namespace": ""
-        },
-        "version": "39'3",
-        "prior_version": "0'0",
-        "last_reqid": "client.4252.0:1",
-        "user_version": 3,
-        "size": 7,
-        "mtime": "",
-        "local_mtime": "",
-        "lost": 0,
-        "flags": [
-          "dirty",
-          "data_digest"
-        ],
-        "truncate_seq": 0,
-        "truncate_size": 0,
-        "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
-        "expected_object_size": 0,
-        "expected_write_size": 0,
-        "alloc_hint_flags": 0,
-        "manifest": {
-          "type": 0
-        },
-        "watchers": {}
-      },
-      "union_shard_errors": [
-        "missing"
-      ],
-      "errors": [],
-      "object": {
-        "version": 3,
-        "snap": "head",
-        "locator": "",
-        "nspace": "",
-        "name": "EOBJ3"
-      }
-    },
-    {
-      "shards": [
-        {
-          "attrs": [
-            {
-              "Base64": false,
-              "value": "bad-val",
-              "name": "key1-EOBJ4"
-            },
-            {
-              "Base64": false,
-              "value": "val2-EOBJ4",
-              "name": "key2-EOBJ4"
-            }
-          ],
-          "size": 2048,
-          "errors": [],
+          "primary": false,
           "shard": 2,
-          "osd": 0,
-          "primary": false
+          "errors": [],
+          "size": 2048
         },
         {
           "osd": 1,
           "primary": true,
           "shard": 0,
-          "errors": [],
-          "size": 2048,
-          "attrs": [
-            {
-              "Base64": false,
-              "value": "val1-EOBJ4",
-              "name": "key1-EOBJ4"
-            },
-            {
-              "Base64": false,
-              "value": "val2-EOBJ4",
-              "name": "key2-EOBJ4"
-            }
-          ]
-        },
-        {
-          "osd": 2,
-          "primary": false,
-          "shard": 1,
-          "errors": [],
-          "size": 2048,
-          "attrs": [
-            {
-              "Base64": false,
-              "value": "val1-EOBJ4",
-              "name": "key1-EOBJ4"
-            },
-            {
-              "Base64": false,
-              "value": "val3-EOBJ4",
-              "name": "key3-EOBJ4"
-            }
-          ]
-        }
-      ],
-      "selected_object_info": {
-        "oid": {
-          "oid": "EOBJ4",
-          "key": "",
-          "snapid": -2,
-          "hash": 1618759290,
-          "max": 0,
-          "pool": 3,
-          "namespace": ""
-        },
-        "version": "45'6",
-        "prior_version": "45'5",
-        "last_reqid": "client.4294.0:1",
-        "user_version": 6,
-        "size": 7,
-        "mtime": "",
-        "local_mtime": "",
-        "lost": 0,
-        "flags": [
-          "dirty",
-          "data_digest"
-        ],
-        "truncate_seq": 0,
-        "truncate_size": 0,
-        "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
-        "expected_object_size": 0,
-        "expected_write_size": 0,
-        "alloc_hint_flags": 0,
-        "manifest": {
-          "type": 0
-        },
-        "watchers": {}
-      },
-      "union_shard_errors": [],
-      "errors": [
-        "attr_value_mismatch",
-        "attr_name_mismatch"
-      ],
-      "object": {
-        "version": 6,
-        "snap": "head",
-        "locator": "",
-        "nspace": "",
-        "name": "EOBJ4"
-      }
-    },
-    {
-      "shards": [
-        {
-          "size": 2048,
-          "errors": [],
-          "shard": 2,
-          "osd": 0,
-          "primary": false
-        },
-        {
+          "errors": [
+            "size_mismatch_info",
+            "obj_size_info_mismatch"
+          ],
+          "size": 9,
           "object_info": {
             "oid": {
-              "oid": "EOBJ5",
+              "oid": "EOBJ1",
               "key": "",
               "snapid": -2,
-              "hash": 2918945441,
+              "hash": 560836233,
               "max": 0,
               "pool": 3,
               "namespace": ""
             },
-            "version": "59'7",
+            "version": "32'1",
             "prior_version": "0'0",
-            "last_reqid": "client.4382.0:1",
-            "user_version": 7,
+            "last_reqid": "client.4210.0:1",
+            "user_version": 1,
             "size": 7,
-            "mtime": "",
-            "local_mtime": "",
+            "mtime": "2025-04-28T02:18:19.605985-0500",
+            "local_mtime": "2025-04-28T02:18:19.607916-0500",
             "lost": 0,
             "flags": [
               "dirty",
@@ -4079,24 +3849,213 @@ function corrupt_scrub_erasure() {
             "manifest": {
               "type": 0
             },
-            "watchers": {}
-          },
-          "size": 4096,
-          "shard": 0,
-          "errors": [
-            "size_mismatch_info",
-            "obj_size_info_mismatch"
-          ],
-          "osd": 1,
-          "primary": true
+            "watchers": {},
+            "shard_versions": []
+          }
         },
         {
-          "size": 2048,
+          "osd": 2,
+          "primary": false,
           "shard": 1,
           "errors": [],
-          "osd": 2,
-          "primary": false
+          "size": 2048
         }
+      ]
+    },
+    {
+      "object": {
+        "name": "EOBJ3",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 3
+      },
+      "errors": [],
+      "union_shard_errors": [
+        "missing"
+      ],
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ3",
+          "key": "",
+          "snapid": -2,
+          "hash": 3125668237,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "46'3",
+        "prior_version": "0'0",
+        "last_reqid": "client.4286.0:1",
+        "user_version": 3,
+        "size": 7,
+        "mtime": "2025-04-28T02:18:36.149933-0500",
+        "local_mtime": "2025-04-28T02:18:36.155056-0500",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": "0x2ddbf8f5",
+        "omap_digest": "0xffffffff",
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {},
+        "shard_versions": []
+      },
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "shard": 2,
+          "errors": [],
+          "size": 2048
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "shard": 0,
+          "errors": [
+            "missing"
+          ]
+        },
+        {
+          "osd": 2,
+          "primary": false,
+          "shard": 1,
+          "errors": [],
+          "size": 2048
+        }
+      ]
+    },
+    {
+      "object": {
+        "name": "EOBJ4",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 6
+      },
+      "errors": [
+        "attr_value_mismatch",
+        "attr_name_mismatch"
+      ],
+      "union_shard_errors": [],
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ4",
+          "key": "",
+          "snapid": -2,
+          "hash": 1618759290,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "54'6",
+        "prior_version": "54'5",
+        "last_reqid": "client.4330.0:1",
+        "user_version": 6,
+        "size": 7,
+        "mtime": "2025-04-28T02:18:44.594720-0500",
+        "local_mtime": "2025-04-28T02:18:44.596235-0500",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": "0x2ddbf8f5",
+        "omap_digest": "0xffffffff",
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {},
+        "shard_versions": []
+      },
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "shard": 2,
+          "errors": [],
+          "size": 2048,
+          "attrs": [
+            {
+              "name": "key1-EOBJ4",
+              "value": "bad-val",
+              "Base64": false
+            },
+            {
+              "name": "key2-EOBJ4",
+              "value": "val2-EOBJ4",
+              "Base64": false
+            }
+          ]
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "shard": 0,
+          "errors": [],
+          "size": 2048,
+          "attrs": [
+            {
+              "name": "key1-EOBJ4",
+              "value": "val1-EOBJ4",
+              "Base64": false
+            },
+            {
+              "name": "key2-EOBJ4",
+              "value": "val2-EOBJ4",
+              "Base64": false
+            }
+          ]
+        },
+        {
+          "osd": 2,
+          "primary": false,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
+          "attrs": [
+            {
+              "name": "key1-EOBJ4",
+              "value": "val1-EOBJ4",
+              "Base64": false
+            },
+            {
+              "name": "key3-EOBJ4",
+              "value": "val3-EOBJ4",
+              "Base64": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "object": {
+        "name": "EOBJ5",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 7
+      },
+      "errors": [
+        "size_mismatch"
+      ],
+      "union_shard_errors": [
+        "size_mismatch_info",
+        "obj_size_info_mismatch"
       ],
       "selected_object_info": {
         "oid": {
@@ -4108,13 +4067,13 @@ function corrupt_scrub_erasure() {
           "pool": 3,
           "namespace": ""
         },
-        "version": "59'7",
+        "version": "71'7",
         "prior_version": "0'0",
-        "last_reqid": "client.4382.0:1",
+        "last_reqid": "client.4424.0:1",
         "user_version": 7,
         "size": 7,
-        "mtime": "",
-        "local_mtime": "",
+        "mtime": "2025-04-28T02:19:03.683994-0500",
+        "local_mtime": "2025-04-28T02:19:03.685505-0500",
         "lost": 0,
         "flags": [
           "dirty",
@@ -4130,33 +4089,85 @@ function corrupt_scrub_erasure() {
         "manifest": {
           "type": 0
         },
-        "watchers": {}
+        "watchers": {},
+        "shard_versions": []
       },
-      "union_shard_errors": [
-        "size_mismatch_info",
-        "obj_size_info_mismatch"
-      ],
-      "errors": [
-        "size_mismatch"
-      ],
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "shard": 2,
+          "errors": [],
+          "size": 2048
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "shard": 0,
+          "errors": [
+            "size_mismatch_info",
+            "obj_size_info_mismatch"
+          ],
+          "size": 4096,
+          "object_info": {
+            "oid": {
+              "oid": "EOBJ5",
+              "key": "",
+              "snapid": -2,
+              "hash": 2918945441,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
+            },
+            "version": "71'7",
+            "prior_version": "0'0",
+            "last_reqid": "client.4424.0:1",
+            "user_version": 7,
+            "size": 7,
+            "mtime": "2025-04-28T02:19:03.683994-0500",
+            "local_mtime": "2025-04-28T02:19:03.685505-0500",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": "0x2ddbf8f5",
+            "omap_digest": "0xffffffff",
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {},
+            "shard_versions": []
+          }
+        },
+        {
+          "osd": 2,
+          "primary": false,
+          "shard": 1,
+          "errors": [],
+          "size": 2048
+        }
+      ]
+    },
+    {
       "object": {
-        "version": 7,
-        "snap": "head",
-        "locator": "",
+        "name": "EOBJ6",
         "nspace": "",
-        "name": "EOBJ5"
-      }
-   },
-   {
-     "errors": [],
-     "object": {
-       "locator": "",
-       "name": "EOBJ6",
-       "nspace": "",
-       "snap": "head",
-       "version": 8
-     },
-     "selected_object_info": {
+        "locator": "",
+        "snap": "head",
+        "version": 8
+      },
+      "errors": [],
+      "union_shard_errors": [
+        "hinfo_missing",
+        "hinfo_corrupted"
+      ],
+      "selected_object_info": {
         "oid": {
           "oid": "EOBJ6",
           "key": "",
@@ -4166,13 +4177,13 @@ function corrupt_scrub_erasure() {
           "pool": 3,
           "namespace": ""
         },
-        "version": "65'8",
+        "version": "78'8",
         "prior_version": "0'0",
-        "last_reqid": "client.4418.0:1",
+        "last_reqid": "client.4462.0:1",
         "user_version": 8,
         "size": 7,
-        "mtime": "",
-        "local_mtime": "",
+        "mtime": "2025-04-28T02:19:11.980798-0500",
+        "local_mtime": "2025-04-28T02:19:11.986446-0500",
         "lost": 0,
         "flags": [
           "dirty",
@@ -4188,70 +4199,68 @@ function corrupt_scrub_erasure() {
         "manifest": {
           "type": 0
         },
-        "watchers": {}
-     },
-     "shards": [
-       {
-         "errors": [
-           "hinfo_missing"
-         ],
-         "osd": 0,
-         "primary": false,
-         "shard": 2,
-         "size": 2048
-       },
-       {
-         "errors": [
-           "hinfo_corrupted"
-         ],
-         "osd": 1,
-         "primary": true,
-         "shard": 0,
-         "hashinfo": "bad-val",
-         "size": 2048
-       },
-       {
-         "errors": [],
-         "osd": 2,
-         "primary": false,
-         "shard": 1,
-         "size": 2048,
-         "hashinfo": {
-           "cumulative_shard_hashes": [
-            {
-              "hash": 80717615,
-              "shard": 0
-            },
-            {
-              "hash": 1534491824,
-              "shard": 1
-            },
-            {
-              "hash": 80717615,
-              "shard": 2
-            }
-           ],
-           "total_chunk_size": 2048
-         }
-       }
-     ],
-     "union_shard_errors": [
-       "hinfo_missing",
-       "hinfo_corrupted"
-     ]
-   },
-   {
-     "errors": [
-       "hinfo_inconsistency"
-     ],
-     "object": {
-       "locator": "",
-       "name": "EOBJ7",
-       "nspace": "",
-       "snap": "head",
-       "version": 10
-     },
-     "selected_object_info": {
+        "watchers": {},
+        "shard_versions": []
+      },
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "shard": 2,
+          "errors": [
+            "hinfo_missing"
+          ],
+          "size": 2048
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "shard": 0,
+          "errors": [
+            "hinfo_corrupted"
+          ],
+          "size": 2048,
+          "hashinfo": "bad-val"
+        },
+        {
+          "osd": 2,
+          "primary": false,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
+          "hashinfo": {
+            "total_chunk_size": 2048,
+            "cumulative_shard_hashes": [
+              {
+                "shard": 0,
+                "hash": 80717615
+              },
+              {
+                "shard": 1,
+                "hash": 1534491824
+              },
+              {
+                "shard": 2,
+                "hash": 80717615
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "object": {
+        "name": "EOBJ7",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 10
+      },
+      "errors": [
+        "hinfo_inconsistency"
+      ],
+      "union_shard_errors": [],
+      "selected_object_info": {
         "oid": {
           "oid": "EOBJ7",
           "key": "",
@@ -4261,13 +4270,13 @@ function corrupt_scrub_erasure() {
           "pool": 3,
           "namespace": ""
         },
-        "version": "75'10",
-        "prior_version": "75'9",
-        "last_reqid": "client.4482.0:1",
+        "version": "90'10",
+        "prior_version": "90'9",
+        "last_reqid": "client.4534.0:1",
         "user_version": 10,
         "size": 34,
-        "mtime": "",
-        "local_mtime": "",
+        "mtime": "2025-04-28T02:19:27.775012-0500",
+        "local_mtime": "2025-04-28T02:19:27.776394-0500",
         "lost": 0,
         "flags": [
           "dirty",
@@ -4283,86 +4292,85 @@ function corrupt_scrub_erasure() {
         "manifest": {
           "type": 0
         },
-        "watchers": {}
-     },
-     "shards": [
-       {
-         "hashinfo": {
-           "cumulative_shard_hashes": [
-            {
-              "hash": 80717615,
-              "shard": 0
-            },
-            {
-              "hash": 1534491824,
-              "shard": 1
-            },
-            {
-              "hash": 80717615,
-              "shard": 2
-            }
-           ],
-           "total_chunk_size": 2048
-         },
-         "errors": [],
-         "osd": 0,
-         "primary": false,
-         "shard": 2,
-         "size": 2048
-       },
-       {
-         "hashinfo": {
-           "cumulative_shard_hashes": [
-            {
-              "hash": 1534350760,
-              "shard": 0
-            },
-            {
-              "hash": 1534491824,
-              "shard": 1
-            },
-            {
-              "hash": 1534350760,
-              "shard": 2
-            }
-           ],
-           "total_chunk_size": 2048
-         },
-         "errors": [],
-         "osd": 1,
-         "primary": true,
-         "shard": 0,
-         "size": 2048
-       },
-       {
-         "hashinfo": {
-           "cumulative_shard_hashes": [
-            {
-              "hash": 1534350760,
-              "shard": 0
-            },
-            {
-              "hash": 1534491824,
-              "shard": 1
-            },
-            {
-              "hash": 1534350760,
-              "shard": 2
-            }
-           ],
-           "total_chunk_size": 2048
-         },
-         "errors": [],
-         "osd": 2,
-         "primary": false,
-         "shard": 1,
-         "size": 2048
-       }
-     ],
-     "union_shard_errors": []
+        "watchers": {},
+        "shard_versions": []
+      },
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "shard": 2,
+          "errors": [],
+          "size": 2048,
+          "hashinfo": {
+            "total_chunk_size": 2048,
+            "cumulative_shard_hashes": [
+              {
+                "shard": 0,
+                "hash": 80717615
+              },
+              {
+                "shard": 1,
+                "hash": 1534491824
+              },
+              {
+                "shard": 2,
+                "hash": 80717615
+              }
+            ]
+          }
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "shard": 0,
+          "errors": [],
+          "size": 2048,
+          "hashinfo": {
+            "total_chunk_size": 2048,
+            "cumulative_shard_hashes": [
+              {
+                "shard": 0,
+                "hash": 1534350760
+              },
+              {
+                "shard": 1,
+                "hash": 1534491824
+              },
+              {
+                "shard": 2,
+                "hash": 1534350760
+              }
+            ]
+          }
+        },
+        {
+          "osd": 2,
+          "primary": false,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
+          "hashinfo": {
+            "total_chunk_size": 2048,
+            "cumulative_shard_hashes": [
+              {
+                "shard": 0,
+                "hash": 1534350760
+              },
+              {
+                "shard": 1,
+                "hash": 1534491824
+              },
+              {
+                "shard": 2,
+                "hash": 1534350760
+              }
+            ]
+          }
+        }
+      ]
     }
-  ],
-  "epoch": 0
+  ]
 }
 EOF
 
@@ -4387,6 +4395,7 @@ EOF
     test $(jq -r '.[0]' $dir/json) = $pg || return 1
 
     rados list-inconsistent-obj $pg > $dir/json || return 1
+    cp $dir/json /tmp/rrr6.json
     # Get epoch for repair-get requests
     epoch=$(jq .epoch $dir/json)
 
@@ -4394,72 +4403,23 @@ EOF
     then
       jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
 {
+  "epoch": 99,
   "inconsistents": [
     {
-      "shards": [
-        {
-          "data_digest": "0x00000000",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 2,
-          "osd": 0,
-          "primary": false
-        },
-        {
-          "object_info": {
-            "oid": {
-              "oid": "EOBJ1",
-              "key": "",
-              "snapid": -2,
-              "hash": 560836233,
-              "max": 0,
-              "pool": 3,
-              "namespace": ""
-            },
-            "version": "27'1",
-            "prior_version": "0'0",
-            "last_reqid": "client.4184.0:1",
-            "user_version": 1,
-            "size": 7,
-            "mtime": "2018-04-05 14:31:33.837147",
-            "local_mtime": "2018-04-05 14:31:33.840763",
-            "lost": 0,
-            "flags": [
-              "dirty",
-              "data_digest"
-            ],
-            "truncate_seq": 0,
-            "truncate_size": 0,
-            "data_digest": "0x2ddbf8f5",
-            "omap_digest": "0xffffffff",
-            "expected_object_size": 0,
-            "expected_write_size": 0,
-            "alloc_hint_flags": 0,
-            "manifest": {
-              "type": 0
-            },
-            "watchers": {}
-          },
-          "size": 9,
-          "shard": 0,
-          "errors": [
-            "read_error",
-            "size_mismatch_info",
-            "obj_size_info_mismatch"
-          ],
-          "osd": 1,
-          "primary": true
-        },
-        {
-          "data_digest": "0x00000000",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "shard": 1,
-          "errors": [],
-          "osd": 2,
-          "primary": false
-        }
+      "object": {
+        "name": "EOBJ1",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 1
+      },
+      "errors": [
+        "size_mismatch"
+      ],
+      "union_shard_errors": [
+        "read_error",
+        "size_mismatch_info",
+        "obj_size_info_mismatch"
       ],
       "selected_object_info": {
         "oid": {
@@ -4471,13 +4431,13 @@ EOF
           "pool": 3,
           "namespace": ""
         },
-        "version": "27'1",
+        "version": "33'1",
         "prior_version": "0'0",
-        "last_reqid": "client.4184.0:1",
+        "last_reqid": "client.4212.0:1",
         "user_version": 1,
         "size": 7,
-        "mtime": "2018-04-05 14:31:33.837147",
-        "local_mtime": "2018-04-05 14:31:33.840763",
+        "mtime": "2025-04-28T05:22:43.385320-0500",
+        "local_mtime": "2025-04-28T05:22:43.387170-0500",
         "lost": 0,
         "flags": [
           "dirty",
@@ -4493,241 +4453,46 @@ EOF
         "manifest": {
           "type": 0
         },
-        "watchers": {}
+        "watchers": {},
+        "shard_versions": []
       },
-      "union_shard_errors": [
-        "read_error",
-        "size_mismatch_info",
-        "obj_size_info_mismatch"
-      ],
-      "errors": [
-        "size_mismatch"
-      ],
-      "object": {
-        "version": 1,
-        "snap": "head",
-        "locator": "",
-        "nspace": "",
-        "name": "EOBJ1"
-      }
-    },
-    {
       "shards": [
         {
-          "data_digest": "0x00000000",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 2,
           "osd": 0,
-          "primary": false
+          "primary": false,
+          "shard": 2,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x00000000"
         },
         {
+          "osd": 1,
+          "primary": true,
           "shard": 0,
           "errors": [
-            "missing"
+            "read_error",
+            "size_mismatch_info",
+            "obj_size_info_mismatch"
           ],
-          "osd": 1,
-          "primary": true
-        },
-        {
-          "data_digest": "0x00000000",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "shard": 1,
-          "errors": [],
-          "osd": 2,
-          "primary": false
-        }
-      ],
-      "selected_object_info": {
-        "oid": {
-          "oid": "EOBJ3",
-          "key": "",
-          "snapid": -2,
-          "hash": 3125668237,
-          "max": 0,
-          "pool": 3,
-          "namespace": ""
-        },
-        "version": "39'3",
-        "prior_version": "0'0",
-        "last_reqid": "client.4252.0:1",
-        "user_version": 3,
-        "size": 7,
-        "mtime": "2018-04-05 14:31:46.841145",
-        "local_mtime": "2018-04-05 14:31:46.844996",
-        "lost": 0,
-        "flags": [
-          "dirty",
-          "data_digest"
-        ],
-        "truncate_seq": 0,
-        "truncate_size": 0,
-        "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
-        "expected_object_size": 0,
-        "expected_write_size": 0,
-        "alloc_hint_flags": 0,
-        "manifest": {
-          "type": 0
-        },
-        "watchers": {}
-      },
-      "union_shard_errors": [
-        "missing"
-      ],
-      "errors": [],
-      "object": {
-        "version": 3,
-        "snap": "head",
-        "locator": "",
-        "nspace": "",
-        "name": "EOBJ3"
-      }
-    },
-    {
-      "shards": [
-        {
-          "attrs": [
-            {
-              "Base64": false,
-              "value": "bad-val",
-              "name": "key1-EOBJ4"
-            },
-            {
-              "Base64": false,
-              "value": "val2-EOBJ4",
-              "name": "key2-EOBJ4"
-            }
-          ],
-          "data_digest": "0x00000000",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 2,
-          "osd": 0,
-          "primary": false
-        },
-        {
-          "attrs": [
-            {
-              "Base64": false,
-              "value": "val1-EOBJ4",
-              "name": "key1-EOBJ4"
-            },
-            {
-              "Base64": false,
-              "value": "val2-EOBJ4",
-              "name": "key2-EOBJ4"
-            }
-          ],
-          "data_digest": "0x00000000",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 0,
-          "osd": 1,
-          "primary": true
-        },
-        {
-          "attrs": [
-            {
-              "Base64": false,
-              "value": "val1-EOBJ4",
-              "name": "key1-EOBJ4"
-            },
-            {
-              "Base64": false,
-              "value": "val3-EOBJ4",
-              "name": "key3-EOBJ4"
-            }
-          ],
-          "data_digest": "0x00000000",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 1,
-          "osd": 2,
-          "primary": false
-        }
-      ],
-      "selected_object_info": {
-        "oid": {
-          "oid": "EOBJ4",
-          "key": "",
-          "snapid": -2,
-          "hash": 1618759290,
-          "max": 0,
-          "pool": 3,
-          "namespace": ""
-        },
-        "version": "45'6",
-        "prior_version": "45'5",
-        "last_reqid": "client.4294.0:1",
-        "user_version": 6,
-        "size": 7,
-        "mtime": "2018-04-05 14:31:54.663622",
-        "local_mtime": "2018-04-05 14:31:54.664527",
-        "lost": 0,
-        "flags": [
-          "dirty",
-          "data_digest"
-        ],
-        "truncate_seq": 0,
-        "truncate_size": 0,
-        "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
-        "expected_object_size": 0,
-        "expected_write_size": 0,
-        "alloc_hint_flags": 0,
-        "manifest": {
-          "type": 0
-        },
-        "watchers": {}
-      },
-      "union_shard_errors": [],
-      "errors": [
-        "attr_value_mismatch",
-        "attr_name_mismatch"
-      ],
-      "object": {
-        "version": 6,
-        "snap": "head",
-        "locator": "",
-        "nspace": "",
-        "name": "EOBJ4"
-      }
-    },
-    {
-      "shards": [
-        {
-          "data_digest": "0x00000000",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 2,
-          "osd": 0,
-          "primary": false
-        },
-        {
+          "size": 9,
           "object_info": {
             "oid": {
-              "oid": "EOBJ5",
+              "oid": "EOBJ1",
               "key": "",
               "snapid": -2,
-              "hash": 2918945441,
+              "hash": 560836233,
               "max": 0,
               "pool": 3,
               "namespace": ""
             },
-            "version": "59'7",
+            "version": "33'1",
             "prior_version": "0'0",
-            "last_reqid": "client.4382.0:1",
-            "user_version": 7,
+            "last_reqid": "client.4212.0:1",
+            "user_version": 1,
             "size": 7,
-            "mtime": "2018-04-05 14:32:12.929161",
-            "local_mtime": "2018-04-05 14:32:12.934707",
+            "mtime": "2025-04-28T05:22:43.385320-0500",
+            "local_mtime": "2025-04-28T05:22:43.387170-0500",
             "lost": 0,
             "flags": [
               "dirty",
@@ -4743,45 +4508,50 @@ EOF
             "manifest": {
               "type": 0
             },
-            "watchers": {}
-          },
-          "size": 4096,
-          "errors": [
-            "read_error",
-            "size_mismatch_info",
-            "obj_size_info_mismatch"
-          ],
-          "shard": 0,
-          "osd": 1,
-          "primary": true
+            "watchers": {},
+            "shard_versions": []
+          }
         },
         {
-          "data_digest": "0x00000000",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 1,
           "osd": 2,
-          "primary": false
+          "primary": false,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x00000000"
         }
+      ]
+    },
+    {
+      "object": {
+        "name": "EOBJ3",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 3
+      },
+      "errors": [],
+      "union_shard_errors": [
+        "missing"
       ],
       "selected_object_info": {
         "oid": {
-          "oid": "EOBJ5",
+          "oid": "EOBJ3",
           "key": "",
           "snapid": -2,
-          "hash": 2918945441,
+          "hash": 3125668237,
           "max": 0,
           "pool": 3,
           "namespace": ""
         },
-        "version": "59'7",
+        "version": "47'3",
         "prior_version": "0'0",
-        "last_reqid": "client.4382.0:1",
-        "user_version": 7,
+        "last_reqid": "client.4288.0:1",
+        "user_version": 3,
         "size": 7,
-        "mtime": "2018-04-05 14:32:12.929161",
-        "local_mtime": "2018-04-05 14:32:12.934707",
+        "mtime": "2025-04-28T05:22:59.744067-0500",
+        "local_mtime": "2025-04-28T05:22:59.748636-0500",
         "lost": 0,
         "flags": [
           "dirty",
@@ -4797,23 +4567,269 @@ EOF
         "manifest": {
           "type": 0
         },
-        "watchers": {}
+        "watchers": {},
+        "shard_versions": []
       },
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "shard": 2,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x00000000"
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "shard": 0,
+          "errors": [
+            "missing"
+          ]
+        },
+        {
+          "osd": 2,
+          "primary": false,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x00000000"
+        }
+      ]
+    },
+    {
+      "object": {
+        "name": "EOBJ4",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 6
+      },
+      "errors": [
+        "attr_value_mismatch",
+        "attr_name_mismatch"
+      ],
+      "union_shard_errors": [],
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ4",
+          "key": "",
+          "snapid": -2,
+          "hash": 1618759290,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "54'6",
+        "prior_version": "54'5",
+        "last_reqid": "client.4332.0:1",
+        "user_version": 6,
+        "size": 7,
+        "mtime": "2025-04-28T05:23:07.959787-0500",
+        "local_mtime": "2025-04-28T05:23:07.961221-0500",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": "0x2ddbf8f5",
+        "omap_digest": "0xffffffff",
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {},
+        "shard_versions": []
+      },
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "shard": 2,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x00000000",
+          "attrs": [
+            {
+              "name": "key1-EOBJ4",
+              "value": "bad-val",
+              "Base64": false
+            },
+            {
+              "name": "key2-EOBJ4",
+              "value": "val2-EOBJ4",
+              "Base64": false
+            }
+          ]
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "shard": 0,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x00000000",
+          "attrs": [
+            {
+              "name": "key1-EOBJ4",
+              "value": "val1-EOBJ4",
+              "Base64": false
+            },
+            {
+              "name": "key2-EOBJ4",
+              "value": "val2-EOBJ4",
+              "Base64": false
+            }
+          ]
+        },
+        {
+          "osd": 2,
+          "primary": false,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x00000000",
+          "attrs": [
+            {
+              "name": "key1-EOBJ4",
+              "value": "val1-EOBJ4",
+              "Base64": false
+            },
+            {
+              "name": "key3-EOBJ4",
+              "value": "val3-EOBJ4",
+              "Base64": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "object": {
+        "name": "EOBJ5",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 7
+      },
+      "errors": [
+        "size_mismatch"
+      ],
       "union_shard_errors": [
         "read_error",
         "size_mismatch_info",
         "obj_size_info_mismatch"
       ],
-      "errors": [
-        "size_mismatch"
-      ],
-      "object": {
-        "version": 7,
-        "snap": "head",
-        "locator": "",
-        "nspace": "",
-        "name": "EOBJ5"
-      }
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ5",
+          "key": "",
+          "snapid": -2,
+          "hash": 2918945441,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "71'7",
+        "prior_version": "0'0",
+        "last_reqid": "client.4432.0:1",
+        "user_version": 7,
+        "size": 7,
+        "mtime": "2025-04-28T05:23:31.119695-0500",
+        "local_mtime": "2025-04-28T05:23:31.121349-0500",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": "0x2ddbf8f5",
+        "omap_digest": "0xffffffff",
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {},
+        "shard_versions": []
+      },
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "shard": 2,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x00000000"
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "shard": 0,
+          "errors": [
+            "read_error",
+            "size_mismatch_info",
+            "obj_size_info_mismatch"
+          ],
+          "size": 4096,
+          "object_info": {
+            "oid": {
+              "oid": "EOBJ5",
+              "key": "",
+              "snapid": -2,
+              "hash": 2918945441,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
+            },
+            "version": "71'7",
+            "prior_version": "0'0",
+            "last_reqid": "client.4432.0:1",
+            "user_version": 7,
+            "size": 7,
+            "mtime": "2025-04-28T05:23:31.119695-0500",
+            "local_mtime": "2025-04-28T05:23:31.121349-0500",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": "0x2ddbf8f5",
+            "omap_digest": "0xffffffff",
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {},
+            "shard_versions": []
+          }
+        },
+        {
+          "osd": 2,
+          "primary": false,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x00000000"
+        }
+      ]
     },
     {
       "object": {
@@ -4839,13 +4855,13 @@ EOF
           "pool": 3,
           "namespace": ""
         },
-        "version": "65'8",
+        "version": "78'8",
         "prior_version": "0'0",
-        "last_reqid": "client.4418.0:1",
+        "last_reqid": "client.4470.0:1",
         "user_version": 8,
         "size": 7,
-        "mtime": "2018-04-05 14:32:20.634116",
-        "local_mtime": "2018-04-05 14:32:20.637999",
+        "mtime": "2025-04-28T05:23:39.428058-0500",
+        "local_mtime": "2025-04-28T05:23:39.433754-0500",
         "lost": 0,
         "flags": [
           "dirty",
@@ -4861,7 +4877,8 @@ EOF
         "manifest": {
           "type": 0
         },
-        "watchers": {}
+        "watchers": {},
+        "shard_versions": []
       },
       "shards": [
         {
@@ -4894,22 +4911,22 @@ EOF
           "omap_digest": "0xffffffff",
           "data_digest": "0x00000000",
           "hashinfo": {
+            "total_chunk_size": 2048,
             "cumulative_shard_hashes": [
-            {
-              "hash": 80717615,
-              "shard": 0
-            },
-            {
-              "hash": 1534491824,
-              "shard": 1
-            },
-            {
-              "hash": 80717615,
-              "shard": 2
-            }
-           ],
-           "total_chunk_size": 2048
-         }
+              {
+                "shard": 0,
+                "hash": 80717615
+              },
+              {
+                "shard": 1,
+                "hash": 1534491824
+              },
+              {
+                "shard": 2,
+                "hash": 80717615
+              }
+            ]
+          }
         }
       ]
     },
@@ -4935,13 +4952,13 @@ EOF
           "pool": 3,
           "namespace": ""
         },
-        "version": "75'10",
-        "prior_version": "75'9",
-        "last_reqid": "client.4482.0:1",
+        "version": "90'10",
+        "prior_version": "90'9",
+        "last_reqid": "client.4542.0:1",
         "user_version": 10,
         "size": 34,
-        "mtime": "2018-04-05 14:32:33.058782",
-        "local_mtime": "2018-04-05 14:32:33.059679",
+        "mtime": "2025-04-28T05:23:55.240961-0500",
+        "local_mtime": "2025-04-28T05:23:55.242367-0500",
         "lost": 0,
         "flags": [
           "dirty",
@@ -4957,7 +4974,8 @@ EOF
         "manifest": {
           "type": 0
         },
-        "watchers": {}
+        "watchers": {},
+        "shard_versions": []
       },
       "shards": [
         {
@@ -4969,21 +4987,21 @@ EOF
           "omap_digest": "0xffffffff",
           "data_digest": "0x00000000",
           "hashinfo": {
-           "cumulative_shard_hashes": [
-            {
-              "hash": 80717615,
-              "shard": 0
-            },
-            {
-              "hash": 1534491824,
-              "shard": 1
-            },
-            {
-              "hash": 80717615,
-              "shard": 2
-            }
-           ],
-           "total_chunk_size": 2048
+            "total_chunk_size": 2048,
+            "cumulative_shard_hashes": [
+              {
+                "shard": 0,
+                "hash": 80717615
+              },
+              {
+                "shard": 1,
+                "hash": 1534491824
+              },
+              {
+                "shard": 2,
+                "hash": 80717615
+              }
+            ]
           }
         },
         {
@@ -4995,21 +5013,21 @@ EOF
           "omap_digest": "0xffffffff",
           "data_digest": "0x00000000",
           "hashinfo": {
-           "cumulative_shard_hashes": [
-            {
-              "hash": 1534350760,
-              "shard": 0
-            },
-            {
-              "hash": 1534491824,
-              "shard": 1
-            },
-            {
-              "hash": 1534350760,
-              "shard": 2
-            }
-           ],
-           "total_chunk_size": 2048
+            "total_chunk_size": 2048,
+            "cumulative_shard_hashes": [
+              {
+                "shard": 0,
+                "hash": 1534350760
+              },
+              {
+                "shard": 1,
+                "hash": 1534491824
+              },
+              {
+                "shard": 2,
+                "hash": 1534350760
+              }
+            ]
           }
         },
         {
@@ -5021,27 +5039,26 @@ EOF
           "omap_digest": "0xffffffff",
           "data_digest": "0x00000000",
           "hashinfo": {
-           "cumulative_shard_hashes": [
-            {
-              "hash": 1534350760,
-              "shard": 0
-            },
-            {
-              "hash": 1534491824,
-              "shard": 1
-            },
-            {
-              "hash": 1534350760,
-              "shard": 2
-            }
-           ],
-           "total_chunk_size": 2048
+            "total_chunk_size": 2048,
+            "cumulative_shard_hashes": [
+              {
+                "shard": 0,
+                "hash": 1534350760
+              },
+              {
+                "shard": 1,
+                "hash": 1534491824
+              },
+              {
+                "shard": 2,
+                "hash": 1534350760
+              }
+            ]
           }
         }
       ]
     }
-  ],
-  "epoch": 0
+  ]
 }
 EOF
 
@@ -5049,72 +5066,23 @@ EOF
 
       jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
 {
+  "epoch": 99,
   "inconsistents": [
     {
-      "shards": [
-        {
-          "data_digest": "0x04cfa72f",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 2,
-          "osd": 0,
-          "primary": false
-        },
-        {
-          "object_info": {
-            "oid": {
-              "oid": "EOBJ1",
-              "key": "",
-              "snapid": -2,
-              "hash": 560836233,
-              "max": 0,
-              "pool": 3,
-              "namespace": ""
-            },
-            "version": "27'1",
-            "prior_version": "0'0",
-            "last_reqid": "client.4192.0:1",
-            "user_version": 1,
-            "size": 7,
-            "mtime": "2018-04-05 14:30:10.688009",
-            "local_mtime": "2018-04-05 14:30:10.691774",
-            "lost": 0,
-            "flags": [
-              "dirty",
-              "data_digest"
-            ],
-            "truncate_seq": 0,
-            "truncate_size": 0,
-            "data_digest": "0x2ddbf8f5",
-            "omap_digest": "0xffffffff",
-            "expected_object_size": 0,
-            "expected_write_size": 0,
-            "alloc_hint_flags": 0,
-            "manifest": {
-              "type": 0
-            },
-            "watchers": {}
-          },
-          "size": 9,
-          "shard": 0,
-          "errors": [
-            "read_error",
-            "size_mismatch_info",
-            "obj_size_info_mismatch"
-          ],
-          "osd": 1,
-          "primary": true
-        },
-        {
-          "data_digest": "0x04cfa72f",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "shard": 1,
-          "errors": [],
-          "osd": 2,
-          "primary": false
-        }
+      "object": {
+        "name": "EOBJ1",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 1
+      },
+      "errors": [
+        "size_mismatch"
+      ],
+      "union_shard_errors": [
+        "read_error",
+        "size_mismatch_info",
+        "obj_size_info_mismatch"
       ],
       "selected_object_info": {
         "oid": {
@@ -5126,13 +5094,13 @@ EOF
           "pool": 3,
           "namespace": ""
         },
-        "version": "27'1",
+        "version": "32'1",
         "prior_version": "0'0",
-        "last_reqid": "client.4192.0:1",
+        "last_reqid": "client.4210.0:1",
         "user_version": 1,
         "size": 7,
-        "mtime": "2018-04-05 14:30:10.688009",
-        "local_mtime": "2018-04-05 14:30:10.691774",
+        "mtime": "2025-04-28T02:18:19.605985-0500",
+        "local_mtime": "2025-04-28T02:18:19.607916-0500",
         "lost": 0,
         "flags": [
           "dirty",
@@ -5148,53 +5116,87 @@ EOF
         "manifest": {
           "type": 0
         },
-        "watchers": {}
+        "watchers": {},
+        "shard_versions": []
       },
-      "union_shard_errors": [
-        "read_error",
-        "size_mismatch_info",
-        "obj_size_info_mismatch"
-      ],
-      "errors": [
-        "size_mismatch"
-      ],
-      "object": {
-        "version": 1,
-        "snap": "head",
-        "locator": "",
-        "nspace": "",
-        "name": "EOBJ1"
-      }
-    },
-    {
       "shards": [
         {
-          "size": 2048,
-          "errors": [
-            "ec_hash_error"
-          ],
-          "shard": 2,
           "osd": 0,
-          "primary": false
+          "primary": false,
+          "shard": 2,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x04cfa72f"
         },
         {
-          "data_digest": "0x04cfa72f",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 0,
           "osd": 1,
-          "primary": true
+          "primary": true,
+          "shard": 0,
+          "errors": [
+            "read_error",
+            "size_mismatch_info",
+            "obj_size_info_mismatch"
+          ],
+          "size": 9,
+          "object_info": {
+            "oid": {
+              "oid": "EOBJ1",
+              "key": "",
+              "snapid": -2,
+              "hash": 560836233,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
+            },
+            "version": "32'1",
+            "prior_version": "0'0",
+            "last_reqid": "client.4210.0:1",
+            "user_version": 1,
+            "size": 7,
+            "mtime": "2025-04-28T02:18:19.605985-0500",
+            "local_mtime": "2025-04-28T02:18:19.607916-0500",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": "0x2ddbf8f5",
+            "omap_digest": "0xffffffff",
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {},
+            "shard_versions": []
+          }
         },
         {
-          "data_digest": "0x04cfa72f",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 1,
           "osd": 2,
-          "primary": false
+          "primary": false,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x04cfa72f"
         }
+      ]
+    },
+    {
+      "object": {
+        "name": "EOBJ2",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 2
+      },
+      "errors": [],
+      "union_shard_errors": [
+        "ec_hash_error"
       ],
       "selected_object_info": {
         "oid": {
@@ -5206,13 +5208,13 @@ EOF
           "pool": 3,
           "namespace": ""
         },
-        "version": "33'2",
+        "version": "39'2",
         "prior_version": "0'0",
-        "last_reqid": "client.4224.0:1",
+        "last_reqid": "client.4248.0:1",
         "user_version": 2,
         "size": 7,
-        "mtime": "2018-04-05 14:30:14.152945",
-        "local_mtime": "2018-04-05 14:30:14.154014",
+        "mtime": "2025-04-28T02:18:27.810433-0500",
+        "local_mtime": "2025-04-28T02:18:27.815649-0500",
         "lost": 0,
         "flags": [
           "dirty",
@@ -5228,48 +5230,50 @@ EOF
         "manifest": {
           "type": 0
         },
-        "watchers": {}
+        "watchers": {},
+        "shard_versions": []
       },
-      "union_shard_errors": [
-        "ec_hash_error"
-      ],
-      "errors": [],
-      "object": {
-        "version": 2,
-        "snap": "head",
-        "locator": "",
-        "nspace": "",
-        "name": "EOBJ2"
-      }
-    },
-    {
       "shards": [
         {
-          "data_digest": "0x04cfa72f",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 2,
           "osd": 0,
-          "primary": false
+          "primary": false,
+          "shard": 2,
+          "errors": [
+            "ec_hash_error"
+          ],
+          "size": 2048
         },
         {
           "osd": 1,
           "primary": true,
           "shard": 0,
-          "errors": [
-            "missing"
-          ]
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x04cfa72f"
         },
         {
-          "data_digest": "0x04cfa72f",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
+          "osd": 2,
+          "primary": false,
           "shard": 1,
           "errors": [],
-          "osd": 2,
-          "primary": false
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x04cfa72f"
         }
+      ]
+    },
+    {
+      "object": {
+        "name": "EOBJ3",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 3
+      },
+      "errors": [],
+      "union_shard_errors": [
+        "missing"
       ],
       "selected_object_info": {
         "oid": {
@@ -5281,13 +5285,13 @@ EOF
           "pool": 3,
           "namespace": ""
         },
-        "version": "39'3",
+        "version": "46'3",
         "prior_version": "0'0",
-        "last_reqid": "client.4258.0:1",
+        "last_reqid": "client.4286.0:1",
         "user_version": 3,
         "size": 7,
-        "mtime": "2018-04-05 14:30:18.875544",
-        "local_mtime": "2018-04-05 14:30:18.880153",
+        "mtime": "2025-04-28T02:18:36.149933-0500",
+        "local_mtime": "2025-04-28T02:18:36.155056-0500",
         "lost": 0,
         "flags": [
           "dirty",
@@ -5303,42 +5307,107 @@ EOF
         "manifest": {
           "type": 0
         },
-        "watchers": {}
+        "watchers": {},
+        "shard_versions": []
       },
-      "union_shard_errors": [
-        "missing"
-      ],
-      "errors": [],
-      "object": {
-        "version": 3,
-        "snap": "head",
-        "locator": "",
-        "nspace": "",
-        "name": "EOBJ3"
-      }
-    },
-    {
       "shards": [
         {
+          "osd": 0,
+          "primary": false,
+          "shard": 2,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x04cfa72f"
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "shard": 0,
+          "errors": [
+            "missing"
+          ]
+        },
+        {
+          "osd": 2,
+          "primary": false,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x04cfa72f"
+        }
+      ]
+    },
+    {
+      "object": {
+        "name": "EOBJ4",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 6
+      },
+      "errors": [
+        "attr_value_mismatch",
+        "attr_name_mismatch"
+      ],
+      "union_shard_errors": [],
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ4",
+          "key": "",
+          "snapid": -2,
+          "hash": 1618759290,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "54'6",
+        "prior_version": "54'5",
+        "last_reqid": "client.4330.0:1",
+        "user_version": 6,
+        "size": 7,
+        "mtime": "2025-04-28T02:18:44.594720-0500",
+        "local_mtime": "2025-04-28T02:18:44.596235-0500",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": "0x2ddbf8f5",
+        "omap_digest": "0xffffffff",
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {},
+        "shard_versions": []
+      },
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "shard": 2,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x04cfa72f",
           "attrs": [
             {
-              "Base64": false,
+              "name": "key1-EOBJ4",
               "value": "bad-val",
-              "name": "key1-EOBJ4"
+              "Base64": false
             },
             {
-              "Base64": false,
+              "name": "key2-EOBJ4",
               "value": "val2-EOBJ4",
-              "name": "key2-EOBJ4"
+              "Base64": false
             }
-          ],
-          "data_digest": "0x04cfa72f",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 2,
-          "osd": 0,
-          "primary": false
+          ]
         },
         {
           "osd": 1,
@@ -5350,14 +5419,14 @@ EOF
           "data_digest": "0x04cfa72f",
           "attrs": [
             {
-              "Base64": false,
+              "name": "key1-EOBJ4",
               "value": "val1-EOBJ4",
-              "name": "key1-EOBJ4"
+              "Base64": false
             },
             {
-              "Base64": false,
+              "name": "key2-EOBJ4",
               "value": "val2-EOBJ4",
-              "name": "key2-EOBJ4"
+              "Base64": false
             }
           ]
         },
@@ -5371,35 +5440,52 @@ EOF
           "data_digest": "0x04cfa72f",
           "attrs": [
             {
-              "Base64": false,
+              "name": "key1-EOBJ4",
               "value": "val1-EOBJ4",
-              "name": "key1-EOBJ4"
+              "Base64": false
             },
             {
-              "Base64": false,
+              "name": "key3-EOBJ4",
               "value": "val3-EOBJ4",
-              "name": "key3-EOBJ4"
+              "Base64": false
             }
           ]
         }
+      ]
+    },
+    {
+      "object": {
+        "name": "EOBJ5",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 7
+      },
+      "errors": [
+        "size_mismatch"
+      ],
+      "union_shard_errors": [
+        "read_error",
+        "size_mismatch_info",
+        "obj_size_info_mismatch"
       ],
       "selected_object_info": {
         "oid": {
-          "oid": "EOBJ4",
+          "oid": "EOBJ5",
           "key": "",
           "snapid": -2,
-          "hash": 1618759290,
+          "hash": 2918945441,
           "max": 0,
           "pool": 3,
           "namespace": ""
         },
-        "version": "45'6",
-        "prior_version": "45'5",
-        "last_reqid": "client.4296.0:1",
-        "user_version": 6,
+        "version": "71'7",
+        "prior_version": "0'0",
+        "last_reqid": "client.4424.0:1",
+        "user_version": 7,
         "size": 7,
-        "mtime": "2018-04-05 14:30:22.271983",
-        "local_mtime": "2018-04-05 14:30:22.272840",
+        "mtime": "2025-04-28T02:19:03.683994-0500",
+        "local_mtime": "2025-04-28T02:19:03.685505-0500",
         "lost": 0,
         "flags": [
           "dirty",
@@ -5415,33 +5501,29 @@ EOF
         "manifest": {
           "type": 0
         },
-        "watchers": {}
+        "watchers": {},
+        "shard_versions": []
       },
-      "union_shard_errors": [],
-      "errors": [
-        "attr_value_mismatch",
-        "attr_name_mismatch"
-      ],
-      "object": {
-        "version": 6,
-        "snap": "head",
-        "locator": "",
-        "nspace": "",
-        "name": "EOBJ4"
-      }
-    },
-    {
       "shards": [
         {
-          "data_digest": "0x04cfa72f",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 2,
           "osd": 0,
-          "primary": false
+          "primary": false,
+          "shard": 2,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x04cfa72f"
         },
         {
+          "osd": 1,
+          "primary": true,
+          "shard": 0,
+          "errors": [
+            "read_error",
+            "size_mismatch_info",
+            "obj_size_info_mismatch"
+          ],
+          "size": 4096,
           "object_info": {
             "oid": {
               "oid": "EOBJ5",
@@ -5452,13 +5534,13 @@ EOF
               "pool": 3,
               "namespace": ""
             },
-            "version": "59'7",
+            "version": "71'7",
             "prior_version": "0'0",
-            "last_reqid": "client.4384.0:1",
+            "last_reqid": "client.4424.0:1",
             "user_version": 7,
             "size": 7,
-            "mtime": "2018-04-05 14:30:35.162395",
-            "local_mtime": "2018-04-05 14:30:35.166390",
+            "mtime": "2025-04-28T02:19:03.683994-0500",
+            "local_mtime": "2025-04-28T02:19:03.685505-0500",
             "lost": 0,
             "flags": [
               "dirty",
@@ -5474,77 +5556,20 @@ EOF
             "manifest": {
               "type": 0
             },
-            "watchers": {}
-          },
-          "size": 4096,
-          "shard": 0,
-          "errors": [
-            "read_error",
-            "size_mismatch_info",
-            "obj_size_info_mismatch"
-          ],
-          "osd": 1,
-          "primary": true
+            "watchers": {},
+            "shard_versions": []
+          }
         },
         {
-          "data_digest": "0x04cfa72f",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
+          "osd": 2,
+          "primary": false,
           "shard": 1,
           "errors": [],
-          "osd": 2,
-          "primary": false
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x04cfa72f"
         }
-      ],
-      "selected_object_info": {
-        "oid": {
-          "oid": "EOBJ5",
-          "key": "",
-          "snapid": -2,
-          "hash": 2918945441,
-          "max": 0,
-          "pool": 3,
-          "namespace": ""
-        },
-        "version": "59'7",
-        "prior_version": "0'0",
-        "last_reqid": "client.4384.0:1",
-        "user_version": 7,
-        "size": 7,
-        "mtime": "2018-04-05 14:30:35.162395",
-        "local_mtime": "2018-04-05 14:30:35.166390",
-        "lost": 0,
-        "flags": [
-          "dirty",
-          "data_digest"
-        ],
-        "truncate_seq": 0,
-        "truncate_size": 0,
-        "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
-        "expected_object_size": 0,
-        "expected_write_size": 0,
-        "alloc_hint_flags": 0,
-        "manifest": {
-          "type": 0
-        },
-        "watchers": {}
-      },
-      "union_shard_errors": [
-        "read_error",
-        "size_mismatch_info",
-        "obj_size_info_mismatch"
-      ],
-      "errors": [
-        "size_mismatch"
-      ],
-      "object": {
-        "version": 7,
-        "snap": "head",
-        "locator": "",
-        "nspace": "",
-        "name": "EOBJ5"
-      }
+      ]
     },
     {
       "object": {
@@ -5570,13 +5595,13 @@ EOF
           "pool": 3,
           "namespace": ""
         },
-        "version": "65'8",
+        "version": "78'8",
         "prior_version": "0'0",
-        "last_reqid": "client.4420.0:1",
+        "last_reqid": "client.4462.0:1",
         "user_version": 8,
         "size": 7,
-        "mtime": "2018-04-05 14:30:40.914673",
-        "local_mtime": "2018-04-05 14:30:40.917705",
+        "mtime": "2025-04-28T02:19:11.980798-0500",
+        "local_mtime": "2025-04-28T02:19:11.986446-0500",
         "lost": 0,
         "flags": [
           "dirty",
@@ -5592,7 +5617,8 @@ EOF
         "manifest": {
           "type": 0
         },
-        "watchers": {}
+        "watchers": {},
+        "shard_versions": []
       },
       "shards": [
         {
@@ -5625,21 +5651,21 @@ EOF
           "omap_digest": "0xffffffff",
           "data_digest": "0x04cfa72f",
           "hashinfo": {
-           "cumulative_shard_hashes": [
-            {
-              "hash": 80717615,
-              "shard": 0
-            },
-            {
-              "hash": 1534491824,
-              "shard": 1
-            },
-            {
-              "hash": 80717615,
-              "shard": 2
-            }
-           ],
-           "total_chunk_size": 2048
+            "total_chunk_size": 2048,
+            "cumulative_shard_hashes": [
+              {
+                "shard": 0,
+                "hash": 80717615
+              },
+              {
+                "shard": 1,
+                "hash": 1534491824
+              },
+              {
+                "shard": 2,
+                "hash": 80717615
+              }
+            ]
           }
         }
       ]
@@ -5668,13 +5694,13 @@ EOF
           "pool": 3,
           "namespace": ""
         },
-        "version": "75'10",
-        "prior_version": "75'9",
-        "last_reqid": "client.4486.0:1",
+        "version": "90'10",
+        "prior_version": "90'9",
+        "last_reqid": "client.4534.0:1",
         "user_version": 10,
         "size": 34,
-        "mtime": "2018-04-05 14:30:50.995009",
-        "local_mtime": "2018-04-05 14:30:50.996112",
+        "mtime": "2025-04-28T02:19:27.775012-0500",
+        "local_mtime": "2025-04-28T02:19:27.776394-0500",
         "lost": 0,
         "flags": [
           "dirty",
@@ -5690,7 +5716,8 @@ EOF
         "manifest": {
           "type": 0
         },
-        "watchers": {}
+        "watchers": {},
+        "shard_versions": []
       },
       "shards": [
         {
@@ -5702,22 +5729,22 @@ EOF
           ],
           "size": 2048,
           "hashinfo": {
-           "cumulative_shard_hashes": [
-            {
-              "hash": 80717615,
-              "shard": 0
-            },
-            {
-              "hash": 1534491824,
-              "shard": 1
-            },
-            {
-              "hash": 80717615,
-              "shard": 2
-            }
-           ],
-           "total_chunk_size": 2048
-         }
+            "total_chunk_size": 2048,
+            "cumulative_shard_hashes": [
+              {
+                "shard": 0,
+                "hash": 80717615
+              },
+              {
+                "shard": 1,
+                "hash": 1534491824
+              },
+              {
+                "shard": 2,
+                "hash": 80717615
+              }
+            ]
+          }
         },
         {
           "osd": 1,
@@ -5728,21 +5755,21 @@ EOF
           "omap_digest": "0xffffffff",
           "data_digest": "0x5b7455a8",
           "hashinfo": {
-           "cumulative_shard_hashes": [
-            {
-              "hash": 1534350760,
-              "shard": 0
-            },
-            {
-              "hash": 1534491824,
-              "shard": 1
-            },
-            {
-              "hash": 1534350760,
-              "shard": 2
-            }
-           ],
-           "total_chunk_size": 2048
+            "total_chunk_size": 2048,
+            "cumulative_shard_hashes": [
+              {
+                "shard": 0,
+                "hash": 1534350760
+              },
+              {
+                "shard": 1,
+                "hash": 1534491824
+              },
+              {
+                "shard": 2,
+                "hash": 1534350760
+              }
+            ]
           }
         },
         {
@@ -5754,27 +5781,26 @@ EOF
           "omap_digest": "0xffffffff",
           "data_digest": "0x5b7455a8",
           "hashinfo": {
-           "cumulative_shard_hashes": [
-            {
-              "hash": 1534350760,
-              "shard": 0
-            },
-            {
-              "hash": 1534491824,
-              "shard": 1
-            },
-            {
-              "hash": 1534350760,
-              "shard": 2
-            }
-           ],
-           "total_chunk_size": 2048
+            "total_chunk_size": 2048,
+            "cumulative_shard_hashes": [
+              {
+                "shard": 0,
+                "hash": 1534350760
+              },
+              {
+                "shard": 1,
+                "hash": 1534491824
+              },
+              {
+                "shard": 2,
+                "hash": 1534350760
+              }
+            ]
           }
         }
       ]
     }
-  ],
-  "epoch": 0
+  ]
 }
 EOF
 
