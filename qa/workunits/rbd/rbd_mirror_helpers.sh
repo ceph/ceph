@@ -2017,9 +2017,9 @@ get_pool_image_count()
     
     run_cmd "rbd --cluster ${cluster} ls ${pool} --format xml --pretty-format"
     if [ "${image}" = '*' ]; then
-        _pool_image_count="$($XMLSTARLET sel -t -v "count(//images/name)" < "$CMD_STDOUT")"
+        _pool_image_count="$(xmlstarlet sel -t -v "count(//images/name)" < "$CMD_STDOUT")"
     else
-        _pool_image_count="$($XMLSTARLET sel -t -v "count(//images[name='${image}'])" < "$CMD_STDOUT")"
+        _pool_image_count="$(xmlstarlet sel -t -v "count(//images[name='${image}'])" < "$CMD_STDOUT")"
     fi
 }
 
