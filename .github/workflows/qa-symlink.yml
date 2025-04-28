@@ -1,6 +1,12 @@
 ---
 name: "Check for missing .qa links"
-on: [pull_request]
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - edited
+      - reopened
 
 jobs:
   pull_request:
