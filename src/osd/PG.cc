@@ -2384,32 +2384,14 @@ std::pair<ghobject_t, bool> PG::do_delete_work(
   return {next, running};
 }
 
-int PG::pg_stat_adjust(osd_stat_t *ns)
+int64_t PG::get_pg_stat_adjustment()
 {
-  osd_stat_t &new_stat = *ns;
   if (is_primary()) {
     return 0;
   }
   // Adjust the kb_used by adding pending backfill data
-  uint64_t reserved_num_bytes = get_reserved_num_bytes();
-
-  // For now we don't consider projected space gains here
-  // I suggest we have an optional 2 pass backfill that frees up
-  // space in a first pass.  This could be triggered when at nearfull
-  // or near to backfillfull.
-  if (reserved_num_bytes > 0) {
-    // TODO: Handle compression by adjusting by the PGs average
-    // compression precentage.
-    dout(20) << __func__ << " reserved_num_bytes " << (reserved_num_bytes >> 10) << "KiB"
-             << " Before kb_used " << new_stat.statfs.kb_used() << "KiB" << dendl;
-    if (new_stat.statfs.available > reserved_num_bytes)
-      new_stat.statfs.available -= reserved_num_bytes;
-    else
-      new_stat.statfs.available = 0;
-    dout(20) << __func__ << " After kb_used " << new_stat.statfs.kb_used() << "KiB" << dendl;
-    return 1;
-  }
-  return 0;
+  int64_t reserved_num_bytes = is_primary() ? 0 : (int64_t)get_reserved_num_bytes();
+  return reserved_num_bytes;
 }
 
 void PG::dump_pgstate_history(Formatter *f)
