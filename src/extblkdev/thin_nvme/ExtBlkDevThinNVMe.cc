@@ -88,14 +88,14 @@ int ExtBlkDevThinNVMe::get_statfs(store_statfs_t& buf)
     uint64_t ncap = ns_data.ncap * lba_size;
     uint64_t nuse = ns_data.nuse * lba_size;
 
-    buf.total = ns_data.nsze * lba_size;
-    buf.available = (ns_data.ncap - ns_data.nuse) * lba_size;
-    buf.raw_use = ns_data.nuse * lba_size;
-    dout(0) << __func__ << " stats (nsze/ncap/nuse):"
-                        << nsze << "/"
-                        << ncap << "/"
-                        << nuse
-                        << dendl;
+    buf.total_raw = ns_data.ncap * lba_size;
+    buf.avail_raw = (ns_data.ncap - ns_data.nuse) * lba_size;
+    dout(10) << __func__ << std::hex
+                         << " stats (nsze/ncap/nuse):"
+                         << nsze << "/"
+                         << ncap << "/"
+                         << nuse
+                         << std::dec << dendl;
   }
   return r;
 }

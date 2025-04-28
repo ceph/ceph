@@ -1772,7 +1772,7 @@ public:
       return true;
     }
     void publish(store_statfs_t* buf) const {
-      buf->allocated = allocated();
+      buf->data_allocated = allocated();
       buf->data_stored = stored();
       buf->data_compressed = compressed();
       buf->data_compressed_original = compressed_original();
@@ -1816,7 +1816,7 @@ public:
       return values[STATFS_COMPRESSED_ALLOCATED];
     }
     volatile_statfs& operator=(const store_statfs_t& st) {
-      values[STATFS_ALLOCATED] = st.allocated;
+      values[STATFS_ALLOCATED] = st.data_allocated;
       values[STATFS_STORED] = st.data_stored;
       values[STATFS_COMPRESSED_ORIGINAL] = st.data_compressed_original;
       values[STATFS_COMPRESSED] = st.data_compressed;

@@ -6531,7 +6531,7 @@ int BlueStore::_reload_logger()
   struct store_statfs_t store_statfs;
   int r = statfs(&store_statfs);
   if (r >= 0) {
-    logger->set(l_bluestore_allocated, store_statfs.allocated);
+    logger->set(l_bluestore_allocated, store_statfs.data_allocated);
     logger->set(l_bluestore_stored, store_statfs.data_stored);
     logger->set(l_bluestore_compressed, store_statfs.data_compressed);
     logger->set(l_bluestore_compressed_allocated, store_statfs.data_compressed_allocated);
@@ -9462,7 +9462,7 @@ int _fsck_sum_extents(
   for (auto e : extents) {
     if (!e.is_valid())
       continue;
-    expected_statfs.allocated += e.length;
+    expected_statfs.data_allocated += e.length;
     pool_fsck_stat.allocated += e.length;
     if (compressed) {
       expected_statfs.data_compressed_allocated += e.length;
@@ -9487,7 +9487,7 @@ int BlueStore::_fsck_check_extents(
   for (auto e : extents) {
     if (!e.is_valid())
       continue;
-    expected_statfs.allocated += e.length;
+    expected_statfs.data_allocated += e.length;
     pool_fsck_stat.allocated += e.length;
     if (compressed) {
       expected_statfs.data_compressed_allocated += e.length;
@@ -11276,7 +11276,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	      bypass_rest = true;
 	      break;
 	    }
-            expected_statfs->allocated += e->length;
+            expected_statfs->data_allocated += e->length;
 	    if (compressed) {
 	      expected_statfs->data_compressed_allocated += e->length;
 	    }
@@ -11316,11 +11316,11 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	      // NB: it's crucial to use compressed_allocated_chunks from sb_info_t
 	      // as we originally used that value while accumulating
 	      // expected_statfs
-	      expected_statfs->allocated -= uint64_t(-sbi.allocated_chunks) << min_alloc_size_order;
+	      expected_statfs->data_allocated -= uint64_t(-sbi.allocated_chunks) << min_alloc_size_order;
 	      expected_statfs->data_compressed_allocated -=
 		uint64_t(-sbi.allocated_chunks) << min_alloc_size_order;
 	    } else {
-	      expected_statfs->allocated -= uint64_t(sbi.allocated_chunks) << min_alloc_size_order;
+	      expected_statfs->data_allocated -= uint64_t(sbi.allocated_chunks) << min_alloc_size_order;
 	    }
 	    sbi.allocated_chunks = 0;
 	    repairer.fix_shared_blob(txn, sbid, nullptr, 0);
@@ -11331,7 +11331,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	    }
 	  } else {
 	    for (auto& p : pext_to_release) {
-	      expected_statfs->allocated -= p.length;
+	      expected_statfs->data_allocated -= p.length;
 	      if (compressed) {
 		expected_statfs->data_compressed_allocated -= p.length;
 	      }
@@ -12087,15 +12087,13 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
   buf->reset();
 
   uint64_t bfree = alloc->get_free();
+  buf->total = bdev->get_size();
+  buf->available = bfree;
 
   int rc = bdev->get_ebd_statfs(*buf);
-  if (rc == 0) {
-    // we are limited by both the size of the virtual device and the
-    // underlying physical device.
-    buf->available = std::min(bfree, buf->available);
-  } else {
-    buf->total = bdev->get_size();
-    buf->available = bfree;
+  if (rc != 0) {
+    buf->total_raw = buf->total;
+    buf->avail_raw = buf->available;
   }
   auto prefix = per_pool_omap == OMAP_BULK ?
     PREFIX_OMAP :
@@ -12127,7 +12125,7 @@ int BlueStore::statfs(struct store_statfs_t *buf,
   _get_statfs_overall(buf);
   {
     std::lock_guard l(vstatfs_lock);
-    buf->allocated = vstatfs.allocated();
+    buf->data_allocated = vstatfs.allocated();
     buf->data_stored = vstatfs.stored();
     buf->data_compressed = vstatfs.compressed();
     buf->data_compressed_original = vstatfs.compressed_original();
