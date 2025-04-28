@@ -17,6 +17,7 @@
 
 #include "msg/Message.h"
 #include "include/ceph_features.h"
+#include "include/ceph_fs_encoder.h"
 
 /*
  * compatibility with old crap
