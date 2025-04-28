@@ -22,6 +22,7 @@
 #include <string_view>
 #include <vector>
 
+#include "include/client_t.h"
 #include "include/compact_set.h"
 #include "include/encoding.h"
 #include "include/fs_types.h"
