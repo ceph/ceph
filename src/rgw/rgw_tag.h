@@ -4,11 +4,12 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
-#include <include/types.h>
 #include <map>
+#include <string>
 
 #include "include/encoding.h"
+
+namespace ceph { class Formatter; }
 
 class RGWObjTags
 {
