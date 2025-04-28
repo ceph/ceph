@@ -15,6 +15,15 @@
 
 #pragma once
 
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "include/encoding.h"
+
+namespace ceph { class Formatter; }
+
 struct compression_block {
   uint64_t old_ofs;
   uint64_t new_ofs;
