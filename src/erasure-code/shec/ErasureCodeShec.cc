@@ -253,14 +253,20 @@ int ErasureCodeShec::encode_chunks(const shard_id_map<bufferptr> &in,
   uint64_t size = 0;
 
   for (auto &&[shard, ptr] : in) {
-    if (size == 0) size = ptr.length();
-    else ceph_assert(size == ptr.length());
+    if (size == 0) {
+      size = ptr.length();
+    } else {
+      ceph_assert(size == ptr.length());
+    }
     chunks[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
   }
 
   for (auto &&[shard, ptr] : out) {
-    if (size == 0) size = ptr.length();
-    else ceph_assert(size == ptr.length());
+    if (size == 0) {
+      size = ptr.length();
+    } else {
+      ceph_assert(size == ptr.length());
+    }
     chunks[static_cast<int>(shard)] = ptr.c_str();
   }
 
@@ -372,7 +378,7 @@ END_IGNORE_DEPRECATED
 
 int ErasureCodeShec::decode_chunks(const shard_id_set &want_to_read,
                                    shard_id_map<bufferptr> &in,
-				   shard_id_map<bufferptr> &out)
+                                   shard_id_map<bufferptr> &out)
 {
   unsigned int size = 0;
   int erased[k + m];
@@ -382,12 +388,15 @@ int ErasureCodeShec::decode_chunks(const shard_id_set &want_to_read,
   char *coding[m];
 
   for (auto &&[shard, ptr] : in) {
-    if (size == 0) size = ptr.length();
-    else ceph_assert(size == ptr.length());
+    if (size == 0) {
+      size = ptr.length();
+    } else {
+      ceph_assert(size == ptr.length());
+    }
+
     if (shard < k) {
       data[static_cast<int>(shard)] = ptr.c_str();
-    }
-    else {
+    } else {
       coding[static_cast<int>(shard) - k] = ptr.c_str();
     }
     avails[static_cast<int>(shard)] = 1;
@@ -395,20 +404,22 @@ int ErasureCodeShec::decode_chunks(const shard_id_set &want_to_read,
   }
 
   for (auto &&[shard, ptr] : out) {
-    if (size == 0) size = ptr.length();
-    else ceph_assert(size == ptr.length());
+    if (size == 0) {
+      size = ptr.length();
+    } else {
+      ceph_assert(size == ptr.length());
+    }
+
     if (shard < k) {
       data[static_cast<int>(shard)] = ptr.c_str();
-    }
-    else {
+    } else {
       coding[static_cast<int>(shard) - k] = ptr.c_str();
     }
     avails[static_cast<int>(shard)] = 0;
     if (want_to_read.count(shard) > 0) {
       erased[static_cast<int>(shard)] = 1;
       erased_count++;
-    }
-    else {
+    } else {
       erased[static_cast<int>(shard)] = 0;
     }
   }
@@ -459,24 +470,37 @@ void ErasureCodeShecReedSolomonVandermonde::apply_delta(const shard_id_map<buffe
   const unsigned blocksize = first->second.length();
 
   for (auto const& [datashard, databuf] : in) {
-    if (datashard < k) {
-      for (auto const& [codingshard, codingbuf] : out) {
-        if (codingshard >= k) {
-          ceph_assert(codingbuf.length() == blocksize);
-          char* input_data = const_cast<char*>(databuf.c_str());
-          char* output_data = const_cast<char*>(codingbuf.c_str());
-          switch (w) {
-            case 8:
-              galois_w08_region_multiply(input_data, matrix[static_cast<int>(datashard) + (k * (static_cast<int>(codingshard) - k))], blocksize, output_data, 1);
-              break;
-            case 16:
-              galois_w16_region_multiply(input_data, matrix[static_cast<int>(datashard) + (k * (static_cast<int>(codingshard) - k))], blocksize, output_data, 1);
-              break;
-            case 32:
-              galois_w32_region_multiply(input_data, matrix[static_cast<int>(datashard) + (k * (int(codingshard) - k))], blocksize, output_data, 1);
-              break;
-          }
-        }
+    if (datashard >= k) {
+      continue;
+    }
+    for (auto const& [codingshard, codingbuf] : out) {
+      if (codingshard < k) {
+        continue;
+      }
+      ceph_assert(codingbuf.length() == blocksize);
+      char* input_data = const_cast<char*>(databuf.c_str());
+      char* output_data = codingbuf.c_str();
+      switch (w) {
+        // We always update one parity at a time, so specify the correct row
+        // in the matrix for this particular parity
+        case 8:
+          galois_w08_region_multiply(
+              input_data,
+              matrix[static_cast<int>(datashard) + (k * (static_cast<int>(codingshard) - k))],
+              blocksize, output_data, 1);
+          break;
+        case 16:
+          galois_w16_region_multiply(
+              input_data,
+              matrix[static_cast<int>(datashard) + (k * (static_cast<int>(codingshard) - k))],
+              blocksize, output_data, 1);
+          break;
+        case 32:
+          galois_w32_region_multiply(
+              input_data,
+              matrix[static_cast<int>(datashard) + (k * (int(codingshard) - k))],
+              blocksize, output_data, 1);
+          break;
       }
     }
   }
