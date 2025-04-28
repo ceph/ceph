@@ -1735,7 +1735,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     struct store_statfs_t statfs;
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
-    ASSERT_EQ( 0u, statfs.allocated);
+    ASSERT_EQ( 0u, statfs.data_allocated);
     ASSERT_EQ( 0u, statfs.data_stored);
     ASSERT_EQ(g_conf()->bluestore_block_size, statfs.total);
     ASSERT_TRUE(statfs.available > 0u && statfs.available < g_conf()->bluestore_block_size);
@@ -1744,7 +1744,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     bool per_pool_omap;
     r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
-    ASSERT_EQ( 0u, statfs_pool.allocated);
+    ASSERT_EQ( 0u, statfs_pool.data_allocated);
     ASSERT_EQ( 0u, statfs_pool.data_stored);
 
     //force fsck
@@ -1767,7 +1767,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(5, statfs.data_stored);
-    ASSERT_EQ(0x10000, statfs.allocated);
+    ASSERT_EQ(0x10000, statfs.data_allocated);
     ASSERT_EQ(0, statfs.data_compressed);
     ASSERT_EQ(0, statfs.data_compressed_original);
     ASSERT_EQ(0, statfs.data_compressed_allocated);
@@ -1777,7 +1777,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(5, statfs_pool.data_stored);
-    ASSERT_EQ(0x10000, statfs_pool.allocated);
+    ASSERT_EQ(0x10000, statfs_pool.data_allocated);
     ASSERT_EQ(0, statfs_pool.data_compressed);
     ASSERT_EQ(0, statfs_pool.data_compressed_original);
     ASSERT_EQ(0, statfs_pool.data_compressed_allocated);
@@ -1786,7 +1786,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     r = store->pool_statfs(poolid + 1, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0, statfs_pool.data_stored);
-    ASSERT_EQ(0, statfs_pool.allocated);
+    ASSERT_EQ(0, statfs_pool.data_allocated);
     ASSERT_EQ(0, statfs_pool.data_compressed);
     ASSERT_EQ(0, statfs_pool.data_compressed_original);
     ASSERT_EQ(0, statfs_pool.data_compressed_allocated);
@@ -1812,7 +1812,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30005, statfs.data_stored);
-    ASSERT_EQ(0x30000, statfs.allocated);
+    ASSERT_EQ(0x30000, statfs.data_allocated);
     ASSERT_LE(statfs.data_compressed, 0x10000);
     ASSERT_EQ(0x20000, statfs.data_compressed_original);
     ASSERT_EQ(statfs.data_compressed_allocated, 0x10000);
@@ -1822,7 +1822,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30005, statfs_pool.data_stored);
-    ASSERT_EQ(0x30000, statfs_pool.allocated);
+    ASSERT_EQ(0x30000, statfs_pool.data_allocated);
     ASSERT_LE(statfs_pool.data_compressed, 0x10000);
     ASSERT_EQ(0x20000, statfs_pool.data_compressed_original);
     ASSERT_EQ(statfs_pool.data_compressed_allocated, 0x10000);
@@ -1845,7 +1845,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30005 - 3 - 9, statfs.data_stored);
-    ASSERT_EQ(0x30000, statfs.allocated);
+    ASSERT_EQ(0x30000, statfs.data_allocated);
     ASSERT_LE(statfs.data_compressed, 0x10000);
     ASSERT_EQ(0x20000 - 9, statfs.data_compressed_original);
     ASSERT_EQ(statfs.data_compressed_allocated, 0x10000);
@@ -1855,7 +1855,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30005 - 3 - 9, statfs_pool.data_stored);
-    ASSERT_EQ(0x30000, statfs_pool.allocated);
+    ASSERT_EQ(0x30000, statfs_pool.data_allocated);
     ASSERT_LE(statfs_pool.data_compressed, 0x10000);
     ASSERT_EQ(0x20000 - 9, statfs_pool.data_compressed_original);
     ASSERT_EQ(statfs_pool.data_compressed_allocated, 0x10000);
@@ -1881,7 +1881,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30001 - 9 + 0x1000, statfs.data_stored);
-    ASSERT_EQ(0x40000, statfs.allocated);
+    ASSERT_EQ(0x40000, statfs.data_allocated);
     ASSERT_LE(statfs.data_compressed, 0x10000);
     ASSERT_EQ(0x20000 - 9 - 0x1000, statfs.data_compressed_original);
     ASSERT_EQ(statfs.data_compressed_allocated, 0x10000);
@@ -1891,7 +1891,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30001 - 9 + 0x1000, statfs_pool.data_stored);
-    ASSERT_EQ(0x40000, statfs_pool.allocated);
+    ASSERT_EQ(0x40000, statfs_pool.data_allocated);
     ASSERT_LE(statfs_pool.data_compressed, 0x10000);
     ASSERT_EQ(0x20000 - 9 - 0x1000, statfs_pool.data_compressed_original);
     ASSERT_EQ(statfs_pool.data_compressed_allocated, 0x10000);
@@ -1918,7 +1918,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30000 + 0x1001, statfs.data_stored);
-    ASSERT_EQ(0x40000, statfs.allocated);
+    ASSERT_EQ(0x40000, statfs.data_allocated);
     ASSERT_LE(statfs.data_compressed, 0);
     ASSERT_EQ(0, statfs.data_compressed_original);
     ASSERT_EQ(0, statfs.data_compressed_allocated);
@@ -1928,7 +1928,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30000 + 0x1001, statfs_pool.data_stored);
-    ASSERT_EQ(0x40000, statfs_pool.allocated);
+    ASSERT_EQ(0x40000, statfs_pool.data_allocated);
     ASSERT_LE(statfs_pool.data_compressed, 0);
     ASSERT_EQ(0, statfs_pool.data_compressed_original);
     ASSERT_EQ(0, statfs_pool.data_compressed_allocated);
@@ -1948,7 +1948,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     struct store_statfs_t statfs;
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
-    ASSERT_EQ(0u, statfs.allocated);
+    ASSERT_EQ(0u, statfs.data_allocated);
     ASSERT_EQ(0u, statfs.data_stored);
     ASSERT_EQ(0u, statfs.data_compressed_original);
     ASSERT_EQ(0u, statfs.data_compressed);
@@ -1958,7 +1958,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     bool per_pool_omap;
     r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
-    ASSERT_EQ(0u, statfs_pool.allocated);
+    ASSERT_EQ(0u, statfs_pool.data_allocated);
     ASSERT_EQ(0u, statfs_pool.data_stored);
     ASSERT_EQ(0u, statfs_pool.data_compressed_original);
     ASSERT_EQ(0u, statfs_pool.data_compressed);
@@ -1986,7 +1986,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x40000 - 2, statfs.data_stored);
-    ASSERT_EQ(0x30000, statfs.allocated);
+    ASSERT_EQ(0x30000, statfs.data_allocated);
     ASSERT_LE(statfs.data_compressed, 0x10000);
     ASSERT_EQ(0x20000, statfs.data_compressed_original);
     ASSERT_EQ(0x10000, statfs.data_compressed_allocated);
@@ -1996,7 +1996,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x40000 - 2, statfs_pool.data_stored);
-    ASSERT_EQ(0x30000, statfs_pool.allocated);
+    ASSERT_EQ(0x30000, statfs_pool.data_allocated);
     ASSERT_LE(statfs_pool.data_compressed, 0x10000);
     ASSERT_EQ(0x20000, statfs_pool.data_compressed_original);
     ASSERT_EQ(0x10000, statfs_pool.data_compressed_allocated);
@@ -2026,7 +2026,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     r = store->statfs(&statfs2);
     ASSERT_EQ(r, 0);
     ASSERT_GT(statfs2.data_stored, statfs.data_stored);
-    ASSERT_EQ(statfs2.allocated, statfs.allocated);
+    ASSERT_EQ(statfs2.data_allocated, statfs.data_allocated);
     ASSERT_GT(statfs2.data_compressed, statfs.data_compressed);
     ASSERT_GT(statfs2.data_compressed_original, statfs.data_compressed_original);
     ASSERT_EQ(statfs2.data_compressed_allocated, statfs.data_compressed_allocated);
@@ -2035,7 +2035,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     r = store->pool_statfs(poolid, &statfs2_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_GT(statfs2_pool.data_stored, statfs_pool.data_stored);
-    ASSERT_EQ(statfs2_pool.allocated, statfs_pool.allocated);
+    ASSERT_EQ(statfs2_pool.data_allocated, statfs_pool.data_allocated);
     ASSERT_GT(statfs2_pool.data_compressed, statfs_pool.data_compressed);
     ASSERT_GT(statfs2_pool.data_compressed_original,
       statfs_pool.data_compressed_original);
@@ -2078,7 +2078,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
       r = store->pool_statfs(poolid2, &statfs2_pool, &per_pool_omap);
       ASSERT_EQ(r, 0);
       ASSERT_EQ(5, statfs2_pool.data_stored);
-      ASSERT_EQ(0x10000, statfs2_pool.allocated);
+      ASSERT_EQ(0x10000, statfs2_pool.data_allocated);
       ASSERT_EQ(0, statfs2_pool.data_compressed);
       ASSERT_EQ(0, statfs2_pool.data_compressed_original);
       ASSERT_EQ(0, statfs2_pool.data_compressed_allocated);
@@ -2135,7 +2135,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
       r = store->pool_statfs(poolid3, &statfs3_pool, &per_pool_omap);
       ASSERT_EQ(r, 0);
       ASSERT_EQ(5, statfs3_pool.data_stored);
-      ASSERT_EQ(0x10000, statfs3_pool.allocated);
+      ASSERT_EQ(0x10000, statfs3_pool.data_allocated);
       ASSERT_EQ(0, statfs3_pool.data_compressed);
       ASSERT_EQ(0, statfs3_pool.data_compressed_original);
       ASSERT_EQ(0, statfs3_pool.data_compressed_allocated);
@@ -2196,7 +2196,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     struct store_statfs_t statfs;
     r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
-    ASSERT_EQ( 0u, statfs.allocated);
+    ASSERT_EQ( 0u, statfs.data_allocated);
     ASSERT_EQ( 0u, statfs.data_stored);
     ASSERT_EQ( 0u, statfs.data_compressed_original);
     ASSERT_EQ( 0u, statfs.data_compressed);
@@ -2206,7 +2206,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     bool per_pool_omap;
     r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
-    ASSERT_EQ( 0u, statfs_pool.allocated);
+    ASSERT_EQ( 0u, statfs_pool.data_allocated);
     ASSERT_EQ( 0u, statfs_pool.data_stored);
     ASSERT_EQ( 0u, statfs_pool.data_compressed_original);
     ASSERT_EQ( 0u, statfs_pool.data_compressed);
@@ -2250,7 +2250,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(g_conf()->bluestore_block_size, statfs.total);
-    ASSERT_EQ(0u, statfs.allocated);
+    ASSERT_EQ(0u, statfs.data_allocated);
     ASSERT_EQ(0u, statfs.data_stored);
     ASSERT_TRUE(statfs.available > 0u && statfs.available < g_conf()->bluestore_block_size);
   }
@@ -2272,7 +2272,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x20000, statfs.data_stored);
-    ASSERT_EQ(0x20000, statfs.allocated);
+    ASSERT_EQ(0x20000, statfs.data_allocated);
 
     r = store->read(ch, hoid, 0, data.size(), newdata);
     ASSERT_EQ(r, (int)data.size());
@@ -2316,7 +2316,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
     struct store_statfs_t statfs;
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
-    ASSERT_EQ(0x20000, statfs.allocated);
+    ASSERT_EQ(0x20000, statfs.data_allocated);
     ASSERT_EQ(0x20000, statfs.data_stored);
 
     r = store->read(ch, hoid, 0x20000-1, 21, newdata);
@@ -2350,7 +2350,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
     struct store_statfs_t statfs;
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
-    ASSERT_EQ(0x30000, statfs.allocated);
+    ASSERT_EQ(0x30000, statfs.data_allocated);
     ASSERT_EQ(0x20003, statfs.data_stored);
 
     r = store->read(ch, hoid, 0x10000-1, 0x10000+22, newdata);
@@ -2381,7 +2381,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
     struct store_statfs_t statfs;
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
-    ASSERT_EQ(0x10000, statfs.allocated);
+    ASSERT_EQ(0x10000, statfs.data_allocated);
     ASSERT_EQ(0x10000, statfs.data_stored);
 
     r = store->read(ch, hoid, 0, 0x30000, newdata);
@@ -2414,7 +2414,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
     struct store_statfs_t statfs;
     r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
-    ASSERT_EQ( 0u, statfs.allocated);
+    ASSERT_EQ( 0u, statfs.data_allocated);
     ASSERT_EQ( 0u, statfs.data_stored);
     ASSERT_EQ( 0u, statfs.data_compressed_original);
     ASSERT_EQ( 0u, statfs.data_compressed);
@@ -7570,14 +7570,14 @@ void doMany4KWritesTest(ObjectStore* store,
   test_obj.wait_for_done();
   test_obj.statfs(res_stat);
   if (!(res_stat.data_stored <= max_object_size) ||
-      !(res_stat.allocated <= max_object_size)) {
+      !(res_stat.data_allocated <= max_object_size)) {
     // this will provide more insight on the mismatch and
     // helps to avoid any races during stats collection
     test_obj.fsck(false);
     // retrieving stats once again and assert if still broken
     test_obj.statfs(res_stat);
     ASSERT_LE(res_stat.data_stored, max_object_size);
-    ASSERT_LE(res_stat.allocated, max_object_size);
+    ASSERT_LE(res_stat.data_allocated, max_object_size);
   }
   test_obj.shutdown();
 }
@@ -8452,7 +8452,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite1) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 5);
-    ASSERT_LE(statfs.allocated, (unsigned)block_size * 5);
+    ASSERT_LE(statfs.data_allocated, (unsigned)block_size * 5);
   }
 
   // overwrite at the beginning, 4K alignment
@@ -8572,7 +8572,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite1) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 5);
-    ASSERT_LE(statfs.allocated, (unsigned)block_size * 5);
+    ASSERT_LE(statfs.data_allocated, (unsigned)block_size * 5);
   }
   store->refresh_perf_counters();
   ASSERT_EQ(logger->get(l_bluestore_blobs), 2u);
@@ -8652,7 +8652,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite2) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 2 - 100);
-    ASSERT_LE(statfs.allocated, (unsigned)block_size * 2);
+    ASSERT_LE(statfs.data_allocated, (unsigned)block_size * 2);
   }
   store->refresh_perf_counters();
   ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
@@ -8689,7 +8689,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite2) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 2);
-    ASSERT_LE(statfs.allocated, (unsigned)block_size * 2);
+    ASSERT_LE(statfs.data_allocated, (unsigned)block_size * 2);
   }
   store->refresh_perf_counters();
   ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
@@ -8721,7 +8721,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite2) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 2);
-    ASSERT_LE(statfs.allocated, (unsigned)block_size * 2);
+    ASSERT_LE(statfs.data_allocated, (unsigned)block_size * 2);
   }
 
   {
@@ -8816,7 +8816,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite3) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 64);
-    ASSERT_LE(statfs.allocated, (unsigned)block_size * 64);
+    ASSERT_LE(statfs.data_allocated, (unsigned)block_size * 64);
   }
 
   // check whether overwrite (larger than prefer_deferred_size) partially
@@ -8859,7 +8859,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite3) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 64);
-    ASSERT_LE(statfs.allocated, (unsigned)block_size * 64);
+    ASSERT_LE(statfs.data_allocated, (unsigned)block_size * 64);
   }
 
   logger->reset();
@@ -8884,7 +8884,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite3) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 64);
-    ASSERT_LE(statfs.allocated, (unsigned)block_size * 64);
+    ASSERT_LE(statfs.data_allocated, (unsigned)block_size * 64);
   }
 
   {
@@ -10168,7 +10168,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   bstore->mount();
   ASSERT_EQ(bstore->statfs(&statfs0), 0);
   statfs = statfs0;
-  statfs.allocated += 0x10000;
+  statfs.data_allocated += 0x10000;
   statfs.data_stored += 0x10000;
   ASSERT_FALSE(statfs0 == statfs);
   // this enforces global stats usage
@@ -10192,7 +10192,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   cerr << "fix invalid statfs2" << std::endl;
   ASSERT_EQ(bstore->statfs(&statfs0), 0);
   statfs = statfs0;
-  statfs.allocated += 0x20000;
+  statfs.data_allocated += 0x20000;
   statfs.data_stored += 0x20000;
   ASSERT_FALSE(statfs0 == statfs);
   // this enforces global stats usage
@@ -11480,7 +11480,7 @@ TEST_P(StoreTestSpecificAUSize, ReproNoBlobMultiTest) {
     ASSERT_EQ(r, 0);
     const PerfCounters* logger = store->get_perf_counters();
     ASSERT_GE(logger->get(l_bluestore_gc_merged), 900*1024*1024);
-    ASSERT_LE(statfs.allocated, 9LL*1024*1024*1024);
+    ASSERT_LE(statfs.data_allocated, 9LL*1024*1024*1024);
   }
 }
 
