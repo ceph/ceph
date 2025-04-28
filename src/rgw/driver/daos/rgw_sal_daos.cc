@@ -1597,6 +1597,7 @@ int DaosMultipartUpload::init(const DoutPrefixProvider* dpp, optional_yield y,
 
   multipart_upload_info upload_info;
   upload_info.dest_placement = dest_placement;
+  upload_info.cksum_type = cksum_type;
 
   ent.encode(bl);
   encode(attrs, bl);
@@ -1985,6 +1986,7 @@ int DaosMultipartUpload::get_info(const DoutPrefixProvider* dpp,
 
   // Now decode the placement rule
   decode(upload_info, iter);
+  cksum_type = upload_info.cksum_type;
   placement = upload_info.dest_placement;
   *rule = &placement;
 

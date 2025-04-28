@@ -15,10 +15,12 @@
 
 #pragma once
 
+#include <optional>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
 #include "common/tracer.h"
+#include "rgw_cksum.h"
 #include "rgw_sal_fwd.h"
 #include "rgw_lua.h"
 #include "rgw_notify_event_type.h"
@@ -227,6 +229,7 @@ class ObjectProcessor : public DataProcessor {
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -1094,8 +1097,8 @@ class Object {
 
         /// If non-null, read data/attributes from the given multipart part.
         int* part_num{nullptr};
-        /// If part_num is specified and the object is multipart, the total
-        /// number of multipart parts is assigned to this output parameter.
+        /// If the object is multipart, the total number of multipart
+        /// parts is assigned to this output parameter.
         std::optional<int> parts_count;
       } params;
 
@@ -1381,6 +1384,8 @@ public:
   virtual const std::string& get_etag() = 0;
   /** Get the modification time of this part */
   virtual ceph::real_time& get_mtime() = 0;
+  /** Get computed (or default/empty) checksum */
+  virtual const std::optional<rgw::cksum::Cksum>& get_cksum() = 0;
 };
 
 /**
@@ -1399,6 +1404,7 @@ public:
   //object lock
   std::optional<RGWObjectRetention> obj_retention = std::nullopt;
   std::optional<RGWObjectLegalHold> obj_legal_hold = std::nullopt;
+  rgw::cksum::Type cksum_type = rgw::cksum::Type::none;
 
   MultipartUpload() = default;
   virtual ~MultipartUpload() = default;
@@ -1663,6 +1669,7 @@ public:
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
