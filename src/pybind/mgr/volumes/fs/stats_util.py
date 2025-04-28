@@ -177,7 +177,7 @@ class CloneProgressReporter:
             ci.dst_path = dst_subvol.path
             log.debug(f'destination subvolume path for clone - {ci.dst_path}')
 
-        clone_state = get_clone_state(self.volclient, self.vol_spec, ci.volname,
+        clone_state = get_clone_state(self.volclient, self.volspec, ci.volname,
                                       ci.dst_group_name, ci.dst_subvol_name)
         if clone_state == SubvolumeStates.STATE_INPROGRESS:
             self.ongoing_clones_count += 1
