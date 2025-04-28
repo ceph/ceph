@@ -26,6 +26,7 @@
 #include "include/encoding.h"
 #include "include/fs_types.h"
 #include "include/ceph_fs.h"
+#include "include/ceph_fs_encoder.h"
 #include "include/client_t.h"
 #include "include/object.h" // for snapid_t
 #include "include/types.h" // for version_t
