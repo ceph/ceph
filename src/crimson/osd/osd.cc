@@ -192,7 +192,7 @@ seastar::future<> OSD::open_meta_coll()
 seastar::future<> OSD::set_perf_queries(const ConfigPayload &config_payload) {
   LOG_PREFIX(OSD::set_perf_queries);
   const OSDConfigPayload &osd_config_payload =
-    boost::get<OSDConfigPayload>(config_payload);
+    std::get<OSDConfigPayload>(config_payload);
   const std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> &queries =
     osd_config_payload.config;
   DEBUG("setting {} queries", queries.size());

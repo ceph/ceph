@@ -21,7 +21,7 @@ OSDPerfMetricCollector::OSDPerfMetricCollector(MetricListener &listener)
 
 void OSDPerfMetricCollector::process_reports(const MetricPayload &payload) {
   const std::map<OSDPerfMetricQuery, OSDPerfMetricReport> &reports =
-    boost::get<OSDMetricPayload>(payload).report;
+    std::get<OSDMetricPayload>(payload).report;
 
   std::lock_guard locker(lock);
   process_reports_generic(

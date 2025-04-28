@@ -551,7 +551,7 @@ void MetricAggregator::notify_mdsmap(const MDSMap &mdsmap) {
 }
 
 void MetricAggregator::set_perf_queries(const ConfigPayload &config_payload) {
-  const MDSConfigPayload &mds_config_payload = boost::get<MDSConfigPayload>(config_payload);
+  const MDSConfigPayload &mds_config_payload = std::get<MDSConfigPayload>(config_payload);
   const std::map<MDSPerfMetricQuery, MDSPerfMetricLimits> &queries = mds_config_payload.config;
 
   dout(10) << ": setting " << queries.size() << " queries" << dendl;

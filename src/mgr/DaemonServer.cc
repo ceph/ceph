@@ -812,7 +812,7 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
 
   if (m->metric_report_message) {
     const MetricReportMessage &message = *m->metric_report_message;
-    boost::apply_visitor(HandlePayloadVisitor(this), message.payload);
+    std::visit(HandlePayloadVisitor(this), message.payload);
   }
 
   return true;
