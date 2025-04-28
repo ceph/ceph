@@ -724,6 +724,13 @@ int FilterDriver::load_customer_managed_policy(const DoutPrefixProvider* dpp,
 {
   return next->load_customer_managed_policy(dpp, y, account, name, info);
 }
+int FilterDriver::delete_customer_managed_policy(const DoutPrefixProvider* dpp,
+                              optional_yield y,
+                              std::string_view account,
+                              std::string_view name)
+{
+  return next->delete_customer_managed_policy(dpp, y, account, name);
+}
 
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,

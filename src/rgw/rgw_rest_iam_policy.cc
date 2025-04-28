@@ -356,3 +356,30 @@ void RGWGetPolicy::execute(optional_yield y)
   }
 }
 
+int RGWDeletePolicy::init_processing(optional_yield y)
+{
+
+  std::string_view account;
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    account = acc->id;
+    std::string provider_arn = s->info.args.get("PolicyArn");
+    return validate_policy_arn(provider_arn, account, arn, s->err.message);
+  }
+  return -ERR_METHOD_NOT_ALLOWED;
+}
+
+void RGWDeletePolicy::execute(optional_yield y)
+{
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  op_ret = driver->delete_customer_managed_policy(this, y, arn.account, policy_name);
+  if(op_ret < 0) {
+    ldpp_dout(this, 20) << "failed to delete managed policy info: " << strerror(op_ret) << dendl;
+  } else {
+    s->formatter->open_object_section_in_ns("DeletePolicyResponse  ", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
+

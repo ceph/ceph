@@ -3137,6 +3137,14 @@ int MotrStore::load_customer_managed_policy(const DoutPrefixProvider* dpp,
   return -ENOTSUP;
 }
 
+int MotrStore::delete_customer_managed_policy(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          std::string_view account,
+                          std::string_view name) 
+{
+  return -ENOTSUP;
+}
+
 std::unique_ptr<MultipartUpload> MotrBucket::get_multipart_upload(const std::string& oid,
                                 std::optional<std::string> upload_id,
                                 ACLOwner owner, ceph::real_time mtime)

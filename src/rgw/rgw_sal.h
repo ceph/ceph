@@ -703,6 +703,10 @@ class Driver {
                             std::string_view account,
                             std::string_view name,
                             rgw::IAM::ManagedPolicyInfo& info) = 0;
+    virtual int delete_customer_managed_policy(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view name) = 0;
     /** Get a Writer that appends to an object */
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
