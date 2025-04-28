@@ -505,6 +505,7 @@ set(libcommon_files
   include/invoke_date.cc
   include/object.cc
   include/errorcode32.cc
+  include/shard_id.cc
   include/types.cc
   include/utime.cc
   include/uuid.cc
