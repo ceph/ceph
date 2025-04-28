@@ -23,11 +23,4 @@
 #define UINT8_MAX (255)
 #endif
 
-const shard_id_t shard_id_t::NO_SHARD(-1);
-
-std::ostream& operator<<(std::ostream& lhs, const shard_id_t& rhs)
-{
-  return lhs << (unsigned)(uint8_t)rhs.id;
-}
-
 #endif
