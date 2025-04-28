@@ -4100,3 +4100,51 @@ TEST(LibCephFS, SubdirLookupAfterReaddir_ll) {
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, InodeGetPut) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  Inode *root = NULL;
+
+  ASSERT_EQ(ceph_ll_lookup_root(cmount, &root), 0);
+  // Update reference on root
+  ceph_ll_get(cmount, root);
+
+  bool last_ref = ceph_ll_put(cmount, root);
+  // ceph_ll_put() always ignore forget on root
+  ASSERT_TRUE(last_ref);
+
+  char dir_name[128];
+  pid_t mypid = getpid();
+  sprintf(dir_name, "dir_%d", mypid);
+
+  ASSERT_EQ(ceph_mkdir(cmount, dir_name, 0777), 0);
+
+  Inode *dir_inode = NULL;
+  UserPerm *perms = ceph_mount_perms(cmount);
+  struct ceph_statx stx;
+
+  ASSERT_EQ(0, ceph_ll_lookup(cmount, root, dir_name, &dir_inode, &stx, 0, 0, perms));
+  // Update reference on directory
+  ceph_ll_get(cmount, dir_inode);
+
+  last_ref = ceph_ll_put(cmount, dir_inode);
+  ASSERT_FALSE(last_ref);
+
+  last_ref = ceph_ll_put(cmount, dir_inode);
+  ASSERT_TRUE(last_ref);
+
+  // Take another reference on directory
+  ceph_ll_get(cmount, dir_inode);
+
+  last_ref = ceph_ll_put(cmount, dir_inode);
+  ASSERT_TRUE(last_ref);
+
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_name));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
