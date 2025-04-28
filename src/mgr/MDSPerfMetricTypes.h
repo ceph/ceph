@@ -9,6 +9,7 @@
 #include <iosfwd>
 
 #include "include/denc.h"
+#include "include/ceph_fs_encoder.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
 

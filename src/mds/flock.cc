@@ -3,6 +3,7 @@
 
 #include "mds/flock.h"
 #include "common/debug.h"
+#include "include/ceph_fs_encoder.h"
 #include "mdstypes.h"
 
 #include <iostream>
