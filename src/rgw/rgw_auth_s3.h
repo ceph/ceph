@@ -72,9 +72,9 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                             const req_state* const s,
                             RoleApplier::Role role,
                             RoleApplier::TokenAttrs token_attrs,
-                            bool is_system_request) const override {
+                            bool is_impersonating) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
-      rgw::auth::RoleApplier(cct, driver, std::move(role), std::move(token_attrs), is_system_request));
+      rgw::auth::RoleApplier(cct, driver, std::move(role), std::move(token_attrs)), is_impersonating);
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 

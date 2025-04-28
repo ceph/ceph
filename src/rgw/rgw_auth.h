@@ -798,20 +798,17 @@ protected:
   rgw::sal::Driver* driver;
   Role role;
   TokenAttrs token_attrs;
-  bool is_system_request;
 
 public:
 
   RoleApplier(CephContext* const cct,
                rgw::sal::Driver* driver,
                const Role& role,
-               const TokenAttrs& token_attrs,
-               bool is_system_request)
+               const TokenAttrs& token_attrs)
     : cct(cct),
       driver(driver),
       role(role),
-      token_attrs(token_attrs),
-      is_system_request(is_system_request) {}
+      token_attrs(token_attrs) {}
 
   ACLOwner get_aclowner() const override;
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
@@ -847,7 +844,7 @@ public:
                                       const req_state* s,
                                       Role role,
                                       TokenAttrs token_attrs,
-                                      bool is_system_request) const = 0;
+                                      bool is_impersonating) const = 0;
     };
 };
 
