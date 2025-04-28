@@ -188,6 +188,7 @@ enum {
   iamAll,
   iamCreatePolicy,
   iamGetPolicy,
+  iamDeletePolicy,
 
   stsAssumeRole,
   stsAssumeRoleWithWebIdentity,
