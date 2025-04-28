@@ -15,6 +15,7 @@
 #include "include/stringify.h"
 #include "NVMeofGwMon.h"
 #include "NVMeofGwMap.h"
+#include "Monitor.h"
 #include "OSDMonitor.h"
 #include "mon/health_check.h"
 

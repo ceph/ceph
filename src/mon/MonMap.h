@@ -21,6 +21,7 @@
 
 #include "common/config_fwd.h"
 #include "common/ceph_releases.h"
+#include "include/types.h" // for epoch_t
 #include "include/uuid.h" // for uuid_d
 
 #include "mon/mon_types.h" // for mon_feature_t
