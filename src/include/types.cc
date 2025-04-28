@@ -50,22 +50,6 @@ inline std::ostream& format_u(std::ostream& out, const uint64_t v, const uint64_
   }
 }
 
-void client_t::dump(ceph::Formatter *f) const {
-  f->dump_int("id", v);
-}
-
-std::list<client_t> client_t::generate_test_instances() {
-  std::list<client_t> ls;
-  ls.emplace_back();
-  ls.push_back(client_t(1));
-  ls.push_back(client_t(123));
-  return ls;
-}
-
-std::ostream& operator<<(std::ostream& out, const client_t& c) {
-  return out << c.v;
-}
-
 std::ostream& operator<<(std::ostream& out, const si_u_t& b)
 {
   uint64_t n = b.v;

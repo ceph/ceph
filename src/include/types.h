@@ -394,40 +394,6 @@ typedef uint64_t ceph_tid_t; // transaction id
 typedef uint64_t version_t;
 typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
 
-// --------------------------------------
-// identify individual mount clients by 64bit value
-
-struct client_t {
-  int64_t v;
-
-  // cppcheck-suppress noExplicitConstructor
-  client_t(int64_t _v = -2) : v(_v) {}
-
-  void encode(ceph::buffer::list& bl) const {
-    using ceph::encode;
-    encode(v, bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    using ceph::decode;
-    decode(v, bl);
-  }
-  void dump(ceph::Formatter *f) const;
-  static std::list<client_t> generate_test_instances();
-};
-WRITE_CLASS_ENCODER(client_t)
-
-static inline bool operator==(const client_t& l, const client_t& r) { return l.v == r.v; }
-static inline bool operator!=(const client_t& l, const client_t& r) { return l.v != r.v; }
-static inline bool operator<(const client_t& l, const client_t& r) { return l.v < r.v; }
-static inline bool operator<=(const client_t& l, const client_t& r) { return l.v <= r.v; }
-static inline bool operator>(const client_t& l, const client_t& r) { return l.v > r.v; }
-static inline bool operator>=(const client_t& l, const client_t& r) { return l.v >= r.v; }
-
-static inline bool operator>=(const client_t& l, int64_t o) { return l.v >= o; }
-static inline bool operator<(const client_t& l, int64_t o) { return l.v < o; }
-
-std::ostream& operator<<(std::ostream& out, const client_t& c);
-
 // --
 
 /*
