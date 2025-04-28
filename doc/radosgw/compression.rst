@@ -34,13 +34,17 @@ Compression settings apply to all new objects uploaded to buckets using this
 placement target. Compression can be disabled by setting the ``type`` to an
 empty string or ``none``.
 
-For example::
+For example:
 
-  $ radosgw-admin zone placement modify \
-        --rgw-zone default \
-        --placement-id default-placement \
-        --storage-class STANDARD \
-        --compression zlib
+.. prompt:: bash #
+
+   radosgw-admin zone placement modify --rgw-zone default \
+                                         --placement-id default-placement \
+                                         --storage-class STANDARD \
+                                         --compression zlib
+
+::
+
   {
   ...
       "placement_pools": [
@@ -72,7 +76,7 @@ Statistics
 Run the ``radosgw-admin bucket stats`` command to see compression statistics
 for a given bucket:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin bucket stats --bucket=<name>
 
