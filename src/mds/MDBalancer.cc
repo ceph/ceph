@@ -18,7 +18,6 @@
 #include "include/compat.h"
 #include "mdstypes.h"
 
-#include "mon/MonClient.h"
 #include "osdc/Objecter.h"
 #include "MDSRank.h"
 #include "MDSMap.h"
