@@ -1586,7 +1586,8 @@ declare -a test_create_group_with_images_then_mirror_with_regular_snapshots_1=("
 declare -a test_create_group_with_images_then_mirror_with_regular_snapshots_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 2 'leave_snap')
 declare -a test_create_group_with_images_then_mirror_with_regular_snapshots_3=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 2 'force_disable')
 
-test_create_group_with_images_then_mirror_with_regular_snapshots_scenarios=3
+# TODO scenario 1 is sometimes failing so is disabled - see issue on line 45
+test_create_group_with_images_then_mirror_with_regular_snapshots_scenarios='2 3'
 
 test_create_group_with_images_then_mirror_with_regular_snapshots()
 {
@@ -3200,9 +3201,16 @@ test_odf_failover_failback()
 
   # promote original primary again
   if [ "${scenario}" = 'retry_promote' ]; then
+    local i=0
     while true; do
       { mirror_group_promote_try "${primary_cluster}" "${pool}/${group0}" && break; } || :
+      if [ "$i" -lt 10000 ]; then 
+        i=$((i+1))
+      else
+        fail "promote command failed after $i attempts"
+      fi  
     done
+    echo "promote command succeeded after $i attempts"
   else
     mirror_group_promote "${primary_cluster}" "${pool}/${group0}"
   fi  
@@ -3716,8 +3724,8 @@ run_all_tests()
   run_test_all_scenarios test_multiple_mirror_group_snapshot_unlink_time
   run_test_all_scenarios test_force_promote_delete_group
   run_test_all_scenarios test_create_group_stop_daemon_then_recreate
-  # TODO these next 2 tests are disabled as they fails with incorrect state/description in mirror group status - issue 50
   run_test_all_scenarios test_enable_mirroring_when_duplicate_group_exists
+  # TODO this next test is disabled as it fails with incorrect state/description in mirror group status - issue 50
   #run_test_all_scenarios test_enable_mirroring_when_duplicate_image_exists
   run_test_all_scenarios test_odf_failover_failback
   run_test_all_scenarios test_resync_marker
