@@ -1107,7 +1107,9 @@ float OSDService::compute_adjusted_ratio(osd_stat_t new_stat, float *pratio,
   if (backfill_adjusted) {
     dout(20) << __func__ << " backfill adjusted " << new_stat << dendl;
   }
-  return ((float)new_stat.statfs.get_used_raw()) / ((float)new_stat.statfs.total);
+  float ratio = ((float)new_stat.statfs.get_used_raw()) / ((float)new_stat.statfs.total);
+  dout(5) << __func__ << " ratio:" << ratio << " pratio: " << *pratio << dendl;
+  return ratio;
 }
 
 void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch)

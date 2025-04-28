@@ -136,8 +136,8 @@ int ExtBlkDevVdo::get_statfs(store_statfs_t& statfs)
   int64_t avail_blocks =
     physical_blocks - overhead_blocks_used - data_blocks_used;
 
-  statfs.total = block_size * physical_blocks;
-  statfs.available = block_size * avail_blocks;
+  statfs.total_raw = block_size * physical_blocks;
+  statfs.avail_raw = block_size * avail_blocks;
 
   return 0;
 }
