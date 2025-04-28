@@ -2456,12 +2456,15 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r);
  */
 struct store_statfs_t
 {
-  uint64_t total = 0;                  ///< Total bytes
+  uint64_t total = 0;                  ///< Total logical bytes
   uint64_t available = 0;              ///< Free bytes available
   uint64_t internally_reserved = 0;    ///< Bytes reserved for internal purposes
 
-  int64_t allocated = 0;               ///< Bytes allocated by the store
+  // physical bytes
+  uint64_t total_raw = 0;              ///< Total physical bytes
+  uint64_t avail_raw = 0;              ///< Physically used bytes
 
+  int64_t allocated = 0;             ///< Bytes allocated for user data
   int64_t data_stored = 0;                ///< Bytes actually stored by the user
   int64_t data_compressed = 0;            ///< Bytes stored after compression
   int64_t data_compressed_allocated = 0;  ///< Bytes allocated for compressed data
@@ -2478,6 +2481,10 @@ struct store_statfs_t
     FLOOR(total);
     FLOOR(available);
     FLOOR(internally_reserved);
+
+    FLOOR(total_raw);
+    FLOOR(avail_raw);
+
     FLOOR(allocated);
     FLOOR(data_stored);
     FLOOR(data_compressed);
@@ -2498,14 +2505,18 @@ struct store_statfs_t
     return total - available - internally_reserved;
   }
 
-  // this accumulates both actually used and statfs's internally_reserved
+  // bytes physically used
   uint64_t get_used_raw() const {
-    return total - available;
+    return total_raw - avail_raw;
+  }
+  // bytes physically available
+  uint64_t get_avail_raw() const {
+    return avail_raw;
   }
 
   float get_used_raw_ratio() const {
-    if (total) {
-      return (float)get_used_raw() / (float)total;
+    if (total_raw) {
+      return (float)get_used_raw() / (float)total_raw;
     } else {
       return 0.0;
     }
@@ -2519,7 +2530,14 @@ struct store_statfs_t
     return total >> 10;
   }
   uint64_t kb_used() const {
-    return (total - available - internally_reserved) >> 10;
+    return get_used() >> 10;
+  }
+
+  uint64_t kb_avail_raw() const {
+    return avail_raw >> 10;
+  }
+  uint64_t kb_total_raw() const {
+    return total_raw >> 10;
   }
   uint64_t kb_used_raw() const {
     return get_used_raw() >> 10;
@@ -2540,6 +2558,10 @@ struct store_statfs_t
     total += o.total;
     available += o.available;
     internally_reserved += o.internally_reserved;
+
+    total_raw += o.total_raw;
+    avail_raw += o.avail_raw;
+
     allocated += o.allocated;
     data_stored += o.data_stored;
     data_compressed += o.data_compressed;
@@ -2552,6 +2574,10 @@ struct store_statfs_t
     total -= o.total;
     available -= o.available;
     internally_reserved -= o.internally_reserved;
+
+    total_raw -= o.total_raw;
+    avail_raw -= o.avail_raw;
+
     allocated -= o.allocated;
     data_stored -= o.data_stored;
     data_compressed -= o.data_compressed;
@@ -2561,23 +2587,11 @@ struct store_statfs_t
     internal_metadata -= o.internal_metadata;
   }
   void dump(ceph::Formatter *f) const;
-  DENC(store_statfs_t, v, p) {
-    DENC_START(1, 1, p);
-    denc(v.total, p);
-    denc(v.available, p);
-    denc(v.internally_reserved, p);
-    denc(v.allocated, p);
-    denc(v.data_stored, p);
-    denc(v.data_compressed, p);
-    denc(v.data_compressed_allocated, p);
-    denc(v.data_compressed_original, p);
-    denc(v.omap_allocated, p);
-    denc(v.internal_metadata, p);
-    DENC_FINISH(p);
-  }
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
   static std::list<store_statfs_t> generate_test_instances();
 };
-WRITE_CLASS_DENC(store_statfs_t)
+WRITE_CLASS_ENCODER(store_statfs_t)
 
 std::ostream &operator<<(std::ostream &lhs, const store_statfs_t &rhs);
 

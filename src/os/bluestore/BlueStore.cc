@@ -12113,15 +12113,13 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
   buf->reset();
 
   uint64_t bfree = alloc->get_free();
+  buf->total = bdev->get_size();
+  buf->available = bfree;
 
   int rc = bdev->get_ebd_statfs(*buf);
-  if (rc == 0) {
-    // we are limited by both the size of the virtual device and the
-    // underlying physical device.
-    buf->available = std::min(bfree, buf->available);
-  } else {
-    buf->total = bdev->get_size();
-    buf->available = bfree;
+  if (rc != 0) {
+    buf->total_raw = buf->total;
+    buf->avail_raw = buf->available;
   }
   auto prefix = per_pool_omap == OMAP_BULK ?
     PREFIX_OMAP :
