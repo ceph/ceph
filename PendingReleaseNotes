@@ -1,6 +1,8 @@
 >=20.0.0
 
 * RGW: Lua scripts will not run against health checks.
+* RGW: Adding missing quotes to the ETag values returned by S3 CopyPart,
+  PostObject and CompleteMultipartUpload responses.
 
 * RBD: All Python APIs that produce timestamps now return "aware" `datetime`
   objects instead of "naive" ones (i.e. those including time zone information
