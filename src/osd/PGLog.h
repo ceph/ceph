@@ -133,6 +133,11 @@ struct PGLog : DoutPrefixProvider {
     return cct;
   }
 
+  enum NonPrimary : bool {
+    NonPrimaryFalse = false,
+    NonPrimaryTrue = true
+  };
+
   ////////////////////////////// sub classes //////////////////////////////
   struct LogEntryHandler {
     virtual void rollback(
@@ -611,9 +616,13 @@ public:
     }
 
     // actors
-    void add(const pg_log_entry_t& e, bool applied = true) {
+    void add(const pg_log_entry_t& e, enum NonPrimary nonprimary, bool applied) {
       if (!applied) {
-	ceph_assert(get_can_rollback_to() == head);
+        if (!nonprimary) {
+          ceph_assert(get_can_rollback_to() == head);
+        } else {
+          ceph_assert(get_can_rollback_to() >= head);
+        }
       }
 
       // make sure our buffers don't pin bigger buffers
@@ -652,6 +661,12 @@ public:
 	skip_can_rollback_to_to_head();
       }
     } // add
+
+    // nonprimary and applied must either both be provided or neither. If
+    // neither is provided applied = true and the nonprimary is irrelevant.
+    void add(const pg_log_entry_t& e) {
+      add(e, NonPrimaryFalse, true);
+    }
 
     void trim(
       CephContext* cct,
@@ -820,9 +835,13 @@ public:
 
   void unindex() { log.unindex(); }
 
-  void add(const pg_log_entry_t& e, bool applied = true) {
+  void add(const pg_log_entry_t& e, enum NonPrimary nonprimary, bool applied) {
     mark_writeout_from(e.version);
-    log.add(e, applied);
+    log.add(e, nonprimary, applied);
+  }
+
+  void add(const pg_log_entry_t& e) {
+    add(e, NonPrimaryFalse, true);
   }
 
   void reset_recovery_pointers() { log.reset_recovery_pointers(); }
