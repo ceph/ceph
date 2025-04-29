@@ -2924,7 +2924,7 @@ test_force_promote_before_initial_sync()
   done
 
   # force promote the group on the secondary - this should fail with a sensible error message
-  expect_failure "no initial group snapshot available" rbd --cluster=${secondary_cluster} mirror group promote ${pool}/${group0} --force
+  expect_failure "no mirror group snapshot available" rbd --cluster=${secondary_cluster} mirror group promote ${pool}/${group0} --force
 
   local group_id_before
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before
