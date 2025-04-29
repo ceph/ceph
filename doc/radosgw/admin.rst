@@ -416,19 +416,19 @@ requests necessary to restore them.
 
 To create an admin user:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin user create --uid={username} --display-name="{display-name}" --admin
 
 To add the admin flag to an existing user:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin user modify --uid={username} --admin
 
 To remove the admin flag from an existing user:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin user modify --uid={username} --admin=0
 
