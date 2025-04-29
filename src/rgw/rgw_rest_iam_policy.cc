@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include "rgw_rest_policy.h"
+#include "rgw_rest_iam_policy.h"
 #include "rgw_rest_iam.h"
 #include <regex>
 #include <string>
@@ -13,7 +13,7 @@
 
 int RGWRestPolicy::verify_permission(optional_yield y)
 {
-  if (verify_user_permission(this, s, resource, action)) {
+  if (verify_user_permission(this, s, arn, action)) {
     return 0;
   }
   return -EACCES;
@@ -43,12 +43,12 @@ static int parse_tags(const DoutPrefixProvider* dpp,
     std::smatch match;
 
     if (std::regex_match(param.first, match, pattern_key)) {
-      int index = std::stoi(match[1].str());
+      int index = ceph::parse<int>(match[1].str()).value();
       key_map[index] = param.second;
     }
 
     if (std::regex_match(param.first, match, pattern_value)) {
-      int index = std::stoi(match[1].str());
+      int index = ceph::parse<int>(match[1].str()).value();
       val_map[index] = param.second;
     }
   }
@@ -74,7 +74,7 @@ static rgw::ARN make_policy_arn(const std::string& path,
                               const std::string& name,
                               const std::string& account)
 {
-  return {name, "policy", account, false};
+  return {string_cat_reserve(path, name), "policy", account, true};
 }
 
 static int check_policy_limit(const DoutPrefixProvider* dpp, optional_yield y,
@@ -144,8 +144,8 @@ int RGWCreatePolicy::init_processing(optional_yield y)
     if (ret < 0) {
       return ret;
     }
-    resource = make_policy_arn(info.path, info.name, info.account_id);
-    info.arn = resource.to_string();
+    arn = make_policy_arn(info.path, info.name, info.account_id);
+    info.arn = arn.to_string();
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -155,7 +155,7 @@ int RGWCreatePolicy::init_processing(optional_yield y)
   return 0;
 }
 
-static void dump_ManagedPolicyInfo(const ManagedPolicyInfo& info, Formatter *f)
+static void dump_ManagedPolicyInfo(const rgw::IAM::ManagedPolicyInfo& info, Formatter *f)
 {
   f->open_object_section("Policy");
   encode_json("PolicyName", info.name, f);
@@ -201,7 +201,7 @@ int RGWCreatePolicy::forward_to_master(optional_yield y,
   }
 
   int r = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                        post_body, parser, s->info, y);
+                                        post_body, parser, s->info, s->err, y);
   if (r < 0) {
     ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
     return r;
@@ -265,7 +265,7 @@ void RGWCreatePolicy::execute(optional_yield y)
 
 static int validate_policy_arn(const std::string& policy_arn,
                                std::string_view account_id,
-                               rgw::ARN& resource,
+                               rgw::ARN& arn,
                                std::string& message)
 {
   if (policy_arn.empty()) {
@@ -292,7 +292,7 @@ static int validate_policy_arn(const std::string& policy_arn,
     message = "PolicyArn partition must be 'aws'";
     return -EINVAL;
   }
-  resource.partition = rgw::Partition::aws;
+  arn.partition = rgw::Partition::aws;
   str.remove_prefix(partition.size());
 
   constexpr std::string_view service = "iam::";
@@ -300,29 +300,26 @@ static int validate_policy_arn(const std::string& policy_arn,
     message = "PolicyArn service must be 'iam'";
     return -EINVAL;
   }
-  resource.service = rgw::Service::iam;
+  arn.service = rgw::Service::iam;
   str.remove_prefix(service.size());
 
   if (!str.starts_with(account_id)) {
     message = "PolicyArn account ID must match curent account ID";
     return -EINVAL;
   }
-  resource.account = std::string(account_id);
+  arn.account = std::string(account_id);
   str.remove_prefix(account_id.size());
 
   if (!str.starts_with(":policy/")) {
     message = "PolicyArn must have ':policy/' after account ID";
     return -EINVAL;
   }
-  str.remove_prefix(std::string_view(":policy/").size());
 
-  // Now str = "test/home/user/MyReadOnlyS3Policy"
-  auto last_slash = str.rfind('/');
-  if (last_slash == std::string_view::npos) {
-    resource.resource = std::string(str);
-  } else {
-    resource.resource = std::string(str.substr(last_slash + 1));
+  if(str.find("//") != std::string_view::npos || str.back() == '/') {
+    message = "Invalid policy path format";
+    return -EINVAL;
   }
+  arn.resource = std::string(str);
 
   return 0;
 }
@@ -334,14 +331,15 @@ int RGWGetPolicy::init_processing(optional_yield y)
   if (const auto& acc = s->auth.identity->get_account(); acc) {
     account = acc->id;
     std::string provider_arn = s->info.args.get("PolicyArn");
-    return validate_policy_arn(provider_arn, account, resource, s->err.message);
+    return validate_policy_arn(provider_arn, account, arn, s->err.message);
   }
-  return -EINVAL;
+  return -ERR_METHOD_NOT_ALLOWED;
 }
 
 void RGWGetPolicy::execute(optional_yield y)
 {
-  op_ret = driver->load_customer_managed_policy(this, y, resource.account, resource.resource, info);
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  op_ret = driver->load_customer_managed_policy(this, y, arn.account, policy_name, info);
   if(op_ret < 0) {
     ldpp_dout(this, 20) << "failed to get managed policy info: " << strerror(op_ret) << dendl;
   } else {
@@ -358,19 +356,19 @@ void RGWGetPolicy::execute(optional_yield y)
 
 int RGWDeletePolicy::init_processing(optional_yield y)
 {
-
   std::string_view account;
   if (const auto& acc = s->auth.identity->get_account(); acc) {
     account = acc->id;
     std::string provider_arn = s->info.args.get("PolicyArn");
-    return validate_policy_arn(provider_arn, account, resource, s->err.message);
+    return validate_policy_arn(provider_arn, account, arn, s->err.message);
   }
-  return -EINVAL;
+  return -ERR_METHOD_NOT_ALLOWED;
 }
 
 void RGWDeletePolicy::execute(optional_yield y)
 {
-  op_ret = driver->delete_customer_managed_policy(this, y, resource.account, resource.resource);
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  op_ret = driver->delete_customer_managed_policy(this, y, arn.account, policy_name);
   if(op_ret < 0) {
     ldpp_dout(this, 20) << "failed to delete managed policy info: " << strerror(op_ret) << dendl;
   } else {
