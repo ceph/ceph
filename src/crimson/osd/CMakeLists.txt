@@ -19,11 +19,11 @@ add_executable(crimson-osd
   ops_executer.cc
   osd_operation.cc
   osd_operations/client_request.cc
-  osd_operations/client_request_common.cc
   osd_operations/internal_client_request.cc
   osd_operations/peering_event.cc
   osd_operations/pg_advance_map.cc
   osd_operations/replicated_request.cc
+  osd_operations/replicated_request_reply.cc
   osd_operations/logmissing_request.cc
   osd_operations/logmissing_request_reply.cc
   osd_operations/background_recovery.cc

@@ -23,7 +23,7 @@ namespace crimson::osd {
 
 RepRequest::RepRequest(crimson::net::ConnectionRef&& conn,
 		       Ref<MOSDRepOp> &&req)
-  : l_conn{std::move(conn)},
+  : RemoteOperation{std::move(conn)},
     req{std::move(req)}
 {}
 
@@ -49,8 +49,8 @@ void RepRequest::dump_detail(Formatter *f) const
 
 ConnectionPipeline &RepRequest::get_connection_pipeline()
 {
-  return get_osd_priv(&get_local_connection()
-         ).replicated_request_conn_pipeline;
+  return get_osd_priv(&get_connection()
+  ).replicated_request_conn_pipeline;
 }
 
 PerShardPipeline &RepRequest::get_pershard_pipeline(
@@ -69,6 +69,7 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
 {
   LOG_PREFIX(RepRequest::with_pg_interruptible);
   DEBUGI("{}", *this);
+  req->finish_decode();
   co_await this->template enter_stage<interruptor>(repop_pipeline(*pg).process);
   co_await interruptor::make_interruptible(this->template with_blocking_event<
     PG_OSDMapGate::OSDMapBlocker::BlockingEvent

@@ -7,6 +7,8 @@
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/sharded.hh>
 
+#include "crimson/common/log.h"
+
 #include "crimson/osd/osd_connection_priv.h"
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/pg_map.h"
@@ -430,6 +432,48 @@ public:
       });
     });
     return std::make_pair(id, std::move(fut));
+  }
+
+  template <typename T, typename... Args>
+  auto start_pg_operation_active(Args&&... args) {
+    LOG_PREFIX(PGShardManager::start_pg_operation_active);
+    auto op = get_local_state().registry.create_operation<T>(
+      std::forward<Args>(args)...);
+    SUBDEBUG(osd, "{} starting", *op);
+
+    auto &opref = *op;
+    if constexpr (T::is_trackable) {
+      op->template track_event<typename T::StartEvent>();
+    }
+
+    auto core = get_pg_to_shard_mapping().get_pg_mapping(opref.get_pgid());
+    if (core == NULL_CORE) {
+      // PG target has been removed, there *must* have been an interval change
+      SUBDEBUG(
+	osd,
+	"{} no core mapping for pg {} found, must be from a prior interval",
+	opref, opref.get_pgid());
+      return seastar::now();
+    }
+
+    return this->template with_remote_shard_state_and_op<T>(
+      core, std::move(op),
+      [FNAME](ShardServices &target_shard_services,
+		    typename T::IRef op) {
+        auto &opref = *op;
+	auto pg = target_shard_services.get_pg(
+	  opref.get_pgid());
+	if (!pg) {
+	  SUBDEBUG(
+	    osd,
+	    "{} pg {} not present, must be from prior interval",
+	    opref, opref.get_pgid());
+	  return seastar::now();
+	}
+	return op->with_pg(
+	  target_shard_services, pg
+	).finally([op] {});
+      });
   }
 
 #undef FORWARD
