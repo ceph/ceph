@@ -67,7 +67,7 @@ And('{string} option {string}', (action: string, labels: string) => {
 });
 
 And('I click on submit button', () => {
-  cy.get('[data-cy=submitBtn]').click();
+  cy.get('[data-testid=submitBtn]').click();
 });
 
 /**
