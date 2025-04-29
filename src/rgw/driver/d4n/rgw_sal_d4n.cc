@@ -58,9 +58,6 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   using boost::redis::config;
 
   conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
-  objDir = std::make_unique<rgw::d4n::ObjectDirectory>(conn);
-  blockDir = std::make_unique<rgw::d4n::BlockDirectory>(conn);
-  bucketDir = std::make_unique<rgw::d4n::BucketDirectory>(conn);
   policyDriver = std::make_unique<rgw::d4n::PolicyDriver>(conn,
 							  cacheDriver.get(),
 							  "lfuda",
@@ -147,8 +144,6 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
   }
 
   //Get objects from cache
-  auto bucketDir = this->filter->get_bucket_dir();
-  auto objDir = this->filter->get_obj_dir();
   std::vector<rgw_obj_key> objects;
   std::vector<rgw_bucket_list_entries> entries;
 
@@ -735,6 +730,7 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
       if (dest_object->get_bucket()->versioned() && !dest_object->get_bucket()->versioning_enabled()) { //if versioning is suspended
         dest_version = "null";
       } else {
+        enum { OBJ_INSTANCE_LEN = 32 };
         char buf[OBJ_INSTANCE_LEN + 1];
         gen_rand_alphanumeric_no_underscore(dpp->get_cct(), buf, OBJ_INSTANCE_LEN);
         dest_version = buf; //version for non-versioned objects, using gen_rand_alphanumeric_no_underscore for the time being
@@ -1141,7 +1137,6 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
 {
   ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object name: " << this->get_name() << " bucket name: " << this->get_bucket()->get_name() << dendl;
   rgw::d4n::CacheBlock block; 
-  rgw::d4n::BlockDirectory* blockDir = this->driver->get_block_dir();
   auto attrs = this->get_attrs();
   bufferlist bl_etag, bl_acl;
   auto etag_it = attrs.find(RGW_ATTR_ETAG);
@@ -1348,7 +1343,6 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
 
 int D4NFilterObject::set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty)
 {
-  rgw::d4n::BlockDirectory* blockDir = driver->get_block_dir();
 
   //update data block entries in directory
   off_t lst = this->get_size();
@@ -1422,7 +1416,6 @@ int D4NFilterObject::delete_data_block_cache_entries(const DoutPrefixProvider* d
 
 bool D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, rgw::d4n::CacheBlock& blk, optional_yield y)
 {
-  rgw::d4n::BlockDirectory* blockDir = this->driver->get_block_dir();
   std::string objName = this->get_oid();
   //object oid does not contain "null" in case the instance is "null", so explicitly populating that
   if (this->have_instance() && this->get_instance() == "null") {
@@ -1655,9 +1648,6 @@ void D4NFilterDriver::shutdown()
   boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
 
   cacheDriver.reset();
-  objDir.reset();
-  blockDir.reset();
-  bucketDir.reset();
   policyDriver.reset();
 
   next->shutdown();
@@ -1893,7 +1883,7 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
           if (ret == 0) {
             source->driver->get_policy_driver()->get_cache_policy()->update(dpp, key, ofs, bl.length(), dest_version, true, rgw::d4n::RefCount::NOOP, y);
           }
-          if (ret = source->driver->get_block_dir()->set(dpp, &dest_block, y); ret < 0){
+          if (ret = source->blockDir->set(dpp, &dest_block, y); ret < 0){
             ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " BlockDirectory set failed with ret: " << ret << dendl;
           }
         } else {
@@ -2359,9 +2349,9 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
     return ret;
   } else {
     bool objDirty = block.cacheObj.dirty;
-    auto blockDir = source->driver->get_block_dir();
-    auto objDir = source->driver->get_obj_dir();
-    auto bucketDir = source->driver->get_bucket_dir();
+    auto blockDir = source->blockDir;
+    auto objDir = source->objDir;
+    auto bucketDir = source->bucketDir;
     std::string version = source->get_object_version();
     std::string objName = source->get_name();
     // special handling for name starting with '_'

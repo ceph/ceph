@@ -55,9 +55,6 @@ class D4NFilterDriver : public FilterDriver {
   private:
     std::shared_ptr<connection> conn;
     std::unique_ptr<rgw::cache::CacheDriver> cacheDriver;
-    std::unique_ptr<rgw::d4n::ObjectDirectory> objDir;
-    std::unique_ptr<rgw::d4n::BlockDirectory> blockDir;
-    std::unique_ptr<rgw::d4n::BucketDirectory> bucketDir;
     std::unique_ptr<rgw::d4n::PolicyDriver> policyDriver;
     boost::asio::io_context& io_context;
     optional_yield y;
@@ -84,13 +81,11 @@ class D4NFilterDriver : public FilterDriver {
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
     rgw::cache::CacheDriver* get_cache_driver() { return cacheDriver.get(); }
-    rgw::d4n::ObjectDirectory* get_obj_dir() { return objDir.get(); }
-    rgw::d4n::BlockDirectory* get_block_dir() { return blockDir.get(); }
-    rgw::d4n::BucketDirectory* get_bucket_dir() { return bucketDir.get(); }
     rgw::d4n::PolicyDriver* get_policy_driver() { return policyDriver.get(); }
     void save_y(optional_yield y) { this->y = y; }
     std::shared_ptr<connection> get_conn() { return conn; }
     std::shared_ptr<rgw::d4n::RedisPool> get_redis_pool() { return redis_pool; }
+    std::shared_ptr<connection> get_connection() { return conn; }
     void shutdown() override;
 };
 
@@ -113,11 +108,44 @@ class D4NFilterBucket : public FilterBucket {
     };
     D4NFilterDriver* filter;
 
+    rgw::d4n::D4NTransaction* m_d4n_trx{nullptr};
+    rgw::d4n::ObjectDirectory* objDir{nullptr};
+    rgw::d4n::BlockDirectory* blockDir{nullptr};
+    rgw::d4n::BucketDirectory* bucketDir{nullptr};
+
   public:
+
+    
+    bool create_d4n_object(std::shared_ptr<connection> conn)
+    {
+      objDir = new rgw::d4n::ObjectDirectory(conn);
+      blockDir = new rgw::d4n::BlockDirectory(conn);
+      bucketDir = new rgw::d4n::BucketDirectory(conn);
+
+      //all objects share the same transaction
+      m_d4n_trx = new rgw::d4n::D4NTransaction();
+      m_d4n_trx->start_trx();
+      objDir->set_d4n_trx(m_d4n_trx);
+      blockDir->set_d4n_trx(m_d4n_trx);
+      bucketDir->set_d4n_trx(m_d4n_trx);
+
+      return true;
+    }
+
     D4NFilterBucket(std::unique_ptr<Bucket> _next, D4NFilterDriver* _filter) :
       FilterBucket(std::move(_next)),
-      filter(_filter) {}
-    virtual ~D4NFilterBucket() = default;
+      filter(_filter) {create_d4n_object(filter->get_connection());}
+
+    virtual ~D4NFilterBucket()
+    {
+      optional_yield y(null_yield);
+      //synchronous end-trx
+      objDir->m_d4n_trx->end_trx(nullptr,filter->get_connection(),y);
+      if(objDir) delete objDir;
+      if(blockDir) delete blockDir;
+      if(bucketDir) delete bucketDir;
+      if(m_d4n_trx) {delete m_d4n_trx;m_d4n_trx=nullptr;}
+    }
    
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
     virtual int list(const DoutPrefixProvider* dpp, ListParams& params, int max,
@@ -144,6 +172,11 @@ class D4NFilterObject : public FilterObject {
     bool exists_in_cache{false};
     bool load_from_store{false};
     bool attrs_read_from_cache{false};
+
+    rgw::d4n::ObjectDirectory* objDir{nullptr};
+    rgw::d4n::BlockDirectory* blockDir{nullptr};
+    rgw::d4n::BucketDirectory* bucketDir{nullptr};
+    rgw::d4n::D4NTransaction* d4n_trx{nullptr};
 
   public:
     struct D4NFilterReadOp : FilterReadOp {
@@ -222,13 +255,39 @@ class D4NFilterObject : public FilterObject {
       virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) override;
     };
 
+    bool create_d4n_object(std::shared_ptr<connection> conn)
+    {
+      objDir = new rgw::d4n::ObjectDirectory(conn);
+      blockDir = new rgw::d4n::BlockDirectory(conn);
+      bucketDir = new rgw::d4n::BucketDirectory(conn);
+
+      //all objects share the same transaction
+      d4n_trx = new rgw::d4n::D4NTransaction();
+      d4n_trx->start_trx(); 
+      objDir->set_d4n_trx(d4n_trx);
+      blockDir->set_d4n_trx(d4n_trx);
+      bucketDir->set_d4n_trx(d4n_trx);
+
+      return true;
+    }
+
     D4NFilterObject(std::unique_ptr<Object> _next, D4NFilterDriver* _driver) : FilterObject(std::move(_next)),
-									      driver(_driver) {}
+									      driver(_driver) {create_d4n_object(driver->get_connection());}
     D4NFilterObject(std::unique_ptr<Object> _next, Bucket* _bucket, D4NFilterDriver* _driver) : FilterObject(std::move(_next), _bucket),
-											       driver(_driver) {}
+											       driver(_driver) {create_d4n_object(driver->get_connection());}
     D4NFilterObject(D4NFilterObject& _o, D4NFilterDriver* _driver) : FilterObject(_o),
-								    driver(_driver) {}
-    virtual ~D4NFilterObject() = default;
+								    driver(_driver) {create_d4n_object(driver->get_connection());}
+
+    virtual ~D4NFilterObject() 
+    {
+      optional_yield y(null_yield);
+      //synchronous end-trx
+      objDir->m_d4n_trx->end_trx(nullptr,driver->get_connection(),y); 
+      if(objDir) delete objDir; 
+      if(blockDir) delete blockDir; 
+      if(bucketDir) delete bucketDir; 
+      if(d4n_trx) {delete d4n_trx;d4n_trx=nullptr;}
+    }
 
     virtual int copy_object(const ACLOwner& owner,
                               const rgw_user& remote_user,
