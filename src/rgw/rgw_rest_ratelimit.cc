@@ -105,7 +105,6 @@ void RGWOp_Ratelimit_Info::execute(optional_yield y)
   if (global) {
     std::string realm_id = driver->get_zone()->get_realm_id();
     RGWPeriodConfig period_config;
-    auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
     auto cfgstore = s->penv.cfgstore;
     op_ret = cfgstore->read_period_config(this, y, realm_id, period_config);
     if (op_ret && op_ret != -ENOENT) {
@@ -309,7 +308,6 @@ void RGWOp_Ratelimit_Set::execute(optional_yield y)
     return;
   }
 
-  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
   auto cfgstore = s->penv.cfgstore;
   if (global) {
     std::string realm_id = driver->get_zone()->get_realm_id();
