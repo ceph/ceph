@@ -26,7 +26,7 @@ D3N improves the performance of big-data jobs by speeding up repeatedly accessed
 Cache servers are located in the datacenter on the access side of potential network and storage bottlenecks.
 D3Ns two-layer logical cache forms a traditional caching hierarchy :sup:`*`
 where caches nearer the client have the lowest access latency and overhead,
-while caches in higher levels in the hierarchy are slower (requiring multiple hops to access),
+while caches in higher levels in the hierarchy are slower (requiring multiple hops to access).
 The layer 1 cache server nearest to the client handles object requests by breaking them into blocks,
 returning any blocks which are cached locally, and forwarding missed requests to the block home location
 (as determined by consistent hashing) in the next layer.
@@ -48,7 +48,7 @@ Implementation
 Requirements
 ------------
 
-- An SSD (/dev/nvme,/dev/pmem,/dev/shm) or similar block storage device, formatted
+- An SSD (``/dev/nvme``, ``/dev/pmem``, ``/dev/shm``) or similar block storage device, formatted
   (filesystems other than XFS were not tested) and mounted.
   It will be used as the cache backing store.
   (depending on device performance, multiple RGWs may share a single device but each requires
@@ -77,7 +77,7 @@ in each Rados Gateways ceph.conf client section, for example for ``[client.rgw.8
       rgw_d3n_l1_datacache_size = 10737418240
 
 The above example assumes that the cache backing-store solid state device
-is mounted at `/mnt/nvme0` and has `10 GB` of free space available for the cache.
+is mounted at ``/mnt/nvme0`` and has 10 GB of free space available for the cache.
 
 The persistent path directory has to be created before starting the Gateway.
 (``mkdir -p /mnt/nvme0/rgw_datacache/client.rgw.8000/``)
@@ -91,25 +91,25 @@ In containerized deployments the cache directory should be mounted as a volume::
 (Reference: `Service Management - Mounting Files with Extra Container Arguments`_)
 
 If another Gateway is co-located on the same machine, configure it's persistent path to a discrete directory,
-for example in the case of `[client.rgw.8001]` configure
+for example in the case of ``[client.rgw.8001]`` configure
 ``rgw_d3n_l1_datacache_persistent_path = "/mnt/nvme0/rgw_datacache/client.rgw.8001/"``
-in the ``[client.rgw.8001]`` ceph.conf client section.
+in the ``[client.rgw.8001]`` ``ceph.conf`` client section.
 
 In a multiple co-located Gateways configuration consider assigning clients with different workloads
 to each Gateway without a balancer in order to avoid cached data duplication.
 
-    NOTE: each time the Rados Gateway is restarted the content of the cache directory is purged.
+.. note:: Each time the Rados Gateway is restarted the content of the cache directory is purged.
 
 Logs
 ----
-- D3N related log lines in `radosgw.*.log` contain the string ``d3n`` (case insensitive).
-- low level D3N logs can be enabled by the ``debug_rgw_datacache`` subsystem (up to ``debug_rgw_datacache=30``)
+- D3N related log lines in ``radosgw.*.log`` contain the string ``d3n`` (case insensitive).
+- Low level D3N logs can be enabled by the ``debug_rgw_datacache`` subsystem (up to ``debug_rgw_datacache=30``).
 
 
-CONFIG REFERENCE
+Config Reference
 ================
 The following D3N related settings can be added to the Ceph configuration file
-(i.e., usually `ceph.conf`) under the ``[client.rgw.{instance-name}]`` section.
+(i.e., usually ``ceph.conf``) under the ``[client.rgw.{instance-name}]`` section.
 
 .. confval:: rgw_d3n_l1_local_datacache_enabled
 .. confval:: rgw_d3n_l1_datacache_persistent_path
