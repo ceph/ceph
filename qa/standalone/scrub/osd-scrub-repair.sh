@@ -6159,7 +6159,7 @@ function TEST_corrupt_snapset_scrub_rep() {
 
     jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
 {
-  "epoch": 34,
+  "epoch": 39,
   "inconsistents": [
     {
       "object": {
@@ -6183,13 +6183,13 @@ function TEST_corrupt_snapset_scrub_rep() {
           "pool": 3,
           "namespace": ""
         },
-        "version": "24'8",
-        "prior_version": "21'3",
-        "last_reqid": "client.4195.0:1",
+        "version": "29'8",
+        "prior_version": "26'3",
+        "last_reqid": "client.4216.0:1",
         "user_version": 8,
         "size": 21,
-        "mtime": "2018-04-05 14:35:43.286117",
-        "local_mtime": "2018-04-05 14:35:43.288990",
+        "mtime": "2025-04-28T22:25:38.106944-0500",
+        "local_mtime": "2025-04-28T22:25:38.111607-0500",
         "lost": 0,
         "flags": [
           "dirty",
@@ -6206,7 +6206,8 @@ function TEST_corrupt_snapset_scrub_rep() {
         "manifest": {
           "type": 0
         },
-        "watchers": {}
+        "watchers": {},
+        "shard_versions": []
       },
       "shards": [
         {
@@ -6215,17 +6216,17 @@ function TEST_corrupt_snapset_scrub_rep() {
           "errors": [],
           "size": 21,
           "snapset": {
+            "seq": 1,
             "clones": [
               {
-                "overlap": "[]",
-                "size": 7,
                 "snap": 1,
+                "size": 7,
+                "overlap": "[]",
                 "snaps": [
                   1
                 ]
               }
-            ],
-            "seq": 1
+            ]
           }
         },
         {
@@ -6234,8 +6235,8 @@ function TEST_corrupt_snapset_scrub_rep() {
           "errors": [],
           "size": 21,
           "snapset": {
-            "clones": [],
-            "seq": 0
+            "seq": 0,
+            "clones": []
           }
         }
       ]
@@ -6262,13 +6263,13 @@ function TEST_corrupt_snapset_scrub_rep() {
           "pool": 3,
           "namespace": ""
         },
-        "version": "28'10",
-        "prior_version": "23'6",
-        "last_reqid": "client.4223.0:1",
+        "version": "35'10",
+        "prior_version": "28'6",
+        "last_reqid": "client.4246.0:1",
         "user_version": 10,
         "size": 21,
-        "mtime": "2018-04-05 14:35:48.326856",
-        "local_mtime": "2018-04-05 14:35:48.328097",
+        "mtime": "2025-04-28T22:25:44.826346-0500",
+        "local_mtime": "2025-04-28T22:25:44.828220-0500",
         "lost": 0,
         "flags": [
           "dirty",
@@ -6285,7 +6286,8 @@ function TEST_corrupt_snapset_scrub_rep() {
         "manifest": {
           "type": 0
         },
-        "watchers": {}
+        "watchers": {},
+        "shard_versions": []
       },
       "shards": [
         {
@@ -6294,8 +6296,8 @@ function TEST_corrupt_snapset_scrub_rep() {
           "errors": [],
           "size": 21,
           "snapset": {
-            "clones": [],
-            "seq": 0
+            "seq": 0,
+            "clones": []
           }
         },
         {
@@ -6304,23 +6306,24 @@ function TEST_corrupt_snapset_scrub_rep() {
           "errors": [],
           "size": 21,
           "snapset": {
+            "seq": 1,
             "clones": [
               {
-                "overlap": "[]",
-                "size": 7,
                 "snap": 1,
+                "size": 7,
+                "overlap": "[]",
                 "snaps": [
                   1
                 ]
               }
-            ],
-            "seq": 1
+            ]
           }
         }
       ]
     }
   ]
 }
+
 EOF
 
     jq "$jqfilter" $dir/json | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/csjson
