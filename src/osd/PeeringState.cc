@@ -4488,7 +4488,8 @@ void PeeringState::add_log_entry(const pg_log_entry_t& e, bool applied)
     info.last_user_version = e.user_version;
 
   // log mutation
-  pg_log.add(e, applied);
+  enum PGLog::NonPrimary nonprimary{pool.info.is_nonprimary_shard(info.pgid.shard)};
+  pg_log.add(e, nonprimary, applied);
   psdout(10) << "add_log_entry " << e << dendl;
 }
 
