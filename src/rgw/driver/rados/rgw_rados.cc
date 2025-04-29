@@ -6102,10 +6102,10 @@ void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_cha
   std::ignore = rgw::check_for_errors(completed);
 }
 
-static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
+static void accumulate_raw_stats(const rgw_bucket_dir_stats& header_stats,
                                  map<RGWObjCategory, RGWStorageStats>& stats)
 {
-  for (const auto& pair : header.stats) {
+  for (const auto& pair : header_stats) {
     const RGWObjCategory category = static_cast<RGWObjCategory>(pair.first);
     const rgw_bucket_category_stats& header_stats = pair.second;
 
@@ -6117,6 +6117,12 @@ static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
     s.size_utilized += header_stats.actual_size;
     s.num_objects += header_stats.num_entries;
   }
+}
+
+static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
+                                 map<RGWObjCategory, RGWStorageStats>& stats)
+{
+  return accumulate_raw_stats(header.stats, stats);
 }
 
 int RGWRados::bucket_check_index(const DoutPrefixProvider *dpp, optional_yield y,
@@ -9764,24 +9770,34 @@ int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			       map<RGWObjCategory, RGWStorageStats>& stats,
 			       string *max_marker, bool *syncstopped)
 {
-  vector<rgw_bucket_dir_header> headers;
+  rgw_bucket_snap_id snap_id;
+  bool snap_aggregate = true;
+  if (snap_range.end.is_set()) {
+    snap_id = snap_range.end;
+    if (snap_range.start.is_set() &&
+        snap_range.start.snap_id == snap_range.end.snap_id - 1) {
+      snap_aggregate = false;
+    }
+  }
+  vector<rgw_cls_get_bucket_stats_ret> per_shard_stats;
   map<int, string> bucket_instance_ids;
-  int r = svc.bi_rados->cls_bucket_head(dpp, bucket_info, idx_layout,
-                                        shard_id, &headers, &bucket_instance_ids, y);
+  int r = svc.bi_rados->cls_bucket_get_stats(dpp, bucket_info, idx_layout, shard_id,
+                                             snap_id, snap_aggregate,
+                                             &per_shard_stats, &bucket_instance_ids, y);
   if (r < 0) {
     return r;
   }
 
-  ceph_assert(headers.size() == bucket_instance_ids.size());
+  ceph_assert(per_shard_stats.size() == bucket_instance_ids.size());
 
-  auto iter = headers.begin();
+  auto iter = per_shard_stats.begin();
   map<int, string>::iterator viter = bucket_instance_ids.begin();
   BucketIndexShardsManager ver_mgr;
   BucketIndexShardsManager master_ver_mgr;
   BucketIndexShardsManager marker_mgr;
   char buf[64];
-  for(; iter != headers.end(); ++iter, ++viter) {
-    accumulate_raw_stats(*iter, stats);
+  for(; iter != per_shard_stats.end(); ++iter, ++viter) {
+    accumulate_raw_stats(iter->stats, stats);
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->ver);
     ver_mgr.add(viter->first, string(buf));
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->master_ver);
