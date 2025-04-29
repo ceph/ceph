@@ -152,8 +152,10 @@ struct PGLog : DoutPrefixProvider {
       const hobject_t &hoid,
       version_t v) = 0;
     virtual void partial_write(
-      pg_info_t *info,
-      const pg_log_entry_t &entry) = 0;
+        pg_info_t *info,
+        eversion_t previous_version,
+        const pg_log_entry_t &entry
+      ) = 0;
     virtual ~LogEntryHandler() {}
   };
   using LogEntryHandlerRef = std::unique_ptr<LogEntryHandler>;
@@ -200,13 +202,20 @@ public:
 	  rollback_info_trimmed_to = to;
       }
 
+      eversion_t previous_version;
+      if (rollback_info_trimmed_to_riter == log.rend()) {
+	previous_version = tail;
+      } else {
+	previous_version = rollback_info_trimmed_to_riter->version;
+      }
       while (rollback_info_trimmed_to_riter != log.rbegin()) {
 	--rollback_info_trimmed_to_riter;
 	if (rollback_info_trimmed_to_riter->version > rollback_info_trimmed_to) {
 	  ++rollback_info_trimmed_to_riter;
 	  break;
 	}
-	f(*rollback_info_trimmed_to_riter);
+	f(*rollback_info_trimmed_to_riter, previous_version);
+	previous_version = rollback_info_trimmed_to_riter->version;
       }
 
       return dirty_log;
@@ -260,30 +269,31 @@ public:
     void trim_rollback_info_to(eversion_t to, pg_info_t *info, LogEntryHandler *h) {
       advance_can_rollback_to(
 	to,
-	[&](pg_log_entry_t &entry) {
+	[&](pg_log_entry_t &entry, eversion_t previous_version) {
 	  h->trim(entry);
-	  h->partial_write(info, entry);
+	  h->partial_write(info, previous_version, entry);
 	});
     }
     bool roll_forward_to(eversion_t to, pg_info_t *info, LogEntryHandler *h) {
       return advance_can_rollback_to(
 	to,
-	[&](pg_log_entry_t &entry) {
+	[&](pg_log_entry_t &entry, eversion_t previous_version) {
 	  h->rollforward(entry);
-	  h->partial_write(info, entry);
+	  h->partial_write(info, previous_version, entry);
 	});
     }
 
     void skip_can_rollback_to_to_head(pg_info_t *info, LogEntryHandler *h) {
       advance_can_rollback_to(
 	head,
-        [&](pg_log_entry_t &entry) {
-	  h->partial_write(info, entry);
+        [&](pg_log_entry_t &entry, eversion_t previous_version) {
+	  h->partial_write(info, previous_version, entry);
 	});
     }
 
     void skip_can_rollback_to_to_head() {
-      advance_can_rollback_to(head, [&](const pg_log_entry_t &entry) {});
+      advance_can_rollback_to(head, [&](const pg_log_entry_t &entry,
+					eversion_t previous_version) {});
     }
 
     mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
