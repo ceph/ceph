@@ -168,8 +168,8 @@ class LevelSpec:
                                         group_name))
                                 except rbd.InvalidArgument:
                                     raise ValueError(
-                                        "group {} not enabled for snapshot mirroring".format(
-                                            group_name))
+                                        "group {} is not in snapshot mirror mode".format(
+                                            group_id))
                             else:
                                 image_name = match.group(3)
                                 try:
