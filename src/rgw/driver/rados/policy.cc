@@ -6,7 +6,7 @@
 #include "rgw_string.h"
 #include "rgw_zone.h"
 #include "svc_mdlog.h"
-#include "rgw_policy.h"
+#include "rgw_iam_managed_policy.h"
 #include "account.h"
 #include "cls/user/cls_user_client.h"
 
@@ -34,7 +34,7 @@ static std::string get_name_key( const std::string_view& account_id, const std::
   boost::algorithm::to_lower(lower_name);
   return string_cat_reserve(oid_prefix, account_id, ".", lower_name);
 }
-rgw_raw_obj get_name_obj(const RGWZoneParams& zone, const ManagedPolicyInfo& info)
+rgw_raw_obj get_name_obj(const RGWZoneParams& zone, const rgw::IAM::ManagedPolicyInfo& info)
 {
     return {zone.policy_pool, get_name_key(info.account_id, info.name)};
 }
@@ -51,7 +51,7 @@ static int add(const DoutPrefixProvider* dpp,
         optional_yield y,
         librados::Rados& rados,
         const rgw_raw_obj& obj,
-        const ManagedPolicyInfo& info,
+        const rgw::IAM::ManagedPolicyInfo& info,
         bool exclusive, uint32_t limit)
 {
   resource_metadata meta;
@@ -76,17 +76,16 @@ static int add(const DoutPrefixProvider* dpp,
 static int remove(const DoutPrefixProvider* dpp,
            optional_yield y,
            librados::Rados& rados,
-           const rgw_raw_obj& obj,
-           std::string_view name)
+           PolicyObj& policy)
 {
   rgw_rados_ref ref;
-  int r = rgw_get_rados_ref(dpp, &rados, obj, &ref);
+  int r = rgw_get_rados_ref(dpp, &rados, policy.obj, &ref);
   if (r < 0) {
     return r;
   }
 
   librados::ObjectWriteOperation op;
-  ::cls_user_account_resource_rm(op, name);
+  ::cls_user_account_resource_rm(op, policy.name);
   return ref.operate(dpp, std::move(op), y);
 }
 
@@ -104,27 +103,27 @@ static int remove_index(const DoutPrefixProvider* dpp, optional_yield y,
 
 static int write_path(const DoutPrefixProvider* dpp, optional_yield y,
                       librados::Rados& rados, RGWSI_SysObj& sysobj,
-                      const RGWZoneParams& zone, const ManagedPolicyInfo& info,
-                      PathIndex& index)
+                      const RGWZoneParams& zone, const rgw::IAM::ManagedPolicyInfo& info,
+                      PolicyIndex& index)
 {
   // add the new policy to its account
-  AccountIndex path;
-  path.obj = get_policy_obj(zone, info.account_id);
-  path.name = info.name;
+  PolicyObj policy;
+  policy.obj = get_policy_obj(zone, info.account_id);
+  policy.name = info.name;
 
   constexpr bool exclusive = true;
   constexpr uint32_t no_limit = std::numeric_limits<uint32_t>::max();
-  int r = add(dpp, y, rados, path.obj, info, exclusive, no_limit);
+  int r = add(dpp, y, rados, policy.obj, info, exclusive, no_limit);
   if (r < 0) {
-    ldpp_dout(dpp, 1) << "failed to add policy to account "<< path.obj << " with: " << cpp_strerror(r) << dendl;
+    ldpp_dout(dpp, 1) << "failed to add policy to account "<< policy.obj << " with: " << cpp_strerror(r) << dendl;
     return r;
   }
-  index = std::move(path);
+  index = std::move(policy);
   return 0;
 }
 
 int write_policy(const DoutPrefixProvider *dpp, optional_yield y, librados::Rados& rados, RGWSI_SysObj &sysobj, 
-          const RGWZoneParams &zone, const ManagedPolicyInfo &info, 
+          const RGWZoneParams &zone, const rgw::IAM::ManagedPolicyInfo &info, 
           bool exclusive)
 {
   int r = -EINVAL;
@@ -143,8 +142,8 @@ int write_policy(const DoutPrefixProvider *dpp, optional_yield y, librados::Rado
     }
   }
 
-  PathIndex new_path;
-  r = write_path(dpp, y, rados, sysobj, zone, info, new_path);
+  PolicyIndex policy_index;
+  r = write_path(dpp, y, rados, sysobj, zone, info, policy_index);
   if (r < 0) {
     // roll back new policy object
     ldpp_dout(dpp, 20) << "failed to write path obj " << iObj.obj << " with: " << cpp_strerror(r) << dendl;
@@ -161,7 +160,7 @@ int get_policy(const DoutPrefixProvider *dpp,
               const RGWZoneParams &zone,
               std::string_view account,
               std::string_view name,
-              ManagedPolicyInfo &info)
+              rgw::IAM::ManagedPolicyInfo &info)
 {
   bufferlist bl; 
   auto oid = get_name_key(account, name);
@@ -191,35 +190,33 @@ int delete_policy(const DoutPrefixProvider *dpp,
               std::string_view account,
               std::string_view name)
 {
-  ManagedPolicyInfo info;
+  rgw::IAM::ManagedPolicyInfo info;
   auto oid = get_name_key(account, name);
   int ret = get_policy(dpp, y, sysobj, zone, account, name, info);
   if(ret < 0){
     return ret;
   }
+
   ret = rgw_delete_system_obj(dpp, &sysobj, zone.policy_pool, oid, nullptr, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: deleting iam policy from pool: " << zone.policy_pool.name << ": "
                   << name << ": " << cpp_strerror(ret) << dendl;
   }
 
-  // delete the path object
   if (!info.account_id.empty()) {
-    AccountIndex path;
-    path.obj = get_policy_obj(zone, info.account_id);
-    path.name = info.name;
-    std::ignore = remove(dpp, y, rados, path.obj, path.name);
+    PolicyObj policy;
+    policy.obj = get_policy_obj(zone, info.account_id);
+    policy.name = info.name;
+    std::ignore = remove(dpp, y, rados, policy);
+    
+    uint32_t count = 0;
+    rgwrados::account::resource_count(dpp, y, rados, policy.obj, count);
+    if (!count) {
+      IndexObj iObj;
+      iObj.obj = get_policy_obj(zone, info.account_id);
+      std::ignore = remove_index(dpp, y, sysobj, iObj);
+    }
   }
-
-  /*
-  FIXME: when object in path map is zero. map should delete
-  // delete the name object
-  if (!info.name.empty()) {
-    IndexObj name;
-    name.obj = get_policy_obj(zone, info);
-    std::ignore = remove_index(dpp, y, sysobj, name);
-  }
-  */
 
   return ret;
 }

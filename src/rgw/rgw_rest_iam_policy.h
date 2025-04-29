@@ -4,13 +4,13 @@
 #pragma once
 
 #include "rgw_rest.h"
-#include "rgw_policy.h"
+#include "rgw_iam_managed_policy.h"
 
 class RGWRestPolicy : public RGWOp {
   const uint64_t action;
   const uint32_t perm;
 protected:
-  rgw::ARN resource;
+  rgw::ARN arn;
 
   RGWRestPolicy(uint64_t action, uint32_t perm) : action(action), perm(perm) {}
 public:
@@ -20,7 +20,7 @@ public:
 
 class RGWCreatePolicy : public RGWRestPolicy {
   bufferlist post_body;
-  ManagedPolicyInfo info;
+  rgw::IAM::ManagedPolicyInfo info;
   int forward_to_master(optional_yield y, const rgw::SiteConfig& site, std::string& uid);
 public:
   RGWCreatePolicy(const bufferlist& post_body) : RGWRestPolicy(rgw::IAM::iamCreatePolicy, RGW_CAP_WRITE), post_body(post_body){ }
@@ -31,7 +31,7 @@ public:
 };
 
 class RGWGetPolicy : public RGWRestPolicy {
-  ManagedPolicyInfo info;
+  rgw::IAM::ManagedPolicyInfo info;
 public:
   RGWGetPolicy() : RGWRestPolicy(rgw::IAM::iamGetPolicy, RGW_CAP_READ){ }
   int init_processing(optional_yield y) override;

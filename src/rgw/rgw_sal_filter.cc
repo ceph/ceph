@@ -701,7 +701,7 @@ int FilterDriver::get_oidc_providers(const DoutPrefixProvider* dpp,
 }
 
 int FilterDriver::store_customer_managed_policy(const DoutPrefixProvider* dpp,
-      optional_yield y, const ManagedPolicyInfo& info, bool exclusive)
+      optional_yield y, const rgw::IAM::ManagedPolicyInfo& info, bool exclusive)
 {
   return next->store_customer_managed_policy(dpp, y, info, exclusive);
 }
@@ -709,7 +709,7 @@ int FilterDriver::load_customer_managed_policy(const DoutPrefixProvider* dpp,
                               optional_yield y,
                               std::string_view account,
                               std::string_view name,
-                              ManagedPolicyInfo& info)
+                              rgw::IAM::ManagedPolicyInfo& info)
 {
   return next->load_customer_managed_policy(dpp, y, account, name, info);
 }

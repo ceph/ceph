@@ -1491,7 +1491,7 @@ namespace rgw::sal {
   }
 
 int DBStore::store_customer_managed_policy(const DoutPrefixProvider* dpp,
-      optional_yield y, const ManagedPolicyInfo& info, bool exclusive)
+      optional_yield y, const rgw::IAM::ManagedPolicyInfo& info, bool exclusive)
 {
   return -ENOTSUP;
 }
@@ -1500,7 +1500,7 @@ int DBStore::load_customer_managed_policy(const DoutPrefixProvider* dpp,
                         optional_yield y,
                         std::string_view account,
                         std::string_view name,
-                        ManagedPolicyInfo& info) 
+                        rgw::IAM::ManagedPolicyInfo& info) 
 {
   return -ENOTSUP;
 }
