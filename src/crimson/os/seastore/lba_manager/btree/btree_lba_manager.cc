@@ -738,7 +738,10 @@ BtreeLBAManager::refresh_lba_cursor(
     return refresh_lba_cursor_iertr::now();
   }
 
+  stats.num_refresh_parent_total++;
+
   if (!cursor->parent->is_valid()) {
+    stats.num_refresh_invalid_parent++;
     TRACET("cursor {} parent is invalid, re-search from scratch",
 	   c.trans, *cursor);
     return btree.lower_bound(c, cursor->get_laddr()
@@ -762,12 +765,16 @@ BtreeLBAManager::refresh_lba_cursor(
 	 c.trans, *cursor, viewable, state);
 
   if (!viewable) {
+    stats.num_refresh_unviewable_parent++;
     leaf = leaf->find_pending_version(c.trans, cursor->get_laddr());
     cursor->parent = leaf;
   }
 
   if (!viewable ||
       leaf->modified_since(cursor->modifications)) {
+    if (viewable) {
+      stats.num_refresh_modified_viewable_parent++;
+    }
     auto i = leaf->lower_bound(cursor->get_laddr());
     cursor->pos = i.get_offset();
     cursor->modifications = leaf->modifications;
@@ -799,6 +806,26 @@ void BtreeLBAManager::register_metrics()
         "alloc_extents_iter_nexts",
         stats.num_alloc_extents_iter_nexts,
         sm::description("total number of iterator next operations during extent allocation")
+      ),
+      sm::make_counter(
+        "refresh_parent_total",
+        stats.num_refresh_parent_total,
+        sm::description("total number of refreshed cursors")
+      ),
+      sm::make_counter(
+        "refresh_invalid_parent",
+        stats.num_refresh_invalid_parent,
+        sm::description("total number of refreshed cursors with invalid parents")
+      ),
+      sm::make_counter(
+        "refresh_unviewable_parent",
+        stats.num_refresh_unviewable_parent,
+        sm::description("total number of refreshed cursors with unviewable parents")
+      ),
+      sm::make_counter(
+        "refresh_modified_viewable_parent",
+        stats.num_refresh_modified_viewable_parent,
+        sm::description("total number of refreshed cursors with viewable but modified parents")
       ),
     }
   );

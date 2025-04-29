@@ -259,6 +259,10 @@ private:
   struct {
     uint64_t num_alloc_extents = 0;
     uint64_t num_alloc_extents_iter_nexts = 0;
+    uint64_t num_refresh_parent_total = 0;
+    uint64_t num_refresh_invalid_parent = 0;
+    uint64_t num_refresh_unviewable_parent = 0;
+    uint64_t num_refresh_modified_viewable_parent = 0;
   } stats;
 
   struct alloc_mapping_info_t {
