@@ -100,9 +100,6 @@ void RGWOp_Period_Post::execute(optional_yield y)
 {
   auto cct = driver->ctx();
 
-  // initialize the period without reading from rados
-  s->penv.cfgstore->read_period(this, y, driver->get_zone()->get_current_period_id(), std::nullopt, period);
-
   // decode the period from input
   const auto max_size = cct->_conf->rgw_max_put_param_size;
   bool empty;
@@ -144,10 +141,6 @@ void RGWOp_Period_Post::execute(optional_yield y)
 
   // if period id is empty, handle as 'period commit'
   if (period.get_id().empty()) {
-    if (op_ret < 0) {
-      cerr << "Error initializing realm: " << cpp_strerror(-op_ret) << std::endl;
-      return;
-    }
     op_ret = rgw::commit_period(this, y, s->penv.cfgstore, driver, realm, *realm_writer, current_period, period, error_stream, false);
     if (op_ret == -EEXIST) {
       op_ret = 0; // succeed on retries so the op is idempotent
@@ -309,7 +302,6 @@ void RGWOp_Realm_Get::execute(optional_yield y)
 
   // read realm
   realm.reset(new RGWRealm(id, name));
-  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
   op_ret = rgw::read_realm(this, y, s->penv.cfgstore, realm->get_id(), realm->get_name(), *realm);
   if (op_ret < 0)
     ldpp_dout(this, -1) << "failed to read realm id=" << id

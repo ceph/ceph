@@ -26,7 +26,6 @@ class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
   ObjectCache cache;
 
   std::shared_ptr<RGWSI_SysObj_Cache_CB> cb;
-  rgw::sal::ConfigStore *cfgstore{nullptr};
 
   void normalize_pool_and_obj(const rgw_pool& src_pool, const std::string& src_obj, rgw_pool& dst_pool, std::string& dst_obj);
 protected:

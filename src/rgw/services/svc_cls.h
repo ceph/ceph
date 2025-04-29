@@ -28,7 +28,6 @@ class RGWSI_Cls : public RGWServiceInstance
 {
   RGWSI_Zone *zone_svc{nullptr};
   librados::Rados* rados{nullptr};
-  rgw::sal::ConfigStore* cfgstore{nullptr};
 
   class ClsSubService : public RGWServiceInstance {
     friend class RGWSI_Cls;
