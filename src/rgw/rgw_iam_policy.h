@@ -117,6 +117,10 @@ enum {
   s3DescribeJob,
   s3GetObjectAttributes,
   s3GetObjectVersionAttributes,
+  s3ReplicateDelete,
+  s3ReplicateObject,
+  s3GetObjectVersionForReplication,
+  s3ReplicateTags,
   s3All,
 
   s3objectlambdaGetObject,
@@ -257,6 +261,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3ListBucketMultipartUploads:
   case s3ListBucketVersions:
   case s3ListMultipartUploadParts:
+  case s3GetObjectVersionForReplication:
     return RGW_PERM_READ;
 
   case s3AbortMultipartUpload:
@@ -273,6 +278,9 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutObjectRetention:
   case s3PutObjectLegalHold:
   case s3BypassGovernanceRetention:
+  case s3ReplicateDelete:
+  case s3ReplicateObject:
+  case s3ReplicateTags:
     return RGW_PERM_WRITE;
 
   case s3GetAccelerateConfiguration:
@@ -325,6 +333,8 @@ inline int op_to_perm(std::uint64_t op) {
   return RGW_PERM_INVALID;
 }
 }
+
+const char* action_bit_string(uint64_t action);
 
 enum class PolicyPrincipal {
   Role,

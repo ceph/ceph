@@ -3509,7 +3509,6 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
 {
   const DoutPrefixProvider *dpp;
   CephContext* cct;
-  rgw_obj obj;
   rgw::sal::DataProcessor *filter;
   boost::optional<RGWPutObj_Compress>& compressor;
   bool try_etag_verify;
@@ -3528,6 +3527,18 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   uint64_t ofs{0};
   uint64_t lofs{0}; /* logical ofs */
   std::function<int(map<string, bufferlist>&)> attrs_handler;
+  /*
+    src_bucket_perms, if provided, serves as a fallback mechanism to validate the
+    source bucket's ACL before initiating the fetch operation. It ensures
+    backward compatibility with legacy implementations where the `rgwx-perm-check-uid`
+    arg might not be honored, and the destination zone does not return the
+    `x-rgw-perm-checked` header, which confirms that the source object's
+    permissions were validated against the specified `rgwx-perm-check-uid`.
+
+    @todo drop src_bucket_perms and src_obj in T+2 release.
+  */
+ const rgw_obj& src_obj;
+ const std::optional<RGWUserPermHandler::Bucket>& src_bucket_perms;
 
 public:
   RGWRadosPutObj(const DoutPrefixProvider *dpp,
@@ -3537,7 +3548,9 @@ public:
                  rgw::sal::ObjectProcessor *p,
                  void (*_progress_cb)(off_t, void *),
                  void *_progress_data,
-                 std::function<int(map<string, bufferlist>&)> _attrs_handler) :
+                 std::function<int(map<string, bufferlist>&)> _attrs_handler,
+                 const rgw_obj& src_obj,
+                 const std::optional<RGWUserPermHandler::Bucket>& _src_bucket_perms = std::nullopt) :
                        dpp(dpp),
                        cct(cct),
                        filter(p),
@@ -3547,7 +3560,9 @@ public:
                        processor(p),
                        progress_cb(_progress_cb),
                        progress_data(_progress_data),
-                       attrs_handler(_attrs_handler) {}
+                       attrs_handler(_attrs_handler),
+                       src_obj(src_obj),
+                       src_bucket_perms(_src_bucket_perms) {}
 
 
   int process_attrs(void) {
@@ -3729,6 +3744,23 @@ public:
     } else {
       return "";
     }
+  }
+
+  int handle_headers(const map<string, string>& headers, int http_status) override {
+    if (src_bucket_perms && http_status != 403 && http_status != 401) {
+      auto iter = headers.find("RGWX_PERM_CHECKED");
+      // if the header is not present, we need to check the ACL
+      // of the source bucket against the fallback UID
+      if (iter == headers.end()) {
+        // old ACL should still win s3:ReplicateObject
+        if (!src_bucket_perms->verify_bucket_permission(src_obj.key, rgw::IAM::s3ReplicateObject)) {
+          ldpp_dout(dpp, 4) << "ERROR: " << __func__ << "(): fallback permission check denied" << dendl;
+          return -EACCES;
+        }
+      }
+    }
+
+    return 0;
   }
 };
 
@@ -4140,7 +4172,7 @@ public:
 
 int RGWRados::stat_remote_obj(const DoutPrefixProvider *dpp,
                RGWObjectCtx& obj_ctx,
-               const rgw_user& user_id,
+               const rgw_owner* user_id,
                req_info *info,
                const rgw_zone_id& source_zone,
                const rgw_obj& src_obj,
@@ -4208,11 +4240,11 @@ int RGWRados::stat_remote_obj(const DoutPrefixProvider *dpp,
 
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
   for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
-    int ret = conn->get_obj(dpp, user_id, info, src_obj, pmod, unmod_ptr,
-                        dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
-                        prepend_meta, get_op, rgwx_stat,
-                        sync_manifest, skip_decrypt, nullptr, sync_cloudtiered,
-                        true, &cb, &in_stream_req);
+    int ret = conn->get_obj(dpp, user_id, nullptr, info, src_obj, pmod, unmod_ptr,
+                            dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
+                            prepend_meta, get_op, rgwx_stat,
+                            sync_manifest, skip_decrypt, nullptr, sync_cloudtiered,
+                            true, &cb, &in_stream_req);
     if (ret < 0) {
       return ret;
     }
@@ -4288,7 +4320,8 @@ int RGWFetchObjFilter_Default::filter(CephContext *cct,
 }
 
 int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
-               const rgw_user& user_id,
+               const rgw_owner* user_id,
+               const rgw_user* perm_check_uid,
                req_info *info,
                const rgw_zone_id& source_zone,
                const rgw_obj& dest_obj,
@@ -4319,7 +4352,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                const rgw_obj& stat_dest_obj,
                std::optional<rgw_zone_set_entry> source_trace_entry,
                rgw_zone_set *zones_trace,
-               std::optional<uint64_t>* bytes_transferred)
+               std::optional<uint64_t>* bytes_transferred,
+               bool keep_tags)
 {
   /* source is in a different zonegroup, copy from there */
 
@@ -4379,6 +4413,32 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
 
   std::optional<rgw_user> override_owner;
 
+  // load src bucket perm handler for backward compatibility
+  // @todo drop me in t+2 release.
+  std::optional<RGWUserPermHandler::Bucket> src_bucket_perms;
+  if (perm_check_uid) {
+    std::unique_ptr<rgw::sal::Bucket> src_bucket;
+    ret = driver->load_bucket(rctx.dpp, src_obj.bucket, &src_bucket, rctx.y);
+    if (ret < 0) {
+      ldpp_dout(rctx.dpp, 0) << "ERROR: failed to load src bucket=" << src_obj << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    RGWUserPermHandler user_perms(rctx.dpp, driver, cct, *perm_check_uid);
+    ret = user_perms.init();
+    if (ret < 0) {
+      ldpp_dout(rctx.dpp, 0) << "ERROR: failed to init user perms for: " << src_obj << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    src_bucket_perms.emplace();
+    ret = user_perms.init_bucket(src_bucket->get_info(), src_bucket->get_attrs(), &*src_bucket_perms);
+    if (ret < 0) {
+      ldpp_dout(rctx.dpp, 0) << "ERROR: failed to init bucket perms for: " << src_obj << " ret=" << ret << dendl;
+      return ret;
+    }
+  }
+
   RGWRadosPutObj cb(rctx.dpp, cct, plugin, compressor, &processor, progress_cb, progress_data,
                     [&](map<string, bufferlist>& obj_attrs) {
                       const rgw_placement_rule *ptail_rule;
@@ -4412,7 +4472,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                         return ret;
                       }
                       return 0;
-                    });
+                    }, src_obj, src_bucket_perms);
 
   string etag;
   real_time set_mtime;
@@ -4447,7 +4507,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
 
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
   for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
-    ret = conn->get_obj(rctx.dpp, user_id, info, src_obj, pmod, unmod_ptr,
+    ret = conn->get_obj(rctx.dpp, user_id, perm_check_uid, info, src_obj, pmod, unmod_ptr,
                         dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver, prepend_meta, get_op, rgwx_stat,
                         sync_manifest, skip_decrypt, &dst_zone_trace,
                         sync_cloudtiered, true,
@@ -4598,6 +4658,10 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
     set_copy_attrs(cb.get_attrs(), attrs, attrs_mod);
   } else {
     attrs = cb.get_attrs();
+  }
+
+  if (!keep_tags) {
+    attrs.erase(RGW_ATTR_TAGS);
   }
 
   if (copy_if_newer) {
@@ -4826,7 +4890,8 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     // response to the frontend socket. call fetch_remote_obj() synchronously so
     // that only one thread tries to suspend that coroutine
     const req_context rctx{dpp, null_yield, nullptr};
-    return fetch_remote_obj(dest_obj_ctx, remote_user, info, source_zone,
+    const rgw_owner remote_user_owner(remote_user);
+    return fetch_remote_obj(dest_obj_ctx, &remote_user_owner, &remote_user, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, &src_bucket_info,
                dest_placement, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
@@ -5342,7 +5407,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                       }
                       cb_processed = true;
                       return 0;
-                    });
+                    }, dest_obj);
 
   // fetch mtime of the object and other attrs of the object
   // to check for restore_status
