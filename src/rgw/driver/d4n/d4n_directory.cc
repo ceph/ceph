@@ -972,6 +972,10 @@ void parse_response(T t, std::vector<std::vector<std::string>>& responses)
     });
 }
 
+//explicit instantiation for 100 elements
+template int BlockDirectory::get<100>(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& blocks, optional_yield y);
+
+template <size_t N>
 int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& blocks, optional_yield y)
 {
   request req;
@@ -1108,6 +1112,130 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, CacheBlock* block, option
     return -EINVAL;
   }
 
+  return 0;
+}
+
+int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& blocks, optional_yield y)
+{
+  boost::redis::generic_response resp;
+  request req;
+  for (auto block : blocks) {
+    std::string key = build_index(&block);
+    std::vector<std::string> fields;
+    ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
+
+    fields.push_back("blockID");
+    fields.push_back("version");
+    fields.push_back("deleteMarker");
+    fields.push_back("size");
+    fields.push_back("globalWeight");
+
+    fields.push_back("objName");
+    fields.push_back("bucketName");
+    fields.push_back("creationTime");
+    fields.push_back("dirty");
+    fields.push_back("hosts");
+    fields.push_back("etag");
+    fields.push_back("objSize");
+    fields.push_back("userId");
+    fields.push_back("displayName");
+
+    try {
+      req.push("HGETALL", key);
+    } catch (std::exception &e) {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+      return -EINVAL;
+    }
+  } //end - for
+
+  try {
+    boost::system::error_code ec;
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+  //i is used to index blocks
+  //j is used to keep a track of number of elements for aggregate type map or array
+  auto i = 0, j = 0;
+  bool field_key=true, field_val=false;
+  std::string key, fieldkey, fieldval, prev_val;
+  int num_elements = 0;
+  for (auto& element : resp.value()) {
+    ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): i is: " << i << dendl;
+    CacheBlock* block = &blocks[i];
+    std::string key = build_index(block);
+    ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
+    if (element.data_type == boost::redis::resp3::type::array || element.data_type == boost::redis::resp3::type::map) {
+      num_elements = element.aggregate_size;
+      if (num_elements == 0) {
+        i++;
+        j = 0;
+      }
+      ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "() num_elements: " << num_elements << dendl;
+      continue;
+    } else {
+      if (j < num_elements) {
+        if (field_key && !field_val) {
+          if (element.value == "blockID" || element.value == "version" || element.value == "deleteMarker" ||
+              element.value == "size" || element.value == "globalWeight" || element.value == "objName" ||
+              element.value == "bucketName" || element.value == "creationTime" || element.value == "dirty" ||
+              element.value == "hosts" || element.value == "etag" || element.value == "objSize" ||
+              element.value == "userId" || element.value == "displayName") {
+            prev_val = element.value;
+            ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "() field key: " << prev_val << dendl;
+            field_key = false;
+            field_val = true;
+          }
+          continue;
+        } else {
+          ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "() field val: " << element.value << dendl;
+          if (prev_val == "blockID") {
+            block->blockID = std::stoull(element.value);
+          } else if (prev_val == "version") {
+            block->version = element.value;
+          } else if (prev_val == "deleteMarker") {
+            block->deleteMarker = (std::stoi(element.value) != 0);
+          } else if (prev_val == "size") {
+            block->size = std::stoull(element.value);
+          } else if (prev_val == "globalWeight") {
+            block->globalWeight = std::stoull(element.value);
+          } else if (prev_val == "objName") {
+            block->cacheObj.objName = element.value;
+          } else if (prev_val == "bucketName") {
+            block->cacheObj.bucketName = element.value;
+          } else if (prev_val == "creationTime") {
+            block->cacheObj.creationTime = element.value;
+          } else if (prev_val == "dirty") {
+            block->cacheObj.dirty = (std::stoi(element.value) != 0);
+          } else if (prev_val == "hosts") {
+            boost::split(block->cacheObj.hostsList, element.value, boost::is_any_of("_"));
+          } else if (prev_val == "etag") {
+            block->cacheObj.etag = element.value;
+          } else if (prev_val == "objSize") {
+            block->cacheObj.size = std::stoull(element.value);
+          } else if (prev_val == "userId") {
+            block->cacheObj.user_id = element.value;
+          } else if (prev_val == "displayName") {
+            block->cacheObj.display_name = element.value;
+          }
+          j++;
+          field_key= true;
+          field_val = false;
+          prev_val.clear();
+        }
+      }
+      if (j == num_elements) {
+        i++;
+        j = 0;
+      }
+    }
+  }
   return 0;
 }
 
