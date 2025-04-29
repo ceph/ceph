@@ -882,6 +882,14 @@ void foo(T t, std::vector<std::vector<std::string>>& responses)
     });
 }
 
+template <> struct fmt::formatter<boost::redis::resp3::type> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<boost::redis::resp3::node> : fmt::formatter<std::string> {
+    template <typename FormatContext> auto format(boost::redis::resp3::node const& node, FormatContext& ctx) const {
+        return format_to(ctx.out(), "({}@{}, {}, {})", node.data_type, node.depth, node.value,
+                         node.aggregate_size);
+    }
+};
+
 TEST_F(BlockDirectoryFixture, Pipeline)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
@@ -901,6 +909,7 @@ TEST_F(BlockDirectoryFixture, Pipeline)
       ASSERT_EQ((bool)ec, false);
     }
     {
+      //using boost::redis::response
       std::vector<std::string> fields;
       fields.push_back("name");
       request req;
@@ -917,6 +926,61 @@ TEST_F(BlockDirectoryFixture, Pipeline)
       for (auto vec : responses) {
         if (!vec.empty()) {
           std::cout << "HMGET: " << vec[0] << std::endl;
+        }
+      }
+    }
+    {
+      //using boost::redis::generic_response
+      std::vector<std::string> fields;
+      fields.push_back("name");
+      request req;
+      req.push("HGETALL", "testkey1");
+      req.push("HGETALL", "testkey2");
+
+      ASSERT_EQ(req.get_commands(), 2);
+      boost::redis::generic_response resp;
+      conn->async_exec(req, resp, yield[ec]);
+      ASSERT_EQ((bool)ec, false);
+      //debug only
+      fmt::print("generic: {}\n", resp.value());
+
+      //1st node gives data type and number of elements of that type
+      //if data type is aggrgate, like array, map, then next n elements will be values of the aggregate type
+      std::unordered_map<std::string, std::unordered_map<std::string,std::string> > key_val_map;
+      auto i = 0, j = 0;
+      std::string key, fieldkey, fieldval;
+      int num_elements = 0;
+      for (auto& element : resp.value()) {
+        if (element.data_type == boost::redis::resp3::type::array || element.data_type == boost::redis::resp3::type::map) {
+          num_elements = element.aggregate_size;
+          if (j == 0) {
+            key = "testkey1";
+            j++;
+          } else {
+            key = "testkey2";
+          }
+          continue;
+        } else {
+          if (i < num_elements) {
+            fieldkey = element.value;
+            i++;
+          } else {
+            fieldval = element.value;
+            key_val_map.emplace(key, std::unordered_map<std::string,std::string>{{fieldkey,fieldval}});
+            key.clear();
+            fieldkey.clear();
+            fieldval.clear();
+            i = 0;
+          }
+        }
+      }
+      std::cout << "HGETALL response size is: " << key_val_map.size() << std::endl;
+      for (auto& it : key_val_map) {
+        std::cout << "key: " << it.first << std::endl;
+        std::unordered_map<std::string,std::string> field_key_val_map = it.second;
+        for (auto& inner_it : field_key_val_map) {
+          std::cout << "fieldkey: " << inner_it.first << std::endl;
+          std::cout << "fieldval: " << inner_it.second << std::endl;
         }
       }
     }
