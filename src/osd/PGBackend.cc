@@ -431,8 +431,9 @@ void PGBackend::partial_write(
         if (!entry.is_written_shard(shard_id_t(shard))) {
 	  if (!info->partial_writes_last_complete.contains(shard_id_t(shard))) {
 	    // 1st partial write since all logs were updated
+	    eversion_t previous_version(entry.version.epoch, entry.version.version - 1);
 	    info->partial_writes_last_complete[shard_id_t(shard)] =
-	      std::pair(entry.prior_version, entry.version);
+	      std::pair(previous_version, entry.version);
 	  } else if (info->partial_writes_last_complete[shard_id_t(shard)]
 		     .second.version + 1 == entry.version.version) {
 	    // Subsequent partial write, version is sequential

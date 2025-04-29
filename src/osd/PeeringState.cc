@@ -7030,7 +7030,7 @@ boost::statechart::result PeeringState::Stray::react(const MInfoRec& infoevt)
 	       << " our last_update=" << ps->info.last_update << dendl;
     // Our last update must be in the range described by partial write
     // last_complete
-    ceph_assert(ps->info.last_update >= pwlc.first);
+    ceph_assert(ps->info.last_update.version >= pwlc.first.version);
     // Last complete must match the partial write last_update
     ceph_assert(pwlc.second == infoevt.info.last_update);
   } else {
