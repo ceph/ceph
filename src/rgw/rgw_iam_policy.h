@@ -185,10 +185,10 @@ enum {
   iamGenerateServiceLastAccessedDetails,
   iamSimulateCustomPolicy,
   iamSimulatePrincipalPolicy,
-  iamAll,
   iamCreatePolicy,
   iamGetPolicy,
   iamDeletePolicy,
+  iamAll,
 
   stsAssumeRole,
   stsAssumeRoleWithWebIdentity,
