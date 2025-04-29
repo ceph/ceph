@@ -4049,9 +4049,9 @@ int reweight::by_utilization(
   } else {
     // by osd utilization
     int num_osd = std::max<size_t>(1, pgm.osd_stat.size());
-    if ((uint64_t)pgm.osd_sum.statfs.total / num_osd
+    if ((uint64_t)pgm.osd_sum.statfs.total_raw / num_osd
 	< g_conf()->mon_reweight_min_bytes_per_osd) {
-      *ss << "Refusing to reweight: we only have " << pgm.osd_sum.statfs.kb()
+      *ss << "Refusing to reweight: we only have " << pgm.osd_sum.statfs.kb_total_raw()
 	  << " kb across all osds!\n";
       return -EDOM;
     }
@@ -4064,7 +4064,7 @@ int reweight::by_utilization(
     }
 
     average_util = (double)pgm.osd_sum.statfs.get_used_raw() /
-      (double)pgm.osd_sum.statfs.total;
+      (double)pgm.osd_sum.statfs.total_raw;
   }
 
   // adjust down only if we are above the threshold
@@ -4115,7 +4115,7 @@ int reweight::by_utilization(
 	pgs_by_osd[p.first] / osdmap.crush->get_item_weightf(p.first);
     } else {
       osd_util.second =
-	(double)p.second.statfs.get_used_raw() / (double)p.second.statfs.total;
+	(double)p.second.statfs.get_used_raw() / (double)p.second.statfs.total_raw;
     }
     util_by_osd.push_back(osd_util);
   }
