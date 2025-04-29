@@ -138,6 +138,13 @@
   allowed.  `rbd trash mv` command now behaves the same way as `rbd rm` in this
   scenario.
 
+* RGW: Replication policies now validate permissions using `s3:ReplicateObject`,
+  `s3:ReplicateDelete`, and `s3:ReplicateTags` for destination buckets. For source
+  buckets, both `s3:GetObjectVersionForReplication` and `s3:GetObject(Version)`
+  are supported. Actions like `s3:GetObjectAcl`, `s3:GetObjectLegalHold`, and
+  `s3:GetObjectRetention` are also considered when fetching the source object.
+  Replication of tags is controlled by the `s3:GetObject(Version)Tagging` permission.
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option

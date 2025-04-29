@@ -47,7 +47,6 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
   unique_lock guard(out_headers_lock);
 
   char line[len + 1];
-
   char *s = (char *)ptr, *end = (char *)ptr + len;
   char *p = line;
   ldpp_dout(this, 30) << "receive_http_header" << dendl;
@@ -58,22 +57,27 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
       continue;
     }
     if (*s == '\n') {
+      if (p == line) {
+        // End of headers (empty line "\r\n")
+        ldpp_dout(this, 30) << "All headers received" << dendl;
+        return handle_headers(out_headers, http_status);
+      }
       *p = '\0';
-      ldpp_dout(this, 30) << "received header:" << line << dendl;
+      ldpp_dout(this, 30) << "received header: " << line << dendl;
       // TODO: fill whatever data required here
       char *l = line;
       char *tok = strsep(&l, " \t:");
       if (tok && l) {
         while (*l == ' ')
           l++;
- 
+
         if (strcmp(tok, "HTTP") == 0 || strncmp(tok, "HTTP/", 5) == 0) {
           http_status = atoi(l);
           if (http_status == 100) /* 100-continue response */
             continue;
           status = rgw_http_error_to_errno(http_status);
         } else {
-          /* convert header field name to upper case  */
+          /* convert header field name to upper case */
           char *src = tok;
           char buf[len + 1];
           size_t i;
@@ -93,10 +97,12 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
             return r;
         }
       }
+      p = line;
     }
     if (s != end)
       *p++ = *s++;
   }
+
   return 0;
 }
 
@@ -990,6 +996,15 @@ int RGWHTTPStreamRWRequest::complete_request(const DoutPrefixProvider* dpp,
     *pheaders = std::move(out_headers);
   }
   return status;
+}
+
+int RGWHTTPStreamRWRequest::handle_headers(const map<string, string>& headers, int http_status)
+{
+  if (cb) {
+    return cb->handle_headers(headers, http_status);
+  }
+
+  return 0;
 }
 
 int RGWHTTPStreamRWRequest::handle_header(const string& name, const string& val)

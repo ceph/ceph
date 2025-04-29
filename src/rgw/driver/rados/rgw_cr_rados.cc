@@ -12,6 +12,7 @@
 #include "rgw_cr_rest.h"
 #include "rgw_rest_conn.h"
 #include "rgw_rados.h"
+#include "rgw_data_sync.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
@@ -812,7 +813,8 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
   std::optional<uint64_t> bytes_transferred;
   const req_context rctx{dpp, null_yield, nullptr};
   int r = store->getRados()->fetch_remote_obj(obj_ctx,
-                       user_id.value_or(rgw_user()),
+                       NULL, /* uid */
+                       user_id ? &*user_id : nullptr, /* replication uid */
                        NULL, /* req_info */
                        source_zone,
                        dest_obj.get_obj(),
@@ -843,7 +845,8 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                        stat_dest_obj,
                        source_trace_entry,
                        &zones_trace,
-                       &bytes_transferred);
+                       &bytes_transferred,
+                       keep_tags);
 
   if (r < 0) {
     ldpp_dout(dpp, 0) << "store->fetch_remote_obj() returned r=" << r << dendl;
@@ -873,7 +876,6 @@ int RGWAsyncStatRemoteObj::_send_request(const DoutPrefixProvider *dpp)
 {
   RGWObjectCtx obj_ctx(store);
 
-  string user_id;
   char buf[16];
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->getRados()->instance_id());
 
@@ -882,7 +884,7 @@ int RGWAsyncStatRemoteObj::_send_request(const DoutPrefixProvider *dpp)
 
   int r = store->getRados()->stat_remote_obj(dpp,
                        obj_ctx,
-                       rgw_user(user_id),
+                       nullptr, /* user_id */
                        nullptr, /* req_info */
                        source_zone,
                        src_obj,
@@ -925,9 +927,55 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
     return 0;
   }
 
-  RGWAccessControlPolicy policy;
+  RGWObjTags obj_tags;
+  bufferlist bl_tag;
+  if (obj->get_attr(RGW_ATTR_TAGS, bl_tag)) {
+    auto bliter = bl_tag.cbegin();
+    try {
+      obj_tags.decode(bliter);
+    } catch (buffer::error &err) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": caught buffer::error couldn't decode TagSet " << dendl;
+      return -EIO;
+    }
+  }
+
+  rgw_sync_pipe_params params;
+  if (!sync_pipe.info.handler.find_obj_params(obj->get_key(),
+                                              obj_tags.get_tags(),
+                                              &params)) {
+    return -ERR_PRECONDITION_FAILED;
+  }
+
+  if (params.mode == rgw_sync_pipe_params::MODE_USER) {
+    std::optional<RGWUserPermHandler> user_perms;
+    RGWUserPermHandler::Bucket dest_bucket_perms;
+
+    if (!params.user.has_value()) {
+      ldpp_dout(dpp, 20) << "ERROR: " << __func__ << ": user level sync but user param not set" << dendl;
+      return -EPERM;
+    }
+    user_perms.emplace(dpp, store, dpp->get_cct(), *params.user);
+
+    ret = user_perms->init();
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to init user perms for uid=" << *params.user << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    ret = user_perms->init_bucket(sync_pipe.dest_bucket_info, sync_pipe.dest_bucket_attrs, &dest_bucket_perms);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to init bucket perms for uid=" << *params.user << " bucket=" << bucket->get_key() << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    if (!dest_bucket_perms.verify_bucket_permission(obj->get_key(), rgw::IAM::s3ReplicateDelete)) {
+      ldpp_dout(dpp, 20) << "ERROR: " << __func__ << ": user does not have permission to delete object" << dendl;
+      return -EPERM;
+    }
+  }
 
   /* decode policy */
+  RGWAccessControlPolicy policy;
   bufferlist bl;
   if (obj->get_attr(RGW_ATTR_ACL, bl)) {
     auto bliter = bl.cbegin();
