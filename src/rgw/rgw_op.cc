@@ -3847,25 +3847,6 @@ void RGWDeleteBucket::execute(optional_yield y)
     op_ret = -ERR_NO_SUCH_BUCKET;
     return;
   }
-  RGWObjVersionTracker ot;
-  ot.read_version = s->bucket->get_version();
-
-  if (s->system_request) {
-    string tag = s->info.args.get(RGW_SYS_PARAM_PREFIX "tag");
-    string ver_str = s->info.args.get(RGW_SYS_PARAM_PREFIX "ver");
-    if (!tag.empty()) {
-      ot.read_version.tag = tag;
-      uint64_t ver;
-      string err;
-      ver = strict_strtol(ver_str.c_str(), 10, &err);
-      if (!err.empty()) {
-        ldpp_dout(this, 0) << "failed to parse ver param" << dendl;
-        op_ret = -EINVAL;
-        return;
-      }
-      ot.read_version.ver = ver;
-    }
-  }
 
   const bool own_bucket = s->penv.site->get_zonegroup().get_id() == s->bucket->get_info().zonegroup;
 
