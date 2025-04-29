@@ -379,6 +379,7 @@ void PGMapDigest::print_oneline_summary(ceph::Formatter *f, ostream *out) const
     f->dump_int("total_avail_bytes", osd_sum.statfs.available);
     f->dump_int("total_used_bytes", osd_sum.statfs.get_used());
     f->dump_int("total_used_raw_bytes", osd_sum.statfs.get_used_raw());
+    f->dump_int("total_avail_raw_bytes", osd_sum.statfs.get_avail_raw());
   }
 
   // make non-negative; we can get negative values if osds send
@@ -1935,6 +1936,7 @@ void PGMap::dump_osd_stats(ostream& ss) const
   tab.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("USED_RAW", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("AVAIL_RAW", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("TOTAL", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("HB_PEERS", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("PG_SUM", TextTable::LEFT, TextTable::RIGHT);
@@ -1947,6 +1949,7 @@ void PGMap::dump_osd_stats(ostream& ss) const
         << byte_u_t(p->second.statfs.get_used())
         << byte_u_t(p->second.statfs.available)
         << byte_u_t(p->second.statfs.get_used_raw())
+        << byte_u_t(p->second.statfs.get_avail_raw())
         << byte_u_t(p->second.statfs.total)
         << p->second.hb_peers
         << get_num_pg_by_osd(p->first)
@@ -1958,6 +1961,7 @@ void PGMap::dump_osd_stats(ostream& ss) const
       << byte_u_t(osd_sum.statfs.get_used())
       << byte_u_t(osd_sum.statfs.available)
       << byte_u_t(osd_sum.statfs.get_used_raw())
+      << byte_u_t(osd_sum.statfs.get_avail_raw())
       << byte_u_t(osd_sum.statfs.total)
       << TextTable::endrow;
 
@@ -1972,12 +1976,14 @@ void PGMap::dump_osd_sum_stats(ostream& ss) const
   tab.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("USED_RAW", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("AVAIL_RAW", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("TOTAL", TextTable::LEFT, TextTable::RIGHT);
 
   tab << "sum"
       << byte_u_t(osd_sum.statfs.get_used())
       << byte_u_t(osd_sum.statfs.available)
       << byte_u_t(osd_sum.statfs.get_used_raw())
+      << byte_u_t(osd_sum.statfs.get_avail_raw())
       << byte_u_t(osd_sum.statfs.total)
       << TextTable::endrow;
 
