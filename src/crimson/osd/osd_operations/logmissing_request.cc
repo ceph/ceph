@@ -22,7 +22,7 @@ namespace crimson::osd {
 
 LogMissingRequest::LogMissingRequest(crimson::net::ConnectionRef&& conn,
 		       Ref<MOSDPGUpdateLogMissing> &&req)
-  : l_conn{std::move(conn)},
+  : RemoteOperation{std::move(conn)},
     req{std::move(req)}
 {}
 
@@ -82,7 +82,7 @@ seastar::future<> LogMissingRequest::with_pg(
           std::move(trigger), req->min_epoch);
       });
     }).then_interruptible([this, pg](auto) {
-      return pg->do_update_log_missing(req, r_conn);
+      return pg->do_update_log_missing(req, get_remote_connection());
     }).then_interruptible([this] {
       logger().debug("{}: complete", *this);
       return handle.complete();
