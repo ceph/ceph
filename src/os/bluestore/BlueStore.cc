@@ -12441,6 +12441,12 @@ int BlueStore::set_collection_opts(
   if (c->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &dval)) {
     c->compression_req_ratio = dval;
   }
+  int64_t csum_min_block;
+  if (c->pool_opts.get(pool_opts_t::CSUM_MIN_BLOCK, &csum_min_block)) {
+    c->debug_skip_block_write = (csum_min_block == 1);
+  } else {
+    c->debug_skip_block_write = false;
+  }
   return 0;
 }
 
@@ -12808,6 +12814,11 @@ int BlueStore::_do_read(
 
   if (offset + length > o->onode.size) {
     length = o->onode.size - offset;
+  }
+
+  if (c->debug_skip_block_write) {
+    bl.append_zero(length);
+    return length;
   }
 
   auto start = mono_clock::now();
@@ -16290,7 +16301,8 @@ void BlueStore::_do_write_small(
                    << "~" << b_len << " pad 0x" << head_pad << " + 0x"
                    << tail_pad << std::dec << " of mutable " << *b << dendl;
 
-          if (!g_conf()->bluestore_debug_omit_block_device_write) {
+          if (!g_conf()->bluestore_debug_omit_block_device_write ||
+              !c->debug_skip_block_write) {
           if (b_len < prefer_deferred_size) {
               dout(20) << __func__ << " deferring small 0x" << std::hex
 		       << b_len << std::dec << " unused write via deferred" << dendl;
@@ -16381,7 +16393,8 @@ void BlueStore::_do_write_small(
 
           b->dirty_blob().calc_csum(b_off, bl);
 
-          if (!g_conf()->bluestore_debug_omit_block_device_write) {
+          if (!g_conf()->bluestore_debug_omit_block_device_write ||
+              !c->debug_skip_block_write) {
           bluestore_deferred_op_t *op = _get_deferred_op(txc, bl.length());
           op->op = bluestore_deferred_op_t::OP_WRITE;
           int r = b->get_blob().map(
@@ -16677,7 +16690,8 @@ void BlueStore::_do_write_big_apply_deferred(
   b0->dirty_blob().mark_used(le->blob_offset, le->length);
   txc->statfs_delta.stored() += le->length;
 
-  if (!g_conf()->bluestore_debug_omit_block_device_write) {
+  if (!g_conf()->bluestore_debug_omit_block_device_write ||
+      !c->debug_skip_block_write) {
     bluestore_deferred_op_t* op = _get_deferred_op(txc, bl.length());
     op->op = bluestore_deferred_op_t::OP_WRITE;
     op->extents.swap(dctx.res_extents);
@@ -17158,7 +17172,8 @@ int BlueStore::_do_alloc_write(
                         wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
     // queue io
-    if (!g_conf()->bluestore_debug_omit_block_device_write) {
+    if (!g_conf()->bluestore_debug_omit_block_device_write ||
+        !coll->debug_skip_block_write) {
       if (data_size < prefer_deferred_size_snapshot) {
 	dout(20) << __func__ << " deferring 0x" << std::hex
 		 << l->length()  << " write via deferred, pds=0x"
