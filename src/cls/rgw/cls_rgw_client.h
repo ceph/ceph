@@ -345,6 +345,11 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
                             rgw_bucket_snap_range snap_range,
                             rgw_cls_list_ret* result);
 
+void cls_rgw_bucket_get_stats_op(librados::ObjectReadOperation& op,
+                                 rgw_bucket_snap_id snap_id,
+                                 bool aggregate,
+                                 rgw_cls_get_bucket_stats_ret *result);
+
 void cls_rgw_bilog_list(librados::ObjectReadOperation& op,
                         const std::string& marker, uint32_t max,
                         cls_rgw_bi_log_list_ret *pdata, int *ret = nullptr);

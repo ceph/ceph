@@ -226,6 +226,21 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
 	  new ClsBucketIndexOpCtx<rgw_cls_list_ret>(result, NULL));
 }
 
+void cls_rgw_bucket_get_stats_op(librados::ObjectReadOperation& op,
+                                 rgw_bucket_snap_id snap_id,
+                                 bool aggregate,
+                                 rgw_cls_get_bucket_stats_ret *result)
+{
+  bufferlist in;
+  rgw_cls_get_bucket_stats_op call;
+  call.snap_id = snap_id;
+  call.aggregate = aggregate;
+  encode(call, in);
+
+  op.exec(RGW_CLASS, RGW_BUCKET_GET_STATS, in,
+	  new ClsBucketIndexOpCtx<rgw_cls_get_bucket_stats_ret>(result, nullptr));
+}
+
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes)
 {
   bufferlist in;

@@ -1122,6 +1122,60 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 } // rgw_bucket_list
 
+int rgw_bucket_get_stats(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  auto iter = in->cbegin();
+
+  rgw_cls_get_bucket_stats_op op;
+  try {
+    decode(op, iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: %s: failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  CLS_LOG(10, "entered %s", __func__);
+
+  rgw_cls_get_bucket_stats_ret ret;
+
+  rgw_bucket_dir_header header;
+  ClsOmapAccess omap(hctx);
+  int rc = read_bucket_header(&omap, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: %s: failed to read header", __func__);
+    return rc;
+  }
+
+  ret.ver = header.ver;
+  ret.master_ver = header.master_ver;
+  ret.max_marker = header.max_marker;
+  ret.syncstopped = header.syncstopped;
+
+  if (!op.snap_id.is_set()) {
+    ret.stats = header.stats;
+  } else {
+    rgw_bucket_dir_snap_stats snap_stats;
+    int r = read_snap_stats(&omap, header,
+                            op.snap_id,
+                            &snap_stats);
+    if (r < 0 && r != -ENOENT) {
+      CLS_LOG(1, "ERROR: %s: failed to read snap stats for snap=%lld: r=%d", __func__, (long long)op.snap_id, r);
+      return r;
+    }
+    if (!op.aggregate) {
+      CLS_LOG(20, "%s(): returning per-snap stats", __func__);
+      ret.stats = snap_stats.snap_stats;
+    } else {
+      CLS_LOG(20, "%s(): returning snap aggregated stats", __func__);
+      ret.stats = snap_stats.total_stats;
+    }
+  }
+
+  encode(ret, *out);
+
+  return 0;
+}
+
 static int write_bucket_header(ClsOmapAccess *omap, rgw_bucket_dir_header *header)
 {
   header->ver++;
@@ -5930,6 +5984,7 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_bucket_init_index;
   cls_method_handle_t h_rgw_bucket_set_tag_timeout;
   cls_method_handle_t h_rgw_bucket_list;
+  cls_method_handle_t h_rgw_bucket_get_stats;
   cls_method_handle_t h_rgw_bucket_check_index;
   cls_method_handle_t h_rgw_bucket_rebuild_index;
   cls_method_handle_t h_rgw_bucket_update_stats;
@@ -5986,6 +6041,7 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, RGW_BUCKET_INIT_INDEX2, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_init_index, &h_rgw_bucket_init_index);
   cls_register_cxx_method(h_class, RGW_BUCKET_SET_TAG_TIMEOUT, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_set_tag_timeout, &h_rgw_bucket_set_tag_timeout);
   cls_register_cxx_method(h_class, RGW_BUCKET_LIST, CLS_METHOD_RD, rgw_bucket_list, &h_rgw_bucket_list);
+  cls_register_cxx_method(h_class, RGW_BUCKET_GET_STATS, CLS_METHOD_RD, rgw_bucket_get_stats, &h_rgw_bucket_get_stats);
   cls_register_cxx_method(h_class, RGW_BUCKET_CHECK_INDEX, CLS_METHOD_RD, rgw_bucket_check_index, &h_rgw_bucket_check_index);
   cls_register_cxx_method(h_class, RGW_BUCKET_REBUILD_INDEX, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_rebuild_index, &h_rgw_bucket_rebuild_index);
   cls_register_cxx_method(h_class, RGW_BUCKET_UPDATE_STATS, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_update_stats, &h_rgw_bucket_update_stats);
