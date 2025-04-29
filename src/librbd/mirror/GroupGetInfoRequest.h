@@ -75,6 +75,7 @@ private:
   Context *m_on_finish;
 
   bufferlist m_outbl;
+  bool m_enoent_is_group_dne = false;
 
   void get_id();
   void handle_get_id(int r);
