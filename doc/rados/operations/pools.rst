@@ -399,6 +399,12 @@ You may set values for the following keys:
    :Description: Sets the maximum size for chunks: that is, chunks larger than this are broken into smaller blobs no larger than this size before compression is performed.
    :Type: Unsigned Integer
 
+.. note:: Compressed pool statistics are visible using ``ceph df detail``.
+   Objects within compressed pools will show their original uncompressed
+   sizes via most API calls or CLI commands. For example: RGW buckets 
+   placed directly in a compressed RADOS pool with no RGW level compression 
+   will report uncompressed bucket sizes via ``radosgw-admin``.
+
 .. _size:
 
 .. describe:: size
