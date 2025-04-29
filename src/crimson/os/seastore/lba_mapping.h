@@ -47,7 +47,7 @@ public:
   virtual bool is_data_stable() const = 0;
   virtual bool is_clone() const = 0;
   bool is_zero_reserved() const {
-    return !get_val().is_real();
+    return get_val().is_zero();
   }
 
   LBAMappingRef duplicate() const;

@@ -31,6 +31,13 @@ public:
                                 // or contains compressed data. Block aligned.
     bufferlist object_data;     // Object data. Needed to put into caches.
     bool is_compressed() const {return compressed_length != 0;}
+    blob_data_t()
+      : real_length(0), compressed_length(0) {}
+    blob_data_t(
+      uint32_t real_length, uint32_t compressed_length,
+      const bufferlist& disk_data, const bufferlist& object_data)
+      : real_length(real_length), compressed_length(compressed_length),
+        disk_data(disk_data), object_data(object_data) {};
   };
   using blob_vec = std::vector<blob_data_t>;
   struct blob_data_printer {
@@ -58,6 +65,13 @@ public:
   void do_write(
     uint32_t location,
     bufferlist& data
+  );
+
+  void do_write_with_blobs(
+    uint32_t location,
+    uint32_t data_end,
+    uint32_t ref_end,
+    blob_vec& blobs
   );
 
   void debug_iterate_buffers(
@@ -175,6 +189,11 @@ private:
 
   BlobRef _blob_create_full(
     bufferlist& disk_data);
+
+  BlobRef _blob_create_full_compressed(
+    bufferlist& disk_data,
+    uint32_t compressed_length,
+    bufferlist& object_data);
 
   void _try_reuse_allocated_l(
     exmp_it after_punch_it,   // hint, we could have found it ourselves
