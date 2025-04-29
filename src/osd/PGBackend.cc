@@ -413,51 +413,53 @@ void PGBackend::try_stash(
 
 void PGBackend::partial_write(
    pg_info_t *info,
+   eversion_t previous_version,
    const pg_log_entry_t &entry)
 {
   ceph_assert(info != nullptr);
-  auto dpp = get_parent()->get_dpp();
-  if (!entry.written_shards.empty()) {
-    ldpp_dout(dpp, 20) << __func__ << " version=" << entry.version
-		       << " written_shards=" << entry.written_shards
-		       << " present_shards=" << entry.present_shards
-		       << " pwlc=" << info->partial_writes_last_complete
-		       << dendl;
-    const pg_pool_t &pool = get_parent()->get_pool();
-    for (unsigned int shard = 0;
-	 shard < get_parent()->get_pool().size;
-	 shard++) {
-      if (pool.is_nonprimary_shard(shard_id_t(shard))) {
-        if (!entry.is_written_shard(shard_id_t(shard))) {
-	  if (!info->partial_writes_last_complete.contains(shard_id_t(shard))) {
-	    // 1st partial write since all logs were updated
-	    info->partial_writes_last_complete[shard_id_t(shard)] =
-	      std::pair(entry.prior_version, entry.version);
-	  } else if (info->partial_writes_last_complete[shard_id_t(shard)]
-		     .second.version + 1 == entry.version.version) {
-	    // Subsequent partial write, version is sequential
-	    info->partial_writes_last_complete[shard_id_t(shard)].second =
-	      entry.version;
-	  } else {
-	    // Subsequent partial write, discontiguous versions
-	    ldpp_dout(dpp, 20) << __func__ << " cannot update shard " << shard
-			       << dendl;
-	  }
-        } else {
-	  // Log updated or shard absent, partial write entry not required
-          info->partial_writes_last_complete.erase(shard_id_t(shard));
-	}
-      }
-    }
-    ldpp_dout(dpp, 20) << __func__ << " after pwlc="
-		       << info->partial_writes_last_complete << dendl;
-  } else {
-    // All shard updated - clear partial write data
-    if (!info->partial_writes_last_complete.empty()) {
-      ldpp_dout(dpp, 20) << __func__ << " clear pwlc" << dendl;
-    }
-    info->partial_writes_last_complete.clear();
+  if (entry.written_shards.empty() && info->partial_writes_last_complete.empty()) {
+    return;
   }
+  auto dpp = get_parent()->get_dpp();
+  ldpp_dout(dpp, 20) << __func__ << " version=" << entry.version
+		     << " written_shards=" << entry.written_shards
+		     << " present_shards=" << entry.present_shards
+		     << " pwlc=" << info->partial_writes_last_complete
+		     << " previous_version=" << previous_version
+		     << dendl;
+  const pg_pool_t &pool = get_parent()->get_pool();
+  for (shard_id_t shard : pool.nonprimary_shards) {
+    auto pwlc_iter = info->partial_writes_last_complete.find(shard);
+    if (!entry.is_written_shard(shard)) {
+      if (pwlc_iter == info->partial_writes_last_complete.end()) {
+	// 1st partial write since all logs were updated
+	info->partial_writes_last_complete[shard] =
+	  std::pair(previous_version, entry.version);
+
+	continue;
+      }
+      auto &&[old_v,  new_v] = pwlc_iter->second;
+      if (old_v == new_v) {
+	old_v = previous_version;
+	new_v = entry.version;
+      } else if (new_v == previous_version) {
+	// Subsequent partial write, contiguous versions
+	new_v = entry.version;
+      } else {
+	// Subsequent partial write, discontiguous versions
+	ldpp_dout(dpp, 20) << __func__ << " cannot update shard " << shard
+			   << dendl;
+      }
+    } else if (pwlc_iter != info->partial_writes_last_complete.end()) {
+      auto &&[old_v,  new_v] = pwlc_iter->second;
+      // Log updated or shard absent, partial write entry is a no-op
+      // FIXME: In a later commit (or later PR) we should look at other ways of
+      //        actually clearing the PWLC once all shards have seen the update.
+      old_v = new_v = entry.version;
+    }
+  }
+  ldpp_dout(dpp, 20) << __func__ << " after pwlc="
+		     << info->partial_writes_last_complete << dendl;
 }
 
 void PGBackend::remove(

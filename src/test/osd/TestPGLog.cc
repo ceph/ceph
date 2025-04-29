@@ -234,8 +234,10 @@ public:
     void trim(
       const pg_log_entry_t &entry) override {}
     void partial_write(
-      pg_info_t *info,
-      const pg_log_entry_t &entry) override {}
+        pg_info_t *info,
+        eversion_t previous_version,
+        const pg_log_entry_t &entry
+      ) override {}
   };
 
   template <typename missing_t>
@@ -360,8 +362,10 @@ struct TestHandler : public PGLog::LogEntryHandler {
   void trim(
     const pg_log_entry_t &entry) override {}
   void partial_write(
-    pg_info_t *info,
-    const pg_log_entry_t &entry) override {}
+      pg_info_t *info,
+      eversion_t previous_version,
+      const pg_log_entry_t &entry
+    ) override {}
 };
 
 TEST_F(PGLogTest, rewind_divergent_log) {
