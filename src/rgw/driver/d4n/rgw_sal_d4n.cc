@@ -435,13 +435,13 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
     } //end - else
 
     rgw::d4n::BlockDirectory* blockDir = this->filter->get_block_dir();
-    auto remainder_size = entries.size();
+    int remainder_size = entries.size();
     size_t j = 0, start_j = 0;
     while (remainder_size > 0) {
-      std::vector<rgw::d4n::CacheBlock> blocks(100);
+      auto batch_size = std::min(max, remainder_size);
+      std::vector<rgw::d4n::CacheBlock> blocks(batch_size);
       start_j = j;
-      size_t batch_size = std::min(static_cast<size_t>(100), remainder_size);
-      for (size_t i = 0; i < batch_size; i++) {
+      for (auto i = 0; i < batch_size; i++) {
         ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " objects[j]: " << entries[j].key.name << dendl;
         ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " remainder_size: " << remainder_size << dendl;
         if (entries[j].key.instance == "null") {
@@ -491,10 +491,10 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
         start_j++;
       }
 
-      if (remainder_size <= 100) {
+      if (remainder_size <= max) {
         remainder_size = 0;
       } else {
-        remainder_size = remainder_size - 100;
+        remainder_size = remainder_size - max;
       }
     }
   } //d4n_write_cache_enabled = true

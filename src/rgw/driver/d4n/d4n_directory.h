@@ -117,7 +117,10 @@ class BlockDirectory: public Directory {
 
     int set(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y);
     int get(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y);
-    //Pipelined version of get for list bucket
+    //Pipelined version of get using boost::redis::response for list bucket
+    template <size_t N = 100>
+    int get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& blocks, optional_yield y);
+    //Pipelined version of get using boost::redis::generic_response
     int get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& blocks, optional_yield y);
     int copy(const DoutPrefixProvider* dpp, CacheBlock* block, const std::string& copyName, const std::string& copyBucketName, optional_yield y);
     int del(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y, bool multi=false);
