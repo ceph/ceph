@@ -5930,6 +5930,7 @@ void RGWCopyObj::execute(optional_yield y)
     if (op_ret < 0) {
       return;
     }
+    obj_size = s->src_object->get_size();
 
     /* Check if the src object is cloud-tiered */
     bufferlist bl;
@@ -5937,7 +5938,8 @@ void RGWCopyObj::execute(optional_yield y)
       RGWObjManifest m;
       try{
         decode(m, bl);
-        if (m.is_tier_type_s3()) {
+	// if object size is zero, then it transitioned object
+        if (m.is_tier_type_s3() && (obj_size == 0)) {
           op_ret = -ERR_INVALID_OBJECT_STATE;
           s->err.message = "This object was transitioned to cloud-s3";
           ldpp_dout(this, 4) << "Cannot copy cloud tiered object. Failing with "
@@ -5952,8 +5954,7 @@ void RGWCopyObj::execute(optional_yield y)
       }
     }
 
-    obj_size = s->src_object->get_size();
-  
+
     if (!s->system_request) { // no quota enforcement for system requests
       if (s->src_object->get_accounted_size() > static_cast<size_t>(s->cct->_conf->rgw_max_put_size)) {
         op_ret = -ERR_TOO_LARGE;
