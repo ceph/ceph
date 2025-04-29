@@ -362,7 +362,6 @@ class SpecStore():
         if update_create:
             self.spec_created[name] = datetime_now()
         self._save(name)
-        self._save_certs_and_keys(spec)
 
     def save_rank_map(self,
                       name: str,
@@ -486,7 +485,6 @@ class SpecStore():
         # type: (str) -> bool
         found = service_name in self._specs
         if found:
-            self._rm_certs_and_keys(self._specs[service_name])
             del self._specs[service_name]
             if service_name in self._rank_maps:
                 del self._rank_maps[service_name]
