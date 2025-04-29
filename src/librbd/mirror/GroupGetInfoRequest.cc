@@ -32,6 +32,7 @@ void GroupGetInfoRequest<I>::send() {
   }
 
   if (m_group_id.empty()) {
+    m_enoent_is_group_dne = true;
     get_id();
   } else {
     get_info();
@@ -109,8 +110,9 @@ void GroupGetInfoRequest<I>::handle_get_info(int r) {
   }
 
   if (r == -ENOENT) {
-    ldout(cct, 20) << "mirroring is disabled" << dendl;
-    finish(r);
+    ldout(cct, 20) << "mirroring is disabled, enoent_is_group_dne="
+                   << m_enoent_is_group_dne << dendl;
+    finish(m_enoent_is_group_dne ? 0 : -ENOENT);
     return;
   }
   if (r < 0) {
