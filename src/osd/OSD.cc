@@ -1085,17 +1085,9 @@ void OSDService::set_osd_stat_repaired(int64_t count)
 float OSDService::compute_adjusted_ratio(osd_stat_t new_stat, float *pratio,
 				         uint64_t adjust_used)
 {
-  *pratio =
-   ((float)new_stat.statfs.get_used_raw()) / ((float)new_stat.statfs.total);
-
-  if (adjust_used) {
-    dout(20) << __func__ << " Before kb_used() " << new_stat.statfs.kb_used()  << dendl;
-    if (new_stat.statfs.available > adjust_used)
-      new_stat.statfs.available -= adjust_used;
-    else
-      new_stat.statfs.available = 0;
-    dout(20) << __func__ << " After kb_used() " << new_stat.statfs.kb_used() << dendl;
-  }
+  uint64_t used = new_stat.statfs.get_used_raw();
+  uint64_t total = new_stat.statfs.total_raw;
+  *pratio = ((float)used) / ((float)total);
 
   // Check all pgs and adjust kb_used to include all pending backfill data
   int64_t backfill_adjusted = 0;
@@ -1104,15 +1096,16 @@ float OSDService::compute_adjusted_ratio(osd_stat_t new_stat, float *pratio,
   for (auto p : pgs) {
     backfill_adjusted += p->get_pg_stat_adjustment();
   }
-  if (backfill_adjusted) {
-    dout(20) << __func__ << " before backfill adjusted " << new_stat << dendl;
-    if (new_stat.statfs.available > backfill_adjusted)
-      new_stat.statfs.available -= backfill_adjusted;
-    else
-      new_stat.statfs.available = 0;
-    dout(20) << __func__ << " after backfill adjusted " << new_stat << dendl;
-  }
-  float ratio = ((float)new_stat.statfs.get_used_raw()) / ((float)new_stat.statfs.total);
+  uint64_t avail = (float)new_stat.statfs.get_avail_raw();
+  uint64_t adjustment = adjust_used + backfill_adjusted;;
+  adjustment = avail < adjustment ? avail : adjustment;
+
+  dout(20) << __func__ << " adjust used:" << adjust_used
+                       << " backfill adjusted:" << backfill_adjusted
+                       << " avail raw:" << avail
+                       << " target adjustment: " << adjustment
+                       << dendl;
+  float ratio = ((float)(used + adjustment) / ((float)total));
   dout(5) << __func__ << " ratio:" << ratio << " pratio: " << *pratio << dendl;
   return ratio;
 }
