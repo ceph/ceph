@@ -28,7 +28,7 @@
 #include "rgw_req_context.h"
 #include "include/random.h"
 #include "include/function2.hpp"
-#include "rgw_policy.h"
+#include "rgw_iam_managed_policy.h"
 
 // FIXME: following subclass dependencies
 #include "driver/rados/rgw_user.h"
@@ -666,12 +666,12 @@ class Driver {
                                    std::string_view tenant,
                                    std::vector<RGWOIDCProviderInfo>& providers) = 0;
     virtual int store_customer_managed_policy(const DoutPrefixProvider* dpp,
-          optional_yield y,const ManagedPolicyInfo& info,bool exclusive) = 0;
+          optional_yield y,const rgw::IAM::ManagedPolicyInfo& info,bool exclusive) = 0;
     virtual int load_customer_managed_policy(const DoutPrefixProvider* dpp,
                             optional_yield y,
                             std::string_view account,
                             std::string_view name,
-                            ManagedPolicyInfo& info) = 0;
+                            rgw::IAM::ManagedPolicyInfo& info) = 0;
     virtual int delete_customer_managed_policy(const DoutPrefixProvider* dpp,
                             optional_yield y,
                             std::string_view account,

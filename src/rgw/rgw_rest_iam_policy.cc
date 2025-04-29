@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include "rgw_rest_policy.h"
+#include "rgw_rest_iam_policy.h"
 #include "rgw_rest_iam.h"
 #include <regex>
 #include <string>
@@ -155,7 +155,7 @@ int RGWCreatePolicy::init_processing(optional_yield y)
   return 0;
 }
 
-static void dump_ManagedPolicyInfo(const ManagedPolicyInfo& info, Formatter *f)
+static void dump_ManagedPolicyInfo(const rgw::IAM::ManagedPolicyInfo& info, Formatter *f)
 {
   f->open_object_section("Policy");
   encode_json("PolicyName", info.name, f);

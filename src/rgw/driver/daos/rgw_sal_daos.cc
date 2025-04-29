@@ -2165,7 +2165,7 @@ int DaosStore::get_oidc_providers(const DoutPrefixProvider* dpp,
 }
 
 int DaosStore::store_customer_managed_policy(const DoutPrefixProvider* dpp,
-optional_yield y, const ManagedPolicyInfo& info, bool exclusive)
+optional_yield y, const rgw::IAM::ManagedPolicyInfo& info, bool exclusive)
 {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
@@ -2174,7 +2174,7 @@ int DaosStore::load_customer_managed_policy(const DoutPrefixProvider* dpp,
                           optional_yield y,
                           std::string_view account,
                           std::string_view name,
-                          ManagedPolicyInfo& info) 
+                          rgw::IAM::ManagedPolicyInfo& info) 
 {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }

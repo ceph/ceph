@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "rgw_policy.h"
+#include "rgw_iam_managed_policy.h"
 #include "common/ceph_time.h"
 #include "include/rados/librados_fwd.hpp"
 #include "rgw_zone.h"
@@ -73,10 +73,10 @@ rgw_raw_obj get_policy_obj(const RGWZoneParams& zone,
 /* 
  * Return the rados object that stores the given account's policy.
  */
-rgw_raw_obj get_name_obj(const RGWZoneParams& zone, const ManagedPolicyInfo& info);
+rgw_raw_obj get_name_obj(const RGWZoneParams& zone, const rgw::IAM::ManagedPolicyInfo& info);
 
 int write_policy(const DoutPrefixProvider *dpp, optional_yield y, librados::Rados& rados, RGWSI_SysObj &sysobj, 
-          const RGWZoneParams &zone, const ManagedPolicyInfo &info, 
+          const RGWZoneParams &zone, const rgw::IAM::ManagedPolicyInfo &info, 
           bool exclusive);
 int get_policy(const DoutPrefixProvider *dpp,
               optional_yield y,
@@ -84,7 +84,7 @@ int get_policy(const DoutPrefixProvider *dpp,
               const RGWZoneParams &zone,
               std::string_view account,
               std::string_view name,
-              ManagedPolicyInfo &info);
+              rgw::IAM::ManagedPolicyInfo &info);
 int delete_policy(const DoutPrefixProvider *dpp,
               optional_yield y,
               librados::Rados& rados,

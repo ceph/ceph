@@ -32,7 +32,7 @@ extern "C" {
 #include "rgw_role.h"
 #include "rgw_multi.h"
 #include "rgw_putobj_processor.h"
-#include "rgw_policy.h"
+#include "rgw_iam_managed_policy.h"
 
 namespace rgw::sal {
 
@@ -1090,12 +1090,12 @@ class MotrStore : public StoreDriver {
                            std::string_view tenant,
                            std::vector<RGWOIDCProviderInfo>& providers) override;
     int store_customer_managed_policy(const DoutPrefixProvider* dpp,
-          optional_yield y, const ManagedPolicyInfo& info, bool exclusive) override;
+          optional_yield y, const rgw::IAM::ManagedPolicyInfo& info, bool exclusive) override;
     int load_customer_managed_policy(const DoutPrefixProvider* dpp,
                     optional_yield y,
                     std::string_view account,
                     std::string_view name,
-                    ManagedPolicyInfo& info) override;
+                    rgw::IAM::ManagedPolicyInfo& info) override;
     int delete_customer_managed_policy(const DoutPrefixProvider* dpp,
                         optional_yield y,
                         std::string_view account,

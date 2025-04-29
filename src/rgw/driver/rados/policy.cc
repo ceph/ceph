@@ -6,7 +6,7 @@
 #include "rgw_string.h"
 #include "rgw_zone.h"
 #include "svc_mdlog.h"
-#include "rgw_policy.h"
+#include "rgw_iam_managed_policy.h"
 #include "account.h"
 #include "cls/user/cls_user_client.h"
 
@@ -34,7 +34,7 @@ static std::string get_name_key( const std::string_view& account_id, const std::
   boost::algorithm::to_lower(lower_name);
   return string_cat_reserve(oid_prefix, account_id, ".", lower_name);
 }
-rgw_raw_obj get_name_obj(const RGWZoneParams& zone, const ManagedPolicyInfo& info)
+rgw_raw_obj get_name_obj(const RGWZoneParams& zone, const rgw::IAM::ManagedPolicyInfo& info)
 {
     return {zone.policy_pool, get_name_key(info.account_id, info.name)};
 }
@@ -51,7 +51,7 @@ static int add(const DoutPrefixProvider* dpp,
         optional_yield y,
         librados::Rados& rados,
         const rgw_raw_obj& obj,
-        const ManagedPolicyInfo& info,
+        const rgw::IAM::ManagedPolicyInfo& info,
         bool exclusive, uint32_t limit)
 {
   resource_metadata meta;
@@ -104,7 +104,7 @@ static int remove_index(const DoutPrefixProvider* dpp, optional_yield y,
 
 static int write_path(const DoutPrefixProvider* dpp, optional_yield y,
                       librados::Rados& rados, RGWSI_SysObj& sysobj,
-                      const RGWZoneParams& zone, const ManagedPolicyInfo& info,
+                      const RGWZoneParams& zone, const rgw::IAM::ManagedPolicyInfo& info,
                       PathIndex& index)
 {
   // add the new policy to its account
@@ -124,7 +124,7 @@ static int write_path(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int write_policy(const DoutPrefixProvider *dpp, optional_yield y, librados::Rados& rados, RGWSI_SysObj &sysobj, 
-          const RGWZoneParams &zone, const ManagedPolicyInfo &info, 
+          const RGWZoneParams &zone, const rgw::IAM::ManagedPolicyInfo &info, 
           bool exclusive)
 {
   int r = -EINVAL;
@@ -161,7 +161,7 @@ int get_policy(const DoutPrefixProvider *dpp,
               const RGWZoneParams &zone,
               std::string_view account,
               std::string_view name,
-              ManagedPolicyInfo &info)
+              rgw::IAM::ManagedPolicyInfo &info)
 {
   bufferlist bl; 
   auto oid = get_name_key(account, name);
@@ -191,7 +191,7 @@ int delete_policy(const DoutPrefixProvider *dpp,
               std::string_view account,
               std::string_view name)
 {
-  ManagedPolicyInfo info;
+  rgw::IAM::ManagedPolicyInfo info;
   auto oid = get_name_key(account, name);
   int ret = get_policy(dpp, y, sysobj, zone, account, name, info);
   if(ret < 0){
