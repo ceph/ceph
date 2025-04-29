@@ -91,7 +91,8 @@ CachedExtent* CachedExtent::get_transactional_view(transaction_id_t tid) {
 
 std::ostream &LogicalCachedExtent::print_detail(std::ostream &out) const
 {
-  out << ", laddr=" << laddr;
+  out << ", laddr=" << laddr
+      << ", seen=" << seen_by_users;
   return print_detail_l(out);
 }
 

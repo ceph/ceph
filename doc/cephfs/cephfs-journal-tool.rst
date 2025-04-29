@@ -21,11 +21,11 @@ examining, modifying, and extracting data from journals.
 Syntax
 ------
 
-::
+.. parsed-literal::
 
-    cephfs-journal-tool journal <inspect|import|export|reset>
-    cephfs-journal-tool header <get|set>
-    cephfs-journal-tool event <get|splice|apply> [filter] <list|json|summary|binary>
+    cephfs-journal-tool [:ref:`options<cephfs_journal_tool_options>`] journal <inspect|import|export|reset>
+    cephfs-journal-tool [:ref:`options<cephfs_journal_tool_options>`] header <get|set> <trimmed_pos|expire_pos|write_pos|pool_id> <value>
+    cephfs-journal-tool [:ref:`options<cephfs_journal_tool_options>`] event <get|splice|recover_dentries> [filter] <list|json|summary|binary>
 
 
 The tool operates in three modes: ``journal``, ``header`` and ``event``,
@@ -43,11 +43,13 @@ This should be your starting point to assess the state of a journal.
   present and can be decoded.
 
 * ``import`` and ``export`` read and write binary dumps of the journal
-  in a sparse file format.  Pass the filename as the last argument.  The
-  export operation may not work reliably for journals which are damaged (missing
+  in a sparse file format. Pass the filename as the last argument. The import operation checks
+  if the imported journal FSID matches with the online cluster FSID. Using ``--force`` skips
+  the FSID check. The export operation may not work reliably for journals which are damaged (missing
   objects).
 
-* ``reset`` truncates a journal, discarding any information within it.
+* ``reset`` truncates a journal, discarding any information within it. Using ``--force`` does a
+  hard reset without trying to recover from on-disk.
 
 
 Example: journal inspect
@@ -93,7 +95,7 @@ Header mode
 * ``get`` outputs the current content of the journal header
 
 * ``set`` modifies an attribute of the header.  Allowed attributes are
-  ``trimmed_pos``, ``expire_pos`` and ``write_pos``.
+  ``trimmed_pos``, ``expire_pos``,  ``write_pos`` and ``pool_id``.
 
 Example: header get/set
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -134,7 +136,9 @@ Actions:
 
 * ``get`` read the events from the log
 * ``splice`` erase events or regions in the journal
-* ``apply`` extract file system metadata from events and attempt to apply it to the metadata store.
+* ``recover_dentries`` recover the dentries from the journal. It does a selective offline replay
+  which only reads out dentries and writes them to the backing store if their version is greater
+  than what is currently in the backing store.
 
 Filtering:
 
@@ -152,7 +156,7 @@ Filters may be combined on an AND basis (i.e. only the intersection of events fr
 Output modes:
 
 * ``binary``: write each event as a binary file, within a folder whose name is controlled by ``--path``
-* ``json``: write all events to a single file, as a JSON serialized list of objects
+* ``json``: write all events to a single file specified by ``--path``, as a JSON serialized list of objects.
 * ``summary``: write a human readable summary of the events read to standard out
 * ``list``: write a human readable terse listing of the type of each event, and
   which file paths the event affects.
@@ -209,11 +213,11 @@ Example: event mode
       OPEN: 1
       UPDATE: 2
 
-    # cephfs-journal-tool event apply --range 0x410bf1.. summary
+    # cephfs-journal-tool event recover_dentries summary
     Events by type:
-      NOOP: 1
-      SESSION: 1
-      UPDATE: 9
+      LID: 1
+      SUBTREEMAP: 1
+    Errors: 0
 
     # cephfs-journal-tool event get --inode=1099511627776 list
     0x40068b UPDATE:  (mkdir)
@@ -237,3 +241,12 @@ Example: event mode
     # cephfs-journal-tool event get binary --path bin_events
     Wrote output to binary files in directory 'bin_events'
 
+.. _cephfs_journal_tool_options:
+
+Options
+~~~~~~~
+
+* ``--rank=<filesystem>:{mds-rank|all}`` Used to specify the filesystem, the MDS rank or all ranks.
+* ``--journal=<mdlog|purge_queue>`` The journal type. The default value is ``mdlog``, which is the
+  only option that supports event mode. When ``purge_queue`` is used, the journal scanner creates
+  a PurgeItem object and adds it to EventMap for processing.

@@ -36,12 +36,10 @@ const get_phy_tree_root_node_ret get_phy_tree_root_node<
       return {true,
               c.cache.get_extent_viewable_by_trans(c.trans, backref_root)};
     } else {
-      c.cache.account_absent_access(c.trans.get_src());
       return {false,
               Cache::get_extent_iertr::make_ready_future<CachedExtentRef>()};
     }
   } else {
-    c.cache.account_absent_access(c.trans.get_src());
     return {false,
             Cache::get_extent_iertr::make_ready_future<CachedExtentRef>()};
   }
@@ -161,7 +159,7 @@ BtreeBackrefManager::new_mapping(
 {
   ceph_assert(
     is_aligned(
-      key.get_addr_type() == paddr_types_t::SEGMENT ?
+      key.is_absolute_segmented() ?
 	key.as_seg_paddr().get_segment_off() :
 	key.as_blk_paddr().get_device_off(),
       cache.get_block_size()));

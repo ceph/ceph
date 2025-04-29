@@ -3,7 +3,7 @@ from io import StringIO
 
 import json
 
-from .conn import get_gateway_connection, get_gateway_iam_connection, get_gateway_secure_connection, get_gateway_s3_client, get_gateway_sns_client
+from .conn import get_gateway_connection, get_gateway_iam_connection, get_gateway_secure_connection, get_gateway_s3_client, get_gateway_sns_client, get_gateway_sts_connection, get_gateway_temp_s3_client
 
 class Cluster:
     """ interface to run commands against a distinct ceph cluster """
@@ -29,6 +29,7 @@ class Gateway:
         self.iam_connection = None
         self.s3_client = None
         self.sns_client = None
+        self.sts_connection = None
 
     @abstractmethod
     def start(self, args = []):
@@ -195,7 +196,7 @@ class ZoneConn(object):
             self.iam_conn = get_gateway_iam_connection(self.zone.gateways[0], self.credentials, region)
             self.s3_client = get_gateway_s3_client(self.zone.gateways[0], self.credentials, region)
             self.sns_client = get_gateway_sns_client(self.zone.gateways[0], self.credentials, region)
-
+            self.temp_s3_client = None
             # create connections for the rest of the gateways (if exist)
             for gw in list(self.zone.gateways):
                 get_gateway_connection(gw, self.credentials)
@@ -208,6 +209,11 @@ class ZoneConn(object):
 
     def get_iam_connection(self):
         return self.iam_conn
+
+    def get_temp_s3_connection(self, credentials, session_token):
+        region = "" if self.zone.zonegroup is None else self.zone.zonegroup.name
+        self.temp_s3_client = get_gateway_temp_s3_client(self.zone.gateways[0], credentials, session_token, region)
+        return self.temp_s3_client
 
     def get_bucket(self, bucket_name, credentials):
         raise NotImplementedError

@@ -237,9 +237,7 @@ std::optional<pg_scrubbing_status_t> Session::get_reservation_status() const
   s.m_osd_to_respond = req ? req->osd : 0;
   s.m_ordinal_of_requested_replica = m_reservations->active_requests_cnt();
   s.m_num_to_reserve = scrbr->get_pg()->get_actingset().size() - 1;
-  s.m_duration_seconds =
-      duration_cast<seconds>(context<ScrubMachine>().get_time_scrubbing())
-	  .count();
+  s.m_duration_seconds = ceil<seconds>(machine.get_time_scrubbing()).count();
   return s;
 }
 

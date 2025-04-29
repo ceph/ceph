@@ -260,7 +260,7 @@ SSE-S3 Settings
 
 
 QoS settings
-------------
+============
 
 .. versionadded:: Nautilus
 
