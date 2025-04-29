@@ -1183,7 +1183,7 @@ int expand_log(
     for (; e <= target_version; e.version++) {
       entry.version = e;
       std::cout << "adding " << e << std::endl;
-      log.add(entry, true);
+      log.add(entry);
     }
     info.last_complete = target_version;
     info.last_update = target_version;
