@@ -292,6 +292,10 @@ sleep options are disabled (set to 0),
 - :confval:`osd_recovery_sleep_hdd`
 - :confval:`osd_recovery_sleep_ssd`
 - :confval:`osd_recovery_sleep_hybrid`
+- :confval:`osd_recovery_sleep_degraded`
+- :confval:`osd_recovery_sleep_degraded_hdd`
+- :confval:`osd_recovery_sleep_degraded_ssd`
+- :confval:`osd_recovery_sleep_degraded_hybrid`
 - :confval:`osd_scrub_sleep`
 - :confval:`osd_delete_sleep`
 - :confval:`osd_delete_sleep_hdd`
