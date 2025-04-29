@@ -20,13 +20,11 @@ def namespace_validator(ioctx: rados.Ioctx) -> None:
 
 
 def group_validator(group: rbd.Group) -> None:
-    try:
-        info = group.mirror_group_get_info()
-    except rbd.ObjectNotFound:
-        raise rbd.InvalidArgument("Error getting mirror group info")
-    if (info['state'] != rbd.RBD_MIRROR_GROUP_ENABLED
-            or info['image_mode'] != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT):
-        raise rbd.InvalidArgument("Group not enabled for snapshot mirroring")
+    info = group.mirror_group_get_info()
+    if info['state'] != rbd.RBD_MIRROR_GROUP_ENABLED:
+        raise rbd.InvalidArgument("Mirroring is not enabled")
+    if info['image_mode'] != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
+        raise rbd.InvalidArgument("Invalid mirror image mode")
 
 
 class GroupSpec(NamedTuple):
