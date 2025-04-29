@@ -315,7 +315,7 @@ int execute_info(const po::variables_map &vm,
   mirror_group_info.state = RBD_MIRROR_GROUP_DISABLED;
   r = rbd.mirror_group_get_info(io_ctx, group_name.c_str(), &mirror_group_info,
                                 sizeof(mirror_group_info));
-  if (r < 0 && r != -ENOENT) {
+  if (r < 0) {
     return r;
   }
 
