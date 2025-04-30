@@ -2523,6 +2523,23 @@ check_group_snap_exists()
     test 1 = "${count}" || { fail "snap count = ${count}"; return 1; }
 }
 
+wait_for_named_group_snap_not_present()
+{
+    local cluster=$1
+    local group_spec=$2
+    local snap=$3
+    local count
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        get_group_snap_count "${cluster}" "${group_spec}" "${snap}" count
+        test 0 = "${count}" && return 0
+    done
+    fail "Group snap still present after waiting"
+    return 1
+}
+
 mirror_group_resync()
 {
     local cluster=$1

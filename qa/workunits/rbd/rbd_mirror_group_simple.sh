@@ -1923,6 +1923,8 @@ test_create_group_with_multiple_images_do_io()
   # this next extra mirror_group_snapshot should not be needed - waiting for fix TODO - coding leftover 38
   mirror_group_snapshot "${primary_cluster}" "${pool}/${group}"
   mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}"/"${group}"
+  #TODO this next line should be removed when the issue on line 45 is fixed (there should be no need to wait)
+  wait_for_named_group_snap_not_present "${secondary_cluster}" "${pool}/${group}" "${snap}"
   check_group_snap_doesnt_exist "${secondary_cluster}" "${pool}/${group}" "${snap}"
 
   for loop_instance in $(seq 0 $(("${image_count}"-1))); do
