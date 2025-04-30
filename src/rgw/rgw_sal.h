@@ -36,6 +36,7 @@
 struct RGWBucketEnt;
 class RGWRESTMgr;
 class RGWLC;
+class RGWRestore;
 struct rgw_user_bucket;
 class RGWUsageBatch;
 class RGWCoroutinesManagerRegistry;
@@ -51,6 +52,7 @@ class RGWZonePlacementInfo;
 struct rgw_pubsub_topic;
 struct RGWOIDCProviderInfo;
 struct RGWRoleInfo;
+struct RGWRestoreEntry;
 
 using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
 
@@ -159,7 +161,7 @@ static constexpr uint32_t FLAG_PREVENT_VERSIONING = 0x0002;
 // delete object where head object is missing)
 static constexpr uint32_t FLAG_FORCE_OP = 0x0004;
 
-enum RGWRestoreStatus : uint8_t {
+enum class RGWRestoreStatus : uint8_t {
   None  = 0,
   RestoreAlreadyInProgress = 1,
   CloudRestored = 2,
@@ -472,6 +474,9 @@ class Driver {
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     /** Get a @a Lifecycle object. Used to manage/run lifecycle transitions */
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
+    /** Get a @a Restore object. Used to manage/run restore objects */
+    virtual std::unique_ptr<Restore> get_restore(const int n_objs,
+		    		const std::vector<std::string_view>& obj_names) = 0;
     /** Reset the temporarily restored objects which are expired */
     virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) = 0;
 
@@ -563,6 +568,8 @@ class Driver {
                                          const DoutPrefixProvider* dpp) = 0;
     /** Get access to the lifecycle management thread */
     virtual RGWLC* get_rgwlc(void) = 0;
+    /** Get access to the tier restore management thread */
+    virtual RGWRestore* get_rgwrestore(void) = 0;   
     /** Get access to the coroutine registry.  Used to create new coroutine managers */
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() = 0;
 
@@ -1265,15 +1272,11 @@ class Object {
 			   optional_yield y) = 0;
     virtual int restore_obj_from_cloud(Bucket* bucket,
 			   rgw::sal::PlacementTier* tier,
-			   rgw_placement_rule& placement_rule,
-			   rgw_bucket_dir_entry& o,
 			   CephContext* cct,
-         		   RGWObjTier& tier_config,
-			   uint64_t olh_epoch,
 		           std::optional<uint64_t> days,
+   	 		   bool& in_progress,
 			   const DoutPrefixProvider* dpp,
-			   optional_yield y,
-			   uint32_t flags) = 0;
+			   optional_yield y) = 0;
     /** Check to see if two placement rules match */
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) = 0;
     /** Dump driver-specific object layout info in JSON */
@@ -1667,6 +1670,53 @@ public:
 						       const std::string& cookie) = 0;
 };
 
+/** @brief Abstraction of a serializer for Restore
+ */
+class RestoreSerializer : public Serializer {
+public:
+  RestoreSerializer() {}
+  virtual ~RestoreSerializer() = default;
+};
+
+/**
+ * @brief Abstraction for restore processing
+ *
+ * The Restore class is designed to manage the restoration of objects
+ * from cloud tier storage back into the Ceph cluster. This is particularly used
+ * for objects stored in cold storage solutions like AWS Glacier or Tape-based systems,
+ * where retrieval operations are asynchronous and can take a significant amount of time.
+ */
+class Restore {
+
+public:
+  Restore() = default;
+  virtual ~Restore() = default;
+  /** Add a single restore entry state */
+  virtual int add_entry(const DoutPrefixProvider* dpp, optional_yield y,
+		  int index, const RGWRestoreEntry& r_entry) = 0;
+  /** Add list of restore entries */
+  virtual int add_entries(const DoutPrefixProvider* dpp, optional_yield y,
+	       int index, const std::list<RGWRestoreEntry>& restore_entries) = 0;
+  /** List all known entries given a marker */
+  virtual int list(const DoutPrefixProvider *dpp, optional_yield y,
+	       	   int index,
+	           const std::string& marker, std::string* out_marker,
+		   uint32_t max_entries, std::vector<RGWRestoreEntry>& entries,
+		   bool* truncated) = 0;
+
+  /** Trim restore entries upto the marker */
+  virtual int trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
+		 	  int index, const std::string_view& marker) = 0;
+  /* Check if the list is empty */
+  virtual int is_empty(const DoutPrefixProvider *dpp, optional_yield y) = 0;
+
+  /** Get a serializer for restore processing */
+  virtual std::unique_ptr<RestoreSerializer> get_serializer(
+		  				const std::string& lock_name,
+						const std::string& oid,
+						const std::string& cookie) = 0;
+};
+  
 /**
  * @brief Abstraction for a Notification event
  *
@@ -1885,6 +1935,7 @@ public:
 				      const rgw::SiteConfig& site_config,
 				      bool use_gc_thread,
 				      bool use_lc_thread,
+				      bool use_restore_thread,
 				      bool quota_threads,
 				      bool run_sync_thread,
 				      bool run_reshard_thread,
@@ -1898,6 +1949,7 @@ public:
 						   site_config,
 						   use_gc_thread,
 						   use_lc_thread,
+						   use_restore_thread,
 						   quota_threads,
 						   run_sync_thread,
 						   run_reshard_thread,
@@ -1926,6 +1978,7 @@ public:
 						const rgw::SiteConfig& site_config,
 						bool use_gc_thread,
 						bool use_lc_thread,
+						bool use_restore_thread,
 						bool quota_threads,
 						bool run_sync_thread,
 						bool run_reshard_thread,

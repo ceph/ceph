@@ -230,6 +230,7 @@ options:
   see_also:
   - rgw_enable_gc_threads
   - rgw_enable_lc_threads
+  - rgw_enable_restore_threads
   with_legacy: true
 - name: rgw_enable_gc_threads
   type: bool
@@ -246,6 +247,7 @@ options:
   see_also:
   - rgw_enable_quota_threads
   - rgw_enable_lc_threads
+  - rgw_enable_restore_threads
   with_legacy: true
 - name: rgw_enable_lc_threads
   type: bool
@@ -263,6 +265,24 @@ options:
   see_also:
   - rgw_enable_gc_threads
   - rgw_enable_quota_threads
+  - rgw_enable_restore_threads
+  with_legacy: true
+- name: rgw_enable_restore_threads
+  type: bool
+  level: advanced
+  desc: Enables the objects' restore maintenance thread.
+  long_desc: The objects restore maintenance thread is responsible for all the objects
+    restoration related maintenance work. The thread itself can be disabled, but in order
+    for the restore from the cloud to work correctly, at least one RGW in each zone needs
+    to have this thread running. Having the thread enabled on multiple RGW processes within
+    the same zone can spread some of the maintenance work between them.
+  default: true
+  services:
+  - rgw
+  see_also:
+  - rgw_enable_gc_threads
+  - rgw_enable_quota_threads
+  - rgw_enable_lc_threads
   with_legacy: true
 - name: rgw_data
   type: str
@@ -472,6 +492,35 @@ options:
     For example, during debugging if one wanted every 10 minutes to be equivalent to one day,
     then this would be set to 600, the number of seconds in 10 minutes.
   default: -1
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_restore_max_objs
+  type: int
+  level: advanced
+  desc: Number of shards for restore processing
+  long_desc: Number of RADOS objects to use for storing restore entries which are in progress. This affects concurrency of restore maintenance, as shards can be processed in parallel.
+  default: 32
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_restore_lock_max_time
+  type: int
+  level: dev
+  default: 90
+  services:
+  - rgw
+  see_also:
+  with_legacy: true
+- name: rgw_restore_processor_period
+  type: int
+  level: advanced
+  desc: Restore cycle run time
+  long_desc: The amount of time between the start of consecutive runs of the restore
+    processing threads. If the thread runs takes more than this period, it will
+    not wait before running again.
+  fmt_desc: The cycle time for restore state processing.
+  default: 15_min
   services:
   - rgw
   with_legacy: true
@@ -1266,6 +1315,14 @@ options:
   type: bool
   level: advanced
   desc: run quota threads in librgw (default off)
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_nfs_run_restore_threads
+  type: bool
+  level: advanced
+  desc: run objects' restore threads in librgw (default off)
   default: false
   services:
   - rgw

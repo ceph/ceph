@@ -440,6 +440,13 @@ bool FilterDriver::process_expired_objects(const DoutPrefixProvider *dpp,
   return next->process_expired_objects(dpp, y);
 }
 
+std::unique_ptr<Restore> FilterDriver::get_restore(const int n_objs,
+		       	const std::vector<std::string_view>& obj_names)
+{
+  std::unique_ptr<Restore> restore = next->get_restore(n_objs, obj_names);
+  return std::make_unique<FilterRestore>(std::move(restore));
+}
+
 std::unique_ptr<Notification> FilterDriver::get_notification(rgw::sal::Object* obj,
 				rgw::sal::Object* src_obj, req_state* s,
 				rgw::notify::EventType event_type, optional_yield y,
@@ -485,6 +492,11 @@ int FilterDriver::remove_persistent_topic(const DoutPrefixProvider* dpp,
 RGWLC* FilterDriver::get_rgwlc()
 {
   return next->get_rgwlc();
+}
+
+RGWRestore* FilterDriver::get_rgwrestore()
+{
+  return next->get_rgwrestore();
 }
 
 RGWCoroutinesManagerRegistry* FilterDriver::get_cr_registry()
@@ -1135,18 +1147,14 @@ int FilterObject::transition_to_cloud(Bucket* bucket,
 
 int FilterObject::restore_obj_from_cloud(Bucket* bucket,
 		          rgw::sal::PlacementTier* tier,
-		          rgw_placement_rule& placement_rule,
-		          rgw_bucket_dir_entry& o,
 		          CephContext* cct,
-		          RGWObjTier& tier_config,
-		          uint64_t olh_epoch,
 		          std::optional<uint64_t> days,
-		          const DoutPrefixProvider* dpp, 
-		          optional_yield y,
-		          uint32_t flags)
+			  bool& in_progress,
+		          const DoutPrefixProvider* dpp,
+		          optional_yield y)
 {
   return next->restore_obj_from_cloud(nextBucket(bucket), nextPlacementTier(tier),
-           placement_rule, o, cct, tier_config, olh_epoch, days, dpp, y, flags);
+           cct, days, in_progress, dpp, y);
 }
 
 bool FilterObject::placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2)
@@ -1447,6 +1455,49 @@ std::unique_ptr<LCSerializer> FilterLifecycle::get_serializer(
   ns = next->get_serializer(lock_name, oid, cookie);
 
   return std::make_unique<FilterLCSerializer>(std::move(ns));
+}
+
+int FilterRestoreSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur,
+				 optional_yield y)
+{
+  return next->try_lock(dpp, dur, y);
+}
+
+std::unique_ptr<RestoreSerializer> FilterRestore::get_serializer(const std::string& lock_name,
+						       const std::string& oid,
+						       const std::string& cookie) {
+  std::unique_ptr<RestoreSerializer> ns;
+  ns = next->get_serializer(lock_name, oid, cookie);
+  return std::make_unique<FilterRestoreSerializer>(std::move(ns));
+}
+
+int FilterRestore::add_entry(const DoutPrefixProvider* dpp, optional_yield y,
+			     int index, const RGWRestoreEntry& r_entry) {
+  return next->add_entry(dpp, y, index, r_entry);
+}
+
+int FilterRestore::add_entries(const DoutPrefixProvider* dpp, optional_yield y,
+	       		       int index,
+			       const std::list<RGWRestoreEntry>& restore_entries) {
+  return next->add_entries(dpp, y, index, restore_entries);
+}
+
+/** List all known entries */
+int FilterRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
+	       	   int index, const std::string& marker, std::string* out_marker,
+		   uint32_t max_entries, std::vector<RGWRestoreEntry>& entries,
+		   bool* truncated) {
+  return next->list(dpp, y, index, marker, out_marker, max_entries,
+  		    entries, truncated);
+}
+
+int FilterRestore::trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
+		 	        int index, const std::string_view& marker) {
+  return next->trim_entries(dpp, y, index, marker);
+}
+
+int FilterRestore::is_empty(const DoutPrefixProvider *dpp, optional_yield y) {
+  return next->is_empty(dpp, y);
 }
 
 int FilterNotification::publish_reserve(const DoutPrefixProvider *dpp,

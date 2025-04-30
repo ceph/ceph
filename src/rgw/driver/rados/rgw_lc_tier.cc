@@ -260,6 +260,7 @@ int rgw_cloud_tier_restore_object(RGWLCCloudTierCtx& tier_ctx,
                          uint64_t& accounted_size, rgw::sal::Attrs& attrs,
                          std::optional<uint64_t> days,
                          RGWZoneGroupTierS3Glacier& glacier_params,
+			 bool& in_progress,
                          void* cb) {
   RGWRESTConn::get_obj_params req_params;
   std::string target_obj_name;
@@ -276,25 +277,23 @@ int rgw_cloud_tier_restore_object(RGWLCCloudTierCtx& tier_ctx,
     target_obj_name += get_key_instance(tier_ctx.obj->get_key());
   }
 
-  if (glacier_params.glacier_restore_tier_type != GlacierRestoreTierType::Expedited) {
-    //XXX: Supporting STANDARD tier type is still in WIP
-    ldpp_dout(tier_ctx.dpp, -1) << __func__ << "ERROR: Only Expedited tier_type is supported " << dendl;
-    return -1;
-  }
+  if (!in_progress) { // first time. Send RESTORE req.
 
-  rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
+    rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
+    ret = cloud_tier_restore(tier_ctx.dpp, tier_ctx.conn, dest_obj, days, glacier_params);
 
-  ret = cloud_tier_restore(tier_ctx.dpp, tier_ctx.conn, dest_obj, days, glacier_params);
-  
-  ldpp_dout(tier_ctx.dpp, 20) << __func__ << "Restoring object=" << dest_obj << "returned ret = " << ret << dendl;
- 
-  if (ret < 0 ) { 
-    ldpp_dout(tier_ctx.dpp, -1) << __func__ << "ERROR: failed to restore object=" << dest_obj << "; ret = " << ret << dendl;
-    return ret;
+    ldpp_dout(tier_ctx.dpp, 20) << __func__ << "Restoring object=" << target_obj_name << "returned ret = " << ret << dendl;
+
+    if (ret < 0 ) {
+      ldpp_dout(tier_ctx.dpp, -1) << __func__ << "ERROR: failed to restore object=" << dest_obj << "; ret = " << ret << dendl;
+      return ret;
+    }
+    in_progress = true;
   }
 
   // now send HEAD request and verify if restore is complete on glacier/tape endpoint
-  bool restore_in_progress = false;
+  static constexpr int MAX_RETRIES = 10;
+  uint32_t retries = 0;
   do {
     ret = rgw_cloud_tier_get_object(tier_ctx, true, headers, nullptr, etag,
                                     accounted_size, attrs, nullptr);
@@ -304,8 +303,14 @@ int rgw_cloud_tier_restore_object(RGWLCCloudTierCtx& tier_ctx,
       return ret;
     }
 
-    restore_in_progress = is_restore_in_progress(tier_ctx.dpp, headers);
-  } while(restore_in_progress);
+    in_progress = is_restore_in_progress(tier_ctx.dpp, headers);
+
+  } while(retries++ < MAX_RETRIES && in_progress);
+
+  if (in_progress) {
+    ldpp_dout(tier_ctx.dpp, 20) << __func__ << "Restoring object=" << target_obj_name << " still in progress; returning " << dendl;
+    return 0;
+  } 
 
   // now do the actual GET
   ret = rgw_cloud_tier_get_object(tier_ctx, false, headers, pset_mtime, etag,
