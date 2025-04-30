@@ -1008,7 +1008,7 @@ void OSDService::set_statfs(const struct store_statfs_t &stbuf,
 {
   uint64_t bytes = stbuf.total;
   uint64_t avail = stbuf.available;
-  uint64_t used = stbuf.get_used_raw();
+  uint64_t used = stbuf.get_used();
 
   // For testing fake statfs values so it doesn't matter if all
   // OSDs are using the same partition.
