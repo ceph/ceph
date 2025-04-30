@@ -17,6 +17,7 @@
 #include "common/JSONFormatter.h"
 #include "common/safe_io.h"
 #include "include/stringify.h"
+#include "include/uuid_fmt.h"
 #include "os/Transaction.h"
 #include "osd/osd_types_fmt.h"
 
