@@ -15,6 +15,7 @@
 
 #include "common/pick_address.h"
 #include "include/util.h"
+#include "include/uuid_fmt.h"
 
 #include "messages/MCommand.h"
 #include "messages/MOSDBeacon.h"
