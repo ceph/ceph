@@ -455,6 +455,10 @@ private:
   void repop_commit(RepModifyRef rm);
   bool auto_repair_supported() const override { return store->has_builtin_csum(); }
 
+  static inline const uint32_t scrub_fadvise_flags{
+      CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
+      CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE};
 
   int be_deep_scrub(
     const Scrub::ScrubCounterSet& io_counters,
