@@ -314,7 +314,9 @@ struct shard_extent_set_t {
   /** return the sum of extent_set.size */
   uint64_t size() const {
     uint64_t size = 0;
-    for (auto &&[_, e] : map) size += e.size();
+    for (auto &&[_, e] : map) {
+      size += e.size();
+    }
 
     return size;
   }

@@ -241,9 +241,7 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
         (*need_sub_chunks)[i] = subchunks_list;
       }
     }
-    for (auto &&i: have) {
-      need_set.insert(i);
-    }
+    need_set.insert(have);
   }
 
   extent_set extra_extents;
