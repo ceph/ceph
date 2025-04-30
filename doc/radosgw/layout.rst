@@ -1,5 +1,5 @@
 ===========================
- Rados Gateway Data Layout
+ RADOS Gateway Data Layout
 ===========================
 
 Although the source code is the ultimate guide, this document helps
