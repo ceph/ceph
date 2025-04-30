@@ -201,7 +201,7 @@ Then apply this yaml document:
 
 The ``wildcard_enabled`` flag ensures that a wildcard SAN entry is included in the self-signed certificate,
 allowing access to buckets in virtual host mode. By default, this flag is disabled.
-example: wildcard SAN - (*.s3.cephlab.com)
+example: wildcard SAN - (``*.s3.cephlab.com``)
 
 Disabling multisite sync traffic
 --------------------------------
