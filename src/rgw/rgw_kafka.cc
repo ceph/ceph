@@ -503,6 +503,7 @@ private:
   }
 
   void run() noexcept {
+    ceph_pthread_setname("kafka_manager");
     while (!stopped) {
 
       // publish all messages in the queue
@@ -575,12 +576,6 @@ public:
       // This is to prevent rehashing so that iterators are not invalidated 
       // when a new connection is added.
       connections.max_load_factor(10.0);
-      // give the runner thread a name for easier debugging
-      const char* thread_name = "kafka_manager";
-      if (const auto rc = ceph_pthread_setname(runner.native_handle(), thread_name); rc != 0) {
-        ldout(cct, 1) << "ERROR: failed to set kafka manager thread name to: " << thread_name
-          << ". error: " << rc << dendl;
-      }
   }
 
   // non copyable

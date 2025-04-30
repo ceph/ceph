@@ -290,6 +290,7 @@ SyntheticClient::SyntheticClient(StandaloneClient *client, int w)
 
 void *synthetic_client_thread_entry(void *ptr)
 {
+  ceph_pthread_setname("client");
   SyntheticClient *sc = static_cast<SyntheticClient*>(ptr);
   //int r = 
   sc->run();
@@ -945,7 +946,6 @@ int SyntheticClient::start_thread()
 
   pthread_create(&thread_id, NULL, synthetic_client_thread_entry, this);
   ceph_assert(thread_id);
-  ceph_pthread_setname(thread_id, "client");
   return 0;
 }
 

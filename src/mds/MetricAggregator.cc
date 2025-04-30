@@ -73,6 +73,7 @@ int MetricAggregator::init() {
   m_cct->get_perfcounters_collection()->add(m_perf_counters);
 
   pinger = std::thread([this]() {
+      ceph_pthread_setname("mds-ping");
       std::unique_lock locker(lock);
       while (!stopping) {
         ping_all_active_ranks();
