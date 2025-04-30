@@ -275,7 +275,7 @@ void MgrStatMonitor::update_logger()
 
   mon.cluster_logger->set(l_cluster_osd_bytes, digest.osd_sum.statfs.total);
   mon.cluster_logger->set(l_cluster_osd_bytes_used,
-                           digest.osd_sum.statfs.get_used_raw());
+                           digest.osd_sum.statfs.get_used());
   mon.cluster_logger->set(l_cluster_osd_bytes_avail,
                            digest.osd_sum.statfs.available);
 
