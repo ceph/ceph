@@ -39,6 +39,7 @@ namespace sal {
   class Object;
   class MultipartUpload;
   class Lifecycle;
+  class Restore;
   class Notification;
   class Writer;
   class PlacementTier;

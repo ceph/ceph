@@ -370,15 +370,11 @@ class StoreObject : public Object {
     }
     virtual int restore_obj_from_cloud(Bucket* bucket,
 			   rgw::sal::PlacementTier* tier,
-			   rgw_placement_rule& placement_rule,
-			   rgw_bucket_dir_entry& o,
 			   CephContext* cct,
-    		           RGWObjTier& tier_config,
-			   uint64_t olh_epoch,
 		           std::optional<uint64_t> days,
+			   bool& in_progress,
 			   const DoutPrefixProvider* dpp,
-			   optional_yield y,
-		           uint32_t flags) override {
+			   optional_yield y) override {
       return -1;
     }
     jspan_context& get_trace() override { return trace_ctx; }
@@ -458,6 +454,20 @@ public:
 
   virtual void print(std::ostream& out) const override { out << oid; }
 };
+
+class StoreRestoreSerializer : public RestoreSerializer {
+
+protected:
+  std::string oid;
+
+public:
+  StoreRestoreSerializer() {}
+  StoreRestoreSerializer(std::string _oid) : oid(_oid) {}
+
+  virtual ~StoreRestoreSerializer() = default;
+  virtual void print(std::ostream& out) const override { out << oid; }
+};
+
 
 class StoreNotification : public Notification {
 protected:

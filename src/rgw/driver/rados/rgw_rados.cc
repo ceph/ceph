@@ -38,6 +38,7 @@
 #include "rgw_datalog.h"
 #include "rgw_putobj_processor.h"
 #include "rgw_lc_tier.h"
+#include "rgw_restore.h"
 
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -1145,6 +1146,12 @@ void RGWRados::finalize()
     rgw::notify::shutdown();
     v1_topic_migration.stop();
   }
+
+  if (use_restore_thread) {
+    restore->stop_processor();
+  }
+  delete restore;
+  restore = NULL;
 }
 
 /** 
@@ -1241,6 +1248,10 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
     return ret;
 
   ret = open_lc_pool_ctx(dpp);
+  if (ret < 0)
+    return ret;
+
+  ret = open_restore_pool_ctx(dpp);
   if (ret < 0)
     return ret;
 
@@ -1367,6 +1378,12 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
   if (use_lc_thread)
     lc->start_processor();
 
+  restore = new RGWRestore();
+  restore->initialize(cct, this->driver);
+
+  if (use_restore_thread)
+    restore->start_processor();
+
   quota_handler = RGWQuotaHandler::generate_handler(dpp, this->driver, quota_threads);
 
   bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
@@ -1486,6 +1503,11 @@ int RGWRados::open_gc_pool_ctx(const DoutPrefixProvider *dpp)
 int RGWRados::open_lc_pool_ctx(const DoutPrefixProvider *dpp)
 {
   return rgw_init_ioctx(dpp, get_rados_handle(), svc.zone->get_zone_params().lc_pool, lc_pool_ctx, true, true);
+}
+
+int RGWRados::open_restore_pool_ctx(const DoutPrefixProvider *dpp)
+{
+  return rgw_init_ioctx(dpp, get_rados_handle(), svc.zone->get_zone_params().restore_pool, restore_pool_ctx, true, true);
 }
 
 int RGWRados::open_objexp_pool_ctx(const DoutPrefixProvider *dpp)
@@ -5357,13 +5379,11 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                              RGWObjectCtx& obj_ctx,
                              RGWBucketInfo& dest_bucket_info,
                              const rgw_obj& dest_obj,
-                             rgw_placement_rule& dest_placement,
                              RGWObjTier& tier_config,
-                             uint64_t olh_epoch,
                              std::optional<uint64_t> days,
+			     bool& in_progress,
                              const DoutPrefixProvider *dpp,
-                             optional_yield y,
-                             bool log_op){
+                             optional_yield y) {
 
   //XXX: read below from attrs .. check transition_obj()
   ACLOwner owner;
@@ -5385,6 +5405,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     dest_obj_bi.key.instance.clear();
   }
 
+  uint64_t olh_epoch = 0; // read it from attrs fetched from cloud below
   rgw::putobj::AtomicObjectProcessor processor(aio.get(), this, dest_bucket_info, nullptr,
                                   owner, obj_ctx, dest_obj_bi, olh_epoch, tag, dpp, y, no_trace);
  
@@ -5398,11 +5419,9 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   }
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
-  dest_placement.storage_class = tier_ctx.restore_storage_class;
+  rgw_placement_rule dest_placement(dest_bucket_info.placement_rule, tier_ctx.restore_storage_class);
   RGWRadosPutObj cb(dpp, cct, plugin, compressor, &processor, progress_cb, progress_data,
                     [&](map<string, bufferlist> obj_attrs) {
-                      // XXX: do we need filter() like in fetch_remote_obj() cb
-                      dest_placement.inherit_from(dest_bucket_info.placement_rule);
                       processor.set_tail_placement(dest_placement);
 
                       ret = processor.prepare(rctx.y);
@@ -5426,6 +5445,9 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     return ret;
   }
 
+  // For Permanent restore, `log_op` depends on flag set on the bucket->get_info().flags
+  bool log_op = (dest_bucket_info.flags & rgw::sal::FLAG_LOG_OP);
+
   uint64_t accounted_size = 0;
   string etag;
   real_time set_mtime;
@@ -5436,7 +5458,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     RGWZoneGroupTierS3Glacier& glacier_params = tier_config.tier_placement.s3_glacier;
     ret = rgw_cloud_tier_restore_object(tier_ctx, headers,
                                 &set_mtime, etag, accounted_size,
-                                attrs, days, glacier_params, &cb);
+                                attrs, days, glacier_params, in_progress, &cb);
   } else {
     ldpp_dout(dpp, 20) << "Fetching  object:" << dest_obj << "from the cloud" <<  dendl;
     ret = rgw_cloud_tier_get_object(tier_ctx, false,  headers,
@@ -5447,6 +5469,11 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   if (ret < 0) { 
     ldpp_dout(dpp, 20) << "Fetching from cloud failed, object:" << dest_obj << dendl;
     return ret; 
+  }
+
+  if (in_progress) {
+    ldpp_dout(tier_ctx.dpp, 20) << "Restoring object:" << dest_obj << " still in progress; returning " << dendl;
+    return ret;
   }
 
   if (!cb_processed) { 
@@ -5474,6 +5501,8 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
         std::optional<uint64_t> olh_ep = ceph::parse<uint64_t>(rgw_bl_str(aiter->second));
         if (olh_ep) {
           olh_epoch = *olh_ep;
+   	  // update in tier_ctx too
+	  tier_ctx.o.versioned_epoch = *olh_ep;
         }
         attrs.erase(aiter);
       }
@@ -5553,6 +5582,8 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
       attrs[RGW_ATTR_RESTORE_TYPE] = std::move(bl);
       ldpp_dout(dpp, 20) << "Permanent restore, object:" << dest_obj << dendl;
     }
+    // bucket->get_info().flags doesn't seem to be having rgw::sal::FLAG_LOG_OP    // set by default. Hence set it explicity
+    // XXX: Do we need to check if sync is disabled for bucket.
     log_op = true;
   }
 
