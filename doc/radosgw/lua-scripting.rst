@@ -26,7 +26,7 @@ By default, the execution of a Lua script is limited to a maximum runtime of 100
 
 .. warning:: Be cautious when modifying the memory limit. If the current memory usage exceeds the newly set limit, all previously stored data in the background state will be lost.
 
-.. warning:: Disabling the runtime limit may result in unbounded script execution, which can lead to excessive resource consumption and potentially impact the RADOS gateway's availability.
+.. warning:: Disabling the runtime limit may result in unbounded script execution, which can lead to excessive resource consumption and potentially impact the RADOS Gateway's availability.
 
 By default, all Lua standard libraries are available in the script, however, in order to allow for additional Lua modules to be used in the script, we support adding packages to an allowlist:
 
