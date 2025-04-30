@@ -409,7 +409,7 @@ PGRecovery::on_local_recover(
     [soid, &recovery_info, is_delete, &t, this] {
     if (soid.is_snap()) {
       OSDriver::OSTransaction _t(pg->get_osdriver().get_transaction(&t));
-      int r = pg->get_snap_mapper().remove_oid(soid, &_t);
+      [[maybe_unused]] int r = pg->get_snap_mapper().remove_oid(soid, &_t);
       assert(r == 0 || r == -ENOENT);
 
       if (!is_delete) {
