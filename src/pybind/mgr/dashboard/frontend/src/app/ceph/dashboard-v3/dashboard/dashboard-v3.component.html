@@ -124,6 +124,13 @@
                      summaryType="iscsi"
                      id="iscsi-item"
                      *ngIf="enabledFeature.iscsi && healthData.iscsi_daemons"></cd-card-row>
+        <!-- Gateway Groups -->  
+        <cd-card-row [data]="healthData.gw_group"
+                     link="/nvmeof/gateways"
+                     title="Gateway Groups"
+                     summaryType="simplified"
+                     id="nvmeof-gateways-item"
+                     *ngIf="healthData.gw_group !== undefined"></cd-card-row>
       </cd-card>
     </div>
 
