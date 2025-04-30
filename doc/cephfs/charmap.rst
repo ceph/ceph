@@ -40,6 +40,7 @@ inherit (copy) the parent's configuration.
           the configuration so long as the preconditions apply: it is empty
           and not part of an existing snapshot.
 
+.. warning:: The charmap is not applied to snapshot names. Snapshots names are always case-sensitive and not normalized.
 
 Normalization
 -------------
