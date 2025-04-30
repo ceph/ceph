@@ -68,6 +68,7 @@
 #include "rgw_iam_managed_policy.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_bucket_logging.h"
+#include "rgw_restore.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -986,13 +987,13 @@ void handle_replication_status_header(
  */
 int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
                          rgw::sal::Attrs& attrs, bool sync_cloudtiered, std::optional<uint64_t> days,
-                         bool restore_op, optional_yield y)
+                         bool read_through, optional_yield y)
 {
   int op_ret = 0;
   ldpp_dout(dpp, 20) << "reached handle cloud tier " << dendl;
   auto attr_iter = attrs.find(RGW_ATTR_MANIFEST);
   if (attr_iter == attrs.end()) {
-    if (restore_op) {
+    if (!read_through) {
       op_ret = -ERR_INVALID_OBJECT_STATE;
       s->err.message = "only cloud tier object can be restored";
       return op_ret;
@@ -1005,7 +1006,7 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
     decode(m, attr_iter->second);
     if (!m.is_tier_type_s3()) {
       ldpp_dout(dpp, 20) << "not a cloud tier object " <<  s->object->get_key().name << dendl;
-      if (restore_op) {
+      if (!read_through) {
         op_ret = -ERR_INVALID_OBJECT_STATE;
         s->err.message = "only cloud tier object can be restored";
         return op_ret;
@@ -1030,26 +1031,45 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
       auto iter = bl.cbegin();
       decode(restore_status, iter);
     }
-    if (attr_iter == attrs.end() || restore_status == rgw::sal::RGWRestoreStatus::RestoreFailed) {
-      // first time restore or previous restore failed
-      rgw::sal::Bucket* pbucket = NULL;
-      pbucket = s->bucket.get();
-
+    if (restore_status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
+      if (read_through) {
+        op_ret = -ERR_REQUEST_TIMEOUT;
+        ldpp_dout(dpp, 5) << "restore is still in progress, please check restore status and retry" << dendl;
+        s->err.message = "restore is still in progress";
+        return op_ret;
+      } else { 
+       	// for restore-op, corresponds to RESTORE_ALREADY_IN_PROGRESS
+        return static_cast<int>(rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress);
+      } 
+    } else if (restore_status == rgw::sal::RGWRestoreStatus::CloudRestored) {
+      // corresponds to CLOUD_RESTORED
+      return static_cast<int>(rgw::sal::RGWRestoreStatus::CloudRestored);
+    } else { // first time restore or previous restore failed.
+      // Restore the object.
       std::unique_ptr<rgw::sal::PlacementTier> tier;
       rgw_placement_rule target_placement;
-      target_placement.inherit_from(pbucket->get_placement_rule());
-      attr_iter = attrs.find(RGW_ATTR_STORAGE_CLASS);
+      target_placement.inherit_from(s->bucket->get_placement_rule());
+      auto attr_iter = attrs.find(RGW_ATTR_STORAGE_CLASS);
       if (attr_iter != attrs.end()) {
         target_placement.storage_class = attr_iter->second.to_str();
       }
       op_ret = driver->get_zone()->get_zonegroup().get_placement_tier(target_placement, &tier);
-      ldpp_dout(dpp, 20) << "getting tier placement handle cloud tier" << op_ret <<
-                       " storage class " << target_placement.storage_class << dendl;
       if (op_ret < 0) {
-        s->err.message = "failed to restore object";
+	ldpp_dout(dpp, -1) << "failed to fetch tier placement handle, ret = " << op_ret << dendl;
         return op_ret;
+      } else {
+        ldpp_dout(dpp, 20) << "getting tier placement handle cloud tier for " <<
+                         " storage class " << target_placement.storage_class << dendl;
       }
-      if (!restore_op) {
+
+      if (!tier->is_tier_type_s3()) {
+        ldpp_dout(dpp, -1) << "ERROR: not s3 tier type - " << tier->get_tier_type() <<
+                       " for storage class " << target_placement.storage_class << dendl;
+        s->err.message = "failed to restore object";
+        return -EINVAL;
+      }
+
+      if (read_through) {
         if (tier->allow_read_through()) {
           days = tier->get_read_through_restore_days();
         } else { //read-through is not enabled
@@ -1058,56 +1078,30 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
           return op_ret;
         }
       }
-      // fill in the entry. XXX: Maybe we can avoid it by passing only necessary params
-      rgw_bucket_dir_entry ent;
-      ent.key.name = s->object->get_key().name;
-      ent.key.instance = s->object->get_key().instance;
-      ent.meta.accounted_size = ent.meta.size = s->obj_size;
-      ent.meta.etag = "" ;
-      uint64_t epoch = 0;
-      op_ret = get_system_versioning_params(s, &epoch, NULL);
-      if (!ent.key.instance.empty()) { // non-current versioned object
-        ent.flags |= rgw_bucket_dir_entry::FLAG_VER;
-      }
-      ldpp_dout(dpp, 20) << "getting versioning params tier placement handle cloud tier" << op_ret << dendl;
+
+      op_ret = driver->get_rgwrestore()->restore_obj_from_cloud(s->bucket.get(),
+		      s->object.get(), tier.get(), days, y);
+
       if (op_ret < 0) {
-        ldpp_dout(dpp, 20) << "failed to get versioning params, op_ret = " << op_ret << dendl;
+	ldpp_dout(dpp, 0) << "Restore of object " << s->object->get_key() << " failed" << op_ret << dendl;
         s->err.message = "failed to restore object";
         return op_ret;
       }
-      op_ret = s->object->restore_obj_from_cloud(pbucket, tier.get(), target_placement, ent,
-                                                 s->cct, tier_config, epoch,
-                                                 days, dpp, y, s->bucket->get_info().flags);
-      if (op_ret < 0) {
-        ldpp_dout(dpp, 0) << "object " << ent.key.name << " fetching failed" << op_ret << dendl;
-        s->err.message = "failed to restore object";
-        return op_ret;
-      }
-      ldpp_dout(dpp, 20) << "object " << ent.key.name << " fetching succeed" << dendl;
-      /*  Even if restore is complete the first read through request will return but actually downloaded
-       * object asyncronously.
+
+      ldpp_dout(dpp, 20) << "Restore of object " << s->object->get_key() << " succeed" << dendl;
+      /*  Even if restore is complete the first read through request will return
+       *  but actually downloaded object asyncronously.
        */
-      if (!restore_op) { //read-through
+      if (read_through) { //read-through
         op_ret = -ERR_REQUEST_TIMEOUT;
         ldpp_dout(dpp, 5) << "restore is still in progress, please check restore status and retry" << dendl;
         s->err.message = "restore is still in progress";
       }
       return op_ret;
-    } else if (restore_status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
-        if (!restore_op) {
-          op_ret = -ERR_REQUEST_TIMEOUT;
-          ldpp_dout(dpp, 5) << "restore is still in progress, please check restore status and retry" << dendl;
-          s->err.message = "restore is still in progress";
-          return op_ret;
-        } else { 
-          return 1; // for restore-op, corresponds to RESTORE_ALREADY_IN_PROGRESS
-        } 
-    } else {
-      return 2; // corresponds to CLOUD_RESTORED
     }
   } catch (const buffer::end_of_buffer&) {
     //empty manifest; it's not cloud-tiered
-    if (restore_op) {
+    if (!read_through) {
       op_ret = -ERR_INVALID_OBJECT_STATE;
       s->err.message = "only cloud tier object can be restored";
     }
@@ -2590,7 +2584,7 @@ void RGWGetObj::execute(optional_yield y)
 
   if (get_type() == RGW_OP_GET_OBJ && get_data) {
     std::optional<uint64_t> days;
-    op_ret = handle_cloudtier_obj(s, this, driver, attrs, sync_cloudtiered, days, false, y);
+    op_ret = handle_cloudtier_obj(s, this, driver, attrs, sync_cloudtiered, days, true, y);
     if (op_ret < 0) {
       ldpp_dout(this, 4) << "Cannot get cloud tiered object: " << *s->object
                        <<". Failing with " << op_ret << dendl;

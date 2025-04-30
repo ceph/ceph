@@ -292,6 +292,8 @@ public:
   }
   virtual int cluster_stat(RGWClusterStat& stats) override;
   virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
+  virtual std::unique_ptr<Restore> get_restore(const int n_objs,
+		 	const std::vector<std::string_view>& obj_names) override;
   virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override;
 
   virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj,
@@ -383,6 +385,7 @@ public:
     return next->get_bucket_topic_mapping(topic, bucket_keys, y, dpp);
   }
   virtual RGWLC* get_rgwlc(void) override;
+  virtual RGWRestore* get_rgwrestore(void) override;
   virtual RGWCoroutinesManagerRegistry* get_cr_registry() override;
 
   virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket,
@@ -833,15 +836,11 @@ public:
 				  optional_yield y) override;
     virtual int restore_obj_from_cloud(Bucket* bucket,
 			   rgw::sal::PlacementTier* tier,
-			   rgw_placement_rule& placement_rule,
-			   rgw_bucket_dir_entry& o,
 			   CephContext* cct,
-		           RGWObjTier& tier_config,
-			   uint64_t olh_epoch,
 		           std::optional<uint64_t> days,
+			   bool& in_progress,
 			   const DoutPrefixProvider* dpp,
-			   optional_yield y,
-		           uint32_t flags) override;
+			   optional_yield y) override;
   virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
   virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y,
 			      Formatter* f) override;
@@ -1059,6 +1058,51 @@ public:
 						       const std::string& cookie) override;
 };
 
+class FilterRestoreSerializer : public RestoreSerializer {
+
+protected:
+  std::unique_ptr<RestoreSerializer> next;
+
+public:
+  FilterRestoreSerializer(std::unique_ptr<RestoreSerializer> _next) : next(std::move(_next)) {}
+  virtual ~FilterRestoreSerializer() = default;
+  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
+  virtual int unlock() override { return next->unlock(); }
+  virtual void print(std::ostream& out) const override { return next->print(out); }
+};
+
+class FilterRestore : public Restore {
+
+protected:
+  std::unique_ptr<Restore> next;
+
+public:
+  FilterRestore(std::unique_ptr<Restore> _next) : next(std::move(_next)) {}
+  ~FilterRestore() override = default;
+
+  virtual int add_entry(const DoutPrefixProvider* dpp, optional_yield y,
+		  int index, const RGWRestoreEntry& r_entry) override;
+  virtual int add_entries(const DoutPrefixProvider* dpp, optional_yield y,
+	       int index,
+	       const std::list<RGWRestoreEntry>& restore_entries) override;
+
+  /** List all known entries */
+  virtual int list(const DoutPrefixProvider *dpp, optional_yield y,
+	       	   int index,
+	           const std::string& marker, std::string* out_marker,
+		   uint32_t max_entries, std::vector<RGWRestoreEntry>& entries,
+		   bool* truncated) override;
+  virtual int trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
+		 	  int index, const std::string_view& marker) override;
+  virtual int is_empty(const DoutPrefixProvider *dpp, optional_yield y);
+
+  /** Get a serializer for lifecycle */
+  virtual std::unique_ptr<RestoreSerializer> get_serializer(
+		  		const std::string& lock_name,
+				const std::string& oid,
+				const std::string& cookie) override;
+};
+  
 class FilterNotification : public Notification {
 protected:
   std::unique_ptr<Notification> next;

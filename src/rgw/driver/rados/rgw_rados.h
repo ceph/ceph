@@ -358,6 +358,7 @@ class RGWRados
   int open_root_pool_ctx(const DoutPrefixProvider *dpp);
   int open_gc_pool_ctx(const DoutPrefixProvider *dpp);
   int open_lc_pool_ctx(const DoutPrefixProvider *dpp);
+  int open_restore_pool_ctx(const DoutPrefixProvider *dpp);
   int open_objexp_pool_ctx(const DoutPrefixProvider *dpp);
   int open_reshard_pool_ctx(const DoutPrefixProvider *dpp);
   int open_notif_pool_ctx(const DoutPrefixProvider *dpp);
@@ -372,9 +373,11 @@ class RGWRados
   rgw::sal::RadosStore* driver{nullptr};
   RGWGC* gc{nullptr};
   RGWLC* lc{nullptr};
+  RGWRestore* restore{nullptr};
   RGWObjectExpirer* obj_expirer{nullptr};
   bool use_gc_thread{false};
   bool use_lc_thread{false};
+  bool use_restore_thread{false};
   bool quota_threads{false};
   bool run_sync_thread{false};
   bool run_reshard_thread{false};
@@ -449,6 +452,7 @@ protected:
 
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
   librados::IoCtx lc_pool_ctx;        // .rgw.lc
+  librados::IoCtx restore_pool_ctx;        // .rgw.restore
   librados::IoCtx objexp_pool_ctx;
   librados::IoCtx reshard_pool_ctx;
   librados::IoCtx notif_pool_ctx;     // .rgw.notif
@@ -500,6 +504,10 @@ public:
     return gc;
   }
 
+  RGWRestore *get_restore() {
+    return restore;
+  }
+
   RGWRados& set_run_gc_thread(bool _use_gc_thread) {
     use_gc_thread = _use_gc_thread;
     return *this;
@@ -507,6 +515,11 @@ public:
 
   RGWRados& set_run_lc_thread(bool _use_lc_thread) {
     use_lc_thread = _use_lc_thread;
+    return *this;
+  }
+
+  RGWRados& set_run_restore_thread(bool _use_restore_thread) {
+    use_restore_thread = _use_restore_thread;
     return *this;
   }
 
@@ -532,6 +545,10 @@ public:
 
   librados::IoCtx* get_lc_pool_ctx() {
     return &lc_pool_ctx;
+  }
+
+  librados::IoCtx* get_restore_pool_ctx() {
+    return &restore_pool_ctx;
   }
 
   librados::IoCtx& get_notif_pool_ctx() {
@@ -1258,13 +1275,11 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                              RGWObjectCtx& obj_ctx,
                              RGWBucketInfo& dest_bucket_info,
                              const rgw_obj& dest_obj,
-                             rgw_placement_rule& dest_placement,
                              RGWObjTier& tier_config,
-                             uint64_t olh_epoch,
                              std::optional<uint64_t> days,
+			     bool& in_progress,
                              const DoutPrefixProvider *dpp,
-                             optional_yield y,
-                             bool log_op = true);
+                             optional_yield y);
 
   int check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y);
 

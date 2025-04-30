@@ -893,6 +893,8 @@ public:
       virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) override;
       virtual int cluster_stat(RGWClusterStat& stats) override;
       virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
+      virtual std::unique_ptr<Restore> get_restore(const int n_objs,
+		     const std::vector<std::string_view>& obj_names) override;
       virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override;
 
   virtual std::unique_ptr<Notification> get_notification(
@@ -925,6 +927,7 @@ public:
                                   const std::string& topic_queue) override;
 
       virtual RGWLC* get_rgwlc(void) override;
+      virtual RGWRestore* get_rgwrestore(void) override { return NULL; }
       virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
       virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y) override;
       virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) override;
