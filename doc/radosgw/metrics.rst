@@ -13,7 +13,7 @@ Op Metrics
 
 The following metrics related to S3 or Swift operations are tracked per Ceph Object Gateway.
 
-.. list-table:: Radosgw Op Metrics
+.. list-table:: Ceph Object Gateway Op Metrics
    :widths: 25 25 75
    :header-rows: 1
 
@@ -191,7 +191,7 @@ To help calculate the Ceph Object Gateway's memory usage of a cache, it should b
 Sending Metrics to Prometheus
 =============================
 
-To get metrics from a Ceph Object Gateway into the time series database Prometheus, the ceph-exporter daemon must be running and configured to scrape the Radogw's admin socket.
+To get metrics from a Ceph Object Gateway into the time series database Prometheus, the ceph-exporter daemon must be running and configured to scrape the Ceph Object Gateway's admin socket.
 
 The ceph-exporter daemon scrapes the Ceph Object Gateway's admin socket at a regular interval, defined by the config variable ``exporter_stats_period``.
 
@@ -199,7 +199,7 @@ Prometheus has a configurable interval in which it scrapes the exporter (see: ht
 
 Config Reference
 ================
-The following rgw op metrics related settings can be set via ``ceph config set client.rgw CONFIG_VARIABLE VALUE``.
+The following Ceph Object Gateway op metrics related settings can be set via ``ceph config set client.rgw CONFIG_VARIABLE VALUE``.
 
 .. confval:: rgw_user_counters_cache
 .. confval:: rgw_user_counters_cache_size
