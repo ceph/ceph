@@ -5,6 +5,8 @@
 
 #include <fmt/ranges.h>
 
+#include "scrubber_test_datasets.h"
+
 using namespace ScrubGenerator;
 
 // ref: PGLogTestRebuildMissing()
@@ -35,6 +37,28 @@ std::pair<bufferlist, std::vector<snapid_t>> create_object_snapset(
 
   // extract the set of object snaps
   return {bl, sns.clones};
+}
+
+RealObjsConf ScrubGenerator::make_erasure_code_configuration(int8_t k,
+                                                             int8_t m) {
+  RealObjsConf erasure_code_configuration;
+  for (shard_id_t i{0}; i < k + m; ++i) {
+    RealObj erasure_code_obj = ScrubDatasets::erasure_code_obj;
+    erasure_code_obj.ghobj.shard_id = i;
+    erasure_code_configuration.objs.push_back(erasure_code_obj);
+  }
+
+  return erasure_code_configuration;
+}
+
+CorruptFuncList ScrubGenerator::make_erasure_code_hash_corruption_functions(
+    int num_osds) {
+  CorruptFuncList ret_list = {};
+  for (int i = 0; i < num_osds; ++i) {
+    ret_list.insert({i, &crpt_object_hash});
+  }
+
+  return ret_list;
 }
 
 RealObjsConfList ScrubGenerator::make_real_objs_conf(
