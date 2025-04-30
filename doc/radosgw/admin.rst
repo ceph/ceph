@@ -862,7 +862,7 @@ all unauthenticated users:
 
 .. note:: In a multisite configuration where a realm and a period are present,
    any changes to the global rate limit must be committed using ``period update
-   --commit``. If no period is present, the rados gateway(s) must be restarted
+   --commit``. If no period is present, the RGW instances must be restarted
    for the changes to take effect.
 
 Usage
