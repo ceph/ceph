@@ -24,6 +24,8 @@
 #include "osd/scrubber/pg_scrubber.h"
 #include "osd/scrubber/scrub_backend.h"
 
+#include "erasure-code/ErasureCodePlugin.h"
+
 /// \file testing isolated parts of the Scrubber backend
 
 using namespace std::string_literals;
@@ -114,6 +116,7 @@ class TestPg : public PgScrubBeListener {
       bl.rebuild();
       encode_map.insert(i, bl);
     }
+
     for (shard_id_t i; i < get_ec_sinfo().get_k(); ++i) {
       for (int j = 0; j < get_ec_sinfo().get_chunk_size(); j++) {
         encode_map.at(i).c_str()[j] =
@@ -800,6 +803,132 @@ TEST_F(TestTScrubberBe_data_2, smaps_clone_size)
   EXPECT_EQ(fix_list.size(), 0);  // snap-mapper fix should be empty
 
   EXPECT_EQ(incons.size(), 1);	// one inconsistency
+}
+
+class TestTScrubberBeECCorruptShards : public TestTScrubberBe {
+ private:
+  int seed;
+
+ protected:
+  std::mt19937 rng;
+  int8_t k;
+  int8_t m;
+  int m_chunk_size = 4;
+
+ public:
+  TestTScrubberBeECCorruptShards()
+      : TestTScrubberBe(),
+        seed(time(0)),
+        rng(seed),
+        k((rng() % 10) + 2),
+        m((rng() % std::min(k - 1, 4)) + 1) {
+    std::cout << "Using seed " << seed << std::endl;
+  }
+
+  std::size_t m_expected_inconsistencies = 0;
+  std::size_t m_expected_error_count = 0;
+
+  // basic test configuration - 3 OSDs, all involved in the pool
+  erasure_code_profile_conf_t ec_profile{
+      "scrub_ec_profile",
+      {{"k", fmt::format("{}", k)},
+       {"m", fmt::format("{}", m)},
+       {"plugin", "isa"},
+       {"technique", "reed_sol_van"},
+       {"stripe_unit", fmt::format("{}", m_chunk_size)}}};
+
+  pool_conf_t pl{3,         3, k + m, k + 1, "ec_pool", pg_pool_t::TYPE_ERASURE,
+                 ec_profile};
+
+  TestTScrubberBeParams inject_params() override {
+    std::cout << fmt::format(
+                     "{}: injecting params (minimal-snaps + size change)",
+                     __func__)
+              << std::endl;
+    TestTScrubberBeParams params{
+        /* pool_conf */ pl,
+        /* real_objs_conf */
+        ScrubGenerator::make_erasure_code_configuration(k, m),
+        /*num_osds */ k + m};
+
+    return params;
+  }
+};
+
+class TestTScrubberBeECNoCorruptShards : public TestTScrubberBeECCorruptShards {
+ public:
+  TestTScrubberBeECNoCorruptShards() : TestTScrubberBeECCorruptShards() {}
+};
+
+TEST_F(TestTScrubberBeECNoCorruptShards, ec_parity_inconsistency) {
+  test_pg->set_stripe_info(k, m, k * m_chunk_size, &test_pg->m_pool->info);
+
+  ASSERT_TRUE(sbe);  // Assert we have a scrubber backend
+  logger.set_expected_err_count(
+      0);  // Set the number of errors we expect to see
+
+  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+
+  EXPECT_EQ(incons.size(), 0);
+}
+
+class TestTScrubberBeECSingleCorruptDataShard
+    : public TestTScrubberBeECCorruptShards {
+ public:
+  TestTScrubberBeECSingleCorruptDataShard()
+      : TestTScrubberBeECCorruptShards() {}
+
+  TestTScrubberBeParams inject_params() override {
+    TestTScrubberBeParams params =
+        TestTScrubberBeECCorruptShards::inject_params();
+    corrupt_funcs = make_erasure_code_hash_corruption_functions(k + m);
+    params.objs_conf.objs[(rng() % k)].corrupt_funcs = &corrupt_funcs;
+    return params;
+  }
+
+ private:
+  CorruptFuncList corrupt_funcs;
+};
+
+TEST_F(TestTScrubberBeECSingleCorruptDataShard, ec_parity_inconsistency) {
+  test_pg->set_stripe_info(k, m, k * m_chunk_size, &test_pg->m_pool->info);
+
+  ASSERT_TRUE(sbe);  // Assert we have a scrubber backend
+  logger.set_expected_err_count(
+      1);  // Set the number of errors we expect to see
+
+  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+
+  EXPECT_EQ(incons.size(), 1);
+}
+
+class TestTScrubberBeECCorruptParityShard
+    : public TestTScrubberBeECCorruptShards {
+ public:
+  TestTScrubberBeECCorruptParityShard() : TestTScrubberBeECCorruptShards() {}
+
+  TestTScrubberBeParams inject_params() override {
+    TestTScrubberBeParams params =
+        TestTScrubberBeECCorruptShards::inject_params();
+    corrupt_funcs = make_erasure_code_hash_corruption_functions(k + m);
+    params.objs_conf.objs[k].corrupt_funcs = &corrupt_funcs;
+    return params;
+  }
+
+ private:
+  CorruptFuncList corrupt_funcs;
+};
+
+TEST_F(TestTScrubberBeECCorruptParityShard, ec_parity_inconsistency) {
+  test_pg->set_stripe_info(k, m, k * m_chunk_size, &test_pg->m_pool->info);
+
+  ASSERT_TRUE(sbe);  // Assert we have a scrubber backend
+  logger.set_expected_err_count(
+      1);  // Set the number of errors we expect to see
+
+  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+
+  EXPECT_EQ(incons.size(), 1);
 }
 
 // Local Variables:

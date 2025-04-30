@@ -210,6 +210,13 @@ static inline RealObj crpt_do_nothing(const RealObj& s, int osdn)
   return s;
 }
 
+static inline RealObj crpt_object_hash(const RealObj& s,
+                                       [[maybe_unused]] int osdn) {
+  RealObj ret = s;
+  ret.data.hash = s.data.hash + 1;
+  return ret;
+}
+
 struct SmapEntry {
   ghobject_t ghobj;
   ScrubMap::object smobj;
@@ -229,6 +236,10 @@ void add_object(ScrubMap& map, const RealObj& obj_versions, int osd_num);
 struct RealObjsConf {
   std::vector<RealObj> objs;
 };
+
+RealObjsConf make_erasure_code_configuration(int8_t k, int8_t m);
+
+CorruptFuncList make_erasure_code_hash_corruption_functions(int num_osds);
 
 using RealObjsConfRef = std::unique_ptr<RealObjsConf>;
 
