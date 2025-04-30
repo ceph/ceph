@@ -1,7 +1,7 @@
 ARG DISTRO
 
 FROM scratch as bootstrap
-ARG CEPH_CTR_SRC=/usr/local/src/ceph
+ARG CEPH_CTR_SRC=/usr/local/src/jeph
 COPY \
     src/script/lib-build.sh \
     src/script/run-make.sh \
