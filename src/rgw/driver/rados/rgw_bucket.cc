@@ -2974,7 +2974,8 @@ int RGWBucketInstanceMetadataHandler::put_post(
       lc_it = old_bci->attrs.find(RGW_ATTR_LC);
       if (lc_it != old_bci->attrs.end()) {
         ldpp_dout(dpp, 20) << "remove lc config for " << old_bci->info.bucket.name << dendl;
-        ret = lc->remove_bucket_config(dpp, y, bucket.get(), old_bci->attrs, false /* cannot merge attrs */);
+        constexpr bool update_attrs = false;
+        ret = lc->remove_bucket_config(dpp, y, bucket.get(), update_attrs);
         if (ret < 0) {
           ldpp_dout(dpp, 0) << __func__ << " failed to remove lc config for "
               << old_bci->info.bucket.name
