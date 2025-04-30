@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import json
-
+import grpc
+import logging
+logger = logging.getLogger(__name__)
 from .. import mgr
 from ..rest_client import RequestException
 from ..security import Permission, Scope
@@ -12,6 +14,7 @@ from ..services.iscsi_client import IscsiClient
 from ..tools import partial_dict
 from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc
 from .host import get_hosts
+from ..services.nvmeof_client import NVMeoFClient
 
 HEALTH_MINIMAL_SCHEMA = ({
     'client_perf': ({
@@ -105,6 +108,10 @@ HEALTH_MINIMAL_SCHEMA = ({
         'pgs_per_osd': (int, ''),
         'statuses': (str, '')
     }, ''),
+    'nvmeof_gateway_groups': ({
+        'up': (int, 'Number of healthy NVMe-oF gateway groups'),
+        'down': (int, 'Number of unhealthy NVMe-oF gateway groups')
+    }, ''),
     'pools': (str, ''),
     'rgw': (int, ''),
     'scrub_status': (str, '')
@@ -128,6 +135,8 @@ class HealthData(object):
         result = {
             "health": self.basic_health(),
         }
+        if self._has_permissions(Permission.READ, Scope.NVMEOF):
+            result['nvmeof_gateway_groups'] = self.nvmeof_gateway_groups()
 
         if self._has_permissions(Permission.READ, Scope.MONITOR):
             result['mon_status'] = self.mon_status()
@@ -223,6 +232,31 @@ class HealthData(object):
                 up_counter += 1
             except RequestException:
                 down_counter += 1
+        return {'up': up_counter, 'down': down_counter}
+    
+    def nvmeof_gateway_groups(self):
+        up_counter = 0
+        down_counter = 0
+        try:
+            client = NVMeoFClient()
+            groups = client.get_gateway_groups()
+            
+            for group in groups:
+                group_name = group.get('name')
+                if not group_name:
+                    logger.warning("Invalid group data: %s", group)
+                    continue
+                    
+                try:
+                    if client.check_group_health(group_name):
+                        up_counter += 1
+                    else:
+                        down_counter += 1
+                except (RequestException, grpc.RpcError, KeyError) as e:
+                    logger.warning("NVMe-oF group %s check failed: %s", group_name, str(e))
+                    down_counter += 1
+        except Exception as e:
+            logger.error("NVMe-oF gateway groups check failed: %s", str(e))
         return {'up': up_counter, 'down': down_counter}
 
     def mgr_map(self):

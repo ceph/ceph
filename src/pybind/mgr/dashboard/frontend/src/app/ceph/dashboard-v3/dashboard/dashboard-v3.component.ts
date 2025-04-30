@@ -27,7 +27,6 @@ import { AlertClass } from '~/app/shared/enum/health-icon.enum';
 import { HardwareService } from '~/app/shared/api/hardware.service';
 import { SettingsService } from '~/app/shared/api/settings.service';
 import { OsdSettings } from '~/app/shared/models/osd-settings';
-import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 
 @Component({
   selector: 'cd-dashboard-v3',
@@ -94,8 +93,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     private mgrModuleService: MgrModuleService,
     private refreshIntervalService: RefreshIntervalService,
     public prometheusAlertService: PrometheusAlertService,
-    private hardwareService: HardwareService,
-    private nvmeofService: NvmeofService 
+    private hardwareService: HardwareService
   ) {
     super(prometheusService);
     this.permissions = this.authStorageService.getPermissions();
@@ -146,17 +144,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   getHealth() {
     this.healthService.getMinimalHealth().subscribe((data: any) => {
       this.healthData = data;
-
-      this.nvmeofService.listGatewayGroups().subscribe({
-        next: (groups: any) => {
-          this.healthData.gw_group = Array.isArray(groups) ? groups.length : 0;
-          console.log('gateway count:', this.healthData.gw_group);
-        },
-        error: (err) => {
-          console.error('Failed to fetch gateway groups', err);
-          this.healthData.gw_group = 0;
-        }
-      });
     });
   }
 
