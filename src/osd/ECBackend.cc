@@ -394,8 +394,8 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   }
 
   dout(20) << __func__ << ": oid=" << op.hoid << dendl;
-  dout(30) << __func__ << "EC_DEBUG_BUFFERS: "
-           << op.returned_data->debug_string(2048, 8)
+  dout(20) << __func__ << "EC_DEBUG_BUFFERS: "
+           << op.returned_data->debug_string(2048, 0)
            << dendl;
 
   continue_recovery_op(op, m);

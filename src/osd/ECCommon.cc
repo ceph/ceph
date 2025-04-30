@@ -486,16 +486,16 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
     extent_map result;
     if (res.r == 0) {
       ceph_assert(res.errors.empty());
-      dout(30) << __func__ << ": before decode: "
-               << res.buffers_read.debug_string(2048, 8)
+      dout(20) << __func__ << ": before decode: "
+               << res.buffers_read.debug_string(2048, 0)
                << dendl;
       /* Decode any missing buffers */
       int r = res.buffers_read.decode(read_pipeline.ec_impl,
                                   req.shard_want_to_read,
                                   req.object_size);
       ceph_assert( r == 0 );
-      dout(30) << __func__ << ": after decode: "
-               << res.buffers_read.debug_string(2048, 8)
+      dout(20) << __func__ << ": after decode: "
+               << res.buffers_read.debug_string(2048, 0)
                << dendl;
 
       for (auto &&read: req.to_read) {
