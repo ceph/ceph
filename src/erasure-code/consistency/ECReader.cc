@@ -14,9 +14,7 @@ Read::Read(const std::string& oid,
 oid(oid),
 block_size(block_size),
 offset(offset),
-length(length)
-{
-}
+length(length) {}
 
 std::string Read::get_oid() { return oid; }
 uint64_t Read::get_block_size()  { return block_size; }
@@ -36,7 +34,6 @@ ECReader::ECReader(librados::Rados& rados,
   int rc;
   rc = rados.ioctx_create(pool_name.c_str(), io);
   ceph_assert(rc == 0);
-  results = std::vector<ReadResult>();
 }
 
 void ECReader::start_io()

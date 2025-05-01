@@ -1655,8 +1655,8 @@ void ECBackendL::objects_read_async(
           ldpp_dout(dpp, 20) << "length: " << length << dendl;
           ldpp_dout(dpp, 20) << "range length: " << range_length << dendl;
 	  ceph_assert(offset + length <= range_offset + range_length);
-          if (cct->_conf->bluestore_debug_inject_parity_read &&
-            ECInject::test_parity_read(hoid)) {
+          if (cct->_conf->bluestore_debug_inject_read_err &&
+              ECInject::test_parity_read(hoid)) {
             length = range_length;
           }
 	  read.second.first->substr_of(

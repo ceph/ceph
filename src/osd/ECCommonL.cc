@@ -525,14 +525,14 @@ void ECCommonL::ReadPipeline::create_parity_read_buffer(
   std::set<int> wanted_to_read,
   bufferlist *outbl)
 {
-  int stripe_size = (int)sinfo.get_k_plus_m();
+  int k_plus_m = (int)sinfo.get_k_plus_m();
   int k = (int)sinfo.get_k();
   bufferlist parity;
 
-  ceph_assert((int)to_decode.size() == stripe_size);
-  ceph_assert((int)wanted_to_read.size() == stripe_size);
+  ceph_assert((int)to_decode.size() == k_plus_m);
+  ceph_assert((int)wanted_to_read.size() == k_plus_m);
 
-  for (int i = k; i < stripe_size; i++) {
+  for (int i = k; i < k_plus_m; i++) {
     parity.append(to_decode[i]);
     wanted_to_read.erase(i);
     to_decode.erase(i);
@@ -588,7 +588,7 @@ struct ClientReadCompleter : ECCommonL::ReadCompleter {
 	to_decode[static_cast<int>(j->first.shard)] = std::move(j->second);
       }
 
-      if (cct->_conf->bluestore_debug_inject_parity_read &&
+      if (cct->_conf->bluestore_debug_inject_read_err &&
           ECInject::test_parity_read(hoid)) {
         bufferlist outbl;
         read_pipeline.create_parity_read_buffer(to_decode, wanted_to_read, &outbl);
@@ -679,7 +679,7 @@ void ECCommonL::ReadPipeline::objects_read_and_reconstruct(
   map<hobject_t, read_request_t> for_read_op;
   for (auto &&to_read: reads) {
     set<int> want_to_read;
-    if (cct->_conf->bluestore_debug_inject_parity_read &&
+    if (cct->_conf->bluestore_debug_inject_read_err &&
         ECInject::test_parity_read(to_read.first)) {
       get_want_to_read_all_shards(&want_to_read);
     } else if (cct->_conf->osd_ec_partial_reads) {

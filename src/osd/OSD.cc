@@ -6746,16 +6746,16 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 	ss << "bluestore_debug_inject_read_err not enabled";
       }
     } else if (command == "injectparityread") {
-      if (service->cct->_conf->bluestore_debug_inject_parity_read) {
+      if (service->cct->_conf->bluestore_debug_inject_read_err) {
         ss << "injectparityread: " << ECInject::parity_read(obj);
       } else {
-        ss << "bluestore_debug_inject_parity_read not enabled";
+        ss << "bluestore_debug_inject_read_err not enabled";
       }
     } else if (command == "injectclearparityread") {
-      if (service->cct->_conf->bluestore_debug_inject_parity_read) {
+      if (service->cct->_conf->bluestore_debug_inject_read_err) {
         ss << "injectclearparityread: " << ECInject::clear_parity_read(obj);
       } else {
-        ss << "bluestore_debug_inject_parity_read not enabled";
+        ss << "bluestore_debug_inject_read_err not enabled";
       }
     }
     return;

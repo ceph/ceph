@@ -29,7 +29,7 @@ namespace ECInject {
   static std::map<ghobject_t,std::pair<int64_t,int64_t>> write_failures3;
   static std::map<ghobject_t,shard_id_t> write_failures0_shard;
   static std::set<osd_reqid_t> write_failures0_reqid;
-  static std::vector<hobject_t> parity_reads;
+  static std::set<hobject_t> parity_reads;
   /**
    * Configure a read error inject that typically forces additional reads of
    * shards in an EC pool to recover data using the redundancy. With multiple
@@ -150,7 +150,7 @@ namespace ECInject {
    */
   std::string parity_read(const hobject_t& o) {
     std::lock_guard<ceph::recursive_mutex> l(lock);
-    parity_reads.push_back(o);
+    parity_reads.insert(o);
     return "ok - parity read inject set";
   }
 
@@ -251,14 +251,11 @@ namespace ECInject {
    */
   std::string clear_parity_read(const hobject_t& o) {
     std::lock_guard<ceph::recursive_mutex> l(lock);
-
-    auto it = std::find(parity_reads.begin(), parity_reads.end(), o);
-    if (it != parity_reads.end()) {
-      parity_reads.erase(it);
-      return "ok - parity read inject cleared";
+    if (!parity_reads.count(o)) {
+      return "no outstanding parity read inject";
     }
-
-    return "no outstanding parity read inject";
+    parity_reads.erase(o);
+    return "ok - parity read inject cleared";
   }
 
   static bool test_error(const ghobject_t& o,
@@ -359,7 +356,6 @@ namespace ECInject {
   bool test_parity_read(const hobject_t& o)
   {
     std::lock_guard<ceph::recursive_mutex> l(lock);
-    auto it = std::find(parity_reads.begin(), parity_reads.end(), o);
-    return (it != parity_reads.end());
+    return (parity_reads.count(o));
   }
 } // ECInject
