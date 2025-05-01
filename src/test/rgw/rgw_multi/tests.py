@@ -5865,3 +5865,43 @@ def test_copy_obj_perm_check_between_zonegroups(zonegroup):
                           CopySource={'Bucket': source_bucket.name, 'Key': objname},
                           Key=objname)
         assert e.response['Error']['Code'] == 'AccessDenied'
+
+
+def test_object_lock_sync()
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    
+    # enable versioning
+    bucket.configure_versioning(True)
+    zonegroup_meta_checkpoint(zonegroup)
+    
+    # enable object lock on bucket
+    primary.s3_client.put_object_lock_configuration(
+        Bucket=bucket.name,
+        ObjectLockConfiguration={
+            'ObjectLockEnabled': 'Enabled',
+            'Rule': {
+                'DefaultRetention': {
+                    'Mode': 'GOVERNANCE',
+                    'Days': 1
+                }
+            }
+        }
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+    
+    objname = 'dummy'
+
+    # upload a dummy object and wait for sync.
+    k = new_key(primary, bucket, objname)
+    k.set_contents_from_string('foo')
+    
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+    
+    

@@ -5,6 +5,12 @@
 
 using namespace std;
 
+void DefaultRetention::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("mode", mode, obj);
+  JSONDecoder::decode_json("days", days, obj);
+  JSONDecoder::decode_json("years", years, obj);
+}
+
 void DefaultRetention::decode_xml(XMLObj *obj) {
   RGWXMLDecoder::decode_xml("Mode", mode, obj, true);
   if (mode.compare("GOVERNANCE") != 0 && mode.compare("COMPLIANCE") != 0) {
@@ -35,6 +41,10 @@ void DefaultRetention::dump_xml(Formatter *f) const {
   }
 }
 
+void ObjectLockRule::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("DefaultRetention", defaultRetention, obj);
+}
+
 void ObjectLockRule::decode_xml(XMLObj *obj) {
   RGWXMLDecoder::decode_xml("DefaultRetention", defaultRetention, obj, true);
 }
@@ -52,6 +62,14 @@ void ObjectLockRule::dump(Formatter *f) const {
 void ObjectLockRule::generate_test_instances(std::list<ObjectLockRule*>& o) {
   ObjectLockRule *obj = new ObjectLockRule;
   o.push_back(obj);
+}
+
+void RGWObjectLock::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("enabled", enabled, obj);
+  JSONDecoder::decode_json("rule_exist", rule_exist, obj);
+  if (rule_exist) {
+    JSONDecoder::decode_json("rule", rule, obj);
+  }
 }
 
 void RGWObjectLock::decode_xml(XMLObj *obj) {
