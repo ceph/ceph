@@ -3948,3 +3948,40 @@ def test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime():
         except:
             pass
         raise
+
+def test_object_lock_sync():
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+
+    # enable versioning
+    primary.s3_client.put_bucket_versioning(
+        Bucket=bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'})
+    zonegroup_meta_checkpoint(zonegroup)
+
+    lock_config = {
+    'ObjectLockEnabled': 'Enabled',
+    'Rule': {
+        'DefaultRetention': {
+            'Mode': 'COMPLIANCE',
+            'Days': 1
+            }
+        }
+    }
+
+    # enable object lock on bucket
+    primary.s3_client.put_object_lock_configuration(
+        Bucket=bucket.name,
+        ObjectLockConfiguration = lock_config)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(secondary.zone, primary.zone)
+
+    response = secondary.s3_client.get_object_lock_configuration(Bucket=bucket.name)
+    assert(response['ObjectLockConfiguration'] == lock_config)
