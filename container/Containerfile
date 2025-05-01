@@ -14,7 +14,7 @@ ARG CEPH_SHA1
 ARG CEPH_GIT_REPO
 
 # (optional) Define the baseurl= for the ganesha.repo
-ARG GANESHA_REPO_BASEURL="https://buildlogs.centos.org/centos/\$releasever-stream/storage/\$basearch/nfsganesha-5/"
+ARG GANESHA_REPO_BASEURL="https://mirror.stream.centos.org/SIGs/\$releasever-stream/storage/\$basearch/nfsganesha-4/"
 
 # (optional) Set to "crimson" to install crimson packages.
 ARG OSD_FLAVOR="default"
