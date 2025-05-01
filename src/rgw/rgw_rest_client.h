@@ -24,6 +24,7 @@ protected:
   bufferlist response;
 
   virtual int handle_header(const std::string& name, const std::string& val);
+  virtual int handle_headers(const std::map<std::string, std::string>& headers, int http_status) { return 0; }
   void get_params_str(std::map<std::string, std::string>& extra_args, std::string& dest);
 
 public:
@@ -123,6 +124,7 @@ protected:
   bufferlist outbl;
 
   int handle_header(const std::string& name, const std::string& val) override;
+  int handle_headers(const std::map<std::string, std::string>& headers, int http_status) override;
 public:
   int send_data(void *ptr, size_t len, bool *pause) override;
   int receive_data(void *ptr, size_t len, bool *pause) override;
@@ -134,6 +136,7 @@ public:
       ReceiveCB() = default;
       virtual ~ReceiveCB() = default;
       virtual int handle_data(bufferlist& bl, bool *pause = nullptr) = 0;
+      virtual int handle_headers(const std::map<std::string, std::string>& headers, int http_status) { return 0; }
       virtual void set_extra_data_len(uint64_t len) {
         extra_data_len = len;
       }

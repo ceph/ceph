@@ -10716,7 +10716,7 @@ next:
     if (!rgw::sal::User::empty(user)) {
       pipe->params.user = user->get_id();
     } else if (pipe->params.mode == rgw_sync_pipe_params::MODE_USER &&
-               pipe->params.user.empty()) {
+               !pipe->params.user.has_value()) {
       cerr << "ERROR: missing --uid for --mode=user" << std::endl;
       return EINVAL;
     }

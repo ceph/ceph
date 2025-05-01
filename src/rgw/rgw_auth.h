@@ -48,9 +48,9 @@ public:
    * applier that is being used. */
   virtual uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const = 0;
 
-  /* Verify whether a given identity *can be treated as* an admin of rgw_owner
-  * specified in @o. On error throws rgw::auth::Exception storing the reason. */
-  virtual bool is_admin_of(const rgw_owner& o) const = 0;
+  /* Verify whether a given identity *can be treated as* an admin.
+   * On error throws rgw::auth::Exception storing the reason. */
+  virtual bool is_admin() const = 0;
 
   /* Verify whether a given identity is the rgw_owner specified in @o.
    * On internal error throws rgw::auth::Exception storing the reason. */
@@ -480,7 +480,7 @@ public:
     return RGW_PERM_NONE;
   }
 
-  bool is_admin_of(const rgw_owner& o) const override {
+  bool is_admin() const override {
     return false;
   }
 
@@ -664,7 +664,7 @@ public:
 
   ACLOwner get_aclowner() const override;
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
-  bool is_admin_of(const rgw_owner& o) const override;
+  bool is_admin() const override;
   bool is_owner_of(const rgw_owner& o) const override;
   bool is_root() const override;
   bool is_identity(const Principal& p) const override;
@@ -730,7 +730,7 @@ public:
 
   ACLOwner get_aclowner() const override;
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
-  bool is_admin_of(const rgw_owner& o) const override;
+  bool is_admin() const override;
   bool is_owner_of(const rgw_owner& o) const override;
   bool is_root() const override;
   bool is_identity(const Principal& p) const override;
@@ -765,7 +765,8 @@ public:
                                       std::vector<IAM::Policy> policies,
                                       const std::string& subuser,
                                       const std::optional<uint32_t>& perm_mask,
-                                      const std::string& access_key_id) const = 0;
+                                      const std::string& access_key_id,
+                                      bool is_impersonating) const = 0;
     };
 };
 
@@ -809,7 +810,7 @@ public:
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return 0;
   }
-  bool is_admin_of(const rgw_owner& o) const override {
+  bool is_admin() const override {
     return false;
   }
   bool is_owner_of(const rgw_owner& o) const override;
@@ -835,11 +836,12 @@ public:
 
   struct Factory {
     virtual ~Factory() {}
-    virtual aplptr_t create_apl_role(CephContext* cct,
-                                     const req_state* s,
-                                     Role role,
-                                     TokenAttrs token_attrs) const = 0;
-  };
+    virtual aplptr_t create_apl_role( CephContext* cct,
+                                      const req_state* s,
+                                      Role role,
+                                      TokenAttrs token_attrs,
+                                      bool is_impersonating) const = 0;
+    };
 };
 
 class ServiceIdentity : public Identity {
@@ -856,7 +858,7 @@ public:
     return RGW_PERM_NONE;
   }
 
-  bool is_admin_of(const rgw_owner& o) const override {
+  bool is_admin() const override {
     return false;
   }
 

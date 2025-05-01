@@ -8,6 +8,8 @@ from nose.tools import eq_ as eq
 
 from .multisite import *
 
+from .conn import get_gateway_sts_connection
+
 log = logging.getLogger(__name__)
 
 def check_object_eq(k1, k2, check_extra = True):
@@ -106,7 +108,7 @@ class RadosZone(Zone):
             return True
 
         def get_role(self, role_name):
-            return self.iam_conn.get_role(role_name)
+            return self.iam_conn.get_role(RoleName=role_name)
 
         def check_role_eq(self, zone_conn, role_name):
             log.info('comparing role=%s zones={%s, %s}', role_name, self.name, zone_conn.name)
@@ -130,10 +132,10 @@ class RadosZone(Zone):
         def create_role(self, path, rolename, policy_document, tag_list):
             if policy_document is None:
                 policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"arn:aws:iam:::user/testuser\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
-            return self.iam_conn.create_role(rolename, policy_document, path)
+            return self.iam_conn.create_role(RoleName=rolename, AssumeRolePolicyDocument=policy_document, Path=path)
 
         def delete_role(self, role_name):
-            return self.iam_conn.delete_role(role_name)
+            return self.iam_conn.delete_role(RoleName=role_name)
 
         def has_role(self, role_name):
             try:
@@ -141,6 +143,11 @@ class RadosZone(Zone):
             except BotoServerError:
                 return False
             return True
+
+        def put_role_policy(self, rolename, policyname, policy_document):
+            if policy_document is None:
+                policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Resource\":\"*\",\"Action\":\"s3:*\"}]}"
+            return self.iam_conn.put_role_policy(RoleName=rolename, PolicyName=policyname, PolicyDocument=policy_document)
 
         def create_topic(self, topicname, attributes):
             result = self.sns_client.create_topic(Name=topicname, Attributes=attributes)
@@ -172,6 +179,17 @@ class RadosZone(Zone):
 
         def head_object(self, bucket_name, obj_name):
             return self.s3_client.head_object(Bucket=bucket_name, Key=obj_name)
+
+        def assume_role_create_bucket(self, bucket, role_arn, session_name, alt_user_creds):
+            region = "" if self.zone.zonegroup is None else self.zone.zonegroup.name
+            sts_conn = None
+            if self.zone.gateways is not None:
+                sts_conn = get_gateway_sts_connection(self.zone.gateways[0], alt_user_creds, region)
+            assumed_role_object = sts_conn.assume_role(RoleArn=role_arn, RoleSessionName=session_name)
+            assumed_role_credentials = assumed_role_object['Credentials']
+            credentials = Credentials(assumed_role_credentials['AccessKeyId'], assumed_role_credentials['SecretAccessKey'])
+            self.get_temp_s3_connection(credentials, assumed_role_credentials['SessionToken'])
+            self.temp_s3_client.create_bucket(Bucket=bucket)
 
     def get_conn(self, credentials):
         return self.Conn(self, credentials)

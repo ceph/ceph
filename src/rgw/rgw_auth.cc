@@ -203,7 +203,7 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
     const rgw_user id;
     const std::string display_name;
     const std::string path;
-    const bool is_admin;
+    const bool user_is_admin;
     const uint32_t type;
     const std::optional<RGWAccountInfo> account;
     const std::vector<IAM::Policy> policies;
@@ -216,7 +216,7 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
         id(user.user_id),
         display_name(user.display_name),
         path(user.path),
-        is_admin(user.admin),
+        user_is_admin(user.admin || user.system),
         type(user.type),
         account(std::move(account)),
         policies(std::move(policies))
@@ -238,8 +238,8 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
       return rgw_perms_from_aclspec_default_strategy(id.to_str(), aclspec, dpp);
     }
 
-    bool is_admin_of(const rgw_owner& o) const override {
-      return is_admin;
+    bool is_admin() const override {
+      return user_is_admin;
     }
 
     bool is_owner_of(const rgw_owner& o) const override {
@@ -302,7 +302,7 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
 
     void to_str(std::ostream& out) const override {
       out << "RGWDummyIdentityApplier(auth_id=" << id
-          << ", is_admin=" << is_admin << ")";
+          << ", is_admin=" << user_is_admin << ")";
     }
 
     auto load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User> override {
@@ -825,7 +825,7 @@ uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvid
   return perm;
 }
 
-bool rgw::auth::RemoteApplier::is_admin_of(const rgw_owner& o) const
+bool rgw::auth::RemoteApplier::is_admin() const
 {
   return info.is_admin;
 }
@@ -1065,7 +1065,7 @@ uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvide
   return mask;
 }
 
-bool rgw::auth::LocalApplier::is_admin_of(const rgw_owner& o) const
+bool rgw::auth::LocalApplier::is_admin() const
 {
   return user_info.admin || user_info.system;
 }
@@ -1320,7 +1320,8 @@ rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const re
     auto apl = \
       apl_factory->create_apl_local(cct, s, std::move(user), std::nullopt, {},
                                     rgw::auth::LocalApplier::NO_SUBUSER,
-                                    std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY);
+                                    std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY,
+                                    false /* is_impersonating */);
     return result_t::grant(std::move(apl));
   }
 }

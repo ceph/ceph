@@ -411,6 +411,26 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       total_len = 0;
     }
 
+    dump_header(s, "Rgwx-Perm-Checked", "true");
+
+    // check for GetObject(Version)Tagging permission to include tags in response
+    auto action = s->object->get_instance().empty() ? rgw::IAM::s3GetObjectTagging : rgw::IAM::s3GetObjectVersionTagging;
+    // since we are already under s->system_request, if the request is not impersonating,
+    // it can be assumed that it is not a user-mode replication.
+    bool keep_tags = s->auth.identity->is_admin() || verify_object_permission(this, s, action);
+
+    // remove tags from attrs if the user doesn't have permission
+    bufferlist tags_bl;
+    if (!keep_tags) {
+      auto iter = attrs.find(RGW_ATTR_TAGS);
+      if (iter != attrs.end()) {
+        ldpp_dout(this, 4) << "removing tags from attrs due to missing permission on " << rgw::IAM::action_bit_string(action) << dendl;
+
+        tags_bl = iter->second;
+        attrs.erase(iter);
+      }
+    }
+
     /* JSON encode object metadata */
     JSONFormatter jf;
     jf.open_object_section("obj_metadata");
@@ -423,6 +443,11 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     metadata_bl.append(ss.str());
     dump_header(s, "Rgwx-Embedded-Metadata-Len", metadata_bl.length());
     total_len += metadata_bl.length();
+
+    // restore tags
+    if (tags_bl.length()) {
+      attrs[RGW_ATTR_TAGS] = std::move(tags_bl);
+    }
   }
 
   if (s->system_request && !real_clock::is_zero(lastmod)) {
@@ -6855,7 +6880,7 @@ rgw::auth::s3::LocalEngine::authenticate(
   if (s->op_type == RGW_OP_OPTIONS_CORS) {
     auto apl = apl_factory->create_apl_local(
         cct, s, std::move(user), std::move(account), std::move(policies),
-        k.subuser, std::nullopt, access_key_id);
+        k.subuser, std::nullopt, access_key_id, false /* is_impersonating */);
     return result_t::grant(std::move(apl), completer_factory(k.key));
   }
 
@@ -6874,9 +6899,46 @@ rgw::auth::s3::LocalEngine::authenticate(
     return result_t::deny(-ERR_SIGNATURE_NO_MATCH);
   }
 
-  auto apl = apl_factory->create_apl_local(
-      cct, s, std::move(user), std::move(account), std::move(policies),
-      k.subuser, std::nullopt, access_key_id);
+  aplptr_t apl;
+
+  // if this is a system request and we have rgwx-perm-check-uid passed,
+  // we do impersonation
+  if (user->get_info().system) {
+    const std::string perm_check_uid = s->info.args.get(RGW_SYS_PARAM_PREFIX "perm-check-uid");
+    if (!perm_check_uid.empty()) {
+      auto perm_check_user = driver->get_user(rgw_user(perm_check_uid));
+      if (int r = perm_check_user->load_user(dpp, y); r < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: unable to load user info for "
+                          << perm_check_uid << dendl;
+        return result_t::deny(r);
+      }
+
+      account.reset();
+      policies.clear();
+      // load account and policies for the impersonated user
+      int ret = load_account_and_policies(dpp, y, driver, perm_check_user->get_info(),
+                                          perm_check_user->get_attrs(), account, policies);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: unable to load account and policies for "
+                          << perm_check_uid << dendl;
+        return result_t::deny(ret);
+      }
+
+      apl = apl_factory->create_apl_local(
+          cct, s, std::move(perm_check_user), std::move(account), std::move(policies),
+          rgw::auth::LocalApplier::NO_SUBUSER, std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY,
+          true /* is_impersonating */);
+    }
+  }
+
+  if (!apl) {
+    // if we don't have impersonation, use the original user
+    // and the original access key id for logging
+    apl = apl_factory->create_apl_local(
+        cct, s, std::move(user), std::move(account), std::move(policies),
+        k.subuser, std::nullopt, access_key_id, false /* is_impersonating */);
+  }
+
   return result_t::grant(std::move(apl), completer_factory(k.key));
 }
 
@@ -6971,10 +7033,37 @@ rgw::auth::s3::STSEngine::authenticate(
     return result_t::reject(ret);
   }
   //Authentication
+  bool is_impersonating = false;
+  std::string secret_access_key;
   //Check if access key is not the same passed in by client
   if (token.access_key_id != _access_key_id) {
-    ldpp_dout(dpp, 0) << "Invalid access key" << dendl;
-    return result_t::reject(-EPERM);
+    /* In case the request is forwarded from secondary in case of multi-site,
+      we by-pass authentication using the session token credentials,
+      instead we use the system user's credentials that was used to sign
+      this request */
+    std::unique_ptr<rgw::sal::User> user;
+    const std::string access_key_id(_access_key_id);
+    if (driver->get_user_by_access_key(dpp, access_key_id, y, &user) < 0) {
+        ldpp_dout(dpp, 5) << "error reading user info, uid=" << access_key_id
+                << " can't authenticate" << dendl;
+        return result_t::reject(-ERR_INVALID_ACCESS_KEY);
+    }
+    // only allow system users as this could be a forwarded request from secondary
+    if (user->get_info().system && driver->is_meta_master()) {
+      const auto iter = user->get_info().access_keys.find(access_key_id);
+      if (iter == std::end(user->get_info().access_keys)) {
+        ldpp_dout(dpp, 0) << "ERROR: access key not encoded in user info" << dendl;
+        return result_t::reject(-EPERM);
+      }
+      const RGWAccessKey& k = iter->second;
+      secret_access_key = k.key;
+      is_impersonating = true;
+    } else {
+      ldpp_dout(dpp, 0) << "Invalid access key" << dendl;
+      return result_t::reject(-EPERM);
+    }
+  } else {
+    secret_access_key = token.secret_access_key;
   }
   //Check if the token has expired
   if (! token.expiration.empty()) {
@@ -6995,7 +7084,7 @@ rgw::auth::s3::STSEngine::authenticate(
   }
   //Check for signature mismatch
   const VersionAbstractor::server_signature_t server_signature = \
-    signature_factory(cct, token.secret_access_key, string_to_sign);
+    signature_factory(cct, secret_access_key, string_to_sign);
   auto compare = signature.compare(server_signature);
 
   ldpp_dout(dpp, 15) << "string_to_sign="
@@ -7059,7 +7148,7 @@ rgw::auth::s3::STSEngine::authenticate(
     t_attrs.token_issued_at = std::move(token.issued_at);
     t_attrs.principal_tags = std::move(token.principal_tags);
     auto apl = role_apl_factory->create_apl_role(cct, s, std::move(r),
-                                                 std::move(t_attrs));
+                                                 std::move(t_attrs), is_impersonating);
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   } else { // This is for all local users of type TYPE_RGW|ROOT|NONE
     if (token.user.empty()) {
@@ -7085,7 +7174,7 @@ rgw::auth::s3::STSEngine::authenticate(
     string subuser;
     auto apl = local_apl_factory->create_apl_local(
         cct, s, std::move(user), std::move(account), std::move(policies),
-        subuser, token.perm_mask, std::string(_access_key_id));
+        subuser, token.perm_mask, std::string(_access_key_id), false /* is_impersonating */);
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   }
 }
