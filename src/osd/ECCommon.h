@@ -65,6 +65,11 @@ struct ECCommon {
 
   using ec_extents_t = std::map<hobject_t, ec_extent_t>;
 
+  static inline const uint32_t scrub_fadvise_flags{
+      CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
+      CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE};
+
   virtual ~ECCommon() = default;
 
   virtual void handle_sub_write(
