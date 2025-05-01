@@ -201,7 +201,8 @@ Then apply this yaml document:
 
 The ``wildcard_enabled`` flag ensures that a wildcard SAN entry is included in the self-signed certificate,
 allowing access to buckets in virtual host mode. By default, this flag is disabled.
-example: wildcard SAN - (``*.s3.cephlab.com``)
+
+Example of a wildcard SAN: ``*.s3.cephlab.com``
 
 Disabling multisite sync traffic
 --------------------------------
@@ -290,7 +291,7 @@ address instead of FQDN.
 .. image:: ../../images/HAProxy_for_RGW.svg
 
 There are N hosts where the ingress service is deployed.  Each host
-has a haproxy daemon and a keepalived daemon.  A virtual IP is
+has a haproxy daemon and a keepalived daemon.  A virtual IP address is
 automatically configured on only one of these hosts at a time.
 
 Each keepalived daemon checks every few seconds whether the haproxy
