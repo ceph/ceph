@@ -3488,10 +3488,14 @@ int OSD::run_osd_bench_test(
     bsize = osize;
   }
 
-  dout(1) << " bench count " << count
-          << " bsize " << byte_u_t(bsize) << dendl;
+  dout(0) << " bench count " << count
+          << " bsize " << byte_u_t(bsize)
+          << " onum " << onum
+          << " osize " << byte_u_t(osize)
+          << dendl;
 
   ObjectStore::Transaction cleanupt;
+  utime_t start = ceph_clock_now();
 
   if (osize && onum) {
     bufferlist bl;
@@ -3517,9 +3521,13 @@ int OSD::run_osd_bench_test(
       waiter.wait();
     }
   }
+  dout(0) << __func__
+          << " prefill took " << ceph_clock_now() - start
+          << dendl;
 
+
+  start = ceph_clock_now();
   bufferlist bl;
-  utime_t start = ceph_clock_now();
   for (int64_t pos = 0; pos < count; pos += bsize) {
     char nm[34];
     unsigned offset = 0;
@@ -3552,6 +3560,9 @@ int OSD::run_osd_bench_test(
   }
   utime_t end = ceph_clock_now();
   *elapsed = end - start;
+  dout(0) << __func__
+          << " benchmark took " << *elapsed
+          << dendl;
 
   // clean up
   store->queue_transaction(service.meta_ch, std::move(cleanupt), nullptr);
