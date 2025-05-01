@@ -9882,7 +9882,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 		   << " min_alloc_size 0x" << min_alloc_size
 		   << " available 0x " << alloc->get_free()
 		   << std::dec << dendl;
-	      if (alloc_len > 0) {
+	      if (exts.size()) {
                 alloc->release(exts);
 	      }
 	      bypass_rest = true;
@@ -10344,7 +10344,7 @@ void BlueStore::inject_leaked(uint64_t len)
   PExtentVector exts;
   int64_t alloc_len = alloc->allocate(len, min_alloc_size,
 					   min_alloc_size * 256, 0, &exts);
-
+  ceph_assert(alloc_len >= 0); // generally we do not expect any errors
   if (fm->is_null_manager()) {
     return;
   }
@@ -13320,6 +13320,7 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
   bool discard_queued = false;
   // it's expected we're called with lazy_release_lock already taken!
   if (unlikely(cct->_conf->bluestore_debug_no_reuse_blocks ||
+               txc->released.size() == 0 ||
                !alloc)) {
       goto out;
   }
