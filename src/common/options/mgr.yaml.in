@@ -5,7 +5,8 @@ options:
 - name: mgr_data
   type: str
   level: advanced
-  desc: Filesystem path to the ceph-mgr data directory, used to contain keyring.
+  desc: Filesystem path to the Manager's data directory, which contains
+    keyrings and other data 
   fmt_desc: Path to load daemon data (such as keyring)
   default: /var/lib/ceph/mgr/$cluster-$id
   services:
