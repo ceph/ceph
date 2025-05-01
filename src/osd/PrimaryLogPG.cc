@@ -2195,7 +2195,9 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   // missing object?
   if (is_unreadable_object(head)) {
-    if (!is_primary()) {
+    if (!is_primary() && is_missing_any_head_or_clone_of(head)) {
+      dout(10) << __func__ <<  "possibly missing clone object " << head
+               << " on this replica, bouncing to primary" << dendl;
       osd->logger->inc(l_osd_replica_read_redirect_missing);
       osd->reply_op_error(op, -EAGAIN);
       return;
