@@ -95,20 +95,25 @@ static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, std::string& o
 struct RGWOLHInfo {
   rgw_obj target;
   bool removed;
+  rgw_bucket_snap_id snap_id;
 
   RGWOLHInfo() : removed(false) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(target, bl);
     encode(removed, bl);
+    encode(snap_id, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START(1, bl);
+     DECODE_START(2, bl);
      decode(target, bl);
      decode(removed, bl);
+     if (struct_v >= 2) {
+       decode(snap_id, bl);
+     }
      DECODE_FINISH(bl);
   }
   static void generate_test_instances(std::list<RGWOLHInfo*>& o);

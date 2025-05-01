@@ -1064,6 +1064,12 @@ class RGWSI_Zone;
 #include "rgw_cksum.h"
 
 
+struct rgw_bucket_reserved {
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::const_iterator& bl);
+};
+WRITE_CLASS_ENCODER(rgw_bucket_reserved)
+
 // this represents the at-rest bucket instance object and is stored as
 // a system object
 struct RGWBucketInfo {
@@ -1102,6 +1108,8 @@ struct RGWBucketInfo {
   RGWObjectLock obj_lock;
 
   std::optional<rgw_sync_policy_info> sync_policy;
+
+  rgw_bucket_reserved reserved_for_snapshots;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
