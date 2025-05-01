@@ -1032,3 +1032,52 @@ TEST(ECUtil, slice)
     ASSERT_EQ(slice_map, sem);
   }
 }
+
+TEST(ECUtil, insert_parity_buffer_into_sem) {
+  int k=2;
+  int m=2;
+  int chunk_size = 4096;
+  stripe_info_t sinfo(k, m, k*chunk_size);
+
+  buffer::list bl1k;
+  buffer::list bl4k;
+  bl1k.append_zero(1024);
+  bl4k.append_zero(4096);
+
+  {
+    shard_extent_map_t sem(&sinfo);
+    sem.insert_in_shard(shard_id_t(2), 0, bl1k);
+    ASSERT_EQ(-1, sem.ro_start);
+    ASSERT_EQ(-1, sem.ro_end);
+  }
+
+  {
+    shard_extent_map_t sem(&sinfo);
+    sem.insert_in_shard(shard_id_t(0), 0, bl4k);
+    ASSERT_EQ(0, sem.ro_start);
+    ASSERT_EQ(4096, sem.ro_end);
+    sem.insert_in_shard(shard_id_t(2), 0, bl4k);
+    ASSERT_EQ(0, sem.ro_start);
+    ASSERT_EQ(4096, sem.ro_end);
+  }
+
+  {
+    shard_extent_map_t sem(&sinfo);
+    sem.insert_in_shard(shard_id_t(1), 0, bl4k);
+    ASSERT_EQ(4096, sem.ro_start);
+    ASSERT_EQ(8192, sem.ro_end);
+    sem.insert_in_shard(shard_id_t(2), 0, bl4k);
+    ASSERT_EQ(4096, sem.ro_start);
+    ASSERT_EQ(8192, sem.ro_end);
+  }
+
+  {
+    shard_extent_map_t sem(&sinfo);
+    sem.insert_in_shard(shard_id_t(1), 0, bl4k);
+    ASSERT_EQ(4096, sem.ro_start);
+    ASSERT_EQ(8192, sem.ro_end);
+    sem.insert_in_shard(shard_id_t(3), 0, bl4k);
+    ASSERT_EQ(4096, sem.ro_start);
+    ASSERT_EQ(8192, sem.ro_end);
+  }
+}

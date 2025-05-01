@@ -354,7 +354,7 @@ void shard_extent_map_t::insert_in_shard(shard_id_t shard, uint64_t off,
   extent_maps[shard].insert(off, bl.length(), bl);
   raw_shard_id_t raw_shard = sinfo->get_raw_shard(shard);
 
-  if (raw_shard > sinfo->get_k()) {
+  if (raw_shard >= sinfo->get_k()) {
     return;
   }
 
