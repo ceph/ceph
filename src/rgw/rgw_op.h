@@ -74,7 +74,8 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw::SiteConfig& site,
                                   const rgw_owner& effective_owner,
                                   bufferlist* indata, JSONParser* jp,
-                                  req_info& req, optional_yield y);
+                                  const req_info& req, rgw_err& err,
+                                  optional_yield y);
 
 int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
                                        CephContext *cct,
