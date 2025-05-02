@@ -11,12 +11,14 @@ This is the seventh backport (hotfix) release in the Reef series. We recommend t
 Notable Changes
 ---------------
 
-This release fixes a critical bluestore regression in versions 18.2.5 and 18.2.6 (https://github.com/ceph/ceph/pull/61653). Users running either of those releases are recommended to upgrade at the earliest convenience.
+This release fixes a critical bluestore regression in versions 18.2.5 and 18.2.6 (https://github.com/ceph/ceph/pull/61653).
+Users running either of those releases are recommended to upgrade at the earliest convenience.
 
 This release also includes several other important BlueStore fixes:
-https://github.com/ceph/ceph/pull/62840
-https://github.com/ceph/ceph/pull/62054
-https://github.com/ceph/ceph/pull/62152
+
+* https://github.com/ceph/ceph/pull/62840
+* https://github.com/ceph/ceph/pull/62054
+* https://github.com/ceph/ceph/pull/62152
 
 Changelog
 ---------
