@@ -61,10 +61,12 @@ void OSDPoolGetRequest::decode_json(JSONObj* obj) {
 
 void OSDPoolGetReply::dump(Formatter* f) const {
   encode_json("erasure_code_profile", erasure_code_profile, f);
+  encode_json("allow_ec_optimizations", allow_ec_optimizations, f);
 }
 
 void OSDPoolGetReply::decode_json(JSONObj* obj) {
   JSONDecoder::decode_json("erasure_code_profile", erasure_code_profile, obj);
+  JSONDecoder::decode_json("allow_ec_optimizations", allow_ec_optimizations, obj);
 }
 
 void OSDECProfileGetRequest::dump(Formatter* f) const {

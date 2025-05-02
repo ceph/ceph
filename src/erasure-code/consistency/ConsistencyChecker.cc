@@ -82,7 +82,8 @@ bool ConsistencyChecker::check_object_consistency(const bufferlist& inbl, int st
 
   bufferlist outbl;
   auto encoder = ceph::consistency::ECEncoder(pool.get_ec_profile(), stripe_unit);
-  encoder.do_encode(data_and_parity.first, outbl);
+  bool is_optimized = commands.get_pool_allow_ec_optimizations(pool.get_pool_name());
+  encoder.do_encode(data_and_parity.first, outbl, is_optimized);
 
   return buffers_match(outbl, data_and_parity.second);
 }

@@ -23,6 +23,7 @@ namespace ceph {
         int get_primary_osd(const std::string& pool_name,
                             const std::string& oid);
         std::string get_pool_ec_profile_name(const std::string& pool_name);
+        bool get_pool_allow_ec_optimizations(const std::string& pool_name);
         ceph::ErasureCodeProfile get_ec_profile_for_pool(const std::string& pool_name);
         void inject_parity_read_on_primary_osd(const std::string& pool_name,
                                                const std::string& oid);

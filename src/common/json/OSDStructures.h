@@ -50,7 +50,7 @@ struct OSDPoolGetRequest {
 
 struct OSDPoolGetReply {
   std::string erasure_code_profile;
-
+  bool allow_ec_optimizations;
   void dump(Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
