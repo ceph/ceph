@@ -114,17 +114,17 @@ class StreamIO : public rgw::asio::ClientIO {
   CephContext* const cct;
   Stream& stream;
   timeout_timer& timeout;
-  boost::asio::yield_context yield;
+  optional_yield y;
   parse_buffer& buffer;
   boost::system::error_code fatal_ec;
  public:
   StreamIO(CephContext *cct, Stream& stream, timeout_timer& timeout,
-           rgw::asio::parser_type& parser, boost::asio::yield_context yield,
+           rgw::asio::parser_type& parser, optional_yield y,
            parse_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
            const tcp::endpoint& remote_endpoint)
       : ClientIO(parser, is_ssl, local_endpoint, remote_endpoint),
-        cct(cct), stream(stream), timeout(timeout), yield(yield),
+        cct(cct), stream(stream), timeout(timeout), y(y),
         buffer(buffer)
   {}
 
@@ -133,8 +133,14 @@ class StreamIO : public rgw::asio::ClientIO {
   size_t write_data(const char* buf, size_t len) override {
     boost::system::error_code ec;
     timeout.start();
-    auto bytes = boost::asio::async_write(stream, boost::asio::buffer(buf, len),
-                                          yield[ec]);
+    size_t bytes = 0;
+    if (y) {
+      boost::asio::yield_context& yield = y.get_yield_context();
+      bytes = boost::asio::async_write(stream, boost::asio::buffer(buf, len),
+                                       yield[ec]);
+    } else {
+      bytes = boost::asio::write(stream, boost::asio::buffer(buf, len), ec);
+    }
     timeout.cancel();
     if (ec) {
       ldout(cct, 4) << "write_data failed: " << ec.message() << dendl;
@@ -159,7 +165,12 @@ class StreamIO : public rgw::asio::ClientIO {
     while (body_remaining.size && !parser.is_done()) {
       boost::system::error_code ec;
       timeout.start();
-      http::async_read_some(stream, buffer, parser, yield[ec]);
+      if (y) {
+        boost::asio::yield_context& yield = y.get_yield_context();
+        http::async_read_some(stream, buffer, parser, yield[ec]);
+      } else {
+        http::read_some(stream, buffer, parser, ec);
+      }
       timeout.cancel();
       if (ec == http::error::need_buffer) {
         break;
@@ -315,7 +326,11 @@ void handle_connection(boost::asio::io_context& context,
         return;
       }
 
-      StreamIO real_client{cct, stream, timeout, parser, yield, buffer,
+      optional_yield y = null_yield;
+      if (cct->_conf->rgw_beast_enable_async) {
+        y = optional_yield{yield};
+      }
+      StreamIO real_client{cct, stream, timeout, parser, y, buffer,
                            is_ssl, local_endpoint, remote_endpoint};
 
       auto real_client_io = rgw::io::add_reordering(
@@ -333,10 +348,6 @@ void handle_connection(boost::asio::io_context& context,
         auto& client_env = client.get_env();
         client_env.set("SSL_CIPHER", ssl_cipher);
         client_env.set("TLS_VERSION", tls_version);
-      }
-      optional_yield y = null_yield;
-      if (cct->_conf->rgw_beast_enable_async) {
-        y = optional_yield{yield};
       }
       int http_ret = 0;
       string user = "-";
