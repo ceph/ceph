@@ -1,9 +1,17 @@
 name: Check if any ceph configuration has been changed
+# on:
+#   pull_request_target:
+#     types: [opened, synchronize, reopened]
+#     branches:
+#       - main
+
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened]
-    branches:
-      - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - edited
+      - reopened
 
 # The following permissions are needed to write a comment to repo
 permissions:
@@ -35,7 +43,7 @@ jobs:
       - name: execute config diff tool
         id: diff_tool
         run:  |
-          rm diff_result.json
+          rm -f diff_result.json
           python3 ./src/script/config-diff/config_diff.py diff-branch-remote-repo --ref-repo ${{ github.event.pull_request.base.repo.clone_url }} --ref-branch ${{ github.event.pull_request.base.ref }} --remote-repo ${{ github.event.pull_request.head.repo.clone_url }} --cmp-branch ${{ github.event.pull_request.head.ref }} >> diff_result.json
         working-directory: ceph
       
