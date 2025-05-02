@@ -296,7 +296,7 @@ void ECBackend::RecoveryBackend::handle_recovery_push_reply(
   if (!recovery_ops.count(op.soid))
     return;
   RecoveryOp &rop = recovery_ops[op.soid];
-  ceph_assert(rop.waiting_on_pushes.count(from));
+  ceph_assert(rop.waiting_on_pushes.contains(from));
   rop.waiting_on_pushes.erase(from);
   continue_recovery_op(rop, m);
 }
@@ -377,10 +377,6 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
 
   int r = op.returned_data->decode(ec_impl, shard_want_to_read, aligned_size);
   ceph_assert(r == 0);
-  // We are never appending here, so we never need hinfo.
-  op.returned_data->insert_parity_buffers();
-  r = op.returned_data->encode(ec_impl, NULL, 0);
-  ceph_assert(r==0);
 
   // Finally, we don't want to write any padding, so truncate the buffer
   // to remove it.
@@ -538,12 +534,30 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
 
       op.state = RecoveryOp::READING;
 
-      // We always read the recovery chunk size (default 8MiB + parity). If that
-      // amount of data is not available, then the backend will truncate the
-      // response.
+      /* When beginning recovery, the OI may not be known. As such the object
+       * size is not known. For the first read, attempt to read the default
+       * size.  If this is larger than the object sizes, then the OSD will
+       * return truncated reads.  If the object size is known, then attempt
+       * correctly sized reads.
+       */
+      uint64_t read_size = get_recovery_chunk_size();
+      if (op.obc) {
+        uint64_t read_to_end = ECUtil::align_next(op.obc->obs.oi.size) -
+          op.recovery_progress.data_recovered_to;
+
+        if (read_to_end < read_size) {
+          read_size = read_to_end;
+        }
+      }
       sinfo.ro_range_to_shard_extent_set_with_parity(
-        op.recovery_progress.data_recovered_to,
-        get_recovery_chunk_size(), want);
+        op.recovery_progress.data_recovered_to, read_size, want);
+
+      op.recovery_progress.data_recovered_to += read_size;
+
+      // We only need to recover shards that are missing.
+      for (auto shard : shard_id_set::difference(sinfo.get_all_shards(), op.missing_on_shards)) {
+        want.erase(shard);
+      }
 
       if (op.recovery_progress.first && op.obc) {
         op.xattrs = op.obc->attr_cache;
@@ -593,9 +607,15 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
       }
       if (read_request.shard_reads.empty()) {
         ceph_assert(op.obc);
-        ceph_assert(0 == op.obc->obs.oi.size);
-        dout(10) << __func__ << "Zero size object recovery, skipping reads."
-                 << op << dendl;
+        /* This can happen for several reasons
+         * - A zero-sized object.
+         * - The missing shards have no data.
+         * - The previous recovery did not need the last data shard. In this
+         *   case, data_recovered_to may indicate that the last shard still
+         *   needs recovery, when it does not.
+         * We can just skip the read and fall through below.
+         */
+        dout(10) << __func__ << " No reads required " << op << dendl;
         // Create an empty read result and fall through.
         op.returned_data.emplace(&sinfo);
       } else {
@@ -614,7 +634,6 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
       dout(20) << __func__ << ": returned_data=" << op.returned_data << dendl;
       op.state = RecoveryOp::WRITING;
       ObjectRecoveryProgress after_progress = op.recovery_progress;
-      after_progress.data_recovered_to = op.returned_data->get_ro_end();
       after_progress.first = false;
       if (after_progress.data_recovered_to >= op.obc->obs.oi.size) {
         after_progress.data_complete = true;
