@@ -505,10 +505,11 @@ public:
 
       if (retcode < 0 && retcode != -ENOENT) {
         return set_cr_error(retcode);
-      } else if (retcode == -ENOENT && bucket_info->layout.logs.front().layout.type == rgw::BucketLogType::Deleted) {
+      } else if (retcode == -ENOENT) {
+        // if the peer doesn't have sync status, we can trim everything
         p->generation = UINT64_MAX;
-        ldpp_dout(dpp, 10) << "INFO: could not read shard status for bucket:" << bucket_instance
-        << " from zone: " << zid.id << dendl;
+        ldpp_dout(dpp, 10) << "INFO: could not read shard status for bucket: "
+            << bucket_instance << " from zone: " << zid.id << dendl;
       }
 
       return set_cr_done();
