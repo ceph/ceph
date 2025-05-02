@@ -1824,4 +1824,40 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
   });
 }
 
+ObjectDataHandler::allocate_ret ObjectDataHandler::allocate_physical_region(
+  context_t ctx, extent_len_t len) {
+  return with_object_data(
+    ctx,
+    [this, ctx, len](auto &object_data) {
+      LOG_PREFIX(ObjectDataHandler::reserve_physical_region);
+      DEBUGT("reserve to 0x{:x}~0x{:x}, object_data: {}~0x{:x}, is_null {}",
+             ctx.t,
+             0,
+             len,
+             object_data.get_reserved_data_base(),
+             object_data.get_reserved_data_len(),
+             object_data.is_null());
+      return prepare_data_reservation(
+	ctx,
+	object_data,
+	p2roundup(len, ctx.tm.get_block_size())
+      ).si_then([this, ctx, len, &object_data] {
+	auto data_base = object_data.get_reserved_data_base();
+	return ctx.tm.alloc_data_extents<ObjectDataBlock>(
+	  ctx.t,
+	  data_base,
+	  len
+	).si_then([](auto extents) {
+	  for (auto &extent : extents) {
+	    extent->mark_physical_reserved();
+	  }
+	  return ObjectDataHandler::allocate_iertr::now();
+	});
+      }).handle_error_interruptible(
+	crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+	ObjectDataHandler::allocate_iertr::pass_further{}
+      );
+  });
+}
+
 } // namespace crimson::os::seastore

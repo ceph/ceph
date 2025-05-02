@@ -1421,6 +1421,10 @@ public:
 
   virtual void clear_modified_region() {}
 
+  virtual bool is_physical_reserved() {
+    return false;
+  }
+
   virtual ~LogicalCachedExtent() {}
 
 protected:

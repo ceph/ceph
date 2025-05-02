@@ -1665,7 +1665,8 @@ SeaStore::Shard::_do_transaction_step(
   if (op->op == Transaction::OP_TOUCH ||
       op->op == Transaction::OP_CREATE ||
       op->op == Transaction::OP_WRITE ||
-      op->op == Transaction::OP_ZERO) {
+      op->op == Transaction::OP_ZERO ||
+      op->op == Transaction::OP_SETALLOCHINT) {
     create = true;
   }
   if (!onodes[op->oid]) {
@@ -1853,6 +1854,10 @@ SeaStore::Shard::_do_transaction_step(
 	  ).si_then([&onode, &ctx](auto new_root) {
 	    onode->update_log_root(*ctx.transaction, new_root);
 	  });
+	} else if (op->expected_object_size > 0 &&
+		  onode->get_layout().size == 0) {
+	  ceph_assert(op->expected_object_size <= max_object_size);
+	  return _allocate(ctx, *onode, op->expected_object_size);
 	}
         return tm_iertr::now();
       }
@@ -2073,6 +2078,34 @@ SeaStore::Shard::_zero(
           onode,
         },
         offset,
+        len);
+  });
+}
+
+SeaStore::Shard::tm_ret
+SeaStore::Shard::_allocate(
+  internal_context_t &ctx,
+  Onode &onode,
+  extent_len_t len)
+{
+  if (len >= max_object_size) {
+    LOG_PREFIX(SeaStoreS::_allocate);
+    ERRORT("0x{:x}~0x{:x} >= 0x{:x}",
+           *ctx.transaction, 0, len, max_object_size);
+    return crimson::ct_error::input_output_error::make();
+  }
+  onode.update_onode_size(
+    *ctx.transaction,
+    len);
+  return seastar::do_with(
+    ObjectDataHandler(max_object_size),
+    [=, this, &ctx, &onode](auto &objhandler) {
+      return objhandler.allocate_physical_region(
+        ObjectDataHandler::context_t{
+          *transaction_manager,
+          *ctx.transaction,
+          onode,
+        },
         len);
   });
 }
