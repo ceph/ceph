@@ -486,7 +486,7 @@ int DaosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y) {
 /* stats - Not for first pass */
 int DaosBucket::read_stats(const DoutPrefixProvider* dpp,
                            const bucket_index_layout_generation& idx_layout,
-                           int shard_id, std::string* bucket_ver,
+                           rgw_bucket_snap_range snap_range, int shard_id, std::string* bucket_ver,
                            std::string* master_ver,
                            std::map<RGWObjCategory, RGWStorageStats>& stats,
                            std::string* max_marker, bool* syncstopped) {
@@ -1520,7 +1520,8 @@ int DaosAtomicWriter::complete(
     size_t accounted_size, const std::string& etag, ceph::real_time* mtime,
     ceph::real_time set_mtime, std::map<std::string, bufferlist>& attrs,
     ceph::real_time delete_at, const char* if_match, const char* if_nomatch,
-    const std::string* user_data, rgw_zone_set* zones_trace, bool* canceled,
+    const std::string* user_data, rgw_zone_set* zones_trace,
+    rgw_bucket_snap_id *psnap_id, bool* canceled,
     optional_yield y, uint32_t flags) {
   ldpp_dout(dpp, 20) << "DEBUG: complete" << dendl;
   bufferlist bl;

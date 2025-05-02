@@ -209,6 +209,7 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
                             const std::string& delimiter,
                             uint32_t num_entries,
                             bool list_versions,
+                            rgw_bucket_snap_range snap_range,
                             rgw_cls_list_ret* result)
 {
   bufferlist in;
@@ -218,10 +219,26 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
   call.delimiter = delimiter;
   call.num_entries = num_entries;
   call.list_versions = list_versions;
+  call.snap_range = snap_range;
   encode(call, in);
 
   op.exec(RGW_CLASS, RGW_BUCKET_LIST, in,
 	  new ClsBucketIndexOpCtx<rgw_cls_list_ret>(result, NULL));
+}
+
+void cls_rgw_bucket_get_stats_op(librados::ObjectReadOperation& op,
+                                 rgw_bucket_snap_id snap_id,
+                                 bool aggregate,
+                                 rgw_cls_get_bucket_stats_ret *result)
+{
+  bufferlist in;
+  rgw_cls_get_bucket_stats_op call;
+  call.snap_id = snap_id;
+  call.aggregate = aggregate;
+  encode(call, in);
+
+  op.exec(RGW_CLASS, RGW_BUCKET_GET_STATS, in,
+	  new ClsBucketIndexOpCtx<rgw_cls_get_bucket_stats_ret>(result, nullptr));
 }
 
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes)
@@ -265,12 +282,13 @@ void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const real_time& mtim
 
 int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
                    BIIndexType index_type, const cls_rgw_obj_key& key,
-                   rgw_cls_bi_entry *entry)
+                   rgw_cls_bi_entry *entry, bool delete_marker)
 {
   bufferlist in, out;
   rgw_cls_bi_get_op call;
   call.key = key;
   call.type = index_type;
+  call.delete_marker = delete_marker;
   encode(call, in);
   int r = io_ctx.exec(oid, RGW_CLASS, RGW_BI_GET, in, out);
   if (r < 0)
@@ -361,12 +379,13 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
 }
 
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid,
-                            const cls_rgw_obj_key& key, const bufferlist& olh_tag,
+                            const cls_rgw_obj_key& key, rgw_bucket_snap_id snap_id,
+                            const bufferlist& olh_tag,
                             bool delete_marker, const string& op_tag, const rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace)
 {
   librados::ObjectWriteOperation op;
-  cls_rgw_bucket_link_olh(op, key, olh_tag, delete_marker, op_tag, meta,
+  cls_rgw_bucket_link_olh(op, key, snap_id, olh_tag, delete_marker, op_tag, meta,
                           olh_epoch, unmod_since, high_precision_time, log_op,
                           zones_trace);
 
@@ -375,6 +394,7 @@ int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid,
 
 
 void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& key,
+                             rgw_bucket_snap_id snap_id,
                             const bufferlist& olh_tag, bool delete_marker,
                             const string& op_tag, const rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace)
@@ -382,6 +402,7 @@ void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_o
   bufferlist in, out;
   rgw_cls_link_olh_op call;
   call.key = key;
+  call.meta.snap_id = snap_id;
   call.olh_tag = olh_tag.to_str();
   call.op_tag = op_tag;
   call.delete_marker = delete_marker;
@@ -400,10 +421,13 @@ void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_o
 int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
                                    const cls_rgw_obj_key& key, const string& op_tag,
                                    const string& olh_tag, uint64_t olh_epoch, bool log_op,
-                                   uint16_t bilog_flags, const rgw_zone_set& zones_trace)
+                                   uint16_t bilog_flags, const rgw_zone_set& zones_trace,
+                                   rgw_bucket_snap_id snap_id,
+                                   rgw_cls_unlink_instance_op::UnlinkFlags flags)
 {
   librados::ObjectWriteOperation op;
-  cls_rgw_bucket_unlink_instance(op, key, op_tag, olh_tag, olh_epoch, log_op, bilog_flags, zones_trace);
+  cls_rgw_bucket_unlink_instance(op, key, op_tag, olh_tag, olh_epoch, log_op,
+                                 bilog_flags, zones_trace, snap_id, flags);
   int r = io_ctx.operate(oid, &op);
   if (r < 0)
     return r;
@@ -414,7 +438,9 @@ int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
 void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
                                    const cls_rgw_obj_key& key, const string& op_tag,
                                    const string& olh_tag, uint64_t olh_epoch, bool log_op,
-                                   uint16_t bilog_flags, const rgw_zone_set& zones_trace)
+                                   uint16_t bilog_flags, const rgw_zone_set& zones_trace,
+                                   rgw_bucket_snap_id snap_id,
+                                   rgw_cls_unlink_instance_op::UnlinkFlags flags)
 {
   bufferlist in, out;
   rgw_cls_unlink_instance_op call;
@@ -425,6 +451,8 @@ void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
   call.log_op = log_op;
   call.zones_trace = zones_trace;
   call.bilog_flags = bilog_flags;
+  call.snap_id = snap_id;
+  call.flags = flags;
   encode(call, in);
   op.exec(RGW_CLASS, RGW_BUCKET_UNLINK_INSTANCE, in);
 }

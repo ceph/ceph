@@ -95,6 +95,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_REQUEST_TIME_SKEWED, {403, "RequestTimeTooSkewed" }},
     { ERR_QUOTA_EXCEEDED, {403, "QuotaExceeded" }},
     { ERR_MFA_REQUIRED, {403, "AccessDenied" }},
+    { ERR_FORBIDDEN, {403, "Forbidden" }},
     { ENOENT, {404, "NoSuchKey" }},
     { ERR_NO_SUCH_BUCKET, {404, "NoSuchBucket" }},
     { ERR_NO_SUCH_WEBSITE_CONFIGURATION, {404, "NoSuchWebsiteConfiguration" }},
@@ -143,6 +144,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ECANCELED, {409, "ConcurrentModification"}},
     { EDQUOT, {507, "InsufficientCapacity"}},
     { ENOSPC, {507, "InsufficientCapacity"}},
+    { ERR_BUCKET_SNAP_EXISTS, {409, "SnapshotAlreadyExists"}},
 });
 
 rgw_http_errors rgw_http_swift_errors({
@@ -952,6 +954,8 @@ void RGWHTTPArgs::append(const string& name, const string& val)
       (name.compare("versioning") == 0) ||
       (name.compare("website") == 0) ||
       (name.compare("requestPayment") == 0) ||
+      (name.compare("snap") == 0) ||
+      (name.compare("snapshots") == 0) ||
       (name.compare("torrent") == 0) ||
       (name.compare("tagging") == 0) ||
       (name.compare("append") == 0) ||
@@ -2289,6 +2293,26 @@ string camelcase_dash_http_attr(const string& orig, bool convert2dash)
   return string(buf);
 }
 
+
+void rgw_bucket_local_info::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(snap_mgr, bl);
+  ENCODE_FINISH(bl);
+}
+
+void rgw_bucket_local_info::decode(bufferlist::const_iterator& bl)
+{
+  DECODE_START(1, bl);
+  decode(snap_mgr, bl);
+  DECODE_FINISH(bl);
+}
+
+void rgw_bucket_local_info::dump(Formatter *f) const
+{
+  encode_json("snap_mgr", snap_mgr, f);
+}
+
 RGWBucketInfo::RGWBucketInfo()
 {
 }
@@ -2304,7 +2328,7 @@ void RGWBucketInfo::encode(bufferlist& bl) const {
   const rgw_user* user = std::get_if<rgw_user>(&owner);
   std::string empty;
 
-  ENCODE_START(24, 4, bl);
+  ENCODE_START(25, 4, bl);
   encode(bucket, bl);
   if (user) {
     encode(user->id, bl);
@@ -2351,12 +2375,13 @@ void RGWBucketInfo::encode(bufferlist& bl) const {
     encode(empty, bl);
   }
   ceph::versioned_variant::encode(owner, bl); // v24
+  encode(local, bl);
   ENCODE_FINISH(bl);
 }
 
 void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
   rgw_user user;
-  DECODE_START_LEGACY_COMPAT_LEN_32(24, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN_32(25, 4, 4, bl);
   decode(bucket, bl);
   if (struct_v >= 2) {
     string s;
@@ -2442,6 +2467,10 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
   if (layout.logs.empty() &&
       layout.current_index.layout.type == rgw::BucketIndexType::Normal) {
     layout.logs.push_back(rgw::log_layout_from_index(0, layout.current_index));
+  }
+
+  if (struct_v >= 25) {
+    decode(local, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -3157,6 +3186,7 @@ void rgw_obj_key::dump(Formatter *f) const
   encode_json("name", name, f);
   encode_json("instance", instance, f);
   encode_json("ns", ns, f);
+  encode_json("snap_id", snap_id, f);
 }
 
 void rgw_obj_key::decode_json(JSONObj *obj)
@@ -3164,6 +3194,7 @@ void rgw_obj_key::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("instance", instance, obj);
   JSONDecoder::decode_json("ns", ns, obj);
+  JSONDecoder::decode_json("snap_id", snap_id, rgw_bucket_snap_id(), obj);
 }
 
 void rgw_raw_obj::dump(Formatter *f) const

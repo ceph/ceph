@@ -3158,13 +3158,14 @@ void RGWStatBucket::pre_exec()
 
 // read the bucket's stats for RGWObjCategory::Main
 static int load_bucket_stats(const DoutPrefixProvider* dpp, optional_yield y,
-                             rgw::sal::Bucket& bucket, RGWStorageStats& stats)
+                             rgw::sal::Bucket& bucket, const rgw_bucket_snap_range& snap_range,
+                             RGWStorageStats& stats)
 {
   const auto& index = bucket.get_info().layout.current_index;
   std::string bver, mver; // ignored
   std::map<RGWObjCategory, RGWStorageStats> categories;
 
-  int r = bucket.read_stats(dpp, y, index, -1, &bver, &mver, categories);
+  int r = bucket.read_stats(dpp, y, index, snap_range, -1, &bver, &mver, categories);
   if (r < 0) {
     return r;
   }
@@ -3185,7 +3186,7 @@ void RGWStatBucket::execute(optional_yield y)
   }
 
   if (report_stats) {
-    op_ret = load_bucket_stats(this, y, *s->bucket, stats);
+    op_ret = load_bucket_stats(this, y, *s->bucket, snap_range, stats);
   }
 }
 
@@ -3257,7 +3258,7 @@ void RGWListBucket::execute(optional_yield y)
 
   if (need_container_stats()) {
     stats.emplace();
-    if (int ret = load_bucket_stats(this, y, *s->bucket, *stats); ret < 0) {
+    if (int ret = load_bucket_stats(this, y, *s->bucket, snap_range, *stats); ret < 0) {
       stats = std::nullopt; // just don't return stats
     }
   }
@@ -3268,6 +3269,7 @@ void RGWListBucket::execute(optional_yield y)
   params.marker = marker;
   params.end_marker = end_marker;
   params.list_versions = list_versions;
+  params.snap_range = snap_range;
   params.allow_unordered = allow_unordered;
   params.shard_id = shard_id;
 
@@ -4777,7 +4779,7 @@ void RGWPutObj::execute(optional_yield y)
 			cksum, (delete_at ? *delete_at : real_time()),
 			if_match, if_nomatch,
 			(user_data.empty() ? nullptr : &user_data),
-			nullptr, nullptr, rctx, complete_flags);
+			nullptr, nullptr, nullptr, rctx, complete_flags);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
   if (op_ret < 0) {
     return;
@@ -5045,7 +5047,7 @@ void RGWPostObj::execute(optional_yield y)
     op_ret = processor->complete(s->obj_size, etag, nullptr, real_time(),
 				 attrs, cksum,
 				 (delete_at ? *delete_at : real_time()),
-				 nullptr, nullptr, nullptr, nullptr, nullptr,
+				 nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
 				 rctx, rgw::sal::FLAG_LOG_OP);
     if (op_ret < 0) {
       return;
@@ -5501,6 +5503,8 @@ void RGWDeleteObj::execute(optional_yield y)
       bool check_obj_lock = s->object->have_instance() && s->bucket->get_info().obj_lock_enabled();
       null_verid = (s->object->get_instance() == "null");
 
+      rgw_obj_key orig_obj_key = s->object->get_key();
+
       op_ret = state_loaded = s->object->load_obj_state(this, s->yield, true);
       if (op_ret < 0) {
         if (need_object_expiration() || multipart_delete) {
@@ -5519,6 +5523,22 @@ void RGWDeleteObj::execute(optional_yield y)
       } else {
         obj_size = s->object->get_size();
         etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
+      }
+
+      auto& obj_key = s->object->get_key();
+      if (!orig_obj_key.snap_id.is_set() &&
+          orig_obj_key.instance.empty() &&
+          obj_key.snap_id.is_set()) {
+        /* no version id was specified originally so if it's a versioned bucket the request is
+         * to create a delete marker. We shouldn't have snap_id set, otherwise we'll
+         * try to remove that specific instance.
+         */
+        obj_key.snap_id.reset();
+      }
+
+      if (null_verid &&
+          obj_key.instance.empty()) {
+        obj_key.instance = orig_obj_key.instance;
       }
 
       // ignore return value from get_obj_attrs in all other cases
@@ -8153,7 +8173,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   op_ret = processor->complete(size, etag, nullptr, ceph::real_time(),
 			       attrs, rgw::cksum::no_cksum,
 			       ceph::real_time() /* delete_at */,
-			       nullptr, nullptr, nullptr, nullptr, nullptr,
+			       nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
 			       rctx, rgw::sal::FLAG_LOG_OP);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "processor::complete returned op_ret=" << op_ret << dendl;

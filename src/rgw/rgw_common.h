@@ -46,6 +46,7 @@
 #include "rgw_tag.h"
 #include "rgw_op_type.h"
 #include "rgw_sync_policy.h"
+#include "rgw_bucket_snap.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/user/cls_user_types.h"
 #include "cls/rgw/cls_rgw_types.h"
@@ -121,6 +122,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_PG_VER 	RGW_ATTR_PREFIX "pg_ver"
 #define RGW_ATTR_SOURCE_ZONE    RGW_ATTR_PREFIX "source_zone"
 #define RGW_ATTR_TAGS           RGW_ATTR_PREFIX RGW_AMZ_PREFIX "tagging"
+#define RGW_ATTR_SNAP_ID             RGW_ATTR_PREFIX "snap_id"
 
 #define RGW_ATTR_CLOUDTIER_STORAGE_CLASS  RGW_ATTR_PREFIX "cloudtier_storage_class"
 #define RGW_ATTR_RESTORE_STATUS   RGW_ATTR_PREFIX "restore-status"
@@ -147,6 +149,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_OLH_PREFIX     RGW_ATTR_PREFIX "olh."
 
 #define RGW_ATTR_OLH_INFO       RGW_ATTR_OLH_PREFIX "info"
+#define RGW_ATTR_OLH_SNAP_INFO  RGW_ATTR_OLH_PREFIX "snap_info"
 #define RGW_ATTR_OLH_VER        RGW_ATTR_OLH_PREFIX "ver"
 #define RGW_ATTR_OLH_ID_TAG     RGW_ATTR_OLH_PREFIX "idtag"
 #define RGW_ATTR_OLH_PENDING_PREFIX RGW_ATTR_OLH_PREFIX "pending."
@@ -318,6 +321,7 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_INVALID_RETENTION_PERIOD 2047
 #define ERR_NO_SUCH_BUCKET_ENCRYPTION_CONFIGURATION 2048
 #define ERR_NO_SUCH_PUBLIC_ACCESS_BLOCK_CONFIGURATION 2049
+#define ERR_FORBIDDEN            2050
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 #define ERR_NOT_IMPLEMENTED      2201
@@ -346,6 +350,7 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_PRESIGNED_URL_DISABLED     2224
 #define ERR_AUTHORIZATION        2225 // SNS 403 AuthorizationError
 #define ERR_ILLEGAL_LOCATION_CONSTRAINT_EXCEPTION 2226
+#define ERR_BUCKET_SNAP_EXISTS   2227
 
 #define ERR_BUSY_RESHARDING      2300 // also in cls_rgw_types.h, don't change!
 #define ERR_NO_SUCH_ENTITY       2301
@@ -1066,6 +1071,15 @@ class RGWSI_Zone;
 
 // this represents the at-rest bucket instance object and is stored as
 // a system object
+struct rgw_bucket_local_info {
+  RGWBucketSnapMgr snap_mgr;
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::const_iterator& bl);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(rgw_bucket_local_info)
+
 struct RGWBucketInfo {
   rgw_bucket bucket;
   rgw_owner owner;
@@ -1102,6 +1116,8 @@ struct RGWBucketInfo {
   RGWObjectLock obj_lock;
 
   std::optional<rgw_sync_policy_info> sync_policy;
+
+  rgw_bucket_local_info local;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);

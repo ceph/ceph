@@ -25,6 +25,7 @@
 
 struct rgw_bucket_dir_header;
 struct rgw_cls_list_ret;
+struct rgw_cls_get_bucket_stats_ret;
 
 class RGWSI_BILog_RADOS;
 
@@ -76,6 +77,16 @@ public:
                       std::vector<rgw_bucket_dir_header> *headers,
                       std::map<int, std::string> *bucket_instance_ids,
                       optional_yield y);
+
+  int cls_bucket_get_stats(const DoutPrefixProvider *dpp,
+                           const RGWBucketInfo& bucket_info,
+                           const rgw::bucket_index_layout_generation& idx_layout,
+                           int shard_id,
+                           rgw_bucket_snap_id snap_id,
+                           bool aggregate,
+                           std::vector<rgw_cls_get_bucket_stats_ret> *stats,
+                           std::map<int, std::string> *bucket_instance_ids,
+                           optional_yield y);
 
   librados::Rados* rados{nullptr};
 
@@ -164,6 +175,7 @@ public:
                    const std::string& prefix,
                    const std::string& delimiter,
                    uint32_t num_entries, bool list_versions,
+                   const rgw_bucket_snap_range& snap_range,
                    std::map<int, rgw_cls_list_ret>& results);
 
   int handle_overwrite(const DoutPrefixProvider *dpp, const RGWBucketInfo& info,

@@ -501,7 +501,7 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
     return ret;
 
   const auto& index = info.get_current_index();
-  ret = read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
+  ret = read_stats(dpp, y, index, rgw_bucket_snap_range(), RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
   if (ret < 0)
     return ret;
 
@@ -647,11 +647,12 @@ int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 
 int RadosBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			    const bucket_index_layout_generation& idx_layout,
-			    int shard_id, std::string* bucket_ver, std::string* master_ver,
+			    rgw_bucket_snap_range snap_range, int shard_id,
+                            std::string* bucket_ver, std::string* master_ver,
 			    std::map<RGWObjCategory, RGWStorageStats>& stats,
 			    std::string* max_marker, bool* syncstopped)
 {
-  return store->getRados()->get_bucket_stats(dpp, y, info, idx_layout, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
+  return store->getRados()->get_bucket_stats(dpp, y, info, idx_layout, snap_range, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
 }
 
 int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp,
@@ -888,6 +889,7 @@ int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max
   list_op.params.access_list_filter = params.access_list_filter;
   list_op.params.force_check_filter = params.force_check_filter;
   list_op.params.list_versions = params.list_versions;
+  list_op.params.snap_range = params.snap_range;
   list_op.params.allow_unordered = params.allow_unordered;
 
   int ret = list_op.list_objects(dpp, max, &results.objs, &results.common_prefixes, &results.is_truncated, y);
@@ -1274,7 +1276,7 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
   obj_attrs.emplace(RGW_ATTR_ETAG, std::move(bl_etag));
   const req_context rctx{dpp, y, nullptr};
   jspan_context trace{false, false};
-  if (const auto ret = head_obj_wop.write_meta(0, size, obj_attrs, rctx, trace); ret < 0) {
+  if (const auto ret = head_obj_wop.write_meta(0, size, obj_attrs, rctx, trace, nullptr); ret < 0) {
   ldpp_dout(dpp, 1) << "ERROR: failed to commit logging object '" << temp_obj_name <<
     "' to bucket '" << get_key() <<"'. error: " << ret << dendl;
     return ret;
@@ -2683,21 +2685,32 @@ int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 {
   RGWObjState *pstate{nullptr};
 
-  int ret = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(), get_obj(), &pstate, &manifest, follow_olh, y);
+  int ret = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(), get_obj(),
+                                             &pstate, &manifest, follow_olh, y, false, false);
+  if (!pstate->exists /* delete marker */ &&
+    !pstate->obj.key.have_non_null_instance()) {
+    pstate->obj.key.set_snap_id(pstate->snap_id);
+  }
   if (ret < 0) {
     return ret;
   }
 
   /* Don't overwrite obj, atomic, or prefetch */
   rgw_obj obj = get_obj();
+
   bool is_atomic = state.is_atomic;
   bool prefetch_data = state.prefetch_data;
 
   state = *pstate;
 
+  if (state.snap_id != obj.key.snap_id) {
+    obj.key.try_set_snap_id(state.snap_id);
+  }
+
   state.obj = obj;
   state.is_atomic = is_atomic;
   state.prefetch_data = prefetch_data;
+
   return ret;
 }
 
@@ -3232,7 +3245,7 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
 	    attrs[RGW_ATTR_INTERNAL_MTIME] = std::move(bl);
 	  }
           const req_context rctx{dpp, y, nullptr};
-          return obj_op.write_meta(0, 0, attrs, rctx, head_obj->get_trace(), false);
+          return obj_op.write_meta(0, 0, attrs, rctx, head_obj->get_trace(), nullptr, false);
         } catch (const buffer::end_of_buffer&) {
           // ignore empty manifest; it's not cloud-tiered
         } catch (const std::exception& e) {
@@ -3326,7 +3339,7 @@ int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
   attrs.erase(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
 
   const req_context rctx{dpp, y, nullptr};
-  return obj_op.write_meta(0, 0, attrs, rctx, head_obj->get_trace());
+  return obj_op.write_meta(0, 0, attrs, rctx, head_obj->get_trace(), nullptr);
 }
 
 int RadosObject::get_max_chunk_size(const DoutPrefixProvider* dpp, rgw_placement_rule placement_rule, uint64_t* max_chunk_size, uint64_t* alignment)
@@ -3495,6 +3508,9 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
   parent_op.params.null_verid = params.null_verid;
   if (params.objv_tracker) {
       parent_op.params.check_objv = params.objv_tracker->version_for_check();
+  }
+  if (flags & FLAG_SNAP_OBJ_REMOVE) {
+    parent_op.params.snap_rm = true;
   }
 
   int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP);
@@ -3909,7 +3925,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
     encode(upload_info, bl);
     obj_op.meta.data = &bl;
 
-    ret = obj_op.write_meta(bl.length(), 0, attrs, rctx, get_trace(), false);
+    ret = obj_op.write_meta(bl.length(), 0, attrs, rctx, get_trace(), nullptr, false);
   } while (ret == -EEXIST);
 
   return ret;
@@ -4221,7 +4237,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   obj_op.meta.olh_epoch = olh_epoch;
 
   const req_context rctx{dpp, y, nullptr};
-  ret = obj_op.write_meta(ofs, accounted_size, attrs, rctx, get_trace());
+  ret = obj_op.write_meta(ofs, accounted_size, attrs, rctx, get_trace(), nullptr);
   if (ret < 0)
     return ret;
 
@@ -4434,6 +4450,7 @@ int RadosLifecycle::set_entry(const DoutPrefixProvider* dpp, optional_yield y,
   cls_rgw_lc_entry cls_entry;
 
   cls_entry.bucket = entry.bucket;
+  cls_entry.snap_id = entry.snap_id;
   cls_entry.start_time = entry.start_time;
   cls_entry.status = entry.status;
 
@@ -4467,7 +4484,7 @@ int RadosLifecycle::list_entries(const DoutPrefixProvider* dpp, optional_yield y
   }
 
   for (auto& entry : cls_entries) {
-    entries.push_back(LCEntry{entry.bucket, entry.start_time, entry.status});
+    entries.push_back(LCEntry{entry.bucket, entry.snap_id, entry.start_time, entry.status});
   }
 
   return ret;
@@ -4564,13 +4581,14 @@ int RadosAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, rgw_bucket_snap_id *psnap_id,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags)
 {
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
 			    cksum, delete_at, if_match, if_nomatch,
-			    user_data, zones_trace, canceled, rctx, flags);
+			    user_data, zones_trace, psnap_id, canceled, rctx, flags);
 }
 
 int RadosAppendWriter::prepare(optional_yield y)
@@ -4590,13 +4608,14 @@ int RadosAppendWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, rgw_bucket_snap_id *psnap_id,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags)
 {
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
 			    cksum, delete_at, if_match, if_nomatch,
-			    user_data, zones_trace, canceled, rctx, flags);
+			    user_data, zones_trace, psnap_id, canceled, rctx, flags);
 }
 
 int RadosMultipartWriter::prepare(optional_yield y)
@@ -4618,13 +4637,14 @@ int RadosMultipartWriter::complete(
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, rgw_bucket_snap_id *psnap_id,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags)
 {
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
 			    cksum, delete_at, if_match, if_nomatch,
-			    user_data, zones_trace, canceled, rctx, flags);
+			    user_data, zones_trace, psnap_id, canceled, rctx, flags);
 }
 
 bool RadosZoneGroup::placement_target_exists(std::string& target) const

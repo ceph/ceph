@@ -99,7 +99,7 @@ void index_complete(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index
     bufferlist olh_tag;
     olh_tag.append(tag);
     rgw_zone_set zone_set;
-    ASSERT_EQ(0, cls_rgw_bucket_link_olh(ioctx, oid, key, olh_tag,
+    ASSERT_EQ(0, cls_rgw_bucket_link_olh(ioctx, oid, key, rgw_bucket_snap_id(), olh_tag,
                                          false, tag, &meta, epoch,
                                          ceph::real_time{}, true, true, zone_set));
   }
@@ -381,9 +381,10 @@ static void list_entries(librados::IoCtx& ioctx,
   std::map<int, std::string> oids = { {0, oid} };
   string empty_prefix;
   constexpr bool list_versions = true;
+  rgw_bucket_snap_range snap_range;
   librados::ObjectReadOperation op;
   cls_rgw_bucket_list_op(op, start_key, empty_prefix, delimiter,
-                         num_entries, list_versions, &result);
+                         num_entries, list_versions, snap_range, &result);
   ASSERT_EQ(0, ioctx.operate(oid, &op, nullptr));
 }
 

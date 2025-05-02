@@ -222,6 +222,7 @@ struct RGWBucketAdminOpState {
   std::string display_name;
   std::string bucket_name;
   std::string bucket_id;
+  rgw_bucket_snap_range snap_range;
   std::string object_name;
   std::string new_bucket_name;
   std::string marker;
@@ -263,6 +264,9 @@ struct RGWBucketAdminOpState {
   void set_bucket_name(const std::string& bucket_str) {
     bucket_name = bucket_str; 
   }
+  void set_snap_range(const rgw_bucket_snap_range& _snap_range) {
+    snap_range = _snap_range;
+  }
   void set_object(std::string& object_str) {
     object_name = object_str;
   }
@@ -283,6 +287,7 @@ struct RGWBucketAdminOpState {
   rgw_account_id& get_account_id() { return account_id; }
   std::string& get_user_display_name() { return display_name; }
   std::string& get_bucket_name() { return bucket_name; }
+  const rgw_bucket_snap_range& get_snap_range() { return snap_range; }
   std::string& get_object_name() { return object_name; }
   std::string& get_tenant() { return uid.tenant; }
 
@@ -366,6 +371,12 @@ public:
   int get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolicy& policy, optional_yield y, const DoutPrefixProvider *dpp);
   int sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
 
+  int snap_create(RGWBucketAdminOpState& op_state, const rgw_bucket_snap_info& snap_info,
+                  optional_yield y, const DoutPrefixProvider *dpp,
+                  rgw_bucket_snap_id *psnap_id, std::string *err_msg = NULL);
+  int snap_remove(RGWBucketAdminOpState& op_state, rgw_bucket_snap_id snap_id,
+                  optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
+
   void clear_failure() { failure = false; }
 
   const RGWBucketInfo& get_bucket_info() const { return bucket->get_info(); }
@@ -414,6 +425,10 @@ public:
 			    RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp, optional_yield y, bool dry_run = false);
 
   static int sync_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
+
+  static int snap_create(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const rgw_bucket_snap_info& snap_info, const DoutPrefixProvider *dpp, optional_yield y,
+                         rgw_bucket_snap_id *psnap_id, std::string *err_msg = NULL);
+  static int snap_remove(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, rgw_bucket_snap_id snap_id, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
 };
 
 struct rgw_ep_info {

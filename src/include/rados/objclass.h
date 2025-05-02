@@ -57,7 +57,8 @@ typedef void *cls_method_handle_t;
  *
  * A context for the method of the object class.
  */
-typedef void* cls_method_context_t;
+struct _cls_method_context {};
+using cls_method_context_t = _cls_method_context*;
 
 /*class utils*/
 extern int cls_log(int level, const char *format, ...)

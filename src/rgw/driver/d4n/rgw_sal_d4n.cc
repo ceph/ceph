@@ -2877,7 +2877,8 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, rgw_bucket_snap_id *psnap_id,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags)
 {
@@ -2971,7 +2972,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     // we need to call next->complete here so that we are able to correctly get the object state needed for caching head
     ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs, cksum,
                             delete_at, if_match, if_nomatch, user_data, zones_trace,
-                            canceled, rctx, flags);
+                            psnap_id, canceled, rctx, flags);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): writing to backend store failed, ret=" << ret << dendl;
       return ret;

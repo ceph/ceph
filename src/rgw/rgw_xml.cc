@@ -464,9 +464,9 @@ void encode_xml(const char *name, bool val, Formatter *f)
 {
   std::string s;
   if (val)
-    s = "True";
+    s = "true";
   else
-    s = "False";
+    s = "false";
 
   f->dump_string(name, s);
 }

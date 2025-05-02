@@ -288,6 +288,51 @@ int RGWBucket::remove_object(const DoutPrefixProvider *dpp, RGWBucketAdminOpStat
   return 0;
 }
 
+int RGWBucket::snap_create(RGWBucketAdminOpState& op_state, const rgw_bucket_snap_info& snap_info,
+                           optional_yield y, const DoutPrefixProvider *dpp, rgw_bucket_snap_id *psnap_id,
+                           std::string *err_msg)
+{
+  bucket = op_state.get_bucket()->clone();
+
+  int r = bucket->get_info().local.snap_mgr.create_snap(snap_info, psnap_id);
+  if (r < 0) {
+    set_err_msg(err_msg, "ERROR: failed creating new snapshot: " + cpp_strerror(-r));
+    return r;
+  }
+  r = bucket->put_info(dpp, false, real_time(), y);
+  if (r < 0) {
+    set_err_msg(err_msg, "ERROR: failed writing bucket instance info: " + cpp_strerror(-r));
+    return r;
+  }
+  return r;
+}
+
+int RGWBucket::snap_remove(RGWBucketAdminOpState& op_state, rgw_bucket_snap_id snap_id,
+                           optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg)
+{
+  bucket = op_state.get_bucket()->clone();
+
+  int r = bucket->get_info().local.snap_mgr.remove_snap(snap_id);
+  if (r < 0) {
+    set_err_msg(err_msg, "ERROR: failed creating new snapshot: " + cpp_strerror(-r));
+    return r;
+  }
+  r = bucket->put_info(dpp, false, real_time(), y);
+  if (r < 0) {
+    set_err_msg(err_msg, "ERROR: failed writing bucket instance info: " + cpp_strerror(-r));
+    return r;
+  }
+
+  auto lc = driver->get_rgwlc();
+  r = lc->set_bucket_snap(dpp, y, bucket.get(), snap_id);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << __func__ << " failed to set lc entry for "
+            << bucket << " snap_id=" << snap_id << dendl;
+    return r;
+  }
+  return 0;
+}
+
 static void dump_bucket_index(const vector<rgw_bucket_dir_entry>& objs,  Formatter *f)
 {
   for (auto iter = objs.begin(); iter != objs.end(); ++iter) {
@@ -807,7 +852,7 @@ static int is_versioned_instance_listable(const DoutPrefixProvider *dpp,
   do {
     librados::ObjectReadOperation op;
     cls_rgw_bucket_list_op(op, marker, key.name, empty_delim, 1000,
-                           true, &result);
+                           true, rgw_bucket_snap_range(), &result);
     bufferlist ibl;
     int r = bs.bucket_obj.operate(dpp, std::move(op), &ibl, y);
     if (r < 0) {
@@ -1348,6 +1393,29 @@ int RGWBucketAdminOp::chown(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_
 
 }
 
+int RGWBucketAdminOp::snap_create(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const rgw_bucket_snap_info& snap_info, const DoutPrefixProvider *dpp, optional_yield y,
+                                  rgw_bucket_snap_id *psnap_id, string *err)
+{
+  RGWBucket bucket;
+
+  int ret = bucket.init(driver, op_state, y, dpp, err);
+  if (ret < 0)
+    return ret;
+
+  return bucket.snap_create(op_state, snap_info, y, dpp, psnap_id, err);
+}
+
+int RGWBucketAdminOp::snap_remove(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, rgw_bucket_snap_id snap_id, const DoutPrefixProvider *dpp, optional_yield y, string *err)
+{
+  RGWBucket bucket;
+
+  int ret = bucket.init(driver, op_state, y, dpp, err);
+  if (ret < 0)
+    return ret;
+
+  return bucket.snap_remove(op_state, snap_id, y, dpp, err);
+}
+
 int RGWBucketAdminOp::check_index_olh(rgw::sal::RadosStore* store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp)
 {
@@ -1511,7 +1579,9 @@ int RGWBucketAdminOp::sync_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpStat
 
 static int bucket_stats(rgw::sal::Driver* driver,
                         const std::string& tenant_name,
-                        const std::string& bucket_name, Formatter* formatter,
+                        const std::string& bucket_name,
+                        const rgw_bucket_snap_range& snap_range,
+                        Formatter* formatter,
                         const DoutPrefixProvider* dpp, optional_yield y) {
   std::unique_ptr<rgw::sal::Bucket> bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
@@ -1533,7 +1603,7 @@ static int bucket_stats(rgw::sal::Driver* driver,
 
   std::string bucket_ver, master_ver;
   std::string max_marker;
-  ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
+  ret = bucket->read_stats(dpp, y, index, snap_range, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0) {
     cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
     return ret;
@@ -1647,7 +1717,7 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 	/* need stats for num_entries */
 	string bucket_ver, master_ver;
 	std::map<RGWObjCategory, RGWStorageStats> stats;
-	ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
+	ret = bucket->read_stats(dpp, y, index, rgw_bucket_snap_range(), RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
 
 	if (ret < 0)
 	  continue;
@@ -1729,7 +1799,7 @@ static int list_owner_bucket_info(const DoutPrefixProvider* dpp,
 
     for (const auto& ent : listing.buckets) {
       if (show_stats) {
-        bucket_stats(driver, tenant, ent.bucket.name, formatter, dpp, y);
+        bucket_stats(driver, tenant, ent.bucket.name, rgw_bucket_snap_range(), formatter, dpp, y);
       } else {
         formatter->dump_string("bucket", ent.bucket.name);
       }
@@ -1764,8 +1834,9 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
 
   const bool show_stats = op_state.will_fetch_stats();
   const rgw_user& user_id = op_state.get_user_id();
+  rgw_bucket_snap_range snap_range = op_state.get_snap_range();
   if (!bucket_name.empty()) {
-    ret = bucket_stats(driver, user_id.tenant, bucket_name, formatter, dpp, y);
+    ret = bucket_stats(driver, user_id.tenant, bucket_name, snap_range, formatter, dpp, y);
     if (ret < 0) {
       return ret;
     }
@@ -1820,7 +1891,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
 						   &truncated);
       for (auto& bucket_name : buckets) {
         if (show_stats) {
-          bucket_stats(driver, user_id.tenant, bucket_name, formatter, dpp, y);
+          bucket_stats(driver, user_id.tenant, bucket_name, snap_range, formatter, dpp, y);
 	} else {
           formatter->dump_string("bucket", bucket_name);
 	}
@@ -2054,7 +2125,21 @@ static int fix_single_bucket_lc(rgw::sal::Driver* driver,
     return ret;
   }
 
-  return rgw::lc::fix_lc_shard_entry(dpp, driver, driver->get_rgwlc()->get_lc(), bucket.get());
+  ret = rgw::lc::fix_lc_shard_entry(dpp, driver, driver->get_rgwlc()->get_lc(), bucket.get(), rgw_bucket_snap_id());
+  if (ret < 0) {
+    return ret;
+  }
+
+  auto rm_snaps = bucket->get_info().local.snap_mgr.get_removed_snaps();
+  for (auto& e : rm_snaps) {
+    int r = rgw::lc::fix_lc_shard_entry(dpp, driver, driver->get_rgwlc()->get_lc(), bucket.get(), e.first);
+    if (r < 0) {
+      ldpp_dout(dpp, 5) << "WARNING: rgw::lc::fix_lc_shard_entry() on " << tenant_name << "/" << bucket_name << " (snap_id=" << e.first << ") returned r=" << r << dendl;
+      ret = r;
+    }
+  }
+
+  return ret;
 }
 
 static void format_lc_status(Formatter* formatter,
@@ -2982,6 +3067,17 @@ int RGWBucketInstanceMetadataHandler::put_post(
               << dendl;
           return ret;
         }
+      }
+    }
+
+    auto rm_snaps = bucket->get_info().local.snap_mgr.get_removed_snaps();
+    for (auto& e : rm_snaps) {
+      ret = lc->set_bucket_snap(dpp, y, bucket.get(), e.first);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << __func__ << " failed to set lc entry for "
+            << bci.info.bucket.name << " snap_id=" << e.first
+            << dendl;
+        return ret;
       }
     }
   } /* update lc */

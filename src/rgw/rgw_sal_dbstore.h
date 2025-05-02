@@ -154,7 +154,7 @@ protected:
       virtual int load_bucket(const DoutPrefixProvider *dpp, optional_yield y) override;
       virtual int read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			     const bucket_index_layout_generation& idx_layout,
-			     int shard_id,
+			     rgw_bucket_snap_range snap_range, int shard_id,
           std::string *bucket_ver, std::string *master_ver,
           std::map<RGWObjCategory, RGWStorageStats>& stats,
           std::string *max_marker = nullptr,
@@ -664,7 +664,8 @@ protected:
                          ceph::real_time delete_at,
                          const char *if_match, const char *if_nomatch,
                          const std::string *user_data,
-                         rgw_zone_set *zones_trace, bool *canceled,
+                         rgw_zone_set *zones_trace, rgw_bucket_snap_id *psnap_id,
+                         bool *canceled,
                          const req_context& rctx,
                          uint32_t flags) override;
   };
@@ -714,7 +715,8 @@ public:
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, rgw_bucket_snap_id *psnap_id,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags) override;
   };

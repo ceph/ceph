@@ -292,7 +292,7 @@ void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const ceph::real_time
 
 int cls_rgw_bi_get(librados::IoCtx& io_ctx, const std::string oid,
                    BIIndexType index_type, const cls_rgw_obj_key& key,
-                   rgw_cls_bi_entry *entry);
+                   rgw_cls_bi_entry *entry, bool delete_marker = false);
 int cls_rgw_bi_put(librados::IoCtx& io_ctx, const std::string oid, const rgw_cls_bi_entry& entry);
 void cls_rgw_bi_put(librados::ObjectWriteOperation& op, const std::string oid, const rgw_cls_bi_entry& entry);
 // Write the given array of index entries and update bucket stats accordingly.
@@ -306,12 +306,13 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
                    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog = false);
 
 void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op,
-                            const cls_rgw_obj_key& key, const ceph::buffer::list& olh_tag,
+                            const cls_rgw_obj_key& key, rgw_bucket_snap_id snap_id, const ceph::buffer::list& olh_tag,
                             bool delete_marker, const std::string& op_tag, const rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace);
 void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
                                    const cls_rgw_obj_key& key, const std::string& op_tag,
-                                   const std::string& olh_tag, uint64_t olh_epoch, bool log_op, uint16_t bilog_flags, const rgw_zone_set& zones_trace);
+                                   const std::string& olh_tag, uint64_t olh_epoch, bool log_op, uint16_t bilog_flags, const rgw_zone_set& zones_trace,
+                                   rgw_bucket_snap_id snap_id, rgw_cls_unlink_instance_op::UnlinkFlags flags);
 void cls_rgw_get_olh_log(librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker, const std::string& olh_tag, rgw_cls_read_olh_log_ret& log_ret, int& op_ret);
 void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, uint64_t ver, const std::string& olh_tag);
 void cls_rgw_clear_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, const std::string& olh_tag);
@@ -320,13 +321,14 @@ void cls_rgw_clear_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key
 // rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
 #ifndef CLS_CLIENT_HIDE_IOCTX
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const std::string& oid,
-                            const cls_rgw_obj_key& key, const ceph::buffer::list& olh_tag,
+                            const cls_rgw_obj_key& key, rgw_bucket_snap_id snap_id, const ceph::buffer::list& olh_tag,
                             bool delete_marker, const std::string& op_tag, const rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace);
 int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const std::string& oid,
                                    const cls_rgw_obj_key& key, const std::string& op_tag,
                                    const std::string& olh_tag, uint64_t olh_epoch, bool log_op,
-                                   uint16_t bilog_flags, const rgw_zone_set& zones_trace);
+                                   uint16_t bilog_flags, const rgw_zone_set& zones_trace,
+                                   rgw_bucket_snap_id snap_id, rgw_cls_unlink_instance_op::UnlinkFlags flags);
 int cls_rgw_get_olh_log(librados::IoCtx& io_ctx, std::string& oid, const cls_rgw_obj_key& olh, uint64_t ver_marker,
                         const std::string& olh_tag, rgw_cls_read_olh_log_ret& log_ret);
 int cls_rgw_clear_olh(librados::IoCtx& io_ctx, std::string& oid, const cls_rgw_obj_key& olh, const std::string& olh_tag);
@@ -340,7 +342,13 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
 			    const std::string& delimiter,
                             uint32_t num_entries,
                             bool list_versions,
+                            rgw_bucket_snap_range snap_range,
                             rgw_cls_list_ret* result);
+
+void cls_rgw_bucket_get_stats_op(librados::ObjectReadOperation& op,
+                                 rgw_bucket_snap_id snap_id,
+                                 bool aggregate,
+                                 rgw_cls_get_bucket_stats_ret *result);
 
 void cls_rgw_bilog_list(librados::ObjectReadOperation& op,
                         const std::string& marker, uint32_t max,

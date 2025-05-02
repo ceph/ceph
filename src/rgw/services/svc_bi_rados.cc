@@ -408,6 +408,89 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+struct IndexStatsReader : rgwrados::shard_io::RadosReader {
+  rgw_bucket_snap_id snap_id;
+  bool aggregate; /* snap-aggregate or snap-only */
+  std::map<int, rgw_cls_get_bucket_stats_ret>& op_rets;
+
+  IndexStatsReader(const DoutPrefixProvider& dpp,
+                   rgw_bucket_snap_id snap_id,
+                   bool aggregate,
+                   boost::asio::any_io_executor ex,
+                   librados::IoCtx& ioctx,
+                   std::map<int, rgw_cls_get_bucket_stats_ret>& op_rets)
+    : RadosReader(dpp, std::move(ex), ioctx), snap_id(snap_id), aggregate(aggregate), op_rets(op_rets)
+  {}
+  void prepare_read(int shard, librados::ObjectReadOperation& op) override {
+    auto& op_ret = op_rets[shard];
+    cls_rgw_bucket_get_stats_op(op, snap_id, aggregate, &op_ret);
+  }
+  Result on_complete(int, boost::system::error_code ec) override {
+    // ignore ENOENT
+    if (ec && ec != boost::system::errc::no_such_file_or_directory) {
+      return Result::Error;
+    } else {
+      return Result::Success;
+    }
+  }
+  void add_prefix(std::ostream& out) const override {
+    out << "read dir headers: ";
+  }
+};
+
+int RGWSI_BucketIndex_RADOS::cls_bucket_get_stats(const DoutPrefixProvider *dpp,
+                                                  const RGWBucketInfo& bucket_info,
+                                                  const rgw::bucket_index_layout_generation& idx_layout,
+                                                  int shard_id,
+                                                  rgw_bucket_snap_id snap_id,
+                                                  bool aggregate,
+                                                  vector<rgw_cls_get_bucket_stats_ret> *stats,
+                                                  map<int, string> *bucket_instance_ids,
+                                                  optional_yield y)
+{
+  librados::IoCtx index_pool;
+  map<int, string> oids;
+  int r = open_bucket_index(dpp, bucket_info, shard_id, idx_layout, &index_pool, &oids, bucket_instance_ids);
+  if (r < 0)
+    return r;
+
+  // read results
+  std::map<int, rgw_cls_get_bucket_stats_ret> op_rets;
+
+  const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
+  boost::system::error_code ec;
+  if (y) {
+    // run on the coroutine's executor and suspend until completion
+    auto yield = y.get_yield_context();
+    auto ex = yield.get_executor();
+    auto reader = IndexStatsReader{*dpp, snap_id, aggregate, ex, index_pool, op_rets};
+
+    rgwrados::shard_io::async_reads(reader, oids, max_aio, yield[ec]);
+  } else {
+    // run a strand on the system executor and block on a condition variable
+    auto ex = boost::asio::make_strand(boost::asio::system_executor{});
+    auto reader = IndexStatsReader{*dpp, snap_id, aggregate, ex, index_pool, op_rets};
+
+    maybe_warn_about_blocking(dpp);
+    rgwrados::shard_io::async_reads(reader, oids, max_aio,
+                                    ceph::async::use_blocked[ec]);
+  }
+  if (ec) {
+    return ceph::from_error_code(ec);
+  }
+
+  try {
+    std::transform(op_rets.begin(), op_rets.end(),
+                   std::back_inserter(*stats),
+                   [] (const auto& kv) {
+                     return kv.second;
+                   });
+  } catch (const ceph::buffer::error&) {
+    return -EIO;
+  }
+  return 0;
+}
+
 // init_index() is all-or-nothing so if we fail to initialize all shards,
 // we undo the creation of others. RevertibleWriter provides these semantics
 struct IndexInitWriter : rgwrados::shard_io::RadosRevertibleWriter {
@@ -930,6 +1013,7 @@ struct ListReader : rgwrados::shard_io::RadosReader {
   const std::string& delimiter;
   uint32_t num_entries;
   bool list_versions;
+  rgw_bucket_snap_range snap_range;
   std::map<int, rgw_cls_list_ret>& results;
 
   ListReader(const DoutPrefixProvider& dpp,
@@ -939,11 +1023,12 @@ struct ListReader : rgwrados::shard_io::RadosReader {
              const std::string& prefix,
              const std::string& delimiter,
              uint32_t num_entries, bool list_versions,
+             const rgw_bucket_snap_range& snap_range,
              std::map<int, rgw_cls_list_ret>& results)
     : RadosReader(dpp, std::move(ex), ioctx),
       start_obj(start_obj), prefix(prefix), delimiter(delimiter),
       num_entries(num_entries), list_versions(list_versions),
-      results(results)
+      snap_range(snap_range), results(results)
   {}
   void prepare_read(int shard, librados::ObjectReadOperation& op) override {
     // set the marker depending on whether we've already queried this
@@ -955,7 +1040,8 @@ struct ListReader : rgwrados::shard_io::RadosReader {
     const cls_rgw_obj_key& marker =
         result.marker.empty() ? start_obj : result.marker;
     cls_rgw_bucket_list_op(op, marker, prefix, delimiter,
-                           num_entries, list_versions, &result);
+                           num_entries, list_versions,
+                           snap_range, &result);
   }
   Result on_complete(int, boost::system::error_code ec) override {
     if (ec.value() == -RGWBIAdvanceAndRetryError) {
@@ -978,6 +1064,7 @@ int RGWSI_BucketIndex_RADOS::list_objects(const DoutPrefixProvider* dpp, optiona
                                           const std::string& prefix,
                                           const std::string& delimiter,
                                           uint32_t num_entries, bool list_versions,
+                                          const rgw_bucket_snap_range& snap_range,
                                           std::map<int, rgw_cls_list_ret>& results)
 {
   const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
@@ -987,14 +1074,14 @@ int RGWSI_BucketIndex_RADOS::list_objects(const DoutPrefixProvider* dpp, optiona
     auto yield = y.get_yield_context();
     auto ex = yield.get_executor();
     auto reader = ListReader{*dpp, ex, index_pool, start_obj, prefix, delimiter,
-                             num_entries, list_versions, results};
+                             num_entries, list_versions, snap_range, results};
 
     rgwrados::shard_io::async_reads(reader, bucket_objs, max_aio, yield[ec]);
   } else {
     // run a strand on the system executor and block on a condition variable
     auto ex = boost::asio::make_strand(boost::asio::system_executor{});
     auto reader = ListReader{*dpp, ex, index_pool, start_obj, prefix, delimiter,
-                             num_entries, list_versions, results};
+                             num_entries, list_versions, snap_range, results};
 
     maybe_warn_about_blocking(dpp);
     rgwrados::shard_io::async_reads(reader, bucket_objs, max_aio,

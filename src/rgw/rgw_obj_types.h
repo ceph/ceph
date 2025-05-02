@@ -24,13 +24,16 @@
 #include "rgw_pool_types.h"
 #include "rgw_bucket_types.h"
 #include "rgw_user_types.h"
+#include "rgw_bucket_snap_types.h"
 
 #include "common/dout.h"
 #include "common/Formatter.h"
+#include "common/ceph_json.h"
 
 struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
   std::string name;
   std::string instance;
+  rgw_bucket_snap_id snap_id;
 
   rgw_obj_index_key() {}
   rgw_obj_index_key(const std::string &_name) : name(_name) {}
@@ -51,18 +54,23 @@ struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
 
   bool operator==(const rgw_obj_index_key& k) const {
     return (name.compare(k.name) == 0) &&
-           (instance.compare(k.instance) == 0);
+           (instance.compare(k.instance) == 0) &&
+           (snap_id == k.snap_id);
   }
 
   bool operator!=(const rgw_obj_index_key& k) const {
     return (name.compare(k.name) != 0) ||
-           (instance.compare(k.instance) != 0);
+           (instance.compare(k.instance) != 0) ||
+           (snap_id != k.snap_id);
   }
 
   bool operator<(const rgw_obj_index_key& k) const {
     int r = name.compare(k.name);
     if (r == 0) {
       r = instance.compare(k.instance);
+    }
+    if (r == 0) {
+      return snap_id < k.snap_id;
     }
     return (r < 0);
   }
@@ -72,20 +80,25 @@ struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
   }
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(name, bl);
     encode(instance, bl);
+    encode(snap_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(name, bl);
     decode(instance, bl);
+    if (struct_v >= 2) {
+      decode(snap_id, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const {
-    f->dump_string("name", name);
-    f->dump_string("instance", instance);
+    encode_json("name", name, f);
+    encode_json("instance", instance, f);
+    encode_json("snap_id", snap_id, f);
   }
   void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<rgw_obj_index_key*>& ls) {
@@ -110,16 +123,33 @@ struct rgw_obj_key {
   std::string instance;
   std::string ns;
 
+  rgw_bucket_snap_id snap_id;
+
   rgw_obj_key() {}
 
   // cppcheck-suppress noExplicitConstructor
   rgw_obj_key(const std::string& n) : name(n) {}
-  rgw_obj_key(const std::string& n, const std::string& i) : name(n), instance(i) {}
-  rgw_obj_key(const std::string& n, const std::string& i, const std::string& _ns) : name(n), instance(i), ns(_ns) {}
+  rgw_obj_key(const std::string& n, const std::string& i) : name(n) {
+    _init_instance(i);
+  }
+  rgw_obj_key(const std::string& n, const std::string& i, const std::string& _ns) : name(n), ns(_ns) {
+    _init_instance(i);
+  }
+  rgw_obj_key(const std::string& n, const std::string& i, std::optional<rgw_bucket_snap_id> _snap_id) : name(n) {
+    _init_instance(i);
+    if (_snap_id) {
+      set_snap_id(*_snap_id);
+    }
+  }
 
   rgw_obj_key(const rgw_obj_index_key& k) {
     parse_index_key(k.name, &name, &ns);
-    instance = k.instance;
+    _init_instance(k.instance);
+    snap_id = k.snap_id;
+  }
+
+  void _init_instance(const std::string& i) {
+    _parse_instance(i, instance, snap_id);
   }
 
   static void parse_index_key(const std::string& key, std::string *name, std::string *ns) {
@@ -153,13 +183,13 @@ struct rgw_obj_key {
 
   void set(const std::string& n, const std::string& i) {
     name = n;
-    instance = i;
+    _init_instance(i);
     ns.clear();
   }
 
   void set(const std::string& n, const std::string& i, const std::string& _ns) {
     name = n;
-    instance = i;
+    _init_instance(i);
     ns = _ns;
   }
 
@@ -168,11 +198,22 @@ struct rgw_obj_key {
       return false;
     }
     instance = index_key.instance;
+    snap_id = index_key.snap_id;
     return true;
   }
 
   void set_instance(const std::string& i) {
-    instance = i;
+    _init_instance(i);
+  }
+
+  void set_snap_id(rgw_bucket_snap_id sid) {
+    snap_id = sid;
+  }
+
+  void try_set_snap_id(rgw_bucket_snap_id sid) {
+    if (ns.empty() && !have_non_null_instance()) {
+      snap_id = sid;
+    }
   }
 
   const std::string& get_instance() const {
@@ -203,6 +244,7 @@ struct rgw_obj_key {
   void get_index_key(rgw_obj_index_key* key) const {
     key->name = get_index_key_name();
     key->instance = instance;
+    key->snap_id = snap_id;
   }
 
   std::string get_loc() const {
@@ -231,8 +273,25 @@ struct rgw_obj_key {
     return !instance.empty();
   }
 
+  bool have_non_null_instance() const {
+    return !instance.empty() && !have_null_instance();
+  }
+
   bool need_to_encode_instance() const {
-    return have_instance() && !have_null_instance();
+    return have_non_null_instance() ||
+      (snap_id.is_set() && !snap_id.is_min());
+
+      snap_id.is_set();
+  }
+
+  std::string instance_oid_str() const {
+    if (have_non_null_instance()) {
+      return instance;
+    }
+
+    std::stringstream ss;  
+    ss << "#" << snap_id;
+    return ss.str();
   }
 
   std::string get_oid() const {
@@ -246,16 +305,24 @@ struct rgw_obj_key {
     std::string oid = "_";
     oid.append(ns);
     if (need_to_encode_instance()) {
-      oid.append(std::string(":") + instance);
+      oid.append(std::string(":") + instance_oid_str());
     }
     oid.append("_");
     oid.append(name);
     return oid;
   }
 
+  rgw_bucket_snap_id get_snap_id() const {
+    if (!instance.empty()) {
+      return rgw_bucket_snap_id();
+    }
+    return snap_id;
+  }
+
   bool operator==(const rgw_obj_key& k) const {
     return (name.compare(k.name) == 0) &&
-           (instance.compare(k.instance) == 0);
+           (instance.compare(k.instance) == 0) &&
+           ((!instance.empty()) || (snap_id == k.snap_id));
   }
 
   bool operator<(const rgw_obj_key& k) const {
@@ -263,20 +330,45 @@ struct rgw_obj_key {
     if (r == 0) {
       r = instance.compare(k.instance);
     }
-    return (r < 0);
+    if (r == 0  && instance.empty()) {
+      return snap_id < k.snap_id;
+    }
+    return r;
   }
 
   bool operator<=(const rgw_obj_key& k) const {
     return !(k < *this);
   }
 
-  static void parse_ns_field(std::string& ns, std::string& instance) {
+  static void _parse_instance(const std::string& field, std::string& instance, rgw_bucket_snap_id& snap_id) {
+    /* callers already output */
+
+    if (field.empty()) {
+      instance.clear();
+      snap_id.reset();
+      return;
+    } 
+
+    if (field[0] == '#') {
+      snap_id = std::stoll(field.substr(1));
+    } else if (field.starts_with("null#")) {
+      snap_id = std::stoll(field.substr(5));
+    } else {
+      instance = field;
+      snap_id.reset();
+      return;
+    }
+
+  }
+
+  static void parse_ns_field(std::string& ns, std::string& instance, rgw_bucket_snap_id& snap_id) {
     int pos = ns.find(':');
     if (pos >= 0) {
-      instance = ns.substr(pos + 1);
+      _parse_instance(ns.substr(pos + 1), instance, snap_id);
       ns = ns.substr(0, pos);
     } else {
       instance.clear();
+      snap_id.reset();
     }
   }
 
@@ -285,6 +377,7 @@ struct rgw_obj_key {
   static bool parse_raw_oid(const std::string& oid, rgw_obj_key *key) {
     key->instance.clear();
     key->ns.clear();
+    key->snap_id.reset();
     if (oid[0] != '_') {
       key->name = oid;
       return true;
@@ -303,7 +396,7 @@ struct rgw_obj_key {
       return false;
 
     key->ns = oid.substr(1, pos - 1);
-    parse_ns_field(key->ns, key->instance);
+    parse_ns_field(key->ns, key->instance, key->snap_id);
 
     key->name = oid.substr(pos + 1);
     return true;
@@ -334,9 +427,11 @@ struct rgw_obj_key {
    * It returns true after successfully doing so, or
    * false if it fails.
    */
-  static bool strip_namespace_from_name(std::string& name, std::string& ns, std::string& instance) {
+  static bool strip_namespace_from_name(std::string& name, std::string& ns, std::string& instance, rgw_bucket_snap_id snap_id) {
     ns.clear();
     instance.clear();
+    snap_id.reset();
+
     if (name[0] != '_') {
       return true;
     }
@@ -359,23 +454,27 @@ struct rgw_obj_key {
     ns = name.substr(1, pos-1);
     name = name.substr(pos+1, std::string::npos);
 
-    parse_ns_field(ns, instance);
+    parse_ns_field(ns, instance, snap_id);
     return true;
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(name, bl);
     encode(instance, bl);
     encode(ns, bl);
+    encode(snap_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(name, bl);
     decode(instance, bl);
     if (struct_v >= 2) {
       decode(ns, bl);
+    }
+    if (struct_v >= 3) {
+      decode(snap_id, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -402,7 +501,11 @@ inline std::ostream& operator<<(std::ostream& out, const rgw_obj_key &key) {
   return out << fmt::format("{}", key);
 #else
   if (key.instance.empty()) {
-    return out << fmt::format("{}", key.name);
+    if (!key.snap_id.is_set()) {
+      return out << fmt::format("{}", key.name);
+    } else {
+      return out << fmt::format("{}[null.{}]", key.name, key.snap_id);
+    }
   } else {
     return out << fmt::format("{}[{}]", key.name, key.instance);
   }
@@ -550,17 +653,18 @@ struct rgw_obj {
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 6, bl);
+    ENCODE_START(7, 6, bl);
     encode(bucket, bl);
     encode(key.ns, bl);
     encode(key.name, bl);
     encode(key.instance, bl);
 //    encode(placement_id, bl);
+    encode(key.snap_id, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
     if (struct_v < 6) {
       std::string s;
       decode(bucket.name, bl); /* bucket.name */
@@ -592,6 +696,9 @@ struct rgw_obj {
       decode(key.name, bl);
       decode(key.instance, bl);
 //      decode(placement_id, bl);
+      if (struct_v >= 7) {
+        decode(key.snap_id, bl);
+      }
     }
     DECODE_FINISH(bl);
   }
@@ -610,6 +717,9 @@ struct rgw_obj {
         r = key.ns.compare(o.key.ns);
         if (r == 0) {
           r = key.instance.compare(o.key.instance);
+          if (r == 0 && key.instance.empty()) { /* don't compare snap_id when instance exists */
+            return (key.snap_id < o.key.snap_id);
+          }
         }
       }
     }

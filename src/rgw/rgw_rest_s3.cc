@@ -39,6 +39,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_s3website.h"
 #include "rgw_rest_pubsub.h"
+#include "rgw_rest_snap.h"
 #include "rgw_auth_s3.h"
 #include "rgw_acl.h"
 #include "rgw_policy_s3.h"
@@ -1806,10 +1807,105 @@ void RGWGetUsage_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+static int parse_snap_id(const string& s, rgw_bucket_snap_id *snap_id, string& err)
+{
+  if (s.empty()) {
+    snap_id->reset();
+    return 0;
+  }
+  uint64_t val = (uint64_t)strict_strtoll(s, 10, &err);
+  if (!err.empty()) {
+    return -EINVAL;
+  }
+  snap_id->init(val);
+  return 0;
+}
+
+static int parse_snap_range(const string& s, rgw_bucket_snap_range *result, string& err)
+{
+  auto p = s.find('-');
+  if (p == string::npos) {
+    /* only one param */
+    rgw_bucket_snap_id snap_id;
+    int r = parse_snap_id(s, &snap_id, err);
+    if (r < 0) {
+      return r;
+    }
+    result->end = snap_id;
+    if (snap_id.snap_id == 0) {
+      result->start = snap_id;
+    } else {
+      result->start.init(snap_id.snap_id - 1);
+    }
+    return 0;
+  }
+
+  auto start_s = s.substr(0, p);
+  auto end_s = s.substr(p + 1);
+
+  int r = parse_snap_id(start_s, &result->start, err);
+  if (r < 0) {
+    return r;
+  }
+
+  r = parse_snap_id(end_s, &result->end, err);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+static std::optional<rgw_bucket_snap_id> get_snap_id_param(req_state *s)
+{
+  const char *snap_param = s->info.env->get("HTTP_X_RGW_SNAP_ID");
+  if (!snap_param) {
+    return nullopt;
+  }
+
+  std::optional<rgw_bucket_snap_id> opt_snap_id;
+  string err;
+  auto sid = strict_strtol(snap_param, 10, &err);
+  if (err.empty()) {
+    opt_snap_id = rgw_bucket_snap_id((uint64_t)sid);
+  }
+
+  return opt_snap_id;
+}
+
+static int get_snap_range_param(const DoutPrefixProvider *dpp, req_state *s, rgw_bucket_snap_range *psnap_range)
+{
+  const char *snap_range_header = s->info.env->get("HTTP_X_RGW_SNAP_RANGE");
+  if (snap_range_header) {
+    string snap_range_str(snap_range_header);
+    string err;
+    int r = parse_snap_range(snap_range_str, psnap_range, err);
+    if (r < 0) {
+      ldpp_dout(dpp, 5) << "failed to parse snap_range (snap_range_str=" << snap_range_str << "): " + err << dendl;
+      return r;
+    }
+  } else {
+    auto snap_id_opt = get_snap_id_param(s);
+    if (snap_id_opt) {
+      psnap_range->end = *snap_id_opt;
+      if (snap_id_opt->is_set() &&
+          snap_id_opt->snap_id > rgw_bucket_snap_id::SNAP_MIN) {
+        psnap_range->start = psnap_range->end - 1;
+      }
+    }
+  }
+  return 0;
+}
+
 int RGWListBucket_ObjStore_S3::get_common_params()
 {
   list_versions = s->info.args.exists("versions");
   prefix = s->info.args.get("prefix");
+
+  op_ret = get_snap_range_param(this, s, &snap_range);
+  if (op_ret < 0) {
+    return op_ret;
+  }
 
   // non-standard
   s->info.args.get_bool("allow-unordered", &allow_unordered, false);
@@ -1916,12 +2012,27 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
   }
 
   if (op_ret >= 0) {
+    auto& snap_mgr = s->bucket->get_info().local.snap_mgr;
+    auto check_snap = snap_mgr.get_cur_snap_id();
+    if (snap_range.end.is_set() &&
+        snap_range.end < check_snap) {
+      check_snap = snap_range.end;
+    }
+
     if (objs_container) {
       s->formatter->open_array_section("Entries");
     }
 
     vector<rgw_bucket_dir_entry>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
+      auto removed_at = iter->removed_at_snap();
+      if (removed_at.is_set()) {
+        /* object was removed, need to check if it exists in a live snapshot */
+        if (!snap_mgr.live_snapshot_at_range(iter->meta.snap_id, removed_at)) {
+          ldpp_dout(this, 20) << __func__ << "(): skipping entry key=" << iter->key << " meta.snap_id=" << iter->meta.snap_id << " removed_at=" << iter->removed_at_snap() << dendl;
+          continue;
+        }
+      }
       const char *section_name = (iter->is_delete_marker() ? "DeleteMarker"
           : "Version");
       s->formatter->open_object_section(section_name);
@@ -1933,6 +2044,10 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       string version_id = key.instance;
       if (version_id.empty()) {
         version_id = "null";
+        if (key.snap_id < check_snap) {
+          version_id.append("#");
+          version_id.append(std::to_string(key.snap_id));
+        }
       }
       if (s->system_request) {
         if (iter->versioned_epoch > 0) {
@@ -1944,6 +2059,12 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       }
       s->formatter->dump_string("VersionId", version_id);
       s->formatter->dump_bool("IsLatest", iter->is_current());
+      if (snap_range.start.is_set() &&
+          iter->is_removed()) {
+        /* this is used in snap-diff, so should only show removed if it existed in the 
+         * base snapshot */
+        s->formatter->dump_bool("IsRemoved", true);
+      }
       dump_time_exact_seconds(s, "LastModified", iter->meta.mtime);
       if (!iter->is_delete_marker()) {
         s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
@@ -2045,6 +2166,12 @@ void RGWListBucket_ObjStore_S3::send_response()
       dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       if (s->system_request) {
 	s->formatter->dump_string("RgwxTag", iter->tag);
+      }
+      if (snap_range.start.is_set() &&
+          iter->is_removed()) {
+        /* this is used in snap-diff, so should only show removed if it existed in the 
+         * base snapshot */
+        s->formatter->dump_bool("IsRemoved", true);
       }
       if (iter->meta.appendable) {
 	s->formatter->dump_string("Type", "Appendable");
@@ -2475,6 +2602,11 @@ static void dump_bucket_metadata(req_state *s,
 int RGWStatBucket_ObjStore_S3::get_params(optional_yield y)
 {
   report_stats = s->info.args.exists("read-stats");
+
+  op_ret = get_snap_range_param(this, s, &snap_range);
+  if (op_ret < 0) {
+    return op_ret;
+  }
 
   return 0;
 }
@@ -5155,6 +5287,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWGetBucketWebsite_ObjStore_S3;
   }
 
+  if (s->info.args.sub_resource_exists("snap"))
+    return new RGWListBucketSnapshots_ObjStore_S3;
+
   if (s->info.args.exists("mdsearch")) {
     if (!s->cct->_conf->rgw_enable_mdsearch) {
       return NULL;
@@ -5210,6 +5345,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return RGWHandler_REST_BucketLogging_S3::create_put_op();
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWSetBucketVersioning_ObjStore_S3;
+  if (s->info.args.sub_resource_exists("snapshots"))
+    return new RGWConfigureBucketSnapshots_ObjStore_S3;
   if (s->info.args.sub_resource_exists("website")) {
     if (!s->cct->_conf->rgw_enable_static_website) {
       return NULL;
@@ -5273,6 +5410,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
     return new RGWDeleteBucketEncryption_ObjStore_S3;
   }
 
+  if (s->info.args.exists("snap")) {
+    return new RGWRemoveBucketSnapshot_ObjStore_S3;
+  }
+
   if (s->info.args.sub_resource_exists("website")) {
     if (!s->cct->_conf->rgw_enable_static_website) {
       return NULL;
@@ -5298,6 +5439,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_post()
 
   if (s->info.args.exists("logging")) {
     return RGWHandler_REST_BucketLogging_S3::create_post_op();
+  }
+
+  if (s->info.args.exists("snap")) {
+    return new RGWCreateBucketSnapshot_ObjStore_S3;
   }
 
   if (s->info.args.exists("mdsearch")) {
@@ -5446,6 +5591,8 @@ int RGWHandler_REST_S3::init_from_header(rgw::sal::Driver* driver,
     first = req;
   }
 
+  std::optional<rgw_bucket_snap_id> opt_snap_id = get_snap_id_param(s);
+
   /*
    * XXX The intent of the check for empty is apparently to let the bucket
    * name from DNS to be set ahead. However, we currently take the DNS
@@ -5468,16 +5615,16 @@ int RGWHandler_REST_S3::init_from_header(rgw::sal::Driver* driver,
      * These calls will always create an object with no bucket. */
     if (!encoded_obj_str.empty()) {
       if (s->bucket) {
-	s->object = s->bucket->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
+	s->object = s->bucket->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId"), opt_snap_id));
       } else {
-	s->object = driver->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
+	s->object = driver->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId"), opt_snap_id));
       }
     }
   } else {
     if (s->bucket) {
-      s->object = s->bucket->get_object(rgw_obj_key(req_name, s->info.args.get("versionId")));
+      s->object = s->bucket->get_object(rgw_obj_key(req_name, s->info.args.get("versionId"), opt_snap_id));
     } else {
-      s->object = driver->get_object(rgw_obj_key(req_name, s->info.args.get("versionId")));
+      s->object = driver->get_object(rgw_obj_key(req_name, s->info.args.get("versionId"), opt_snap_id));
     }
   }
   return 0;
@@ -6455,6 +6602,9 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_OBJ_LEGAL_HOLD:
         case RGW_STS_GET_SESSION_TOKEN:
         case RGW_STS_ASSUME_ROLE:
+        case RGW_OP_CONFIG_BUCKET_SNAPSHOTS:
+        case RGW_OP_CREATE_BUCKET_SNAPSHOT:
+        case RGW_OP_DEL_BUCKET_SNAPSHOT:
         case RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK:
         case RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK:
         case RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK:

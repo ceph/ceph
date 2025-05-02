@@ -957,6 +957,7 @@ protected:
   std::string delimiter;
   std::string encoding_type;
   bool list_versions{false};
+  rgw_bucket_snap_range snap_range;
   int max{0};
   std::vector<rgw_bucket_dir_entry> objs;
   std::map<std::string, bool> common_prefixes;
@@ -1096,6 +1097,7 @@ class RGWStatBucket : public RGWOp {
 protected:
   RGWStorageStats stats;
   bool report_stats{true};
+  rgw_bucket_snap_range snap_range;
 
 public:
   int verify_permission(optional_yield y) override;

@@ -26,6 +26,7 @@
 #include "rgw_lua.h"
 #include "rgw_notify_event_type.h"
 #include "rgw_req_context.h"
+#include "rgw_bucket_snap_types.h"
 #include "include/random.h"
 #include "include/function2.hpp"
 
@@ -154,6 +155,7 @@ enum AttrsMod {
 
 static constexpr uint32_t FLAG_LOG_OP = 0x0001;
 static constexpr uint32_t FLAG_PREVENT_VERSIONING = 0x0002;
+static constexpr uint32_t FLAG_SNAP_OBJ_REMOVE = 0x0004;
 
 // if cannot do all elements of op, do as much as possible (e.g.,
 // delete object where head object is missing)
@@ -209,7 +211,9 @@ class ObjectProcessor : public DataProcessor {
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace,
+                       rgw_bucket_snap_id *psnap_id,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags) = 0;
 };
@@ -831,6 +835,7 @@ class Bucket {
       rgw::AccessListFilter access_list_filter{};
       RGWBucketListNameFilter force_check_filter;
       bool list_versions{false};
+      rgw_bucket_snap_range snap_range;
       bool allow_unordered{false};
       int shard_id{RGW_NO_SHARD};
 
@@ -842,6 +847,7 @@ class Bucket {
 	  "\", ns=\"" << p.ns <<
 	  "\", enforce_ns=" << p.enforce_ns <<
 	  ", list_versions=" << p.list_versions <<
+	  ", snap_range=" << p.snap_range <<
 	  ", allow_unordered=" << p.allow_unordered <<
 	  ", shard_id=" << p.shard_id <<
 	  " }";
@@ -910,7 +916,8 @@ class Bucket {
     /** Read the bucket stats from the backing Store, synchronous */
     virtual int read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			   const bucket_index_layout_generation& idx_layout,
-			   int shard_id, std::string* bucket_ver, std::string* master_ver,
+			   rgw_bucket_snap_range snap_range, int shard_id, std::string* bucket_ver,
+                           std::string* master_ver,
 			   std::map<RGWObjCategory, RGWStorageStats>& stats,
 			   std::string* max_marker = nullptr,
 			   bool* syncstopped = nullptr) = 0;
@@ -1617,6 +1624,7 @@ struct LCHead {
  * buckets. */
 struct LCEntry {
   std::string bucket;
+  rgw_bucket_snap_id snap_id;
   uint64_t start_time = 0;
   uint32_t status = 0;
 };
@@ -1715,7 +1723,9 @@ public:
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace,
+                       rgw_bucket_snap_id *psnap_id,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags) = 0;
 };

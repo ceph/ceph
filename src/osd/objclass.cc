@@ -125,7 +125,7 @@ int cls_read(cls_method_context_t hctx, int ofs, int len,
 
 int cls_get_request_origin(cls_method_context_t hctx, entity_inst_t *origin)
 {
-  PrimaryLogPG::OpContext **pctx = static_cast<PrimaryLogPG::OpContext **>(hctx);
+  PrimaryLogPG::OpContext **pctx = static_cast<PrimaryLogPG::OpContext **>((void *)hctx);
   *origin = (*pctx)->op->get_req()->get_orig_source_inst();
   return 0;
 }

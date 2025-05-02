@@ -802,7 +802,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	  ceph::real_time mtime = ceph::real_clock::from_time_t(e->creationTime);
 	  op_ret = processor->complete(lst, e->etag, &mtime, ceph::real_clock::from_time_t(e->creationTime), obj_attrs,
 				  std::nullopt, ceph::real_time(), nullptr, nullptr,
-				  nullptr, nullptr, nullptr,
+				  nullptr, nullptr, nullptr, nullptr,
 				  rctx, rgw::sal::FLAG_LOG_OP);
 
 	  if (op_ret < 0) {

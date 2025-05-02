@@ -172,6 +172,7 @@ void rgw_bucket_pending_info::decode_json(JSONObj *obj) {
 void cls_rgw_obj_key::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("instance", instance, obj);
+  JSONDecoder::decode_json("snap_id", snap_id, obj);
 }
 
 void rgw_bucket_dir_entry_meta::generate_test_instances(list<rgw_bucket_dir_entry_meta*>& o)
@@ -203,6 +204,7 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
   encode_json("accounted_size", accounted_size, f);
   encode_json("user_data", user_data, f);
   encode_json("appendable", appendable, f);
+  encode_json("snap_id", snap_id, f);
 }
 
 void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
@@ -221,6 +223,7 @@ void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("accounted_size", accounted_size, obj);
   JSONDecoder::decode_json("user_data", user_data, obj);
   JSONDecoder::decode_json("appendable", appendable, obj);
+  JSONDecoder::decode_json("snap_id", snap_id, obj);
 }
 
 void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& o)
@@ -266,6 +269,30 @@ void rgw_bucket_entry_ver::generate_test_instances(list<rgw_bucket_entry_ver*>& 
 }
 
 
+void rgw_bucket_snap_skip_entry::dump(Formatter *f) const
+{
+  encode_json("snap_id", snap_id, f);
+  encode_json("index_key", index_key , f);
+}
+
+void rgw_bucket_snap_skip_entry::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("snap_id", snap_id, obj);
+  JSONDecoder::decode_json("index_key", index_key, obj);
+}
+
+void rgw_bucket_dirent_snap_info::dump(Formatter *f) const
+{
+  encode_json("skip", skip, f);
+  encode_json("removed_at", removed_at, f);
+  encode_json("current_flag_map", current_flag_map, f);
+}
+
+void rgw_bucket_dirent_snap_info::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("skip", skip, obj);
+  JSONDecoder::decode_json("removed_at", removed_at, obj);
+  JSONDecoder::decode_json("current_range_map", removed_at, obj);
+}
+
 void rgw_bucket_dir_entry::dump(Formatter *f) const
 {
   encode_json("name", key.name, f);
@@ -278,6 +305,7 @@ void rgw_bucket_dir_entry::dump(Formatter *f) const
   encode_json("flags", (int)flags , f);
   encode_json("pending_map", pending_map, f);
   encode_json("versioned_epoch", versioned_epoch , f);
+  encode_json("snap_info", snap_info , f);
 }
 
 void rgw_bucket_dir_entry::decode_json(JSONObj *obj) {
@@ -293,6 +321,7 @@ void rgw_bucket_dir_entry::decode_json(JSONObj *obj) {
   flags = (uint16_t)val;
   JSONDecoder::decode_json("pending_map", pending_map, obj);
   JSONDecoder::decode_json("versioned_epoch", versioned_epoch, obj);
+  JSONDecoder::decode_json("snap_info", snap_info, obj);
 }
 
 static void dump_bi_entry(bufferlist bl, BIIndexType index_type, Formatter *formatter)
@@ -469,6 +498,8 @@ void rgw_bucket_olh_entry::dump(Formatter *f) const
   encode_json("tag", tag, f);
   encode_json("exists", exists, f);
   encode_json("pending_removal", pending_removal, f);
+  encode_json("snap_id", snap_id, f);
+  encode_json("null_ver_snap_id", null_ver_snap_id, f);
 }
 
 void rgw_bucket_olh_entry::decode_json(JSONObj *obj)
@@ -479,7 +510,8 @@ void rgw_bucket_olh_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("pending_log", pending_log, obj);
   JSONDecoder::decode_json("tag", tag, obj);
   JSONDecoder::decode_json("exists", exists, obj);
-  JSONDecoder::decode_json("pending_removal", pending_removal, obj);
+  JSONDecoder::decode_json("snap_id", snap_id, obj);
+  JSONDecoder::decode_json("null_ver_snap_id", null_ver_snap_id, obj);
 }
 
 void rgw_bucket_olh_entry::generate_test_instances(list<rgw_bucket_olh_entry*>& o)
@@ -686,20 +718,66 @@ void rgw_bucket_dir_header::generate_test_instances(list<rgw_bucket_dir_header*>
   o.push_back(new rgw_bucket_dir_header);
 }
 
+void encode_json(const char *name, const rgw_bucket_dir_stats& stats, ceph::Formatter *f)
+{
+  Formatter::ArraySection as(*f, name);
+  for (const auto& e : stats) {
+    encode_json("category", int32_t(e.first), f);
+    encode_json("category_stats", e.second, f);
+  }
+}
+
 void rgw_bucket_dir_header::dump(Formatter *f) const
 {
   f->dump_int("ver", ver);
   f->dump_int("master_ver", master_ver);
-  f->open_array_section("stats");
-  for (auto iter = stats.begin(); iter != stats.end(); ++iter) {
-    f->dump_int("category", int(iter->first));
-    f->open_object_section("category_stats");
-    iter->second.dump(f);
-    f->close_section();
-  }
+  encode_json("stats", stats, f);
   f->close_section();
   ::encode_json("new_instance", new_instance, f);
   f->dump_int("reshardlog_entries", reshardlog_entries);
+  ::encode_json("max_snap_id", max_snap_id, f);
+  if (max_snap_stats) {
+    encode_json("max_snap_stats", *max_snap_stats, f);
+  }
+}
+
+void rgw_bucket_dir_snap_stats::generate_test_instances(list<rgw_bucket_dir_snap_stats*>& o)
+{
+  list<rgw_bucket_category_stats *> l;
+  rgw_bucket_category_stats::generate_test_instances(l);
+
+  uint8_t i = 0;
+  for (auto iter = l.begin(); iter != l.end(); ++iter, ++i) {
+    RGWObjCategory c = static_cast<RGWObjCategory>(i);
+    rgw_bucket_dir_snap_stats *h = new rgw_bucket_dir_snap_stats;
+    rgw_bucket_category_stats *s = *iter;
+    h->total_stats[c] = *s;
+    h->snap_stats[c] = *s;
+
+    o.push_back(h);
+
+    delete s;
+  }
+
+  o.push_back(new rgw_bucket_dir_snap_stats);
+}
+
+void rgw_bucket_dir_snap_stats::dump(Formatter *f) const
+{
+  encode_json("snap_id", snap_id, f);
+  encode_json("total_stats", total_stats, f);
+  encode_json("snap_stats", snap_stats, f);
+}
+
+void rgw_bucket_dir_snap_header::generate_test_instances(list<rgw_bucket_dir_snap_header*>& o)
+{
+  o.push_back(new rgw_bucket_dir_snap_header);
+}
+
+void rgw_bucket_dir_snap_header::dump(Formatter *f) const
+{
+  encode_json("ver", ver, f);
+  encode_json("stats", stats, f);
 }
 
 void rgw_bucket_dir::generate_test_instances(list<rgw_bucket_dir*>& o)
@@ -929,6 +1007,7 @@ list<cls_rgw_bucket_instance_entry*>& ls)
 void cls_rgw_lc_entry::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);
+  encode_json("snap_id", snap_id, f);
   encode_json("start_time", start_time, f);
   encode_json("status", status, f);
 }

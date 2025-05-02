@@ -846,12 +846,12 @@ int FilterBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 
 int FilterBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			     const bucket_index_layout_generation& idx_layout,
-			     int shard_id, std::string* bucket_ver,
+			     rgw_bucket_snap_range snap_range, int shard_id, std::string* bucket_ver,
 			     std::string* master_ver,
 			     std::map<RGWObjCategory, RGWStorageStats>& stats,
 			     std::string* max_marker, bool* syncstopped)
 {
-  return next->read_stats(dpp, y, idx_layout, shard_id, bucket_ver, master_ver,
+  return next->read_stats(dpp, y, idx_layout, snap_range, shard_id, bucket_ver, master_ver,
 			  stats, max_marker, syncstopped);
 }
 
@@ -1466,13 +1466,14 @@ int FilterWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, rgw_bucket_snap_id *psnap_id,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags)
 {
   return next->complete(accounted_size, etag, mtime, set_mtime, attrs, cksum,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
-			canceled, rctx, flags);
+			psnap_id, canceled, rctx, flags);
 }
 
 int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,

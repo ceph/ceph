@@ -773,7 +773,8 @@ int MotrBucket::unlink_user(const DoutPrefixProvider* dpp, User* new_user, optio
 
 /* stats - Not for first pass */
 int MotrBucket::read_stats(const DoutPrefixProvider *dpp,
-    const bucket_index_layout_generation& idx_layout, int shard_id,
+    const bucket_index_layout_generation& idx_layout,
+    rgw_bucket_snap_range snap_range, int shard_id,
     std::string *bucket_ver, std::string *master_ver,
     std::map<RGWObjCategory, RGWStorageStats>& stats,
     std::string *max_marker, bool *syncstopped)
@@ -2332,7 +2333,8 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, rgw_bucket_snap_id *psnap_id,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags)
 {

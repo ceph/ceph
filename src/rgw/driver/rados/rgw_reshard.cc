@@ -1603,6 +1603,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
     std::map<RGWObjCategory, RGWStorageStats> stats;
     ret = store->getRados()->get_bucket_stats(dpp, y, bucket_info,
 					      bucket_info.layout.current_index,
+                                              rgw_bucket_snap_range(),
 					      -1, nullptr, nullptr, stats, nullptr, nullptr);
     if (ret < 0) {
       return clean_up("unable to access buckets current stats");

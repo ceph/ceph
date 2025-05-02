@@ -211,9 +211,10 @@ struct rgw_bucket_dir_entry_meta {
   std::string user_data;
   std::string storage_class;
   bool appendable = false;
+  rgw_bucket_snap_id snap_id;
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(7, 3, bl);
+    ENCODE_START(8, 3, bl);
     encode(category, bl);
     encode(size, bl);
     encode(mtime, bl);
@@ -225,6 +226,7 @@ struct rgw_bucket_dir_entry_meta {
     encode(user_data, bl);
     encode(storage_class, bl);
     encode(appendable, bl);
+    encode(snap_id, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -248,6 +250,10 @@ struct rgw_bucket_dir_entry_meta {
       decode(storage_class, bl);
     if (struct_v >= 7)
       decode(appendable, bl);
+    if (struct_v >= 8)
+      decode(snap_id, bl);
+    else
+      snap_id = rgw_bucket_snap_id(rgw_bucket_snap_id::SNAP_MIN);
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
@@ -366,6 +372,69 @@ inline std::ostream& operator<<(std::ostream& out, const cls_rgw_obj_key& o) {
   return out;
 }
 
+struct rgw_bucket_snap_skip_entry {
+  rgw_bucket_snap_id snap_id;
+  std::string index_key;
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(snap_id, bl);
+    encode(index_key, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(snap_id, bl);
+    decode(index_key, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_bucket_snap_skip_entry)
+
+struct rgw_bucket_dirent_snap_info {
+  rgw_bucket_snap_skip_entry skip;
+  rgw_bucket_snap_id removed_at;
+  std::map<rgw_bucket_snap_id, bool> current_flag_map;
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(skip, bl);
+    encode(removed_at, bl);
+    encode(current_flag_map, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(skip, bl);
+    decode(removed_at, bl);
+    decode(current_flag_map, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void set_current(rgw_bucket_snap_id snap_id, bool current) {
+    current_flag_map[snap_id] = current;
+  }
+
+  bool is_current(rgw_bucket_snap_id snap_id) {
+    auto iter = current_flag_map.upper_bound(snap_id);
+    if (iter == current_flag_map.begin()) {
+      return false;
+    }
+    --iter;
+    return iter->second;
+  }
+};
+WRITE_CLASS_ENCODER(rgw_bucket_dirent_snap_info)
+
+
 struct rgw_bucket_dir_entry {
   /* a versioned object instance */
   static constexpr uint16_t FLAG_VER =                0x1;
@@ -375,6 +444,9 @@ struct rgw_bucket_dir_entry {
   static constexpr uint16_t FLAG_DELETE_MARKER =      0x4;
   /* object is versioned, a placeholder for the plain entry */
   static constexpr uint16_t FLAG_VER_MARKER =         0x8;
+  /* object is deleted (delete marker may or may not exist for it,
+   * used to report of object removal in a snapshot range diff */
+  static constexpr uint16_t FLAG_DELETE =            0x10;
   /* object is a proxy; it is not listed in the bucket index but is a
    * prefix ending with a delimiter, perhaps common to multiple
    * entries; it is only useful when a delimiter is used and
@@ -392,12 +464,13 @@ struct rgw_bucket_dir_entry {
   std::string tag;
   uint16_t flags;
   uint64_t versioned_epoch;
+  std::optional<rgw_bucket_dirent_snap_info> snap_info;
 
   rgw_bucket_dir_entry() :
     exists(false), index_ver(0), flags(0), versioned_epoch(0) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(8, 3, bl);
+    ENCODE_START(9, 3, bl);
     encode(key.name, bl);
     encode(ver.epoch, bl);
     encode(exists, bl);
@@ -410,10 +483,12 @@ struct rgw_bucket_dir_entry {
     encode(key.instance, bl);
     encode(flags, bl);
     encode(versioned_epoch, bl);
+    encode(key.snap_id, bl);
+    encode(snap_info, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(9, 3, 3, bl);
     decode(key.name, bl);
     decode(ver.epoch, bl);
     decode(exists, bl);
@@ -440,6 +515,10 @@ struct rgw_bucket_dir_entry {
     if (struct_v >= 8) {
       decode(versioned_epoch, bl);
     }
+    if (struct_v >= 9) {
+      decode(key.snap_id, bl);
+      decode(snap_info, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -449,8 +528,18 @@ struct rgw_bucket_dir_entry {
     return (flags & rgw_bucket_dir_entry::FLAG_VER) == 0 ||
            (flags & test_flags) == test_flags;
   }
+  bool is_current_at_snap(rgw_bucket_snap_id snap_id) {
+    if (!meta.snap_id.is_set()) {
+      return true;
+    }
+    return (flags & rgw_bucket_dir_entry::FLAG_VER) == 0 ||
+      (snap_info && snap_info->is_current(snap_id));
+  }
   bool is_delete_marker() const {
     return (flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) != 0;
+  }
+  bool is_removed() const {
+    return (flags & rgw_bucket_dir_entry::FLAG_DELETE) != 0;
   }
   bool is_visible() const {
     return is_current() && !is_delete_marker();
@@ -460,6 +549,44 @@ struct rgw_bucket_dir_entry {
   }
   bool is_common_prefix() const {
     return flags & rgw_bucket_dir_entry::FLAG_COMMON_PREFIX;
+  }
+
+  rgw_bucket_snap_id removed_at_snap() const {
+    if (!snap_info) {
+      return rgw_bucket_snap_id();
+    }
+    return snap_info->removed_at;
+  }
+  bool exists_at_snap(rgw_bucket_snap_id check_snap_id) const {
+    if (!check_snap_id.is_set()) {
+      return (!removed_at_snap().is_set());
+    }
+    if (meta.snap_id.is_set() && 
+        check_snap_id < meta.snap_id) {
+      /* we were created at a later snapshot than the checked one */
+      return false;
+    }
+
+    auto removed_at = removed_at_snap();
+    return (!removed_at.is_set() ||
+            check_snap_id < removed_at);
+  }
+  rgw_bucket_dirent_snap_info& set_snap_info() {
+    if (!snap_info) {
+      snap_info.emplace(rgw_bucket_dirent_snap_info());
+    }
+    return *snap_info;
+  }
+  void set_snap_skip_from(const rgw_bucket_dir_entry& entry) {
+    if (!snap_info && !entry.snap_info) {
+      return;
+    }
+    auto& info = set_snap_info();
+    if (!entry.snap_info) {
+      info.skip = rgw_bucket_snap_skip_entry();
+    } else {
+      info.skip = entry.snap_info->skip;
+    }
   }
 
   void dump(ceph::Formatter *f) const;
@@ -522,21 +649,24 @@ struct rgw_bucket_olh_log_entry {
   std::string op_tag;
   cls_rgw_obj_key key;
   bool delete_marker;
+  rgw_bucket_snap_id snap_id;
+
 
   rgw_bucket_olh_log_entry() : epoch(0), op(CLS_RGW_OLH_OP_UNKNOWN), delete_marker(false) {}
 
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(epoch, bl);
     encode((__u8)op, bl);
     encode(op_tag, bl);
     encode(key, bl);
     encode(delete_marker, bl);
+    encode(snap_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(epoch, bl);
     uint8_t c;
     decode(c, bl);
@@ -544,6 +674,9 @@ struct rgw_bucket_olh_log_entry {
     decode(op_tag, bl);
     decode(key, bl);
     decode(delete_marker, bl);
+    if (struct_v >= 2) {
+      decode(snap_id, bl);
+    }
     DECODE_FINISH(bl);
   }
   static void generate_test_instances(std::list<rgw_bucket_olh_log_entry*>& o);
@@ -554,17 +687,24 @@ WRITE_CLASS_ENCODER(rgw_bucket_olh_log_entry)
 
 struct rgw_bucket_olh_entry {
   cls_rgw_obj_key key;
+  rgw_bucket_snap_id snap_id;
   bool delete_marker;
   uint64_t epoch;
   std::map<uint64_t, std::vector<struct rgw_bucket_olh_log_entry> > pending_log;
   std::string tag;
   bool exists;
   bool pending_removal;
+  rgw_bucket_snap_id null_ver_snap_id; /* snap in which latest null version exists.
+                                          It's needed so that we can easily find it
+                                          when a new null version is being written,
+                                          so that we may need to mark the old one
+                                          as 'removed' at a specific snapshot */
+                                    
 
   rgw_bucket_olh_entry() : delete_marker(false), epoch(0), exists(false), pending_removal(false) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(key, bl);
     encode(delete_marker, bl);
     encode(epoch, bl);
@@ -572,10 +712,12 @@ struct rgw_bucket_olh_entry {
     encode(tag, bl);
     encode(exists, bl);
     encode(pending_removal, bl);
+    encode(snap_id, bl);
+    encode(null_ver_snap_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(key, bl);
     decode(delete_marker, bl);
     decode(epoch, bl);
@@ -583,6 +725,10 @@ struct rgw_bucket_olh_entry {
     decode(tag, bl);
     decode(exists, bl);
     decode(pending_removal, bl);
+    if (struct_v >= 2) {
+      decode(snap_id, bl);
+      decode(null_ver_snap_id, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
@@ -818,6 +964,8 @@ WRITE_CLASS_ENCODER(cls_rgw_bucket_instance_entry)
 
 using rgw_bucket_dir_stats = std::map<RGWObjCategory, rgw_bucket_category_stats>;
 
+void encode_json(const char *name, const rgw_bucket_dir_stats& stats, ceph::Formatter *f);
+
 struct rgw_bucket_dir_header {
   rgw_bucket_dir_stats stats;
   uint64_t tag_timeout;
@@ -827,12 +975,14 @@ struct rgw_bucket_dir_header {
   cls_rgw_bucket_instance_entry new_instance;
   bool syncstopped;
   uint32_t reshardlog_entries;
+  rgw_bucket_snap_id max_snap_id;
+  std::optional<rgw_bucket_dir_stats> max_snap_stats;
 
   rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0), syncstopped(false),
                             reshardlog_entries(0) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(8, 2, bl);
+    ENCODE_START(9, 2, bl);
     encode(stats, bl);
     encode(tag_timeout, bl);
     encode(ver, bl);
@@ -841,10 +991,12 @@ struct rgw_bucket_dir_header {
     encode(new_instance, bl);
     encode(syncstopped,bl);
     encode(reshardlog_entries, bl);
+    encode(max_snap_id, bl);
+    encode(max_snap_stats, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(8, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(9, 2, 2, bl);
     decode(stats, bl);
     if (struct_v > 2) {
       decode(tag_timeout, bl);
@@ -873,6 +1025,10 @@ struct rgw_bucket_dir_header {
     } else {
       reshardlog_entries = 0;
     }
+    if (struct_v >= 9) {
+      decode(max_snap_id, bl);
+      decode(max_snap_stats, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
@@ -892,6 +1048,55 @@ struct rgw_bucket_dir_header {
 
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
+
+struct rgw_bucket_dir_snap_stats {
+  rgw_bucket_snap_id snap_id;
+  rgw_bucket_dir_stats total_stats;  /* the aggregated total storage when the snapshot was taken */
+  rgw_bucket_dir_stats snap_stats;   /* total storage used by the specific snapshot */
+
+  rgw_bucket_dir_snap_stats() {}
+
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(snap_id, bl);
+    encode(total_stats, bl);
+    encode(snap_stats, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(snap_id, bl);
+    decode(total_stats, bl);
+    decode(snap_stats, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_bucket_dir_snap_stats*>& o);
+};
+WRITE_CLASS_ENCODER(rgw_bucket_dir_snap_stats)
+
+struct rgw_bucket_dir_snap_header {
+  uint64_t ver{0};
+  rgw_bucket_dir_snap_stats stats;  /* the aggregated total storage when the snapshot was taken */
+
+  rgw_bucket_dir_snap_header() {}
+
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(ver, bl);
+    encode(stats, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(ver, bl);
+    decode(stats, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_bucket_dir_snap_header*>& o);
+};
+WRITE_CLASS_ENCODER(rgw_bucket_dir_snap_header)
 
 struct rgw_bucket_dir {
   rgw_bucket_dir_header header;
@@ -1337,6 +1542,7 @@ WRITE_CLASS_ENCODER(cls_rgw_lc_obj_head)
 
 struct cls_rgw_lc_entry {
   std::string bucket;
+  rgw_bucket_snap_id snap_id;
   uint64_t start_time; // if in_progress
   uint32_t status;
 
@@ -1345,22 +1551,26 @@ struct cls_rgw_lc_entry {
 
   cls_rgw_lc_entry(const cls_rgw_lc_entry& rhs) = default;
 
-  cls_rgw_lc_entry(const std::string& b, uint64_t t, uint32_t s)
-    : bucket(b), start_time(t), status(s) {};
+  cls_rgw_lc_entry(const std::string& b, rgw_bucket_snap_id sid, uint64_t t, uint32_t s)
+    : bucket(b), snap_id(sid), start_time(t), status(s) {};
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(bucket, bl);
     encode(start_time, bl);
     encode(status, bl);
+    encode(snap_id, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(bucket, bl);
     decode(start_time, bl);
     decode(status, bl);
+    if (struct_v >= 2) {
+      decode(snap_id,  bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

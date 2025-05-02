@@ -103,7 +103,7 @@ void cls_rgw_lc_get_entry_ret::dump(Formatter *f) const
 
 void cls_rgw_lc_get_entry_ret::generate_test_instances(list<cls_rgw_lc_get_entry_ret*>& ls)
 {
-  cls_rgw_lc_entry entry("bucket1", 6000, 0);
+  cls_rgw_lc_entry entry("bucket1", rgw_bucket_snap_id(), 6000, 0);
   ls.push_back(new cls_rgw_lc_get_entry_ret);
   ls.back()->entry = entry;
 }

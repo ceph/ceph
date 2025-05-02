@@ -205,7 +205,7 @@ namespace rgw::sal {
   /* stats - Not for first pass */
   int DBBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
       const bucket_index_layout_generation& idx_layout,
-      int shard_id,
+      rgw_bucket_snap_range snap_range, int shard_id,
       std::string *bucket_ver, std::string *master_ver,
       std::map<RGWObjCategory, RGWStorageStats>& stats,
       std::string *max_marker, bool *syncstopped)
@@ -1242,7 +1242,9 @@ namespace rgw::sal {
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace,
+                       rgw_bucket_snap_id *psnap_id,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags)
   {
@@ -1253,7 +1255,7 @@ namespace rgw::sal {
     parent_op.meta.if_nomatch = if_nomatch;
     parent_op.meta.user_data = user_data;
     parent_op.meta.zones_trace = zones_trace;
-    
+
     /* XXX: handle accounted size */
     accounted_size = total_data_size;
 
@@ -1266,6 +1268,10 @@ namespace rgw::sal {
     info.modified = real_clock::now();
     //info.manifest = manifest;
 
+    if (psnap_id) {
+      psnap_id->reset();
+    }
+    
     DB::Object op_target(store->getDB(),
         meta_obj->get_bucket()->get_info(), meta_obj->get_obj());
     auto ret = op_target.add_mp_part(dpp, info);
@@ -1399,7 +1405,8 @@ namespace rgw::sal {
                          ceph::real_time delete_at,
                          const char *if_match, const char *if_nomatch,
                          const std::string *user_data,
-                         rgw_zone_set *zones_trace, bool *canceled,
+                         rgw_zone_set *zones_trace, rgw_bucket_snap_id *psnap_id,
+                         bool *canceled,
                          const req_context& rctx,
                          uint32_t flags)
   {
