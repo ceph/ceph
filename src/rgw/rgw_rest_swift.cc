@@ -976,7 +976,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
   std::unique_ptr<rgw::sal::Object> slo_seg = bucket->get_object(rgw_obj_key(obj_name));
 
   /* no prefetch */
-  slo_seg->set_atomic();
+  slo_seg->set_atomic(true);
 
   bool compressed;
   RGWCompressionInfo cs_info;
@@ -2707,7 +2707,7 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
   std::unique_ptr<rgw::sal::Object> obj = s->bucket->get_object(rgw_obj_key(std::move(subdir_name)));
 
   /* First, get attrset of the object we'll try to retrieve. */
-  obj->set_atomic();
+  obj->set_atomic(true);
   obj->set_prefetch_data();
 
   if (obj->load_obj_state(s, s->yield, false)) {
@@ -2735,7 +2735,7 @@ bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index) const
 {
   std::unique_ptr<rgw::sal::Object> obj = s->bucket->get_object(rgw_obj_key(index));
 
-  obj->set_atomic();
+  obj->set_atomic(true);
   obj->set_prefetch_data();
 
   if (obj->load_obj_state(s, s->yield, false)) {
