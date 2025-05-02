@@ -91,7 +91,7 @@ class TestPg : public PgScrubBeListener {
   const pg_info_t& get_pg_info(ScrubberPasskey) const final { return m_info; }
 
   uint64_t logical_to_ondisk_size(uint64_t logical_size,
-                                 shard_id_t shard_id) const final
+                                  shard_id_t shard_id) const final
   {
     return logical_size;
   }
@@ -102,14 +102,18 @@ class TestPg : public PgScrubBeListener {
   pg_info_t& m_info;
   pg_shard_t m_pshard;
 
-  bool get_is_nonprimary_shard(const pg_shard_t &pg_shard) const override {
-    return false;
+  bool get_is_nonprimary_shard(const pg_shard_t &pg_shard) const final
+  {
+    return get_is_ec_optimized() &&
+           m_pool->info.is_nonprimary_shard(pg_shard.shard);
   }
-  bool get_is_hinfo_required() const override {
-    return false;
+  bool get_is_hinfo_required() const final
+  {
+    return get_is_ec_optimized() &&
+           !m_pool->info.has_flag(m_pool->info.FLAG_EC_OVERWRITES);
   }
-  virtual bool get_is_ec_optimized() const override {
-    return false;
+  bool get_is_ec_optimized() const final {
+    return m_pool->info.has_flag(m_pool->info.FLAG_EC_OPTIMIZATIONS);
   }
 };
 
