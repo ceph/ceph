@@ -252,7 +252,7 @@ class ECBackend : public ECCommon {
       hobject_t hoid;
       eversion_t v;
       std::set<pg_shard_t> missing_on;
-      std::set<shard_id_t> missing_on_shards;
+      shard_id_set missing_on_shards;
 
       ObjectRecoveryInfo recovery_info;
       ObjectRecoveryProgress recovery_progress;

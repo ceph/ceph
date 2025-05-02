@@ -358,6 +358,7 @@ class stripe_info_t {
   const std::vector<raw_shard_id_t> chunk_mapping_reverse;
   const shard_id_set data_shards;
   const shard_id_set parity_shards;
+  const shard_id_set all_shards;
 
 private:
   void ro_range_to_shards(
@@ -410,6 +411,13 @@ private:
     return data_shards;
   }
 
+  static shard_id_set calc_all_shards(int k_plus_m) {
+    shard_id_set all_shards;
+    all_shards.insert_range(shard_id_t(), k_plus_m);
+    return all_shards;
+  }
+
+
 public:
   stripe_info_t(const ErasureCodeInterfaceRef &ec_impl, const pg_pool_t *pool,
                 uint64_t stripe_width
@@ -424,7 +432,8 @@ public:
         complete_chunk_mapping(ec_impl->get_chunk_mapping(), k + m)),
       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)),
+      all_shards(calc_all_shards(k + m)) {
     ceph_assert(stripe_width != 0);
     ceph_assert(stripe_width % k == 0);
   }
@@ -600,6 +609,11 @@ public:
   auto get_parity_shards() const {
     return parity_shards;
   }
+
+  auto get_all_shards() const {
+    return all_shards;
+  }
+
 
   uint64_t ro_offset_to_prev_chunk_offset(uint64_t offset) const {
     return (offset / stripe_width) * chunk_size;
