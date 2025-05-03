@@ -496,12 +496,12 @@ public:
           assert(cnode->has_parent_tracker());
           if (node->is_pending()) {
             auto &n = node->get_stable_for_key(i->get_key());
-            assert(cnode->get_parent_node().get() == &n);
+            assert(cnode->peek_parent_node().get() == &n);
             auto pos = n.lower_bound(i->get_key()).get_offset();
             assert(pos < n.get_size());
             assert(n.children[pos] == cnode.get());
           } else {
-            assert(cnode->get_parent_node().get() == node.get());
+            assert(cnode->peek_parent_node().get() == node.get());
             assert(node->children[i->get_offset()] == cnode.get());
           }
         } else if (child_node->is_pending()) {
@@ -511,12 +511,12 @@ public:
             assert(prior.is_parent_valid());
             if (node->is_mutation_pending()) {
               auto &n = node->get_stable_for_key(i->get_key());
-              assert(prior.get_parent_node().get() == &n);
+              assert(prior.peek_parent_node().get() == &n);
               auto pos = n.lower_bound(i->get_key()).get_offset();
               assert(pos < n.get_size());
               assert(n.children[pos] == &prior);
             } else {
-              assert(prior.get_parent_node().get() == node.get());
+              assert(prior.peek_parent_node().get() == node.get());
               assert(node->children[i->get_offset()] == &prior);
             }
           } else {
@@ -567,9 +567,9 @@ public:
         } else {
           auto c = static_cast<child_node_t*>(child);
           assert(c->has_parent_tracker());
-          assert(c->get_parent_node().get() == node.get()
+          assert(c->peek_parent_node().get() == node.get()
             || (node->is_pending() && c->is_stable()
-                && c->get_parent_node().get() == &node->get_stable_for_key(
+                && c->peek_parent_node().get() == &node->get_stable_for_key(
                   i->get_key())));
         }
       } else {

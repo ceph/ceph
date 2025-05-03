@@ -196,7 +196,10 @@ public:
   bool is_parent_valid() const {
     return parent_tracker && parent_tracker->is_valid();
   }
-  TCachedExtentRef<ParentT> get_parent_node() const {
+  // this method should only be used for asserts and logs, because
+  // the parent node might be stable writing and should "wait_io"
+  // before further access
+  TCachedExtentRef<ParentT> peek_parent_node() const {
     assert(parent_tracker);
     return parent_tracker->get_parent();
   }
@@ -999,7 +1002,7 @@ protected:
     assert(!down_cast().is_btree_root());
     assert(this->has_parent_tracker());
     auto off = get_parent_pos();
-    auto parent = this->get_parent_node();
+    auto parent = this->peek_parent_node();
     assert(parent->children[off] == &down_cast());
     parent->children[off] = nullptr;
   }
@@ -1018,7 +1021,7 @@ private:
     this->parent_tracker = prior.BaseChildNode<ParentT, key_t>::parent_tracker;
     assert(this->has_parent_tracker());
     auto off = get_parent_pos();
-    auto parent = this->get_parent_node();
+    auto parent = this->peek_parent_node();
     assert(me.get_prior_instance().get() ==
 	   dynamic_cast<CachedExtent*>(parent->children[off]));
     parent->children[off] = &me;
@@ -1026,7 +1029,7 @@ private:
 
   btreenode_pos_t get_parent_pos() const {
     auto &me = down_cast();
-    auto parent = this->get_parent_node();
+    auto parent = this->peek_parent_node();
     assert(parent);
     //TODO: can this search be avoided?
     auto key = me.get_begin();
