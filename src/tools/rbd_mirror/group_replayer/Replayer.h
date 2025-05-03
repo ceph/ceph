@@ -106,6 +106,7 @@ private:
 
   State m_state = STATE_INIT;
   std::string m_remote_mirror_peer_uuid;
+  std::vector<std::string> m_prune_snap_ids;
 
   std::vector<cls::rbd::GroupSnapshot> m_local_group_snaps;
   std::vector<cls::rbd::GroupSnapshot> m_remote_group_snaps;
@@ -149,7 +150,8 @@ private:
   void load_remote_group_snapshots(std::unique_lock<ceph::mutex>* locker);
   void handle_load_remote_group_snapshots(int r);
 
-  void validate_image_snaps_sync_complete(const std::string &group_snap_id);
+  void validate_image_snaps_sync_complete(const std::string &group_snap_id,
+      std::unique_lock<ceph::mutex> &locker);
   void scan_for_unsynced_group_snapshots();
 
   void try_create_group_snapshot(cls::rbd::GroupSnapshot snap,
@@ -176,7 +178,11 @@ private:
   void remove_mirror_peer_uuid(const std::string &snap_id);
   void handle_remove_mirror_peer_uuid(int r, const std::string &snap_id);
   bool prune_all_image_snapshots(cls::rbd::GroupSnapshot *local_snap);
-  void unlink_group_snapshots();
+  void prune_unnecessary_mirror_group_snaps(
+      std::unique_lock<ceph::mutex> &locker);
+  void prune_group_snapshots(std::unique_lock<ceph::mutex> &locker);
+  void prune_group_snapshot(std::string snap_id,
+      std::unique_lock<ceph::mutex> &locker);
 
   void create_regular_snapshot(
     cls::rbd::GroupSnapshot *snap,
