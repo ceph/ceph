@@ -1,0 +1,246 @@
+{
+  "name": "ceph-dashboard",
+  "$schema": "node_modules/nx/schemas/project-schema.json",
+  "i18n": {
+    "sourceLocale": {
+      "code": "en-US",
+      "baseHref": ""
+    },
+    "locales": {
+      "cs": {
+        "translation": "src/locale/messages.cs.xlf",
+        "baseHref": ""
+      },
+      "de": {
+        "translation": "src/locale/messages.de-DE.xlf",
+        "baseHref": ""
+      },
+      "es": {
+        "translation": "src/locale/messages.es-ES.xlf",
+        "baseHref": ""
+      },
+      "fr": {
+        "translation": "src/locale/messages.fr-FR.xlf",
+        "baseHref": ""
+      },
+      "id": {
+        "translation": "src/locale/messages.id-ID.xlf",
+        "baseHref": ""
+      },
+      "it": {
+        "translation": "src/locale/messages.it-IT.xlf",
+        "baseHref": ""
+      },
+      "ja": {
+        "translation": "src/locale/messages.ja-JP.xlf",
+        "baseHref": ""
+      },
+      "ko": {
+        "translation": "src/locale/messages.ko-KR.xlf",
+        "baseHref": ""
+      },
+      "pl": {
+        "translation": "src/locale/messages.pl-PL.xlf",
+        "baseHref": ""
+      },
+      "pt": {
+        "translation": "src/locale/messages.pt-BR.xlf",
+        "baseHref": ""
+      },
+      "zh-Hans": {
+        "translation": "src/locale/messages.zh-CN.xlf",
+        "baseHref": ""
+      },
+      "zh-Hant": {
+        "translation": "src/locale/messages.zh-TW.xlf",
+        "baseHref": ""
+      }
+    }
+  },
+  "sourceRoot": "src",
+  "projectType": "application",
+  "cli": {},
+  "targets": {
+    "build": {
+      "executor": "@nx/angular:webpack-browser",
+      "options": {
+        "allowedCommonJsDependencies": [
+          "brace-expansion",
+          "chart.js",
+          "core-js",
+          "file-saver",
+          "lodash"
+        ],
+        "i18nMissingTranslation": "ignore",
+        "outputPath": "dist",
+        "index": "src/index.html",
+        "main": "src/main.ts",
+        "tsConfig": "tsconfig.app.json",
+        "polyfills": "src/polyfills.ts",
+        "assets": [
+          "src/assets",
+          "src/favicon.ico",
+          {
+            "glob": "**/swagger-ui.css",
+            "input": "node_modules/swagger-ui-dist",
+            "output": "."
+          },
+          {
+            "glob": "**/swagger-ui-bundle.js",
+            "input": "node_modules/swagger-ui-dist",
+            "output": "."
+          }
+        ],
+        "styles": [
+          "node_modules/swagger-ui/dist/swagger-ui.css",
+          "node_modules/ngx-toastr/toastr.css",
+          "src/styles.scss"
+        ],
+        "stylePreprocessorOptions": {
+          "includePaths": ["src"]
+        },
+        "vendorChunk": true,
+        "extractLicenses": false,
+        "buildOptimizer": false,
+        "sourceMap": true,
+        "optimization": false,
+        "namedChunks": true,
+        "customWebpackConfig": {
+          "path": "./webpack.config.ts"
+        }
+      },
+      "configurations": {
+        "production": {
+          "budgets": [
+            {
+              "type": "anyComponentStyle",
+              "maximumWarning": "6kb"
+            }
+          ],
+          "optimization": true,
+          "outputHashing": "all",
+          "sourceMap": false,
+          "namedChunks": false,
+          "extractLicenses": true,
+          "vendorChunk": false,
+          "buildOptimizer": true,
+          "fileReplacements": [
+            {
+              "replace": "src/environments/environment.ts",
+              "with": "src/environments/environment.prod.ts"
+            }
+          ],
+          "customWebpackConfig": {
+            "path": "./webpack.prod.config.ts"
+          }
+        },
+        "cs": {
+          "localize": ["cs"]
+        },
+        "de": {
+          "localize": ["de"]
+        },
+        "en-US": {
+          "localize": ["en-US"]
+        },
+        "es": {
+          "localize": ["es"]
+        },
+        "fr": {
+          "localize": ["fr"]
+        },
+        "id": {
+          "localize": ["id"]
+        },
+        "it": {
+          "localize": ["it"]
+        },
+        "ja": {
+          "localize": ["ja"]
+        },
+        "ko": {
+          "localize": ["ko"]
+        },
+        "pl": {
+          "localize": ["pl"]
+        },
+        "pt": {
+          "localize": ["pt"]
+        },
+        "zh-Hans": {
+          "localize": ["zh-Hans"]
+        },
+        "zh-Hant": {
+          "localize": ["zh-Hant"]
+        }
+      },
+      "defaultConfiguration": "",
+      "outputs": ["{options.outputPath}"]
+    },
+    "serve": {
+      "executor": "@nx/angular:module-federation-dev-server",
+      "options": {
+        "proxyConfig": "proxy.conf.json",
+        "buildTarget": "ceph-dashboard:build",
+        "publicHost": "http://localhost:4200"
+      },
+      "configurations": {
+        "production": {
+          "buildTarget": "ceph-dashboard:build:production"
+        },
+        "cs": {
+          "buildTarget": "ceph-dashboard:build:cs"
+        },
+        "de": {
+          "buildTarget": "ceph-dashboard:build:de"
+        },
+        "en-US": {
+          "buildTarget": "ceph-dashboard:build:en-US"
+        },
+        "es": {
+          "buildTarget": "ceph-dashboard:build:es"
+        },
+        "fr": {
+          "buildTarget": "ceph-dashboard:build:fr"
+        },
+        "id": {
+          "buildTarget": "ceph-dashboard:build:id"
+        },
+        "it": {
+          "buildTarget": "ceph-dashboard:build:it"
+        },
+        "ja": {
+          "buildTarget": "ceph-dashboard:build:ja"
+        },
+        "ko": {
+          "buildTarget": "ceph-dashboard:build:ko"
+        },
+        "pl": {
+          "buildTarget": "ceph-dashboard:build:pl"
+        },
+        "pt": {
+          "buildTarget": "ceph-dashboard:build:pt"
+        },
+        "zh-Hans": {
+          "buildTarget": "ceph-dashboard:build:zh-Hans"
+        },
+        "zh-Hant": {
+          "buildTarget": "ceph-dashboard:build:zh-Hant"
+        }
+      }
+    },
+    "extract-i18n": {
+      "executor": "@angular-devkit/build-angular:extract-i18n",
+      "options": {
+        "buildTarget": "ceph-dashboard:build"
+      }
+    },
+    "lint": {
+      "executor": "@angular-eslint/builder:lint",
+      "options": {
+        "lintFilePatterns": ["src/**/*.ts", "src/**/*.html"]
+      },
+      "outputs": ["{options.outputFile}"]
+    }
+  }
+}
