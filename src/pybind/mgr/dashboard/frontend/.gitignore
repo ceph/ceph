@@ -48,3 +48,9 @@ yarn.lock
 # Ceph
 !core
 !*.core
+
+
+
+.nx/cache
+.nx/workspace-data
+
