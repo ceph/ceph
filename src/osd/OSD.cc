@@ -2444,7 +2444,7 @@ OSD::OSD(CephContext *cct_,
       } else {
         // This should never happen
         dout(0) << "Invalid value passed for 'osd_op_queue': " << type << dendl;
-        ceph_assert(0 == "Unsupported op queue type");
+        ceph_abort_msg("Unsupported op queue type");
       }
     } else {
       static const std::vector<op_queue_type_t> index_lookup = {
