@@ -800,8 +800,13 @@ class VolumeClient(CephfsClient["Module"]):
             with open_subvol_in_vol(self, self.volspec, volname, groupname, subvolname,
                                     SubvolumeOpType.SNAP_GETPATH) \
                                     as (vol, group, subvol):
-                snap_path = subvol.snapshot_data_path(snapname)
-                ret = 0, snap_path.decode("utf-8"), ""
+                if subvol.version() == 1:
+                    ret = (-errno.ENOTSUP, '',
+                           'command not supported for v1 subvolumes')
+                    return ret
+                elif subvol.version() > 1:
+                    snap_path = subvol.snapshot_data_path(snapname)
+                    ret = 0, snap_path.decode("utf-8"), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
