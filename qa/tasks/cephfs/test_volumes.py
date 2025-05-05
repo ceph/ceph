@@ -5218,7 +5218,8 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
 
         subvol_path = self.get_ceph_cmd_stdout(cmd).strip()
 
-        subvol_uuid = os.path.basename(subvol_path)
+        subvol_uuid = os.path.basename(os.path.dirname(subvol_path))
+
         return subvol_uuid
 
     def test_snapshot_getpath(self):
@@ -5239,7 +5240,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
                                              f'{snap_name}').strip()
         # expected snapshot path
         exp_snap_path = os.path.join('/volumes', '_nogroup', subvol_name,
-                                     '.snap', snap_name, sv_uuid)
+                                     'roots', sv_uuid, '.snap', snap_name, 'mnt')
         self.assertEqual(snap_path, exp_snap_path)
 
     def test_snapshot_getpath_in_group(self):
@@ -5265,7 +5266,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
                                              .strip()
         # expected snapshot path
         exp_snap_path = os.path.join('/volumes', group_name, subvol_name,
-                                     '.snap', snap_name, sv_uuid)
+                                     'roots', sv_uuid, '.snap', snap_name, 'mnt')
         self.assertEqual(snap_path, exp_snap_path)
 
     def test_snapshot_getpath_on_retained_subvol(self):
@@ -5290,7 +5291,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
 
         # expected snapshot path
         exp_snap_path = os.path.join('/volumes', '_nogroup', subvol_name,
-                                     '.snap', snap_name, sv_uuid)
+                                     'roots', sv_uuid, '.snap', snap_name, 'mnt')
         self.assertEqual(snap_path, exp_snap_path)
 
     def test_snapshot_getpath_on_retained_subvol_in_group(self):
@@ -5319,7 +5320,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
                                              .strip()
         # expected snapshot path
         exp_snap_path = os.path.join('/volumes', group_name, subvol_name,
-                                     '.snap', snap_name, sv_uuid)
+                                     'roots', sv_uuid, '.snap', snap_name, 'mnt')
         self.assertEqual(snap_path, exp_snap_path)
 
     def test_subvolume_snapshot_info(self):
