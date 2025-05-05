@@ -11338,6 +11338,13 @@ TEST_F(TestLibRBD, CreateWithMirrorEnabled) {
   librbd::Image parent_image;
   ASSERT_EQ(0, rbd.open(ioctx, parent_image, parent_name.c_str(), NULL));
 
+  librbd::mirror_image_info_t mirror_image_info;
+  ASSERT_EQ(0, parent_image.mirror_image_get_info(&mirror_image_info,
+                                                  sizeof(mirror_image_info)));
+  ASSERT_EQ(RBD_MIRROR_IMAGE_ENABLED, mirror_image_info.state);
+  ASSERT_NE("", mirror_image_info.global_id);
+  ASSERT_EQ(true, mirror_image_info.primary);
+
   librbd::mirror_image_mode_t mirror_image_mode;
   ASSERT_EQ(0, parent_image.mirror_image_get_mode(&mirror_image_mode));
   ASSERT_EQ(RBD_MIRROR_IMAGE_MODE_SNAPSHOT, mirror_image_mode);
@@ -11358,6 +11365,14 @@ TEST_F(TestLibRBD, CreateWithMirrorEnabled) {
   ASSERT_EQ(0, child_image.mirror_image_disable(true));
   ASSERT_EQ(0, parent_image.mirror_image_disable(true));
   ASSERT_EQ(0, rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED));
+
+  ASSERT_EQ(0, parent_image.mirror_image_get_info(&mirror_image_info,
+                                                  sizeof(mirror_image_info)));
+  ASSERT_EQ(RBD_MIRROR_IMAGE_DISABLED, mirror_image_info.state);
+  ASSERT_EQ("", mirror_image_info.global_id);
+  ASSERT_EQ(false, mirror_image_info.primary);
+
+  ASSERT_EQ(-EINVAL, parent_image.mirror_image_get_mode(&mirror_image_mode));
 }
 
 TEST_F(TestLibRBD, FlushCacheWithCopyupOnExternalSnapshot) {
