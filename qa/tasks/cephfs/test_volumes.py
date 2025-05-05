@@ -6605,6 +6605,65 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
                                      '.snap', snap_name, sv_uuid)
         self.assertEqual(snap_path, exp_snap_path)
 
+    def construct_v1_subvol(self, subvol_name, subvol_group=None,
+                            has_snapshot=False, subvol_type='subvolume',
+                            state='complete'):
+        group = subvol_group if subvol_group is not None else '_nogroup'
+        basepath = os.path.join("volumes", group, subvol_name)
+        uuid_str = str(uuid.uuid4())
+        createpath = os.path.join(basepath, uuid_str)
+        self.mount_a.run_shell(['sudo', 'mkdir', '-p', createpath], omit_sudo=False)
+        self.mount_a.setfattr(createpath, 'ceph.dir.subvolume', '1', sudo=True)
+
+        # create a v1 snapshot, to prevent auto upgrades
+        if has_snapshot:
+            snappath = os.path.join(createpath, self.get_snap_dir_name(), "fake")
+            self.mount_a.run_shell(['sudo', 'mkdir', '-p', snappath], omit_sudo=False)
+
+        # add required xattrs to subvolume
+        default_pool = self.mount_a.getfattr(".", "ceph.dir.layout.pool")
+        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool, sudo=True)
+
+        # create a v1 .meta file
+        cp = "/" + createpath
+        meta_contents = f"[GLOBAL]\nversion = 1\ntype = {subvol_type}\npath = {cp}\nstate = {state}\n"
+        meta_contents += "allow_subvolume_upgrade = 0\n"  # boolean
+        if state == 'pending':
+            # add a fake clone source
+            meta_contents = meta_contents + '[source]\nvolume = fake\nsubvolume = fake\nsnapshot = fake\n'
+        meta_filepath1 = os.path.join(self.mount_a.mountpoint, basepath, ".meta")
+        self.mount_a.client_remote.write_file(meta_filepath1, meta_contents, sudo=True)
+        return createpath
+
+    def test_snapshot_getpath_for_v1(self):
+        subvol_name = self._gen_subvol_name()
+        snap_name = self._gen_subvol_snap_name()
+
+        self.construct_v1_subvol(subvol_name)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                          f'{subvol_name} {snap_name}')
+
+        with self.assertRaises(CommandFailedError) as cm:
+            self.run_ceph_cmd(f'fs subvolume snapshot getpath {self.volname} '
+                              f'{subvol_name} {snap_name}')
+        self.assertEqual(cm.exception.exitstatus, errno.ENOTSUP)
+
+    def test_snapshot_getpath_in_group_for_v1(self):
+        subvol_name = self._gen_subvol_name()
+        group_name = self._gen_subvol_grp_name()
+        snap_name = self._gen_subvol_snap_name()
+
+        self.run_ceph_cmd(f'fs subvolumegroup create {self.volname} '
+                          f'{group_name}')
+        self.construct_v1_subvol(subvol_name, group_name)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                          f'{subvol_name} {snap_name} {group_name}')
+
+        with self.assertRaises(CommandFailedError) as cm:
+            self.run_ceph_cmd(f'fs subvolume snapshot getpath {self.volname} '
+                              f'{subvol_name} {snap_name} {group_name}')
+        self.assertEqual(cm.exception.exitstatus, errno.ENOTSUP)
+
 
 class TestSubvolumeSnapshotClones(TestVolumesHelper):
     """ Tests for FS subvolume snapshot clone operations."""
