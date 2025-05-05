@@ -6492,6 +6492,24 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
         subvol_uuid = os.path.basename(subvol_path)
         return subvol_uuid
 
+    def get_subvol_uuid_for_v3(self, subvol_name, group_name=None):
+        '''
+        Return the UUID directory component obtained from the path of
+        subvolume.
+        '''
+        cmd = f'fs subvolume getpath {self.volname} {subvol_name}'
+        if group_name:
+            cmd += f' {group_name}'
+
+        subvol_path = self.get_ceph_cmd_stdout(cmd).strip()
+        subvol_uuid = os.path.basename(os.path.dirname(subvol_path))
+        return subvol_uuid
+
+    def construct_snap_path_for_v3(self, subvol_name, snap_name, uuid,
+                                   group_name='_nogroup'):
+        return os.path.join('/volumes', group_name, subvol_name, 'roots',
+                            uuid, '.snap', snap_name, 'mnt')
+
     def construct_snap_path_for_v2(self, subvol_name, snap_name, uuid,
                                    group_name='_nogroup'):
         return os.path.join('/volumes', group_name, subvol_name, '.snap',
@@ -6516,14 +6534,14 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
         snap_name = self._gen_subvol_snap_name()
 
         self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol_name}')
-        sv_uuid = self.get_subvol_uuid(subvol_name)
+        sv_uuid = self.get_subvol_uuid_for_v3(subvol_name)
         self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
                           f'{subvol_name} {snap_name}')
 
         snap_path = self.get_ceph_cmd_stdout(f'fs subvolume snapshot getpath '
                                              f'{self.volname} {subvol_name} '
                                              f'{snap_name}').strip()
-        exp_snap_path = self.construct_snap_path_for_v2(subvol_name, snap_name,
+        exp_snap_path = self.construct_snap_path_for_v3(subvol_name, snap_name,
                                                         sv_uuid)
         self.assertEqual(snap_path, exp_snap_path)
 
@@ -6540,7 +6558,7 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
         self.run_ceph_cmd(f'fs subvolumegroup create {self.volname} {group_name}')
         self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol_name} '
                           f'{group_name}')
-        sv_uuid = self.get_subvol_uuid(subvol_name, group_name)
+        sv_uuid = self.get_subvol_uuid_for_v3(subvol_name, group_name)
         self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
                           f'{subvol_name} {snap_name} {group_name}')
 
@@ -6548,7 +6566,7 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
                                              f'{self.volname} {subvol_name} '
                                              f'{snap_name} {group_name}')\
                                              .strip()
-        exp_snap_path = self.construct_snap_path_for_v2(subvol_name, snap_name,
+        exp_snap_path = self.construct_snap_path_for_v3(subvol_name, snap_name,
                                                         sv_uuid, group_name)
         self.assertEqual(snap_path, exp_snap_path)
 
@@ -6562,7 +6580,7 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
         snap_name = self._gen_subvol_snap_name()
 
         self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol_name}')
-        sv_uuid = self.get_subvol_uuid(subvol_name)
+        sv_uuid = self.get_subvol_uuid_for_v3(subvol_name)
         self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
                           f'{subvol_name} {snap_name}')
         self.run_ceph_cmd(f'fs subvolume rm {self.volname} {subvol_name} '
@@ -6571,7 +6589,7 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
         snap_path = self.get_ceph_cmd_stdout(f'fs subvolume snapshot getpath '
                                              f'{self.volname} {subvol_name} '
                                              f'{snap_name}').strip()
-        exp_snap_path = self.construct_snap_path_for_v2(subvol_name, snap_name,
+        exp_snap_path = self.construct_snap_path_for_v3(subvol_name, snap_name,
                                                         sv_uuid)
         self.assertEqual(snap_path, exp_snap_path)
 
@@ -6589,7 +6607,7 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
         self.run_ceph_cmd(f'fs subvolumegroup create {self.volname} {group_name}')
         self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol_name} '
                           f'{group_name}')
-        sv_uuid = self.get_subvol_uuid(subvol_name, group_name)
+        sv_uuid = self.get_subvol_uuid_for_v3(subvol_name, group_name)
         self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
                           f'{subvol_name} {snap_name} {group_name}')
         self.run_ceph_cmd(f'fs subvolume rm {self.volname} {subvol_name} '
@@ -6599,7 +6617,7 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
                                              f'{self.volname} {subvol_name} '
                                              f'{snap_name} {group_name}')\
                                              .strip()
-        exp_snap_path = self.construct_snap_path_for_v2(subvol_name, snap_name,
+        exp_snap_path = self.construct_snap_path_for_v3(subvol_name, snap_name,
                                                         sv_uuid, group_name)
         self.assertEqual(snap_path, exp_snap_path)
 
