@@ -580,7 +580,7 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
   if (!m_local_group_ctx.name.empty()) {
     m_local_group_name = m_local_group_ctx.name;
   }
-  if (r == -EINVAL) {
+  if (r == -EREMCHG) {
     sync_group_names();
   } else {
     reregister_admin_socket_hook();
@@ -596,7 +596,7 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
     finish_start_fail(r, "group removed");
     return;
   } else if (r == -ENOLINK) {
-    finish_start_fail(r, "remote group does not exist");
+    finish_start_fail(r, "remote group no longer exists");
     return;
   } else if (r == -EREMOTEIO) {
     m_destroy_replayers = true;
@@ -605,8 +605,11 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
   } else if (r == -EEXIST) {
     finish_start_fail(r, "split-brain detected");
     return;
+  } else if (r == -EREMCHG) {
+    finish_start_fail(0, "remote group renamed");
+    return;
   } else if (r < 0) {
-    finish_start_fail(r, "bootstrap failed");
+    finish_start_fail(r, "error bootstrapping replay");
     return;
   }
 
@@ -614,15 +617,6 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
   // in order to have the mirror pool health status set to ok.
   m_destroy_replayers = false;
 
-/*
-  if (m_local_group_ctx.primary) { // XXXMG
-    set_mirror_group_status_update(
-       cls::rbd::MIRROR_GROUP_STATUS_STATE_STOPPED,
-       "local group is primary");
-    finish_start_fail(0, "local group is primary");
-    return;
-  }
-*/
   m_local_group_ctx.listener = &m_listener;
 
   // Start the image replayers first
