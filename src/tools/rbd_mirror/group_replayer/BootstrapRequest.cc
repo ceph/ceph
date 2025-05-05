@@ -194,7 +194,7 @@ void BootstrapRequest<I>::handle_prepare_remote_group(int r) {
   } else {
     // Local group is secondary.
     if (m_local_group_name != (*m_state_builder)->group_name) {
-      finish(-EINVAL);
+      finish(-EREMCHG);
       return;
     }
     // See if resync is set.
