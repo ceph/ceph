@@ -580,7 +580,7 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
   if (!m_local_group_ctx.name.empty()) {
     m_local_group_name = m_local_group_ctx.name;
   }
-  if (r == -EINVAL) {
+  if (r == -EREMCHG) {
     sync_group_names();
   } else {
     reregister_admin_socket_hook();
@@ -604,6 +604,9 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
     return;
   } else if (r == -EEXIST) {
     finish_start_fail(r, "split-brain detected");
+    return;
+  } else if (r == -EREMCHG) {
+    finish_start_fail(0, "remote group renamed");
     return;
   } else if (r < 0) {
     finish_start_fail(r, "bootstrap failed");
