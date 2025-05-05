@@ -872,6 +872,14 @@ int SQLiteConfigStore::delete_period(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int SQLiteConfigStore::update_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
+                                           std::string_view period_id, uint32_t epoch)
+{
+  Prefix prefix{*dpp, "dbconfig:sqlite:read_latest_epoch "}; dpp = &prefix;
+  // TODO: implement it later
+  return 0;
+}
+
 int SQLiteConfigStore::list_period_ids(const DoutPrefixProvider* dpp,
                                        optional_yield y,
                                        const std::string& marker,

@@ -9,6 +9,8 @@
 #include "rgw_zone.h"
 #include "rgw_rest_conn.h"
 #include "rgw_bucket_sync.h"
+#include "rgw_sal.h"
+#include "rgw_sal_config.h"
 
 #include "common/errno.h"
 #include "include/random.h"
@@ -18,7 +20,8 @@
 using namespace std;
 using namespace rgw_zone_defaults;
 
-RGWSI_Zone::RGWSI_Zone(CephContext *cct) : RGWServiceInstance(cct)
+RGWSI_Zone::RGWSI_Zone(CephContext *cct, rgw::sal::ConfigStore* _cfgstore, const rgw::SiteConfig* _site)
+        : RGWServiceInstance(cct), cfgstore(_cfgstore), site(_site)
 {
 }
 
@@ -86,6 +89,7 @@ int RGWSI_Zone::search_realm_with_zone(const DoutPrefixProvider *dpp,
                                        RGWPeriod *pperiod,
                                        RGWZoneGroup *pzonegroup,
                                        bool *pfound,
+                                       rgw::sal::ConfigStore* cfgstore,
                                        optional_yield y)
 {
   auto& found = *pfound;
@@ -102,14 +106,14 @@ int RGWSI_Zone::search_realm_with_zone(const DoutPrefixProvider *dpp,
   for (auto& realm_name : realms) {
     string realm_id;
     RGWRealm realm(realm_id, realm_name);
-    r = realm.init(dpp, cct, sysobj_svc, y);
+    r = rgw::read_realm(dpp, y, cfgstore, realm_id, realm_name, realm);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "WARNING: can't open realm " << realm_name << ": " << cpp_strerror(-r) << " ... skipping" << dendl;
       continue;
     }
 
     r = realm.find_zone(dpp, zid, pperiod,
-                        pzonegroup, &found, y);
+                        pzonegroup, &found, cfgstore, y);
     if (r < 0) {
       ldpp_dout(dpp, 20) << __func__ << "(): ERROR: realm.find_zone() returned r=" << r<< dendl;
       return r;
@@ -134,25 +138,18 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 
   assert(sysobj_svc->is_started()); /* if not then there's ordering issue */
 
-  ret = realm->init(dpp, cct, sysobj_svc, y);
-  if (ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 0) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
-    return ret;
+  if (site->get_realm().has_value()) {
+    *realm = site->get_realm().value();
   }
 
   ldpp_dout(dpp, 20) << "realm  " << realm->get_name() << " " << realm->get_id() << dendl;
-  ret = current_period->init(dpp, cct, sysobj_svc, realm->get_id(), y);
-  if (ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 0) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
-    return ret;
+  if (site->get_period().has_value()) {
+    *current_period = site->get_period().value();
   }
+  current_period->set_realm_id(realm->get_id());
 
-  ret = zone_params->init(dpp, cct, sysobj_svc, y);
-  bool found_zone = (ret == 0);
-  if (ret < 0 && ret != -ENOENT) {
-    lderr(cct) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
+  *zone_params = site->get_zone_params();
+  bool found_zone = true;
 
   cur_zone_id = rgw_zone_id(zone_params->get_id());
 
@@ -185,6 +182,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
                                  current_period,
                                  zonegroup,
                                  &found_period_conf,
+                                 cfgstore,
                                  y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: search_realm_conf() failed: ret="<< ret << dendl;
@@ -195,7 +193,9 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 
   if (!zg_initialized) {
     /* couldn't find a proper period config, use local zonegroup */
-    ret = zonegroup->init(dpp, cct, sysobj_svc, y);
+    std::string_view zonegroup_id = zonegroup->get_id();
+    std::string_view zonegroup_name = zonegroup->get_name();
+    ret = rgw::read_zonegroup(dpp, y, cfgstore, zonegroup_id, zonegroup_name, *zonegroup);
     zg_initialized = (ret == 0);
     if (ret < 0 && ret != -ENOENT) {
       ldpp_dout(dpp, 0) << "failed reading zonegroup info: " << cpp_strerror(-ret) << dendl;
@@ -286,7 +286,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
     }
     // read period_config into current_period
     auto& period_config = current_period->get_config();
-    ret = period_config.read(dpp, sysobj_svc, zonegroup->realm_id, y);
+    ret = cfgstore->read_period_config(dpp, y, zonegroup->realm_id, period_config);
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << "ERROR: failed to read period config: "
           << cpp_strerror(ret) << dendl;
@@ -420,7 +420,7 @@ int RGWSI_Zone::list_zones(const DoutPrefixProvider *dpp, list<string>& zones)
 
 int RGWSI_Zone::list_realms(const DoutPrefixProvider *dpp, list<string>& realms)
 {
-  RGWRealm realm(cct, sysobj_svc);
+  RGWRealm realm;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(realm.get_pool(cct));
 
   return syspool.list_prefixed_objs(dpp, realm_names_oid_prefix, &realms);
@@ -455,7 +455,7 @@ int RGWSI_Zone::list_periods(const DoutPrefixProvider *dpp, const string& curren
   string period_id = current_period;
   while(!period_id.empty()) {
     RGWPeriod period(period_id);
-    ret = period.init(dpp, cct, sysobj_svc, y);
+    ret = cfgstore->read_period(dpp, y, period_id, std::nullopt, period);
     if (ret < 0) {
       return ret;
     }
@@ -495,11 +495,6 @@ int RGWSI_Zone::init_zg_from_period(const DoutPrefixProvider *dpp, optional_yiel
   if (iter != current_period->get_map().zonegroups.end()) {
     ldpp_dout(dpp, 20) << "using current period zonegroup " << zonegroup->get_name() << dendl;
     *zonegroup = iter->second;
-    int ret = zonegroup->init(dpp, cct, sysobj_svc, y, false);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "failed init zonegroup: " << " " << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
   }
   for (iter = current_period->get_map().zonegroups.begin();
        iter != current_period->get_map().zonegroups.end(); ++iter){
@@ -517,20 +512,22 @@ int RGWSI_Zone::init_zg_from_period(const DoutPrefixProvider *dpp, optional_yiel
 	  master->second.name << " id:" << master->second.id << " as master" << dendl;
 	if (zonegroup->get_id() == zg.get_id()) {
 	  zonegroup->master_zone = master->second.id;
-	  int ret = zonegroup->update(dpp, y);
+	  int ret = cfgstore->create_zonegroup(dpp, y, false, *zonegroup, nullptr);
 	  if (ret < 0) {
 	    ldpp_dout(dpp, 0) << "error updating zonegroup : " << cpp_strerror(-ret) << dendl;
 	    return ret;
 	  }
 	} else {
 	  RGWZoneGroup fixed_zg(zg.get_id(),zg.get_name());
-	  int ret = fixed_zg.init(dpp, cct, sysobj_svc, y);
+    std::string_view zonegroup_id = zonegroup->get_id();
+    std::string_view zonegroup_name = zonegroup->get_name();
+    int ret = rgw::read_zonegroup(dpp, y, cfgstore, zonegroup_id, zonegroup_name, *zonegroup);
 	  if (ret < 0) {
 	    ldpp_dout(dpp, 0) << "error initializing zonegroup : " << cpp_strerror(-ret) << dendl;
 	    return ret;
 	  }
 	  fixed_zg.master_zone = master->second.id;
-	  ret = fixed_zg.update(dpp, y);
+    ret = cfgstore->create_zonegroup(dpp, y, false, fixed_zg, nullptr);
 	  if (ret < 0) {
 	    ldpp_dout(dpp, 0) << "error initializing zonegroup : " << cpp_strerror(-ret) << dendl;
 	    return ret;
@@ -556,13 +553,15 @@ int RGWSI_Zone::init_zg_from_period(const DoutPrefixProvider *dpp, optional_yiel
 int RGWSI_Zone::create_default_zg(const DoutPrefixProvider *dpp, optional_yield y)
 {
   ldout(cct, 10) << "Creating default zonegroup " << dendl;
-  int ret = zonegroup->create_default(dpp, y);
+  int ret = cfgstore->create_zonegroup(dpp, y, true, *zonegroup, nullptr);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
       << dendl;
     return ret;
   }
-  ret = zonegroup->init(dpp, cct, sysobj_svc, y);
+  std::string_view zonegroup_id = zonegroup->get_id();
+  std::string_view zonegroup_name = zonegroup->get_name();
+  ret = rgw::read_zonegroup(dpp, y, cfgstore, zonegroup_id, zonegroup_name, *zonegroup);
   if (ret < 0) {
     ldout(cct, 0) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
       << dendl;
@@ -575,8 +574,7 @@ int RGWSI_Zone::create_default_zg(const DoutPrefixProvider *dpp, optional_yield 
 int RGWSI_Zone::init_default_zone(const DoutPrefixProvider *dpp, optional_yield y)
 {
   ldpp_dout(dpp, 10) << " Using default name "<< default_zone_name << dendl;
-  zone_params->set_name(default_zone_name);
-  int ret = zone_params->init(dpp, cct, sysobj_svc, y);
+  int ret = cfgstore->read_zone_by_name(dpp, y, default_zone_name, *zone_params, nullptr);
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(dpp, 0) << "failed reading zone params info: " << " " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -598,7 +596,7 @@ int RGWSI_Zone::init_zg_from_local(const DoutPrefixProvider *dpp, optional_yield
 	ldpp_dout(dpp, 0) << "zonegroup " << zonegroup->get_name() << " missing master_zone, setting zone " <<
 	  master->second.name << " id:" << master->second.id << " as master" << dendl;
 	zonegroup->master_zone = master->second.id;
-	int ret = zonegroup->update(dpp, y);
+	int ret = cfgstore->create_zonegroup(dpp, y, false, *zonegroup, nullptr);
 	if (ret < 0) {
 	  ldpp_dout(dpp, 0) << "error initializing zonegroup : " << cpp_strerror(-ret) << dendl;
 	  return ret;
