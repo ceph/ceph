@@ -147,6 +147,12 @@
   `s3:GetObjectRetention` are also considered when fetching the source object.
   Replication of tags is controlled by the `s3:GetObject(Version)Tagging` permission.
 
+* RBD: Fetching the mirroring mode of an image is invalid if the image is not
+  enabled for mirroring. The public APIs — C++ `mirror_image_get_mode()`,
+  C `rbd_mirror_image_get_mode()`, and Python `Image.mirror_image_get_mode()`
+  -- will return an error code or raise an exception to indicate that the
+  operation is not permitted when mirroring is not enabled for the image.
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
