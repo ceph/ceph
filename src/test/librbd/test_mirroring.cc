@@ -1477,6 +1477,10 @@ TEST_F(TestMirroring, SnapshotPromoteDemote)
   ASSERT_EQ(0, image.mirror_image_demote());
   ASSERT_EQ(0, image.mirror_image_promote(false));
 
+  ASSERT_EQ(0, image.mirror_image_disable(false));
+  ASSERT_EQ(-EINVAL, image.mirror_image_promote(false));
+  ASSERT_EQ(-EINVAL, image.mirror_image_demote());
+
   ASSERT_EQ(0, image.close());
   ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
   ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer_uuid));
