@@ -4593,7 +4593,7 @@ int main(int argc, const char **argv)
     if (raw_storage_op) {
       site = rgw::SiteConfig::make_fake();
       driver = DriverManager::get_raw_storage(dpp(), g_ceph_context,
-					      cfg, context_pool, *site);
+					      cfg, context_pool, *site, cfgstore.get());
     } else {
       site = std::make_unique<rgw::SiteConfig>();
       auto r = site->load(dpp(), null_yield, cfgstore.get(), localzonegroup_op);
@@ -4615,6 +4615,7 @@ int main(int argc, const char **argv)
                                         false,
 					false, // No background tasks!
                                         null_yield,
+					cfgstore.get(),
 					need_cache && g_conf()->rgw_cache_enabled,
 					need_gc);
     }
@@ -9837,7 +9838,7 @@ next:
 
   if (opt_cmd == OPT::MDLOG_AUTOTRIM) {
     // need a full history for purging old mdlog periods
-    static_cast<rgw::sal::RadosStore*>(driver)->svc()->mdlog->init_oldest_log_period(null_yield, dpp());
+    static_cast<rgw::sal::RadosStore*>(driver)->svc()->mdlog->init_oldest_log_period(null_yield, dpp(), cfgstore.get());
 
     RGWCoroutinesManager crs(driver->ctx(), driver->get_cr_registry());
     RGWHTTPManager http(driver->ctx(), crs.get_completion_mgr());
@@ -9986,7 +9987,7 @@ next:
       return -ret;
     }
 
-    ret = sync.run(dpp(), null_yield);
+    ret = sync.run(dpp(), null_yield, cfgstore.get());
     if (ret < 0) {
       cerr << "ERROR: sync.run() returned ret=" << ret << std::endl;
       return -ret;
@@ -10105,7 +10106,7 @@ next:
       return -ret;
     }
 
-    ret = sync.run(dpp());
+    ret = sync.run(dpp(), cfgstore.get());
     if (ret < 0) {
       cerr << "ERROR: sync.run() returned ret=" << ret << std::endl;
       return -ret;

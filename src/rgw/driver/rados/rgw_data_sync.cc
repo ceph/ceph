@@ -3232,7 +3232,7 @@ void RGWRemoteDataLog::wakeup(int shard_id, bc::flat_set<rgw_data_notify_entry>&
   data_sync_cr->wakeup(shard_id, entries);
 }
 
-int RGWRemoteDataLog::run_sync(const DoutPrefixProvider *dpp, int num_shards)
+int RGWRemoteDataLog::run_sync(const DoutPrefixProvider *dpp, int num_shards, rgw::sal::ConfigStore* cfgstore)
 {
   // construct and start bid manager for data sync fairness
   const auto& control_pool = sc.env->driver->svc()->zone->get_zone_params().control_pool;

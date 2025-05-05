@@ -137,6 +137,12 @@ int ImmutableConfigStore::list_period_ids(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int ImmutableConfigStore::update_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
+                                              std::string_view period_id, uint32_t epoch)
+{
+  return -EROFS;
+}
+
 
 // ZoneGroup
 

@@ -55,6 +55,8 @@ class RGWSI_Zone : public RGWServiceInstance
   std::map<rgw_zone_id, RGWZone> zone_by_id;
 
   std::unique_ptr<rgw_sync_policy_info> sync_policy;
+  rgw::sal::ConfigStore *cfgstore{nullptr};
+  const rgw::SiteConfig* site{nullptr};
 
   void init(RGWSI_SysObj *_sysobj_svc,
 	    librados::Rados* rados_,
@@ -75,9 +77,10 @@ class RGWSI_Zone : public RGWServiceInstance
                              RGWPeriod *pperiod,
                              RGWZoneGroup *pzonegroup,
                              bool *pfound,
+                             rgw::sal::ConfigStore* cfgstore,
                              optional_yield y);
 public:
-  RGWSI_Zone(CephContext *cct);
+  RGWSI_Zone(CephContext *cct, rgw::sal::ConfigStore* cfgstore, const rgw::SiteConfig* _site);
   ~RGWSI_Zone();
 
   const RGWZoneParams& get_zone_params() const;

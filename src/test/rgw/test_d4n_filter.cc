@@ -12,6 +12,7 @@
 #include "rgw_aio_throttle.h"
 #include "rgw_sal.h"
 #include "rgw_sal_store.h"
+#include "rgw_sal_config.h"
 #include "driver/dbstore/common/dbstore.h"
 #include "rgw_sal_d4n.h"
 #include "rgw_sal_filter.h"
@@ -115,9 +116,11 @@ class D4NFilterFixture: public ::testing::Test {
       DriverManager::Config cfg = DriverManager::get_config(true, g_ceph_context);
       cfg.store_name = "dbstore";
       cfg.filter_name = "d4n";
+      auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+      auto cfgstore = DriverManager::create_config_store(env->dpp, config_store_type);
 
       auto filterDriver = DriverManager::get_raw_storage(env->dpp, g_ceph_context,
-							  cfg, io, site_config);
+							  cfg, io, site_config, cfgstore.get());
 
       rgw::sal::Driver* next = filterDriver;
       driver = newD4NFilter(next, io);
