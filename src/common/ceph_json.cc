@@ -147,40 +147,6 @@ bool JSONParser::parse(std::string_view json_string_view)
   return false; 
 }
 
-bool JSONParser::parse_maybe_throw_JFW(std::string_view json_string_view) 
-{
-  // The original implementation checked this, I'm not sure we have to but we're doing it for now:
-  if (json_string_view.empty())
-   return false;
-
-  if (!parse_json_maybe_throw_JFW(json_string_view, data))
-   return false;
-
-  // recursively evaluate the result:
-  handle_value(data);
-
-  if (data.is_object() or data.is_array()) 
-   return true;
-
-  if (data.is_string()) {
-    val.set(data.as_string(), true);
-    return true;
-  } 
-
-  // For any other kind of value:
-  std::string s = boost::json::serialize(data);
-
-  // Was the entire string read?
-  if (s.size() == static_cast<uint64_t>(json_string_view.length())) { 
-    val.set(s, false);
-    return true;
-  }
-
-  // Could not parse and convert:
-  return false; 
-}
-
-
 bool JSONParser::parse_file(const std::filesystem::path file_name)
 {
  ifstream is(file_name);

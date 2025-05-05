@@ -199,22 +199,6 @@ protected:
 	return ec ? false : true;
   }
 
-  static bool parse_json_maybe_throw_JFW(std::string_view input, boost::json::value& data_out)
-  {
-	std::error_code ec;
-
-	data_out = boost::json::parse(input, ec, boost::json::storage_ptr(), 
-				     { .allow_invalid_utf8 = true });
-
-if(ec)
-throw std::runtime_error(fmt::format("JFW: parse_json(): {}; against INPUT (len = {}; char@len = dec :\n---\n{}\n---", 
-  input.size(), (int)input[input.size()],
-ec.message(), input));
-
-	return ec ? false : true;
-  }
-
-
 public:
   JSONObj() = default;
 
@@ -313,12 +297,8 @@ public:
 	       : false;
   }
 
-bool parse_maybe_throw_JFW(std::string_view json_string_view); // JFW
-
-  bool parse_JFW(const char *buf_, int len) {
- 	return buf_ ? 
-	        parse_maybe_throw_JFW(std::string_view { buf_, static_cast<std::string_view::size_type>(len) }) 
-	       : false;
+  bool parse(ceph::buffer::list& bl) {
+	return parse(bl.c_str(), bl.length());
   }
 
   [[deprecated("this may not be reliable")]] bool parse_file(const std::filesystem::path file_name); 
