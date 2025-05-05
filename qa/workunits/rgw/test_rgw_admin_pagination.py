@@ -1,20 +1,13 @@
 #!/usr/bin/env python3
-#
+
 # Copyright (C) 2025 Binero
 # Author: Tobias Urdin <tobias.urdin@binero.com>
-#
-# Source the src/test/detect-build-env-vars.sh script to set the
-# environment variables before running these tests.
-#
-# You need to install the requests and boto3 python3 modules to
-# run this test suite.
 
 import boto3
 from botocore.auth import HmacV1Auth
 from botocore.awsrequest import AWSRequest
 from botocore.compat import (parse_qsl, urlparse)
 import json
-import os
 import requests
 import subprocess
 import unittest
@@ -61,14 +54,7 @@ class AWSAuth(requests.auth.AuthBase):
 
 class TestRGWAdminHelper:
     def __init__(self) -> None:
-        self.ceph_bin_dir = os.environ.get('CEPH_BIN', None)
-        if self.ceph_bin_dir is None:
-            raise RuntimeError(
-                "Could not find CEPH_BIN env var, you need to "
-                "source the detect-build-env-vars.sh script")
-
-        self.radosgw_admin = os.path.join(
-            self.ceph_bin_dir, 'radosgw-admin')
+        self.radosgw_admin = 'radosgw-admin'
 
     def _run_radosgw_admin(
             self, args: ty.List[str]) -> subprocess.CompletedProcess:
@@ -139,6 +125,23 @@ class TestRGWAdminHelper:
             aws_access_key_id=user['keys'][0]['access_key'],
             aws_secret_access_key=user['keys'][0]['secret_key'])
 
+    def get_boto3_client(self, session: boto3.session.Session):
+        """Get a boto3 s3 client from a session."""
+        def _try_client(portnum: str, ssl: bool, proto: str):
+            endpoint = proto + '://localhost:' + portnum
+            client = session.client(
+                's3', use_ssl=ssl, endpoint_url=endpoint, verify=False)
+            list(client.buckets.limit(1))  # Test connection
+            return endpoint, client
+
+        try:
+            return _try_client('80', False, 'http')
+        except Exception:
+            try:
+                return _try_client('8000', False, 'http')
+            except Exception:
+                return _try_client('443', True, 'https')
+
 
 class TestRGWAdminBucket(unittest.TestCase):
     @classmethod
@@ -152,7 +155,6 @@ class TestRGWAdminBucket(unittest.TestCase):
         cls.admin_session = cls.helper.get_boto3_session(
             cls.admin_user)
 
-        cls.endpoint = 'http://localhost:8000'
         cls.session = requests.Session()
         cls.session.auth = AWSAuth(cls.admin_session)
 
@@ -163,8 +165,8 @@ class TestRGWAdminBucket(unittest.TestCase):
 
         cls.test_session = cls.helper.get_boto3_session(
             cls.test_user)
-        cls.test_client = cls.test_session.client(
-            's3', endpoint_url=cls.endpoint)
+        cls.endpoint, cls.test_client = cls.helper.get_boto3_client(
+            cls.test_session)
 
         cls._populate_buckets()
 
