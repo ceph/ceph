@@ -86,7 +86,8 @@ enum class Metric {
 template <typename Key, typename Value>
 class WebCache {
  public:
-  using ValuePtr = std::shared_ptr<const Value>;
+  // TODO(irq0) let the user choose the value pointer type
+  using ValuePtr = std::shared_ptr<Value>;
   using Result = tl::expected<ValuePtr, std::error_code>;
 
  protected:
