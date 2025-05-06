@@ -64,8 +64,8 @@ InternalClientRequest::with_interruption()
 
   co_await enter_stage<interruptor>(obc_orderer->obc_pp().process);
 
-  bool unfound = co_await do_recover_missing(
-    pg, get_target_oid(), osd_reqid_t());
+  bool unfound = co_await pg->do_recover_missing(
+    get_target_oid(), osd_reqid_t());
 
   if (unfound) {
     throw std::system_error(
