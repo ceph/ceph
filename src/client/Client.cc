@@ -14119,8 +14119,6 @@ InodeRef Client::open_snapdir(const InodeRef& diri)
   auto [it, b] = inode_map.try_emplace(vino, nullptr);
   if (b) {
     in = new Inode(this, vino, &diri->layout);
-    in->fscrypt_auth = diri->fscrypt_auth; /* borrow parent fscrypt data */
-    in->fscrypt_ctx = in->init_fscrypt_ctx(fscrypt.get());
     refresh_snapdir_attrs(in, diri.get());
     diri->flags |= I_SNAPDIR_OPEN;
     it->second = in;
