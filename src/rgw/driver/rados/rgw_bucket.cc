@@ -3019,10 +3019,20 @@ int RGWBucketInstanceMetadataHandler::remove(std::string& entry, RGWObjVersionTr
     return ret;
   }
 
-  // skip bucket instance removal. each zone will handle it independently during trimming
+  // safe to remove bucket instances owned by other zonegroups
+  const RGWZoneGroup& local_zonegroup = svc_zone->get_zonegroup();
+  if (bci.info.zonegroup != local_zonegroup.id) {
+    RGWObjVersionTracker& objv = bci.info.objv_tracker;
+    ret = svc_bucket->remove_bucket_instance_info(entry, bci.info, &objv, y, dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, -1) << "could not delete bucket=" << entry << dendl;
+    }
+  } else {
+    // skip bucket instance removal. each zone will handle it independently during trimming
 
-  std::ignore = update_bucket_topic_mappings(dpp, &bci, /*current_bci=*/nullptr,
-                                             driver);
+    std::ignore = update_bucket_topic_mappings(dpp, &bci, /*current_bci=*/nullptr,
+                                               driver);
+  }
   return 0;
 }
 
