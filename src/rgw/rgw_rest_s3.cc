@@ -3362,11 +3362,19 @@ int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
       return -EINVAL;
     }
 
-    decoded_policy.append('\0'); // NULL terminate
-    ldpp_dout(this, 20) << "POST policy: " << decoded_policy.c_str() << dendl;
-
-
+// JFW: after this copy, never an issue; we do want to do it without the copy, especially having
+// made AT LEAST one above:
 ldpp_dout(this, 0) << "JFW: decoded_policy: " << decoded_policy.c_str() << dendl;
+
+
+if('\0' != decoded_policy.c_str()[decoded_policy.length() - 1]) {
+ldpp_dout(this, 0) << "JFW: APPENDING NULL; found " << ( (char)decoded_policy.c_str()[decoded_policy.length() - 1] ) << dendl;
+    decoded_policy.append('\0'); // NULL terminate
+} else {
+ldpp_dout(this, 0) << "JFW: NOT APPENDING NULL" << dendl;
+}// JFW
+
+    ldpp_dout(this, 20) << "POST policy: " << decoded_policy.c_str() << dendl;
     int r = post_policy.from_json(decoded_policy, err_msg, true);
     if (r < 0) {
       if (err_msg.empty()) {
