@@ -129,7 +129,8 @@ static const std::unordered_map<int, int> cephfs_errno_to_system_errno = {
   {EDOM,            EDOM},
   {EMLINK,          EMLINK},
   {ETIME,           ETIME},
-  {EOLDSNAPC,       EIO} // forcing to EIO for now
+  {EOLDSNAPC,       EIO}, // forcing to EIO for
+  {ENOKEY,          ENOKEY}
 };
 
 /* Requirements:
