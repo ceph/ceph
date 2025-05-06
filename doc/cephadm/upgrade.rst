@@ -28,16 +28,18 @@ The automated upgrade process follows Ceph best practices.  For example:
    disabling the autoscaler for the duration of the upgrade.  This is so that
    PG splitting or merging in the middle of an upgrade does not unduly delay
    upgrade progress.  In a very large cluster this could easily increase the
-   time to complete by a whole day or more, especially if the upgrade happens to
-   change PG autoscaler behavior by e.g. changing the default value of
-   the :confval:`mon_target_pg_per_osd`.
-   | 
-   * ``ceph osd pool set noautoscale``
-   * Perform the upgrade
-   * ``ceph osd pool unset noautoscale``
-   | 
+   time to complete by a day or more, especially if the upgrade happens to
+   change PG autoscaler behavior by e.g. changing the default value
+   of :confval:`mon_target_pg_per_osd`.
+
+   .. prompt:: bash #
+
+     ceph osd pool set noautoscale
+     # Perform the upgrade
+     ceph osd pool unset noautoscale
+   
    When pausing autoscaler activity in this fashion, the existing values for
-   each pool's mode, ``off``, ``on``, or ``warn`` are expected to remain.
+   each pool's mode, ``off``, ``on``, or ``warn``, are expected to remain.
    If the new release changes the above target value, there may be splitting
    or merging of PGs when unsetting after the upgrade.
 
