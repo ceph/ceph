@@ -1538,23 +1538,21 @@ ObjectDataHandler::clone_ret _clone_range(
   });
 }
 
-ObjectDataHandler::clone_ret ObjectDataHandler::clone(
-  context_t ctx)
+ObjectDataHandler::clone_ret ObjectDataHandler::clone_range(
+  context_t ctx,
+  extent_len_t srcoff,
+  extent_len_t len,
+  extent_len_t destoff)
 {
   assert(ctx.d_onode);
-  LOG_PREFIX(ObjectDataHandler::clone);
-  DEBUGT("{}=>{}", ctx.t, ctx.onode.get_hobj(), ctx.d_onode->get_hobj());
-  // the whole clone procedure can be seperated into the following steps:
-  // 	1. let clone onode(d_object_data) take the head onode's
-  // 	   object data base;
-  // 	2. reserve a new region in lba tree for the head onode;
-  // 	3. clone all extents of the clone onode, see transaction_manager.h
-  // 	   for the details of clone_pin;
-  // 	4. reserve the space between the head onode's size and its reservation
-  // 	   length.
+  assert(srcoff == destoff);
+  LOG_PREFIX(ObjectDataHandler::clone_range);
+  DEBUGT("{}=>{}, {}~{}",
+    ctx.t, ctx.onode.get_hobj(),
+    ctx.d_onode->get_hobj(), srcoff, len);
   return with_objects_data(
     ctx,
-    [ctx, this](auto &object_data, auto &d_object_data) {
+    [ctx, this, srcoff, len](auto &object_data, auto &d_object_data) {
     struct state_t {
       LBAMapping src_first_mapping;
       LBAMapping dest_first_mapping;
@@ -1567,6 +1565,11 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
     if (d_object_data.is_null()) {
       return clone_iertr::now();
     }
+    auto direct_base = ctx.d_onode->is_snap()
+      ? get_clone_direct_base(
+	  *ctx.d_onode, d_object_data.get_reserved_data_base())
+      : get_clone_direct_base(
+	  ctx.onode, object_data.get_reserved_data_base());
     return seastar::do_with(
       state_t {
 	LBAMapping{},
@@ -1574,28 +1577,27 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
 	LBAMapping{},
 	object_data.get_reserved_data_base(),
 	d_object_data.get_reserved_data_base(),
-	get_clone_direct_base(
-	  *ctx.d_onode,
-	  ctx.d_onode->is_snap()
-	    ? d_object_data.get_reserved_data_base()
-	    : object_data.get_reserved_data_base())},
-      [ctx, this, &object_data, &d_object_data](auto &state) {
+	direct_base},
+      [ctx, this, &object_data, &d_object_data, srcoff, len](auto &state) {
       return prepare_data_reservation(
 	ctx, *ctx.d_onode, d_object_data,
 	object_data.get_reserved_data_len()
-      ).si_then([ctx, &state](auto) {
-	return ctx.tm.get_pin(ctx.t, state.src_base, false);
-      }).si_then([&state, ctx](auto mapping) {
+      ).si_then([ctx, &state, srcoff](auto) {
+	auto laddr = (state.src_base + srcoff).get_aligned_laddr();
+	return ctx.tm.get_pin(ctx.t, laddr, true);
+      }).si_then([&state, ctx, srcoff](auto mapping) {
 	state.src_first_mapping = std::move(mapping);
-	return ctx.tm.get_pin(ctx.t, state.dest_base, false);
-      }).si_then([&state, ctx](auto mapping) {
+	auto laddr = (state.dest_base + srcoff).get_aligned_laddr();
+	return ctx.tm.get_pin(ctx.t, laddr, true);
+      }).si_then([&state, ctx, srcoff](auto mapping) {
 	state.dest_first_mapping = std::move(mapping);
-	return ctx.tm.get_pin(ctx.t, state.direct_base, false);
-      }).si_then([&state, ctx, &object_data](auto mapping) {
+	auto laddr = (state.direct_base + srcoff).get_aligned_laddr();
+	return ctx.tm.get_pin(ctx.t, laddr, true);
+      }).si_then([&state, ctx, srcoff, len](auto mapping) {
 	state.first_direct_mapping = std::move(mapping);
 	return _clone_range(
 	  ctx, state.src_base, state.dest_base, state.direct_base,
-	  0, object_data.get_reserved_data_len(),
+	  srcoff, len,
 	  std::move(state.src_first_mapping),
 	  std::move(state.dest_first_mapping),
 	  std::move(state.first_direct_mapping));
