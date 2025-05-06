@@ -6390,6 +6390,11 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
         subvol_uuid = os.path.basename(subvol_path)
         return subvol_uuid
 
+    def construct_snap_path(self, subvol_name, snap_name, uuid,
+                            group_name='_nogroup'):
+        return os.path.join('/volumes', group_name, subvol_name, '.snap',
+                            snap_name, uuid)
+
     def test_snapshot_getpath(self):
         '''
         Test that "ceph fs subvolume snapshot getpath" command returns path to
@@ -6406,9 +6411,8 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
         snap_path = self.get_ceph_cmd_stdout(f'fs subvolume snapshot getpath '
                                              f'{self.volname} {subvol_name} '
                                              f'{snap_name}').strip()
-        # expected snapshot path
-        exp_snap_path = os.path.join('/volumes', '_nogroup', subvol_name,
-                                     '.snap', snap_name, sv_uuid)
+        exp_snap_path = self.construct_snap_path(subvol_name, snap_name,
+                                                 sv_uuid)
         self.assertEqual(snap_path, exp_snap_path)
 
     def test_snapshot_getpath_in_group(self):
@@ -6432,9 +6436,8 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
                                              f'{self.volname} {subvol_name} '
                                              f'{snap_name} {group_name}')\
                                              .strip()
-        # expected snapshot path
-        exp_snap_path = os.path.join('/volumes', group_name, subvol_name,
-                                     '.snap', snap_name, sv_uuid)
+        exp_snap_path = self.construct_snap_path(subvol_name, snap_name,
+                                                 sv_uuid, group_name)
         self.assertEqual(snap_path, exp_snap_path)
 
     def test_snapshot_getpath_on_retained_subvol(self):
@@ -6456,10 +6459,8 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
         snap_path = self.get_ceph_cmd_stdout(f'fs subvolume snapshot getpath '
                                              f'{self.volname} {subvol_name} '
                                              f'{snap_name}').strip()
-
-        # expected snapshot path
-        exp_snap_path = os.path.join('/volumes', '_nogroup', subvol_name,
-                                     '.snap', snap_name, sv_uuid)
+        exp_snap_path = self.construct_snap_path(subvol_name, snap_name,
+                                                 sv_uuid)
         self.assertEqual(snap_path, exp_snap_path)
 
     def test_snapshot_getpath_on_retained_subvol_in_group(self):
@@ -6486,9 +6487,8 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
                                              f'{self.volname} {subvol_name} '
                                              f'{snap_name} {group_name}')\
                                              .strip()
-        # expected snapshot path
-        exp_snap_path = os.path.join('/volumes', group_name, subvol_name,
-                                     '.snap', snap_name, sv_uuid)
+        exp_snap_path = self.construct_snap_path(subvol_name, snap_name,
+                                                 sv_uuid, group_name)
         self.assertEqual(snap_path, exp_snap_path)
 
 
