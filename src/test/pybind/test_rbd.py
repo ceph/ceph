@@ -2682,6 +2682,7 @@ class TestMirroring(object):
         assert_raises(InvalidArgument, self.image.mirror_image_promote, False)
         assert_raises(InvalidArgument, self.image.mirror_image_promote, True)
         assert_raises(InvalidArgument, self.image.mirror_image_demote)
+        assert_raises(InvalidArgument, self.image.mirror_image_resync)
 
         self.image.mirror_image_enable()
         info = self.image.mirror_image_get_info()

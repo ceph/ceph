@@ -815,11 +815,14 @@ int Mirror<I>::image_resync(I *ictx) {
   req->send();
 
   r = get_info_ctx.wait();
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to retrieve mirroring state, cannot resync: "
+               << cpp_strerror(r) << dendl;
     return r;
-  }
-
-  if (promotion_state == mirror::PROMOTION_STATE_PRIMARY) {
+  } else if (mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+    lderr(cct) << "mirroring is not enabled, cannot resync" << dendl;
+    return -EINVAL;
+  } else if (promotion_state == mirror::PROMOTION_STATE_PRIMARY) {
     lderr(cct) << "image is primary, cannot resync to itself" << dendl;
     return -EINVAL;
   }
