@@ -102,7 +102,7 @@ export class NvmeofListenersListComponent implements OnInit, OnChanges {
   deleteListenerModal() {
     const listener = this.selection.first();
     this.modalService.show(DeleteConfirmationModalComponent, {
-      itemDescription: 'Listener',
+      itemDescription: $localize`Listener`,
       actionDescription: 'delete',
       infoMessage: $localize`This action will delete listener despite any active connections.`,
       itemNames: [
@@ -116,6 +116,7 @@ export class NvmeofListenersListComponent implements OnInit, OnChanges {
           }),
           call: this.nvmeofService.deleteListener(
             this.subsystemNQN,
+            this.group,
             listener.host_name,
             listener.traddr,
             listener.trsvcid

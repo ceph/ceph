@@ -98,12 +98,19 @@ export class NvmeofService {
     });
   }
 
-  deleteListener(subsystemNQN: string, hostName: string, traddr: string, trsvcid: string) {
+  deleteListener(
+    subsystemNQN: string,
+    group: string,
+    hostName: string,
+    traddr: string,
+    trsvcid: string
+  ) {
     return this.http.delete(
       `${API_PATH}/subsystem/${subsystemNQN}/listener/${hostName}/${traddr}`,
       {
         observe: 'response',
         params: {
+          gw_group: group,
           trsvcid,
           force: 'true'
         }
