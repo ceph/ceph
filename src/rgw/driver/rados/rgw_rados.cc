@@ -362,7 +362,6 @@ void *RGWRadosThread::Worker::entry() {
 
   do {
     auto start = ceph::real_clock::now();
-
     int r = processor->process(this);
     if (r < 0) {
       ldpp_dout(this, 0) << "ERROR: processor->process() returned error r=" << r << dendl;
@@ -483,7 +482,6 @@ public:
 class RGWMetaSyncProcessorThread : public RGWSyncProcessorThread
 {
   RGWMetaSyncStatusManager sync;
-  rgw::sal::ConfigStore *cfgstore{nullptr};
 
   uint64_t interval_msec() override {
     return 0; /* no interval associated, it'll run once until stopped */
@@ -492,9 +490,8 @@ class RGWMetaSyncProcessorThread : public RGWSyncProcessorThread
     sync.stop();
   }
 public:
-  RGWMetaSyncProcessorThread(rgw::sal::RadosStore* _driver, RGWAsyncRadosProcessor *async_rados,
-                             rgw::sal::ConfigStore *_cfgstore)
-    : RGWSyncProcessorThread(_driver->getRados(), "meta-sync"), sync(_driver, async_rados), cfgstore(_cfgstore) {}
+  RGWMetaSyncProcessorThread(rgw::sal::RadosStore* _driver, RGWAsyncRadosProcessor *async_rados)
+    : RGWSyncProcessorThread(_driver->getRados(), "meta-sync"), sync(_driver, async_rados) {}
 
   void wakeup_sync_shards(set<int>& shard_ids) {
     for (set<int>::iterator iter = shard_ids.begin(); iter != shard_ids.end(); ++iter) {
@@ -513,7 +510,7 @@ public:
   }
 
   int process(const DoutPrefixProvider *dpp) override {
-    sync.run(dpp, null_yield, cfgstore);
+    sync.run(dpp, null_yield);
     return 0;
   }
 };
@@ -523,7 +520,6 @@ class RGWDataSyncProcessorThread : public RGWSyncProcessorThread
   PerfCountersRef counters;
   RGWDataSyncStatusManager sync;
   bool initialized;
-  rgw::sal::ConfigStore *cfgstore{nullptr};
 
   uint64_t interval_msec() override {
     if (initialized) {
@@ -538,11 +534,11 @@ class RGWDataSyncProcessorThread : public RGWSyncProcessorThread
   }
 public:
   RGWDataSyncProcessorThread(rgw::sal::RadosStore* _driver, RGWAsyncRadosProcessor *async_rados,
-                             const RGWZone* source_zone, rgw::sal::ConfigStore *_cfgstore)
+                             const RGWZone* source_zone)
     : RGWSyncProcessorThread(_driver->getRados(), "data-sync"),
       counters(sync_counters::build(store->ctx(), std::string("data-sync-from-") + source_zone->name)),
       sync(_driver, async_rados, source_zone->id, counters.get()),
-      initialized(false), cfgstore(_cfgstore) {}
+      initialized(false) {}
 
   void wakeup_sync_shards(bc::flat_map<int, bc::flat_set<rgw_data_notify_entry> >& entries) {
     for (bc::flat_map<int, bc::flat_set<rgw_data_notify_entry> >::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
@@ -569,7 +565,7 @@ public:
       /* we'll be back! */
       return 0;
     }
-    sync.run(dpp, cfgstore);
+    sync.run(dpp);
     return 0;
   }
 };
@@ -1223,7 +1219,7 @@ int RGWRados::update_service_map(const DoutPrefixProvider *dpp, std::map<std::st
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
  */
-int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw::sal::ConfigStore* cfgstore)
+int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
 {
   int ret;
 
@@ -1307,7 +1303,7 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
     }
     auto async_processor = svc.async_processor;
     std::lock_guard l{meta_sync_thread_lock};
-    meta_sync_processor_thread = new RGWMetaSyncProcessorThread(this->driver, async_processor, cfgstore);
+    meta_sync_processor_thread = new RGWMetaSyncProcessorThread(this->driver, async_processor);
     ret = meta_sync_processor_thread->init(dpp);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to initialize meta sync thread" << dendl;
@@ -1330,7 +1326,7 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
     std::lock_guard dl{data_sync_thread_lock};
     for (auto source_zone : svc.zone->get_data_sync_source_zones()) {
       ldpp_dout(dpp, 5) << "starting data sync thread for zone " << source_zone->name << dendl;
-      auto *thread = new RGWDataSyncProcessorThread(this->driver, svc.async_processor, source_zone, cfgstore);
+      auto *thread = new RGWDataSyncProcessorThread(this->driver, svc.async_processor, source_zone);
       ret = thread->init(dpp);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: failed to initialize data sync thread" << dendl;
@@ -1422,14 +1418,14 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
 }
 
 int RGWRados::init_svc(bool raw, const DoutPrefixProvider *dpp,
-           bool background_tasks, // Ignored when `raw`
-           const rgw::SiteConfig& site, rgw::sal::ConfigStore* cfgstore)
+		       bool background_tasks, // Ignored when `raw`
+                       const rgw::SiteConfig& site)
 {
   if (raw) {
-    return svc.init_raw(cct, driver, use_cache, null_yield, dpp, site, cfgstore);
+    return svc.init_raw(cct, driver, use_cache, null_yield, dpp, site);
   }
 
-  return svc.init(cct, driver, use_cache, run_sync_thread, background_tasks, null_yield, dpp, site, cfgstore);
+  return svc.init(cct, driver, use_cache, run_sync_thread, background_tasks, null_yield, dpp, site);
 }
 
 /** 
@@ -1438,7 +1434,7 @@ int RGWRados::init_svc(bool raw, const DoutPrefixProvider *dpp,
  */
 int RGWRados::init_begin(CephContext* _cct, const DoutPrefixProvider *dpp,
 			 bool background_tasks,
-       const rgw::SiteConfig& site, rgw::sal::ConfigStore* cfgstore)
+                         const rgw::SiteConfig& site)
 {
   set_context(_cct);
   int ret = driver->init_neorados(dpp);
@@ -1452,7 +1448,7 @@ int RGWRados::init_begin(CephContext* _cct, const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  ret = init_svc(false, dpp, background_tasks, site, cfgstore);
+  ret = init_svc(false, dpp, background_tasks, site);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
     return ret;

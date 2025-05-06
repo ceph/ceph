@@ -25,8 +25,7 @@ using namespace std;
 using Svc = RGWSI_MDLog::Svc;
 using Cursor = RGWPeriodHistory::Cursor;
 
-RGWSI_MDLog::RGWSI_MDLog(CephContext *cct, bool _run_sync, rgw::sal::ConfigStore* _cfgstore) : RGWServiceInstance(cct),
-              run_sync(_run_sync), cfgstore(_cfgstore) {
+RGWSI_MDLog::RGWSI_MDLog(CephContext *cct, bool _run_sync) : RGWServiceInstance(cct), run_sync(_run_sync) {
 }
 
 RGWSI_MDLog::~RGWSI_MDLog() {
@@ -59,7 +58,7 @@ int RGWSI_MDLog::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   if (run_sync &&
       svc.zone->need_to_sync()) {
     // initialize the log period history
-    svc.mdlog->init_oldest_log_period(y, dpp, cfgstore);
+    svc.mdlog->init_oldest_log_period(y, dpp);
   }
   return 0;
 }
@@ -400,7 +399,7 @@ class TrimHistoryCR : public RGWCoroutine {
 
 // traverse all the way back to the beginning of the period history, and
 // return a cursor to the first period in a fully attached history
-Cursor RGWSI_MDLog::find_oldest_period(const DoutPrefixProvider *dpp, optional_yield y, rgw::sal::ConfigStore* cfgstore)
+Cursor RGWSI_MDLog::find_oldest_period(const DoutPrefixProvider *dpp, optional_yield y)
 {
   auto cursor = period_history->get_current();
 
@@ -416,7 +415,7 @@ Cursor RGWSI_MDLog::find_oldest_period(const DoutPrefixProvider *dpp, optional_y
       }
       // pull the predecessor and add it to our history
       RGWPeriod period;
-      int r = period_puller->pull(dpp, predecessor, period, y, cfgstore);
+      int r = period_puller->pull(dpp, predecessor, period, y);
       if (r < 0) {
         return cursor;
       }
@@ -434,7 +433,7 @@ Cursor RGWSI_MDLog::find_oldest_period(const DoutPrefixProvider *dpp, optional_y
   return cursor;
 }
 
-Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y, const DoutPrefixProvider *dpp, rgw::sal::ConfigStore* cfgstore)
+Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y, const DoutPrefixProvider *dpp)
 {
   // read the mdlog history
   RGWMetadataLogHistory state;
@@ -444,7 +443,7 @@ Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y, const DoutPrefixPro
   if (ret == -ENOENT) {
     // initialize the mdlog history and write it
     ldpp_dout(dpp, 10) << "initializing mdlog history" << dendl;
-    auto cursor = find_oldest_period(dpp, y, cfgstore);
+    auto cursor = find_oldest_period(dpp, y);
     if (!cursor) {
       return cursor;
     }
@@ -471,7 +470,7 @@ Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y, const DoutPrefixPro
   if (cursor) {
     return cursor;
   } else {
-    cursor = find_oldest_period(dpp, y, cfgstore);
+    cursor = find_oldest_period(dpp, y);
     state.oldest_realm_epoch = cursor.get_epoch();
     state.oldest_period_id = cursor.get_period().get_id();
     ldpp_dout(dpp, 10) << "rewriting mdlog history" << dendl;
@@ -486,7 +485,7 @@ Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y, const DoutPrefixPro
 
   // pull the oldest period by id
   RGWPeriod period;
-  ret = period_puller->pull(dpp, state.oldest_period_id, period, y, cfgstore);
+  ret = period_puller->pull(dpp, state.oldest_period_id, period, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "failed to read period id=" << state.oldest_period_id
         << " for mdlog history: " << cpp_strerror(ret) << dendl;
@@ -500,7 +499,7 @@ Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y, const DoutPrefixPro
     return Cursor{-EINVAL};
   }
   // attach the period to our history
-  return period_history->attach(dpp, std::move(period), y, cfgstore);
+  return period_history->attach(dpp, std::move(period), y);
 }
 
 Cursor RGWSI_MDLog::read_oldest_log_period(optional_yield y, const DoutPrefixProvider *dpp) const
@@ -572,8 +571,8 @@ int RGWSI_MDLog::get_shard_id(const string& hash_key, int *shard_id)
 }
 
 int RGWSI_MDLog::pull_period(const DoutPrefixProvider *dpp, const std::string& period_id, RGWPeriod& period,
-			     optional_yield y, rgw::sal::ConfigStore* cfgstore)
+			     optional_yield y)
 {
-  return period_puller->pull(dpp, period_id, period, y, cfgstore);
+  return period_puller->pull(dpp, period_id, period, y);
 }
 
