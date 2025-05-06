@@ -119,7 +119,11 @@ void RGWRealmReloader::reload()
 
       // recreate and initialize a new driver
       DriverManager::Config cfg;
+#ifdef WITH_RADOSGW_RADOS
       cfg.store_name = "rados";
+#else
+      cfg.store_name = "posix";
+#endif
       cfg.filter_name = "none";
       env.driver = DriverManager::get_storage(&dp, cct, cfg, io_context,
 	  *env.site,

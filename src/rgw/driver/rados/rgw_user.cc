@@ -32,33 +32,6 @@ static string key_type_to_str(int key_type) {
   }
 }
 
-static bool char_is_unreserved_url(char c)
-{
-  if (isalnum(c))
-    return true;
-
-  switch (c) {
-  case '-':
-  case '.':
-  case '_':
-  case '~':
-    return true;
-  default:
-    return false;
-  }
-}
-
-static bool validate_access_key(string& key)
-{
-  const char *p = key.c_str();
-  while (*p) {
-    if (!char_is_unreserved_url(*p))
-      return false;
-    p++;
-  }
-  return true;
-}
-
 static void set_err_msg(std::string *sink, std::string msg)
 {
   if (sink && !msg.empty())
@@ -500,41 +473,6 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
     op_state.set_access_key_exist();
   }
   return 0;
-}
-
-void rgw_generate_secret_key(CephContext* cct,
-                             std::string& secret_key)
-{
-  char secret_key_buf[SECRET_KEY_LEN + 1];
-  gen_rand_alphanumeric_plain(cct, secret_key_buf, sizeof(secret_key_buf));
-  secret_key = secret_key_buf;
-}
-
-int rgw_generate_access_key(const DoutPrefixProvider* dpp,
-                            optional_yield y,
-                            rgw::sal::Driver* driver,
-                            std::string& access_key_id)
-{
-  std::string id;
-  int r = 0;
-
-  do {
-    id.resize(PUBLIC_ID_LEN + 1);
-    gen_rand_alphanumeric_upper(dpp->get_cct(), id.data(), id.size());
-    id.pop_back(); // remove trailing null
-
-    if (!validate_access_key(id))
-      continue;
-
-    std::unique_ptr<rgw::sal::User> duplicate_check;
-    r = driver->get_user_by_access_key(dpp, id, y, &duplicate_check);
-  } while (r == 0);
-
-  if (r == -ENOENT) {
-    access_key_id = std::move(id);
-    return 0;
-  }
-  return r;
 }
 
 // Generate a new random key
