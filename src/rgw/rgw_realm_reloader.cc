@@ -118,8 +118,7 @@ void RGWRealmReloader::reload()
       ldpp_dout(&dp, 1) << "Creating new driver" << dendl;
 
       // recreate and initialize a new driver
-      DriverManager::Config cfg;
-      cfg.store_name = "rados";
+      DriverManager::Config cfg = DriverManager::get_config(false, g_ceph_context);
       cfg.filter_name = "none";
       env.driver = DriverManager::get_storage(&dp, cct, cfg, io_context,
 	  *env.site,

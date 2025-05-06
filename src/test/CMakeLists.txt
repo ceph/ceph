@@ -614,7 +614,7 @@ if(WITH_RBD)
     add_dependencies(tests unittest_librbd rbd-mirror)
   endif(WITH_RBD_MIRROR)
 endif(WITH_RBD)
-if(WITH_RADOSGW)
+if(WITH_RADOSGW AND WITH_RADOSGW_RADOS)
   add_dependencies(tests radosgw radosgw-admin)
 endif()
 #add dependency from fio just to ensure the plugin build isn't failing
