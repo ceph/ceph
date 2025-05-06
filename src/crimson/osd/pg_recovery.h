@@ -34,7 +34,7 @@ public:
   virtual ~PGRecovery() {}
   void start_pglogbased_recovery();
 
-  interruptible_future<bool> start_recovery_ops(
+  interruptible_future<seastar::stop_iteration> start_recovery_ops(
     RecoveryBackend::RecoveryBlockingEvent::TriggerI&,
     crimson::osd::PglogBasedRecovery &recover_op,
     size_t max_to_start);
@@ -137,7 +137,13 @@ private:
   void update_peers_last_backfill(
     const hobject_t& new_last_backfill) final;
   bool budget_available() const final;
+
+  template <typename T>
+  void start_peering_event_operation_listener(T &&evt, float delay = 0);
   void backfilled() final;
+  void request_backfill();
+  void all_replicas_recovered();
+
   friend crimson::osd::BackfillState::PGFacade;
   friend crimson::osd::PG;
   // backfill end
