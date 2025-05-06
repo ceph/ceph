@@ -630,7 +630,7 @@ void PG::on_active_actmap()
       publish_stats_to_osd();
     });
   } else {
-    logger().debug("{}: pg not clean, skipping snap trim");
+    logger().debug("pg not clean, skipping snap trim");
     ceph_assert(!peering_state.state_test(PG_STATE_SNAPTRIM));
   }
 }
