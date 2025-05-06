@@ -407,6 +407,13 @@ public:
       internal_context_t &ctx,
       OnodeRef &onode,
       OnodeRef &d_onode);
+    tm_ret _clone_range(
+      internal_context_t &ctx,
+      OnodeRef &src_onode,
+      OnodeRef &dst_onode,
+      extent_len_t srcoff,
+      extent_len_t length,
+      extent_len_t dstoff);
     tm_ret _zero(
       internal_context_t &ctx,
       Onode &onode,

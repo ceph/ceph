@@ -327,6 +327,12 @@ public:
   using clone_ret = clone_iertr::future<>;
   clone_ret clone(context_t ctx);
 
+  clone_ret clone_range(
+    context_t ctx,
+    extent_len_t srcoff,
+    extent_len_t len,
+    extent_len_t destoff);
+
 private:
   /// Updates region [_offset, _offset + bl.length) to bl
   write_ret overwrite(
