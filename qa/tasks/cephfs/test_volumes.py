@@ -70,18 +70,15 @@ class TestVolumesHelper(CephFSTestCase):
     def _check_clone_canceled(self, clone, clone_group=None):
         self.__check_clone_state("canceled", clone, clone_group, timo=1)
 
-    def _get_subvolume_snapshot_path(self, subvolume, snapshot, source_group, subvol_path, source_version):
-        if source_version == 2:
-            # v2
-            if subvol_path is not None:
-                (base_path, uuid_str) = os.path.split(subvol_path)
-            else:
-                (base_path, uuid_str) = os.path.split(self._get_subvolume_path(self.volname, subvolume, group_name=source_group))
-            return os.path.join(base_path, ".snap", snapshot, uuid_str)
+    def _get_subvolume_snapshot_path(self, subvol_name, snap_name, group_name):
+        cmd = (f'fs subvolume snapshot getpath {self.volname} {subvol_name} '
+               f'{snap_name}')
+        if group_name:
+            cmd += f' {group_name}'
 
-        # v1
-        base_path = self._get_subvolume_path(self.volname, subvolume, group_name=source_group)
-        return os.path.join(base_path, ".snap", snapshot)
+        cephfs_snap_path = self.get_ceph_cmd_stdout(cmd).strip()
+        # remove leading '/' from cephfs_snap_path
+        return os.path.join(self.mount_a.hostfs_mntpt, cephfs_snap_path[1:])
 
     def _verify_clone_attrs(self, source_path, clone_path):
         path1 = source_path
@@ -143,7 +140,7 @@ class TestVolumesHelper(CephFSTestCase):
                       subvol_path=None, source_version=2, timo=120):
         # pass in subvol_path (subvolume path when snapshot was taken) when subvolume is removed
         # but snapshots are retained for clone verification
-        path1 = self._get_subvolume_snapshot_path(subvolume, snapshot, source_group, subvol_path, source_version)
+        path1 = self._get_subvolume_snapshot_path(subvolume, snapshot, source_group)
         path2 = self._get_subvolume_path(self.volname, clone, group_name=clone_group)
 
         check = 0
