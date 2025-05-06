@@ -113,52 +113,6 @@ class CreateSnapshotRequests:
             self.finish(image_spec)
             return
 
-        self.get_mirror_mode(image_spec, image)
-
-    def get_mirror_mode(self, image_spec: ImageSpec, image: rbd.Image) -> None:
-        pool_id, namespace, image_id = image_spec
-
-        self.log.debug("CreateSnapshotRequests.get_mirror_mode: {}/{}/{}".format(
-            pool_id, namespace, image_id))
-
-        def cb(comp: rados.Completion, mode: Optional[int]) -> None:
-            self.handle_get_mirror_mode(image_spec, image, comp, mode)
-
-        try:
-            image.aio_mirror_image_get_mode(cb)
-        except Exception as e:
-            self.log.error(
-                "exception when getting mirror mode for {}/{}/{}: {}".format(
-                    pool_id, namespace, image_id, e))
-            self.close_image(image_spec, image)
-
-    def handle_get_mirror_mode(self,
-                               image_spec: ImageSpec,
-                               image: rbd.Image,
-                               comp: rados.Completion,
-                               mode: Optional[int]) -> None:
-        pool_id, namespace, image_id = image_spec
-
-        self.log.debug(
-            "CreateSnapshotRequests.handle_get_mirror_mode {}/{}/{}: r={} mode={}".format(
-                pool_id, namespace, image_id, comp.get_return_value(), mode))
-
-        if mode is None:
-            if comp.get_return_value() != -errno.ENOENT:
-                self.log.error(
-                    "error when getting mirror mode for {}/{}/{}: {}".format(
-                        pool_id, namespace, image_id, comp.get_return_value()))
-            self.close_image(image_spec, image)
-            return
-
-        if mode != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
-            self.log.debug(
-                "CreateSnapshotRequests.handle_get_mirror_mode: {}/{}/{}: {}".format(
-                    pool_id, namespace, image_id,
-                    "snapshot mirroring is not enabled"))
-            self.close_image(image_spec, image)
-            return
-
         self.get_mirror_info(image_spec, image)
 
     def get_mirror_info(self, image_spec: ImageSpec, image: rbd.Image) -> None:
@@ -190,10 +144,17 @@ class CreateSnapshotRequests:
                 pool_id, namespace, image_id, comp.get_return_value(), info))
 
         if info is None:
-            if comp.get_return_value() != -errno.ENOENT:
-                self.log.error(
-                    "error when getting mirror info for {}/{}/{}: {}".format(
-                        pool_id, namespace, image_id, comp.get_return_value()))
+            self.log.error(
+                "error when getting mirror info for {}/{}/{}: {}".format(
+                    pool_id, namespace, image_id, comp.get_return_value()))
+            self.close_image(image_spec, image)
+            return
+
+        if info['state'] != rbd.RBD_MIRROR_IMAGE_ENABLED:
+            self.log.debug(
+                "CreateSnapshotRequests.handle_get_mirror_info: {}/{}/{}: {}".format(
+                    pool_id, namespace, image_id,
+                    "mirroring is not enabled"))
             self.close_image(image_spec, image)
             return
 
@@ -202,6 +163,51 @@ class CreateSnapshotRequests:
                 "CreateSnapshotRequests.handle_get_mirror_info: {}/{}/{}: {}".format(
                     pool_id, namespace, image_id,
                     "is not primary"))
+            self.close_image(image_spec, image)
+            return
+
+        self.get_mirror_mode(image_spec, image)
+
+    def get_mirror_mode(self, image_spec: ImageSpec, image: rbd.Image) -> None:
+        pool_id, namespace, image_id = image_spec
+
+        self.log.debug("CreateSnapshotRequests.get_mirror_mode: {}/{}/{}".format(
+            pool_id, namespace, image_id))
+
+        def cb(comp: rados.Completion, mode: Optional[int]) -> None:
+            self.handle_get_mirror_mode(image_spec, image, comp, mode)
+
+        try:
+            image.aio_mirror_image_get_mode(cb)
+        except Exception as e:
+            self.log.error(
+                "exception when getting mirror mode for {}/{}/{}: {}".format(
+                    pool_id, namespace, image_id, e))
+            self.close_image(image_spec, image)
+
+    def handle_get_mirror_mode(self,
+                               image_spec: ImageSpec,
+                               image: rbd.Image,
+                               comp: rados.Completion,
+                               mode: Optional[int]) -> None:
+        pool_id, namespace, image_id = image_spec
+
+        self.log.debug(
+            "CreateSnapshotRequests.handle_get_mirror_mode {}/{}/{}: r={} mode={}".format(
+                pool_id, namespace, image_id, comp.get_return_value(), mode))
+
+        if mode is None:
+            self.log.error(
+                "error when getting mirror mode for {}/{}/{}: {}".format(
+                    pool_id, namespace, image_id, comp.get_return_value()))
+            self.close_image(image_spec, image)
+            return
+
+        if mode != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
+            self.log.debug(
+                "CreateSnapshotRequests.handle_get_mirror_mode: {}/{}/{}: {}".format(
+                    pool_id, namespace, image_id,
+                    "not enabled for snapshot mirroring"))
             self.close_image(image_spec, image)
             return
 
