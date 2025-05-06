@@ -512,7 +512,8 @@ private:
             xattr_name == "ceph.dir.charmap"sv ||
             xattr_name == "ceph.dir.normalization"sv ||
             xattr_name == "ceph.dir.encoding"sv ||
-            xattr_name == "ceph.dir.casesensitive"sv;
+            xattr_name == "ceph.dir.casesensitive"sv ||
+	    xattr_name == "ceph.dir.subvolume";
   }
 
   static bool is_ceph_file_vxattr(std::string_view xattr_name) {
