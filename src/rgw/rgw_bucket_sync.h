@@ -18,6 +18,7 @@
 
 #include "rgw_common.h"
 #include "rgw_sync_policy.h"
+#include "rgw_zone.h"
 
 class RGWSI_Zone;
 class RGWSI_SyncModules;
