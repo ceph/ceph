@@ -38,15 +38,13 @@ protected:
   const bool do_init;
 
   // For splitting
-  std::optional<std::set<std::pair<spg_t, epoch_t>>> split_children;
   std::set<spg_t> children_pgids;
   std::set<Ref<PG>> split_pgs;
 
 public:
   PGAdvanceMap(
     Ref<PG> pg, ShardServices &shard_services, epoch_t to,
-    PeeringCtx &&rctx, bool do_init,
-    std::optional<std::set<std::pair<spg_t, epoch_t>>> split_children = std::nullopt);
+    PeeringCtx &&rctx, bool do_init);
   ~PGAdvanceMap();
 
   void print(std::ostream &) const final;
@@ -55,7 +53,9 @@ public:
   PipelineHandle &get_handle() { return handle; }
 
   using cached_map_t = OSDMapService::cached_map_t;
-  seastar::future<> split_pg(std::set<std::pair<spg_t, epoch_t>> split_children_info,
+  seastar::future<> check_for_splits(epoch_t old_epoch,
+                                     cached_map_t next_map);
+  seastar::future<> split_pg(std::set<spg_t> split_children,
                              cached_map_t next_map);
   void split_stats(std::set<Ref<PG>> child_pgs,
 		   const std::set<spg_t> &child_pgids);
@@ -71,6 +71,10 @@ public:
 
 private:
   PGPeeringPipeline &peering_pp(PG &pg);
+  seastar::future<> handle_split_pg_creation(
+    Ref<PG> child_pg,
+    cached_map_t next_map,
+    PGMap::PGCreationBlockingEvent::TriggerI&&);
 };
 
 }

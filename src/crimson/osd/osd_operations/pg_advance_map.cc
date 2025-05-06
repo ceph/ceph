@@ -23,10 +23,9 @@ namespace crimson::osd {
 
 PGAdvanceMap::PGAdvanceMap(
   Ref<PG> pg, ShardServices &shard_services, epoch_t to,
-  PeeringCtx &&rctx, bool do_init,
-  std::optional<std::set<std::pair<spg_t, epoch_t>>> split_children)
+  PeeringCtx &&rctx, bool do_init)
   : pg(pg), shard_services(shard_services), to(to),
-    rctx(std::move(rctx)), do_init(do_init), split_children(split_children)
+    rctx(std::move(rctx)), do_init(do_init)
 {
   logger().debug("{}: created", *this);
 }
@@ -98,14 +97,7 @@ seastar::future<> PGAdvanceMap::start()
 	    logger().debug("{}: advancing map to {}",
 			   *this, next_map->get_epoch());
 	    pg->handle_advance_map(next_map, rctx);
-	    if (split_children.has_value()) {
-	      logger().debug("{}: split PGs detected", *this);
-	      auto split_children_info = split_children.value();
-	      return split_pg(split_children_info,
-		              next_map);
-	    } else {
-	      return seastar::now();
-	    }
+	    return check_for_splits(*from, next_map);
 	  });
       }).then([this] {
 	pg->handle_activate_map(rctx);
@@ -125,23 +117,50 @@ seastar::future<> PGAdvanceMap::start()
   });
 }
 
-seastar::future<> PGAdvanceMap::split_pg(
-    std::set<std::pair<spg_t, epoch_t>> split_children_info,
+seastar::future<> PGAdvanceMap::check_for_splits(
+    epoch_t old_epoch,
     cached_map_t next_map)
 {
   using cached_map_t = OSDMapService::cached_map_t;
-  logger().debug("{}: start", *this);
+  cached_map_t old_map = co_await shard_services.get_map(old_epoch);
+  if (!old_map->have_pg_pool(pg->get_pgid().pool())) {
+    logger().debug("{} pool doesn't exist in epoch {}", pg->get_pgid(),
+	old_epoch);
+    co_return;
+  }
+  auto old_pg_num = old_map->get_pg_num(pg->get_pgid().pool());
+  auto new_pg_num = next_map->get_pg_num(pg->get_pgid().pool());
+  logger().debug(" pg_num change in e{} {} -> {}", next_map->get_epoch(),
+                 old_pg_num, new_pg_num);
+  std::set<spg_t> children;
+  if (new_pg_num && new_pg_num > old_pg_num) {
+    if (pg->pgid.is_split(
+	    old_pg_num,
+	    new_pg_num,
+	    &children)) {
+      co_await split_pg(children, next_map);
+    }
+  }
+  co_return;
+}
 
-  for (auto& child_pg_info : split_children_info) {
-    auto child_pgid = child_pg_info.first;
-    auto pg_epoch = child_pg_info.second;
+
+seastar::future<> PGAdvanceMap::split_pg(
+    std::set<spg_t> split_children,
+    cached_map_t next_map)
+{
+  logger().debug("{}: start", *this);
+  auto pg_epoch = next_map->get_epoch();
+  logger().debug("{}: epoch: {}", *this, pg_epoch);
+
+  for (auto child_pgid : split_children) {
     children_pgids.insert(child_pgid);
 
     // Map each child pg ID to a core
     auto core = co_await shard_services.create_split_pg_mapping(child_pgid, seastar::this_shard_id());
     logger().debug(" PG {} mapped to {}", child_pgid.pgid, core);
     logger().debug(" {} map epoch: {}", child_pgid.pgid, pg_epoch);
-    cached_map_t map = co_await shard_services.get_map(pg_epoch);
+    auto map = next_map;
     auto child_pg = co_await shard_services.make_pg(std::move(map), child_pgid, true);
 
     logger().debug(" Parent PG: {}", pg->get_pgid());
@@ -161,26 +180,36 @@ seastar::future<> PGAdvanceMap::split_pg(
 
     co_await this->template with_blocking_event<PGMap::PGCreationBlockingEvent>(
 	[this, child_pg, next_map] (auto&& trigger) -> seastar::future<> {
-	auto fut = shard_services.create_split_pg(
-	    std::move(trigger),
-            child_pg->get_pgid());
-	co_await shard_services.start_operation<PGAdvanceMap>(
-            child_pg, shard_services, next_map->get_epoch(),
-            std::move(rctx), true).second;
-	co_await fut.safe_then([this] (Ref<PG> child_pgref) {
-	    logger().debug(" Child PG creation done! {}", child_pgref->get_pgid());
-	    split_pgs.insert(child_pgref);
-	}).handle_error(crimson::ct_error::ecanceled::handle([](auto) {
-	    logger().debug("PG creation canceled");
-            return seastar::now();
-        }));
-	co_return;
+	return handle_split_pg_creation(child_pg, next_map, std::move(trigger));
     });
   }
 
   split_stats(split_pgs, children_pgids);
   co_return;
 }
+
+seastar::future<> PGAdvanceMap::handle_split_pg_creation(
+    Ref<PG> child_pg,
+    cached_map_t next_map,
+    PGMap::PGCreationBlockingEvent::TriggerI&& trigger)
+{
+  auto fut = shard_services.create_split_pg(std::move(trigger), child_pg->get_pgid());
+
+  co_await shard_services.start_operation<PGAdvanceMap>(
+      child_pg, shard_services, next_map->get_epoch(),
+      std::move(rctx), true).second;
+
+  co_await fut.safe_then([this] (Ref<PG> child_pgref) {
+    logger().debug(" Child PG creation done! {}", child_pgref->get_pgid());
+    split_pgs.insert(child_pgref);
+  }).handle_error(crimson::ct_error::ecanceled::handle([](auto) {
+    logger().debug("PG creation canceled");
+    return seastar::now();
+  }));
+
+  co_return;
+}
+
 
 void PGAdvanceMap::split_stats(std::set<Ref<PG>> children_pgs,
                               const std::set<spg_t> &children_pgids)
