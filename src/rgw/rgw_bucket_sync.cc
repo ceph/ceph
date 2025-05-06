@@ -693,7 +693,7 @@ RGWBucketSyncFlowManager::RGWBucketSyncFlowManager(CephContext *_cct,
                                                                                               parent(_parent) {}
 
 
-void RGWSyncPolicyCompat::convert_old_sync_config(RGWSI_Zone *zone_svc,
+void RGWSyncPolicyCompat::convert_old_sync_config(const rgw::SiteConfig* site,
                                                   RGWSI_SyncModules *sync_modules_svc,
                                                   rgw_sync_policy_info *ppolicy)
 {
@@ -702,7 +702,7 @@ void RGWSyncPolicyCompat::convert_old_sync_config(RGWSI_Zone *zone_svc,
   rgw_sync_policy_info policy;
 
   auto& group = policy.groups["default"];
-  auto& zonegroup = zone_svc->get_zonegroup();
+  auto& zonegroup = site->get_zonegroup();
 
   for (const auto& ziter1 : zonegroup.zones) {
     auto& id1 = ziter1.first;
@@ -746,17 +746,18 @@ void RGWSyncPolicyCompat::convert_old_sync_config(RGWSI_Zone *zone_svc,
 RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
                                                        RGWSI_SyncModules *sync_modules_svc,
 						       RGWSI_Bucket_Sync *_bucket_sync_svc,
-                                                       std::optional<rgw_zone_id> effective_zone) : zone_svc(_zone_svc) ,
+                                                       const rgw::SiteConfig* _site,
+                                                       std::optional<rgw_zone_id> effective_zone) : zone_svc(_zone_svc) , site(_site),
                                                                                                     bucket_sync_svc(_bucket_sync_svc) {
   zone_id = effective_zone.value_or(zone_svc->zone_id());
   flow_mgr.reset(new RGWBucketSyncFlowManager(zone_svc->ctx(),
                                               zone_id,
                                               nullopt,
                                               nullptr));
-  sync_policy = zone_svc->get_zonegroup().sync_policy;
+  sync_policy = site->get_zonegroup().sync_policy;
 
   if (sync_policy.empty()) {
-    RGWSyncPolicyCompat::convert_old_sync_config(zone_svc, sync_modules_svc, &sync_policy);
+    RGWSyncPolicyCompat::convert_old_sync_config(site, sync_modules_svc, &sync_policy);
     legacy_config = true;
   }
 }
@@ -1011,7 +1012,7 @@ bool RGWBucketSyncPolicyHandler::bucket_exports_data() const
     return true;
   }
 
-  return (zone_svc->need_to_log_data() &&
+  return (site->get_zone().log_data && zone_svc->sync_module_exports_data() &&
           bucket_info->datasync_flag_enabled());
 }
 

@@ -119,7 +119,14 @@ void RGWRealmReloader::reload()
 
       // recreate and initialize a new driver
       DriverManager::Config cfg;
+#ifdef WITH_RADOSGW_RADOS
       cfg.store_name = "rados";
+#elif defined(WITH_RADOSGW_POSIX)
+      cfg.store_name = "posix";
+#else
+      ldpp_dout(&dp, 1) << "Niether RADOS nor POSIX are enabled, can't initliaze storage!" << dendl;
+      exit(1);
+#endif
       cfg.filter_name = "none";
       env.driver = DriverManager::get_storage(&dp, cct, cfg, io_context,
 	  *env.site,

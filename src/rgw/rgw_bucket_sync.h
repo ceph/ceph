@@ -18,6 +18,7 @@
 
 #include "rgw_common.h"
 #include "rgw_sync_policy.h"
+#include "rgw_zone.h"
 
 class RGWSI_Zone;
 class RGWSI_SyncModules;
@@ -104,7 +105,7 @@ struct rgw_sync_group_pipe_map {
 
 class RGWSyncPolicyCompat {
 public:
-  static void convert_old_sync_config(RGWSI_Zone *zone_svc,
+  static void convert_old_sync_config(const rgw::SiteConfig *site,
                                       RGWSI_SyncModules *sync_modules_svc,
                                       rgw_sync_policy_info *ppolicy);
 };
@@ -286,6 +287,7 @@ class RGWBucketSyncPolicyHandler {
   bool legacy_config{false};
   const RGWBucketSyncPolicyHandler *parent{nullptr};
   RGWSI_Zone *zone_svc;
+  const rgw::SiteConfig* site;
   RGWSI_Bucket_Sync *bucket_sync_svc;
   rgw_zone_id zone_id;
   std::optional<RGWBucketInfo> bucket_info;
@@ -328,6 +330,7 @@ public:
   RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
                              RGWSI_SyncModules *sync_modules_svc,
 			     RGWSI_Bucket_Sync *bucket_sync_svc,
+                             const rgw::SiteConfig* site,
                              std::optional<rgw_zone_id> effective_zone = std::nullopt);
 
   RGWBucketSyncPolicyHandler *alloc_child(const RGWBucketInfo& bucket_info,
