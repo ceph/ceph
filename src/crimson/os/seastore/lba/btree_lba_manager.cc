@@ -1013,12 +1013,29 @@ BtreeLBAManager::refresh_lba_mapping(Transaction &t, LBAMapping mapping)
   {
     return seastar::futurize_invoke([c, this, &btree, &mapping] {
       if (mapping.direct_cursor) {
-        return refresh_lba_cursor(c, btree, *mapping.direct_cursor);
+	return refresh_lba_cursor(c, btree, *mapping.direct_cursor
+	).si_then([&mapping] {
+	  // the corresponding mapping might have been turned into
+	  // indirect after the refresh, we need to handle this case.
+	  // This happens in the case of move_mapping
+	  if (mapping.direct_cursor->is_indirect()) {
+	    assert(!mapping.is_indirect());
+	    mapping.indirect_cursor = std::move(mapping.direct_cursor);
+	  }
+	});
       }
       return refresh_lba_cursor_iertr::make_ready_future();
     }).si_then([c, this, &btree, &mapping] {
       if (mapping.indirect_cursor) {
-	return refresh_lba_cursor(c, btree, *mapping.indirect_cursor);
+	return refresh_lba_cursor(c, btree, *mapping.indirect_cursor
+	).si_then([&mapping] {
+	  // the corresponding mapping might have been turned into
+	  // direct after the refresh, we need to handle this case.
+	  // This happens in the case of overwrite
+	  if (!mapping.indirect_cursor->is_indirect()) {
+	    mapping.direct_cursor = std::move(mapping.indirect_cursor);
+	  }
+	});
       }
       return refresh_lba_cursor_iertr::make_ready_future();
 #ifndef NDEBUG
