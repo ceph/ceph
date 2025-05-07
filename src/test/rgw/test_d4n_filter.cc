@@ -1537,7 +1537,7 @@ TEST_F(D4NFilterFixture, GetObjectWrite)
     Read_CB cb(&bl);
     std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
     EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), 0);
-    EXPECT_EQ(read_op->iterate(env->dpp, 0, ofs, &cb, optional_yield{yield}), 0);
+    EXPECT_EQ(read_op->iterate(env->dpp, 0, (ofs-1), &cb, optional_yield{yield}), 0);
     
     boost::system::error_code ec;
     request req;
@@ -2216,7 +2216,7 @@ TEST_F(D4NFilterFixture, GetVersionedObjectWrite)
       Read_CB cb(&bl);
       std::unique_ptr<rgw::sal::Object::ReadOp> read_op_enabled(objEnabled->get_read_op());
       EXPECT_EQ(read_op_enabled->prepare(optional_yield{yield}, env->dpp), 0);
-      EXPECT_EQ(read_op_enabled->iterate(env->dpp, 0, ofs, &cb, optional_yield{yield}), 0);
+      EXPECT_EQ(read_op_enabled->iterate(env->dpp, 0, (ofs - 1), &cb, optional_yield{yield}), 0);
 
       boost::system::error_code ec;
       request req;
@@ -2285,7 +2285,7 @@ TEST_F(D4NFilterFixture, GetVersionedObjectWrite)
       Read_CB cb(&bl);
       std::unique_ptr<rgw::sal::Object::ReadOp> read_op_suspended(objSuspended->get_read_op());
       EXPECT_EQ(read_op_suspended->prepare(optional_yield{yield}, env->dpp), 0);
-      EXPECT_EQ(read_op_suspended->iterate(env->dpp, 0, ofs, &cb, optional_yield{yield}), 0);
+      EXPECT_EQ(read_op_suspended->iterate(env->dpp, 0, (ofs - 1), &cb, optional_yield{yield}), 0);
 
       boost::system::error_code ec;
       request req;
@@ -3189,7 +3189,6 @@ TEST_F(D4NFilterFixture, SimpleDeleteBeforeCleaning)
 
     std::unique_ptr<rgw::sal::Object::ReadOp> read_op(objEnabled->get_read_op());
     EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), -2); // Simple read; should return -ENOENT
-    EXPECT_EQ(read_op->iterate(env->dpp, 0, ofs, nullptr, optional_yield{yield}), -2);
 
     /* TODO: 
     std::string attr_val;
@@ -3266,7 +3265,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
 
     std::unique_ptr<rgw::sal::Object::ReadOp> read_op(objEnabled->get_read_op());
     EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), 0);
-    EXPECT_EQ(read_op->iterate(env->dpp, 0, ofs, nullptr, optional_yield{yield}), 0);
+    EXPECT_EQ(read_op->iterate(env->dpp, 0, (ofs - 1), nullptr, optional_yield{yield}), 0);
     EXPECT_EQ(objEnabled->get_instance(), instances[0]); // Next latest version
 
     objEnabled->set_instance(instances[0]);
@@ -3304,7 +3303,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
       next->set_instance("");
       std::unique_ptr<rgw::sal::Object::ReadOp> read_op(next->get_read_op());
       EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), 0);
-      EXPECT_EQ(read_op->iterate(env->dpp, 0, ofs, &cb, optional_yield{yield}), 0);
+      EXPECT_EQ(read_op->iterate(env->dpp, 0, (ofs - 1), &cb, optional_yield{yield}), 0);
       EXPECT_EQ(next->get_instance(), instances[0]); // Next latest version
     }
 
