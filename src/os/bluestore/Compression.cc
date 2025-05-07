@@ -872,7 +872,7 @@ void Scan::on_write_start(
   }
   if (left_it != extent_map->extent_map.begin()) {
     --left_it; // left_walk points to processes extent
-    if (limit_left < left_it->logical_offset) {
+    if (limit_left <= left_it->logical_offset) {
       dout(30) << "left maybe expand" << dendl;
       has_expanded |= maybe_expand_scan_range(left_it, left, right);
     }
