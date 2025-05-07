@@ -13,12 +13,10 @@ This feature allows users to assign execution context to Lua scripts. The suppor
  - ``background`` which will execute within a specified time interval
  - ``getdata`` which will execute on objects' data when objects are downloaded
  - ``putdata`` which will execute on objects' data when objects are uploaded
- - ``preRequest`` which will execute a script before each operation is performed
- - ``postRequest`` which will execute after each operation is performed
 
 A request (pre or post) or data (get or put) context script may be constrained to operations belonging to a specific tenant's users.
 The request context script can also access fields in the request and modify certain fields, as well as the `Global RGW Table`_.
-The data context script can access the content of the object as well as the request fields and the `Global RGW Table`_. 
+The data context script can access the content of the object as well as the request fields and the `Global RGW Table`_.
 All Lua language features can be used in all contexts.
 An execution of a script in a context can use up to 500K byte of memory. This include all libraries used by Lua, but not the memory which is managed by the RGW itself, and may be accessed from Lua.
 To change this default value, use the ``rgw_lua_max_memory_per_state`` configuration parameter. Note that the basic overhead of Lua with its standard libraries is ~32K bytes. To disable the limit, use zero.
@@ -30,13 +28,14 @@ By default, the execution of a Lua script is limited to a maximum runtime of 100
 
 By default, all Lua standard libraries are available in the script, however, in order to allow for additional Lua modules to be used in the script, we support adding packages to an allowlist:
 
+  - Make sure that the ``luarocks`` package manager is installed on the host.
   - Adding a Lua package to the allowlist, or removing a packge from it does not install or remove it. For the changes to take affect a "reload" command should be called.
   - In addition all packages in the allowlist are being re-installed using the luarocks package manager on radosgw restart.
   - To add a package that contains C source code that needs to be compiled, use the ``--allow-compilation`` flag. In this case a C compiler needs to be available on the host
   - Lua packages are installed in, and used from, a directory local to the radosgw. Meaning that Lua packages in the allowlist are separated from any Lua packages available on the host.
-    By default, this directory would be ``/tmp/luarocks/<entity name>``. Its prefix part (``/tmp/luarocks/``) could be set to a different location via the ``rgw_luarocks_location`` configuration parameter. 
+    By default, this directory would be ``/tmp/luarocks/<entity name>``. Its prefix part (``/tmp/luarocks/``) could be set to a different location via the ``rgw_luarocks_location`` configuration parameter.
     Note that this parameter should not be set to one of the default locations where luarocks install packages (e.g. ``$HOME/.luarocks``, ``/usr/lib64/lua``, ``/usr/share/lua``).
-	
+
 
 .. toctree::
    :maxdepth: 1
@@ -46,12 +45,12 @@ Script Management via CLI
 -------------------------
 
 To upload a script:
-   
+
 
 ::
 
-   # radosgw-admin script put --infile={lua-file-path} --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]   
-   
+   # radosgw-admin script put --infile={lua-file-path} --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
+
 * When uploading a script with the ``background`` context, a tenant name should not be specified.
 
 ::
@@ -62,14 +61,14 @@ To upload a script:
 To print the content of the script to standard output:
 
 ::
-   
+
    # radosgw-admin script get --context={preRequest|postRequest|background|getdata|putdata} [--tenant={tenant-name}]
 
 
 To remove the script:
 
 ::
-   
+
    # radosgw-admin script rm --context={preRequest|postRequest|background|getdata|putdata} [--tenant={tenant-name}]
 
 
@@ -371,7 +370,7 @@ Lua Code Samples
 - Print information on source and destination objects in case of copy:
 
 .. code-block:: lua
- 
+
   function print_object(object)
     RGWDebugLog("  Name: " .. object.Name)
     RGWDebugLog("  Instance: " .. object.Instance)
@@ -415,7 +414,7 @@ Lua Code Samples
       end
     else
       RGWDebugLog("no " .. acl_type .. " ACL in request: " .. Request.Id)
-    end 
+    end
   end
 
   print_acl("User")
@@ -425,7 +424,7 @@ Lua Code Samples
 - Use of operations log only in case of errors:
 
 .. code-block:: lua
-  
+
   if Request.Response.HTTPStatusCode ~= 200 then
     RGWDebugLog("request is bad, use ops log")
     rc = Request.Log()
@@ -458,7 +457,7 @@ In the ``postrequest`` context we look at the metadata:
   for k, v in pairs(Request.HTTP.Metadata) do
     RGWDebugLog("key=" .. k .. ", " .. "value=" .. v)
   end
- 
+
 - Use modules to create Unix socket based, JSON encoded, "access log":
 
 First we should add the following packages to the allowlist:
@@ -473,7 +472,7 @@ Then, run a server to listen on the Unix socket. For example, use "netcat":
 
 ::
 
-  # rm -f /tmp/socket       
+  # rm -f /tmp/socket
   # nc -vklU /tmp/socket
 
 And last, do a restart for the radosgw and upload the following script to the ``postrequest`` context:
@@ -550,26 +549,26 @@ in the ``putdata`` context, add the following script
 
 	function object_entropy()
 		local byte_hist = {}
-		local byte_hist_size = 256 
+		local byte_hist_size = 256
 		for i = 1,byte_hist_size do
-			byte_hist[i] = 0 
-		end 
-		local total = 0 
+			byte_hist[i] = 0
+		end
+		local total = 0
 
 		for i, c in pairs(Data)  do
-			local byte = c:byte() + 1 
-			byte_hist[byte] = byte_hist[byte] + 1 
-			total = total + 1 
-		end 
+			local byte = c:byte() + 1
+			byte_hist[byte] = byte_hist[byte] + 1
+			total = total + 1
+		end
 
-		entropy = 0 
+		entropy = 0
 
 		for _, count in ipairs(byte_hist) do
 			if count ~= 0 then
 				local p = 1.0 * count / total
 				entropy = entropy - (p * math.log(p)/math.log(byte_hist_size))
-			end 
-		end 
+			end
+		end
 
 		return entropy
 	end
