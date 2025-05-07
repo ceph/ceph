@@ -803,14 +803,21 @@ void KernelDevice::_discard_thread(uint64_t tid)
 
 // this is private and is expected that the caller checks that discard
 // threads are running via _discard_started()
-void KernelDevice::_queue_discard(interval_set<uint64_t> &to_release)
+bool KernelDevice::_queue_discard(interval_set<uint64_t> &to_release)
 {
   if (to_release.empty())
-    return;
+    return false;
+
+  auto max_pending = cct->_conf->bdev_async_discard_max_pending;
 
   std::lock_guard l(discard_lock);
+
+  if (max_pending > 0 && discard_queued.num_intervals() >= max_pending)
+    return false;
+
   discard_queued.insert(to_release);
   discard_cond.notify_one();
+  return true;
 }
 
 // return true only if discard was queued, so caller won't have to do
@@ -821,8 +828,7 @@ bool KernelDevice::try_discard(interval_set<uint64_t> &to_release, bool async)
     return false;
 
   if (async && _discard_started()) {
-    _queue_discard(to_release);
-    return true;
+    return _queue_discard(to_release);
   } else {
     for (auto p = to_release.begin(); p != to_release.end(); ++p) {
       _discard(p.get_start(), p.get_len());

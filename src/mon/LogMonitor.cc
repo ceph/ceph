@@ -711,11 +711,9 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
     goto done;
   }
 
-  return false;
-
- done:
-  mon.no_reply(op);
-  return true;
+  done:
+    mon.no_reply(op);
+    return (!num_new);
 }
 
 struct LogMonitor::C_Log : public C_MonOp {

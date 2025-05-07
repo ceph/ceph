@@ -1754,7 +1754,7 @@ options:
 - name: mon_warn_pg_not_deep_scrubbed_ratio
   type: float
   level: advanced
-  desc: Percentage of the deep scrub interval past the deep scrub interval to warn
+  desc: Percentage of the deep scrub interval past the deep scrub interval to warn - Set this configurable with the command "ceph config set mgr mon_warn_pg_not_deep_scrubbed_ratio <ratio_value>"
   default: 0.75
   see_also:
   - osd_deep_scrub_interval
@@ -4067,6 +4067,23 @@ options:
   - runtime
   see_also:
   - bdev_enable_discard
+  - bdev_async_discard_max_pending
+- name: bdev_async_discard_max_pending
+  desc: maximum number of pending discards
+  long_desc: The maximum number of pending async discards that can be queued and not claimed by an
+    async discard thread. Discards will not be issued once the queue is full and blocks will be
+    freed back to the allocator immediately instead. This is useful if you have a device with slow
+    discard performance that can't keep up to a consistently high write workload. 0 means
+    'unlimited'.
+  type: uint
+  level: advanced
+  default: 1000000
+  min: 0
+  with_legacy: true
+  flags:
+  - runtime
+  see_also:
+  - bdev_async_discard_threads
 - name: bdev_flock_retry_interval
   type: float
   level: advanced
@@ -4176,6 +4193,7 @@ options:
   - avl
   - btree
   - hybrid
+  - hybrid_btree2
   with_legacy: true
 - name: bluefs_log_replay_check_allocations
   type: bool
@@ -4957,6 +4975,7 @@ options:
   - btree
   - hybrid
   - zoned
+  - hybrid_btree2
   with_legacy: true
 - name: bluestore_freelist_blocks_per_key
   type: size
@@ -5482,6 +5501,11 @@ options:
   level: dev
   desc: Maximum RAM hybrid allocator should use before enabling bitmap supplement
   default: 64_M
+- name: bluestore_btree2_alloc_weight_factor
+  type: float
+  level: dev
+  desc: Large continuous extents weight factor
+  default: 2
 - name: bluestore_volume_selection_policy
   type: str
   level: dev

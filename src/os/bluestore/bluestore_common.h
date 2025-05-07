@@ -62,4 +62,14 @@ struct Int64ArrayMergeOperator : public KeyValueDB::MergeOperator {
   }
 };
 
+// write a label in the first block.  always use this size.  note that
+// bluefs makes a matching assumption about the location of its
+// superblock (always the second block of the device).
+#define BDEV_LABEL_BLOCK_SIZE  4096
+
+// reserved for standalone DB volume:
+// label (4k) + bluefs super (4k), which means we start at 8k.
+#define DB_SUPER_RESERVED  (BDEV_LABEL_BLOCK_SIZE + 4096)
+
+
 #endif

@@ -6,9 +6,10 @@ OSD Service
 List Devices
 ============
 
-``ceph-volume`` scans each host in the cluster from time to time in order
-to determine which devices are present and whether they are eligible to be
-used as OSDs.
+``ceph-volume`` scans each host in the cluster periodically in order
+to determine the devices that are present and responsive. It is also
+determined whether each is eligible to be used for new OSDs in a block,
+DB, or WAL role.
 
 To print a list of devices discovered by ``cephadm``, run this command:
 
@@ -31,10 +32,7 @@ Example::
   srv-03    /dev/sdc  hdd   15R0A0P7FRD6         300G  Unknown  N/A    N/A    No
   srv-03    /dev/sdd  hdd   15R0A0O7FRD6         300G  Unknown  N/A    N/A    No
 
-Using the ``--wide`` option provides all details relating to the device,
-including any reasons that the device might not be eligible for use as an OSD.
-
-In the above example you can see fields named "Health", "Ident", and "Fault".
+In the above examples you can see fields named ``Health``, ``Ident``, and ``Fault``.
 This information is provided by integration with `libstoragemgmt`_. By default,
 this integration is disabled (because `libstoragemgmt`_ may not be 100%
 compatible with your hardware).  To make ``cephadm`` include these fields,
@@ -44,9 +42,20 @@ enable cephadm's "enhanced device scan" option as follows;
 
   ceph config set mgr mgr/cephadm/device_enhanced_scan true
 
+Note that the columns reported by ``ceph orch device ls`` may vary from release to
+release.
+
+The ``--wide`` option shows device details,
+including any reasons that the device might not be eligible for use as an OSD.
+Example (Reef)::
+
+  HOST               PATH          TYPE  DEVICE ID                                      SIZE  AVAILABLE  REFRESHED  REJECT REASONS
+  davidsthubbins    /dev/sdc       hdd   SEAGATE_ST20000NM002D_ZVTBJNGC17010W339UW25    18.1T  No         22m ago    Has a FileSystem, Insufficient space (<10 extents) on vgs, LVM detected
+  nigeltufnel       /dev/sdd       hdd   SEAGATE_ST20000NM002D_ZVTBJNGC17010C3442787    18.1T  No         22m ago    Has a FileSystem, Insufficient space (<10 extents) on vgs, LVM detected
+
 .. warning::
-    Although the libstoragemgmt library performs standard SCSI inquiry calls,
-    there is no guarantee that your firmware fully implements these standards.
+    Although the ``libstoragemgmt`` library issues standard SCSI (SES) inquiry calls,
+    there is no guarantee that your hardware and firmware properly implement these standards.
     This can lead to erratic behaviour and even bus resets on some older
     hardware. It is therefore recommended that, before enabling this feature,
     you test your hardware's compatibility with libstoragemgmt first to avoid
@@ -144,7 +153,7 @@ conditions are met:
 * The device must not contain a Ceph BlueStore OSD.
 * The device must be larger than 5 GB.
 
-Ceph will not provision an OSD on a device that is not available.
+Ceph will not provision an OSD on a device that is not *available*.
 
 Creating New OSDs
 -----------------
@@ -264,26 +273,29 @@ Remove an OSD
 
 Removing an OSD from a cluster involves two steps:
 
-#. evacuating all placement groups (PGs) from the OSD
-#. removing the PG-free OSD from the cluster
+#. Evacuating all placement groups (PGs) from the OSD
+#. Removing the PG-free OSD from the cluster
 
 The following command performs these two steps:
 
 .. prompt:: bash #
 
-  ceph orch osd rm <osd_id(s)> [--replace] [--force]
+  ceph orch osd rm <osd_id(s)> [--replace] [--force] [--zap]
 
 Example:
 
 .. prompt:: bash #
 
   ceph orch osd rm 0
+  ceph orch osd rm 1138 --zap
 
 Expected output::
 
   Scheduled OSD(s) for removal
 
-OSDs that are not safe to destroy will be rejected.
+OSDs that are not safe to destroy will be rejected.  Adding the ``--zap`` flag
+directs the orchestrator to remove all LVM and partition information from the
+OSD's drives, leaving it a blank slate for redeployment or other reuse.
 
 .. note::
     After removing OSDs, if the drives the OSDs were deployed on once again
@@ -297,10 +309,11 @@ OSDs that are not safe to destroy will be rejected.
     specs see :ref:`drivegroups`. For more info on the declarative nature of
     cephadm in reference to deploying OSDs, see :ref:`cephadm-osd-declarative`
 
-Monitoring OSD State
---------------------
+Monitoring OSD State During OSD Removal
+---------------------------------------
 
-You can query the state of OSD operation with the following command:
+You can query the state of OSD operations during the process of removing OSDS
+by running the following command:
 
 .. prompt:: bash #
 
@@ -690,7 +703,11 @@ Additional Options
 There are multiple optional settings you can use to change the way OSDs are deployed.
 You can add these options to the base level of an OSD spec for it to take effect.
 
-This example would deploy all OSDs with encryption enabled.
+This example deploys encrypted OSDs on all unused drives.  Note that if Linux
+MD mirroring is used for the boot, ``/var/log``, or other volumes this spec *may*
+grab replacement or added drives before you can employ them for non-OSD purposes.
+The ``unmanaged`` attribute may be set to pause automatic deployment until you
+are ready.
 
 .. code-block:: yaml
 
@@ -819,18 +836,21 @@ This can be described with two layouts.
       data_devices:
         rotational: 1
       db_devices:
-        model: MC-55-44-XZ
-        limit: 2 # db_slots is actually to be favoured here, but it's not implemented yet
+        model: MC-55-44-XZ      # Select only this model for WAL+DB offload
+        limit: 2                # Select at most two for this purpose
+      db_slots: 5               # Chop the DB device into this many slices and
+                                #  use one for each of this many HDD OSDs
     ---
     service_type: osd
     service_id: osd_spec_ssd
     placement:
       host_pattern: '*'
-    spec:
+    spec:                       # This scenario is uncommon
       data_devices:
-        model: MC-55-44-XZ
-      db_devices:
-        vendor: VendorC
+        model: MC-55-44-XZ      # Select drives of this model for OSD data
+      db_devices:               # Select drives of this brand for WAL+DB. Since the
+        vendor: VendorC         #   data devices are SAS/SATA SSDs this would make sense for NVMe SSDs
+      db_slots: 2               # Back two slower SAS/SATA SSD data devices with each NVMe slice
 
 This would create the desired layout by using all HDDs as data_devices with two SSD assigned as dedicated db/wal devices.
 The remaining SSDs(10) will be data_devices that have the 'VendorC' NVMEs assigned as dedicated db/wal devices.
@@ -1123,6 +1143,13 @@ This procedure assumes the existence of two hosts: ``ceph01`` and ``ceph04``.
 *This procedure was developed by Eugen Block in Feburary of 2025, and a blog
 post pertinent to its development can be seen here:*
 `Eugen Block's "Cephadm: Activate existing OSDs" blog post <https://heiterbiswolkig.blogs.nde.ag/2025/02/06/cephadm-activate-existing-osds/>`_.
+
+.. note::
+    It is usually not safe to run ``ceph orch restart osd.myosdservice`` on a
+    running cluster, as attention is not paid to CRUSH failure domains, and
+    parallel OSD restarts may lead to temporary data unavailability or in rare
+    cases even data loss.
+
 
 Further Reading
 ===============

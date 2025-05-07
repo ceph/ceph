@@ -436,6 +436,7 @@ void BlueFS::_shutdown_logger()
 {
   cct->get_perfcounters_collection()->remove(logger);
   delete logger;
+  logger = nullptr;
 }
 
 void BlueFS::_update_logger_stats()
@@ -455,11 +456,26 @@ void BlueFS::_update_logger_stats()
 }
 
 int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
-                             uint64_t reserved,
                              bluefs_shared_alloc_context_t* _shared_alloc)
 {
+  uint64_t reserved;
+  switch(id) {
+    case BDEV_WAL:
+    case BDEV_NEWWAL:
+      reserved = BDEV_LABEL_BLOCK_SIZE;
+      break;
+    case BDEV_DB:
+    case BDEV_NEWDB:
+      reserved = DB_SUPER_RESERVED;
+      break;
+    case BDEV_SLOW:
+      reserved = 0;
+      break;
+    default:
+      ceph_assert(false);
+  }
   dout(10) << __func__ << " bdev " << id << " path " << path << " "
-           << reserved << dendl;
+           << " reserved " << reserved << dendl;
   ceph_assert(id < bdev.size());
   ceph_assert(bdev[id] == NULL);
   BlockDevice *b = BlockDevice::create(cct, path, NULL, NULL,
@@ -574,16 +590,17 @@ void BlueFS::dump_perf_counters(Formatter *f)
 void BlueFS::dump_block_extents(ostream& out)
 {
   for (unsigned i = 0; i < MAX_BDEV; ++i) {
-    if (!bdev[i]) {
+    if (!bdev[i] || !alloc[i]) {
       continue;
     }
-    auto total = get_total(i);
+    auto total = get_total(i) + block_reserved[i];
     auto free = get_free(i);
 
     out << i << " : device size 0x" << std::hex << total
+        << "(" << byte_u_t(total) << ")"
         << " : using 0x" << total - free
-	<< std::dec << "(" << byte_u_t(total - free) << ")";
-    out << "\n";
+        << "(" << byte_u_t(total - free) << ")"
+        << std::dec << std::endl;
   }
 }
 
@@ -727,6 +744,7 @@ void BlueFS::_init_alloc()
               << ", allocator name " << name
               << ", allocator type " << cct->_conf->bluefs_allocator
               << ", capacity 0x" << bdev[id]->get_size()
+              << ", reserved 0x" << block_reserved[id]
               << ", block size 0x" << alloc_size[id]
               << std::dec << dendl;
       alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
@@ -3906,8 +3924,9 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   }
   if (alloc_len < 0 || alloc_len < need) {
     if (alloc[id]) {
-      if (alloc_len > 0) {
+      if (extents.size()) {
         alloc[id]->release(extents);
+	extents.clear();
       }
       if (!was_cooldown && shared) {
         auto delay_s = cct->_conf->bluefs_failed_shared_alloc_cooldown;
