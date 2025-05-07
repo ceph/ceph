@@ -1093,8 +1093,8 @@ void InstanceWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
     return;
   }
 
-  apply_visitor(HandlePayloadVisitor(this, stringify(notifier_id), ctx),
-                notify_message.payload);
+  std::visit(HandlePayloadVisitor(this, stringify(notifier_id), ctx),
+	     notify_message.payload);
 }
 
 template <typename I>

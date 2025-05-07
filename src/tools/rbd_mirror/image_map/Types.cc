@@ -16,7 +16,7 @@ const std::string UNMAPPED_INSTANCE_ID("");
 namespace {
 
 template <typename E>
-class GetTypeVisitor : public boost::static_visitor<E> {
+class GetTypeVisitor {
 public:
   template <typename T>
   inline E operator()(const T&) const {
@@ -24,7 +24,7 @@ public:
   }
 };
 
-class EncodeVisitor : public boost::static_visitor<void> {
+class EncodeVisitor {
 public:
   explicit EncodeVisitor(bufferlist &bl) : m_bl(bl) {
   }
@@ -39,7 +39,7 @@ private:
   bufferlist &m_bl;
 };
 
-class DecodeVisitor : public boost::static_visitor<void> {
+class DecodeVisitor {
 public:
   DecodeVisitor(__u8 version, bufferlist::const_iterator &iter)
     : m_version(version), m_iter(iter) {
@@ -54,7 +54,7 @@ private:
   bufferlist::const_iterator &m_iter;
 };
 
-class DumpVisitor : public boost::static_visitor<void> {
+class DumpVisitor {
 public:
   explicit DumpVisitor(Formatter *formatter, const std::string &key)
     : m_formatter(formatter), m_key(key) {}
@@ -73,12 +73,12 @@ private:
 } // anonymous namespace
 
 PolicyMetaType PolicyData::get_policy_meta_type() const {
-  return boost::apply_visitor(GetTypeVisitor<PolicyMetaType>(), policy_meta);
+  return std::visit(GetTypeVisitor<PolicyMetaType>(), policy_meta);
 }
 
 void PolicyData::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  boost::apply_visitor(EncodeVisitor(bl), policy_meta);
+  std::visit(EncodeVisitor(bl), policy_meta);
   ENCODE_FINISH(bl);
 }
 
@@ -97,12 +97,12 @@ void PolicyData::decode(bufferlist::const_iterator& it) {
     break;
   }
 
-  boost::apply_visitor(DecodeVisitor(struct_v, it), policy_meta);
+  std::visit(DecodeVisitor(struct_v, it), policy_meta);
   DECODE_FINISH(it);
 }
 
 void PolicyData::dump(Formatter *f) const {
-  boost::apply_visitor(DumpVisitor(f, "policy_meta_type"), policy_meta);
+  std::visit(DumpVisitor(f, "policy_meta_type"), policy_meta);
 }
 
 void PolicyData::generate_test_instances(std::list<PolicyData *> &o) {

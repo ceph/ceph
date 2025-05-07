@@ -11,7 +11,7 @@
 #include "common/zipkin_trace.h"
 #include "librbd/Types.h"
 #include "librbd/io/Types.h"
-#include <boost/variant/variant.hpp>
+#include <variant>
 
 namespace librbd {
 namespace io {
@@ -144,13 +144,13 @@ public:
     }
   };
 
-  typedef boost::variant<ReadRequest,
-                         DiscardRequest,
-                         WriteRequest,
-                         WriteSameRequest,
-                         CompareAndWriteRequest,
-                         FlushRequest,
-                         ListSnapsRequest> Request;
+  typedef std::variant<ReadRequest,
+		       DiscardRequest,
+		       WriteRequest,
+		       WriteSameRequest,
+		       CompareAndWriteRequest,
+		       FlushRequest,
+		       ListSnapsRequest> Request;
 
   C_Dispatcher dispatcher_ctx;
 

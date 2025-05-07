@@ -5,6 +5,7 @@
 #define _INCLUDED_BOUNDED_BUFFER_HPP
 
 #include <boost/bind/bind.hpp>
+#include <boost/call_traits.hpp>
 #include <boost/circular_buffer.hpp>
 #include <boost/thread/condition.hpp>
 #include <boost/thread/mutex.hpp>

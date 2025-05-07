@@ -7,7 +7,6 @@
 #include "include/stringify.h"
 #include "common/Formatter.h"
 #include <iostream>
-#include <boost/variant.hpp>
 
 namespace rbd_replay {
 namespace action {
@@ -35,7 +34,7 @@ void decode_big_endian_string(std::string &str, bufferlist::const_iterator &it) 
 #endif
 }
 
-class EncodeVisitor : public boost::static_visitor<void> {
+class EncodeVisitor {
 public:
   explicit EncodeVisitor(bufferlist &bl) : m_bl(bl) {
   }
@@ -50,7 +49,7 @@ private:
   bufferlist &m_bl;
 };
 
-class DecodeVisitor : public boost::static_visitor<void> {
+class DecodeVisitor {
 public:
   DecodeVisitor(__u8 version, bufferlist::const_iterator &iter)
     : m_version(version), m_iter(iter) {
@@ -65,7 +64,7 @@ private:
   bufferlist::const_iterator &m_iter;
 };
 
-class DumpVisitor : public boost::static_visitor<void> {
+class DumpVisitor {
 public:
   explicit DumpVisitor(Formatter *formatter) : m_formatter(formatter) {}
 
@@ -270,7 +269,7 @@ void UnknownAction::dump(Formatter *f) const {
 
 void ActionEntry::encode(bufferlist &bl) const {
   ENCODE_START(1, 1, bl);
-  boost::apply_visitor(EncodeVisitor(bl), action);
+  std::visit(EncodeVisitor(bl), action);
   ENCODE_FINISH(bl);
 }
 
@@ -329,11 +328,11 @@ void ActionEntry::decode_versioned(__u8 version, bufferlist::const_iterator &it)
     break;
   }
 
-  boost::apply_visitor(DecodeVisitor(version, it), action);
+  std::visit(DecodeVisitor(version, it), action);
 }
 
 void ActionEntry::dump(Formatter *f) const {
-  boost::apply_visitor(DumpVisitor(f), action);
+  std::visit(DumpVisitor(f), action);
 }
 
 void ActionEntry::generate_test_instances(std::list<ActionEntry *> &o) {
