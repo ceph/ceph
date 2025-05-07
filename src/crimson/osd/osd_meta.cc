@@ -136,13 +136,13 @@ void OSDMeta::store_final_pool_info(
 ghobject_t OSDMeta::osdmap_oid(epoch_t epoch)
 {
   string name = fmt::format("osdmap.{}", epoch);
-  return ghobject_t(hobject_t(sobject_t(object_t(name), 0)));
+  return ghobject_t(hobject_t(sobject_t(object_t(name), CEPH_NOSNAP)));
 }
 
 ghobject_t OSDMeta::inc_osdmap_oid(epoch_t epoch)
 {
   string name = fmt::format("inc_osdmap.{}", epoch);
-  return ghobject_t(hobject_t(sobject_t(object_t(name), 0)));
+  return ghobject_t(hobject_t(sobject_t(object_t(name), CEPH_NOSNAP)));
 }
 
 ghobject_t OSDMeta::final_pool_info_oid(int64_t pool)
@@ -153,5 +153,5 @@ ghobject_t OSDMeta::final_pool_info_oid(int64_t pool)
 
 ghobject_t OSDMeta::superblock_oid()
 {
-  return ghobject_t(hobject_t(sobject_t(object_t("osd_superblock"), 0)));
+  return ghobject_t(hobject_t(sobject_t(object_t("osd_superblock"), CEPH_NOSNAP)));
 }
