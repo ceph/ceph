@@ -4,7 +4,7 @@
 
 namespace ceph {
 
-class LinuxKeyringTest : public  ::testing::Test {
+class LinuxKeyringTest : public ::testing::Test {
  protected:
   void SetUp() override {
     if (!LinuxKeyringSecret::supported()) {
@@ -16,8 +16,8 @@ class LinuxKeyringTest : public  ::testing::Test {
 TEST(LinuxKeyringTest, Basics) {
   std::string secret("secret");
   auto maybe_keyring_secret = LinuxKeyringSecret::add("testkey", secret);
-  
-  ASSERT_TRUE(maybe_keyring_secret.has_value());
+
+  ASSERT_TRUE(maybe_keyring_secret.has_value()) << maybe_keyring_secret.error();
   auto keyring_secret = std::move(maybe_keyring_secret.value());
 
   std::string out;
