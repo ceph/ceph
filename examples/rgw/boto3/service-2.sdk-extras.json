@@ -21,6 +21,7 @@
                 "responseCode":201
             },
             "input":{"shape":"PostBucketLoggingRequest"},
+            "output": {"shape": "PostBucketLoggingOutput"},
             "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/bucketops/#post-bucket-logging",
             "documentation":"<p>Flushes the logging objects of the buckets.</p>"
         },
@@ -391,6 +392,18 @@
                     "locationName":"read-stats"
                 }
             }
+        },
+        "PostBucketLoggingOutput": {
+            "type":"structure",
+            "members":{
+              "FlushedLoggingObject": {
+                "shape":"FlushedLoggingObject",
+                "documentation":"<p>Name of the pending logging object that was flushed.</p>"
+              }
+            }
+        },
+        "FlushedLoggingObject":{
+            "type":"string"
         },
         "HeadBucketOutput":{
             "type":"structure",
