@@ -12,7 +12,7 @@ namespace mirroring_watcher {
 
 namespace {
 
-class DumpPayloadVisitor : public boost::static_visitor<void> {
+class DumpPayloadVisitor {
 public:
   explicit DumpPayloadVisitor(Formatter *formatter) : m_formatter(formatter) {}
 
@@ -80,7 +80,7 @@ void UnknownPayload::dump(Formatter *f) const {
 
 void NotifyMessage::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  boost::apply_visitor(watcher::util::EncodePayloadVisitor(bl), payload);
+  std::visit(watcher::util::EncodePayloadVisitor(bl), payload);
   ENCODE_FINISH(bl);
 }
 
@@ -103,12 +103,12 @@ void NotifyMessage::decode(bufferlist::const_iterator& iter) {
     break;
   }
 
-  apply_visitor(watcher::util::DecodePayloadVisitor(struct_v, iter), payload);
+  std::visit(watcher::util::DecodePayloadVisitor(struct_v, iter), payload);
   DECODE_FINISH(iter);
 }
 
 void NotifyMessage::dump(Formatter *f) const {
-  apply_visitor(DumpPayloadVisitor(f), payload);
+  std::visit(DumpPayloadVisitor(f), payload);
 }
 
 void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
