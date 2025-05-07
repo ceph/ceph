@@ -241,7 +241,12 @@ ECTransaction::WritePlanObj::WritePlanObj(
        */
     }
 
-    if (!reads.empty()) {
+    /* If the read is not empty AND the object is not going tbe deleted as
+     * part of the op, then record that we need to do the reads.  Potentially
+     * some performance could be gained by not calculating reads at all if
+     * delete_first is set, but this is not a performance-critical code path.
+     */
+    if (!reads.empty() && !op.delete_first) {
       to_read = std::move(reads);
     }
   }
@@ -333,14 +338,13 @@ void ECTransaction::Generate::delete_first() {
   /* We also want to remove the std::nullopt entries since
    * the keys already won't exist */
   for (auto j = op.attr_updates.begin();
-       j != op.attr_updates.end();
-    ) {
+       j != op.attr_updates.end();) {
     if (j->second) {
       ++j;
     } else {
       j = op.attr_updates.erase(j);
     }
-    }
+  }
   /* Fill in all current entries for xattr rollback */
   if (obc) {
     xattr_rollback.insert(
