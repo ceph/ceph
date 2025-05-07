@@ -6,7 +6,6 @@
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageDispatcherInterface.h"
-#include <boost/variant.hpp>
 
 namespace librbd {
 namespace io {
