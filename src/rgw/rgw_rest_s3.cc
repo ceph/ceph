@@ -5914,7 +5914,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op, optional_yiel
   if (should_redirect) {
     const string& hostname = s->info.env->get("HTTP_HOST", "");
     const string& protocol =
-      (s->info.env->get("SERVER_PORT_SECURE") ? "https" : "http");
+      (rgw_transport_is_secure(s->cct, *s->info.env) ? "https" : "http");
     int redirect_code = 0;
     rrule.apply_rule(protocol, hostname, key_name, &s->redirect,
 		    &redirect_code);
@@ -6045,7 +6045,7 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
   if (should_redirect) {
     const string& hostname = s->info.env->get("HTTP_HOST", "");
     const string& protocol =
-      (s->info.env->get("SERVER_PORT_SECURE") ? "https" : "http");
+      (rgw_transport_is_secure(s->cct, *s->info.env) ? "https" : "http");
     int redirect_code = 0;
     rrule.apply_rule(protocol, hostname, original_object_name,
                      &s->redirect, &redirect_code);
