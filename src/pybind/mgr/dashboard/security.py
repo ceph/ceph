@@ -13,6 +13,7 @@ class Scope(object):
     CONFIG_OPT = "config-opt"
     POOL = "pool"
     OSD = "osd"
+    NVMEOF = "nvmeof"
     MONITOR = "monitor"
     RBD_IMAGE = "rbd-image"
     ISCSI = "iscsi"

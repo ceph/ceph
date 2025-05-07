@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, Generator, List, NamedTuple, Optional, T
 
 from ..exceptions import DashboardException
 from .nvmeof_conf import NvmeofGatewaysConfig
+from ..rest_client import RequestException
 
 logger = logging.getLogger("nvmeof_client")
 
@@ -127,6 +128,20 @@ else:
             return wrapper
 
         return decorator
+    
+    def get_gateway_groups(self) -> List[Dict]:
+        # GET /api/nvmeof/gateway/group
+        response = self.get("/api/nvmeof/gateway/group")
+        data = response.json()
+        if isinstance(data, dict):  
+            return data.get("groups", [])
+        else: 
+            return []
+
+    def check_group_health(self, group_name: str) -> bool:
+        # GET /api/nvmeof/gateway/group/{group_name}/health
+        response = self.get(f"/api/nvmeof/gateway/group/{group_name}/health")
+        return response.json().get("healthy", False)
 
     import errno
 
