@@ -52,23 +52,41 @@ using P = BlueStore::printer;
 
 void Estimator::cleanup()
 {
+  wctx = nullptr;
   new_size = 0;
   uncompressed_size = 0;
   compressed_occupied = 0;
   compressed_size = 0;
+  compressed_area = 0;
   total_uncompressed_size = 0;
   total_compressed_occupied = 0;
   total_compressed_size = 0;
   actual_compressed = 0;
   actual_compressed_plus_pad = 0;
   extra_recompress.clear();
+  single_compressed_blob = true;
+  last_blob = nullptr;
 }
+
+void Estimator::set_wctx(const WriteContext* wctx)
+{
+  this->wctx = wctx;
+}
+
 inline void Estimator::batch(const BlueStore::Extent* e, uint32_t gain)
 {
   const Blob *h_Blob = &(*e->blob);
   const bluestore_blob_t &h_bblob = h_Blob->get_blob();
   if (h_bblob.is_compressed()) {
+    if (last_blob) {
+      if (h_Blob != last_blob) {
+        single_compressed_blob = false;
+      }
+    } else {
+      last_blob = h_Blob;
+    }
     compressed_size += e->length * h_bblob.get_compressed_payload_length() / h_bblob.get_logical_length();
+    compressed_area += e->length;
     compressed_occupied += gain;
   } else {
     uncompressed_size += e->length;
@@ -82,6 +100,16 @@ inline bool Estimator::is_worth()
 {
   uint32_t cost = uncompressed_size * expected_compression_factor +
                   compressed_size * expected_recompression_error;
+  if (uncompressed_size == 0 && single_compressed_blob) {
+    // The special case if all extents are from compressed blobs.
+    // We want to avoid the case of recompressing into exactly the same.
+    // The cost should increase proportionally to blob size;
+    // the rationale is that recompressing small blob is likely to provide gain,
+    // but recompressing whole large blob isn't.
+    uint64_t padding_size = p2nphase<uint64_t>(compressed_size, bluestore->min_alloc_size);
+    uint32_t split_tax = padding_size * compressed_area / wctx->target_blob_size;
+    cost += split_tax;
+  }
   uint32_t gain = uncompressed_size + compressed_occupied;
   double need_ratio = bluestore->cct->_conf->bluestore_recompression_min_gain;
   bool take = gain > cost * need_ratio;
@@ -153,15 +181,13 @@ void Estimator::get_regions(std::vector<region_t>& regions)
 }
 
 int32_t Estimator::split_and_compress(
-  CompressorRef compr,
-  uint32_t max_blob_size,
   ceph::buffer::list& data_bl,
   Writer::blob_vec& bd)
 {
   uint32_t au_size = bluestore->min_alloc_size;
   uint32_t size = data_bl.length();
   ceph_assert(size > 0);
-  uint32_t blobs = (size + max_blob_size - 1) / max_blob_size;
+  uint32_t blobs = (size + wctx->target_blob_size - 1) / wctx->target_blob_size;
   uint32_t blob_size = p2roundup(size / blobs, au_size);
   std::vector<uint32_t> blob_sizes(blobs);
   for (auto& i: blob_sizes) {
@@ -179,10 +205,10 @@ int32_t Estimator::split_and_compress(
     // FIXME: memory alignment here is bad
     bufferlist t;
     std::optional<int32_t> compressor_message;
-    int r = compr->compress(bd.back().object_data, t, compressor_message);
+    int r = wctx->compressor->compress(bd.back().object_data, t, compressor_message);
     ceph_assert(r == 0);
     bluestore_compression_header_t chdr;
-    chdr.type = compr->get_type();
+    chdr.type = wctx->compressor->get_type();
     chdr.length = t.length();
     chdr.compressor_message = compressor_message;
     encode(chdr, bd.back().disk_data);
