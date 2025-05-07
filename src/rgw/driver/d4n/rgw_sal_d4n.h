@@ -145,14 +145,16 @@ class D4NFilterObject : public FilterObject {
 	    D4NFilterDriver* filter;
 	    D4NFilterObject* source;
 	    RGWGetDataCB* client_cb;
-	    int64_t ofs = 0, len = 0;
+	    int64_t start_ofs = 0, len = 0, end_ofs = 0;
       int64_t adjusted_start_ofs{0};
+      int64_t adjusted_end_ofs{0};
 	    bufferlist bl_rem;
 	    bool last_part{false};
 	    bool write_to_cache{true};
 	    const DoutPrefixProvider* dpp;
 	    optional_yield* y;
-      int part_count{0};
+      int part_num{0}, num_parts{0};
+      int len_sent = 0;
 
 	  public:
 	    D4NFilterGetCB(D4NFilterDriver* _filter, D4NFilterObject* _source) : filter(_filter),
@@ -164,9 +166,11 @@ class D4NFilterObject : public FilterObject {
               this->dpp = dpp;
               this->y = y;
             }
-	    void set_ofs(uint64_t ofs) { this->ofs = ofs; }
+	    void set_start_ofs(uint64_t ofs) { this->start_ofs = ofs; }
+      void set_len(uint64_t len) { this->len = len; }
       void set_adjusted_start_ofs(uint64_t adjusted_start_ofs) { this->adjusted_start_ofs = adjusted_start_ofs; }
-      void set_part_num(uint64_t part_num) { this->part_count = part_num; }
+      void set_part_num(uint64_t part_num) { this->part_num = part_num; }
+      void set_num_parts(uint64_t num_parts) { this->num_parts = num_parts; }
 	    int flush_last_part();
 	    void bypass_cache_write() { this->write_to_cache = false; }
 	};
