@@ -132,13 +132,21 @@ void DemoteRequest<I>::demote() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
+  /* Error Injection
+  if (m_image_ctx.name == "test_image2") {
+    lderr(cct) << "Skipping demotion for test_image2" << dendl;
+     handle_demote(-EINVAL);
+     return;
+  } */
+
   auto ctx = create_context_callback<
     DemoteRequest<I>, &DemoteRequest<I>::handle_demote>(this);
   if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
     Journal<I>::demote(&m_image_ctx, ctx);
   } else if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
     auto req = mirror::snapshot::DemoteRequest<I>::create(
-      &m_image_ctx, m_mirror_image.global_image_id, ctx);
+      &m_image_ctx, m_mirror_image.global_image_id, m_group_snap_id, m_snap_id,
+      ctx);
     req->send();
   } else {
     lderr(cct) << "unknown image mirror mode: " << m_mirror_image.mode << dendl;
