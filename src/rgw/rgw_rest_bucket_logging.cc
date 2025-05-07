@@ -341,6 +341,7 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
   rgw::bucketlogging::configuration configuration;
   std::unique_ptr<rgw::sal::Bucket> target_bucket;
   std::unique_ptr<rgw::sal::Bucket> source_bucket;
+  std::string old_obj;
 
   int init_processing(optional_yield y) override {
     if (const auto ret = verify_bucket_logging_params(this, s); ret < 0) {
@@ -384,7 +385,7 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
       ldpp_dout(this, 1) << "ERROR: failed to get pending logging object name from target bucket '" << target_bucket_id << "'" << dendl;
       return;
     }
-    const auto old_obj = obj_name;
+    old_obj = obj_name;
     const auto region = driver->get_zone()->get_zonegroup().get_api_name();
     op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, region, source_bucket, null_yield, true, &objv_tracker);
     if (op_ret < 0) {
@@ -394,6 +395,16 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
     }
     ldpp_dout(this, 20) << "INFO: flushed pending logging object '" << old_obj
                 << "' to target bucket '" << target_bucket_id << "'" << dendl;
+  }
+
+  void send_response() override {
+    dump_errno(s);
+    end_header(s, this, to_mime_type(s->format));
+    dump_start(s);
+    s->formatter->open_object_section_in_ns("PostBucketLoggingOutput", XMLNS_AWS_S3);
+    s->formatter->dump_string("FlushedLoggingObject", old_obj);
+    s->formatter->close_section();
+    rgw_flush_formatter_and_reset(s, s->formatter);
   }
 };
 
