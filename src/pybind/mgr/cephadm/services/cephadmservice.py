@@ -373,9 +373,9 @@ class CephadmService(metaclass=ABCMeta):
         fqdns = fqdns or [self.mgr.get_fqdn(daemon_spec.host)]
         cert, key = self.mgr.cert_mgr.get_self_signed_cert_key_pair(svc_spec.service_name(), daemon_spec.host)
         if cert and key:
-            logger.info(f'redo: certs for {svc_spec.service_name()} already exists.. checking ips {ips}')
             combined_fqdns = sorted(set(s.lower() for s in fqdns + custom_sans))
             cert_ips, cert_fqdns = extract_ips_and_fqdns_from_cert(cert)
+            logger.info(f'redo: certs for {svc_spec.service_name()} already exists.. checking ips {ips}/{cert_ips} ({combined_fqdns}/{cert_fqdns})')
             if sorted(cert_ips) == sorted(ips) and sorted(cert_fqdns) == sorted(combined_fqdns):
                 logger.info(f'redo: certs for {self.cert_name} already exists.. and ips/sans are the same')
                 # Nothing has changed, use the stored certifiactes
