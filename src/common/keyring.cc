@@ -15,8 +15,6 @@
 
 #include "keyring.h"
 
-#include <keyutils.h>
-
 namespace ceph {
 
 #ifdef _WIN32
@@ -49,6 +47,8 @@ bool LinuxKeyringSecret::supported() noexcept {
 
 #else
 
+#include <keyutils.h>
+
 LinuxKeyringSecret::LinuxKeyringSecret(key_serial_t serial, size_t len) noexcept
     : _len(len), _serial(serial) {}
 
@@ -58,7 +58,7 @@ LinuxKeyringSecret::~LinuxKeyringSecret() noexcept {
 
 tl::expected<LinuxKeyringSecret, std::error_code> LinuxKeyringSecret::add(
     const std::string& key, const std::string& secret) noexcept {
-  const auto serial = ::add_key(
+  const auto serial = add_key(
       "user", key.c_str(), secret.c_str(), secret.size(),
       KEY_SPEC_SESSION_KEYRING);
   if (serial == -1) {
@@ -85,15 +85,17 @@ bool LinuxKeyringSecret::supported() noexcept {
 [[nodiscard]] std::error_code LinuxKeyringSecret::read(std::string& out) const {
   out.clear();
   out.resize(_len);
-  const auto ret = ::keyctl_read(_serial, out.data(), _len);
-  if (ret != _len) {
+  const auto ret = keyctl_read(_serial, out.data(), _len);
+  if (ret == -1) {
     return {errno, std::system_category()};
+  } else if (static_cast<size_t>(ret) != _len) {
+    return {-EINVAL, std::generic_category()};
   }
   return {};
 }
 
 [[nodiscard]] std::error_code LinuxKeyringSecret::remove() const {
-  const auto ret = ::keyctl_invalidate(_serial);
+  const auto ret = keyctl_invalidate(_serial);
   if (ret != 0) {
     return {errno, std::system_category()};
   }
