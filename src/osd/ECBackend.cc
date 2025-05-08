@@ -1246,6 +1246,9 @@ void ECBackend::handle_sub_read_reply(
       rop.complete.emplace(hoid, &sinfo);
     }
     auto &complete = rop.complete.at(hoid);
+    if (!req.shard_reads.contains(from.shard)) {
+      continue;
+    }
     const shard_read_t &read = req.shard_reads.at(from.shard);
     if (!complete.errors.contains(from)) {
       dout(20) << __func__ <<" read:" << read << dendl;
