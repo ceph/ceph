@@ -1191,9 +1191,9 @@ void ECBackend::handle_sub_write_reply(
 }
 
 void ECBackend::handle_sub_read_reply(
-  pg_shard_t from,
-  ECSubReadReply &op,
-  const ZTracer::Trace &trace) {
+    pg_shard_t from,
+    ECSubReadReply &op,
+    const ZTracer::Trace &trace) {
   trace.event("ec sub read reply");
   dout(10) << __func__ << ": reply " << op << dendl;
   map<ceph_tid_t, ReadOp>::iterator iter = read_pipeline.tid_to_read_map.
@@ -1258,7 +1258,7 @@ void ECBackend::handle_sub_read_reply(
   for (auto &&[hoid, attr]: op.attrs_read) {
     ceph_assert(!op.errors.count(hoid));
     // if read error better not have sent an attribute
-    if (!rop.to_read.count(hoid)) {
+    if (!rop.to_read.contains(hoid)) {
       // We canceled this read! @see filter_read_op
       dout(20) << __func__ << " to_read skipping" << dendl;
       continue;
