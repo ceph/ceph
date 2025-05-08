@@ -6,10 +6,12 @@
 #include <regex>
 #include <system_error>
 
-#include <boost/process.hpp>
+#include <boost/process/v1/io.hpp>
+#include <boost/process/v1/child.hpp>
+#include <boost/process/v1/pipe.hpp>
 #include <boost/tokenizer.hpp>
 
-namespace bp = boost::process;
+namespace bp = boost::process::v1;
 using namespace std;
 
 int main(int argc, char** argv)
