@@ -104,6 +104,14 @@ function TEST_availablity_score() {
       return 1
     fi
 
+    # unset config option enable_availability_tracking to disable feature 
+    ceph config set mon enable_availability_tracking false 
+    AVAILABILITY_STATUS=$(ceph osd pool availability-status | grep -w "foo")
+    if [ "$AVAILABILITY_STATUS" != "" ]; then
+      echo "Failed: feature not disabled successfully."
+      return 1
+    fi
+
     echo "TEST PASSED"
     return 0
 }
