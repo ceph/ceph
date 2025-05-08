@@ -623,7 +623,7 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
         m->pushes[pg_shard].push_back(PushOp());
         PushOp &pop = m->pushes[pg_shard].back();
         pop.soid = op.hoid;
-        pop.version = op.v;
+        pop.version = op.recovery_info.oi.get_version_for_shard(pg_shard.shard);
         op.returned_data->get_shard_first_buffer(pg_shard.shard, pop.data);
         dout(10) << __func__ << ": pop shard=" << pg_shard
                  << ", oid=" << pop.soid
@@ -636,7 +636,26 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
             op.returned_data->get_shard_first_offset(pg_shard.shard),
             pop.data.length());
         if (op.recovery_progress.first) {
-          pop.attrset = op.xattrs;
+          if (sinfo.is_nonprimary_shard(pg_shard.shard)) {
+            if (pop.version == op.recovery_info.oi.version) {
+              dout(10) << __func__ << ": copy OI attr only" << dendl;
+              pop.attrset[OI_ATTR] = op.xattrs[OI_ATTR];
+            } else {
+              // We are recovering a partial write - make sure we push the correct
+              // version in the OI or a scrub error will occur.
+              object_info_t oi(op.recovery_info.oi);
+              oi.shard_versions.clear();
+              oi.version = pop.version;
+              dout(10) << __func__ << ": partial write OI attr: oi=" << oi << dendl;
+              bufferlist bl;
+              oi.encode(bl, get_osdmap()->get_features(
+                CEPH_ENTITY_TYPE_OSD, nullptr));
+              pop.attrset[OI_ATTR] = bl;
+            }
+          } else {
+            dout(10) << __func__ << ": push all attrs (not nonprimary)" << dendl;
+            pop.attrset = op.xattrs;
+          }
         }
         pop.recovery_info = op.recovery_info;
         pop.before_progress = op.recovery_progress;
