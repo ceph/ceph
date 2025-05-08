@@ -891,9 +891,9 @@ void ECTransaction::Generate::written_and_present_shards() {
       // cache here (to account for any modifications made by previous in flight
       // transactions), make any required modifications to shard_versions and
       // then update the OBC cached copy and the encoded OI attr.
+      bool update = oi.shard_versions != obc->obs.oi.shard_versions;
       oi.shard_versions = obc->obs.oi.shard_versions;
 
-      bool update = false;
       if (entry->written_shards.empty()) {
         if (!oi.shard_versions.empty()) {
           oi.shard_versions.clear();
