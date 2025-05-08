@@ -138,11 +138,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         if flush:
             self.metadata_mgr.flush()
 
-    def remove_clone_source(self, flush=False):
-        self.metadata_mgr.remove_section("source")
-        if flush:
-            self.metadata_mgr.flush()
-
     def add_clone_failure(self, errno, error_msg):
         try:
             self.metadata_mgr.add_section(MetadataManager.CLONE_FAILURE_SECTION)
