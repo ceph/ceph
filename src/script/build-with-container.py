@@ -696,6 +696,11 @@ def bc_make_source_rpm(ctx):
         _run(cmd, check=True, ctx=ctx)
 
 
+def _glob_search(ctx, pattern):
+    overlay = ctx.overlay()
+    return glob.glob(pattern, root_dir=overlay.upper if overlay else None)
+
+
 @Builder.set(Steps.RPM)
 def bc_build_rpm(ctx):
     """Build RPMs from SRPM."""
@@ -716,7 +721,7 @@ def bc_build_rpm(ctx):
                 ctx.cli.ceph_version
             )
             srpm_glob = f"ceph-{srpm_version}.*.src.rpm"
-    paths = glob.glob(srpm_glob)
+    paths = _glob_search(ctx, srpm_glob)
     if len(paths) > 1:
         raise RuntimeError(
             "too many matching source rpms"
@@ -726,7 +731,7 @@ def bc_build_rpm(ctx):
     if not paths:
         # no matches. build a new srpm
         ctx.build.wants(Steps.SOURCE_RPM, ctx)
-        paths = glob.glob(srpm_glob)
+        paths = _glob_search(ctx, srpm_glob)
         assert paths
     srpm_path = pathlib.Path(ctx.cli.homedir) / paths[0]
     topdir = pathlib.Path(ctx.cli.homedir) / "rpmbuild"
