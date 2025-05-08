@@ -738,3 +738,39 @@ Print active connections and their TCP round trip time and retransmission counte
 
 	248     89      1       mgr.0   863     1677    0
 	3       86      2       mon.0   230     278     0
+
+Tracking Data Availability Score of a Cluster
+=============================================
+
+Ceph internally tracks the data availability of each pool in a cluster.
+To check the data availability score of each pool in a cluster, 
+the following command can be invoked: 
+
+
+.. prompt:: bash $
+
+   ceph osd pool availability-status
+
+If the cluster has 4 pools, this is what the ``availability-status`` 
+will report:  
+
+.. prompt:: bash $
+
+   POOL       	UPTIME  DOWNTIME  NUMFAILURES  MTBF  MTTR  SCORE 	AVAILABLE
+   rbd            	2m   	21s        	1	2m   21s  0.888889      	1
+   .mgr          	86s    	0s        	0	0s	0s     	1      	1
+   cephfs.a.meta 	77s    	0s        	0	0s	0s     	1      	1
+   cephfs.a.data 	76s    	0s        	0	0s	0s     	1      	1
+
+We consider a pool unavailable if there is potentially any data loss. 
+This means, if there are any PG in the pool not in 
+active state or if there are unfound objects, some data might be
+either unreachable or lost. In such cases, we mark the pool as 
+unavailable. Otherwise the pool is considered available. 
+For example: A pool will be marked available even if an OSD is down 
+as long as PG replication ensures there is no data loss. 
+
+We first calculate the Mean Time Between Failures (MTBF) and 
+Mean Time To Recover (MTTR) and arrive at the availability score 
+by finding ratio of MTBF to total time (ie MTTR + MTBF).  The score
+is updated every 5 seconds. 
