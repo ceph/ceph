@@ -1254,7 +1254,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
       if (!can_bl.contents_equal(auth_bl)) {
         object_info_t oi(can_bl);
         fmt::format_to(std::back_inserter(out),
-                       "{}object info inconsistent auth_io={} candidate_oi={}",
+                       "{}object info inconsistent auth_oi={} candidate_oi={}",
                        sep(error), auth_oi, oi);
         obj_result.set_object_info_inconsistency();
       }
