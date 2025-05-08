@@ -53,6 +53,14 @@ class TestNvmeofCLICommand:
         assert result.stderr == ''
         base_call_mock.assert_called_once()
 
+    def test_command_return_cmd_result_text_format(self, base_call_mock, sample_command):
+        result = NvmeofCLICommand.COMMANDS[sample_command].call(MagicMock(), {'format': 'text'})
+        assert isinstance(result, HandleCommandResult)
+        assert result.retval == 0
+        assert result.stdout == ''
+        assert result.stderr == ''
+        base_call_mock.assert_called_once()
+        
     def test_command_return_cmd_result_json_format(self, base_call_mock, sample_command):
         result = NvmeofCLICommand.COMMANDS[sample_command].call(MagicMock(), {'format': 'json'})
         assert isinstance(result, HandleCommandResult)

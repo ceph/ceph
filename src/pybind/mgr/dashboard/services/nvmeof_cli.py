@@ -61,7 +61,63 @@ class NvmeofCLICommand(CLICommand):
         hence triggering linters alerts.
         """
         return super().__call__(func)
+    
+    def _snake_case_to_title(self, s):
+        return s.replace('_', ' ').title()
 
+    def _create_table(self, field_names):
+        from prettytable import PrettyTable
+        table = PrettyTable(border=True)
+        titles = [self._snake_case_to_title(field) for field in field_names]
+        table.field_names = titles
+        table.align = 'l'
+        table.left_padding_width = 0
+        table.right_padding_width = 2
+        return table
+    
+    def _get_list_text_output(self, data):
+        columns = list(dict.fromkeys([key for obj in data for key in obj.keys()]))
+        table = self._create_table(columns)
+        for d in data:
+            row = []
+            for col in columns:
+                row.append(str(d.get(col)))
+            table.add_row(row)
+        return table.get_string()
+
+    def _get_object_text_output(self, data):
+        columns = [k for k in data.keys() if k not in ["status", "error_message"]]
+        table = self._create_table(columns)
+        row = []
+        for col in columns:
+            row.append(str(data.get(col)))
+        table.add_row(row)
+        return table.get_string()
+
+    def _is_list_of_complex_type(self, value):
+        if not isinstance(value, list):
+            return False
+
+        if not value:
+            return None
+
+        primitives = (int, float, str, bool, bytes)
+
+        return not isinstance(value[0], primitives)
+
+    def _select_list_field(self, data: Dict):
+        for key, value in data.items():
+            if self._is_list_of_complex_type(value):
+                return key
+
+    def _convert_to_text_output(self, output):
+        from collections.abc import Iterable
+        data_field = self._select_list_field(output)
+        if not data_field:
+            return self._get_object_text_output(output)
+        return self._get_list_text_output(output[data_field])
+        
+    
     def call(self,
              mgr: Any,
              cmd_dict: Dict[str, Any],
@@ -69,16 +125,14 @@ class NvmeofCLICommand(CLICommand):
         try:
             ret = super().call(mgr, cmd_dict, inbuf)
             out_format = cmd_dict.get('format')
-            if out_format == 'json' or not out_format:
-                if ret is None:
+            if ret is None:
                     out = ''
-                else:
-                    out = json.dumps(ret)
+            if out_format == 'text' or not out_format:
+                out = self._convert_to_text_output(ret)
+            elif out_format == 'json':
+                out = json.dumps(ret)
             elif out_format == 'yaml':
-                if ret is None:
-                    out = ''
-                else:
-                    out = yaml.dump(ret)
+                out = yaml.dump(ret)
             else:
                 return HandleCommandResult(-errno.EINVAL, '',
                                            f"format '{out_format}' is not implemented")
