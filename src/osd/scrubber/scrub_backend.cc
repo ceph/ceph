@@ -1057,7 +1057,8 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
                                                      auth_sel.shard_map[srd],
                                                      obj_result,
                                                      ss,
-                                                     ho.has_snapset());
+                                                     ho.has_snapset(),
+                                                     srd);
 
       dout(20) << fmt::format(
 		    "{}: {}{} <{}:{}> shards: {} {} {}", __func__,
@@ -1160,7 +1161,8 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
                                        shard_info_wrapper& shard_result,
                                        inconsistent_obj_wrapper& obj_result,
                                        stringstream& errstream,
-                                       bool has_snapset)
+                                       bool has_snapset,
+                                       const pg_shard_t &shard)
 {
   fmt::memory_buffer out;
   bool error{false};
@@ -1232,15 +1234,40 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
     ceph_assert(can_attr != candidate.attrs.end());
     const bufferlist& can_bl = can_attr->second;
 
-    auto auth_attr = auth.attrs.find(OI_ATTR);
-    ceph_assert(auth_attr != auth.attrs.end());
-    const bufferlist& auth_bl = auth_attr->second;
+    if (auth_oi.get_version_for_shard(shard.shard) == auth_oi.version) {
+      // The expected version of the shard and the authoritative shard are the
+      // same, so we can do a simple memcmp of the OI attr.
+      auto auth_attr = auth.attrs.find(OI_ATTR);
+      ceph_assert(auth_attr != auth.attrs.end());
+      const bufferlist& auth_bl = auth_attr->second;
 
-    if (!can_bl.contents_equal(auth_bl)) {
-      fmt::format_to(std::back_inserter(out),
-		     "{}object info inconsistent ",
-		     sep(error));
-      obj_result.set_object_info_inconsistency();
+      if (!can_bl.contents_equal(auth_bl)) {
+        object_info_t oi(can_bl);
+        fmt::format_to(std::back_inserter(out),
+                       "{}object info inconsistent auth_io={} candidate_oi={}",
+                       sep(error), auth_oi, oi);
+        obj_result.set_object_info_inconsistency();
+      }
+    } else try {
+      // This means that this shard is expected to have an old copy of the IO
+      // so the buffer comparison above will not work. The authoritative shard
+      // contains the correct version number, so we check that matches.  We
+      // also check the size, as that is the only other piece of data that the
+      // nonprimary OIs require.
+      object_info_t oi(can_bl);
+      if (oi.version != auth_oi.get_version_for_shard(shard.shard) ||
+            oi.size != auth_oi.size) {
+        fmt::format_to(std::back_inserter(out),
+                       "{}object info version incorrect auth_io={} candidate_oi={}",
+                       sep(error), auth_oi, oi);
+        obj_result.set_object_info_inconsistency();
+      }
+    } catch (ceph::buffer::error& e) {
+        // Can the above actually fail?  Out of paranoia, mark as inconsistent.
+        fmt::format_to(std::back_inserter(out),
+                "{}object info corrupt auth_oi={}",
+                sep(error), auth_oi);
+        obj_result.set_object_info_inconsistency();
     }
   }
 

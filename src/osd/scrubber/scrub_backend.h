@@ -435,7 +435,8 @@ class ScrubBackend {
                            shard_info_wrapper& shard_result,
                            inconsistent_obj_wrapper& obj_result,
                            std::stringstream& errorstream,
-                           bool has_snapset);
+                           bool has_snapset,
+                           const pg_shard_t &shard);
 
   void repair_object(const hobject_t& soid,
                      const auth_peers_t& ok_peers,
