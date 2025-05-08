@@ -6,11 +6,12 @@
   <cds-combo-box
       type="single"
       label="Selected Gateway Group"
-      i18n-placeholder
-      placeholder="Enter group"
+      i18n-label
+      [placeholder]="gwGroupPlaceholder"
       [items]="gwGroups"
       (selected)="onGroupSelection($event)"
-      (clear)="onGroupClear()">
+      (clear)="onGroupClear()"
+      [disabled]="gwGroupsEmpty">
     <cds-dropdown-list></cds-dropdown-list>
   </cds-combo-box>
 </div>
