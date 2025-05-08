@@ -1,12 +1,15 @@
 import errno
 import json
 import unittest
+from typing import Annotated, List, NamedTuple
 from unittest.mock import MagicMock
 
 import pytest
 from mgr_module import CLICommand, HandleCommandResult
 
-from ..services.nvmeof_cli import NvmeofCLICommand
+from ..model.nvmeof import CliFlags, CliHeader
+from ..services.nvmeof_cli import AnnotatedDataTextOutputFormatter, \
+    NvmeofCLICommand, convert_from_bytes
 from ..tests import CLICommandTestMixin
 
 
@@ -14,7 +17,11 @@ from ..tests import CLICommandTestMixin
 def fixture_sample_command():
     test_cmd = "test command"
 
-    @NvmeofCLICommand(test_cmd)
+    class Model(NamedTuple):
+        a: str
+        b: int
+
+    @NvmeofCLICommand(test_cmd, Model)
     def func(_): # noqa # pylint: disable=unused-variable
         return {'a': '1', 'b': 2}
     yield test_cmd
@@ -49,7 +56,27 @@ class TestNvmeofCLICommand:
         result = NvmeofCLICommand.COMMANDS[sample_command].call(MagicMock(), {})
         assert isinstance(result, HandleCommandResult)
         assert result.retval == 0
-        assert result.stdout == '{"a": "b"}'
+        assert result.stdout == (
+            "+-+\n"
+            "|A|\n"
+            "+-+\n"
+            "|b|\n"
+            "+-+"
+        )
+        assert result.stderr == ''
+        base_call_mock.assert_called_once()
+
+    def test_command_return_cmd_result_plain_format(self, base_call_mock, sample_command):
+        result = NvmeofCLICommand.COMMANDS[sample_command].call(MagicMock(), {'format': 'plain'})
+        assert isinstance(result, HandleCommandResult)
+        assert result.retval == 0
+        assert result.stdout == (
+            "+-+\n"
+            "|A|\n"
+            "+-+\n"
+            "|b|\n"
+            "+-+"
+        )
         assert result.stderr == ''
         base_call_mock.assert_called_once()
 
@@ -85,7 +112,13 @@ class TestNvmeofCLICommand:
         result = NvmeofCLICommand.COMMANDS[sample_command].call(MagicMock(), {})
         assert isinstance(result, HandleCommandResult)
         assert result.retval == 0
-        assert result.stdout == ''
+        assert result.stdout == (
+            "++\n"
+            "||\n"
+            "++\n"
+            "\n"
+            "++"
+        )
         assert result.stderr == ''
         base_call_return_none_mock.assert_called_once()
 
@@ -261,3 +294,125 @@ class TestNVMeoFConfCLI(unittest.TestCase, CLICommandTestMixin):
         self.assertEqual(
             config['gateways'], {}
         )
+
+
+class TestAnnotatedDataTextOutputFormatter():
+    def test_size_bytes_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            age: int
+            byte: Annotated[int, CliFlags.SIZE]
+
+        data = {'name': 'Alice', 'age': 30, "byte": 20971520}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == (
+            '+-----+---+----+\n'
+            '|Name |Age|Byte|\n'
+            '+-----+---+----+\n'
+            '|Alice|30 |20MB|\n'
+            '+-----+---+----+'
+        )
+
+    def test_drop_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            age: Annotated[int, CliFlags.DROP]
+
+        data = {'name': 'Alice', 'age': 30}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == (
+            '+-----+\n'
+            '|Name |\n'
+            '+-----+\n'
+            '|Alice|\n'
+            '+-----+'
+        )
+
+    def test_multiple_annotations(self):
+        class Sample(NamedTuple):
+            name: str
+            age: Annotated[int, CliFlags.SIZE, CliHeader('test')]
+
+        data = {'name': 'Alice', 'age': 1024*1024}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == (
+            '+-----+----+\n'
+            '|Name |Test|\n'
+            '+-----+----+\n'
+            '|Alice|1MB |\n'
+            '+-----+----+'
+        )
+
+    def test_override_header_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            age: Annotated[int, CliHeader('test')]
+
+        data = {'name': 'Alice', 'age': 30}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == (
+            '+-----+----+\n'
+            '|Name |Test|\n'
+            '+-----+----+\n'
+            '|Alice|30  |\n'
+            '+-----+----+'
+        )
+
+    def test_override_exclusive_list_field_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            age: int
+
+        class SampleList(NamedTuple):
+            status: int
+            error_message: str
+            samples: Annotated[List[Sample], CliFlags.EXCLUSIVE_LIST]
+
+        data = {"status": 0, "error_message": '',
+                "samples": [{'name': 'Alice', 'age': 30},
+                            {'name': 'Bob', 'age': 40}]}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, SampleList)
+        assert output == (
+            '+-----+---+\n'
+            '|Name |Age|\n'
+            '+-----+---+\n'
+            '|Alice|30 |\n'
+            '|Bob  |40 |\n'
+            '+-----+---+'
+        )
+
+    def test_exclusive_result_indicator_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            status: Annotated[int, CliFlags.EXCLUSIVE_RESULT]
+            error_message: str
+
+        data = {'name': 'Alice', 'status': 30, "error_message": 'bla'}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == 'Failure: bla'
+
+        data = {'name': 'Alice', 'status': 0}
+        output = formatter.format_output(data, Sample)
+
+        assert output == 'Success'
+
+
+class TestConverFromBytes:
+    def test_valid_inputs(self):
+        assert convert_from_bytes(209715200) == '200MB'
+        assert convert_from_bytes(219715200) == '209.5MB'
+        assert convert_from_bytes(1048576) == '1MB'
+        assert convert_from_bytes(123) == '123B'
+        assert convert_from_bytes(5368709120) == '5GB'
