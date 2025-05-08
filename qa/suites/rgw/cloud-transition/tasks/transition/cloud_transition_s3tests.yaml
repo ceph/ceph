@@ -53,7 +53,7 @@ tasks:
       lifecycle_tests: True
       cloudtier_tests: True
     #client.2:
-      #force-branch: ceph-master
+      #force-branch: ceph-tentacle
       #rgw_server: client.2
       #extra_attrs: ["cloud_transition"]
       #lc_debug_interval: 10
