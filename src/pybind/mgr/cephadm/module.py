@@ -2667,7 +2667,7 @@ Then run the following:
             raise OrchestratorError(
                 f'Unable to schedule redeploy for {daemon_name}: No standby MGRs')
 
-        if action == 'restart' and not force:
+        if action in ['restart', 'stop'] and not force:
             r = service_registry.get_service(daemon_type_to_service(
                 d.daemon_type)).ok_to_stop([d.daemon_id], force=False)
             if r.retval:
