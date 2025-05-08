@@ -282,7 +282,6 @@ def handle_clone_complete(fs_client, volspec, volname, index, groupname, subvoln
                                            volname, groupname, subvolname) \
                 as (subvol0, subvol1, subvol2):
                 subvol1.detach_snapshot(subvol2, index)
-                subvol0.remove_clone_source(flush=True)
     except (MetadataMgrException, VolumeException) as e:
         log.error("failed to detach clone from snapshot: {0}".format(e))
     return (None, True)
