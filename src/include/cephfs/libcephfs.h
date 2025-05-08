@@ -40,7 +40,7 @@ extern "C" {
 #endif
 
 #define LIBCEPHFS_VER_MAJOR 10
-#define LIBCEPHFS_VER_MINOR 0
+#define LIBCEPHFS_VER_MINOR 1
 #define LIBCEPHFS_VER_EXTRA 3
 
 #define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
