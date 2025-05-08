@@ -732,7 +732,10 @@ def bc_build_rpm(ctx):
         # no matches. build a new srpm
         ctx.build.wants(Steps.SOURCE_RPM, ctx)
         paths = _glob_search(ctx, srpm_glob)
-        assert paths
+        if not paths:
+            raise RuntimeError(
+                f"unable to find source rpm(s) matching {srpm_glob}"
+            )
     srpm_path = pathlib.Path(ctx.cli.homedir) / paths[0]
     topdir = pathlib.Path(ctx.cli.homedir) / "rpmbuild"
     if ctx.cli.build_dir:
