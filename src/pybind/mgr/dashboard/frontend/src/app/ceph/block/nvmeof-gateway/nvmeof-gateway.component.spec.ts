@@ -7,6 +7,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { ComboBoxModule, GridModule } from 'carbon-components-angular';
 import { NvmeofTabsComponent } from '../nvmeof-tabs/nvmeof-tabs.component';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
+import { CephServiceSpec } from '~/app/shared/models/service.interface';
 
 const mockServiceDaemons = [
   {
@@ -60,7 +61,7 @@ const mockGateways = [
   }
 ];
 
-const mockGwGroups = [
+const mockformattedGwGroups = [
   {
     content: 'default',
     serviceName: 'nvmeof.rbd.default'
@@ -96,6 +97,10 @@ class MockNvmeOfService {
   listGatewayGroups() {
     return of(mockServices);
   }
+
+  formatGwGroupsList(_data: CephServiceSpec[][]) {
+    return mockformattedGwGroups;
+  }
 }
 
 class MockCephServiceService {
@@ -130,7 +135,7 @@ describe('NvmeofGatewayComponent', () => {
 
   it('should load gateway groups correctly', () => {
     expect(component.gwGroups.length).toBe(2);
-    expect(component.gwGroups).toStrictEqual(mockGwGroups);
+    expect(component.gwGroups).toStrictEqual(mockformattedGwGroups);
   });
 
   it('should set service name of gateway groups correctly', () => {
