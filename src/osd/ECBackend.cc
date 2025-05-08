@@ -242,7 +242,7 @@ void ECBackend::RecoveryBackend::handle_recovery_push(
   }
 
   if (op.before_progress.first) {
-    ceph_assert(op.attrset.count(string("_")));
+    ceph_assert(op.attrset.contains(OI_ATTR));
     m->t.setattrs(
       coll,
       tobj,
@@ -1052,8 +1052,7 @@ void ECBackend::handle_sub_read(
 		  << dendl;
         } else {
           get_parent()->clog_error() << "Error " << r
-            << " reading object "
-            << hoid;
+            << " reading object " << hoid;
           dout(5) << __func__ << ": Error " << r
 		  << " reading " << hoid << dendl;
         }
@@ -1087,8 +1086,7 @@ void ECBackend::handle_sub_read(
         if (!hinfo) {
           r = -EIO;
           get_parent()->clog_error() << "Corruption detected: object "
-            << hoid
-            << " is missing hash_info";
+            << hoid << " is missing hash_info";
           dout(5) << __func__ << ": No hinfo for " << hoid << dendl;
           goto error;
         }
@@ -1104,8 +1102,8 @@ void ECBackend::handle_sub_read(
               << hex << h.digest() << " expected 0x" << hinfo->
               get_chunk_hash(shard) << dec;
             dout(5) << __func__ << ": Bad hash for " << hoid << " digest 0x"
-		    << hex << h.digest() << " expected 0x" << hinfo->
-get_chunk_hash(shard) << dec << dendl;
+		    << hex << h.digest() << " expected 0x"
+                    << hinfo->get_chunk_hash(shard) << dec << dendl;
             r = -EIO;
             goto error;
           }
