@@ -25,6 +25,7 @@
 #include "include/encoding.h"
 #include "common/dout.h"
 #include "common/random_string.h"
+#include "rgw_realm_watcher.h"
 
 #include "driver/rados/rgw_zone.h" // FIXME: subclass dependency
 
@@ -674,6 +675,14 @@ int SQLiteConfigStore::realm_notify_new_period(const DoutPrefixProvider* dpp,
                                                const RGWPeriod& period)
 {
   return -ENOTSUP;
+}
+
+auto SQLiteConfigStore::create_realm_watcher(const DoutPrefixProvider* dpp,
+                                             optional_yield y,
+                                             const RGWRealm& realm)
+  -> std::unique_ptr<RGWRealmWatcher>
+{
+  return nullptr;
 }
 
 int SQLiteConfigStore::list_realm_names(const DoutPrefixProvider* dpp,

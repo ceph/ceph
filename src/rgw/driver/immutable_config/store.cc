@@ -12,8 +12,8 @@
  *
  */
 
-#include "rgw_zone.h"
 #include "store.h"
+#include "rgw_realm_watcher.h"
 
 namespace rgw::sal {
 
@@ -92,6 +92,14 @@ int ImmutableConfigStore::realm_notify_new_period(const DoutPrefixProvider* dpp,
                                                   const RGWPeriod& period)
 {
   return -ENOTSUP;
+}
+
+auto ImmutableConfigStore::create_realm_watcher(const DoutPrefixProvider* dpp,
+                                                optional_yield y,
+                                                const RGWRealm& realm)
+  -> std::unique_ptr<RGWRealmWatcher>
+{
+  return nullptr;
 }
 
 int ImmutableConfigStore::list_realm_names(const DoutPrefixProvider* dpp,
