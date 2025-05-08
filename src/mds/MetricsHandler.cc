@@ -343,7 +343,7 @@ void MetricsHandler::handle_client_metrics(const cref_t<MClientMetrics> &m) {
   }
 
   for (auto &metric : m->updates) {
-    boost::apply_visitor(HandlePayloadVisitor(this, session), metric.payload);
+    std::visit(HandlePayloadVisitor(this, session), metric.payload);
   }
 }
 
