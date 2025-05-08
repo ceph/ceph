@@ -44,15 +44,13 @@ struct sched_conf_t {
   std::optional<double> max_shallow;
 
   /**
-   * the maximum interval between deep scrubs.
-   * For deep scrubs - there is no equivalent of scrub_max_interval. Per the
-   * documentation, once deep_scrub_interval has passed, we are already
-   * "overdue", at least as far as the "ignore allowed load" window is
-   * concerned. \todo based on users complaints (and the fact that the
-   * interaction between the configuration parameters is clear to no one),
-   * this will be revised shortly.
+   * the maximum interval between deep scrubs, after which the
+   * (info-only) "overdue" field in the scheduler dump is set.
+   * There is no specific configuration parameter to control the
+   * deep scrubs max. Instead - we set it to 4 times the average
+   * interval.
    */
-  double max_deep{0.0};
+  double max_deep{std::numeric_limits<double>::max()};
 
   /**
    * interval_randomize_ratio
@@ -226,7 +224,7 @@ class ScrubJob {
    * The new values are updated into the scrub-job.
    *
    * Specifically:
-   * - for high-priority scrubs: n.b. & deadline are set equal to the
+   * - for high-priority scrubs: the 'not_before' is set to the
    *   (untouched) proposed target time.
    * - for regular scrubs: the proposed time is adjusted (delayed) based
    *   on the configuration; the deadline is set further out (if configured)
