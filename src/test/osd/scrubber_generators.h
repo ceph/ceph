@@ -103,12 +103,19 @@ class MockLog : public LoggerSinkSet {
 // ///////////////////////////////////////////////////////////////////////// //
 // ///////////////////////////////////////////////////////////////////////// //
 
+struct erasure_code_profile_conf_t {
+  std::string erasure_code_profile_name{"erasure_code_profile"};
+  std::map<std::string, std::string> erasure_code_profile{};
+};
+
 struct pool_conf_t {
   int pg_num{3};
   int pgp_num{3};
   int size{3};
   int min_size{3};
   std::string name{"rep_pool"};
+  uint8_t type{pg_pool_t::TYPE_REPLICATED};
+  std::optional<erasure_code_profile_conf_t> erasure_code_profile;
 };
 
 using attr_t = std::map<std::string, std::string>;
@@ -231,8 +238,10 @@ using RealObjsConfRef = std::unique_ptr<RealObjsConf>;
 using RealObjsConfList = std::map<int, RealObjsConfRef>;
 
 RealObjsConfList make_real_objs_conf(int64_t pool_id,
-				     const RealObjsConf& blueprint,
-				     std::vector<int32_t> active_osds);
+                                     const RealObjsConf& blueprint,
+                                     std::vector<int32_t> active_osds,
+                                     std::set<pg_shard_t> active_shards,
+                                     bool erasure_coded_pool);
 
 /**
  * create the snap-ids set for all clones appearing in the head
