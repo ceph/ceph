@@ -4,6 +4,30 @@ Reef
 
 Reef is the 18th stable release of Ceph. It is named after the reef squid (Sepioteuthis).
 
+v18.2.7 Reef
+============
+This is the seventh backport (hotfix) release in the Reef series. We recommend that all users update to this release.
+
+Notable Changes
+---------------
+
+This release fixes a critical bluestore regression in versions 18.2.5 and 18.2.6 (https://github.com/ceph/ceph/pull/61653).
+Users running either of those releases are recommended to upgrade at the earliest convenience.
+
+This release also includes several other important BlueStore fixes:
+
+* https://github.com/ceph/ceph/pull/62840
+* https://github.com/ceph/ceph/pull/62054
+* https://github.com/ceph/ceph/pull/62152
+
+Changelog
+---------
+
+* [reef] os/bluestore: fix _extend_log seq advance (`pr#61653 <https://github.com/ceph/ceph/pull/61653>`_, Pere Diaz Bou)
+* blk/kerneldevice: notify_all only required when discard_drain wait for condition (`pr#62152 <https://github.com/ceph/ceph/pull/62152>`_, Yite Gu)
+* os/bluestore: Fix ExtentDecoderPartial::_consume_new_blob (`pr#62054 <https://github.com/ceph/ceph/pull/62054>`_, Adam Kupczyk)
+* os/bluestore: Fix race in BlueFS truncate / remove (`pr#62840 <https://github.com/ceph/ceph/pull/62840>`_, Adam Kupczyk)
+
 v18.2.6 Reef
 ============
 
