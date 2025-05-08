@@ -646,7 +646,7 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
               object_info_t oi(op.recovery_info.oi);
               oi.shard_versions.clear();
               oi.version = pop.version;
-              dout(10) << __func__ << ": partial write OI attr. oi=" << oi << dendl;
+              dout(10) << __func__ << ": partial write OI attr: oi=" << oi << dendl;
               bufferlist bl;
               oi.encode(bl, get_osdmap()->get_features(
                 CEPH_ENTITY_TYPE_OSD, nullptr));

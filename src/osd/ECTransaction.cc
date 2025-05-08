@@ -903,18 +903,18 @@ void ECTransaction::Generate::written_and_present_shards() {
         for (shard_id_t shard; shard < sinfo.get_k_plus_m(); ++shard) {
           if (sinfo.is_nonprimary_shard(shard)) {
             if (entry->is_written_shard(shard) || plan.orig_size != plan.
-              projected_size) {
-                // Written - erase per shard version
-                if (oi.shard_versions.erase(shard)) {
-                  update = true;
-                }
-              } else if (!oi.shard_versions.count(shard)) {
-                // Unwritten shard, previously up to date
-                oi.shard_versions[shard] = oi.prior_version;
+                projected_size) {
+              // Written - erase per shard version
+              if (oi.shard_versions.erase(shard)) {
                 update = true;
-              } else {
-                // Unwritten shard, already out of date
               }
+            } else if (!oi.shard_versions.count(shard)) {
+              // Unwritten shard, previously up to date
+              oi.shard_versions[shard] = oi.prior_version;
+              update = true;
+            } else {
+              // Unwritten shard, already out of date
+            }
           } else {
             // Primary shards are always written and use oi.version
           }

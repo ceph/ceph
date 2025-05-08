@@ -1268,7 +1268,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
       if (oi.version != auth_oi.get_version_for_shard(shard.shard) ||
             oi.size != auth_oi.size) {
         fmt::format_to(std::back_inserter(out),
-                       "{}object info version incorrect auth_io={} candidate_oi={}",
+                       "{}object info version incorrect auth_oi={} candidate_oi={}",
                        sep(error), auth_oi, oi);
         obj_result.set_object_info_inconsistency();
       }

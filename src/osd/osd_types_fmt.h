@@ -110,7 +110,7 @@ struct formatter<object_info_t> {
       fmt::format_to(ctx.out(), " {}", oi.manifest);
     }
     if (!oi.shard_versions.empty()) {
-      fmt::format_to(ctx.out(), "shard_versions={}", oi.shard_versions);
+      fmt::format_to(ctx.out(), " shard_versions={}", oi.shard_versions);
     }
     return fmt::format_to(ctx.out(), ")");
   }

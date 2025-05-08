@@ -864,7 +864,7 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
 
   if (extent_cache.idle()) {
     if (op->version > get_parent()->get_log().get_can_rollback_to()) {
-      dout(20) << __func__ << "cache idle" << op->version << dendl;
+      dout(20) << __func__ << " cache idle " << op->version << dendl;
       // submit a dummy, transaction-empty op to kick the rollforward
       const auto tid = get_parent()->get_tid();
       const auto nop = std::make_shared<ECDummyOp>();
