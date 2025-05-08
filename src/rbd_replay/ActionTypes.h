@@ -11,7 +11,7 @@
 #include <list>
 #include <string>
 #include <vector>
-#include <boost/variant/variant.hpp>
+#include <variant>
 
 namespace ceph { class Formatter; }
 
@@ -294,19 +294,19 @@ struct UnknownAction {
   void dump(Formatter *f) const;
 };
 
-typedef boost::variant<StartThreadAction,
-                       StopThreadAction,
-                       ReadAction,
-                       WriteAction,
-                       DiscardAction,
-                       AioReadAction,
-                       AioWriteAction,
-                       AioDiscardAction,
-                       OpenImageAction,
-                       CloseImageAction,
-                       AioOpenImageAction,
-                       AioCloseImageAction,
-                       UnknownAction> Action;
+typedef std::variant<StartThreadAction,
+		     StopThreadAction,
+		     ReadAction,
+		     WriteAction,
+		     DiscardAction,
+		     AioReadAction,
+		     AioWriteAction,
+		     AioDiscardAction,
+		     OpenImageAction,
+		     CloseImageAction,
+		     AioOpenImageAction,
+		     AioCloseImageAction,
+		     UnknownAction> Action;
 
 class ActionEntry {
 public:

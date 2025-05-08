@@ -83,7 +83,7 @@ void TrashWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
     return;
   }
 
-  apply_visitor(watcher::util::HandlePayloadVisitor<TrashWatcher<I>>(
+  std::visit(watcher::util::HandlePayloadVisitor<TrashWatcher<I>>(
     this, notify_id, handle), notify_message.payload);
 }
 
