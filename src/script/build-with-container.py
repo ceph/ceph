@@ -738,7 +738,7 @@ def bc_build_rpm(ctx):
         'rpmbuild',
         '--rebuild',
         f'-D_topdir {topdir}',
-    ] + list(ctx.cli.rpmbuild_arg) + [str(srpm_path)]
+    ] + list(ctx.cli.rpmbuild_arg or []) + [str(srpm_path)]
     rpmbuild_cmd = ' '.join(shlex.quote(cmd) for cmd in rpmbuild_args)
     cmd = _container_cmd(
         ctx,
