@@ -28,6 +28,8 @@ enum TABS {
   'overview'
 }
 
+const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
+
 @Component({
   selector: 'cd-nvmeof-gateway',
   templateUrl: './nvmeof-gateway.component.html',
@@ -35,7 +37,6 @@ enum TABS {
 })
 export class NvmeofGatewayComponent implements OnInit {
   selectedTab: TABS;
-  selectedGatewayGroup: string = null;
 
   onSelected(tab: TABS) {
     this.selectedTab = tab;
@@ -53,6 +54,9 @@ export class NvmeofGatewayComponent implements OnInit {
   selection = new CdTableSelection();
   gwGroups: ComboBoxItem[] = [];
   groupService: string = null;
+  selectedGatewayGroup: string = null;
+  gwGroupsEmpty: boolean = false;
+  gwGroupPlaceholder: string = DEFAULT_PLACEHOLDER;
 
   constructor(
     private nvmeofService: NvmeofService,
@@ -61,7 +65,7 @@ export class NvmeofGatewayComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    this.getGatewayGroups();
+    this.setGatewayGroups();
     this.gatewayColumns = [
       {
         name: $localize`Gateway ID`,
@@ -120,19 +124,37 @@ export class NvmeofGatewayComponent implements OnInit {
     this.groupService = null;
     this.getGateways();
   }
-
-  getGatewayGroups() {
-    this.nvmeofService.listGatewayGroups().subscribe((response: CephServiceSpec[][]) => {
-      this.gwGroups = response?.[0]?.length
-        ? response[0].map((group: CephServiceSpec) => {
-            return {
-              content: group?.spec?.group,
-              serviceName: group?.service_name
-            };
-          })
-        : [];
-      // Select first group if no group is selected
-      if (!this.groupService && this.gwGroups.length) this.onGroupSelection(this.gwGroups[0]);
-    });
+  
+  // formats the gateway groups to be consumed for combobox item
+  formatGwGroupsList(data: CephServiceSpec[][]): ComboBoxItem[] {
+    return data[0].reduce((gwGrpList: ComboBoxItem[], group: CephServiceSpec) => {
+      if (group?.spec?.group && group?.service_name) {
+        gwGrpList.push({
+          content: group.spec.group,
+          serviceName: group.service_name
+        })
+      }
+      return gwGrpList;
+      },[])
   }
+
+
+  
+    setGatewayGroups() {
+      this.nvmeofService.listGatewayGroups().subscribe((response: CephServiceSpec[][]) => {
+        if(response?.[0]?.length) {
+          this.gwGroups = this.formatGwGroupsList(response);
+        } else this.gwGroups = [];
+        // Select first group if no group is selected
+        if (!this.groupService && this.gwGroups.length) {
+          this.onGroupSelection(this.gwGroups[0]);
+          this.gwGroupsEmpty = false;
+          this.gwGroupPlaceholder = DEFAULT_PLACEHOLDER;
+        }
+        else {
+          this.gwGroupsEmpty = true;
+          this.gwGroupPlaceholder = $localize`No groups available`;
+        }
+      });
+    }
 }

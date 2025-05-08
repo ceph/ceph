@@ -22,6 +22,7 @@ type ComboBoxItem = {
 };
 
 const BASE_URL = 'block/nvmeof/subsystems';
+const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
 
 @Component({
   selector: 'cd-nvmeof-subsystems',
@@ -37,6 +38,8 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
   subsystemDetails: any[];
   gwGroups: ComboBoxItem[] = [];
   group: string = null;
+  gwGroupsEmpty: boolean = false;
+  gwGroupPlaceholder: string = DEFAULT_PLACEHOLDER;
 
   constructor(
     private nvmeofService: NvmeofService,
@@ -55,7 +58,7 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
     this.route.queryParams.subscribe((params) => {
       if (params?.['group']) this.onGroupSelection({ content: params?.['group'] });
     });
-    this.getGatewayGroups();
+    this.setGatewayGroups();
     this.subsystemsColumns = [
       {
         name: $localize`NQN`,
@@ -135,17 +138,33 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
     this.getSubsystems();
   }
 
-  getGatewayGroups() {
-    this.nvmeofService.listGatewayGroups().subscribe((response: CephServiceSpec[][]) => {
-      if (response?.[0].length) {
-        this.gwGroups = response[0].map((group: CephServiceSpec) => {
-          return {
-            content: group?.spec?.group
-          };
-        });
-      }
-      // Select first group if no group is selected
-      if (!this.group && this.gwGroups.length) this.onGroupSelection(this.gwGroups[0]);
-    });
-  }
+  // formats the gateway groups to be consumed for combobox item
+    formatGwGroupsList(data: CephServiceSpec[][]): ComboBoxItem[] {
+      return data[0].reduce((gwGrpList: ComboBoxItem[], group: CephServiceSpec) => {
+        if (group?.spec?.group) {
+          gwGrpList.push({
+            content: group.spec.group,
+          })
+        }
+        return gwGrpList;
+        },[])
+    }
+  
+    setGatewayGroups() {
+      this.nvmeofService.listGatewayGroups().subscribe((response: CephServiceSpec[][]) => {
+        if(response?.[0]?.length) {
+          this.gwGroups = this.formatGwGroupsList(response);
+        } else this.gwGroups = [];
+        // Select first group if no group is selected
+        if (!this.group && this.gwGroups.length) {
+          this.onGroupSelection(this.gwGroups[0]);
+          this.gwGroupsEmpty = false;
+          this.gwGroupPlaceholder = DEFAULT_PLACEHOLDER;
+        }
+        else {
+          this.gwGroupsEmpty = true;
+          this.gwGroupPlaceholder = $localize`No groups available`;
+        }
+      });
+    }
 }
