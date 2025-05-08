@@ -674,46 +674,68 @@ Scrub::sched_conf_t PgScrubber::populate_config_params() const
   const auto& conf = get_pg_cct()->_conf;  // for brevity
   Scrub::sched_conf_t configs;
 
-  // deep-scrub optimal interval
-  configs.deep_interval =
-      pool_conf.value_or(pool_opts_t::DEEP_SCRUB_INTERVAL, 0.0);
-  if (configs.deep_interval <= 0.0) {
-    configs.deep_interval = conf->osd_deep_scrub_interval;
-  }
-
-  // shallow-scrub interval
-  configs.shallow_interval =
+  // shallow scrubs interval
+  const auto shallow_pool =
       pool_conf.value_or(pool_opts_t::SCRUB_MIN_INTERVAL, 0.0);
-  if (configs.shallow_interval <= 0.0) {
-    configs.shallow_interval = conf->osd_scrub_min_interval;
-  }
+  configs.shallow_interval =
+      shallow_pool > 0.0 ? shallow_pool : conf->osd_scrub_min_interval;
 
-  // the max allowed delay between scrubs.
-  // For deep scrubs - there is no equivalent of scrub_max_interval. Per the
-  // documentation, once deep_scrub_interval has passed, we are already
-  // "overdue", at least as far as the "ignore allowed load" window is
-  // concerned.
+  // deep scrubs optimal interval
+  const auto deep_pool =
+      pool_conf.value_or(pool_opts_t::DEEP_SCRUB_INTERVAL, 0.0);
+  configs.deep_interval =
+      deep_pool > 0.0 ? deep_pool : conf->osd_deep_scrub_interval;
 
-  configs.max_deep = configs.deep_interval + configs.shallow_interval;
-
+  /**
+   * 'max_deep' and 'max_shallow' are set to the maximum allowed delay between
+   * scrubs. These deadlines have almost no effect on scrub scheduling
+   * (the only minor exception: when sorting two scrub jobs that are
+   * equivalent in all but the deadline).
+   *
+   * 'max_shallow' is controlled by a pool option and a configuration
+   * parameter. Note that if the value configured is less than the
+   * shallow interval, the max_shallow is disabled.
+   */
   auto max_shallow = pool_conf.value_or(pool_opts_t::SCRUB_MAX_INTERVAL, 0.0);
   if (max_shallow <= 0.0) {
     max_shallow = conf->osd_scrub_max_interval;
   }
+
   if (max_shallow > 0.0) {
-    configs.max_shallow = max_shallow;
-    // otherwise - we're left with the default nullopt
+    const auto min_accepted_deadline =
+	configs.shallow_interval *
+	(1 + conf->osd_scrub_interval_randomize_ratio);
+
+    if (max_shallow >= min_accepted_deadline) {
+      configs.max_shallow = max_shallow;
+    } else {
+      // this is a bit odd, but the pool option is set to a value
+      // less than the interval. Keep the nullopt in max_shallow,
+      dout(10) << fmt::format(
+		      "{}: configured 'max shallow' rejected as too low ({}/{} "
+		      "< {})",
+		      __func__,
+		      pool_conf.value_or(pool_opts_t::SCRUB_MAX_INTERVAL, 0.0),
+		      conf->osd_scrub_max_interval, min_accepted_deadline)
+	       << dendl;
+    }
   }
 
-  // but seems like our tests require: \todo fix!
-  configs.max_deep =
-      std::max(configs.max_shallow.value_or(0.0), configs.deep_interval);
+  // There are no comparable options for max_deep. We set it here to
+  // 4X the deep interval, as a reasonable default.
+  configs.max_deep = 4 * configs.deep_interval;
 
   configs.interval_randomize_ratio = conf->osd_scrub_interval_randomize_ratio;
-  configs.deep_randomize_ratio = conf.get_val<double>("osd_deep_scrub_interval_cv");
+  configs.deep_randomize_ratio =
+      conf.get_val<double>("osd_deep_scrub_interval_cv");
   configs.mandatory_on_invalid = conf->osd_scrub_invalid_stats;
 
-  dout(15) << fmt::format("{}: updated config:{}", __func__, configs) << dendl;
+  dout(15) << fmt::format(
+		  "{}: inputs: intervals: sh:{}(pl:{}),dp:{}(pl:{})",
+		  __func__, configs.shallow_interval, shallow_pool,
+		  configs.deep_interval, deep_pool)
+	   << dendl;
+  dout(10) << fmt::format("{}: updated config:{}", __func__, configs) << dendl;
   return configs;
 }
 
@@ -2080,7 +2102,7 @@ void PgScrubber::on_digest_updates()
 void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
 {
   if (!m_scrub_job->is_registered()) {
-    dout(10) << fmt::format(
+    dout(5) << fmt::format(
 		    "{}: PG not registered for scrubbing on this OSD. Won't "
 		    "requeue!",
 		    __func__)

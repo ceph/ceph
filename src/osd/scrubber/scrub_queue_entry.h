@@ -61,9 +61,6 @@ enum class urgency_t {
  * the 'urgency' attribute of the scheduled scrub (which determines most of
  * its behavior and scheduling decisions) and the actual time attributes
  * for scheduling (target, deadline, not_before).
- *
- * In this commit - the 'urgency' attribute is not fully used yet, and some
- * of the scrub behavior is still controlled by the 'planned scrub' flags.
  */
 struct SchedEntry {
   constexpr SchedEntry(spg_t pgid, scrub_level_t level)

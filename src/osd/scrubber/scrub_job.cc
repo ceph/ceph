@@ -122,7 +122,7 @@ void ScrubJob::adjust_shallow_schedule(
     if (app_conf.max_shallow) {
       sh_times.deadline += *app_conf.max_shallow;
     } else {
-      sh_times.deadline = utime_t{};
+      sh_times.deadline = utime_t::max();
     }
     if (adj_not_before < adj_target) {
       adj_not_before = adj_target;
@@ -135,7 +135,7 @@ void ScrubJob::adjust_shallow_schedule(
     // the target time is already set. Make sure to reset the n.b. and
     // the (irrelevant) deadline
     sh_times.not_before = sh_times.scheduled_at;
-    sh_times.deadline = sh_times.scheduled_at;
+    sh_times.deadline = utime_t::max();
   }
 
   dout(10) << fmt::format(
@@ -257,12 +257,8 @@ void ScrubJob::adjust_deep_schedule(
                     app_conf.deep_randomize_ratio, adj_target)
              << dendl;
 
-    // the deadline can be updated directly into the scrub-job
-    if (app_conf.max_shallow) {
-      dp_times.deadline += *app_conf.max_shallow;  // RRR fix
-    } else {
-      dp_times.deadline = utime_t{};
-    }
+    dp_times.deadline += app_conf.max_deep;
+
     if (adj_not_before < adj_target) {
       adj_not_before = adj_target;
     }
@@ -272,7 +268,7 @@ void ScrubJob::adjust_deep_schedule(
     // the target time is already set. Make sure to reset the n.b. and
     // the (irrelevant) deadline
     dp_times.not_before = dp_times.scheduled_at;
-    dp_times.deadline = dp_times.scheduled_at;
+    dp_times.deadline = utime_t::max();
   }
 
   dout(10) << fmt::format(
