@@ -6,8 +6,6 @@
 #include "common/dout.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/Utils.h"
-#include <boost/variant/apply_visitor.hpp>
-#include <boost/variant/static_visitor.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -17,7 +15,7 @@
 namespace librbd {
 namespace io {
 
-struct ReadResult::SetImageExtentsVisitor : public boost::static_visitor<void> {
+struct ReadResult::SetImageExtentsVisitor {
   Extents image_extents;
 
   explicit SetImageExtentsVisitor(const Extents& image_extents)
@@ -40,7 +38,7 @@ struct ReadResult::SetImageExtentsVisitor : public boost::static_visitor<void> {
   }
 };
 
-struct ReadResult::AssembleResultVisitor : public boost::static_visitor<void> {
+struct ReadResult::AssembleResultVisitor {
   CephContext *cct;
   Striper::StripedReadResult &destriper;
 
@@ -48,7 +46,7 @@ struct ReadResult::AssembleResultVisitor : public boost::static_visitor<void> {
     : cct(cct), destriper(destriper) {
   }
 
-  void operator()(Empty &empty) const {
+  void operator()(std::monostate &empty) const {
     ldout(cct, 20) << "dropping read result" << dendl;
   }
 
@@ -230,9 +228,6 @@ void ReadResult::C_ObjectReadMergedExtents::finish(int r) {
   on_finish->complete(r);
 }
 
-ReadResult::ReadResult() : m_buffer(Empty()) {
-}
-
 ReadResult::ReadResult(char *buf, size_t buf_len)
   : m_buffer(Linear(buf, buf_len)) {
 }
@@ -250,11 +245,11 @@ ReadResult::ReadResult(Extents* extent_map, ceph::bufferlist* bl)
 }
 
 void ReadResult::set_image_extents(const Extents& image_extents) {
-  boost::apply_visitor(SetImageExtentsVisitor(image_extents), m_buffer);
+  std::visit(SetImageExtentsVisitor(image_extents), m_buffer);
 }
 
 void ReadResult::assemble_result(CephContext *cct) {
-  boost::apply_visitor(AssembleResultVisitor(cct, m_destriper), m_buffer);
+  std::visit(AssembleResultVisitor(cct, m_destriper), m_buffer);
 }
 
 } // namespace io

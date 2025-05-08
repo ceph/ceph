@@ -12,7 +12,6 @@
 #include <list>
 #include <memory>
 #include <string>
-#include <boost/variant.hpp>
 
 namespace ceph {
 class Formatter;
