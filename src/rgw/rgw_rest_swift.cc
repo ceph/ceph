@@ -327,7 +327,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data(rgw::sal::BucketList& buc
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const rgw::sal::Bucket& bucket)
+void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(rgw::sal::Bucket& bucket)
 {
   s->formatter->open_object_section("container");
   s->formatter->dump_string("name", bucket.get_name());
@@ -335,6 +335,7 @@ void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const rgw::sal::Bucket& bu
   if (need_stats) {
     s->formatter->dump_int("count", bucket.get_count());
     s->formatter->dump_int("bytes", bucket.get_size());
+    dump_time(s, "last_modified", bucket.get_modification_time());
   }
 
   s->formatter->close_section();
