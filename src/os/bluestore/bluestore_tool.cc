@@ -357,6 +357,7 @@ int main(int argc, char **argv)
         "show-label, "
         "show-label-at, "
         "set-label-key, "
+	"create-bdev-label, "
         "rm-label-key, "
         "prime-osd-dir, "
         "bluefs-super-dump, "
@@ -517,6 +518,16 @@ int main(int argc, char **argv)
     }
     if (action == "set-label-key" && value.size() == 0) {
       cerr << "must specify a value with -v" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+  if (action == "create-bdev-label") {
+    if (path.empty()) {
+      cerr << "must specify bluestore path" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (devs.size() != 1) {
+      cerr << "must specify the main bluestore device" << std::endl;
       exit(EXIT_FAILURE);
     }
   }
@@ -836,6 +847,115 @@ int main(int argc, char **argv)
     jf.close_section();
     jf.close_section();
     jf.flush(cout);
+  }
+  else if (action == "create-bdev-label") {
+
+    std::vector<std::string> metadata_files = {
+        "bfm_blocks",
+	"bfm_blocks_per_key",
+	"bfm_bytes_per_block",
+	"bfm_size",
+	"bluefs",
+	"ceph_fsid",
+	"ceph_version_when_created",
+	"created_at",
+	"elastic_shared_blobs",
+	"fsid",
+	"kv_backend",
+	"magic",
+	"osd_key",
+	"ready",
+	"require_osd_release",
+	"type",
+	"whoami"
+    };
+
+    unique_ptr<BlockDevice> bdev(BlockDevice::create(
+      cct.get(), devs.front(), nullptr, nullptr, nullptr, nullptr));
+    int r = bdev->open(devs.front());
+    if (r < 0)
+      return r;
+
+    uint64_t size;
+    if (bdev->supported_bdev_label() &&
+      !vm.count("yes-i-really-really-mean-it")) {
+      cerr << "device " << devs.front()
+           << " already supports bdev label refusing to create a new label without --yes-i-really-really-mean-it"
+           << std::endl;
+      bdev->close();
+      exit(EXIT_FAILURE);
+    }
+    size = bdev->get_size();
+    bdev->close();
+
+    bluestore_bdev_label_t label;
+    std::vector<uint64_t> valid_positions;
+    bool is_multi = false;
+    int64_t epoch = -1;
+
+    r = BlueStore::read_bdev_label(cct.get(), devs.front(), &label,
+      &valid_positions, &is_multi, &epoch);
+
+    if (r == 0 && !vm.count("yes-i-really-really-mean-it")) {
+      cerr << "device " << devs.front() << " already has a label" << std::endl;
+      cerr << "Creating a new label on top of an existing one is a dangerous operation "
+	   << "which could cause data loss.\n"
+	   << "Please confirm with --yes-i-really-really-mean-it option" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+
+    if (r < 0 && r != -ENOENT) {
+      cerr << "unable to read label for " << devs.front() << ": "
+           << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+
+    label = bluestore_bdev_label_t();
+    label.btime = ceph_clock_now();
+    if (devs.front().ends_with("block")) {
+      label.description = "main";
+    } else if (devs.front().ends_with("block.db")) {
+      label.description = "bluefs db";
+    } else if (devs.front().ends_with("block.wal")) {
+      label.description = "bluefs wal";
+    }
+    label.size = size;
+
+    if (r == -ENOENT) {
+      valid_positions = {0};
+    }
+
+    for (const auto& file : metadata_files) {
+      std::ifstream infile(path + "/" + file);
+      if (infile) {
+	std::string value((std::istreambuf_iterator<char>(infile)), std::istreambuf_iterator<char>());
+	value.erase(std::remove(value.begin(), value.end(), '\n'), value.end());
+	if (file == "fsid") {
+	  label.osd_uuid.parse(value.c_str());
+	}
+	else if (label.description == "main"){
+	  label.meta[file] = value;
+	}
+      } else {
+	cerr << "Warning: unable to read metadata file: " << file << std::endl;
+      }
+    }
+
+    bool wrote_at_least_one = false;
+    for (uint64_t position : valid_positions) {
+      r = BlueStore::write_bdev_label(cct.get(), devs.front(), label, position);
+      if (r < 0) {
+	cerr << "unable to write label for " << devs.front()
+	     << " at 0x" << std::hex << position << std::dec
+             << ": " << cpp_strerror(r) << std::endl;
+      } else {
+	wrote_at_least_one = true;
+      }
+    }
+
+    if (!wrote_at_least_one) {
+        exit(EXIT_FAILURE);
+    }
   }
   else if (action == "set-label-key") {
     bluestore_bdev_label_t label;
