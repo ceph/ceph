@@ -167,4 +167,5 @@ export class RgwBucketLifecycleListComponent implements OnInit {
         }
       });
   }
+  
 }
