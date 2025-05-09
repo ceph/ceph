@@ -24,6 +24,8 @@
 #include "osd/scrubber/pg_scrubber.h"
 #include "osd/scrubber/scrub_backend.h"
 
+#include "erasure-code/ErasureCodePlugin.h"
+
 /// \file testing isolated parts of the Scrubber backend
 
 using namespace std::string_literals;
@@ -71,6 +73,11 @@ class TestScrubBackend : public ScrubBackend {
 
 // mocking the PG
 class TestPg : public PgScrubBeListener {
+  ErasureCodeInterfaceRef m_erasure_code_interface;
+  unsigned int m_ec_stripe_width = 0;
+  unsigned int m_erasure_code_k = 0;
+  unsigned int m_erasure_code_m = 0;
+
  public:
   ~TestPg() = default;
 
@@ -91,9 +98,120 @@ class TestPg : public PgScrubBeListener {
   const pg_info_t& get_pg_info(ScrubberPasskey) const final { return m_info; }
 
   uint64_t logical_to_ondisk_size(uint64_t logical_size,
-                                 int8_t shard_id) const final
+                                  shard_id_t shard_id) const final
   {
     return logical_size;
+  }
+
+  bool ec_can_decode(const shard_id_set& available_shards) const final {
+    return get_is_ec_optimized()
+      && available_shards.size() > get_ec_stripe_width() - 2;
+  };
+
+  // Fake encode function for erasure code tests in this class.
+  // Just sets parities to sum of data shards.
+  shard_id_map<bufferlist> ec_encode_acting_set(const bufferlist& chunks) const final
+  {
+    shard_id_map<bufferlist> encode_map(get_ec_stripe_width());
+    for (shard_id_t i{0}; i < get_ec_stripe_width(); ++i)
+    {
+      bufferlist bl;
+      bl.append(buffer::create(get_ec_stripe_chunk_size(), 0));
+      bl.rebuild();
+      encode_map.insert(i, bl);
+    }
+    for (shard_id_t i{0}; i < get_ec_data_chunk_count(); ++i)
+    {
+      for (int j = 0; j < get_ec_stripe_chunk_size(); j++)
+      {
+        encode_map.at(i).c_str()[j] = chunks[j + (get_ec_stripe_chunk_size() * i.id)];
+        for (shard_id_t k{static_cast<int8_t>(get_ec_stripe_width())}; k < get_ec_stripe_width(); ++k)
+        {
+          encode_map.at(k).c_str()[j] += chunks[j + (get_ec_stripe_chunk_size() * i.id)];
+        }
+      }
+    }
+
+    return encode_map;
+
+  };
+
+  // Fake encode function for erasure code tests in this class.
+  // Just sets calculates missing parity by using sum of all data shards = parity
+  // Tests using this will only have 1 missing shard.
+  shard_id_map<bufferlist> ec_decode_acting_set(
+      const shard_id_map<bufferlist>& chunks, int chunk_size) const final {
+    shard_id_map<bufferlist> decode_map(get_ec_stripe_width());
+
+    ceph_assert(chunks.size() > get_ec_stripe_width() - 2);
+
+    for (shard_id_t i; i < get_ec_stripe_width(); ++i)
+    {
+      bufferlist bl;
+      bufferptr ptr = buffer::create(chunk_size, 0);
+      if (chunks.contains(i))
+      {
+        ptr.copy_in(0, chunk_size, chunks.at(i).to_str().c_str());
+      }
+      bl.append(ptr);
+      bl.rebuild();
+      decode_map.insert(i, bl);
+    }
+
+    for (shard_id_t shard; shard < get_ec_stripe_width(); ++shard)
+    {
+      if (!chunks.contains(shard))
+      {
+        for (int j = 0; j < chunk_size; j++)
+        {
+          if (shard < get_ec_data_chunk_count())
+          {
+            decode_map.at(shard).c_str()[j] = decode_map.at(shard_id_t{static_cast<int8_t>(get_ec_data_chunk_count())}).c_str()[j];
+          }
+          for (shard_id_t i; i < get_ec_data_chunk_count(); ++i)
+          {
+            if (shard < get_ec_data_chunk_count() && chunks.contains(i))
+            {
+              decode_map.at(shard).c_str()[j] -= decode_map.at(i).c_str()[j];
+            }
+            else if (chunks.contains(i))
+            {
+              decode_map.at(shard).c_str()[j] += decode_map.at(i).c_str()[j];
+            }
+          }
+        }
+      }
+      else
+      {
+        decode_map.insert(shard, chunks.at(shard));
+      }
+    }
+
+    return decode_map;
+  };
+
+  bool get_ec_supports_crc_encode_decode() const final
+  {
+    return true;
+  }
+
+  unsigned int get_ec_data_chunk_count() const final { return m_erasure_code_k; };
+  unsigned int get_ec_stripe_width() const final { return m_erasure_code_k + m_erasure_code_m; };
+  int get_ec_stripe_chunk_size() const final { return m_ec_stripe_width; };
+
+  void set_ec_stripe_chunk_size(unsigned int chunk_size)
+  {
+    m_ec_stripe_width = chunk_size;
+  }
+
+  void set_k(unsigned int k)
+  {
+    m_erasure_code_k = k;
+  }
+
+  void set_m(unsigned int m)
+  {
+    m_erasure_code_m = m;
   }
 
   bool is_waiting_for_unreadable_object() const final { return false; }
@@ -101,6 +219,20 @@ class TestPg : public PgScrubBeListener {
   std::shared_ptr<PGPool> m_pool;
   pg_info_t& m_info;
   pg_shard_t m_pshard;
+
+  bool get_is_nonprimary_shard(const pg_shard_t &pg_shard) const final
+  {
+    return get_is_ec_optimized() &&
+           m_pool->info.is_nonprimary_shard(pg_shard.shard);
+  }
+  bool get_is_hinfo_required() const final
+  {
+    return get_is_ec_optimized() &&
+           !m_pool->info.has_flag(m_pool->info.FLAG_EC_OVERWRITES);
+  }
+  bool get_is_ec_optimized() const final {
+    return m_pool->info.has_flag(m_pool->info.FLAG_EC_OPTIMIZATIONS);
+  }
 };
 
 
@@ -265,7 +397,7 @@ class TestTScrubberBe : public ::testing::Test {
    * generated by the Primary). Then - create the snap-sets for all
    * the objects in the set.
    */
-  void fake_a_scrub_set(ScrubGenerator::RealObjsConfList& all_sets);
+  void fake_a_scrub_set(ScrubGenerator::RealObjsConfList& all_sets, std::set<pg_shard_t> acting_shards);
 
   std::unique_ptr<TestScrubBackend> sbe;
 
@@ -342,7 +474,12 @@ void TestTScrubberBe::SetUp()
   std::cout << fmt::format("PG info: {}", info) << std::endl;
 
   real_objs_list =
-    ScrubGenerator::make_real_objs_conf(pool_id, real_objs, acting_osds);
+    ScrubGenerator::make_real_objs_conf(pool_id,
+                                        real_objs,
+                                        acting_osds,
+                                        acting_shards,
+                                        pool_conf
+                                          .erasure_code_profile.has_value());
 
   // now we can create the main mockers
 
@@ -367,7 +504,7 @@ void TestTScrubberBe::SetUp()
   }
 
   sbe->new_chunk();
-  fake_a_scrub_set(real_objs_list);
+  fake_a_scrub_set(real_objs_list, acting_shards);
 }
 
 
@@ -396,7 +533,7 @@ OSDMapRef TestTScrubberBe::setup_map(int num_osds,
   }
   osdmap->apply_incremental(pending_inc);
 
-  // create a replicated pool
+  // create a pool
   OSDMap::Incremental new_pool_inc(osdmap->get_epoch() + 1);
   new_pool_inc.new_pool_max = osdmap->get_pool_max();
   new_pool_inc.fsid = osdmap->get_fsid();
@@ -404,12 +541,21 @@ OSDMapRef TestTScrubberBe::setup_map(int num_osds,
   pg_pool_t empty;
   auto p = new_pool_inc.get_new_pool(pool_id, &empty);
   p->size = pconf.size;
+  p->min_size = pconf.min_size;
   p->set_pg_num(pconf.pg_num);
   p->set_pgp_num(pconf.pgp_num);
-  p->type = pg_pool_t::TYPE_REPLICATED;
+  p->type = pconf.type;
   p->crush_rule = 0;
   p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
   new_pool_inc.new_pool_names[pool_id] = pconf.name;
+  if (pconf.erasure_code_profile)
+  {
+    osdmap->set_erasure_code_profile(pconf.erasure_code_profile->erasure_code_profile_name,
+                                     pconf.erasure_code_profile->erasure_code_profile);
+    p->erasure_code_profile = pconf.erasure_code_profile->erasure_code_profile_name;
+    p->set_flag(pg_pool_t::FLAG_EC_OVERWRITES);
+    p->set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  }
   osdmap->apply_incremental(new_pool_inc);
   return osdmap;
 }
@@ -440,16 +586,24 @@ pg_info_t TestTScrubberBe::setup_pg_in_map()
 	    << std::endl;
 
   spg = spg_t{pgid};
-  i_am = pg_shard_t{up_primary};
-  std::cout << fmt::format("{}: spg: {} and I am {}", __func__, spg, i_am)
-	    << std::endl;
 
   // the 'acting shards' set - the one actually used by the scrubber
+  shard_id_t shard;
   std::for_each(acting_osds.begin(), acting_osds.end(), [&](int osd) {
-    acting_shards.insert(pg_shard_t{osd});
+    acting_shards.insert(pg_shard_t{osd, shard});
+    ++shard;
   });
   std::cout << fmt::format("{}: acting_shards: {}", __func__, acting_shards)
 	    << std::endl;
+
+  shard_id_t osd_shard = std::find_if(acting_shards.begin(),acting_shards.end(), [&](pg_shard_t pg_shard)
+  {
+    return i_am.osd == pg_shard.osd;
+  })->shard;
+
+  i_am = pg_shard_t{up_primary, osd_shard};
+  std::cout << fmt::format("{}: spg: {} and I am {}", __func__, spg, i_am)
+      << std::endl;
 
   pg_info_t info;
   info.pgid = spg;
@@ -474,7 +628,7 @@ void TestTScrubberBe::TearDown()
 }
 
 void TestTScrubberBe::fake_a_scrub_set(
-  ScrubGenerator::RealObjsConfList& all_sets)
+  ScrubGenerator::RealObjsConfList& all_sets, std::set<pg_shard_t> acting_shards)
 {
   for (int osd_num = 0; osd_num < pool_conf.size; ++osd_num) {
     ScrubMap smap;
@@ -489,12 +643,17 @@ void TestTScrubberBe::fake_a_scrub_set(
       ScrubGenerator::add_object(smap, obj, osd_num);
     }
 
+    shard_id_t shard = std::find_if(acting_shards.begin(),acting_shards.end(), [&osd_num](pg_shard_t pg_shard)
+    {
+      return osd_num == pg_shard.osd;
+    })->shard;
+
     std::cout << fmt::format("{}: {} inserting smap {:D}",
 			     __func__,
 			     osd_num,
 			     smap)
 	      << std::endl;
-    sbe->insert_faked_smap(pg_shard_t{osd_num}, smap);
+    sbe->insert_faked_smap(pg_shard_t{osd_num, shard}, smap);
   }
 
   // create the snap_mapper state
@@ -534,7 +693,7 @@ class TestTScrubberBe_data_1 : public TestTScrubberBe {
   TestTScrubberBe_data_1() : TestTScrubberBe() {}
 
   // test configuration
-  pool_conf_t pl{3, 3, 3, 3, "rep_pool"};
+  pool_conf_t pl{3, 3, 3, 3, "rep_pool", pg_pool_t::TYPE_REPLICATED, std::nullopt };
 
   TestTScrubberBeParams inject_params() override
   {
@@ -633,7 +792,7 @@ class TestTScrubberBe_data_2 : public TestTScrubberBe {
   TestTScrubberBe_data_2() : TestTScrubberBe() {}
 
   // basic test configuration - 3 OSDs, all involved in the pool
-  pool_conf_t pl{3, 3, 3, 3, "rep_pool"};
+  pool_conf_t pl{3, 3, 3, 3, "rep_pool", pg_pool_t::TYPE_REPLICATED, std::nullopt };
 
   TestTScrubberBeParams inject_params() override
   {
@@ -663,6 +822,178 @@ TEST_F(TestTScrubberBe_data_2, smaps_clone_size)
   EXPECT_EQ(fix_list.size(), 0);  // snap-mapper fix should be empty
 
   EXPECT_EQ(incons.size(), 1);	// one inconsistency
+}
+
+class TestTScrubberBeECCorruptShards : public TestTScrubberBe
+{
+private:
+  int seed;
+protected:
+  std::mt19937 rng;
+  int8_t k;
+  int8_t m;
+  int m_chunk_size = 4;
+
+public:
+  TestTScrubberBeECCorruptShards() : TestTScrubberBe(),
+  seed(time(0)),
+  rng(seed),
+  k((rng() % 11) + 1),
+  m((rng() % std::min(k-1, 4)) + 1)
+  {
+    std::cout << "Using seed " << seed << std::endl;
+  }
+
+  std::size_t m_expected_inconsistencies = 0;
+  std::size_t m_expected_error_count = 0;
+
+  // basic test configuration - 3 OSDs, all involved in the pool
+  erasure_code_profile_conf_t ec_profile{"scrub_ec_profile", {
+      {"k", fmt::format("{}", k)},
+      {"m", fmt::format("{}", m)},
+      {"plugin", "isa"},
+      {"technique", "reed_sol_van"},
+      {"stripe_unit", fmt::format("{}", m_chunk_size)}
+  }};
+
+  pool_conf_t pl{3, 3, k+m, k+1, "ec_pool", pg_pool_t::TYPE_ERASURE, ec_profile};
+
+  TestTScrubberBeParams inject_params() override
+  {
+    std::cout << fmt::format(
+                "{}: injecting params (minimal-snaps + size change)",
+                 __func__)
+                << std::endl;
+    TestTScrubberBeParams params{
+      /* pool_conf */ pl,
+      /* real_objs_conf */ ScrubGenerator::make_erasure_code_configuration(k, m),
+      /*num_osds */ k+m};
+
+    return params;
+  }
+};
+
+class TestTScrubberBeECNoCorruptShards : public TestTScrubberBeECCorruptShards {
+public:
+  TestTScrubberBeECNoCorruptShards() : TestTScrubberBeECCorruptShards() {}
+};
+
+TEST_F(TestTScrubberBeECNoCorruptShards, ec_parity_inconsistency)
+{
+  test_pg->set_ec_stripe_chunk_size(m_chunk_size);
+  test_pg->set_k(k);
+  test_pg->set_m(m);
+
+  ASSERT_TRUE(sbe); // Assert we have a scrubber backend
+  logger.set_expected_err_count(0); // Set the number of errors we expect to see
+
+  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+
+  EXPECT_EQ(incons.size(), 0);	// Assert we see the number of inconsistencies we are expecting after we compare maps
+}
+
+class TestTScrubberBeECSingleCorruptDataShard : public TestTScrubberBeECCorruptShards {
+public:
+  TestTScrubberBeECSingleCorruptDataShard() : TestTScrubberBeECCorruptShards() {}
+
+  TestTScrubberBeParams inject_params() override
+  {
+    TestTScrubberBeParams params = TestTScrubberBeECCorruptShards::inject_params();
+    corrupt_funcs = make_erasure_code_hash_corruption_functions(k+m);
+    params.objs_conf.objs[(rng() % k)].corrupt_funcs = &corrupt_funcs;
+    return params;
+  }
+
+private:
+  CorruptFuncList corrupt_funcs;
+};
+
+TEST_F(TestTScrubberBeECSingleCorruptDataShard, ec_parity_inconsistency)
+{
+  test_pg->set_ec_stripe_chunk_size(m_chunk_size);
+  test_pg->set_k(k);
+  test_pg->set_m(m);
+
+  ASSERT_TRUE(sbe); // Assert we have a scrubber backend
+  logger.set_expected_err_count(1); // Set the number of errors we expect to see
+
+  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+
+  EXPECT_EQ(incons.size(), 1);	// Assert we see the number of inconsistencies we are expecting after we compare maps
+}
+
+class TestTScrubberBeECMultipleCorruptDataShards : public TestTScrubberBeECCorruptShards {
+public:
+  int num_corrupt_shards;
+
+  TestTScrubberBeECMultipleCorruptDataShards() : TestTScrubberBeECCorruptShards() {}
+
+  TestTScrubberBeParams inject_params() override
+  {
+    std::vector<int> shard_ids;
+    for (int i = 0; i < k; i++)
+    {
+      shard_ids.push_back(i);
+    }
+
+    std::shuffle(shard_ids.begin(), shard_ids.end(), rng);
+    num_corrupt_shards = rng() % (k - 1);
+
+    TestTScrubberBeParams params = TestTScrubberBeECCorruptShards::inject_params();
+    for (int i = 0; i < num_corrupt_shards; i++)
+    {
+      corrupt_funcs = make_erasure_code_hash_corruption_functions(k+m);
+      params.objs_conf.objs[shard_ids.at(i)].corrupt_funcs = &corrupt_funcs;
+    }
+    return params;
+  }
+
+private:
+  CorruptFuncList corrupt_funcs;
+};
+
+TEST_F(TestTScrubberBeECMultipleCorruptDataShards, ec_parity_inconsistency)
+{
+  test_pg->set_ec_stripe_chunk_size(m_chunk_size);
+  test_pg->set_k(k);
+  test_pg->set_m(m);
+
+  ASSERT_TRUE(sbe); // Assert we have a scrubber backend
+  logger.set_expected_err_count(num_corrupt_shards); // Set the number of errors we expect to see
+
+  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+
+  EXPECT_EQ(incons.size(), num_corrupt_shards);	// Assert we see the number of inconsistencies we are expecting after we compare maps
+}
+
+class TestTScrubberBeECCorruptParityShard : public TestTScrubberBeECCorruptShards {
+public:
+  TestTScrubberBeECCorruptParityShard() : TestTScrubberBeECCorruptShards() {}
+
+  TestTScrubberBeParams inject_params() override
+  {
+    TestTScrubberBeParams params = TestTScrubberBeECCorruptShards::inject_params();
+    corrupt_funcs = make_erasure_code_hash_corruption_functions(k+m);
+    params.objs_conf.objs[k].corrupt_funcs = &corrupt_funcs;
+    return params;
+  }
+
+private:
+  CorruptFuncList corrupt_funcs;
+};
+
+TEST_F(TestTScrubberBeECCorruptParityShard, ec_parity_inconsistency)
+{
+  test_pg->set_ec_stripe_chunk_size(m_chunk_size);
+  test_pg->set_k(k);
+  test_pg->set_m(m);
+
+  ASSERT_TRUE(sbe); // Assert we have a scrubber backend
+  logger.set_expected_err_count(1); // Set the number of errors we expect to see
+
+  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+
+  EXPECT_EQ(incons.size(), 1);	// Assert we see the number of inconsistencies we are expecting after we compare maps
 }
 
 // Local Variables:

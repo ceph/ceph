@@ -1685,6 +1685,45 @@ void ECBackendL::objects_read_async(
 	   on_complete)));
 }
 
+  bool ECBackendL::ec_can_decode(const std::set<int> &available_shards) const {
+  std::map<int, std::vector<std::pair<int, int>>> minimum_set;
+  set<int> want_to_read;
+  for (unsigned int i = 0; i < ec_impl->get_chunk_count(); i++) {
+    want_to_read.insert(ec_impl->get_chunk_mapping()[i].id);
+  }
+
+  int r =
+      ec_impl->minimum_to_decode(want_to_read, available_shards, &minimum_set);
+  return (r == 0);
+}
+
+  std::map<int, bufferlist> ECBackendL::ec_encode_acting_set(
+      const bufferlist &in_bl) const {
+  std::set<int> want_to_encode;
+  for (unsigned int i = 0; i < ec_impl->get_chunk_count(); i++) {
+    shard_id_t shard_id = shard_id_t(i);
+    if (ec_impl->get_chunk_mapping().size() != 0)
+      shard_id = ec_impl->get_chunk_mapping()[i];
+    want_to_encode.insert(shard_id.id);
+  }
+  std::map<int, bufferlist> encoded;
+  ec_impl->encode(want_to_encode, in_bl, &encoded);
+  return encoded;
+}
+
+  std::map<int, bufferlist> ECBackendL::ec_decode_acting_set(
+      const std::map<int, bufferlist> &shard_map, int chunk_size) const {
+  std::map<int, bufferlist> decoded_buffers;
+  set<int> want_to_read;
+  for (unsigned int i = 0; i < ec_impl->get_chunk_count(); i++) {
+    want_to_read.insert(ec_impl->get_chunk_mapping()[i].id);
+  }
+
+  ec_impl->decode(want_to_read, shard_map, &decoded_buffers, chunk_size);
+
+  return decoded_buffers;
+}
+
 void ECBackendL::objects_read_and_reconstruct(
   const map<hobject_t,
     std::list<ec_align_t>
