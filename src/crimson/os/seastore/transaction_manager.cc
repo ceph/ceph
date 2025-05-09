@@ -8,7 +8,7 @@
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/journal/circular_bounded_journal.h"
-#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/lba/lba_btree_node.h"
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
 
 /*
@@ -805,7 +805,7 @@ TransactionManagerRef make_transaction_manager(
 {
   auto epm = std::make_unique<ExtentPlacementManager>();
   auto cache = std::make_unique<Cache>(*epm);
-  auto lba_manager = lba_manager::create_lba_manager(*cache);
+  auto lba_manager = lba::create_lba_manager(*cache);
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto rbs = std::make_unique<RBMDeviceGroup>();
   auto backref_manager = create_backref_manager(*cache);
