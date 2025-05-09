@@ -45,6 +45,18 @@ export class UrlsCollection extends PageHelper {
     cephfs: { url: '#/cephfs/fs', id: 'cd-cephfs-list' },
     'create cephfs': { url: '#/cephfs/fs/create', id: 'cd-cephfs-form' },
 
+    // SMB
+    smb: { url: '#/cephfs/smb', id: 'cd-smb-tabs' },
+    'create cluster': { url: '#/cephfs/smb/create', id: 'cd-smb-cluster-form' },
+    'edit cluster adCluster': { url: '#/cephfs/smb/adCluster/edit', id: 'cd-smb-cluster-form' },
+    'edit cluster ugCluster': { url: '#/cephfs/smb/ugCluster/edit', id: 'cd-smb-cluster-form' },
+    'create active-directory': {
+      url: '#/cephfs/smb/active-directory/create',
+      id: 'cd-smb-join-auth-form'
+    },
+    'create standalone': { url: '#/cephfs/smb/standalone/create', id: 'cd-smb-usersgroups-form' },
+    'create share': { url: '#/cephfs/smb/share/create', id: 'cd-smb-share-form' },
+
     // Pools
     pools: { url: '/#pool', id: 'cd-pool-list' },
     'create pool': { url: '#/pool/create', id: 'cd-pool-form' }
