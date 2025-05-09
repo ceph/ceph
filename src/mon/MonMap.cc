@@ -4,6 +4,7 @@
 #include "MonMap.h"
 
 #include <algorithm>
+#include <limits>
 #include <sstream>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -926,6 +927,9 @@ seastar::future<> MonMap::build_monmap(const crimson::common::ConfigProxy& conf,
 
 seastar::future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf, bool for_mkfs)
 {
+  /* an invalid epoch so the real monmap doesn't trigger rotation */
+  auth_epoch = std::numeric_limits<decltype(auth_epoch)>::max();
+
   // mon_host_override?
   if (maybe_init_with_mon_host(conf.get_val<std::string>("mon_host_override"),
                                for_mkfs)) {
@@ -1006,6 +1010,9 @@ int MonMap::build_initial(CephContext *cct, bool for_mkfs, ostream& errout)
 {
   lgeneric_dout(cct, 1) << __func__ << " for_mkfs: " << for_mkfs << dendl;
   const auto& conf = cct->_conf;
+
+  /* an invalid epoch so the real monmap doesn't trigger rotation */
+  auth_epoch = std::numeric_limits<decltype(auth_epoch)>::max();
 
   // mon_host_override?
   auto mon_host_override = conf.get_val<std::string>("mon_host_override");
