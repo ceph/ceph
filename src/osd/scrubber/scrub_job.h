@@ -38,19 +38,12 @@ struct sched_conf_t {
   double deep_interval{0.0};
 
   /**
-   * the maximum interval between shallow scrubs, as determined by either the
-   * OSD or the pool configuration. Empty if no limit is configured.
+   * the maximum interval between shallow scrubs, after which the
+   * (info-only) "overdue" field in the scheduler dump is set.
+   * Determined by either the pool or the cluster configuration.
+   * Empty if no limit is configured.
    */
   std::optional<double> max_shallow;
-
-  /**
-   * the maximum interval between deep scrubs, after which the
-   * (info-only) "overdue" field in the scheduler dump is set.
-   * There is no specific configuration parameter to control the
-   * deep scrubs max. Instead - we set it to 4 times the average
-   * interval.
-   */
-  double max_deep{std::numeric_limits<double>::max()};
 
   /**
    * interval_randomize_ratio
@@ -274,6 +267,17 @@ class ScrubJob {
    */
   void operator_forced(scrub_level_t s_or_d, scrub_type_t scrub_type);
 
+  /**
+   * calculate a time offset large enough, so that once the relevant
+   * last-scrub timestamp is forced back by this amount, the PG is
+   * eligible for a periodic scrub of the specified level.
+   * Used by the scrubber upon receiving a 'fake a scheduled scrub' request
+   * from the operator.
+   */
+  double guaranteed_offset(
+      scrub_level_t s_or_d,
+      const Scrub::sched_conf_t& app_conf);
+
   void dump(ceph::Formatter* f) const;
 
   bool is_registered() const { return registered; }
@@ -430,9 +434,9 @@ struct formatter<Scrub::sched_conf_t> {
   {
     return fmt::format_to(
 	ctx.out(),
-	"periods:s:{}/{},d:{}/{},iv-ratio:{},deep-rand:{},on-inv:{}",
+	"periods:s:{}/{},d:{},iv-ratio:{},deep-rand:{},on-inv:{}",
 	cf.shallow_interval, cf.max_shallow.value_or(-1.0), cf.deep_interval,
-	cf.max_deep, cf.interval_randomize_ratio, cf.deep_randomize_ratio,
+	cf.interval_randomize_ratio, cf.deep_randomize_ratio,
 	cf.mandatory_on_invalid);
   }
 };
