@@ -408,6 +408,7 @@ void MonClient::handle_monmap(MMonMap *m)
   auto con_addrs = m->get_source_addrs();
   string old_name = monmap.get_name(con_addrs);
   const auto old_epoch = monmap.get_epoch();
+  const auto old_auth_epoch = monmap.auth_epoch;
 
   auto p = m->monmapbl.cbegin();
   decode(monmap, p);
@@ -444,6 +445,11 @@ void MonClient::handle_monmap(MMonMap *m)
   }
 
   cct->set_mon_addrs(monmap);
+
+  if (old_auth_epoch < monmap.auth_epoch) {
+    ldout(cct, 1) << "auth epoch has changed: invalidating tickets and rotating secrets" << dendl;
+    _wipe_secrets_and_tickets();
+  }
 
   sub.got("monmap", monmap.get_epoch());
   map_cond.notify_all();
@@ -521,6 +527,10 @@ int MonClient::init()
     "rotate-key",
     this,
     "rotate live authentication key");
+  cct->get_admin_socket()->register_command(
+    "wipe-rotating-secrets",
+    this,
+    "wipe rotating secrets");
 
   return 0;
 }
@@ -611,6 +621,14 @@ int MonClient::authenticate(double timeout)
   return authenticate_err;
 }
 
+void MonClient::_wipe_secrets_and_tickets()
+{
+  ldout(cct, 5) << " wiping rotating secrets and invalidating tickets" << dendl;
+  rotating_secrets->wipe();
+  auth->invalidate_all_tickets();
+  _check_auth_tickets();
+}
+
 int MonClient::call(
     std::string_view command,
     const cmdmap_t& cmdmap,
@@ -634,6 +652,10 @@ int MonClient::call(
       errss << "cephx not enabled; no key to rotate";
       return -EINVAL;
     }
+  } else if (command == "wipe-rotating-secrets") {
+    ldout(cct, 1) << __func__ << ": " << command << dendl;
+    std::lock_guard l{monc_lock};
+    _wipe_secrets_and_tickets();
   }
   return 0;
 }
