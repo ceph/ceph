@@ -773,6 +773,7 @@ public:
   md_config_t::config_callback get_config_callback();
 
 private:
+  void _wipe_secrets_and_tickets();
 
   std::map<ceph_tid_t, std::unique_ptr<VersionCompletion>> version_requests;
   ceph_tid_t version_req_id;
