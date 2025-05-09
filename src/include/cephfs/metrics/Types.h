@@ -33,6 +33,7 @@ enum ClientMetricType {
   CLIENT_METRIC_TYPE_STDEV_WRITE_LATENCY,
   CLIENT_METRIC_TYPE_AVG_METADATA_LATENCY,
   CLIENT_METRIC_TYPE_STDEV_METADATA_LATENCY,
+  CLIENT_METRIC_TYPE_COPY_IO_SIZES,
 };
 inline std::ostream &operator<<(std::ostream &os, const ClientMetricType &type) {
   switch(type) {
@@ -83,6 +84,9 @@ inline std::ostream &operator<<(std::ostream &os, const ClientMetricType &type) 
     break;
   case ClientMetricType::CLIENT_METRIC_TYPE_STDEV_METADATA_LATENCY:
     os << "STDEV_METADATA_LATENCY";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_COPY_IO_SIZES:
+    os << "COPY_IO_SIZES";
     break;
   default:
     os << "(UNKNOWN:" << static_cast<std::underlying_type<ClientMetricType>::type>(type) << ")";
@@ -529,6 +533,43 @@ struct WriteIoSizesPayload : public ClientMetricPayloadBase {
   }
 };
 
+struct CopyIoSizesPayload : public ClientMetricPayloadBase {
+  uint64_t total_ops = 0;
+  uint64_t total_size = 0;
+
+  CopyIoSizesPayload()
+    : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_COPY_IO_SIZES) { }
+  CopyIoSizesPayload(uint64_t total_ops, uint64_t total_size)
+    : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_COPY_IO_SIZES),
+    total_ops(total_ops), total_size(total_size) {
+  }
+
+  void encode(bufferlist &bl) const {
+    using ceph::encode;
+    ENCODE_START(1, 1, bl);
+    encode(total_ops, bl);
+    encode(total_size, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &iter) {
+    using ceph::decode;
+    DECODE_START(1, iter);
+    decode(total_ops, iter);
+    decode(total_size, iter);
+    DECODE_FINISH(iter);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_int("total_ops", total_ops);
+    f->dump_int("total_size", total_size);
+  }
+
+  void print(std::ostream *out) const {
+    *out << "total_ops: " << total_ops << " total_size: " << total_size;
+  }
+};
+
 struct UnknownPayload : public ClientMetricPayloadBase {
   UnknownPayload()
     : ClientMetricPayloadBase(static_cast<ClientMetricType>(-1)) { }
@@ -562,6 +603,7 @@ typedef boost::variant<CapInfoPayload,
                        OpenedInodesPayload,
                        ReadIoSizesPayload,
                        WriteIoSizesPayload,
+                       CopyIoSizesPayload,
                        UnknownPayload> ClientMetricPayload;
 
 // metric update message sent by clients
@@ -676,6 +718,9 @@ public:
     case ClientMetricType::CLIENT_METRIC_TYPE_WRITE_IO_SIZES:
       payload = WriteIoSizesPayload();
       break;
+    case ClientMetricType::CLIENT_METRIC_TYPE_COPY_IO_SIZES:
+      payload = CopyIoSizesPayload();
+    break;
     default:
       payload = UnknownPayload(static_cast<ClientMetricType>(metric_type));
       break;
