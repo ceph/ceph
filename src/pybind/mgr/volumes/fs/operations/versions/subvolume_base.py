@@ -442,6 +442,33 @@ class SubvolumeBase(object):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
+    def _get_clone_source_info(self):
+        try:
+            src_vol_name = self.metadata_mgr.get_option('source', 'volume')
+            src_subvol_name = self.metadata_mgr.get_option('source', 'subvolume')
+            src_snap_name = self.metadata_mgr.get_option('source', 'snapshot')
+            clone_src_info = {'volume': src_vol_name, 'subvolume': src_subvol_name,
+                              'snapshot': src_snap_name}
+
+            try:
+                src_group_name = self.metadata_mgr.get_option('source', 'group')
+                clone_src_info['group'] = src_group_name
+            except MetadataMgrException as e:
+                if e.errno == -errno.ENOENT:
+                    # group name won't be saved in .meta file in case it's
+                    # default group
+                    clone_src_info['group'] = '_nogroup'
+                else:
+                    raise
+        except MetadataMgrException as e:
+            if e.errno == -errno.ENOENT:
+                clone_src_info = {'volume': 'N/A',  'group': 'N/A', 'subvolume': 'N/A',
+                                  'snapshot': 'N/A'}
+            else:
+                raise
+
+        return clone_src_info
+
     def info(self):
         subvolpath = (self.metadata_mgr.get_global_option(
                       MetadataManager.GLOBAL_META_KEY_PATH))
@@ -494,6 +521,8 @@ class SubvolumeBase(object):
         except cephfs.NoData:
             casesensitive = True
 
+        source_info_dict = self._get_clone_source_info()
+
         return {'path': subvolpath,
                 'type': etype.value,
                 'uid': int(st["uid"]),
@@ -515,6 +544,7 @@ class SubvolumeBase(object):
                 'earmark': earmark,
                 'normalization': normalization,
                 'casesensitive': casesensitive,
+                'source': source_info_dict
         }
 
     def set_user_metadata(self, keyname, value):
