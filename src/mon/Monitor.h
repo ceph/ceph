@@ -746,10 +746,9 @@ public:
   ceph::mutex session_map_lock = ceph::make_mutex("Monitor::session_map_lock");
   AdminSocketHook *admin_hook;
 
-  template<typename Func, typename...Args>
-  void with_session_map(Func&& func) {
+  void with_session_map(auto&& f) {
     std::lock_guard l(session_map_lock);
-    std::forward<Func>(func)(session_map);
+    std::forward<decltype(f)>(f)(session_map);
   }
   void send_latest_monmap(Connection *con);
 
