@@ -687,14 +687,15 @@ Scrub::sched_conf_t PgScrubber::populate_config_params() const
       deep_pool > 0.0 ? deep_pool : conf->osd_deep_scrub_interval;
 
   /**
-   * 'max_deep' and 'max_shallow' are set to the maximum allowed delay between
-   * scrubs. These deadlines have almost no effect on scrub scheduling
+   * 'max_shallow' is set to the maximum allowed delay between
+   * scrubs. This deadline has almost no effect on scrub scheduling
    * (the only minor exception: when sorting two scrub jobs that are
-   * equivalent in all but the deadline).
+   * equivalent in all but the deadline). It will be removed in
+   * the next version.
    *
    * 'max_shallow' is controlled by a pool option and a configuration
    * parameter. Note that if the value configured is less than the
-   * shallow interval, the max_shallow is disabled.
+   * shallow interval (plus expenses), the max_shallow is disabled.
    */
   auto max_shallow = pool_conf.value_or(pool_opts_t::SCRUB_MAX_INTERVAL, 0.0);
   if (max_shallow <= 0.0) {
@@ -720,10 +721,6 @@ Scrub::sched_conf_t PgScrubber::populate_config_params() const
 	       << dendl;
     }
   }
-
-  // There are no comparable options for max_deep. We set it here to
-  // 4X the deep interval, as a reasonable default.
-  configs.max_deep = 4 * configs.deep_interval;
 
   configs.interval_randomize_ratio = conf->osd_scrub_interval_randomize_ratio;
   configs.deep_randomize_ratio =
@@ -762,33 +759,29 @@ void PgScrubber::on_operator_periodic_cmd(
     scrub_level_t scrub_level,
     int64_t offset)
 {
-  const auto cnf = populate_config_params();
-  dout(10) << fmt::format(
-		  "{}: {} (cmd offset:{}) conf:{}", __func__,
-		  (scrub_level == scrub_level_t::deep ? "deep" : "shallow"), offset,
-		  cnf)
-	   << dendl;
-
+  // if 'offset' wasn't specified - find a value that guarantees the scrub
+  // target will appear ready for scrubbing (even after random adjustments)
+  if (offset == 0) {
+    const auto cnf = populate_config_params();
+    offset = m_scrub_job->guaranteed_offset(scrub_level, cnf);
+    dout(15) << fmt::format(
+		    "{}: {} (calculated offset:{}) conf:{}", __func__,
+		    (scrub_level == scrub_level_t::deep ? "deep" : "shallow"),
+		    offset, cnf)
+	     << dendl;
+  } else {
+    dout(15) << fmt::format(
+		    "{}: {} command offset:{}", __func__,
+		    (scrub_level == scrub_level_t::deep ? "deep" : "shallow"),
+		    offset)
+	     << dendl;
+  }
   // move the relevant time-stamp backwards - enough to trigger a scrub
   utime_t stamp = ceph_clock_now();
-  if (offset > 0) {
-    stamp -= offset;
-  } else {
-    double max_iv =
-	(scrub_level == scrub_level_t::deep)
-	    ? 2 * cnf.max_deep
-	    : (cnf.max_shallow ? *cnf.max_shallow : cnf.shallow_interval);
-    dout(20) << fmt::format(
-		    "{}: stamp:{:s} ms:{}/{}/{}", __func__, stamp,
-		    (cnf.max_shallow ? "ms+" : "ms-"),
-		    (cnf.max_shallow ? *cnf.max_shallow : -999.99),
-		    cnf.shallow_interval)
-	     << dendl;
-    stamp -= max_iv;
-  }
-  stamp -= 100.0;  // for good measure
+  stamp -= offset;  // can't combine with prev line
 
-  dout(10) << fmt::format("{}: stamp:{:s} ", __func__, stamp) << dendl;
+  dout(10) << fmt::format("{}: calculated stamp:{:s}", __func__, stamp)
+	   << dendl;
   asok_response_section(f, true, scrub_level, stamp);
 
   if (scrub_level == scrub_level_t::deep) {
