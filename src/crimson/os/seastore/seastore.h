@@ -440,6 +440,10 @@ public:
     tm_ret _remove_collection(
       internal_context_t &ctx,
       const coll_t& cid);
+    tm_ret _allocate(
+      internal_context_t &ctx,
+      Onode &onode,
+      extent_len_t len);
 
     boost::intrusive_ptr<SeastoreCollection> _get_collection(const coll_t& cid);
 
