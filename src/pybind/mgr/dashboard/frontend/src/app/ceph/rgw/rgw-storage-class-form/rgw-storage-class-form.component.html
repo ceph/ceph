@@ -327,6 +327,16 @@
                 <cd-help-text>{{ retainHeadObjectText }}</cd-help-text>
               </cds-checkbox>
             </div>
+            <div class="form-item">
+              <cds-checkbox
+                id="allow_read_through"
+                formControlName="allow_read_through"
+                cdOptionalField="Allow Read Through"
+                i18n-label
+                >Allow Read Through
+                <cd-help-text>{{ allowReadThroughText }}</cd-help-text>
+              </cds-checkbox>
+            </div>
           </cds-accordion-item>
         </cds-accordion>
         <ng-template #title>
