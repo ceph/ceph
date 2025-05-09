@@ -6633,6 +6633,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # remove snapshot
         self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
 
+        # actual testing begins now...
         subvol_info = json.loads(self._get_subvolume_info(self.volname, clone))
         if len(subvol_info) == 0:
             raise RuntimeError("Expected the 'fs subvolume info' command to list metadata of subvolume")
@@ -6641,6 +6642,14 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
                 raise RuntimeError("%s not present in the metadata of subvolume" % md)
         if subvol_info["type"] != "clone":
             raise RuntimeError("type should be set to clone")
+
+        for i in ['volume', 'subvolume', 'snapshot']:
+            if i not in subvol_info['source'].keys():
+               raise RuntimeError(f'Expected key "{i}" was not found in the '
+                                   'output of "subvolume info" cmd')
+        self.assertEqual(subvol_info['source']['volume'], self.volname)
+        self.assertEqual(subvol_info['source']['subvolume'], subvolume)
+        self.assertEqual(subvol_info['source']['snapshot'], snapshot)
 
         # remove subvolumes
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)

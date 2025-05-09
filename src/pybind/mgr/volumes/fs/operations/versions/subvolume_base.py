@@ -442,6 +442,21 @@ class SubvolumeBase(object):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
+    def _get_clone_source_info(self):
+        try:
+            src_vol_name = self.metadata_mgr.get_option('source', 'volume')
+            src_subvol_name = self.metadata_mgr.get_option('source', 'subvolume')
+            src_snap_name = self.metadata_mgr.get_option('source', 'snapshot')
+
+            return {'volume': src_vol_name, 'subvolume': src_subvol_name,
+                    'snapshot': src_snap_name}
+        except MetadataMgrException as e:
+            if e.errno == errno.ENOENT:
+                log.info('info on source of clones wasn\'t find .meta file '
+                         f'for subvolume "{self.subvlname}"')
+            else:
+                raise
+
     def info(self):
         subvolpath = (self.metadata_mgr.get_global_option(
                       MetadataManager.GLOBAL_META_KEY_PATH))
@@ -494,6 +509,8 @@ class SubvolumeBase(object):
         except cephfs.NoData:
             casesensitive = True
 
+        source_info_dict = self._get_clone_source_info()
+
         return {'path': subvolpath,
                 'type': etype.value,
                 'uid': int(st["uid"]),
@@ -515,6 +532,7 @@ class SubvolumeBase(object):
                 'earmark': earmark,
                 'normalization': normalization,
                 'casesensitive': casesensitive,
+                'source': source_info_dict
         }
 
     def set_user_metadata(self, keyname, value):
