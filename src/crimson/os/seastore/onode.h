@@ -81,6 +81,15 @@ public:
       hobj(hobj)
   {}
 
+  const hobject_t &get_hobj() const {
+    return hobj;
+  }
+  bool is_snap() const {
+    return hobj.is_snap();
+  }
+  bool is_head() const {
+    return hobj.is_head();
+  }
   virtual bool is_alive() const = 0;
   virtual const onode_layout_t &get_layout() const = 0;
   virtual ~Onode() = default;

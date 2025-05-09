@@ -1637,7 +1637,7 @@ seastar::future<double> OSD::run_bench(int64_t count, int64_t bsize, int64_t osi
       for (int i = 0; i < onum; ++i) {
         ceph::os::Transaction t;
         std::string oid_str = fmt::format("disk_bw_test_{}", i);
-        ghobject_t oid(hobject_t(sobject_t(object_t(oid_str), 0)),
+        ghobject_t oid(hobject_t(sobject_t(object_t(oid_str), CEPH_NOSNAP)),
                         ghobject_t::NO_GEN,
                         shard_id_t::NO_SHARD);
         t.write(coll_t::meta(), oid, 0, data.size(), bl);
@@ -1674,7 +1674,7 @@ seastar::future<double> OSD::run_bench(int64_t count, int64_t bsize, int64_t osi
       } else {
         oid_str = fmt::format("disk_bw_test_{}", i * bsize);
       }
-      ghobject_t oid(hobject_t(sobject_t(object_t(oid_str), 0)));
+      ghobject_t oid(hobject_t(sobject_t(object_t(oid_str), CEPH_NOSNAP)));
 
       t.write(coll_t::meta(), oid, offset, bsize, bl);
 
