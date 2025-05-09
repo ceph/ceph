@@ -38,21 +38,12 @@ struct sched_conf_t {
   double deep_interval{0.0};
 
   /**
-   * the maximum interval between shallow scrubs, as determined by either the
-   * OSD or the pool configuration. Empty if no limit is configured.
+   * the maximum interval between shallow scrubs, after which the
+   * (info-only) "overdue" field in the scheduler dump is set.
+   * Determined by either the pool or the cluster configuration.
+   * Empty if no limit is configured.
    */
   std::optional<double> max_shallow;
-
-  /**
-   * the maximum interval between deep scrubs.
-   * For deep scrubs - there is no equivalent of scrub_max_interval. Per the
-   * documentation, once deep_scrub_interval has passed, we are already
-   * "overdue", at least as far as the "ignore allowed load" window is
-   * concerned. \todo based on users complaints (and the fact that the
-   * interaction between the configuration parameters is clear to no one),
-   * this will be revised shortly.
-   */
-  double max_deep{0.0};
 
   /**
    * interval_randomize_ratio
@@ -226,7 +217,7 @@ class ScrubJob {
    * The new values are updated into the scrub-job.
    *
    * Specifically:
-   * - for high-priority scrubs: n.b. & deadline are set equal to the
+   * - for high-priority scrubs: the 'not_before' is set to the
    *   (untouched) proposed target time.
    * - for regular scrubs: the proposed time is adjusted (delayed) based
    *   on the configuration; the deadline is set further out (if configured)
@@ -275,6 +266,17 @@ class ScrubJob {
    * parameters.
    */
   void operator_forced(scrub_level_t s_or_d, scrub_type_t scrub_type);
+
+  /**
+   * calculate a time offset large enough, so that once the relevant
+   * last-scrub timestamp is forced back by this amount, the PG is
+   * eligible for a periodic scrub of the specified level.
+   * Used by the scrubber upon receiving a 'fake a scheduled scrub' request
+   * from the operator.
+   */
+  double guaranteed_offset(
+      scrub_level_t s_or_d,
+      const Scrub::sched_conf_t& app_conf);
 
   void dump(ceph::Formatter* f) const;
 
@@ -432,9 +434,9 @@ struct formatter<Scrub::sched_conf_t> {
   {
     return fmt::format_to(
 	ctx.out(),
-	"periods:s:{}/{},d:{}/{},iv-ratio:{},deep-rand:{},on-inv:{}",
+	"periods:s:{}/{},d:{},iv-ratio:{},deep-rand:{},on-inv:{}",
 	cf.shallow_interval, cf.max_shallow.value_or(-1.0), cf.deep_interval,
-	cf.max_deep, cf.interval_randomize_ratio, cf.deep_randomize_ratio,
+	cf.interval_randomize_ratio, cf.deep_randomize_ratio,
 	cf.mandatory_on_invalid);
   }
 };

@@ -136,9 +136,11 @@ struct scrub_schedule_t {
    * the 'deadline' is the time by which we expect the periodic scrub to
    * complete. It is determined by the SCRUB_MAX_INTERVAL pool configuration
    * and by osd_scrub_max_interval;
-   * Once passed, the scrub will be allowed to run even if the OSD is
-   * overloaded.It would also have higher priority than other
-   * auto-scheduled scrubs.
+   * Note: the 'deadline' has only a limited effect on scheduling: when
+   * comparing jobs having identical urgency and target time (scheduled_at'),
+   * the job with the earlier 'deadline' is preferred.
+   * Being past deadline also sets the 'overdue' flag in scrub
+   * scheduling dumps.
    */
   utime_t deadline{utime_t::max()};
 
