@@ -291,6 +291,15 @@ void CephXTicketManager::invalidate_ticket(uint32_t service_id)
     iter->second.invalidate_ticket();
 }
 
+void CephXTicketManager::invalidate_all_tickets()
+{
+  ldout(cct, 10) << __func__ << dendl;
+  for ([[maybe_unused]] auto &[service_id, ticket] : tickets_map) {
+    ticket.invalidate_ticket();
+  }
+}
+
+
 /*
  * PRINCIPAL: verify our attempt to authenticate succeeded.  fill out
  * this ServiceTicket with the result.

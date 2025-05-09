@@ -66,6 +66,8 @@ public:
 
   bool need_tickets() override;
 
+  void invalidate_all_tickets() override;
+
   void set_global_id(uint64_t id) override {
     global_id = id;
     tickets.global_id = id;
