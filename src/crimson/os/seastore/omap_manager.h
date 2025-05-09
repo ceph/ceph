@@ -13,6 +13,8 @@
 #include "crimson/osd/exceptions.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/transaction_manager.h"
+#include "os/ObjectStore.h"
+
 
 //TODO: calculate the max key and value sizes the current layout supports,
 //	and return errors during insert if the max is exceeded.
@@ -96,6 +98,27 @@ public:
     omap_root_t &omap_root,
     Transaction &t,
     const std::string &key) = 0;
+
+  /**
+   * omap_iterate
+   *
+   * scan key/value pairs and give key/value from start_from.seek_poistion to function f
+   *
+   * @param omap_root: omap btree root information
+   * @param t: current transaction
+   * @param start_from: seek start key and seek type
+   * @param f: function is called for each seeked key/value pair
+   *
+   */
+   using omap_iterate_cb_t = std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)>;
+   using omap_iterate_iertr = base_iertr;
+   using omap_iterate_ret = omap_iterate_iertr::future<ObjectStore::omap_iter_ret_t>;
+   virtual omap_iterate_ret omap_iterate(
+     const omap_root_t &omap_root,
+     Transaction &t,
+     ObjectStore::omap_iter_seek_t &start_from,
+     omap_iterate_cb_t callback
+   ) = 0;
 
   /**
    * omap_list

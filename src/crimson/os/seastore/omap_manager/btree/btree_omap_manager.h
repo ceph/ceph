@@ -96,6 +96,12 @@ public:
     const std::string &last,
     omap_list_config_t config) final;
 
+  omap_iterate_ret omap_iterate(
+    const omap_root_t &omap_root,
+    Transaction &t,
+    ObjectStore::omap_iter_seek_t &start_from,
+    omap_iterate_cb_t callback) final;
+
   omap_list_ret omap_list(
     const omap_root_t &omap_root,
     Transaction &t,
