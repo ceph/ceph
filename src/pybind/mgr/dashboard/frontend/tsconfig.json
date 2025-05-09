@@ -23,13 +23,9 @@
     "baseUrl": "./",
     "resolveJsonModule": true,
     "paths": {
-      "~/*": ["src/*"],
-      "timers": [
-          "node_modules/timers-browserify"
-        ],
-        "stream": [
-          "node_modules/stream-browserify"
-        ]
+      "stream": ["node_modules/stream-browserify"],
+      "timers": ["node_modules/timers-browserify"],
+      "~/*": ["src/*"]
     },
     "typeRoots": ["node_modules/@types"],
     "lib": ["es2017", "dom"],
