@@ -44,6 +44,7 @@ public:
   bool need_new_secrets(utime_t now) const;
   void set_secrets(RotatingSecrets&& s);
   void dump_rotating() const;
+  void wipe();
   bool get_secret(const EntityName& name, CryptoKey& secret) const override;
   bool get_service_secret(uint32_t service_id, uint64_t secret_id,
 			  CryptoKey& secret) const override;

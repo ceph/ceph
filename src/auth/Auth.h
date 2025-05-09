@@ -303,6 +303,9 @@ struct RotatingSecrets {
   bool empty() {
     return secrets.empty();
   }
+  void wipe() {
+    secrets.clear();
+  }
 
   void dump();
 };
