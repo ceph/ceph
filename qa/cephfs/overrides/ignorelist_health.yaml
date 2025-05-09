@@ -25,4 +25,6 @@ overrides:
       - BLUESTORE_SLOW_OP_ALERT
       - slow operation indications in BlueStore
       - experiencing slow operations in BlueStore
+      # cluster [WRN] Health check failed: 0 slow ops, oldest one blocked for 181 sec, osd.4 has slow ops (SLOW_OPS)
+      - SLOW_OPS
       - MGR_MODULE_ERROR
