@@ -2,12 +2,12 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "crimson/os/seastore/btree/btree_types.h"
-#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/lba/lba_btree_node.h"
 #include "crimson/os/seastore/backref/backref_tree_node.h"
 
 namespace crimson::os::seastore {
 
-namespace lba_manager::btree {
+namespace lba {
 
 std::ostream& operator<<(std::ostream& out, const lba_map_val_t& v)
 {
@@ -19,7 +19,7 @@ std::ostream& operator<<(std::ostream& out, const lba_map_val_t& v)
              << ")";
 }
 
-} // namespace lba_manager::btree
+} // namespace lba
 
 namespace backref {
 
@@ -36,7 +36,7 @@ namespace {
 template <typename key_t, typename T>
 bool modified_since(T &&extent, uint64_t iter_modifications) {
   using backref::BackrefLeafNode;
-  using lba_manager::btree::LBALeafNode;
+  using lba::LBALeafNode;
   if constexpr (std::is_same_v<key_t, laddr_t>) {
     assert(extent->get_type() == extent_types_t::LADDR_LEAF);
     auto leaf = extent->template cast<LBALeafNode>();
@@ -64,7 +64,7 @@ bool BtreeCursor<key_t, val_t>::is_viewable() const {
   return viewable;
 }
 
-template struct BtreeCursor<laddr_t, lba_manager::btree::lba_map_val_t>;
+template struct BtreeCursor<laddr_t, lba::lba_map_val_t>;
 template struct BtreeCursor<paddr_t, backref::backref_map_val_t>;
 
 } // namespace crimson::os::seastore

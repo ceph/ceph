@@ -10,13 +10,13 @@
 #include "include/buffer.h"
 #include "include/byteorder.h"
 
-#include "crimson/os/seastore/lba_manager/btree/btree_lba_manager.h"
+#include "crimson/os/seastore/lba/btree_lba_manager.h"
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/logical_child_node.h"
 
 SET_SUBSYS(seastore_lba);
 
-namespace crimson::os::seastore::lba_manager::btree {
+namespace crimson::os::seastore::lba {
 
 std::ostream &LBALeafNode::print_detail(std::ostream &out) const
 {

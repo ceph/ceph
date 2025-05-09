@@ -20,14 +20,14 @@
 #include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/cache.h"
 
-#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/lba/lba_btree_node.h"
 #include "crimson/os/seastore/btree/btree_types.h"
 
 namespace crimson::os::seastore {
 class LogicalCachedExtent;
 }
 
-namespace crimson::os::seastore::lba_manager::btree {
+namespace crimson::os::seastore::lba {
 
 using LBABtree = FixedKVBtree<
   laddr_t, lba_map_val_t, LBAInternalNode,

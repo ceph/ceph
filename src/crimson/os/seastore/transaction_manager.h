@@ -951,7 +951,7 @@ private:
 
   shard_stats_t& shard_stats;
 
-  using LBALeafNode = lba_manager::btree::LBALeafNode;
+  using LBALeafNode = lba::LBALeafNode;
   struct unlinked_child_t {
     LBAMapping mapping;
     child_pos_t<LBALeafNode> child_pos;
