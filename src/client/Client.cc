@@ -670,7 +670,7 @@ void Client::_finish_init()
     plb.add_u64(l_c_rd_ops, "rdops", "Total read IO operations");
     plb.add_time(l_c_wr_avg, "writeavg", "Average latency for processing write requests");
     plb.add_u64(l_c_wr_sqsum, "writesqsum", "Sum of squares ((to calculate variability/stdev) for write requests");
-    plb.add_u64(l_c_wr_ops, "rdops", "Total write IO operations");
+    plb.add_u64(l_c_wr_ops, "wrops", "Total write IO operations");
     logger.reset(plb.create_perf_counters());
     cct->get_perfcounters_collection()->add(logger.get());
   }
@@ -17481,6 +17481,23 @@ void Client::set_cap_epoch_barrier(epoch_t e)
 {
   ldout(cct, 5) << __func__ << " epoch = " << e << dendl;
   cap_epoch_barrier = e;
+}
+
+int Client::get_perf_counters(bufferlist *outbl) {
+  RWRef_t iref_reader(initialize_state, CLIENT_INITIALIZED);
+  if (!iref_reader.is_state_satisfied()) {
+    return -ENOTCONN;
+  }
+
+  ceph::bufferlist inbl;
+  std::ostringstream err;
+  std::vector<std::string> cmd{
+    "{\"prefix\": \"perf dump\"}",
+    "{\"format\": \"json\"}"
+  };
+
+  ldout(cct, 10) << __func__ << ": perf cmd=" << cmd << dendl;
+  return cct->get_admin_socket()->execute_command(cmd, inbl, err, outbl);
 }
 
 std::vector<std::string> Client::get_tracked_keys() const noexcept
