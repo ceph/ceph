@@ -14,9 +14,12 @@ const char* RGWTable::INCREMENT = "increment";
 const char* RGWTable::DECREMENT = "decrement";
 
 int RGWTable::increment_by(lua_State* L) {
-  const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-  auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
-  auto decrement = lua_toboolean(L, lua_upvalueindex(THIRD_UPVAL));
+  const auto map = reinterpret_cast<ProtectedMap*>(
+      lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+#ifndef WITH_RADOSGW_INTEL_TBB
+  auto& mtx = map->get_mutex();
+#endif
+  auto decrement = lua_toboolean(L, lua_upvalueindex(SECOND_UPVAL));
 
   const auto args = lua_gettop(L);
   const auto index = luaL_checkstring(L, 1);
@@ -34,11 +37,11 @@ int RGWTable::increment_by(lua_State* L) {
     }
   }
 
+#ifndef WITH_RADOSGW_INTEL_TBB
   std::unique_lock l(mtx);
-
-  const auto it = map->find(std::string(index));
-  if (it != map->end()) {
-    auto& value = it->second;
+#endif
+  if (map->find(std::string(index))) {
+    auto& value = map->get(std::string(index));
     if (std::holds_alternative<double>(value) && std::holds_alternative<double>(inc_by)) {
       value = std::get<double>(value) + std::get<double>(inc_by);
     } else if (std::holds_alternative<long long int>(value) && std::holds_alternative<long long int>(inc_by)) {
@@ -48,11 +51,12 @@ int RGWTable::increment_by(lua_State* L) {
     } else if (std::holds_alternative<long long int>(value) && std::holds_alternative<double>(inc_by)) {
       value = static_cast<double>(std::get<long long int>(value)) + std::get<double>(inc_by);
     } else {
+#ifndef WITH_RADOSGW_INTEL_TBB
       mtx.unlock();
+#endif
       return luaL_error(L, "can increment only numeric values");
     }
   }
-
   return 0;
 }
 
@@ -132,14 +136,23 @@ std::unique_ptr<lua_state_guard> Background::initialize_lguard_state() {
 }
 
 const BackgroundMapValue Background::empty_table_value;
+const BackgroundMapValue ProtectedMap::empty_table_value;
 
 const BackgroundMapValue& Background::get_table_value(const std::string& key) const {
-  std::unique_lock cond_lock(table_mutex);
-  const auto it = rgw_map.find(key);
-  if (it == rgw_map.end()) {
-    return empty_table_value;
+  auto map = rgw_map.get_map();
+#ifdef WITH_RADOSGW_INTEL_TBB
+  tbb::concurrent_hash_map<std::string, BackgroundMapValue>::accessor acc;
+  if (map.find(acc, key)) {
+    return acc->second;
   }
-  return it->second;
+#else
+  std::unique_lock cond_lock(table_mutex);
+  const auto it = map.find(key);
+  if (it != map.end()) {
+    return it->second;
+  }
+#endif
+  return empty_table_value;
 }
 
 //(1) Loads the script from the object if not paused
@@ -209,7 +222,12 @@ void Background::run() {
 
 void Background::create_background_metatable(lua_State* L) {
   static const char* background_table_name = "RGW";
-  create_metatable<RGWTable>(L, "", background_table_name, true, &rgw_map, &table_mutex);
+#ifdef WITH_RADOSGW_INTEL_TBB
+  create_metatable<RGWTable>(L, "", background_table_name, true, &rgw_map);
+#else
+  create_metatable<RGWTable>(L, "", background_table_name, true, &rgw_map,
+                             &table_mutex);
+#endif
   lua_getglobal(L, background_table_name);
   ceph_assert(lua_istable(L, -1));
 }
