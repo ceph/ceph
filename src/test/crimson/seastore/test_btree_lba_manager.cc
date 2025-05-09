@@ -221,7 +221,7 @@ struct lba_btree_test : btree_test_base {
   std::map<laddr_t, lba_map_val_t> check;
 
   auto get_op_context(Transaction &t) {
-    return op_context_t<laddr_t>{*cache, t};
+    return op_context_t{*cache, t};
   }
 
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
@@ -364,7 +364,7 @@ struct lba_btree_test : btree_test_base {
 	EXPECT_TRUE(iter.get_val().len == len);
 	return btree.remove(
 	  get_op_context(t), iter 
-	);
+        ).discard_result();
       });
     });
   }
@@ -561,16 +561,16 @@ struct btree_lba_manager_test : btree_test_base {
 	});
       }).unsafe_get();
     for (auto &ret : rets) {
-      logger().debug("alloc'd: {}", *ret);
-      EXPECT_EQ(len, ret->get_length());
-      auto [b, e] = get_overlap(t, ret->get_key(), len);
+      logger().debug("alloc'd: {}", ret);
+      EXPECT_EQ(len, ret.get_length());
+      auto [b, e] = get_overlap(t, ret.get_key(), len);
       EXPECT_EQ(b, e);
       t.mappings.emplace(
 	std::make_pair(
-	  ret->get_key(),
+	  ret.get_key(),
 	  test_extent_t{
-	    ret->get_val(),
-	    ret->get_length(),
+	    ret.get_val(),
+	    ret.get_length(),
 	    1
 	  }
 	));
@@ -652,9 +652,9 @@ struct btree_lba_manager_test : btree_test_base {
 	}).unsafe_get();
       EXPECT_EQ(ret_list.size(), 1);
       auto &ret = *ret_list.begin();
-      EXPECT_EQ(i.second.addr, ret->get_val());
-      EXPECT_EQ(laddr, ret->get_key());
-      EXPECT_EQ(len, ret->get_length());
+      EXPECT_EQ(i.second.addr, ret.get_val());
+      EXPECT_EQ(laddr, ret.get_key());
+      EXPECT_EQ(len, ret.get_length());
 
       auto ret_pin = with_trans_intr(
 	*t.t,
@@ -662,9 +662,9 @@ struct btree_lba_manager_test : btree_test_base {
 	  return lba_manager->get_mapping(
 	    t, laddr);
 	}).unsafe_get();
-      EXPECT_EQ(i.second.addr, ret_pin->get_val());
-      EXPECT_EQ(laddr, ret_pin->get_key());
-      EXPECT_EQ(len, ret_pin->get_length());
+      EXPECT_EQ(i.second.addr, ret_pin.get_val());
+      EXPECT_EQ(laddr, ret_pin.get_key());
+      EXPECT_EQ(len, ret_pin.get_length());
     }
     with_trans_intr(
       *t.t,
