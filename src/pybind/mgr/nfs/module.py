@@ -130,11 +130,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 ingress: Optional[bool] = None,
                                 virtual_ip: Optional[str] = None,
                                 ingress_mode: Optional[IngressType] = None,
-                                port: Optional[int] = None) -> None:
+                                port: Optional[int] = None,
+                                enable_virtual_server: bool = False) -> None:
         """Create an NFS Cluster"""
         return self.nfs.create_nfs_cluster(cluster_id=cluster_id, placement=placement,
                                            virtual_ip=virtual_ip, ingress=ingress,
-                                           ingress_mode=ingress_mode, port=port)
+                                           ingress_mode=ingress_mode, port=port,
+                                           enable_virtual_server=enable_virtual_server)
 
     @CLICommand('nfs cluster rm', perm='rw')
     @object_format.EmptyResponder()
