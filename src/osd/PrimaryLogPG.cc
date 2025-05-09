@@ -8563,21 +8563,36 @@ void PrimaryLogPG::_do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
   t->clone(soid, rollback_to_sobject);
   t->add_obc(rollback_to);
 
-  map<snapid_t, interval_set<uint64_t> >::iterator iter =
+  map<snapid_t, interval_set<uint64_t> >::iterator rollback_target_iter =
     snapset.clone_overlap.lower_bound(snapid);
-  ceph_assert(iter != snapset.clone_overlap.end());
-  interval_set<uint64_t> overlaps = iter->second;
-  for ( ;
-	iter != snapset.clone_overlap.end();
-	++iter)
-    overlaps.intersection_of(iter->second);
+  ceph_assert(rollback_target_iter != snapset.clone_overlap.end());
 
-  if (obs.oi.size > 0) {
+  // Let's reuse what we already have, bring forward the overlaps
+  // between the rollback target to the newest clone we have
+  auto last_clone_overlap_iter = --snapset.clone_overlap.end();
+
+  // Forget last_clone overlap with head as we are about to overwrite it
+  // Calculate the new last clone overlap with the rollback taret and
+  // adjust it directly.
+  {
+    interval_set<uint64_t> new_last_clone_overlap;
+    new_last_clone_overlap.insert(0,rollback_to->obs.oi.size);
+    for (auto iter = rollback_target_iter;
+         iter != last_clone_overlap_iter;
+         ++iter) {
+      new_last_clone_overlap.intersection_of(iter->second);
+    }
+    last_clone_overlap_iter->second = new_last_clone_overlap;
+  }
+
+  // Calculate what is modified between the
+  // rollback target and the newest clone
+  if (rollback_to->obs.oi.size > 0) {
     interval_set<uint64_t> modified;
-    modified.insert(0, obs.oi.size);
-    overlaps.intersection_of(modified);
-    modified.subtract(overlaps);
-    ctx->modified_ranges.union_of(modified);
+    modified.insert(0, rollback_to->obs.oi.size);
+    last_clone_overlap_iter->second.intersection_of(modified);
+    modified.subtract(last_clone_overlap_iter->second);
+    ctx->delta_stats.num_bytes += modified.size();
   }
 
   // Adjust the cached objectcontext
