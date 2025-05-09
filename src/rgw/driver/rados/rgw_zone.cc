@@ -408,16 +408,15 @@ int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
                   RGWRealm& realm, sal::RealmWriter& realm_writer,
                   const RGWPeriod& current_period,
                   RGWPeriod& info, std::ostream& error_stream,
-                  bool force_if_stale)
+                  bool force_if_stale, const rgw::SiteConfig& site)
 {
   ldpp_dout(dpp, 20) << __func__ << " realm " << realm.id
       << " period " << current_period.id << dendl;
-  auto zone_svc = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone; // XXX
 
   // gateway must be in the master zone to commit
-  if (info.master_zone != zone_svc->get_zone_params().id) {
+  if (info.master_zone != site.get_zone_params().id) {
     error_stream << "Cannot commit period on zone "
-        << zone_svc->get_zone_params().id << ", it must be sent to "
+        << site.get_zone_params().id << ", it must be sent to "
         "the period's master zone " << info.master_zone << '.' << std::endl;
     return -EINVAL;
   }
