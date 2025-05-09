@@ -20,26 +20,26 @@
            Cluster->Services</a>
       </cd-alert-panel>
       <cd-table-actions class="btn-group mb-4 me-2"
-                        [permission]="permission"
+                        [permission]="permissions.rgw"
                         [selection]="selection"
                         [tableActions]="createTableActions">
       </cd-table-actions>
       <span *ngIf="showMigrateAction">
         <cd-table-actions class="btn-group mb-4 me-2 secondary"
-                          [permission]="permission"
+                          [permission]="permissions.rgw"
                           [btnColor]="'light'"
                           [selection]="selection"
                           [tableActions]="migrateTableAction">
         </cd-table-actions>
       </span>
       <cd-table-actions class="btn-group mb-4 me-2"
-                        [permission]="permission"
+                        [permission]="permissions.rgw"
                         [btnColor]="'light'"
                         [selection]="selection"
                         [tableActions]="importAction">
       </cd-table-actions>
       <cd-table-actions class="btn-group mb-4 me-2"
-                        [permission]="permission"
+                        [permission]="permissions.rgw"
                         [btnColor]="'light'"
                         [selection]="selection"
                         [tableActions]="exportAction">
