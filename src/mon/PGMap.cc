@@ -3313,6 +3313,10 @@ void PGMap::get_health_checks(
         summary += " experiencing stalled read in wal device of BlueFS";
       } else if (asum.first == "DB_DEVICE_STALLED_READ_ALERT") {
         summary += " experiencing stalled read in db device of BlueFS";
+      } else if (asum.first.find("_DISCARD_QUEUE") != std::string::npos) {
+	for (auto str : asum.second.second) {
+	  summary += str;
+	}
       }
 
       auto& d = checks->add(asum.first, HEALTH_WARN, summary, asum.second.first);
