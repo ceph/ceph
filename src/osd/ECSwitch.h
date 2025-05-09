@@ -359,4 +359,19 @@ public:
     return legacy.object_size_to_shard_size(size);
     // All shards are the same size.
   }
+  bool get_is_nonprimary_shard(const shard_id_t shard) const final {
+    if (is_optimized()) {
+      return optimized.get_is_nonprimary_shard(shard);
+    }
+    return false;
+  }
+  bool get_is_hinfo_required() const final {
+    if (is_optimized()) {
+      return optimized.get_is_hinfo_required();
+    }
+    return true;
+  }
+  bool get_is_ec_optimized() const final {
+    return is_optimized();
+  }
 };
