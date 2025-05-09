@@ -39,6 +39,7 @@
 #include "MetricsHandler.h"
 #include "cephfs_features.h"
 #include "MDSContext.h"
+#include "LogSegment.h"
 
 #include "messages/MClientReconnect.h"
 #include "messages/MClientReply.h"
@@ -410,6 +411,8 @@ void Server::dispatch(const cref_t<Message> &m)
 // SESSION management
 
 class C_MDS_session_finish : public ServerLogContext {
+  using LogSegmentRef = boost::intrusive_ptr<LogSegment>;
+
   Session *session;
   uint64_t state_seq;
   bool open;
@@ -417,14 +420,14 @@ class C_MDS_session_finish : public ServerLogContext {
   interval_set<inodeno_t> inos_to_free;
   version_t inotablev;
   interval_set<inodeno_t> inos_to_purge;
-  LogSegment *ls = nullptr;
+  LogSegmentRef ls = nullptr;
   Context *fin;
 public:
   C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = nullptr) :
     ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
   C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv,
 		       const interval_set<inodeno_t>& to_free, version_t iv,
-		       const interval_set<inodeno_t>& to_purge, LogSegment *_ls, Context *fin_ = nullptr) :
+		       const interval_set<inodeno_t>& to_purge, LogSegmentRef _ls, Context *fin_ = nullptr) :
     ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv),
     inos_to_free(to_free), inotablev(iv), inos_to_purge(to_purge), ls(_ls), fin(fin_) {}
   void finish(int r) override {
@@ -903,7 +906,7 @@ void Server::finish_flush_session(Session *session, version_t seq)
 
 void Server::_session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
 			     const interval_set<inodeno_t>& inos_to_free, version_t piv,
-			     const interval_set<inodeno_t>& inos_to_purge, LogSegment *ls)
+			     const interval_set<inodeno_t>& inos_to_purge, LogSegmentRef ls)
 {
   dout(10) << "_session_logged " << session->info.inst
 	   << " state_seq " << state_seq
