@@ -250,7 +250,7 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
     return;
   }
 
-  ENCODE_START(9, 6, blist);
+  ENCODE_START(10, 6, blist);
   ceph::encode_raw(fsid, blist);
   encode(epoch, blist);
   encode(last_changed, blist);
@@ -267,13 +267,14 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
   encode(stretch_mode_enabled, blist);
   encode(tiebreaker_mon, blist);
   encode(stretch_marked_down_mons, blist);
+  encode(auth_epoch, blist);
   ENCODE_FINISH(blist);
 }
 
 void MonMap::decode(ceph::buffer::list::const_iterator& p)
 {
   map<string,entity_addr_t> mon_addr;
-  DECODE_START_LEGACY_COMPAT_LEN_16(9, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(10, 3, 3, p);
   ceph::decode_raw(fsid, p);
   decode(epoch, p);
   if (struct_v == 1) {
@@ -330,6 +331,9 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
     stretch_mode_enabled = false;
     tiebreaker_mon = "";
     stretch_marked_down_mons.clear();
+  }
+  if (struct_v >= 10) {
+    decode(auth_epoch, p);
   }
   calc_addr_mons();
   DECODE_FINISH(p);
@@ -474,11 +478,13 @@ void MonMap::print(ostream& out) const
     }
     out << "\n";
   }
+  out << "auth_epoch " << auth_epoch << "\n";
 }
 
 void MonMap::dump(Formatter *f) const
 {
   f->dump_unsigned("epoch", epoch);
+  f->dump_unsigned("auth_epoch", auth_epoch);
   f->dump_stream("fsid") <<  fsid;
   last_changed.gmtime(f->dump_stream("modified"));
   created.gmtime(f->dump_stream("created"));
