@@ -130,7 +130,6 @@ private:
   std::string m_local_group_name;
   std::string m_prepare_local_group_name;
   std::string m_prepare_remote_group_name;
-  bool m_local_group_removed = false;
 
   bufferlist m_out_bl;
 

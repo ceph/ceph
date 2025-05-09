@@ -82,6 +82,7 @@ void BootstrapRequest<I>::send() {
 // TODO : Create this in PrepareLocalGroupRequest/PrepareRemoteGroupRequest ?
   *m_state_builder = GroupStateBuilder<I>::create(m_global_group_id);
 
+  *m_resync_requested = false;
   prepare_local_group();
 }
 
@@ -96,7 +97,6 @@ template <typename I>
 void BootstrapRequest<I>::prepare_local_group() {
   dout(10) << dendl;
 
-  m_local_group_removed = false;
   auto ctx = create_context_callback<
     BootstrapRequest, &BootstrapRequest<I>::handle_prepare_local_group>(this);
   auto req = PrepareLocalGroupRequest<I>::create(
@@ -152,8 +152,7 @@ void BootstrapRequest<I>::handle_prepare_remote_group(int r) {
     if (state_builder->remote_group_id.empty()) {
       if (state_builder->local_group_id.empty()) {
 	// Neither group exists
-	m_local_group_removed = true; //FIXME
-	finish(0);
+	finish(-ENOLINK);
 	return;
       } else if (state_builder->local_promotion_state ==
                  librbd::mirror::PROMOTION_STATE_NON_PRIMARY){
@@ -161,7 +160,7 @@ void BootstrapRequest<I>::handle_prepare_remote_group(int r) {
 	return;
       } else {
 	// Do not remove the group if the promotion state is orphan or unknown
-	finish(-ENOLINK);
+	finish(-ENOENT);
 	return;
       }
     }
@@ -250,8 +249,13 @@ void BootstrapRequest<I>::handle_remove_local_group(int r) {
     finish(r);
     return;
   }
-  m_local_group_removed = true;
-  finish(0);
+
+  if (*m_resync_requested) {
+    finish(0);
+  } else {
+    finish(-ENOLINK);
+  }
+
 }
 
 template <typename I>
@@ -265,8 +269,9 @@ void BootstrapRequest<I>::finish(int r) {
   }
 
   if (r == 0) {
-    if (m_local_group_removed) {
-      r = -ENOENT;
+    if (*m_resync_requested) {
+      m_on_finish->complete(r);
+      return;
     } else {
       *m_local_group_ctx = {(*m_state_builder)->group_name,
                             (*m_state_builder)->local_group_id,
@@ -468,7 +473,7 @@ void BootstrapRequest<I>::handle_get_local_group_meta(int r) {
       *m_resync_requested = true;
     }
   }
-  if (r != -ENOENT){
+  if (r < 0 && r != -ENOENT){
     // ignore this for now ?
     dout(10) << "failed to get group meta: " << r << dendl;
   }
@@ -477,6 +482,7 @@ void BootstrapRequest<I>::handle_get_local_group_meta(int r) {
     return;
   } else {
     // proceed to remove local group
+    dout(10) << "group resync requested" << dendl;
     remove_local_group();
     return;
   }

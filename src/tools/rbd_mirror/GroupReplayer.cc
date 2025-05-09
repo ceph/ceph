@@ -357,6 +357,7 @@ void GroupReplayer<I>::start(Context *on_finish, bool manual, bool restart) {
       m_manual_stop = false;
       m_finished = false;
       m_delete_requested = false;
+      m_resync_requested = false;
       m_status_removed = false;
       ceph_assert(m_on_start_finish == nullptr);
       std::swap(m_on_start_finish, on_finish);
@@ -592,9 +593,6 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
   m_destroy_replayers = true;
   if (finish_start_if_interrupted()) {
     return;
-  } else if (r == -ENOENT) {
-    finish_start_fail(r, "group removed");
-    return;
   } else if (r == -ENOLINK) {
     finish_start_fail(r, "remote group no longer exists");
     return;
@@ -610,6 +608,9 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
     return;
   } else if (r < 0) {
     finish_start_fail(r, "error bootstrapping replay");
+    return;
+  } else if (m_resync_requested) {
+    finish_start_fail(0, "resync requested");
     return;
   }
 
@@ -853,7 +854,7 @@ void GroupReplayer<I>::finish_start_fail(int r, const std::string &desc) {
       if (r < 0) {
 	if (r == -ECANCELED) {
 	  dout(10) << "start canceled" << dendl;
-	} else if (r == -ENOENT) {
+	} else if (r == -ENOLINK) {
           m_delete_requested = true;
 	  dout(10) << "mirroring group removed" << dendl;
 	} else if (r == -EREMOTEIO) {
@@ -941,7 +942,7 @@ template <typename I>
 void GroupReplayer<I>::handle_shut_down(int r) {
   dout(10) << "r=" << r << dendl;
 
-  if (r == -ENOENT) { // group removed
+  if (r == -ENOLINK) { // group removed
     if (!m_resync_requested) {
       set_finished(true);
     }
