@@ -100,7 +100,7 @@ struct __attribute__((packed)) fixed_kv_node_meta_le_t {
   }
 };
 
-namespace lba_manager::btree {
+namespace lba {
 
 /**
  * lba_map_val_t
@@ -150,7 +150,7 @@ struct __attribute__((packed)) lba_map_val_le_t {
   }
 };
 
-} // namespace lba_manager::btree
+} // namespace lba
 
 namespace backref {
 
@@ -216,7 +216,7 @@ struct BtreeCursor {
 	pos(pos)
   {
     if constexpr (std::is_same_v<key_t, laddr_t>) {
-      static_assert(std::is_same_v<val_t, lba_manager::btree::lba_map_val_t>,
+      static_assert(std::is_same_v<val_t, lba::lba_map_val_t>,
         "the value type of laddr_t for BtreeCursor should be lba_map_val_t");
     } else {
       static_assert(std::is_same_v<key_t, paddr_t>,
@@ -251,8 +251,8 @@ struct BtreeCursor {
   }
 };
 
-struct LBACursor : BtreeCursor<laddr_t, lba_manager::btree::lba_map_val_t> {
-  using Base = BtreeCursor<laddr_t, lba_manager::btree::lba_map_val_t>;
+struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
+  using Base = BtreeCursor<laddr_t, lba::lba_map_val_t>;
   using Base::BtreeCursor;
   bool is_indirect() const {
     assert(!is_end());

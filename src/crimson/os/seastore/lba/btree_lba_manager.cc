@@ -7,8 +7,8 @@
 #include <seastar/core/metrics.hh>
 
 #include "include/buffer.h"
-#include "crimson/os/seastore/lba_manager/btree/btree_lba_manager.h"
-#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/lba/btree_lba_manager.h"
+#include "crimson/os/seastore/lba/lba_btree_node.h"
 #include "crimson/os/seastore/logging.h"
 
 SET_SUBSYS(seastore_lba);
@@ -20,10 +20,10 @@ SET_SUBSYS(seastore_lba);
  */
 
 template <> struct fmt::formatter<
-  crimson::os::seastore::lba_manager::btree::LBABtree::iterator>
+  crimson::os::seastore::lba::LBABtree::iterator>
     : public fmt::formatter<std::string_view>
 {
-  using Iter = crimson::os::seastore::lba_manager::btree::LBABtree::iterator;
+  using Iter = crimson::os::seastore::lba::LBABtree::iterator;
 
   template <typename FmtCtx>
   auto format(const Iter &iter, FmtCtx &ctx) const
@@ -45,7 +45,7 @@ Transaction::tree_stats_t& get_tree_stats(Transaction &t)
 
 template Transaction::tree_stats_t&
 get_tree_stats<
-  crimson::os::seastore::lba_manager::btree::LBABtree>(
+  crimson::os::seastore::lba::LBABtree>(
   Transaction &t);
 
 template <typename T>
@@ -56,11 +56,11 @@ phy_tree_root_t& get_phy_tree_root(root_t &r)
 
 template phy_tree_root_t&
 get_phy_tree_root<
-  crimson::os::seastore::lba_manager::btree::LBABtree>(root_t &r);
+  crimson::os::seastore::lba::LBABtree>(root_t &r);
 
 template <>
 const get_phy_tree_root_node_ret get_phy_tree_root_node<
-  crimson::os::seastore::lba_manager::btree::LBABtree>(
+  crimson::os::seastore::lba::LBABtree>(
   const RootBlockRef &root_block, op_context_t c)
 {
   auto lba_root = root_block->lba_root_node;
@@ -98,12 +98,12 @@ public:
   }
 };
 
-template class TreeRootLinker<RootBlock, lba_manager::btree::LBAInternalNode>;
-template class TreeRootLinker<RootBlock, lba_manager::btree::LBALeafNode>;
+template class TreeRootLinker<RootBlock, lba::LBAInternalNode>;
+template class TreeRootLinker<RootBlock, lba::LBALeafNode>;
 
 }
 
-namespace crimson::os::seastore::lba_manager::btree {
+namespace crimson::os::seastore::lba {
 
 BtreeLBAManager::mkfs_ret
 BtreeLBAManager::mkfs(

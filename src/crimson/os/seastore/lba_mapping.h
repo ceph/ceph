@@ -5,12 +5,12 @@
 
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/btree/btree_types.h"
-#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/lba/lba_btree_node.h"
 #include "crimson/os/seastore/logical_child_node.h"
 
 namespace crimson::os::seastore {
 
-namespace lba_manager::btree {
+namespace lba {
 class BtreeLBAManager;
 }
 
@@ -94,7 +94,7 @@ public:
     return direct_cursor->get_laddr();
   }
 
-   // An lba pin may be indirect, see comments in lba_manager/btree/btree_lba_manager.h
+   // An lba pin may be indirect, see comments in lba/btree_lba_manager.h
   laddr_t get_intermediate_key() const {
     assert(is_indirect());
     return indirect_cursor->get_intermediate_key();
@@ -117,7 +117,7 @@ public:
       extent_len_t>(get_intermediate_key());
   }
 
-  get_child_ret_t<lba_manager::btree::LBALeafNode, LogicalChildNode>
+  get_child_ret_t<lba::LBALeafNode, LogicalChildNode>
   get_logical_extent(Transaction &t);
 
   LBAMapping duplicate() const {
@@ -132,7 +132,7 @@ public:
   }
 
 private:
-  friend lba_manager::btree::BtreeLBAManager;
+  friend lba::BtreeLBAManager;
 
   // To support cloning, there are two kinds of lba mappings:
   //    1. direct lba mapping: the pladdr in the value of which is the paddr of
