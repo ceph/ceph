@@ -873,8 +873,8 @@ class LokiService(CephadmService):
 
 
 @register_cephadm_service
-class PromtailService(CephadmService):
-    TYPE = 'promtail'
+class AlloyService(CephadmService):
+    TYPE = 'alloy'
     DEFAULT_SERVICE_PORT = 9080
 
     @classmethod
@@ -902,10 +902,10 @@ class PromtailService(CephadmService):
             'client_hostname': loki_host,
         }
 
-        yml = self.mgr.template.render('services/promtail.yml.j2', context)
+        alloy_config = self.mgr.template.render('services/alloy.j2', context)
         return {
             "files": {
-                "promtail.yml": yml
+                "alloy": alloy_config
             }
         }, deps
 
