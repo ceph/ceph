@@ -176,12 +176,13 @@ BtreeLBAManager::get_mappings(
           auto intermediate_len = pin->get_length();
           return get_indirect_pin(c, btree, key, intermediate_key, intermediate_len
           ).si_then([FNAME, c, &ret, laddr, length](auto pin) {
-            TRACET("{}~0x{:x} got indirect pin {}~0x{:x}->{}({}~0x{:x})",
+            TRACET("{}~0x{:x} got indirect pin {}~0x{:x}->{}({}~0x{:x}), made direct {}",
                    c.trans, laddr, length,
                    pin->get_key(), pin->get_length(),
                    pin->get_intermediate_key(),
                    pin->get_intermediate_base(),
-                   pin->get_intermediate_length());
+                   pin->get_intermediate_length(),
+                   !pin->is_indirect());
             ret.emplace_back(std::move(pin));
             return get_mappings_iertr::now();
           });
@@ -238,16 +239,34 @@ BtreeLBAManager::get_indirect_pin(
   extent_len_t length)
 {
   return _get_mappings(c, btree, intermediate_key, length
-  ).si_then([key, intermediate_key, length](auto pin_list) {
+  ).si_then(
+    [this, c, key, intermediate_key, length](auto pin_list) -> get_indirect_pin_ret {
     ceph_assert(pin_list.size() == 1);
     auto& pin = pin_list.front();
     assert(!pin->is_indirect());
     assert(pin->get_key() <= intermediate_key);
     assert(pin->get_key() + pin->get_length() >= intermediate_key + length);
+    auto dmap_val = pin->get_map_val();
+    if (dmap_val.refcount == 1 && length == dmap_val.len && c.trans.get_src() != Transaction::src_t::READ) {
+      c.cache.adjust_laddr(c.trans, dmap_val.pladdr.get_paddr(), key);
+      auto&& fut = this->_decref_intermediate(c.trans, pin->get_key(), pin->get_length()
+      ).si_then([this, c, key, dmap_val](std::optional<ref_update_result_t> maybe_result) {
+        assert(maybe_result.has_value());
+        return this->_update_mapping(c.trans, key,
+        [dmap_val](const lba_map_val_t&) -> lba_map_val_t {return dmap_val;}, nullptr);}
+      ).si_then([](auto update_result) {
+        return std::move(update_result.mapping);}
+      ).handle_error_interruptible(
+        get_mappings_iertr::pass_further(),
+        crimson::ct_error::enoent::handle(
+          []{ceph_abort_msg("unexpected enoent error");return get_mappings_iertr::make_ready_future<BtreeLBAMappingRef>();})
+      );
+      return std::move(fut);
+    }
     pin->make_indirect(key, length, intermediate_key);
     assert(pin->get_key() == key);
     assert(pin->get_length() == length);
-    return std::move(pin);
+    return get_mappings_iertr::make_ready_future<BtreeLBAMappingRef>(std::move(pin));
   });
 }
 
@@ -275,12 +294,13 @@ BtreeLBAManager::get_mapping(
       laddr_t direct_laddr = pin->get_raw_val().get_laddr();
       return get_indirect_pin(c, btree, laddr, direct_laddr, len
       ).si_then([FNAME, c, laddr](auto pin) {
-        TRACET("{} got indirect pin {}~0x{:x}->{}({}~0x{:x})",
+        TRACET("{} got indirect pin {}~0x{:x}->{}({}~0x{:x}), made direct {}",
                c.trans, laddr,
                pin->get_key(), pin->get_length(),
                pin->get_intermediate_key(),
                pin->get_intermediate_base(),
-               pin->get_intermediate_length());
+               pin->get_intermediate_length(),
+               !pin->is_indirect());
         return get_mapping_iertr::make_ready_future<LBAMappingRef>(std::move(pin));
       });
     });

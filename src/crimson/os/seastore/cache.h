@@ -1403,6 +1403,15 @@ public:
   /// Dump live extents
   void dump_contents();
 
+  void adjust_laddr(Transaction &t, paddr_t paddr, laddr_t new_laddr) {
+    auto ext = query_cache(paddr);
+    retire_extent(t, ext);
+    auto new_ext = ext->duplicate_for_write(t);
+    new_ext->init(CachedExtent::extent_state_t::EXIST_CLEAN, paddr,
+                  PLACEMENT_HINT_NULL, NULL_GENERATION, t.get_trans_id());
+    t.add_fresh_extent(new_ext);
+  }
+
   /**
    * backref_extent_entry_t
    *
@@ -1989,6 +1998,7 @@ private:
     }
   }
 };
+
 using CacheRef = std::unique_ptr<Cache>;
 
 }

@@ -270,9 +270,9 @@ public:
         --(shard_stats.starting_io_num);
         ++(shard_stats.waiting_collock_io_num);
 
-	return ctx.transaction->get_handle().take_collection_lock(
+	return /*ctx.transaction->get_handle().take_collection_lock(
 	  static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
-	).then([this] {
+	)*/seastar::now().then([this] {
 	  assert(shard_stats.waiting_collock_io_num);
 	  --(shard_stats.waiting_collock_io_num);
 	  ++(shard_stats.waiting_throttler_io_num);
