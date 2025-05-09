@@ -93,6 +93,12 @@
     realm default                    set realm as default
     realm default rm                 clear the current default realm
     realm pull                       pull a realm and its current period
+    realm cross-zonegroup enable     enable cross-zonegroup replication policy
+    realm cross-zonegroup allow      allow cross-zonegroup replication policy
+    realm cross-zonegroup forbid     forbid cross-zonegroup replication policy
+    realm same-zonegroup enable      enable same-zonegroup replication policy
+    realm same-zonegroup allow       allow same-zonegroup replication policy
+    realm same-zonegroup forbid      forbid same-zonegroup replication policy
     zonegroup add                    add a zone to a zonegroup
     zonegroup create                 create a new zone group info
     zonegroup default                set default zone group
@@ -109,6 +115,17 @@
     zonegroup placement modify       modify a placement target of a specific zonegroup
     zonegroup placement rm           remove a placement target from a zonegroup
     zonegroup placement default      set a zonegroup's default placement target
+    zonegroup export enable [rm]     add/remove the --peer-zonegroup-id from the set of enabled
+                                     destinations for cross-zonegroup replication policy
+    zonegroup export forbid [rm]     add/remove the --peer-zonegroup-id from the set of forbidden
+                                     destinations for cross-zonegroup replication policy
+    zonegroup import enable [rm]     add/remove the --peer-zonegroup-id from the set of enabled
+                                     sources for cross-zonegroup replication policy
+    zonegroup import forbid [rm]     add/remove the --peer-zonegroup-id from the set of forbidden
+                                     sources for cross-zonegroup replication policy
+    zonegroup same-zonegroup enable  enable same-zonegroup replication policy
+    zonegroup same-zonegroup allow   allow same-zonegroup replication policy
+    zonegroup same-zonegroup forbid  forbid same-zonegroup replication policy
     zone create                      create a new zone
     zone rm                          remove a zone
     zone get                         show zone cluster params
@@ -304,6 +321,7 @@
      --sync-from-all[=false]           set/reset whether zone syncs from all zonegroup peers
      --sync-from=[zone-name][,...]     set list of zones to sync from
      --sync-from-rm=[zone-name][,...]  remove zones from list of zones to sync from
+     --peer-zonegroup-id               zonegroup id or wildcard '*' for zonegroup import/export
      --bucket-index-max-shards         override a zone/zonegroup's default bucket index shard count
      --fix                             besides checking bucket index, will also fix it
      --check-objects                   bucket check: rebuilds bucket index according to actual objects state
