@@ -14,13 +14,13 @@ from ceph.fs.earmarking import CephFSVolumeEarmarking, EarmarkException
 from mgr_util import CephfsClient
 
 from .fs_util import listdir, has_subdir
-from .stats_util import get_stats
 
 from .operations.group import open_group, create_group, remove_group, \
     open_group_unique, set_group_attrs
 from .operations.volume import create_volume, delete_volume, rename_volume, \
     list_volumes, open_volume, get_pool_names, get_pool_ids, \
-    get_pending_subvol_deletions_count, get_all_pending_clones_count
+    get_pending_subvol_deletions_count, get_all_pending_clones_count, \
+    open_trashcan_in_vol
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone, open_subvol_in_group, open_subvol_in_vol
 
@@ -30,7 +30,8 @@ from .exception import VolumeException, ClusterError, ClusterTimeout, \
 from .async_cloner import Cloner
 from .purge_queue import ThreadPoolPurgeQueueMixin
 from .operations.template import SubvolumeOpType
-from .stats_util import CloneProgressReporter
+from .stats_util import get_clone_stats, CloneProgressReporter, \
+    PurgeProgressReporter, get_num_ratio_str, get_size_ratio_str
 
 if TYPE_CHECKING:
     from volumes import Module
@@ -62,11 +63,22 @@ class VolumeClient(CephfsClient["Module"]):
         super().__init__(mgr)
         # volume specification
         self.volspec = VolSpec(mgr.rados.conf_get('client_snapdir'))
+
         self.cloner = Cloner(self, self.mgr.max_concurrent_clones, self.mgr.snapshot_clone_delay,
                              self.mgr.snapshot_clone_no_wait)
         self.clone_progress_reporter = CloneProgressReporter(self,
                                                              self.volspec)
         self.purge_queue = ThreadPoolPurgeQueueMixin(self, 4)
+        self.purge_progress_reporter = PurgeProgressReporter(self, self.volspec)
+        # this variable collects the statistics (number of files and subvols in
+        # trash for a volume) just before the subvolume is removed and holds it
+        # so that "ceph fs purge status" command can utilize it to report the
+        # progress made by the purge threads.
+        #
+        # following is how this dictionary will look -
+        # {'volname': {'total_files': x, 'total_subvols': y}}
+        self.subvol_stats_before_purge = {}
+
         # on startup, queue purge job for available volumes to kickstart
         # purge for leftover subvolume entries in trash. note that, if the
         # trash directory does not exist or if there are no purge entries
@@ -289,6 +301,47 @@ class VolumeClient(CephfsClient["Module"]):
             ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def _get_subvol_stats_before_del(self, fs, volname, group, subvolname):
+        '''
+        The purpose of this method is get the collect the statistics for a
+        subvolume (like total number of files in a subvolume) just BEFORE the
+        subvolume is deleted. Therefore this method must be called right before
+        calling the code for deleting the subvolume.
+
+        The statistics colleted by this method are later used by code for
+        "ceph fs purge status" command.
+        '''
+        # NOTE: If any exceptions are raised by this method, don't catch them
+        # since the caller already has code to catch them.
+        with open_subvol(self.mgr, fs, self.volspec, group, subvolname,
+                         SubvolumeOpType.GETPATH) as subvolume:
+            subvol_path = subvolume.path
+
+        try:
+            num_of_trash_files = int(fs.getxattr(subvol_path, 'ceph.dir.rfiles'))
+            subvol_size = int(fs.getxattr(subvol_path, 'ceph.dir.rbytes'))
+        except:
+            log.debug('subvolume went missing but this method is to be run '
+                      'before code for remove subvolume is executed.')
+            raise
+
+        if not self.subvol_stats_before_purge.get(volname, None):
+            self.subvol_stats_before_purge[volname] = {
+                'total_files': num_of_trash_files,
+                'total_size': subvol_size,
+                'total_subvols': 1}
+        else:
+            self.subvol_stats_before_purge[volname]['total_files'] += num_of_trash_files
+            self.subvol_stats_before_purge[volname]['total_size'] += subvol_size
+            self.subvol_stats_before_purge[volname]['total_subvols'] += 1
+
+        log.debug('total files in trash dir = '
+                  f'{self.subvol_stats_before_purge[volname]["total_files"]}')
+        log.debug('total size of data in trash dir = '
+                  f'{self.subvol_stats_before_purge[volname]["total_size"]}')
+        log.debug('total subvols in trash dir = '
+                  f'{self.subvol_stats_before_purge[volname]["total_subvols"]}')
+
     def remove_subvolume(self, **kwargs):
         ret         = 0, "", ""
         volname     = kwargs['vol_name']
@@ -300,12 +353,15 @@ class VolumeClient(CephfsClient["Module"]):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
+                    self._get_subvol_stats_before_del(fs_handle, volname, group,
+                                                     subvolname)
                     remove_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, force, retainsnaps)
                     # kick the purge threads for async removal -- note that this
                     # assumes that the subvolume is moved to trash can.
                     # TODO: make purge queue as singleton so that trash can kicks
                     # the purge threads on dump.
                     self.purge_queue.queue_job(volname)
+                    self.purge_progress_reporter.initiate_reporting()
         except VolumeException as ve:
             if ve.errno == -errno.EAGAIN and not force:
                 ve = VolumeException(ve.errno, ve.error_str + " (use --force to override)")
@@ -1034,7 +1090,7 @@ class VolumeClient(CephfsClient["Module"]):
         if not src_path:
             return None
 
-        stats = get_stats(src_path, dst_path, vol_handle)
+        stats = get_clone_stats(src_path, dst_path, vol_handle)
         if stats:
             stats['percentage cloned'] = str(stats['percentage cloned']) + '%'
         return stats
@@ -1074,6 +1130,84 @@ class VolumeClient(CephfsClient["Module"]):
             self.cloner.cancel_job(volname, (clonename, groupname))
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def _get_purge_status_dict(self, volname, stats):
+        files_left = stats['files_left']
+        subvols_left = stats['subvols_left']
+        size_left = stats['size_left']
+
+        total_files = self.subvol_stats_before_purge[volname]['total_files']
+        total_subvols = self.subvol_stats_before_purge[volname]['total_subvols']
+        total_size = self.subvol_stats_before_purge[volname]['total_size']
+
+        stats['files_left'] = get_num_ratio_str(files_left, total_files)
+        stats['subvols_left'] = get_num_ratio_str(subvols_left, total_subvols)
+        stats['size_left'] = get_size_ratio_str(size_left, total_size)
+
+        files_purged = total_files - files_left
+        files_purged_percent = files_purged/total_files * 100
+        files_purged_percent = round(files_purged_percent, 3)
+
+        subvols_purged = total_subvols - subvols_left
+        subvols_purged_percent = subvols_purged/total_subvols * 100
+        subvols_purged_percent = round(subvols_purged_percent, 3)
+
+        size_purged = total_size - size_left
+        size_purged_percent = size_purged/total_size * 100
+        size_purged_percent = round(size_purged_percent, 3)
+
+        status = {'status':
+                    {'state': 'ongoing',
+                     'progress_report':
+                         {'amount_left': {},
+                          'percentage_purged': {},
+                          'purge_rate': 0}}}
+        amount_left = status['status']['progress_report']\
+            ['amount_left'] # type: ignore
+        percent_purged = status['status']['progress_report']\
+            ['percentage_purged'] # type: ignore
+
+        amount_left['files'] = stats['files_left']
+        amount_left['subvols'] = stats['subvols_left']
+        amount_left['size'] = stats['size_left']
+
+        percent_purged['files'] = f'{files_purged_percent}%'
+        percent_purged['subvols'] = f'{subvols_purged_percent}%'
+        percent_purged['size'] = f'{size_purged_percent}%'
+
+        if self.purge_queue.purge_rate:
+            purge_rate_str = (f'{self.purge_queue.purge_rate} '
+                               'unlink+rmdir per sec')
+            status['status']['progress_report']['purge_rate'] = purge_rate_str \
+                # type: ignore
+
+        return status
+
+    def purge_status(self, **kwargs):
+        ret       = 0, "", ""
+        volname   = kwargs['vol_name']
+
+        try:
+            with open_trashcan_in_vol(self, volname, self.volspec) as (_, trashcan):
+                stats = trashcan.get_stats()
+                if stats:
+                    status = self._get_purge_status_dict(volname, stats)
+                else:
+                    status = {'status': {'state': 'complete'}}
+                    # reset all the variable holding statistics for "volname"
+                    # since all the subvolumes have been purged.
+                    self.subvol_stats_before_purge[volname]['total_files'] = 0
+                    self.subvol_stats_before_purge[volname]['total_size'] = 0
+                    self.subvol_stats_before_purge[volname]['total_subvols'] = 0
+                    self.purge_queue.purge_rate = None
+
+                ret = 0, json.dumps(status, indent=2), ''
+        except VolumeException as ve:
+            if ve.errno == -errno.ENOENT and '/volumes/_deleting' in ve.error_str:
+                ret = (0, '', 'no trash yet, got nothing to purge')
+            else:
+                ret = self.volume_exception_to_retval(ve)
         return ret
 
     ### group operations
