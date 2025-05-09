@@ -80,17 +80,17 @@ PGRecovery::start_recovery_ops(
   ceph_assert(pg->is_recovering());
   ceph_assert(!pg->is_backfilling());
 
-  // move to unnamed placeholder when C++ 26 is available
-  auto reset_pglog_based_recovery_op = seastar::defer([this] {
-    pg->reset_pglog_based_recovery_op();
-  });
-
   if (!pg->get_peering_state().needs_recovery()) {
     if (pg->get_peering_state().needs_backfill()) {
       request_backfill();
     } else {
       all_replicas_recovered();
     }
+    /* TODO: this is racy -- it's possible for a DeferRecovery
+     * event to be processed between this call and when the
+     * async RequestBackfill or AllReplicasRecovered events
+     * are processed --  see https://tracker.ceph.com/issues/71267 */
+    pg->reset_pglog_based_recovery_op();
     co_return seastar::stop_iteration::yes;
   }
   co_return seastar::stop_iteration::no;
