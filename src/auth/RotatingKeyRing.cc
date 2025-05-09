@@ -28,6 +28,11 @@ void RotatingKeyRing::set_secrets(RotatingSecrets&& s)
   dump_rotating();
 }
 
+void RotatingKeyRing::wipe()
+{
+  secrets.wipe();
+}
+
 void RotatingKeyRing::dump_rotating() const
 {
   ldout(cct, 10) << "dump_rotating:" << dendl;
