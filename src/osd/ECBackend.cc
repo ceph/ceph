@@ -637,7 +637,7 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
             pop.data.length());
         if (op.recovery_progress.first) {
           if (sinfo.is_nonprimary_shard(pg_shard.shard)) {
-            if (pop.version == op.v) {
+            if (pop.version == op.recovery_info.oi.version) {
               dout(10) << __func__ << ": copy OI attr only" << dendl;
               pop.attrset[OI_ATTR] = op.xattrs[OI_ATTR];
             } else {
@@ -1246,7 +1246,7 @@ void ECBackend::handle_sub_read_reply(
       rop.complete.emplace(hoid, &sinfo);
     }
     auto &complete = rop.complete.at(hoid);
-    if (!req.shard_want_to_read.contains(from.shard)) {
+    if (!req.shard_reads.contains(from.shard)) {
       continue;
     }
     const shard_read_t &read = req.shard_reads.at(from.shard);
