@@ -6727,6 +6727,9 @@ void Monitor::set_mon_crush_location(const string& loc)
 
 void Monitor::notify_new_monmap(bool can_change_external_state, bool remove_rank_elector)
 {
+  dout(20) << __func__
+           << ": can_change_external_state=" << can_change_external_state
+           << " remove_rank_elector=" << remove_rank_elector << dendl;
   if (need_set_crush_loc) {
     auto my_info_i = monmap->mon_info.find(name);
     if (my_info_i != monmap->mon_info.end() &&
