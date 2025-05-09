@@ -1,6 +1,6 @@
 export enum Icons {
   /* Icons for Symbol */
-  add = 'fa fa-plus', // Create, Add
+  add = 'add', // Create, Add
   addCircle = 'fa fa-plus-circle', // Plus with Circle
   minusCircle = 'fa fa-minus-circle', // Minus with Circle
   edit = 'fa fa-pencil', // Edit, Edit Mode, Rename
@@ -10,7 +10,7 @@ export enum Icons {
   copy = 'fa fa-copy', // Copy
   clipboard = 'fa fa-clipboard', // Clipboard
   flatten = 'fa fa-chain-broken', // Flatten, Link broken, Mark Lost
-  trash = 'fa fa-trash-o', // Move to trash
+  trash = 'trash-can', // Move to trash
   lock = 'fa fa-lock', // Protect
   unlock = 'fa fa-unlock', // Unprotect
   clone = 'fa fa-clone', // clone
@@ -32,13 +32,14 @@ export enum Icons {
   users = 'fa fa-users', // Users, Groups
   share = 'fa fa-share-alt', // share
   key = 'fa fa-key-modern', // S3 Keys, Swift Keys, Authentication
-  warning = 'fa fa-exclamation-triangle', // Notification warning
-  info = 'fa fa-info', // Notification information
-  infoCircle = 'fa fa-info-circle', // Info on landing page
+  warning = 'warning--alt--filled', // Notification warning
+  info = 'information', // Notification information
+  infoCircle = 'information--filled', // Info on landing page
   questionCircle = 'fa fa-question-circle-o',
-  danger = 'fa fa-exclamation-circle',
-  success = 'fa fa-check-circle',
-  check = 'fa fa-check', // Notification check
+  danger = 'warning--filled',
+  // success = 'fa fa-check-circle',
+  success = 'checkmark--filled',
+  check = 'checkmark', // Notification check
   show = 'fa fa-eye', // Show
   paragraph = 'fa fa-paragraph', // Silence Matcher - Attribute name
   terminal = 'fa fa-terminal', // Silence Matcher - Value
@@ -46,8 +47,9 @@ export enum Icons {
   hourglass = 'fa fa-hourglass-o', // Task
   filledHourglass = 'fa fa-hourglass', // Task
   table = 'fa fa-table', // Table,
-  spinner = 'fa fa-spinner', // spinner, Load
-  refresh = 'fa fa-refresh', // Refresh
+  spinner = 'progress-bar--round', // spinner, Load
+  spinner1 = 'progress-bar--round', // spinner, Load
+  refresh = 'renew', // Refresh
   bullseye = 'fa fa-bullseye', // Target
   disk = 'fa fa-hdd-o', // Hard disk, disks
   server = 'fa fa-server', // Server, Portal
@@ -55,7 +57,7 @@ export enum Icons {
   lineChart = 'fa fa-line-chart', // Line chart
   signOut = 'fa fa-sign-out', // Sign Out
   health = 'fa fa-heartbeat', // Health
-  circle = 'fa fa-circle', // Circle
+  circle = 'dot-mark', // Circle
   bell = 'fa fa-bell', // Notification
   mute = 'fa fa-bell-slash', // Mute or silence
   tag = 'fa fa-tag', // Tag, Badge
@@ -85,8 +87,12 @@ export enum Icons {
   calendar = 'fa fa-calendar',
   externalUrl = 'fa fa-external-link', // links to external page
   nfsExport = 'fa fa-server', // NFS export
-
+  launch = 'launch',
   /* Icons for special effect */
+  size16 = '16',
+  size20 = '20',
+  size24 = '24',
+  size32 = '32',
   large = 'fa fa-lg', // icon becomes 33% larger
   large2x = 'fa fa-2x', // icon becomes 50% larger
   large3x = 'fa fa-3x', // icon becomes 3 times larger
