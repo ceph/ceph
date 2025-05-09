@@ -1502,3 +1502,11 @@ void MonmapMonitor::tick()
     propose_pending();
   }
 }
+
+epoch_t MonmapMonitor::bump_auth_epoch(epoch_t e)
+{
+  ceph_assert(is_writeable());
+  ceph_assert(e >= pending_map.auth_epoch);
+  pending_map.auth_epoch = e;
+  return e;
+}

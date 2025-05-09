@@ -76,6 +76,8 @@ class MonmapMonitor : public PaxosService {
 
   void tick() override;
 
+  epoch_t bump_auth_epoch(epoch_t e);
+
 private:
   void check_subs();
   ceph::buffer::list monmap_bl;
