@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "crypto_onwire.h"
+#include "auth/Auth.h"
 #include "common/debug.h"
 #include "common/ceph_crypto.h"
 #include "include/buffer.h"

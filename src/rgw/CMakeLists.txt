@@ -440,6 +440,7 @@ target_link_libraries(rgw_a
   PRIVATE
     legacy-option-headers
     common_utf8 global
+    kmip
     ${CRYPTO_LIBS}
     ${ARROW_LIBRARIES}
     ${ARROW_FLIGHT_LIBRARIES}
@@ -447,7 +448,7 @@ target_link_libraries(rgw_a
   PUBLIC
     rgw_common
     Boost::context)
-
+  
 if(WITH_CURL_OPENSSL)
   # used by rgw_http_client_curl.cc
   target_link_libraries(rgw_a PRIVATE OpenSSL::Crypto)
@@ -463,6 +464,8 @@ set(rgw_schedulers_srcs
 add_library(rgw_schedulers STATIC ${rgw_schedulers_srcs})
 target_link_libraries(rgw_schedulers
   PUBLIC dmclock::dmclock Boost::context)
+
+target_link_libraries(rgw_a PRIVATE rgw_schedulers)
 
 set(radosgw_srcs
   rgw_main.cc)

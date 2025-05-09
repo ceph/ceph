@@ -14,12 +14,14 @@
 #ifndef CEPH_UTIL_H
 #define CEPH_UTIL_H
 
-#include "common/Formatter.h"
-#include "include/types.h"
-
+#include <cstdint>
 #include <list>
 #include <map>
 #include <string>
+
+#include "common/Formatter.h"
+#include "include/buffer.h"
+#include "include/encoding.h"
 
 std::string bytes2str(uint64_t count);
 

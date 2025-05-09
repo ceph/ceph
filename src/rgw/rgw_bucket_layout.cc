@@ -15,6 +15,8 @@
 
 #include <boost/algorithm/string.hpp>
 #include "rgw_bucket_layout.h"
+#include "include/encoding_optional.h"
+#include "include/encoding_vector.h"
 #include "include/utime.h"
 
 namespace rgw {
