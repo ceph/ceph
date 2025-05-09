@@ -61,6 +61,10 @@ class SQLiteConfigStore : public sal::ConfigStore {
   int realm_notify_new_period(const DoutPrefixProvider* dpp,
                               optional_yield y,
                               const RGWPeriod& period) override;
+  auto create_realm_watcher(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            const RGWRealm& realm)
+      -> std::unique_ptr<RGWRealmWatcher> override;
   int list_realm_names(const DoutPrefixProvider* dpp,
                        optional_yield y, const std::string& marker,
                        std::span<std::string> entries,
