@@ -332,3 +332,8 @@ bool CephxClientHandler::need_tickets()
 
   return _need_tickets();
 }
+
+void CephxClientHandler::invalidate_all_tickets()
+{
+  tickets.invalidate_all_tickets();
+}
