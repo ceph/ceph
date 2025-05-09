@@ -53,6 +53,8 @@ enum {
   l_rgw_d4n_cache_misses,
   l_rgw_d4n_cache_evictions,
 
+  l_rgw_kms_fetch_lat,
+
   l_rgw_last,
 };
 
