@@ -1,3 +1,5 @@
+.. _radosgw-config-ref:
+
 ======================================
  Ceph Object Gateway Config Reference
 ======================================
