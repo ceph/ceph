@@ -93,11 +93,6 @@ struct mon_info_t {
 };
 WRITE_CLASS_ENCODER_FEATURES(mon_info_t)
 
-inline std::ostream& operator<<(std::ostream& out, const mon_info_t& mon) {
-  mon.print(out);
-  return out;
-}
-
 class MonMap {
  public:
   epoch_t epoch;       // what epoch/version of the monmap
