@@ -68,6 +68,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
   editing = false;
   isReplicated = false;
   isErasure = false;
+  blobUnits = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+  maxBytesUnits = ['KiB', 'MiB', 'GiB', 'TiB'];
   data = new PoolFormData();
   externalPgChange = false;
   current: Record<string, any> = {
@@ -131,7 +133,13 @@ export class PoolFormComponent extends CdForm implements OnInit {
       minBlobSize: new UntypedFormControl('', {
         updateOn: 'blur'
       }),
+      minBlobSizeUnit: new UntypedFormControl(this.blobUnits[0], {
+        updateOn: 'blur'
+      }),
       maxBlobSize: new UntypedFormControl('', {
+        updateOn: 'blur'
+      }),
+      maxBlobSizeUnit: new UntypedFormControl(this.blobUnits[2], {
         updateOn: 'blur'
       }),
       ratio: new UntypedFormControl(this.DEFAULT_RATIO, {
@@ -182,6 +190,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
         ecOverwrites: new UntypedFormControl(false),
         compression: compressionForm,
         max_bytes: new UntypedFormControl(''),
+        maxBytesUnit: new UntypedFormControl(this.maxBytesUnits[2]),
         max_objects: new UntypedFormControl(0),
         rbdMirroring: new UntypedFormControl(false)
       },
@@ -264,6 +273,13 @@ export class PoolFormComponent extends CdForm implements OnInit {
       initialData: pool.configuration,
       sourceType: RbdConfigurationSourceField.pool
     });
+    const maxBytesConverted = this.dimlessBinaryPipe.transform(pool.quota_max_bytes).split(' ');
+    const minBlobSizeConverted = this.dimlessBinaryPipe
+      .transform(pool.options.compression_min_blob_size)
+      .split(' ');
+    const maxBlobSizeConverted = this.dimlessBinaryPipe
+      .transform(pool.options.compression_max_blob_size)
+      .split(' ');
     this.poolTypeChange(pool.type);
     const rules = this.info.crush_rules_replicated.concat(this.info.crush_rules_erasure);
     const dataMap = {
@@ -277,10 +293,13 @@ export class PoolFormComponent extends CdForm implements OnInit {
       ecOverwrites: pool.flags_names.includes('ec_overwrites'),
       mode: pool.options.compression_mode,
       algorithm: pool.options.compression_algorithm,
-      minBlobSize: this.dimlessBinaryPipe.transform(pool.options.compression_min_blob_size),
-      maxBlobSize: this.dimlessBinaryPipe.transform(pool.options.compression_max_blob_size),
+      minBlobSize: minBlobSizeConverted[0],
+      minBlobSizeUnit: minBlobSizeConverted[1],
+      maxBlobSize: maxBlobSizeConverted[0],
+      maxBlobSizeUnit: maxBlobSizeConverted[1],
       ratio: pool.options.compression_required_ratio,
-      max_bytes: this.dimlessBinaryPipe.transform(pool.quota_max_bytes),
+      max_bytes: maxBytesConverted[0],
+      maxBytesUnit: maxBytesConverted[1],
       max_objects: pool.quota_max_objects
     };
     Object.keys(dataMap).forEach((controlName: string) => {
@@ -378,7 +397,13 @@ export class PoolFormComponent extends CdForm implements OnInit {
     this.form.get('minBlobSize').valueChanges.subscribe(() => {
       this.form.get('maxBlobSize').updateValueAndValidity({ emitEvent: false });
     });
+    this.form.get('minBlobSizeUnit').valueChanges.subscribe(() => {
+      this.form.get('maxBlobSize').updateValueAndValidity({ emitEvent: false });
+    });
     this.form.get('maxBlobSize').valueChanges.subscribe(() => {
+      this.form.get('minBlobSize').updateValueAndValidity({ emitEvent: false });
+    });
+    this.form.get('maxBlobSizeUnit').valueChanges.subscribe(() => {
       this.form.get('minBlobSize').updateValueAndValidity({ emitEvent: false });
     });
   }
@@ -541,13 +566,23 @@ export class PoolFormComponent extends CdForm implements OnInit {
     CdValidators.validateIf(this.form.get('minBlobSize'), () => this.hasCompressionEnabled(), [
       Validators.min(0),
       CdValidators.custom('maximum', (size: string) =>
-        this.oddBlobSize(size, this.form.getValue('maxBlobSize'))
+        this.oddBlobSize(
+          size,
+          this.form.getValue('minBlobSizeUnit'),
+          this.form.getValue('maxBlobSize'),
+          this.form.getValue('maxBlobSizeUnit')
+        )
       )
     ]);
     CdValidators.validateIf(this.form.get('maxBlobSize'), () => this.hasCompressionEnabled(), [
       Validators.min(0),
       CdValidators.custom('minimum', (size: string) =>
-        this.oddBlobSize(this.form.getValue('minBlobSize'), size)
+        this.oddBlobSize(
+          this.form.getValue('minBlobSize'),
+          this.form.getValue('minBlobSizeUnit'),
+          size,
+          this.form.getValue('maxBlobSizeUnit')
+        )
       )
     ]);
     CdValidators.validateIf(this.form.get('ratio'), () => this.hasCompressionEnabled(), [
@@ -556,9 +591,9 @@ export class PoolFormComponent extends CdForm implements OnInit {
     ]);
   }
 
-  private oddBlobSize(minimum: string, maximum: string) {
-    const min = this.formatter.toBytes(minimum);
-    const max = this.formatter.toBytes(maximum);
+  private oddBlobSize(minimum: string, minUnit: string, maximum: string, maxUnit: string) {
+    const min = this.formatter.toBytes(minimum + minUnit);
+    const max = this.formatter.toBytes(maximum + maxUnit);
     return Boolean(min && max && min >= max);
   }
 
@@ -779,7 +814,10 @@ export class PoolFormComponent extends CdForm implements OnInit {
       {
         externalFieldName: 'quota_max_bytes',
         formControlName: 'max_bytes',
-        replaceFn: this.formatter.toBytes,
+        replaceFn: (value: string) => {
+          const unit = this.form.getValue('maxBytesUnit');
+          return this.formatter.toBytes(value + unit);
+        },
         editable: true,
         resetValue: this.editing ? 0 : undefined
       },
@@ -821,14 +859,20 @@ export class PoolFormComponent extends CdForm implements OnInit {
           {
             externalFieldName: 'compression_min_blob_size',
             formControlName: 'minBlobSize',
-            replaceFn: this.formatter.toBytes,
+            replaceFn: (value: string) => {
+              const unit = this.form.getValue('minBlobSizeUnit');
+              return this.formatter.toBytes(value + unit);
+            },
             editable: true,
             resetValue: 0
           },
           {
             externalFieldName: 'compression_max_blob_size',
             formControlName: 'maxBlobSize',
-            replaceFn: this.formatter.toBytes,
+            replaceFn: (value: string) => {
+              const unit = this.form.getValue('maxBlobSizeUnit');
+              return this.formatter.toBytes(value + unit);
+            },
             editable: true,
             resetValue: 0
           },
