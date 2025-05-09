@@ -181,6 +181,15 @@ class CephNvmeof(ContainerDaemonForm):
             cname = '%s-%s' % (cname, desc)
         return cname
 
+    def get_container_envs(self) -> List[str]:
+        if 'grpc_trace' in self.files:
+            return [
+                'GRPC_TRACE = %s' % self.files['grpc_trace'],
+                'GRPC_VERBOSITY = DEBUG'
+            ]
+        else:
+            return []
+
     def create_daemon_dirs(self, data_dir, uid, gid):
         # type: (str, int, int) -> None
         """Create files under the container data dir"""
