@@ -330,7 +330,7 @@ if(WITH_JAEGER)
   include(BuildOpentelemetry)
   build_opentelemetry()
   add_library(jaeger_base INTERFACE)
-  target_link_libraries(jaeger_base INTERFACE opentelemetry::libopentelemetry
+  target_link_libraries(jaeger_base INTERFACE ${OPENTELEMETRY_CPP_LIBRARIES}
     thrift::libthrift)
 endif()
 
