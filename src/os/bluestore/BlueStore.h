@@ -1692,6 +1692,7 @@ public:
     std::optional<int64_t> comp_min_blob_size;
     std::optional<int64_t> comp_max_blob_size;
     std::optional<double> compression_req_ratio;
+    bool debug_skip_block_write = false;
 
     ContextQueue *commit_queue;
     std::unique_ptr<Estimator> estimator;
