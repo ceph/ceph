@@ -24,7 +24,7 @@ namespace crimson::os::seastore {
 class LogicalChildNode;
 }
 
-namespace crimson::os::seastore::lba_manager::btree {
+namespace crimson::os::seastore::lba {
 
 using base_iertr = Cache::base_iertr;
 using LBANode = FixedKVNode<laddr_t>;
@@ -284,8 +284,8 @@ using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
 }
 
 #if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::lba_node_meta_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::lba_map_val_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::LBAInternalNode> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::LBALeafNode> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba::lba_node_meta_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba::lba_map_val_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba::LBAInternalNode> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba::LBALeafNode> : fmt::ostream_formatter {};
 #endif

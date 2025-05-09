@@ -178,7 +178,7 @@ public:
       assert(!is_end());
       auto ret = leaf.node->iter_idx(leaf.pos).get_val();
       if constexpr (
-        std::is_same_v<crimson::os::seastore::lba_manager::btree::lba_map_val_t,
+        std::is_same_v<crimson::os::seastore::lba::lba_map_val_t,
                        node_val_t>) {
         if (ret.pladdr.is_paddr()) {
           ret.pladdr = ret.pladdr.get_paddr().maybe_relative_to(

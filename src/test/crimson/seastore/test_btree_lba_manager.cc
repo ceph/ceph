@@ -8,7 +8,7 @@
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
-#include "crimson/os/seastore/lba_manager/btree/btree_lba_manager.h"
+#include "crimson/os/seastore/lba/btree_lba_manager.h"
 
 #include "test/crimson/seastore/test_block.h"
 
@@ -21,8 +21,7 @@ namespace {
 using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
-using namespace crimson::os::seastore::lba_manager;
-using namespace crimson::os::seastore::lba_manager::btree;
+using namespace crimson::os::seastore::lba;
 
 struct btree_test_base :
   public seastar_test_suite_t, SegmentProvider, JournalTrimmer {

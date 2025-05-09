@@ -241,7 +241,7 @@ public:
 using LBAManagerRef = std::unique_ptr<LBAManager>;
 
 class Cache;
-namespace lba_manager {
+namespace lba {
 LBAManagerRef create_lba_manager(Cache &cache);
 }
 
