@@ -6,6 +6,7 @@ import ipaddress
 import json
 import logging
 import os
+from pyexpat import ExpatError
 import re
 import time
 import uuid
@@ -22,7 +23,7 @@ try:
 except ModuleNotFoundError:
     logging.error("Module 'xmltodict' is not installed.")
 
-from mgr_util import build_url
+from mgr_util import build_url, name_to_config_section
 
 from .. import mgr
 from ..awsauth import S3Auth
@@ -1121,6 +1122,7 @@ class RgwClient(RestClient):
 
     @RestClient.api_post('?Action=CreateTopic&Name={name}')
     def create_topic(self, request=None, name: str = '',
+                     daemon_name: str = '',
                      push_endpoint: Optional[str] = '', opaque_data: Optional[str] = '',
                      persistent: Optional[bool] = False, time_to_live: Optional[str] = '',
                      max_retries: Optional[str] = '', retry_sleep_duration: Optional[str] = '',
@@ -1165,12 +1167,104 @@ class RgwClient(RestClient):
             params['kafka_brokers'] = kafka_brokers
         if mechanism:
             params['mechanism'] = mechanism
+
+        full_daemon_name = 'rgw.' + daemon_name
+        key = 'rgw_allow_notification_secrets_in_cleartext'
+        value = 'true'
+        CephService.send_command('mon', 'config set',
+                                 who=name_to_config_section(full_daemon_name),
+                                 name=key, value=value)
         try:
             result = request(params=params)
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
 
         return result
+
+    @RestClient.api_put('/{bucket_name}?notification')
+    def set_notification(self, bucket_name, notification, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request(data=notification)  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
+    @RestClient.api_get('/{bucket_name}?notification')
+    def get_notification(self, bucket_name, notification_id=None, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request(
+                raw_content=True,
+                headers={'Accept': 'text/xml'}
+            ).decode()  # type: ignore
+
+            notification_config = xmltodict.parse(result)
+            notification_configuration = (
+                notification_config.get('NotificationConfiguration', {})
+                if notification_config else {}
+            )
+
+            topic_configuration = notification_configuration.get('TopicConfiguration')
+            if not topic_configuration:
+                return []
+
+            if isinstance(topic_configuration, dict):
+                topic_configuration = [topic_configuration]
+
+            def normalize_filter_rules(filter_dict):
+                if not isinstance(filter_dict, dict):
+                    return
+
+                for key in ['S3Key', 'S3Metadata', 'S3Tags']:
+                    if key in filter_dict:
+                        rules = filter_dict[key].get('FilterRule')
+                        if rules and isinstance(rules, dict):
+                            filter_dict[key]['FilterRule'] = [rules]
+            for topic in topic_configuration:
+                topic_filter = topic.get('Filter')
+                if topic_filter:
+                    normalize_filter_rules(topic_filter)
+
+            return topic_configuration
+
+        except RequestException as e:
+            logger.warning(
+                "RequestException while fetching notification for bucket '%s': %s",
+                bucket_name, str(e)
+            )
+            if e.content:
+                try:
+                    root = ET.fromstring(e.content)
+                    code = root.find('Code')
+                    if code is not None and code.text == 'NoSuchNotificationConfiguration':
+                        logger.info(
+                            "No notification configuration found for bucket '%s'",
+                            bucket_name
+                        )
+                        return []
+                except ET.ParseError as e_parse:
+                    logger.error(
+                        "Error parsing XML from exception content: %s", e_parse
+                    )
+            return []
+
+        except (UnicodeDecodeError, AttributeError, ExpatError) as e:
+            logger.error(
+                "Error processing notification config for bucket '%s': %s",
+                bucket_name, str(e)
+            )
+            return []
+
+    @RestClient.api_delete('/{bucket_name}?notification={notification_id}')
+    def delete_notification(self, bucket_name, notification_id, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request()
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
 
 
 class SyncStatus(Enum):

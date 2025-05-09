@@ -451,3 +451,9 @@ class TestDictToXML(TestCase):
         expected_xml = "<name>Foo</name>\n<age>30</age>\n"
         result = RgwClient.dict_to_xml(data)
         self.assertEqual(result, expected_xml)
+        
+    def test_notification_list_in_dict(self):
+        data = {"TopicConfiguration": [{"Id": "Config1","Topic": "arn:aws:sns:us-east-1:123456789012:topic1","Event": "s3:ObjectCreated:*"},{"Id": "Config1","Topic": "arn:aws:sns:us-east-1:123456789012:topic1","Event": "s3:ObjectCreated:*"}]}
+        expected_xml = "<TopicConfiguration>\n<Id>Config1</Id>\n<Topic>arn:aws:sns:us-east-1:123456789012:topic1</Topic>\n<Event>s3:ObjectCreated:*</Event>\n</TopicConfiguration>\n<TopicConfiguration>\n<Id>Config1</Id>\n<Topic>arn:aws:sns:us-east-1:123456789012:topic1</Topic>\n<Event>s3:ObjectCreated:*</Event>\n</TopicConfiguration>\n"
+        result = RgwClient.dict_to_xml(data)
+        self.assertEqual(result, expected_xml)
