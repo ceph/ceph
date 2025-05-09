@@ -228,6 +228,9 @@ struct RotatingSecrets {
   bool empty() {
     return secrets.empty();
   }
+  void wipe() {
+    secrets.clear();
+  }
 
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<RotatingSecrets*>& ls);
