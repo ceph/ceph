@@ -9,6 +9,7 @@
 #include "messages/MOSDMap.h"
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGTemp.h"
+#include "messages/MOSDPGReadyToMerge.h"
 
 #include "osd/osd_perf_counters.h"
 #include "osd/PeeringState.h"
@@ -21,6 +22,8 @@
 #include "crimson/os/cyanstore/cyan_store.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
+#include "crimson/osd/osd_operations/pg_splitting.h"
+#include "crimson/osd/osd_operations/pg_merging.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_meta.h"
 #include <boost/iterator/counting_iterator.hpp>
@@ -93,13 +96,281 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
   assert_core();
   auto &pgs = pg_map.get_pgs();
   return seastar::parallel_for_each(
-    pgs.begin(), pgs.end(),
+      pgs.begin(), pgs.end(),
     [=, &shard_services](auto& pg) {
+      auto old_map = pg.second->get_osdmap();
       return shard_services.start_operation<PGAdvanceMap>(
-	pg.second,
-	shard_services,
-	epoch,
-	PeeringCtx{}, false).second;
+        pg.second,
+        shard_services,
+        epoch,
+        PeeringCtx{}, false, false).second.then(
+        [this, old_map, epoch, &shard_services, pg=pg.second] () {
+          return identify_splits(shard_services, pg, old_map, epoch).then(
+            [this, old_map, epoch, &shard_services, pg] (auto&& split_children) {
+              if (!split_children.empty()) {
+                return shard_services.get_map(epoch).then(
+                  [&shard_services, pg, split_children = std::move(split_children)]
+                  (cached_map_t&& new_map) {
+                    return shard_services.start_operation<PGSplitting>(
+                      pg,
+                      shard_services,
+                      new_map,
+                      std::move(split_children),
+                      PeeringCtx{}).second;
+                  });
+              } else {
+                return seastar::now();
+              }
+	    }).then([this, old_map, epoch, &shard_services, pg] () {
+              // Check for merges and register the PGs that need to be merged
+                return identify_merges(shard_services, pg, old_map, epoch).then(
+                [old_map, epoch, &shard_services, pg] (auto&& merge_candidates) {
+                  if (!merge_candidates.empty()) {
+                    return shard_services.get_map(epoch).then(
+                      [&shard_services, pg, old_map, merge_candidates = std::move(merge_candidates)]
+                      (cached_map_t&& new_map) {
+		        return shard_services.register_for_merge(
+			    pg,
+			    new_map,
+			    old_map);
+                      });
+                  } else {
+                    return seastar::now();
+                  }
+                });
+	      return seastar::now();
+            });
+	  return seastar::now();
+        });
+      return seastar::now();
+    }).then([this, epoch, &shard_services] () {
+      if (!shard_services.merge_target_pgs.empty()) {
+	return shard_services.get_map(epoch).then(
+	    [this, &shard_services] (cached_map_t&& new_map) {
+	    auto target_pgs = shard_services.merge_target_pgs;
+	    return seastar::parallel_for_each(target_pgs.begin(), target_pgs.end(),
+	       [this, &shard_services, &new_map] (auto &target_info) {
+                  auto pg = shard_services.get_pg(target_info.first);
+		  return shard_services.start_operation<PGMerging>(
+		    pg,
+		    shard_services,
+		    new_map,
+		    target_info.second,
+		    PeeringCtx{}).second;
+	    });
+	});
+      }
+      return seastar::now();
+    });
+}
+
+seastar::future<> ShardServices::register_for_merge(Ref<PG> pg,
+                                                    OSDMapRef new_map,
+						    OSDMapRef old_map)
+{
+  LOG_PREFIX(ShardServices::register_for_merge);
+  unsigned old_pg_num = old_map->get_pg_num(pg->get_pgid().pool());
+  unsigned new_pg_num = new_map->get_pg_num(pg->get_pgid().pool());
+  DEBUG(" old_pg_num: {}, new_pg_num: {}", old_pg_num, new_pg_num);
+
+  spg_t parent;
+  if (pg->get_pgid().is_merge_source(
+	old_pg_num,
+	new_pg_num,
+	&parent)) {
+    DEBUG(" {} is merge source, target is {}", pg->get_pgid(), parent);
+
+    // for the target parent PG, calculate how many source PGs will be needed
+    std::set<spg_t> merge_sources;
+    parent.is_split(new_pg_num, old_pg_num, &merge_sources);
+    if (add_merge_waiter(new_map, parent,
+			 pg, merge_sources.size())) {
+	DEBUG(" added {} to merge waiter for target PG {}", pg->get_pgid(), parent);
+    }
+    return seastar::now();
+  } else if (pg->get_pgid().is_merge_target(old_pg_num, new_pg_num)) {
+    DEBUG(" {} is a merge target", pg->get_pgid());
+    merge_target_pgs[pg->get_pgid()] = old_map;
+    return seastar::now();
+  }
+  return seastar::now();
+}
+
+bool ShardServices::add_merge_waiter(OSDMapRef nextmap, spg_t target, Ref<PG> src,
+                           unsigned need)
+{
+  LOG_PREFIX(ShardServices::add_merge_waiter);
+  auto& p = merge_waiters[nextmap->get_epoch()][target];
+  p[src->get_pgid()] = src;
+  DEBUG(" added merge waiter {} for {} have {}/{}",
+      src->get_pgid(), target, p.size(), need);
+  return p.size() == need;
+}
+
+seastar::future<std::set<std::pair<spg_t, epoch_t>>> PerShardState::identify_splits(
+  ShardServices &shard_services,
+  Ref<PG> pg,
+  cached_map_t cur_map,
+  epoch_t epoch)
+{
+  LOG_PREFIX(PerShardState::identify_splits);
+  unsigned old_pg_num;
+  if (cur_map->have_pg_pool(pg->get_pgid().pool())) {
+    old_pg_num = cur_map->get_pg_num(pg->get_pgid().pool());
+  } else {
+    DEBUG("{} pool doesn't exist in epoch {}", pg->get_pgid(), cur_map->get_epoch());
+    return seastar::make_ready_future<std::set<std::pair<spg_t, epoch_t>>>(
+	std::set<std::pair<spg_t, epoch_t>>());
+  }
+
+  if (!per_shard_pg_num_history.pg_nums.contains(pg->get_pgid().pool())) {
+    DEBUG("For pgid {} pool {}  has no history", pg->get_pgid(), pg->get_pgid().pool());
+    return seastar::make_ready_future<std::set<std::pair<spg_t, epoch_t>>>(
+	std::set<std::pair<spg_t, epoch_t>>());
+  }
+
+  return shard_services.get_map(epoch).then(
+    [this, FNAME, old_pg_num, old_map=cur_map, pg] (cached_map_t&& new_map) {
+    auto pgid = pg->get_pgid();
+
+    // Retrieve history map for the pool
+    const auto& pool_pg_num_history_map = per_shard_pg_num_history.pg_nums[pgid.pool()];
+    std::set<std::pair<spg_t, epoch_t>> split_children;
+    // Used for managing the PGs that need to be checked for splits
+    std::deque<spg_t> check_for_split_queue;
+    check_for_split_queue.push_back(pgid);
+    // To track which PGs have already been processed
+    std::set<spg_t> check_done;
+    while(!check_for_split_queue.empty()) {
+      auto cur_pg = check_for_split_queue.front();
+      check_for_split_queue.pop_front();
+      check_done.insert(cur_pg);
+      unsigned pg_num = old_pg_num;
+
+      //Iterate over the history of pg_num changes
+      for (auto map_iter = pool_pg_num_history_map.lower_bound(old_map->get_epoch());
+	   map_iter != pool_pg_num_history_map.end();
+	   ++map_iter) {
+	const auto& [new_epoch, new_pg_num] = *map_iter;
+	if (new_epoch > new_map->get_epoch()) {
+	  // don't handle any changes recorded later than new_map's epoch
+	  break;
+	}
+	if (pg_num < new_pg_num) {
+	  // If the current PG's placement state is before pg_num,
+	  // a split might have occurred.
+	  if(cur_pg.ps() < pg_num) {
+	    std::set<spg_t> children;
+	    if (cur_pg.is_split(pg_num, new_pg_num, &children)) {
+	      DEBUG("{} e{} pg_num {} -> {} children {}", cur_pg,
+	      new_epoch, pg_num, new_pg_num, children);
+	      for (auto child : children) {
+		split_children.insert(std::make_pair(child, new_epoch));
+		// If the child has not been processed,
+		// add it to the queue for checking
+		if (!check_done.count(child))
+		  check_for_split_queue.push_back(child);
+	      }
+	    }
+	  } else if (cur_pg.ps() < new_pg_num) {
+	    // Since the current PG's placement state is between pg_num and new_pg_num,
+	    // the current PG is considered a child resulting from the split.
+	    DEBUG("{} e{} pg_num {} -> {} is a child", cur_pg,
+		new_epoch, pg_num, new_pg_num);
+	    split_children.insert(std::make_pair(cur_pg, new_epoch));
+	  } else {
+	    // The current PG's placement state is not less than new_pg_num,
+	    // it is already post-split and we can skip further processing
+	    DEBUG("{} e{} pg_num {} -> {} is post-split, skipping", cur_pg,
+		  new_epoch, pg_num, new_pg_num);
+	  }
+        }
+	pg_num = new_pg_num;
+      }
+    }
+    return seastar::make_ready_future<std::set<std::pair<spg_t, epoch_t>>>(
+	std::move(split_children));
+  });
+}
+
+seastar::future<std::set<std::pair<spg_t, epoch_t>>> PerShardState::identify_merges(
+  ShardServices &shard_services,
+  Ref<PG> pg,
+  cached_map_t old_map,
+  epoch_t epoch)
+{
+  LOG_PREFIX(PerShardState::identify_merges);
+  DEBUG(" {} e{} to e{}", pg->get_pgid(), old_map->get_epoch(), epoch);
+  unsigned old_pg_num;
+  if (old_map->have_pg_pool(pg->get_pgid().pool())) {
+    old_pg_num = old_map->get_pg_num(pg->get_pgid().pool());
+  } else {
+    DEBUG("{} pool doesn't exist in epoch {}", pg->get_pgid(), old_map->get_epoch());
+    return seastar::make_ready_future<std::set<std::pair<spg_t, epoch_t>>>(
+        std::move(std::set<std::pair<spg_t, epoch_t>>()));
+  }
+
+  return shard_services.get_map(epoch).then(
+    [this, FNAME, old_pg_num, old_map, pg] (cached_map_t&& new_map) {
+    auto pgid = pg->get_pgid();
+    const auto& pool_pg_num_history_map = per_shard_pg_num_history.pg_nums[pgid.pool()];
+    std::set<std::pair<spg_t, epoch_t>> merge_pgs;
+    std::deque<spg_t> check_for_merge_queue;
+    check_for_merge_queue.push_back(pgid);
+    std::set<spg_t> check_done;
+    while(!check_for_merge_queue.empty()) {
+      auto cur_pg = check_for_merge_queue.front();
+      check_for_merge_queue.pop_front();
+      check_done.insert(cur_pg);
+      unsigned pg_num = old_pg_num;
+      for (auto map_iter = pool_pg_num_history_map.lower_bound(old_map->get_epoch());
+           map_iter != pool_pg_num_history_map.end();
+           ++map_iter) {
+        const auto& [new_epoch, new_pg_num] = *map_iter;
+        if (new_epoch > new_map->get_epoch()) {
+          // don't handle any changes recorded later than new_map's epoch
+          break;
+        }
+        // checking for merge
+        if (cur_pg.ps() >= new_pg_num) {
+          if (cur_pg.ps() < pg_num) {
+            spg_t parent;
+            if (cur_pg.is_merge_source(pg_num, new_pg_num, &parent)) {
+              std::set<spg_t> children;
+              parent.is_split(new_pg_num, pg_num, &children);
+              DEBUG("{} e{} pg_num {} -> {} is merge source target :{} source(s): {}", cur_pg, new_epoch,
+                     pg_num, new_pg_num, parent, children);
+              merge_pgs.insert(std::make_pair(parent, new_epoch));
+              if (!check_done.count(parent))
+                check_for_merge_queue.push_back(parent);
+              for (auto child: children) {
+                merge_pgs.insert(std::make_pair(child, new_epoch));
+                if (!check_done.count(child))
+                  check_for_merge_queue.push_back(child);
+              }
+            }
+          } else {
+            DEBUG("{} e{} pg_num {} -> {} is beyond old pg_num, skipping",
+                  cur_pg, new_epoch, pg_num, new_pg_num);
+          }
+        } else {
+          std::set<spg_t> children;
+          if (cur_pg.is_split(new_pg_num, pg_num, &children)) {
+              DEBUG("{} e{} pg_num {} -> {} is merge target, source {}", cur_pg, new_epoch,
+                     pg_num, new_pg_num, children);
+              for (auto child: children) {
+		merge_pgs.insert(std::make_pair(child, new_epoch));
+                if (!check_done.count(child))
+                  check_for_merge_queue.push_back(child);
+              }
+              merge_pgs.insert(std::make_pair(cur_pg, new_epoch));
+          }
+        }
+        pg_num = new_pg_num;
+      }
+      }
+      return seastar::make_ready_future<std::set<std::pair<spg_t, epoch_t>>>(
+        std::move(merge_pgs));
     });
 }
 
@@ -123,6 +394,13 @@ seastar::future<> PerShardState::update_shard_superblock(OSDSuperblock superbloc
 {
   assert_core();
   per_shard_superblock = std::move(superblock);
+  return seastar::now();
+}
+
+seastar::future<> PerShardState::update_shard_pg_num_history(pool_pg_num_history_t pg_num_history)
+{
+  assert_core();
+  per_shard_pg_num_history = std::move(pg_num_history);
   return seastar::now();
 }
 
@@ -305,6 +583,137 @@ void OSDSingletonState::prune_pg_created()
   }
 }
 
+seastar::future<> OSDSingletonState::set_ready_to_merge_source(pg_t pgid,
+                                                  eversion_t version)
+{
+  LOG_PREFIX(OSDSingletonState::set_ready_to_merge_source);
+  DEBUG("{}", pgid);
+  ready_to_merge_source[pgid] = version;
+  ceph_assert(not_ready_to_merge_source.count(pgid) == 0);
+  return send_ready_to_merge();
+
+}
+
+seastar::future<> OSDSingletonState::set_ready_to_merge_target(pg_t pgid,
+                                           eversion_t version,
+                                           epoch_t last_epoch_started,
+                                           epoch_t last_epoch_clean)
+{
+  LOG_PREFIX(OSDSingletonState::set_ready_to_merge_target);
+  DEBUG("{}", pgid);
+  ready_to_merge_target.insert(std::make_pair(pgid,
+                                         std::make_tuple(version,
+                                                    last_epoch_started,
+                                                    last_epoch_clean)));
+  ceph_assert(not_ready_to_merge_target.count(pgid) == 0);
+  return send_ready_to_merge();
+
+}
+
+seastar::future<> OSDSingletonState::set_not_ready_to_merge_source(pg_t source)
+{
+  LOG_PREFIX(OSDSingletonState::set_not_ready_to_merge_source);
+  DEBUG("{}", source);
+  not_ready_to_merge_source.insert(source);
+  ceph_assert(ready_to_merge_source.count(source) == 0);
+  return send_ready_to_merge();
+
+}
+
+
+seastar::future<> OSDSingletonState::set_not_ready_to_merge_target(pg_t target, pg_t source)
+{
+  LOG_PREFIX(OSDSingletonState::set_not_ready_to_merge_target);
+  DEBUG("{} source {}", target, source);
+  not_ready_to_merge_target[target] = source;
+  ceph_assert(ready_to_merge_source.count(target) == 0);
+  return send_ready_to_merge();
+
+}
+
+seastar::future<> OSDSingletonState::send_ready_to_merge()
+{
+  LOG_PREFIX(OSDSingletonState::send_ready_to_merge);
+  DEBUG(" ready_to_merge_source: {} not_ready_to_merge_source: {} \
+          ready_to_merge_target: {} not_ready_to_merge_target: {} \
+          sent_ready_to_merge_source {}", ready_to_merge_source,
+          not_ready_to_merge_source, ready_to_merge_target, not_ready_to_merge_target,
+          sent_ready_to_merge_source);
+  for (auto src : not_ready_to_merge_source) {
+    if (sent_ready_to_merge_source.count(src) == 0) {
+      return monc.send_message(crimson::make_message<MOSDPGReadyToMerge>(
+                               src,
+                               eversion_t{}, eversion_t{}, 0, 0,
+                               false,
+                               osdmap->get_epoch())).then([this, src] {
+        sent_ready_to_merge_source.insert(src);
+      });
+    }
+  }
+  for (auto p : not_ready_to_merge_target) {
+    if (sent_ready_to_merge_source.count(p.second) == 0) {
+      return monc.send_message(crimson::make_message<MOSDPGReadyToMerge>(
+                               p.second,
+                               eversion_t{}, eversion_t{}, 0, 0,
+                               false,
+                               osdmap->get_epoch())).then([this, p] {
+      sent_ready_to_merge_source.insert(p.second);
+      });
+    }
+  }
+  for (auto src : ready_to_merge_source) {
+    if (not_ready_to_merge_source.count(src.first) ||
+        not_ready_to_merge_target.count(src.first.get_parent())) {
+      continue;
+    }
+    auto p = ready_to_merge_target.find(src.first.get_parent());
+    if (p != ready_to_merge_target.end() &&
+        sent_ready_to_merge_source.count(src.first) == 0) {
+      return monc.send_message(crimson::make_message<MOSDPGReadyToMerge>(
+                               src.first,           // source pgid
+                               src.second,          // src version
+                               std::get<0>(p->second), // target version
+                               std::get<1>(p->second), // PG's last_epoch_started
+                               std::get<2>(p->second), // PG's last_epoch_clean
+                               true,
+                               osdmap->get_epoch())).then([this, src] {
+      sent_ready_to_merge_source.insert(src.first);
+      });
+    }
+  }
+  return seastar::now();
+}
+
+void OSDSingletonState::clear_ready_to_merge(pg_t pgid)
+{
+  ready_to_merge_source.erase(pgid);
+  ready_to_merge_target.erase(pgid);
+  not_ready_to_merge_source.erase(pgid);
+  not_ready_to_merge_target.erase(pgid);
+  sent_ready_to_merge_source.erase(pgid);
+}
+
+void OSDSingletonState::clear_sent_ready_to_merge()
+{
+  sent_ready_to_merge_source.clear();
+}
+
+void OSDSingletonState::prune_sent_ready_to_merge(const OSDMapService::cached_map_t osdmap)
+{
+  LOG_PREFIX(OSDSingletonState::prune_sent_ready_to_merge);
+  auto source = sent_ready_to_merge_source.begin();
+  while (source != sent_ready_to_merge_source.end()) {
+    if (!osdmap->pg_exists(*source)) {
+      DEBUG("{}", *source);
+      source = sent_ready_to_merge_source.erase(source);
+    } else {
+      DEBUG(" exist {}", *source);
+      ++source;
+    }
+  }
+}
+
+
 seastar::future<> OSDSingletonState::send_alive(const epoch_t want)
 {
   LOG_PREFIX(OSDSingletonState::send_alive);
@@ -466,7 +875,8 @@ seastar::future<std::unique_ptr<OSDMap>> OSDSingletonState::load_map(epoch_t e)
   });
 }
 
-seastar::future<> OSDSingletonState::store_maps(
+seastar::future<std::map<epoch_t, OSDMapService::local_cached_map_t>>
+OSDSingletonState::store_maps(
   ceph::os::Transaction& t,
   epoch_t start, Ref<MOSDMap> m)
 {
@@ -519,7 +929,7 @@ seastar::future<> OSDSingletonState::store_maps(
 	     added_maps.begin()->first,
 	     added_maps.rbegin()->first);
 	meta_coll->store_final_pool_info(t, lastmap, added_maps);
-	return seastar::now();
+	return seastar::make_ready_future<std::map<epoch_t, local_cached_map_t>>(std::move(added_maps));
       });
     });
   });
@@ -700,7 +1110,7 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 	    rctx->transaction
 	  ).then([this, pg=pg, rctx=std::move(rctx)] {
 	    return start_operation<PGAdvanceMap>(
-	      pg, *this, get_map()->get_epoch(), std::move(*rctx), true
+	      pg, *this, get_map()->get_epoch(), std::move(*rctx), true, false
 	    ).second.then([pg=pg] {
 	      return seastar::make_ready_future<Ref<PG>>(pg);
 	    });
