@@ -3889,8 +3889,8 @@ void RGWCreateBucket::execute(optional_yield y)
     if (op_ret >= 0) {
       op_ret = -ERR_BUCKET_EXISTS;
     }
-  }
-}
+  } /* if (need_metadata_upload() && existed) */
+} /* RGWCreateBucket::execute() */
 
 int RGWDeleteBucket::verify_permission(optional_yield y)
 {
