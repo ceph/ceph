@@ -80,8 +80,17 @@ struct Page {
   Page(char *data, uint64_t offset) : data(data), offset(offset), nrefs(1) {}
 
   static void operator delete(void *p) {
+// Because picking up pragmata addressed to a different compiler and
+// then complaining about not recognizing them is *such* a good way to
+// be compatible, isn't it, Clang?
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunknown-warning-option"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
     delete[] reinterpret_cast<Page*>(p)->data;
   }
+#pragma GCC diagnostic pop
+#pragma clang diagnostic pop
 };
 
 class PageSet {
