@@ -58,9 +58,21 @@ def main():
     assert 'DeleteMarker' in resp, 'DeleteMarker key not present in response'
     assert resp['DeleteMarker'], 'DeleteMarker value not True in response'
     assert 'VersionId' in resp, 'VersionId key not present in response'
-    version_id = resp['VersionId']
-    bucket.Object(key).delete()
-    connection.ObjectVersion(bucket.name, key, version_id).delete()
+    version_id_1 = resp['VersionId']
+
+    resp = bucket.Object(key).delete()
+    assert 'DeleteMarker' in resp, 'DeleteMarker key not present in response'
+    assert resp['DeleteMarker'], 'DeleteMarker value not True in response'
+    assert 'VersionId' in resp, 'VersionId key not present in response'
+    version_id_2 = resp['VersionId']
+
+    connection.ObjectVersion(bucket.name, key, version_id_2).delete()
+    # bucket index should only include entries for an object version
+    out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME}')
+    json_out = json.loads(out.replace(b'\x80', b'0x80'))
+    assert len(json_out) == 4, 'bucket index did not only include entries for an object version'
+
+    connection.ObjectVersion(bucket.name, key, version_id_1).delete()
     # bucket index should now be empty
     out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME}')
     json_out = json.loads(out.replace(b'\x80', b'0x80'))
