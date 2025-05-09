@@ -60,6 +60,7 @@ import { SmbJoinAuthListComponent } from './ceph/smb/smb-join-auth-list/smb-join
 import { SmbUsersgroupsListComponent } from './ceph/smb/smb-usersgroups-list/smb-usersgroups-list.component';
 import { SmbOverviewComponent } from './ceph/smb/smb-overview/smb-overview.component';
 
+
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
   resolve(route: ActivatedRouteSnapshot) {
@@ -378,7 +379,8 @@ const routes: Routes = [
       {
         path: 'pool',
         data: { breadcrumbs: 'Cluster/Pools' },
-        loadChildren: () => import('./ceph/pool/pool.module').then((m) => m.RoutedPoolModule)
+        loadChildren: () => import('./ceph/pool/pool.module').then((m) => m.RoutedPoolModule),
+      
       },
       // Block
       {

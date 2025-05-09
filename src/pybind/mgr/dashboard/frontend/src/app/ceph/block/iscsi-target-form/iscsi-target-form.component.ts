@@ -12,7 +12,7 @@ import { SelectMessages } from '~/app/shared/components/select/select-messages.m
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -27,7 +27,7 @@ import { IscsiTargetIqnSettingsModalComponent } from '../iscsi-target-iqn-settin
   templateUrl: './iscsi-target-form.component.html',
   styleUrls: ['./iscsi-target-form.component.scss']
 })
-export class IscsiTargetFormComponent extends CdForm implements OnInit {
+export class IscsiTargetFormComponent extends CdFormCanDeactivate implements OnInit {
   cephIscsiConfigVersion: number;
   targetForm: CdFormGroup;
   modalRef: NgbModalRef;
@@ -277,6 +277,10 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
         this.onGroupMemberSelection({ option: new SelectOption(true, member, '') }, group_index);
       });
     });
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.targetForm;
   }
 
   hasAdvancedSettings(settings: any) {

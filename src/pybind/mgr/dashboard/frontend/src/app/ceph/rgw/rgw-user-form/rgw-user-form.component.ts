@@ -9,7 +9,7 @@ import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -36,7 +36,7 @@ import { RGW } from '../utils/constants';
   templateUrl: './rgw-user-form.component.html',
   styleUrls: ['./rgw-user-form.component.scss']
 })
-export class RgwUserFormComponent extends CdForm implements OnInit {
+export class RgwUserFormComponent extends CdFormCanDeactivate implements OnInit {
   userForm: CdFormGroup;
   editing = false;
   submitObservables: Observable<Object>[] = [];
@@ -75,6 +75,10 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     this.editing = this.router.url.startsWith(`/rgw/user/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.createForm();
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.userForm;
   }
 
   createForm() {
