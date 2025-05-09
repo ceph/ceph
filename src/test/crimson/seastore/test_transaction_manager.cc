@@ -14,7 +14,7 @@
 #include "crimson/os/seastore/segment_manager.h"
 
 #include "test/crimson/seastore/test_block.h"
-#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/lba/lba_btree_node.h"
 
 using namespace crimson;
 using namespace crimson::os;
@@ -2118,7 +2118,7 @@ TEST_P(tm_single_device_intergrity_check_test_t, remap_lazy_read)
 TEST_P(tm_single_device_test_t, invalid_lba_mapping_detect)
 {
   run_async([this] {
-    using namespace crimson::os::seastore::lba_manager::btree;
+    using namespace crimson::os::seastore::lba;
     {
       auto t = create_transaction();
       for (unsigned i = 0; i < LEAF_NODE_CAPACITY; i++) {
