@@ -2383,7 +2383,7 @@ int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, o
 
   /* Temporarily set target */
   state.obj = target;
-  set_atomic();
+  set_atomic(true);
   state.attrset[attr_name] = attr_val;
   r = set_obj_attrs(dpp, &state.attrset, nullptr, y, rgw::sal::FLAG_LOG_OP);
   /* Restore target */
@@ -2397,7 +2397,7 @@ int RadosObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* att
   Attrs rmattr;
   bufferlist bl;
 
-  set_atomic();
+  set_atomic(true);
   rmattr[attr_name] = bl;
   return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
 }
@@ -2549,7 +2549,7 @@ int RadosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_y
   bl.clear();
   encode(policy, bl);
 
-  set_atomic();
+  set_atomic(true);
   map<string, bufferlist> attrs;
   attrs[RGW_ATTR_ACL] = bl;
   r = set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
@@ -2668,7 +2668,7 @@ int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
   RGWRados::Object op_target(store->getRados(), bucket->get_info(), *rados_ctx, get_obj());
   RGWRados::Object::Write obj_op(&op_target);
 
-  set_atomic();
+  set_atomic(true);
   obj_op.meta.modify_tail = true;
   obj_op.meta.flags = PUT_OBJ_CREATE;
   obj_op.meta.category = RGWObjCategory::CloudTiered;
@@ -3579,7 +3579,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
     attrs[RGW_ATTR_COMPRESSION] = tmp;
   }
 
-  target_obj->set_atomic();
+  target_obj->set_atomic(true);
 
   const RGWBucketInfo& bucket_info = target_obj->get_bucket()->get_info();
   RGWRados::Object op_target(store->getRados(), bucket_info,
