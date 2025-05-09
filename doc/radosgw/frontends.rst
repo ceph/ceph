@@ -7,7 +7,7 @@ HTTP Frontends
 .. contents::
 
 The Ceph Object Gateway supports two embedded HTTP frontend libraries
-that can be configured with ``rgw_frontends``. See `Config Reference`_
+that can be configured with ``rgw_frontends``. See :ref:`radosgw-config-ref`
 for details about the syntax.
 
 Beast
@@ -161,5 +161,3 @@ Some frontend options are generic and supported by all frontends:
 :Type: String
 :Default: None
 
-
-.. _Config Reference: ../config-ref

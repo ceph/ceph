@@ -1,3 +1,5 @@
+.. _radosgw-account:
+
 ===============
  User Accounts
 ===============
