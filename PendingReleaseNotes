@@ -3,6 +3,8 @@
 * RGW: Lua scripts will not run against health checks.
 * RGW: Adding missing quotes to the ETag values returned by S3 CopyPart,
   PostObject and CompleteMultipartUpload responses.
+* RGW: IAM policy evaluation now supports conditions ArnEquals and ArnLike, along
+  with their Not and IfExists variants.
 
 * RBD: All Python APIs that produce timestamps now return "aware" `datetime`
   objects instead of "naive" ones (i.e. those including time zone information
