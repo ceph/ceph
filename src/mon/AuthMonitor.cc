@@ -16,6 +16,7 @@
 #include <sstream>
 
 #include "mon/AuthMonitor.h"
+#include "mon/MonmapMonitor.h"
 #include "mon/Monitor.h"
 #include "mon/MonitorDBStore.h"
 #include "mon/MonMap.h"
@@ -1941,6 +1942,15 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
   } else if (prefix == "auth wipe-rotating-service-keys") {
     /* N.B.: doing this requires all service daemons to restart to get new service keys. */
     /* is this true?? */
+
+    auto&& monmon = mon.monmon();
+    if (!monmon->is_writeable()) {
+      monmon->wait_for_writeable(op, new PaxosService::C_RetryMessage(this, op));
+      return false;
+    }
+
+    paxos.plug();
+
     KeyServerData::Incremental rot_inc;
     rot_inc.op = KeyServerData::AUTH_INC_SET_ROTATING;
     bool modified = mon.key_server.prepare_rotating_update(rot_inc.rotating_bl, true);
@@ -1948,8 +1958,14 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     rs = "wiped rotating service keys!";
     dout(5) << __func__ << " wiped rotating service keys!" << dendl;
     push_cephx_inc(rot_inc);
-    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
-                                              get_last_committed() + 1));
+
+    auto const next_epoch = get_last_committed() + 1;
+    monmon->bump_auth_epoch(next_epoch);
+    request_proposal(monmon);
+
+    paxos.unplug();
+
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs, rdata, next_epoch));
     return true;
   }
 done:
