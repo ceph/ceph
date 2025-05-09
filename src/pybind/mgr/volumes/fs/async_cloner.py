@@ -84,10 +84,6 @@ def set_clone_state(fs_client, volspec, volname, groupname, subvolname, state):
     with open_at_volume(fs_client, volspec, volname, groupname, subvolname, SubvolumeOpType.CLONE_INTERNAL) as subvolume:
         subvolume.state = (state, True)
 
-def get_clone_source(clone_subvolume):
-    source = clone_subvolume._get_clone_source()
-    return (source['volume'], source.get('group', None), source['subvolume'], source['snapshot'])
-
 def get_next_state_on_error(errnum):
     if errnum == -errno.EINTR:
         next_state = SubvolumeOpSm.transition(SubvolumeTypes.TYPE_CLONE,
