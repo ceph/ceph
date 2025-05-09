@@ -904,5 +904,44 @@ int verify_target_bucket_attributes(const DoutPrefixProvider* dpp, rgw::sal::Buc
   return 0;
 }
 
+int get_target_and_conf_from_source(
+    const DoutPrefixProvider* dpp,
+    rgw::sal::Driver* driver,
+    rgw::sal::Bucket* src_bucket,
+    const std::string& tenant,
+    configuration& configuration,
+    std::unique_ptr<rgw::sal::Bucket>& target_bucket,
+    optional_yield y) {
+    const auto src_bucket_id = src_bucket->get_key();
+    const auto& bucket_attrs = src_bucket->get_attrs();
+    auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING);
+    if (iter == bucket_attrs.end()) {
+      ldpp_dout(dpp, 1) << "WARNING: no logging configured on bucket '" << src_bucket_id << "'" << dendl;
+      return -ENODATA;
+    }
+    try {
+      configuration.enabled = true;
+      auto bl_iter = iter->second.cbegin();
+      decode(configuration, bl_iter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 1) << "WARNING: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
+        << "' for bucket '" << src_bucket_id << "', error: " << err.what() << dendl;
+      return -EINVAL;
+    }
+
+    rgw_bucket target_bucket_id;
+    if (const auto ret = get_bucket_id(configuration.target_bucket, tenant, target_bucket_id); ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to parse target bucket '" << configuration.target_bucket << "', ret = " << ret << dendl;
+      return ret;
+    }
+
+    if (const auto ret = driver->load_bucket(dpp, target_bucket_id,
+                                 &target_bucket, y); ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to get target bucket '" << target_bucket_id << "', ret = " << ret << dendl;
+      return ret;
+    }
+    return 0;
+}
+
 } // namespace rgw::bucketlogging
 
