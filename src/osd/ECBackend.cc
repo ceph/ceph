@@ -242,7 +242,7 @@ void ECBackend::RecoveryBackend::handle_recovery_push(
   }
 
   if (op.before_progress.first) {
-    ceph_assert(op.attrset.count(string("_")));
+    ceph_assert(op.attrset.contains(OI_ATTR));
     m->t.setattrs(
       coll,
       tobj,
@@ -336,7 +336,7 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
       op.recovery_info.oi = op.obc->obs.oi;
     }
 
-    if (sinfo.require_hinfo()) {
+    if (sinfo.get_is_hinfo_required()) {
       ECUtil::HashInfo hinfo(sinfo.get_k_plus_m());
       if (op.obc->obs.oi.size > 0) {
         ceph_assert(op.xattrs.count(ECUtil::get_hinfo_key()));
@@ -373,7 +373,7 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
     }
   }
 
-  uint64_t aligned_size = ECUtil::align_page_next(op.obc->obs.oi.size);
+  uint64_t aligned_size = ECUtil::align_next(op.obc->obs.oi.size);
 
   int r = op.returned_data->decode(ec_impl, shard_want_to_read, aligned_size);
   ceph_assert(r == 0);
@@ -393,8 +393,10 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
     }
   }
 
-  dout(20) << __func__ << ": oid=" << op.hoid << " "
-           << op.returned_data->debug_string(2048, 8) << dendl;
+  dout(20) << __func__ << ": oid=" << op.hoid << dendl;
+  dout(20) << __func__ << "EC_DEBUG_BUFFERS: "
+           << op.returned_data->debug_string(2048, 0)
+           << dendl;
 
   continue_recovery_op(op, m);
 }
@@ -545,7 +547,7 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
 
       if (op.recovery_progress.first && op.obc) {
         op.xattrs = op.obc->attr_cache;
-        if (sinfo.require_hinfo()) {
+        if (sinfo.get_is_hinfo_required()) {
           if (auto [r, attrs, size] = ecbackend->get_attrs_n_size_from_disk(
               op.hoid);
             r >= 0 || r == -ENOENT) {
@@ -621,7 +623,7 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
         m->pushes[pg_shard].push_back(PushOp());
         PushOp &pop = m->pushes[pg_shard].back();
         pop.soid = op.hoid;
-        pop.version = op.v;
+        pop.version = op.recovery_info.oi.get_version_for_shard(pg_shard.shard);
         op.returned_data->get_shard_first_buffer(pg_shard.shard, pop.data);
         dout(10) << __func__ << ": pop shard=" << pg_shard
                  << ", oid=" << pop.soid
@@ -634,7 +636,26 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
             op.returned_data->get_shard_first_offset(pg_shard.shard),
             pop.data.length());
         if (op.recovery_progress.first) {
-          pop.attrset = op.xattrs;
+          if (sinfo.is_nonprimary_shard(pg_shard.shard)) {
+            if (pop.version == op.recovery_info.oi.version) {
+              dout(10) << __func__ << ": copy OI attr only" << dendl;
+              pop.attrset[OI_ATTR] = op.xattrs[OI_ATTR];
+            } else {
+              // We are recovering a partial write - make sure we push the correct
+              // version in the OI or a scrub error will occur.
+              object_info_t oi(op.recovery_info.oi);
+              oi.shard_versions.clear();
+              oi.version = pop.version;
+              dout(10) << __func__ << ": partial write OI attr: oi=" << oi << dendl;
+              bufferlist bl;
+              oi.encode(bl, get_osdmap()->get_features(
+                CEPH_ENTITY_TYPE_OSD, nullptr));
+              pop.attrset[OI_ATTR] = bl;
+            }
+          } else {
+            dout(10) << __func__ << ": push all attrs (not nonprimary)" << dendl;
+            pop.attrset = op.xattrs;
+          }
         }
         pop.recovery_info = op.recovery_info;
         pop.before_progress = op.recovery_progress;
@@ -1050,8 +1071,7 @@ void ECBackend::handle_sub_read(
 		  << dendl;
         } else {
           get_parent()->clog_error() << "Error " << r
-            << " reading object "
-            << hoid;
+            << " reading object " << hoid;
           dout(5) << __func__ << ": Error " << r
 		  << " reading " << hoid << dendl;
         }
@@ -1085,8 +1105,7 @@ void ECBackend::handle_sub_read(
         if (!hinfo) {
           r = -EIO;
           get_parent()->clog_error() << "Corruption detected: object "
-            << hoid
-            << " is missing hash_info";
+            << hoid << " is missing hash_info";
           dout(5) << __func__ << ": No hinfo for " << hoid << dendl;
           goto error;
         }
@@ -1102,8 +1121,8 @@ void ECBackend::handle_sub_read(
               << hex << h.digest() << " expected 0x" << hinfo->
               get_chunk_hash(shard) << dec;
             dout(5) << __func__ << ": Bad hash for " << hoid << " digest 0x"
-		    << hex << h.digest() << " expected 0x" << hinfo->
-get_chunk_hash(shard) << dec << dendl;
+		    << hex << h.digest() << " expected 0x"
+                    << hinfo->get_chunk_hash(shard) << dec << dendl;
             r = -EIO;
             goto error;
           }
@@ -1172,9 +1191,9 @@ void ECBackend::handle_sub_write_reply(
 }
 
 void ECBackend::handle_sub_read_reply(
-  pg_shard_t from,
-  ECSubReadReply &op,
-  const ZTracer::Trace &trace) {
+    pg_shard_t from,
+    ECSubReadReply &op,
+    const ZTracer::Trace &trace) {
   trace.event("ec sub read reply");
   dout(10) << __func__ << ": reply " << op << dendl;
   map<ceph_tid_t, ReadOp>::iterator iter = read_pipeline.tid_to_read_map.
@@ -1227,26 +1246,19 @@ void ECBackend::handle_sub_read_reply(
       rop.complete.emplace(hoid, &sinfo);
     }
     auto &complete = rop.complete.at(hoid);
-    for (auto &&[shard, read]: std::as_const(req.shard_reads)) {
-      if (complete.errors.contains(read.pg_shard)) continue;
-
-      complete.processed_read_requests[shard].union_of(read.extents);
-
-      if (!rop.complete.contains(hoid) ||
-        !complete.buffers_read.contains(shard)) {
-        if (!read.extents.empty()) continue; // Complete the actual read first.
-
-        // If we are first here, populate the completion.
-        if (!rop.complete.contains(hoid)) {
-          rop.complete.emplace(hoid, read_result_t(&sinfo));
-        }
-      }
+    if (!req.shard_reads.contains(from.shard)) {
+      continue;
+    }
+    const shard_read_t &read = req.shard_reads.at(from.shard);
+    if (!complete.errors.contains(from)) {
+      dout(20) << __func__ <<" read:" << read << dendl;
+      complete.processed_read_requests[from.shard].union_of(read.extents);
     }
   }
   for (auto &&[hoid, attr]: op.attrs_read) {
     ceph_assert(!op.errors.count(hoid));
     // if read error better not have sent an attribute
-    if (!rop.to_read.count(hoid)) {
+    if (!rop.to_read.contains(hoid)) {
       // We canceled this read! @see filter_read_op
       dout(20) << __func__ << " to_read skipping" << dendl;
       continue;
@@ -1290,6 +1302,8 @@ void ECBackend::handle_sub_read_reply(
       rop.to_read.at(oid).shard_want_to_read.
           populate_shard_id_set(want_to_read);
 
+      dout(20) << __func__ << " read_result: " << read_result << dendl;
+
       int err = ec_impl->minimum_to_decode(want_to_read, have, dummy_minimum,
                                             nullptr);
       if (err) {
@@ -1305,7 +1319,7 @@ void ECBackend::handle_sub_read_reply(
               // We found that new reads are required to do a decode.
               need_resend = true;
               continue;
-            } else if (r >  0) {
+            } else if (r > 0) {
               // No new reads were requested. This means that some parity
               // shards can be assumed to be zeros.
               err = 0;
@@ -1340,7 +1354,8 @@ void ECBackend::handle_sub_read_reply(
             rop.complete.at(oid).errors.clear();
           }
         }
-        // avoid re-read for completed object as we may send remaining reads for uncopmpleted objects
+        // avoid re-read for completed object as we may send remaining reads for
+        // uncompleted objects
         rop.to_read.at(oid).shard_reads.clear();
         rop.to_read.at(oid).want_attrs = false;
         ++is_complete;
@@ -1599,28 +1614,28 @@ void ECBackend::submit_transaction(
 }
 
 int ECBackend::objects_read_sync(
-  const hobject_t &hoid,
-  uint64_t off,
-  uint64_t len,
-  uint32_t op_flags,
-  bufferlist *bl) {
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len,
+    uint32_t op_flags,
+    bufferlist *bl) {
   return -EOPNOTSUPP;
 }
 
 void ECBackend::objects_read_async(
-  const hobject_t &hoid,
-  uint64_t object_size,
-  const list<pair<ec_align_t,
-                  pair<bufferlist*, Context*>>> &to_read,
-  Context *on_complete,
-  bool fast_read) {
+    const hobject_t &hoid,
+    uint64_t object_size,
+    const list<pair<ec_align_t,
+                    pair<bufferlist*, Context*>>> &to_read,
+    Context *on_complete,
+    bool fast_read) {
   map<hobject_t, std::list<ec_align_t>> reads;
 
   uint32_t flags = 0;
   extent_set es;
   for (const auto &[read, ctx]: to_read) {
     pair<uint64_t, uint64_t> tmp;
-    if (!cct->_conf->osd_ec_partial_reads || fast_read) {
+    if (!cct->_conf->osd_ec_partial_reads) {
       tmp = sinfo.ro_offset_len_to_stripe_ro_offset_len(read.offset, read.size);
     } else {
       tmp.first = read.offset;
@@ -1806,13 +1821,6 @@ int ECBackend::be_deep_scrub(
     o.read_error = true;
     return 0;
   }
-  if (bl.length() % sinfo.get_chunk_size()) {
-    dout(20) << __func__ << "  " << poid << " got "
-	     << r << " on read, not chunk size " << sinfo.get_chunk_size() << " aligned"
-	     << dendl;
-    o.read_error = true;
-    return 0;
-  }
   if (r > 0) {
     pos.data_hash << bl;
   }
@@ -1822,6 +1830,14 @@ int ECBackend::be_deep_scrub(
     return -EINPROGRESS;
   }
 
+  if (!sinfo.get_is_hinfo_required()) {
+    o.digest = 0;
+    o.digest_present = true;
+    o.omap_digest = -1;
+    o.omap_digest_present = true;
+    return 0;
+  }
+
   ECUtil::HashInfoRef hinfo = unstable_hashinfo_registry.get_hash_info(
     poid, false, o.attrs, o.size);
   if (!hinfo) {
@@ -1829,49 +1845,39 @@ int ECBackend::be_deep_scrub(
     o.read_error = true;
     o.digest_present = false;
     return 0;
-  } else {
-    if (!sinfo.supports_ec_overwrites()) {
-      if (!hinfo->has_chunk_hash()) {
-        dout(0) << "_scan_list  " << poid << " got invalid hash info" << dendl;
-        o.ec_size_mismatch = true;
-        return 0;
-      }
-      if (hinfo->get_total_chunk_size() != (unsigned)pos.data_pos) {
-        dout(0) << "_scan_list  " << poid << " got incorrect size on read 0x"
-		<< std::hex << pos
-		<< " expected 0x" << hinfo->get_total_chunk_size() << std::dec
-		<< dendl;
-        o.ec_size_mismatch = true;
-        return 0;
-      }
-
-      if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) !=
-        pos.data_hash.digest()) {
-        dout(0) << "_scan_list  " << poid << " got incorrect hash on read 0x"
-		<< std::hex << pos.data_hash.digest() << " !=  expected 0x"
-		<< hinfo->get_chunk_hash(get_parent()->whoami_shard().shard)
-		<< std::dec << dendl;
-        o.ec_hash_mismatch = true;
-        return 0;
-      }
-
-      /* We checked above that we match our own stored hash.  We cannot
-       * send a hash of the actual object, so instead we simply send
-       * our locally stored hash of shard 0 on the assumption that if
-       * we match our chunk hash and our recollection of the hash for
-       * chunk 0 matches that of our peers, there is likely no corruption.
-       */
-      o.digest = hinfo->get_chunk_hash(shard_id_t(0));
-      o.digest_present = true;
-    } else {
-      /* Hack! We must be using partial overwrites, and partial overwrites
-       * don't support deep-scrub yet
-       */
-      o.digest = 0;
-      o.digest_present = true;
-    }
+  }
+  if (!hinfo->has_chunk_hash()) {
+    dout(0) << "_scan_list  " << poid << " got invalid hash info" << dendl;
+    o.ec_size_mismatch = true;
+    return 0;
+  }
+  if (hinfo->get_total_chunk_size() != (unsigned)pos.data_pos) {
+    dout(0) << "_scan_list  " << poid << " got incorrect size on read 0x"
+	    << std::hex << pos
+	    << " expected 0x" << hinfo->get_total_chunk_size() << std::dec
+	    << dendl;
+    o.ec_size_mismatch = true;
+    return 0;
   }
 
+  if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) !=
+    pos.data_hash.digest()) {
+    dout(0) << "_scan_list  " << poid << " got incorrect hash on read 0x"
+	    << std::hex << pos.data_hash.digest() << " !=  expected 0x"
+	    << hinfo->get_chunk_hash(get_parent()->whoami_shard().shard)
+	    << std::dec << dendl;
+    o.ec_hash_mismatch = true;
+    return 0;
+  }
+
+  /* We checked above that we match our own stored hash.  We cannot
+   * send a hash of the actual object, so instead we simply send
+   * our locally stored hash of shard 0 on the assumption that if
+   * we match our chunk hash and our recollection of the hash for
+   * chunk 0 matches that of our peers, there is likely no corruption.
+   */
+  o.digest = hinfo->get_chunk_hash(shard_id_t(0));
+  o.digest_present = true;
   o.omap_digest = -1;
   o.omap_digest_present = true;
   return 0;

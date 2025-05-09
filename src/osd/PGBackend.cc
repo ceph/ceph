@@ -413,6 +413,7 @@ void PGBackend::try_stash(
 
 void PGBackend::partial_write(
    pg_info_t *info,
+   const eversion_t previous_version,
    const pg_log_entry_t &entry)
 {
   ceph_assert(info != nullptr);
@@ -422,6 +423,7 @@ void PGBackend::partial_write(
 		       << " written_shards=" << entry.written_shards
 		       << " present_shards=" << entry.present_shards
 		       << " pwlc=" << info->partial_writes_last_complete
+                       << " previous_version=" << previous_version
 		       << dendl;
     const pg_pool_t &pool = get_parent()->get_pool();
     for (unsigned int shard = 0;
@@ -432,7 +434,7 @@ void PGBackend::partial_write(
 	  if (!info->partial_writes_last_complete.contains(shard_id_t(shard))) {
 	    // 1st partial write since all logs were updated
 	    info->partial_writes_last_complete[shard_id_t(shard)] =
-	      std::pair(entry.prior_version, entry.version);
+	      std::pair(previous_version, entry.version);
 	  } else if (info->partial_writes_last_complete[shard_id_t(shard)]
 		     .second.version + 1 == entry.version.version) {
 	    // Subsequent partial write, version is sequential
