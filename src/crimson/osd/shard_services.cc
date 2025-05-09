@@ -94,13 +94,13 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
   auto &pgs = pg_map.get_pgs();
   return seastar::parallel_for_each(
     pgs.begin(), pgs.end(),
-    [=, &shard_services](auto& pg) {
+    [&shard_services, epoch](auto& pg) {
       return shard_services.start_operation<PGAdvanceMap>(
 	pg.second,
 	shard_services,
 	epoch,
 	PeeringCtx{}, false).second;
-    });
+  });
 }
 
 Ref<PG> PerShardState::get_pg(spg_t pgid)
@@ -737,6 +737,17 @@ ShardServices::wait_for_pg(
   PGMap::PGCreationBlockingEvent::TriggerI&& trigger, spg_t pgid)
 {
   return local_state.pg_map.wait_for_pg(std::move(trigger), pgid).first;
+}
+
+ShardServices::wait_for_pg_ret
+ShardServices::create_split_pg(
+    PGMap::PGCreationBlockingEvent::TriggerI&& trigger,
+    spg_t pgid)
+{
+  auto fut = local_state.pg_map.wait_for_pg(
+      std::move(trigger), pgid).first;
+  local_state.pg_map.set_creating(pgid);
+  return fut;
 }
 
 seastar::future<Ref<PG>> ShardServices::load_pg(spg_t pgid)
