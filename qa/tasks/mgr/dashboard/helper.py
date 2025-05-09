@@ -339,12 +339,12 @@ class DashboardTestCase(MgrTestCase):
 
     @classmethod
     def _get(cls, url, params=None, version=DEFAULT_API_VERSION, set_cookies=False, headers=None,
-             retries=0, wait_func=None):
+             retries=1, wait_func=None):
         while retries >= 0:
             try:
                 return cls._request(url, 'GET', params=params, version=version,
                                     set_cookies=set_cookies, headers=headers)
-            except requests.RequestException as e:
+            except (Exception, requests.RequestException) as e:  # pylint: disable=broad-except
                 if retries == 0:
                     raise e from None
 
