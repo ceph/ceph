@@ -3947,6 +3947,11 @@ bool BlueStore::ExtentMap::encode_some(
 	       << std::dec << " hit new spanning blob " << *p << dendl;
       request_reshard(p->blob_start(), p->blob_end());
       must_reshard = true;
+    } else if (p->blob->is_spanning() && p->logical_end() > end) {
+      dout(30) << __func__ << std::hex << offset << "~" << length
+               << std::dec << " extent stands out " << *p << dendl;
+      request_reshard(p->blob_start(), p->blob_end());
+      must_reshard = true;
     }
     if (!must_reshard) {
       denc_varint(0, bound); // blobid
@@ -17981,7 +17986,7 @@ int BlueStore::_do_remove(
       bluestore_blob_t& blob = e.blob->dirty_blob();
       blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
       e.blob->get_dirty_shared_blob() = nullptr;
-      h->extent_map.dirty_range(e.logical_offset, 1);
+      h->extent_map.dirty_range(e.logical_offset, e.length);
     }
   }
   txc->write_onode(h);
