@@ -8,9 +8,11 @@
     </cds-tree-view>
     <ng-template #treeNodeTemplate
                  let-node>
-      <i [class]="node?.cdIcon"></i>
+    <svg [cdsIcon]="node.data.cdIcon"
+         [size]="icons.size16"
+         class="cds--btn__icon"></svg>
       <span>{{ node?.name }}</span>
-      &nbsp;
+        &nbsp;
       <span class="badge"
             [ngClass]="{'badge-success': ['logged_in'].includes(node?.status), 'badge-danger': ['logged_out'].includes(node?.status)}">
         {{ node?.status }}
