@@ -166,6 +166,8 @@ class MonMap {
   std::set<std::string> stretch_marked_down_mons; // can't be leader or taken proposal in CONNECTIVITY 
                                                   // seriously until fully recovered
 
+  epoch_t auth_epoch = 0;
+
 public:
   void calc_legacy_ranks();
   void calc_addr_mons() {
