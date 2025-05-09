@@ -14,6 +14,7 @@ enum {
 
   l_mgr_cache_hit,
   l_mgr_cache_miss,
+  l_mgr_gil_acquisition_avg,
 
   l_mgr_last,
 };
