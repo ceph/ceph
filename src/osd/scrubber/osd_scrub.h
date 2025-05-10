@@ -140,14 +140,17 @@ class OsdScrub {
   /**
    * check the OSD-wide environment conditions (scrub resources, time, etc.).
    * These may restrict the type of scrubs we are allowed to start, maybe
-   * down to allowing only high-priority scrubs
+   * down to allowing only high-priority scrubs. See comments in scrub_job.h
+   * detailing which condiitions may prevent what types of scrubs.
    *
-   * Specifically:
-   * 'only high priority' flag is set for either of
-   * the following reasons: no local resources (too many scrubs on this OSD);
-   * a dice roll says we will not scrub in this tick;
-   * a recovery is in progress, and we are not allowed to scrub while recovery;
-   * a PG is trying to acquire replica resources.
+   * The following possible limiting conditions are checked:
+   * - high local OSD concurrency (i.e. too many scrubs on this OSD);
+   * - a "dice roll" says we will not scrub in this tick (note: this
+   *   specific condition is only checked if the "high concurrency" condition
+   *   above is not detected);
+   * - the CPU load is high (i.e. above osd_scrub_cpu_load_threshold);
+   * - the OSD is performing a recovery & osd_scrub_during_recovery is 'false';
+   * - the current time is outside of the allowed scrubbing hours/days
    */
   Scrub::OSDRestrictions restrictions_on_scrubbing(
       bool is_recovery_active,
