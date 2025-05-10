@@ -122,7 +122,7 @@ void BackfillState::Enqueuing::maybe_update_range()
       ceph_assert(primary_bi.version == eversion_t());
       return;
     }
-    DEBUGDPP("{}: bi is old, ({}) can be updated with log to {}",
+    DEBUGDPP("bi is old, ({}) can be updated with log to {}",
 	     pg(),
 	     primary_bi.version,
 	     pg().get_projected_last_update());
@@ -183,9 +183,9 @@ void BackfillState::Enqueuing::maybe_update_range()
           }
         }
       };
-    DEBUGDPP("{}: scanning pg log first", pg());
+    DEBUGDPP("scanning pg log first", pg());
     peering_state().scan_log_after(primary_bi.version, func);
-    DEBUGDPP("{}: scanning projected log", pg());
+    DEBUGDPP("scanning projected log", pg());
     pg().get_projected_log().scan_log_after(primary_bi.version, func);
     primary_bi.version = pg().get_projected_last_update();
   } else {

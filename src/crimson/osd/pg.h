@@ -309,7 +309,7 @@ public:
     LOG_PREFIX(PG::request_remote_recovery_reservation);
     SUBDEBUGDPP(
       osd, "priority {} on_grant {} on_preempt {}",
-      *this, on_grant->get_desc(), on_preempt->get_desc());
+      *this, priority, on_grant->get_desc(), on_preempt->get_desc());
     shard_services.remote_request_reservation(
       orderer,
       pgid,

@@ -44,7 +44,7 @@ private:
       scheduler_class
     };
   }
-  using do_recovery_ret_t = typename PhasedOperationT<T>::template interruptible_future<bool>;
+  using do_recovery_ret_t = typename PhasedOperationT<T>::template interruptible_future<seastar::stop_iteration>;
   virtual do_recovery_ret_t do_recovery() = 0;
   ShardServices &ss;
   const crimson::osd::scheduler::scheduler_class_t scheduler_class;
@@ -71,7 +71,7 @@ public:
 
 private:
   void dump_detail(Formatter* f) const final;
-  interruptible_future<bool> do_recovery() override;
+  interruptible_future<seastar::stop_iteration> do_recovery() override;
   const hobject_t soid;
   const eversion_t need;
 };
@@ -100,7 +100,7 @@ public:
     return epoch_started;
   }
 private:
-  interruptible_future<bool> do_recovery() override;
+  interruptible_future<seastar::stop_iteration> do_recovery() override;
   bool cancelled = false;
 };
 
