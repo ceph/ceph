@@ -377,6 +377,9 @@ BtreeLBAManager::alloc_extents(
 	  [&btree, FNAME, &iter, c, &ret, this](auto ext) {
 	  assert(ext->has_laddr());
 	  stats.num_alloc_extents += ext->get_length();
+	  assert((ext->get_laddr() + ext->get_length()).checked_to_laddr()
+	    <= iter.get_key());
+	  DEBUGT("inserting {} at {}", c.trans, ext->get_laddr(), iter);
 	  return btree.insert(
 	    c,
 	    iter,
@@ -1338,14 +1341,16 @@ BtreeLBAManager::next_mapping(
   return with_btree<LBABtree>(
     cache,
     c,
-    [c, mapping=mapping.duplicate()](auto &btree) mutable {
+    [c, mapping=mapping.duplicate(), FNAME](auto &btree) mutable {
     auto &cursor = mapping.get_effective_cursor();
     auto iter = btree.make_partial_iter(c, cursor);
-    return iter.next(c).si_then([c](auto iter) {
+    return iter.next(c).si_then([c, FNAME](auto iter) {
+      auto cursor = iter.get_cursor(c);
+      DEBUGT("got cursor {}", c.trans, *cursor);
       if (!iter.is_end() && iter.get_val().pladdr.is_laddr()) {
-	return LBAMapping::create_indirect(iter.get_cursor(c));
+	return LBAMapping::create_indirect(std::move(cursor));
       } else {
-	return LBAMapping::create_direct(iter.get_cursor(c));
+	return LBAMapping::create_direct(std::move(cursor));
       }
     });
   });
