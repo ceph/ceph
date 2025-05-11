@@ -795,6 +795,16 @@ struct ECCommon {
     void _failed_push(const hobject_t &hoid, ECCommon::read_result_t &res);
   };
 
+  static std::optional<object_info_t> get_object_info_from_obc(
+      ObjectContextRef &obc_map
+    );
+
+  static ECTransaction::WritePlan get_write_plan(
+    const ECUtil::stripe_info_t &sinfo,
+    PGTransaction &t,
+    ECCommon::ReadPipeline &read_pipeline,
+    ECCommon::RMWPipeline &rmw_pipeline,
+    DoutPrefixProvider *dpp);
 };
 
 struct RecoveryMessages {

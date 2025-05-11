@@ -1546,4 +1546,70 @@ ECCommon::RecoveryBackend::recover_object(
   return op;
 }
 
+std::optional<object_info_t> ECBackend::get_object_info_from_obc(
+    ObjectContextRef &obc) {
+  std::optional<object_info_t> ret;
+
+  auto attr_cache = obc->attr_cache;
+  if (!attr_cache.contains(OI_ATTR))
+    return ret;
+
+  ret.emplace(attr_cache.at(OI_ATTR));
+  return ret;
+}
+
+ECTransaction::WritePlan ECBackend::get_write_plan(
+  const ECUtil::stripe_info_t &sinfo,
+  PGTransaction &t,
+  ECCommon::ReadPipeline &read_pipeline,
+  ECCommon::RMWPipeline &rmw_pipeline,
+  DoutPrefixProvider *dpp) {
+  ECTransaction::WritePlan plans;
+  auto obc_map = t.obc_map;
+  t.safe_create_traverse(
+    [&](std::pair<const hobject_t, PGTransaction::ObjectOperation> &i) {
+      const auto &[oid, inner_op] = i;
+      auto &obc = obc_map.at(oid);
+      object_info_t oi = obc->obs.oi;
+      std::optional<object_info_t> soi;
+
+      hobject_t source;
+      if (inner_op.has_source(&source)) {
+        if (!inner_op.is_rename()) {
+          soi = get_object_info_from_obc(obc_map.at(source));
+        }
+      }
+
+      uint64_t old_object_size = 0;
+      bool object_in_cache = false;
+      if (rmw_pipeline.extent_cache.contains_object(oid)) {
+        /* We have a valid extent cache for this object. If we need to read, we
+         * need to behave as if the object is already the size projected by the
+         * extent cache, or we may not read enough data.
+         */
+        old_object_size = rmw_pipeline.extent_cache.get_projected_size(oid);
+        object_in_cache = true;
+      } else {
+        std::optional<object_info_t> old_oi = get_object_info_from_obc(obc);
+        if (old_oi && !inner_op.delete_first) {
+          old_object_size = old_oi->size;
+        }
+      }
+
+      auto [readable_shards, writable_shards] =
+        read_pipeline.get_readable_writable_shard_id_sets();
+      ECTransaction::WritePlanObj plan(oid, inner_op, sinfo, readable_shards,
+                                       writable_shards,
+                                       object_in_cache, old_object_size,
+                                       oi, soi,
+                                       rmw_pipeline.ec_pdw_write_mode);
+
+      if (plan.to_read) plans.want_read = true;
+      plans.plans.emplace_back(std::move(plan));
+  });
+  ldpp_dout(dpp, 20) << __func__ << " plans=" << plans << dendl;
+  return plans;
+}
+
+
 END_IGNORE_DEPRECATED
