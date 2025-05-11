@@ -347,9 +347,16 @@ public:
     size_t
   > get_attrs_n_size_from_disk(const hobject_t &hoid);
 
-  std::optional<object_info_t> get_object_info_from_obc(
+  static std::optional<object_info_t> get_object_info_from_obc(
       ObjectContextRef &obc_map
     );
+
+  template <class GetHashInfoF>
+  ECTransaction::WritePlan get_write_plan(
+    const ECUtil::stripe_info_t &sinfo,
+    PGTransaction &t,
+    GetHashInfoF &&get_hinfo,
+    DoutPrefixProvider *dpp);
 
  public:
   int object_stat(const hobject_t &hoid, struct stat *st);

@@ -956,7 +956,27 @@ void ECBackend::submit_transaction(
   }
   ECTransaction::WritePlan &plans = op->plan;
 
-  op->t->safe_create_traverse(
+  ceph_assert(op->plan.plans.empty());
+  op->plan = get_write_plan(
+    sinfo,
+    *op->t,
+    [this](const hobject_t& oid) { return get_hinfo_from_disk(oid); },
+    get_parent()->get_dpp());
+  ldpp_dout(get_parent()->get_dpp(), 20) << __func__
+             << " plans=" << plans
+             << dendl;
+  rmw_pipeline.start_rmw(std::move(op));
+}
+
+template <class GetHashInfoF>
+ECTransaction::WritePlan ECBackend::get_write_plan(
+  const ECUtil::stripe_info_t &sinfo,
+  PGTransaction &t,
+  GetHashInfoF &&get_hinfo,
+  DoutPrefixProvider *dpp) {
+  ECTransaction::WritePlan plans;
+  auto obc_map = t.obc_map;
+  t.safe_create_traverse(
     [&](std::pair<const hobject_t, PGTransaction::ObjectOperation> &i) {
       const auto &[oid, inner_op] = i;
       auto &obc = obc_map.at(oid);
@@ -996,11 +1016,11 @@ void ECBackend::submit_transaction(
 
       if (plan.to_read) plans.want_read = true;
       plans.plans.emplace_back(std::move(plan));
-    });
+  });
   ldpp_dout(get_parent()->get_dpp(), 20) << __func__
              << " plans=" << plans
              << dendl;
-  rmw_pipeline.start_rmw(std::move(op));
+  return plans;
 }
 
 int ECBackend::objects_read_sync(
