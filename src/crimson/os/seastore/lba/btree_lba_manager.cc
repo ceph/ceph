@@ -375,6 +375,10 @@ BtreeLBAManager::alloc_extents(
 	  [&btree, FNAME, &iter, c, &ret, this](auto ext) {
 	  assert(ext->has_laddr());
 	  stats.num_alloc_extents += ext->get_length();
+	  assert(iter.is_end() ||
+	    (ext->get_laddr() + ext->get_length()
+	     ).checked_to_laddr() <= iter.get_key());
+	  DEBUGT("inserting {} at {}", c.trans, ext->get_laddr(), iter);
 	  return btree.insert(
 	    c,
 	    iter,
