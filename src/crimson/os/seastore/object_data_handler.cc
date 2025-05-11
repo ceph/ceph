@@ -185,12 +185,31 @@ struct overwrite_params_t {
     return {raw_begin, raw_end};
   }
 };
+std::ostream& operator<<(std::ostream &out, const overwrite_params_t &params) {
+  return out << "overwrite_params_t{"
+    << "offset=" << params.offset
+    << ", len=" << params.len
+    << ", first_key=" << params.first_key
+    << ", first_len=" << params.first_len
+    << ", raw_begin=" << params.raw_begin
+    << ", data_begin=" << params.data_begin
+    << ", raw_end=" << params.raw_end
+    << ", data_end=" << params.data_end
+    << "}";
+}
 
 struct data_t {
   std::optional<bufferlist> headbl;
   std::optional<bufferlist> bl;
   std::optional<bufferlist> tailbl;
 };
+std::ostream& operator<<(std::ostream &out, const data_t &data) {
+  return out << "data_t{"
+    << "headbl=" << (data.headbl ? data.headbl->length() : 0)
+    << ", bl=" << (data.bl ? data.bl->length() : 0)
+    << ", tailbl=" << (data.tailbl ? data.tailbl->length() : 0)
+    << "}";
+}
 
 using do_mappings_ret = ObjectDataHandler::write_iertr::future<LBAMapping>;
 
@@ -1271,3 +1290,10 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(context_t ctx)
 }
 
 } // namespace crimson::os::seastore
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::overwrite_params_t>
+  : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::data_t>
+  : fmt::ostream_formatter {};
+#endif
