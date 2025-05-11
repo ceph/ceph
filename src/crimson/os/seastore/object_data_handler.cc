@@ -233,12 +233,31 @@ struct overwrite_params_t {
   laddr_offset_t raw_end;
   laddr_t data_end = L_ADDR_NULL;
 };
+std::ostream& operator<<(std::ostream &out, const overwrite_params_t &params) {
+  return out << "overwrite_params_t{"
+    << "offset=" << params.offset
+    << ", len=" << params.len
+    << ", first_key=" << params.first_key
+    << ", first_len=" << params.first_len
+    << ", raw_begin=" << params.raw_begin
+    << ", data_begin=" << params.data_begin
+    << ", raw_end=" << params.raw_end
+    << ", data_end=" << params.data_end
+    << "}";
+}
 
 struct data_t {
   std::optional<bufferlist> headbl;
   std::optional<bufferlist> bl;
   std::optional<bufferlist> tailbl;
 };
+std::ostream& operator<<(std::ostream &out, const data_t &data) {
+  return out << "data_t{"
+    << "headbl=" << (data.headbl ? data.headbl->length() : 0)
+    << ", bl=" << (data.bl ? data.bl->length() : 0)
+    << ", tailbl=" << (data.tailbl ? data.tailbl->length() : 0)
+    << "}";
+}
 
 using do_mappings_ret = ObjectDataHandler::write_iertr::future<LBAMapping>;
 
@@ -303,6 +322,9 @@ do_mappings_ret punch_first_mapping(
   LBAMapping first_mapping,
   data_t &data)
 {
+  LOG_PREFIX(ObjectDataHandler::do_first_mapping);
+  DEBUGT("params={}, first_mapping={}, data={}",
+    ctx.t, params, first_mapping, data);
   if (!first_mapping.is_indirect() && !first_mapping.is_data_stable()) {
     // merge with existing pending extents
     auto length = params.first_key.template get_byte_distance<
@@ -394,6 +416,9 @@ do_mappings_ret punch_middle_mappings(
   // we need to allow duplicated move_mappings
   bool keep_direct_mapping)
 {
+  LOG_PREFIX(ObjectDataHandler::do_middle_mappings);
+  DEBUGT("params={}, mapping={}, do_remove={}",
+    ctx.t, params, mapping, do_remove);
   // remove all middle mappings
   return seastar::do_with(
     std::move(mapping),
@@ -446,6 +471,9 @@ do_mappings_ret punch_last_mapping(
   // we need to allow duplicated move_mappings
   bool keep_direct_mapping)
 {
+  LOG_PREFIX(ObjectDataHandler::do_last_mapping);
+  DEBUGT("params={}, mapping={}, data={}, do_remove={}",
+    ctx.t, params, mapping, data, do_remove);
   if (!mapping.is_indirect() && !mapping.is_data_stable()) {
     // merge with existing pending extents
     auto offset = params.raw_end.template get_byte_distance<
@@ -553,6 +581,9 @@ _punch_hole_ret _punch_hole(
   bool rm_mid_mapping,
   bool keep_direct_mapping)
 {
+  LOG_PREFIX(ObjectDataHandler::_punch_hole);
+  DEBUGT("params={}, mapping={}, data={}, rm={}",
+    ctx.t, params, mapping, data, rm_mid_mapping);
   return punch_first_mapping(
     ctx, params, std::move(mapping), data
   ).si_then([&params, ctx, rm_mid_mapping,
@@ -1718,3 +1749,10 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(context_t ctx)
 }
 
 } // namespace crimson::os::seastore
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::overwrite_params_t>
+  : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::data_t>
+  : fmt::ostream_formatter {};
+#endif
