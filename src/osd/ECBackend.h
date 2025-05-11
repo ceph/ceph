@@ -332,9 +332,11 @@ public:
       ObjectContextRef &obc_map
     );
 
-  ECTransaction::WritePlan get_write_plan(
+  static ECTransaction::WritePlan get_write_plan(
     const ECUtil::stripe_info_t &sinfo,
     PGTransaction &t,
+    ECCommon::ReadPipeline &read_pipeline,
+    ECCommon::RMWPipeline &rmw_pipeline,
     DoutPrefixProvider *dpp);
 
  public:
