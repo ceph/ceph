@@ -110,20 +110,13 @@ void ScrubJob::adjust_shallow_schedule(
   if (ScrubJob::requires_randomization(shallow_target.urgency())) {
     utime_t adj_not_before = last_scrub;
     utime_t adj_target = last_scrub;
-    sh_times.deadline = adj_target;
 
     // add a random delay to the proposed scheduled time
     adj_target += app_conf.shallow_interval;
     double r = rand() / (double)RAND_MAX;
     adj_target +=
-	  app_conf.shallow_interval * app_conf.interval_randomize_ratio * r;
+	app_conf.shallow_interval * app_conf.interval_randomize_ratio * r;
 
-    // the deadline can be updated directly into the scrub-job
-    if (app_conf.max_shallow) {
-      sh_times.deadline += *app_conf.max_shallow;
-    } else {
-      sh_times.deadline = utime_t::max();
-    }
     if (adj_not_before < adj_target) {
       adj_not_before = adj_target;
     }
@@ -132,16 +125,13 @@ void ScrubJob::adjust_shallow_schedule(
 
   } else {
 
-    // the target time is already set. Make sure to reset the n.b. and
-    // the (irrelevant) deadline
+    // the target time is already set. Make sure to reset the n.b.
     sh_times.not_before = sh_times.scheduled_at;
-    sh_times.deadline = utime_t::max();
   }
 
   dout(10) << fmt::format(
-		  "adjusted: nb:{:s} target:{:s} deadline:{:s} ({})",
-		  sh_times.not_before, sh_times.scheduled_at, sh_times.deadline,
-		  state_desc())
+		  "adjusted: nb:{:s} target:{:s} ({})", sh_times.not_before,
+		  sh_times.scheduled_at, state_desc())
 	   << dendl;
 }
 
@@ -253,7 +243,6 @@ void ScrubJob::adjust_deep_schedule(
 	   << dendl;
 
   auto& dp_times = deep_target.sched_info.schedule;  // shorthand
-  dp_times.deadline = utime_t::max(); // no 'max' for deep scrubs
 
   if (ScrubJob::requires_randomization(deep_target.urgency())) {
     utime_t adj_target = last_deep;
@@ -369,7 +358,6 @@ void ScrubJob::dump(ceph::Formatter* f) const
   f->dump_stream("pgid") << pgid;
   f->dump_stream("sched_time") << get_sched_time();
   f->dump_stream("orig_sched_time") << sch.scheduled_at;
-  f->dump_stream("deadline") << sch.deadline;
   f->dump_bool("forced", entry.urgency >= urgency_t::operator_requested);
 }
 
