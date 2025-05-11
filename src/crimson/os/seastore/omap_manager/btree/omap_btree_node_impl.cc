@@ -490,10 +490,10 @@ OMapInnerNode::merge_entry(
       ).si_then([liter=liter, riter=riter, l=l, r=r, oc, this](auto tuple) {
 	LOG_PREFIX(OMapInnerNode::merge_entry);
         auto [replacement_l, replacement_r, replacement_pivot] = tuple;
-	DEBUGT("to update parent: {} {} {}",
-	  oc.t, *this, *replacement_l, *replacement_r);
 	replacement_l->init_range(l->get_begin(), replacement_pivot);
 	replacement_r->init_range(replacement_pivot, r->get_end());
+	DEBUGT("to update parent: {} {} {}",
+	  oc.t, *this, *replacement_l, *replacement_r);
 	if (get_meta().depth > 2) { // l and r are inner nodes
 	  auto &left = *l->template cast<OMapInnerNode>();
 	  auto &right = *r->template cast<OMapInnerNode>();

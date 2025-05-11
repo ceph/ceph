@@ -558,6 +558,19 @@ public:
     set_meta(Meta::merge_from(left.get_meta(), right.get_meta()));
   }
 
+  static uint32_t get_balance_pivot_idx(
+    const FixedKVNodeLayout &left,
+    const FixedKVNodeLayout &right,
+    bool prefer_left)
+  {
+    auto total = left.get_size() + right.get_size();
+    auto pivot_idx = total / 2;
+    if (total % 2 && prefer_left) {
+      pivot_idx++;
+    }
+    return pivot_idx;
+  }
+
   /**
    * balance_into_new_nodes
    *
@@ -574,10 +587,7 @@ public:
     FixedKVNodeLayout &replacement_right)
   {
     auto total = left.get_size() + right.get_size();
-    auto pivot_idx = (left.get_size() + right.get_size()) / 2;
-    if (total % 2 && prefer_left) {
-      pivot_idx++;
-    }
+    auto pivot_idx = get_balance_pivot_idx(left, right, prefer_left);
     auto replacement_pivot = pivot_idx >= left.get_size() ?
       right.iter_idx(pivot_idx - left.get_size())->get_key() :
       left.iter_idx(pivot_idx)->get_key();

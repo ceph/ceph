@@ -638,11 +638,7 @@ protected:
   {
     size_t l_size = left.get_size();
     size_t r_size = right.get_size();
-    size_t total = l_size + r_size;
-    size_t pivot_idx = (l_size + r_size) / 2;
-    if (total % 2 && prefer_left) {
-      pivot_idx++;
-    }
+    size_t pivot_idx = T::get_balance_pivot_idx(left, right, prefer_left);
 
     replacement_left.maybe_expand_children(pivot_idx);
     replacement_right.maybe_expand_children(r_size + l_size - pivot_idx);
