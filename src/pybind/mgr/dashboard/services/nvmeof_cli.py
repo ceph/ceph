@@ -50,18 +50,24 @@ def remove_nvmeof_gateway(_, name: str, daemon_name: str = ''):
     except ManagedByOrchestratorException as ex:
         return -errno.EINVAL, '', str(ex)
 
+from abc import ABC, abstractmethod
 
-class NvmeofCLICommand(CLICommand):
-    def __call__(self, func) -> HandlerFuncType:  # type: ignore
-        # pylint: disable=useless-super-delegation
-        """
-        This method is being overriden solely to be able to disable the linters checks for typing.
-        The NvmeofCLICommand decorator assumes a different type returned from the
-        function it wraps compared to CLICmmand, breaking a Liskov substitution principal,
-        hence triggering linters alerts.
-        """
-        return super().__call__(func)
+class OutputFormatter(ABC):
+    @abstractmethod
+    def format_output(self, data):
+        """Format the given data for output."""
+        pass
+
+    @abstractmethod
+    def get_type(self) -> str:
+        """Return a string representing the output format type ('text', 'json', 'yaml')."""
+        pass
+
+class TextOutputFormatter(OutputFormatter):
+    def get_type(self):
+        return 'text'
     
+class DataTextOutputFormatter(TextOutputFormatter):
     def _snake_case_to_title(self, s):
         return s.replace('_', ' ').title()
 
@@ -110,13 +116,31 @@ class NvmeofCLICommand(CLICommand):
             if self._is_list_of_complex_type(value):
                 return key
 
-    def _convert_to_text_output(self, output):
-        from collections.abc import Iterable
-        data_field = self._select_list_field(output)
+    def _convert_to_text_output(self, data):
+        data_field = self._select_list_field(data)
         if not data_field:
-            return self._get_object_text_output(output)
-        return self._get_list_text_output(output[data_field])
+            return self._get_object_text_output(data)
+        return self._get_list_text_output(data[data_field])
+    
+    def format_output(self, data):
+        return self._convert_to_text_output(data)
+    
+class NvmeofCLICommand(CLICommand):
+    def __init__(self, prefix, perm = 'rw', poll = False, output_formatter: TextOutputFormatter=None):
+        super().__init__(prefix, perm, poll)
+        if not output_formatter:
+            output_formatter = DataTextOutputFormatter()
+        self._output_formatter = output_formatter
         
+    def __call__(self, func) -> HandlerFuncType:  # type: ignore
+        # pylint: disable=useless-super-delegation
+        """
+        This method is being overriden solely to be able to disable the linters checks for typing.
+        The NvmeofCLICommand decorator assumes a different type returned from the
+        function it wraps compared to CLICmmand, breaking a Liskov substitution principal,
+        hence triggering linters alerts.
+        """
+        return super().__call__(func)
     
     def call(self,
              mgr: Any,
@@ -128,7 +152,7 @@ class NvmeofCLICommand(CLICommand):
             if ret is None:
                     out = ''
             if out_format == 'text' or not out_format:
-                out = self._convert_to_text_output(ret)
+                out = self._output_formatter.format_output(ret)
             elif out_format == 'json':
                 out = json.dumps(ret)
             elif out_format == 'yaml':
