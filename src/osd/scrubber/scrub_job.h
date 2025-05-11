@@ -38,14 +38,6 @@ struct sched_conf_t {
   double deep_interval{0.0};
 
   /**
-   * the maximum interval between shallow scrubs, after which the
-   * (info-only) "overdue" field in the scheduler dump is set.
-   * Determined by either the pool or the cluster configuration.
-   * Empty if no limit is configured.
-   */
-  std::optional<double> max_shallow;
-
-  /**
    * interval_randomize_ratio
    *
    * We add an extra random duration to the configured times when doing
@@ -212,16 +204,15 @@ class ScrubJob {
 
   /**
    * Given a proposed time for the next scrub, and the relevant
-   * configuration, adjust_schedule() determines the actual target time,
-   * the deadline, and the 'not_before' time for the scrub.
+   * configuration, adjust_schedule() determines the actual target time
+   * and the 'not_before' time for the scrub.
    * The new values are updated into the scrub-job.
    *
    * Specifically:
    * - for high-priority scrubs: the 'not_before' is set to the
    *   (untouched) proposed target time.
    * - for regular scrubs: the proposed time is adjusted (delayed) based
-   *   on the configuration; the deadline is set further out (if configured)
-   *   and the n.b. is reset to the target.
+   *   on the configuration; the n.b. is reset to the target.
    */
   void adjust_shallow_schedule(
     utime_t last_scrub,
@@ -434,8 +425,8 @@ struct formatter<Scrub::sched_conf_t> {
   {
     return fmt::format_to(
 	ctx.out(),
-	"periods:s:{}/{},d:{},iv-ratio:{},deep-rand:{},on-inv:{}",
-	cf.shallow_interval, cf.max_shallow.value_or(-1.0), cf.deep_interval,
+	"periods:s:{},d:{},iv-ratio:{},deep-rand:{},on-inv:{}",
+	cf.shallow_interval, cf.deep_interval,
 	cf.interval_randomize_ratio, cf.deep_randomize_ratio,
 	cf.mandatory_on_invalid);
   }

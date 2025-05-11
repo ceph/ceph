@@ -686,42 +686,6 @@ Scrub::sched_conf_t PgScrubber::populate_config_params() const
   configs.deep_interval =
       deep_pool > 0.0 ? deep_pool : conf->osd_deep_scrub_interval;
 
-  /**
-   * 'max_shallow' is set to the maximum allowed delay between
-   * scrubs. This deadline has almost no effect on scrub scheduling
-   * (the only minor exception: when sorting two scrub jobs that are
-   * equivalent in all but the deadline). It will be removed in
-   * the next version.
-   *
-   * 'max_shallow' is controlled by a pool option and a configuration
-   * parameter. Note that if the value configured is less than the
-   * shallow interval (plus expenses), the max_shallow is disabled.
-   */
-  auto max_shallow = pool_conf.value_or(pool_opts_t::SCRUB_MAX_INTERVAL, 0.0);
-  if (max_shallow <= 0.0) {
-    max_shallow = conf->osd_scrub_max_interval;
-  }
-
-  if (max_shallow > 0.0) {
-    const auto min_accepted_deadline =
-	configs.shallow_interval *
-	(1 + conf->osd_scrub_interval_randomize_ratio);
-
-    if (max_shallow >= min_accepted_deadline) {
-      configs.max_shallow = max_shallow;
-    } else {
-      // this is a bit odd, but the pool option is set to a value
-      // less than the interval. Keep the nullopt in max_shallow,
-      dout(10) << fmt::format(
-		      "{}: configured 'max shallow' rejected as too low ({}/{} "
-		      "< {})",
-		      __func__,
-		      pool_conf.value_or(pool_opts_t::SCRUB_MAX_INTERVAL, 0.0),
-		      conf->osd_scrub_max_interval, min_accepted_deadline)
-	       << dendl;
-    }
-  }
-
   configs.interval_randomize_ratio = conf->osd_scrub_interval_randomize_ratio;
   configs.deep_randomize_ratio =
       conf.get_val<double>("osd_deep_scrub_interval_cv");
@@ -2125,7 +2089,6 @@ void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
       std::max(current_targ.urgency(), aborted_target.urgency());
   curr_sched.scheduled_at =
       std::min(curr_sched.scheduled_at, abrt_sched.scheduled_at);
-  curr_sched.deadline = std::min(curr_sched.deadline, abrt_sched.deadline);
   curr_sched.not_before =
       std::min(curr_sched.not_before, abrt_sched.not_before);
 
