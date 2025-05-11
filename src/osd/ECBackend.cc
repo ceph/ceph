@@ -950,6 +950,8 @@ void ECBackend::submit_transaction(
   op->plan = get_write_plan(
     sinfo,
     *op->t,
+    read_pipeline,
+    rmw_pipeline,
     get_parent()->get_dpp());
   ldpp_dout(get_parent()->get_dpp(), 20) << __func__
              << " plans=" << plans
@@ -960,6 +962,8 @@ void ECBackend::submit_transaction(
 ECTransaction::WritePlan ECBackend::get_write_plan(
   const ECUtil::stripe_info_t &sinfo,
   PGTransaction &t,
+  ECCommon::ReadPipeline &read_pipeline,
+  ECCommon::RMWPipeline &rmw_pipeline,
   DoutPrefixProvider *dpp) {
   ECTransaction::WritePlan plans;
   auto obc_map = t.obc_map;
@@ -1004,9 +1008,7 @@ ECTransaction::WritePlan ECBackend::get_write_plan(
       if (plan.to_read) plans.want_read = true;
       plans.plans.emplace_back(std::move(plan));
   });
-  ldpp_dout(get_parent()->get_dpp(), 20) << __func__
-             << " plans=" << plans
-             << dendl;
+  ldpp_dout(dpp, 20) << __func__ << " plans=" << plans << dendl;
   return plans;
 }
 
