@@ -961,6 +961,8 @@ void ECBackend::submit_transaction(
     sinfo,
     *op->t,
     [this](const hobject_t& oid) { return get_hinfo_from_disk(oid); },
+    read_pipeline,
+    rmw_pipeline,
     get_parent()->get_dpp());
   ldpp_dout(get_parent()->get_dpp(), 20) << __func__
              << " plans=" << plans
@@ -973,6 +975,8 @@ ECTransaction::WritePlan ECBackend::get_write_plan(
   const ECUtil::stripe_info_t &sinfo,
   PGTransaction &t,
   GetHashInfoF &&get_hinfo,
+  ECCommon::ReadPipeline &read_pipeline,
+  ECCommon::RMWPipeline &rmw_pipeline,
   DoutPrefixProvider *dpp) {
   ECTransaction::WritePlan plans;
   auto obc_map = t.obc_map;
@@ -1017,9 +1021,7 @@ ECTransaction::WritePlan ECBackend::get_write_plan(
       if (plan.to_read) plans.want_read = true;
       plans.plans.emplace_back(std::move(plan));
   });
-  ldpp_dout(get_parent()->get_dpp(), 20) << __func__
-             << " plans=" << plans
-             << dendl;
+  ldpp_dout(dpp, 20) << __func__ << " plans=" << plans << dendl;
   return plans;
 }
 
