@@ -264,22 +264,6 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
       require_osd_release);
 #endif
   }
-
-  template <typename F>
-  static ECTransaction::WritePlan get_write_plan(
-    const ECUtil::stripe_info_t &sinfo,
-    PGTransaction& t,
-    F &&get_hinfo,
-    DoutPrefixProvider *dpp)
-  {
-#if 1
-    return ECTransaction::get_write_plan(
-      sinfo,
-      t,
-      std::forward<F>(get_hinfo),
-      dpp);
-#endif
-  }
 };
 
 class C_AllSubWritesCommited : public Context {
@@ -324,9 +308,11 @@ ECBackend::submit_transaction(const std::set<pg_shard_t> &pg_shards,
   //if (client_op) {
   //  op->trace = client_op->pg_trace;
   //}
-  op->plan = op->get_write_plan(
+  op->plan = ECCommon::get_write_plan(
     sinfo,
     *(op->t),
+    read_pipeline,
+    rmw_pipeline,
     &dpp);
   logger().info("{}: op {} starting", "_submit_transaction", ""); //*op);
   rmw_pipeline.start_rmw(std::move(op));
