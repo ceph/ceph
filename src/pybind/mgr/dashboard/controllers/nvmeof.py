@@ -8,7 +8,7 @@ from orchestrator import OrchestratorError
 from .. import mgr
 from ..model import nvmeof as model
 from ..security import Scope
-from ..services.nvmeof_cli import NvmeofCLICommand
+from ..services.nvmeof_cli import NvmeofCLICommand, StatusTextOutputFormatter
 from ..services.orchestrator import OrchClient
 from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
@@ -426,7 +426,7 @@ else:
             },
         )
         @pick("namespaces", first=True)
-        @NvmeofCLICommand("nvmeof ns update")
+        @NvmeofCLICommand("nvmeof ns update", output_formatter=StatusTextOutputFormatter())
         @convert_to_model(model.NamespaceList)
         @handle_nvmeof_error
         def update(
@@ -510,7 +510,7 @@ else:
             },
         )
         @empty_response
-        @NvmeofCLICommand("nvmeof ns del")
+        @NvmeofCLICommand("nvmeof ns del", output_formatter=StatusTextOutputFormatter())
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def delete(

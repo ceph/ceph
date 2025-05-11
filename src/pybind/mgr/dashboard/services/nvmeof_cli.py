@@ -66,7 +66,18 @@ class OutputFormatter(ABC):
 class TextOutputFormatter(OutputFormatter):
     def get_type(self):
         return 'text'
+
+class StatusTextOutputFormatter(TextOutputFormatter):
+    def _convert_to_status_text_output(self, data):
+        if data.get('status') == 0:
+            return "Success"
+        else:
+            return data.get("error_message")
     
+    def format_output(self, data):
+        return self._convert_to_status_text_output(data)
+
+
 class DataTextOutputFormatter(TextOutputFormatter):
     def _snake_case_to_title(self, s):
         return s.replace('_', ' ').title()
