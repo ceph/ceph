@@ -2204,25 +2204,4 @@ auto with_btree_state(
     cache, c, State{}, std::forward<F>(f));
 }
 
-template <
-  typename tree_type_t,
-  typename Ret,
-  typename F>
-auto with_btree_ret(
-  Cache &cache,
-  op_context_t c,
-  F &&f) {
-  return with_btree_state<tree_type_t, Ret>(
-    cache,
-    c,
-    [f=std::forward<F>(f)](auto &btree, auto &ret) mutable {
-      return f(
-        btree
-      ).si_then([&ret](auto &&_ret) {
-        ret = std::move(_ret);
-      });
-    });
 }
-
-}
-

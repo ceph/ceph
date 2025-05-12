@@ -91,7 +91,7 @@ BtreeBackrefManager::get_mapping(
   LOG_PREFIX(BtreeBackrefManager::get_mapping);
   TRACET("{}", t, offset);
   auto c = get_context(t);
-  return with_btree_ret<BackrefBtree, BackrefMapping>(
+  return with_btree<BackrefBtree>(
     cache,
     c,
     [c, offset](auto &btree) {
@@ -503,7 +503,7 @@ BtreeBackrefManager::remove_mapping(
   paddr_t addr)
 {
   auto c = get_context(t);
-  return with_btree_ret<BackrefBtree, remove_mapping_result_t>(
+  return with_btree<BackrefBtree>(
     cache,
     c,
     [c, addr](auto &btree) mutable {
@@ -574,7 +574,7 @@ BtreeBackrefManager::retrieve_backref_extents_in_range(
 	ent.key);
 
       auto c = get_context(t);
-      return with_btree_ret<BackrefBtree, CachedExtentRef>(
+      return with_btree<BackrefBtree>(
 	cache,
 	c,
 	[c, &ent](auto &btree) {
