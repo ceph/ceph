@@ -2874,6 +2874,10 @@ struct cache_size_stats_t {
     ++num_extents;
   }
 
+  void account_parital_in(extent_len_t sz) {
+    size += sz;
+  }
+
   void account_out(extent_len_t sz) {
     assert(size >= sz);
     assert(num_extents > 0);
