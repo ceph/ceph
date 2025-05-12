@@ -6,6 +6,8 @@
 
 #include "rgw/rgw_hex.h"
 
+#include "fmt/core.h"
+
 #include <ranges>
 #include <cstring>
 
@@ -15,8 +17,23 @@ using std::array;
 using std::string;
 using std::string_view;
 
+TEST_CASE("library versions") {
+  int version = FMT_VERSION;
+  int major = version / 10000;
+  int minor = (version % 10000) / 100;
+  int patch = version % 100;
+
+  auto s = fmt::format("JFW: libfmt version: {}.{}.{}\n", major, minor, patch);
+
+  INFO(s);
+
+  FAIL(s);
+}
+
+
 TEST_CASE("hexdigit", "[rgw]") {
 
+INFO(
   SECTION("simple heuristic checks", "check known edge-cases") {
     CHECK(-EINVAL == hexdigit('\0'));
 

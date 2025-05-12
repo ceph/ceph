@@ -185,6 +185,44 @@ if(NOT HAVE_CXX11_ATOMIC)
     " ${LIBATOMIC_LINK_FLAGS}")
 endif()
 
+# Enable package management via CPM:
+include(${CMAKE_MODULE_PATH}/CPM.cmake)
+
+# We want a way to restore CPM's local package settings:
+# Parameters: string -> bool -> bool
+# Where the string is formatted for CPMAddPackage; refer-to:
+# https://github.com/cpm-cmake/CPM.cmake
+function(cpm_local_optional package_name package_source enable_package enable_system_packages)
+  if(${enable_package})
+    set(ORIG_CPM_LOCAL_PACKAGES_ONLY ${CPM_USE_LOCAL_PACKAGES_ONLY})
+
+    if(${enable_system_packages})
+      set(CPM_LOCAL_PACKAGES_ONLY ON)
+    endif()
+
+    include(${CMAKE_MODULE_PATH}/CPM.cmake)
+    CPMAddPackage(${package_source})
+
+    # Restore the original CPM settings in case someone else wants to use the module:
+    set(CPM_USE_LOCAL_PACKAGES_ONLY, ${ORIG_CPM_USE_LOCAL_PACKAGES_ONLY})
+
+    message(string(CONCAT enable_msg "-- Enabled " ${package_name} " support"))
+  endif()
+endfunction()
+
+# libformat (fmt):
+set(WITH_FMT ON)
+set(FMT_LIB fmt)
+option(WITH_SYSTEM_FMT "build against system fmt" OFF)
+cpm_local_optional("libformat (fmt)" "gh:fmtlib/fmt#8.1.1" WITH_LIBFMT WITH_SYSTEM_FMT)
+
+set(FMT_LIB fmt)
+option(WITH_FMT_HEADER_ONLY "use header-only version of fmt library" OFF)
+if (WITH_FMT_HEADER_ONLY)
+  message(STATUS "Using fmt header-only.")
+  set(FMT_LIB fmt-header-only)
+endif()
+
 option(WITH_RDMA "Enable RDMA in async messenger" ON)
 if(WITH_RDMA)
   find_package(verbs REQUIRED)
@@ -521,23 +559,25 @@ endif()
 # This needs to come before any tests using Catch2.
 option(WITH_CATCH2 "Enable Catch2 unit tests" ON)
 option(WITH_SYSTEM_CATCH2 "Enable Catch2 unit tests (require system packages)" OFF)
+cpm_local_optional("Catch2" "gh:catchorg/Catch2@3.8.1" WITH_CATCH2 WITH_SYSTEM_CATCH2)
 
-if(WITH_CATCH2)
-  # Save pre-existing definitions (if any):
-  set(ORIG_CPM_LOCAL_PACKAGES_ONLY ${CPM_USE_LOCAL_PACKAGES_ONLY})
-
-    if(WITH_SYSTEM_CATCH2)
-   set(CPM_LOCAL_PACKAGES_ONLY ON)
-  endif()
-
-  include(${CMAKE_MODULE_PATH}/CPM.cmake)
-  CPMAddPackage("gh:catchorg/Catch2@3.8.1")
-
-  # Restore the original CPM settings in case someone else wants to use the module:
-  set(CPM_USE_LOCAL_PACKAGES_ONLY, ${ORIG_CPM_USE_LOCAL_PACKAGES_ONLY})
-
-  message("-- Enabled Catch2 support")
-endif()
+#JFW:
+#if(WITH_CATCH2)
+#  # Save pre-existing definitions (if any):
+#  set(ORIG_CPM_LOCAL_PACKAGES_ONLY ${CPM_USE_LOCAL_PACKAGES_ONLY})
+#
+#    if(WITH_SYSTEM_CATCH2)
+#   set(CPM_LOCAL_PACKAGES_ONLY ON)
+#  endif()
+#
+#  include(${CMAKE_MODULE_PATH}/CPM.cmake)
+#  CPMAddPackage("gh:catchorg/Catch2@3.8.1")
+#
+#  # Restore the original CPM settings in case someone else wants to use the module:
+#  set(CPM_USE_LOCAL_PACKAGES_ONLY, ${ORIG_CPM_USE_LOCAL_PACKAGES_ONLY})
+#
+#  message("-- Enabled Catch2 support")
+#endif()
 
 #option for RGW
 option(WITH_RADOSGW "RADOS Gateway is enabled" ON)

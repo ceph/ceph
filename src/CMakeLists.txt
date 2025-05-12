@@ -356,31 +356,6 @@ if(NOT TARGET RapidJSON::RapidJSON)
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/s3select/rapidjson/include")
 endif()
 
-option(WITH_FMT_HEADER_ONLY "use header-only version of fmt library" OFF)
-option(WITH_SYSTEM_FMT "build against system fmt" OFF)
-if(WITH_SYSTEM_FMT)
-  find_package(fmt 8.1.1...11.1.4 REQUIRED)
-endif()
-if (WITH_FMT_HEADER_ONLY)
-  message(STATUS "Using fmt header-only.")
-  set(FMT_LIB fmt::fmt-header-only)
-else()
-  message(STATUS "Linking to fmt library.")
-  set(FMT_LIB fmt::fmt)
-endif()
-if(fmt_FOUND)
-  message(STATUS "Building with system fmt.")
-else()
-  message(STATUS "Building fmt as submodule")
-  set(old_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
-  set(BUILD_SHARED_LIBS FALSE)
-  set(FMT_INSTALL OFF)
-  add_subdirectory(fmt)
-  set(BUILD_SHARED_LIBS ${old_BUILD_SHARED_LIBS})
-  unset(old_BUILD_SHARED_LIBS)
-  include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
-endif()
-
 # in osd/PeeringState.h, the number of elements in PeeringState::Active::reactions
 # is now 21 which exceeds the default value of BOOST_MPL_LIMIT_VECTOR_SIZE, which
 # is 20. so we need to override it. see
@@ -473,8 +448,6 @@ set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
 target_link_libraries(common-objs legacy-option-headers)
-target_compile_definitions(common-objs PRIVATE
-  $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
 
 if(WITH_JAEGER)
   add_dependencies(common-objs jaeger_base)
