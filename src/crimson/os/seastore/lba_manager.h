@@ -45,7 +45,7 @@ public:
    * lba value.
    */
   using get_mappings_iertr = base_iertr;
-  using get_mappings_ret = get_mappings_iertr::future<lba_pin_list_t>;
+  using get_mappings_ret = get_mappings_iertr::future<lba_mapping_list_t>;
   virtual get_mappings_ret get_mappings(
     Transaction &t,
     laddr_t offset, extent_len_t length) = 0;
@@ -59,10 +59,30 @@ public:
    */
   using get_mapping_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
-  using get_mapping_ret = get_mapping_iertr::future<LBAMappingRef>;
+  using get_mapping_ret = get_mapping_iertr::future<LBAMapping>;
   virtual get_mapping_ret get_mapping(
     Transaction &t,
-    laddr_t offset) = 0;
+    laddr_t offset,
+    bool find_containment = false) = 0;
+
+  virtual get_mapping_ret get_mapping(
+    Transaction &t,
+    LogicalChildNode &extent) = 0;
+
+  /**
+   * Fetches the next mapping of "mapping"
+   */
+  using next_mapping_iertr = base_iertr;
+  using next_mapping_ret = next_mapping_iertr::future<LBAMapping>;
+  virtual next_mapping_ret next_mapping(
+    Transaction &t,
+    const LBAMapping mapping) = 0;
+
+#ifdef UNIT_TESTS_BUILT
+  using get_end_mapping_iertr = base_iertr;
+  using get_end_mapping_ret = get_end_mapping_iertr::future<LBAMapping>;
+  virtual get_end_mapping_ret get_end_mapping(Transaction &t) = 0;
+#endif
 
   /**
    * Allocates a new mapping referenced by LBARef
@@ -72,30 +92,67 @@ public:
    * is called on the LBAMapping.
    */
   using alloc_extent_iertr = base_iertr;
-  using alloc_extent_ret = alloc_extent_iertr::future<LBAMappingRef>;
+  using alloc_extent_ret = alloc_extent_iertr::future<LBAMapping>;
   virtual alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
     LogicalChildNode &nextent,
-    extent_ref_count_t refcount = EXTENT_DEFAULT_REF_COUNT) = 0;
+    extent_ref_count_t refcount) = 0;
 
   using alloc_extents_ret = alloc_extent_iertr::future<
-    std::vector<LBAMappingRef>>;
+    std::vector<LBAMapping>>;
   virtual alloc_extents_ret alloc_extents(
     Transaction &t,
     laddr_t hint,
     std::vector<LogicalChildNodeRef> extents,
     extent_ref_count_t refcount) = 0;
-
-  virtual alloc_extent_ret clone_mapping(
+  virtual alloc_extents_ret alloc_extents(
     Transaction &t,
-    laddr_t hint,
+    LBAMapping mapping,
+    std::vector<LogicalChildNodeRef> ext) = 0;
+
+  struct clone_mapping_ret_t {
+    LBAMapping cloned_mapping;
+    LBAMapping orig_mapping;
+  };
+  using clone_mapping_iertr = alloc_extent_iertr;
+  using clone_mapping_ret = clone_mapping_iertr::future<clone_mapping_ret_t>;
+  virtual clone_mapping_ret clone_mapping(
+    Transaction &t,
+    LBAMapping pos,
+    LBAMapping mapping,
+    laddr_t laddr,
+    extent_len_t offset,
     extent_len_t len,
-    laddr_t intermediate_key,
-    laddr_t intermediate_base) = 0;
+    bool updateref) = 0;
+
+  struct move_mapping_ret_t {
+    LBAMapping src;
+    LBAMapping dest;
+  };
+  /*
+   * move_mapping
+   *
+   * move an direct mapping to "pos" and make the original
+   * mapping an indirect one.
+   */
+  using move_mapping_iertr = alloc_extent_iertr;
+  using move_mapping_ret = move_mapping_iertr::future<move_mapping_ret_t>;
+  virtual move_mapping_ret move_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest,
+    LogicalChildNode &extent) = 0;
 
   virtual alloc_extent_ret reserve_region(
     Transaction &t,
+    laddr_t hint,
+    extent_len_t len) = 0;
+
+  virtual alloc_extent_ret reserve_region(
+    Transaction &t,
+    LBAMapping pos,
     laddr_t hint,
     extent_len_t len) = 0;
 
@@ -104,6 +161,10 @@ public:
     extent_ref_count_t refcount = 0;
     pladdr_t addr;
     extent_len_t length = 0;
+    LBAMapping mapping; // the mapping pointing to the updated lba entry if
+			// refcount is non-zero; the next lba entry otherwise;
+			// null mapping if the mapping is the last one and
+			// is removed
   };
   using ref_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
@@ -117,21 +178,35 @@ public:
   virtual ref_ret remove_mapping(
     Transaction &t,
     laddr_t addr) = 0;
+  virtual ref_ret remove_mapping(
+    Transaction &t,
+    LBAMapping mapping) = 0;
 
-  struct remap_entry {
+  /**
+   * Increments ref count on extent
+   *
+   * @return returns resulting refcount
+   */
+  virtual ref_ret incref_extent(
+    Transaction &t,
+    laddr_t addr) = 0;
+  virtual ref_ret incref_extent(
+    Transaction &t,
+    LBAMapping mapping) = 0;
+
+  struct remap_entry_t {
     extent_len_t offset;
     extent_len_t len;
-    remap_entry(extent_len_t _offset, extent_len_t _len) {
-      offset = _offset;
-      len = _len;
-    }
-  };
-  struct lba_remap_ret_t {
-    ref_update_result_t ruret;
-    std::vector<LBAMappingRef> remapped_mappings;
+    LogicalChildNode* extent = nullptr;
+    remap_entry_t(
+      extent_len_t _offset,
+      extent_len_t _len,
+      LogicalChildNode *extent = nullptr)
+      : offset(_offset), len(_len), extent(extent)
+    {}
   };
   using remap_iertr = ref_iertr;
-  using remap_ret = remap_iertr::future<lba_remap_ret_t>;
+  using remap_ret = remap_iertr::future<std::vector<LBAMapping>>;
 
   /**
    * remap_mappings
@@ -141,10 +216,8 @@ public:
    */
   virtual remap_ret remap_mappings(
     Transaction &t,
-    LBAMappingRef orig_mapping,
-    std::vector<remap_entry> remaps,
-    std::vector<LogicalChildNodeRef> extents  // Required if and only
-						 // if pin isn't indirect
+    LBAMapping orig_mapping,
+    std::vector<remap_entry_t> remaps
     ) = 0;
 
   /**
@@ -199,7 +272,7 @@ public:
   using update_mapping_ret = base_iertr::future<extent_ref_count_t>;
   virtual update_mapping_ret update_mapping(
     Transaction& t,
-    laddr_t laddr,
+    LBAMapping mapping,
     extent_len_t prev_len,
     paddr_t prev_addr,
     LogicalChildNode& nextent) = 0;
@@ -233,6 +306,19 @@ public:
     paddr_t addr,
     laddr_t laddr,
     extent_len_t len) = 0;
+
+  using refresh_lba_mapping_iertr = base_iertr;
+  using refresh_lba_mapping_ret = refresh_lba_mapping_iertr::future<LBAMapping>;
+  virtual refresh_lba_mapping_ret refresh_lba_mapping(
+    Transaction &t,
+    LBAMapping mapping) = 0;
+
+  using complete_lba_mapping_iertr = get_mappings_iertr;
+  using complete_lba_mapping_ret =
+    complete_lba_mapping_iertr::future<LBAMapping>;
+  virtual complete_lba_mapping_ret complete_indirect_lba_mapping(
+    Transaction &t,
+    LBAMapping mapping) = 0;
 
   virtual ~LBAManager() {}
 };

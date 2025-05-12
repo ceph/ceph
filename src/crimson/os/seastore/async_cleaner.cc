@@ -1091,7 +1091,7 @@ double SegmentCleaner::calc_gc_benefit_cost(
 SegmentCleaner::do_reclaim_space_ret
 SegmentCleaner::do_reclaim_space(
     const std::vector<CachedExtentRef> &backref_extents,
-    const backref_pin_list_t &pin_list,
+    const backref_mapping_list_t &pin_list,
     std::size_t &reclaimed,
     std::size_t &runs)
 {
@@ -1142,10 +1142,10 @@ SegmentCleaner::do_reclaim_space(
         backref_entry_query_set_t backref_entries;
         for (auto &pin : pin_list) {
           backref_entries.emplace(
-            pin->get_key(),
-            pin->get_val(),
-            pin->get_length(),
-            pin->get_type());
+            pin.get_key(),
+            pin.get_val(),
+            pin.get_length(),
+            pin.get_type());
         }
         for (auto &cached_backref : cached_backref_entries) {
           if (cached_backref.laddr == L_ADDR_NULL) {
@@ -1236,7 +1236,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
   // transactions.  So, concurrent transactions between trim and reclaim are
   // not allowed right now.
   return seastar::do_with(
-    std::pair<std::vector<CachedExtentRef>, backref_pin_list_t>(),
+    std::pair<std::vector<CachedExtentRef>, backref_mapping_list_t>(),
     [this](auto &weak_read_ret) {
     return repeat_eagain([this, &weak_read_ret] {
       // Note: not tracked by shard_stats_t intentionally.
@@ -1253,7 +1253,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
 	  if (!pin_list.empty()) {
 	    auto it = pin_list.begin();
 	    auto &first_pin = *it;
-	    if (first_pin->get_key() < reclaim_state->start_pos) {
+	    if (first_pin.get_key() < reclaim_state->start_pos) {
 	      // BackrefManager::get_mappings may include a entry before
 	      // reclaim_state->start_pos, which is semantically inconsistent
 	      // with the requirements of the cleaner

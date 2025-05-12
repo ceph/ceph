@@ -6,12 +6,9 @@
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/root_block.h"
+#include "crimson/os/seastore/btree/btree_types.h"
 
 namespace crimson::os::seastore {
-
-// XXX: It happens to be true that the width of node
-// 	index in lba and omap tree are the same.
-using btreenode_pos_t = uint16_t;
 
 template <typename ParentT>
 class child_pos_t {
@@ -188,6 +185,27 @@ std::ostream &operator<<(std::ostream &, const parent_tracker_t<T> &);
 template <typename T>
 using parent_tracker_ref = boost::intrusive_ptr<parent_tracker_t<T>>;
 
+class ExtentTransViewRetriever {
+public:
+  template <typename T>
+  get_child_ifut<T> get_extent_viewable_by_trans(
+    Transaction &t,
+    TCachedExtentRef<T> ext)
+  {
+    return get_extent_viewable_by_trans(t, CachedExtentRef(ext.get())
+    ).si_then([](auto ext) {
+      return ext->template cast<T>();
+    });
+  }
+  virtual bool is_viewable_extent_data_stable(Transaction &, CachedExtentRef) = 0;
+  virtual bool is_viewable_extent_stable(Transaction &, CachedExtentRef) = 0;
+  virtual ~ExtentTransViewRetriever() {}
+protected:
+  virtual get_child_iertr::future<CachedExtentRef> get_extent_viewable_by_trans(
+    Transaction &t,
+    CachedExtentRef extent) = 0;
+};
+
 template <typename ParentT, typename key_t>
 class BaseChildNode {
 public:
@@ -200,7 +218,21 @@ public:
   bool is_parent_valid() const {
     return parent_tracker && parent_tracker->is_valid();
   }
-  TCachedExtentRef<ParentT> get_parent_node() const {
+  using get_parent_node_iertr = get_child_iertr;
+  using get_parent_node_ret =
+    get_parent_node_iertr::future<TCachedExtentRef<ParentT>>;
+  get_parent_node_ret get_parent_node(
+    Transaction &t,
+    ExtentTransViewRetriever &etvr)
+  {
+    assert(parent_tracker);
+    return etvr.get_extent_viewable_by_trans<ParentT>(
+      t, parent_tracker->get_parent());
+  }
+  // this method should only be used for asserts and logs, because
+  // the parent node might be stable writing and should "wait_io"
+  // before further access
+  TCachedExtentRef<ParentT> peek_parent_node() const {
     assert(parent_tracker);
     return parent_tracker->get_parent();
   }
@@ -237,27 +269,6 @@ template <typename T, typename node_key_t>
 bool is_valid_child_ptr(BaseChildNode<T, node_key_t>* child) {
   return child != nullptr && child != get_reserved_ptr<T, node_key_t>();
 }
-
-class ExtentTransViewRetriever {
-public:
-  template <typename T>
-  get_child_ifut<T> get_extent_viewable_by_trans(
-    Transaction &t,
-    TCachedExtentRef<T> ext)
-  {
-    return get_extent_viewable_by_trans(t, CachedExtentRef(ext.get())
-    ).si_then([](auto ext) {
-      return ext->template cast<T>();
-    });
-  }
-  virtual bool is_viewable_extent_data_stable(Transaction &, CachedExtentRef) = 0;
-  virtual bool is_viewable_extent_stable(Transaction &, CachedExtentRef) = 0;
-  virtual ~ExtentTransViewRetriever() {}
-protected:
-  virtual get_child_iertr::future<CachedExtentRef> get_extent_viewable_by_trans(
-    Transaction &t,
-    CachedExtentRef extent) = 0;
-};
 
 // ParentNodes are nodes in the tree that have children,
 // including leaf nodes that has other types of extents
@@ -394,6 +405,10 @@ public:
   void update_child_ptr(btreenode_pos_t pos, BaseChildNode<T, node_key_t>* child) {
     children[pos] = child;
     set_child_ptracker(child);
+  }
+
+  void reset_child_ptr(btreenode_pos_t pos) {
+    children[pos] = get_reserved_ptr<T, node_key_t>();
   }
 
 protected:
@@ -638,11 +653,7 @@ protected:
   {
     size_t l_size = left.get_size();
     size_t r_size = right.get_size();
-    size_t total = l_size + r_size;
-    size_t pivot_idx = (l_size + r_size) / 2;
-    if (total % 2 && prefer_left) {
-      pivot_idx++;
-    }
+    size_t pivot_idx = T::get_balance_pivot_idx(left, right, prefer_left);
 
     replacement_left.maybe_expand_children(pivot_idx);
     replacement_right.maybe_expand_children(r_size + l_size - pivot_idx);
@@ -858,7 +869,8 @@ protected:
 
     for (auto i : me) {
       auto child = this->children[i.get_offset()];
-      if (is_valid_child_ptr(child) && child->node_begin() != i.get_key()) {
+      if (is_valid_child_ptr(child) &&
+	  (child->node_begin() != i.get_key() || !child->valid())) {
 	SUBERROR(seastore_fixedkv_tree,
 	  "stable child not valid: child {}, key {}",
 	  *dynamic_cast<CachedExtent*>(child),
@@ -1013,7 +1025,7 @@ protected:
     assert(!down_cast().is_btree_root());
     assert(this->has_parent_tracker());
     auto off = get_parent_pos();
-    auto parent = this->get_parent_node();
+    auto parent = this->peek_parent_node();
     assert(parent->children[off] == &down_cast());
     parent->children[off] = nullptr;
   }
@@ -1032,7 +1044,7 @@ private:
     this->parent_tracker = prior.BaseChildNode<ParentT, key_t>::parent_tracker;
     assert(this->has_parent_tracker());
     auto off = get_parent_pos();
-    auto parent = this->get_parent_node();
+    auto parent = this->peek_parent_node();
     assert(me.get_prior_instance().get() ==
 	   dynamic_cast<CachedExtent*>(parent->children[off]));
     parent->children[off] = &me;
@@ -1040,7 +1052,7 @@ private:
 
   btreenode_pos_t get_parent_pos() const {
     auto &me = down_cast();
-    auto parent = this->get_parent_node();
+    auto parent = this->peek_parent_node();
     assert(parent);
     //TODO: can this search be avoided?
     auto key = me.get_begin();

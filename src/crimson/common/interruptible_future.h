@@ -1474,16 +1474,27 @@ public:
 	return seastar::futurize_invoke(std::forward<Func>(func));
   }
 
+  template <typename T>
+  static auto to_seastar_future(seastar::future<T> fut) {
+    return fut;
+  }
+
+  template <typename Fut>
+  requires IsInterruptibleFuture<Fut> || is_errorated_future_v<Fut>
+  static auto to_seastar_future(Fut &&fut) {
+    return to_seastar_future(fut.to_future());
+  }
+
   template <typename... FutOrFuncs>
   static inline auto when_all(FutOrFuncs&&... fut_or_funcs) noexcept {
     return ::seastar::internal::when_all_impl(
-	futurize_invoke_if_func(std::forward<FutOrFuncs>(fut_or_funcs))...);
+	to_seastar_future(futurize_invoke_if_func(std::forward<FutOrFuncs>(fut_or_funcs)))...);
   }
 
   template <typename... FutOrFuncs>
   static inline auto when_all_succeed(FutOrFuncs&&... fut_or_funcs) noexcept {
     return ::seastar::internal::when_all_succeed_impl(
-	futurize_invoke_if_func(std::forward<FutOrFuncs>(fut_or_funcs))...);
+	to_seastar_future(futurize_invoke_if_func(std::forward<FutOrFuncs>(fut_or_funcs)))...);
   }
 
   // This is a simpler implemation than seastar::when_all_succeed.

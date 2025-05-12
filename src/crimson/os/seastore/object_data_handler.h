@@ -226,20 +226,55 @@ public:
   using clone_ret = clone_iertr::future<>;
   clone_ret clone(context_t ctx);
 
+  clone_ret clone_range(
+    context_t ctx,
+    extent_len_t srcoff,
+    extent_len_t len,
+    extent_len_t destoff);
+
 private:
   /// Updates region [_offset, _offset + bl.length) to bl
-  write_ret overwrite(
+  /*write_ret overwrite(
     context_t ctx,        ///< [in] ctx
     laddr_t data_base,    ///< [in] data base laddr
     objaddr_t offset,     ///< [in] write offset
     extent_len_t len,     ///< [in] len to write, len == bl->length() if bl
     std::optional<bufferlist> &&bl, ///< [in] buffer to write, empty for zeros
-    lba_pin_list_t &&pins ///< [in] set of pins overlapping above region
-  );
+    lba_mapping_list_t &&pins ///< [in] set of pins overlapping above region
+  );*/
+
+  write_ret overwrite(
+    context_t ctx,
+    laddr_t data_base,
+    objaddr_t offset,
+    extent_len_t len,
+    std::optional<bufferlist> &&bl,
+    LBAMapping first_mapping);
+
+  write_ret overwrite_clone(
+    context_t ctx,
+    laddr_t &base,
+    objaddr_t offset,
+    extent_len_t len,
+    std::optional<bufferlist> &&bl,
+    LBAMapping first_mapping);
 
   /// Ensures object_data reserved region is prepared
-  write_ret prepare_data_reservation(
+  write_iertr::future<LBAMapping> prepare_data_reservation(
     context_t ctx,
+    Onode &onode,
+    object_data_t &object_data,
+    extent_len_t size);
+
+  write_iertr::future<LBAMapping> prepare_head_data_reservation(
+    context_t ctx,
+    Onode &onode,
+    object_data_t &object_data,
+    extent_len_t size);
+
+  write_iertr::future<LBAMapping> prepare_clone_data_reservation(
+    context_t ctx,
+    Onode &onode,
     object_data_t &object_data,
     extent_len_t size);
 
@@ -252,9 +287,20 @@ private:
   clone_ret clone_extents(
     context_t ctx,
     object_data_t &object_data,
-    lba_pin_list_t &pins,
+    lba_mapping_list_t &pins,
     laddr_t data_base);
 
+  laddr_t get_clone_direct_base(
+    const Onode &onode,
+    const laddr_t &base) const {
+    assert(onode.is_snap());
+    return (base + max_object_size).checked_to_laddr();
+  }
+
+  extent_len_t get_reservation_length(const hobject_t &hobj) const {
+    // make clone objects direct/indirect are adjacent in the laddr space
+    return max_object_size * hobj.get_reservation_factor();
+  }
 private:
   /**
    * max_object_size
