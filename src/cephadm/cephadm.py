@@ -3225,31 +3225,24 @@ def command_ceph_volume(ctx):
 
 
 @infer_fsid
-def command_unit_install(ctx):
-    # type: (CephadmContext) -> int
-    if not getattr(ctx, 'fsid', None):
-        raise Error('must pass --fsid to specify cluster')
-    if not getattr(ctx, 'name', None):
-        raise Error('daemon name required')
-    ident = DaemonIdentity.from_context(ctx)
+def command_unit_install(ctx: CephadmContext) -> int:
+    ident = identify(ctx)
     systemd_unit.update_files(ctx, ident)
     call_throws(ctx, ['systemctl', 'daemon-reload'])
     return 0
 
 
 @infer_fsid
-def command_unit(ctx):
-    # type: (CephadmContext) -> int
-    if not ctx.fsid:
-        raise Error('must pass --fsid to specify cluster')
-
-    unit_name = lookup_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
-
+def command_unit(ctx: CephadmContext) -> int:
+    ident = identify(ctx)
+    unit_name = lookup_unit_name_by_daemon_name(
+        ctx, ident.fsid, ident.daemon_name
+    )
     _, _, code = call(
         ctx,
         ['systemctl', ctx.command, unit_name],
         verbosity=CallVerbosity.VERBOSE,
-        desc=''
+        desc='',
     )
     return code
 
@@ -3257,13 +3250,11 @@ def command_unit(ctx):
 
 
 @infer_fsid
-def command_logs(ctx):
-    # type: (CephadmContext) -> None
-    if not ctx.fsid:
-        raise Error('must pass --fsid to specify cluster')
-
-    unit_name = lookup_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
-
+def command_logs(ctx: CephadmContext) -> None:
+    ident = identify(ctx)
+    unit_name = lookup_unit_name_by_daemon_name(
+        ctx, ident.fsid, ident.daemon_name
+    )
     cmd = [find_program('journalctl')]
     cmd.extend(['-u', unit_name])
     if ctx.command:
@@ -4496,6 +4487,20 @@ def _add_deploy_parser_args(
     )
 
 
+def _name_opts(parser: argparse.ArgumentParser) -> None:
+    ng = parser.add_mutually_exclusive_group(required=True)
+    ng.add_argument(
+        '--name',
+        '-n',
+        help='daemon name (type.id)',
+    )
+    ng.add_argument(
+        '--infer-name',
+        '-i',
+        help='daemon name search (type[.partial_id])',
+    )
+
+
 def _get_parser():
     # type: () -> argparse.ArgumentParser
     parser = argparse.ArgumentParser(
@@ -4764,13 +4769,7 @@ def _get_parser():
     parser_enter.add_argument(
         '--fsid',
         help='cluster FSID')
-    parser_enter_ng = parser_enter.add_mutually_exclusive_group(required=True)
-    parser_enter_ng.add_argument(
-        '--name', '-n',
-        help='daemon name (type.id)')
-    parser_enter_ng.add_argument(
-        '--infer-name', '-i',
-        help='daemon name search (type[.partial_id])')
+    _name_opts(parser_enter)
     parser_enter.add_argument(
         'command', nargs=argparse.REMAINDER,
         help='command')
@@ -4819,10 +4818,7 @@ def _get_parser():
     parser_unit.add_argument(
         '--fsid',
         help='cluster FSID')
-    parser_unit.add_argument(
-        '--name', '-n',
-        required=True,
-        help='daemon name (type.id)')
+    _name_opts(parser_unit)
 
     parser_unit_install = subparsers.add_parser(
         'unit-install', help="Install the daemon's systemd unit")
@@ -4830,10 +4826,7 @@ def _get_parser():
     parser_unit_install.add_argument(
         '--fsid',
         help='cluster FSID')
-    parser_unit_install.add_argument(
-        '--name', '-n',
-        required=True,
-        help='daemon name (type.id)')
+    _name_opts(parser_unit_install)
 
     parser_logs = subparsers.add_parser(
         'logs', help='print journald logs for a daemon container')
@@ -4841,10 +4834,7 @@ def _get_parser():
     parser_logs.add_argument(
         '--fsid',
         help='cluster FSID')
-    parser_logs.add_argument(
-        '--name', '-n',
-        required=True,
-        help='daemon name (type.id)')
+    _name_opts(parser_logs)
     parser_logs.add_argument(
         'command', nargs='*',
         help='additional journalctl args')
