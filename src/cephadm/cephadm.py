@@ -3171,6 +3171,9 @@ def command_enter(ctx: CephadmContext) -> int:
         container_args=container_args,
     )
     command = c.exec_cmd(command)
+    if ctx.dry_run:
+        print(' '.join(shlex.quote(arg) for arg in command))
+        return 0
     return call_timeout(ctx, command, ctx.timeout)
 
 ##################################
@@ -3238,9 +3241,13 @@ def command_unit(ctx: CephadmContext) -> int:
     unit_name = lookup_unit_name_by_daemon_name(
         ctx, ident.fsid, ident.daemon_name
     )
+    command = ['systemctl', ctx.command, unit_name]
+    if ctx.dry_run:
+        print(' '.join(shlex.quote(arg) for arg in command))
+        return 0
     _, _, code = call(
         ctx,
-        ['systemctl', ctx.command, unit_name],
+        command,
         verbosity=CallVerbosity.VERBOSE,
         desc='',
     )
@@ -3260,6 +3267,9 @@ def command_logs(ctx: CephadmContext) -> None:
     if ctx.command:
         cmd.extend(ctx.command)
 
+    if ctx.dry_run:
+        print(' '.join(shlex.quote(arg) for arg in cmd))
+        return
     # call this directly, without our wrapper, so that we get an unmolested
     # stdout with logger prefixing.
     logger.debug('Running command: %s' % ' '.join(cmd))
@@ -4771,6 +4781,10 @@ def _get_parser():
         help='cluster FSID')
     _name_opts(parser_enter)
     parser_enter.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='print, but do not execute, the command to enter the container')
+    parser_enter.add_argument(
         'command', nargs=argparse.REMAINDER,
         help='command')
 
@@ -4818,6 +4832,10 @@ def _get_parser():
     parser_unit.add_argument(
         '--fsid',
         help='cluster FSID')
+    parser_unit.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='print, but do not execute, the unit command')
     _name_opts(parser_unit)
 
     parser_unit_install = subparsers.add_parser(
@@ -4835,6 +4853,10 @@ def _get_parser():
         '--fsid',
         help='cluster FSID')
     _name_opts(parser_logs)
+    parser_logs.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='print, but do not execute, the command to show the logs')
     parser_logs.add_argument(
         'command', nargs='*',
         help='additional journalctl args')
