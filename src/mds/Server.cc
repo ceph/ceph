@@ -12567,17 +12567,17 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
   mdr->set_mds_stamp(now);
 
   mdr->snapid_diff_other = (uint64_t)req->head.args.snapdiff.snap_other;
+  dout(10) << __func__
+    << " snap " << mdr->snapid
+    << " vs. snap " << mdr->snapid_diff_other
+    << dendl;
+
   if (mdr->snapid_diff_other == mdr->snapid ||
       mdr->snapid == CEPH_NOSNAP ||
       mdr->snapid_diff_other == CEPH_NOSNAP) {
     dout(10) << "reply to " << *req << " snapdiff -EINVAL" << dendl;
     respond_to_request(mdr, -EINVAL);
   }
-
-  dout(10) << __func__
-    << " snap " << mdr->snapid
-    << " vs. snap " << mdr->snapid_diff_other
-    << dendl;
 
   unsigned max = req->head.args.snapdiff.max_entries;
   if (!max)
