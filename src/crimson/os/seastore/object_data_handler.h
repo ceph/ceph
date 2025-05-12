@@ -245,6 +245,14 @@ private:
     std::optional<bufferlist> &&bl,
     LBAMapping first_mapping);
 
+  write_ret overwrite_clone(
+    context_t ctx,
+    laddr_t &base,
+    objaddr_t offset,
+    extent_len_t len,
+    std::optional<bufferlist> &&bl,
+    LBAMapping first_mapping);
+
   /// Ensures object_data reserved region is prepared
   write_iertr::future<LBAMapping> prepare_data_reservation(
     context_t ctx,
