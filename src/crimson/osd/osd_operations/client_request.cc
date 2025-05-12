@@ -180,7 +180,12 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
       pg.wait_for_active_blocker,
       &decltype(pg.wait_for_active_blocker)::wait));
 
+  DEBUGDPP("{}.{}: waited for active, entering get_obc stage ",
+           pg, *this, this_instance_id);
+
   co_await ihref.enter_stage<interruptor>(client_pp(pg).get_obc, *this);
+
+  DEBUGDPP("{}.{}: entered get_obc stage", pg, *this, this_instance_id);
 
   if (int res = op_info.set_from_op(&*m, *pg.get_osdmap());
       res != 0) {
