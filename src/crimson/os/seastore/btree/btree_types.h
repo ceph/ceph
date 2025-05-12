@@ -19,8 +19,6 @@ struct op_context_t {
   Transaction &trans;
 };
 
-constexpr uint16_t MAX_FIXEDKVBTREE_DEPTH = 8;
-
 template <typename bound_t>
 struct fixed_kv_node_meta_t {
   bound_t begin = min_max_t<bound_t>::min;
