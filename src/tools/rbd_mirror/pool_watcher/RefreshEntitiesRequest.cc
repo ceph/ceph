@@ -101,7 +101,8 @@ void RefreshEntitiesRequest<I>::handle_mirror_group_list(int r) {
     r = librbd::cls_client::mirror_group_list_finish(&it, &groups);
   }
 
-  if (r < 0 && r != -ENOENT) {
+  // ignore EOPNOTSUPP to allow image mirroring in mixed clusters
+  if (r < 0 && r != -EOPNOTSUPP && r != -ENOENT) {
     derr << "failed to list mirrored groups: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
