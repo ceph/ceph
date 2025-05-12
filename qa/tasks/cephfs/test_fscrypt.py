@@ -1,11 +1,14 @@
 from io import StringIO
 from os.path import basename
+import json
+import os
 import random
 import string
 import time
+import hashlib
 
 from logging import getLogger
-
+from teuthology.contextutil import safe_while
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.xfstests_dev import XFSTestsDev
 
@@ -358,6 +361,217 @@ class TestFSCryptRMW(FSCryptTestCase):
         fill = 's'
 
         self.strided_tests(fscrypt_block_size, write_size, num_writes, shared_file, fill)
+
+class TestFSCryptVolumes(CephFSTestCase):
+    MDSS_REQUIRED = 2
+
+    def setUp(self):
+        super().setUp()
+
+        self.protector = ''.join(random.choice(string.ascii_letters) for _ in range(8))
+        self.key_file = "/tmp/key_volume"
+        self.path = "dir/"
+
+        self.mount_a.run_shell_payload(f"sudo fscrypt setup {self.mount_a.hostfs_mntpt} --verbose")
+        self.mount_a.run_shell_payload("sudo fscrypt status --verbose")
+        self.mount_a.run_shell_payload(f"sudo dd if=/dev/urandom of={self.key_file} bs=32 count=1")
+        self.mount_a.run_shell_payload(f"mkdir -p {self.path}")
+
+    def tearDown(self):
+        self.mount_a.run_shell_payload(f"sudo fscrypt purge --force --verbose {self.mount_a.hostfs_mntpt}")
+        super().tearDown()
+
+    def _compare_trees(self, src, dst):
+        files = os.listdir(src)
+        for file in files:
+            src_file = f'{src}/{file}'
+            dst_file = f'{dst}/{file}'
+
+            exists = os.path.exists(dst_file)
+            lexists = os.path.lexists(dst_file)
+            if not exists and not lexists:
+                log.debug(f'path_dne:={dst_file}')
+                raise
+
+            if os.path.islink(src):
+                #do link check
+                if os.readlink(src_file) != os.readlink(dst_file):
+                    raise
+            elif os.path.isfile(src):
+                #check reported size
+                rsize_match = os.path.getsize(src_file) == os.path.getsize(dst_file)
+                if not rsize_match:
+                    raise
+
+                #check contents
+                src_hash = self._md5hash_file(src_file)
+                dest_hash = self._md5hash_file(dst_file)
+                if src_hash != dest_hash:
+                    raise
+
+    def _md5hash_file(self, file):
+        md5 = hashlib.md5()
+        with open(file, "rb") as f:
+            md5.update(f.read())
+        return md5.hexdigest()
+
+    def _get_sv_path(self, v, sv):
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
+        sv_path = sv_path.strip()
+        # delete slash at the beginning of path
+        sv_path = sv_path[1:]
+
+        sv_path = os.path.join(self.mount_a.mountpoint, sv_path)
+        return sv_path
+
+    def _fs_cmd(self, *args):
+        return self.get_ceph_cmd_stdout("fs", *args)
+
+    def __check_clone_state(self, states, volname, clone, clone_group=None, timo=120):
+        if isinstance(states, str):
+            states = (states, )
+
+        args = ["clone", "status", volname, clone]
+        if clone_group:
+            args.append(clone_group)
+        args = tuple(args)
+
+        msg = (f'Executed cmd "{args}" {timo} times; clone was never in '
+               f'"{states}" state(s).')
+
+        with safe_while(tries=timo, sleep=1, action=msg) as proceed:
+            while proceed():
+                result = json.loads(self._fs_cmd(*args))
+                current_state = result["status"]["state"]
+
+                log.debug(f'current clone state = {current_state}')
+                if current_state in states:
+                    return
+
+    def _wait_for_clone_to_complete(self, volname, clone, clone_group=None, timo=120):
+        self.__check_clone_state("complete", volname, clone, clone_group, timo)
+
+    def test_fscrypt_snap(self):
+        """ Test that snapshot names are not encrypted """
+
+        self.mount_a.run_shell_payload(f"sudo fscrypt encrypt --verbose --source=raw_key --name={self.protector} --no-recovery --key={self.key_file} {self.path}")
+
+        snap_path = f'{self.path}/.snap/s1'
+        self.mount_a.run_shell_payload(f'mkdir -p {snap_path}')
+        self.mount_a.run_shell_payload(f'ls {snap_path}')
+
+        self.mount_a.run_shell_payload(f"sudo fscrypt lock --verbose {self.path}")
+        self.mount_a.run_shell_payload(f'ls {snap_path}')
+
+    def test_fscrypt_snap_mgr(self):
+        """ Test that mgr created snapshots are readable in unlocked state """
+        v = "cephfs"
+        sv = "sv1"
+        ss = "ss1"
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        sv_path = self._get_sv_path(v, sv)
+
+        # ensure subvol exists
+        self.mount_a.run_shell_payload(f'ls {sv_path}')
+
+        # encrypt and unlock subvol
+        self.mount_a.run_shell_payload(f"sudo fscrypt encrypt --verbose --source=raw_key --name={self.protector} --no-recovery --key={self.key_file} {sv_path}")
+
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        snap_path = f'{sv_path}/.snap/'
+
+        #check snapshot name is same in unlocked/locked state
+        self.mount_a.run_shell_payload(f'sudo chmod 777 {sv_path}')
+        self.mount_a.run_shell_payload(f'ls {snap_path} | grep ^_{ss}')
+        self.mount_a.run_shell_payload(f"sudo fscrypt lock --verbose {sv_path}")
+        self.mount_a.run_shell_payload(f'ls {snap_path} | grep ^_{ss}')
+
+    def test_fscrypt_clone(self):
+        """ Test that an fscrypt tree can be cloned """
+        v = "cephfs"
+        sv = "sv1"
+        ss = "ss1"
+        c = "ss1c1"
+
+        #generate tree
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        src_path = self._get_sv_path(v, sv)
+
+        self.mount_a.run_shell_payload(f"sudo fscrypt encrypt --verbose --source=raw_key --name={self.protector} --no-recovery --key={self.key_file} {src_path}")
+        self.mount_a.run_shell_payload(f'sudo chmod 777 {src_path}')
+
+        num_of_files = 10
+        dirs = 3
+        for i in range(num_of_files):
+            self.mount_a.run_shell_payload(f'mkdir -p {src_path}/{i}')
+            for j in range(dirs):
+                rand_file = f'{src_path}/{i}/rand_file{j}'
+                block = ''.join(random.choice(string.ascii_letters) for _ in range(1 * 1024 * 1024))
+                contents = block * 16
+                with open(rand_file, 'w') as f:
+                    f.write(contents)
+
+            self.mount_a.symlink(rand_file, f'{rand_file}-sym')
+
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+        self._wait_for_clone_to_complete(v, c)
+
+        c_path = self._get_sv_path(v, c)
+        dst_path = f'{c_path}'
+
+        #compare unlocked
+        self._compare_trees(src_path, dst_path)
+
+        #compare locked
+        self.mount_a.run_shell_payload(f"sudo fscrypt lock --verbose {src_path}")
+        self._compare_trees(src_path, dst_path)
+
+    def test_fscrypt_clone_long_name(self):
+        """ Test that an fscrypt tree with long names can be cloned """
+        v = "cephfs"
+        sv = "sv1"
+        ss = "ss1"
+        c = "ss1c1"
+
+        #generate tree
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        src_path = self._get_sv_path(v, sv)
+
+        self.mount_a.run_shell_payload(f'mkdir -p {src_path}')
+
+        self.mount_a.run_shell_payload(f"sudo fscrypt encrypt --verbose --source=raw_key --name={self.protector} --no-recovery --key={self.key_file} {src_path}")
+        self.mount_a.run_shell_payload(f'sudo chmod 777 {src_path}')
+
+        long_name = f'{src_path}/'
+        for i in range(255):
+            long_name += 'a'
+
+        with open(long_name, 'w') as f:
+            f.write('contents')
+
+        long_symlink = f'{src_path}/'
+        for i in range(255):
+            long_symlink += 's'
+
+        self.mount_a.symlink(long_name, f'{long_symlink}')
+
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+        self._wait_for_clone_to_complete(v, c)
+
+        c_path = self._get_sv_path(v, c)
+        dst_path = f'{c_path}'
+
+        #compare unlocked
+        self._compare_trees(src_path, dst_path)
+
+        #compare locked
+        self.mount_a.run_shell_payload(f"sudo fscrypt lock --verbose {src_path}")
+        self._compare_trees(src_path, dst_path)
 
 class TestFSCryptXFS(XFSTestsDev):
 
