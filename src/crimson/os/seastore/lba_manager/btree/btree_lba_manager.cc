@@ -1370,7 +1370,7 @@ BtreeLBAManager::remap_mappings(
   return with_btree<LBABtree>(
     cache,
     c,
-    [mapping=std::move(mapping), c, this,
+    [mapping=std::move(mapping), c, this, FNAME,
     remaps=std::move(remaps)](auto &btree) mutable {
     auto &cursor = mapping.get_effective_cursor();
     return seastar::do_with(
@@ -1378,7 +1378,8 @@ BtreeLBAManager::remap_mappings(
       std::move(mapping),
       btree.make_partial_iter(c, cursor),
       std::vector<LBAMapping>(),
-      [c, &btree, this, &cursor](auto &remaps, auto &mapping, auto &iter, auto &ret) {
+      [c, &btree, this, &cursor, FNAME]
+      (auto &remaps, auto &mapping, auto &iter, auto &ret) {
       auto val = iter.get_val();
       assert(val.refcount == EXTENT_DEFAULT_REF_COUNT);
       assert(mapping.is_indirect() ||
@@ -1386,7 +1387,7 @@ BtreeLBAManager::remap_mappings(
 	 !val.pladdr.get_paddr().is_zero()));
       // remove the remapped mapping
       return update_refcount(c.trans, &cursor, -1, false
-      ).si_then([&mapping, &btree, &iter, c, &ret,
+      ).si_then([&mapping, &btree, &iter, c, &ret, FNAME,
 		&remaps, pladdr=val.pladdr](auto r) {
 	assert(r.is_removed_mapping());
 	auto &cursor = *r.get_removed_mapping().next;
@@ -1394,7 +1395,7 @@ BtreeLBAManager::remap_mappings(
 	// insert new remap mapping
 	return trans_intr::do_for_each(
 	  remaps,
-	  [&mapping, &btree, &iter, c, &ret, pladdr](auto &remap) {
+	  [&mapping, &btree, FNAME, &iter, c, &ret, pladdr](auto &remap) {
 	  assert(remap.offset + remap.len <= mapping.get_length());
 	  assert((bool)remap.extent == !mapping.is_indirect());
 	  lba_map_val_t val;
@@ -1412,11 +1413,13 @@ BtreeLBAManager::remap_mappings(
 	  val.checksum = 0; // the checksum should be updated later when
 			    // committing the transaction
 	  return btree.insert(c, iter, new_key, std::move(val)
-	  ).si_then([c, &remap, &mapping, &ret, &iter](auto p) {
+	  ).si_then([FNAME, c, &remap, &mapping, &ret, &iter](auto p) {
 	    auto &[it, inserted] = p;
 	    ceph_assert(inserted);
 	    auto &leaf_node = *it.get_leaf_node();
 	    if (mapping.is_indirect()) {
+	      DEBUGT("inserting reserved child ptr to pos {}, parent: {}",
+		c.trans, it.get_leaf_pos(), leaf_node);
 	      leaf_node.insert_child_ptr(
 		it.get_leaf_pos(),
 		get_reserved_ptr<LBALeafNode, laddr_t>(),
@@ -1424,6 +1427,8 @@ BtreeLBAManager::remap_mappings(
 	      ret.push_back(
 		LBAMapping::create_indirect(it.get_cursor(c)));
 	    } else {
+	      DEBUGT("inserting child ptr to pos {}, {}, parent: {}",
+		c.trans, it.get_leaf_pos(), *remap.extent, leaf_node);
 	      leaf_node.insert_child_ptr(
 		it.get_leaf_pos(),
 		remap.extent,
