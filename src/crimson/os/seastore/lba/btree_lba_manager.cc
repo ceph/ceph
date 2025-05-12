@@ -707,7 +707,7 @@ BtreeLBAManager::get_physical_extent_if_live(
          t, type, laddr, addr, len);
   ceph_assert(is_lba_node(type));
   auto c = get_context(t);
-  return with_btree_ret<LBABtree, CachedExtentRef>(
+  return with_btree<LBABtree>(
     cache,
     c,
     [c, type, addr, laddr, len](auto &btree) {
