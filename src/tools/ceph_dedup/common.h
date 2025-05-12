@@ -46,19 +46,18 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_ceph_dedup
 
-using namespace std;
 namespace po = boost::program_options;
 using namespace librados;
 
 constexpr unsigned default_op_size = 1 << 26;
 
-string get_opts_pool_name(const po::variables_map &opts);
-string get_opts_chunk_algo(const po::variables_map &opts);
-string get_opts_fp_algo(const po::variables_map &opts);
-string get_opts_op_name(const po::variables_map &opts);
-string get_opts_chunk_pool(const po::variables_map &opts);
-string get_opts_object_name(const po::variables_map &opts);
+std::string get_opts_pool_name(const po::variables_map &opts);
+std::string get_opts_chunk_algo(const po::variables_map &opts);
+std::string get_opts_fp_algo(const po::variables_map &opts);
+std::string get_opts_op_name(const po::variables_map &opts);
+std::string get_opts_chunk_pool(const po::variables_map &opts);
+std::string get_opts_object_name(const po::variables_map &opts);
 int get_opts_max_thread(const po::variables_map &opts);
 int get_opts_report_period(const po::variables_map &opts);
-string make_pool_str(string pool, string var, string val);
-string make_pool_str(string pool, string var, int val);
+std::string make_pool_str(std::string pool, std::string var, std::string val);
+std::string make_pool_str(std::string pool, std::string var, int val);
