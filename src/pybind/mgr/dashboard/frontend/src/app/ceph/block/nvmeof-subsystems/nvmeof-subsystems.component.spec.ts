@@ -12,6 +12,7 @@ import { NvmeofSubsystemsComponent } from './nvmeof-subsystems.component';
 import { NvmeofTabsComponent } from '../nvmeof-tabs/nvmeof-tabs.component';
 import { NvmeofSubsystemsDetailsComponent } from '../nvmeof-subsystems-details/nvmeof-subsystems-details.component';
 import { ComboBoxModule, GridModule } from 'carbon-components-angular';
+import { CephServiceSpec } from '~/app/shared/models/service.interface';
 
 const mockSubsystems = [
   {
@@ -49,9 +50,22 @@ const mockGroups = [
   2
 ];
 
+const mockformattedGwGroups = [
+  {
+    content: 'default'
+  },
+  {
+    content: 'foo'
+  }
+];
+
 class MockNvmeOfService {
   listSubsystems() {
     return of(mockSubsystems);
+  }
+
+  formatGwGroupsList(_data: CephServiceSpec[][]) {
+    return mockformattedGwGroups;
   }
 
   listGatewayGroups() {
