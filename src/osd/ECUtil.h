@@ -355,6 +355,7 @@ class stripe_info_t {
   const unsigned int m;
   const std::vector<shard_id_t> chunk_mapping;
   const std::vector<raw_shard_id_t> chunk_mapping_reverse;
+  const shard_id_set all_shards;
   const shard_id_set data_shards;
   const shard_id_set parity_shards;
 
@@ -410,91 +411,96 @@ private:
   }
 
 public:
-  stripe_info_t(const ErasureCodeInterfaceRef &ec_impl, const pg_pool_t *pool,
-                uint64_t stripe_width
-    )
-    : stripe_width(stripe_width),
-      plugin_flags(ec_impl->get_supported_optimizations()),
-      chunk_size(stripe_width / ec_impl->get_data_chunk_count()),
-      pool(pool),
-      k(ec_impl->get_data_chunk_count()),
-      m(ec_impl->get_coding_chunk_count()),
-      chunk_mapping(
-        complete_chunk_mapping(ec_impl->get_chunk_mapping(), k + m)),
-      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
-      data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
-    ceph_assert(stripe_width != 0);
-    ceph_assert(stripe_width % k == 0);
-  }
+ stripe_info_t(const ErasureCodeInterfaceRef &ec_impl, const pg_pool_t *pool,
+               uint64_t stripe_width)
+     : stripe_width(stripe_width),
+       plugin_flags(ec_impl->get_supported_optimizations()),
+       chunk_size(stripe_width / ec_impl->get_data_chunk_count()),
+       pool(pool),
+       k(ec_impl->get_data_chunk_count()),
+       m(ec_impl->get_coding_chunk_count()),
+       chunk_mapping(
+           complete_chunk_mapping(ec_impl->get_chunk_mapping(), k + m)),
+       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
+       all_shards(calc_shards(raw_shard_id_t(), k + m, chunk_mapping)),
+       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
+       parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+   ceph_assert(stripe_width != 0);
+   ceph_assert(stripe_width % k == 0);
+ }
 
   // Simpler constructors for unit tests
-  stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width)
-    : stripe_width(stripe_width),
-      plugin_flags(0xFFFFFFFFFFFFFFFFul),
-      // Everything enabled for test harnesses.
-      chunk_size(stripe_width / k),
-      pool(nullptr),
-      k(k),
-      m(m),
-      chunk_mapping(complete_chunk_mapping(std::vector<shard_id_t>(), k + m)),
-      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
-      data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
-    ceph_assert(stripe_width != 0);
-    ceph_assert(stripe_width % k == 0);
-  }
+ stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width)
+     : stripe_width(stripe_width),
+       plugin_flags(0xFFFFFFFFFFFFFFFFul),
+       // Everything enabled for test harnesses.
+       chunk_size(stripe_width / k),
+       pool(nullptr),
+       k(k),
+       m(m),
+       chunk_mapping(complete_chunk_mapping(std::vector<shard_id_t>(), k + m)),
+       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
+       all_shards(calc_shards(raw_shard_id_t(), k + m, chunk_mapping)),
+       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
+       parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+   ceph_assert(stripe_width != 0);
+   ceph_assert(stripe_width % k == 0);
+ }
 
-  stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
-                const std::vector<shard_id_t> &_chunk_mapping)
-    : stripe_width(stripe_width),
-      plugin_flags(0xFFFFFFFFFFFFFFFFul),
-      // Everything enabled for test harnesses.
-      chunk_size(stripe_width / k),
-      pool(nullptr),
-      k(k),
-      m(m),
-      chunk_mapping(complete_chunk_mapping(_chunk_mapping, k + m)),
-      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
-      data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
-    ceph_assert(stripe_width != 0);
-    ceph_assert(stripe_width % k == 0);
-  }
+ stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
+               const std::vector<shard_id_t> &_chunk_mapping)
+     : stripe_width(stripe_width),
+       plugin_flags(0xFFFFFFFFFFFFFFFFul),
+       // Everything enabled for test harnesses.
+       chunk_size(stripe_width / k),
+       pool(nullptr),
+       k(k),
+       m(m),
+       chunk_mapping(complete_chunk_mapping(_chunk_mapping, k + m)),
+       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
+       all_shards(calc_shards(raw_shard_id_t(), k + m, chunk_mapping)),
+       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
+       parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+   ceph_assert(stripe_width != 0);
+   ceph_assert(stripe_width % k == 0);
+ }
 
-  stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
-                const pg_pool_t *pool, const std::vector<shard_id_t> &_chunk_mapping)
-    : stripe_width(stripe_width),
-      plugin_flags(0xFFFFFFFFFFFFFFFFul),
-      // Everything enabled for test harnesses.
-      chunk_size(stripe_width / k),
-      pool(pool),
-      k(k),
-      m(m),
-      chunk_mapping(complete_chunk_mapping(_chunk_mapping, k + m)),
-      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
-      data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
-    ceph_assert(stripe_width != 0);
-    ceph_assert(stripe_width % k == 0);
-  }
+ stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
+               const pg_pool_t *pool,
+               const std::vector<shard_id_t> &_chunk_mapping)
+     : stripe_width(stripe_width),
+       plugin_flags(0xFFFFFFFFFFFFFFFFul),
+       // Everything enabled for test harnesses.
+       chunk_size(stripe_width / k),
+       pool(pool),
+       k(k),
+       m(m),
+       chunk_mapping(complete_chunk_mapping(_chunk_mapping, k + m)),
+       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
+       all_shards(calc_shards(raw_shard_id_t(), k + m, chunk_mapping)),
+       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
+       parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+   ceph_assert(stripe_width != 0);
+   ceph_assert(stripe_width % k == 0);
+ }
 
-  stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
-                const pg_pool_t *pool)
-    : stripe_width(stripe_width),
-      plugin_flags(0xFFFFFFFFFFFFFFFFul),
-      // Everything enabled for test harnesses.
-      chunk_size(stripe_width / k),
-      pool(pool),
-      k(k),
-      m(m),
-      chunk_mapping(complete_chunk_mapping(std::vector<shard_id_t>(), k + m)),
-      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
-      data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
-    ceph_assert(stripe_width != 0);
-    ceph_assert(stripe_width % k == 0);
-  }
+ stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
+               const pg_pool_t *pool)
+     : stripe_width(stripe_width),
+       plugin_flags(0xFFFFFFFFFFFFFFFFul),
+       // Everything enabled for test harnesses.
+       chunk_size(stripe_width / k),
+       pool(pool),
+       k(k),
+       m(m),
+       chunk_mapping(complete_chunk_mapping(std::vector<shard_id_t>(), k + m)),
+       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
+       all_shards(calc_shards(raw_shard_id_t(), k + m, chunk_mapping)),
+       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
+       parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+   ceph_assert(stripe_width != 0);
+   ceph_assert(stripe_width % k == 0);
+ }
 
   uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard) const {
     uint64_t remainder = size % get_stripe_width();
@@ -537,6 +543,10 @@ public:
 
   bool supports_ec_overwrites() const {
     return pool->allows_ecoverwrites();
+  }
+
+  bool supports_ec_optimisations() const {
+    return pool->allows_ecoptimizations();
   }
 
   bool supports_sub_chunks() const {
@@ -597,6 +607,8 @@ public:
   }
 
   /* Return a "span" - which can be iterated over */
+  auto get_all_shards() const { return all_shards; }
+
   auto get_data_shards() const {
     return data_shards;
   }

@@ -527,6 +527,7 @@ class ScrubBackend {
   // accessing the PG backend for this translation service
   uint64_t logical_to_ondisk_size(uint64_t logical_size,
                                  shard_id_t shard_id) const;
+  uint32_t generate_zero_buffer_crc(shard_id_t shard_id, int length) const;
 };
 
 namespace fmt {
