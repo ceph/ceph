@@ -417,7 +417,6 @@ private:
     return all_shards;
   }
 
-
 public:
   stripe_info_t(const ErasureCodeInterfaceRef &ec_impl, const pg_pool_t *pool,
                 uint64_t stripe_width
@@ -548,6 +547,10 @@ public:
 
   bool supports_ec_overwrites() const {
     return pool->allows_ecoverwrites();
+  }
+
+  bool supports_ec_optimisations() const {
+    return pool->allows_ecoptimizations();
   }
 
   bool supports_sub_chunks() const {

@@ -96,11 +96,37 @@ class TestPg : public PgScrubBeListener {
     return logical_size;
   }
 
+  bool ec_can_decode(const shard_id_set& available_shards) const final {
+    return false;
+  };
+
+  shard_id_map<bufferlist> ec_encode_acting_set(
+      const bufferlist& in_bl) const final {
+    return shard_id_map<bufferlist>(0);
+  };
+
+  shard_id_map<bufferlist> ec_decode_acting_set(
+      const shard_id_map<bufferlist>& chunks, int chunk_size) const final {
+    return shard_id_map<bufferlist>(0);
+  }
+
+  bool get_ec_supports_crc_encode_decode() const final {
+    return get_is_ec_optimized();
+  }
+
+  ECUtil::stripe_info_t get_ec_sinfo() const final { return *m_sinfo; }
+
+  void set_stripe_info(unsigned int k, unsigned int m, uint64_t stripe_width,
+                       const pg_pool_t* pool) {
+    m_sinfo.reset(new ECUtil::stripe_info_t{k, m, stripe_width, pool});
+  }
+
   bool is_waiting_for_unreadable_object() const final { return false; }
 
   std::shared_ptr<PGPool> m_pool;
   pg_info_t& m_info;
   pg_shard_t m_pshard;
+  std::unique_ptr<ECUtil::stripe_info_t> m_sinfo;
 
   bool get_is_nonprimary_shard(const pg_shard_t &pg_shard) const final
   {
