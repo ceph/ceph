@@ -580,12 +580,14 @@ class RGWPutObjRetention_ObjStore : public RGWPutObjRetention {
 public:
   RGWPutObjRetention_ObjStore() = default;
   ~RGWPutObjRetention_ObjStore() override = default;
+  virtual std::string canonical_name() const override { return fmt::format("REST.{}.RETENTION", s->info.method); }
 };
 
 class RGWGetObjRetention_ObjStore : public RGWGetObjRetention {
 public:
   RGWGetObjRetention_ObjStore() = default;
   ~RGWGetObjRetention_ObjStore() = default;
+  virtual std::string canonical_name() const override { return fmt::format("REST.{}.RETENTION", s->info.method); }
 };
 
 class RGWPutObjLegalHold_ObjStore : public RGWPutObjLegalHold {
@@ -593,11 +595,13 @@ public:
   RGWPutObjLegalHold_ObjStore() = default;
   ~RGWPutObjLegalHold_ObjStore() override = default;
   int get_params(optional_yield y) override;
+  virtual std::string canonical_name() const override { return fmt::format("REST.{}.LEGAL_HOLD", s->info.method); }
 };
 
 class RGWGetObjLegalHold_ObjStore : public RGWGetObjLegalHold {
 public:
   RGWGetObjLegalHold_ObjStore() = default;
+  virtual std::string canonical_name() const override { return fmt::format("REST.{}.LEGAL_HOLD", s->info.method); }
   ~RGWGetObjLegalHold_ObjStore() = default;
 };
 
