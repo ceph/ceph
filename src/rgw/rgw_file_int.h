@@ -1442,21 +1442,7 @@ public:
     return rcb(name.data(), cb_arg, off, nullptr, 0, RGW_LOOKUP_FLAG_DIR);
   }
 
-  bool eof() {
-    using boost::get;
-
-    if (unlikely(cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15))) {
-      bool is_offset =
-	unlikely(! get<const char*>(&offset)) ||
-	!! get<const char*>(offset);
-      lsubdout(cct, rgw, 15) << "READDIR offset: " <<
-	((is_offset) ? offset : "(nil)")
-			     << " is_truncated: " << is_truncated
-			     << dendl;
-    }
-    return !is_truncated && !rcb_eof;
-  }
-
+  inline bool eof();
 }; /* RGWListBucketsRequest */
 
 /*
@@ -1769,22 +1755,7 @@ public:
     send_response();
   }
 
-  bool eof() {
-    using boost::get;
-
-    if (unlikely(cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15))) {
-      bool is_offset =
-	unlikely(! get<const char*>(&offset)) ||
-	!! get<const char*>(offset);
-      lsubdout(cct, rgw, 15) << "READDIR offset: " <<
-	((is_offset) ? offset : "(nil)")
-			     << " next marker: " << next_marker
-			     << " is_truncated: " << is_truncated
-			     << dendl;
-    }
-    return !is_truncated && !rcb_eof;
-  }
-
+  inline bool eof();
 }; /* RGWReaddirRequest */
 
 /*
