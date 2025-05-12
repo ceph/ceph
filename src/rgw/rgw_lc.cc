@@ -732,19 +732,19 @@ public:
 }; /* LCOpRule */
 
 using WorkItem =
-  boost::variant<void*,
-		 /* out-of-line delete */
-		 std::tuple<LCOpRule, rgw_bucket_dir_entry>,
-		 /* uncompleted MPU expiration */
-		 std::tuple<lc_op, rgw_bucket_dir_entry>,
-		 rgw_bucket_dir_entry>;
+  std::variant<void*,
+	       /* out-of-line delete */
+	       std::tuple<LCOpRule, rgw_bucket_dir_entry>,
+	       /* uncompleted MPU expiration */
+	       std::tuple<lc_op, rgw_bucket_dir_entry>,
+	       rgw_bucket_dir_entry>;
 
 class WorkQ : public Thread
 {
 public:
   using unique_lock = std::unique_lock<std::mutex>;
   using work_f = std::function<void(RGWLC::LCWorker*, WorkQ*, WorkItem&)>;
-  using dequeue_result = boost::variant<void*, WorkItem>;
+  using dequeue_result = std::variant<void*, WorkItem>;
 
   static constexpr uint32_t FLAG_NONE =        0x0000;
   static constexpr uint32_t FLAG_EWAIT_SYNC =  0x0001;
@@ -827,11 +827,11 @@ private:
   void* entry() override {
     while (!wk->get_lc()->going_down()) {
       auto item = dequeue();
-      if (item.which() == 0) {
+      if (item.index() == 0) {
 	/* going down */
 	break;
       }
-      f(wk, this, boost::get<WorkItem>(item));
+      f(wk, this, std::get<WorkItem>(item));
     }
     return nullptr;
   }
@@ -909,7 +909,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 
   auto pf = [&](RGWLC::LCWorker *wk, WorkQ *wq, WorkItem &wi) {
     int ret{0};
-    auto wt = boost::get<std::tuple<lc_op, rgw_bucket_dir_entry>>(wi);
+    auto wt = std::get<std::tuple<lc_op, rgw_bucket_dir_entry>>(wi);
     auto& [rule, obj] = wt;
 
     if (obj_has_expired(this, cct, obj.meta.mtime, rule.mp_expiration)) {
@@ -1782,7 +1782,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
 
   auto pf = [&bucket_name](RGWLC::LCWorker* wk, WorkQ* wq, WorkItem& wi) {
     auto wt =
-      boost::get<std::tuple<LCOpRule, rgw_bucket_dir_entry>>(wi);
+      std::get<std::tuple<LCOpRule, rgw_bucket_dir_entry>>(wi);
     auto& [op_rule, o] = wt;
 
     ldpp_dout(wk->get_lc(), 20)
