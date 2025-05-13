@@ -842,6 +842,11 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 reply:
   reply = new MAuthReply(proto, &response_bl, ret, s->con->peer_global_id);
   mon.send_reply(op, reply);
+  if (ret < 0) {
+    /* auth has failed (key change?), close the session */
+    dout(1) << "stopping due to failed auth (" << cpp_strerror(ret) << "): " << *s << dendl;
+    s->con->shutdown();
+  }
   if (finished) {
     // always send the latest monmap.
     if (m->monmap_epoch < mon.monmap->get_epoch())
