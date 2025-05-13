@@ -11,8 +11,11 @@
 
 #include "rgw_common.h"
 
-namespace rgw::sal {
-class RadosStore;
+namespace rgw {
+  class SiteConfig;
+  namespace sal {
+    class RadosStore;
+  }
 }
 
 struct RGWServices_Def;
@@ -106,7 +109,8 @@ struct RGWServices_Def
 
   int init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
 	   bool raw_storage, bool run_sync, bool background_tasks,
-	   optional_yield y, const DoutPrefixProvider *dpp);
+	   optional_yield y, const DoutPrefixProvider *dpp,
+     const rgw::SiteConfig* site);
   void shutdown();
 };
 
