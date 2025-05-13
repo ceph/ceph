@@ -17,9 +17,9 @@ Key Idea
 --------
 
 For a given snapshot pair in a directory, `cephfs-mirror` daemon will rely on
-`CephFS Snapdiff Feature` to identify changes in a directory tree. The diffs are applied to
-directory in the remote file system thereby only synchronizing files that have
-changed between two snapshots.
+`CephFS Snapdiff Feature` to identify changes in a directory tree. The diffs
+are applied to directory in the remote file system thereby only synchronizing
+files that have changed between two snapshots.
 
 Currently, snapshot data is synchronized by bulk copying to the remote
 filesystem.
@@ -39,59 +39,70 @@ data pool(s).
 
    ceph auth get-or-create client.mirror mon 'profile cephfs-mirror' mds 'allow r' osd 'allow rw tag cephfs metadata=*, allow r tag cephfs data=*' mgr 'allow r'
 
-Create a user for each file system peer (on the secondary/remote cluster). This user needs
-to have full capabilities on the MDS (to take snapshots) and the OSDs::
+Create a user for each file system peer (on the secondary/remote cluster).
+This user needs to have full capabilities on the MDS (to take snapshots) and
+the OSDs:
 
-  $ ceph fs authorize <fs_name> client.mirror_remote / rwps
+.. prompt:: bash $
+
+   ceph fs authorize <fs_name> client.mirror_remote / rwps
 
 This user should be used (as part of peer specification) when adding a peer.
 
 Starting Mirror Daemon
 ----------------------
 
-Mirror daemon should be spawned using `systemctl(1)` unit files::
+Spawn a mirror daemon by using `systemctl(1)` unit files:
 
-  $ systemctl enable cephfs-mirror@mirror
-  $ systemctl start cephfs-mirror@mirror
+.. prompt:: bash $
 
-`cephfs-mirror` daemon can be run in foreground using::
+   systemctl enable cephfs-mirror@mirror
+   systemctl start cephfs-mirror@mirror
 
-  $ cephfs-mirror --id mirror --cluster site-a -f
+Run the `cephfs-mirror` daemon in the foreground by running the following
+command with the ``-f`` option:
 
-.. note:: User used here is `mirror` as created in the `Creating Users` section.
+.. prompt:: bash $
+
+   cephfs-mirror --id mirror --cluster site-a -f
+
+.. note:: The user specified here is ``mirror``, as created in the `Creating
+   Users` section.
 
 Mirroring Design
 ----------------
 
-CephFS supports asynchronous replication of snapshots to a remote CephFS file system
-via `cephfs-mirror` tool. For a given directory, snapshots are synchronized by transferring
-snapshot data to the remote file system and creating a snapshot with the same name as the
-snapshot being synchronized.
+CephFS supports asynchronous replication of snapshots to a remote CephFS file
+system via the `cephfs-mirror` tool. For a given directory, snapshots are
+synchronized by transferring snapshot data to the remote file system and
+by creating a snapshot with the same name as the snapshot being synchronized.
 
 Snapshot Synchronization Order
 ------------------------------
 
-Although the order in which snapshots get chosen for synchronization does not matter,
-snapshots are picked based on creation order (using snap-id).
+Although the order in which snapshots get chosen for synchronization does not
+matter, snapshots are picked based on creation order (using snap-id).
 
 Snapshot Incarnation
 --------------------
 
-A snapshot may be deleted and recreated (with the same name) with different contents.
-An "old" snapshot could have been synchronized (earlier) and the recreation of the
-snapshot could have been done when mirroring was disabled. Using snapshot names to
-infer the point-of-continuation would result in the "new" snapshot (incarnation)
-never getting picked up for synchronization.
+A snapshot may be deleted and recreated (with the same name) with different
+contents.  An "old" snapshot could have been synchronized (earlier) and the
+recreation of the snapshot could have been done when mirroring was disabled.
+Using snapshot names to infer the point-of-continuation would result in the
+"new" snapshot (incarnation) never getting picked up for synchronization.
 
-Snapshots on the secondary file system stores the snap-id of the snapshot it was
-synchronized from. This metadata is stored in `SnapInfo` structure on the MDS.
+Snapshots on the secondary file system stores the snap-id of the snapshot it
+was synchronized from. This metadata is stored in `SnapInfo` structure on the
+MDS.
 
 Interfaces
 ----------
 
-`Mirroring` module (manager plugin) provides interfaces for managing directory snapshot
-mirroring. Manager interfaces are (mostly) wrappers around monitor commands for managing
-file system mirroring and is the recommended control interface.
+The `mirroring` module (a Manager plugin) provides interfaces for managing
+directory snapshot mirroring. Manager interfaces are (mostly) wrappers around
+monitor commands for managing file system mirroring and are the recommended
+control interface.
 
 Mirroring Module and Interface
 ------------------------------
