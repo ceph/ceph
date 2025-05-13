@@ -68,17 +68,6 @@ class RGWSI_Zone : public RGWServiceInstance
   int init_zg_from_period(const DoutPrefixProvider *dpp, optional_yield y);
   int init_zg_from_local(const DoutPrefixProvider *dpp, optional_yield y);
 
-  int create_default_zg(const DoutPrefixProvider *dpp, optional_yield y);
-  int init_default_zone(const DoutPrefixProvider *dpp, optional_yield y);
-
-  int search_realm_with_zone(const DoutPrefixProvider *dpp,
-                             const rgw_zone_id& zid,
-                             RGWRealm *prealm,
-                             RGWPeriod *pperiod,
-                             RGWZoneGroup *pzonegroup,
-                             bool *pfound,
-                             rgw::sal::ConfigStore* cfgstore,
-                             optional_yield y);
 public:
   RGWSI_Zone(CephContext *cct, rgw::sal::ConfigStore* cfgstore, const rgw::SiteConfig* _site);
   ~RGWSI_Zone();
