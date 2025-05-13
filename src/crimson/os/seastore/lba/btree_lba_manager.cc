@@ -155,7 +155,7 @@ BtreeLBAManager::get_mappings(
           }
 	  assert(cursor->val->refcount == EXTENT_DEFAULT_REF_COUNT);
 	  assert(cursor->val->checksum == 0);
-          return resolve_indirect_cursor(c, btree, *cursor
+          return this->resolve_indirect_cursor(c, btree, *cursor
           ).si_then([FNAME, c, &ret, &cursor, laddr, length](auto direct) {
             ret.emplace_back(LBAMapping::create_indirect(
 		std::move(direct), std::move(cursor)));
