@@ -432,13 +432,13 @@ the host name:
 To set a custom hostname or address for an RGW gateway, set the value of ``RGW_HOSTNAME_PER_DAEMON``
 accordingly:
 
-.. promt:: bash $
+.. prompt:: bash $
 
    ceph dashboard set-rgw-hostname <gateway_name> <hostname>
 
 The setting can be unset using:
 
-.. promt:: bash $
+.. prompt:: bash $
 
    ceph dashboard unset-rgw-hostname <gateway_name>
 
