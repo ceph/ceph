@@ -135,6 +135,7 @@ things to do:
   the confirmation flag (``--yes-i-really-mean-it``)
 
 .. _pause-purge-threads:
+
 * **Turn off async purge threads** The volumes plugin spawns threads for
   asynchronously purging trashed/deleted subvolumes. To help troubleshooting or
   recovery effort, these purge threads can be disabled using:

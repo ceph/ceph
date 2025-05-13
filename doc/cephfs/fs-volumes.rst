@@ -1624,7 +1624,7 @@ Before resorting to a measure as drastic as this, it is a good idea to try less
 drastic measures and then assess if the file system experience has improved due
 to it. One example of such less drastic measure is to disable asynchronous
 threads launched by volumes plugins for cloning and purging trash. For details
-on these see: :ref:`pause-purge-threads` and :ref:`pause-clone-threads`.
+on these see: :ref:`Pause Purge threads<pause-purge-threads>` and :ref:`Pause Clone Threads<pause-clone-threads>`.
 
 
 .. _manila: https://github.com/openstack/manila
