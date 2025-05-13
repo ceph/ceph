@@ -8582,6 +8582,11 @@ void PrimaryLogPG::_do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
          ++iter) {
       new_last_clone_overlap.intersection_of(iter->second);
     }
+
+    // before overwriting the current head, omit its actual size
+    ctx->delta_stats.num_bytes -=
+      (obs.oi.size - last_clone_overlap_iter->second.size());
+
     last_clone_overlap_iter->second = new_last_clone_overlap;
   }
 
@@ -8595,8 +8600,9 @@ void PrimaryLogPG::_do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
 
   // Adjust the cached objectcontext
   maybe_create_new_object(ctx, true);
-  ctx->delta_stats.num_bytes -= obs.oi.size;
-  ctx->delta_stats.num_bytes += rollback_to->obs.oi.size;
+  // add the actual size of the new head (after rollbacking)
+  ctx->delta_stats.num_bytes +=
+    (rollback_to->obs.oi.size - last_clone_overlap_iter->second.size());
   ctx->clean_regions.mark_data_region_dirty(0, std::max(obs.oi.size, rollback_to->obs.oi.size));
   ctx->clean_regions.mark_omap_dirty();
   obs.oi.size = rollback_to->obs.oi.size;
