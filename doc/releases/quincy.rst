@@ -5,6 +5,22 @@ Quincy
 Quincy is the 17th stable release of Ceph. It is named after Squidward
 Quincy Tentacles from Spongebob Squarepants.
 
+v17.2.9 Quincy
+==============
+
+This is the ninth backport (hotfix) release in the Quincy series. We recommend that all users update to this release.
+
+Notable Changes
+---------------
+
+This release fixes a critical bluestore regression in versions 17.2.8 (#63122). Users running this releas are recommended to upgrade at the earliest convenience.
+
+Changelog
+---------
+
+* [quincy] os/bluestore: fix _extend_log seq advance (`pr#63122 <https://github.com/ceph/ceph/pull/63122>`_, aclamk)
+
+  
 v17.2.8 Quincy
 ==============
 

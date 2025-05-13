@@ -48,6 +48,8 @@ releases:
     target_eol: 2024-06-01
     actual_eol: 2025-01-13
     releases:
+      - version: 17.2.9
+        released: 2025-05-19
       - version: 17.2.8
         released: 2024-11-25
       - version: 17.2.7
