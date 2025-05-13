@@ -6004,6 +6004,18 @@ PeeringState::WaitLocalRecoveryReserved::react(const RecoveryTooFull &evt)
   return transit<NotRecovering>();
 }
 
+boost::statechart::result
+PeeringState::WaitLocalRecoveryReserved::react(const AdvMap& ev)
+{
+  DECLARE_LOCALS;
+  if (!ps->cct->_conf->osd_debug_skip_full_check_in_recovery &&
+      ps->get_osdmap()->check_full(ps->acting_recovery_backfill)) {
+    post_event(RecoveryTooFull());
+    return discard_event();
+  }
+  return forward_event();
+}
+
 void PeeringState::WaitLocalRecoveryReserved::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
@@ -6042,6 +6054,18 @@ PeeringState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserved &ev
     post_event(AllRemotesReserved());
   }
   return discard_event();
+}
+
+boost::statechart::result
+PeeringState::WaitRemoteRecoveryReserved::react(const AdvMap& ev)
+{
+  DECLARE_LOCALS;
+  if (!ps->cct->_conf->osd_debug_skip_full_check_in_recovery &&
+      ps->get_osdmap()->check_full(ps->acting_recovery_backfill)) {
+    post_event(RecoveryTooFull());
+    return discard_event();
+  }
+  return forward_event();
 }
 
 void PeeringState::WaitRemoteRecoveryReserved::exit()
