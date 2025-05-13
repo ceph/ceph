@@ -55,6 +55,8 @@ struct StateBuilder<librbd::MockTestImageCtx> {
   std::string remote_mirror_uuid = "remote mirror uuid";
   ::journal::MockJournaler* remote_journaler = nullptr;
   librbd::journal::MirrorPeerClientMeta remote_client_meta;
+
+  MOCK_METHOD0(is_remote_primary, bool());
 };
 
 } // namespace journal
@@ -127,6 +129,12 @@ public:
                       WithArg<2>(Invoke([this, r](Context *on_finish) {
                                           m_threads->work_queue->queue(on_finish, r);
                                         }))));
+  }
+
+  void expect_is_remote_primary(MockStateBuilder &mock_state_builder,
+                                bool is_primary) {
+    EXPECT_CALL(mock_state_builder, is_remote_primary())
+      .WillOnce(Return(is_primary));
   }
 
   void expect_journal_get_tag_tid(librbd::MockJournal &mock_journal,
@@ -239,10 +247,37 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, ResyncRequested) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   mock_local_image_ctx.journal = &mock_journal;
 
+  C_SaferCond ctx;
+  ::journal::MockJournaler mock_remote_journaler;
+  librbd::journal::MirrorPeerClientMeta mirror_peer_client_meta;
+  mirror_peer_client_meta.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
+  mirror_peer_client_meta.image_id = mock_local_image_ctx.id;
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      mirror_peer_client_meta);
+
   // check initial state
   expect_is_resync_requested(mock_journal, true, 0);
+  expect_is_remote_primary(mock_state_builder, true);
   expect_journal_get_tag_tid(mock_journal, 345);
   expect_journal_get_tag_data(mock_journal, {"remote mirror uuid"});
+
+  bool resync_requested;
+  bool syncing;
+  auto request = create_request(mock_state_builder, "local mirror uuid",
+                                &resync_requested, &syncing, &ctx);
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+  ASSERT_TRUE(resync_requested);
+  ASSERT_FALSE(syncing);
+}
+
+TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, ResyncRequestedRemoteNotPrimary) {
+  InSequence seq;
+
+  librbd::MockJournal mock_journal;
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  mock_local_image_ctx.journal = &mock_journal;
 
   C_SaferCond ctx;
   ::journal::MockJournaler mock_remote_journaler;
@@ -252,13 +287,38 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, ResyncRequested) {
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_journaler,
                                       mirror_peer_client_meta);
+
+  // check initial state
+  expect_is_resync_requested(mock_journal, true, 0);
+  // remote is not primary, so no resync should occur
+  expect_is_remote_primary(mock_state_builder, false);
+  expect_journal_get_tag_tid(mock_journal, 345);
+  expect_journal_get_tag_data(mock_journal, {"remote mirror uuid"});
+
+  // lookup remote image tag class
+  librbd::journal::ClientData client_data{
+    librbd::journal::ImageClientMeta{123}};
+  cls::journal::Client client;
+  encode(client_data, client.data);
+  expect_journaler_get_client(mock_remote_journaler,
+                              librbd::Journal<>::IMAGE_CLIENT_ID,
+                              client, 0);
+
+  // single promotion event
+  Tags tags = {
+    {2, 123, encode_tag_data({librbd::Journal<>::LOCAL_MIRROR_UUID,
+                              librbd::Journal<>::LOCAL_MIRROR_UUID,
+                              true, 344, 99})},
+  };
+  expect_journaler_get_tags(mock_remote_journaler, 123, tags, 0);
+
   bool resync_requested;
   bool syncing;
   auto request = create_request(mock_state_builder, "local mirror uuid",
                                 &resync_requested, &syncing, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
-  ASSERT_TRUE(resync_requested);
+  ASSERT_FALSE(resync_requested);
   ASSERT_FALSE(syncing);
 }
 
