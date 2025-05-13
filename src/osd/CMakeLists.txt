@@ -79,7 +79,7 @@ endif()
 
 # libcls_* are runtime dependencies
 add_dependencies(osd cls_journal cls_hello cls_lock cls_log cls_numops
-  cls_refcount cls_timeindex cls_user cls_version cls_cas cls_cmpomap)
+  cls_refcount cls_timeindex cls_user cls_version cls_cas cls_cmpomap cls_blake3)
 if(WITH_CEPHFS)
   add_dependencies(osd cls_cephfs)
 endif()
