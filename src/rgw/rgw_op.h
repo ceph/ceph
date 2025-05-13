@@ -15,6 +15,9 @@
 #include <cstdint>
 #include <limits.h>
 
+#include <optional>
+
+
 #include <array>
 #include <memory>
 #include <span>
@@ -371,11 +374,11 @@ public:
 
 class RGWGetObj : public RGWOp {
 protected:
-  const char *range_str;
-  const char *if_mod;
-  const char *if_unmod;
-  const char *if_match;
-  const char *if_nomatch;
+    std::optional<std::string> range_str;
+    std::optional<std::string> if_mod;
+    std::optional<std::string> if_unmod;
+    std::optional<std::string> if_match;
+    std::optional<std::string> if_nomatch;
   uint32_t mod_zone_id;
   uint64_t mod_pg_ver;
   off_t ofs;
@@ -422,34 +425,7 @@ protected:
 
   int init_common();
 public:
-  RGWGetObj() {
-    range_str = NULL;
-    if_mod = NULL;
-    if_unmod = NULL;
-    if_match = NULL;
-    if_nomatch = NULL;
-    mod_zone_id = 0;
-    mod_pg_ver = 0;
-    start = 0;
-    ofs = 0;
-    total_len = 0;
-    end = -1;
-    mod_ptr = NULL;
-    unmod_ptr = NULL;
-    get_data = false;
-    partial_content = false;
-    range_parsed = false;
-    skip_manifest = false;
-    is_slo = false;
-    first_block = 0;
-    last_block = 0;
-    q_ofs = 0;
-    q_len = 0;
-    first_data = true;
-    cur_ofs = 0;
-    get_retention = false;
-    get_legal_hold = false;
- }
+  RGWGetObj() = default;
 
   bool prefetch_data() override;
 
