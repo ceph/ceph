@@ -4503,6 +4503,20 @@ void PeeringState::append_log(
   bool transaction_applied,
   bool async)
 {
+  /* With EC optimisations on, it is possible that we are told to commit a
+   * version we don't have. This happens when the multiple transactions were
+   * in flight and the last was a partial write.
+   * While this is technically valid, there are a number of asserts which can
+   * be avoided by refusing to roll forward beyond the head of the log.
+   */
+  if (pool.info.allows_ecoptimizations()) {
+    if (roll_forward_to > pg_log.get_head()) {
+      roll_forward_to = pg_log.get_head();
+    }
+    if (pct > pg_log.get_head()) {
+      pct = pg_log.get_head();
+    }
+  }
   /* The primary has sent an info updating the history, but it may not
    * have arrived yet.  We want to make sure that we cannot remember this
    * write without remembering that it happened in an interval which went
