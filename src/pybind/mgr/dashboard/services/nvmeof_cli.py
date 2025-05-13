@@ -88,8 +88,7 @@ class DataTextOutputFormatter(TextOutputFormatter):
         titles = [self._snake_case_to_title(field) for field in field_names]
         table.field_names = titles
         table.align = 'l'
-        table.left_padding_width = 0
-        table.right_padding_width = 2
+        table.padding_width = 0
         return table
     
     def _get_list_text_output(self, data):
