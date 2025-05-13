@@ -124,23 +124,13 @@ enum class schedule_result_t {
 };
 
 /// a collection of the basic scheduling information of a scrub target:
-/// target time to scrub, the 'not before' time, and a deadline.
+/// target time to scrub, and the 'not before'.
 struct scrub_schedule_t {
   /**
    * the time at which we are allowed to start the scrub. Never
    * decreasing after 'scheduled_at' is set.
    */
   utime_t not_before{utime_t::max()};
-
-  /**
-   * the 'deadline' is the time by which we expect the periodic scrub to
-   * complete. It is determined by the SCRUB_MAX_INTERVAL pool configuration
-   * and by osd_scrub_max_interval;
-   * Once passed, the scrub will be allowed to run even if the OSD is
-   * overloaded.It would also have higher priority than other
-   * auto-scheduled scrubs.
-   */
-  utime_t deadline{utime_t::max()};
 
   /**
    * the 'scheduled_at' is the time at which we intended the scrub to be scheduled.
@@ -159,12 +149,9 @@ struct scrub_schedule_t {
   {
     // when compared - the 'not_before' is ignored, assuming
     // we never compare jobs with different eligibility status.
-    auto cmp1 = scheduled_at <=> rhs.scheduled_at;
-    if (cmp1 != 0) {
-      return cmp1;
-    }
-    return deadline <=> rhs.deadline;
+    return scheduled_at <=> rhs.scheduled_at;
   };
+
   bool operator==(const scrub_schedule_t& rhs) const = default;
 };
 
@@ -189,8 +176,7 @@ struct formatter<Scrub::OSDRestrictions> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const Scrub::OSDRestrictions& conds, FormatContext& ctx) const
-  {
+  auto format(const Scrub::OSDRestrictions& conds, FormatContext& ctx) const {
     return fmt::format_to(
 	ctx.out(), "<{}.{}.{}.{}.{}>",
 	conds.max_concurrency_reached ? "max-scrubs" : "",
@@ -205,11 +191,9 @@ template <>
 struct formatter<Scrub::scrub_schedule_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
   template <typename FormatContext>
-  auto format(const Scrub::scrub_schedule_t& sc, FormatContext& ctx) const
-  {
+  auto format(const Scrub::scrub_schedule_t& sc, FormatContext& ctx) const {
     return fmt::format_to(
-	ctx.out(), "nb:{:s}(at:{:s},dl:{:s})", sc.not_before,
-        sc.scheduled_at, sc.deadline);
+	ctx.out(), "nb:{:s}(at:{:s})", sc.not_before, sc.scheduled_at);
   }
 };
 

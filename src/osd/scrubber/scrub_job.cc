@@ -110,20 +110,13 @@ void ScrubJob::adjust_shallow_schedule(
   if (ScrubJob::requires_randomization(shallow_target.urgency())) {
     utime_t adj_not_before = last_scrub;
     utime_t adj_target = last_scrub;
-    sh_times.deadline = adj_target;
 
     // add a random delay to the proposed scheduled time
     adj_target += app_conf.shallow_interval;
     double r = rand() / (double)RAND_MAX;
     adj_target +=
-	  app_conf.shallow_interval * app_conf.interval_randomize_ratio * r;
+	app_conf.shallow_interval * app_conf.interval_randomize_ratio * r;
 
-    // the deadline can be updated directly into the scrub-job
-    if (app_conf.max_shallow) {
-      sh_times.deadline += *app_conf.max_shallow;
-    } else {
-      sh_times.deadline = utime_t{};
-    }
     if (adj_not_before < adj_target) {
       adj_not_before = adj_target;
     }
@@ -132,17 +125,30 @@ void ScrubJob::adjust_shallow_schedule(
 
   } else {
 
-    // the target time is already set. Make sure to reset the n.b. and
-    // the (irrelevant) deadline
+    // the target time is already set. Make sure to reset the n.b.
     sh_times.not_before = sh_times.scheduled_at;
-    sh_times.deadline = sh_times.scheduled_at;
   }
 
   dout(10) << fmt::format(
-		  "adjusted: nb:{:s} target:{:s} deadline:{:s} ({})",
-		  sh_times.not_before, sh_times.scheduled_at, sh_times.deadline,
-		  state_desc())
+		  "adjusted: nb:{:s} target:{:s} ({})", sh_times.not_before,
+		  sh_times.scheduled_at, state_desc())
 	   << dendl;
+}
+
+
+double ScrubJob::guaranteed_offset(
+    scrub_level_t s_or_d,
+    const Scrub::sched_conf_t& app_conf)
+{
+  if (s_or_d == scrub_level_t::deep) {
+    // use the sdv of the deep scrub distribution, times 3 (3-sigma...)
+    const double sdv = app_conf.deep_interval * app_conf.deep_randomize_ratio;
+  // note: the '+10.0' is there just to guarantee inequality if '._ratio' is 0
+    return app_conf.deep_interval + abs(3 * sdv) + 10.0;
+  }
+
+  // shallow scrub
+  return app_conf.shallow_interval * (2.0 + app_conf.interval_randomize_ratio);
 }
 
 
@@ -239,46 +245,32 @@ void ScrubJob::adjust_deep_schedule(
   auto& dp_times = deep_target.sched_info.schedule;  // shorthand
 
   if (ScrubJob::requires_randomization(deep_target.urgency())) {
-    utime_t adj_not_before = last_deep;
     utime_t adj_target = last_deep;
-    dp_times.deadline = adj_target;
 
     // add a random delay to the proposed scheduled time
     const double sdv = app_conf.deep_interval * app_conf.deep_randomize_ratio;
     std::normal_distribution<double> normal_dist{app_conf.deep_interval, sdv};
-    auto next_delay =
-        std::clamp(normal_dist(random_gen), app_conf.deep_interval - 2 * sdv,
-                   app_conf.deep_interval + 2 * sdv);
+    auto next_delay = std::clamp(
+	normal_dist(random_gen), app_conf.deep_interval - 2 * sdv,
+	app_conf.deep_interval + 2 * sdv);
     adj_target += next_delay;
     dout(20) << fmt::format(
-                    "deep scrubbing: next_delay={:.0f} (interval={:.0f}, "
-                    "ratio={:.3f}), adjusted:{:s}",
-                    next_delay, app_conf.deep_interval,
-                    app_conf.deep_randomize_ratio, adj_target)
-             << dendl;
+		    "deep scrubbing: next_delay={:.0f} (interval={:.0f}, "
+		    "ratio={:.3f}), adjusted:{:s}",
+		    next_delay, app_conf.deep_interval,
+		    app_conf.deep_randomize_ratio, adj_target)
+	     << dendl;
 
-    // the deadline can be updated directly into the scrub-job
-    if (app_conf.max_shallow) {
-      dp_times.deadline += *app_conf.max_shallow;  // RRR fix
-    } else {
-      dp_times.deadline = utime_t{};
-    }
-    if (adj_not_before < adj_target) {
-      adj_not_before = adj_target;
-    }
     dp_times.scheduled_at = adj_target;
-    dp_times.not_before = adj_not_before;
+    dp_times.not_before = adj_target;
   } else {
-    // the target time is already set. Make sure to reset the n.b. and
-    // the (irrelevant) deadline
+    // the target time is already set. The n.b. is set to same
     dp_times.not_before = dp_times.scheduled_at;
-    dp_times.deadline = dp_times.scheduled_at;
   }
 
   dout(10) << fmt::format(
-		  "adjusted: nb:{:s} target:{:s} deadline:{:s} ({})",
-		  dp_times.not_before, dp_times.scheduled_at, dp_times.deadline,
-		  state_desc())
+		  "adjusted: nb:{:s} target:{:s} ({})", dp_times.not_before,
+		  dp_times.scheduled_at, state_desc())
 	   << dendl;
 }
 
@@ -366,7 +358,6 @@ void ScrubJob::dump(ceph::Formatter* f) const
   f->dump_stream("pgid") << pgid;
   f->dump_stream("sched_time") << get_sched_time();
   f->dump_stream("orig_sched_time") << sch.scheduled_at;
-  f->dump_stream("deadline") << sch.deadline;
   f->dump_bool("forced", entry.urgency >= urgency_t::operator_requested);
 }
 
