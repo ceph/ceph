@@ -1,5 +1,5 @@
 <ng-template #usageNotAvailableTooltipTpl>
-  <ng-container i18n>Only available for RBD images with <strong>fast-diff</strong> enabled</ng-container>
+  <ng-container i18n>Only available for volumes with <strong>fast-diff</strong> enabled</ng-container>
 </ng-template>
 
 <ng-container *ngIf="selection && selection.source !== 'REMOVING'">
@@ -168,7 +168,7 @@
 </ng-container>
 <ng-container *ngIf="selection && selection.source === 'REMOVING'">
   <cd-alert-panel type="warning"
-                  i18n>Information can not be displayed for RBD in status 'Removing'.</cd-alert-panel>
+                  i18n>Information can not be displayed for volumes in status 'Removing'.</cd-alert-panel>
 </ng-container>
 
 <ng-template #poolConfigurationSourceTpl
@@ -177,11 +177,11 @@
   <ng-container *ngIf="+value; else global">
     <strong i18n
             i18n-ngbTooltip
-            ngbTooltip="This setting overrides the global value">Image</strong>
+            ngbTooltip="This setting overrides the global value">Volume</strong>
   </ng-container>
   <ng-template #global>
     <span i18n
           i18n-ngbTooltip
-          ngbTooltip="This is the global value. No value for this option has been set for this image.">Global</span>
+          ngbTooltip="This is the global value. No value for this option has been set for this volume.">Global</span>
   </ng-template>
 </ng-template>

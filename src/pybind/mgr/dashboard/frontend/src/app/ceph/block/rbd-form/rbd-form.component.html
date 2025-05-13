@@ -142,7 +142,7 @@
                         actionName="Set mode"
                         (action)="onAlertAction($event)"
                         i18n>
-          You need to set mode as&nbsp;<b>Image</b>&nbsp;in the selected pool to enable snapshot mirroring.
+          You need to set mode as&nbsp;<b>Volume</b>&nbsp;in the selected pool to enable snapshot mirroring.
         </cd-alert-panel>
       </div>
 
@@ -181,12 +181,12 @@
                       i18n>
                       Use a dedicated data pool
 
-          <cd-help-text>Use a dedicated pool to store the image data. If not selected,
-            the image data will be stored in the same pool as the image metadata.
+          <cd-help-text>Use a dedicated pool to store the volume data. If not selected,
+            the volume data will be stored in the same pool as the volume metadata.
           </cd-help-text>
 
           <cd-helper *ngIf="allDataPools.length <= 1 && mode !== 'editing'">
-            <span>You need more than one pool with the rbd application label use to use a dedicated data pool.</span>
+            <span>You need more than one pool with the 'rbd' application label use to use a dedicated data pool.</span>
           </cd-helper>
         </cds-checkbox>
       </div>
@@ -195,7 +195,7 @@
       <div class="form-item"
            *ngIf="rbdForm.getValue('useDataPool')">
         <cds-select label="Data pool"
-                    helperText="Dedicated pool that stores the object-data of the RBD"
+                    helperText="Dedicated pool that stores the object-data of the volume"
                     for="dataPool"
                     name="dataPool"
                     id="dataPool"
@@ -240,7 +240,7 @@
 
       <div class="form-item">
         <cds-select label="Namespace"
-                    helperText="Namespace allows you to logically group RBD images within your Ceph Cluster.Choosing a namespace makes it easier to locate and manage related RBD images efficiently"
+                    helperText="Namespace allows you to logically group volumes within your Ceph Cluster. Choosing a namespace makes it easier to locate and manage related volumes efficiently"
                     for="namespace"
                     name="namespace"
                     id="namespace"

@@ -75,7 +75,7 @@
   <div class="alert alert-warning"
        *ngIf="hasSnapshots"
        role="alert">
-    <span i18n>Deleting this image will also delete all its snapshots.</span>
+    <span i18n>Deleting this volume will also delete all its snapshots.</span>
     <br>
     <ng-container *ngIf="snapshots.length > 0">
       <span i18n>The following snapshots are currently protected and will be removed:</span>
@@ -104,7 +104,7 @@
   </span>
   <i *ngIf="row.source && row.source === 'REMOVING'"
      i18n-title
-     title="RBD in status 'Removing'"
+     title="Block in status 'Removing'"
      class="{{ icons.warning }} warn"></i>
 </ng-template>
 
@@ -137,5 +137,5 @@
 
 <ng-template #usageTooltip>
   <div i18n
-       [innerHtml]="'Only available for RBD images with <strong>fast-diff</strong> enabled and without snapshot mirroring'"></div>
+       [innerHtml]="'Only available for volumes with <strong>fast-diff</strong> enabled and without snapshot mirroring'"></div>
 </ng-template>

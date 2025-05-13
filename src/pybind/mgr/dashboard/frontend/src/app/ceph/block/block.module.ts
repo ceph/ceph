@@ -159,13 +159,13 @@ const routes: Routes = [
       moduleStatusGuardConfig: {
         uiApiPath: 'block/rbd',
         redirectTo: 'error',
-        header: $localize`Block Pool is not configured`,
-        button_name: $localize`Configure Default pool`,
+        header: $localize`The block storage pool is not configured. Please configure the default pool to proceed.`,
+        button_name: $localize`Configure Default Pool`,
         button_route: '/pool/create',
         component: 'Default Pool',
         uiConfig: true
       },
-      breadcrumbs: 'Images'
+      breadcrumbs: 'Volumes'
     },
     children: [
       { path: '', component: RbdListComponent },
@@ -219,9 +219,9 @@ const routes: Routes = [
       moduleStatusGuardConfig: {
         uiApiPath: 'block/mirroring',
         redirectTo: 'error',
-        header: $localize`Block Mirroring is not configured`,
+        header: $localize`Block Mirroring is not configured. Please configure Block Mirroring to enable this feature.`,
         button_name: $localize`Configure Block Mirroring`,
-        button_title: $localize`This will create \"rbd-mirror\" service and a replicated Block pool`,
+        button_title: $localize`This will create the "rbd-mirror" service and a replicated Block pool.`,
         component: 'Block Mirroring',
         uiConfig: true
       },
@@ -274,7 +274,7 @@ const routes: Routes = [
       moduleStatusGuardConfig: {
         uiApiPath: 'nvmeof',
         redirectTo: 'error',
-        header: $localize`NVMe/TCP Gateway not configured`,
+        header: $localize`NVMe/TCP Gateway is not configured. Please configure the NVMe/TCP Gateway to proceed.`,
         button_name: $localize`Configure NVMe/TCP`,
         button_route: ['/services', { outlets: { modal: ['create', 'nvmeof'] } }],
         uiConfig: false

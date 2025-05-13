@@ -137,7 +137,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
     super();
     this.routerUrl = this.router.url;
     this.poolPermission = this.authStorageService.getPermissions().pool;
-    this.resource = $localize`Image`;
+    this.resource = $localize`Volume`;
     this.features = {
       'deep-flatten': {
         desc: $localize`Deep flatten`,
@@ -145,22 +145,22 @@ export class RbdFormComponent extends CdForm implements OnInit {
         allowEnable: false,
         allowDisable: true,
         helperHtml: $localize`Feature can be disabled but can't be re-enabled later`,
-        helperText: $localize`Speeds up the process of deleting a clone by removing the dependency on the parent image.`
+        helperText: $localize`Speeds up the process of deleting a clone by removing the dependency on the parent volume.`
       },
       layering: {
         desc: $localize`Layering`,
         requires: null,
         allowEnable: false,
         allowDisable: false,
-        helperHtml: $localize`Feature flag can't be manipulated after the image is created. Disabling this option will also disable the Protect and Clone actions on Snapshot`,
-        helperText: $localize`Allows the creation of snapshots and clones of an image.`
+        helperHtml: $localize`Feature flag can't be manipulated after the volume is created. Disabling this option will also disable the Protect and Clone actions on Snapshot`,
+        helperText: $localize`Allows the creation of snapshots and clones of an volume.`
       },
       'exclusive-lock': {
         desc: $localize`Exclusive lock`,
         requires: null,
         allowEnable: true,
         allowDisable: true,
-        helperText: $localize`Ensures that only one client can write to the image at a time.`
+        helperText: $localize`Ensures that only one client can write to the volume at a time.`
       },
       'object-map': {
         desc: $localize`Object map (requires exclusive-lock)`,
@@ -168,7 +168,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
         allowEnable: true,
         allowDisable: true,
         initDisabled: true,
-        helperText: $localize`Tracks which objects actually exist (have data stored on a device). Enabling object map support speeds up I/O operations for cloning, importing and exporting a sparsely populated image, and deleting.`
+        helperText: $localize`Tracks which objects actually exist (have data stored on a device). Enabling object map support speeds up I/O operations for cloning, importing and exporting a sparsely populated volume, and deleting.`
       },
       'fast-diff': {
         desc: $localize`Fast diff (interlocked with object-map)`,
@@ -177,7 +177,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
         allowDisable: true,
         interlockedWith: 'object-map',
         initDisabled: true,
-        helperText: $localize`Speeds up the process of comparing two images.`
+        helperText: $localize`Speeds up the process of comparing two volumes.`
       }
     };
     this.featuresList = this.objToArray(this.features);

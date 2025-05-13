@@ -42,7 +42,7 @@ export class ImageListComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.image_error.columns = [
       { prop: 'pool_name', name: $localize`Pool`, flexGrow: 2 },
-      { prop: 'name', name: $localize`Image`, flexGrow: 2 },
+      { prop: 'name', name: $localize`Volume`, flexGrow: 2 },
       {
         prop: 'state',
         name: $localize`State`,
@@ -54,7 +54,7 @@ export class ImageListComponent implements OnInit, OnDestroy {
 
     this.image_syncing.columns = [
       { prop: 'pool_name', name: $localize`Pool`, flexGrow: 2 },
-      { prop: 'name', name: $localize`Image`, flexGrow: 2 },
+      { prop: 'name', name: $localize`Volume`, flexGrow: 2 },
       {
         prop: 'state',
         name: $localize`State`,
@@ -78,7 +78,7 @@ export class ImageListComponent implements OnInit, OnDestroy {
 
     this.image_ready.columns = [
       { prop: 'pool_name', name: $localize`Pool`, flexGrow: 2 },
-      { prop: 'name', name: $localize`Image`, flexGrow: 2 },
+      { prop: 'name', name: $localize`Volume`, flexGrow: 2 },
       {
         prop: 'state',
         name: $localize`State`,

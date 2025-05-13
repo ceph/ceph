@@ -71,7 +71,7 @@ export class RbdNamespaceListComponent implements OnInit {
         flexGrow: 1
       },
       {
-        name: $localize`Total images`,
+        name: $localize`Total volumes`,
         prop: 'num_images',
         flexGrow: 1
       }
@@ -147,7 +147,7 @@ export class RbdNamespaceListComponent implements OnInit {
     const first = this.selection.first();
 
     if (first?.num_images > 0) {
-      return $localize`Namespace contains images`;
+      return $localize`Namespace contains volumes`;
     }
 
     return !this.selection?.first();

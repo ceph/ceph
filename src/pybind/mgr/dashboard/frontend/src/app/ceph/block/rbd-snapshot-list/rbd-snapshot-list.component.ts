@@ -309,7 +309,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     const snapshotName = this.selection.selected[0].name;
     const imageSpec = new ImageSpec(this.poolName, this.namespace, this.rbdName).toString();
     const initialState = {
-      titleText: $localize`RBD snapshot rollback`,
+      titleText: $localize`Volume snapshot rollback`,
       buttonText: $localize`Rollback`,
       bodyTpl: this.rollbackTpl,
       bodyData: {
@@ -327,7 +327,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     const snapshotName = this.selection.selected[0].name;
     this.modalRef = this.cdsModalService.show(DeleteConfirmationModalComponent, {
       impact: DeletionImpact.high,
-      itemDescription: $localize`RBD snapshot`,
+      itemDescription: $localize`Volume snapshot`,
       itemNames: [snapshotName],
       submitAction: () => this._asyncTask('deleteSnapshot', 'rbd/snap/delete', snapshotName)
     });

@@ -3,7 +3,7 @@
            (overlaySelected)="closeModal()">
   <cds-modal-header (closeSelect)="closeModal()">
     <h3 cdsModalHeaderHeading
-        i18n>Move an image to trash</h3>
+        i18n>Move an volume to trash</h3>
   </cds-modal-header>
 
   <section cdsModalContent>
@@ -15,7 +15,7 @@
       <cd-alert-panel type="warning"
                       *ngIf="hasSnapshots"
                       spacingClass="mb-2">
-        <span i18n>This image contains snapshot(s), which will prevent it
+        <span i18n>This volume contains snapshot(s), which will prevent it
           from being removed after moved to trash.</span>
       </cd-alert-panel>
 

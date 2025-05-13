@@ -46,7 +46,7 @@ export class RbdSnapshotFormModalComponent extends BaseModal implements OnInit {
   ) {
     super();
     this.action = this.actionLabels.CREATE;
-    this.resource = $localize`RBD Snapshot`;
+    this.resource = $localize`Volume Snapshot`;
     this.createForm();
   }
 
