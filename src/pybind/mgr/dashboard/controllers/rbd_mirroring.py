@@ -241,8 +241,14 @@ class ReplayingData(NamedTuple):
 
 def _get_mirror_mode(ioctx, image_name):
     with rbd.Image(ioctx, image_name) as img:
-        mirror_mode = img.mirror_image_get_mode()
+        mirror_mode = None
         mirror_mode_str = 'Disabled'
+        try:
+            mirror_mode = img.mirror_image_get_mode()
+        except rbd.InvalidArgument:
+            # Suppress exception raised when mirroring is disabled
+            pass
+
         if mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_JOURNAL:
             mirror_mode_str = 'journal'
         elif mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
