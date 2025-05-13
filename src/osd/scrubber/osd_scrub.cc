@@ -189,7 +189,8 @@ Scrub::OSDRestrictions OsdScrub::restrictions_on_scrubbing(
 {
   Scrub::OSDRestrictions env_conditions;
 
-  // some environmental conditions prevent all but high priority scrubs
+  // some "environmental conditions" prevent all but specific types
+  // (urgency levels) of scrubs
 
   if (!m_resource_bookkeeper.can_inc_scrubs()) {
     // our local OSD is already running too many scrubs
@@ -198,20 +199,19 @@ Scrub::OSDRestrictions OsdScrub::restrictions_on_scrubbing(
 
   } else if (scrub_random_backoff()) {
     // dice-roll says we should not scrub now
-    dout(15) << "Lost in dice. Only high priority scrubs allowed." << dendl;
+    dout(15) << "Lost on the dice. Regular scheduled scrubs are not permitted."
+	     << dendl;
     env_conditions.random_backoff_active = true;
+  }
 
-  } else if (is_recovery_active && !conf->osd_scrub_during_recovery) {
+  if (is_recovery_active && !conf->osd_scrub_during_recovery) {
     dout(15) << "recovery in progress. Operator-initiated scrubs only."
 	     << dendl;
     env_conditions.recovery_in_progress = true;
-  } else {
-
-    // regular, i.e. non-high-priority scrubs are allowed
-    env_conditions.restricted_time = !scrub_time_permit(scrub_clock_now);
-    env_conditions.cpu_overloaded =
-	!m_load_tracker.scrub_load_below_threshold();
   }
+
+  env_conditions.restricted_time = !scrub_time_permit(scrub_clock_now);
+  env_conditions.cpu_overloaded = !m_load_tracker.scrub_load_below_threshold();
 
   return env_conditions;
 }
