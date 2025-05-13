@@ -1083,31 +1083,23 @@ All translations will then be reviewed and later pushed upstream.
 Updating translated messages
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Any time there are new messages translated and reviewed in a specific language
-we should update the translation file upstream.
+1. Download the `transifex CLI tool <https://github.com/transifex/cli>`_
 
-To do that, check the settings in the i18n config file
-``src/pybind/mgr/dashboard/frontend/i18n.config.json``:: and make sure that the
-organization is *ceph*, the project is *ceph-dashboard* and the resource is
-the one you want to pull from and push to e.g. *Master:master*. To find a list
-of available resources visit `<https://www.transifex.com/ceph/ceph-dashboard/content/>`_.
+2. Create an `API token <https://www.transifex.com/user/settings/api/>`_.
 
-After you checked the config go to the directory ``src/pybind/mgr/dashboard/frontend`` and run::
+3. Pushing translation:
 
-  $ npm run i18n
+  $ tx push -s
 
-This command will extract all marked messages from the HTML templates and
-TypeScript files. Once the source file has been created it will push it to
-transifex and pull the latest translations. It will also fill all the
-untranslated strings with the source string.
-The tool will ask you for an api token, unless you added it by running:
+  This will push the source file in transifex.
 
-  $ npm run i18n:token
+4. Pulling translation:
 
-To create a transifex api token visit `<https://www.transifex.com/user/settings/api/>`_.
+  $ tx pull -r ceph-dashboard.<resource_slug> -f
 
-After the command ran successfully, build the UI and check if everything is
-working as expected. You also might want to run the frontend tests.
+  e.g `tx pull -r ceph-dashboard.main`
+
+  This will pull all translations of the resource. 
 
 Add a new release resource to transifex
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1115,24 +1107,32 @@ Add a new release resource to transifex
 In order to organize the translations, we create a
 `transifex resource <https://www.transifex.com/ceph/ceph-dashboard/content/>`_
 for every Ceph release. This means, once a new version has been released, the
-``src/pybind/mgr/dashboard/frontend/i18n.config.json`` needs to be updated on
+``src/pybind/mgr/dashboard/frontend/.tx/config`` needs to be updated on
 the release branch.
 
 Please replace::
-
-"resource": "Master:master"
+`resource_name          = Main`
 
 by::
+`resource_name          = <Release-name>`
 
-"resource": "<Release-name>:<release-name>"
+E.g. the resource definition for the Tentacle release::
+`resource_name          = Tentacle`
 
-E.g. the resource definition for the pacific release::
+And replace::
+`[o:ceph:p:ceph-dashboard:r:main]`
 
-"resource": "Pacific:pacific"
+by::
+`[o:ceph:p:ceph-dashboard:r:<release-name>]`
+
+E.g. the resource definition for the Tentacle release::
+`[o:ceph:p:ceph-dashboard:r:tentacle]`
+
+Once done push the translations::
+  $ tx push -s
 
 Note:
-  The first part of the resource definition (before the colon) needs to be
-  written with a capital letter.
+  Only the <Release-name> is capitalized.
 
 Suggestions
 ~~~~~~~~~~~
