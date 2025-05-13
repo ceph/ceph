@@ -227,6 +227,8 @@ struct StateBuilder<librbd::MockTestImageCtx> {
   std::string remote_mirror_uuid = "remote mirror uuid";
   ::journal::MockJournaler* remote_journaler = nullptr;
   librbd::journal::MirrorPeerClientMeta remote_client_meta;
+
+  MOCK_METHOD0(is_remote_primary, bool());
 };
 
 EventPreprocessor<librbd::MockTestImageCtx>* EventPreprocessor<librbd::MockTestImageCtx>::s_instance = nullptr;
@@ -330,6 +332,12 @@ public:
     EXPECT_CALL(mock_journaler, get_cached_client(client_id, _))
       .WillOnce(DoAll(SetArgPointee<1>(client_copy),
                       Return(r)));
+  }
+
+  void expect_is_remote_primary(MockStateBuilder &mock_state_builder,
+                                bool is_primary) {
+    EXPECT_CALL(mock_state_builder, is_remote_primary())
+      .WillOnce(Return(is_primary));
   }
 
   void expect_start_external_replay(librbd::MockTestJournal &mock_journal,
@@ -806,6 +814,7 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitDisconnectedResync) {
                             cls::journal::CLIENT_STATE_DISCONNECTED},
                            {librbd::journal::MirrorPeerClientMeta{
                               mock_local_image_ctx.id}}, 0);
+  expect_is_remote_primary(mock_state_builder, true);
   MockCloseImageRequest mock_close_image_request;
   expect_send(mock_close_image_request, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
@@ -844,6 +853,7 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitResyncRequested) {
   EXPECT_CALL(mock_local_journal, add_listener(_));
   expect_is_tag_owner(mock_local_journal, false);
   expect_is_resync_requested(mock_local_journal, 0, true);
+  expect_is_remote_primary(mock_state_builder, true);
   expect_notification(mock_threads, mock_replayer_listener);
 
   C_SaferCond init_ctx;
@@ -856,6 +866,59 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitResyncRequested) {
   EXPECT_CALL(mock_local_journal, stop_external_replay());
   MockCloseImageRequest mock_close_image_request;
   expect_send(mock_close_image_request, 0);
+  EXPECT_CALL(mock_remote_journaler, remove_listener(_));
+
+  C_SaferCond shutdown_ctx;
+  mock_replayer.shut_down(&shutdown_ctx);
+  ASSERT_EQ(0, shutdown_ctx.wait());
+}
+
+TEST_F(TestMockImageReplayerJournalReplayer, InitResyncRequestedRemoteNotPrimary) {
+  librbd::MockTestJournal mock_local_journal;
+  librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
+                                                mock_local_journal};
+  ::journal::MockJournaler mock_remote_journaler;
+  MockReplayerListener mock_replayer_listener;
+  MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
+  MockReplayer mock_replayer{
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
+
+  expect_work_queue_repeatedly(mock_threads);
+
+  InSequence seq;
+
+  expect_init(mock_remote_journaler, 0);
+  EXPECT_CALL(mock_remote_journaler, add_listener(_));
+  expect_get_cached_client(mock_remote_journaler, "local mirror uuid", {},
+                           {librbd::journal::MirrorPeerClientMeta{}}, 0);
+  MockReplay mock_local_journal_replay;
+  MockEventPreprocessor mock_event_preprocessor;
+  MockReplayStatusFormatter mock_replay_status_formatter;
+  expect_start_external_replay(mock_local_journal, &mock_local_journal_replay,
+                               0);
+  EXPECT_CALL(mock_local_journal, add_listener(_));
+  expect_is_tag_owner(mock_local_journal, false);
+  expect_is_resync_requested(mock_local_journal, 0, true);
+  // remote is not primary, so no resync should occur
+  expect_is_remote_primary(mock_state_builder, false);
+  EXPECT_CALL(mock_remote_journaler, start_live_replay(_, _));
+  expect_notification(mock_threads, mock_replayer_listener);
+
+  C_SaferCond init_ctx;
+  mock_replayer.init(&init_ctx);
+  ASSERT_EQ(0, init_ctx.wait());
+  ASSERT_EQ(0, wait_for_notification());
+
+  expect_shut_down(mock_local_journal_replay, true, 0);
+  EXPECT_CALL(mock_local_journal, remove_listener(_));
+  EXPECT_CALL(mock_local_journal, stop_external_replay());
+  MockCloseImageRequest mock_close_image_request;
+  expect_send(mock_close_image_request, 0);
+  expect_stop_replay(mock_remote_journaler, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
 
   C_SaferCond shutdown_ctx;
@@ -1436,6 +1499,7 @@ TEST_F(TestMockImageReplayerJournalReplayer, LocalJournalResyncRequested) {
                                    &remote_replay_handler,
                                    &remote_journaler_listener));
 
+  expect_is_remote_primary(mock_state_builder, true);
   expect_notification(mock_threads, mock_replayer_listener);
   local_journal_listener->handle_resync();
   wait_for_notification();
@@ -1488,6 +1552,7 @@ TEST_F(TestMockImageReplayerJournalReplayer, RemoteJournalDisconnected) {
                             cls::journal::CLIENT_STATE_DISCONNECTED},
                            {librbd::journal::MirrorPeerClientMeta{
                               mock_local_image_ctx.id}}, 0);
+  expect_is_remote_primary(mock_state_builder, true);
   expect_notification(mock_threads, mock_replayer_listener);
 
   remote_journaler_listener->handle_update(nullptr);
