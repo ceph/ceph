@@ -4151,6 +4151,9 @@ struct AnonConnection : public Connection {
   void mark_down() override {
     // silently ignore
   }
+  void shutdown() override {
+    // silengtly ignore
+  }
   void mark_disposable() override {
     // silengtly ignore
   }
