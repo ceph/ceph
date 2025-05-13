@@ -235,6 +235,7 @@ private:
   void process();
   void wakeup_from(uint64_t id);
   void tick(uint64_t id);
+  void shutdown() override;
   void stop(bool queue_reset);
   void cleanup();
   PerfCounters *get_perf_counter() {

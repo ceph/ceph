@@ -759,6 +759,12 @@ void AsyncConnection::stop(bool queue_reset) {
   if (need_queue_reset) dispatch_queue->queue_reset(this);
 }
 
+void AsyncConnection::shutdown()
+{
+  /* FIXME: stop() discards out queue so this doesn't actually flush sent messages */
+  return stop(true);
+}
+
 void AsyncConnection::cleanup() {
   shutdown_socket();
   delete read_handler;

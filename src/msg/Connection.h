@@ -157,6 +157,12 @@ public:
    */
   virtual void mark_disposable() = 0;
 
+  /*
+   * Politely shutdown the connection.  Finish sending any messages.  This
+   * queues a connection reset event.
+   */
+  virtual void shutdown() = 0;
+
   // WARNING / FIXME: this is not populated for loopback connections
   AuthCapsInfo& get_peer_caps_info() {
     return peer_caps_info;
