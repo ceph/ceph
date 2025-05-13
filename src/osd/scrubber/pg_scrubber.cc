@@ -674,46 +674,29 @@ Scrub::sched_conf_t PgScrubber::populate_config_params() const
   const auto& conf = get_pg_cct()->_conf;  // for brevity
   Scrub::sched_conf_t configs;
 
-  // deep-scrub optimal interval
-  configs.deep_interval =
-      pool_conf.value_or(pool_opts_t::DEEP_SCRUB_INTERVAL, 0.0);
-  if (configs.deep_interval <= 0.0) {
-    configs.deep_interval = conf->osd_deep_scrub_interval;
-  }
-
-  // shallow-scrub interval
-  configs.shallow_interval =
+  // shallow scrubs interval
+  const auto shallow_pool =
       pool_conf.value_or(pool_opts_t::SCRUB_MIN_INTERVAL, 0.0);
-  if (configs.shallow_interval <= 0.0) {
-    configs.shallow_interval = conf->osd_scrub_min_interval;
-  }
+  configs.shallow_interval =
+      shallow_pool > 0.0 ? shallow_pool : conf->osd_scrub_min_interval;
 
-  // the max allowed delay between scrubs.
-  // For deep scrubs - there is no equivalent of scrub_max_interval. Per the
-  // documentation, once deep_scrub_interval has passed, we are already
-  // "overdue", at least as far as the "ignore allowed load" window is
-  // concerned.
-
-  configs.max_deep = configs.deep_interval + configs.shallow_interval;
-
-  auto max_shallow = pool_conf.value_or(pool_opts_t::SCRUB_MAX_INTERVAL, 0.0);
-  if (max_shallow <= 0.0) {
-    max_shallow = conf->osd_scrub_max_interval;
-  }
-  if (max_shallow > 0.0) {
-    configs.max_shallow = max_shallow;
-    // otherwise - we're left with the default nullopt
-  }
-
-  // but seems like our tests require: \todo fix!
-  configs.max_deep =
-      std::max(configs.max_shallow.value_or(0.0), configs.deep_interval);
+  // deep scrubs optimal interval
+  const auto deep_pool =
+      pool_conf.value_or(pool_opts_t::DEEP_SCRUB_INTERVAL, 0.0);
+  configs.deep_interval =
+      deep_pool > 0.0 ? deep_pool : conf->osd_deep_scrub_interval;
 
   configs.interval_randomize_ratio = conf->osd_scrub_interval_randomize_ratio;
-  configs.deep_randomize_ratio = conf.get_val<double>("osd_deep_scrub_interval_cv");
+  configs.deep_randomize_ratio =
+      conf.get_val<double>("osd_deep_scrub_interval_cv");
   configs.mandatory_on_invalid = conf->osd_scrub_invalid_stats;
 
-  dout(15) << fmt::format("{}: updated config:{}", __func__, configs) << dendl;
+  dout(15) << fmt::format(
+		  "{}: inputs: intervals: sh:{}(pl:{}),dp:{}(pl:{})",
+		  __func__, configs.shallow_interval, shallow_pool,
+		  configs.deep_interval, deep_pool)
+	   << dendl;
+  dout(10) << fmt::format("{}: updated config:{}", __func__, configs) << dendl;
   return configs;
 }
 
@@ -740,33 +723,29 @@ void PgScrubber::on_operator_periodic_cmd(
     scrub_level_t scrub_level,
     int64_t offset)
 {
-  const auto cnf = populate_config_params();
-  dout(10) << fmt::format(
-		  "{}: {} (cmd offset:{}) conf:{}", __func__,
-		  (scrub_level == scrub_level_t::deep ? "deep" : "shallow"), offset,
-		  cnf)
-	   << dendl;
-
+  // if 'offset' wasn't specified - find a value that guarantees the scrub
+  // target will appear ready for scrubbing (even after random adjustments)
+  if (offset == 0) {
+    const auto cnf = populate_config_params();
+    offset = m_scrub_job->guaranteed_offset(scrub_level, cnf);
+    dout(15) << fmt::format(
+		    "{}: {} (calculated offset:{}) conf:{}", __func__,
+		    (scrub_level == scrub_level_t::deep ? "deep" : "shallow"),
+		    offset, cnf)
+	     << dendl;
+  } else {
+    dout(15) << fmt::format(
+		    "{}: {} command offset:{}", __func__,
+		    (scrub_level == scrub_level_t::deep ? "deep" : "shallow"),
+		    offset)
+	     << dendl;
+  }
   // move the relevant time-stamp backwards - enough to trigger a scrub
   utime_t stamp = ceph_clock_now();
-  if (offset > 0) {
-    stamp -= offset;
-  } else {
-    double max_iv =
-	(scrub_level == scrub_level_t::deep)
-	    ? 2 * cnf.max_deep
-	    : (cnf.max_shallow ? *cnf.max_shallow : cnf.shallow_interval);
-    dout(20) << fmt::format(
-		    "{}: stamp:{:s} ms:{}/{}/{}", __func__, stamp,
-		    (cnf.max_shallow ? "ms+" : "ms-"),
-		    (cnf.max_shallow ? *cnf.max_shallow : -999.99),
-		    cnf.shallow_interval)
-	     << dendl;
-    stamp -= max_iv;
-  }
-  stamp -= 100.0;  // for good measure
+  stamp -= offset;  // can't combine with prev line
 
-  dout(10) << fmt::format("{}: stamp:{:s} ", __func__, stamp) << dendl;
+  dout(10) << fmt::format("{}: calculated stamp:{:s}", __func__, stamp)
+	   << dendl;
   asok_response_section(f, true, scrub_level, stamp);
 
   if (scrub_level == scrub_level_t::deep) {
@@ -2080,7 +2059,7 @@ void PgScrubber::on_digest_updates()
 void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
 {
   if (!m_scrub_job->is_registered()) {
-    dout(10) << fmt::format(
+    dout(5) << fmt::format(
 		    "{}: PG not registered for scrubbing on this OSD. Won't "
 		    "requeue!",
 		    __func__)
@@ -2110,7 +2089,6 @@ void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
       std::max(current_targ.urgency(), aborted_target.urgency());
   curr_sched.scheduled_at =
       std::min(curr_sched.scheduled_at, abrt_sched.scheduled_at);
-  curr_sched.deadline = std::min(curr_sched.deadline, abrt_sched.deadline);
   curr_sched.not_before =
       std::min(curr_sched.not_before, abrt_sched.not_before);
 
