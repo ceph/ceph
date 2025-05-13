@@ -892,6 +892,7 @@ public:
   void insert_in_shard(shard_id_t shard, uint64_t off, const buffer::list &bl,
                        uint64_t new_start, uint64_t new_end);
   void insert_ro_zero_buffer(uint64_t ro_offset, uint64_t ro_length);
+  void insert(shard_id_t const shard, extent_map &&map);
   void insert(shard_extent_map_t const &other);
   void append_zeros_to_ro_offset(uint64_t ro_offset);
   void insert_ro_extent_map(const extent_map &host_extent_map);
@@ -940,6 +941,7 @@ public:
   void pad_and_rebuild_to_ec_align();
   uint64_t size();
   void clear();
+  shard_extent_set_t get_zeros_extent_set() const;
   uint64_t get_start_offset() const { return start_offset; }
   uint64_t get_end_offset() const { return end_offset; }
   void deep_copy(shard_extent_map_t const &other);

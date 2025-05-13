@@ -291,6 +291,10 @@ shard_extent_map_t shard_extent_map_t::intersect(
   return out;
 }
 
+void shard_extent_map_t::insert(shard_id_t const shard, extent_map &&map) {
+  extent_maps[shard] = map;
+}
+
 void shard_extent_map_t::insert(shard_extent_map_t const &other) {
   for (auto &&[shard, emap] : other.extent_maps) {
     if (!extent_maps.contains(shard)) {
@@ -793,6 +797,38 @@ void shard_extent_map_t::pad_and_rebuild_to_ec_align() {
     compute_ro_range();
   }
 }
+
+shard_extent_set_t shard_extent_map_t::get_zeros_extent_set() const {
+  shard_extent_set_t zero_set(sinfo->get_k_plus_m());
+  for (auto &&[shard, emap] : extent_maps) {
+    for (auto i = emap.begin(); i != emap.end(); ++i) {
+      uint64_t emap_offset = i.get_off();
+      uint64_t emap_length = i.get_len();
+
+      ceph_assert(emap_offset % EC_ALIGN_SIZE == 0);
+      ceph_assert(emap_length % EC_ALIGN_SIZE == 0);
+
+      bufferlist bl = i.get_val();
+      uint64_t bl_offset = 0;
+      auto j = bl.begin();
+      while (j != bl.end()) {
+        bufferptr bp = j.get_current_ptr();
+        uint64_t bp_length = bp.length();
+        ceph_assert(bp_length % EC_ALIGN_SIZE == 0);
+        char *c_str = bp.c_str();
+        for (uint64_t bp_offset = 0; bp_offset < bp_length; bp_offset += EC_ALIGN_SIZE) {
+          if (mem_is_zero(c_str + bp_offset, EC_ALIGN_SIZE)) {
+            zero_set[shard].insert(emap_offset + bl_offset + bp_offset, EC_ALIGN_SIZE);
+          }
+        }
+        bl_offset += bp_length;
+        j += bp_length;
+      }
+    }
+  }
+  return zero_set;
+}
+
 
 shard_extent_map_t shard_extent_map_t::slice_map(
     uint64_t offset, uint64_t length) const {
