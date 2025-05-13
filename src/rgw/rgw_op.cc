@@ -4835,8 +4835,23 @@ void RGWPutObj::execute(optional_yield y)
     return;
   }
 
+  auto ret = rgw::bucketlogging::log_record(driver,
+      rgw::bucketlogging::LoggingType::Standard,
+      s->object.get(),
+      s,
+      (multipart ? "REST.PUT.PART" : canonical_name()),
+      etag,
+      s->object->get_size(),
+      this,
+      y,
+      true,
+      false);
+  if (ret  < 0) {
+    ldpp_dout(this, 5) << "WARNING: in Standard mode, put object operation ignores bucket logging failure: " << ret << dendl;
+ }
+
   // send request to notification manager
-  int ret = res->publish_commit(this, s->obj_size, mtime, etag, s->object->get_instance());
+  ret = res->publish_commit(this, s->obj_size, mtime, etag, s->object->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here

@@ -628,8 +628,8 @@ int log_record(rgw::sal::Driver* driver,
     bool async_completion,
     bool log_source_bucket) {
   if (!s->bucket) {
-    // logging only bucket operations
-    return 0;
+    ldpp_dout(dpp, 1) << "ERROR: only bucket operations are logged in bucket logging" << dendl;
+    return -EINVAL;
   }
   // check if bucket logging is needed
   const auto& bucket_attrs = s->bucket->get_attrs();
