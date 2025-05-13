@@ -24,6 +24,7 @@
 #include "common/dout.h"
 
 //#define FULL_DEDUP_SUPPORT
+//#define DEBUG_BLAKE3_CLS
 namespace rgw::dedup {
   static constexpr const char* DEDUP_WATCH_OBJ = "DEDUP_WATCH_OBJ";
   using work_shard_t   = uint16_t;

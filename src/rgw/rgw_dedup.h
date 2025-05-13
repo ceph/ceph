@@ -180,6 +180,8 @@ namespace rgw::dedup {
 
 #ifdef FULL_DEDUP_SUPPORT
     int calc_object_sha256(const disk_record_t *p_rec, uint8_t *p_sha256);
+    int calc_object_blake3(const disk_record_t *p_rec, uint8_t *p_blake3);
+    int calc_object_blake3_cls(const disk_record_t *p_rec, uint8_t *p_blake3);
     int add_obj_attrs_to_record(rgw_bucket            *p_rb,
                                 disk_record_t         *p_rec,
                                 const rgw::sal::Attrs &attrs,
