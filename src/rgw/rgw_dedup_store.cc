@@ -30,6 +30,13 @@
 #include "fmt/ranges.h"
 #include <span>
 
+#define CEPHTOH_16 le16toh
+#define CEPHTOH_32 le32toh
+#define CEPHTOH_64 le64toh
+#define HTOCEPH_16 htole16
+#define HTOCEPH_32 htole32
+#define HTOCEPH_64 htole64
+
 namespace rgw::dedup {
 
   rgw_pool pool(DEDUP_POOL_NAME);
