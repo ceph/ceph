@@ -3,7 +3,8 @@
 
 from contextlib import contextmanager
 
-from .helper import DashboardTestCase, JLeaf, JList, JObj
+from .helper import (DashboardTestCase, JLeaf, JList, JObj,
+                     skip_unless_dashboard_pr)
 
 
 class CephfsTest(DashboardTestCase):
@@ -354,6 +355,7 @@ class CephfsTest(DashboardTestCase):
 
         self.rm_dir('/animal')
 
+    @skip_unless_dashboard_pr
     def test_cephfs_clients_get_after_mds_down(self):
         fs_id = self.get_fs_id()
         self._get(f"/api/cephfs/{fs_id}/clients")
