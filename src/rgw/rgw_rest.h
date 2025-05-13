@@ -248,7 +248,10 @@ public:
   int get_params(optional_yield y) override;
   int get_data(bufferlist& bl) override;
 
-  virtual std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT", s->info.method); }
+  virtual std::string canonical_name() const override {
+    const bool multipart = !multipart_upload_id.empty();
+    return fmt::format("REST.{}.{}", s->info.method, multipart ? "PART" : "OBJECT");
+  }
 };
 
 class RGWPostObj_ObjStore : public RGWPostObj
