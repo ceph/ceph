@@ -766,7 +766,7 @@ void PGMapDigest::dump_pool_stats_full(
       tbl.define_column("(OMAP)", TextTable::RIGHT, TextTable::RIGHT);
     }
     tbl.define_column("OBJECTS", TextTable::RIGHT, TextTable::RIGHT);
-    tbl.define_column("USED", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("ALLOCATED", TextTable::RIGHT, TextTable::RIGHT);
     if (verbose) {
       tbl.define_column("(DATA)", TextTable::RIGHT, TextTable::RIGHT);
       tbl.define_column("(OMAP)", TextTable::RIGHT, TextTable::RIGHT);
@@ -906,16 +906,16 @@ void PGMapDigest::dump_object_stat_sum(
   const object_stat_sum_t &sum = pool_stat.stats.sum;
   const store_statfs_t statfs = pool_stat.store_stats;
 
-  uint64_t used_data_bytes = pool_stat.get_allocated_data_bytes(per_pool);
-  uint64_t used_omap_bytes = pool_stat.get_allocated_omap_bytes(per_pool_omap);
-  uint64_t used_bytes = used_data_bytes + used_omap_bytes;
+  uint64_t allocated_data_bytes = pool_stat.get_allocated_data_bytes(per_pool);
+  uint64_t allocated_omap_bytes = pool_stat.get_allocated_omap_bytes(per_pool_omap);
+  uint64_t allocated_bytes = allocated_data_bytes + allocated_omap_bytes;
 
   float used = 0.0;
   // note avail passed in is raw_avail, calc raw_used here.
   if (avail) {
-    used = used_bytes;
+    used = allocated_bytes;
     used /= used + avail;
-  } else if (used_bytes) {
+  } else if (allocated_bytes) {
     used = 1.0;
   }
   auto avail_res = raw_used_rate ? avail / raw_used_rate : 0;
@@ -934,11 +934,11 @@ void PGMapDigest::dump_object_stat_sum(
       f->dump_int("stored_omap", stored_omap_normalized);
     }
     f->dump_int("objects", sum.num_objects);
-    f->dump_int("kb_used", shift_round_up(used_bytes, 10));
-    f->dump_int("bytes_used", used_bytes);
+    f->dump_int("kb_allocated", shift_round_up(allocated_bytes, 10));
+    f->dump_int("bytes_allocated", allocated_bytes);
     if (verbose) {
-      f->dump_int("data_bytes_used", used_data_bytes);
-      f->dump_int("omap_bytes_used", used_omap_bytes);
+      f->dump_int("data_bytes_allocated", allocated_data_bytes);
+      f->dump_int("omap_bytes_allocated", allocated_omap_bytes);
     }
     f->dump_float("percent_used", used);
     f->dump_unsigned("max_avail", avail_res);
@@ -967,10 +967,10 @@ void PGMapDigest::dump_object_stat_sum(
       tbl << stringify(byte_u_t(stored_omap_normalized));
     }
     tbl << stringify(si_u_t(sum.num_objects));
-    tbl << stringify(byte_u_t(used_bytes));
+    tbl << stringify(byte_u_t(allocated_bytes));
     if (verbose) {
-      tbl << stringify(byte_u_t(used_data_bytes));
-      tbl << stringify(byte_u_t(used_omap_bytes));
+      tbl << stringify(byte_u_t(allocated_data_bytes));
+      tbl << stringify(byte_u_t(allocated_omap_bytes));
     }
     tbl << percentify(used*100);
     tbl << stringify(byte_u_t(avail_res));

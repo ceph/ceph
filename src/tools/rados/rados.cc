@@ -2392,7 +2392,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
     if (!formatter) {
       tab.define_column("POOL_NAME", TextTable::LEFT, TextTable::LEFT);
-      tab.define_column("USED", TextTable::RIGHT, TextTable::RIGHT);
+      tab.define_column("ALLOCATED", TextTable::RIGHT, TextTable::RIGHT);
       tab.define_column("OBJECTS", TextTable::RIGHT, TextTable::RIGHT);
       tab.define_column("CLONES", TextTable::RIGHT, TextTable::RIGHT);
       tab.define_column("COPIES", TextTable::RIGHT, TextTable::RIGHT);
