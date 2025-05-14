@@ -1,0 +1,61 @@
+From 12ac945158ae3c2373ec0c888899373218aa209f Mon Sep 17 00:00:00 2001
+From: Dmitry Arkhipov <grisumbras@yandex.ru>
+Date: Tue, 7 Jan 2025 16:03:34 +0300
+Subject: [PATCH] move context-impl feature into a module
+
+This is now necessary to allow users to set it from the command line.
+---
+ boost-context-features.jam | 11 +++++++++++
+ build/Jamfile.v2           | 13 -------------
+ 2 files changed, 11 insertions(+), 13 deletions(-)
+
+diff --git a/boost-context-features.jam b/boost-context-features.jam
+index ff3265e2..13f02f52 100644
+--- a/boost-context-features.jam
++++ b/boost-context-features.jam
+@@ -58,3 +58,14 @@ feature.feature abi
+    : propagated
+    ;
+ feature.set-default abi : [ default_abi ] ;
++
++feature.feature context-impl
++    : fcontext
++      ucontext
++      winfib
++    : propagated
++      composite
++    ;
++feature.set-default context-impl : fcontext ;
++feature.compose <context-impl>ucontext : <define>BOOST_USE_UCONTEXT ;
++feature.compose <context-impl>winfib : <define>BOOST_USE_WINFIB ;
+diff --git a/build/Jamfile.v2 b/build/Jamfile.v2
+index d0b6d20f..7ff048b1 100644
+--- a/build/Jamfile.v2
++++ b/build/Jamfile.v2
+@@ -14,7 +14,6 @@ import modules ;
+ import os ;
+ import toolset ;
+ import config : requires ;
+-import feature ;
+ 
+ project
+     : common-requirements <library>$(boost_dependencies)
+@@ -49,18 +48,6 @@ project
+     ;
+ 
+ 
+-feature.feature context-impl
+-    : fcontext
+-      ucontext
+-      winfib
+-    : propagated
+-      composite
+-    ;
+-feature.set-default context-impl : fcontext ;
+-feature.compose <context-impl>ucontext : <define>BOOST_USE_UCONTEXT ;
+-feature.compose <context-impl>winfib : <define>BOOST_USE_WINFIB ;
+-
+-
+ # ARM
+ # ARM/AAPCS/ELF
+ alias asm_sources
