@@ -45,6 +45,12 @@ cdef nogil:
     cdef struct ceph_snapdiff_entry_t:
         int dummy
 
+    cdef struct ceph_file_blockdiff_info:
+        int dummy
+
+    cdef struct ceph_file_blockdiff_changedblocks:
+        int dummy
+
     ctypedef void* rados_t
 
     const char *ceph_version(int *major, int *minor, int *patch):
@@ -189,6 +195,14 @@ cdef nogil:
     int ceph_readdir_snapdiff(ceph_snapdiff_info *snapdiff, ceph_snapdiff_entry_t *out):
         pass
     int ceph_close_snapdiff(ceph_snapdiff_info *snapdiff):
+        pass
+    int ceph_file_blockdiff_init(ceph_mount_info *cmount, const char *root_path, const char *rel_path, const char *snap1, const char *snap2, ceph_file_blockdiff_info *out_info):
+        pass
+    int ceph_file_blockdiff(ceph_file_blockdiff_info *info, ceph_file_blockdiff_changedblocks *blocks):
+        pass
+    void ceph_free_file_blockdiff_buffer(ceph_file_blockdiff_changedblocks *blocks):
+        pass
+    int ceph_file_blockdiff_finish(ceph_file_blockdiff_info *info):
         pass
     int ceph_rmdir(ceph_mount_info *cmount, const char *path):
         pass
