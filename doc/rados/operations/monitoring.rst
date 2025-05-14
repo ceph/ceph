@@ -751,8 +751,7 @@ the following command can be invoked:
 
    ceph osd pool availability-status
 
-If the cluster has 4 pools, this is what the ``availability-status`` 
-will report:  
+Example output:  
 
 .. prompt:: bash $
 
@@ -762,15 +761,12 @@ will report:
    cephfs.a.meta 	77s    	0s        	0	0s	0s     	1      	1
    cephfs.a.data 	76s    	0s        	0	0s	0s     	1      	1
 
-We consider a pool unavailable if there is potentially any data loss. 
-This means, if there are any PG in the pool not in 
-active state or if there are unfound objects, some data might be
-either unreachable or lost. In such cases, we mark the pool as 
-unavailable. Otherwise the pool is considered available. 
-For example: A pool will be marked available even if an OSD is down 
-as long as PG replication ensures there is no data loss. 
+A pool is considered ``unavailable`` when at least one PG in the pool 
+becomes inactive or there is at least one unfound object in the pool. 
+Otherwise the pool is considered ``available``. 
 
 We first calculate the Mean Time Between Failures (MTBF) and 
-Mean Time To Recover (MTTR) and arrive at the availability score 
+Mean Time To Recover (MTTR) from the uptime and downtime recorded 
+for each pool and arrive at the availability score 
 by finding ratio of MTBF to total time (ie MTTR + MTBF).  The score
 is updated every 5 seconds. 
