@@ -50,6 +50,17 @@ cdef extern from "cephfs/libcephfs.h" nogil:
         dirent dir_entry
         uint64_t snapid
 
+    cdef struct ceph_file_blockdiff_info:
+        pass
+
+    cdef struct cblock:
+        uint64_t offset
+        uint64_t len
+
+    cdef struct ceph_file_blockdiff_changedblocks:
+        uint64_t num_blocks
+        cblock *b
+
     ctypedef void* rados_t
 
     const char *ceph_version(int *major, int *minor, int *patch)
@@ -138,6 +149,16 @@ cdef extern from "cephfs/libcephfs.h" nogil:
                            ceph_snapdiff_info *out)
     int ceph_readdir_snapdiff(ceph_snapdiff_info *snapdiff, ceph_snapdiff_entry_t *out);
     int ceph_close_snapdiff(ceph_snapdiff_info *snapdiff)
+    int ceph_file_blockdiff_init(ceph_mount_info *cmount,
+                                 const char *root_path,
+                                 const char *rel_path,
+                                 const char *snap1,
+                                 const char *snap2,
+                                 ceph_file_blockdiff_info *out_info)
+    int ceph_file_blockdiff(ceph_file_blockdiff_info *info,
+                            ceph_file_blockdiff_changedblocks *blocks)
+    void ceph_free_file_blockdiff_buffer(ceph_file_blockdiff_changedblocks *blocks)
+    int ceph_file_blockdiff_finish(ceph_file_blockdiff_info *info)
     int ceph_rmdir(ceph_mount_info *cmount, const char *path)
     const char* ceph_getcwd(ceph_mount_info *cmount)
     int ceph_sync_fs(ceph_mount_info *cmount)
