@@ -1426,8 +1426,7 @@ BtreeLBAManager::remap_mappings(
 	  auto new_key = (old_key + remap.offset).checked_to_laddr();
 	  val.len = remap.len;
 	  if (pladdr.is_laddr()) {
-	    auto laddr = pladdr.get_laddr();
-	    val.pladdr = (laddr + remap.offset).checked_to_laddr();
+	    val.pladdr = pladdr;
 	  } else {
 	    auto paddr = pladdr.get_paddr();
 	    val.pladdr = paddr + remap.offset;
