@@ -1363,8 +1363,9 @@ static std::string modify_op_str(uint8_t op) {
 }
 
 static int write_header_while_logrecord(ClsOmapAccess *omap,
-                                        rgw_bucket_dir_header& header) {
-  if (header.resharding_in_logrecord())
+                                        rgw_bucket_dir_header& header,
+                                        bool write_anyway) {
+  if (header.resharding_in_logrecord() || write_anyway)
     return write_bucket_header(omap, &header);
   return 0;
 }
@@ -1504,14 +1505,17 @@ static void _unaccount_entry(rgw_bucket_category_stats& stats,
 
 static int _xaccount_entry(ClsOmapAccess *omap,
                            rgw_bucket_dir_header& header,
-                           const rgw_bucket_dir_entry_meta& meta,
-                           void (*account_func)(rgw_bucket_category_stats&, const rgw_bucket_dir_entry_meta&))
+                           const rgw_bucket_dir_entry& entry,
+                           void (*account_func)(rgw_bucket_category_stats&, const rgw_bucket_dir_entry_meta&),
+                           bool no_snap)
 {
+  auto& meta = entry.meta;
   rgw_bucket_category_stats& stats = header.stats[meta.category];
   CLS_LOG(20, "%s(): header.max_snap_id=%d meta.snap_id=%d", __func__, (int)header.max_snap_id.snap_id, (int)meta.snap_id.snap_id);
 
-  if (meta.snap_id.snap_id == rgw_bucket_snap_id::SNAP_MIN &&
-      !header.max_snap_id.is_set()) {
+  if (no_snap ||
+      (meta.snap_id.snap_id == rgw_bucket_snap_id::SNAP_MIN &&
+      !header.max_snap_id.is_set())) {
     CLS_LOG(20, "%s(): write to base snap, done", __func__);
     account_func(stats, meta);
     /* write to base snap, not updating any other stats */
@@ -1572,7 +1576,11 @@ static int _xaccount_entry(ClsOmapAccess *omap,
       return r;
     }
 
-    account_func(stats, meta);
+    /* if this object is makred with removed_at at a specific snapshot, it was already
+     * unaccounted from the main stats, don't unaccount again */
+    if (!entry.removed_at_snap().is_set()) {
+      account_func(stats, meta);
+    }
 
     return 0;
   }
@@ -1594,20 +1602,22 @@ static int _xaccount_entry(ClsOmapAccess *omap,
 
 static int account_entry(ClsOmapAccess *omap,
                          rgw_bucket_dir_header& header,
-                         const rgw_bucket_dir_entry_meta& meta)
+                         const rgw_bucket_dir_entry& entry,
+                         bool no_snap = false)
 {
-  return _xaccount_entry(omap, header, meta, _account_entry);
+  return _xaccount_entry(omap, header, entry, _account_entry, no_snap);
 }
 
 static int unaccount_entry(ClsOmapAccess *omap,
                            rgw_bucket_dir_header& header,
-                           const rgw_bucket_dir_entry& entry)
+                           const rgw_bucket_dir_entry& entry,
+                           bool no_snap = false)
 {
   if (!entry.exists) {
     return 0;
   }
 
-  return _xaccount_entry(omap, header, entry.meta, _unaccount_entry);
+  return _xaccount_entry(omap, header, entry, _unaccount_entry, no_snap);
 }
 
 static void log_entry(const char *func, const char *str, rgw_bucket_dir_entry *entry)
@@ -1921,7 +1931,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     entry.exists = true;
     entry.tag = op.tag;
     // account for new entry
-    rc = account_entry(&omap, header, meta);
+    rc = account_entry(&omap, header, entry);
     if (rc < 0) {
       CLS_LOG_BITX(bitx_inst, 1,
                    "ERROR: %s: unable to account entry stats at key=%s, rc=%d",
@@ -2587,6 +2597,8 @@ static int _rgw_bucket_link_olh(ClsOmapAccess *omap, bufferlist *in, bufferlist 
   string olh_data_idx;
   string instance_idx;
 
+  bool need_flush_header = false;
+
   // decode request
   rgw_cls_link_olh_op op;
   auto iter = in->cbegin();
@@ -2779,6 +2791,12 @@ static int _rgw_bucket_link_olh(ClsOmapAccess *omap, bufferlist *in, bufferlist 
         return ret;
       }
 
+      /*
+       * this would have been an object overwrite if snapshots weren't involved
+       * so we need to treat it as such
+       */
+      unaccount_entry(omap, header, prev_null_obj.get_dir_entry(), true /* only unaccount current stats not the snap stats */);
+      need_flush_header = true;
     }
   }
 
@@ -2825,11 +2843,11 @@ static int _rgw_bucket_link_olh(ClsOmapAccess *omap, bufferlist *in, bufferlist 
   }
 
   if (!op.log_op) {
-    return write_header_while_logrecord(omap, header);
+    return write_header_while_logrecord(omap, header, need_flush_header);
   }
 
   if (header.syncstopped) {
-    return write_header_while_logrecord(omap, header);
+    return write_header_while_logrecord(omap, header, need_flush_header);
   }
 
   rgw_bucket_dir_entry& entry = obj.get_dir_entry();
@@ -3420,7 +3438,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
 		     __func__, escape_str(cur_change.key.to_string()).c_str(),
 		     stats.num_entries, stats.num_entries + 1);
 
-        ret = account_entry(&omap, header, cur_change.meta);
+        ret = account_entry(&omap, header, cur_change);
         if (ret < 0) {
           CLS_LOG_BITX(bitx_inst, 20,
                        "INFO: %s: ERROR: account_entry() failed on key=%s (ret=%d)",
