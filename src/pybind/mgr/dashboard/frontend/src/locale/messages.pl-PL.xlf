@@ -310,7 +310,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">38</context>
+          <context context-type="linenumber">39</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/smb/smb-tabs/smb-tabs.component.html</context>
@@ -2108,7 +2108,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">32</context>
+          <context context-type="linenumber">33</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-tabs/nvmeof-tabs.component.html</context>
@@ -2493,7 +2493,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
-          <context context-type="linenumber">71</context>
+          <context context-type="linenumber">69</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/hosts/hosts.component.ts</context>
@@ -2960,15 +2960,15 @@
           <context context-type="linenumber">152</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="f5ff2607cf2fd0645a263371d6f93f063d07e33a" datatype="html">
-        <source>Enter group</source>
+      <trans-unit id="cf378a96424886fda41c2c758e3996513692cd54" datatype="html">
+        <source>Selected Gateway Group</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">10</context>
+          <context context-type="linenumber">8</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.html</context>
-          <context context-type="linenumber">10</context>
+          <context context-type="linenumber">8</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3cc9c2ae277393b3946b38c088dabff671b1ee1b" datatype="html">
@@ -2976,7 +2976,7 @@
         <target>Wydajność</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">44</context>
+          <context context-type="linenumber">45</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-details/rbd-details.component.html</context>
@@ -2991,28 +2991,39 @@
         <source> Gateways <x id="START_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;cd-help-text&gt;"/> Ceph NVMe-oF gateways provide Ceph Block Device storage through NVMe/TCP. For VMware clients the NVMe/TCP volumes display as VMFS Datastores. For Linux clients the NVMe/TCP volumes display as as block devices. <x id="CLOSE_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;/cd-help-text&gt;"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">53,57</context>
+          <context context-type="linenumber">54,58</context>
         </context-group>
       </trans-unit>
       <trans-unit id="88d52a108e372081c5e122c5b369aac3ec904146" datatype="html">
         <source>Gateway overview</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">69</context>
+          <context context-type="linenumber">70</context>
         </context-group>
       </trans-unit>
       <trans-unit id="9517e7f935e73e6889dda20c0fa0408465c18f2e" datatype="html">
         <source>Gateway performance</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">79</context>
+          <context context-type="linenumber">80</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5032690935748986815" datatype="html">
+        <source>Enter group name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
+          <context context-type="linenumber">25</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
+          <context context-type="linenumber">20</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7974613004081450726" datatype="html">
         <source>Gateway ID</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
-          <context context-type="linenumber">67</context>
+          <context context-type="linenumber">65</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5611592591303869712" datatype="html">
@@ -3020,7 +3031,7 @@
         <target>Status</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
-          <context context-type="linenumber">75</context>
+          <context context-type="linenumber">73</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-trash-list/rbd-trash-list.component.ts</context>
@@ -3053,6 +3064,17 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-multisite-sync-policy/rgw-multisite-sync-policy.component.ts</context>
           <context context-type="linenumber">71</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3107044384926915007" datatype="html">
+        <source>No groups available</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
+          <context context-type="linenumber">134</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
+          <context context-type="linenumber">148</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4f7cdf99e53b74c843abea60b5ca07a6842c9135" datatype="html">
@@ -3311,6 +3333,10 @@
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-listeners-form/nvmeof-listeners-form.component.ts</context>
           <context context-type="linenumber">50</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-listeners-list/nvmeof-listeners-list.component.ts</context>
+          <context context-type="linenumber">103</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="6641024648411549335" datatype="html">
         <source>Host</source>
@@ -3349,6 +3375,13 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-configuration-page/rgw-configuration-page.component.ts</context>
           <context context-type="linenumber">81</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5236029444167617860" datatype="html">
+        <source>listener</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-listeners-list/nvmeof-listeners-list.component.ts</context>
+          <context context-type="linenumber">106</context>
         </context-group>
       </trans-unit>
       <trans-unit id="e70fcca5a99575cffef3ff8cbd5e69f06ffd0f1c" datatype="html">
@@ -3795,28 +3828,28 @@
         <source> Subsystems <x id="START_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;cd-help-text&gt;"/> A subsystem provides access control to which hosts can access the namespaces within the subsystem. <x id="CLOSE_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;/cd-help-text&gt;"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.html</context>
-          <context context-type="linenumber">18,22</context>
+          <context context-type="linenumber">19,23</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7707701592702091951" datatype="html">
         <source>NQN</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
-          <context context-type="linenumber">61</context>
+          <context context-type="linenumber">59</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4249456376242514671" datatype="html">
         <source># Namespaces</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
-          <context context-type="linenumber">65</context>
+          <context context-type="linenumber">63</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8636681982233006716" datatype="html">
         <source># Maximum Allowed Namespaces</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
-          <context context-type="linenumber">69</context>
+          <context context-type="linenumber">67</context>
         </context-group>
       </trans-unit>
       <trans-unit id="409b6a23ac5c8302cbe2868c58d14eb425d72ddd" datatype="html">

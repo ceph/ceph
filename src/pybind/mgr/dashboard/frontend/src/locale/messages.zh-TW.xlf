@@ -337,7 +337,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">38</context>
+          <context context-type="linenumber">39</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/smb/smb-tabs/smb-tabs.component.html</context>
@@ -1370,7 +1370,7 @@
       </trans-unit>
       <trans-unit id="f717bad2da5944a2567a52f971ccc6806db85805" datatype="html">
         <source>User names must have a length of 8 to 64 characters and can contain alphanumeric characters, '.', '@', '-', '_' or ':'.</source>
-        <target>用户名长度必须为 8 至 64 个字符，可以包含字母数字字符、&quot;.&quot;、&quot;@&quot;、&quot;-&quot;、&quot;_&quot; 或 &quot;:&quot;。</target>
+        <target>使用者名稱長度必須為 8 至 64 個字元，可以包含英數字元、&quot;.&quot;、&quot;@&quot;、&quot;-&quot;、&quot;_&quot; 或 &quot;:&quot;。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
           <context context-type="linenumber">28,29</context>
@@ -1410,7 +1410,7 @@
       </trans-unit>
       <trans-unit id="001e1836299d8d3b84eaebe2fa051325beab3f00" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and can contain alphanumeric characters, '@', '-', '_' or '/'.</source>
-        <target>密码长度必须为 12 至 16 个字符，可以包含字母数字字符、&quot;@&quot;、&quot;-&quot;、&quot;_&quot; 或 &quot;/&quot;。</target>
+        <target>密碼長度必須為 12 至 16 個字元，可以包含英數字元、&quot;@&quot;、&quot;-&quot;、&quot;_&quot; 或 &quot;/&quot;。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
           <context context-type="linenumber">59,60</context>
@@ -1599,7 +1599,7 @@
       </trans-unit>
       <trans-unit id="050a7ff057d1e895357540406b6be5652b4d1c71" datatype="html">
         <source>An IQN has the following notation 'iqn.$year-$month.$reversedAddress:$definedName'</source>
-        <target>IQN 模式應如下所示︰「iqn.$year-$month.$reversedAddress:$definedName」</target>
+        <target>IQN 的表示法如下：iqn.$year-$month.$reversedAddress:$definedName</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">44,45</context>
@@ -1623,7 +1623,7 @@
       </trans-unit>
       <trans-unit id="9b1aa85dfc6849196e64060db02c5410de69b7a1" datatype="html">
         <source>This target has modified advanced settings.</source>
-        <target>此目標的進階設定存在修改。</target>
+        <target>此目標的進階設定已修改。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">56</context>
@@ -1699,7 +1699,7 @@
       </trans-unit>
       <trans-unit id="e3484cae8b118c576ca2815bf9c9406c2eb2cae3" datatype="html">
         <source>This image has modified settings.</source>
-        <target>此影像的設定存在修改。</target>
+        <target>此影像的設定已修改。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">144</context>
@@ -1747,7 +1747,7 @@
       </trans-unit>
       <trans-unit id="137fbf154ecad4d580354db0858b76faea7e4686" datatype="html">
         <source>User names must have a length of 8 to 64 characters and can contain alphanumeric characters, '.', '@', '-', '_' or ':'.</source>
-        <target>用户名长度必须为 8 至 64 个字符，可以包含字母数字字符、&quot;.&quot;、&quot;@&quot;、&quot;-&quot;、&quot;_&quot; 或 &quot;:&quot;。</target>
+        <target>使用者名稱長度必須為 8 至 64 個字元，可以包含英數字元、&quot;.&quot;、&quot;@&quot;、&quot;-&quot;、&quot;_&quot; 或 &quot;:&quot;。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">221,222</context>
@@ -1759,7 +1759,7 @@
       </trans-unit>
       <trans-unit id="361771c32dd2254d77fd3fbf006b008983fe5907" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and can contain alphanumeric characters, '@', '-', '_' or '/'.</source>
-        <target>密码长度必须为 12 至 16 个字符，可以包含字母数字字符、&quot;@&quot;、&quot;-&quot;、&quot;_&quot; 或 &quot;/&quot;。</target>
+        <target>密碼長度必須為 12 至 16 個字元，可以包含英數字元、&quot;@&quot;、&quot;-&quot;、&quot;_&quot; 或 &quot;/&quot;。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">254,255</context>
@@ -1803,7 +1803,7 @@
       </trans-unit>
       <trans-unit id="107d5aabce23d900f0a80e6ddc1c10e29aa0bed8" datatype="html">
         <source>Initiator IQN needs to be unique.</source>
-        <target>啟動器 IQN 必須唯一。</target>
+        <target>啟動器 IQN 必須是唯一的。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">353</context>
@@ -1811,7 +1811,7 @@
       </trans-unit>
       <trans-unit id="7e7cad911fa524e512d9744b16358b7ee6791385" datatype="html">
         <source>User names must have a length of 8 to 64 characters and can contain alphanumeric characters, '.', '@', '-', '_' or ':'.</source>
-        <target>用户名长度必须为 8 至 64 个字符，可以包含字母数字字符、&quot;.&quot;、&quot;@&quot;、&quot;-&quot;、&quot;_&quot; 或 &quot;:&quot;。</target>
+        <target>使用者名稱長度必須為 8 至 64 個字元，可以包含英數字元、&quot;.&quot;、&quot;@&quot;、&quot;-&quot;、&quot;_&quot; 或 &quot;:&quot;。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">383,384</context>
@@ -1823,7 +1823,7 @@
       </trans-unit>
       <trans-unit id="e7f2c186d181206d0d2b1ff74819081a010f10bf" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and can contain alphanumeric characters, '@', '-', '_' or '/'.</source>
-        <target>密码长度必须为 12 至 16 个字符，可以包含字母数字字符、&quot;@&quot;、&quot;-&quot;、&quot;_&quot; 或 &quot;/&quot;。</target>
+        <target>密碼長度必須為 12 至 16 個字元，可以包含英數字元、&quot;@&quot;、&quot;-&quot;、&quot;_&quot; 或 &quot;/&quot;。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">414,415</context>
@@ -1835,7 +1835,7 @@
       </trans-unit>
       <trans-unit id="5d1878d5fc761cbe9614bfd87047a740c82a6951" datatype="html">
         <source>Initiator belongs to a group. Images will be configure in the group.</source>
-        <target>啟動器屬於群組。影像須在群組中進行設定。 </target>
+        <target>啟動器屬於群組。影像須在群組中進行設定。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">498</context>
@@ -2035,7 +2035,7 @@
       </trans-unit>
       <trans-unit id="69a47cbabcc51ca942606e1d8da0ec11f98a2690" datatype="html">
         <source>Backstore</source>
-        <target>支援儲存</target>
+        <target>後備儲存</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-image-settings-modal/iscsi-target-image-settings-modal.component.html</context>
           <context context-type="linenumber">58</context>
@@ -2157,7 +2157,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">32</context>
+          <context context-type="linenumber">33</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-tabs/nvmeof-tabs.component.html</context>
@@ -2551,7 +2551,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
-          <context context-type="linenumber">71</context>
+          <context context-type="linenumber">69</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/hosts/hosts.component.ts</context>
@@ -2807,7 +2807,7 @@
       </trans-unit>
       <trans-unit id="4ddcb416c1c0aa1f54acf5beef1de81813e76fa6" datatype="html">
         <source>{VAR_SELECT, select, edit {Edit} other {Add}}</source>
-        <target>{VAR_SELECT, select, edit {编辑} other {添加}}</target>
+        <target>{VAR_SELECT, select, edit {編輯} other {新增}}</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/mirroring/pool-edit-peer-modal/pool-edit-peer-modal.component.html</context>
           <context context-type="linenumber">8</context>
@@ -3023,15 +3023,15 @@
           <context context-type="linenumber">152</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="f5ff2607cf2fd0645a263371d6f93f063d07e33a" datatype="html">
-        <source>Enter group</source>
+      <trans-unit id="cf378a96424886fda41c2c758e3996513692cd54" datatype="html">
+        <source>Selected Gateway Group</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">10</context>
+          <context context-type="linenumber">8</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.html</context>
-          <context context-type="linenumber">10</context>
+          <context context-type="linenumber">8</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3cc9c2ae277393b3946b38c088dabff671b1ee1b" datatype="html">
@@ -3039,7 +3039,7 @@
         <target>效能</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">44</context>
+          <context context-type="linenumber">45</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-details/rbd-details.component.html</context>
@@ -3054,28 +3054,39 @@
         <source> Gateways <x id="START_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;cd-help-text&gt;"/> Ceph NVMe-oF gateways provide Ceph Block Device storage through NVMe/TCP. For VMware clients the NVMe/TCP volumes display as VMFS Datastores. For Linux clients the NVMe/TCP volumes display as as block devices. <x id="CLOSE_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;/cd-help-text&gt;"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">53,57</context>
+          <context context-type="linenumber">54,58</context>
         </context-group>
       </trans-unit>
       <trans-unit id="88d52a108e372081c5e122c5b369aac3ec904146" datatype="html">
         <source>Gateway overview</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">69</context>
+          <context context-type="linenumber">70</context>
         </context-group>
       </trans-unit>
       <trans-unit id="9517e7f935e73e6889dda20c0fa0408465c18f2e" datatype="html">
         <source>Gateway performance</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">79</context>
+          <context context-type="linenumber">80</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5032690935748986815" datatype="html">
+        <source>Enter group name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
+          <context context-type="linenumber">25</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
+          <context context-type="linenumber">20</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7974613004081450726" datatype="html">
         <source>Gateway ID</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
-          <context context-type="linenumber">67</context>
+          <context context-type="linenumber">65</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5611592591303869712" datatype="html">
@@ -3083,7 +3094,7 @@
         <target>狀態</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
-          <context context-type="linenumber">75</context>
+          <context context-type="linenumber">73</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-trash-list/rbd-trash-list.component.ts</context>
@@ -3116,6 +3127,17 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-multisite-sync-policy/rgw-multisite-sync-policy.component.ts</context>
           <context context-type="linenumber">71</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3107044384926915007" datatype="html">
+        <source>No groups available</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
+          <context context-type="linenumber">134</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
+          <context context-type="linenumber">148</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4f7cdf99e53b74c843abea60b5ca07a6842c9135" datatype="html">
@@ -3374,6 +3396,10 @@
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-listeners-form/nvmeof-listeners-form.component.ts</context>
           <context context-type="linenumber">50</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-listeners-list/nvmeof-listeners-list.component.ts</context>
+          <context context-type="linenumber">103</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="6641024648411549335" datatype="html">
         <source>Host</source>
@@ -3412,6 +3438,13 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-configuration-page/rgw-configuration-page.component.ts</context>
           <context context-type="linenumber">81</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5236029444167617860" datatype="html">
+        <source>listener</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-listeners-list/nvmeof-listeners-list.component.ts</context>
+          <context context-type="linenumber">106</context>
         </context-group>
       </trans-unit>
       <trans-unit id="e70fcca5a99575cffef3ff8cbd5e69f06ffd0f1c" datatype="html">
@@ -3802,7 +3835,7 @@
       </trans-unit>
       <trans-unit id="ee1a29cc658e4fa891be762d7bae96139b57c8f4" datatype="html">
         <source>The value must be at least 1.</source>
-        <target>值必须至少为 1。</target>
+        <target>值必須至少為 1。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems-form/nvmeof-subsystems-form.component.html</context>
           <context context-type="linenumber">55</context>
@@ -3862,28 +3895,28 @@
         <source> Subsystems <x id="START_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;cd-help-text&gt;"/> A subsystem provides access control to which hosts can access the namespaces within the subsystem. <x id="CLOSE_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;/cd-help-text&gt;"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.html</context>
-          <context context-type="linenumber">18,22</context>
+          <context context-type="linenumber">19,23</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7707701592702091951" datatype="html">
         <source>NQN</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
-          <context context-type="linenumber">61</context>
+          <context context-type="linenumber">59</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4249456376242514671" datatype="html">
         <source># Namespaces</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
-          <context context-type="linenumber">65</context>
+          <context context-type="linenumber">63</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8636681982233006716" datatype="html">
         <source># Maximum Allowed Namespaces</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
-          <context context-type="linenumber">69</context>
+          <context context-type="linenumber">67</context>
         </context-group>
       </trans-unit>
       <trans-unit id="409b6a23ac5c8302cbe2868c58d14eb425d72ddd" datatype="html">
@@ -4070,7 +4103,7 @@
       </trans-unit>
       <trans-unit id="2900827028308925059" datatype="html">
         <source>This RBD image has an invalid name and can't be managed by ceph.</source>
-        <target>此 RBD 映像的名称无效，无法通过 Ceph 进行管理。</target>
+        <target>此 RBD 影像的名稱無效，無法由 ceph 管理。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-contants.ts</context>
           <context context-type="linenumber">10</context>
@@ -4082,7 +4115,7 @@
       </trans-unit>
       <trans-unit id="1796389652493657142" datatype="html">
         <source>Action not possible for an RBD in status 'Removing'</source>
-        <target>无法对处于 &quot;正在删除&quot; 状态的 RBD 执行操作</target>
+        <target>無法對處於 &quot;正在移除&quot; 狀態的 RBD 執行動作</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-contants.ts</context>
           <context context-type="linenumber">11</context>
@@ -4228,7 +4261,7 @@
       </trans-unit>
       <trans-unit id="3a4c2a9e76634ff14a60d52a718296f722d47c67" datatype="html">
         <source>Parent</source>
-        <target>父</target>
+        <target>父項</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-details/rbd-details.component.html</context>
           <context context-type="linenumber">105</context>
@@ -4315,7 +4348,7 @@
       </trans-unit>
       <trans-unit id="935bb9cb0e4340fc74d33caa3b70d9d143fcad87" datatype="html">
         <source>Information can not be displayed for RBD in status 'Removing'.</source>
-        <target>无法显示 &quot;正在删除&quot; 状态的 RBD 的信息。</target>
+        <target>無法顯示處於 &quot;正在移除&quot; 狀態的 RBD 的資訊。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-details/rbd-details.component.html</context>
           <context context-type="linenumber">171</context>
@@ -4365,7 +4398,7 @@
       </trans-unit>
       <trans-unit id="0e9ecf29a4fa5b057bd8052e0d801b3fde6a30bf" datatype="html">
         <source>'/' and '@' are not allowed.</source>
-        <target>不允許使用「/」和「@」。</target>
+        <target>不允許使用 &quot;/&quot; 和 &quot;@&quot;。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">52</context>
@@ -4666,7 +4699,7 @@
       </trans-unit>
       <trans-unit id="2e362ec498c4c9112dc47a3cb7d7250ca8e71790" datatype="html">
         <source>RBD in status 'Removing'</source>
-        <target>处于 &quot;正在删除&quot; 状态的 RBD</target>
+        <target>RBD 處於 &quot;正在移除&quot; 狀態</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-list/rbd-list.component.html</context>
           <context context-type="linenumber">107</context>
@@ -4925,7 +4958,7 @@
       </trans-unit>
       <trans-unit id="1152535233999495900" datatype="html">
         <source>Snapshot must be protected in order to clone.</source>
-        <target>快照必须处于受保护状态才能克隆。</target>
+        <target>快照必須處於受保護狀態才能複製。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-list/rbd-snapshot-actions.model.ts</context>
           <context context-type="linenumber">124</context>
@@ -4933,7 +4966,7 @@
       </trans-unit>
       <trans-unit id="5c5331983af566d4ac6a1024d15a3511786a4aa6" datatype="html">
         <source>You are about to rollback</source>
-        <target>您正要復原</target>
+        <target>您即將復原</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-list/rbd-snapshot-list.component.html</context>
           <context context-type="linenumber">15</context>
@@ -5152,7 +5185,7 @@
       </trans-unit>
       <trans-unit id="a1506e5f2ca22cad14502ec7a20fb6113ace145d" datatype="html">
         <source>Wrong date format. Please use &quot;YYYY-MM-DD HH:mm:ss&quot;.</source>
-        <target>日期格式錯誤。請使用「YYYY-MM-DD HH:mm:ss」。</target>
+        <target>日期格式錯誤。請使用 &quot;YYYY-MM-DD HH:mm:ss&quot;。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
           <context context-type="linenumber">40</context>
@@ -5176,7 +5209,7 @@
       </trans-unit>
       <trans-unit id="dfc3c34e182ea73c5d784ff7c8135f087992dac1" datatype="html">
         <source>All</source>
-        <target>全部</target>
+        <target>所有</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-trash-purge-modal/rbd-trash-purge-modal.component.html</context>
           <context context-type="linenumber">28</context>
@@ -5403,7 +5436,7 @@
       </trans-unit>
       <trans-unit id="6129397096478256985" datatype="html">
         <source>Dirs</source>
-        <target>Dirs</target>
+        <target>目錄</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-detail/cephfs-detail.component.ts</context>
           <context context-type="linenumber">59</context>
@@ -5411,7 +5444,7 @@
       </trans-unit>
       <trans-unit id="3011876564696453148" datatype="html">
         <source>Caps</source>
-        <target>Caps</target>
+        <target>功能</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-detail/cephfs-detail.component.ts</context>
           <context context-type="linenumber">60</context>
@@ -5555,7 +5588,7 @@
       </trans-unit>
       <trans-unit id="6960117167304061503" datatype="html">
         <source>Value has to be at least 0 or more</source>
-        <target>值必须大于或等于 0</target>
+        <target>值必須大於或等於 0</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-directories/cephfs-directories.component.ts</context>
           <context context-type="linenumber">487</context>
@@ -7144,7 +7177,7 @@
       </trans-unit>
       <trans-unit id="17137bac47e1e020d139256ded0006a671966e73" datatype="html">
         <source>Physical Disks</source>
-        <target>物理磁盘</target>
+        <target>實體磁碟</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/hosts/host-details/host-details.component.html</context>
           <context context-type="linenumber">16</context>
@@ -7382,8 +7415,7 @@
       </trans-unit>
       <trans-unit id="4025065730478477779" datatype="html">
         <source>The feature is disabled because the selected host is not managed by Orchestrator.</source>
-        <target>由于所选主机并不是由 Orchestrator 管理，特性为未启用。
- </target>
+        <target>由於所選主機并不是由 Orchestrator 管理，已停用該功能。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/hosts/hosts.component.ts</context>
           <context context-type="linenumber">108</context>
@@ -7768,7 +7800,7 @@
       </trans-unit>
       <trans-unit id="de0478286b8b5a939db54e9e5282405364ad2d61" datatype="html">
         <source>No log entries found. Please try to select different filter options.</source>
-        <target>未找到任何日志条目。请尝试选择不同的过滤选项。</target>
+        <target>找不到記錄項目。請嘗試選取其他過濾選項。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/logs/logs.component.html</context>
           <context context-type="linenumber">181</context>
@@ -7776,7 +7808,7 @@
       </trans-unit>
       <trans-unit id="1c7479674d91142b785b9547a87e5fb51cb16108" datatype="html">
         <source>Reset filter.</source>
-        <target>重置过滤器。</target>
+        <target>重設過濾器。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/logs/logs.component.html</context>
           <context context-type="linenumber">185</context>
@@ -7814,7 +7846,7 @@
       </trans-unit>
       <trans-unit id="7aacd038b39cfd347107d01d1dc27f5cb3e0951c" datatype="html">
         <source>The entered value needs to be a valid IP address.</source>
-        <target>輸入的值必須是有效的  IP 位址。</target>
+        <target>輸入的值必須是有效的 IP 位址。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component.html</context>
           <context context-type="linenumber">59</context>
@@ -7982,7 +8014,7 @@
       </trans-unit>
       <trans-unit id="bd4ee06ffdc46d9dfbd0c0c4f81399021c680056" datatype="html">
         <source>quorum con</source>
-        <target>quorum con</target>
+        <target>仲裁 con</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/monitor/monitor.component.html</context>
           <context context-type="linenumber">26</context>
@@ -7990,7 +8022,7 @@
       </trans-unit>
       <trans-unit id="1176c7db8a8276ccb44cc3d42e2c28d9fa6c6596" datatype="html">
         <source>quorum mon</source>
-        <target>quorum mon</target>
+        <target>仲裁 mon</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/monitor/monitor.component.html</context>
           <context context-type="linenumber">31</context>
@@ -7998,7 +8030,7 @@
       </trans-unit>
       <trans-unit id="530ef677a09d681b3ab68cb0760494b3ae72a77c" datatype="html">
         <source>required con</source>
-        <target>required con</target>
+        <target>所需 con</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/monitor/monitor.component.html</context>
           <context context-type="linenumber">36</context>
@@ -8006,7 +8038,7 @@
       </trans-unit>
       <trans-unit id="a91558e0d506c32021c31843f8f168899fc65cbf" datatype="html">
         <source>required mon</source>
-        <target>required mon</target>
+        <target>所需 mon</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/monitor/monitor.component.html</context>
           <context context-type="linenumber">41</context>
@@ -8181,7 +8213,7 @@
       </trans-unit>
       <trans-unit id="9e37e0d06148c7708e88b4a1eb412babbe1a4afc" datatype="html">
         <source>Certificate</source>
-        <target>证书</target>
+        <target>證書</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/multi-cluster/multi-cluster-form/multi-cluster-form.component.html</context>
           <context context-type="linenumber">198</context>
@@ -8193,7 +8225,7 @@
       </trans-unit>
       <trans-unit id="295ae4f632322098deca8a3ddfbc7aeaabb5423b" datatype="html">
         <source>The SSL certificate in PEM format.</source>
-        <target>PEM 格式的 SSL 证书。</target>
+        <target>PEM 格式的 SSL 證書。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/multi-cluster/multi-cluster-form/multi-cluster-form.component.html</context>
           <context context-type="linenumber">199</context>
@@ -8205,7 +8237,7 @@
       </trans-unit>
       <trans-unit id="464272c069fe56f6c50f41f426a25b2a42c95ba5" datatype="html">
         <source>Invalid SSL certificate.</source>
-        <target>SSL 证书无效。</target>
+        <target>SSL 證書無效。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/multi-cluster/multi-cluster-form/multi-cluster-form.component.html</context>
           <context context-type="linenumber">214</context>
@@ -8477,7 +8509,7 @@
       </trans-unit>
       <trans-unit id="97842f379e1d4157ac3ab0661b90c352e7cb72d5" datatype="html">
         <source>Metadata not available</source>
-        <target>無法使用中繼資料</target>
+        <target>中繼資料不可用</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-details/osd-details.component.html</context>
           <context context-type="linenumber">34</context>
@@ -8524,7 +8556,7 @@
       </trans-unit>
       <trans-unit id="b87e181ab9e8393aa5ed759dd3d53836e32c8ffe" datatype="html">
         <source>DB devices can be used for storing BlueStore’s internal metadata. It is only helpful to provision a DB device if it is faster than the primary device (e.g. NVME devices or SSD).</source>
-        <target>DB 设备可用于存储 BlueStore 的内部元数据。仅当 DB 设备速度快于主设备（例如 NVME 设备或 SSD）时，才适合供给 DB 设备。</target>
+        <target>DB 裝置可用於儲存 BlueStore 的內部中繼資料。僅當 DB 裝置速度快於主要裝置 (例如 NVME 裝置或 SSD) 時，才適合佈建 DB 裝置。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-devices-selection-groups/osd-devices-selection-groups.component.html</context>
           <context context-type="linenumber">12</context>
@@ -9068,6 +9100,7 @@
       </trans-unit>
       <trans-unit id="19a2892320d36f6564eac566181f172a7b5e5095" datatype="html">
         <source>{VAR_SELECT, select, true {it} other {them}}</source>
+        <target>{VAR_SELECT, select, true {編輯} other {新增}}</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-list/osd-list.component.html</context>
           <context context-type="linenumber">89</context>
@@ -9562,7 +9595,7 @@
       </trans-unit>
       <trans-unit id="62b73a34ba65b3073e3560dce828a16d7fd3c0f4" datatype="html">
         <source>{VAR_SELECT, select, true {Deep } other {}}</source>
-        <target>{VAR_SELECT, select, true {深层} other {}}</target>
+        <target>{VAR_SELECT, select, true {深層} other {}}</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-scrub-modal/osd-scrub-modal.component.html</context>
           <context context-type="linenumber">3</context>
@@ -9578,7 +9611,7 @@
       </trans-unit>
       <trans-unit id="fad3dc421817a16dd6c46c1a0c36de619a8d776e" datatype="html">
         <source>{VAR_SELECT, select, true {deep } other {}}</source>
-        <target>{VAR_SELECT, select, true {深层} other {}}</target>
+        <target>{VAR_SELECT, select, true {深層} other {}}</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-scrub-modal/osd-scrub-modal.component.html</context>
           <context context-type="linenumber">11</context>
@@ -9876,7 +9909,7 @@
       </trans-unit>
       <trans-unit id="78af6a5e6e4d305557054b64d10f9f9446d8043d" datatype="html">
         <source>{VAR_SELECT, select, true {Edit} other {Add}}</source>
-        <target>{VAR_SELECT, select, true {编辑} other {添加}}</target>
+        <target>{VAR_SELECT, select, true {編輯} other {新增}}</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/prometheus/silence-matcher-modal/silence-matcher-modal.component.html</context>
           <context context-type="linenumber">3</context>
@@ -9916,7 +9949,7 @@
       </trans-unit>
       <trans-unit id="5518753745858598442" datatype="html">
         <source>no spec</source>
-        <target>无规格</target>
+        <target>無規格</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/placement.pipe.ts</context>
           <context context-type="linenumber">17</context>
@@ -9924,7 +9957,7 @@
       </trans-unit>
       <trans-unit id="1186363766752354382" datatype="html">
         <source>unmanaged</source>
-        <target>非受管</target>
+        <target>未受管理</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/placement.pipe.ts</context>
           <context context-type="linenumber">20</context>
@@ -9948,7 +9981,7 @@
       </trans-unit>
       <trans-unit id="0cb3aa7e9fea1d445a1a9d7797ab17e6ac6fe13b" datatype="html">
         <source>Service Events</source>
-        <target>服务事件</target>
+        <target>服務事件</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-daemon-list/service-daemon-list.component.html</context>
           <context context-type="linenumber">22</context>
@@ -9993,7 +10026,7 @@
       </trans-unit>
       <trans-unit id="3022087209429182774" datatype="html">
         <source>Daemon Events</source>
-        <target>守护进程事件</target>
+        <target>精靈事件</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-daemon-list/service-daemon-list.component.ts</context>
           <context context-type="linenumber">184</context>
@@ -10001,7 +10034,7 @@
       </trans-unit>
       <trans-unit id="3907644935670421963" datatype="html">
         <source>Service Events</source>
-        <target>服务事件</target>
+        <target>服務事件</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-daemon-list/service-daemon-list.component.ts</context>
           <context context-type="linenumber">193</context>
@@ -10037,7 +10070,7 @@
       </trans-unit>
       <trans-unit id="3214a1f3a4c3e89a848b4ec59adeeda3b913c396" datatype="html">
         <source>-- Select a service type --</source>
-        <target>-- 请选择服务类型 --</target>
+        <target>-- 選取服務類型 --</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">53</context>
@@ -10045,7 +10078,7 @@
       </trans-unit>
       <trans-unit id="f32579a9fd19d93c083175284ee3426d78751c33" datatype="html">
         <source>Backend Service</source>
-        <target>后端服务</target>
+        <target>後端服務</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">71</context>
@@ -10053,7 +10086,7 @@
       </trans-unit>
       <trans-unit id="c2937074aed12b8158e929c58747a8216433b72b" datatype="html">
         <source>-- No service available --</source>
-        <target>-- 没有可用的服务 --</target>
+        <target>-- 沒有可用的服務 --</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">83</context>
@@ -10160,7 +10193,7 @@
       </trans-unit>
       <trans-unit id="83d5d7edd8a0be253c4e93ad4c3efe86d9ac520f" datatype="html">
         <source>Unmanaged</source>
-        <target>非受管</target>
+        <target>未受管理</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">256</context>
@@ -10179,7 +10212,7 @@
       </trans-unit>
       <trans-unit id="c15fa461935e0f600bc5d1660af1da67f024fc2a" datatype="html">
         <source>Placement</source>
-        <target>归置</target>
+        <target>放置</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">267</context>
@@ -10191,7 +10224,7 @@
       </trans-unit>
       <trans-unit id="863226cffd5b66a6fee9810a9282a5006d6ef576" datatype="html">
         <source>Label</source>
-        <target>标签</target>
+        <target>標籤</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">276</context>
@@ -10211,7 +10244,7 @@
       </trans-unit>
       <trans-unit id="06412bce0f4fe4311193e9763666089bf9d980da" datatype="html">
         <source>Count</source>
-        <target>计数</target>
+        <target>計數</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">321</context>
@@ -10230,7 +10263,7 @@
       </trans-unit>
       <trans-unit id="cb2741a46e3560f6bc6dfd99d385e86b08b26d72" datatype="html">
         <source>Port</source>
-        <target>端口</target>
+        <target>連接埠</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">345</context>
@@ -10250,7 +10283,7 @@
       </trans-unit>
       <trans-unit id="a23ed3598cca5285606675b6cb2536a56b411ade" datatype="html">
         <source>The value cannot exceed 65535.</source>
-        <target>值不得超过 65535。</target>
+        <target>值不得超過 65535。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">361</context>
@@ -10282,7 +10315,7 @@
       </trans-unit>
       <trans-unit id="2d8ebdc326e6b9ff35feee3f762b7ab39c02d78f" datatype="html">
         <source>-- No pools available --</source>
-        <target>-- 没有可用的存储池 --</target>
+        <target>-- 沒有可用的池 --</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">383</context>
@@ -10290,7 +10323,7 @@
       </trans-unit>
       <trans-unit id="84b675705324741b954615fedf2417d4d873b0b6" datatype="html">
         <source>Trusted IPs</source>
-        <target>可信 IP</target>
+        <target>可信的 IP</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">402</context>
@@ -10298,7 +10331,7 @@
       </trans-unit>
       <trans-unit id="b543e7c787cc48c2938cbce2d14c6afea5a598df" datatype="html">
         <source>Comma separated list of IP addresses.</source>
-        <target>IP 地址逗号分隔列表。</target>
+        <target>IP 位址的逗號分隔清單。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">404</context>
@@ -10454,7 +10487,7 @@
       </trans-unit>
       <trans-unit id="6265b64c17a1e19775769489bfd0b152fa1f3ba1" datatype="html">
         <source>Virtual IP</source>
-        <target>虚拟 IP</target>
+        <target>虛擬 IP</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">650</context>
@@ -10462,7 +10495,7 @@
       </trans-unit>
       <trans-unit id="61893fde6e9e05a6b91619d501edaa7962b438ff" datatype="html">
         <source>The virtual IP address and subnet (in CIDR notation) where the ingress service will be available.</source>
-        <target>可以使用入站服务的虚拟 IP 地址和子网（采用 CIDR 表示法）。</target>
+        <target>可以使用輸入服務的虛擬 IP 位址和子網路 (以 CIDR 表示法表示)。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">652</context>
@@ -10470,7 +10503,7 @@
       </trans-unit>
       <trans-unit id="ece04ddf7e96f445415ebd90d93c455e03e8cf53" datatype="html">
         <source>Frontend Port</source>
-        <target>前端端口</target>
+        <target>前端連接埠</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">671</context>
@@ -10478,7 +10511,7 @@
       </trans-unit>
       <trans-unit id="ae6fd97454d184b374984c9ff808176ece54f0dd" datatype="html">
         <source>The port used to access the ingress service.</source>
-        <target>用于访问入站服务的端口。</target>
+        <target>用於存取輸入服務的連接埠。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">673</context>
@@ -10486,7 +10519,7 @@
       </trans-unit>
       <trans-unit id="1261eacf161f75efc9dfea84dd97b4a466b89aa1" datatype="html">
         <source>Monitor Port</source>
-        <target>Monitor 端口</target>
+        <target>監控程式連接埠</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">703</context>
@@ -10494,7 +10527,7 @@
       </trans-unit>
       <trans-unit id="4df6281ed630ba96f09790a46a7fe0ec0e666bb6" datatype="html">
         <source>The port used by haproxy for load balancer status.</source>
-        <target>HAProxy 用于获取负载平衡器状态的端口。</target>
+        <target>HAProxy 用於實現負載平衡狀態的連接埠。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">705</context>
@@ -10502,7 +10535,7 @@
       </trans-unit>
       <trans-unit id="8ce24ae1d792ed2846ba57e7ed6397a802caeff5" datatype="html">
         <source>CIDR Networks</source>
-        <target>CIDR 网络</target>
+        <target>CIDR 網路</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">734</context>
@@ -10510,7 +10543,7 @@
       </trans-unit>
       <trans-unit id="7c13184af0c09e3bad77daa5f4869138708d26b2" datatype="html">
         <source>A list of networks to identify which network interface to use for the virtual IP address.</source>
-        <target>用于识别虚拟 IP 地址所用网络接口的网络列表。</target>
+        <target>用於識別虛擬 IP 位址所用的網路介面的網路清單。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">736</context>
@@ -10843,7 +10876,7 @@
       </trans-unit>
       <trans-unit id="0596d06bf1f8a15d4bfe56226971ecdd78013b1f" datatype="html">
         <source>Private key</source>
-        <target>私用密钥</target>
+        <target>私密金鑰</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">1198</context>
@@ -10851,7 +10884,7 @@
       </trans-unit>
       <trans-unit id="ded15dc55104994c0230189f34dff84a4955aafb" datatype="html">
         <source>The SSL private key in PEM format.</source>
-        <target>PEM 格式的 SSL 私用密钥。</target>
+        <target>PEM 格式的 SSL 私密金鑰。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">1199</context>
@@ -10859,7 +10892,7 @@
       </trans-unit>
       <trans-unit id="19bdc1597d815b456793ff87c89af4257a85a103" datatype="html">
         <source>Invalid SSL private key.</source>
-        <target>SSL 私用密钥无效。</target>
+        <target>SSL 私密金鑰無效。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">1214</context>
@@ -10937,7 +10970,7 @@
       </trans-unit>
       <trans-unit id="3356018487523380058" datatype="html">
         <source>service</source>
-        <target>服务</target>
+        <target>服務</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.ts</context>
           <context context-type="linenumber">130</context>
@@ -10945,7 +10978,7 @@
       </trans-unit>
       <trans-unit id="2412938991511187011" datatype="html">
         <source>There are no hosts.</source>
-        <target>没有主机。</target>
+        <target>沒有主機。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.ts</context>
           <context context-type="linenumber">134</context>
@@ -10957,7 +10990,7 @@
       </trans-unit>
       <trans-unit id="2594503755408511486" datatype="html">
         <source>Filter hosts</source>
-        <target>过滤主机</target>
+        <target>過濾主機</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.ts</context>
           <context context-type="linenumber">135</context>
@@ -10969,7 +11002,7 @@
       </trans-unit>
       <trans-unit id="5869780110608474933" datatype="html">
         <source>Placement</source>
-        <target>归置</target>
+        <target>放置</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/services.component.ts</context>
           <context context-type="linenumber">164</context>
@@ -11024,7 +11057,7 @@
       </trans-unit>
       <trans-unit id="e25b17c0b4ef361b6a05aaec2bbd2b7e86680458" datatype="html">
         <source>The telemetry report is broken down into several &quot;channels&quot;, each with a different type of information that can be configured below.</source>
-        <target>遥测报告细分为数个 &quot;通道&quot;，每个通道包含不同类型的信息，您可以在下面进行配置。</target>
+        <target>遙測報告細分為數個 &quot;通道&quot;，每個通道包含不同類型的資訊，您可以在下方進行設定。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/telemetry/telemetry.component.html</context>
           <context context-type="linenumber">32,33</context>
@@ -11238,7 +11271,7 @@
       </trans-unit>
       <trans-unit id="91317562c9dfefbdd5973faf11d217f571d073c7" datatype="html">
         <source>The module compiles and sends a new report every 24 hours by default. You can adjust this interval by setting a different number of hours.</source>
-        <target>模块默认每 24 小时编译并发送一次新报告。您可以设置不同的小时数以调整此间隔。</target>
+        <target>模組預設每 24 小時編譯並傳送一次新報告。您可以設定不同的小時數以調整此間隔。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/telemetry/telemetry.component.html</context>
           <context context-type="linenumber">207,208</context>
@@ -11262,7 +11295,7 @@
       </trans-unit>
       <trans-unit id="6de03357358c7eff62aca486508bb5c2046e0669" datatype="html">
         <source>If the cluster cannot directly connect to the configured telemetry endpoint (default telemetry.ceph.com), you can configure a HTTP/HTTPS proxy server by e.g. adding https://10.0.0.1:8080</source>
-        <target>如果集群无法直接连接到配置的遥测端点（默认为 telemetry.ceph.com），您可以配置 HTTP/HTTPS 代理服务器，例如，通过添加 https://10.0.0.1:8080 来配置</target>
+        <target>如果叢集無法直接連接至設定的遙測端點 (預設為 telemetry.ceph.com)，您可以設定 HTTP/HTTPS 代理伺服器，例如，透過新增 https://10.0.0.1:8080 來設定</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/telemetry/telemetry.component.html</context>
           <context context-type="linenumber">226,228</context>
@@ -12139,7 +12172,7 @@
       </trans-unit>
       <trans-unit id="16bd21c1b48036d54c6a595f5cff2540cfba7f60" datatype="html">
         <source>here</source>
-        <target>此处</target>
+        <target>此處</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/dashboard/info-group/info-group.component.html</context>
           <context context-type="linenumber">8</context>
@@ -12640,7 +12673,7 @@
       </trans-unit>
       <trans-unit id="5ecc0107badb6625466aaa3f975b5c05276f432f" datatype="html">
         <source>Path need to start with a '/' and can be followed by a word</source>
-        <target>路徑必須以「/」開頭，後面可接單詞</target>
+        <target>路徑必須以 &quot;/&quot; 開頭，後面可接單字</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/nfs/nfs-form/nfs-form.component.html</context>
           <context context-type="linenumber">236</context>
@@ -13246,7 +13279,7 @@
       </trans-unit>
       <trans-unit id="2981733b912b693a9dd9d915d6d34f4692cc874a" datatype="html">
         <source>Technique</source>
-        <target>技術</target>
+        <target>方法</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form-modal.component.html</context>
           <context context-type="linenumber">354</context>
@@ -13428,7 +13461,7 @@
       </trans-unit>
       <trans-unit id="c75b132bef7b29fa5171768303c4b96e34ccaf68" datatype="html">
         <source>It's not possible to create an RBD pool with '/' in the name. Please change the name or remove 'rbd' from the applications list.</source>
-        <target>无法创建名称中包含 &quot;/&quot; 的 RBD 存储池。请更改名称或从应用列表中删除 &quot;rbd&quot;。</target>
+        <target>無法建立名稱中包含 &quot;/&quot; 的 RBD 池。請變更名稱，或從應用程式清單中移除 &quot;rbd&quot;。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">34,35</context>
@@ -13500,7 +13533,7 @@
       </trans-unit>
       <trans-unit id="fccbd60493df26705d957ed6c02a3c447894678f" datatype="html">
         <source>The current PGs settings were calculated for you, you should make sure the values suit your needs before submit.</source>
-        <target>当前的 PG 设置是为您计算的，您应在提交前确保这些值符合您的需求。</target>
+        <target>目前的 PG 設定是為您計算的，您應在提交前確定這些值符合您的需求。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">116,117</context>
@@ -13540,7 +13573,7 @@
       </trans-unit>
       <trans-unit id="dda6196ffab88c1825f44a565c7b34e246e7e12f" datatype="html">
         <source>A size of 1 will not create a replication of the object. The 'Replicated size' includes the object itself.</source>
-        <target>指定 1 将不创建对象的副本。&quot;副本个数&quot; 包括对象本身。</target>
+        <target>指定 1 將不會建立物件的複本。&quot;複製大小&quot; 包括物件自身。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">148,149</context>
@@ -13756,7 +13789,7 @@
       </trans-unit>
       <trans-unit id="104a0e6900d1d1b0c8cf9e5947e36edb352583fc" datatype="html">
         <source>The rule can't be used in the current cluster as it has too few OSDs to meet the minimum required OSD by this rule.</source>
-        <target>当前集群无法使用该规则，因为集群的 OSD 数量太少，不满足规则要求的最低 OSD 数量。</target>
+        <target>目前的叢集中無法使用該規則，因為叢集的 OSD 數量太少，不符合此規則要求的最低 OSD 數量。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">443,444</context>
@@ -13806,7 +13839,7 @@
       </trans-unit>
       <trans-unit id="5d68ddb254275f8f44221e9ad6d8ceeb59ca46a6" datatype="html">
         <source>Minimum blob size</source>
-        <target>Blob 最小大小</target>
+        <target>Blob 大小下限</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">508</context>
@@ -13849,7 +13882,7 @@
       </trans-unit>
       <trans-unit id="151efb127a9a4dd25259a0b2055442318a141f5b" datatype="html">
         <source>Maximum blob size</source>
-        <target>Blob 最大大小</target>
+        <target>Blob 大小上限</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">540</context>
@@ -13872,7 +13905,7 @@
       </trans-unit>
       <trans-unit id="0a65a24eee8a026f3b1113fe9e157e9a0dd69486" datatype="html">
         <source>Value should be greater than the minimum blob size</source>
-        <target>值應大於 blob 最小大小</target>
+        <target>值應大於 blob 大小下限</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">560</context>
@@ -13994,7 +14027,7 @@
       </trans-unit>
       <trans-unit id="9055665654201606988" datatype="html">
         <source>Data Protection</source>
-        <target>数据保护</target>
+        <target>資料保護</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-list/pool-list.component.ts</context>
           <context context-type="linenumber">130</context>
@@ -14610,7 +14643,7 @@
       </trans-unit>
       <trans-unit id="b06de7f834c622197e68b66a2abe893040b174c4" datatype="html">
         <source>Bucket names must not contain uppercase characters or underscores.</source>
-        <target>存储桶名称不能包含大写字符或下划线。</target>
+        <target>桶名稱不能包含大寫字元或底線。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
           <context context-type="linenumber">54</context>
@@ -14618,7 +14651,7 @@
       </trans-unit>
       <trans-unit id="6abacf4af2f66d3af08c5ebe502b21b1f42ac649" datatype="html">
         <source>Each label must start and end with a lowercase letter or a number.</source>
-        <target>每个标签都必须以小写字母或数字开头和结尾。</target>
+        <target>每個標籤都必須以小寫字母或數字開頭和結尾。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
           <context context-type="linenumber">57</context>
@@ -14626,7 +14659,7 @@
       </trans-unit>
       <trans-unit id="85a7f52e6813e0535026f61a2d6e8adc8a1d006a" datatype="html">
         <source>Bucket names cannot be formatted as IP address.</source>
-        <target>存储桶名称不能采用 IP 地址格式。</target>
+        <target>桶名稱不能採用 IP 位址格式。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
           <context context-type="linenumber">60</context>
@@ -14642,7 +14675,7 @@
       </trans-unit>
       <trans-unit id="cf5c849977e0be2dbfc862d044edd323bfd9fb77" datatype="html">
         <source>Bucket names must be 3 to 63 characters long.</source>
-        <target>存储桶名称长度必须在 3 到 63 个字符之间。</target>
+        <target>桶名稱長度必須介於 3 至 63 個字元之間。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
           <context context-type="linenumber">66</context>
@@ -14766,7 +14799,7 @@
       </trans-unit>
       <trans-unit id="48d8247c1ba2ea156109bf286c5f6dd26b4be760" datatype="html">
         <source>Retention Days must be a positive integer.</source>
-        <target>保留天数必须为正整数。</target>
+        <target>保留天數必須為正整數。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
           <context context-type="linenumber">245</context>
@@ -15009,7 +15042,7 @@
       </trans-unit>
       <trans-unit id="9c338bae89822d7eefbc9a887c458a7d8a98e55e" datatype="html">
         <source>No Limit</source>
-        <target>无限制</target>
+        <target>無限制</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-bucket-list/rgw-bucket-list.component.html</context>
           <context context-type="linenumber">31</context>
@@ -15616,7 +15649,7 @@
       </trans-unit>
       <trans-unit id="6148052126949932311" datatype="html">
         <source>Zone Group</source>
-        <target>区域组</target>
+        <target>區域群組</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-daemon-list/rgw-daemon-list.component.ts</context>
           <context context-type="linenumber">57</context>
@@ -15628,7 +15661,7 @@
       </trans-unit>
       <trans-unit id="4378147649219625174" datatype="html">
         <source>Zone</source>
-        <target>区域</target>
+        <target>區域</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-daemon-list/rgw-daemon-list.component.ts</context>
           <context context-type="linenumber">62</context>
@@ -15794,7 +15827,7 @@
       </trans-unit>
       <trans-unit id="2f193722f1e788f14a823b89ac1794c3ba934f9f" datatype="html">
         <source>Only that number of daemons will be created.</source>
-        <target>将进创建该数量的守护进程。</target>
+        <target>系統將僅建立該數量的精靈。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-multisite-import/rgw-multisite-import.component.html</context>
           <context context-type="linenumber">131</context>
@@ -17572,7 +17605,7 @@
       </trans-unit>
       <trans-unit id="4363143805416924501" datatype="html">
         <source>Tenant</source>
-        <target>租户</target>
+        <target>租用戶</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-user-accounts/rgw-user-accounts.component.ts</context>
           <context context-type="linenumber">63</context>
@@ -17718,7 +17751,7 @@
       </trans-unit>
       <trans-unit id="a94e6b2b5b834d92cceb90037d51ad6165c8b619" datatype="html">
         <source>Tenant</source>
-        <target>租户</target>
+        <target>租用戶</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
           <context context-type="linenumber">29</context>
@@ -17730,7 +17763,7 @@
       </trans-unit>
       <trans-unit id="83c4d4d764d2e2725ab8e919ec16ac400e1f290a" datatype="html">
         <source>User ID</source>
-        <target>用户 ID</target>
+        <target>使用者 ID</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
           <context context-type="linenumber">34</context>
@@ -17968,7 +18001,7 @@
       </trans-unit>
       <trans-unit id="6af106b0d759fd2882e645604675c4494abfcd5b" datatype="html">
         <source>The chosen user ID exists in this tenant.</source>
-        <target>此租户中存在所选用户 ID。</target>
+        <target>此租用戶中存在所選使用者 ID。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
           <context context-type="linenumber">112</context>
@@ -19464,7 +19497,7 @@
       </trans-unit>
       <trans-unit id="0070e83d11da39d6f4bb95065c2675db1610b419" datatype="html">
         <source>Username is required</source>
-        <target>需要指定使用者名稱</target>
+        <target>需要提供使用者名稱</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/auth/login/login.component.html</context>
           <context context-type="linenumber">26</context>
@@ -19472,7 +19505,7 @@
       </trans-unit>
       <trans-unit id="1e20f8b8a4706526c9024cc2f39d568345d100dc" datatype="html">
         <source>Password is required</source>
-        <target>需要指定密碼</target>
+        <target>需要提供密碼</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/auth/login/login.component.html</context>
           <context context-type="linenumber">48</context>
@@ -19480,7 +19513,7 @@
       </trans-unit>
       <trans-unit id="f093d9574ab746b231504bd2cbb65f04bd7b00db" datatype="html">
         <source>Log in</source>
-        <target>登录</target>
+        <target>登入</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/auth/login/login.component.html</context>
           <context context-type="linenumber">63</context>
@@ -19725,7 +19758,7 @@
       </trans-unit>
       <trans-unit id="0051a3479d3ba79135c16dc8cc017950a2cce821" datatype="html">
         <source>You are about to remove &quot;user read / update&quot; permissions from your own user.</source>
-        <target>您正要為您自己的使用者移除「使用者讀取/寫入」許可權。</target>
+        <target>您即將為您自己的使用者移除 &quot;使用者讀取/更新&quot; 許可權。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/auth/user-form/user-form.component.html</context>
           <context context-type="linenumber">206</context>
@@ -19879,7 +19912,7 @@
       </trans-unit>
       <trans-unit id="ced3246fa3db31be0f7da06648463f29ba378fbe" datatype="html">
         <source>Selected Object Gateway:</source>
-        <target>所选对象网关：</target>
+        <target>所選物件閘道：</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/context/context.component.html</context>
           <context context-type="linenumber">5</context>
@@ -19887,7 +19920,7 @@
       </trans-unit>
       <trans-unit id="c53062af97ebda2a03f905698f58e524ecf8b968" datatype="html">
         <source>Select Object Gateway</source>
-        <target>所选对象网关</target>
+        <target>所選物件閘道</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/context/context.component.html</context>
           <context context-type="linenumber">12</context>
@@ -19936,7 +19969,7 @@
       </trans-unit>
       <trans-unit id="9d57ca7cab78c6f0d27e0d890cb8cf1515e4e30a" datatype="html">
         <source>Go To Dashboard</source>
-        <target>转到仪表盘</target>
+        <target>移至儀表板</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/error/error.component.html</context>
           <context context-type="linenumber">66</context>
@@ -19951,7 +19984,7 @@
       </trans-unit>
       <trans-unit id="6578397717654172779" datatype="html">
         <source>Page Not Found</source>
-        <target>找不到页面</target>
+        <target>找不到頁面</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/error/error.ts</context>
           <context context-type="linenumber">10</context>
@@ -19960,8 +19993,8 @@
       <trans-unit id="8185335715884155108" datatype="html">
         <source>Sorry, we couldn’t find what you were looking for.
   The page you requested may have been changed or moved.</source>
-        <target>抱歉，无法找到您要查找的数据。
-您请求的页面可能已被更改或移动。</target>
+        <target>抱歉，我們找不到您要尋找的內容。
+您所要求的頁面可能已變更或已移動。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/error/error.ts</context>
           <context context-type="linenumber">11,12</context>
@@ -19969,7 +20002,7 @@
       </trans-unit>
       <trans-unit id="143318366100741906" datatype="html">
         <source>Access Denied</source>
-        <target>访问拒绝</target>
+        <target>拒絕存取</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/error/error.ts</context>
           <context context-type="linenumber">17</context>
@@ -19981,7 +20014,7 @@
       </trans-unit>
       <trans-unit id="5384670299771400832" datatype="html">
         <source>Sorry, you don’t have permission to view this page or resource.</source>
-        <target>抱歉，您无权限浏览页面或资源</target>
+        <target>抱歉，您無權檢視此頁面或資源。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/error/error.ts</context>
           <context context-type="linenumber">18</context>
@@ -19993,7 +20026,7 @@
       </trans-unit>
       <trans-unit id="2424411274809083521" datatype="html">
         <source>User Denied</source>
-        <target>用户已拒绝</target>
+        <target>已拒絕使用者</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/error/error.ts</context>
           <context context-type="linenumber">23</context>
@@ -20002,8 +20035,8 @@
       <trans-unit id="7645004872908092358" datatype="html">
         <source>Sorry, the user does not exist in Ceph.
   You'll be logged out from the Identity Provider when you retry logging in.</source>
-        <target>抱歉，Ceph 中不存在该用户。
-当您尝试重新登录时，将会从该身份提供者中登出。</target>
+        <target>抱歉，Ceph 中不存在該使用者。
+當您嘗試重新登入時，將會從該身分提供者中登出。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/error/error.ts</context>
           <context context-type="linenumber">24,25</context>
@@ -20027,7 +20060,7 @@
       </trans-unit>
       <trans-unit id="8878700331247603166" datatype="html">
         <source>Security</source>
-        <target>安全</target>
+        <target>安全性</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/layouts/login-layout/login-layout.component.ts</context>
           <context context-type="linenumber">11</context>
@@ -20035,7 +20068,7 @@
       </trans-unit>
       <trans-unit id="8642696205489749843" datatype="html">
         <source>Trademarks</source>
-        <target>商标</target>
+        <target>商標</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/layouts/login-layout/login-layout.component.ts</context>
           <context context-type="linenumber">12</context>
@@ -20337,7 +20370,7 @@
       </trans-unit>
       <trans-unit id="5276fc60d54d667116babb723641b21281d37271" datatype="html">
         <source>File Systems</source>
-        <target>文件系统</target>
+        <target>檔案系統</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">263</context>
@@ -20757,7 +20790,7 @@
       </trans-unit>
       <trans-unit id="8321762156640395170" datatype="html">
         <source>The feature is disabled because Orchestrator is not available.</source>
-        <target>该功能已禁用，因为 Orchestrator 不可用。</target>
+        <target>該功能已停用，因為 Orchestrator 不可用。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/api/orchestrator.service.ts</context>
           <context context-type="linenumber">17</context>
@@ -20765,7 +20798,7 @@
       </trans-unit>
       <trans-unit id="6718394293315494787" datatype="html">
         <source>The Orchestrator backend doesn't support this feature.</source>
-        <target>Orchestrator 后端不支持此功能。</target>
+        <target>Orchestrator 後端不支援此功能。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/api/orchestrator.service.ts</context>
           <context context-type="linenumber">18</context>
@@ -20820,7 +20853,7 @@
       </trans-unit>
       <trans-unit id="8231424898988217966" datatype="html">
         <source>Retrieving data.</source>
-        <target>正在检索数据。</target>
+        <target>正在擷取資料。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/classes/table-status-view-cache.ts</context>
           <context context-type="linenumber">16</context>
@@ -20828,7 +20861,7 @@
       </trans-unit>
       <trans-unit id="2357645764289315007" datatype="html">
         <source>Please wait...</source>
-        <target>请稍候...</target>
+        <target>請稍候...</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/classes/table-status-view-cache.ts</context>
           <context context-type="linenumber">18</context>
@@ -20844,7 +20877,7 @@
       </trans-unit>
       <trans-unit id="8721257977793603730" datatype="html">
         <source>Displaying previously cached data.</source>
-        <target>正在显示之前缓存的数据。</target>
+        <target>正在顯示之前快取的資料。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/classes/table-status-view-cache.ts</context>
           <context context-type="linenumber">24</context>
@@ -20860,7 +20893,7 @@
       </trans-unit>
       <trans-unit id="3359748695862553898" datatype="html">
         <source>Could not load data.</source>
-        <target>无法加载数据。</target>
+        <target>無法載入資料。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/classes/table-status-view-cache.ts</context>
           <context context-type="linenumber">31</context>
@@ -20868,7 +20901,7 @@
       </trans-unit>
       <trans-unit id="4836577225879717660" datatype="html">
         <source>Please check the cluster health.</source>
-        <target>请检查集群健康状况。</target>
+        <target>請檢查叢集狀態。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/classes/table-status-view-cache.ts</context>
           <context context-type="linenumber">33</context>
@@ -20907,7 +20940,7 @@
       </trans-unit>
       <trans-unit id="3425367071066107827" datatype="html">
         <source>Danger</source>
-        <target>危险</target>
+        <target>危險</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/alert-panel/alert-panel.component.ts</context>
           <context context-type="linenumber">76</context>
@@ -21380,7 +21413,7 @@
       </trans-unit>
       <trans-unit id="b20e42ac4354d449f2718428b5390933eef0c1b9" datatype="html">
         <source>The feature is not supported in the current Orchestrator.</source>
-        <target>当前的 Orchestrator 不支持该功能。</target>
+        <target>目前的 Orchestrator 不支援該功能。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/orchestrator-doc-panel/orchestrator-doc-panel.component.html</context>
           <context context-type="linenumber">3</context>
@@ -21490,7 +21523,7 @@
       </trans-unit>
       <trans-unit id="8352450862052130357" datatype="html">
         <source>You can activate the module on the Telemetry configuration page (&lt;b&gt;Dashboard Settings&lt;/b&gt; -&gt; &lt;b&gt;Telemetry configuration&lt;/b&gt;) at any time.</source>
-        <target>您随时都可在 &quot;遥测配置&quot; 页面（&lt;b&gt;仪表盘设置&lt;/b&gt; -&gt; &lt;b&gt;遥测配置&lt;/b&gt;）激活该模块。</target>
+        <target>您隨時可在 &quot;遙測組態&quot; 頁面 (&lt;b&gt;儀表板設定&lt;/b&gt; -&gt; &lt;b&gt;遙測組態&lt;/b&gt;) 中啟用該模組。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/telemetry-notification/telemetry-notification.component.ts</context>
           <context context-type="linenumber">58,59</context>
@@ -21604,7 +21637,7 @@
       </trans-unit>
       <trans-unit id="2354817630223808522" datatype="html">
         <source>Move</source>
-        <target>移动</target>
+        <target>移動</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/constants/app.constants.ts</context>
           <context context-type="linenumber">185</context>
@@ -21775,7 +21808,7 @@
       </trans-unit>
       <trans-unit id="8450843381175865415" datatype="html">
         <source>Enter Maintenance</source>
-        <target>进入维护模式</target>
+        <target>進入維護模式</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/constants/app.constants.ts</context>
           <context context-type="linenumber">215</context>
@@ -21783,7 +21816,7 @@
       </trans-unit>
       <trans-unit id="1610181371597502589" datatype="html">
         <source>Exit Maintenance</source>
-        <target>退出维护模式</target>
+        <target>結束維護模式</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/constants/app.constants.ts</context>
           <context context-type="linenumber">216</context>
@@ -22008,7 +22041,7 @@
       </trans-unit>
       <trans-unit id="4754993936947658096" datatype="html">
         <source>Previewed</source>
-        <target>已预览</target>
+        <target>已預覽</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/constants/app.constants.ts</context>
           <context context-type="linenumber">311</context>
@@ -22412,7 +22445,7 @@
       </trans-unit>
       <trans-unit id="709331713250198508" datatype="html">
         <source>Loading form data...</source>
-        <target>正在加载表单数据...</target>
+        <target>正在載入表單資料...</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/directives/form-loading.directive.ts</context>
           <context context-type="linenumber">20</context>
@@ -22420,7 +22453,7 @@
       </trans-unit>
       <trans-unit id="3850344644863430180" datatype="html">
         <source>Form data could not be loaded.</source>
-        <target>无法加载表单数据。</target>
+        <target>無法載入表單資料。</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/directives/form-loading.directive.ts</context>
           <context context-type="linenumber">27</context>
@@ -22497,7 +22530,7 @@
       </trans-unit>
       <trans-unit id="7789266940050748913" datatype="html">
         <source>in %s</source>
-        <target>%s 内</target>
+        <target>%s內</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">8</context>
@@ -22513,7 +22546,7 @@
       </trans-unit>
       <trans-unit id="220300059326988179" datatype="html">
         <source>a few seconds</source>
-        <target>几秒</target>
+        <target>幾秒</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">10</context>
@@ -22521,7 +22554,7 @@
       </trans-unit>
       <trans-unit id="2761143993878941513" datatype="html">
         <source>%d seconds</source>
-        <target>%d秒</target>
+        <target>%d 秒</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">11</context>
@@ -22529,7 +22562,7 @@
       </trans-unit>
       <trans-unit id="7094767962693903153" datatype="html">
         <source>a minute</source>
-        <target>一分钟</target>
+        <target>1 分鐘</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">12</context>
@@ -22537,7 +22570,7 @@
       </trans-unit>
       <trans-unit id="7597613755904774250" datatype="html">
         <source>%d minutes</source>
-        <target>%d 分钟</target>
+        <target>%d 分鐘</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">13</context>
@@ -22545,7 +22578,7 @@
       </trans-unit>
       <trans-unit id="2757762976030115752" datatype="html">
         <source>an hour</source>
-        <target>一小时</target>
+        <target>1 小時</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">14</context>
@@ -22553,7 +22586,7 @@
       </trans-unit>
       <trans-unit id="9118454901758656303" datatype="html">
         <source>%d hours</source>
-        <target>%d 小时</target>
+        <target>%d 小時</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">15</context>
@@ -22561,7 +22594,7 @@
       </trans-unit>
       <trans-unit id="7435193742089920080" datatype="html">
         <source>a day</source>
-        <target>一天</target>
+        <target>1 天</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">16</context>
@@ -22577,7 +22610,7 @@
       </trans-unit>
       <trans-unit id="7375306199026780379" datatype="html">
         <source>a week</source>
-        <target>一周</target>
+        <target>1 週</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">18</context>
@@ -22585,7 +22618,7 @@
       </trans-unit>
       <trans-unit id="7272688256541915488" datatype="html">
         <source>%d weeks</source>
-        <target>%d 周</target>
+        <target>%d 週</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">19</context>
@@ -22593,7 +22626,7 @@
       </trans-unit>
       <trans-unit id="5761124614324704118" datatype="html">
         <source>a month</source>
-        <target>一个月</target>
+        <target>1 個月</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">20</context>
@@ -22601,7 +22634,7 @@
       </trans-unit>
       <trans-unit id="352195662913351589" datatype="html">
         <source>%d months</source>
-        <target>%d 个月</target>
+        <target>%d 個月</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">21</context>
@@ -22609,7 +22642,7 @@
       </trans-unit>
       <trans-unit id="7562153591649199139" datatype="html">
         <source>a year</source>
-        <target>一年</target>
+        <target>1 年</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">22</context>
@@ -22685,11 +22718,11 @@
   * Numbers 0-9
   * Special chars: !&quot;#$%&amp; '()*+,-./:;&lt;=&gt;?@[\]^_`{{|}}~
   * Any other characters (signs)</source>
-        <target>必须包含以下类型的字符：
+        <target>必須由以下類型的字元組成：
   * 字母 a-z、A-Z
-  * 数字 0-9
-  * 特殊字符：!&quot;#$%&amp; '()*+,-./:;&lt;=&gt;?@[\]^_`{{|}}~
-  * 任何其他字符（符号）</target>
+  * 數字 0-9
+  * 特殊字元：!&quot;#$%&amp; '()*+,-./:;&lt;=&gt;?@[\]^_`{{|}}~
+  * 任何其他字元 (符號)</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/services/password-policy.service.ts</context>
           <context context-type="linenumber">30,34</context>

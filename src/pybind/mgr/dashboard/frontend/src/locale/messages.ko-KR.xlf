@@ -117,7 +117,7 @@
       </trans-unit>
       <trans-unit id="ngb.datepicker.next-month" datatype="html">
         <source>Next month</source>
-        <target>다음달</target>
+        <target>다음 달</target>
         <context-group purpose="location">
           <context context-type="sourcefile">node_modules/src/ngb-config.ts</context>
           <context context-type="linenumber">13</context>
@@ -313,7 +313,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">38</context>
+          <context context-type="linenumber">39</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/smb/smb-tabs/smb-tabs.component.html</context>
@@ -1386,7 +1386,7 @@
       </trans-unit>
       <trans-unit id="001e1836299d8d3b84eaebe2fa051325beab3f00" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and can contain alphanumeric characters, '@', '-', '_' or '/'.</source>
-        <target>암호의 길이는 12~16자여야 하며 영숫자, '@', '-', '_' 또는 '/' 를 포함할 수 있습니다.</target>
+        <target>비밀번호의 길이는 12~16자여야 하며 영숫자, '@', '-', '_' 또는 '/' 를 포함할 수 있습니다.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
           <context context-type="linenumber">59,60</context>
@@ -1414,7 +1414,7 @@
       </trans-unit>
       <trans-unit id="0cf73dbebe99b737c4d288788182fc356e3c93d3" datatype="html">
         <source>Mutual Password</source>
-        <target>공통 암호</target>
+        <target>공통 비밀번호</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
           <context context-type="linenumber">92</context>
@@ -1674,7 +1674,7 @@
       </trans-unit>
       <trans-unit id="e3484cae8b118c576ca2815bf9c9406c2eb2cae3" datatype="html">
         <source>This image has modified settings.</source>
-        <target>이 이미지는 설정을 수정했습니다. </target>
+        <target>이 이미지는 설정을 수정 되었습니다.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">144</context>
@@ -1734,7 +1734,7 @@
       </trans-unit>
       <trans-unit id="361771c32dd2254d77fd3fbf006b008983fe5907" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and can contain alphanumeric characters, '@', '-', '_' or '/'.</source>
-        <target>암호의 길이는 12~16자여야 하며 영숫자, '@', '-', '_' 또는 '/' 를 포함할 수 있습니다.</target>
+        <target>비밀번호의 길이는 12~16자여야 하며 영숫자, '@', '-', '_' 또는 '/' 를 포함할 수 있습니다.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">254,255</context>
@@ -1778,7 +1778,7 @@
       </trans-unit>
       <trans-unit id="107d5aabce23d900f0a80e6ddc1c10e29aa0bed8" datatype="html">
         <source>Initiator IQN needs to be unique.</source>
-        <target>개시자 IQN은 유일해야 합니다.</target>
+        <target>Initiator IQN은 유일해야 합니다.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">353</context>
@@ -1798,7 +1798,7 @@
       </trans-unit>
       <trans-unit id="e7f2c186d181206d0d2b1ff74819081a010f10bf" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and can contain alphanumeric characters, '@', '-', '_' or '/'.</source>
-        <target>암호의 길이는 12~16자여야 하며 영숫자, '@', '-', '_' 또는 '/' 를 포함할 수 있습니다.</target>
+        <target>비밀번호의 길이는 12~16자여야 하며 영숫자, '@', '-', '_' 또는 '/' 를 포함할 수 있습니다.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">414,415</context>
@@ -1830,7 +1830,7 @@
       </trans-unit>
       <trans-unit id="d565e47726158e428ecdc952fc9233b9b7d7f049" datatype="html">
         <source>Add initiator</source>
-        <target>개시자 추가</target>
+        <target>Initiator 추가</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">526</context>
@@ -2130,7 +2130,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">32</context>
+          <context context-type="linenumber">33</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-tabs/nvmeof-tabs.component.html</context>
@@ -2436,7 +2436,7 @@
       </trans-unit>
       <trans-unit id="ff785f5596aef34a93b9b4d1023e95c62eef5740" datatype="html">
         <source>Generated token...</source>
-        <target>생성된 토큰</target>
+        <target>생성된 토큰...</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/mirroring/bootstrap-create-modal/bootstrap-create-modal.component.html</context>
           <context context-type="linenumber">73</context>
@@ -2522,7 +2522,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
-          <context context-type="linenumber">71</context>
+          <context context-type="linenumber">69</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/hosts/hosts.component.ts</context>
@@ -2730,7 +2730,7 @@
       </trans-unit>
       <trans-unit id="5769292297914455214" datatype="html">
         <source>Disabled</source>
-        <target>비활성화됨</target>
+        <target>비활성화</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/mirroring/pool-edit-mode-modal/pool-edit-mode-modal.component.ts</context>
           <context context-type="linenumber">36</context>
@@ -2991,15 +2991,15 @@
           <context context-type="linenumber">152</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="f5ff2607cf2fd0645a263371d6f93f063d07e33a" datatype="html">
-        <source>Enter group</source>
+      <trans-unit id="cf378a96424886fda41c2c758e3996513692cd54" datatype="html">
+        <source>Selected Gateway Group</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">10</context>
+          <context context-type="linenumber">8</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.html</context>
-          <context context-type="linenumber">10</context>
+          <context context-type="linenumber">8</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3cc9c2ae277393b3946b38c088dabff671b1ee1b" datatype="html">
@@ -3007,7 +3007,7 @@
         <target>성능</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">44</context>
+          <context context-type="linenumber">45</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-details/rbd-details.component.html</context>
@@ -3022,28 +3022,39 @@
         <source> Gateways <x id="START_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;cd-help-text&gt;"/> Ceph NVMe-oF gateways provide Ceph Block Device storage through NVMe/TCP. For VMware clients the NVMe/TCP volumes display as VMFS Datastores. For Linux clients the NVMe/TCP volumes display as as block devices. <x id="CLOSE_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;/cd-help-text&gt;"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">53,57</context>
+          <context context-type="linenumber">54,58</context>
         </context-group>
       </trans-unit>
       <trans-unit id="88d52a108e372081c5e122c5b369aac3ec904146" datatype="html">
         <source>Gateway overview</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">69</context>
+          <context context-type="linenumber">70</context>
         </context-group>
       </trans-unit>
       <trans-unit id="9517e7f935e73e6889dda20c0fa0408465c18f2e" datatype="html">
         <source>Gateway performance</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">79</context>
+          <context context-type="linenumber">80</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5032690935748986815" datatype="html">
+        <source>Enter group name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
+          <context context-type="linenumber">25</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
+          <context context-type="linenumber">20</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7974613004081450726" datatype="html">
         <source>Gateway ID</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
-          <context context-type="linenumber">67</context>
+          <context context-type="linenumber">65</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5611592591303869712" datatype="html">
@@ -3051,7 +3062,7 @@
         <target>상태</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
-          <context context-type="linenumber">75</context>
+          <context context-type="linenumber">73</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-trash-list/rbd-trash-list.component.ts</context>
@@ -3084,6 +3095,17 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-multisite-sync-policy/rgw-multisite-sync-policy.component.ts</context>
           <context context-type="linenumber">71</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3107044384926915007" datatype="html">
+        <source>No groups available</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
+          <context context-type="linenumber">134</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
+          <context context-type="linenumber">148</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4f7cdf99e53b74c843abea60b5ca07a6842c9135" datatype="html">
@@ -3342,6 +3364,10 @@
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-listeners-form/nvmeof-listeners-form.component.ts</context>
           <context context-type="linenumber">50</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-listeners-list/nvmeof-listeners-list.component.ts</context>
+          <context context-type="linenumber">103</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="6641024648411549335" datatype="html">
         <source>Host</source>
@@ -3380,6 +3406,13 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-configuration-page/rgw-configuration-page.component.ts</context>
           <context context-type="linenumber">81</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5236029444167617860" datatype="html">
+        <source>listener</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-listeners-list/nvmeof-listeners-list.component.ts</context>
+          <context context-type="linenumber">106</context>
         </context-group>
       </trans-unit>
       <trans-unit id="e70fcca5a99575cffef3ff8cbd5e69f06ffd0f1c" datatype="html">
@@ -3604,7 +3637,7 @@
       </trans-unit>
       <trans-unit id="4f8b2bb476981727ab34ed40fde1218361f92c45" datatype="html">
         <source>Details</source>
-        <target>세부설명</target>
+        <target>세부 정보</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems-details/nvmeof-subsystems-details.component.html</context>
           <context context-type="linenumber">8</context>
@@ -3829,28 +3862,28 @@
         <source> Subsystems <x id="START_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;cd-help-text&gt;"/> A subsystem provides access control to which hosts can access the namespaces within the subsystem. <x id="CLOSE_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;/cd-help-text&gt;"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.html</context>
-          <context context-type="linenumber">18,22</context>
+          <context context-type="linenumber">19,23</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7707701592702091951" datatype="html">
         <source>NQN</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
-          <context context-type="linenumber">61</context>
+          <context context-type="linenumber">59</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4249456376242514671" datatype="html">
         <source># Namespaces</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
-          <context context-type="linenumber">65</context>
+          <context context-type="linenumber">63</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8636681982233006716" datatype="html">
         <source># Maximum Allowed Namespaces</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
-          <context context-type="linenumber">69</context>
+          <context context-type="linenumber">67</context>
         </context-group>
       </trans-unit>
       <trans-unit id="409b6a23ac5c8302cbe2868c58d14eb425d72ddd" datatype="html">
@@ -4158,7 +4191,7 @@
       </trans-unit>
       <trans-unit id="84a36cb75660b736773fe36ffa3d54f0f0fe363e" datatype="html">
         <source>N/A</source>
-        <target>이용 불가</target>
+        <target>없음</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-details/rbd-details.component.html</context>
           <context context-type="linenumber">71</context>
@@ -4897,7 +4930,7 @@
       </trans-unit>
       <trans-unit id="5c5331983af566d4ac6a1024d15a3511786a4aa6" datatype="html">
         <source>You are about to rollback</source>
-        <target>롤백하려고 합니다.</target>
+        <target>되돌리려고 합니다.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-list/rbd-snapshot-list.component.html</context>
           <context context-type="linenumber">15</context>
@@ -4973,7 +5006,7 @@
       </trans-unit>
       <trans-unit id="8587768621777516124" datatype="html">
         <source>RBD snapshot rollback</source>
-        <target>RBD 스냅샷 롤백</target>
+        <target>RBD 스냅샷 되돌리기</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-list/rbd-snapshot-list.component.ts</context>
           <context context-type="linenumber">312</context>
@@ -5045,7 +5078,7 @@
       </trans-unit>
       <trans-unit id="5c96a761dc55a21882c132c929583a424c9b8cf4" datatype="html">
         <source>Expired at</source>
-        <target>폐기될</target>
+        <target>만료됨</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-trash-list/rbd-trash-list.component.html</context>
           <context context-type="linenumber">36</context>
@@ -5053,7 +5086,7 @@
       </trans-unit>
       <trans-unit id="661041e3fcff4d3e75c561e038ca2504cf2cc643" datatype="html">
         <source>Protected until</source>
-        <target>까지 보호됨</target>
+        <target>보호됨</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-trash-list/rbd-trash-list.component.html</context>
           <context context-type="linenumber">39</context>
@@ -5068,7 +5101,7 @@
       </trans-unit>
       <trans-unit id="2155633476201267204" datatype="html">
         <source>Deleted At</source>
-        <target>삭제될 </target>
+        <target>삭제됨</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-trash-list/rbd-trash-list.component.ts</context>
           <context context-type="linenumber">113</context>
@@ -5122,7 +5155,7 @@
       </trans-unit>
       <trans-unit id="aa7ea0bb7495281e0b3258467ac7d90a1e44a1a1" datatype="html">
         <source>Protection has already expired. Please pick a future date or leave it empty.</source>
-        <target>보호가 이미 만료되었습니다. 미래 날짜를 선택하거나 비워 두십시오.</target>
+        <target>보호가 이미 만료되었습니다. 날짜를 선택하거나 비워 두십시오.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
           <context context-type="linenumber">43</context>
@@ -5145,7 +5178,7 @@
       </trans-unit>
       <trans-unit id="b0e7c7ed1d51a0c205c815048bc9f79e24ee6db2" datatype="html">
         <source>Restore Image</source>
-        <target>이미지 복구하기</target>
+        <target>이미지 복구</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-trash-restore-modal/rbd-trash-restore-modal.component.html</context>
           <context context-type="linenumber">7</context>
@@ -7830,7 +7863,7 @@
       </trans-unit>
       <trans-unit id="1600086764852993170" datatype="html">
         <source>This Manager module is always on.</source>
-        <target>이 Manager 모듈은 항상 켜져 있습니다.</target>
+        <target>이 매니저 모듈은 항상 켜져 있습니다.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component.ts</context>
           <context context-type="linenumber">136</context>
@@ -7938,7 +7971,7 @@
       </trans-unit>
       <trans-unit id="6949358970125514744" datatype="html">
         <source>Open Sessions</source>
-        <target>열린 세션</target>
+        <target>활성화 세션</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/monitor/monitor.component.ts</context>
           <context context-type="linenumber">28</context>
@@ -8699,7 +8732,7 @@
       </trans-unit>
       <trans-unit id="4851280330655956778" datatype="html">
         <source>Backfilling of PGs is suspended</source>
-        <target>PG의 Backfilling이 일시정지 되었습니다.</target>
+        <target>PG의 Backfill이 일시중지 되었습니다.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-flags-modal/osd-flags-modal.component.ts</context>
           <context context-type="linenumber">71</context>
@@ -8707,7 +8740,7 @@
       </trans-unit>
       <trans-unit id="5994953210305546559" datatype="html">
         <source>No Rebalance</source>
-        <target>리밸런싱 되지 않음</target>
+        <target>재조정 안함</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-flags-modal/osd-flags-modal.component.ts</context>
           <context context-type="linenumber">75</context>
@@ -9171,7 +9204,7 @@
       </trans-unit>
       <trans-unit id="6382718875453721838" datatype="html">
         <source>PGs</source>
-        <target>PG</target>
+        <target>PGs</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-list/osd-list.component.ts</context>
           <context context-type="linenumber">318</context>
@@ -9307,7 +9340,7 @@
       </trans-unit>
       <trans-unit id="7771252117308888928" datatype="html">
         <source>PG scrub options</source>
-        <target>빠른 PG 데이터 정리 옵션</target>
+        <target>PG 빠른 데이터 정리 옵션</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-pg-scrub-modal/osd-pg-scrub-modal.component.ts</context>
           <context context-type="linenumber">43</context>
@@ -9315,7 +9348,7 @@
       </trans-unit>
       <trans-unit id="1797901277775175680" datatype="html">
         <source>Updated PG scrub options</source>
-        <target>빠른 PG 데이터 정리 옵션 업데이트</target>
+        <target>PG 빠른 데이터 정리 옵션 업데이트</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-pg-scrub-modal/osd-pg-scrub-modal.component.ts</context>
           <context context-type="linenumber">59</context>
@@ -9400,7 +9433,7 @@
       </trans-unit>
       <trans-unit id="7590013429208346303" datatype="html">
         <source>Custom</source>
-        <target>사용자 정의</target>
+        <target>사용자 설정</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-recv-speed-modal/osd-recv-speed-modal.component.ts</context>
           <context context-type="linenumber">107</context>
@@ -9426,7 +9459,7 @@
       </trans-unit>
       <trans-unit id="67650b2998db48201b2c6176cbfef51e7211ccaa" datatype="html">
         <source>The value needs to be between 0 and 1.</source>
-        <target>값은 0과 1 사이 어야 합니다.</target>
+        <target>값은 0과 1 사이어야 합니다.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-reweight-modal/osd-reweight-modal.component.html</context>
           <context context-type="linenumber">25</context>
@@ -9598,8 +9631,7 @@
       </trans-unit>
       <trans-unit id="a3ba06aba047605af8ea1718ec1ba153b7db12a2" datatype="html">
         <source>Editing a silence will expire the old silence and recreate it as a new silence</source>
-        <target>Silence를 편집하면 이전의 Silence이 만료되고 새로운 Silence가 다시 생성됩니다.
- </target>
+        <target>Silence를 편집하면 이전의 Silence이 만료되고 새로운 Silence가 다시 생성됩니다.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/prometheus/silence-form/silence-form.component.html</context>
           <context context-type="linenumber">55</context>
@@ -11059,7 +11091,7 @@
       </trans-unit>
       <trans-unit id="632cac1e025b77b2d77fed16ad22a410ddacab9e" datatype="html">
         <source>My first Ceph cluster</source>
-        <target>첫 번째 Ceph 클러스터</target>
+        <target>첫 번째 Glue 클러스터</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/telemetry/telemetry.component.html</context>
           <context context-type="linenumber">184</context>
@@ -11550,7 +11582,7 @@
       </trans-unit>
       <trans-unit id="7888499255176013171" datatype="html">
         <source>Last 5 minutes</source>
-        <target>마지막 5분</target>
+        <target>지난 15분</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/dashboard-v3/dashboard-time-selector/dashboard-time-selector.component.ts</context>
           <context context-type="linenumber">20</context>
@@ -12075,7 +12107,7 @@
       </trans-unit>
       <trans-unit id="7329683463736701292" datatype="html">
         <source>n/a</source>
-        <target>이용불가</target>
+        <target>없음</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/dashboard/mgr-dashboard-summary.pipe.ts</context>
           <context context-type="linenumber">14</context>
@@ -12311,7 +12343,8 @@
       </trans-unit>
       <trans-unit id="a5f3f74c0f6925826cb2188576391c0da01a23f0" datatype="html">
         <source>Must contain one or more comma-separated values</source>
-        <target>반드시 하나 이상의 쉼표로 구분 된 값을 포함해야 함</target>
+        <target>쉼표로 구분된 값을 하나 이상 포함해야 합니다.
+ </target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/nfs/nfs-form-client/nfs-form-client.component.html</context>
           <context context-type="linenumber">53</context>
@@ -13302,7 +13335,7 @@
       </trans-unit>
       <trans-unit id="6301f1391d726f8f450bb358058534db19541ca9" datatype="html">
         <source>At least one placement group is needed!</source>
-        <target>적어도 하나의 배치 그룹이 필요함!</target>
+        <target>적어도 하나의 배치 그룹이 필요합니다.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">105</context>
@@ -13495,7 +13528,7 @@
       </trans-unit>
       <trans-unit id="33150f22ce5348aa6c499bd092c3f4f3695d62cc" datatype="html">
         <source>Crush ruleset</source>
-        <target>크러쉬 룰셋</target>
+        <target>크러쉬 규칙</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">323</context>
@@ -13507,7 +13540,7 @@
       </trans-unit>
       <trans-unit id="c69b0bcd4698aa845d32c4c4ad488492552cb469" datatype="html">
         <source>A new crush ruleset will be implicitly created.</source>
-        <target>새로운 크러쉬 룰셋이 자동으로 생성됩니다.</target>
+        <target>새로운 크러쉬 규칙이 자동으로 생성됩니다.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">327</context>
@@ -13555,7 +13588,7 @@
       </trans-unit>
       <trans-unit id="92da80699921e89fb19372e25b8d0f3b9fa427fc" datatype="html">
         <source>Crush rule</source>
-        <target>크러쉬 룰</target>
+        <target>크러쉬 규칙</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">399</context>
@@ -13786,7 +13819,7 @@
       </trans-unit>
       <trans-unit id="6215593782779198370" datatype="html">
         <source>erasure code profile</source>
-        <target>Erasure 코드 프로필</target>
+        <target>Erasure code 프로필</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.ts</context>
           <context context-type="linenumber">642</context>
@@ -13841,7 +13874,7 @@
       </trans-unit>
       <trans-unit id="1669788723782899084" datatype="html">
         <source>Crush Ruleset</source>
-        <target>크러쉬 룰셋</target>
+        <target>크러쉬 규칙</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-list/pool-list.component.ts</context>
           <context context-type="linenumber">156</context>
@@ -15611,7 +15644,7 @@
       </trans-unit>
       <trans-unit id="2f193722f1e788f14a823b89ac1794c3ba934f9f" datatype="html">
         <source>Only that number of daemons will be created.</source>
-        <target>그 수의 데몬만 생성됩니다.</target>
+        <target>해당 개수의 데몬만 생성됩니다.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-multisite-import/rgw-multisite-import.component.html</context>
           <context context-type="linenumber">131</context>
@@ -17553,7 +17586,7 @@
       </trans-unit>
       <trans-unit id="b760f123248930122fc7e7b6b6bf94e376e959c8" datatype="html">
         <source>Full name</source>
-        <target>전체 이름</target>
+        <target>이름</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
           <context context-type="linenumber">44</context>
@@ -17820,7 +17853,7 @@
       </trans-unit>
       <trans-unit id="f39256070bfc0714020dfee08895421fc1527014" datatype="html">
         <source>Disabled</source>
-        <target>비활성화됨</target>
+        <target>비활성화</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
           <context context-type="linenumber">169</context>
@@ -18093,7 +18126,7 @@
       </trans-unit>
       <trans-unit id="8301535046747035390" datatype="html">
         <source>Full name</source>
-        <target>전체 이름</target>
+        <target>이름</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-user-list/rgw-user-list.component.ts</context>
           <context context-type="linenumber">84</context>
@@ -19238,7 +19271,7 @@
       </trans-unit>
       <trans-unit id="1cf42e491adc166a337a960eb84d03c0c3f677c8" datatype="html">
         <source>The old and new passwords must be different.</source>
-        <target>기존 비밀번호와 새로운 비밀번호는 달라야 합니다.</target>
+        <target>기존 비밀번호와 새로운 비밀번호는 같지 않아야 합니다.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/auth/login-password-form/login-password-form.component.html</context>
           <context context-type="linenumber">27</context>
@@ -20384,7 +20417,7 @@ reed_sol_van이 설정되면 Vandermonde, cauchy가 설정되면 Cauchy입니다
         <source>The shec plugin encapsulates the multiple SHEC library.
           It allows ceph to recover data more efficiently than Reed Solomon codes.</source>
         <target>shec plugin은 다중 SHEC 라이브러리를 캡슐화합니다.
-           ceph가 리드 솔로몬 코드보다 더 효율적으로 데이터를 복구 할 수 있습니다.</target>
+          ceph가 리드 솔로몬 코드보다 더 효율적으로 데이터를 복구 할 수 있습니다.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
           <context context-type="linenumber">57,58</context>
@@ -20480,7 +20513,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="9049698214199657456" datatype="html">
         <source>Set the directory name from which the erasure code plugin is loaded.</source>
-        <target>삭제 코드 플러그인이로드되는 디렉토리 이름을 설정하십시오.</target>
+        <target>Erasure Code 플러그인을 불러오는 디렉토리 이름을 설정하십시오.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
           <context context-type="linenumber">96</context>
@@ -20488,7 +20521,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="3895296744591223546" datatype="html">
         <source>Reconnecting, please wait ...</source>
-        <target>재접속 중입니다. 잠시 기다려주세요.</target>
+        <target>다시 연결 중 입니다. 잠시 기다려주세요.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/api/mgr-module.service.ts</context>
           <context context-type="linenumber">144</context>
@@ -21194,7 +21227,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="1034353870189672674" datatype="html">
         <source>Deselect item to select again</source>
-        <target>다시 선택하기 위해 아이템 선택을 취소</target>
+        <target>다시 선택하기</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/select/select-messages.model.ts</context>
           <context context-type="linenumber">14</context>
@@ -21226,7 +21259,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="699988676752930063" datatype="html">
         <source>There are no items available.</source>
-        <target>사용가능한 아이템 없음</target>
+        <target>사용가능한 아이템이 없습니다.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/select/select-messages.model.ts</context>
           <context context-type="linenumber">19</context>
@@ -21410,6 +21443,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="8343007008325027187" datatype="html">
         <source>Evict</source>
+        <target>퇴출</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/constants/app.constants.ts</context>
           <context context-type="linenumber">196</context>
@@ -21417,6 +21451,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="408179081163888126" datatype="html">
         <source>Flatten</source>
+        <target>평평함</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/constants/app.constants.ts</context>
           <context context-type="linenumber">197</context>
@@ -21424,6 +21459,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="318900679147387932" datatype="html">
         <source>Mark Down</source>
+        <target>다운 표시</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/constants/app.constants.ts</context>
           <context context-type="linenumber">198</context>
@@ -21431,6 +21467,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="5275142643521766706" datatype="html">
         <source>Mark In</source>
+        <target>인 표시</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/constants/app.constants.ts</context>
           <context context-type="linenumber">199</context>
@@ -21438,6 +21475,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="6973272903386150199" datatype="html">
         <source>Mark Lost</source>
+        <target>손실 표시</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/constants/app.constants.ts</context>
           <context context-type="linenumber">200</context>
@@ -21445,6 +21483,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="1962653792210847411" datatype="html">
         <source>Mark Out</source>
+        <target>아웃 표시</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/constants/app.constants.ts</context>
           <context context-type="linenumber">201</context>
@@ -21571,7 +21610,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="5528551262937858942" datatype="html">
         <source>Recreate</source>
-        <target>다시 만들기</target>
+        <target>재생성</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/constants/app.constants.ts</context>
           <context context-type="linenumber">223</context>
@@ -21818,6 +21857,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="7460162290177581995" datatype="html">
         <source>Flattened</source>
+        <target>평평하게 됨</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/constants/app.constants.ts</context>
           <context context-type="linenumber">319</context>
@@ -21829,6 +21869,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="3662010055028969035" datatype="html">
         <source>Marked Down</source>
+        <target>다운 표시됨</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/constants/app.constants.ts</context>
           <context context-type="linenumber">320</context>
@@ -21836,6 +21877,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="5880434235404894589" datatype="html">
         <source>Marked In</source>
+        <target>인 표시됨</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/constants/app.constants.ts</context>
           <context context-type="linenumber">321</context>
@@ -21843,6 +21885,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="266997194072682078" datatype="html">
         <source>Marked Lost</source>
+        <target>손실 표시됨</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/constants/app.constants.ts</context>
           <context context-type="linenumber">322</context>
@@ -21850,6 +21893,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="4010544044592534535" datatype="html">
         <source>Marked Out</source>
+        <target>아웃 표시됨</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/constants/app.constants.ts</context>
           <context context-type="linenumber">323</context>
@@ -22368,7 +22412,7 @@ d는 k+1 = d = k+m-1로 선택해야 합니다. d가 클수록 절감 효과가 
       </trans-unit>
       <trans-unit id="7738182956549158907" datatype="html">
         <source>Required rules for passwords:</source>
-        <target>암호에 필요한 규칙은 다음과 같습니다. :</target>
+        <target>비밀번호에 필요한 규칙은 다음과 같습니다 :</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/services/password-policy.service.ts</context>
           <context context-type="linenumber">22</context>
