@@ -544,6 +544,7 @@ endif (WITH_RADOSGW)
 
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
+option(WITH_CEPHFS_NOTIFICATION "CephFS notification is disabled" OFF)
 
 if(NOT WIN32)
 # Please specify 3.[0-7] if you want to build with a certain version of python3.

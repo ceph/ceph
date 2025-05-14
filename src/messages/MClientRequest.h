@@ -75,6 +75,114 @@ struct SnapPayload {
 
 WRITE_CLASS_ENCODER(SnapPayload)
 
+struct NotificationEndpointPayload {
+  virtual void encode(ceph::buffer::list &bl) const = 0;
+  virtual void decode(ceph::buffer::list::const_iterator &iter) = 0;
+  virtual void dump(ceph::Formatter *f) const = 0;
+  virtual ~NotificationEndpointPayload() {}
+};
+
+struct KafkaTopicPayload final : public NotificationEndpointPayload {
+  std::string topic_name;
+  std::string endpoint_name;
+  std::string broker;
+  bool use_ssl = false;
+  std::string user, password;
+  std::optional<std::string> ca_location;
+  std::optional<std::string> mechanism;
+  KafkaTopicPayload() {}
+  KafkaTopicPayload(const std::string &topic_name,
+                    const std::string &endpoint_name, const std::string &broker,
+                    bool use_ssl, const std::string &user,
+                    const std::string &password,
+                    const std::optional<std::string> &ca_location,
+                    const std::optional<std::string> &mechanism)
+      : topic_name(topic_name), endpoint_name(endpoint_name), broker(broker),
+        use_ssl(use_ssl), user(user), password(password),
+        ca_location(ca_location), mechanism(mechanism) {}
+  KafkaTopicPayload(const std::string &topic_name,
+                    const std::string &endpoint_name)
+      : topic_name(topic_name), endpoint_name(endpoint_name) {}
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(topic_name, bl);
+    encode(endpoint_name, bl);
+    encode(broker, bl);
+    encode(use_ssl, bl);
+    encode(user, bl);
+    encode(password, bl);
+    encode(ca_location, bl);
+    encode(mechanism, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator &iter) {
+    DECODE_START(1, iter);
+    decode(topic_name, iter);
+    decode(endpoint_name, iter);
+    decode(broker, iter);
+    decode(use_ssl, iter);
+    decode(user, iter);
+    decode(password, iter);
+    decode(ca_location, iter);
+    decode(mechanism, iter);
+    DECODE_FINISH(iter);
+  }
+  void dump(ceph::Formatter *f) const {
+    f->dump_string("topic_name", topic_name);
+    f->dump_string("endpoint_name", endpoint_name);
+    f->dump_string("broker", broker);
+    f->dump_bool("use_ssl", use_ssl);
+    f->dump_string("user", user);
+    f->dump_string("password", password);
+    if (ca_location.has_value()) {
+      f->dump_string("ca_location", ca_location.value());
+    }
+    if (mechanism.has_value()) {
+      f->dump_string("mechanism", mechanism.value());
+    }
+  }
+  static void generate_test_instances(std::list<KafkaTopicPayload *> &o) {
+    o.push_back(new KafkaTopicPayload);
+  }
+};
+
+WRITE_CLASS_ENCODER(KafkaTopicPayload)
+
+struct UDPEndpointPayload final : public NotificationEndpointPayload {
+  std::string name;
+  std::string ip;
+  int port = -1;
+  UDPEndpointPayload() {}
+  UDPEndpointPayload(const std::string &name, const std::string &ip, int port)
+      : name(name), ip(ip), port(port) {
+  }
+  UDPEndpointPayload(const std::string &name) : name(name) {}
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(name, bl);
+    encode(ip, bl);
+    encode(port, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator &iter) {
+    DECODE_START(1, iter);
+    decode(name, iter);
+    decode(ip, iter);
+    decode(port, iter);
+    DECODE_FINISH(iter);
+  }
+  void dump(ceph::Formatter *f) const {
+    f->dump_string("name", name);
+    f->dump_string("ip", ip);
+    f->dump_int("port", port);
+  }
+  static void generate_test_instances(std::list<UDPEndpointPayload *> &o) {
+    o.push_back(new UDPEndpointPayload);
+  }
+};
+
+WRITE_CLASS_ENCODER(UDPEndpointPayload)
+
 // metadata ops.
 
 class MClientRequest final : public MMDSOp {

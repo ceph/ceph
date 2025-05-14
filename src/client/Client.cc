@@ -1695,6 +1695,10 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
 
   Inode *in = NULL;
   Dentry *de = NULL;
+  bool is_notification_op = (req->get_op() == CEPH_MDS_OP_ADD_KAFKA_TOPIC ||
+  req->get_op() == CEPH_MDS_OP_REMOVE_KAFKA_TOPIC ||
+  req->get_op() == CEPH_MDS_OP_ADD_UDP_ENDPOINT ||
+  req->get_op() == CEPH_MDS_OP_REMOVE_UDP_ENDPOINT);
 
   if (req->resend_mds >= 0) {
     mds = req->resend_mds;
@@ -1704,6 +1708,10 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
 
   if (cct->_conf->client_use_random_mds)
     goto random_mds;
+
+  if (is_notification_op) {
+    mds = 0;
+  }
 
   in = req->inode();
   de = req->dentry();
@@ -10386,8 +10394,17 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
 
   // success?
   if (result >= 0) {
-    if (fhp)
+    if (fhp) {
       *fhp = _create_fh(in, flags, cmode, perms);
+      // ceph_flags_sys2wire/ceph_flags_to_mode() calls above transforms O_DIRECTORY flag
+      // into CEPH_FILE_MODE_PIN mode. Although this mode is used at server size
+      // we [ab]use it here to determine whether we should pin inode to prevent from
+      // undesired cache eviction.
+      if (cmode == CEPH_FILE_MODE_PIN) {
+        ldout(cct, 20) << " pinning ll_get() call for " << *in << dendl;
+        _ll_get(in);
+      }
+    }
   } else {
     in->put_open_ref(cmode);
   }
@@ -10444,6 +10461,10 @@ int Client::_close(int fd)
   Fh *fh = get_filehandle(fd);
   if (!fh)
     return -CEPHFS_EBADF;
+  if (fh->mode == CEPH_FILE_MODE_PIN) {
+    ldout(cct, 20) << " unpinning ll_put() call for " << *(fh->inode.get()) << dendl;
+    _ll_put(fh->inode.get(), 1);
+  }
   int err = _release_fh(fh);
   fd_map.erase(fd);
   put_fd(fd);
@@ -17445,3 +17466,65 @@ void StandaloneClient::shutdown()
   objecter->shutdown();
   monclient->shutdown();
 }
+
+#ifdef WITH_CEPHFS_NOTIFICATION
+// notifications
+int Client::add_kafka_topic(const char *topic_name, const char *endpoint_name,
+                            const char *broker, bool use_ssl, const char *user,
+                            const char *password, const char *ca_location,
+                            const char *mechanism, const UserPerm &perm) {
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_ADD_KAFKA_TOPIC);
+
+  KafkaTopicPayload payload(topic_name, endpoint_name, broker, use_ssl,
+                            (user == nullptr ? "" : user),
+                            (password == nullptr ? "" : password),
+                            (ca_location == nullptr || strlen(ca_location) == 0)
+                                ? std::optional<std::string>(std::nullopt)
+                                : ca_location,
+                            (mechanism == nullptr || strlen(mechanism) == 0)
+                                ? std::optional<std::string>(std::nullopt)
+                                : mechanism);
+  bufferlist bl;
+  encode(payload, bl);
+  req->set_data(bl);
+  std::scoped_lock lock(client_lock);
+  int res = make_request(req, perm);
+  return res;
+}
+
+int Client::remove_kafka_topic(const char *topic_name,
+                               const char *endpoint_name,
+                               const UserPerm &perm) {
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_REMOVE_KAFKA_TOPIC);
+  KafkaTopicPayload payload(topic_name, endpoint_name);
+  bufferlist bl;
+  encode(payload, bl);
+  req->set_data(bl);
+  std::scoped_lock lock(client_lock);
+  int res = make_request(req, perm);
+  return res;
+}
+
+int Client::add_udp_endpoint(const char* name, const char* ip,
+                             int port, const UserPerm &perm) {
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_ADD_UDP_ENDPOINT);
+  UDPEndpointPayload payload(name, ip, port);
+  bufferlist bl;
+  encode(payload, bl);
+  req->set_data(bl);
+  std::scoped_lock lock(client_lock);
+  int res = make_request(req, perm);
+  return res;
+}
+
+int Client::remove_udp_endpoint(const char* name, const UserPerm &perm) {
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_REMOVE_UDP_ENDPOINT);
+  UDPEndpointPayload payload(name);
+  bufferlist bl;
+  encode(payload, bl);
+  req->set_data(bl);
+  std::scoped_lock lock(client_lock);
+  int res = make_request(req, perm);
+  return res;
+}
+#endif

@@ -3094,6 +3094,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
       if (new_mtime > pi.inode->rstat.rctime)
 	pi.inode->rstat.rctime = new_mtime;
     }
+    mds->notification_manager->push_notification(
+      mds->get_nodeid(), in, CEPH_MDS_NOTIFY_MODIFY, false, in->is_dir());
   }
 
   // use EOpen if the file is still open; otherwise, use EUpdate.
@@ -3913,8 +3915,9 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
 							      ack, client));
 }
 
-void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps> &m, CInode::mempool_inode *pi)
-{
+void Locker::_update_cap_fields(CInode *in, int dirty,
+                                const cref_t<MClientCaps> &m,
+                                CInode::mempool_inode *pi) {
   if (dirty == 0)
     return;
 
@@ -3923,8 +3926,8 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
   uint64_t features = m->get_connection()->get_features();
 
   if (m->get_ctime() > pi->ctime) {
-    dout(7) << "  ctime " << pi->ctime << " -> " << m->get_ctime()
-	    << " for " << *in << dendl;
+    dout(7) << "  ctime " << pi->ctime << " -> " << m->get_ctime() << " for "
+            << *in << dendl;
     pi->ctime = m->get_ctime();
     if (m->get_ctime() > pi->rstat.rctime)
       pi->rstat.rctime = m->get_ctime();
@@ -3932,51 +3935,52 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
 
   if ((features & CEPH_FEATURE_FS_CHANGE_ATTR) &&
       m->get_change_attr() > pi->change_attr) {
-    dout(7) << "  change_attr " << pi->change_attr << " -> " << m->get_change_attr()
-	    << " for " << *in << dendl;
+    dout(7) << "  change_attr " << pi->change_attr << " -> "
+            << m->get_change_attr() << " for " << *in << dendl;
     pi->change_attr = m->get_change_attr();
   }
 
   // file
-  if (dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR)) {
+  if (dirty & (CEPH_CAP_FILE_EXCL | CEPH_CAP_FILE_WR)) {
     utime_t atime = m->get_atime();
     utime_t mtime = m->get_mtime();
     uint64_t size = m->get_size();
     version_t inline_version = m->inline_version;
-    
+
     if (((dirty & CEPH_CAP_FILE_WR) && mtime > pi->mtime) ||
-	((dirty & CEPH_CAP_FILE_EXCL) && mtime != pi->mtime)) {
-      dout(7) << "  mtime " << pi->mtime << " -> " << mtime
-	      << " for " << *in << dendl;
+        ((dirty & CEPH_CAP_FILE_EXCL) && mtime != pi->mtime)) {
+      dout(7) << "  mtime " << pi->mtime << " -> " << mtime << " for " << *in
+              << dendl;
       pi->mtime = mtime;
       if (mtime > pi->rstat.rctime)
-	pi->rstat.rctime = mtime;
+        pi->rstat.rctime = mtime;
+      mds->notification_manager->push_notification(
+          mds->get_nodeid(), in, CEPH_MDS_NOTIFY_MODIFY, false, in->is_dir());
     }
-    if (in->is_file() &&   // ONLY if regular file
-	size > pi->size) {
-      dout(7) << "  size " << pi->size << " -> " << size
-	      << " for " << *in << dendl;
+    if (in->is_file() && // ONLY if regular file
+        size > pi->size) {
+      dout(7) << "  size " << pi->size << " -> " << size << " for " << *in
+              << dendl;
       pi->size = size;
       pi->rstat.rbytes = size;
     }
-    if (in->is_file() &&
-        (dirty & CEPH_CAP_FILE_WR) &&
+    if (in->is_file() && (dirty & CEPH_CAP_FILE_WR) &&
         inline_version > pi->inline_data.version) {
       pi->inline_data.version = inline_version;
       if (inline_version != CEPH_INLINE_NONE && m->inline_data.length() > 0)
-	pi->inline_data.set_data(m->inline_data);
+        pi->inline_data.set_data(m->inline_data);
       else
-	pi->inline_data.free_data();
+        pi->inline_data.free_data();
     }
     if ((dirty & CEPH_CAP_FILE_EXCL) && atime != pi->atime) {
-      dout(7) << "  atime " << pi->atime << " -> " << atime
-	      << " for " << *in << dendl;
+      dout(7) << "  atime " << pi->atime << " -> " << atime << " for " << *in
+              << dendl;
       pi->atime = atime;
     }
     if ((dirty & CEPH_CAP_FILE_EXCL) &&
-	ceph_seq_cmp(pi->time_warp_seq, m->get_time_warp_seq()) < 0) {
-      dout(7) << "  time_warp_seq " << pi->time_warp_seq << " -> " << m->get_time_warp_seq()
-	      << " for " << *in << dendl;
+        ceph_seq_cmp(pi->time_warp_seq, m->get_time_warp_seq()) < 0) {
+      dout(7) << "  time_warp_seq " << pi->time_warp_seq << " -> "
+              << m->get_time_warp_seq() << " for " << *in << dendl;
       pi->time_warp_seq = m->get_time_warp_seq();
     }
     if (m->fscrypt_file.size())
@@ -3985,27 +3989,23 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
   // auth
   if (dirty & CEPH_CAP_AUTH_EXCL) {
     if (m->head.uid != pi->uid) {
-      dout(7) << "  uid " << pi->uid
-	      << " -> " << m->head.uid
-	      << " for " << *in << dendl;
+      dout(7) << "  uid " << pi->uid << " -> " << m->head.uid << " for " << *in
+              << dendl;
       pi->uid = m->head.uid;
     }
     if (m->head.gid != pi->gid) {
-      dout(7) << "  gid " << pi->gid
-	      << " -> " << m->head.gid
-	      << " for " << *in << dendl;
+      dout(7) << "  gid " << pi->gid << " -> " << m->head.gid << " for " << *in
+              << dendl;
       pi->gid = m->head.gid;
     }
     if (m->head.mode != pi->mode) {
-      dout(7) << "  mode " << oct << pi->mode
-	      << " -> " << m->head.mode << dec
-	      << " for " << *in << dendl;
+      dout(7) << "  mode " << oct << pi->mode << " -> " << m->head.mode << dec
+              << " for " << *in << dendl;
       pi->mode = m->head.mode;
     }
     if ((features & CEPH_FEATURE_FS_BTIME) && m->get_btime() != pi->btime) {
-      dout(7) << "  btime " << oct << pi->btime
-	      << " -> " << m->get_btime() << dec
-	      << " for " << *in << dendl;
+      dout(7) << "  btime " << oct << pi->btime << " -> " << m->get_btime()
+              << dec << " for " << *in << dendl;
       pi->btime = m->get_btime();
     }
     if (m->fscrypt_auth.size())
@@ -4018,80 +4018,78 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
  *  adjust max_size, if needed.
  * if we update, return true; otherwise, false (no updated needed).
  */
-bool Locker::_do_cap_update(CInode *in, Capability *cap,
-			    int dirty, snapid_t follows,
-			    const cref_t<MClientCaps> &m, const ref_t<MClientCaps> &ack,
-			    bool *need_flush)
-{
-  dout(10) << "_do_cap_update dirty " << ccap_string(dirty)
-	   << " issued " << ccap_string(cap ? cap->issued() : 0)
-	   << " wanted " << ccap_string(cap ? cap->wanted() : 0)
-	   << " on " << *in << dendl;
+bool Locker::_do_cap_update(CInode *in, Capability *cap, int dirty,
+                            snapid_t follows, const cref_t<MClientCaps> &m,
+                            const ref_t<MClientCaps> &ack, bool *need_flush) {
+  dout(10) << "_do_cap_update dirty " << ccap_string(dirty) << " issued "
+           << ccap_string(cap ? cap->issued() : 0) << " wanted "
+           << ccap_string(cap ? cap->wanted() : 0) << " on " << *in << dendl;
   ceph_assert(in->is_auth());
   client_t client = m->get_source().num();
-  const auto& latest = in->get_projected_inode();
+  const auto &latest = in->get_projected_inode();
 
   // increase or zero max_size?
   uint64_t size = m->get_size();
   bool change_max = false;
   uint64_t old_max = latest->get_client_range(client);
   uint64_t new_max = old_max;
-  
+
   if (in->is_file()) {
     bool forced_change_max = false;
     dout(20) << "inode is file" << dendl;
-    if (cap && ((cap->issued() | cap->wanted()) & CEPH_CAP_ANY_FILE_WR & in->get_caps_quiesce_mask())) {
-      dout(20) << "client has write caps; m->get_max_size="
-               << m->get_max_size() << "; old_max=" << old_max << dendl;
+    if (cap && ((cap->issued() | cap->wanted()) & CEPH_CAP_ANY_FILE_WR &
+                in->get_caps_quiesce_mask())) {
+      dout(20) << "client has write caps; m->get_max_size=" << m->get_max_size()
+               << "; old_max=" << old_max << dendl;
       if (m->get_max_size() > new_max) {
-	dout(10) << "client requests file_max " << m->get_max_size()
-		 << " > max " << old_max << dendl;
-	change_max = true;
-	forced_change_max = true;
-	new_max = calc_new_max_size(latest, m->get_max_size());
+        dout(10) << "client requests file_max " << m->get_max_size()
+                 << " > max " << old_max << dendl;
+        change_max = true;
+        forced_change_max = true;
+        new_max = calc_new_max_size(latest, m->get_max_size());
       } else {
-	new_max = calc_new_max_size(latest, size);
+        new_max = calc_new_max_size(latest, size);
 
-	if (new_max > old_max)
-	  change_max = true;
-	else
-	  new_max = old_max;
+        if (new_max > old_max)
+          change_max = true;
+        else
+          new_max = old_max;
       }
     } else {
       if (old_max) {
-	change_max = true;
-	new_max = 0;
+        change_max = true;
+        new_max = 0;
       }
     }
 
-    if (in->last == CEPH_NOSNAP &&
-	change_max &&
-	!in->filelock.can_wrlock(client) &&
-	!in->filelock.can_force_wrlock(client)) {
-      dout(10) << " i want to change file_max, but lock won't allow it (yet)" << dendl;
+    if (in->last == CEPH_NOSNAP && change_max &&
+        !in->filelock.can_wrlock(client) &&
+        !in->filelock.can_force_wrlock(client)) {
+      dout(10) << " i want to change file_max, but lock won't allow it (yet)"
+               << dendl;
       if (in->filelock.is_stable()) {
-	bool need_issue = false;
-	if (cap)
-	  cap->inc_suppress();
-	if (in->get_mds_caps_wanted().empty() &&
-	    (in->get_loner() >= 0 || (in->get_wanted_loner() >= 0 && in->try_set_loner()))) {
-	  if (in->filelock.get_state() != LOCK_EXCL)
-	    file_excl(&in->filelock, &need_issue);
-	} else
-	  simple_lock(&in->filelock, &need_issue);
-	if (need_issue)
-	  issue_caps(in);
-	if (cap)
-	  cap->dec_suppress();
+        bool need_issue = false;
+        if (cap)
+          cap->inc_suppress();
+        if (in->get_mds_caps_wanted().empty() &&
+            (in->get_loner() >= 0 ||
+             (in->get_wanted_loner() >= 0 && in->try_set_loner()))) {
+          if (in->filelock.get_state() != LOCK_EXCL)
+            file_excl(&in->filelock, &need_issue);
+        } else
+          simple_lock(&in->filelock, &need_issue);
+        if (need_issue)
+          issue_caps(in);
+        if (cap)
+          cap->dec_suppress();
       }
       if (!in->filelock.can_wrlock(client) &&
-	  !in->filelock.can_force_wrlock(client)) {
-	C_MDL_CheckMaxSize *cms = new C_MDL_CheckMaxSize(this, in,
-	                                                 forced_change_max ? new_max : 0,
-	                                                 0, utime_t());
+          !in->filelock.can_force_wrlock(client)) {
+        C_MDL_CheckMaxSize *cms = new C_MDL_CheckMaxSize(
+            this, in, forced_change_max ? new_max : 0, 0, utime_t());
 
-	in->filelock.add_waiter(SimpleLock::WAIT_STABLE, cms);
-	change_max = false;
+        in->filelock.add_waiter(SimpleLock::WAIT_STABLE, cms);
+        change_max = false;
       }
     }
   }
@@ -4100,20 +4098,22 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     int32_t num_locks;
     auto bli = m->flockbl.cbegin();
     decode(num_locks, bli);
-    for ( int i=0; i < num_locks; ++i) {
+    for (int i = 0; i < num_locks; ++i) {
       ceph_filelock decoded_lock;
       decode(decoded_lock, bli);
-      in->get_fcntl_lock_state()->held_locks.
-	insert(pair<uint64_t, ceph_filelock>(decoded_lock.start, decoded_lock));
-      ++in->get_fcntl_lock_state()->client_held_lock_counts[(client_t)(decoded_lock.client)];
+      in->get_fcntl_lock_state()->held_locks.insert(
+          pair<uint64_t, ceph_filelock>(decoded_lock.start, decoded_lock));
+      ++in->get_fcntl_lock_state()
+            ->client_held_lock_counts[(client_t)(decoded_lock.client)];
     }
     decode(num_locks, bli);
-    for ( int i=0; i < num_locks; ++i) {
+    for (int i = 0; i < num_locks; ++i) {
       ceph_filelock decoded_lock;
       decode(decoded_lock, bli);
-      in->get_flock_lock_state()->held_locks.
-	insert(pair<uint64_t, ceph_filelock>(decoded_lock.start, decoded_lock));
-      ++in->get_flock_lock_state()->client_held_lock_counts[(client_t)(decoded_lock.client)];
+      in->get_flock_lock_state()->held_locks.insert(
+          pair<uint64_t, ceph_filelock>(decoded_lock.start, decoded_lock));
+      ++in->get_flock_lock_state()
+            ->client_held_lock_counts[(client_t)(decoded_lock.client)];
     }
   }
 
@@ -4123,8 +4123,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   // do the update.
   EUpdate *le = new EUpdate(mds->mdlog, "cap update");
 
-  bool xattr = (dirty & CEPH_CAP_XATTR_EXCL) &&
-               m->xattrbl.length() &&
+  bool xattr = (dirty & CEPH_CAP_XATTR_EXCL) && m->xattrbl.length() &&
                m->head.xattr_version > in->get_projected_inode()->xattr_version;
 
   MutationRef mut(new MutationImpl());
@@ -4136,8 +4135,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   _update_cap_fields(in, dirty, m, pi.inode.get());
 
   if (change_max) {
-    dout(7) << "  max_size " << old_max << " -> " << new_max
-	    << " for " << *in << dendl;
+    dout(7) << "  max_size " << old_max << " -> " << new_max << " for " << *in
+            << dendl;
     if (new_max) {
       auto &cr = pi.inode->client_ranges[client];
       cr.range.first = 0;
@@ -4145,18 +4144,18 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       cr.follows = in->first - 1;
       in->mark_clientwriteable();
       if (cap)
-	cap->mark_clientwriteable();
+        cap->mark_clientwriteable();
     } else {
       pi.inode->client_ranges.erase(client);
       if (pi.inode->client_ranges.empty())
-	in->clear_clientwriteable();
+        in->clear_clientwriteable();
       if (cap)
-	cap->clear_clientwriteable();
+        cap->clear_clientwriteable();
     }
   }
-    
-  if (change_max || (dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR))) 
-    wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
+
+  if (change_max || (dirty & (CEPH_CAP_FILE_EXCL | CEPH_CAP_FILE_WR)))
+    wrlock_force(&in->filelock, mut); // wrlock for duration of journal
 
   // auth
   if (dirty & CEPH_CAP_AUTH_EXCL)
@@ -4164,27 +4163,30 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 
   // xattrs update?
   if (xattr) {
-    dout(7) << " xattrs v" << pi.inode->xattr_version << " -> " << m->head.xattr_version << dendl;
+    dout(7) << " xattrs v" << pi.inode->xattr_version << " -> "
+            << m->head.xattr_version << dendl;
     decode_new_xattrs(pi.inode.get(), pi.xattrs.get(), m);
     wrlock_force(&in->xattrlock, mut);
   }
-  
+
   mut->auth_pin(in);
-  mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
+  mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY,
+                                    0, follows);
   mdcache->journal_dirty_inode(mut.get(), &le->metablob, in, follows);
 
   // "oldest flush tid" > 0 means client uses unique TID for each flush
   if (ack && ack->get_oldest_flush_tid() > 0)
-    le->metablob.add_client_flush(metareqid_t(m->get_source(), ack->get_client_tid()),
-				  ack->get_oldest_flush_tid());
+    le->metablob.add_client_flush(
+        metareqid_t(m->get_source(), ack->get_client_tid()),
+        ack->get_oldest_flush_tid());
 
   unsigned update_flags = 0;
   if (change_max)
     update_flags |= UPDATE_SHAREMAX;
   if (cap)
     update_flags |= UPDATE_NEEDSISSUE;
-  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, update_flags,
-							      ack, client));
+  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(
+                                   this, in, mut, update_flags, ack, client));
   if (need_flush && !*need_flush &&
       ((change_max && new_max) || // max INCREASE
        _need_flush_mdlog(in, dirty)))

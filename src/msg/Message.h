@@ -202,6 +202,11 @@
 #define MSG_MDS_QUIESCE_DB_LISTING 0x505  // quiesce db replication
 #define MSG_MDS_QUIESCE_DB_ACK     0x506  // quiesce agent ack back to the db
 
+#ifdef WITH_CEPHFS_NOTIFICATION
+#define MSG_MDS_NOTIFICATION_INFO_KAFKA_TOPIC        0x507
+#define MSG_MDS_NOTIFICATION_INFO_UDP_ENDPOINT   0x508
+#endif
+
 // *** generic ***
 #define MSG_TIMECHECK             0x600
 #define MSG_MON_HEALTH            0x601

@@ -532,6 +532,47 @@ void MDSDaemon::set_up_admin_socket()
     asok_hook,
     "run cpu profiling on daemon");
   ceph_assert(r == 0);
+
+  #ifdef WITH_CEPHFS_NOTIFICATION
+  r = admin_socket->register_command(
+    "add_topic "
+    "name=topic_name,type=CephString,req=true "
+    "name=endpoint_name,type=CephString,req=true "
+    "name=broker,type=CephString,req=false "
+    "name=use_ssl,type=CephBool,req=false "
+    "name=username,type=CephString,req=false "
+    "name=password,type=CephString,req=false "
+    "name=ca_location,type=CephString,req=false "
+    "name=mechanism,type=CephString,req=false",
+    asok_hook,
+    "add topic for notification"
+  );
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "remove_topic "
+    "name=topic_name,type=CephString,req=true "
+    "name=endpoint_name,type=CephString,req=true",
+    asok_hook,
+    "remove kafka topic"
+  );
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "add_udp_endpoint "
+    "name=entity,type=CephString,req=true "
+    "name=ip,type=CephString,req=true "
+    "name=port,type=CephInt,req=true",
+    asok_hook,
+    "add udp endpoint for notification"
+  );
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "remove_udp_endpoint "
+    "name=entity,type=CephString,req=true",
+    asok_hook,
+    "remove UDP endpoint"
+  );
+  ceph_assert(r == 0);
+  #endif
 }
 
 void MDSDaemon::clean_up_admin_socket()

@@ -32,6 +32,10 @@
 #include "MetricsHandler.h"
 #include "cephfs_features.h"
 #include "MDSContext.h"
+#ifdef WITH_CEPHFS_NOTIFICATION
+#include "messages/MNotificationInfoKafkaTopic.h"
+#include "messages/MNotificationInfoUDPEndpoint.h"
+#endif
 
 #include "msg/Messenger.h"
 
@@ -245,6 +249,21 @@ void Server::create_logger()
   plb.add_time_avg(l_mdss_req_snapdiff_latency, "req_snapdiff_latency",
 		   "Request type snapshot difference latency");
 
+#ifdef WITH_CEPHFS_NOTIFICATION
+  plb.add_time_avg(l_mdss_req_add_kafka_topic_latency,
+                 "req_add_kafka_topic_latency",
+                 "Request type add kafka topic latency");
+  plb.add_time_avg(l_mdss_req_remove_kafka_topic_latency,
+                 "req_remove_kafka_topic_latency",
+                 "Request type remove kafka topic latency");
+  plb.add_time_avg(l_mdss_req_add_udp_endpoint_latency,
+                 "req_add_udp_endpoint_latency",
+                 "Request type add udp endpoint latency");
+  plb.add_time_avg(l_mdss_req_remove_udp_endpoint_latency,
+                 "req_remove_udp_endpoint_latency",
+                 "Request type remove udp endpoint latency");
+#endif
+
   plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
   plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request",
                       "Client requests dispatched");
@@ -275,6 +294,19 @@ Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
   bal_fragment_size_max = g_conf().get_val<int64_t>("mds_bal_fragment_size_max");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
   supported_metric_spec = feature_bitset_t(CEPHFS_METRIC_FEATURES_ALL);
+  // connection_t conn("localhost:9093", true, "admin", "admin-secret",
+  //                std::nullopt, std::nullopt);
+  // MDSAsyncNotificationManager::create(mds->cct);
+  // MDSSyncNotificationManager::create(mds->cct);
+  // notification_manager = std::make_unique<MDSNotificationManager>(mds);
+  // topic_ptr = MDSKafkaTopic::create(
+  //   "my-topic", mds->cct,
+  //   connection_t("localhost:9093", true, "admin", "admin-secret",
+  //                std::optional<std::string>(
+  //                    "/home/sajibreadd/croit/certs-kafka/ca-cert"),
+  //                std::optional<std::string>("PLAIN")));
+  // udp_sender =
+  //   MDSUDPNotificationSender::create("udp", mds->cct, "127.0.0.1", 8080);
 }
 
 void Server::dispatch(const cref_t<Message> &m)
@@ -2179,6 +2211,22 @@ void Server::perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t l
   case CEPH_MDS_OP_READDIR_SNAPDIFF:
     code = l_mdss_req_snapdiff_latency;
     break;
+
+#ifdef WITH_CEPHFS_NOTIFICATION
+  case CEPH_MDS_OP_ADD_KAFKA_TOPIC:
+    code = l_mdss_req_add_kafka_topic_latency;
+    break;
+  case CEPH_MDS_OP_REMOVE_KAFKA_TOPIC:
+    code = l_mdss_req_remove_kafka_topic_latency;
+    break;
+  case CEPH_MDS_OP_ADD_UDP_ENDPOINT:
+    code = l_mdss_req_add_udp_endpoint_latency;
+    break;
+  case CEPH_MDS_OP_REMOVE_UDP_ENDPOINT:
+    code = l_mdss_req_remove_udp_endpoint_latency;
+    break;
+#endif
+
   default:
     dout(1) << ": unknown client op" << dendl;
     return;
@@ -2827,6 +2875,21 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
   case CEPH_MDS_OP_READDIR_SNAPDIFF:
     handle_client_readdir_snapdiff(mdr);
     break;
+#ifdef WITH_CEPHFS_NOTIFICATION
+  // notifications
+  case CEPH_MDS_OP_ADD_KAFKA_TOPIC:
+    handle_client_add_kafka_topic(mdr);
+    break;
+  case CEPH_MDS_OP_REMOVE_KAFKA_TOPIC:
+    handle_client_remove_kafka_topic(mdr);
+    break;
+  case CEPH_MDS_OP_ADD_UDP_ENDPOINT:
+    handle_client_add_udp_endpoint(mdr);
+    break;
+  case CEPH_MDS_OP_REMOVE_UDP_ENDPOINT:
+    handle_client_remove_udp_endpoint(mdr);
+    break;
+#endif
 
   default:
     dout(1) << " unknown client op " << req->get_op() << dendl;
@@ -4594,6 +4657,10 @@ void Server::handle_client_open(const MDRequestRef& mdr)
   if (cmode & CEPH_FILE_MODE_WR)
     mds->locker->check_inode_max_size(cur);
 
+  mds->notification_manager->push_notification(
+      mds->get_nodeid(), cur, CEPH_MDS_NOTIFY_OPEN | CEPH_MDS_NOTIFY_ACCESS,
+      true, cur->is_dir());
+
   // make sure this inode gets into the journal
   if (cur->is_auth() && cur->last == CEPH_NOSNAP &&
       mdcache->open_file_table.should_log_open(cur)) {
@@ -4808,6 +4875,10 @@ void Server::handle_client_openc(const MDRequestRef& mdr)
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(this, mdr, dn, newi);
 
   set_reply_extra_bl(req, _inode->ino, mdr->reply_extra_bl);
+
+  mds->notification_manager->push_notification(
+      mds->get_nodeid(), newi, CEPH_MDS_NOTIFY_CREATE | CEPH_MDS_NOTIFY_OPEN,
+      true, newi->is_dir());
 
   journal_and_reply(mdr, newi, dn, le, fin);
 
@@ -5486,7 +5557,11 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
-  
+
+  mds->notification_manager->push_notification(
+      mds->get_nodeid(), cur,
+      CEPH_MDS_NOTIFY_SET_ATTRIB | CEPH_MDS_NOTIFY_ACCESS, true, cur->is_dir());
+
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur,
 								   truncating_smaller, changed_ranges));
 
@@ -5550,6 +5625,11 @@ void Server::do_open_truncate(const MDRequestRef& mdr, int cmode)
     ceph_assert(mdr->dn[0].size());
     dn = mdr->dn[0].back();
   }
+
+  mds->notification_manager->push_notification(mds->get_nodeid(), in,
+                                        CEPH_MDS_NOTIFY_MODIFY |
+                                            CEPH_MDS_NOTIFY_ACCESS |
+                                            CEPH_MDS_NOTIFY_OPEN, true, in->is_dir());
 
   journal_and_reply(mdr, in, dn, le, new C_MDS_inode_update_finish(this, mdr, in, old_size > 0,
 								   changed_ranges));
@@ -5639,7 +5719,9 @@ void Server::handle_client_setlayout(const MDRequestRef& mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
-  
+  mds->notification_manager->push_notification(
+      mds->get_nodeid(), cur, CEPH_MDS_NOTIFY_SET_LAYOUT, true, cur->is_dir());
+
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
 }
 
@@ -5756,6 +5838,10 @@ void Server::handle_client_setdirlayout(const MDRequestRef& mdr)
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
   mdr->no_early_reply = true;
+
+  mds->notification_manager->push_notification(
+      mds->get_nodeid(), cur, CEPH_MDS_NOTIFY_SET_LAYOUT, true, cur->is_dir());
+
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
 }
 
@@ -6728,6 +6814,9 @@ void Server::handle_client_setxattr(const MDRequestRef& mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
+  mds->notification_manager->push_notification(
+      mds->get_nodeid(), cur, CEPH_MDS_NOTIFY_SET_XATTRIB, true, cur->is_dir());
+
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
 }
 
@@ -6796,6 +6885,8 @@ void Server::handle_client_removexattr(const MDRequestRef& mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
+  mds->notification_manager->push_notification(
+      mds->get_nodeid(), cur, CEPH_MDS_NOTIFY_REM_XATTRIB, true, cur->is_dir());
 
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
 }
@@ -7113,6 +7204,11 @@ void Server::handle_client_mknod(const MDRequestRef& mdr)
 				    PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, newi, true, true, true);
 
+  mds->notification_manager->push_notification(mds->get_nodeid(), newi,
+                                               CEPH_MDS_NOTIFY_CREATE |
+                                                   CEPH_MDS_NOTIFY_SET_ATTRIB,
+                                               true, newi->is_dir());
+
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
   mds->balancer->maybe_fragment(dn->get_dir(), false);
 }
@@ -7204,6 +7300,9 @@ void Server::handle_client_mkdir(const MDRequestRef& mdr)
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(newi->ino());
 
+  mds->notification_manager->push_notification(
+      mds->get_nodeid(), newi, CEPH_MDS_NOTIFY_CREATE, true, newi->is_dir());
+
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
 
   // We hit_dir (via hit_inode) in our finish callback, but by then we might
@@ -7266,6 +7365,9 @@ void Server::handle_client_symlink(const MDRequestRef& mdr)
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, newi, true, true);
+
+  mds->notification_manager->push_notification(
+      mds->get_nodeid(), newi, CEPH_MDS_NOTIFY_CREATE, true, newi->is_dir());
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
   mds->balancer->maybe_fragment(dir, false);
@@ -7397,6 +7499,10 @@ void Server::handle_client_link(const MDRequestRef& mdr)
 
   // go!
   ceph_assert(g_conf()->mds_kill_link_at != 1);
+
+  mds->notification_manager->push_notification_link(
+      mds->get_nodeid(), targeti, destdn, CEPH_MDS_NOTIFY_SET_ATTRIB,
+      CEPH_MDS_NOTIFY_CREATE, targeti->is_dir());
 
   // local or remote?
   if (targeti->is_auth()) 
@@ -8126,6 +8232,10 @@ void Server::handle_client_unlink(const MDRequestRef& mdr)
 
   if (!rmdir && dnl->is_primary() && mdr->dn[0].size() == 1)
     mds->locker->create_lock_cache(mdr, diri);
+
+  mds->notification_manager->push_notification_link(
+      mds->get_nodeid(), in, dn, CEPH_MDS_NOTIFY_SET_ATTRIB,
+      CEPH_MDS_NOTIFY_DELETE, in->is_dir());
 
   // ok!
   if (dnl->is_remote() && !dnl->get_inode()->is_auth()) 
@@ -9155,6 +9265,9 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
 
   // -- commit locally --
   C_MDS_rename_finish *fin = new C_MDS_rename_finish(this, mdr, srcdn, destdn, straydn);
+
+  mds->notification_manager->push_notification_move(mds->get_nodeid(), srcdn,
+                                               destdn, srci->is_dir());
 
   journal_and_reply(mdr, srci, destdn, le, fin);
   mds->balancer->maybe_fragment(destdn->get_dir(), false);
@@ -11125,6 +11238,10 @@ void Server::handle_client_mksnap(const MDRequestRef& mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, diri);
 
+  mds->notification_manager->push_notification_snap(
+      mds->get_nodeid(), diri, std::string(snapname),
+      CEPH_MDS_NOTIFY_CREATE | CEPH_MDS_NOTIFY_SET_ATTRIB, diri->is_dir());
+
   // journal the snaprealm changes
   submit_mdlog_entry(le, new C_MDS_mksnap_finish(this, mdr, diri, info),
                      mdr, __func__);
@@ -11257,6 +11374,10 @@ void Server::handle_client_rmsnap(const MDRequestRef& mdr)
   le->metablob.add_table_transaction(TABLE_SNAP, stid);
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, diri);
+
+  mds->notification_manager->push_notification_snap(
+      mds->get_nodeid(), diri, std::string(snapname),
+      CEPH_MDS_NOTIFY_DELETE | CEPH_MDS_NOTIFY_SET_ATTRIB, diri->is_dir());
 
   submit_mdlog_entry(le, new C_MDS_rmsnap_finish(this, mdr, diri, snapid),
                      mdr, __func__);
@@ -11875,3 +11996,81 @@ bool Server::build_snap_diff(
   }
   return it == dir->end();
 }
+
+#ifdef WITH_CEPHFS_NOTIFICATION
+
+// FIXME handling user rights
+void Server::handle_client_add_kafka_topic(const MDRequestRef &mdr) {
+  const cref_t<MClientRequest> &req = mdr->client_request;
+  KafkaTopicPayload payload;
+  if (req->get_data().length()) {
+    try {
+      auto iter = req->get_data().cbegin();
+      decode(payload, iter);
+    } catch (const ceph::buffer::error &e) {
+      dout(1) << ": no data in kafka topic payload" << dendl;
+      respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+  }
+  int r = mds->notification_manager->add_kafka_topic(
+      payload.topic_name, payload.endpoint_name, payload.broker,
+      payload.use_ssl, payload.user, payload.password, payload.ca_location,
+      payload.mechanism, true, true);
+  respond_to_request(mdr, r);
+}
+
+void Server::handle_client_remove_kafka_topic(const MDRequestRef &mdr) {
+  const cref_t<MClientRequest> &req = mdr->client_request;
+  KafkaTopicPayload payload;
+  if (req->get_data().length()) {
+    try {
+      auto iter = req->get_data().cbegin();
+      decode(payload, iter);
+    } catch (const ceph::buffer::error &e) {
+      dout(1) << ": no data in kafka topic payload" << dendl;
+      respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+  }
+  int r = mds->notification_manager->remove_kafka_topic(
+      payload.topic_name, payload.endpoint_name, true, true);
+  respond_to_request(mdr, r);
+}
+
+void Server::handle_client_add_udp_endpoint(const MDRequestRef &mdr) {
+  const cref_t<MClientRequest> &req = mdr->client_request;
+  UDPEndpointPayload payload;
+  if (req->get_data().length()) {
+    try {
+      auto iter = req->get_data().cbegin();
+      decode(payload, iter);
+    } catch (const ceph::buffer::error &e) {
+      dout(1) << ": no data in udp endpoint payload" << dendl;
+      respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+  }
+  int r = mds->notification_manager->add_udp_endpoint(payload.name, payload.ip,
+                                                      payload.port, true, true);
+  respond_to_request(mdr, r);
+}
+
+void Server::handle_client_remove_udp_endpoint(const MDRequestRef &mdr) {
+  const cref_t<MClientRequest> &req = mdr->client_request;
+  UDPEndpointPayload payload;
+  if (req->get_data().length()) {
+    try {
+      auto iter = req->get_data().cbegin();
+      decode(payload, iter);
+    } catch (const ceph::buffer::error &e) {
+      dout(1) << ": no data in udp endpoint payload" << dendl;
+      respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+  }
+  int r =
+      mds->notification_manager->remove_udp_endpoint(payload.name, true, true);
+  respond_to_request(mdr, r);
+}
+#endif

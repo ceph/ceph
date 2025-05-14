@@ -731,6 +731,61 @@ int64_t ceph_telldir(struct ceph_mount_info *cmount, struct ceph_dir_result *dir
  */
 void ceph_seekdir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, int64_t offset);
 
+#ifdef WITH_CEPHFS_NOTIFICATION
+/**
+ * Create/replace kafka topic for notification.
+ *
+ * @param cmount the ceph mount handle.
+ * @param topic_name kafka topic name to create.
+ * @param endpoint_name kafka endpoint name where the topic will be added.
+ * @param broker address of kafka endpoint.
+ * @param use_ssl ssl authentication required or not.
+ * @param user username
+ * @param password password for authentication
+ * @param ca_location a trusted entity that issues SSL certificates
+ * @param mechanism user to specify which of these Kafka SASL mechanisms to
+ * 				use when connecting to a Kafka broker that requires authentication.
+ * @returns 0 on success or a negative return code on error.
+ */
+int ceph_add_kafka_topic(struct ceph_mount_info *cmount, const char *topic_name,
+                         const char *endpoint_name, const char *broker,
+                         bool use_ssl, const char *user, const char *password,
+                         const char *ca_location, const char *mechanism);
+
+/**
+ * Remove kafka topic.
+ *
+ * @param cmount the ceph mount handle.
+ * @param topic_name kafka topic name to remove.
+ * @param endpoint_name kafka endpoint name from where the topic will be removed.
+ * @returns 0 on success or a negative return code on error.
+ */
+int ceph_remove_kafka_topic(struct ceph_mount_info *cmount,
+                            const char *topic_name, const char *endpoint_name);
+
+/**
+ * Create/replace a udp endpoint.
+ *
+ * @param cmount the ceph mount handle.
+ * @param name udp endpoint name to create.
+ * @param ip ip address of udp endpoint.
+ * @param port port to connect for udp endpoint.
+ * @returns 0 on success or a negative return code on error.
+ */
+int ceph_add_udp_endpoint(struct ceph_mount_info *cmount, const char *name,
+                         const char *ip, int port);
+
+/**
+ * Remove an udp endpoint.
+ *
+ * @param cmount the ceph mount handle.
+ * @param name udp endpoint name to remove.
+ * @returns 0 on success or a negative return code on error.
+ */
+int ceph_remove_udp_endpoint(struct ceph_mount_info *cmount, const char *name);
+
+#endif
+
 /**
  * Create a directory.
  *

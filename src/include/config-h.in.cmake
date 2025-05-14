@@ -133,6 +133,9 @@
 /* define if cephfs enabled */
 #cmakedefine WITH_CEPHFS
 
+/* define if cephfs notification enabled */
+#cmakedefine WITH_CEPHFS_NOTIFICATION
+
 /* define if systemed is enabled */
 #cmakedefine WITH_SYSTEMD
 

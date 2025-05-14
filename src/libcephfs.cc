@@ -882,6 +882,46 @@ extern "C" int ceph_rename(struct ceph_mount_info *cmount, const char *from,
   return cmount->get_client()->rename(from, to, cmount->default_perms);
 }
 
+#ifdef WITH_CEPHFS_NOTIFICATION
+// notifications
+extern "C" int
+ceph_add_kafka_topic(struct ceph_mount_info *cmount, const char *topic_name,
+                     const char *endpoint_name, const char *broker,
+                     bool use_ssl, const char *user, const char *password,
+                     const char *ca_location, const char *mechanism) {
+  if (!cmount->is_mounted())
+    return -CEPHFS_ENOTCONN;
+  return cmount->get_client()->add_kafka_topic(
+      topic_name, endpoint_name, broker, use_ssl, user, password, ca_location,
+      mechanism, cmount->default_perms);
+}
+
+extern "C" int ceph_remove_kafka_topic(struct ceph_mount_info *cmount,
+                                       const char *topic_name,
+                                       const char *endpoint_name) {
+  if (!cmount->is_mounted())
+    return -CEPHFS_ENOTCONN;
+  return cmount->get_client()->remove_kafka_topic(topic_name, endpoint_name,
+                                                  cmount->default_perms);
+}
+
+extern "C" int ceph_add_udp_endpoint(struct ceph_mount_info *cmount,
+                                     const char *name, const char *ip,
+                                     int port) {
+  if (!cmount->is_mounted())
+    return -CEPHFS_ENOTCONN;
+  return cmount->get_client()->add_udp_endpoint(name, ip, port,
+                                                cmount->default_perms);
+}
+
+extern "C" int ceph_remove_udp_endpoint(struct ceph_mount_info *cmount,
+                                        const char *name) {
+  if (!cmount->is_mounted())
+    return -CEPHFS_ENOTCONN;
+  return cmount->get_client()->remove_udp_endpoint(name, cmount->default_perms);
+}
+#endif
+
 // dirs
 extern "C" int ceph_mkdir(struct ceph_mount_info *cmount, const char *path, mode_t mode)
 {

@@ -1679,3 +1679,65 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_allow_notification_secrets_in_cleartext
+  type: bool
+  level: advanced
+  desc: Allows sending secrets (e.g. passwords) over non encrypted HTTP messages.
+  long_desc: When notification endpoint require secrets (e.g. passwords),
+    we allow the topic creation. This parameter can be set to "true" to bypass
+    this check. Use this only if mds is on a trusted private network, and
+    the message broker cannot be configured without password authentication.
+    Otherwise, this will leak the credentials of your message broker and
+    compromise its security.
+  default: false
+  services:
+  - mds
+- name: mds_kafka_sleep_timeout
+  type: uint
+  level: advanced
+  desc: Time in milliseconds to sleep while polling for kafka replies
+  long_desc: This will be used to prevent busy waiting for the kafka replies
+    As well as for the cases where the broker is down and we try to reconnect.
+    The same values times 3 will be used to sleep if there were no messages
+    sent or received across all kafka connections
+  default: 100
+  services:
+  - mds
+  with_legacy: true
+- name: mds_kafka_message_timeout
+  type: uint
+  level: advanced
+  desc: This is the maximum time in milliseconds to deliver a message (including retries)
+  long_desc: Delivery error occurs when the message timeout is exceeded.
+    Value must be greater than zero, if set to zero, a value of 1 millisecond will be used.
+  default: 5000
+  services:
+  - mds
+- name: mds_kafka_unacked_message_threshold
+  type: uint
+  level: advanced
+  desc: Maximum number of unacked message stored in memory.
+  long_desc: If count of unacked message grows than this number then MDSKakfa will start
+    polling to fetch delivery report.
+  default: 5000
+  services:
+  - mds
+  with_legacy: true
+- name: mds_notification_dir_mask
+  type: uint
+  level: advanced
+  desc: This indicates which events are subscribed to for any operations on directories
+  long_desc: There are certain events mentioned. This mask represents OR of those event flag.
+    which filter out events for directories.
+  default: 1048575
+  services:
+  - mds
+- name: mds_notification_file_mask
+  type: uint
+  level: advanced
+  desc: This indicates which events are subscribed to for any operations on files
+  long_desc: There are certain events mentioned. This mask represents OR of those event flag.
+    which filter out events for files.
+  default: 1048575
+  services:
+  - mds

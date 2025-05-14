@@ -214,6 +214,8 @@ TYPE(openc_response_t)
 #include "messages/MClientRequest.h"
 MESSAGE(MClientRequest)
 TYPE(SnapPayload)
+TYPE(KafkaTopicPayload)
+TYPE(UDPEndpointPayload)
 TYPE(MClientRequest::Release)
 
 #include "messages/MClientRequestForward.h"

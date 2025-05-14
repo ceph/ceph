@@ -37,6 +37,7 @@ using namespace std::literals::string_view_literals;
 #include "Mutation.h"
 #include "MDSContext.h"
 
+// class MDSNotificationManager;
 class OSDMap;
 class LogEvent;
 class EMetaBlob;
@@ -84,6 +85,14 @@ enum {
   l_mdss_cap_revoke_eviction,
   l_mdss_cap_acquisition_throttle,
   l_mdss_req_getvxattr_latency,
+
+#ifdef WITH_CEPHFS_NOTIFICATION
+  l_mdss_req_add_kafka_topic_latency,
+  l_mdss_req_remove_kafka_topic_latency,
+  l_mdss_req_add_udp_endpoint_latency,
+  l_mdss_req_remove_udp_endpoint_latency,
+#endif
+
   l_mdss_last,
 };
 
@@ -121,6 +130,13 @@ public:
   time last_recalled() const {
     return last_recall_state;
   }
+
+#ifdef WITH_CEPHFS_NOTIFICATION
+  void handle_client_add_kafka_topic(const MDRequestRef& mdr);
+  void handle_client_remove_kafka_topic(const MDRequestRef& mdr);
+  void handle_client_add_udp_endpoint(const MDRequestRef& mdr);
+  void handle_client_remove_udp_endpoint(const MDRequestRef& mdr);
+#endif
 
   void handle_client_session(const cref_t<MClientSession> &m);
   void _session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,

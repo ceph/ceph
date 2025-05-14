@@ -429,7 +429,7 @@ void FSMirror::add_peer(const Peer &peer) {
     return;
   }
   m_peer_replayers.emplace(peer, std::move(replayer));
-  ceph_assert(m_peer_replayers.size() == 1); // support only a single peer
+  // ceph_assert(m_peer_replayers.size() == 1); // support only a single peer
   if (m_perf_counters) {
     m_perf_counters->inc(l_cephfs_mirror_fs_mirror_peers);
   }
