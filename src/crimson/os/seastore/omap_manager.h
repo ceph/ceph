@@ -239,8 +239,7 @@ public:
     omap_root_t &omap_root,
     Transaction &t,
     const std::string &first,
-    const std::string &last,
-    omap_list_config_t config) = 0;
+    const std::string &last) = 0;
 
   /**
    * clear all omap tree key->value mapping
