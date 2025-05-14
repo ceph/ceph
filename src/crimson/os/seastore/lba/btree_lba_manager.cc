@@ -328,7 +328,7 @@ BtreeLBAManager::reserve_region(
     [pos=std::move(pos), c, addr, len](auto &btree) mutable {
     auto &cursor = pos.get_effective_cursor();
     auto iter = btree.make_partial_iter(c, cursor);
-    lba_map_val_t val{len, P_ADDR_ZERO, EXTENT_DEFAULT_REF_COUNT, 0};
+    lba_map_val_t val{len, pladdr_t{P_ADDR_ZERO}, EXTENT_DEFAULT_REF_COUNT, 0};
     return btree.insert(c, iter, addr, val
     ).si_then([c](auto p) {
       auto &[iter, inserted] = p;
@@ -385,7 +385,7 @@ BtreeLBAManager::alloc_extents(
 	    ext->get_laddr(),
 	    lba_map_val_t{
 	      ext->get_length(),
-	      ext->get_paddr(),
+	      pladdr_t{ext->get_paddr()},
 	      EXTENT_DEFAULT_REF_COUNT,
 	      ext->get_last_committed_crc()}
 	  ).si_then([ext, c, FNAME, &iter, &ret](auto p) {
@@ -480,7 +480,9 @@ BtreeLBAManager::clone_mapping(
 	    c,
 	    btree.make_partial_iter(c, cursor),
 	    state.laddr,
-            lba_map_val_t{state.len, inter_key, EXTENT_DEFAULT_REF_COUNT, 0});
+            lba_map_val_t{
+	      state.len, pladdr_t{inter_key.get_local_clone_id()},
+	      EXTENT_DEFAULT_REF_COUNT, 0});
 	}).si_then([c, &state](auto p) {
 	  auto &[iter, inserted] = p;
 	  auto &leaf_node = *iter.get_leaf_node();
@@ -1121,9 +1123,10 @@ BtreeLBAManager::update_refcount(
     if (res.is_removed_mapping() && cascade_remove &&
 	res.get_removed_mapping().map_value.pladdr.is_laddr()) {
       auto &val = res.get_removed_mapping().map_value;
+      auto inter_key = val.pladdr.build_laddr(addr);
       TRACET("decref intermediate {} -> {}",
-	     t, addr, val.pladdr.get_laddr());
-      return _decref_intermediate(t, val.pladdr.get_laddr(), val.len
+	     t, addr, inter_key);
+      return _decref_intermediate(t, inter_key, val.len
       ).si_then([indirect_res=std::move(res), this](auto res) mutable {
 	return indirect_res.get_removed_mapping().next->refresh(
 	).si_then([this, res=std::move(res),
@@ -1440,7 +1443,7 @@ BtreeLBAManager::_copy_mapping(
       lba_map_val_t{
 	state.src.get_length(),
 	state.src.is_indirect()
-	  ? pladdr_t(state.src.get_intermediate_key())
+	  ? pladdr_t(state.src.get_intermediate_key().get_local_clone_id())
 	  : pladdr_t(state.src.get_val()),
 	EXTENT_DEFAULT_REF_COUNT,
 	state.src.is_indirect() ? 0 : state.src.get_checksum()}
@@ -1554,7 +1557,7 @@ BtreeLBAManager::move_and_clone_direct_mapping(
 	*state.src.direct_cursor,
 	[&state](const auto &in) {
 	  lba_map_val_t val = in;
-	  val.pladdr = state.dest.get_key();
+	  val.pladdr = state.dest.get_key().get_local_clone_id();
 	  val.checksum = 0;
 	  return val;
 	},
