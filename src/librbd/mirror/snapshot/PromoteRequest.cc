@@ -36,15 +36,20 @@ template <typename I>
 void PromoteRequest<I>::send() {
   CephContext *cct = m_image_ctx->cct;
   bool requires_orphan = false;
-  if (!util::can_create_primary_snapshot(m_image_ctx, false, true,
-                                         &requires_orphan,
-                                         &m_rollback_snap_id)) {
-    lderr(cct) << "cannot promote" << dendl;
-    finish(-EINVAL);
-    return;
-  } else if (m_rollback_snap_id == CEPH_NOSNAP && !requires_orphan) {
-    create_promote_snapshot();
-    return;
+  if (m_rollback_snap_id != CEPH_NOSNAP) {
+    ldout(cct, 15) << "m_rollback_snap_id: " << m_rollback_snap_id << dendl;
+    requires_orphan = true;
+  } else {
+    if (!util::can_create_primary_snapshot(m_image_ctx, false, true,
+          &requires_orphan,
+          &m_rollback_snap_id)) {
+      lderr(cct) << "cannot promote" << dendl;
+      finish(-EINVAL);
+      return;
+    } else if (m_rollback_snap_id == CEPH_NOSNAP && !requires_orphan) {
+      create_promote_snapshot();
+      return;
+    }
   }
 
   ldout(cct, 15) << "requires_orphan=" << requires_orphan << ", "

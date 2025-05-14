@@ -101,7 +101,8 @@ struct Mirror {
   static int image_promote(ImageCtxT *ictx, bool force);
   static void image_promote(ImageCtxT *ictx, bool force, Context *on_finish);
   static void image_promote(ImageCtxT *ictx,
-                            const std::string &group_snap_id, bool force,
+                            const std::string &group_snap_id,
+                            uint64_t rollback_snap_id, bool force,
                             uint64_t *snap_id, Context *on_finish);
   static int image_demote(ImageCtxT *ictx);
   static void image_demote(ImageCtxT *ictx, Context *on_finish);
