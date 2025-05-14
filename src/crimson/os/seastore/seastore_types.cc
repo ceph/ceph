@@ -5,6 +5,7 @@
 
 #include <utility>
 
+#include "common/hobject.h"
 #include "crimson/common/log.h"
 
 namespace {
@@ -16,6 +17,10 @@ seastar::logger& journal_logger() {
 }
 
 namespace crimson::os::seastore {
+
+static_assert(sizeof(laddr_shard_t) == sizeof(ghobject_t().shard_id.id));
+static_assert(sizeof(laddr_pool_t) == sizeof(ghobject_t().hobj.pool));
+static_assert(sizeof(laddr_crush_hash_t) == sizeof(ghobject_t().hobj.get_bitwise_key_u32()));
 
 bool is_aligned(uint64_t offset, uint64_t alignment)
 {
@@ -127,7 +132,20 @@ std::ostream &operator<<(std::ostream &out, const laddr_t &laddr) {
   if (laddr == L_ADDR_NULL) {
     return out << "L_ADDR_NULL";
   } else {
-    return laddr_formatter_t<laddr_t::Unsigned>::format(out, laddr.value);
+    laddr_formatter_t<laddr_t::Unsigned>::format(out, laddr.value);
+    if (!laddr.is_global_address()) {
+      out << std::hex << '(' << static_cast<int>(laddr.get_shard())
+	  << ',' << laddr.get_pool()
+	  << ',' << laddr.get_reversed_hash();
+      if (laddr.is_object_address()) {
+	out << ',' << laddr.get_local_object_id()
+	    << ',' << laddr.get_local_clone_id()
+	    << ',' << laddr.is_metadata()
+	    << ',' << laddr.get_offset_bytes();
+      }
+      out << ')' << std::dec;
+    }
+    return out;
   }
 }
 
