@@ -260,9 +260,14 @@ namespace rgw::dedup {
   {
     rgw_pool dedup_pool(DEDUP_POOL_NAME);
     std::string pool_name(DEDUP_POOL_NAME);
+#if 0
     // using Replica-1 for the intermediate data
     // since it can be regenerated in case of a failure
     std::string replica_count(std::to_string(1));
+#else
+    // temporary solution until we find a way to disable the health warn on replica1
+    std::string replica_count(std::to_string(2));
+#endif
     librados::bufferlist inbl;
     std::string output;
     std::string command = R"(
