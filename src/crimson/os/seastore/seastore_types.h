@@ -1613,6 +1613,150 @@ constexpr laddr_t L_ADDR_MAX = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX);
 constexpr laddr_t L_ADDR_MIN = laddr_t::from_raw_uint(0);
 constexpr laddr_t L_ADDR_NULL = L_ADDR_MAX;
 
+// This enum specifies the conflict condition for laddr allocation.
+enum class laddr_conflict_condition_t {
+  // Fixed shard, pool, and reversed_hash, allocate a unique local object id.
+  object_prefix_at_object_id,
+  // Fixed object prefix, allocate a unique local clone id.
+  clone_prefix_at_clone_id,
+  // Fixed object prefix, allocate a unique object content value.
+  all_at_object_content,
+  // Fixed clone prefix, allocate a unique block offset.
+  all_at_block_offset,
+  // Fixed laddr, conflicts never occur
+  all_at_never,
+};
+
+// The behavior of handling laddr allocation conflict
+// see BtreeLBAManager::search_insert_pos()
+enum class laddr_conflict_policy_t {
+  // Find appropriate address by following the lba iterator, only
+  // laddr_conflict_policy_t::{all_at_object_content, all_at_block_offset}
+  // could use this policy.
+  linear_search,
+  // Generate a new random hint.
+  gen_random,
+};
+
+struct laddr_hint_t {
+  laddr_t addr;
+  laddr_conflict_condition_t condition;
+  laddr_conflict_policy_t policy;
+  extent_len_t block_size;
+
+  static laddr_hint_t create_as_fixed(
+    laddr_t laddr,
+    extent_len_t block_size = laddr_t::UNIT_SIZE)
+  {
+    return {
+      laddr,
+      laddr_conflict_condition_t::all_at_never,
+      laddr_conflict_policy_t::linear_search,
+      block_size
+    };
+  }
+  static laddr_hint_t create_global_md_hint(
+    extent_len_t block_size = laddr_t::UNIT_SIZE);
+  static laddr_hint_t create_onode_hint(
+    laddr_shard_t shard,
+    laddr_pool_t pool,
+    laddr_crush_hash_t crush,
+    extent_len_t block_size);
+
+  // According to the state of Onode, there are 6 valid cases when constructing
+  // laddr hint:
+  // |No.|object id|clone id|is metadata|description|
+  // | 1 | N | N | N | write data to a fresh object                       |
+  // | 2 | N | N | Y | write omap/xattr to a fresh object                 |
+  // | 3 | N | Y | N | invalid case                                       |
+  // | 4 | N | Y | Y | invalid case                                       |
+  // | 5 | Y | N | N | clone existing onode                               |
+  // | 6 | Y | N | Y | clone existing onode that might only contains omap |
+  // | 7 | Y | Y | N | it might occur if first write omap then write data |
+  // | 8 | Y | Y | Y | allocate omap extents in existing onode            |
+
+  // 1
+  static laddr_hint_t create_fresh_object_data_hint(
+    laddr_shard_t shard,
+    laddr_pool_t pool,
+    laddr_crush_hash_t crush,
+    extent_len_t block_size);
+  // 2
+  static laddr_hint_t create_fresh_object_md_hint(
+    laddr_shard_t shard,
+    laddr_pool_t pool,
+    laddr_crush_hash_t crush,
+    extent_len_t block_size);
+  // 5
+  static laddr_hint_t create_clone_object_data_hint(
+    laddr_shard_t shard,
+    laddr_pool_t pool,
+    laddr_crush_hash_t crush,
+    local_object_id_t object_id,
+    extent_len_t block_size);
+  // 6
+  static laddr_hint_t create_clone_object_md_hint(
+    laddr_shard_t shard,
+    laddr_pool_t pool,
+    laddr_crush_hash_t crush,
+    local_object_id_t object_id,
+    extent_len_t block_size);
+  // 7
+  static laddr_hint_t create_object_data_hint(
+    laddr_t clone_prefix,
+    extent_len_t block_size);
+  // 8
+  static laddr_hint_t create_object_md_hint(
+    laddr_t clone_prefix,
+    extent_len_t block_size);
+
+  void find_next_random();
+
+  bool conflict_with(laddr_t other) const {
+    switch (condition) {
+    case laddr_conflict_condition_t::object_prefix_at_object_id:
+      assert(addr.is_object_address());
+      return addr.get_object_prefix() == other.get_object_prefix();
+    case laddr_conflict_condition_t::clone_prefix_at_clone_id:
+      assert(addr.is_object_address());
+      return addr.get_clone_prefix() == other.get_clone_prefix();
+    case laddr_conflict_condition_t::all_at_object_content:
+    case laddr_conflict_condition_t::all_at_block_offset:
+    case laddr_conflict_condition_t::all_at_never:
+      return addr == other;
+    default:
+      __builtin_unreachable();
+    }
+  }
+
+  laddr_t lower_boundary() const {
+    switch (condition) {
+    case laddr_conflict_condition_t::object_prefix_at_object_id:
+      assert(addr.is_object_address());
+      return addr.with_object_content(0);
+    case laddr_conflict_condition_t::clone_prefix_at_clone_id:
+      assert(addr.is_object_address());
+      return addr.with_offset_by_blocks(0).without_metadata();
+    case laddr_conflict_condition_t::all_at_object_content:
+    case laddr_conflict_condition_t::all_at_block_offset:
+    case laddr_conflict_condition_t::all_at_never:
+      return addr;
+    default:
+      __builtin_unreachable();
+    }
+  }
+
+  bool operator==(const laddr_hint_t&) const = default;
+};
+std::ostream &operator<<(std::ostream &out, const laddr_hint_t &hint);
+
+constexpr laddr_hint_t LADDR_HINT_NULL = {
+  L_ADDR_NULL,
+  laddr_conflict_condition_t::all_at_never,
+  laddr_conflict_policy_t::gen_random,
+  /*block_size=*/ 0
+};
+
 struct __attribute__((packed)) laddr_le_t {
   ceph_le64 low64;
   ceph_le64 high64;
@@ -3444,6 +3588,7 @@ template <> struct fmt::formatter<crimson::os::seastore::extent_types_t> : fmt::
 template <> struct fmt::formatter<crimson::os::seastore::journal_seq_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::journal_tail_delta_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::laddr_hint_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_offset_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::omap_root_t> : fmt::ostream_formatter {};
