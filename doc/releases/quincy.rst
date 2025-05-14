@@ -13,7 +13,7 @@ This is the ninth backport (hotfix) release in the Quincy series. We recommend t
 Users should expect to see the el8 rpm subdirectory empty and the "dnf" commands are expected
 to fail with 17.2.9.
 They can choose to use 17.2.9 RPM packages for centos 8/el8 provided by CERN as a community
-member or continue to stay at 17.2.7 following instructions
+member or stay at 17.2.7 following instructions
 from https://docs.ceph.com/en/latest/install/get-packages/#rhel, the ceph.repo file should
 point to https://download.ceph.com/rpm-17.2.7/el8 instead of https://download.ceph.com/rpm-quincy/el8
 
@@ -26,7 +26,7 @@ packages is available at `RPM-GPG-KEY-Ceph-Community <https://linuxsoft.cern.ch/
 Notable Changes
 ---------------
 
-This release fixes a critical bluestore regression in versions 17.2.8 (#63122). Users running this releas are recommended to upgrade at the earliest convenience.
+This release fixes a critical BlueStore regression in versions 17.2.8 (#63122). Users running this releas are recommended to upgrade at the earliest convenience.
 
 Changelog
 ---------
