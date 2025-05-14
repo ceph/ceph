@@ -364,7 +364,7 @@ void PeeringState::update_peer_info(const pg_shard_t &from,
   }
   // 3 cases:
   // We are the primary - from is the shard that sent the oinfo
-  // We are a replica - from is the primary, it will not have pwlc infomation
+  // We are a replica - from is the primary, it will not have pwlc infomation for itself
   // Merge - from is pg_whoami, oinfo is a source pg that is being merged
   if ((from != pg_whoami) &&
       info.partial_writes_last_complete.contains(from.shard)) {
@@ -385,6 +385,34 @@ void PeeringState::update_peer_info(const pg_shard_t &from,
       } else {
 	psdout(10) << "osd." << from << " has last_complete "
 		   << peer_info[from].last_complete
+		   << " cannot apply pwlc from " << fromversion
+		   << " to " << toversion
+		   << dendl;
+      }
+    }
+  }
+  // Non-primary shards might need to apply pwlc to update info
+  if (info.partial_writes_last_complete.contains(pg_whoami.shard)) {
+    // Check if last_complete and last_update can be advanced based on
+    // knowledge of partial_writes
+    const auto & [fromversion, toversion] =
+      info.partial_writes_last_complete[pg_whoami.shard];
+    if (toversion > info.last_complete) {
+      if (fromversion <= info.last_complete) {
+	psdout(10) << "osd." << pg_whoami << " has last_complete "
+		   << info.last_complete
+		   << " but pwlc says its at " << toversion
+		   << dendl;
+	info.last_complete = toversion;
+	if (toversion > info.last_update) {
+	  info.last_update = toversion;
+	}
+	if (toversion > pg_log.get_head()) {
+	  pg_log.set_head(toversion);
+	}
+      } else {
+	psdout(10) << "osd." << pg_whoami << " has last_complete "
+		   << info.last_complete
 		   << " cannot apply pwlc from " << fromversion
 		   << " to " << toversion
 		   << dendl;
