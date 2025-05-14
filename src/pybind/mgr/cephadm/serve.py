@@ -1393,6 +1393,15 @@ class CephadmServe:
                     if not osd_uuid:
                         raise OrchestratorError('osd.%s not in osdmap' % daemon_spec.daemon_id)
                     daemon_params['osd_fsid'] = osd_uuid
+                    # we may need a dm-crypt key to rotate this OSD's keyring
+                    # if it is encrypted. If it is not encrypted, no such
+                    # key will exist
+                    rc, ckg_out, ckg_err = self.mgr.mon_command({
+                        'prefix': 'config-key get',
+                        'key': f'dm-crypt/osd/{osd_uuid}/luks',
+                    })
+                    if not rc and ckg_out:
+                        daemon_params['osd_dm_crypt_key'] = ckg_out
 
                 if reconfig:
                     daemon_params['reconfig'] = True
