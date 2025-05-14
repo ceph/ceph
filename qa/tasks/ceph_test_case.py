@@ -1,4 +1,4 @@
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, NamedTuple
 import unittest
 import time
 import logging
@@ -13,6 +13,20 @@ log = logging.getLogger(__name__)
 
 class TestTimeoutError(RuntimeError):
     pass
+
+
+class ConditionResult(NamedTuple):
+    result: bool
+    context: str
+
+    def __bool__(self):
+        return bool(self.result)
+
+    def __str__(self):
+        return str(self.context)
+
+    def __eq__(self, other):
+        return bool(self.result) == other
 
 
 class RunCephCmd:
@@ -297,7 +311,10 @@ class CephTestCase(unittest.TestCase, RunCephCmd):
         """
         def is_clear():
             health = self.ceph_cluster.mon_manager.get_mon_health()
-            return len(health['checks']) == 0
+            checks = health.get('checks')
+            if checks:
+                log.info("Ceph health check issues found: %s", health['checks'])
+            return ConditionResult(result=len(checks), context=checks)
 
         self.wait_until_true(is_clear, timeout)
 
@@ -326,21 +343,25 @@ class CephTestCase(unittest.TestCase, RunCephCmd):
         elapsed = 0
         retry_count = 0
         while True:
-            if condition():
-                log.debug("wait_until_true: success in {0}s and {1} retries".format(elapsed, retry_count))
-                return
-            else:
-                if elapsed >= timeout:
-                    if check_fn and check_fn() and retry_count < 5:
-                        elapsed = 0
-                        retry_count += 1
-                        log.debug("wait_until_true: making progress, waiting (timeout={0} retry_count={1})...".format(timeout, retry_count))
-                    else:
-                        raise TestTimeoutError("Timed out after {0}s and {1} retries".format(elapsed, retry_count))
+            if (last_result := condition()):
+                if isinstance(last_result, tuple):
+                    if last_result.result == 0:
+                        log.debug("wait_until_true: success in {0}s and {1} retries".format(elapsed, retry_count))
+                        return
+                elif isinstance(last_result, bool):
+                    log.debug("wait_until_true: success in {0}s and {1} retries".format(elapsed, retry_count))
+                    return
+            if elapsed >= timeout:
+                if check_fn and check_fn() and retry_count < 5:
+                    elapsed = 0
+                    retry_count += 1
+                    log.debug("wait_until_true: making progress, waiting (timeout={0} retry_count={1})...".format(timeout, retry_count))
                 else:
-                    log.debug("wait_until_true: waiting (timeout={0} retry_count={1})...".format(timeout, retry_count))
-                time.sleep(period)
-                elapsed += period
+                    raise TestTimeoutError("Timed out after {0}s and {1} retries: {2}".format(elapsed, retry_count, last_result.context))
+            else:
+                log.debug("wait_until_true: waiting (timeout={0} retry_count={1})...".format(timeout, retry_count))
+            time.sleep(period)
+            elapsed += period
 
     @classmethod
     def wait_until_true_and_hold(cls, condition, timeout, success_hold_time, check_fn=None, period=5):
