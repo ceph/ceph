@@ -1883,8 +1883,16 @@ int MonConnection::handle_auth_bad_method(
   p = std::find_first_of(std::next(p), auth_supported.end(),
 			 allowed_methods.begin(), allowed_methods.end());
   if (p == auth_supported.end()) {
-    lderr(cct) << __func__ << " server allowed_methods " << allowed_methods
-	       << " but i only support " << auth_supported << dendl;
+    auto s_allowed_methods = std::set<uint32_t>(allowed_methods.begin(), allowed_methods.end());
+    auto s_auth_supported = std::set<uint32_t>(auth_supported.begin(), auth_supported.end());
+    bool is_subset = std::includes(s_allowed_methods.begin(), s_allowed_methods.end(),
+                                   s_auth_supported.begin(), s_auth_supported.end());
+    if (!is_subset) {
+      lderr(cct) << __func__ << " server allowed_methods " << allowed_methods
+	         << " and I support " << auth_supported << dendl;
+    } else {
+      lderr(cct) << __func__ << " failed to auth with my available methods: " << cpp_strerror(result) << dendl;
+    }
     return handle_auth_failure(cct);
   }
   auth_method = *p;
