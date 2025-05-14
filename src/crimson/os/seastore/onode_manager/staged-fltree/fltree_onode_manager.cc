@@ -20,11 +20,6 @@ void FLTreeOnode::Recorder::apply_value_delta(
     ceph::decode(op, bliter);
     auto &mlayout = *reinterpret_cast<onode_layout_t*>(value.get_write());
     switch (op) {
-    case delta_op_t::UPDATE_SHARED_REGION_BASE:
-      DEBUG("update shared region base");
-      bliter.copy(sizeof(mlayout.shared_region_base),
-		  (char *)&mlayout.shared_region_base);
-      break;
     case delta_op_t::UPDATE_ONODE_SIZE:
       DEBUG("update onode size");
       bliter.copy(sizeof(mlayout.size), (char *)&mlayout.size);
@@ -85,12 +80,6 @@ void FLTreeOnode::Recorder::encode_update(
   auto &encoded = get_encoded(payload_mut);
   ceph::encode(op, encoded);
   switch(op) {
-  case delta_op_t::UPDATE_SHARED_REGION_BASE:
-    DEBUG("update shared region base");
-    encoded.append(
-      (const char *)&layout.shared_region_base,
-      sizeof(layout.shared_region_base));
-    break;
   case delta_op_t::UPDATE_ONODE_SIZE:
     DEBUG("update onode size");
     encoded.append(
@@ -169,11 +158,7 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
       DEBUGT("no entry for {}", trans, hoid);
       return crimson::ct_error::enoent::make();
     }
-    auto val = OnodeRef(new FLTreeOnode(
-	default_data_reservation,
-	default_metadata_range,
-	hoid.hobj,
-	cursor.value()));
+    auto val = OnodeRef(new FLTreeOnode(hoid.hobj, cursor.value()));
     return get_onode_iertr::make_ready_future<OnodeRef>(
       val
     );
@@ -189,14 +174,10 @@ FLTreeOnodeManager::get_or_create_onode(
   return tree.insert(
     trans, hoid,
     OnodeTree::tree_value_config_t{sizeof(onode_layout_t)}
-  ).si_then([this, &trans, &hoid, FNAME](auto p)
+  ).si_then([&trans, &hoid, FNAME](auto p)
               -> get_or_create_onode_ret {
     auto [cursor, created] = std::move(p);
-    auto onode = new FLTreeOnode(
-	default_data_reservation,
-	default_metadata_range,
-	hoid.hobj,
-	cursor.value());
+    auto onode = new FLTreeOnode(hoid.hobj, cursor.value());
     if (created) {
       DEBUGT("created onode for entry for {}", trans, hoid);
       onode->create_default_layout(trans);
