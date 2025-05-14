@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 import errno
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Type, NamedTuple, \
+    get_type_hints, Annotated, get_origin, get_args
 
 import yaml
 from mgr_module import CLICheckNonemptyFileInput, CLICommand, CLIReadCommand, \
@@ -134,6 +135,109 @@ class DataTextOutputFormatter(TextOutputFormatter):
     
     def format_output(self, data):
         return self._convert_to_text_output(data)
+    
+class AnnotatedDataTextOutputFormatter(TextOutputFormatter):
+    def _snake_case_to_title(self, s):
+        return s.replace('_', ' ').title()
+
+    def _create_table(self, field_names):
+        from prettytable import PrettyTable
+        table = PrettyTable(border=True)
+        titles = [self._snake_case_to_title(field) for field in field_names]
+        table.field_names = titles
+        table.align = 'l'
+        table.padding_width = 0
+        return table
+    
+    def _get_text_output(self, data):
+        if isinstance(data, list):
+            return self._get_list_text_output(data)
+        return self._get_object_text_output(data)
+    
+    def _get_list_text_output(self, data):
+        columns = list(dict.fromkeys([key for obj in data for key in obj.keys()]))
+        table = self._create_table(columns)
+        for d in data:
+            row = []
+            for col in columns:
+                row.append(str(d.get(col)))
+            table.add_row(row)
+        return table.get_string()
+
+    def _get_object_text_output(self, data):
+        columns = [k for k in data.keys() if k not in ["status", "error_message"]]
+        table = self._create_table(columns)
+        row = []
+        for col in columns:
+            row.append(str(data.get(col)))
+        table.add_row(row)
+        return table.get_string()
+
+    def _is_list_of_complex_type(self, value):
+        if not isinstance(value, list):
+            return False
+
+        if not value:
+            return None
+
+        primitives = (int, float, str, bool, bytes)
+
+        return not isinstance(value[0], primitives)
+
+    def _select_list_field(self, data: Dict):
+        for key, value in data.items():
+            if self._is_list_of_complex_type(value):
+                return key
+
+    def is_namedtuple_type(self, obj):
+        return isinstance(obj, type) and issubclass(obj, tuple) and hasattr(obj, '_fields')
+
+    def process_dict(self, input_dict: dict, nt_class, is_top_level):
+        result = {}
+        hints = get_type_hints(nt_class, include_extras=True)
+
+        for field, type_hint in hints.items():
+            if field not in input_dict:
+                continue
+
+            value = input_dict[field]
+            origin = get_origin(type_hint)
+
+            actual_type = type_hint
+            annotations = []
+            output_name = field
+            skip = False
+
+            if origin is Annotated:
+                actual_type, *annotations = get_args(type_hint)
+                for annotation in annotations:
+                    if annotation == 'drop':
+                        skip = True
+                        break
+                    elif isinstance(annotation, str) and annotation.startswith('override-header:'):
+                        output_name = annotation.split(':', 1)[1]
+                    elif is_top_level and annotation == 'exclusive-list-field':
+                        assert get_origin(actual_type) ==  list
+                        assert len(get_args(actual_type)) == 1
+                        return [self.process_dict(item, get_args(actual_type)[0], False) for item in value]
+
+            if skip:
+                continue
+
+            # If it's a nested namedtuple and value is a dict, recurse
+            if self.is_namedtuple_type(actual_type) and isinstance(value, dict):
+                result[output_name] = self.process_dict(value, actual_type, False)
+            else:
+                result[output_name] = value
+
+        return result
+
+    def _convert_to_text_output(self, data, model):
+        data = self.process_dict(data, model, True)
+        return self._get_text_output(data)
+    
+    def format_output(self, data, model):
+        return self._convert_to_text_output(data, model)
     
 class NvmeofCLICommand(CLICommand):
     def __init__(self, prefix, perm = 'rw', poll = False, output_formatter: TextOutputFormatter=None):

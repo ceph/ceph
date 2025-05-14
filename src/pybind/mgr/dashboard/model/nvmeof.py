@@ -1,4 +1,4 @@
-from typing import List, NamedTuple, Optional
+from typing import List, NamedTuple, Optional, Annotated
 
 
 class GatewayInfo(NamedTuple):
@@ -34,8 +34,8 @@ class Subsystem(NamedTuple):
     enable_ha: bool
     serial_number: str
     model_number: str
-    min_cntlid: int
-    max_cntlid: int
+    min_cntlid: Annotated[int, 'drop']
+    max_cntlid: Annotated[int, 'drop']
     namespace_count: int
     subtype: str
     max_namespaces: int
