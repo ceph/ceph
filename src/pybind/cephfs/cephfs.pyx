@@ -406,6 +406,43 @@ cdef class SnapDiffHandle(object):
             raise make_ex(ret, "closesnapdiff failed")
         self.opened = 0
 
+cdef class BlockDiffHandle(object):
+    cdef LibCephFS lib
+    cdef ceph_file_blockdiff_info handle
+    cdef int opened
+
+    def __cinit__(self, _lib):
+        self.opened = 0
+        self.lib = _lib
+
+    def __dealloc__(self):
+        self.closeblockdiff()
+
+    def readblock(self):
+        self.lib.require_state("mounted")
+
+        cdef:
+            ceph_file_blockdiff_changedblocks chblks
+        with nogil:
+            if self.opened:
+                ret = ceph_file_blockdiff(&self.handle, &chblks)
+            else:
+                raise make_ex(EBADF, "dir is not open")
+        if ret < 0:
+            raise make_ex(ret, f"ceph_file_blockdiff failed, return value: {ret}")
+        elif ret == 0:
+            return None, None, None
+        return chblks.num_blocks, chblks.b.offset, chblks.b.len
+
+    def closeblockdiff(self):
+        if not self.opened:
+            return
+        self.lib.require_state("mounted")
+        with nogil:
+            ret = ceph_file_blockdiff_finish(&self.handle)
+        if ret < 0:
+            raise make_ex(ret, "closeblockdiff failed")
+        self.opened = 0
 
 def cstr(val, name, encoding="utf-8", opt=False) -> bytes:
     """
@@ -1084,6 +1121,35 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "open_snapdiff failed for {} vs. {}"
                 .format(snap1.decode('utf-8'), snap2.decode('utf-8')))
+        h.opened = 1
+        return h
+
+    def openblockdiff(self, root_path, rel_path, snap1name, snap2name) -> BlockDiffHandle:
+        """
+        Opens the blockdiff
+
+        :param root_path: the path name of the directory to open.  Must be either an absolute path
+                          or a path relative to the current working directory.
+        :param rel_path: the path of the file relative to root_path.
+        :returns: the open directory stream handle
+        """
+        self.require_state("mounted")
+
+        h = BlockDiffHandle(self)
+        root = cstr(root_path, 'root')
+        relp = cstr(rel_path, 'relp')
+        snap1 = cstr(snap1name, 'snap1')
+        snap2 = cstr(snap2name, 'snap2')
+        cdef:
+            char* _root = root
+            char* _relp = relp
+            char* _snap1 = snap1
+            char* _snap2 = snap2
+        with nogil:
+            ret = ceph_file_blockdiff_init(self.cluster, _root, _relp, _snap1, _snap2, &h.handle)
+        if ret < 0:
+            raise make_ex(ret, "file blockdiff init failed for "
+                  f"{snap1.decode('utf-8')} vs. {snap2.decode('utf-8')}")
         h.opened = 1
         return h
 
