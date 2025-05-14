@@ -241,7 +241,7 @@ struct rgw_cls_unlink_instance_op {
 
   rgw_cls_unlink_instance_op() : olh_epoch(0), log_op(false), bilog_flags(0) {}
 
-  enum UnlinkFlags {
+  enum class UnlinkFlags : uint8_t {
     None = 0,
     SnapRemoval = 0x1, /* Snapshotted object removal.
                           if not set then a removal op will mark them as removed_at current
@@ -278,10 +278,8 @@ struct rgw_cls_unlink_instance_op {
       decode(zones_trace, bl);
     }
     if (struct_v >= 4) {
-      decode((uint64_t&)snap_id, bl);
-      uint32_t f;
-      decode(f, bl);
-      flags = (UnlinkFlags)f;
+      decode(snap_id, bl);
+      decode(flags, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -769,7 +767,7 @@ struct rgw_cls_bi_get_op {
   void dump(ceph::Formatter *f) const {
     f->dump_stream("key") << key;
     f->dump_int("type", (int)type);
-    f->dump_bool("delete_marker", (int)delete_marker);
+    f->dump_bool("delete_marker", (bool)delete_marker);
   }
 
   static void generate_test_instances(std::list<rgw_cls_bi_get_op*>& o) {

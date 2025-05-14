@@ -14,8 +14,8 @@
 
 
 struct rgw_bucket_snap_id {
-  static constexpr uint64_t SNAP_UNDEFINED = (uint64_t)0;
-  static constexpr uint64_t SNAP_MIN       = (uint64_t)1;
+  static constexpr uint64_t SNAP_UNDEFINED = 0;
+  static constexpr uint64_t SNAP_MIN       = 1;
   uint64_t snap_id;
 
   constexpr rgw_bucket_snap_id() : snap_id(SNAP_UNDEFINED) {}
@@ -65,24 +65,9 @@ struct rgw_bucket_snap_id {
     ceph::decode(snap_id, bl);
   }
 
-  /* note that we treat undefined snap id as bigger than defined snap ids */
-  bool operator<(const rgw_bucket_snap_id& rhs) const {
-    return snap_id < rhs.snap_id;
-  }
-  bool operator<=(const rgw_bucket_snap_id& rhs) const {
-    return snap_id <= rhs.snap_id;
-  }
-  bool operator>(const rgw_bucket_snap_id& rhs) const {
-    return snap_id > rhs.snap_id;
-  }
-  bool operator>=(const rgw_bucket_snap_id& rhs) const {
-    return snap_id >= rhs.snap_id;
-  }
-  bool operator==(const rgw_bucket_snap_id& rhs) const {
-    return snap_id == rhs.snap_id;
-  }
+  auto operator<=>(const rgw_bucket_snap_id&) const = default;
 
-  operator long long() const {
+  operator uint64_t() const {
     return snap_id;
   }
 
@@ -109,7 +94,7 @@ WRITE_CLASS_ENCODER(rgw_bucket_snap_id)
 
 static inline std::ostream& operator<<(std::ostream& os, const rgw_bucket_snap_id& snap_id)
 {
-  os << (int64_t)snap_id.snap_id;
+  os << snap_id.snap_id;
   return os;
 }
 

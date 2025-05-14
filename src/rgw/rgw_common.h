@@ -1069,6 +1069,12 @@ class RGWSI_Zone;
 #include "rgw_cksum.h"
 
 
+struct rgw_bucket_reserved {
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::const_iterator& bl);
+};
+WRITE_CLASS_ENCODER(rgw_bucket_reserved)
+
 // this represents the at-rest bucket instance object and is stored as
 // a system object
 struct rgw_bucket_local_info {

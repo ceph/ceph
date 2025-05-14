@@ -2296,15 +2296,17 @@ string camelcase_dash_http_attr(const string& orig, bool convert2dash)
 
 void rgw_bucket_local_info::encode(bufferlist& bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(snap_mgr, bl);
   ENCODE_FINISH(bl);
 }
 
 void rgw_bucket_local_info::decode(bufferlist::const_iterator& bl)
 {
-  DECODE_START(1, bl);
-  decode(snap_mgr, bl);
+  DECODE_START(2, bl);
+  if (struct_v >= 2) {
+    decode(snap_mgr, bl);
+  }
   DECODE_FINISH(bl);
 }
 

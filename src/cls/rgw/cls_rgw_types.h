@@ -404,7 +404,7 @@ struct rgw_bucket_dirent_snap_info {
   void decode_json(JSONObj *obj);
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(skip, bl);
     encode(removed_at, bl);
     encode(current_flag_map, bl);
@@ -412,10 +412,12 @@ struct rgw_bucket_dirent_snap_info {
   }
 
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
-    decode(skip, bl);
-    decode(removed_at, bl);
-    decode(current_flag_map, bl);
+    DECODE_START(2, bl);
+    if (struct_v >= 2) {
+      decode(skip, bl);
+      decode(removed_at, bl);
+      decode(current_flag_map, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -433,7 +435,6 @@ struct rgw_bucket_dirent_snap_info {
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dirent_snap_info)
-
 
 struct rgw_bucket_dir_entry {
   /* a versioned object instance */
@@ -700,7 +701,6 @@ struct rgw_bucket_olh_entry {
                                           so that we may need to mark the old one
                                           as 'removed' at a specific snapshot */
                                     
-
   rgw_bucket_olh_entry() : delete_marker(false), epoch(0), exists(false), pending_removal(false) {}
 
   void encode(ceph::buffer::list &bl) const {

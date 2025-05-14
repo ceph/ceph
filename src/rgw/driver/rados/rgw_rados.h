@@ -149,10 +149,12 @@ struct RGWOLHInfo {
   }
 
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START(1, bl);
+     DECODE_START(2, bl);
      decode(target, bl);
      decode(removed, bl);
-     decode(snap_id, bl);
+     if (struct_v >= 2) {
+       decode(snap_id, bl);
+     }
      DECODE_FINISH(bl);
   }
   static void generate_test_instances(std::list<RGWOLHInfo*>& o);
