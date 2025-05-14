@@ -1911,7 +1911,9 @@ static int send_to_remote_gateway(RGWRESTConn* conn, req_info& info,
     return ret;
   }
 
-  ret = parser.parse(response.c_str(), response.length());
+cerr << "JFW: RESPONSE was:\n" << response.c_str() << std::endl;
+  ret = parser.parse(response);
+//JFW:  ret = parser.parse(response.c_str(), response.length());
   if (ret < 0) {
     cerr << "failed to parse response" << std::endl;
     return ret;
@@ -2002,7 +2004,6 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
   if (remote.empty() && url.empty()) {
     // use the new master zone's connection
     remote = master_zone;
-    cerr << "Sending period to new master zone " << remote << std::endl;
   }
   boost::optional<RGWRESTConn> conn;
   RGWRESTConn *remote_conn = nullptr;
@@ -2018,6 +2019,7 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
 
   // push period to the master with an empty period id
   period.set_id(string());
+cerr << "JFW: pushing empty period id" << std::endl;
 
   RGWEnv env;
   req_info info(g_ceph_context, &env);
@@ -2029,6 +2031,8 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
   encode_json("period", period, &jf);
   bufferlist bl;
   jf.flush(bl);
+
+cerr << "JFW: period encoded as:\n" << bl.c_str() << "\n----- JFW" << std::endl;
 
   JSONParser p;
   int ret = send_to_remote_or_url(remote_conn, url, opt_region, access, secret, info, bl, p);
