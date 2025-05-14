@@ -246,7 +246,7 @@ namespace rgw::dedup {
     d_min_obj_size_for_dedup = cct->_conf->rgw_max_chunk_size;
     d_head_object_size = cct->_conf->rgw_max_chunk_size;
     //ceph_assert(4*1024*1024 == d_head_object_size);
-    d_min_obj_size_for_dedup = 4 * 1024;
+
     int ret = init_rados_access_handles();
     if (ret != 0) {
       derr << __func__ << "::ERR: failed init_rados_access_handles() ret="

@@ -295,6 +295,16 @@ namespace rgw::dedup {
                         << cpp_strerror(-ret) << dendl;
     }
 
+    ret = ioctx.application_enable("dedup", false);
+    if (ret == 0) {
+      ldpp_dout(dpp, 10) << __func__ << "::pool " << DEDUP_POOL_NAME
+			 << " was associated with dedup app" << dendl;
+    }
+    else {
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to enable pool "
+                        << DEDUP_POOL_NAME << " with: "
+                        << cpp_strerror(-ret) << ", ret=" << ret << dendl;
+    }
     return ret;
   }
 

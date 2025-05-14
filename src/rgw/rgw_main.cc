@@ -162,9 +162,7 @@ int main(int argc, char *argv[])
   main.init_opslog();
   main.init_tracepoints();
   main.init_lua();
-#ifdef ENABLE_DEDUP
   main.init_dedup();
-#endif
   r = main.init_frontends2(nullptr /* RGWLib */);
   if (r != 0) {
     derr << "ERROR:  initialize frontend fail, r = " << r << dendl;

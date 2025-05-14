@@ -530,11 +530,9 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     if (env.lua.background) {
       rgw_pauser->add_pauser(env.lua.background);
     }
-#ifdef ENABLE_DEDUP
     if (dedup_background) {
       rgw_pauser->add_pauser(dedup_background.get());
     }
-#endif
     need_context_pool();
     reloader = std::make_unique<RGWRealmReloader>(
       env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), *context_pool);
@@ -587,7 +585,6 @@ void rgw::AppMain::init_lua()
 
 void rgw::AppMain::init_dedup()
 {
-#ifdef ENABLE_DEDUP
   rgw::sal::Driver* driver = env.driver;
   if (driver->get_name() == "rados") { /* Supported for only RadosStore */
     try {
@@ -599,7 +596,6 @@ void rgw::AppMain::init_dedup()
       ldpp_dout(dpp, 0) << __func__ << "::failed create dedup background job" << dendl;
     }
   }
-#endif
 }
 
 void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
@@ -609,11 +605,9 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
     if (g_conf().get_val<bool>("rgw_lua_enable")) {
       static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->unwatch_reload(dpp);
     }
-#ifdef ENABLE_DEDUP
     if (dedup_background) {
       dedup_background->unwatch_reload(dpp);
     }
-#endif
   }
 
   for (auto& fe : fes) {
@@ -622,11 +616,11 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 
   ldh.reset(nullptr); // deletes ldap helper if it was created
   rgw_log_usage_finalize();
-#ifdef ENABLE_DEDUP
+
   if (dedup_background) {
     dedup_background->shutdown();
   }
-#endif
+
   if (lua_background) {
     lua_background->shutdown();
   }
