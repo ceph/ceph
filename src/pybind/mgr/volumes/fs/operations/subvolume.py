@@ -137,3 +137,10 @@ def open_clone_subvol_pair_in_group(mgr, vol_handle, vol_spec, volname,
                                       SubvolumeOpType.CLONE_SOURCE) \
                                       as src_subvol:
                 yield (dst_subvol, src_subvol, src_snap_name)
+
+def get_subvol_state(vc, volspec, vol_name, group_name, subvol_name,
+                     op_type, volume=None, group=None):
+    group_name = None if group_name == '_nogroup' else group_name
+    with open_subvol_in_vol(vc, volspec, vol_name, group_name, subvol_name,
+                            op_type) as (_, _, subvol):
+        return subvol.state

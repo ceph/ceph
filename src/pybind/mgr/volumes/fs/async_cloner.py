@@ -19,7 +19,8 @@ from .operations.volume import open_volume, open_volume_lockless
 from .operations.group import open_group
 from .operations.subvolume import (open_subvol, open_subvol_in_group,
                                    open_clone_subvol_pair_in_vol,
-                                   open_clone_subvol_pair_in_group)
+                                   open_clone_subvol_pair_in_group,
+                                   get_subvol_state)
 from .operations.clone_index import open_clone_index
 from .operations.template import SubvolumeOpType
 
@@ -60,10 +61,6 @@ def open_at_group_unique(mgr, fs_handle, volspec, s_groupname, s_subvolname, c_s
         with open_subvol_in_group(mgr, fs_handle, volspec, s_groupname,
                                   s_subvolname, op_type) as s_subvolume:
             yield s_subvolume
-
-def get_clone_state(fs_client, volspec, volname, groupname, subvolname):
-    with open_at_volume(fs_client, volspec, volname, groupname, subvolname, SubvolumeOpType.CLONE_INTERNAL) as subvolume:
-        return subvolume.state
 
 def set_clone_state(fs_client, volspec, volname, groupname, subvolname, state):
     with open_at_volume(fs_client, volspec, volname, groupname, subvolname, SubvolumeOpType.CLONE_INTERNAL) as subvolume:
@@ -281,7 +278,9 @@ def start_clone_sm(fs_client, volspec, volname, index, groupname, subvolname, st
     finished = False
     current_state = None
     try:
-        current_state = get_clone_state(fs_client, volspec, volname, groupname, subvolname)
+        current_state = get_subvol_state(fs_client, volspec, volname, groupname,
+                                         subvolname,
+                                         SubvolumeOpType.CLONE_INTERNAL)
         log.debug("cloning ({0}, {1}, {2}) -- starting state \"{3}\"".format(volname, groupname, subvolname, current_state))
         if current_state == SubvolumeStates.STATE_PENDING:
             time.sleep(snapshot_clone_delay)
