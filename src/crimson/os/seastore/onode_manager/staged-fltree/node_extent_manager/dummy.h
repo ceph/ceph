@@ -151,7 +151,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     assert(len % ALIGNMENT == 0);
     auto r = ceph::buffer::create_aligned(len, ALIGNMENT);
     auto addr = laddr_t::from_byte_offset(
-      reinterpret_cast<laddr_t::Unsigned>(r->get_data()));
+      reinterpret_cast<loffset_t>(r->get_data()));
     auto bp = ceph::bufferptr(std::move(r));
     auto extent = Ref<DummyNodeExtent>(new DummyNodeExtent(std::move(bp)));
     extent->set_laddr(addr);
