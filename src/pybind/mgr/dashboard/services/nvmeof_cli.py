@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
+from abc import ABC, abstractmethod
 import errno
 import json
-from typing import Any, Dict, Optional, Type, NamedTuple, \
-    get_type_hints, Annotated, get_origin, get_args
+from typing import Any, Dict, Optional, get_type_hints, Annotated, get_origin, get_args, Union
 
 import yaml
+from prettytable import PrettyTable
+
 from mgr_module import CLICheckNonemptyFileInput, CLICommand, CLIReadCommand, \
     CLIWriteCommand, HandleCommandResult, HandlerFuncType
 
@@ -51,97 +53,37 @@ def remove_nvmeof_gateway(_, name: str, daemon_name: str = ''):
     except ManagedByOrchestratorException as ex:
         return -errno.EINVAL, '', str(ex)
 
-from abc import ABC, abstractmethod
+
+def convert_from_bytes(num_in_bytes):
+    units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+    size = float(num_in_bytes)
+    unit_index = 0
+
+    while size >= 1024 and unit_index < len(units) - 1:
+        size /= 1024
+        unit_index += 1
+
+    # Round to no decimal if it's an integer, otherwise show 1 decimal place
+    if size.is_integer():
+        size_str = f"{int(size)}"
+    else:
+        size_str = f"{size:.1f}"
+
+    return f"{size_str}{units[unit_index]}"
+
 
 class OutputFormatter(ABC):
     @abstractmethod
-    def format_output(self, data):
+    def format_output(self, data, model):
         """Format the given data for output."""
         pass
 
-    @abstractmethod
-    def get_type(self) -> str:
-        """Return a string representing the output format type ('text', 'json', 'yaml')."""
-        pass
 
-class TextOutputFormatter(OutputFormatter):
-    def get_type(self):
-        return 'text'
-
-class StatusTextOutputFormatter(TextOutputFormatter):
-    def _convert_to_status_text_output(self, data):
-        if data.get('status') == 0:
-            return "Success"
-        else:
-            return data.get("error_message")
-    
-    def format_output(self, data):
-        return self._convert_to_status_text_output(data)
-
-
-class DataTextOutputFormatter(TextOutputFormatter):
+class AnnotatedDataTextOutputFormatter(OutputFormatter):
     def _snake_case_to_title(self, s):
         return s.replace('_', ' ').title()
 
     def _create_table(self, field_names):
-        from prettytable import PrettyTable
-        table = PrettyTable(border=True)
-        titles = [self._snake_case_to_title(field) for field in field_names]
-        table.field_names = titles
-        table.align = 'l'
-        table.padding_width = 0
-        return table
-    
-    def _get_list_text_output(self, data):
-        columns = list(dict.fromkeys([key for obj in data for key in obj.keys()]))
-        table = self._create_table(columns)
-        for d in data:
-            row = []
-            for col in columns:
-                row.append(str(d.get(col)))
-            table.add_row(row)
-        return table.get_string()
-
-    def _get_object_text_output(self, data):
-        columns = [k for k in data.keys() if k not in ["status", "error_message"]]
-        table = self._create_table(columns)
-        row = []
-        for col in columns:
-            row.append(str(data.get(col)))
-        table.add_row(row)
-        return table.get_string()
-
-    def _is_list_of_complex_type(self, value):
-        if not isinstance(value, list):
-            return False
-
-        if not value:
-            return None
-
-        primitives = (int, float, str, bool, bytes)
-
-        return not isinstance(value[0], primitives)
-
-    def _select_list_field(self, data: Dict):
-        for key, value in data.items():
-            if self._is_list_of_complex_type(value):
-                return key
-
-    def _convert_to_text_output(self, data):
-        data_field = self._select_list_field(data)
-        if not data_field:
-            return self._get_object_text_output(data)
-        return self._get_list_text_output(data[data_field])
-    
-    def format_output(self, data):
-        return self._convert_to_text_output(data)
-    
-class AnnotatedDataTextOutputFormatter(TextOutputFormatter):
-    def _snake_case_to_title(self, s):
-        return s.replace('_', ' ').title()
-
-    def _create_table(self, field_names):
-        from prettytable import PrettyTable
         table = PrettyTable(border=True)
         titles = [self._snake_case_to_title(field) for field in field_names]
         table.field_names = titles
@@ -222,6 +164,9 @@ class AnnotatedDataTextOutputFormatter(TextOutputFormatter):
                         return [self.process_dict(item, get_args(actual_type)[0], False) for item in value]
                     elif is_top_level and annotation == 'exclusive-result-indicator':
                         return 'Success' if bool(input_dict[field]) else "Failure"
+                    elif annotation == 'size-bytes':
+                        assert isinstance(input_dict[field], int)
+                        value = convert_from_bytes(input_dict[field])
 
             if skip:
                 continue
@@ -244,11 +189,9 @@ class AnnotatedDataTextOutputFormatter(TextOutputFormatter):
         return self._convert_to_text_output(data, model)
     
 class NvmeofCLICommand(CLICommand):
-    def __init__(self, prefix, perm = 'rw', poll = False, output_formatter: TextOutputFormatter=None):
+    def __init__(self, prefix, perm = 'rw', poll = False):
         super().__init__(prefix, perm, poll)
-        if not output_formatter:
-            output_formatter = DataTextOutputFormatter()
-        self._output_formatter = output_formatter
+        self._output_formatter = AnnotatedDataTextOutputFormatter()
         
     def __call__(self, func) -> HandlerFuncType:  # type: ignore
         # pylint: disable=useless-super-delegation

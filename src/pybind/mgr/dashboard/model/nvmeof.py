@@ -77,19 +77,19 @@ class Namespace(NamedTuple):
     rbd_image_name: str
     rbd_pool_name: str
     load_balancing_group: int
-    rbd_image_size: int
-    block_size: int
-    rw_ios_per_second: int
-    rw_mbytes_per_second: int
-    r_mbytes_per_second: int
-    w_mbytes_per_second: int
+    rbd_image_size: Annotated[int, 'size-bytes']
+    block_size: Annotated[int, 'size-bytes']
+    rw_ios_per_second: Annotated[int, 'override-header: R/W IOs per second']
+    rw_mbytes_per_second: Annotated[int, 'override-header: R/W MBs per second']
+    r_mbytes_per_second: Annotated[int, 'override-header: Read MBs per second']
+    w_mbytes_per_second: Annotated[int, 'override-header: Write MBs per second']
     trash_image: bool
 
 
 class NamespaceList(NamedTuple):
     status: int
     error_message: str
-    namespaces: List[Namespace]
+    namespaces: Annotated[List[Namespace], 'exclusive-list-field']
 
 
 class NamespaceIOStats(NamedTuple):
