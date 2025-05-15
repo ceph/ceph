@@ -100,7 +100,7 @@ The zone placement configuration can be queried with:
       ...
   }
 
-.. note:: If you have not done any previous `Multisite Configuration`_,
+.. note:: If you have not done any previous :ref:`Multisite Configuration <multisite>`,
           a ``default`` zone and zonegroup are created for you, and changes
           to the zone/zonegroup will not take effect until the Ceph Object
           Gateways are restarted. If you have created a realm for multisite,
@@ -272,4 +272,3 @@ names be used with Ceph, including ``INTELLIGENT-TIERING``, ``STANDARD_IA``,
 libraries.
 
 .. _`Pools`: ../pools
-.. _`Multisite Configuration`: ../multisite
