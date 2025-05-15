@@ -1,7 +1,7 @@
 .. _hardware-recommendations:
 
 ==========================
- hardware recommendations
+ Hardware Recommendations
 ==========================
 
 Ceph is designed to run on commodity hardware, which makes building and
@@ -73,7 +73,7 @@ administrative tasks (like monitoring and metrics) as well as increased
 consumption during recovery:  provisioning ~8GB *per BlueStore OSD* is thus
 advised.
 
-Monitors and managers (ceph-mon and ceph-mgr)
+Monitors and Managers (ceph-mon and ceph-mgr)
 ---------------------------------------------
 
 Monitor and manager daemon memory usage scales with the size of the
@@ -88,7 +88,7 @@ tuning the following settings:
 * :confval:`rocksdb_cache_size`
 
 
-Metadata servers (ceph-mds)
+Metadata Servers (ceph-mds)
 ---------------------------
 
 CephFS metadata daemon memory utilization depends on the configured size of
