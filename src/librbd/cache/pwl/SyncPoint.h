@@ -52,10 +52,10 @@ private:
    * Writes bearing this sync gen number and the prior sync point will be
    * sub-ops of this Gather. This sync point will not be appended until all
    * these complete to the point where their persist order is guaranteed. */
-  C_Gather *m_prior_log_entries_persisted;
+  std::unique_ptr<C_Gather> m_prior_log_entries_persisted;
   /* The finisher for this will append the sync point to the log.  The finisher
    * for m_prior_log_entries_persisted will be a sub-op of this. */
-  C_Gather *m_sync_point_persist;
+  std::unique_ptr<C_Gather> m_sync_point_persist;
   int m_prior_log_entries_persisted_result = 0;
   int m_prior_log_entries_persisted_complete = false;
   friend std::ostream &operator<<(std::ostream &os,

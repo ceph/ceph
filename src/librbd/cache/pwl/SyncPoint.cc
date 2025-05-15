@@ -14,8 +14,8 @@ namespace pwl {
 
 SyncPoint::SyncPoint(uint64_t sync_gen_num, CephContext *cct)
   : log_entry(std::make_shared<SyncPointLogEntry>(sync_gen_num)), m_cct(cct) {
-  m_prior_log_entries_persisted = new C_Gather(cct, nullptr);
-  m_sync_point_persist = new C_Gather(cct, nullptr);
+  m_prior_log_entries_persisted = std::make_unique<C_Gather>(cct, nullptr);
+  m_sync_point_persist = std::make_unique<C_Gather>(cct, nullptr);
   on_sync_point_appending.reserve(MAX_WRITES_PER_SYNC_POINT + 2);
   on_sync_point_persisted.reserve(MAX_WRITES_PER_SYNC_POINT + 2);
   ldout(m_cct, 20) << "sync point " << sync_gen_num << dendl;
