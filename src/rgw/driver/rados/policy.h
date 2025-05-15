@@ -44,16 +44,16 @@ struct IndexObj {
 using PolicyIndex = std::variant<std::monostate, IndexObj, PolicyObj>;
 
 struct resource_metadata {
-  std::string policy_id;
+  std::string policy_name;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(policy_id, bl);
+    encode(policy_name, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(policy_id, bl);
+    decode(policy_name, bl);
     DECODE_FINISH(bl);
   }
 
@@ -92,4 +92,18 @@ int delete_policy(const DoutPrefixProvider *dpp,
               const RGWZoneParams &zone,
               std::string_view account,
               std::string_view name);
+
+int list_policies(const DoutPrefixProvider *dpp,
+              optional_yield y,
+              librados::Rados& rados,
+              RGWSI_SysObj &sysobj,
+              const RGWZoneParams &zone,
+              std::string_view account_id,
+              rgw::IAM::Scope scope,
+              bool only_attached,
+              std::string_view path_prefix,
+              rgw::IAM::PolicyUsageFilter policy_usage_filter,
+              std::string_view marker,
+              uint32_t max_items,
+              rgw::IAM::PolicyList& listing);
 }
