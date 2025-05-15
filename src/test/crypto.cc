@@ -354,7 +354,7 @@ static void dump_buf(string title, const unsigned char *buf, int len)
     if (i != 0 && i % 16 == 0) {
       cout << std::endl;
     }
-    std::cout << std::format("{:02x} ", buf[i]);
+    std::cout << fmt::format("{:02x} ", buf[i]);
   }
   std::cout << std::endl << std::endl;
 }
