@@ -5138,6 +5138,14 @@ next:
 	              "inode and a local dirfrag is dirty; please rerun scrub when "
 		      "system is stable; assuming passed for now;" << dendl;
           results->raw_stats.passed = true;
+	} else if (in->has_dirty_remote_dirfrag_scrubbed()) {
+          MDCache *mdcache = in->mdcache; // for dout()
+          auto ino = [this]() { return in->ino(); }; // for dout()
+          dout(20) << "raw stats most likely wont match since it's a directory "
+	              "inode and a remote dirfrag is dirty; please rerun scrub when "
+		      "system is stable; assuming passed for now;" << dendl;
+          results->raw_stats.passed = true;
+	  in->clear_dirty_remote_dirfrag_scrubbed();
 	}
 	goto next;
       }
