@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_rest_iam_policy.h"
+#include "rgw_iam_managed_policy.h"
 #include "rgw_rest_iam.h"
 #include <regex>
 #include <string>
@@ -383,3 +384,128 @@ void RGWDeletePolicy::execute(optional_yield y)
   }
 }
 
+int RGWListPolicies::init_processing(optional_yield y)
+{
+  const std::string scope_str = s->info.args.get("Scope");
+  if (scope_str.empty() || scope_str == "All") {
+    scope = rgw::IAM::Scope::All;
+  } else if (scope_str == "AWS") {
+    scope = rgw::IAM::Scope::AWS;
+  } else if (scope_str == "Local") {
+    scope = rgw::IAM::Scope::Local;
+  } else {
+    s->err.message = "Invalid value for Scope";
+    return -EINVAL;
+  }
+
+  s->info.args.get_bool("OnlyAttached", &only_attached, false);
+
+  path_prefix = s->info.args.get("PathPrefix");
+  if(path_prefix.empty()) {
+    path_prefix = "/";
+  }
+
+  const std::string usage_filter_str = s->info.args.get("PolicyUsageFilter");
+  if (usage_filter_str.empty() || usage_filter_str == "PermissionsPolicy") {
+    policy_usage_filter = rgw::IAM::PolicyUsageFilter::PermissionsPolicy;
+  } else if (usage_filter_str == "PermissionsBoundary") {
+    policy_usage_filter = rgw::IAM::PolicyUsageFilter::PermissionsBoundary;
+  } else {
+    s->err.message = "Invalid value for PolicyUsageFilter";
+    return -EINVAL;
+  }
+
+  marker = s->info.args.get("Marker");
+
+  int r = s->info.args.get_int("MaxItems", &max_items, max_items);
+  if (r < 0 || max_items > 1000) {
+    s->err.message = "Invalid value for MaxItems";
+    return -EINVAL;
+  }
+
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    account_id = acc->id;
+  }
+
+  return 0;
+}
+
+void RGWListPolicies::execute(optional_yield y)
+{
+  rgw::IAM::PolicyList listing;
+  listing.next_marker = marker;
+  op_ret = driver->list_customer_mananged_policies(this, y, account_id, scope,
+                      only_attached, path_prefix, policy_usage_filter,
+                      listing.next_marker, max_items, listing);
+  if (op_ret == -ENOENT) {
+    op_ret = 0;
+  } else if (op_ret < 0) {
+    return;
+  }
+
+  send_response_data(listing.policies);
+
+  if (!started_response) {
+    started_response = true;
+    start_response();
+  }
+  end_response(listing.next_marker);
+}
+
+void RGWListPolicies::start_response()
+{
+  const int64_t proposed_content_length =
+      op_ret ? NO_CONTENT_LENGTH : CHUNKED_TRANSFER_ENCODING;
+
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, to_mime_type(s->format), proposed_content_length);
+
+  if (op_ret) {
+    return;
+  }
+
+  dump_start(s); // <?xml block ?>
+  s->formatter->open_object_section_in_ns("ListPoliciesResponse", RGW_REST_IAM_XMLNS);
+  s->formatter->open_object_section("ListPoliciesResult");
+  s->formatter->open_array_section("Policies");
+}
+
+void RGWListPolicies::end_response(std::string_view next_marker)
+{
+  s->formatter->close_section(); // Policies
+
+  const bool truncated = !next_marker.empty();
+  s->formatter->dump_bool("IsTruncated", truncated);
+  if (truncated) {
+    s->formatter->dump_string("Marker", next_marker);
+  }
+
+  s->formatter->close_section(); // ListPoliciesResult
+  s->formatter->close_section(); // ListPoliciesResponse
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+void RGWListPolicies::send_response_data(std::span<rgw::IAM::ManagedPolicyInfo> policies)
+{
+  if (!started_response) {
+    started_response = true;
+    start_response();
+  }
+
+  for (const auto& info : policies) {
+    s->formatter->open_object_section("member");
+    dump_ManagedPolicyInfo(info, s->formatter);
+    s->formatter->close_section(); // member
+  }
+
+  // flush after each chunk
+  rgw_flush_formatter(s, s->formatter);
+}
+
+void RGWListPolicies::send_response()
+{
+  if (!started_response) {
+    start_response();
+  }
+}

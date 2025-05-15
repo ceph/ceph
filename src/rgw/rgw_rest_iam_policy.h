@@ -5,6 +5,7 @@
 
 #include "rgw_rest.h"
 #include "rgw_iam_managed_policy.h"
+#include <span>
 
 class RGWRestPolicy : public RGWOp {
   const uint64_t action;
@@ -47,4 +48,28 @@ public:
   RGWDeletePolicy() : RGWRestPolicy(rgw::IAM::iamDeletePolicy, RGW_CAP_WRITE){ }
   const char* name() const override { return "delete_policy"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_POLICY; }
+};
+
+class RGWListPolicies : public RGWRestPolicy {
+  std::string account_id;
+  rgw::IAM::Scope scope;
+  bool only_attached;
+  std::string path_prefix;
+  rgw::IAM::PolicyUsageFilter policy_usage_filter;
+  std::string marker;
+  int max_items = 100;
+
+  bool started_response = false;
+  void start_response();
+  void end_response(std::string_view next_marker);
+  void send_response_data(std::span<rgw::IAM::ManagedPolicyInfo> policies);
+public:
+  RGWListPolicies() : RGWRestPolicy(rgw::IAM::iamListPolicies, RGW_CAP_READ){ }
+
+  int init_processing(optional_yield y) override;
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "list_policies"; }
+  RGWOpType get_type() override { return RGW_OP_LIST_POLICIES; }
 };
