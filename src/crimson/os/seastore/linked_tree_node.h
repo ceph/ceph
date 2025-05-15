@@ -632,14 +632,14 @@ protected:
     Transaction &t,
     T &left,
     T &right,
-    bool prefer_left,
+    uint32_t pivot_idx,
     T &replacement_left,
     T &replacement_right)
   {
     size_t l_size = left.get_size();
     size_t r_size = right.get_size();
-    size_t pivot_idx = T::get_balance_pivot_idx(left, right, prefer_left);
 
+    ceph_assert(pivot_idx != l_size && pivot_idx != r_size);
     replacement_left.maybe_expand_children(pivot_idx);
     replacement_right.maybe_expand_children(r_size + l_size - pivot_idx);
 
@@ -678,17 +678,11 @@ protected:
     Transaction &t,
     T &left,
     T &right,
-    bool prefer_left,
+    uint32_t pivot_idx,
     T &replacement_left,
     T &replacement_right)
   {
     size_t l_size = left.get_size();
-    size_t r_size = right.get_size();
-    size_t total = l_size + r_size;
-    size_t pivot_idx = (l_size + r_size) / 2;
-    if (total % 2 && prefer_left) {
-      pivot_idx++;
-    }
 
     if (left.is_initial_pending()) {
       for (auto &cs : left.copy_sources) {

@@ -738,11 +738,9 @@ public:
     set_meta(omap_node_meta_t::merge_from(left.get_meta(), right.get_meta()));
   }
 
-  static uint32_t get_balance_pivot_idx(
+  static std::optional<uint32_t> get_balance_pivot_idx(
     const StringKVInnerNodeLayout &left,
-    const StringKVInnerNodeLayout &right,
-    // this is just for the consistency with linked tree nodes
-    bool prefer_left = false)
+    const StringKVInnerNodeLayout &right)
   {
     uint32_t left_size = omap_inner_key_t(
       left.get_node_key_ptr()[left.get_size()-1]).key_off;
@@ -773,7 +771,9 @@ public:
         }
       }
     }
-    return pivot_idx;
+    return pivot_idx == left.get_size()
+      ? std::nullopt
+      : std::make_optional<uint32_t>(pivot_idx);
   }
 
   /**
@@ -786,14 +786,15 @@ public:
   static std::string balance_into_new_nodes(
     const StringKVInnerNodeLayout &left,
     const StringKVInnerNodeLayout &right,
+    uint32_t pivot_idx,
     StringKVInnerNodeLayout &replacement_left,
     StringKVInnerNodeLayout &replacement_right)
   {
+    ceph_assert(!(left.below_min() && right.below_min()));
     uint32_t left_size = omap_inner_key_t(left.get_node_key_ptr()[left.get_size()-1]).key_off;
     uint32_t right_size = omap_inner_key_t(right.get_node_key_ptr()[right.get_size()-1]).key_off;
     uint32_t total = left_size + right_size;
     uint32_t pivot_size = total / 2;
-    uint32_t pivot_idx = get_balance_pivot_idx(left, right);
 
     auto replacement_pivot = pivot_idx >= left.get_size() ?
       right.iter_idx(pivot_idx - left.get_size())->get_key() :
