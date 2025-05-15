@@ -220,6 +220,8 @@ class AnnotatedDataTextOutputFormatter(TextOutputFormatter):
                         assert get_origin(actual_type) ==  list
                         assert len(get_args(actual_type)) == 1
                         return [self.process_dict(item, get_args(actual_type)[0], False) for item in value]
+                    elif is_top_level and annotation == 'exclusive-result-indicator':
+                        return 'Success' if bool(input_dict[field]) else "Failure"
 
             if skip:
                 continue
@@ -234,6 +236,8 @@ class AnnotatedDataTextOutputFormatter(TextOutputFormatter):
 
     def _convert_to_text_output(self, data, model):
         data = self.process_dict(data, model, True)
+        if isinstance(data, str):
+            return data
         return self._get_text_output(data)
     
     def format_output(self, data, model):
