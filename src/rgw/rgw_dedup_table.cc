@@ -165,15 +165,15 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int dedup_table_t::set_shared_manifest_mode(const key_t *p_key,
-                                              disk_block_id_t block_id,
-                                              record_id_t rec_id)
+  int dedup_table_t::set_shared_manifest_src_mode(const key_t *p_key,
+                                                  disk_block_id_t block_id,
+                                                  record_id_t rec_id)
   {
     uint32_t idx = find_entry(p_key);
     value_t &val = hash_tab[idx].val;
     if (val.is_occupied()) {
       if (val.block_idx == block_id && val.rec_id == rec_id) {
-        val.set_shared_manifest();
+        val.set_shared_manifest_src();
         return 0;
       }
     }

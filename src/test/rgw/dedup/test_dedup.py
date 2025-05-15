@@ -4,7 +4,8 @@ import random
 import math
 import time
 import subprocess
-
+import urllib.request
+import hashlib
 from multiprocessing import Process
 import os
 import string
@@ -34,10 +35,14 @@ class Dedup_Stats:
     skip_src_record: int = 0
     skip_changed_object: int = 0
     corrupted_etag: int = 0
+    sha256_mismatch: int = 0
+    valid_sha256: int = 0
+    invalid_sha256: int = 0
+    set_sha256: int = 0
     total_processed_objects: int = 0
     size_before_dedup: int = 0
     loaded_objects: int = 0
-    set_shared_manifest : int = 0
+    set_shared_manifest_src : int = 0
     deduped_obj: int = 0
     singleton_obj : int = 0
     unique_obj : int = 0
@@ -569,16 +574,15 @@ def calc_expected_stats(dedup_stats, obj_size, num_copies, config):
         dedup_stats.skip_singleton_bytes += on_disk_byte_size
     else:
         dedup_stats.skip_src_record += 1
-        dedup_stats.set_shared_manifest += 1
+        dedup_stats.set_shared_manifest_src += 1
+        dedup_stats.set_sha256 += num_copies
+        dedup_stats.invalid_sha256 += num_copies
         dedup_stats.unique_obj += 1
         dups_count = (num_copies - 1)
         dedup_stats.duplicate_obj += dups_count
         dedup_stats.deduped_obj += dups_count
         deduped_obj_bytes=calc_dedupable_space(on_disk_byte_size, config)
         dedup_stats.deduped_obj_bytes += (deduped_obj_bytes * dups_count)
-        # roundup to next 4KB
-        #blocks_bytes = ((obj_size+BLOCK_SIZE-1)//BLOCK_SIZE)*BLOCK_SIZE
-        #deduped_block_bytes=calc_dedupable_space(blocks_bytes, config)
         deduped_block_bytes=((deduped_obj_bytes+BLOCK_SIZE-1)//BLOCK_SIZE)*BLOCK_SIZE
         dedup_stats.dedup_bytes_estimate += (deduped_block_bytes * dups_count)
 
@@ -883,7 +887,7 @@ def get_stats_line_val(line):
 #-------------------------------------------------------------------------------
 def print_dedup_stats(dedup_stats):
     for key in dedup_stats.__dict__:
-        log.info("dedup_stats[%s] = %d", key, dedup_stats.__dict__[key])
+        log.warning("dedup_stats[%s] = %d", key, dedup_stats.__dict__[key])
 
 
 #-------------------------------------------------------------------------------
@@ -897,7 +901,7 @@ def print_dedup_stats_diff(actual, expected):
 #-------------------------------------------------------------------------------
 def reset_full_dedup_stats(dedup_stats):
     dedup_stats.total_processed_objects = 0
-    dedup_stats.set_shared_manifest = 0
+    dedup_stats.set_shared_manifest_src = 0
     dedup_stats.deduped_obj = 0
     dedup_stats.deduped_obj_bytes = 0
     dedup_stats.skip_shared_manifest = 0
@@ -906,12 +910,17 @@ def reset_full_dedup_stats(dedup_stats):
     dedup_stats.skip_singleton_bytes = 0
     dedup_stats.skip_changed_object = 0
     dedup_stats.corrupted_etag = 0
+    dedup_stats.sha256_mismatch = 0
+    dedup_stats.valid_sha256 = 0
+    dedup_stats.invalid_sha256 = 0
+    dedup_stats.set_sha256 = 0
+
 
 #-------------------------------------------------------------------------------
 def read_full_dedup_stats(dedup_stats, md5_stats):
     main = md5_stats['main']
     dedup_stats.total_processed_objects = main['Total processed objects']
-    dedup_stats.set_shared_manifest = main['Set Shared-Manifest']
+    dedup_stats.set_shared_manifest_src = main['Set Shared-Manifest SRC']
     dedup_stats.deduped_obj = main['Deduped Obj (this cycle)']
     dedup_stats.deduped_obj_bytes = main['Deduped Bytes(this cycle)']
 
@@ -925,10 +934,22 @@ def read_full_dedup_stats(dedup_stats, md5_stats):
     if key in skipped:
         dedup_stats.skip_changed_object = skipped[key]
 
+    notify=md5_stats['notify']
+    dedup_stats.valid_sha256 = notify['Valid SHA256 attrs']
+    dedup_stats.invalid_sha256 = notify['Invalid SHA256 attrs']
+    key='Set SHA256'
+    if key in notify:
+        dedup_stats.set_sha256 = notify[key]
+
     sys_failures = md5_stats['system failures']
     key='Corrupted ETAG'
     if key in sys_failures:
         dedup_stats.corrupted_etag = sys_failures[key]
+
+    log_failures = md5_stats['logical failures']
+    key='SHA256 mismatch'
+    if key in log_failures:
+        dedup_stats.sha256_mismatch = log_failures[key]
 
 
 #-------------------------------------------------------------------------------
@@ -1059,9 +1080,11 @@ def exec_dedup(expected_dedup_stats, dry_run, verify_stats=True):
     if verify_stats == False:
         return ret
 
+    #dedup_stats.set_sha256 = dedup_stats.invalid_sha256
     if dedup_stats != expected_dedup_stats:
         log.info("==================================================")
         print_dedup_stats_diff(dedup_stats, expected_dedup_stats)
+        print_dedup_stats(dedup_stats)
         log.info("==================================================\n")
         assert dedup_stats == expected_dedup_stats
 
@@ -1347,7 +1370,7 @@ def test_dedup_etag_corruption():
         return
 
     bucket_name = gen_bucket_name()
-    log.info("test_dedup_small: connect to AWS ...")
+    log.info("test_dedup_etag_corruption: connect to AWS ...")
     conn=get_single_connection()
     prepare_test()
     try:
@@ -1357,7 +1380,6 @@ def test_dedup_etag_corruption():
         gen_files_fixed_copies(files, num_files, MULTIPART_SIZE, 2)
 
         bucket = conn.create_bucket(Bucket=bucket_name)
-        log.info("upload objects to bucket <%s> ...", bucket_name)
         indices = [0] * len(files)
         ret = upload_objects(bucket_name, files, indices, conn, default_config)
         expected_results = ret[0]
@@ -1373,13 +1395,18 @@ def test_dedup_etag_corruption():
                 # no dedup will happen because of the inserted corruption
                 expected_dedup_stats.deduped_obj=0
                 expected_dedup_stats.deduped_obj_bytes=0
-                expected_dedup_stats.set_shared_manifest=0
+                expected_dedup_stats.set_shared_manifest_src=0
 
             dry_run=False
             ret=exec_dedup(expected_dedup_stats, dry_run)
-            dedup_stats=ret[1]
+            #dedup_stats=ret[1]
             dedup_ratio_estimate=ret[2]
             dedup_ratio_actual=ret[3]
+
+            if corruption == "no corruption":
+                expected_dedup_stats.valid_sha256=1
+                expected_dedup_stats.invalid_sha256=0
+                expected_dedup_stats.set_sha256=0
 
             s3_bytes_before=expected_dedup_stats.size_before_dedup
             expected_ratio_actual=Dedup_Ratio()
@@ -1389,6 +1416,92 @@ def test_dedup_etag_corruption():
             if corruption != "no corruption":
                 assert expected_ratio_actual == dedup_ratio_actual
                 change_object_etag(corrupted[0], corrupted[1])
+
+    finally:
+        # cleanup must be executed even after a failure
+        cleanup(bucket_name, conn)
+
+#-------------------------------------------------------------------------------
+def write_bin_file(files, bin_arr, filename):
+    full_filename = OUT_DIR + filename
+    fout = open(full_filename, "wb")
+    fout.write(bin_arr)
+    fout.close()
+    files.append((filename, len(bin_arr), 1))
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_md5_collisions():
+    #return
+
+    if full_dedup_is_disabled():
+        return
+
+    s1="d131dd02c5e6eec4693d9a0698aff95c2fcab58712467eab4004583eb8fb7f8955ad340609f4b30283e488832571415a085125e8f7cdc99fd91dbdf280373c5bd8823e3156348f5bae6dacd436c919c6dd53e2b487da03fd02396306d248cda0e99f33420f577ee8ce54b67080a80d1ec69821bcb6a8839396f9652b6ff72a70"
+    s2="d131dd02c5e6eec4693d9a0698aff95c2fcab50712467eab4004583eb8fb7f8955ad340609f4b30283e4888325f1415a085125e8f7cdc99fd91dbd7280373c5bd8823e3156348f5bae6dacd436c919c6dd53e23487da03fd02396306d248cda0e99f33420f577ee8ce54b67080280d1ec69821bcb6a8839396f965ab6ff72a70"
+
+    s1_bin=bytes.fromhex(s1)
+    s2_bin=bytes.fromhex(s2)
+
+    s1_hash=hashlib.md5(s1_bin).hexdigest()
+    s2_hash=hashlib.md5(s2_bin).hexdigest()
+    # data is different
+    assert s1 != s2
+    # but MD5 is identical
+    assert s1_hash == s2_hash
+
+    prepare_test()
+    files=[]
+    try:
+        write_bin_file(files, s1_bin, "s1")
+        write_bin_file(files, s2_bin, "s2")
+
+        bucket_name = gen_bucket_name()
+        log.info("test_md5_collisions: connect to AWS ...")
+        config2=TransferConfig(multipart_threshold=64, multipart_chunksize=1*MB)
+        conn=get_single_connection()
+        bucket = conn.create_bucket(Bucket=bucket_name)
+        indices = [0] * len(files)
+        upload_objects(bucket_name, files, indices, conn, config2)
+
+        dedup_stats = Dedup_Stats()
+        # we wrote 2 different small objects (BLOCK_SIZE) with the same md5
+        dedup_stats.total_processed_objects=2
+        dedup_stats.loaded_objects=dedup_stats.total_processed_objects
+        # the objects will seem like a duplications with 1 unique and 1 duplicate
+        dedup_stats.unique_obj=1
+        dedup_stats.duplicate_obj=1
+        dedup_stats.skip_src_record=1
+        # the objects are 128 Bytes long so will take the min of BLOCK_SIZE each
+        dedup_stats.size_before_dedup=2*BLOCK_SIZE
+        # the md5 collision confuses the estimate
+        dedup_stats.dedup_bytes_estimate=BLOCK_SIZE
+        # SHA256 check will expose the problem
+        dedup_stats.invalid_sha256=dedup_stats.total_processed_objects
+        dedup_stats.set_sha256=dedup_stats.total_processed_objects
+        dedup_stats.sha256_mismatch=1
+        s3_bytes_before=dedup_stats.size_before_dedup
+        expected_ratio_actual=Dedup_Ratio()
+        expected_ratio_actual.s3_bytes_before=s3_bytes_before
+        expected_ratio_actual.s3_bytes_after=s3_bytes_before
+        expected_ratio_actual.ratio=0
+
+        dry_run=False
+        log.info("test_md5_collisions: first call to exec_dedup")
+        ret=exec_dedup(dedup_stats, dry_run)
+        dedup_ratio_actual=ret[3]
+
+        assert expected_ratio_actual == dedup_ratio_actual
+
+        dedup_stats.valid_sha256=dedup_stats.total_processed_objects
+        dedup_stats.invalid_sha256=0
+        dedup_stats.set_sha256=0
+
+        log.info("test_md5_collisions: second call to exec_dedup")
+        ret=exec_dedup(dedup_stats, dry_run)
+        dedup_ratio_actual=ret[3]
+
+        assert expected_ratio_actual == dedup_ratio_actual
 
     finally:
         # cleanup must be executed even after a failure
@@ -1444,7 +1557,8 @@ def test_dedup_small_with_tenants():
         small_objs_dedup_stats.skip_too_small=s3_objects_total
         assert small_objs_dedup_stats == dedup_stats
 
-        exec_dedup(dedup_stats, False)
+        dry_run=False
+        exec_dedup(dedup_stats, dry_run)
         log.info("Verify all objects")
         verify_objects_multi(files, conns, bucket_names, expected_results, default_config)
     finally:
@@ -1460,7 +1574,7 @@ def test_dedup_small_with_tenants():
 #    should be made to the system
 @pytest.mark.basic_test
 def test_dedup_inc_0_with_tenants():
-    return
+    #return
 
     if full_dedup_is_disabled():
         return
@@ -1484,15 +1598,19 @@ def test_dedup_inc_0_with_tenants():
         s3_objects_total = ret[2]
 
         dedup_stats2 = dedup_stats
-        dedup_stats2.skip_shared_manifest = dedup_stats.deduped_obj
-        dedup_stats2.skip_src_record = dedup_stats.set_shared_manifest
-        dedup_stats2.set_shared_manifest = 0
-        dedup_stats2.deduped_obj = 0
-        dedup_stats2.deduped_obj_bytes = 0
+        dedup_stats2.skip_shared_manifest=dedup_stats.deduped_obj
+        dedup_stats2.skip_src_record=dedup_stats.set_shared_manifest_src
+        dedup_stats2.set_shared_manifest_src=0
+        dedup_stats2.deduped_obj=0
+        dedup_stats2.deduped_obj_bytes=0
+        dedup_stats2.valid_sha256=dedup_stats.invalid_sha256
+        dedup_stats2.invalid_sha256=0
+        dedup_stats2.set_sha256=0
 
         log.info("test_dedup_inc_0_with_tenants: incremental dedup:")
         # run dedup again and make sure nothing has changed
-        exec_dedup(dedup_stats2, False)
+        dry_run=False
+        exec_dedup(dedup_stats2, dry_run)
         verify_objects_multi(files, conns, bucket_names, expected_results, config)
     finally:
         # cleanup must be executed even after a failure
@@ -1507,7 +1625,7 @@ def test_dedup_inc_0_with_tenants():
 #    should be made to the system
 @pytest.mark.basic_test
 def test_dedup_inc_0():
-    return
+    #return
 
     if full_dedup_is_disabled():
         return
@@ -1528,15 +1646,19 @@ def test_dedup_inc_0():
         s3_objects_total = ret[2]
 
         dedup_stats2 = dedup_stats
-        dedup_stats2.skip_shared_manifest = dedup_stats.deduped_obj
-        dedup_stats2.skip_src_record = dedup_stats.set_shared_manifest
-        dedup_stats2.set_shared_manifest = 0
-        dedup_stats2.deduped_obj = 0
-        dedup_stats2.deduped_obj_bytes = 0
+        dedup_stats2.skip_shared_manifest=dedup_stats.deduped_obj
+        dedup_stats2.skip_src_record=dedup_stats.set_shared_manifest_src
+        dedup_stats2.set_shared_manifest_src=0
+        dedup_stats2.deduped_obj=0
+        dedup_stats2.deduped_obj_bytes=0
+        dedup_stats2.valid_sha256=dedup_stats.invalid_sha256
+        dedup_stats2.invalid_sha256=0
+        dedup_stats2.set_sha256=0
 
         log.info("test_dedup_inc_0: incremental dedup:")
         # run dedup again and make sure nothing has changed
-        exec_dedup(dedup_stats2, False)
+        dry_run=False
+        exec_dedup(dedup_stats2, dry_run)
         verify_objects(bucket_name, files, conn, expected_results, config)
     finally:
         # cleanup must be executed even after a failure
@@ -1550,7 +1672,7 @@ def test_dedup_inc_0():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_1_with_tenants():
-    return
+    #return
 
     if full_dedup_is_disabled():
         return
@@ -1590,17 +1712,21 @@ def test_dedup_inc_1_with_tenants():
         expected_results=ret[0]
         stats_combined=ret[1]
         stats_combined.skip_shared_manifest = stats_base.deduped_obj
-        #stats_combined.skip_shared_manifest = stats_base.set_shared_manifest + stats_base.deduped_obj
         stats_combined.skip_src_record     -= stats_base.skip_src_record
-        stats_combined.skip_src_record     += stats_base.set_shared_manifest
+        stats_combined.skip_src_record     += stats_base.set_shared_manifest_src
 
-        stats_combined.set_shared_manifest -= stats_base.set_shared_manifest
+        stats_combined.set_shared_manifest_src -= stats_base.set_shared_manifest_src
         stats_combined.deduped_obj         -= stats_base.deduped_obj
         stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
 
+        stats_combined.valid_sha256    = stats_base.set_sha256
+        stats_combined.invalid_sha256 -= stats_base.set_sha256
+        stats_combined.set_sha256     -= stats_base.set_sha256
+
         log.info("test_dedup_inc_1_with_tenants: incremental dedup:")
         # run dedup again
-        exec_dedup(stats_combined, False)
+        dry_run=False
+        exec_dedup(stats_combined, dry_run)
         verify_objects_multi(files_combined, conns, bucket_names, expected_results, config)
     finally:
         # cleanup must be executed even after a failure
@@ -1614,7 +1740,7 @@ def test_dedup_inc_1_with_tenants():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_1():
-    return
+    #return
 
     if full_dedup_is_disabled():
         return
@@ -1650,17 +1776,21 @@ def test_dedup_inc_1():
         expected_results = ret[0]
         stats_combined = ret[1]
         stats_combined.skip_shared_manifest = stats_base.deduped_obj
-        #stats_combined.skip_shared_manifest = stats_base.set_shared_manifest + stats_base.deduped_obj
         stats_combined.skip_src_record     -= stats_base.skip_src_record
-        stats_combined.skip_src_record     += stats_base.set_shared_manifest
+        stats_combined.skip_src_record     += stats_base.set_shared_manifest_src
 
-        stats_combined.set_shared_manifest -= stats_base.set_shared_manifest
+        stats_combined.set_shared_manifest_src -= stats_base.set_shared_manifest_src
         stats_combined.deduped_obj         -= stats_base.deduped_obj
         stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
 
+        stats_combined.valid_sha256    = stats_base.set_sha256
+        stats_combined.invalid_sha256 -= stats_base.set_sha256
+        stats_combined.set_sha256     -= stats_base.set_sha256
+
         log.info("test_dedup_inc_1: incremental dedup:")
         # run dedup again
-        exec_dedup(stats_combined, False)
+        dry_run=False
+        exec_dedup(stats_combined, dry_run)
         verify_objects(bucket_name, files_combined, conn, expected_results, config)
     finally:
         # cleanup must be executed even after a failure
@@ -1675,7 +1805,7 @@ def test_dedup_inc_1():
 # 4) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_2_with_tenants():
-    return
+    #return
 
     if full_dedup_is_disabled():
         return
@@ -1723,17 +1853,21 @@ def test_dedup_inc_2_with_tenants():
         expected_results = ret[0]
         stats_combined = ret[1]
         stats_combined.skip_shared_manifest = stats_base.deduped_obj
-        #stats_combined.skip_shared_manifest = stats_base.set_shared_manifest + stats_base.deduped_obj
         stats_combined.skip_src_record     -= stats_base.skip_src_record
-        stats_combined.skip_src_record     += stats_base.set_shared_manifest
+        stats_combined.skip_src_record     += stats_base.set_shared_manifest_src
 
-        stats_combined.set_shared_manifest -= stats_base.set_shared_manifest
+        stats_combined.set_shared_manifest_src -= stats_base.set_shared_manifest_src
         stats_combined.deduped_obj         -= stats_base.deduped_obj
         stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
 
+        stats_combined.valid_sha256    = stats_base.set_sha256
+        stats_combined.invalid_sha256 -= stats_base.set_sha256
+        stats_combined.set_sha256     -= stats_base.set_sha256
+
         log.info("test_dedup_inc_2_with_tenants: incremental dedup:")
         # run dedup again
-        exec_dedup(stats_combined, False)
+        dry_run=False
+        exec_dedup(stats_combined, dry_run)
         verify_objects_multi(files_combined, conns, bucket_names, expected_results, config)
     finally:
         # cleanup must be executed even after a failure
@@ -1748,7 +1882,7 @@ def test_dedup_inc_2_with_tenants():
 # 4) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_2():
-    return
+    #return
 
     if full_dedup_is_disabled():
         return
@@ -1791,17 +1925,21 @@ def test_dedup_inc_2():
         expected_results = ret[0]
         stats_combined = ret[1]
         stats_combined.skip_shared_manifest = stats_base.deduped_obj
-        #stats_combined.skip_shared_manifest = stats_base.set_shared_manifest + stats_base.deduped_obj
         stats_combined.skip_src_record     -= stats_base.skip_src_record
-        stats_combined.skip_src_record     += stats_base.set_shared_manifest
+        stats_combined.skip_src_record     += stats_base.set_shared_manifest_src
 
-        stats_combined.set_shared_manifest -= stats_base.set_shared_manifest
+        stats_combined.set_shared_manifest_src -= stats_base.set_shared_manifest_src
         stats_combined.deduped_obj         -= stats_base.deduped_obj
         stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
 
+        stats_combined.valid_sha256    = stats_base.set_sha256
+        stats_combined.invalid_sha256 -= stats_base.set_sha256
+        stats_combined.set_sha256     -= stats_base.set_sha256
+
         log.info("test_dedup_inc_2: incremental dedup:")
         # run dedup again
-        exec_dedup(stats_combined, False)
+        dry_run=False
+        exec_dedup(stats_combined, dry_run)
         verify_objects(bucket_name, files_combined, conn, expected_results,
                        config)
     finally:
@@ -1816,7 +1954,7 @@ def test_dedup_inc_2():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_with_remove_multi_tenants():
-    return
+    #return
 
     if full_dedup_is_disabled():
         return
@@ -1842,6 +1980,7 @@ def test_dedup_inc_with_remove_multi_tenants():
         # REMOVE some objects and update stats/expected
         src_record=0
         shared_manifest=0
+        valid_sha=0
         object_keys=[]
         files_sub=[]
         dedup_stats = Dedup_Stats()
@@ -1854,6 +1993,7 @@ def test_dedup_inc_with_remove_multi_tenants():
             log.debug("objects::%s::size=%d, num_copies=%d", filename, obj_size, num_copies_2);
             if num_copies_2:
                 if num_copies_2 > 1 and obj_size > RADOS_OBJ_SIZE:
+                    valid_sha += num_copies_2
                     src_record += 1
                     shared_manifest += (num_copies_2 - 1)
 
@@ -1871,15 +2011,18 @@ def test_dedup_inc_with_remove_multi_tenants():
         assert result[1] == 0
 
         # run dedup again
-        dedup_stats.set_shared_manifest=0
+        dedup_stats.set_shared_manifest_src=0
         dedup_stats.deduped_obj=0
         dedup_stats.deduped_obj_bytes=0
         dedup_stats.skip_src_record=src_record
         dedup_stats.skip_shared_manifest=shared_manifest
-        #stats_combined.skip_shared_manifest = stats_base.deduped_obj
+        dedup_stats.valid_sha256=valid_sha
+        dedup_stats.invalid_sha256=0
+        dedup_stats.set_sha256=0
 
         log.info("test_dedup_inc_with_remove: incremental dedup:")
-        exec_dedup(dedup_stats, False)
+        dry_run=False
+        exec_dedup(dedup_stats, dry_run)
         expected_results=calc_expected_results(files_sub, config)
         verify_objects_multi(files_sub, conns, bucket_names, expected_results, config)
     finally:
@@ -1916,6 +2059,7 @@ def test_dedup_inc_with_remove():
         # REMOVE some objects and update stats/expected
         src_record=0
         shared_manifest=0
+        valid_sha=0
         object_keys=[]
         files_sub=[]
         dedup_stats = Dedup_Stats()
@@ -1928,6 +2072,7 @@ def test_dedup_inc_with_remove():
             log.debug("objects::%s::size=%d, num_copies=%d", filename, obj_size, num_copies_2);
             if num_copies_2:
                 if num_copies_2 > 1 and obj_size > RADOS_OBJ_SIZE:
+                    valid_sha += num_copies_2
                     src_record += 1
                     shared_manifest += (num_copies_2 - 1)
 
@@ -1952,17 +2097,20 @@ def test_dedup_inc_with_remove():
         assert result[1] == 0
 
         # run dedup again
-        dedup_stats.set_shared_manifest=0
+        dedup_stats.set_shared_manifest_src=0
         dedup_stats.deduped_obj=0
         dedup_stats.deduped_obj_bytes=0
         dedup_stats.skip_src_record=src_record
         dedup_stats.skip_shared_manifest=shared_manifest
+        dedup_stats.valid_sha256=valid_sha
+        dedup_stats.invalid_sha256=0
+        dedup_stats.set_sha256=0
 
         log.info("test_dedup_inc_with_remove: incremental dedup:")
         log.info("stats_base.size_before_dedup=%d", stats_base.size_before_dedup)
         log.info("dedup_stats.size_before_dedup=%d", dedup_stats.size_before_dedup)
-
-        exec_dedup(dedup_stats, False)
+        dry_run=False
+        exec_dedup(dedup_stats, dry_run)
         expected_results=calc_expected_results(files_sub, config)
         verify_objects(bucket_name, files_sub, conn, expected_results, config)
     finally:
@@ -2153,7 +2301,7 @@ def test_dedup_large_scale():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_empty_bucket():
-    return
+    #return
 
     if full_dedup_is_disabled():
         return
@@ -2212,13 +2360,18 @@ def inc_step_with_tenants(stats_base, files, conns, bucket_names, config):
 
     stats_combined.skip_shared_manifest = stats_base.deduped_obj
     stats_combined.skip_src_record      = src_record
-    stats_combined.set_shared_manifest -= stats_base.set_shared_manifest
+    stats_combined.set_shared_manifest_src -= stats_base.set_shared_manifest_src
     stats_combined.deduped_obj         -= stats_base.deduped_obj
     stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
 
+    stats_combined.valid_sha256    = stats_base.set_sha256
+    stats_combined.invalid_sha256 -= stats_base.set_sha256
+    stats_combined.set_sha256     -= stats_base.set_sha256
+
     log.info("test_dedup_inc_2_with_tenants: incremental dedup:")
     # run dedup again
-    exec_dedup(stats_combined, False)
+    dry_run=False
+    exec_dedup(stats_combined, dry_run)
     verify_objects_multi(files_combined, conns, bucket_names, expected_results, config)
 
     return (files_combined, stats_combined)
@@ -2254,9 +2407,10 @@ def test_dedup_inc_loop_with_tenants():
             ret = inc_step_with_tenants(stats_base, files, conns, bucket_names, config)
             files=ret[0]
             stats_last=ret[1]
-            stats_base.set_shared_manifest += stats_last.set_shared_manifest
+            stats_base.set_shared_manifest_src += stats_last.set_shared_manifest_src
             stats_base.deduped_obj         += stats_last.deduped_obj
             stats_base.deduped_obj_bytes   += stats_last.deduped_obj_bytes
+            stats_base.set_sha256          += stats_last.set_sha256
     finally:
         # cleanup must be executed even after a failure
         cleanup_all_buckets(bucket_names, conns)
@@ -2296,8 +2450,8 @@ def test_dedup_dry_small_with_tenants():
         small_objs_dedup_stats.skip_too_small_bytes=dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small=s3_objects_total
         assert small_objs_dedup_stats == dedup_stats
-
-        exec_dedup(dedup_stats, True)
+        dry_run=True
+        exec_dedup(dedup_stats, dry_run)
     finally:
         # cleanup must be executed even after a failure
         cleanup_all_buckets(bucket_names, conns)
@@ -2507,7 +2661,7 @@ def test_dedup_dry_large_scale_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_dry_large_scale():
-    return
+    #return
 
     prepare_test()
     max_copies_count=3

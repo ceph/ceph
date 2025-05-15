@@ -305,7 +305,7 @@ namespace rgw::dedup {
 
       f->dump_unsigned("Total processed objects", this->processed_objects);
       f->dump_unsigned("Loaded objects", this->loaded_objects);
-      f->dump_unsigned("Set Shared-Manifest", this->set_shared_manifest);
+      f->dump_unsigned("Set Shared-Manifest SRC", this->set_shared_manifest_src);
       f->dump_unsigned("Deduped Obj (this cycle)", this->deduped_objects);
       f->dump_unsigned("Deduped Bytes(this cycle)", this->deduped_objects_bytes);
       f->dump_unsigned("Already Deduped bytes (prev cycles)",

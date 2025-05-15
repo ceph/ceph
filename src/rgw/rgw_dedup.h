@@ -212,6 +212,7 @@ namespace rgw::dedup {
                                    RGWObjManifest    &tgt_manifest);
     int dedup_object(const disk_record_t *p_src_rec,
                      const disk_record_t *p_tgt_rec,
+                     md5_stats_t         *p_stats,
                      bool                 is_shared_manifest_src);
 #endif
     int  remove_slabs(unsigned worker_id, unsigned md5_shard, uint32_t slab_count);

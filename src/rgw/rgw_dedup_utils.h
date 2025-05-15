@@ -224,7 +224,7 @@ namespace rgw::dedup {
       this->set_sha256_attrs        += other.set_sha256_attrs;
       this->skip_sha256_cmp         += other.skip_sha256_cmp;
 
-      this->set_shared_manifest     += other.set_shared_manifest;
+      this->set_shared_manifest_src += other.set_shared_manifest_src;
       this->loaded_objects          += other.loaded_objects;
       this->processed_objects       += other.processed_objects;
       this->singleton_count         += other.singleton_count;
@@ -269,7 +269,7 @@ namespace rgw::dedup {
     uint64_t set_sha256_attrs = 0;
     uint64_t skip_sha256_cmp = 0;
 
-    uint64_t set_shared_manifest = 0;
+    uint64_t set_shared_manifest_src = 0;
     uint64_t loaded_objects = 0;
     uint64_t processed_objects = 0;
     uint64_t singleton_count = 0;
@@ -317,7 +317,7 @@ namespace rgw::dedup {
     encode(m.invalid_sha256_attrs, bl);
     encode(m.set_sha256_attrs, bl);
     encode(m.skip_sha256_cmp, bl);
-    encode(m.set_shared_manifest, bl);
+    encode(m.set_shared_manifest_src, bl);
 
     encode(m.loaded_objects, bl);
     encode(m.processed_objects, bl);
@@ -365,7 +365,7 @@ namespace rgw::dedup {
     decode(m.invalid_sha256_attrs, bl);
     decode(m.set_sha256_attrs, bl);
     decode(m.skip_sha256_cmp, bl);
-    decode(m.set_shared_manifest, bl);
+    decode(m.set_shared_manifest_src, bl);
 
     decode(m.loaded_objects, bl);
     decode(m.processed_objects, bl);

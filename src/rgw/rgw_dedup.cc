@@ -565,6 +565,8 @@ namespace rgw::dedup {
                              librados::ObjectWriteOperation *p_op)
   {
     p_op->cmpxattr(RGW_ATTR_ETAG, CEPH_OSD_CMPXATTR_OP_EQ, etag_bl);
+    // TBD: do we really need the secondary compare using the full manifest?
+    // Can replace it with something cheaper like size/version?
     p_op->cmpxattr(RGW_ATTR_MANIFEST, CEPH_OSD_CMPXATTR_OP_EQ, p_rec->manifest_bl);
 
     // SHA has 256 bit splitted into multiple 64bit units
@@ -582,6 +584,7 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int Background::dedup_object(const disk_record_t *p_src_rec,
                                const disk_record_t *p_tgt_rec,
+                               md5_stats_t         *p_stats,
                                bool                 has_shared_manifest_src)
   {
     RGWObjManifest src_manifest;
@@ -609,21 +612,17 @@ namespace rgw::dedup {
     ldpp_dout(dpp, 20) << __func__ << "::num_parts=" << p_tgt_rec->s.num_parts
                        << "::ETAG=" << etag_bl.to_str() << dendl;
 
-    bufferlist hash_bl, manifest_hash_bl, src_sha256_bl, tgt_sha256_bl;
+    bufferlist hash_bl, manifest_hash_bl, tgt_sha256_bl;
     crypto::digest<crypto::SHA1>(p_src_rec->manifest_bl).encode(hash_bl);
     // Use a shorter hash (64bit instead of 160bit)
     hash_bl.splice(0, 8, &manifest_hash_bl);
-    librados::ObjectWriteOperation src_op, tgt_op;
-    init_cmp_pairs(p_src_rec, etag_bl, src_sha256_bl, &src_op);
+    librados::ObjectWriteOperation tgt_op;
     init_cmp_pairs(p_tgt_rec, etag_bl, tgt_sha256_bl, &tgt_op);
-    src_op.setxattr(RGW_ATTR_SHARE_MANIFEST, manifest_hash_bl);
-    if (p_src_rec->s.flags.sha256_calculated()) {
-      src_op.setxattr(RGW_ATTR_SHA256, src_sha256_bl);
-    }
     tgt_op.setxattr(RGW_ATTR_SHARE_MANIFEST, manifest_hash_bl);
     tgt_op.setxattr(RGW_ATTR_MANIFEST, p_src_rec->manifest_bl);
     if (p_tgt_rec->s.flags.sha256_calculated()) {
       tgt_op.setxattr(RGW_ATTR_SHA256, tgt_sha256_bl);
+      p_stats->set_sha256_attrs++;
     }
 
     std::string src_oid, tgt_oid;
@@ -658,6 +657,15 @@ namespace rgw::dedup {
         // disk-record (as require an expensive random-disk-write).
         // When deduping C we can trust the shared_manifest state in the table and
         // skip a redundant update to SRC object attribute
+        bufferlist src_sha256_bl;
+        librados::ObjectWriteOperation src_op;
+        init_cmp_pairs(p_src_rec, etag_bl, src_sha256_bl, &src_op);
+        src_op.setxattr(RGW_ATTR_SHARE_MANIFEST, manifest_hash_bl);
+        if (p_src_rec->s.flags.sha256_calculated()) {
+          src_op.setxattr(RGW_ATTR_SHA256, src_sha256_bl);
+          p_stats->set_sha256_attrs++;
+        }
+
         ldpp_dout(dpp, 20) << __func__ <<"::send SRC CLS (Shared_Manifest)"<< dendl;
         ret = src_ioctx.operate(src_oid, &src_op);
         if (unlikely(ret != 0)) {
@@ -852,7 +860,6 @@ namespace rgw::dedup {
     // CEPH_CRYPTO_HMACSHA256_DIGESTSIZE is 32 Bytes (32*8=256)
     int ret = calc_object_sha256(p_rec, (uint8_t*)p_rec->s.sha256);
     if (ret == 0) {
-      p_stats->set_sha256_attrs++;
       p_rec->s.flags.set_sha256_calculated();
     }
 
@@ -1015,6 +1022,36 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  static int write_sha256_object_attribute(const DoutPrefixProvider* const dpp,
+                                           rgw::sal::Driver* driver,
+                                           RGWRados* rados,
+                                           const disk_record_t *p_rec)
+  {
+    bufferlist etag_bl;
+    bufferlist sha256_bl;
+    librados::ObjectWriteOperation op;
+    etag_to_bufferlist(p_rec->s.md5_high, p_rec->s.md5_low, p_rec->s.num_parts,
+                       &etag_bl);
+    init_cmp_pairs(p_rec, etag_bl, sha256_bl /*OUT PARAM*/, &op);
+    op.setxattr(RGW_ATTR_SHA256, sha256_bl);
+
+    std::string oid;
+    librados::IoCtx ioctx;
+    int ret = get_ioctx(dpp, driver, rados, p_rec, &ioctx, &oid);
+    if (unlikely(ret != 0)) {
+      ldpp_dout(dpp, 5) << __func__ << "::ERR: failed get_ioctx()" << dendl;
+      return ret;
+    }
+
+    ret = ioctx.operate(oid, &op);
+    if (unlikely(ret != 0)) {
+      ldpp_dout(dpp, 5) << __func__ << "::ERR: failed ioctx.operate("
+                        << oid << "), err is " << cpp_strerror(-ret) << dendl;
+    }
+    return ret;
+  }
+
+  //---------------------------------------------------------------------------
   // We purged all entries not marked for-dedup (i.e. singleton bit is set) from the table
   //   so all entries left are sources of dedup with multiple copies.
   // If the record is marked as Shared-Manifest-Object -> skip it
@@ -1115,18 +1152,27 @@ namespace rgw::dedup {
     if (memcmp(src_rec.s.sha256, p_tgt_rec->s.sha256, sizeof(src_rec.s.sha256)) != 0) {
       p_stats->sha256_mismatch++;
       ldpp_dout(dpp, 10) << __func__ << "::SHA256 mismatch" << dendl;
+      // TBD: set sha256 attributes on head objects to save calc next time
+      if (src_rec.s.flags.sha256_calculated()) {
+        write_sha256_object_attribute(dpp, driver, rados, &src_rec);
+        p_stats->set_sha256_attrs++;
+      }
+      if (p_tgt_rec->s.flags.sha256_calculated()) {
+        write_sha256_object_attribute(dpp, driver, rados, p_tgt_rec);
+        p_stats->set_sha256_attrs++;
+      }
       return 0;
     }
 
-    ret = dedup_object(&src_rec, p_tgt_rec, src_val.has_shared_manifest());
+    ret = dedup_object(&src_rec, p_tgt_rec, p_stats, src_val.has_shared_manifest());
     if (ret == 0) {
       p_stats->deduped_objects++;
       p_stats->deduped_objects_bytes += dedupable_objects_bytes;
       // mark the SRC object as a providor of a shared manifest
       if (!src_val.has_shared_manifest()) {
-        p_stats->set_shared_manifest++;
+        p_stats->set_shared_manifest_src++;
         // set the shared manifest flag in the dedup table
-        p_table->set_shared_manifest_mode(&key, src_block_id, src_rec_id);
+        p_table->set_shared_manifest_src_mode(&key, src_block_id, src_rec_id);
       }
       else {
         ldpp_dout(dpp, 20) << __func__ << "::SRC object already marked as shared_manifest" << dendl;
@@ -2068,7 +2114,7 @@ namespace rgw::dedup {
     int ret = d_dedup_cluster_ioctx.create(oid, exclusive);
     if (ret >= 0) {
       ldpp_dout(dpp, 10) << "dedup_bg::watch_reload():" << oid
-			 << " was created!" << dendl;
+                         << " was created!" << dendl;
     }
     else if (ret == -EEXIST) {
       ldpp_dout(dpp, 5) << __func__ << "::"<< oid << " exists" << dendl;

@@ -82,7 +82,7 @@ namespace rgw::dedup {
 
       inline void clear_flags() { flags.clear(); }
       inline bool has_shared_manifest() const {return flags.has_shared_manifest(); }
-      inline void set_shared_manifest() { this->flags.set_shared_manifest(); }
+      inline void set_shared_manifest_src() { this->flags.set_shared_manifest(); }
       inline bool is_singleton() const { return (count == 1); }
       inline bool is_occupied() const { return flags.is_occupied(); }
       inline void set_occupied() { this->flags.set_occupied();  }
@@ -106,9 +106,9 @@ namespace rgw::dedup {
 
     int  get_val(const key_t *p_key, struct value_t *p_val /*OUT*/);
 
-    int set_shared_manifest_mode(const key_t *p_key,
-                                 disk_block_id_t block_id,
-                                 record_id_t rec_id);
+    int set_shared_manifest_src_mode(const key_t *p_key,
+                                     disk_block_id_t block_id,
+                                     record_id_t rec_id);
 
     void count_duplicates(uint64_t *p_singleton_count,
                           uint64_t *p_unique_count,
