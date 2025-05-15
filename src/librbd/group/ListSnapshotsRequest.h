@@ -44,16 +44,24 @@ private:
    * @verbatim
    *
    * <start>    /--------\
-   *    |       |        | (if required. repeat if more
+   *    |       |        | (if requested, repeat if more
    *    v       v        |  entries)
    *  LIST_SNAP_ORDERS --/
+   *    |
    *    |       /--------\
    *    |       |        | (repeat if more
    *    v       v        |  snapshots)
    *  LIST_SNAPS --------/
    *    |
-   *    v
-   *  SORT_SNAPS (if required)  
+   *    |                          /--------\
+   *    |/-------<--------\        |        | (repeat if more
+   *    |                 |        v        |  entries)
+   *    |                LIST_SNAP_ORDERS --/
+   *    |                 ^
+   *    |                 | (retry if ordering is required and
+   *    |                 |  an entry is missing for a snapshot)
+   *    v (if requested)  |
+   *  SORT_SNAPS ---------/
    *    |
    *    v
    *  <finish>
@@ -73,6 +81,7 @@ private:
   cls::rbd::GroupSnapshot m_start_after;
   std::string m_start_after_order;
   bufferlist m_out_bl;
+  bool m_retried_snap_orders = false;
 
   void list_snaps();
   void handle_list_snaps(int r);
