@@ -2064,12 +2064,13 @@ private:
         c.cache.retire_extent(c.trans, r);
         get_tree_stats<self_type>(c.trans).extents_num_delta--;
       } else {
+        auto pivot_idx = l->get_balance_pivot_idx(*l, *r);
         LOG_PREFIX(FixedKVBtree::merge_level);
         auto [replacement_l, replacement_r, pivot] =
           l->make_balanced(
             c,
             r,
-            !donor_is_left);
+            pivot_idx);
 
         parent_pos.node->update(
           liter,

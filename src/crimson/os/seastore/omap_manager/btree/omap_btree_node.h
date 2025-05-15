@@ -101,7 +101,7 @@ struct OMapNode : LogicalChildNode {
 
   using make_balanced_iertr = base_iertr;
   using make_balanced_ret = make_balanced_iertr::future
-          <std::tuple<OMapNodeRef, OMapNodeRef, std::string>>;
+          <std::tuple<OMapNodeRef, OMapNodeRef, std::optional<std::string>>>;
   virtual make_balanced_ret make_balanced(
     omap_context_t oc,
     OMapNodeRef _right) = 0;
