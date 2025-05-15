@@ -768,5 +768,7 @@ Otherwise the pool is considered ``available``.
 We first calculate the Mean Time Between Failures (MTBF) and 
 Mean Time To Recover (MTTR) from the uptime and downtime recorded 
 for each pool and arrive at the availability score 
-by finding ratio of MTBF to total time (ie MTTR + MTBF).  The score
-is updated every 5 seconds. 
+by finding ratio of MTBF to total time (ie MTTR + MTBF).  
+
+The score is updated every 5 seconds. This interval is currently 
+not configurable. 
