@@ -1,10 +1,7 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container class="modal-title"
-                i18n>Reweight OSD: {{ osdId }}</ng-container>
+<cd-modal title="Reweight OSD: {{ osdId }}">
 
   <ng-container class="modal-content">
     <form [formGroup]="reweightForm">
-      <div class="modal-body">
         <div class="row">
           <label for="weight"
                  class="cd-col-form-label">Weight</label>
@@ -26,13 +23,13 @@
             </span>
           </div>
         </div>
-      </div>
-
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="reweight()"
-                              [form]="reweightForm"
-                              [submitText]="actionLabels.REWEIGHT"></cd-form-button-panel>
-      </div>
     </form>
+  </ng-container>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="reweight()"
+                          [form]="reweightForm"
+                          [modalForm]="true"
+                          [submitText]="actionLabels.REWEIGHT"></cd-form-button-panel>
   </ng-container>
 </cd-modal>

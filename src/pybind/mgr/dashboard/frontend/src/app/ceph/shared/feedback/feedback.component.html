@@ -1,12 +1,9 @@
-<cd-modal [modalRef]="activeModal">
-  <div class="modal-title"
-       i18n>Report an issue</div>
+<cd-modal title="Report an issue">
 
-  <div class="modal-content">
+  <ng-container class="modal-content">
     <form name="feedbackForm"
           [formGroup]="feedbackForm"
           #formDir="ngForm">
-      <div class="modal-body">
         <cd-alert-panel *ngIf="!isFeedbackEnabled"
                         type="error"
                         i18n>Feedback module is not enabled. Please enable it from <a (click)="redirect()">Cluster-> Manager Modules.</a>
@@ -106,15 +103,15 @@
                   i18n>Description is required.</span>
           </div>
         </div>
-
-      </div>
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                              [form]="feedbackForm"
-                              [submitText]="actionLabels.SUBMIT"
-                              wrappingClass="text-right">
-        </cd-form-button-panel>
-      </div>
     </form>
-  </div>
+  </ng-container>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                          [form]="feedbackForm"
+                          [modalForm]="true"
+                          [submitText]="actionLabels.SUBMIT"
+                          wrappingClass="text-right">
+    </cd-form-button-panel>
+  </ng-container>
 </cd-modal>

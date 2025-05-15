@@ -23,7 +23,6 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TimerService } from '~/app/shared/services/timer.service';
 import { RgwRealm, RgwZone, RgwZonegroup } from '../models/rgw-multisite';
@@ -124,7 +123,6 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   NAVIGATE_TO = '/rgw/multisite';
 
   constructor(
-    private modalService: ModalService,
     private timerService: TimerService,
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
@@ -156,13 +154,9 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     if (entityName === 'realm') {
       this.bsModalRef = this.cdsModalService.show(RgwMultisiteRealmFormComponent, initialState);
     } else if (entityName === 'zonegroup') {
-      this.bsModalRef = this.modalService.show(RgwMultisiteZonegroupFormComponent, initialState, {
-        size: 'lg'
-      });
+      this.bsModalRef = this.cdsModalService.show(RgwMultisiteZonegroupFormComponent, initialState);
     } else {
-      this.bsModalRef = this.modalService.show(RgwMultisiteZoneFormComponent, initialState, {
-        size: 'lg'
-      });
+      this.cdsModalService.show(RgwMultisiteZoneFormComponent, initialState);
     }
   }
 
@@ -174,28 +168,21 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     const initialState = {
       multisiteInfo: this.multisiteInfo
     };
-    this.bsModalRef = this.modalService.show(RgwMultisiteMigrateComponent, initialState, {
-      size: 'lg'
-    });
+    this.cdsModalService.show(RgwMultisiteMigrateComponent, initialState);
   }
 
   openImportModal() {
     const initialState = {
       multisiteInfo: this.multisiteInfo
     };
-    this.bsModalRef = this.modalService.show(RgwMultisiteImportComponent, initialState, {
-      size: 'lg'
-    });
+    this.cdsModalService.show(RgwMultisiteImportComponent, initialState);
   }
 
   openExportModal() {
     const initialState = {
-      defaultsInfo: this.defaultsInfo,
       multisiteInfo: this.multisiteInfo
     };
-    this.bsModalRef = this.modalService.show(RgwMultisiteExportComponent, initialState, {
-      size: 'lg'
-    });
+    this.cdsModalService.show(RgwMultisiteExportComponent, initialState);
   }
 
   getDisableExport() {
@@ -601,11 +588,11 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
         }
       });
     } else if (node?.data?.type === 'zonegroup') {
-      this.modalRef = this.modalService.show(RgwMultisiteZonegroupDeletionFormComponent, {
+      this.cdsModalService.show(RgwMultisiteZonegroupDeletionFormComponent, {
         zonegroup: node.data
       });
     } else if (node?.data?.type === 'zone') {
-      this.modalRef = this.modalService.show(RgwMultisiteZoneDeletionFormComponent, {
+      this.cdsModalService.show(RgwMultisiteZoneDeletionFormComponent, {
         zone: node.data
       });
     }

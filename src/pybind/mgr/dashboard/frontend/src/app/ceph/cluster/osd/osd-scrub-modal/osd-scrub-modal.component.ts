@@ -1,7 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { UntypedFormGroup } from '@angular/forms';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import { forkJoin } from 'rxjs';
 
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -15,18 +15,20 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   templateUrl: './osd-scrub-modal.component.html',
   styleUrls: ['./osd-scrub-modal.component.scss']
 })
-export class OsdScrubModalComponent implements OnInit {
-  deep: boolean;
+export class OsdScrubModalComponent extends BaseModal implements OnInit {
   scrubForm: UntypedFormGroup;
-  selected: any[] = [];
 
   constructor(
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     private osdService: OsdService,
     private notificationService: NotificationService,
-    private joinPipe: JoinPipe
-  ) {}
+    private joinPipe: JoinPipe,
+
+    @Optional() @Inject('selected') public selected: any[] = [],
+    @Optional() @Inject('deep') public deep: boolean
+  ) {
+    super();
+  }
 
   ngOnInit() {
     this.scrubForm = new UntypedFormGroup({});
@@ -44,9 +46,9 @@ export class OsdScrubModalComponent implements OnInit {
           )}`
         );
 
-        this.activeModal.close();
+        this.closeModal();
       },
-      () => this.activeModal.close()
+      () => this.closeModal()
     );
   }
 }

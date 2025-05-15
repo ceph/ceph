@@ -1,6 +1,5 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
-import { NgbActiveModal, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
@@ -12,24 +11,19 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwRealm, RgwZone, RgwZonegroup, SystemKey } from '../models/rgw-multisite';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-rgw-multisite-zone-form',
   templateUrl: './rgw-multisite-zone-form.component.html',
   styleUrls: ['./rgw-multisite-zone-form.component.scss']
 })
-export class RgwMultisiteZoneFormComponent implements OnInit {
-  action: string;
-  info: any;
+export class RgwMultisiteZoneFormComponent extends BaseModal implements OnInit {
   multisiteZoneForm: CdFormGroup;
   editing = false;
-  resource: string;
   realm: RgwRealm;
   zonegroup: RgwZonegroup;
   zone: RgwZone;
-  defaultsInfo: string[] = [];
-  multisiteInfo: object[] = [];
   zonegroupList: RgwZonegroup[] = [];
   zoneList: RgwZone[] = [];
   zoneNames: string[];
@@ -44,7 +38,6 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
   isMasterZone: boolean;
   isDefaultZone: boolean;
   syncStatusTimedOut: boolean = false;
-  bsModalRef: NgbModalRef;
   createSystemUser: boolean = false;
   master_zone_of_master_zonegroup: RgwZone;
   masterZoneUser: any;
@@ -54,18 +47,20 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
   userListReady: boolean = false;
 
   constructor(
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     public rgwMultisiteService: RgwMultisiteService,
     public rgwZoneService: RgwZoneService,
     public rgwZoneGroupService: RgwZonegroupService,
     public notificationService: NotificationService,
     public rgwUserService: RgwUserService,
-    public modalService: ModalService
+
+    @Optional() @Inject('resource') public resource: string,
+    @Optional() @Inject('action') public action: string,
+    @Optional() @Inject('info') public info: any,
+    @Optional() @Inject('defaultsInfo') public defaultsInfo: string[] = [],
+    @Optional() @Inject('multisiteInfo') public multisiteInfo: object[] = []
   ) {
-    this.action = this.editing
-      ? this.actionLabels.EDIT + this.resource
-      : this.actionLabels.CREATE + this.resource;
+    super();
     this.createForm();
   }
 
@@ -249,7 +244,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
               NotificationType.success,
               $localize`Zone: '${values['zoneName']}' created successfully`
             );
-            this.activeModal.close();
+            this.closeModal();
           },
           () => {
             this.multisiteZoneForm.setErrors({ cdSubmitButton: true });
@@ -286,7 +281,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
               NotificationType.success,
               $localize`Zone: '${values['zoneName']}' updated successfully`
             );
-            this.activeModal.close();
+            this.closeModal();
           },
           () => {
             this.multisiteZoneForm.setErrors({ cdSubmitButton: true });

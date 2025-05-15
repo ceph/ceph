@@ -11,14 +11,13 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { PoolEditModeResponseModel } from './pool-edit-mode-response.model';
-import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-pool-edit-mode-modal',
   templateUrl: './pool-edit-mode-modal.component.html',
   styleUrls: ['./pool-edit-mode-modal.component.scss']
 })
-export class PoolEditModeModalComponent extends BaseModal implements OnInit, OnDestroy {
+export class PoolEditModeModalComponent implements OnInit, OnDestroy {
   poolName: string;
   open = false;
   subs: Subscription;
@@ -45,7 +44,6 @@ export class PoolEditModeModalComponent extends BaseModal implements OnInit, OnD
     private route: ActivatedRoute,
     private location: Location
   ) {
-    super();
     this.createForm();
   }
 
@@ -58,7 +56,6 @@ export class PoolEditModeModalComponent extends BaseModal implements OnInit, OnD
   }
 
   ngOnInit() {
-    this.open = this.route.outlet === 'modal';
     this.route.params.subscribe((params: { pool_name: string }) => {
       this.poolName = params.pool_name;
     });
@@ -108,9 +105,5 @@ export class PoolEditModeModalComponent extends BaseModal implements OnInit, OnD
         this.location.back();
       }
     });
-  }
-
-  closeModal(): void {
-    this.location.back();
   }
 }

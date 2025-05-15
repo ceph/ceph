@@ -1,6 +1,5 @@
 import { Component, ViewChild } from '@angular/core';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
 import { ConfigOptionComponent } from '~/app/shared/components/config-option/config-option.component';
@@ -11,13 +10,14 @@ import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { OsdPgScrubModalOptions } from './osd-pg-scrub-modal.options';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-osd-pg-scrub-modal',
   templateUrl: './osd-pg-scrub-modal.component.html',
   styleUrls: ['./osd-pg-scrub-modal.component.scss']
 })
-export class OsdPgScrubModalComponent {
+export class OsdPgScrubModalComponent extends BaseModal {
   osdPgScrubForm: CdFormGroup;
   action: string;
   resource: string;
@@ -34,11 +34,11 @@ export class OsdPgScrubModalComponent {
   advancedEnabled = false;
 
   constructor(
-    public activeModal: NgbActiveModal,
     private authStorageService: AuthStorageService,
     private notificationService: NotificationService,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.osdPgScrubForm = new CdFormGroup({});
     this.resource = $localize`PG scrub options`;
     this.action = this.actionLabels.EDIT;
@@ -58,10 +58,10 @@ export class OsdPgScrubModalComponent {
           NotificationType.success,
           $localize`Updated PG scrub options`
         );
-        this.activeModal.close();
+        this.closeModal();
       },
       () => {
-        this.activeModal.close();
+        this.closeModal();
       }
     );
   }

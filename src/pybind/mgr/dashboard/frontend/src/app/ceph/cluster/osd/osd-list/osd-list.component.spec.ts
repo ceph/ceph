@@ -23,7 +23,6 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import {
   configureTestBed,
   OrchestratorHelper,
@@ -35,6 +34,7 @@ import { OsdListComponent } from './osd-list.component';
 import { ResizeObserver as ResizeObserverPolyfill } from '@juggle/resize-observer';
 import { PaginateObservable } from '~/app/shared/api/paginate.model';
 import { Osd } from '~/app/shared/models/osd.model';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 describe('OsdListComponent', () => {
   let component: OsdListComponent;
@@ -110,7 +110,7 @@ describe('OsdListComponent', () => {
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
       TableActionsComponent,
-      ModalService
+      ModalCdsService
     ]
   });
 
@@ -118,7 +118,7 @@ describe('OsdListComponent', () => {
     fixture = TestBed.createComponent(OsdListComponent);
     component = fixture.componentInstance;
     osdService = TestBed.inject(OsdService);
-    modalServiceShowSpy = spyOn(TestBed.inject(ModalService), 'show').and.returnValue({
+    modalServiceShowSpy = spyOn(TestBed.inject(ModalCdsService), 'show').and.returnValue({
       // mock the close function, it might be called if there are async tests.
       close: jest.fn()
     });

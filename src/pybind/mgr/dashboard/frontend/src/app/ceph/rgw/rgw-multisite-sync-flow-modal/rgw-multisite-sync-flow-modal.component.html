@@ -1,13 +1,10 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} {{ groupType | upperFirst }} Flow</ng-container>
+<cd-modal title="{{ action | titlecase }} {{ groupType | upperFirst }} Flow">
 
   <ng-container class="modal-content">
     <form name="flowForm"
           #frm="ngForm"
           [formGroup]="currentFormGroupContext"
           novalidate>
-      <div class="modal-body">
         <div class="form-group row">
           <label class="cd-col-form-label required"
                  for="flow_id"
@@ -71,13 +68,14 @@
             </div>
           </div>
         </ng-template>
-      </div>
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="submit()"
-                              [form]="currentFormGroupContext"
-                              [submitText]="(action | titlecase) + ' ' + (groupType | upperFirst) + ' ' + 'Flow'"></cd-form-button-panel>
-      </div>
     </form>
+  </ng-container>
+  
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="submit()"
+                          [form]="currentFormGroupContext"
+                          [modalForm]="true"
+                          [submitText]="(action | titlecase) + ' ' + (groupType | upperFirst) + ' ' + 'Flow'"></cd-form-button-panel>
   </ng-container>
 </cd-modal>
 

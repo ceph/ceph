@@ -1,12 +1,9 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">Import Multi-site Token</ng-container>
+<cd-modal title="Import Multi-site Token">
 
   <ng-container class="modal-content">
     <form name="importTokenForm"
           #frm="ngForm"
           [formGroup]="importTokenForm">
-    <div class="modal-body">
       <cd-alert-panel type="info"
                       spacingClass="mb-3">
         <ul>
@@ -171,12 +168,13 @@
           </div>
         </div>
       </ng-container>
-    </div>
-    <div class="modal-footer">
-      <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                            [submitText]="actionLabels.IMPORT"
-                            [form]="importTokenForm"></cd-form-button-panel>
-    </div>
     </form>
+  </ng-container>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                          [submitText]="actionLabels.IMPORT"
+                          [modalForm]="true"
+                          [form]="importTokenForm"></cd-form-button-panel>
   </ng-container>
 </cd-modal>

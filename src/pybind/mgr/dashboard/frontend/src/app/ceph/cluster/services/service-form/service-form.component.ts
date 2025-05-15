@@ -1,9 +1,9 @@
 import { HttpParams } from '@angular/common/http';
-import { Component, Input, OnInit, ViewChild } from '@angular/core';
+import { Component, Inject, OnInit, Optional, ViewChild } from '@angular/core';
 import { AbstractControl, UntypedFormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { NgbActiveModal, NgbModalRef, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
+import { NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
 import { ListItem } from 'carbon-components-angular';
 import _ from 'lodash';
 import { forkJoin, merge, Observable, Subject, Subscription } from 'rxjs';
@@ -36,7 +36,7 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Host } from '~/app/shared/models/host.interface';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { TimerService } from '~/app/shared/services/timer.service';
 
@@ -59,14 +59,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   @ViewChild(NgbTypeahead, { static: false })
   typeahead: NgbTypeahead;
 
-  @Input() hiddenServices: string[] = [];
-
-  @Input() editing = false;
-
-  @Input() serviceName: string;
-
-  @Input() serviceType: string;
-
   serviceForm: CdFormGroup;
   action: string;
   resource: string;
@@ -88,7 +80,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   realmList: RgwRealm[] = [];
   zonegroupList: RgwZonegroup[] = [];
   zoneList: RgwZone[] = [];
-  bsModalRef: NgbModalRef;
   defaultZonegroup: RgwZonegroup;
   showRealmCreationForm = false;
   defaultsInfo: { defaultRealmName: string; defaultZonegroupName: string; defaultZoneName: string };
@@ -124,8 +115,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     public rgwZoneService: RgwZoneService,
     public rgwMultisiteService: RgwMultisiteService,
     private route: ActivatedRoute,
-    public activeModal: NgbActiveModal,
-    public modalService: ModalService
+    public modalService: ModalCdsService,
+
+    @Optional() @Inject('serviceName') public serviceName: string,
+    @Optional() @Inject('serviceType') public serviceType: string,
+    @Optional() @Inject('hiddenServices') public hiddenServices: string[] = [],
+    @Optional() @Inject('editing') public editing = false
   ) {
     super();
     this.resource = $localize`service`;
@@ -1341,7 +1336,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         complete: () => {
           this.pageURL === 'services'
             ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
-            : this.activeModal.close();
+            : this.closeModal();
         }
       });
   }
@@ -1364,10 +1359,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }
 
   createMultisiteSetup() {
-    this.bsModalRef = this.modalService.show(CreateRgwServiceEntitiesComponent, {
-      size: 'lg'
-    });
-    this.bsModalRef.componentInstance.submitAction.subscribe(() => {
+    const cdsModalRef = this.modalService.show(CreateRgwServiceEntitiesComponent);
+    cdsModalRef.submitAction.subscribe(() => {
       this.setRgwFields();
     });
   }

@@ -31,7 +31,6 @@ import { PoolFormInfo } from '~/app/shared/models/pool-form-info';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CrushRuleFormModalComponent } from '../crush-rule-form-modal/crush-rule-form-modal.component';
 import { ErasureCodeProfileFormModalComponent } from '../erasure-code-profile-form/erasure-code-profile-form-modal.component';
@@ -39,6 +38,7 @@ import { Pool } from '../pool';
 import { PoolFormData } from './pool-form-data';
 import { PoolEditModeResponseModel } from '../../block/mirroring/pool-edit-mode-modal/pool-edit-mode-response.model';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 interface FormFieldDescription {
   externalFieldName: string;
@@ -97,7 +97,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private route: ActivatedRoute,
     private router: Router,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private poolService: PoolService,
     private authStorageService: AuthStorageService,
     private formatter: FormatterService,
@@ -616,7 +616,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   private addModal(modalComponent: Type<any>, reload: (name: string) => void) {
     this.hideOpenTooltips();
     const modalRef = this.modalService.show(modalComponent);
-    modalRef.componentInstance.submitAction.subscribe((item: any) => {
+    modalRef.submitAction.subscribe((item: any) => {
       reload(item.name);
     });
   }

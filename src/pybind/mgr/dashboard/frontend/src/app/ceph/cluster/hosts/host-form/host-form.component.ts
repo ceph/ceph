@@ -1,6 +1,6 @@
 import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Router } from '@angular/router';
 import expand from 'brace-expansion';
 
 import { HostService } from '~/app/shared/api/host.service';
@@ -45,7 +45,6 @@ export class HostFormComponent extends CdForm implements OnInit {
     private actionLabels: ActionLabelsI18n,
     private hostService: HostService,
     private taskWrapper: TaskWrapperService,
-    private route: ActivatedRoute,
 
     @Inject('hideMaintenance') @Optional() public hideMaintenance?: boolean
   ) {
@@ -58,7 +57,6 @@ export class HostFormComponent extends CdForm implements OnInit {
     if (this.router.url.includes(HOSTS)) {
       this.pageURL = HOSTS;
     }
-    this.open = this.route.outlet === 'modal';
     this.createForm();
     const hostContext = new CdTableFetchDataContext(() => undefined);
     this.hostService.list(hostContext.toParams(), 'false').subscribe((resp: any[]) => {

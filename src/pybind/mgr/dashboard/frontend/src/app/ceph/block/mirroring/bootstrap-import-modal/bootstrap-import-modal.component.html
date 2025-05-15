@@ -1,13 +1,8 @@
-<cds-modal size="md"
-           [open]="open"
-           (overlaySelected)="closeModal()">
+<cd-modal size="md"
+          [open]="open"
+          title="Import Bootstrap Token">
 
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>Import Bootstrap Token</h3>
-  </cds-modal-header>
-
-  <section cdsModalContent>
+  <ng-container class="modal-content">
     <form name="importBootstrapForm"
           class="form"
           #formDir="ngForm"
@@ -100,10 +95,12 @@
         </ng-template>
       </div>
     </form>
-  </section>
+  </ng-container>
 
-  <cd-form-button-panel (submitActionEvent)="import()"
-                        [form]="importBootstrapForm"
-                        [submitText]="actionLabels.SUBMIT"
-                        [modalForm]="true"></cd-form-button-panel>
-</cds-modal>
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="import()"
+                          [form]="importBootstrapForm"
+                          [submitText]="actionLabels.SUBMIT"
+                          [modalForm]="true"></cd-form-button-panel>
+  </ng-container>
+</cd-modal>

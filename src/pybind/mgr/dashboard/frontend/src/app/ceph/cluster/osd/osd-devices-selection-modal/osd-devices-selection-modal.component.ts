@@ -3,11 +3,13 @@ import {
   ChangeDetectorRef,
   Component,
   EventEmitter,
+  Inject,
+  Optional,
   Output,
   ViewChild
 } from '@angular/core';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import _ from 'lodash';
 
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
@@ -24,7 +26,7 @@ import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
   templateUrl: './osd-devices-selection-modal.component.html',
   styleUrls: ['./osd-devices-selection-modal.component.scss']
 })
-export class OsdDevicesSelectionModalComponent implements AfterViewInit {
+export class OsdDevicesSelectionModalComponent extends BaseModal implements AfterViewInit {
   @ViewChild('inventoryDevices')
   inventoryDevices: InventoryDevicesComponent;
 
@@ -32,15 +34,10 @@ export class OsdDevicesSelectionModalComponent implements AfterViewInit {
   submitAction = new EventEmitter<CdTableColumnFiltersChange>();
 
   icons = Icons;
-  filterColumns: (string | number)[] = [];
 
-  hostname: string;
-  deviceType: string;
-  diskType: string;
   formGroup: CdFormGroup;
   action: string;
 
-  devices: InventoryDevice[] = [];
   filteredDevices: InventoryDevice[] = [];
   capacity = 0;
   event: CdTableColumnFiltersChange;
@@ -50,10 +47,16 @@ export class OsdDevicesSelectionModalComponent implements AfterViewInit {
   constructor(
     private formBuilder: CdFormBuilder,
     private cdRef: ChangeDetectorRef,
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
-    public wizardStepService: WizardStepsService
+    public wizardStepService: WizardStepsService,
+    
+    @Optional() @Inject('hostname') public hostname: string,
+    @Optional() @Inject('deviceType') public deviceType: string,
+    @Optional() @Inject('diskType') public diskType: string,
+    @Optional() @Inject('devices') public devices: string,
+    @Optional() @Inject('filterColumns') public filterColumns: (string | number)[]
   ) {
+    super();
     this.action = actionLabels.ADD;
     this.createForm();
   }
@@ -96,6 +99,6 @@ export class OsdDevicesSelectionModalComponent implements AfterViewInit {
 
   onSubmit() {
     this.submitAction.emit(this.event);
-    this.activeModal.close();
+    this.closeModal();
   }
 }

@@ -1,13 +1,8 @@
-<cds-modal size="sm"
-           [open]="open"
-           [hasScrollingContent]="false"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
-  </cds-modal-header>
+<cd-modal size="sm"
+          [open]="open"
+          title="{{ action | titlecase }} {{ resource | upperFirst }}">
 
-  <div cdsModalContent>
+  <ng-container class="modal-content">
     <form name="multisiteRealmForm"
           #formDir="ngForm"
           [formGroup]="multisiteRealmForm"
@@ -79,12 +74,15 @@
         </cds-checkbox>
       </div>
     </form>
-  </div>
-  <cd-form-button-panel
-    (submitActionEvent)="submit()"
-    [form]="multisiteRealmForm"
-    [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-    [modalForm]="true"
-  >
-  </cd-form-button-panel>
-</cds-modal>
+  </ng-container>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel
+      (submitActionEvent)="submit()"
+      [form]="multisiteRealmForm"
+      [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+      [modalForm]="true"
+    >
+    </cd-form-button-panel>
+  </ng-container>
+</cd-modal>

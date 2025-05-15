@@ -21,11 +21,11 @@ import {
 import { Permission } from '~/app/shared/models/permissions';
 import { GroupAlertmanagerAlert, PrometheusRule } from '~/app/shared/models/prometheus-alerts';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { PrometheusSilenceMatcherService } from '~/app/shared/services/prometheus-silence-matcher.service';
 import { TimeDiffService } from '~/app/shared/services/time-diff.service';
 import { SilenceMatcherModalComponent } from '../silence-matcher-modal/silence-matcher-modal.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-prometheus-form',
@@ -75,7 +75,7 @@ export class SilenceFormComponent {
     private notificationService: NotificationService,
     private route: ActivatedRoute,
     private timeDiff: TimeDiffService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private silenceMatcher: PrometheusSilenceMatcherService,
     private actionLabels: ActionLabelsI18n,
     private succeededLabels: SucceededActionLabelsI18n
@@ -278,7 +278,7 @@ export class SilenceFormComponent {
 
   showMatcherModal(index?: number) {
     const modalRef = this.modalService.show(SilenceMatcherModalComponent);
-    const modalComponent = modalRef.componentInstance as SilenceMatcherModalComponent;
+    const modalComponent = modalRef as SilenceMatcherModalComponent;
     modalComponent.rules = this.rules;
     if (_.isNumber(index)) {
       modalComponent.editMode = true;

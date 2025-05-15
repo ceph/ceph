@@ -1,14 +1,10 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">Create Realm/Zone Group/Zone
-  </ng-container>
+<cd-modal title="Create Realm/Zone Group/Zone">
 
   <ng-container class="modal-content">
     <form name="createMultisiteEntitiesForm"
           #formDir="ngForm"
           [formGroup]="createMultisiteEntitiesForm"
           novalidate>
-    <div class="modal-body">
       <cd-alert-panel type="info"
                       spacingClass="mb-3">The realm/zone group/zone created will be set as default and master.
       </cd-alert-panel>
@@ -60,11 +56,12 @@
                 i18n>This field is required.</span>
         </div>
       </div>
-    </div>
-    <div class="modal-footer">
-      <cd-form-button-panel (submitActionEvent)="submit()"
-                            [form]="createMultisiteEntitiesForm"></cd-form-button-panel>
-    </div>
     </form>
+  </ng-container>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="submit()"
+                          [form]="createMultisiteEntitiesForm"
+                          [modalForm]="true"></cd-form-button-panel>
   </ng-container>
 </cd-modal>

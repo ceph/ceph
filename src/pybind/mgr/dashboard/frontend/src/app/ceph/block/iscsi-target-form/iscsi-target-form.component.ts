@@ -17,10 +17,10 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { FinishedTask } from '~/app/shared/models/finished-task';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { IscsiTargetImageSettingsModalComponent } from '../iscsi-target-image-settings-modal/iscsi-target-image-settings-modal.component';
 import { IscsiTargetIqnSettingsModalComponent } from '../iscsi-target-iqn-settings-modal/iscsi-target-iqn-settings-modal.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-iscsi-target-form',
@@ -75,7 +75,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
 
   constructor(
     private iscsiService: IscsiService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private rbdService: RbdService,
     private router: Router,
     private route: ActivatedRoute,

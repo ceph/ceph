@@ -1,6 +1,6 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Inject, Optional, Output } from '@angular/core';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import _ from 'lodash';
 
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -15,9 +15,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
   templateUrl: './osd-creation-preview-modal.component.html',
   styleUrls: ['./osd-creation-preview-modal.component.scss']
 })
-export class OsdCreationPreviewModalComponent {
-  @Input()
-  driveGroups: Object[] = [];
+export class OsdCreationPreviewModalComponent extends BaseModal{
 
   @Output()
   submitAction = new EventEmitter();
@@ -26,12 +24,14 @@ export class OsdCreationPreviewModalComponent {
   formGroup: CdFormGroup;
 
   constructor(
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     private formBuilder: CdFormBuilder,
     private osdService: OsdService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+
+    @Optional() @Inject('driveGroups') public driveGroups: Object[],
   ) {
+    super();
     this.action = actionLabels.CREATE;
     this.createForm();
   }
@@ -55,7 +55,7 @@ export class OsdCreationPreviewModalComponent {
         },
         complete: () => {
           this.submitAction.emit();
-          this.activeModal.close();
+          this.closeModal();
         }
       });
   }

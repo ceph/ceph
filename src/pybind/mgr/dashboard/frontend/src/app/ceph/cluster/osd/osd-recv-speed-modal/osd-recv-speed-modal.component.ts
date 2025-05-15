@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import _ from 'lodash';
 
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
@@ -19,7 +20,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   templateUrl: './osd-recv-speed-modal.component.html',
   styleUrls: ['./osd-recv-speed-modal.component.scss']
 })
-export class OsdRecvSpeedModalComponent implements OnInit {
+export class OsdRecvSpeedModalComponent extends BaseModal implements OnInit {
   osdRecvSpeedForm: CdFormGroup;
   permissions: Permissions;
 
@@ -34,6 +35,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
     private notificationService: NotificationService,
     private osdService: OsdService
   ) {
+    super();
     this.permissions = this.authStorageService.getPermissions();
     this.priorities = this.osdService.osdRecvSpeedModalPriorities.KNOWN_PRIORITIES;
     this.osdRecvSpeedForm = new CdFormGroup({
@@ -228,10 +230,10 @@ export class OsdRecvSpeedModalComponent implements OnInit {
             'priority'
           )}'`
         );
-        this.activeModal.close();
+        this.closeModal();
       },
       () => {
-        this.activeModal.close();
+        this.closeModal();
       }
     );
   }

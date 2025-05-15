@@ -1,12 +1,9 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+<cd-modal title="{{ action | titlecase }} {{ resource | upperFirst }}">
 
   <ng-container class="modal-content">
     <form #frm="ngForm"
           [formGroup]="form"
           novalidate>
-      <div class="modal-body">
         <div class="form-group row">
           <label class="cd-col-form-label"
                  for="name"
@@ -455,13 +452,13 @@
                    formControlName="directory">
           </div>
         </div>
-      </div>
-
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                              [form]="form"
-                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
-      </div>
     </form>
+  </ng-container>
+  
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                          [form]="form"
+                          [modalForm]="true"
+                          [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
   </ng-container>
 </cd-modal>

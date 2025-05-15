@@ -28,7 +28,6 @@ import { OsdSettings } from '~/app/shared/models/osd-settings';
 import { Permissions } from '~/app/shared/models/permissions';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
@@ -108,7 +107,6 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     private authStorageService: AuthStorageService,
     private osdService: OsdService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
-    private modalService: ModalService,
     private urlBuilder: URLBuilderService,
     private router: Router,
     private taskWrapper: TaskWrapperService,
@@ -490,18 +488,18 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       deep: deep
     };
 
-    this.bsModalRef = this.modalService.show(OsdScrubModalComponent, initialState);
+    this.bsModalRef = this.cdsModalService.show(OsdScrubModalComponent, initialState);
   }
 
   configureFlagsAction() {
-    this.bsModalRef = this.modalService.show(OsdFlagsModalComponent);
+    this.bsModalRef = this.cdsModalService.show(OsdFlagsModalComponent);
   }
 
   configureFlagsIndivAction() {
     const initialState = {
       selected: this.getSelectedOsds()
     };
-    this.bsModalRef = this.modalService.show(OsdFlagsIndivModalComponent, initialState);
+    this.bsModalRef = this.cdsModalService.show(OsdFlagsIndivModalComponent, initialState);
   }
 
   showConfirmationModal(markAction: string, onSubmit: (id: number) => Observable<any>) {
@@ -524,7 +522,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
 
   reweight() {
     const selectedOsd = this.osds.filter((o) => o.id === this.selection.first().id).pop();
-    this.bsModalRef = this.modalService.show(OsdReweightModalComponent, {
+    this.bsModalRef = this.cdsModalService.show(OsdReweightModalComponent, {
       currentWeight: selectedOsd.weight,
       osdId: selectedOsd.id
     });
@@ -627,10 +625,10 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   }
 
   configureQosParamsAction() {
-    this.bsModalRef = this.modalService.show(OsdRecvSpeedModalComponent);
+    this.bsModalRef = this.cdsModalService.show(OsdRecvSpeedModalComponent);
   }
 
   configurePgScrubAction() {
-    this.bsModalRef = this.modalService.show(OsdPgScrubModalComponent, undefined, { size: 'lg' });
+    this.bsModalRef = this.cdsModalService.show(OsdPgScrubModalComponent, undefined);
   }
 }

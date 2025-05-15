@@ -1,6 +1,5 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Inject, OnInit, Optional, Output } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
-import { NgbActiveModal, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
@@ -12,22 +11,21 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwRealm, RgwZone, RgwZonegroup } from '../models/rgw-multisite';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-rgw-multisite-migrate',
   templateUrl: './rgw-multisite-migrate.component.html',
   styleUrls: ['./rgw-multisite-migrate.component.scss']
 })
-export class RgwMultisiteMigrateComponent implements OnInit {
+export class RgwMultisiteMigrateComponent extends BaseModal implements OnInit {
   @Output()
   submitAction = new EventEmitter();
 
   multisiteMigrateForm: CdFormGroup;
   zoneNames: string[];
   realmList: RgwRealm[];
-  multisiteInfo: object[] = [];
   realmNames: string[];
   zonegroupList: RgwZonegroup[];
   zonegroupNames: string[];
@@ -37,11 +35,9 @@ export class RgwMultisiteMigrateComponent implements OnInit {
   zone: RgwZone;
   newZonegroupName: any;
   newZoneName: any;
-  bsModalRef: NgbModalRef;
   users: any;
 
   constructor(
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     public rgwMultisiteService: RgwMultisiteService,
     public rgwZoneService: RgwZoneService,
@@ -49,8 +45,10 @@ export class RgwMultisiteMigrateComponent implements OnInit {
     public rgwZonegroupService: RgwZonegroupService,
     public rgwRealmService: RgwRealmService,
     public rgwDaemonService: RgwDaemonService,
-    public modalService: ModalService
+
+    @Optional() @Inject('multisiteInfo') public multisiteInfo: object[] = []
   ) {
+    super();
     this.createForm();
   }
 
@@ -136,7 +134,7 @@ export class RgwMultisiteMigrateComponent implements OnInit {
             $localize`Migration done successfully`
           );
           this.submitAction.emit();
-          this.activeModal.close();
+          this.closeModal();
         },
         () => {
           this.notificationService.show(NotificationType.error, $localize`Migration failed`);

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { RgwZonegroup, Zone } from '../models/rgw-multisite';
@@ -8,7 +8,6 @@ import { of } from 'rxjs';
 import { RgwDaemon } from '../models/rgw-daemon';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
@@ -16,6 +15,7 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { ZoneData } from '../models/rgw-multisite-zone-selector';
 import { SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { BaseModal } from 'carbon-components-angular';
 
 const ALL_ZONES = $localize`All zones (*)`;
 const ALL_BUCKET_SELECTED_HELP_TEXT =
@@ -26,11 +26,8 @@ const ALL_BUCKET_SELECTED_HELP_TEXT =
   templateUrl: './rgw-multisite-sync-pipe-modal.component.html',
   styleUrls: ['./rgw-multisite-sync-pipe-modal.component.scss']
 })
-export class RgwMultisiteSyncPipeModalComponent implements OnInit {
-  groupExpandedRow: any;
-  pipeSelectedRow: any;
+export class RgwMultisiteSyncPipeModalComponent extends BaseModal implements OnInit {
   pipeForm: CdFormGroup;
-  action: string;
   editing: boolean;
   sourceZones = new ZoneData(false, 'Filter Zones');
   destZones = new ZoneData(false, 'Filter Zones');
@@ -38,13 +35,18 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
   allBucketSelectedHelpText = ALL_BUCKET_SELECTED_HELP_TEXT;
 
   constructor(
-    public activeModal: NgbActiveModal,
     private rgwDaemonService: RgwDaemonService,
     private rgwZonegroupService: RgwZonegroupService,
     private rgwMultisiteService: RgwMultisiteService,
     private notificationService: NotificationService,
-    private succeededLabels: SucceededActionLabelsI18n
-  ) {}
+    private succeededLabels: SucceededActionLabelsI18n,
+
+    @Optional() @Inject('groupExpandedRow') public groupExpandedRow: any,
+    @Optional() @Inject('pipeSelectedRow') public pipeSelectedRow: any,
+    @Optional() @Inject('action') public action: string
+  ) {
+    super();
+  }
 
   ngOnInit(): void {
     if (this.pipeSelectedRow) {
@@ -201,12 +203,12 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
             NotificationType.success,
             $localize`${action} Sync Pipe '${this.pipeForm.getValue('pipe_id')}'`
           );
-          this.activeModal.close(NotificationType.success);
+          this.closeModal();
         },
         () => {
           // Reset the 'Submit' button.
           this.pipeForm.setErrors({ cdSubmitButton: true });
-          this.activeModal.dismiss();
+          this.closeModal();
         }
       );
   }

@@ -1,13 +1,8 @@
-<cds-modal size="md"
-           [open]="open"
-           [hasScrollingContent]="true"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>Create Bootstrap Token</h3>
-  </cds-modal-header>
+<cd-modal size="md"
+          [open]="open"
+          title="Create Bootstrap Token">
 
-  <section cdsModalContent>
+  <ng-container class="modal-content">
     <form name="createBootstrapForm"
           class="form"
           #formDir="ngForm"
@@ -83,11 +78,12 @@
         </cd-copy-2-clipboard-button>
       </div>
     </form>
-  </section>
+  </ng-container>
 
-  <cd-form-button-panel (backAction)="closeModal()"
-                        [showSubmit]="false"
-                        [modalForm]="true"
-                        cancelText="Close"></cd-form-button-panel>
-
-</cds-modal>
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (backAction)="closeModal()"
+                          [showSubmit]="false"
+                          [modalForm]="true"
+                          cancelText="Close"></cd-form-button-panel>
+  </ng-container>
+</cd-modal>

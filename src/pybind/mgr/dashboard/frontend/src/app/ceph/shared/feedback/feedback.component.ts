@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
-import { NgbActiveModal, NgbModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import { Subscription } from 'rxjs';
 
 import { FeedbackService } from '~/app/shared/api/feedback.service';
@@ -16,7 +16,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   templateUrl: './feedback.component.html',
   styleUrls: ['./feedback.component.scss']
 })
-export class FeedbackComponent implements OnInit, OnDestroy {
+export class FeedbackComponent extends BaseModal implements OnInit, OnDestroy {
   title = 'Feedback';
   project: any = [
     'dashboard',
@@ -38,12 +38,12 @@ export class FeedbackComponent implements OnInit, OnDestroy {
 
   constructor(
     private feedbackService: FeedbackService,
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
-    public secondaryModal: NgbModal,
     private notificationService: NotificationService,
     private router: Router
-  ) {}
+  ) {
+    super();
+  }
 
   ngOnInit() {
     this.createForm();
@@ -97,13 +97,13 @@ export class FeedbackComponent implements OnInit, OnDestroy {
           this.feedbackForm.setErrors({ cdSubmitButton: true });
         },
         complete: () => {
-          this.activeModal.close();
+          this.closeModal();
         }
       });
   }
 
   redirect() {
-    this.activeModal.close();
+    this.closeModal();
     this.router.navigate(['/mgr-modules']);
   }
 }

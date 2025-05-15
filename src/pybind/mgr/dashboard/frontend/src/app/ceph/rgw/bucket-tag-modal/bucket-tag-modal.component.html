@@ -1,17 +1,10 @@
-<cds-modal size="md"
-           [open]="open"
-           [hasScrollingContent]="false"
-           (overlaySelected)="closeModal()">
+<cd-modal title="{{ getMode() }} Tag"
+          [open]="open">
 
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>{{ getMode() }} Tag</h3>
-  </cds-modal-header>
-
-  <form class="form"
-        #formDir="ngForm"
-        [formGroup]="form">
-    <div cdsModalContent>
+  <ng-container class="modal-content">
+    <form class="form"
+          #formDir="ngForm"
+          [formGroup]="form">
       <!-- Key -->
       <div class="form-item">
         <cds-text-label label="Key"
@@ -65,11 +58,13 @@
         </ng-template>
       </div>
 
-    </div>
+    </form>
+  </ng-container>
 
+  <ng-container class="modal-footer">
     <cd-form-button-panel (submitActionEvent)="onSubmit()"
                           [form]="form"
                           [submitText]="getMode()"
                           [modalForm]="true"></cd-form-button-panel>
-  </form>
-</cds-modal>
+  </ng-container>
+</cd-modal>

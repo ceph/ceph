@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { UntypedFormGroup } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import _ from 'lodash';
 
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -16,7 +17,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   templateUrl: './osd-flags-modal.component.html',
   styleUrls: ['./osd-flags-modal.component.scss']
 })
-export class OsdFlagsModalComponent implements OnInit {
+export class OsdFlagsModalComponent extends BaseModal implements OnInit {
   permissions: Permissions;
 
   osdFlagsForm = new UntypedFormGroup({});
@@ -121,6 +122,7 @@ export class OsdFlagsModalComponent implements OnInit {
     private osdService: OsdService,
     private notificationService: NotificationService
   ) {
+    super();
     this.permissions = this.authStorageService.getPermissions();
   }
 
@@ -146,10 +148,10 @@ export class OsdFlagsModalComponent implements OnInit {
     this.osdService.updateFlags(newFlags).subscribe(
       () => {
         this.notificationService.show(NotificationType.success, $localize`Updated OSD Flags`);
-        this.activeModal.close();
+        this.closeModal();
       },
       () => {
-        this.activeModal.close();
+        this.closeModal();
       }
     );
   }

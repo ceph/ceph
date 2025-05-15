@@ -7,10 +7,10 @@ import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/
 import { OsdService } from '~/app/shared/api/osd.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { OsdDevicesSelectionModalComponent } from '../osd-devices-selection-modal/osd-devices-selection-modal.component';
 import { DevicesSelectionChangeEvent } from './devices-selection-change-event.interface';
 import { DevicesSelectionClearEvent } from './devices-selection-clear-event.interface';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-osd-devices-selection-groups',
@@ -51,7 +51,7 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
   };
 
   constructor(
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     public osdService: OsdService,
     private router: Router
   ) {
@@ -91,10 +91,8 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
       devices: this.availDevices,
       filterColumns: filterColumns
     };
-    const modalRef = this.modalService.show(OsdDevicesSelectionModalComponent, initialState, {
-      size: 'xl'
-    });
-    modalRef.componentInstance.submitAction.subscribe((result: CdTableColumnFiltersChange) => {
+    const modalRef = this.modalService.show(OsdDevicesSelectionModalComponent, initialState);
+    modalRef.submitAction.subscribe((result: CdTableColumnFiltersChange) => {
       this.devices = result.data;
       this.capacity = _.sumBy(this.devices, 'sys_api.size');
       this.appliedFilters = result.filters;
