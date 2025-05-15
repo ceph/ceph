@@ -1,8 +1,6 @@
 import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
 import { CrushNodeSelectionClass } from '~/app/shared/classes/crush.node.selection.class';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -51,7 +49,6 @@ export class ErasureCodeProfileFormModalComponent
 
   constructor(
     private formBuilder: CdFormBuilder,
-    public activeModal: NgbActiveModal,
     private taskWrapper: TaskWrapperService,
     private ecpService: ErasureCodeProfileService,
     public actionLabels: ActionLabelsI18n
@@ -430,7 +427,7 @@ export class ErasureCodeProfileFormModalComponent
           this.form.setErrors({ cdSubmitButton: true });
         },
         complete: () => {
-          this.activeModal.close();
+          this.closeModal();
           this.submitAction.emit(profile);
         }
       });

@@ -1,13 +1,10 @@
-<cd-modal [modalRef]="activeModal">
-  <span class="modal-title"
-        i18n>{editMode, select, true {Edit} other {Add}} Matcher</span>
+<cd-modal title="{editMode, select, true {Edit} other {Add}} Matcher">
 
   <ng-container class="modal-content">
     <form class="form"
           #formDir="ngForm"
           [formGroup]="form"
           novalidate>
-      <div class="modal-body">
         <!-- Name -->
         <div class="form-group row">
           <label class="cd-col-form-label required"
@@ -73,13 +70,14 @@
             </div>
           </div>
         </div>
-      </div>
 
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                              [form]="form"
-                              [submitText]="getMode()"></cd-form-button-panel>
-      </div>
     </form>
+  </ng-container>
+  
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                          [form]="form"
+                          [modalForm]="true"
+                          [submitText]="getMode()"></cd-form-button-panel>
   </ng-container>
 </cd-modal>

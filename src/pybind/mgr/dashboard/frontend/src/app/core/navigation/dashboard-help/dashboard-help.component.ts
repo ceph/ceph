@@ -7,6 +7,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 import { DocService } from '~/app/shared/services/doc.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { AboutComponent } from '../about/about.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-dashboard-help',
@@ -19,7 +20,11 @@ export class DashboardHelpComponent implements OnInit {
   icons = Icons;
   bsModalRef: NgbModalRef;
 
-  constructor(private modalService: ModalService, private docService: DocService) {}
+  constructor(
+    private modalService: ModalService,
+    private docService: DocService,
+    private cdsModalService: ModalCdsService
+  ) {}
 
   ngOnInit() {
     this.docService.subscribeOnce('dashboard', (url: string) => {
@@ -32,6 +37,6 @@ export class DashboardHelpComponent implements OnInit {
   }
 
   openFeedbackModal() {
-    this.bsModalRef = this.modalService.show(FeedbackComponent, null, { size: 'lg' });
+    this.cdsModalService.show(FeedbackComponent);
   }
 }

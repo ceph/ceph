@@ -1,18 +1,12 @@
-<cds-modal size="md"
-           [open]="open"
-           [hasScrollingContent]="false"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <ng-container i18n="form title"
-                  class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+<cd-modal size="md"
+          [open]="open"
+          title="{{ action | titlecase }} {{ resource | upperFirst }}">
 
-    <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
-  </cds-modal-header>
+  <ng-container class="modal-content">
 
-  <form #frm="ngForm"
-        [formGroup]="formGroup"
-        novalidate>
-    <div cdsModalContent>
+      <form #frm="ngForm"
+            [formGroup]="formGroup"
+            novalidate>
 
       <!-- Username -->
       <div class="form-item">
@@ -108,12 +102,14 @@
         </ng-template>
       </div>
 
-    </div>
+    </form>
+  </ng-container>
 
+  <ng-container class="modal-footer">
     <cd-form-button-panel (submitActionEvent)="onSubmit()"
                           [form]="formGroup"
                           [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
                           [showSubmit]="!viewing"
                           [modalForm]="true"></cd-form-button-panel>
-  </form>
-</cds-modal>
+  </ng-container>
+</cd-modal>
