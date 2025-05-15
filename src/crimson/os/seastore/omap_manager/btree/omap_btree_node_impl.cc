@@ -394,18 +394,24 @@ OMapInnerNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
   LOG_PREFIX(OMapInnerNode::make_balanced);
   DEBUGT("l: {}, r: {}", oc.t, *this, *_right);
   ceph_assert(_right->get_type() == TYPE);
+  auto &right = *_right->cast<OMapInnerNode>();
+  auto pivot_idx = get_balance_pivot_idx(*this, right);
+  if (!pivot_idx) {
+    return make_balanced_ret(
+      interruptible::ready_future_marker{},
+      std::make_tuple(OMapNodeRef{}, OMapNodeRef{}, std::nullopt));
+  }
   return oc.tm.alloc_extents<OMapInnerNode>(oc.t, oc.hint,
     OMAP_INNER_BLOCK_SIZE, 2)
-    .si_then([this, _right, oc] (auto &&replacement_pair){
+    .si_then([this, &right, pivot_idx, oc] (auto &&replacement_pair){
       auto replacement_left = replacement_pair.front();
       auto replacement_right = replacement_pair.back();
-      auto &right = *_right->cast<OMapInnerNode>();
-      this->balance_child_ptrs(oc.t, *this, right, true,
+      this->balance_child_ptrs(oc.t, *this, right, *pivot_idx,
 			       *replacement_left, *replacement_right);
       return make_balanced_ret(
              interruptible::ready_future_marker{},
              std::make_tuple(replacement_left, replacement_right,
-                             balance_into_new_nodes(*this, right,
+                             balance_into_new_nodes(*this, right, *pivot_idx,
                                *replacement_left, *replacement_right)));
   }).handle_error_interruptible(
     crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
@@ -490,8 +496,14 @@ OMapInnerNode::merge_entry(
       ).si_then([liter=liter, riter=riter, l=l, r=r, oc, this](auto tuple) {
 	LOG_PREFIX(OMapInnerNode::merge_entry);
         auto [replacement_l, replacement_r, replacement_pivot] = tuple;
-	replacement_l->init_range(l->get_begin(), replacement_pivot);
-	replacement_r->init_range(replacement_pivot, r->get_end());
+	if (!replacement_pivot) {
+	  return merge_entry_ret(
+		 interruptible::ready_future_marker{},
+		 mutation_result_t(mutation_status_t::SUCCESS,
+		   std::nullopt, std::nullopt));
+	}
+	replacement_l->init_range(l->get_begin(), *replacement_pivot);
+	replacement_r->init_range(*replacement_pivot, r->get_end());
 	DEBUGT("to update parent: {} {} {}",
 	  oc.t, *this, *replacement_l, *replacement_r);
 	if (get_meta().depth > 2) { // l and r are inner nodes
@@ -511,7 +523,7 @@ OMapInnerNode::merge_entry(
 	  liter,
 	  replacement_l->get_laddr(),
 	  maybe_get_delta_buffer());
-        bool overflow = extent_will_overflow(replacement_pivot.size(),
+        bool overflow = extent_will_overflow(replacement_pivot->size(),
 	  std::nullopt);
         if (!overflow) {
 	  this->update_child_ptr(
@@ -521,7 +533,7 @@ OMapInnerNode::merge_entry(
           journal_inner_insert(
 	    riter,
 	    replacement_r->get_laddr(),
-	    replacement_pivot,
+	    *replacement_pivot,
 	    maybe_get_delta_buffer());
           std::vector<laddr_t> dec_laddrs{l->get_laddr(), r->get_laddr()};
           return dec_ref(oc, dec_laddrs
@@ -539,7 +551,7 @@ OMapInnerNode::merge_entry(
 	  this->remove_child_ptr(riter.get_offset());
           journal_inner_remove(riter, maybe_get_delta_buffer());
           return make_split_insert(
-	    oc, riter, replacement_pivot, replacement_r
+	    oc, riter, *replacement_pivot, replacement_r
 	  ).si_then([this, oc, l = l, r = r](auto mresult) {
 	    std::vector<laddr_t> dec_laddrs{
 	      l->get_laddr(),
