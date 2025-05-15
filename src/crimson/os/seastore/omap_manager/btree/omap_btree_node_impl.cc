@@ -166,11 +166,14 @@ OMapInnerNode::insert(
   LOG_PREFIX(OMapInnerNode::insert);
   DEBUGT("{}->{}, this: {}",  oc.t, key, value, *this);
   auto child_pt = get_containing_child(key);
+  if (exceeds_max_kv_limit(key, value)) {
+    return crimson::ct_error::value_too_large::make();
+  }
   return get_child_node(oc, child_pt).si_then(
     [oc, &key, &value] (auto extent) {
     ceph_assert(!extent->is_btree_root());
     return extent->insert(oc, key, value);
-  }).si_then([this, oc, child_pt] (auto mresult) {
+  }).si_then([this, oc, child_pt] (auto mresult) -> insert_ret {
     if (mresult.status == mutation_status_t::SUCCESS) {
       return insert_iertr::make_ready_future<mutation_result_t>(mresult);
     } else if (mresult.status == mutation_status_t::WAS_SPLIT) {
@@ -208,7 +211,11 @@ OMapInnerNode::rm_key(omap_context_t oc, const std::string &key)
                                      std::nullopt, std::nullopt));
         }
         case mutation_status_t::WAS_SPLIT:
-          return handle_split(oc, child_pt, mresult);
+          return handle_split(oc, child_pt, mresult
+	  ).handle_error_interruptible(
+	    rm_key_iertr::pass_further{},
+	    crimson::ct_error::assert_all{"unexpected error"}
+	  );
         default:
           return rm_key_iertr::make_ready_future<mutation_result_t>(mresult);
       }
@@ -620,6 +627,9 @@ OMapLeafNode::insert(
 {
   LOG_PREFIX(OMapLeafNode::insert);
   DEBUGT("{} -> {}, this: {}", oc.t, key, value, *this);
+  if (exceeds_max_kv_limit(key, value)) {
+    return crimson::ct_error::value_too_large::make();
+  }
   bool overflow = extent_will_overflow(key.size(), value.length());
   if (!overflow) {
     if (!is_mutable()) {
