@@ -10,6 +10,8 @@ v17.2.9 Quincy
 
 This is the ninth backport (hotfix) release in the Quincy series. We recommend that all users update to this release.
 
+Please be aware that this hotfix was finalized after its end-of-life (EOL) declaration and subsequent removal from the build system. As a result, container builds were not created, and the hotfix has only been subject to limited testing.
+
 Users should expect to see the el8 rpm subdirectory empty and the "dnf" commands are expected
 to fail with 17.2.9.
 They can choose to use 17.2.9 RPM packages for centos 8/el8 provided by CERN as a community
@@ -22,6 +24,9 @@ tested by Ceph according to `platforms <https://docs.ceph.com/en/latest/start/os
 The repository for el8 builds is hosted by CERN on `Linux@CERN <https://linuxsoft.cern.ch/repos/ceph-ext-quincy8el-stable/>`_ .
 The public part of the GPG key used to sign the
 packages is available at `RPM-GPG-KEY-Ceph-Community <https://linuxsoft.cern.ch/repos/RPM-GPG-KEY-Ceph-Community>`_ .
+
+Also note that Ceph now builds against OpenSSL 3.5.0, which may affect EL package users who are on distros that
+still reference an older version.
 
 Notable Changes
 ---------------
