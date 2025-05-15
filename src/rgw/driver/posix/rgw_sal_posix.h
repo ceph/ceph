@@ -645,6 +645,16 @@ public:
           optional_yield y,
           std::string_view account,
           std::string_view name) override { return -ENOTSUP; }
+  virtual int list_customer_mananged_policies(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          std::string_view account_id,
+          rgw::IAM::Scope scope,
+          bool only_attached,
+          std::string_view path_prefix,
+          rgw::IAM::PolicyUsageFilter policy_usage_filter,
+          std::string_view marker,
+          uint32_t max_items,
+          rgw::IAM::PolicyList& listing) override { return -ENOTSUP; }
 
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
   virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;
