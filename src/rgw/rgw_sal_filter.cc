@@ -732,6 +732,20 @@ int FilterDriver::delete_customer_managed_policy(const DoutPrefixProvider* dpp,
   return next->delete_customer_managed_policy(dpp, y, account, name);
 }
 
+int FilterDriver::list_customer_mananged_policies(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account_id,
+                            rgw::IAM::Scope scope,
+                            bool only_attached,
+                            std::string_view path_prefix,
+                            rgw::IAM::PolicyUsageFilter policy_usage_filter,
+                            std::string_view marker,
+                            uint32_t max_items,
+                            rgw::IAM::PolicyList& listing)
+{
+  return next->list_customer_mananged_policies(dpp, y, account_id, scope, only_attached, path_prefix, policy_usage_filter, marker, max_items, listing);
+}
+
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
