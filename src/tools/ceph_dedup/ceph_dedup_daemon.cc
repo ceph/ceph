@@ -190,13 +190,13 @@ public:
       }
     }
 
-    bool contains(std::string& fp) {
+    bool contains(const std::string& fp) {
       std::shared_lock lock(fingerprint_lock);
       return fp_map.contains(fp);
     }
 
     // return true if the chunk is duplicate
-    bool add(chunk_t& chunk) {
+    bool add(const chunk_t& chunk) {
       std::unique_lock lock(fingerprint_lock);
       auto entry = fp_map.find(chunk.fingerprint);
       total_bytes += chunk.size;
@@ -246,7 +246,7 @@ public:
       fp_store(chunk_threshold, report_period, fpstore_threshold),
       sampling_ratio(static_cast<double>(sampling_ratio) / 100) { }
 
-    bool is_all_stop() {
+    bool is_all_stop() const {
       std::shared_lock l{glock};
       return all_stop;
     }
@@ -319,14 +319,14 @@ private:
     ObjectCursor end,
     size_t max_object_count);
   std::vector<size_t> sample_object(size_t count);
-  void try_dedup_and_accumulate_result(ObjectItem &object, snap_t snap = 0);
+  void try_dedup_and_accumulate_result(const ObjectItem &object, snap_t snap = 0);
   int do_chunk_dedup(chunk_t &chunk, snap_t snap);
-  bufferlist read_object(ObjectItem &object);
+  bufferlist read_object(const ObjectItem &object);
   std::vector<std::tuple<bufferlist, std::pair<uint64_t, uint64_t>>> do_cdc(
-    ObjectItem &object,
-    bufferlist &data);
-  std::string generate_fingerprint(bufferlist chunk_data);
-  AioCompRef do_async_evict(std::string oid);
+    const ObjectItem &object,
+    const bufferlist &data) const;
+  std::string generate_fingerprint(const bufferlist& chunk_data) const;
+  AioCompRef do_async_evict(const std::string& oid);
 
   IoCtx io_ctx;
   IoCtx chunk_io_ctx;
@@ -393,7 +393,7 @@ void SampleDedupWorkerThread::crawl()
   }
 }
 
-AioCompRef SampleDedupWorkerThread::do_async_evict(std::string oid)
+AioCompRef SampleDedupWorkerThread::do_async_evict(const std::string& oid)
 {
   Rados rados;
   ObjectReadOperation op_tier;
@@ -443,7 +443,7 @@ std::vector<size_t> SampleDedupWorkerThread::sample_object(size_t count)
 }
 
 void SampleDedupWorkerThread::try_dedup_and_accumulate_result(
-  ObjectItem &object, snap_t snap)
+  const ObjectItem &object, snap_t snap)
 {
   bufferlist data = read_object(object);
   if (data.length() == 0) {
@@ -504,7 +504,7 @@ void SampleDedupWorkerThread::try_dedup_and_accumulate_result(
   total_object_size += object_size;
 }
 
-bufferlist SampleDedupWorkerThread::read_object(ObjectItem &object)
+bufferlist SampleDedupWorkerThread::read_object(const ObjectItem &object)
 {
   bufferlist whole_data;
   size_t offset = 0;
@@ -527,8 +527,8 @@ bufferlist SampleDedupWorkerThread::read_object(ObjectItem &object)
 }
 
 std::vector<std::tuple<bufferlist, std::pair<uint64_t, uint64_t>>> SampleDedupWorkerThread::do_cdc(
-  ObjectItem &object,
-  bufferlist &data)
+  const ObjectItem &object,
+  const bufferlist &data) const
 {
   std::vector<std::tuple<bufferlist, std::pair<uint64_t, uint64_t>>> ret;
 
@@ -544,7 +544,7 @@ std::vector<std::tuple<bufferlist, std::pair<uint64_t, uint64_t>>> SampleDedupWo
   return ret;
 }
 
-std::string SampleDedupWorkerThread::generate_fingerprint(bufferlist chunk_data)
+std::string SampleDedupWorkerThread::generate_fingerprint(const bufferlist& chunk_data) const
 {
   std::string ret;
 
