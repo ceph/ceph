@@ -357,7 +357,7 @@ public:
   int wait(const DoutPrefixProvider* dpp, bufferlist *pbl, optional_yield y) {
     int ret = req.wait(dpp, y);
     if (ret < 0) {
-      if (ret == -EIO) {
+      if (ret == -ERR_INTERNAL_ERROR) {
         conn->set_url_unconnectable(req.get_url_orig());
       }
       return ret;
@@ -413,7 +413,7 @@ int RGWRESTReadResource::wait(const DoutPrefixProvider* dpp, T *dest,
 {
   int ret = req.wait(dpp, y);
   if (ret < 0) {
-    if (ret == -EIO) {
+    if (ret == -ERR_INTERNAL_ERROR) {
       conn->set_url_unconnectable(req.get_url_orig());
     }
     return ret;
@@ -488,7 +488,7 @@ public:
     int ret = req.wait(dpp, y);
     *pbl = bl;
 
-    if (ret == -EIO) {
+    if (ret == -ERR_INTERNAL_ERROR) {
       conn->set_url_unconnectable(req.get_url_orig());
     }
 
@@ -509,7 +509,7 @@ int RGWRESTSendResource::wait(const DoutPrefixProvider* dpp, T *dest,
                               optional_yield y, E *err_result)
 {
   int ret = req.wait(dpp, y);
-  if (ret == -EIO) {
+  if (ret == -ERR_INTERNAL_ERROR) {
     conn->set_url_unconnectable(req.get_url_orig());
   }
 

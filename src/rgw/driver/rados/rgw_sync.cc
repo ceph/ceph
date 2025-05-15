@@ -510,7 +510,7 @@ public:
         }
 
         if (op_ret < 0) {
-          if (op_ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+          if (op_ret == -ERR_INTERNAL_ERROR && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
             ldpp_dout(dpp, 20) << "failed to read remote metadata log shard info. retry. shard_id=" << shard_id << dendl;
             continue;
           } else {
@@ -1094,7 +1094,7 @@ public:
         }
 
         if (op_ret < 0) {
-          if (op_ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+          if (op_ret == -ERR_INTERNAL_ERROR && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
             ldpp_dout(dpp, 20) << "failed to read remote metadata. retry. section=" << section << " key=" << key << dendl;
             continue;
           } else {
@@ -2440,7 +2440,7 @@ int RGWCloneMetaLogCoroutine::operate(const DoutPrefixProvider *dpp)
           return state_receive_rest_response();
         }
 
-        if (op_ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+        if (op_ret == -ERR_INTERNAL_ERROR && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
           ldout(cct, 20) << __func__ << ": request IO error. retries=" << tries << dendl;
           continue;
         } else if (op_ret < 0) {
@@ -2547,7 +2547,7 @@ int RGWCloneMetaLogCoroutine::state_send_rest_request(const DoutPrefixProvider *
 int RGWCloneMetaLogCoroutine::state_receive_rest_response()
 {
   op_ret = http_op->wait(sync_env->dpp, &data, null_yield);
-  if (op_ret < 0 && op_ret != -EIO) {
+  if (op_ret < 0 && op_ret != -ERR_INTERNAL_ERROR) {
     error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
     ldpp_dout(sync_env->dpp, 5) << "failed to wait for op, ret=" << op_ret << dendl;
     http_op->put();
@@ -2557,7 +2557,7 @@ int RGWCloneMetaLogCoroutine::state_receive_rest_response()
   http_op->put();
   http_op = NULL;
 
-  if (op_ret == -EIO) {
+  if (op_ret == -ERR_INTERNAL_ERROR) {
     return 0;
   }
 
