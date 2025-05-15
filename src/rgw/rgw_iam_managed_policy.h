@@ -71,13 +71,13 @@ WRITE_CLASS_ENCODER(ManagedPolicyAttachment)
 struct ManagedPolicyInfo {
   std::string id;
   std::string name;
-  std::string path;
+  std::string path{"/"};
   std::string arn;
   std::string policy_document;
   std::string description;
   rgw_account_id account_id;
-  ceph::real_time update_date;
-  ceph::real_time creation_date;
+  ceph::real_time update_date{ceph::real_clock::now()};
+  ceph::real_time creation_date{ceph::real_clock::now()};
   std::string default_version{"v1"};
   bool is_attachable{true};
   uint32_t attachment_count{0};
@@ -135,5 +135,16 @@ struct ManagedPolicyInfo {
 };
 WRITE_CLASS_ENCODER(ManagedPolicyInfo)
 
+// A list of policies
+struct PolicyList {
+  // The list of results, sorted by name
+  std::vector<ManagedPolicyInfo> policies;
+  // The next marker to resume listing, or empty
+  std::string next_marker;
+};
+
+enum class Scope { All, AWS, Local };
+enum class PolicyUsageFilter { PermissionsPolicy, PermissionsBoundary };
+std::vector<ManagedPolicyInfo> list_aws_managed_policy();
 
 } // namespace rgw::IAM
