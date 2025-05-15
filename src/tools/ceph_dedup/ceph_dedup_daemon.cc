@@ -365,11 +365,9 @@ void SampleDedupWorkerThread::crawl()
 	op.list_snaps(&snap_set, &snap_ret);
 	io_ctx.operate(target.oid, &op, NULL);
 
-	for (std::vector<librados::clone_info_t>::const_iterator r = snap_set.clones.begin();
-	  r != snap_set.clones.end();
-	  ++r) {
-	  io_ctx.snap_set_read(r->cloneid);
-	  try_dedup_and_accumulate_result(target, r->cloneid);
+	for (const auto& clone : snap_set.clones) {
+	  io_ctx.snap_set_read(clone.cloneid);
+	  try_dedup_and_accumulate_result(target, clone.cloneid);
 	}
       } else {
 	try_dedup_and_accumulate_result(target);
