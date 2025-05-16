@@ -82,7 +82,7 @@ command to use the kernel driver to mount CephFS:
 
    .. prompt:: bash #
 
-      mount -t ceph cephuser@b3acfc0d-575f-41d3-9c91-0e7ed3dbb3fa.cephfs=/ -o mon_addr=192.168.0.1:6789,secret=AQATSKdNGBnwLhAAnNDKnH65FmVKpXZJVasUeQ==
+      mount -t ceph cephuser@b3acfc0d-575f-41d3-9c91-0e7ed3dbb3fa.cephfs=/ /mnt/mycephfs -o mon_addr=192.168.0.1:6789,secret=AQATSKdNGBnwLhAAnNDKnH65FmVKpXZJVasUeQ==
 
 When using the mount helper, monitor hosts and FSID are optional. The
 ``mount.ceph`` helper discovers these details by finding and reading the ceph
