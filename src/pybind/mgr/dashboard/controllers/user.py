@@ -166,6 +166,7 @@ class UserPasswordPolicy(RESTController):
     def validate_password(self, password, username=None, old_password=None):
         """
         Check if the password meets the password policy.
+
         :param password: The password to validate.
         :param username: The name of the user (optional).
         :param old_password: The old password (optional).
