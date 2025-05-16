@@ -143,6 +143,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
             service_type: 'iscsi'
           }),
           CdValidators.requiredIf({
+            service_type: 'nvmeof'
+          }),
+          CdValidators.requiredIf({
             service_type: 'ingress'
           }),
           CdValidators.composeIf(
@@ -170,11 +173,15 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       count: [null, [CdValidators.number(false)]],
       unmanaged: [false],
       // iSCSI
+      // NVMe/TCP
       pool: [
         null,
         [
           CdValidators.requiredIf({
             service_type: 'iscsi'
+          }),
+          CdValidators.requiredIf({
+            service_type: 'nvmeof'
           })
         ]
       ],
@@ -748,6 +755,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         break;
 
       case 'iscsi':
+      case 'nvmeof':
         serviceSpec['pool'] = values['pool'];
         break;
 

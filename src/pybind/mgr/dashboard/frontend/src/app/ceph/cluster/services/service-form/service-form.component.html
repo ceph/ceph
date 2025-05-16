@@ -277,9 +277,10 @@
         </ng-container>
 
         <!-- iSCSI -->
+        <!-- NVMe/TCP -->
         <!-- pool -->
         <div class="form-group row"
-             *ngIf="serviceForm.controls.service_type.value === 'iscsi'">
+             *ngIf="serviceForm.controls.service_type.value === 'iscsi' || serviceForm.controls.service_type.value === 'nvmeof'">
           <label i18n
                  class="cd-col-form-label required"
                  for="pool">Pool</label>
