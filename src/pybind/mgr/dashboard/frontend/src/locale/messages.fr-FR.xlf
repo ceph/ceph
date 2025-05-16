@@ -337,7 +337,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">38</context>
+          <context context-type="linenumber">39</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/smb/smb-tabs/smb-tabs.component.html</context>
@@ -586,7 +586,7 @@
       </trans-unit>
       <trans-unit id="7cbdabcece469fab89cfa687ab152bca18b97498" datatype="html">
         <source>This field is required.</source>
-        <target>Ce champs est requis.</target>
+        <target>Ce champ est obligatoire.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
           <context context-type="linenumber">24</context>
@@ -1370,7 +1370,7 @@
       </trans-unit>
       <trans-unit id="f717bad2da5944a2567a52f971ccc6806db85805" datatype="html">
         <source>User names must have a length of 8 to 64 characters and can contain alphanumeric characters, '.', '@', '-', '_' or ':'.</source>
-        <target>Les noms d'utilisateur doivent avoir une longueur de 8 à 64 caractères et peuvent contenir des caractères alphanumériques : '.', '@', '-', '_' ou ':'.</target>
+        <target>Les noms d'utilisateur doivent avoir une longueur comprise entre 8 et 64 caractères et peuvent contenir des caractères alphanumériques : '.', '@', '-', '_' ou ':'.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
           <context context-type="linenumber">28,29</context>
@@ -1410,7 +1410,7 @@
       </trans-unit>
       <trans-unit id="001e1836299d8d3b84eaebe2fa051325beab3f00" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and can contain alphanumeric characters, '@', '-', '_' or '/'.</source>
-        <target>Les mots de passe doivent avoir une longueur de 12 à 16 caractères et peuvent contenir des caractères alphanumériques '@', '-', '_' ou '/'.</target>
+        <target>Les mots de passe doivent avoir une longueur comprise entre 12 et 16 caractères et peuvent contenir des caractères alphanumériques : '@', '-', '_' ou '/'.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
           <context context-type="linenumber">59,60</context>
@@ -1747,7 +1747,7 @@
       </trans-unit>
       <trans-unit id="137fbf154ecad4d580354db0858b76faea7e4686" datatype="html">
         <source>User names must have a length of 8 to 64 characters and can contain alphanumeric characters, '.', '@', '-', '_' or ':'.</source>
-        <target>Les noms d'utilisateur doivent avoir une longueur de 8 à 64 caractères et peuvent contenir des caractères alphanumériques : '.', '@', '-', '_' ou ':'.</target>
+        <target>Les noms d'utilisateur doivent avoir une longueur comprise entre 8 à 64 caractères et peuvent contenir des caractères alphanumériques : '.', '@', '-', '_' ou ':'.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">221,222</context>
@@ -1759,7 +1759,7 @@
       </trans-unit>
       <trans-unit id="361771c32dd2254d77fd3fbf006b008983fe5907" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and can contain alphanumeric characters, '@', '-', '_' or '/'.</source>
-        <target>Les mots de passe doivent avoir une longueur de 12 à 16 caractères et peuvent contenir des caractères alphanumériques : '@', '-', '_' ou '/'.</target>
+        <target>Les mots de passe doivent avoir une longueur comprise entre 12 et 16 caractères et peuvent contenir des caractères alphanumériques : '@', '-', '_' ou '/'.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">254,255</context>
@@ -1811,7 +1811,7 @@
       </trans-unit>
       <trans-unit id="7e7cad911fa524e512d9744b16358b7ee6791385" datatype="html">
         <source>User names must have a length of 8 to 64 characters and can contain alphanumeric characters, '.', '@', '-', '_' or ':'.</source>
-        <target>Les noms d'utilisateur doivent avoir une longueur de 8 à 64 caractères et peuvent contenir des caractères alphanumériques : '.', '@', '-', '_' ou ':'.</target>
+        <target>Les noms d'utilisateur doivent avoir une longueur comprise entre 8 et 64 caractères et peuvent contenir des caractères alphanumériques : '.', '@', '-', '_' ou ':'.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">383,384</context>
@@ -1823,7 +1823,7 @@
       </trans-unit>
       <trans-unit id="e7f2c186d181206d0d2b1ff74819081a010f10bf" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and can contain alphanumeric characters, '@', '-', '_' or '/'.</source>
-        <target>Les mots de passe doivent avoir une longueur de 12 à 16 caractères et peuvent contenir des caractères alphanumériques '@', '-', '_' ou '/'.</target>
+        <target>Les mots de passe doivent avoir une longueur comprise entre 12 et 16 caractères et peuvent contenir des caractères alphanumériques '@', '-', '_' ou '/'.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">414,415</context>
@@ -2157,7 +2157,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">32</context>
+          <context context-type="linenumber">33</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-tabs/nvmeof-tabs.component.html</context>
@@ -2551,7 +2551,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
-          <context context-type="linenumber">71</context>
+          <context context-type="linenumber">69</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/hosts/hosts.component.ts</context>
@@ -2807,7 +2807,7 @@
       </trans-unit>
       <trans-unit id="4ddcb416c1c0aa1f54acf5beef1de81813e76fa6" datatype="html">
         <source>{VAR_SELECT, select, edit {Edit} other {Add}}</source>
-        <target>{VAR_SELECT, sélectionner, modifier {Edit} autre {Add}}</target>
+        <target>{VAR_SELECT, select, edit {Modifier} other {Ajouter}}</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/mirroring/pool-edit-peer-modal/pool-edit-peer-modal.component.html</context>
           <context context-type="linenumber">8</context>
@@ -2853,7 +2853,7 @@
       </trans-unit>
       <trans-unit id="7539188a568c3d553cbde1bacaf32310c4264e24" datatype="html">
         <source>CephX ID...</source>
-        <target>ID CephX</target>
+        <target>ID CephX...</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/mirroring/pool-edit-peer-modal/pool-edit-peer-modal.component.html</context>
           <context context-type="linenumber">58</context>
@@ -2899,7 +2899,7 @@
       </trans-unit>
       <trans-unit id="f53434bcb95bd86f1df9c8e22966f757614fc4ad" datatype="html">
         <source>Base64-encoded key...</source>
-        <target>Clef Base64...</target>
+        <target>Clé Base64...</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/mirroring/pool-edit-peer-modal/pool-edit-peer-modal.component.html</context>
           <context context-type="linenumber">103</context>
@@ -2907,7 +2907,7 @@
       </trans-unit>
       <trans-unit id="4cd83164cd4f66b4abc2863f9ce6f599d789e4ca" datatype="html">
         <source>CephX key must be base64 encoded.</source>
-        <target>La clef CephX doit être codée en base64.</target>
+        <target>La clé CephX doit être codée en base64.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/mirroring/pool-edit-peer-modal/pool-edit-peer-modal.component.html</context>
           <context context-type="linenumber">113</context>
@@ -3023,15 +3023,15 @@
           <context context-type="linenumber">152</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="f5ff2607cf2fd0645a263371d6f93f063d07e33a" datatype="html">
-        <source>Enter group</source>
+      <trans-unit id="cf378a96424886fda41c2c758e3996513692cd54" datatype="html">
+        <source>Selected Gateway Group</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">10</context>
+          <context context-type="linenumber">8</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.html</context>
-          <context context-type="linenumber">10</context>
+          <context context-type="linenumber">8</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3cc9c2ae277393b3946b38c088dabff671b1ee1b" datatype="html">
@@ -3039,7 +3039,7 @@
         <target>Performance</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">44</context>
+          <context context-type="linenumber">45</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-details/rbd-details.component.html</context>
@@ -3054,28 +3054,39 @@
         <source> Gateways <x id="START_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;cd-help-text&gt;"/> Ceph NVMe-oF gateways provide Ceph Block Device storage through NVMe/TCP. For VMware clients the NVMe/TCP volumes display as VMFS Datastores. For Linux clients the NVMe/TCP volumes display as as block devices. <x id="CLOSE_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;/cd-help-text&gt;"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">53,57</context>
+          <context context-type="linenumber">54,58</context>
         </context-group>
       </trans-unit>
       <trans-unit id="88d52a108e372081c5e122c5b369aac3ec904146" datatype="html">
         <source>Gateway overview</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">69</context>
+          <context context-type="linenumber">70</context>
         </context-group>
       </trans-unit>
       <trans-unit id="9517e7f935e73e6889dda20c0fa0408465c18f2e" datatype="html">
         <source>Gateway performance</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">79</context>
+          <context context-type="linenumber">80</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5032690935748986815" datatype="html">
+        <source>Enter group name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
+          <context context-type="linenumber">25</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
+          <context context-type="linenumber">20</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7974613004081450726" datatype="html">
         <source>Gateway ID</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
-          <context context-type="linenumber">67</context>
+          <context context-type="linenumber">65</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5611592591303869712" datatype="html">
@@ -3083,7 +3094,7 @@
         <target>Statut</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
-          <context context-type="linenumber">75</context>
+          <context context-type="linenumber">73</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-trash-list/rbd-trash-list.component.ts</context>
@@ -3116,6 +3127,17 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-multisite-sync-policy/rgw-multisite-sync-policy.component.ts</context>
           <context context-type="linenumber">71</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3107044384926915007" datatype="html">
+        <source>No groups available</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
+          <context context-type="linenumber">134</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
+          <context context-type="linenumber">148</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4f7cdf99e53b74c843abea60b5ca07a6842c9135" datatype="html">
@@ -3374,6 +3396,10 @@
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-listeners-form/nvmeof-listeners-form.component.ts</context>
           <context context-type="linenumber">50</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-listeners-list/nvmeof-listeners-list.component.ts</context>
+          <context context-type="linenumber">103</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="6641024648411549335" datatype="html">
         <source>Host</source>
@@ -3414,6 +3440,13 @@
           <context context-type="linenumber">81</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="5236029444167617860" datatype="html">
+        <source>listener</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-listeners-list/nvmeof-listeners-list.component.ts</context>
+          <context context-type="linenumber">106</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="e70fcca5a99575cffef3ff8cbd5e69f06ffd0f1c" datatype="html">
         <source>Pool</source>
         <target>Réserve</target>
@@ -3451,7 +3484,7 @@
       </trans-unit>
       <trans-unit id="ef83ec9c304a89d45650e580dcdc2978c37b3a83" datatype="html">
         <source>-- Select a pool --</source>
-        <target>-- Sélectionner une réserve --</target>
+        <target>-- Sélectionnez une réserve --</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-namespaces-form/nvmeof-namespaces-form.component.html</context>
           <context context-type="linenumber">36</context>
@@ -3862,28 +3895,28 @@
         <source> Subsystems <x id="START_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;cd-help-text&gt;"/> A subsystem provides access control to which hosts can access the namespaces within the subsystem. <x id="CLOSE_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;/cd-help-text&gt;"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.html</context>
-          <context context-type="linenumber">18,22</context>
+          <context context-type="linenumber">19,23</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7707701592702091951" datatype="html">
         <source>NQN</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
-          <context context-type="linenumber">61</context>
+          <context context-type="linenumber">59</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4249456376242514671" datatype="html">
         <source># Namespaces</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
-          <context context-type="linenumber">65</context>
+          <context context-type="linenumber">63</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8636681982233006716" datatype="html">
         <source># Maximum Allowed Namespaces</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
-          <context context-type="linenumber">69</context>
+          <context context-type="linenumber">67</context>
         </context-group>
       </trans-unit>
       <trans-unit id="409b6a23ac5c8302cbe2868c58d14eb425d72ddd" datatype="html">
@@ -4431,7 +4464,7 @@
       </trans-unit>
       <trans-unit id="e22d7bb4d2d561e0832ee0b9a3da2468a080c4f0" datatype="html">
         <source>-- Select a namespace --</source>
-        <target>-- Sélectionner un espace de noms --</target>
+        <target>-- Sélectionnez un espace de noms --</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">257</context>
@@ -5113,7 +5146,7 @@
       </trans-unit>
       <trans-unit id="f0b5d789d42c0e69348e5fe0037fcbf5b5fbbdcc" datatype="html">
         <source>Move an image to trash</source>
-        <target>Déplacer une image vers la corbeille.</target>
+        <target>Déplacer une image vers la corbeille</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
           <context context-type="linenumber">6</context>
@@ -5152,7 +5185,7 @@
       </trans-unit>
       <trans-unit id="a1506e5f2ca22cad14502ec7a20fb6113ace145d" datatype="html">
         <source>Wrong date format. Please use &quot;YYYY-MM-DD HH:mm:ss&quot;.</source>
-        <target>Format de date incorrect. Veuillez utiliser &quot;AAAA-MM-JJ HH:mm:ss&quot;</target>
+        <target>Format de date incorrect. Veuillez utiliser &quot;AAAA-MM-JJ HH:mm:ss&quot;.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
           <context context-type="linenumber">40</context>
@@ -5555,7 +5588,7 @@
       </trans-unit>
       <trans-unit id="6960117167304061503" datatype="html">
         <source>Value has to be at least 0 or more</source>
-        <target>La valeur doit être au moins égale à 0 ou supérieure</target>
+        <target>La valeur doit être au minimum égale à 0 ou supérieure</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-directories/cephfs-directories.component.ts</context>
           <context context-type="linenumber">487</context>
@@ -6661,7 +6694,7 @@
       </trans-unit>
       <trans-unit id="ab0089ef47af61ca1d137bc908b96c290dfd9287" datatype="html">
         <source>Enum values</source>
-        <target>Valeurs d'énuménation</target>
+        <target>Valeurs d'énumération</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/configuration/configuration-details/configuration-details.component.html</context>
           <context context-type="linenumber">96</context>
@@ -8507,7 +8540,7 @@
       </trans-unit>
       <trans-unit id="60cb3d01e5ddf266ecb4271007a1c3d0f3efdc22" datatype="html">
         <source>The primary storage devices. These devices contain all OSD data.</source>
-        <target>Les principaux périphériques de stockage. Ces périphériques contiennent toutes les données OSD.</target>
+        <target>Périphériques de stockage primaires. Ces périphériques contiennent toutes les données OSD.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-devices-selection-groups/osd-devices-selection-groups.component.html</context>
           <context context-type="linenumber">8</context>
@@ -8515,7 +8548,7 @@
       </trans-unit>
       <trans-unit id="b432e04886d0d1fd84f740477383051f85addcf2" datatype="html">
         <source>Write-Ahead-Log devices. These devices are used for BlueStore’s internal journal. It is only useful to use a WAL device if the device is faster than the primary device (e.g. NVME devices or SSDs). If there is only a small amount of fast storage available (e.g., less than a gigabyte), we recommend using it as a WAL device.</source>
-        <target>Périphériques Write-Ahead-Log. Ces périphériques sont utilisés pour le journal interne de BlueStore. Un périphérique WAL n'est utile que si celui-ci est plus rapide que le périphérique principal (par exemple, des périphériques NVME ou SSD). S'il n'y a qu'une petite quantité d'espace de stockage rapide disponible (par exemple, moins d'un gigaoctet), nous recommandons de l'utiliser comme périphérique WAL.</target>
+        <target>Périphériques Write-Ahead-Log. Ces périphériques sont utilisés pour le journal interne de BlueStore. Un périphérique WAL n'est utile que s'il est plus rapide que le périphérique primaire (par exemple, périphériques NVME ou SSD). Si la quantité d'espace de stockage rapide disponible est limitée (par exemple, moins d'un gigaoctet), nous recommandons de l'utiliser en tant que périphérique WAL.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-devices-selection-groups/osd-devices-selection-groups.component.html</context>
           <context context-type="linenumber">10</context>
@@ -8523,7 +8556,7 @@
       </trans-unit>
       <trans-unit id="b87e181ab9e8393aa5ed759dd3d53836e32c8ffe" datatype="html">
         <source>DB devices can be used for storing BlueStore’s internal metadata. It is only helpful to provision a DB device if it is faster than the primary device (e.g. NVME devices or SSD).</source>
-        <target>Les périphériques DB peuvent être utilisés pour stocker les métadonnées internes de BlueStore. Il n'est utile de provisionner un périphérique DB que s'il est plus rapide que le périphérique primaire (par exemple, les périphériques NVME ou SSD).</target>
+        <target>Les périphériques DB peuvent être utilisés pour stocker les métadonnées internes de BlueStore. Le provisioning d'un périphérique DB n'est utile que s'il est plus rapide que le périphérique primaire (par exemple, périphériques NVME ou SSD).</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-devices-selection-groups/osd-devices-selection-groups.component.html</context>
           <context context-type="linenumber">12</context>
@@ -8563,7 +8596,7 @@
       </trans-unit>
       <trans-unit id="3617271647728055571" datatype="html">
         <source>Please add primary devices first</source>
-        <target>Ajoutez d'abord les périphériques principaux</target>
+        <target>Ajoutez d'abord les périphériques primaires</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-devices-selection-groups/osd-devices-selection-groups.component.ts</context>
           <context context-type="linenumber">49</context>
@@ -9067,6 +9100,7 @@
       </trans-unit>
       <trans-unit id="19a2892320d36f6564eac566181f172a7b5e5095" datatype="html">
         <source>{VAR_SELECT, select, true {it} other {them}}</source>
+        <target>{VAR_SELECT, select, true {Modifier} other {Ajouter}}</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-list/osd-list.component.html</context>
           <context context-type="linenumber">89</context>
@@ -9561,7 +9595,7 @@
       </trans-unit>
       <trans-unit id="62b73a34ba65b3073e3560dce828a16d7fd3c0f4" datatype="html">
         <source>{VAR_SELECT, select, true {Deep } other {}}</source>
-        <target>{VAR_SELECT, select, true {Profond } other {}}</target>
+        <target>{VAR_SELECT, select, true {En profondeur} other {}}</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-scrub-modal/osd-scrub-modal.component.html</context>
           <context context-type="linenumber">3</context>
@@ -9577,7 +9611,7 @@
       </trans-unit>
       <trans-unit id="fad3dc421817a16dd6c46c1a0c36de619a8d776e" datatype="html">
         <source>{VAR_SELECT, select, true {deep } other {}}</source>
-        <target>{VAR_SELECT, select, true {profond } other {}}</target>
+        <target>{VAR_SELECT, select, true {en profondeur} other {}}</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-scrub-modal/osd-scrub-modal.component.html</context>
           <context context-type="linenumber">11</context>
@@ -9875,7 +9909,7 @@
       </trans-unit>
       <trans-unit id="78af6a5e6e4d305557054b64d10f9f9446d8043d" datatype="html">
         <source>{VAR_SELECT, select, true {Edit} other {Add}}</source>
-        <target>{VAR_SELECT, select, true {Modifier} other {Ajouter}</target>
+        <target>{VAR_SELECT, select, true {Modifier} other {Ajouter}}</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/prometheus/silence-matcher-modal/silence-matcher-modal.component.html</context>
           <context context-type="linenumber">3</context>
@@ -10509,7 +10543,7 @@
       </trans-unit>
       <trans-unit id="7c13184af0c09e3bad77daa5f4869138708d26b2" datatype="html">
         <source>A list of networks to identify which network interface to use for the virtual IP address.</source>
-        <target>Liste de réseaux pour identifier l'interface réseau à utiliser pour l'adresse IP virtuelle.</target>
+        <target>Liste de réseaux permettant d'identifier l'interface réseau à utiliser pour l'adresse IP virtuelle.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">736</context>
@@ -11055,7 +11089,7 @@
       </trans-unit>
       <trans-unit id="72d5fe31d9e13239bdd223d0bbd289a1b1903e86" datatype="html">
         <source>Number of monitors, managers, OSDs, MDSs, object gateways, or other daemons</source>
-        <target>Nombre de moniteurs, de gestionnaires, d'OSD, de MDS, de passerelles d'objet ou d'autres daemons</target>
+        <target>Nombre de moniteurs, de gestionnaires, d'OSD, de MDS, de passerelles Object Gateway ou d'autres daemons</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/telemetry/telemetry.component.html</context>
           <context context-type="linenumber">44</context>
@@ -11261,7 +11295,7 @@
       </trans-unit>
       <trans-unit id="6de03357358c7eff62aca486508bb5c2046e0669" datatype="html">
         <source>If the cluster cannot directly connect to the configured telemetry endpoint (default telemetry.ceph.com), you can configure a HTTP/HTTPS proxy server by e.g. adding https://10.0.0.1:8080</source>
-        <target>Si la grappe ne peut pas se connecter directement au point de terminaison de télémétrie configuré (par défaut telemetry.ceph.com), vous pouvez configurer un serveur proxy HTTP/HTTPS en ajoutant, par exemple, https://10.0.0.1:8080.</target>
+        <target>Si la grappe ne peut pas se connecter directement au noeud d'extrémité de télémétrie configuré (par défaut telemetry.ceph.com), vous pouvez configurer un serveur proxy HTTP/HTTPS en ajoutant, par exemple, https://10.0.0.1:8080.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/telemetry/telemetry.component.html</context>
           <context context-type="linenumber">226,228</context>
@@ -11912,7 +11946,7 @@
       </trans-unit>
       <trans-unit id="946ac5dea9921dc09d7b0a63b89535371f283b19" datatype="html">
         <source>Object Gateways</source>
-        <target>Passerelles d'objet</target>
+        <target>Passerelles Object Gateway</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/dashboard/health/health.component.html</context>
           <context context-type="linenumber">84</context>
@@ -12346,7 +12380,7 @@
       </trans-unit>
       <trans-unit id="3575940435199094878" datatype="html">
         <source>Squash</source>
-        <target>Squash</target>
+        <target>Écraser</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/nfs/nfs-details/nfs-details.component.ts</context>
           <context context-type="linenumber">33</context>
@@ -12515,7 +12549,7 @@
       </trans-unit>
       <trans-unit id="3563954518111128118" datatype="html">
         <source>-- Select the access type --</source>
-        <target>-- Sélectionner le type d'accès --</target>
+        <target>-- Sélectionnez le type d'accès --</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/nfs/nfs-form-client/nfs-form-client.component.ts</context>
           <context context-type="linenumber">45</context>
@@ -12531,7 +12565,7 @@
       </trans-unit>
       <trans-unit id="8729531250118136719" datatype="html">
         <source>-- Select what kind of user id squashing is performed --</source>
-        <target>-- Sélectionner le type de squashing d'ID utilisateur effectué --</target>
+        <target>-- Sélectionnez le type d'écrasement d'ID utilisateur effectué --</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/nfs/nfs-form-client/nfs-form-client.component.ts</context>
           <context context-type="linenumber">59</context>
@@ -12717,7 +12751,7 @@
       </trans-unit>
       <trans-unit id="f3af55f7fd5b1d9e5a53e030c80116dc635bfb9f" datatype="html">
         <source>By using different Pseudo options, the same Path may be exported multiple times.</source>
-        <target>En utilisant différentes options de pseudo, il est possible d'exporter exporter plusieurs fois le même chemin.</target>
+        <target>En utilisant différentes options de pseudo, il est possible d'exporter plusieurs fois le même chemin.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/nfs/nfs-form/nfs-form.component.html</context>
           <context context-type="linenumber">319</context>
@@ -13331,7 +13365,7 @@
       </trans-unit>
       <trans-unit id="9133265273798382582" datatype="html">
         <source>Min Evict Age</source>
-        <target>Âge évict min.</target>
+        <target>Âge min. évinc.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-details/pool-details.component.ts</context>
           <context context-type="linenumber">47</context>
@@ -13387,7 +13421,7 @@
       </trans-unit>
       <trans-unit id="1393735257943344790" datatype="html">
         <source>Allowed characters '_a-zA-Z0-9'</source>
-        <target>Caractère autorisés '_a-zA-Z0-9'</target>
+        <target>Caractères autorisés '_a-zA-Z0-9'</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form-data.ts</context>
           <context context-type="linenumber">32</context>
@@ -13547,7 +13581,7 @@
       </trans-unit>
       <trans-unit id="1c870fb00256b8a5b9cb9cd1a124e6390b9bc639" datatype="html">
         <source>EC Overwrites</source>
-        <target>Écrasements EC</target>
+        <target>Écrasements de code d'effacement</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">166</context>
@@ -13706,7 +13740,7 @@
       </trans-unit>
       <trans-unit id="73a6b31116b3cc322af951daa0bafdc169e6c42e" datatype="html">
         <source>-- Select a crush rule --</source>
-        <target>-- Sélectionner une règle crush --</target>
+        <target>-- Sélectionner une règle Crush --</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">353</context>
@@ -13894,7 +13928,7 @@
       </trans-unit>
       <trans-unit id="ae5ce6de352cde949998fb10754459c3a4eb183b" datatype="html">
         <source>Value should be between 0.0 and 1.0</source>
-        <target>La valeur doit se situer entre 0.0 et 1.0</target>
+        <target>La valeur doit se situer entre 0,0 et 1,0</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">587</context>
@@ -14617,7 +14651,7 @@
       </trans-unit>
       <trans-unit id="6abacf4af2f66d3af08c5ebe502b21b1f42ac649" datatype="html">
         <source>Each label must start and end with a lowercase letter or a number.</source>
-        <target>Chaque libellé doit commencer et se terminer par une lettre minuscule ou un chiffre.</target>
+        <target>Chaque libellé doit commencer et se terminer par une minuscule ou un chiffre.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
           <context context-type="linenumber">57</context>
@@ -14641,7 +14675,7 @@
       </trans-unit>
       <trans-unit id="cf5c849977e0be2dbfc862d044edd323bfd9fb77" datatype="html">
         <source>Bucket names must be 3 to 63 characters long.</source>
-        <target>Les noms de compartiments doivent compter entre 3 et 63 caractères.</target>
+        <target>Les noms de compartiments doivent être compris entre 3 et 63 caractères.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
           <context context-type="linenumber">66</context>
@@ -14765,7 +14799,7 @@
       </trans-unit>
       <trans-unit id="48d8247c1ba2ea156109bf286c5f6dd26b4be760" datatype="html">
         <source>Retention Days must be a positive integer.</source>
-        <target>Le nombre de jours de rétention doit être un entier positif.</target>
+        <target>Le nombre de jours de conservation doit être un entier positif.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
           <context context-type="linenumber">245</context>
@@ -17705,7 +17739,7 @@
       </trans-unit>
       <trans-unit id="0bcd5ef19af0f1b814141ca8c57df623d8270088" datatype="html">
         <source>Keys</source>
-        <target>Clefs</target>
+        <target>Clés</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
           <context context-type="linenumber">4</context>
@@ -18043,7 +18077,7 @@
       </trans-unit>
       <trans-unit id="583a219c524155c2314eb06ee29162bb315272a3" datatype="html">
         <source>S3 key</source>
-        <target>Clef S3</target>
+        <target>Clé S3</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
           <context context-type="linenumber">214</context>
@@ -18051,7 +18085,7 @@
       </trans-unit>
       <trans-unit id="c217ee914725a37e9dd2336c721c8e63e9666bdc" datatype="html">
         <source>Auto-generate key</source>
-        <target>Générer automatiquement la clef</target>
+        <target>Générer automatiquement la clé</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
           <context context-type="linenumber">220</context>
@@ -18101,7 +18135,7 @@
       </trans-unit>
       <trans-unit id="d6819038d608623503918fb2553f53d68231ec3a" datatype="html">
         <source>There are no keys.</source>
-        <target>Il n'y a pas de clefs.</target>
+        <target>Il n'y a pas de clé.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
           <context context-type="linenumber">353</context>
@@ -18628,7 +18662,7 @@
       </trans-unit>
       <trans-unit id="4f635b3cb0600409a2ad44a5bd1863c699e6a01c" datatype="html">
         <source>Failed to retrieve SMART data.</source>
-        <target>Impossible de récupérer les données SMART.</target>
+        <target>Échec de récupération des données SMART.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/shared/smart-list/smart-list.component.html</context>
           <context context-type="linenumber">4</context>
@@ -19463,7 +19497,7 @@
       </trans-unit>
       <trans-unit id="0070e83d11da39d6f4bb95065c2675db1610b419" datatype="html">
         <source>Username is required</source>
-        <target>Nom d'utilisateur requis</target>
+        <target>Le nom d'utilisateur est obligatoire.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/auth/login/login.component.html</context>
           <context context-type="linenumber">26</context>
@@ -19471,7 +19505,7 @@
       </trans-unit>
       <trans-unit id="1e20f8b8a4706526c9024cc2f39d568345d100dc" datatype="html">
         <source>Password is required</source>
-        <target>Mot de passe requis</target>
+        <target>Le mot de passe est obligatoire.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/auth/login/login.component.html</context>
           <context context-type="linenumber">48</context>
@@ -19968,8 +20002,7 @@
       </trans-unit>
       <trans-unit id="143318366100741906" datatype="html">
         <source>Access Denied</source>
-        <target>Accès refusé
-</target>
+        <target>Accès refusé</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/error/error.ts</context>
           <context context-type="linenumber">17</context>
@@ -19981,7 +20014,7 @@
       </trans-unit>
       <trans-unit id="5384670299771400832" datatype="html">
         <source>Sorry, you don’t have permission to view this page or resource.</source>
-        <target>Désolés, vous n'êtes pas autorisé à consulter cette page ou cette ressource.</target>
+        <target>Désolé, vous n'êtes pas autorisé à consulter cette page ou cette ressource.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/error/error.ts</context>
           <context context-type="linenumber">18</context>
@@ -19993,8 +20026,7 @@
       </trans-unit>
       <trans-unit id="2424411274809083521" datatype="html">
         <source>User Denied</source>
-        <target>Utilisateur refusé
-</target>
+        <target>Utilisateur refusé</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/error/error.ts</context>
           <context context-type="linenumber">23</context>
@@ -20028,7 +20060,7 @@
       </trans-unit>
       <trans-unit id="8878700331247603166" datatype="html">
         <source>Security</source>
-        <target>Securité</target>
+        <target>Sécurité</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/layouts/login-layout/login-layout.component.ts</context>
           <context context-type="linenumber">11</context>
@@ -20591,7 +20623,7 @@
       <trans-unit id="2389282202903059852" datatype="html">
         <source>The ISA plugin comes in two Reed Solomon forms.
           If reed_sol_van is set, it is Vandermonde, if cauchy is set, it is Cauchy.</source>
-        <target>Le plugin ISA se présente sous deux formes Reed Solomon.
+        <target>Le plug-in ISA se présente sous deux formes Reed Solomon.
  Si reed_sol_van est défini, il équivaut à Vandermonde. Si cauchy est configuré, il équivaut à Cauchy.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
@@ -22507,7 +22539,7 @@
       </trans-unit>
       <trans-unit id="8565573880632900017" datatype="html">
         <source>%s ago</source>
-        <target>%s</target>
+        <target>Il y a %s </target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">9</context>
@@ -22699,7 +22731,7 @@
       </trans-unit>
       <trans-unit id="8649061117624699581" datatype="html">
         <source>Your matcher seems to match no currently defined rule or active alert.</source>
-        <target>Votre comparateur semble ne correspondre à aucune règle définie ni alerte active.</target>
+        <target>Votre comparateur semble ne correspondre à aucune règle actuellement définie ni alerte active.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/services/prometheus-silence-matcher.service.ts</context>
           <context context-type="linenumber">62</context>

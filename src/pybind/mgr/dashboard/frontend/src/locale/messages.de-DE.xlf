@@ -347,7 +347,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">38</context>
+          <context context-type="linenumber">39</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/smb/smb-tabs/smb-tabs.component.html</context>
@@ -1380,7 +1380,7 @@
       </trans-unit>
       <trans-unit id="f717bad2da5944a2567a52f971ccc6806db85805" datatype="html">
         <source>User names must have a length of 8 to 64 characters and can contain alphanumeric characters, '.', '@', '-', '_' or ':'.</source>
-        <target>Benutzernamen müssen zwischen 8 und 64 Zeichen lang sein und dürfen alphanumerische Zeichen '.', '@', '-', '_' oder ':' enthalten.</target>
+        <target>Benutzernamen müssen zwischen 8 und 64 Zeichen lang sein und dürfen die alphanumerischen Zeichen '.', '@', '-', '_' oder ':' enthalten.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
           <context context-type="linenumber">28,29</context>
@@ -1420,7 +1420,7 @@
       </trans-unit>
       <trans-unit id="001e1836299d8d3b84eaebe2fa051325beab3f00" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and can contain alphanumeric characters, '@', '-', '_' or '/'.</source>
-        <target>Passwörter müssen zwischen 12 und 16 Zeichen lang sein und dürfen alphanumerische Zeichen, '@', '-', '_' oder '/' enthalten.</target>
+        <target>Passwörter müssen zwischen 12 und 16 Zeichen lang sein und dürfen die alphanumerischen Zeichen '@', '-', '_' oder '/' enthalten.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
           <context context-type="linenumber">59,60</context>
@@ -1757,7 +1757,7 @@
       </trans-unit>
       <trans-unit id="137fbf154ecad4d580354db0858b76faea7e4686" datatype="html">
         <source>User names must have a length of 8 to 64 characters and can contain alphanumeric characters, '.', '@', '-', '_' or ':'.</source>
-        <target>Benutzernamen müssen zwischen 8 und 64 Zeichen lang sein und dürfen alphanumerische Zeichen '.', '@', '-', '_' oder ':' enthalten.</target>
+        <target>Benutzernamen müssen zwischen 8 und 64 Zeichen lang sein und dürfen die alphanumerischen Zeichen '.', '@', '-', '_' oder ':' enthalten.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">221,222</context>
@@ -1769,7 +1769,7 @@
       </trans-unit>
       <trans-unit id="361771c32dd2254d77fd3fbf006b008983fe5907" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and can contain alphanumeric characters, '@', '-', '_' or '/'.</source>
-        <target>Passwörter müssen zwischen 12 und 16 Zeichen lang sein und dürfen alphanumerische Zeichen, '@', '-', '_' oder '/' enthalten.</target>
+        <target>Passwörter müssen zwischen 12 und 16 Zeichen lang sein und dürfen die alphanumerischen Zeichen '@', '-', '_' oder '/' enthalten.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">254,255</context>
@@ -1821,7 +1821,7 @@
       </trans-unit>
       <trans-unit id="7e7cad911fa524e512d9744b16358b7ee6791385" datatype="html">
         <source>User names must have a length of 8 to 64 characters and can contain alphanumeric characters, '.', '@', '-', '_' or ':'.</source>
-        <target>Benutzernamen müssen zwischen 8 und 64 Zeichen lang sein und dürfen alphanumerische Zeichen '.', '@', '-', '_' oder ':' enthalten.</target>
+        <target>Benutzernamen müssen zwischen 8 und 64 Zeichen lang sein und dürfen die alphanumerischen Zeichen '.', '@', '-', '_' oder ':' enthalten.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">383,384</context>
@@ -1833,7 +1833,7 @@
       </trans-unit>
       <trans-unit id="e7f2c186d181206d0d2b1ff74819081a010f10bf" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and can contain alphanumeric characters, '@', '-', '_' or '/'.</source>
-        <target>Passwörter müssen zwischen 12 und 16 Zeichen lang sein und dürfen alphanumerische Zeichen, '@', '-', '_' oder '/' enthalten.</target>
+        <target>Passwörter müssen zwischen 12 und 16 Zeichen lang sein und dürfen die alphanumerischen Zeichen '@', '-', '_' oder '/' enthalten.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">414,415</context>
@@ -2168,7 +2168,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">32</context>
+          <context context-type="linenumber">33</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-tabs/nvmeof-tabs.component.html</context>
@@ -2564,7 +2564,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
-          <context context-type="linenumber">71</context>
+          <context context-type="linenumber">69</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/hosts/hosts.component.ts</context>
@@ -2829,7 +2829,7 @@
       </trans-unit>
       <trans-unit id="4ddcb416c1c0aa1f54acf5beef1de81813e76fa6" datatype="html">
         <source>{VAR_SELECT, select, edit {Edit} other {Add}}</source>
-        <target>{VAR_SELECT, select, edit {Bearbeiten} other {Hinzufügen} }</target>
+        <target>{VAR_SELECT, select, edit {bearbeiten} other {hinzufügen} }</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/mirroring/pool-edit-peer-modal/pool-edit-peer-modal.component.html</context>
           <context context-type="linenumber">8</context>
@@ -3051,16 +3051,15 @@
           <context context-type="linenumber">152</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="f5ff2607cf2fd0645a263371d6f93f063d07e33a" datatype="html">
-        <source>Enter group</source>
-        <target>Gruppe eingeben</target>
+      <trans-unit id="cf378a96424886fda41c2c758e3996513692cd54" datatype="html">
+        <source>Selected Gateway Group</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">10</context>
+          <context context-type="linenumber">8</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.html</context>
-          <context context-type="linenumber">10</context>
+          <context context-type="linenumber">8</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3cc9c2ae277393b3946b38c088dabff671b1ee1b" datatype="html">
@@ -3068,7 +3067,7 @@
         <target>Leistung</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">44</context>
+          <context context-type="linenumber">45</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-details/rbd-details.component.html</context>
@@ -3081,23 +3080,37 @@
       </trans-unit>
       <trans-unit id="f550d8f29f67e387d33901243d1b7148bb712b79" datatype="html">
         <source> Gateways <x id="START_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;cd-help-text&gt;"/> Ceph NVMe-oF gateways provide Ceph Block Device storage through NVMe/TCP. For VMware clients the NVMe/TCP volumes display as VMFS Datastores. For Linux clients the NVMe/TCP volumes display as as block devices. <x id="CLOSE_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;/cd-help-text&gt;"/></source>
+        <target>Gateways <x id="START_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;cd-help-text&gt;"/> Ceph NVMe-oF Gateways stellen Ceph Block Speicher mittels NVMe/TCP bereit. Für VMware-Clients werden die NVMe/TCP Volumes als VMFS Datastores dargestellt. Für Linux-Clients werden die NVMe/TCP Volumes als Block-Geräte dargestellt.<x id="CLOSE_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;/cd-help-text&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">53,57</context>
+          <context context-type="linenumber">54,58</context>
         </context-group>
       </trans-unit>
       <trans-unit id="88d52a108e372081c5e122c5b369aac3ec904146" datatype="html">
         <source>Gateway overview</source>
+        <target>Gateway Übersicht</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">69</context>
+          <context context-type="linenumber">70</context>
         </context-group>
       </trans-unit>
       <trans-unit id="9517e7f935e73e6889dda20c0fa0408465c18f2e" datatype="html">
         <source>Gateway performance</source>
+        <target>Gateway Leistung</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.html</context>
-          <context context-type="linenumber">79</context>
+          <context context-type="linenumber">80</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5032690935748986815" datatype="html">
+        <source>Enter group name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
+          <context context-type="linenumber">25</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
+          <context context-type="linenumber">20</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7974613004081450726" datatype="html">
@@ -3105,7 +3118,7 @@
         <target>Gateway ID</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
-          <context context-type="linenumber">67</context>
+          <context context-type="linenumber">65</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5611592591303869712" datatype="html">
@@ -3113,7 +3126,7 @@
         <target>Status</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
-          <context context-type="linenumber">75</context>
+          <context context-type="linenumber">73</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-trash-list/rbd-trash-list.component.ts</context>
@@ -3146,6 +3159,17 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-multisite-sync-policy/rgw-multisite-sync-policy.component.ts</context>
           <context context-type="linenumber">71</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3107044384926915007" datatype="html">
+        <source>No groups available</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-gateway/nvmeof-gateway.component.ts</context>
+          <context context-type="linenumber">134</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
+          <context context-type="linenumber">148</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4f7cdf99e53b74c843abea60b5ca07a6842c9135" datatype="html">
@@ -3388,6 +3412,7 @@
       </trans-unit>
       <trans-unit id="0f2fab684bf9d800d69ddc30d36c851d503570b9" datatype="html">
         <source>The IP port to use. Default is 4420.</source>
+        <target>Zu verwendender IP Port. Standard ist 4420.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-listeners-form/nvmeof-listeners-form.component.html</context>
           <context context-type="linenumber">54</context>
@@ -3419,6 +3444,10 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-listeners-form/nvmeof-listeners-form.component.ts</context>
           <context context-type="linenumber">50</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-listeners-list/nvmeof-listeners-list.component.ts</context>
+          <context context-type="linenumber">103</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6641024648411549335" datatype="html">
@@ -3459,6 +3488,13 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-configuration-page/rgw-configuration-page.component.ts</context>
           <context context-type="linenumber">81</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5236029444167617860" datatype="html">
+        <source>listener</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/nvmeof-listeners-list/nvmeof-listeners-list.component.ts</context>
+          <context context-type="linenumber">106</context>
         </context-group>
       </trans-unit>
       <trans-unit id="e70fcca5a99575cffef3ff8cbd5e69f06ffd0f1c" datatype="html">
@@ -3534,6 +3570,7 @@
       </trans-unit>
       <trans-unit id="a8f8156ce234ecc5804561d0a594bc8ab2135d6e" datatype="html">
         <source>Namespace Count</source>
+        <target>Namensraum Anzahl</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-namespaces-form/nvmeof-namespaces-form.component.html</context>
           <context context-type="linenumber">55</context>
@@ -3541,6 +3578,7 @@
       </trans-unit>
       <trans-unit id="95c8ca819cb3de20feeda064406716077630e4df" datatype="html">
         <source>The number of namespaces to create</source>
+        <target>Die Anzahl der zu erstellenden Namensräume</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-namespaces-form/nvmeof-namespaces-form.component.html</context>
           <context context-type="linenumber">60</context>
@@ -3596,6 +3634,7 @@
       </trans-unit>
       <trans-unit id="1100896231820744442" datatype="html">
         <source>The namespace count should be between 1 and 5</source>
+        <target>Die Anzahl der Namensräume sollte zwischen 1 und 5 betragen</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-namespaces-form/nvmeof-namespaces-form.component.ts</context>
           <context context-type="linenumber">49</context>
@@ -3795,6 +3834,7 @@
       </trans-unit>
       <trans-unit id="31570397ce6df323eddf2e0fbc4aabd2640399f5" datatype="html">
         <source>Subsystem details</source>
+        <target>Subsystem Details</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems-details/nvmeof-subsystems-details.component.html</context>
           <context context-type="linenumber">47</context>
@@ -3856,7 +3896,7 @@
       </trans-unit>
       <trans-unit id="7faeff0841ac252437a150e1e3e2ab1d125cb2e7" datatype="html">
         <source>Maximum Namespaces</source>
-        <target>Maximum Namensräume</target>
+        <target>Maximum Namespaces</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems-form/nvmeof-subsystems-form.component.html</context>
           <context context-type="linenumber">44</context>
@@ -3935,7 +3975,7 @@
         <target>Subsysteme <x id="START_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;cd-help-text&gt;"/> Ein Subsystem erlaubt die Zugriffskontrolle, welche Hosts auf die Namensräume innerhalb der Subsysteme zugreifen dürfen.<x id="CLOSE_TAG_CD_HELP_TEXT" ctype="x-cd_help_text" equiv-text="&lt;/cd-help-text&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.html</context>
-          <context context-type="linenumber">18,22</context>
+          <context context-type="linenumber">19,23</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7707701592702091951" datatype="html">
@@ -3943,7 +3983,7 @@
         <target>NQN</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
-          <context context-type="linenumber">61</context>
+          <context context-type="linenumber">59</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4249456376242514671" datatype="html">
@@ -3951,7 +3991,7 @@
         <target># Namensräume</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
-          <context context-type="linenumber">65</context>
+          <context context-type="linenumber">63</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8636681982233006716" datatype="html">
@@ -3959,7 +3999,7 @@
         <target># Maximum erlaubter Namensräume</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/nvmeof-subsystems/nvmeof-subsystems.component.ts</context>
-          <context context-type="linenumber">69</context>
+          <context context-type="linenumber">67</context>
         </context-group>
       </trans-unit>
       <trans-unit id="409b6a23ac5c8302cbe2868c58d14eb425d72ddd" datatype="html">
@@ -4154,7 +4194,7 @@
       </trans-unit>
       <trans-unit id="2900827028308925059" datatype="html">
         <source>This RBD image has an invalid name and can't be managed by ceph.</source>
-        <target>Dieses RBD-Bild hat einen ungültigen Namen und kann nicht von ceph verwaltet werdencan't be managed by ceph.</target>
+        <target>Dieses RBD-Image hat einen ungültigen Namen und kann nicht von ceph verwaltet werden.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-contants.ts</context>
           <context context-type="linenumber">10</context>
@@ -4439,6 +4479,7 @@
       </trans-unit>
       <trans-unit id="29645d4f82a29e8ee4c0cd5e5fbdce60159f73ba" datatype="html">
         <source>Name <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                  type=&quot;text&quot;                  placeholder=&quot;Name...&quot;                  id=&quot;name&quot;                  name=&quot;name&quot;                  formControlName=&quot;name&quot;                  [invalid]=&quot;!rbdForm.controls['name'].valid &amp;&amp; (rbdForm.controls['name'].dirty)&quot;                  autofocus&gt;"/></source>
+        <target>Name <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                  type=&quot;text&quot;                  placeholder=&quot;Name...&quot;                  id=&quot;name&quot;                  name=&quot;name&quot;                  formControlName=&quot;name&quot;                  [invalid]=&quot;!rbdForm.controls['name'].valid &amp;&amp; (rbdForm.controls['name'].dirty)&quot;                  autofocus&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">37,46</context>
@@ -4458,6 +4499,7 @@
       </trans-unit>
       <trans-unit id="5a770ea510b878c3e4e2191bcadaa13582f156dc" datatype="html">
         <source>Pool <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                  type=&quot;text&quot;                  placeholder=&quot;Pool name...&quot;                  id=&quot;pool&quot;                  name=&quot;pool&quot;                  formControlName=&quot;pool&quot;&gt;"/></source>
+        <target>Pool <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                  type=&quot;text&quot;                  placeholder=&quot;Pool name...&quot;                  id=&quot;pool&quot;                  name=&quot;pool&quot;                  formControlName=&quot;pool&quot;&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">62,69</context>
@@ -4524,6 +4566,7 @@
       </trans-unit>
       <trans-unit id="87bfaa2c5a9162484a5758fb4793ff3dbfc476c3" datatype="html">
         <source>Size <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                  type=&quot;text&quot;                  placeholder=&quot;e.g., 10GiB&quot;                  id=&quot;size&quot;                  name=&quot;size&quot;                  formControlName=&quot;size&quot;                  defaultUnit=&quot;GiB&quot;                  [invalid]=&quot;!rbdForm.controls['size'].valid &amp;&amp; (rbdForm.controls['size'].dirty)&quot;                  cdDimlessBinary&gt;"/></source>
+        <target>Größe <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                  type=&quot;text&quot;                  placeholder=&quot;e.g., 10GiB&quot;                  id=&quot;size&quot;                  name=&quot;size&quot;                  formControlName=&quot;size&quot;                  defaultUnit=&quot;GiB&quot;                  [invalid]=&quot;!rbdForm.controls['size'].valid &amp;&amp; (rbdForm.controls['size'].dirty)&quot;                  cdDimlessBinary&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">269,279</context>
@@ -4539,6 +4582,7 @@
       </trans-unit>
       <trans-unit id="25db023269cd62168393b201f615ec90e07f3df8" datatype="html">
         <source>Size must be a number or in a valid format. eg: 5 GiB</source>
+        <target>Die Größe muss entweder eine Zahl sein, oder in einem gültigen Format angegeben werden, z. B. 5 GiB</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">289</context>
@@ -4586,6 +4630,7 @@
       </trans-unit>
       <trans-unit id="0442b1c55f1908c10a879e2f70a3c32122878207" datatype="html">
         <source><x id="START_TAG_OPTION" ctype="x-option" equiv-text="[value]=&quot;objectSize&quot;&gt;"/><x id="INTERPOLATION" equiv-text="&lt;/opt"/><x id="CLOSE_TAG_OPTION" ctype="x-option"/></source>
+        <target><x id="START_TAG_OPTION" ctype="x-option" equiv-text="[value]=&quot;objectSize&quot;&gt;"/><x id="INTERPOLATION" equiv-text="&lt;/opt"/><x id="CLOSE_TAG_OPTION" ctype="x-option"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">333,335</context>
@@ -4593,6 +4638,7 @@
       </trans-unit>
       <trans-unit id="34b6143e14e7fe00345c0823f6e6aa7553df20c9" datatype="html">
         <source><x id="START_TAG_OPTION" ctype="x-option" equiv-text="-- Select stripe unit --&lt;/option&gt;"/>-- Select stripe unit --<x id="CLOSE_TAG_OPTION" ctype="x-option"/><x id="START_TAG_OPTION_1" ctype="x-option_1" equiv-text="&lt;option *ngFor=&quot;let objectSize of objectSizes&quot;                     [value]=&quot;objectSize&quot;&gt;"/><x id="INTERPOLATION" equiv-text="&lt;/optio"/><x id="CLOSE_TAG_OPTION" ctype="x-option"/></source>
+        <target><x id="START_TAG_OPTION" ctype="x-option" equiv-text="-- Select stripe unit --&lt;/option&gt;"/>-- Stripe Unit wählen --<x id="CLOSE_TAG_OPTION" ctype="x-option"/><x id="START_TAG_OPTION_1" ctype="x-option_1" equiv-text="&lt;option *ngFor=&quot;let objectSize of objectSizes&quot;                     [value]=&quot;objectSize&quot;&gt;"/><x id="INTERPOLATION" equiv-text="&lt;/optio"/><x id="CLOSE_TAG_OPTION" ctype="x-option"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">350,353</context>
@@ -4647,6 +4693,7 @@
       </trans-unit>
       <trans-unit id="8998828232434758111" datatype="html">
         <source>Speeds up the process of deleting a clone by removing the dependency on the parent image.</source>
+        <target>Beschleunigt den Löschvorgang eines Klons durch das Entfernen der Abhängigkeit zum übergeordneten Image.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-form/rbd-form.component.ts</context>
           <context context-type="linenumber">148</context>
@@ -4669,6 +4716,7 @@
       </trans-unit>
       <trans-unit id="6642510317085759045" datatype="html">
         <source>Allows the creation of snapshots and clones of an image.</source>
+        <target>Erlaubt die Erzeugung von Snapshots und Klonen eines Images.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-form/rbd-form.component.ts</context>
           <context context-type="linenumber">156</context>
@@ -4684,6 +4732,7 @@
       </trans-unit>
       <trans-unit id="204015242007057409" datatype="html">
         <source>Ensures that only one client can write to the image at a time.</source>
+        <target>Stellt sicher, dass nur ein Client zur selben Zeit ins Image schreiben darf.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-form/rbd-form.component.ts</context>
           <context context-type="linenumber">163</context>
@@ -4714,6 +4763,7 @@
       </trans-unit>
       <trans-unit id="4404837078429826355" datatype="html">
         <source>Speeds up the process of comparing two images.</source>
+        <target>Beschleunigt den Vorgang, zwei Images zu vergleichen.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-form/rbd-form.component.ts</context>
           <context context-type="linenumber">180</context>
@@ -4721,6 +4771,7 @@
       </trans-unit>
       <trans-unit id="15671184234f834e314c40d34c3c0eb5c1e33e99" datatype="html">
         <source>primary</source>
+        <target>primär</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-list/rbd-list.component.html</context>
           <context context-type="linenumber">46</context>
@@ -4728,6 +4779,7 @@
       </trans-unit>
       <trans-unit id="d71f8be8ce8ea687594f60743e85fc779970876b" datatype="html">
         <source>secondary</source>
+        <target>sekundär</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-list/rbd-list.component.html</context>
           <context context-type="linenumber">49</context>
@@ -4759,6 +4811,7 @@
       </trans-unit>
       <trans-unit id="0c609add8ca113d92adfe964b29a92bf94148882" datatype="html">
         <source><x id="START_TAG_STRONG" ctype="x-strong" equiv-text="&lt;strong&gt;"/> Do you want to force the operation? <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="&lt;/strong&gt;"/></source>
+        <target><x id="START_TAG_STRONG" ctype="x-strong" equiv-text="&lt;strong&gt;"/> Möchten Sie die Operation erzwingen? <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="&lt;/strong&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-list/rbd-list.component.html</context>
           <context context-type="linenumber">115,117</context>
@@ -4865,6 +4918,7 @@
       </trans-unit>
       <trans-unit id="3526205892584451052" datatype="html">
         <source>image</source>
+        <target>Image</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-list/rbd-list.component.ts</context>
           <context context-type="linenumber">538</context>
@@ -4900,6 +4954,7 @@
       </trans-unit>
       <trans-unit id="7470299231529834595" datatype="html">
         <source>Enforce</source>
+        <target>Erzwingen</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-list/rbd-list.component.ts</context>
           <context context-type="linenumber">584</context>
@@ -4907,6 +4962,7 @@
       </trans-unit>
       <trans-unit id="2f653b9da30427811c4723bde845f195ee5b76e6" datatype="html">
         <source> Create Namespace </source>
+        <target>Namensraum erstellen</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-namespace-form/rbd-namespace-form-modal.component.html</context>
           <context context-type="linenumber">7,9</context>
@@ -4921,6 +4977,7 @@
       </trans-unit>
       <trans-unit id="657d1282882639b24623891a28fc8efee6e79794" datatype="html">
         <source>Namespace <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                type=&quot;text&quot;                placeholder=&quot;Namespace name...&quot;                id=&quot;namespace&quot;                name=&quot;namespace&quot;                formControlName=&quot;namespace&quot;                [invalid]=&quot;namespaceForm.controls['namespace'].invalid &amp;&amp; (namespaceForm.controls['namespace'].dirty)&quot;                autofocus&gt;"/></source>
+        <target>Namensraum <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                type=&quot;text&quot;                placeholder=&quot;Namespace name...&quot;                id=&quot;namespace&quot;                name=&quot;namespace&quot;                formControlName=&quot;namespace&quot;                [invalid]=&quot;namespaceForm.controls['namespace'].invalid &amp;&amp; (namespaceForm.controls['namespace'].dirty)&quot;                autofocus&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-namespace-form/rbd-namespace-form-modal.component.html</context>
           <context context-type="linenumber">56,65</context>
@@ -4928,6 +4985,7 @@
       </trans-unit>
       <trans-unit id="7ef102389b17e38d78dd3c66cf6dded31d0e4270" datatype="html">
         <source>The namespace already exists.</source>
+        <target>Namensraum existiert bereits.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-namespace-form/rbd-namespace-form-modal.component.html</context>
           <context context-type="linenumber">72</context>
@@ -4967,6 +5025,7 @@
       </trans-unit>
       <trans-unit id="656c9b074bbd3a26186f7ce54ba309a3f0bbfd2f" datatype="html">
         <source>RBD overview</source>
+        <target>RBD Übersicht</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-performance/rbd-performance.component.html</context>
           <context context-type="linenumber">4</context>
@@ -4981,6 +5040,7 @@
       </trans-unit>
       <trans-unit id="03b51e08feeb9be612c451133e01e6fab09f0ed4" datatype="html">
         <source>The snapshot name cannot start with &quot;.&quot; and cannot contain &quot;/&quot; and &quot;@&quot;.</source>
+        <target>Der Snapshot-Name darf nicht mit &quot;.&quot; beginnen und darf kein &quot;/&quot; und &quot;@&quot; enthalten.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-form/rbd-snapshot-form-modal.component.html</context>
           <context context-type="linenumber">42</context>
@@ -5222,6 +5282,7 @@
       </trans-unit>
       <trans-unit id="40b1adac63add22d1f260b8326184f2dd22f08e8" datatype="html">
         <source>Set expiration date</source>
+        <target>Ablaufdatum setzen</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
           <context context-type="linenumber">30</context>
@@ -5285,6 +5346,7 @@
       </trans-unit>
       <trans-unit id="6bcc5a40c7d2e882440e36fc81e9711fe82a6da1" datatype="html">
         <source>FS name <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                  placeholder=&quot;Name...&quot;                  i18n-placeholder                  id=&quot;fsName&quot;                  name=&quot;fsName&quot;                  formControlName=&quot;fsName&quot;                  size=&quot;sm&quot;                  [invalid]=&quot;!form.controls['fsName'].valid &amp;&amp; (form.controls['fsName'].dirty)&quot;                  autofocus&gt;"/></source>
+        <target>FS Name <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                  placeholder=&quot;Name...&quot;                  i18n-placeholder                  id=&quot;fsName&quot;                  name=&quot;fsName&quot;                  formControlName=&quot;fsName&quot;                  size=&quot;sm&quot;                  [invalid]=&quot;!form.controls['fsName'].valid &amp;&amp; (form.controls['fsName'].dirty)&quot;                  autofocus&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-auth-modal/cephfs-auth-modal.component.html</context>
           <context context-type="linenumber">21,30</context>
@@ -5292,6 +5354,7 @@
       </trans-unit>
       <trans-unit id="2ea56900ce0a6cb6d1740cb9a624684cc31271dd" datatype="html">
         <source>User ID <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                  value=&quot;client.&quot;                  readonly&gt;"/><x id="TAG_INPUT_1" ctype="x-input_1" equiv-text="&lt;input cdsText                  placeholder=&quot;Name...&quot;                  i18n-placeholder                  id=&quot;userId&quot;                  name=&quot;userId&quot;                  formControlName=&quot;userId&quot;                  [invalid]=&quot;!form.controls['userId'].valid &amp;&amp; (form.controls['userId'].dirty)&quot;&gt;"/></source>
+        <target>Benutzer ID <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                  value=&quot;client.&quot;                  readonly&gt;"/><x id="TAG_INPUT_1" ctype="x-input_1" equiv-text="&lt;input cdsText                  placeholder=&quot;Name...&quot;                  i18n-placeholder                  id=&quot;userId&quot;                  name=&quot;userId&quot;                  formControlName=&quot;userId&quot;                  [invalid]=&quot;!form.controls['userId'].valid &amp;&amp; (form.controls['userId'].dirty)&quot;&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-auth-modal/cephfs-auth-modal.component.html</context>
           <context context-type="linenumber">47,58</context>
@@ -5306,6 +5369,7 @@
       </trans-unit>
       <trans-unit id="2bdadc765959d013f0661e656884d5ea020bff1c" datatype="html">
         <source>Directory <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                  type=&quot;text&quot;                  [placeholder]=&quot;directoryStore.isLoading ? '' : 'Directory path'&quot;                  i18n-placeholder                  id=&quot;directory&quot;                  name=&quot;directory&quot;                  formControlName=&quot;directory&quot;                  [skeleton]=&quot;directoryStore.isLoading&quot;                  [invalid]=&quot;!form.controls['directory'].valid &amp;&amp; (form.controls['directory'].dirty)&quot;                  [ngbTypeahead]=&quot;search&quot;&gt;"/></source>
+        <target>Verzeichnis <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                  type=&quot;text&quot;                  [placeholder]=&quot;directoryStore.isLoading ? '' : 'Directory path'&quot;                  i18n-placeholder                  id=&quot;directory&quot;                  name=&quot;directory&quot;                  formControlName=&quot;directory&quot;                  [skeleton]=&quot;directoryStore.isLoading&quot;                  [invalid]=&quot;!form.controls['directory'].valid &amp;&amp; (form.controls['directory'].dirty)&quot;                  [ngbTypeahead]=&quot;search&quot;&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-auth-modal/cephfs-auth-modal.component.html</context>
           <context context-type="linenumber">83,93</context>
@@ -5353,6 +5417,7 @@
       </trans-unit>
       <trans-unit id="3018558309310657661" datatype="html">
         <source>access</source>
+        <target>Zugriff</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-auth-modal/cephfs-auth-modal.component.ts</context>
           <context context-type="linenumber">75</context>
@@ -5732,6 +5797,7 @@
       </trans-unit>
       <trans-unit id="5474727554951891443" datatype="html">
         <source>Snapshot name '<x id="PH" equiv-text="values.name"/>' is already in use. Please use another name.</source>
+        <target>Snapshot-Name '<x id="PH" equiv-text="values.name"/>' wird bereits verwendet. Bitte einen anderen Namen verwenden.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-directories/cephfs-directories.component.ts</context>
           <context context-type="linenumber">569</context>
@@ -5755,6 +5821,7 @@
       </trans-unit>
       <trans-unit id="formTitle" datatype="html">
         <source><x id="INTERPOLATION" equiv-text="{{ resource | upperFirst }}&lt;/div&gt;        &lt;div class=&quot;form-item&quot;&gt;         &lt;ng-container"/> <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/></source>
+        <target><x id="INTERPOLATION" equiv-text="{{ resource | upperFirst }}&lt;/div&gt;        &lt;div class=&quot;form-item&quot;&gt;         &lt;ng-container"/> <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-form/cephfs-form.component.html</context>
           <context context-type="linenumber">10,12</context>
@@ -5786,6 +5853,7 @@
       </trans-unit>
       <trans-unit id="da6954d55a46943dd77159d65e5b81f51b0e3acb" datatype="html">
         <source>Name <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    placeholder=&quot;Name...&quot;                    i18n-placeholder                    id=&quot;name&quot;                    name=&quot;name&quot;                    formControlName=&quot;name&quot;                    [invalid]=&quot;!form.controls.name.valid &amp;&amp; form.controls.name.dirty&quot;                    autofocus&gt;"/></source>
+        <target>Name <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    placeholder=&quot;Name...&quot;                    i18n-placeholder                    id=&quot;name&quot;                    name=&quot;name&quot;                    formControlName=&quot;name&quot;                    [invalid]=&quot;!form.controls.name.valid &amp;&amp; form.controls.name.dirty&quot;                    autofocus&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-form/cephfs-form.component.html</context>
           <context context-type="linenumber">36,45</context>
@@ -5905,6 +5973,7 @@
       </trans-unit>
       <trans-unit id="a89b4773ed0b7b46e8d6253688fc169450b689e4" datatype="html">
         <source>File System name should start with a letter or dot (.) and can only contain letters, numbers, '.', '-' or '_'</source>
+        <target>Der Name des File-Systems sollte mit einem Buchstaben oder einem Punkt beginnen (.) und darf ausschließlich Buchstaben, Zahlen, '.', '-' or '_' enthalten.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-form/cephfs-form.component.html</context>
           <context context-type="linenumber">52</context>
@@ -5926,6 +5995,7 @@
       </trans-unit>
       <trans-unit id="1e46c0cc719c40bc5259bca930727f148baeae6a" datatype="html">
         <source>Data pool <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    type=&quot;text&quot;                    placeholder=&quot;Pool name...&quot;                    id=&quot;dataPool&quot;                    name=&quot;dataPool&quot;                    formControlName=&quot;dataPool&quot;&gt;"/></source>
+        <target>Daten-Pool <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    type=&quot;text&quot;                    placeholder=&quot;Pool name...&quot;                    id=&quot;dataPool&quot;                    name=&quot;dataPool&quot;                    formControlName=&quot;dataPool&quot;&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-form/cephfs-form.component.html</context>
           <context context-type="linenumber">78,85</context>
@@ -5933,6 +6003,7 @@
       </trans-unit>
       <trans-unit id="10a3ac903c294af036af44c4c6c42aa38b67ad9c" datatype="html">
         <source>-- No cephfs pools available --</source>
+        <target>-- Keine CephFS-Pools verfügbar --</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-form/cephfs-form.component.html</context>
           <context context-type="linenumber">101</context>
@@ -5944,6 +6015,7 @@
       </trans-unit>
       <trans-unit id="23605a50eb40cbd0acbbfbb0d2a90ef59f83ce68" datatype="html">
         <source>Metadata pool <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    type=&quot;text&quot;                    placeholder=&quot;Pool name...&quot;                    id=&quot;metadataPool&quot;                    name=&quot;metadataPool&quot;                    formControlName=&quot;metadataPool&quot;&gt;"/></source>
+        <target>Metadaten-Pool <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    type=&quot;text&quot;                    placeholder=&quot;Pool name...&quot;                    id=&quot;metadataPool&quot;                    name=&quot;metadataPool&quot;                    formControlName=&quot;metadataPool&quot;&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-form/cephfs-form.component.html</context>
           <context context-type="linenumber">120,127</context>
@@ -5951,6 +6023,7 @@
       </trans-unit>
       <trans-unit id="437a96bebd51cf4113f3ef22cfc37c10ed622a41" datatype="html">
         <source><x id="START_TAG_OPTION" ctype="x-option" equiv-text="Hosts&lt;/option&gt;               &lt;option value=&quot;"/>Hosts<x id="CLOSE_TAG_OPTION" ctype="x-option" equiv-text="&lt;/option&gt;"/><x id="START_TAG_OPTION_1" ctype="x-option_1" equiv-text="&lt;option value=&quot;label&quot;&gt;"/>Labels<x id="CLOSE_TAG_OPTION" ctype="x-option" equiv-text="&lt;/option&gt;"/></source>
+        <target><x id="START_TAG_OPTION" ctype="x-option" equiv-text="Hosts&lt;/option&gt;               &lt;option value=&quot;"/>Hosts<x id="CLOSE_TAG_OPTION" ctype="x-option" equiv-text="&lt;/option&gt;"/><x id="START_TAG_OPTION_1" ctype="x-option_1" equiv-text="&lt;option value=&quot;label&quot;&gt;"/>Labels<x id="CLOSE_TAG_OPTION" ctype="x-option" equiv-text="&lt;/option&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-form/cephfs-form.component.html</context>
           <context context-type="linenumber">167,169</context>
@@ -5958,6 +6031,7 @@
       </trans-unit>
       <trans-unit id="3d9607d23bb1ab0f64c3fc1135e097f8245b4035" datatype="html">
         <source>Select labels...</source>
+        <target>Labels wählen...</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-form/cephfs-form.component.html</context>
           <context context-type="linenumber">183</context>
@@ -5969,6 +6043,7 @@
       </trans-unit>
       <trans-unit id="564b4b8f89f519d273ecfb74464f4d798d939d43" datatype="html">
         <source><x id="START_TAG_CDS_DROPDOWN_LIST" ctype="x-cds_dropdown_list" equiv-text="&lt;/cds-dropdown-list&gt;             &lt;/cds-combo-bo"/><x id="CLOSE_TAG_CDS_DROPDOWN_LIST" ctype="x-cds_dropdown_list"/></source>
+        <target><x id="START_TAG_CDS_DROPDOWN_LIST" ctype="x-cds_dropdown_list" equiv-text="&lt;/cds-dropdown-list&gt;             &lt;/cds-combo-bo"/><x id="CLOSE_TAG_CDS_DROPDOWN_LIST" ctype="x-cds_dropdown_list"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-form/cephfs-form.component.html</context>
           <context context-type="linenumber">194,196</context>
@@ -5984,6 +6059,7 @@
       </trans-unit>
       <trans-unit id="4501e9c3311db8dcacc36b5402e666bbb2b6a7ac" datatype="html">
         <source>Select hosts...</source>
+        <target>Hosts wählen...</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-form/cephfs-form.component.html</context>
           <context context-type="linenumber">213</context>
@@ -5995,6 +6071,7 @@
       </trans-unit>
       <trans-unit id="4418561194859483200" datatype="html">
         <source>File System</source>
+        <target>Dateisystem</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-form/cephfs-form.component.ts</context>
           <context context-type="linenumber">80</context>
@@ -6029,6 +6106,7 @@
       </trans-unit>
       <trans-unit id="2383007044433646811" datatype="html">
         <source>File System deletion is disabled by the mon_allow_pool_delete configuration setting.</source>
+        <target>Das Löschen des Dateisystems ist durch die Konfigurationsoption mon_allow_pool_delete deaktiviert.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-list/cephfs-list.component.ts</context>
           <context context-type="linenumber">196</context>
@@ -6036,6 +6114,7 @@
       </trans-unit>
       <trans-unit id="b71e3978ce17adca9d2c7f48670f5e76c0fa7797" datatype="html">
         <source> Attach commands </source>
+        <target>Befehle hinzufügen</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-mount-details/cephfs-mount-details.component.html</context>
           <context context-type="linenumber">6,8</context>
@@ -6064,6 +6143,7 @@
       </trans-unit>
       <trans-unit id="4f4837945d87a6a300c5cf65952b67c63ecea04d" datatype="html">
         <source> <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/> <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/> </source>
+        <target> <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/> <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/> </target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-snapshotschedule-form/cephfs-snapshotschedule-form.component.html</context>
           <context context-type="linenumber">7,9</context>
@@ -6071,6 +6151,7 @@
       </trans-unit>
       <trans-unit id="348ee7190a5fbaa2e4d8e314f29c899e39bb0476" datatype="html">
         <source><x id="START_TAG_NG_CONTAINER" ctype="x-ng_container" equiv-text="Directory (require"/>Directory (required)<x id="CLOSE_TAG_NG_CONTAINER" ctype="x-ng_container" equiv-text="&lt;/ng-container&gt;"/><x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    type=&quot;text&quot;                    formControlName=&quot;directory&quot;                    name=&quot;directory&quot;                    [ngbTypeahead]=&quot;search&quot;                    [invalid]=&quot;snapScheduleForm.controls.directory.invalid &amp;&amp; (snapScheduleForm.controls.directory.dirty)&quot;                    [placeholder]=&quot;directoryStore.isLoading ? '' : 'Directory path'&quot;                    [skeleton]=&quot;directoryStore.isLoading&quot;/&gt;"/></source>
+        <target><x id="START_TAG_NG_CONTAINER" ctype="x-ng_container" equiv-text="Directory (require"/>Verzeichnis (erforderlich)<x id="CLOSE_TAG_NG_CONTAINER" ctype="x-ng_container" equiv-text="&lt;/ng-container&gt;"/><x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    type=&quot;text&quot;                    formControlName=&quot;directory&quot;                    name=&quot;directory&quot;                    [ngbTypeahead]=&quot;search&quot;                    [invalid]=&quot;snapScheduleForm.controls.directory.invalid &amp;&amp; (snapScheduleForm.controls.directory.dirty)&quot;                    [placeholder]=&quot;directoryStore.isLoading ? '' : 'Directory path'&quot;                    [skeleton]=&quot;directoryStore.isLoading&quot;/&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-snapshotschedule-form/cephfs-snapshotschedule-form.component.html</context>
           <context context-type="linenumber">27,36</context>
@@ -6092,6 +6173,7 @@
       </trans-unit>
       <trans-unit id="a0cb3d8ceecb3f17a64557fe9ab3cf5bb04b4a77" datatype="html">
         <source>Choose a value greater than 0.</source>
+        <target>Wählen Sie einen Wert größer als 0.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-snapshotschedule-form/cephfs-snapshotschedule-form.component.html</context>
           <context context-type="linenumber">93</context>
@@ -6128,6 +6210,7 @@
       </trans-unit>
       <trans-unit id="2144284400590569712" datatype="html">
         <source>Subvolume</source>
+        <target>Subvolume</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-snapshotschedule-list/cephfs-snapshotschedule-list.component.ts</context>
           <context context-type="linenumber">142</context>
@@ -6212,6 +6295,7 @@
       </trans-unit>
       <trans-unit id="627d77d777327b116ab0ef83e42e4274c52c3852" datatype="html">
         <source>Volume name <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    type=&quot;text&quot;                    id=&quot;volumeName&quot;                    name=&quot;volumeName&quot;                    formControlName=&quot;volumeName&quot;&gt;"/></source>
+        <target>Volume Name <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    type=&quot;text&quot;                    id=&quot;volumeName&quot;                    name=&quot;volumeName&quot;                    formControlName=&quot;volumeName&quot;&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-form/cephfs-subvolume-form.component.html</context>
           <context context-type="linenumber">50,56</context>
@@ -6255,6 +6339,7 @@
       </trans-unit>
       <trans-unit id="cf68b93f7ce07de1b3d9f7429a8a29595c4fe302" datatype="html">
         <source>Size <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    type=&quot;text&quot;                    id=&quot;size&quot;                    name=&quot;size&quot;                    formControlName=&quot;size&quot;                    i18n-placeholder                    placeholder=&quot;e.g., 10GiB&quot;                    defaultUnit=&quot;GiB&quot;                    [invalid]=&quot;subvolumeForm.controls.size.invalid &amp;&amp; (subvolumeForm.controls.size.dirty)&quot;                    cdDimlessBinary&gt;"/></source>
+        <target>Größe <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    type=&quot;text&quot;                    id=&quot;size&quot;                    name=&quot;size&quot;                    formControlName=&quot;size&quot;                    i18n-placeholder                    placeholder=&quot;e.g., 10GiB&quot;                    defaultUnit=&quot;GiB&quot;                    [invalid]=&quot;subvolumeForm.controls.size.invalid &amp;&amp; (subvolumeForm.controls.size.dirty)&quot;                    cdDimlessBinary&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-form/cephfs-subvolume-form.component.html</context>
           <context context-type="linenumber">83,94</context>
@@ -6293,6 +6378,7 @@
       </trans-unit>
       <trans-unit id="24bd69b6c334472d0aaefe8ade289310e3e65564" datatype="html">
         <source>UID <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    type=&quot;number&quot;                    placeholder=&quot;Subvolume UID...&quot;                    id=&quot;uid&quot;                    name=&quot;uid&quot;                    formControlName=&quot;uid&quot;&gt;"/></source>
+        <target>UID <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    type=&quot;number&quot;                    placeholder=&quot;Subvolume UID...&quot;                    id=&quot;uid&quot;                    name=&quot;uid&quot;                    formControlName=&quot;uid&quot;&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-form/cephfs-subvolume-form.component.html</context>
           <context context-type="linenumber">120,127</context>
@@ -6304,6 +6390,7 @@
       </trans-unit>
       <trans-unit id="20d558ebd10cbfb1955896b2a49341b49951dc9d" datatype="html">
         <source>GID <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    type=&quot;number&quot;                    placeholder=&quot;Subvolume GID...&quot;                    id=&quot;gid&quot;                    name=&quot;gid&quot;                    formControlName=&quot;gid&quot;&gt;"/></source>
+        <target>GID <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    type=&quot;number&quot;                    placeholder=&quot;Subvolume GID...&quot;                    id=&quot;gid&quot;                    name=&quot;gid&quot;                    formControlName=&quot;gid&quot;&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-form/cephfs-subvolume-form.component.html</context>
           <context context-type="linenumber">134,141</context>
@@ -6315,6 +6402,7 @@
       </trans-unit>
       <trans-unit id="b04e4b4ddc6dfdc6fd2b1c1bb789333a51cf89b3" datatype="html">
         <source>Mode </source>
+        <target>Modus</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-form/cephfs-subvolume-form.component.html</context>
           <context context-type="linenumber">148,149</context>
@@ -6369,6 +6457,7 @@
       </trans-unit>
       <trans-unit id="2603482535677312633" datatype="html">
         <source>Write</source>
+        <target>Schreiben</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-form/cephfs-subvolume-form.component.ts</context>
           <context context-type="linenumber">79</context>
@@ -6426,6 +6515,7 @@
       </trans-unit>
       <trans-unit id="3188d5e2d2a44e06dadc5989e95d6351b30df385" datatype="html">
         <source><x id="TAG_INPUT" ctype="x-input" equiv-text="placeholder=&quot;Snapshot name...&quot;                    id=&quot;snapshotName&quot;                    name=&quot;snapshotName&quot;                    formControlName=&quot;snapshotName&quot;                    [invalid]=&quot;snapshotForm.controls.snapshotName.invalid &amp;&amp; (snapshotForm.controls.snapshotName.dirty)&quot;                    autofocus                    modal-primary-focus&gt;"/></source>
+        <target><x id="TAG_INPUT" ctype="x-input" equiv-text="placeholder=&quot;Snapshot name...&quot;                    id=&quot;snapshotName&quot;                    name=&quot;snapshotName&quot;                    formControlName=&quot;snapshotName&quot;                    [invalid]=&quot;snapshotForm.controls.snapshotName.invalid &amp;&amp; (snapshotForm.controls.snapshotName.dirty)&quot;                    autofocus                    modal-primary-focus&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-form/cephfs-subvolume-snapshots-form.component.html</context>
           <context context-type="linenumber">22,31</context>
@@ -6433,6 +6523,7 @@
       </trans-unit>
       <trans-unit id="5c0f4f2ebd0c9bab3358feca9e7f3a3dcc35fde1" datatype="html">
         <source>The snapshot already exists.</source>
+        <target>Der Snapshot existiert bereits.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-form/cephfs-subvolume-snapshots-form.component.html</context>
           <context context-type="linenumber">38</context>
@@ -6440,6 +6531,7 @@
       </trans-unit>
       <trans-unit id="bc10faea89ab159ba5724d6f4863196d7ac6c9ab" datatype="html">
         <source>Volume name <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    type=&quot;text&quot;                    id=&quot;volumeName&quot;                    name=&quot;volumeName&quot;                    formControlName=&quot;volumeName&quot;&gt;"/></source>
+        <target>Volume Name <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                    type=&quot;text&quot;                    id=&quot;volumeName&quot;                    name=&quot;volumeName&quot;                    formControlName=&quot;volumeName&quot;&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-form/cephfs-subvolume-snapshots-form.component.html</context>
           <context context-type="linenumber">46,52</context>
@@ -6451,6 +6543,7 @@
       </trans-unit>
       <trans-unit id="1608860531622786040" datatype="html">
         <source>snapshot</source>
+        <target>Snapshot</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-form/cephfs-subvolume-snapshots-form.component.ts</context>
           <context context-type="linenumber">40</context>
@@ -6458,6 +6551,7 @@
       </trans-unit>
       <trans-unit id="a20570a85b5462a9e3336dd597c4669bce0b37a0" datatype="html">
         <source>Loading snapshots...</source>
+        <target>Snapshots werden geladen</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-list.component.html</context>
           <context context-type="linenumber">3</context>
@@ -6479,6 +6573,7 @@
       </trans-unit>
       <trans-unit id="8153791073015653248" datatype="html">
         <source>Create clone</source>
+        <target>Klon erstellen</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-list.component.ts</context>
           <context context-type="linenumber">262</context>
@@ -6486,6 +6581,7 @@
       </trans-unit>
       <trans-unit id="6247958153498401915" datatype="html">
         <source>Allowed characters are letters, numbers, '.', '-', '+', ':' or '_'</source>
+        <target>Erlaubte Zeichen sind Buchstaben, Ziffern, '.', '-', '+', ':' oder '_'</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-list.component.ts</context>
           <context context-type="linenumber">282</context>
@@ -6493,6 +6589,7 @@
       </trans-unit>
       <trans-unit id="4260133045185403975" datatype="html">
         <source>A subvolume or clone with this name already exists.</source>
+        <target>Ein Subvolume oder Klon mit diesem Namen existiert bereits.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-list.component.ts</context>
           <context context-type="linenumber">283</context>
@@ -6500,6 +6597,7 @@
       </trans-unit>
       <trans-unit id="2041629809382689328" datatype="html">
         <source>Group name</source>
+        <target>Gruppenname</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-list.component.ts</context>
           <context context-type="linenumber">290</context>
@@ -6507,6 +6605,7 @@
       </trans-unit>
       <trans-unit id="1225562223741594063" datatype="html">
         <source>Create Clone</source>
+        <target>Klon erstellen</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-list.component.ts</context>
           <context context-type="linenumber">298</context>
@@ -6514,6 +6613,7 @@
       </trans-unit>
       <trans-unit id="450396535748925414" datatype="html">
         <source>Created Clone &quot;<x id="PH" equiv-text="value.cloneName"/>&quot; successfully.</source>
+        <target>Klon &amp;quot;<x id="PH" equiv-text="value.cloneName"/>&amp;quot; erfolgreich erstellt.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-list.component.ts</context>
           <context context-type="linenumber">321</context>
@@ -6521,6 +6621,7 @@
       </trans-unit>
       <trans-unit id="6df5486c9d526e51d0618fdc4558abe004307ee1" datatype="html">
         <source>Subvolume group name...</source>
+        <target>Subvolume Gruppenname...</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolumegroup-form/cephfs-subvolumegroup-form.component.html</context>
           <context context-type="linenumber">25</context>
@@ -6528,6 +6629,7 @@
       </trans-unit>
       <trans-unit id="4a67528e98485cefec44731707c4863da1619bb9" datatype="html">
         <source>The subvolume group already exists.</source>
+        <target>Die Subvolume-Gruppe existiert bereits.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolumegroup-form/cephfs-subvolumegroup-form.component.html</context>
           <context context-type="linenumber">39</context>
@@ -6535,6 +6637,7 @@
       </trans-unit>
       <trans-unit id="4321251706271844996" datatype="html">
         <source>subvolume group</source>
+        <target>Subvolume-Gruppe</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-subvolumegroup-form/cephfs-subvolumegroup-form.component.ts</context>
           <context context-type="linenumber">53</context>
@@ -6550,6 +6653,7 @@
       </trans-unit>
       <trans-unit id="d5439bc4a2c71a425d5f84aa5b748ccccd5da1f0" datatype="html">
         <source>Subvolumes</source>
+        <target>Subvolumes</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-tabs/cephfs-tabs.component.html</context>
           <context context-type="linenumber">27</context>
@@ -6557,6 +6661,7 @@
       </trans-unit>
       <trans-unit id="ef87412ef5ebf5b6a82d4dbbe8cb2409f25e8d41" datatype="html">
         <source>Subvolume groups</source>
+        <target>Subvolume-Gruppen</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-tabs/cephfs-tabs.component.html</context>
           <context context-type="linenumber">39</context>
@@ -6583,6 +6688,7 @@
       </trans-unit>
       <trans-unit id="c14c00658ba06b798659c34f59568bec31c7c4d4" datatype="html">
         <source>CephFS MDS performance</source>
+        <target>CephFS MDS Leistung</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-tabs/cephfs-tabs.component.html</context>
           <context context-type="linenumber">87</context>
@@ -6714,7 +6820,7 @@
       </trans-unit>
       <trans-unit id="a446fb0eb11fbffcac805ece5a2d306d24e733d8" datatype="html">
         <source>Level</source>
-        <target>Ebene</target>
+        <target>Level</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/configuration/configuration-details/configuration-details.component.html</context>
           <context context-type="linenumber">81</context>
@@ -6893,6 +6999,7 @@
       </trans-unit>
       <trans-unit id="6286037250766429054" datatype="html">
         <source>yes</source>
+        <target>Ja</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/configuration/configuration.component.ts</context>
           <context context-type="linenumber">33</context>
@@ -6904,6 +7011,7 @@
       </trans-unit>
       <trans-unit id="2420525563530770652" datatype="html">
         <source>no</source>
+        <target>Nein</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/configuration/configuration.component.ts</context>
           <context context-type="linenumber">33</context>
@@ -7051,6 +7159,7 @@
       </trans-unit>
       <trans-unit id="d1ef212ae133e173d7773798b16375bf8a39f040" datatype="html">
         <source><x id="INTERPOLATION" equiv-text="{{deploymentDescText}}"/></source>
+        <target><x id="INTERPOLATION" equiv-text="{{deploymentDescText}}"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/create-cluster/create-cluster-review.component.html</context>
           <context context-type="linenumber">66</context>
@@ -7249,6 +7358,7 @@
       </trans-unit>
       <trans-unit id="b23193979284e10491d9a08f9b90ea6e46a66a2d" datatype="html">
         <source>Host details</source>
+        <target>Host-Details</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/hosts/host-details/host-details.component.html</context>
           <context context-type="linenumber">38</context>
@@ -7276,6 +7386,7 @@
       </trans-unit>
       <trans-unit id="e1a688aad6950c764739ca17eb73de43fb7c0dcd" datatype="html">
         <source>Hostname (required)</source>
+        <target>Host-Name (erforderlich)</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/hosts/host-form/host-form.component.html</context>
           <context context-type="linenumber">19</context>
@@ -7330,6 +7441,7 @@
       </trans-unit>
       <trans-unit id="0a557dec73c10c78e2d6d85aff6d8acefbc6e752" datatype="html">
         <source>Network address <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                  type=&quot;text&quot;                  placeholder=&quot;192.168.0.1&quot;                  id=&quot;addr&quot;                  name=&quot;addr&quot;                  formControlName=&quot;addr&quot;/&gt;"/></source>
+        <target>Netzwerk-Adresse <x id="TAG_INPUT" ctype="x-input" equiv-text="&lt;input cdsText                  type=&quot;text&quot;                  placeholder=&quot;192.168.0.1&quot;                  id=&quot;addr&quot;                  name=&quot;addr&quot;                  formControlName=&quot;addr&quot;/&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/hosts/host-form/host-form.component.html</context>
           <context context-type="linenumber">57,63</context>
@@ -7351,6 +7463,7 @@
       </trans-unit>
       <trans-unit id="12f37de6622cf2e15ac960f3dd14502e8581733a" datatype="html">
         <source><x id="START_TAG_CDS_DROPDOWN_LIST" ctype="x-cds_dropdown_list" equiv-text="&lt;cds-dropdown-list&gt;"/><x id="CLOSE_TAG_CDS_DROPDOWN_LIST" ctype="x-cds_dropdown_list" equiv-text="&lt;/cds-dropdown-list&gt;"/></source>
+        <target><x id="START_TAG_CDS_DROPDOWN_LIST" ctype="x-cds_dropdown_list" equiv-text="&lt;cds-dropdown-list&gt;"/><x id="CLOSE_TAG_CDS_DROPDOWN_LIST" ctype="x-cds_dropdown_list" equiv-text="&lt;/cds-dropdown-list&gt;"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/hosts/host-form/host-form.component.html</context>
           <context context-type="linenumber">88</context>
@@ -7362,6 +7475,7 @@
       </trans-unit>
       <trans-unit id="8e653762da6d533b48daa16fe2091ff4528363ff" datatype="html">
         <source>Maintenance Mode </source>
+        <target>Wartungs-Modus</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/hosts/host-form/host-form.component.html</context>
           <context context-type="linenumber">96,97</context>
@@ -7421,6 +7535,7 @@
       </trans-unit>
       <trans-unit id="e3638e813c6a583c5e345f61c2d9e3526fe1b2ff" datatype="html">
         <source>Host overview</source>
+        <target>Host Übersicht</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/hosts/hosts.component.html</context>
           <context context-type="linenumber">52</context>
@@ -7444,6 +7559,7 @@
       </trans-unit>
       <trans-unit id="37a0c0fffef57ba4b1fe7bf2318fc9211267286e" datatype="html">
         <source>-</source>
+        <target>-</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/hosts/hosts.component.html</context>
           <context context-type="linenumber">118</context>
@@ -7806,6 +7922,7 @@
       </trans-unit>
       <trans-unit id="64f352a2fd5f00c05d969b4b6b32097b0d77bd4a" datatype="html">
         <source>Daemon Logs</source>
+        <target>Daemon Protokolle</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/logs/logs.component.html</context>
           <context context-type="linenumber">79</context>
@@ -7813,6 +7930,7 @@
       </trans-unit>
       <trans-unit id="508a91443aae9e64535807c941bfb03c558eab53" datatype="html">
         <source>Daemon logs</source>
+        <target>Daemon Protokolle</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/logs/logs.component.html</context>
           <context context-type="linenumber">84</context>
@@ -8134,6 +8252,7 @@
       </trans-unit>
       <trans-unit id="b62b6a95e00b7590aa0794c2d328f13d0d186b42" datatype="html">
         <source>Cluster details</source>
+        <target>Cluster Details</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/multi-cluster/multi-cluster-details/multi-cluster-details.component.html</context>
           <context context-type="linenumber">14</context>
@@ -8141,6 +8260,7 @@
       </trans-unit>
       <trans-unit id="1ea03cf319d475346ce6bbf491eb03ba9760e996" datatype="html">
         <source><x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/> Cluster </source>
+        <target><x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/> Cluster </target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/multi-cluster/multi-cluster-form/multi-cluster-form.component.html</context>
           <context context-type="linenumber">3,4</context>
@@ -8149,6 +8269,7 @@
       </trans-unit>
       <trans-unit id="9836134ed990ad29c0798632cdb350f2d1211d09" datatype="html">
         <source><x id="INTERPOLATION" equiv-text="{{ connectionMessage }}"/> </source>
+        <target><x id="INTERPOLATION" equiv-text="{{ connectionMessage }}"/> </target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/multi-cluster/multi-cluster-form/multi-cluster-form.component.html</context>
           <context context-type="linenumber">13,14</context>
@@ -8289,7 +8410,7 @@
       </trans-unit>
       <trans-unit id="464272c069fe56f6c50f41f426a25b2a42c95ba5" datatype="html">
         <source>Invalid SSL certificate.</source>
-        <target>Ungültiges SSK-Zertifikat.</target>
+        <target>Ungültiges SSL-Zertifikat.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/multi-cluster/multi-cluster-form/multi-cluster-form.component.html</context>
           <context context-type="linenumber">214</context>
@@ -9152,6 +9273,7 @@
       </trans-unit>
       <trans-unit id="19a2892320d36f6564eac566181f172a7b5e5095" datatype="html">
         <source>{VAR_SELECT, select, true {it} other {them}}</source>
+        <target>{VAR_SELECT, select, true {bearbeiten} other {hinzufügen} }</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-list/osd-list.component.html</context>
           <context context-type="linenumber">89</context>
@@ -9646,7 +9768,7 @@
       </trans-unit>
       <trans-unit id="62b73a34ba65b3073e3560dce828a16d7fd3c0f4" datatype="html">
         <source>{VAR_SELECT, select, true {Deep } other {}}</source>
-        <target>{VAR_SELECT, select, true {Umfassend} other {}}</target>
+        <target>{VAR_SELECT, select, true {Umfassender} other {}}</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-scrub-modal/osd-scrub-modal.component.html</context>
           <context context-type="linenumber">3</context>
@@ -9662,7 +9784,7 @@
       </trans-unit>
       <trans-unit id="fad3dc421817a16dd6c46c1a0c36de619a8d776e" datatype="html">
         <source>{VAR_SELECT, select, true {deep } other {}}</source>
-        <target>{VAR_SELECT, select, true {Umfassend} other {}}</target>
+        <target>{VAR_SELECT, select, true {umfassenden} other {}}</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-scrub-modal/osd-scrub-modal.component.html</context>
           <context context-type="linenumber">11</context>
@@ -9806,7 +9928,7 @@
       </trans-unit>
       <trans-unit id="a3ba06aba047605af8ea1718ec1ba153b7db12a2" datatype="html">
         <source>Editing a silence will expire the old silence and recreate it as a new silence</source>
-        <target>Das Bearbeiten einer Stummschaltung löscht die Vorherige und legt eine neue Stummschaltung an.</target>
+        <target>Das Bearbeiten einer Stummschaltung löscht die vorherige und legt eine neue Stummschaltung an.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/prometheus/silence-form/silence-form.component.html</context>
           <context context-type="linenumber">55</context>
@@ -9960,7 +10082,7 @@
       </trans-unit>
       <trans-unit id="78af6a5e6e4d305557054b64d10f9f9446d8043d" datatype="html">
         <source>{VAR_SELECT, select, true {Edit} other {Add}}</source>
-        <target>{VAR_SELECT, select, true {Bearbeiten} other {Hinzufügen} }</target>
+        <target>{VAR_SELECT, select, true {bearbeiten} other {hinzufügen} }</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/prometheus/silence-matcher-modal/silence-matcher-modal.component.html</context>
           <context context-type="linenumber">3</context>
@@ -10137,7 +10259,7 @@
       </trans-unit>
       <trans-unit id="c2937074aed12b8158e929c58747a8216433b72b" datatype="html">
         <source>-- No service available --</source>
-        <target>-- Keine Dienst verfügbar --</target>
+        <target>-- Kein Dienst verfügbar --</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">83</context>
@@ -10594,7 +10716,7 @@
       </trans-unit>
       <trans-unit id="7c13184af0c09e3bad77daa5f4869138708d26b2" datatype="html">
         <source>A list of networks to identify which network interface to use for the virtual IP address.</source>
-        <target>Eine Liste der Netzwerke zur Identifikation, welche Netzwerk-Schnittstelle für die virtuelle IP-Adresse zu verwenden.</target>
+        <target>Eine Liste von Netzwerken, die angibt, welche Netzwerkschnittstelle für die virtuelle IP-Adresse zu verwenden ist.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/services/service-form/service-form.component.html</context>
           <context context-type="linenumber">736</context>
@@ -13041,7 +13163,7 @@
       </trans-unit>
       <trans-unit id="72396a9565cf644d1fe1b21b790c4243ee270986" datatype="html">
         <source>Device class</source>
-        <target>Laufwerksklasse</target>
+        <target>Geräte-Klasse</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/crush-rule-form-modal/crush-rule-form-modal.component.html</context>
           <context context-type="linenumber">96</context>
@@ -13860,6 +13982,7 @@
       </trans-unit>
       <trans-unit id="e79b3795fab22dff7224fe1f748d490ee1b1e49c" datatype="html">
         <source>Mode </source>
+        <target>Modus</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">460,461</context>
@@ -14427,7 +14550,7 @@
       </trans-unit>
       <trans-unit id="f50a33d3c339f8f4a465141f8caa5d2d8c005251" datatype="html">
         <source>Enabled</source>
-        <target>Aktiviert</target>
+        <target>Aktiv</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-bucket-details/rgw-bucket-details.component.html</context>
           <context context-type="linenumber">60</context>
@@ -14702,7 +14825,7 @@
       </trans-unit>
       <trans-unit id="6abacf4af2f66d3af08c5ebe502b21b1f42ac649" datatype="html">
         <source>Each label must start and end with a lowercase letter or a number.</source>
-        <target>Jedes Label muss mit einem kleinen Buchstaben oder einer Zahl beginnen und enden.</target>
+        <target>Jedes Label muss mit einem Kleinbuchstaben oder einer Zahl beginnen und enden.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
           <context context-type="linenumber">57</context>
@@ -18052,7 +18175,7 @@
       </trans-unit>
       <trans-unit id="6af106b0d759fd2882e645604675c4494abfcd5b" datatype="html">
         <source>The chosen user ID exists in this tenant.</source>
-        <target>Die gewählte Benutzer-ID ist in diesem Mandanten vorhanden</target>
+        <target>Die gewählte Benutzer-ID ist in diesem Mandanten vorhanden.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
           <context context-type="linenumber">112</context>
@@ -18914,6 +19037,7 @@
       </trans-unit>
       <trans-unit id="1ba7de58697f500e9c007c9fcbfb7941dc7e31bf" datatype="html">
         <source> <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/> <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/> </source>
+        <target> <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/> <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/> </target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/smb/smb-cluster-form/smb-cluster-form.component.html</context>
           <context context-type="linenumber">10,12</context>
@@ -19147,6 +19271,7 @@
       </trans-unit>
       <trans-unit id="d60e1082e26ae4e941496b9eb5159f11884ebbea" datatype="html">
         <source> <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/> <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/> </source>
+        <target> <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/> <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/> </target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/smb/smb-join-auth-form/smb-join-auth-form.component.html</context>
           <context context-type="linenumber">10,12</context>
@@ -20119,7 +20244,7 @@ Sie werden vom Identitätsanbieter abgemeldet, wenn Sie versuchen, sich erneut a
       </trans-unit>
       <trans-unit id="8642696205489749843" datatype="html">
         <source>Trademarks</source>
-        <target>Handelsmarken</target>
+        <target>Marken</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/layouts/login-layout/login-layout.component.ts</context>
           <context context-type="linenumber">12</context>
@@ -21149,6 +21274,7 @@ Sie werden vom Identitätsanbieter abgemeldet, wenn Sie versuchen, sich erneut a
       </trans-unit>
       <trans-unit id="045ed332fbb2645493d6955677247db0d1134c2d" datatype="html">
         <source><x id="INTERPOLATION" equiv-text="{{title}}"/></source>
+        <target><x id="INTERPOLATION" equiv-text="{{title}}"/></target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/form-advanced-fieldset/form-advanced-fieldset.component.html</context>
           <context context-type="linenumber">14</context>
@@ -21193,6 +21319,7 @@ Sie werden vom Identitätsanbieter abgemeldet, wenn Sie versuchen, sich erneut a
       </trans-unit>
       <trans-unit id="4749416028992272245" datatype="html">
         <source>Size must be a number or in a valid format. eg: 5 GiB</source>
+        <target>Die Größe muss entweder eine Zahl sein, oder in einem gültigen Format angegeben werden, z. B. 5 GiB</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/form-modal/form-modal.component.ts</context>
           <context context-type="linenumber">113</context>
@@ -21575,7 +21702,7 @@ Sie werden vom Identitätsanbieter abgemeldet, wenn Sie versuchen, sich erneut a
       </trans-unit>
       <trans-unit id="8352450862052130357" datatype="html">
         <source>You can activate the module on the Telemetry configuration page (&lt;b&gt;Dashboard Settings&lt;/b&gt; -&gt; &lt;b&gt;Telemetry configuration&lt;/b&gt;) at any time.</source>
-        <target>Sie können das Modul jederzeit auf der Telemetriekonfigurationsseite (&lt;b&gt;Dashboard-Einstellungen&lt;/b&gt;-&gt;&lt;b&gt;Telemetriekonfiguratio&lt;/b&gt;) aktivieren.</target>
+        <target>Sie können das Modul jederzeit auf der Telemetriekonfigurationsseite (&lt;b&gt;Dashboard-Einstellungen&lt;/b&gt;-&gt;&lt;b&gt;Telemetriekonfiguration&lt;/b&gt;) aktivieren.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/telemetry-notification/telemetry-notification.component.ts</context>
           <context context-type="linenumber">58,59</context>
@@ -22622,7 +22749,7 @@ Sie werden vom Identitätsanbieter abgemeldet, wenn Sie versuchen, sich erneut a
       </trans-unit>
       <trans-unit id="7597613755904774250" datatype="html">
         <source>%d minutes</source>
-        <target>%dMinuten</target>
+        <target>%d Minuten</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">13</context>
@@ -22638,7 +22765,7 @@ Sie werden vom Identitätsanbieter abgemeldet, wenn Sie versuchen, sich erneut a
       </trans-unit>
       <trans-unit id="9118454901758656303" datatype="html">
         <source>%d hours</source>
-        <target>%d Stunde</target>
+        <target>%d Stunden</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">15</context>
@@ -22670,7 +22797,7 @@ Sie werden vom Identitätsanbieter abgemeldet, wenn Sie versuchen, sich erneut a
       </trans-unit>
       <trans-unit id="7272688256541915488" datatype="html">
         <source>%d weeks</source>
-        <target>%d Woche</target>
+        <target>%d Wochen</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">19</context>
@@ -22686,7 +22813,7 @@ Sie werden vom Identitätsanbieter abgemeldet, wenn Sie versuchen, sich erneut a
       </trans-unit>
       <trans-unit id="352195662913351589" datatype="html">
         <source>%d months</source>
-        <target>%d Monate</target>
+        <target>%d Monaten</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">21</context>
@@ -22694,7 +22821,7 @@ Sie werden vom Identitätsanbieter abgemeldet, wenn Sie versuchen, sich erneut a
       </trans-unit>
       <trans-unit id="7562153591649199139" datatype="html">
         <source>a year</source>
-        <target>ein Jahr</target>
+        <target>einem Jahr</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">22</context>
@@ -22702,7 +22829,7 @@ Sie werden vom Identitätsanbieter abgemeldet, wenn Sie versuchen, sich erneut a
       </trans-unit>
       <trans-unit id="5424759741855527370" datatype="html">
         <source>%d years</source>
-        <target>%d Jahre</target>
+        <target>%d Jahren</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/pipes/relative-date.pipe.ts</context>
           <context context-type="linenumber">23</context>
@@ -22774,7 +22901,7 @@ Sie werden vom Identitätsanbieter abgemeldet, wenn Sie versuchen, sich erneut a
   * Alphabetisch a-z, A-Z
   * Ziffern 0-9
   * Sonderzeichen: !&quot;#$%&amp; '()*+,-./:;&lt;=&gt;?@[\]^_`{{|}}~
-  * Andere Zeichen (signs)</target>
+  * Andere Zeichen (Symbole)</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/services/password-policy.service.ts</context>
           <context context-type="linenumber">30,34</context>
