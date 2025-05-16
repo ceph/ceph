@@ -164,10 +164,10 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
                         assert len(get_args(actual_type)) == 1
                         return [self.process_dict(item, get_args(actual_type)[0], False) for item in value]
                     elif is_top_level and annotation == 'exclusive-result-indicator':
-                        return 'Success' if bool(input_dict[field]) else f"Failure: {input_dict.get('error_message')}"
+                        return f"Failure: {input_dict.get('error_message')}" if bool(input_dict[field]) else "Success"
                     elif annotation == 'size-bytes':
                         assert isinstance(input_dict[field], int)
-                        value = convert_from_bytes(input_dict[field])
+                        value = convert_from_bytes(int(input_dict[field]))
 
             if skip:
                 continue
