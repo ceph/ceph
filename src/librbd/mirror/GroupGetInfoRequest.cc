@@ -167,12 +167,18 @@ void GroupGetInfoRequest<I>::handle_get_last_mirror_snapshot_state(int r) {
       // XXXMG: check primary_mirror_uuid matches?
       switch (ns->state) {
       case cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY:
+        if (it->state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+          continue;
+        }
         *m_promotion_state = PROMOTION_STATE_PRIMARY;
         break;
       case cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY:
         *m_promotion_state = PROMOTION_STATE_NON_PRIMARY;
         break;
       case cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED:
+        if (it->state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+          continue;
+        }
       case cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED:
         *m_promotion_state = PROMOTION_STATE_ORPHAN;
         break;
