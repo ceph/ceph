@@ -265,7 +265,7 @@ all of the
 chassis's hosts and their associated OSDs will be in the ``down``
 state and thus unavailable.  It is important to avoid placing multiple replicas
 or shards of data within a single such chassis, which in this case is
-a _failure domain_.
+a *failure domain*.
 
 To declare a bucket instance, do the following: specify its type, give it a
 unique name (an alphanumeric string), assign it a unique ID expressed as a
