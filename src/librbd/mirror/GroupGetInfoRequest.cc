@@ -161,6 +161,9 @@ void GroupGetInfoRequest<I>::handle_get_last_mirror_snapshot_state(int r) {
   }
 
   for (auto it = m_group_snaps.rbegin(); it != m_group_snaps.rend(); it++) {
+    if (it->state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+      continue;
+    }
     auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
       &it->snapshot_namespace);
     if (ns != nullptr) {
@@ -179,6 +182,11 @@ void GroupGetInfoRequest<I>::handle_get_last_mirror_snapshot_state(int r) {
       }
       break;
     }
+  }
+
+  if (*m_promotion_state == PROMOTION_STATE_UNKNOWN) {
+    finish(-EINVAL);
+    return;
   }
 
   finish(0);
