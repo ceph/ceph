@@ -43,4 +43,5 @@ tasks:
   - cephfs_test_runner:
       fail_on_skip: false
       modules:
+        - tasks.mgr.test_dashboard
         - tasks.mgr.dashboard.test_rgw
