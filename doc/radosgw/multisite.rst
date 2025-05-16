@@ -143,8 +143,8 @@ master zonegroup.
 See `Pools`_ for instructions on creating and tuning pools for Ceph Object
 Storage.
 
-See `Sync Policy Config`_ for instructions on defining fine-grained bucket sync
-policy rules.
+See :ref:`Sync Policy Config <radosgw-multisite-sync-policy>` for instructions
+on defining fine-grained bucket sync policy rules.
 
 .. _master-zone-label:
 
@@ -831,9 +831,8 @@ to a multi-site system, follow these steps:
 
       systemctl restart ceph-radosgw@rgw.`hostname -s`
 
-After completing this procedure, proceed to `Configure a Secondary
-Zone <#configure-secondary-zones>`_ and create a secondary zone
-in the master zonegroup.
+After completing this procedure, proceed to :ref:`secondary-zone-label`
+and create a secondary zone in the master zonegroup.
 
 Multi-Site Configuration Reference
 ==================================
@@ -1604,4 +1603,3 @@ instance.
 
 
 .. _`Pools`: ../pools
-.. _`Sync Policy Config`: ../multisite-sync-policy
