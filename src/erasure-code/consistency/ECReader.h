@@ -42,6 +42,7 @@ namespace ceph {
 
       public:
         ECReader(librados::Rados& rados, boost::asio::io_context& asio, const std::string& pool);
+        uint64_t get_object_size(std::string oid);
         void do_read(Read read);
         void start_io(void);
         void finish_io(void);

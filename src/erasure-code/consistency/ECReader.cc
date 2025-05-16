@@ -59,6 +59,22 @@ void ECReader::wait_for_io()
 }
 
 /**
+ * Send a syncronous stat request to librados.
+ *
+ * @param oid Object ID.
+ * @returns The size of the object, -1 if the stat failed.
+ */
+uint64_t ECReader::get_object_size(std::string oid)
+{
+  uint64_t size;
+  int r = io.stat(oid, &size, nullptr);
+  if (r != 0) {
+    return -1;
+  }
+  return size;
+}
+
+/**
  * Send an async read request to librados. Push the returned data
  * and oid into the results vector. 
  *

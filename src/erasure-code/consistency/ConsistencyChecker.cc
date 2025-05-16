@@ -50,7 +50,7 @@ bool ConsistencyChecker::single_read_and_check_consistency(const std::string& oi
 
   ReadResult res = (*read_results)[0];
 
-  bool is_consistent = check_object_consistency(res.second, stripe_unit);
+  bool is_consistent = check_object_consistency(res.first, res.second, stripe_unit);
   results.push_back(ConsistencyCheckResult(oid, is_consistent));
   commands.inject_clear_parity_read_on_primary_osd(pool.get_pool_name(),
                                                    oid);
@@ -72,13 +72,16 @@ void ConsistencyChecker::queue_ec_read(Read read)
 /**
  * Generate parities from the data and compare to the parity shards
  *
+ * @param oid string The object ID of the object being checked
  * @param inbl bufferlist The entire contents of the object, including parities
  * @param stripe_unit int The chunk size for the object
  */
-bool ConsistencyChecker::check_object_consistency(const bufferlist& inbl, int stripe_unit)
+bool ConsistencyChecker::check_object_consistency(const std::string& oid,
+                                                  const bufferlist& inbl,
+                                                  int stripe_unit)
 {
   std::pair<bufferlist, bufferlist> data_and_parity;
-  data_and_parity = split_data_and_parity(inbl, pool.get_ec_profile());
+  data_and_parity = split_data_and_parity(oid, inbl, pool.get_ec_profile());
 
   bufferlist outbl;
   auto encoder = ceph::consistency::ECEncoder(pool.get_ec_profile(), stripe_unit);
@@ -100,17 +103,15 @@ void ConsistencyChecker::print_results(std::ostream& out)
 }
 
 std::pair<bufferlist, bufferlist>
-  ConsistencyChecker::split_data_and_parity(const bufferlist& read,
+  ConsistencyChecker::split_data_and_parity(const std::string& oid,
+                                            const bufferlist& read,
                                             ErasureCodeProfile profile)
 {
-  uint8_t k = atoi(profile["k"].c_str());
-  uint8_t m = atoi(profile["m"].c_str());
-  uint64_t parity_index = (read.length() / (k + m)) * k;
-  uint64_t parity_size = read.length() - parity_index;
-
+  uint64_t data_size = reader.get_object_size(oid);
+  uint64_t parity_size = read.length() - data_size;
   bufferlist data, parity;
   auto it = read.begin();
-  it.copy(read.length() - parity_size, data);
+  it.copy(data_size, data);
   it.copy(parity_size, parity);
   return std::pair<bufferlist, bufferlist>(data, parity);
 }

@@ -81,8 +81,8 @@ int ECEncoder::ec_init_sinfo_legacy(ceph::ErasureCodeInterfaceRef *ec_impl,
  * @returns int 0 if successful, otherwise 1
  */
 int ECEncoder::do_encode(ceph::bufferlist inbl,
-  ceph::bufferlist &outbl,
-  bool is_optimized)
+                         ceph::bufferlist &outbl,
+                         bool is_optimized)
 {
   if (is_optimized)
     return do_encode_optimized(inbl, outbl);
@@ -117,6 +117,7 @@ int ECEncoder::do_encode_optimized(ceph::bufferlist inbl,
   }
 
   sinfo->ro_range_to_shard_extent_map(0, inbl.length(), inbl, encoded_data);
+  encoded_data.insert_parity_buffers();
   r = encoded_data.encode(ec_impl, nullptr, encoded_data.get_ro_end());
   if (r < 0) {
     std::cerr << "Failed to encode: " << cpp_strerror(r) << std::endl;
@@ -124,7 +125,9 @@ int ECEncoder::do_encode_optimized(ceph::bufferlist inbl,
   }
 
   for (auto &[shard, _] : encoded_data.get_extent_maps()) {
-    encoded_data.get_shard_first_buffer(shard, outbl);
+    if (shard >= atoi(profile["k"].c_str())) {
+      encoded_data.get_shard_first_buffer(shard, outbl);
+    }
   }
 
   return 0;
