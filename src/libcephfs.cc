@@ -2639,3 +2639,10 @@ extern "C" int get_inode_flags(struct ceph_mount_info *cmount, int fd, int* file
 
   return cmount->get_client()->get_inode_flags(fd, file_attr_out);
 }
+
+extern "C" int ceph_fcopyfile(struct ceph_mount_info *cmount, const char *spath, const char *dpath, mode_t mode)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->fcopyfile(spath, dpath, cmount->default_perms, mode);
+}

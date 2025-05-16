@@ -387,6 +387,8 @@ public:
   int get_inode_flags(const Inode* in, int* file_attr_out);
   int get_inode_flags(int fd, int* file_attr_out);
 
+  int fcopyfile(const char *sname, const char *dname, UserPerm& perms, mode_t mode);
+
   int set_fscrypt_policy_v2(int fd, const struct fscrypt_policy_v2& policy);
   int is_encrypted(int fd, UserPerm& perms, char* enctag);
 
