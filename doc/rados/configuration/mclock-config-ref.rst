@@ -612,7 +612,7 @@ Run custom drive benchmark if defaults are not accurate (manual)
 If the default OSD capacity is not accurate, the recommendation is to run a
 custom benchmark using your preferred tool (e.g. Fio) on the drive and then
 override the ``osd_mclock_max_capacity_iops_[hdd, ssd]`` option as described
-in the `Specifying  Max OSD Capacity`_ section.
+in the `Set or Override Max IOPS Capacity of an OSD`_ section.
 
 This step is highly recommended until an alternate mechansim is worked upon.
 
@@ -625,7 +625,7 @@ Steps to Manually Benchmark an OSD (Optional)
 
 .. tip:: If you have already determined the benchmark data and wish to manually
          override the max osd capacity for an OSD, you may skip to section
-         `Specifying  Max OSD Capacity`_.
+         `Set or Override Max IOPS Capacity of an OSD`_.
 
 
 Any existing benchmarking tool (e.g. Fio) can be used for this purpose. In this
