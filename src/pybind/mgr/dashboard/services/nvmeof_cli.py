@@ -2,7 +2,8 @@
 from abc import ABC, abstractmethod
 import errno
 import json
-from typing import Any, Dict, Optional, get_type_hints, Annotated, get_origin, get_args, Union
+from typing import Any, Dict, Optional, get_type_hints, Annotated, get_origin, get_args, \
+    Type, NamedTuple
 
 import yaml
 from prettytable import PrettyTable
@@ -189,9 +190,10 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
         return self._convert_to_text_output(data, model)
     
 class NvmeofCLICommand(CLICommand):
-    def __init__(self, prefix, perm = 'rw', poll = False):
+    def __init__(self, prefix, model: Type[NamedTuple], perm = 'rw', poll = False):
         super().__init__(prefix, perm, poll)
         self._output_formatter = AnnotatedDataTextOutputFormatter()
+        self._model = model
         
     def __call__(self, func) -> HandlerFuncType:  # type: ignore
         # pylint: disable=useless-super-delegation
@@ -213,7 +215,7 @@ class NvmeofCLICommand(CLICommand):
             if ret is None:
                     out = ''
             if out_format == 'text' or not out_format:
-                out = self._output_formatter.format_output(ret)
+                out = self._output_formatter.format_output(ret, self._model)
             elif out_format == 'json':
                 out = json.dumps(ret)
             elif out_format == 'yaml':

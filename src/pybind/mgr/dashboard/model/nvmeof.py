@@ -65,7 +65,7 @@ class ConnectionList(NamedTuple):
 
 
 class NamespaceCreation(NamedTuple):
-    status: int
+    status: Annotated[int, 'exclusive-result-indicator']
     error_message: str
     nsid: int
 
@@ -149,5 +149,5 @@ class HostsInfo(NamedTuple):
 
 
 class RequestStatus(NamedTuple):
-    status: int
+    status: Annotated[int, 'exclusive-result-indicator']
     error_message: str
