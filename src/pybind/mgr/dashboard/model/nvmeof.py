@@ -2,7 +2,7 @@ from typing import List, NamedTuple, Optional, Annotated
 
 
 class GatewayInfo(NamedTuple):
-    cli_version: str
+    cli_version: Annotated[str, 'drop']
     version: str
     name: str
     group: str
@@ -44,7 +44,7 @@ class Subsystem(NamedTuple):
 class SubsystemList(NamedTuple):
     status: int
     error_message: str
-    subsystems: List[Subsystem]
+    subsystems: Annotated[List[Subsystem], 'exclusive-list-field']
 
 
 class Connection(NamedTuple):
@@ -61,7 +61,7 @@ class ConnectionList(NamedTuple):
     status: int
     error_message: str
     subsystem_nqn: str
-    connections: List[Connection]
+    connections: Annotated[List[Connection], 'exclusive-list-field']
 
 
 class NamespaceCreation(NamedTuple):
@@ -93,19 +93,19 @@ class NamespaceList(NamedTuple):
 
 
 class NamespaceIOStats(NamedTuple):
-    status: int
-    error_message: str
+    status: Annotated[int, 'drop']
+    error_message: Annotated[str, 'drop']
     subsystem_nqn: str
     nsid: int
     uuid: str
     bdev_name: str
     tick_rate: int
     ticks: int
-    bytes_read: int
+    bytes_read: Annotated[int, 'size-bytes']
     num_read_ops: int
-    bytes_written: int
+    bytes_written: Annotated[int, 'size-bytes']
     num_write_ops: int
-    bytes_unmapped: int
+    bytes_unmapped: Annotated[int, 'size-bytes']
     num_unmap_ops: int
     read_latency_ticks: int
     max_read_latency_ticks: int
@@ -133,7 +133,7 @@ class Listener(NamedTuple):
 class ListenerList(NamedTuple):
     status: int
     error_message: str
-    listeners: List[Listener]
+    listeners: Annotated[List[Listener], 'exclusive-list-field']
 
 
 class Host(NamedTuple):
