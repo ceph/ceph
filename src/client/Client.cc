@@ -18767,6 +18767,10 @@ int Client::get_inode_flags(int fd, int* file_attr_out) {
   return get_inode_flags(fh->inode.get(), file_attr_out);
 }
 
+int Client::fcopyfile(const char *spath, const char *dpath, UserPerm& perms, mode_t mode) {
+ return 0;
+}
+
 StandaloneClient::StandaloneClient(Messenger *m, MonClient *mc,
 				   boost::asio::io_context& ictx)
   : Client(m, mc, new Objecter(m->cct, m, mc, ictx))
