@@ -60,6 +60,18 @@ export class CdValidators {
   }
 
   /**
+   * Validator function in order to validate network addresses e.g 192.168.1.0/24.
+   * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
+   *   if the validation check fails, otherwise `null`.
+   */
+  static networkAddress(): ValidatorFn {
+    // prettier-ignore
+    const ipv4Rgx =
+      /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\/(3[0-2]|[12]?[0-9])?)$/i;
+    return Validators.pattern(ipv4Rgx);
+  }
+
+  /**
    * Validator function in order to validate numbers.
    * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
    *   if the validation check fails, otherwise `null`.
