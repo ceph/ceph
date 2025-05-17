@@ -5,7 +5,7 @@ All the Grafana dashboards are already generated in the `dashboards_out`
 directory and alerts in the `prometheus_alerts.yml` file.
 
 You can use the Grafana dashboards and alerts with Jsonnet like any other
-prometheus mixin. You can find more resources about mixins in general on
+Prometheus mixin. You can find more resources about mixins in general on
 [monitoring.mixins.dev](https://monitoring.mixins.dev/).
 
 ### Grafana dashboards for Ceph
