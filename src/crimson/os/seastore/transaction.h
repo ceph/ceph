@@ -687,6 +687,8 @@ private:
 
   /// list of mutated blocks, holds refcounts, subset of write_set
   std::list<CachedExtentRef> mutated_block_list;
+  // existing blocks whose laddr changed on transaction commit
+  std::list<std::pair<LogicalCachedExtentRef, laddr_t>> remapped_block;
 
   /// partial blocks of extents on disk, with data and refcounts
   std::list<CachedExtentRef> existing_block_list;

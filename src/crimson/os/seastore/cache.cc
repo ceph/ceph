@@ -1830,6 +1830,10 @@ void Cache::complete_commit(
     }
   });
 
+  for (auto &[i, new_laddr]: t.remapped_block) {
+    i->set_laddr(new_laddr);
+  }
+ 
   // Add new copy of mutated blocks, set_io_wait to block until written
   for (auto &i: t.mutated_block_list) {
     if (!i->is_valid()) {
