@@ -1911,7 +1911,9 @@ static int send_to_remote_gateway(RGWRESTConn* conn, req_info& info,
     return ret;
   }
 
-  ret = parser.parse(response.c_str(), response.length());
+cerr << "JFW: RESPONSE was:\n" << response.c_str() << std::endl;
+  ret = parser.parse(response);
+//JFW:  ret = parser.parse(response.c_str(), response.length());
   if (ret < 0) {
     cerr << "failed to parse response" << std::endl;
     return ret;
@@ -1993,7 +1995,7 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
                              realm, realm_writer, current_period,
                              period, cerr, force);
     if (ret < 0) {
-      cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
+      cerr << "commit_period(): failed to commit period: " << cpp_strerror(-ret) << std::endl;
     }
     (void) cfgstore->realm_notify_new_period(dpp(), null_yield, period);
     return ret;
@@ -2002,7 +2004,6 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
   if (remote.empty() && url.empty()) {
     // use the new master zone's connection
     remote = master_zone;
-    cerr << "Sending period to new master zone " << remote << std::endl;
   }
   boost::optional<RGWRESTConn> conn;
   RGWRESTConn *remote_conn = nullptr;
@@ -2018,6 +2019,7 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
 
   // push period to the master with an empty period id
   period.set_id(string());
+cerr << "JFW: pushing explicitly empty period id" << std::endl;
 
   RGWEnv env;
   req_info info(g_ceph_context, &env);
@@ -2051,9 +2053,14 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
     return -EINVAL;
   }
   if (period.get_id().empty()) {
-    cerr << "Period commit got back an empty period id" << std::endl;
+    cerr << "commit_period(): Period commit got back an empty period id" << std::endl;
+cerr << "JFW: period encoded as (len=" << bl.length() << "):\n" << bl.c_str() << "\n----- JFW" << std::endl;
     return -EINVAL;
   }
+else {
+cout << "JFW: period id is NOT empty. BL was:\n";
+cerr << "JFW: period encoded as (len=" << bl.length() << "):\n" << bl.c_str() << "\n----- JFW" << std::endl;
+}
   // the master zone gave us back the period that it committed, so it's
   // safe to save it as our latest epoch
   constexpr bool exclusive = false;
@@ -2118,7 +2125,7 @@ static int update_period(rgw::sal::ConfigStore* cfgstore,
     ret = commit_period(cfgstore, realm, *realm_writer, period, remote, url,
                         opt_region, access, secret, force);
     if (ret < 0) {
-      cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
+      cerr << "update_period(): failed to commit period: " << cpp_strerror(-ret) << std::endl;
       return ret;
     }
   }
@@ -7048,7 +7055,7 @@ int main(int argc, const char **argv)
                           remote, url, opt_region, access_key, secret_key,
                           yes_i_really_mean_it);
       if (ret < 0) {
-        cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
+        cerr << "OPT::PERIOD_COMMIT: failed to commit period: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
 
