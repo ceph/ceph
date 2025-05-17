@@ -78,6 +78,15 @@ namespace rgw::putobj {
 	return cksum_hdr_t(hk, hv);
       }
     }
+    /* for requests not sending a trailer, we could just have (golang sdk v2)
+     * a checksum header and payload */
+    for (const auto& ck_desc : cksum::Cksum::checksums) {
+      auto aws_hdr_name = fmt::format("HTTP_X_AMZ_CHECKSUM_{}", ck_desc.name_uc);
+      auto hv = env.get(aws_hdr_name.c_str());
+      if (hv) {
+	return cksum_hdr_t("HTTP_X_AMZ_CHECKSUM_ALGORITHM", ck_desc.name_uc);
+      }
+    }
     return cksum_hdr_t(nullptr, nullptr);
   } /* cksum_algorithm_hdr */
 
