@@ -1,0 +1,270 @@
+local g = import 'grafonnet/grafana.libsonnet';
+
+
+(import 'utils.libsonnet') {
+  '{{json_file}}': $.dashboardSchema(
+    '{{ title }}',
+    '{{ description }}',
+    "{{ uid }}",
+    "{{ time.from }}",
+    "{{ refresh }}", 
+    "{{ schemaVersion }}",
+    $._config.dashboardTags,
+    ''
+  )
+  {{ logger.debug("Processing annotations...") or "" }}
+{%- for annotate in annotations.get('list') -%}
+  .addAnnotation(
+      $.addAnnotationSchema(
+        {{ annotate.builtIn }},
+        {{ annotate.datasource }},
+        {{ annotate.enable }},
+        {{ annotate.hide }},
+        '{{ annotate.iconColor }}',
+        '{{ annotate.name }}',
+        '{{ annotate.type }}'
+      )
+  )
+{%- endfor -%}
+  {{ logger.debug("Processing links...") or "" }}
+{%- for link in links -%}
+  .addLink(
+      $.addLinkSchema(
+        asDropdown={{ link.get('asDropdown', true) | tojson }},
+        icon='{{ link.get('icon', '') }}',
+        includeVars={{ link.get(includeVars, true) | tojson }},
+        keepTime={{ link.get('keepTime', true) | tojson }},
+        tags={{ link.get('tags', []) }},
+        targetBlank={{ link.get('targetBlank', false) | tojson }},
+        title='{{ link.get('title', '') }}',
+        tooltip='{{ link.get('tooltip', '') }}',
+        type='{{ link.get('type', '') }}',
+        url='{{ link.get('url', '') }}'
+      ),
+  )
+{%- endfor -%}
+{{ logger.debug("Processing templates...") or "" }}
+{%- for template in templating.list -%}
+  {%- if template.type == "datasource" -%}  
+  .addTemplate(
+    g.template.datasource('datasource', 'prometheus', 'default', label='Data Source')
+  )
+  {%- elif template.type == "query" -%}
+  .addTemplate(
+    $.addTemplateSchema(
+      name='{{ template.name }}',
+      datasource='$datasource',
+      query="{{ template.get('query', '') }}",
+      refresh={{ template.refresh }},
+      includeAll={{ template.get('includeAll', true) | tojson }},
+      sort={{ template.sort }},
+      label='{{ template.label }}',
+      regex='{{ template.regex }}',
+      multi={{ template.multi | tojson }},
+      current={{ template.get('current', none) | tojson }}
+    )
+  )
+  {%- endif -%}
+{%- endfor -%}
+
+{{ logger.debug("Processing panels...") or "" }}
+  .addPanels([
+{%- for panel in panels -%}
+{{ logger.debug("Processing " ~ panel.type ~ " panel '" ~ panel.title ~ "'...") or "" }}
+  {%- if panel.type == "row" %}  
+      $.addRowSchema(collapse={{ panel.collapsed | tojson }}, showTitle=true, title='{{ panel.title }}') + { gridPos: { x: {{ panel.gridPos.x }}, y: {{ panel.gridPos.y }}, w: {{ panel.gridPos.w }}, h: {{ panel.gridPos.h }} } }
+  {%- else -%}
+    {% if panel.type == "stat" %}
+      $.addStatPanel(
+        title='{{ panel.title }}',
+        description='{{ panel.description }}',
+        unit='{{ panel.get('options', {}).get('fieldOptions', {}).get('defaults', {}).get('unit', '') | default("", true) }}',
+        datasource='$datasource',
+        gridPosition={ x: {{ panel.gridPos.x }}, y: {{ panel.gridPos.y }}, w: {{ panel.gridPos.w }}, h: {{ panel.gridPos.h }} },
+        colorMode="{{ panel.options.colorMode }}",
+        graphMode="{{ panel.options.graphMode }}",
+        justifyMode="{{ panel.options.justifyMode }}",
+        orientation="{{ panel.options.orientation }}",
+        textMode="{{ panel.options.textMode }}",
+        interval='1m',
+        color={ mode: 'thresholds' },
+        thresholdsMode='{{ panel.get('options', {}).get('fieldOptions', {}).get('defaults', {}).get('thresholds', {}).get('mode', '') }}',
+        noValue={{ panel.fieldConfig.defaults.get('noValue', none) | tojson }},
+      )
+    {%- elif panel.type == "bargauge" %}
+      $.addBarGaugePanel(
+        title='{{ panel.title }}',
+        description='{{ panel.description }}',
+        datasource='${datasource}',
+        gridPosition={ x: {{ panel.gridPos.x }}, y: {{ panel.gridPos.y }}, w: {{ panel.gridPos.w }}, h: {{ panel.gridPos.h }} },
+        unit='{{ panel.get('fieldConfig', {}).get('defaults', {}).get('unit', '') | default("", true) }}',
+        {%- if panel.get('fieldConfig', {}).get('defaults', {}).get('thresholds', {}) %}
+        thresholds={ 
+          mode: '{{ panel.get('fieldConfig', {}).get('defaults', {}).get('thresholds', {}).get('mode', '') }}',
+          steps: [
+          {%- for step in panel.fieldConfig.defaults.thresholds.steps  %}
+            { color: '{{ step.color }}', value: {{ step.get('value', none) | tojson }} },
+          {%- endfor %}
+          ]
+        },
+        {%- endif %}
+      )
+    {%- elif panel.type == "timeseries" %}
+      $.timeSeriesPanel( 
+        title='{{ panel.title }}',
+        description='{{ panel.description }}',
+        gridPosition={ x: {{ panel.gridPos.x }}, y: {{ panel.gridPos.y }}, w: {{ panel.gridPos.w }}, h: {{ panel.gridPos.h }} },
+        lineInterpolation='{{ panel.fieldConfig.defaults.custom.lineInterpolation }}',
+        lineWidth={{ panel.fieldConfig.defaults.custom.lineWidth }},
+        drawStyle='{{ panel.fieldConfig.defaults.custom.drawStyle }}',
+        axisPlacement='{{ panel.fieldConfig.defaults.custom.axisPlacement }}',
+        datasource='$datasource',
+        fillOpacity={{ panel.fieldConfig.defaults.custom.fillOpacity }},
+        pointSize={{ panel.fieldConfig.defaults.custom.pointSize }},
+        showPoints='{{ panel.fieldConfig.defaults.custom.showPoints }}',
+        unit='{{ panel.fieldConfig.defaults.unit }}',
+        displayMode='{{ panel.options.legend.displayMode }}',
+        showLegend={{ panel.options.legend.showLegend | tojson }},
+        placement='{{ panel.options.legend.placement }}',
+        tooltip={{ panel.options.tooltip }},
+        stackingMode='{{ panel.fieldConfig.defaults.custom.get('stacking', {}).get('mode', '') }}',
+        spanNulls={{ panel.fieldConfig.defaults.custom.spanNulls | tojson }},
+        decimals={{ panel.fieldConfig.defaults.get('decimals', none) | tojson  }},
+        thresholdsMode='{{ panel.fieldConfig.defaults.thresholds.mode }}',
+        noValue={{ panel.fieldConfig.defaults.get('noValue', none) | tojson }},
+      )
+    {%- elif panel.type == "table" %}
+      $.addTableExtended(
+        title='{{ panel.title }}',
+        datasource='$datasource',
+        gridPosition={ x: {{ panel.gridPos.x }}, y: {{ panel.gridPos.y }}, w: {{ panel.gridPos.w }}, h: {{ panel.gridPos.h }} },
+        color={{ panel.fieldConfig.defaults.color }},
+        options={{ panel.options | tojson }},
+        custom={{ panel.fieldConfig.defaults.custom | tojson }},
+        thresholds={{ panel.fieldConfig.defaults.thresholds | tojson }},
+        overrides={{ panel.fieldConfig.get('overrides', {}) | tojson }},
+      )
+    {%- elif panel.type == "piechart" %}
+      $.pieChartPanel(
+        title='{{ panel.title }}',
+        description='{{ panel.description }}',
+        datasource='$datasource',
+        gridPos={ x: {{ panel.gridPos.x }}, y: {{ panel.gridPos.y }}, w: {{ panel.gridPos.w }}, h: {{ panel.gridPos.h }} },
+        displayMode='{{ panel.options.legend.displayMode }}',
+        placement='{{ panel.options.legend.placement }}',
+        showLegend={{ panel.options.legend.showLegend | tojson }},
+        displayLabels={{ panel.options.displayLabels }},
+        tooltip={{ panel.options.tooltip }}, 
+        pieType='{{ panel.options.pieType }}',
+        values={{ panel.options.legend.get('values', []) }},
+        colorMode='{{ panel.fieldConfig.defaults.get('color', {}).get('mode', '') }}',
+        overrides={{ panel.fieldConfig.overrides }},
+        reduceOptions={{ panel.options.reduceOptions | tojson }}
+      )
+    {%- elif panel.type == "alertlist" %}
+      $.addAlertListPanel(
+        title='{{ panel.title }}',
+        datasource={
+          type: 'datasource',
+          uid: 'grafana',
+        },
+        gridPosition={ x: {{ panel.gridPos.x }}, y: {{ panel.gridPos.y }}, w: {{ panel.gridPos.w }}, h: {{ panel.gridPos.h }} },
+        alertInstanceLabelFilter='{{ panel.alertInstanceLabelFilter }}',
+        alertName='{{ panel.options.get('alertName', '') }}',
+        dashboardAlerts={{ panel.options.get('dashboardAlerts', false) | tojson }},
+        groupBy={{ panel.options.get('groupBy', '') }},
+        groupMode='{{ panel.options.get('groupMode', '') }}',
+        maxItems={{ panel.options.get('maxItems', '') }},
+        sortOrder={{ panel.options.get('sortOrder', '') }},
+        stateFilter={{ panel.options.get('stateFilter', {}) | tojson }},
+      )
+    {%- else %}
+{{ logger.warning("ALERT!! grafana-template.libsonnet.j2 is missing support for " ~ panel.type ~ " type panel!") or "" }}
+TODO: {{ panel.type }}
+    {%- endif %}
+      {%- if panel.type not in ["bargauge", "table"] and panel.get('fieldConfig', {}).get('defaults', {}).get('thresholds', {}).get('steps', []) -%}
+      .addThresholds([
+      {%- for threshold in panel.get('fieldConfig', {}).get('defaults', {}).get('thresholds', {}).get('steps', []) %}
+        { color: '{{ threshold.color }}', value: {{ threshold.get('value', none) | tojson }} },
+      {%- endfor %}
+      ])
+      {%- endif -%}
+      {%- if panel.get('options', {}).get('fieldOptions', {}).get('defaults', {}).get('mappings', []) -%}
+      .addMappings([
+      {%- for mapping in panel.get('options', {}).get('fieldOptions', {}).get('defaults', {}).get('mappings', []) %}
+        { 
+          options: { 
+            match: null, 
+            result: { 
+              index: {{ mapping.options.result.index }}, 
+              text: '{{ mapping.options.result.text }}',
+              {%- if mapping.options.result.get('color', '') %}
+              color: '{{ mapping.options.result.color }}',
+              {%- endif %}
+            } 
+          }, 
+          type: '{{ mapping.type }}' 
+        },
+      {%- endfor %}
+      ])
+      {%- endif -%}
+      {%- for target in panel.get('targets', []) %}
+      .addTarget(
+        $.addTargetSchema(
+          expr="{{ target.get('expr', '') }}",
+          format='{{ target.get('format', '') }}',
+          instant={{ target.get('instant', none) | tojson }},
+          legendFormat="{{ target.get('legendFormat', '') | tojson }}",
+          range={{ target.get('range', true) | tojson }},
+          datasource='$datasource',
+        )
+      )
+      {%- endfor %}
+      {%- if panel.get('transformations', []) and panel.type == "table" -%}
+      .addTransformations(
+        {{ panel.transformations | tojson }}
+      )
+      {%- endif -%}
+      {%- if panel.get('fieldConfig', {}).get('overrides', {}) and panel.type not in ["bargauge", "table"] %}
+      .addOverrides([
+      {%- for override in panel.get('fieldConfig', {}).get('overrides', {}) %}
+        {
+          matcher: { id: '{{ override.matcher.id }}', options: '{{ override.matcher.options }}' },
+          properties: [
+          {%- for props in override.properties %}
+            {
+              id: '{{ props.id }}',
+              {%- if props.id == 'color' %}
+              value: { 
+                fixedColor: '{{ props.value.fixedColor }}', 
+                mode: '{{ props.value.mode }}' 
+              },
+              {%- elif props.id == 'links' %}
+              value: [
+                {%- for v in props.value %}
+                {
+                  title: {{ v.get('title', '') | tojson }},
+                  url: '{{ v.url }}'
+                },
+                {%- endfor %}
+              ], 
+              {%- else %}
+              value: {{ props.value | tojson }}
+              {%- endif %}
+            },
+          {%- endfor %}
+          ],
+        },
+      {%- endfor %}
+      ])
+      {%- endif %}
+      {%- if panel.type == "bargauge" %}
+      + { fieldConfig: {{ panel.fieldConfig | tojson }}, options: {{ panel.options | tojson }} }
+      {%- endif %}
+  {%- endif -%}
+  ,
+{% endfor %}
+  ])
+
+{{ logger.debug("Processed all.") or "" }}
+}
