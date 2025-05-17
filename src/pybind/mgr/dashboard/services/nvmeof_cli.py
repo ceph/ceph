@@ -166,7 +166,6 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
                     elif is_top_level and annotation == 'exclusive-result-indicator':
                         return f"Failure: {input_dict.get('error_message')}" if bool(input_dict[field]) else "Success"
                     elif annotation == 'size-bytes':
-                        assert isinstance(input_dict[field], int)
                         value = convert_from_bytes(int(input_dict[field]))
 
             if skip:
