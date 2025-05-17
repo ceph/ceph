@@ -552,17 +552,6 @@ uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
   return 4096;
 }
 
-int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_objs, const std::string& pool,
-		   const char *cls, const char *method, bufferlist& inbl)
-{
-  return 0;
-}
-
-int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, bufferlist> *results)
-{
-  return 0;
-}
-
 // although at first glance the implementation looks the same as in
 // the classical OSD, it's different b/c of how the dout macro expands.
 int cls_log(int level, const char *format, ...)
