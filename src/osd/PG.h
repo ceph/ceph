@@ -250,6 +250,20 @@ public:
     return !waiting_for_unreadable_object.empty();
   }
 
+  bool get_is_nonprimary_shard(const pg_shard_t &shard) const final
+  {
+    return get_pgbackend()->get_is_nonprimary_shard(shard.shard);
+  }
+
+  bool get_is_hinfo_required() const final
+  {
+    return get_pgbackend()->get_is_hinfo_required();
+  }
+
+  bool get_is_ec_optimized() const final {
+    return get_pgbackend()->get_is_ec_optimized();
+  }
+
   static void set_last_scrub_stamp(
     utime_t t, pg_history_t &history, pg_stat_t &stats) {
     stats.last_scrub_stamp = t;
@@ -1130,8 +1144,9 @@ protected:
     void trim(const pg_log_entry_t &entry) override {
       pg->get_pgbackend()->trim(entry, t);
     }
-    void partial_write(pg_info_t *info, const pg_log_entry_t &entry) override {
-      pg->get_pgbackend()->partial_write(info, entry);
+    void partial_write(pg_info_t *info, const eversion_t previous_version,
+		       const pg_log_entry_t &entry) override {
+      pg->get_pgbackend()->partial_write(info, previous_version, entry);
     }
   };
 
@@ -1396,7 +1411,7 @@ public:
  }
 
  uint64_t logical_to_ondisk_size(uint64_t logical_size,
-                                 int8_t shard_id) const final {
+                                 shard_id_t shard_id) const final {
    return get_pgbackend()->be_get_ondisk_size(logical_size, shard_id_t(shard_id));
  }
 };
