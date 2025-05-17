@@ -1,11 +1,13 @@
 import json
 import re
 import logging
-from typing import TYPE_CHECKING, Iterator, Optional, Dict, Any, List
+from typing import TYPE_CHECKING, Iterator, Optional, Dict, Any, List, cast
 
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec, RGWSpec
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec, RGWSpec, NFSServiceSpec
 from cephadm.schedule import HostAssignment
 from cephadm.utils import SpecialHostLabels
+from cephadm.services.nfs import NFSService
+from cephadm.services.service_registry import service_registry
 import rados
 
 from mgr_module import NFS_POOL_NAME
@@ -14,7 +16,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 7
+LAST_MIGRATION = 8
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +110,10 @@ class Migrations:
         if self.mgr.migration_current == 6:
             if self.migrate_6_7():
                 self.set(7)
+
+        if self.mgr.migration_current == 7 and not startup:
+            if self.migrate_7_8():
+                self.set(8)
 
     def migrate_0_1(self) -> bool:
         """
@@ -440,6 +446,21 @@ class Migrations:
         # NOTE: prometheus, alertmanager, and node-exporter certs were not stored
         # and appeared to just be generated at daemon deploy time if secure_monitoring_stack
         # was set to true. Therefore we have nothing to migrate for those daemons
+        return True
+
+    def migrate_7_8(self) -> bool:
+        def nfs_remove_old_membership_from_grace_table() -> None:
+            """
+            NFS has changed rados cluster node id from str to int in Tentacle. This function will remove
+            the old node ids that exist in the rados grace table.
+            """
+            service_specs = self.mgr.spec_store.get_specs_by_type('nfs')
+            nfs_service = cast(NFSService, service_registry.get_service('nfs'))
+            for service_name, spec in service_specs.items():
+                daemons = self.mgr.cache.get_daemons_by_service(service_name)
+                for daemon in daemons:
+                    nfs_service.run_grace_tool(cast(NFSServiceSpec, spec), 'remove', f'{service_name}.{daemon.rank}')
+        nfs_remove_old_membership_from_grace_table()
         return True
 
 
