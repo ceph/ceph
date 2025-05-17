@@ -481,6 +481,10 @@ public:
     return {get_reactor_utilization()};
   }
 
+  auto create_split_pg_mapping(spg_t pgid, core_id_t core) {
+    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid, core);
+  }
+
   auto remove_pg(spg_t pgid) {
     local_state.pg_map.remove_pg(pgid);
     return pg_to_shard_mapping.remove_pg_mapping(pgid);
@@ -535,6 +539,10 @@ public:
   using wait_for_pg_ret = wait_for_pg_ertr::future<Ref<PG>>;
   wait_for_pg_ret wait_for_pg(
     PGMap::PGCreationBlockingEvent::TriggerI&&, spg_t pgid);
+  wait_for_pg_ret create_split_pg(
+    PGMap::PGCreationBlockingEvent::TriggerI&& trigger,
+    spg_t pgid);
+
   seastar::future<Ref<PG>> load_pg(spg_t pgid);
 
   /// Dispatch and reset ctx transaction
