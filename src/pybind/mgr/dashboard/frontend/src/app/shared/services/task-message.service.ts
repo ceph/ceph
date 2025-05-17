@@ -24,8 +24,8 @@ class TaskMessage {
   involves: (object: any) => string;
   errors: (metadata: any) => object;
 
-  failure(metadata: any): string {
-    return $localize`Failed to ${this.operation.failure} ${this.involves(metadata)}`;
+  failure(metadata: any, title: string = ''): string {
+    return $localize`Failed to ${title || this.operation.failure} ${this.involves(metadata)}`;
   }
 
   running(metadata: any): string {
@@ -688,8 +688,8 @@ export class TaskMessageService {
     );
   }
 
-  getErrorTitle(task: Task) {
-    return this._getTaskTitle(task).failure(task.metadata);
+  getErrorTitle(task: FinishedTask) {
+    return this._getTaskTitle(task).failure(task.metadata, task.exception?.title);
   }
 
   getRunningTitle(task: Task) {
