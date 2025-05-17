@@ -829,10 +829,10 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
         return pending_clones_info
 
-    def remove_snapshot(self, snapname, force=False):
+    def remove_snapshot(self, snapname, force=False, uuid=None):
         if self.has_pending_clones(snapname):
             raise VolumeException(-errno.EAGAIN, "snapshot '{0}' has pending clones".format(snapname))
-        snappath = self.snapshot_path(snapname)
+        snappath = self.snapshot_path(snapname, uuid=uuid)
         try:
             self.metadata_mgr.remove_section(self.get_snap_section_name(snapname))
             self.metadata_mgr.flush()
@@ -925,3 +925,10 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         except (IndexException, MetadataMgrException) as e:
             log.warning("error delining snapshot from clone: {0}".format(e))
             raise VolumeException(-errno.EINVAL, "error delinking snapshot from clone")
+
+    def current_incar_exists(self):
+        # XXX: unlike v3, in v1 a subvol either exists or doesn't. previous
+        # incarnations are never preserved whether or not snapshots are
+        # retained. Therefore, this method EXISTS ONLY FOR COMPATIBILITY with
+        # v3.
+        return True
