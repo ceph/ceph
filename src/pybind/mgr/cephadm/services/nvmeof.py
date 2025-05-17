@@ -93,6 +93,10 @@ class NvmeofService(CephService):
             except ValueError:
                 logger.error(f"Invalid value for SPDK huge pages: {spec.spdk_huge_pages}")
 
+        # Indicate to the daemon whether to enable grpc tracing
+        if spec.grpc_trace:
+            daemon_spec.extra_files['grpc_trace'] = str(spec.grpc_trace)
+
         if spec.enable_auth:
             if (
                 not spec.client_cert
