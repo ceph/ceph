@@ -153,6 +153,24 @@ To adjust the warning threshold, run the following command:
 
    ceph config set global mon_data_size_warn <size>
 
+MON_NETSPLIT
+____________
+
+A network partition has occurred among Ceph Monitors. This health check is
+raised when one or more monitors detect that at least two Ceph Monitors have
+lost connectivity or reachability, based on their individual connection scores,
+which are frequently updated. This warning only appears when
+the cluster is provisioned with at least three Ceph Monitors and are using the
+``connectivity`` election strategy.
+
+Network partitions are reported in two ways:
+- As location-level netsplits (e.g., "Netsplit detected between dc1 and dc2") when
+  all monitors in one location cannot communicate with all monitors in another location
+- As individual monitor netsplits (e.g., "Netsplit detected between mon.a and mon.d")
+  when only specific monitors are disconnected across locations
+
+The system prioritizes reporting at the highest topology level (``datacenter``, ``rack``, etc.)
+when possible, to better help operators identify infrastructure-level network issues.
 
 AUTH_INSECURE_GLOBAL_ID_RECLAIM
 _______________________________
