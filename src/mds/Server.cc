@@ -192,6 +192,14 @@ void Server::create_logger()
                       PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_u64_counter(l_mdss_cap_revoke_eviction, "cap_revoke_eviction",
                       "Cap Revoke Client Eviction", "cre", PerfCountersBuilder::PRIO_INTERESTING);
+  plb.add_u64_counter(l_mdss_cache_trim_throttle, "cache_trim_throttle",
+                      "Cache trim throttle counter", "ctt", PerfCountersBuilder::PRIO_INTERESTING);
+  plb.add_u64_counter(l_mdss_session_recall_throttle, "session_recall_throttle",
+                      "Session recall throttle counter", "srt", PerfCountersBuilder::PRIO_INTERESTING);
+  plb.add_u64_counter(l_mdss_session_recall_throttle2o, "session_recall_throttle2o",
+                      "Session recall throttle2o counter", "srt2", PerfCountersBuilder::PRIO_INTERESTING);
+  plb.add_u64_counter(l_mdss_global_recall_throttle, "global_recall_throttle",
+        "Global recall throttle counter", "grt", PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_u64_counter(l_mdss_cap_acquisition_throttle,
                       "cap_acquisition_throttle", "Cap acquisition throttle counter", "cat",
                       PerfCountersBuilder::PRIO_INTERESTING);
@@ -2002,14 +2010,23 @@ std::pair<bool, uint64_t> Server::recall_client_state(MDSGatherBuilder* gather, 
       const uint64_t global_recall_throttle = recall_throttle.get();
       if (session_recall_throttle+recall > recall_max_decay_threshold) {
         dout(15) << "  session recall threshold (" << recall_max_decay_threshold << ") hit at " << session_recall_throttle << "; skipping!" << dendl;
+        if (logger) {
+          logger->inc(l_mdss_session_recall_throttle);
+        }
         throttled = true;
         continue;
       } else if (session_recall_throttle2o+recall > recall_max_caps*2) {
         dout(15) << "  session recall 2nd-order threshold (" << 2*recall_max_caps << ") hit at " << session_recall_throttle2o << "; skipping!" << dendl;
+        if (logger) {
+          logger->inc(l_mdss_session_recall_throttle2o);
+        }
         throttled = true;
         continue;
       } else if (global_recall_throttle+recall > recall_global_max_decay_threshold) {
         dout(15) << "  global recall threshold (" << recall_global_max_decay_threshold << ") hit at " << global_recall_throttle << "; skipping!" << dendl;
+        if (logger) {
+          logger->inc(l_mdss_global_recall_throttle);
+        }
         throttled = true;
         break;
       }
