@@ -3466,7 +3466,6 @@ options:
   level: advanced
   desc: STS Key
   long_desc: Key used for encrypting/ decrypting session token.
-  default: sts
   services:
   - rgw
   with_legacy: true
