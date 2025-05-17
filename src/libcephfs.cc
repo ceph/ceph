@@ -1314,21 +1314,21 @@ extern "C" int ceph_chmodat(struct ceph_mount_info *cmount, int dirfd, const cha
 }
 
 extern "C" int ceph_chown(struct ceph_mount_info *cmount, const char *path,
-			  int uid, int gid)
+			  uid_t uid, gid_t gid)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
   return cmount->get_client()->chown(path, uid, gid, cmount->default_perms);
 }
 extern "C" int ceph_fchown(struct ceph_mount_info *cmount, int fd,
-			   int uid, int gid)
+			   uid_t uid, gid_t gid)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
   return cmount->get_client()->fchown(fd, uid, gid, cmount->default_perms);
 }
 extern "C" int ceph_lchown(struct ceph_mount_info *cmount, const char *path,
-			   int uid, int gid)
+			   uid_t uid, gid_t gid)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
