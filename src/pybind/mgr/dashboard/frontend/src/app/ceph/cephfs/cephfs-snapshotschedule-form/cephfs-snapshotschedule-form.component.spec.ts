@@ -16,13 +16,13 @@ import { FormHelper, configureTestBed } from '~/testing/unit-test-helper';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
 import { of } from 'rxjs';
 import {
-  ModalService,
   ModalModule,
   InputModule,
   SelectModule,
   NumberModule
 } from 'carbon-components-angular';
 import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 describe('CephfsSnapshotscheduleFormComponent', () => {
   let component: CephfsSnapshotscheduleFormComponent;
@@ -31,7 +31,7 @@ describe('CephfsSnapshotscheduleFormComponent', () => {
 
   configureTestBed({
     declarations: [CephfsSnapshotscheduleFormComponent],
-    providers: [ModalService, { provide: 'fsName', useValue: 'test_fs' }],
+    providers: [ModalCdsService, { provide: 'fsName', useValue: 'test_fs' }],
     imports: [
       SharedModule,
       ToastrModule.forRoot(),

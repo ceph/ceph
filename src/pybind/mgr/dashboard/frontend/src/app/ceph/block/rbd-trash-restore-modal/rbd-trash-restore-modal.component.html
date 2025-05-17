@@ -1,13 +1,8 @@
-<cds-modal size="sm"
-           [open]="open"
-           (overlaySelected)="closeModal()">
+<cd-modal size="sm"
+          [open]="open"
+          title="Restore Image">
 
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>Restore Image</h3>
-  </cds-modal-header>
-
-  <section cdsModalContent>
+  <ng-container class="modal-content">
     <form name="restoreForm"
           class="form"
           #formDir="ngForm"
@@ -33,11 +28,12 @@
         </cds-text-label>
       </div>
     </form>
-  </section>
+  </ng-container>
 
-  <cd-form-button-panel (submitActionEvent)="restore()"
-                        [form]="restoreForm"
-                        [submitText]="actionLabels.RESTORE"
-                        [modalForm]="true"></cd-form-button-panel>
-
-</cds-modal>
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="restore()"
+                          [form]="restoreForm"
+                          [submitText]="actionLabels.RESTORE"
+                          [modalForm]="true"></cd-form-button-panel>
+  </ng-container>
+</cd-modal>

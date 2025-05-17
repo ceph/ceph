@@ -1,7 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { UntypedFormControl } from '@angular/forms';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import _ from 'lodash';
 
 import { IscsiService } from '~/app/shared/api/iscsi.service';
@@ -13,18 +13,19 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
   templateUrl: './iscsi-target-iqn-settings-modal.component.html',
   styleUrls: ['./iscsi-target-iqn-settings-modal.component.scss']
 })
-export class IscsiTargetIqnSettingsModalComponent implements OnInit {
-  target_controls: UntypedFormControl;
-  target_default_controls: any;
-  target_controls_limits: any;
-
+export class IscsiTargetIqnSettingsModalComponent extends BaseModal implements OnInit {
   settingsForm: CdFormGroup;
 
   constructor(
-    public activeModal: NgbActiveModal,
     public iscsiService: IscsiService,
-    public actionLabels: ActionLabelsI18n
-  ) {}
+    public actionLabels: ActionLabelsI18n,
+
+    @Optional() @Inject('target_controls') public target_controls: UntypedFormControl,
+    @Optional() @Inject('target_default_controls') public target_default_controls: any,
+    @Optional() @Inject('target_controls_limits') public target_controls_limits: any
+  ) {
+    super();
+  }
 
   ngOnInit() {
     const fg: Record<string, UntypedFormControl> = {};
@@ -44,7 +45,7 @@ export class IscsiTargetIqnSettingsModalComponent implements OnInit {
     });
 
     this.target_controls.setValue(settings);
-    this.activeModal.close();
+    this.closeModal();
   }
 
   getTargetControlLimits(setting: string) {

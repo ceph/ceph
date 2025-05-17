@@ -1,13 +1,10 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} Pipe</ng-container>
+<cd-modal title="{{ action | titlecase }} Pipe">
 
   <ng-container class="modal-content">
     <form name="pipeForm"
           #frm="ngForm"
           [formGroup]="pipeForm"
           novalidate>
-      <div class="modal-body">
         <div class="form-group row">
           <label class="cd-col-form-label required"
                  for="pipe_id"
@@ -86,14 +83,15 @@
             </cd-help-text>
           </div>
         </div>
-      </div>
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="submit()"
-                              [form]="pipeForm"
-                              [submitText]="(action | titlecase) + ' ' + 'Pipe'">
-        </cd-form-button-panel>
-      </div>
     </form>
+  </ng-container>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="submit()"
+                          [form]="pipeForm"
+                          [modalForm]="true"
+                          [submitText]="(action | titlecase) + ' ' + 'Pipe'">
+    </cd-form-button-panel>
   </ng-container>
 </cd-modal>
 

@@ -21,7 +21,6 @@ import {
 } from '~/app/shared/models/alertmanager-silence';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import {
@@ -31,6 +30,7 @@ import {
   PrometheusHelper
 } from '~/testing/unit-test-helper';
 import { SilenceFormComponent } from './silence-form.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 describe('SilenceFormComponent', () => {
   // SilenceFormComponent specific
@@ -440,7 +440,7 @@ describe('SilenceFormComponent', () => {
       addMatcher('alertname', 'alert.*', true);
       expectMatch(null);
 
-      const modalService = TestBed.inject(ModalService);
+      const modalService = TestBed.inject(ModalCdsService);
       spyOn(modalService, 'show').and.callFake(() => {
         return {
           componentInstance: {

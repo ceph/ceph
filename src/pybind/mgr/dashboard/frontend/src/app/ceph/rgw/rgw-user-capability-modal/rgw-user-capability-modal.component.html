@@ -1,18 +1,12 @@
-<cds-modal size="md"
-           [open]="open"
-           [hasScrollingContent]="false"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
+<cd-modal size="md"
+          [open]="open"
+          title="{{ action | titlecase }} {{ resource | upperFirst }}">
 
-    <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
-  </cds-modal-header>
-
+  <ng-container class="modal-content">
+        
     <form #frm="ngForm"
           [formGroup]="formGroup"
           novalidate>
-      <div cdsModalContent>
         <!-- Type -->
         <div class="form-item">
           <cds-text-label for="type"
@@ -67,12 +61,13 @@
                   i18n>This field is required.</span>
           </ng-template>
         </div>
-      </div>
+    </form>
+  </ng-container>
 
+  <ng-container class="modal-footer">
     <cd-form-button-panel (submitActionEvent)="onSubmit()"
                           [form]="formGroup"
                           [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
                           [modalForm]="true"></cd-form-button-panel>
-
-  </form>
-</cds-modal>
+  </ng-container>
+</cd-modal>

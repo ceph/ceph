@@ -42,7 +42,7 @@ export class RgwMultisiteRealmFormComponent extends BaseModal implements OnInit 
   ) {
     super();
 
-    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
+    this.action = this.action === 'edit' ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.createForm();
   }
 

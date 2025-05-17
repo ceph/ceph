@@ -22,13 +22,13 @@ import {
   CephfsQuotas,
   CephfsSnapshot
 } from '~/app/shared/models/cephfs-directory-models';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, modalServiceShow, PermissionHelper } from '~/testing/unit-test-helper';
 import { CephfsDirectoriesComponent } from './cephfs-directories.component';
 import { Node } from 'carbon-components-angular/treeview/tree-node.types';
 import { By } from '@angular/platform-browser';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 describe('CephfsDirectoriesComponent', () => {
   let component: CephfsDirectoriesComponent;
@@ -418,7 +418,7 @@ describe('CephfsDirectoriesComponent', () => {
     spyOn(cephfsService, 'quota').and.callFake(mockLib.updateQuota);
     spyOn(global, 'setTimeout').and.callFake((fn) => fn());
 
-    modalShowSpy = spyOn(TestBed.inject(ModalService), 'show').and.callFake(mockLib.modalShow);
+    modalShowSpy = spyOn(TestBed.inject(ModalCdsService), 'show').and.callFake(mockLib.modalShow);
     notificationShowSpy = spyOn(TestBed.inject(NotificationService), 'show').and.stub();
 
     fixture = TestBed.createComponent(CephfsDirectoriesComponent);

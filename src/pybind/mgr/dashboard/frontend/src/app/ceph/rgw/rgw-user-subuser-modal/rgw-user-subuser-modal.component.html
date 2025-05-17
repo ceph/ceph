@@ -1,18 +1,12 @@
-<cds-modal size="md"
+<cd-modal size="md"
            [open]="open"
-           [hasScrollingContent]="false"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
+           title="{{ action | titlecase }} {{ resource | upperFirst }}"
+           formAllFieldsRequired="true">
 
-    <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
-  </cds-modal-header>
-
-  <form #frm="ngForm"
-        [formGroup]="formGroup"
-        novalidate>
-    <div cdsModalContent>
+  <ng-container class="modal-content">
+    <form #frm="ngForm"
+          [formGroup]="formGroup"
+          novalidate>
       <!-- Username -->
       <div class="form-item">
         <cds-text-label for="uid"
@@ -113,11 +107,14 @@
         </div>
 
       </fieldset>
-    </div>
+    </form>
+  </ng-container>
+
+  <ng-container class="modal-footer">
     <cd-form-button-panel (submitActionEvent)="onSubmit()"
                           [form]="formGroup"
                           [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
                           [modalForm]="true"></cd-form-button-panel>
 
-  </form>
-</cds-modal>
+  </ng-container>
+</cd-modal>

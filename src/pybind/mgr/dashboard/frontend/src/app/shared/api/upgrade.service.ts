@@ -6,8 +6,8 @@ import { SummaryService } from '../services/summary.service';
 import { UpgradeInfoInterface, UpgradeStatusInterface } from '../models/upgrade.interface';
 import { Observable } from 'rxjs';
 import { UpgradeStartModalComponent } from '~/app/ceph/cluster/upgrade/upgrade-form/upgrade-start-modal.component';
-import { ModalService } from '../services/modal.service';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import { ModalCdsService } from '../services/modal-cds.service';
 
 const CACHE_SIZE = 1;
 
@@ -36,7 +36,7 @@ export class UpgradeService extends ApiClient {
   constructor(
     private http: HttpClient,
     private summaryService: SummaryService,
-    private modalService: ModalService
+    private modalService: ModalCdsService
   ) {
     super();
   }

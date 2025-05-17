@@ -1,12 +1,8 @@
-<cds-modal size="sm"
-           [open]="open"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>Move an image to trash</h3>
-  </cds-modal-header>
+<cd-modal size="sm"
+          [open]="open"
+          title="Move an image to trash">
 
-  <section cdsModalContent>
+  <ng-container class="modal-content">
     <form name="moveForm"
           class="form"
           #formDir="ngForm"
@@ -43,10 +39,12 @@
               i18n>Protection has already expired. Please pick a future date or leave it empty.</span>
       </div>
     </form>
-  </section>
+  </ng-container>
 
-  <cd-form-button-panel (submitActionEvent)="moveImage()"
-                        [form]="moveForm"
-                        [submitText]="actionLabels.MOVE"
-                        [modalForm]="true"></cd-form-button-panel>
-</cds-modal>
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="moveImage()"
+                          [form]="moveForm"
+                          [submitText]="actionLabels.MOVE"
+                          [modalForm]="true"></cd-form-button-panel>
+  </ng-container>
+</cd-modal>

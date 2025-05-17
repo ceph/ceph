@@ -22,7 +22,6 @@ import { Permissions } from '~/app/shared/models/permissions';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { RelativeDatePipe } from '~/app/shared/pipes/relative-date.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { PlacementPipe } from './placement.pipe';
@@ -82,7 +81,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   constructor(
     private actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private orchService: OrchestratorService,
     private cephServiceService: CephServiceService,
     private relativeDatePipe: RelativeDatePipe,
@@ -148,7 +147,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
             hiddenServices: this.hiddenServices,
             editing: edit
           });
-      this.bsModalRef = this.modalService.show(ServiceFormComponent, initialState, { size: 'lg' });
+      this.bsModalRef = this.modalService.show(ServiceFormComponent, initialState);
     }
   }
 

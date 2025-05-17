@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import {
   UntypedFormArray,
   UntypedFormBuilder,
@@ -6,7 +6,6 @@ import {
   NgForm,
   Validators
 } from '@angular/forms';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -17,23 +16,19 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { RgwRealm, RgwZone, RgwZonegroup } from '../models/rgw-multisite';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-rgw-multisite-zonegroup-form',
   templateUrl: './rgw-multisite-zonegroup-form.component.html',
   styleUrls: ['./rgw-multisite-zonegroup-form.component.scss']
 })
-export class RgwMultisiteZonegroupFormComponent implements OnInit {
-  action: string;
+export class RgwMultisiteZonegroupFormComponent extends BaseModal implements OnInit {
   icons = Icons;
   multisiteZonegroupForm: CdFormGroup;
   editing = false;
-  resource: string;
   realm: RgwRealm;
   zonegroup: RgwZonegroup;
-  info: any;
-  defaultsInfo: string[] = [];
-  multisiteInfo: object[] = [];
   realmList: RgwRealm[] = [];
   zonegroupList: RgwZonegroup[] = [];
   zonegroupNames: string[];
@@ -53,15 +48,18 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
   disableMaster = false;
 
   constructor(
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     public rgwZonegroupService: RgwZonegroupService,
     public notificationService: NotificationService,
-    private formBuilder: UntypedFormBuilder
+    private formBuilder: UntypedFormBuilder,
+
+    @Optional() @Inject('resource') public resource: string,
+    @Optional() @Inject('action') public action: string,
+    @Optional() @Inject('info') public info: any,
+    @Optional() @Inject('defaultsInfo') public defaultsInfo: string[] = [],
+    @Optional() @Inject('multisiteInfo') public multisiteInfo: object[] = []
   ) {
-    this.action = this.editing
-      ? this.actionLabels.EDIT + this.resource
-      : this.actionLabels.CREATE + this.resource;
+    super();
     this.createForm();
   }
 
@@ -211,7 +209,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
               NotificationType.success,
               $localize`Zonegroup: '${values['zonegroupName']}' created successfully`
             );
-            this.activeModal.close();
+            this.closeModal();
           },
           () => {
             this.multisiteZonegroupForm.setErrors({ cdSubmitButton: true });
@@ -251,7 +249,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
               NotificationType.success,
               $localize`Zonegroup: '${values['zonegroupName']}' updated successfully`
             );
-            this.activeModal.close();
+            this.closeModal();
           },
           () => {
             this.multisiteZonegroupForm.setErrors({ cdSubmitButton: true });

@@ -28,7 +28,6 @@ import {
   OsdDeploymentOptions
 } from '~/app/shared/models/osd-deployment-options';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { OsdCreationPreviewModalComponent } from '../osd-creation-preview-modal/osd-creation-preview-modal.component';
 import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/devices-selection-change-event.interface';
@@ -36,6 +35,7 @@ import { DevicesSelectionClearEvent } from '../osd-devices-selection-groups/devi
 import { OsdDevicesSelectionGroupsComponent } from '../osd-devices-selection-groups/osd-devices-selection-groups.component';
 import { DriveGroup } from './drive-group.model';
 import { OsdFeature } from './osd-feature.interface';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-osd-form',
@@ -100,7 +100,7 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
     private orchService: OrchestratorService,
     private hostService: HostService,
     private router: Router,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private osdService: OsdService,
     private taskWrapper: TaskWrapperService
   ) {
@@ -296,7 +296,7 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
       const modalRef = this.modalService.show(OsdCreationPreviewModalComponent, {
         driveGroups: [this.driveGroup.spec]
       });
-      modalRef.componentInstance.submitAction.subscribe(() => {
+      modalRef.submitAction.subscribe(() => {
         this.router.navigate(['/osd']);
       });
       this.previewButtonPanel.submitButton.loading = false;

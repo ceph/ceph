@@ -11,11 +11,11 @@ import { HostService } from '~/app/shared/api/host.service';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 import { AppConstants } from '~/app/shared/constants/app.constants';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { CreateClusterComponent } from './create-cluster.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 describe('CreateClusterComponent', () => {
   let component: CreateClusterComponent;
@@ -43,7 +43,7 @@ describe('CreateClusterComponent', () => {
     wizardStepService = TestBed.inject(WizardStepsService);
     hostService = TestBed.inject(HostService);
     osdService = TestBed.inject(OsdService);
-    modalServiceShowSpy = spyOn(TestBed.inject(ModalService), 'show').and.returnValue({
+    modalServiceShowSpy = spyOn(TestBed.inject(ModalCdsService), 'show').and.returnValue({
       // mock the close function, it might be called if there are async tests.
       close: jest.fn()
     });

@@ -1,6 +1,6 @@
-import { AfterViewInit, Component, OnInit } from '@angular/core';
+import { AfterViewInit, Component, Inject, OnInit, Optional } from '@angular/core';
 import { UntypedFormControl } from '@angular/forms';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -13,21 +13,22 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   templateUrl: './rgw-multisite-zone-deletion-form.component.html',
   styleUrls: ['./rgw-multisite-zone-deletion-form.component.scss']
 })
-export class RgwMultisiteZoneDeletionFormComponent implements OnInit, AfterViewInit {
+export class RgwMultisiteZoneDeletionFormComponent extends BaseModal implements OnInit, AfterViewInit {
   zoneData$: any;
   poolList$: any;
-  zone: any;
   zoneForm: CdFormGroup;
   displayText: boolean = false;
   includedPools: Set<string> = new Set<string>();
 
   constructor(
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     public notificationService: NotificationService,
     private rgwZoneService: RgwZoneService,
-    private poolService: PoolService
+    private poolService: PoolService,
+
+    @Optional() @Inject('zone') public zone: any
   ) {
+    super();
     this.createForm();
   }
 
@@ -55,7 +56,7 @@ export class RgwMultisiteZoneDeletionFormComponent implements OnInit, AfterViewI
             NotificationType.success,
             $localize`Zone: '${this.zone.name}' deleted successfully`
           );
-          this.activeModal.close();
+          this.closeModal();
         },
         () => {
           this.zoneForm.setErrors({ cdSubmitButton: true });

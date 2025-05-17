@@ -1,14 +1,10 @@
-<cds-modal size="lg"
-           [open]="open"
-           [hasScrollingContent]="true"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
-  </cds-modal-header>
+<cd-modal size="lg"
+          [open]="open"
+          [hasScrollingContent]="true"
+          title="{{ action | titlecase }} {{ resource | upperFirst }}">
 
-  <ng-container *cdFormLoading="loading">
-    <div cdsModalContent>
+  <ng-container class="modal-content">
+    <ng-container *cdFormLoading="loading">
       <form name="subvolumeForm"
             #formDir="ngForm"
             [formGroup]="subvolumeForm"
@@ -169,12 +165,13 @@
           </cds-checkbox>
         </div>
       </form>
-    </div>
+    </ng-container>
+  </ng-container>
 
+  <ng-container class="modal-footer">
     <cd-form-button-panel (submitActionEvent)="submit()"
                           [form]="subvolumeForm"
                           [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
                           [modalForm]="true"></cd-form-button-panel>
-
   </ng-container>
-</cds-modal>
+</cd-modal>

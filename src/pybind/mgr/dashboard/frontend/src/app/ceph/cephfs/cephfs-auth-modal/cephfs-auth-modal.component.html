@@ -1,12 +1,9 @@
-<cds-modal size="md"
-           [open]="open"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
-  </cds-modal-header>
-  <ng-container *cdFormLoading="loading">
-    <section class="cds--modal-content">
+<cd-modal size="md"
+          [open]="open"
+          title="{{ action | titlecase }} {{ resource | upperFirst }}">
+
+  <ng-container class="modal-content">
+    <ng-container *cdFormLoading="loading">
       <form name="form"
             #formDir="ngForm"
             [formGroup]="form">
@@ -118,10 +115,13 @@
         </fieldset>
         </div>
       </form>
-    </section>
+    </ng-container>
+  </ng-container>
+
+  <ng-container class="modal-footer">
     <cd-form-button-panel (submitActionEvent)="onSubmit()"
                           [form]="form"
                           [submitText]="(action | titlecase)"
                           [modalForm]="true"></cd-form-button-panel>
   </ng-container>
-</cds-modal>
+</cd-modal>

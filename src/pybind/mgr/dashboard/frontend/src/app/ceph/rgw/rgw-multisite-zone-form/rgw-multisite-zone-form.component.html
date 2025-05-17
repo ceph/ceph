@@ -1,13 +1,10 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+<cd-modal title="{{ action | titlecase }} {{ resource | upperFirst }}">
 
   <ng-container class="modal-content">
     <form name="multisiteZoneForm"
           #formDir="ngForm"
           [formGroup]="multisiteZoneForm"
           novalidate>
-    <div class="modal-body">
       <div class="form-group row">
         <label class="cd-col-form-label"
                for="selectedZonegroup"
@@ -284,12 +281,13 @@
           </div>
         </div>
       </div>
-    </div>
-    <div class="modal-footer">
-      <cd-form-button-panel (submitActionEvent)="submit()"
-                            [form]="multisiteZoneForm"
-                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
-    </div>
     </form>
+  </ng-container>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="submit()"
+                          [form]="multisiteZoneForm"
+                          [modalForm]="true"
+                          [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
   </ng-container>
 </cd-modal>

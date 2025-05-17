@@ -1,13 +1,9 @@
-<cds-modal size="md"
-           [open]="open"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()"
-                    i18n>{{editing ? 'Edit' : 'Create'}} Tiering configuration
-    <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
-  </cds-modal-header>
+<cd-modal size="md"
+          [open]="open"
+          title="{{editing ? 'Edit' : 'Create'}} Tiering configuration">
 
-<ng-container *cdFormLoading="loading">
-  <section cdsModalContent>
+<ng-container class="modal-content">
+  <ng-container *cdFormLoading="loading">
     <cd-alert-panel
       *ngIf="(snapScheduleModuleStatus$ | async) === false"
       type="info"
@@ -222,8 +218,10 @@
         </ng-template>
       </div>
     </form>
-  </section>
+  </ng-container>
 </ng-container>
+
+<ng-container class="modal-footer">
   <cd-form-button-panel
     (submitActionEvent)="submitTieringConfig()"
     [form]="tieringForm"
@@ -231,4 +229,5 @@
     [modalForm]="true"
     [disabled]="storageClassList?.length === 0 && isStorageClassFetched"
   ></cd-form-button-panel>
-</cds-modal>
+</ng-container>
+</cd-modal>

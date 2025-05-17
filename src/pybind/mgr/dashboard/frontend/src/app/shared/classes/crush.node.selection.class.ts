@@ -4,8 +4,9 @@ import _ from 'lodash';
 
 import { CrushNode } from '../models/crush-node';
 import { CrushFailureDomains } from '../models/erasure-code-profile';
+import { BaseModal } from 'carbon-components-angular';
 
-export class CrushNodeSelectionClass {
+export class CrushNodeSelectionClass extends BaseModal {
   private nodes: CrushNode[] = [];
   private idTree: { [id: number]: CrushNode } = {};
   private allDevices: string[] = [];
@@ -28,6 +29,10 @@ export class CrushNodeSelectionClass {
    * Otherwise, user manually selects a device class.
    */
   autoDeviceUpdate: boolean = true;
+
+  constructor() {
+    super();
+  }
 
   static searchFailureDomains(
     nodes: CrushNode[],

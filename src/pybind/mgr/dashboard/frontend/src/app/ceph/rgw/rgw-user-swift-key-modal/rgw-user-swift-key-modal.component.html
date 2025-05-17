@@ -1,14 +1,8 @@
-<cds-modal size="md"
-           [open]="open"
-           [hasScrollingContent]="false"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
-  </cds-modal-header>
+<cd-modal size="md"
+          title="{{ action | titlecase }} {{ resource | upperFirst }}">
 
-  <form novalidate>
-    <div cdsModalContent>
+  <ng-container class="modal-content">
+    <form novalidate>
       <!-- Username -->
       <div class="form-item">
         <cds-text-label for="user"
@@ -36,9 +30,12 @@
                                     class="mt-4">
         </cd-copy-2-clipboard-button>
       </div>
-    </div>
+    </form>
+  </ng-container>
+
+  <ng-container class="modal-footer">
     <cd-form-button-panel [showSubmit]="false"
                           (cancel)="closeModal()"
                           [modalForm]="true"></cd-form-button-panel>
-  </form>
-</cds-modal>
+  </ng-container>
+</cd-modal>

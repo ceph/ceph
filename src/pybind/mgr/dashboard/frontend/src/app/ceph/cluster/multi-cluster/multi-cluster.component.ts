@@ -3,7 +3,6 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Observable, Subscription } from 'rxjs';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { MultiClusterFormComponent } from './multi-cluster-form/multi-cluster-form.component';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -18,6 +17,7 @@ import {
 import { SettingsService } from '~/app/shared/api/settings.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-multi-cluster',
@@ -100,7 +100,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
   constructor(
     private multiClusterService: MultiClusterService,
     private settingsService: SettingsService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private router: Router,
     private prometheusService: PrometheusService,
     private notificationService: NotificationService
@@ -214,9 +214,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
     const initialState = {
       action: 'connect'
     };
-    this.bsModalRef = this.modalService.show(MultiClusterFormComponent, initialState, {
-      size: 'lg'
-    });
+    this.bsModalRef = this.modalService.show(MultiClusterFormComponent, initialState);
     this.bsModalRef.componentInstance.submitAction.subscribe(() => {
       this.loading = true;
       setTimeout(() => {

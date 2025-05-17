@@ -1,17 +1,11 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">Migrate Single Site to Multi-site
-    <cd-helper>
-      <span>Migrate from a single-site deployment with a default zone group and zone to a multi-site system</span>
-    </cd-helper>
-  </ng-container>
+<cd-modal title="Migrate Single Site to Multi-site"
+          titleHelperText="Migrate from a single-site deployment with a default zone group and zone to a multi-site system">
 
   <ng-container class="modal-content">
     <form name="multisiteMigrateForm"
           #formDir="ngForm"
           [formGroup]="multisiteMigrateForm"
           novalidate>
-    <div class="modal-body">
       <div class="form-group row">
         <label class="cd-col-form-label required"
                for="realmName"
@@ -128,12 +122,13 @@
                 i18n>This field is required.</span>
         </div>
       </div>
-    </div>
-    <div class="modal-footer">
-      <cd-form-button-panel (submitActionEvent)="submit()"
-                            [submitText]="actionLabels.MIGRATE + ' ' + 'to Multi-site'"
-                            [form]="multisiteMigrateForm"></cd-form-button-panel>
-    </div>
     </form>
+  </ng-container>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="submit()"
+                          [submitText]="actionLabels.MIGRATE + ' ' + 'to Multi-site'"
+                          [form]="multisiteMigrateForm"
+                          [modalForm]="true"></cd-form-button-panel>
   </ng-container>
 </cd-modal>

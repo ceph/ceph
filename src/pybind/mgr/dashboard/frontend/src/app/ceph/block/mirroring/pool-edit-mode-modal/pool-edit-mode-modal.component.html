@@ -1,12 +1,8 @@
-<cds-modal size="md"
-           [open]="open"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>Edit pool mirror mode</h3>
-  </cds-modal-header>
+<cd-modal size="md"
+          [open]="true"
+          title="Edit pool mirror mode">
 
-  <section cdsModalContent>
+  <ng-container class="modal-content">
     <form name="editModeForm"
           class="form"
           #formDir="ngForm"
@@ -38,10 +34,12 @@
         </ng-template>
       </div>
     </form>
-  </section>
+  </ng-container>
 
-  <cd-form-button-panel (submitActionEvent)="update()"
-                        [form]="editModeForm"
-                        [submitText]="actionLabels.UPDATE"
-                        [modalForm]="true"></cd-form-button-panel>
-</cds-modal>
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="update()"
+                          [form]="editModeForm"
+                          [submitText]="actionLabels.UPDATE"
+                          [modalForm]="true"></cd-form-button-panel>
+  </ng-container>
+</cd-modal>

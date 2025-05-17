@@ -32,7 +32,6 @@ import {
   BaseModal,
   BaseModalService,
   ModalModule,
-  ModalService,
   PlaceholderModule,
   PlaceholderService
 } from 'carbon-components-angular';
@@ -77,7 +76,7 @@ describe('RbdSnapshotListComponent', () => {
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
       TaskListService,
-      ModalService,
+      ModalCdsService,
       PlaceholderService,
       BaseModalService
     ],
@@ -225,7 +224,7 @@ describe('RbdSnapshotListComponent', () => {
     beforeEach(() => {
       component.poolName = 'pool01';
       component.rbdName = 'image01';
-      spyOn(TestBed.inject(ModalService), 'show').and.callFake(() => {
+      spyOn(TestBed.inject(ModalCdsService), 'show').and.callFake(() => {
         const ref: any = {};
         ref.componentInstance = new RbdSnapshotFormModalComponent(
           null,

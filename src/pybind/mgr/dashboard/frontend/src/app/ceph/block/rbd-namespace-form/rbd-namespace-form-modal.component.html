@@ -1,15 +1,7 @@
-<cds-modal size="md"
-           [open]="open"
-           [hasScrollingContent]="true"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>
-      Create Namespace
-  </h3>
-  </cds-modal-header>
+<cd-modal size="md"
+          title="Create Namespace">
 
-  <section cdsModalContent>
+  <ng-container class="modal-content">
 
     <form name="namespaceForm"
           #formDir="ngForm"
@@ -75,10 +67,12 @@
 
 
     </form>
-  </section>
-  <cd-form-button-panel (submitActionEvent)="submit()"
-                        [form]="namespaceForm"
-                        [submitText]="actionLabels.CREATE"
-                        [modalForm]="true"></cd-form-button-panel>
+  </ng-container>
 
-</cds-modal>
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="submit()"
+                          [form]="namespaceForm"
+                          [submitText]="actionLabels.CREATE"
+                          [modalForm]="true"></cd-form-button-panel>
+  </ng-container>
+</cd-modal>

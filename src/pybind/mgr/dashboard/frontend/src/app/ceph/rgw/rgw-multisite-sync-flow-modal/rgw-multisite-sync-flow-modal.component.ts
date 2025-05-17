@@ -1,6 +1,5 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { ActionLabelsI18n, SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -16,18 +15,15 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { ZoneData } from '../models/rgw-multisite-zone-selector';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-rgw-multisite-sync-flow-modal',
   templateUrl: './rgw-multisite-sync-flow-modal.component.html',
   styleUrls: ['./rgw-multisite-sync-flow-modal.component.scss']
 })
-export class RgwMultisiteSyncFlowModalComponent implements OnInit {
-  action: string;
+export class RgwMultisiteSyncFlowModalComponent extends BaseModal implements OnInit {
   editing: boolean = false;
-  groupType: FlowType;
-  groupExpandedRow: any;
-  flowSelectedRow: any;
   syncPolicyDirectionalFlowForm: CdFormGroup;
   syncPolicySymmetricalFlowForm: CdFormGroup;
   syncPolicyPipeForm: CdFormGroup;
@@ -37,14 +33,20 @@ export class RgwMultisiteSyncFlowModalComponent implements OnInit {
   zones = new ZoneData(false, 'Filter Zones');
 
   constructor(
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     public notificationService: NotificationService,
     private rgwDaemonService: RgwDaemonService,
     private rgwZonegroupService: RgwZonegroupService,
     private rgwMultisiteService: RgwMultisiteService,
-    private succeededLabels: SucceededActionLabelsI18n
-  ) {}
+    private succeededLabels: SucceededActionLabelsI18n,
+
+    @Optional() @Inject('action') public action: string,
+    @Optional() @Inject('groupType') public groupType: FlowType,
+    @Optional() @Inject('groupExpandedRow') public groupExpandedRow: any,
+    @Optional() @Inject('flowSelectedRow') public flowSelectedRow: any,
+  ) {
+    super();
+  }
 
   ngOnInit(): void {
     if (this.action === 'edit') {
@@ -184,12 +186,12 @@ export class RgwMultisiteSyncFlowModalComponent implements OnInit {
             NotificationType.success,
             $localize`${action} Sync Flow '${this.currentFormGroupContext.getValue('flow_id')}'`
           );
-          this.activeModal.close(NotificationType.success);
+          this.closeModal();
         },
         () => {
           // Reset the 'Submit' button.
           this.currentFormGroupContext.setErrors({ cdSubmitButton: true });
-          this.activeModal.dismiss();
+          this.closeModal();
         }
       );
   }

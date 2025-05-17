@@ -1,12 +1,10 @@
 import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { MultiClusterFormComponent } from '../multi-cluster-form/multi-cluster-form.component';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -42,10 +40,8 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
   columns: Array<CdTableColumn> = [];
   data: any;
   selection = new CdTableSelection();
-  bsModalRef: NgbModalRef;
   clustersTokenMap: Map<string, string> = new Map<string, string>();
   newData: any;
-  modalRef: NgbModalRef;
   hubUrl: string;
   currentUrl: string;
   icons = Icons;
@@ -58,7 +54,6 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
     public actionLabels: ActionLabelsI18n,
     private notificationService: NotificationService,
     private authStorageService: AuthStorageService,
-    private modalService: ModalService,
     private cookieService: CookiesService,
     private settingsService: SettingsService,
     private cdsModalService: ModalCdsService,
@@ -217,10 +212,8 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
       action: action,
       cluster: this.selection.first()
     };
-    this.bsModalRef = this.modalService.show(MultiClusterFormComponent, initialState, {
-      size: 'xl'
-    });
-    this.bsModalRef.componentInstance.submitAction.subscribe(() => {
+    const bsModalRef = this.cdsModalService.show(MultiClusterFormComponent, initialState);
+    bsModalRef.submitAction.subscribe(() => {
       const currentRoute = this.router.url.split('?')[0];
       this.multiClusterService.refreshMultiCluster(currentRoute);
       this.checkClusterConnectionStatus();
@@ -230,7 +223,7 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
 
   openDeleteClusterModal() {
     const cluster = this.selection.first();
-    this.modalRef = this.cdsModalService.show(DeleteConfirmationModalComponent, {
+    this.cdsModalService.show(DeleteConfirmationModalComponent, {
       infoMessage: $localize`Please note that the data for the disconnected cluster will be visible for a duration of ~ 5 minutes. After this period, it will be automatically removed.`,
       actionDescription: $localize`Disconnect`,
       itemDescription: $localize`Cluster`,
