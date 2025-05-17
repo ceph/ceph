@@ -213,7 +213,7 @@ class NvmeofCLICommand(CLICommand):
             out_format = cmd_dict.get('format')
             if ret is None:
                     out = ''
-            if out_format == 'text' or not out_format:
+            if out_format == 'plain' or not out_format:
                 out = self._output_formatter.format_output(ret, self._model)
             elif out_format == 'json':
                 out = json.dumps(ret)
