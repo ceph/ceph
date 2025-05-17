@@ -7,11 +7,9 @@
 #include "rgw_http_errors.h"
 #include "common/ceph_json.h"
 #include "common/errno.h"
-#include "rgw_sal_config.h"
 
 #include "services/svc_zone.h"
 
-#define FIRST_EPOCH 1
 #define dout_subsys ceph_subsys_rgw
 
 #undef dout_prefix
@@ -72,11 +70,12 @@ int pull_period(const DoutPrefixProvider *dpp, RGWRESTConn* conn, const std::str
 } // anonymous namespace
 
 int RGWPeriodPuller::pull(const DoutPrefixProvider *dpp, const std::string& period_id, RGWPeriod& period,
-			  optional_yield y, rgw::sal::ConfigStore* cfgstore)
+			  optional_yield y)
 {
   // try to read the period from rados
   period.set_id(period_id);
-  int r = cfgstore->read_period(dpp, y, period_id, std::nullopt, period);
+  period.set_epoch(0);
+  int r = period.init(dpp, cct, svc.sysobj, y);
   if (r < 0) {
     if (svc.zone->is_meta_master()) {
       // can't pull if we're the master
@@ -94,10 +93,7 @@ int RGWPeriodPuller::pull(const DoutPrefixProvider *dpp, const std::string& peri
       return r;
     }
     // write the period to rados
-    period.period_map.id = period.id = rgw::gen_random_uuid();
-    period.epoch = FIRST_EPOCH;
-    constexpr bool exclusive = true;
-    r = cfgstore->create_period(dpp, y, exclusive, period);
+    r = period.store_info(dpp, true, y);
     if (r == -EEXIST) {
       r = 0;
     } else if (r < 0) {
@@ -105,7 +101,7 @@ int RGWPeriodPuller::pull(const DoutPrefixProvider *dpp, const std::string& peri
       return r;
     }
     // update latest epoch
-    r = cfgstore->update_latest_epoch(dpp, y, period.get_id(), period.get_epoch());
+    r = period.update_latest_epoch(dpp, period.get_epoch(), y);
     if (r == -EEXIST) {
       // already have this epoch (or a more recent one)
       return 0;
@@ -117,7 +113,7 @@ int RGWPeriodPuller::pull(const DoutPrefixProvider *dpp, const std::string& peri
     }
     // reflect period objects if this is the latest version
     if (svc.zone->get_realm().get_current_period() == period_id) {
-      r = rgw::reflect_period(dpp, y, cfgstore, period);
+      r = period.reflect(dpp, y);
       if (r < 0) {
         return r;
       }

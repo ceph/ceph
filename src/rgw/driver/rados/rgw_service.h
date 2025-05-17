@@ -11,11 +11,8 @@
 
 #include "rgw_common.h"
 
-namespace rgw {
-  class SiteConfig;
-  namespace sal {
-    class RadosStore;
-  }
+namespace rgw::sal {
+class RadosStore;
 }
 
 struct RGWServices_Def;
@@ -109,7 +106,7 @@ struct RGWServices_Def
 
   int init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
 	   bool raw_storage, bool run_sync, bool background_tasks,
-	   optional_yield y, const DoutPrefixProvider *dpp, rgw::sal::ConfigStore* cfgstore, const rgw::SiteConfig* site);
+	   optional_yield y, const DoutPrefixProvider *dpp);
   void shutdown();
 };
 
@@ -148,19 +145,19 @@ struct RGWServices
 
   int do_init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
 	      bool raw_storage, bool run_sync, bool background_tasks, optional_yield y,
-	      const DoutPrefixProvider *dpp, const rgw::SiteConfig& site, rgw::sal::ConfigStore* cfgstore);
+	      const DoutPrefixProvider *dpp, const rgw::SiteConfig& site);
 
   int init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
 	   bool run_sync, bool background_tasks, optional_yield y, const DoutPrefixProvider *dpp,
-	   const rgw::SiteConfig& site, rgw::sal::ConfigStore* cfgstore) {
-    return do_init(cct, store, have_cache, false, run_sync, background_tasks, y, dpp, site, cfgstore);
+	   const rgw::SiteConfig& site) {
+    return do_init(cct, store, have_cache, false, run_sync, background_tasks, y, dpp, site);
   }
 
   int init_raw(CephContext *cct, rgw::sal::RadosStore* store,
 	       bool have_cache, optional_yield y,
 	       const DoutPrefixProvider *dpp,
-	       const rgw::SiteConfig& site, rgw::sal::ConfigStore* cfgstore) {
-    return do_init(cct, store, have_cache, true, false, false, y, dpp, site, cfgstore);
+	       const rgw::SiteConfig& site) {
+    return do_init(cct, store, have_cache, true, false, false, y, dpp, site);
   }
   void shutdown() {
     _svc.shutdown();
