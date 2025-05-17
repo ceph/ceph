@@ -63,6 +63,7 @@ void add_rgw_frontend_counters(PerfCountersBuilder *pcb) {
   pcb->add_u64_counter(l_rgw_d4n_cache_hits, "d4n_cache_hits", "D4N cache hits");
   pcb->add_u64_counter(l_rgw_d4n_cache_misses, "d4n_cache_misses", "D4N cache misses");
   pcb->add_u64_counter(l_rgw_d4n_cache_evictions, "d4n_cache_evictions", "D4N cache evictions");
+  pcb->add_time_avg(l_rgw_kms_fetch_lat, "kms_fetch_lat", "Uncached KMS secret fetch latency");
 }
 
 void add_rgw_op_counters(PerfCountersBuilder *lpcb) {
