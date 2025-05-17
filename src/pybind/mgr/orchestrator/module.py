@@ -1170,8 +1170,12 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=output)
 
     @_cli_read_command('orch certmgr cert ls')
-    def _cert_store_cert_ls(self, show_details: bool = False, format: Format = Format.plain) -> HandleCommandResult:
-        completion = self.cert_store_cert_ls(show_details)
+    def _cert_store_cert_ls(self,
+                            filter_by: str = '',
+                            show_details: bool = False,
+                            include_cephadm_signed: bool = False,
+                            format: Format = Format.plain) -> HandleCommandResult:
+        completion = self.cert_store_cert_ls(filter_by, show_details, include_cephadm_signed)
         cert_ls = raise_if_exception(completion)
         if format != Format.plain:
             return HandleCommandResult(stdout=to_format(cert_ls, format, many=False, cls=None))
@@ -1200,8 +1204,10 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             return HandleCommandResult(stdout=result_str)
 
     @_cli_read_command('orch certmgr key ls')
-    def _cert_store_key_ls(self, format: Format = Format.plain) -> HandleCommandResult:
-        completion = self.cert_store_key_ls()
+    def _cert_store_key_ls(self,
+                           include_cephadm_signed: bool = False,
+                           format: Format = Format.plain) -> HandleCommandResult:
+        completion = self.cert_store_key_ls(include_cephadm_signed)
         key_ls = raise_if_exception(completion)
         if format != Format.plain:
             return HandleCommandResult(stdout=to_format(key_ls, format, many=False, cls=None))
@@ -1255,7 +1261,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         cert_name: Optional[str] = None,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
-        force: Optional[bool] = False,
+        force: bool = False,
         inbuf: Optional[str] = None
     ) -> HandleCommandResult:
         """
@@ -1290,6 +1296,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         cert: Optional[str] = None,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
+        force: bool = False,
         inbuf: Optional[str] = None
     ) -> HandleCommandResult:
         """
@@ -1304,6 +1311,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             cert_content,
             service_name,
             hostname,
+            force
         )
         output = raise_if_exception(completion)
         return HandleCommandResult(stdout=output)
