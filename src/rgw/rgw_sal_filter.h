@@ -745,7 +745,7 @@ public:
                const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual RGWAccessControlPolicy& get_acl(void) override;
   virtual int set_acl(const RGWAccessControlPolicy& acl) override { return next->set_acl(acl); }
-  virtual void set_atomic() override { return next->set_atomic(); }
+  virtual void set_atomic(bool atomic) override { return next->set_atomic(atomic); }
   virtual bool is_atomic() override { return next->is_atomic(); }
   virtual void set_prefetch_data() override { return next->set_prefetch_data(); }
   virtual bool is_prefetch_data() override { return next->is_prefetch_data(); }
