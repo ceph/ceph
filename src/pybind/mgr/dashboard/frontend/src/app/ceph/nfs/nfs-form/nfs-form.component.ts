@@ -18,7 +18,7 @@ import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -40,7 +40,7 @@ import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant'
   templateUrl: './nfs-form.component.html',
   styleUrls: ['./nfs-form.component.scss']
 })
-export class NfsFormComponent extends CdForm implements OnInit {
+export class NfsFormComponent extends CdFormCanDeactivate implements OnInit {
   @ViewChild('nfsClients', { static: true })
   nfsClients: NfsFormClientComponent;
 
@@ -169,6 +169,12 @@ export class NfsFormComponent extends CdForm implements OnInit {
       this.getData(promises);
     }
   }
+
+
+  getFormGroup(): CdFormGroup {
+    return this.nfsForm;
+  }
+
 
   getData(promises: Observable<any>[]) {
     forkJoin(promises).subscribe((data: any[]) => {

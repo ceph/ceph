@@ -19,7 +19,7 @@ import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -47,7 +47,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
   templateUrl: './rgw-bucket-form.component.html',
   styleUrls: ['./rgw-bucket-form.component.scss']
 })
-export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewChecked {
+export class RgwBucketFormComponent extends CdFormCanDeactivate implements OnInit, AfterViewChecked {
   @ViewChild('bucketPolicyTextArea')
   public bucketPolicyTextArea: ElementRef<any>;
   @ViewChild('lifecycleTextArea')
@@ -111,6 +111,10 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.resource = $localize`bucket`;
     this.createForm();
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.bucketForm;
   }
 
   ngAfterViewChecked(): void {

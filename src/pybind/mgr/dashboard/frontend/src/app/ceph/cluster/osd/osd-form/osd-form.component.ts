@@ -19,7 +19,7 @@ import { OsdService } from '~/app/shared/api/osd.service';
 import { FormButtonPanelComponent } from '~/app/shared/components/form-button-panel/form-button-panel.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -42,7 +42,7 @@ import { OsdFeature } from './osd-feature.interface';
   templateUrl: './osd-form.component.html',
   styleUrls: ['./osd-form.component.scss']
 })
-export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
+export class OsdFormComponent extends CdFormCanDeactivate implements OnInit, OnDestroy {
   @ViewChild('dataDeviceSelectionGroups')
   dataDeviceSelectionGroups: OsdDevicesSelectionGroupsComponent;
 
@@ -154,6 +154,10 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
         .get(feature.key)
         .valueChanges.subscribe((value) => this.featureFormUpdate(feature.key, value));
     });
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.form;
   }
 
   createForm() {

@@ -12,7 +12,7 @@ import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import {
   RbdConfigurationEntry,
@@ -47,7 +47,7 @@ class ExternalData {
   templateUrl: './rbd-form.component.html',
   styleUrls: ['./rbd-form.component.scss']
 })
-export class RbdFormComponent extends CdForm implements OnInit {
+export class RbdFormComponent extends CdFormCanDeactivate implements OnInit {
   poolPermission: Permission;
   rbdForm: CdFormGroup;
   getDirtyConfigurationValues: (
@@ -229,6 +229,10 @@ export class RbdFormComponent extends CdForm implements OnInit {
       },
       this.validateRbdForm(this.formatter)
     );
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.rbdForm;
   }
 
   disableForEdit() {
@@ -449,8 +453,8 @@ export class RbdFormComponent extends CdForm implements OnInit {
     }
     this.dataPools = this.allDataPools
       ? this.allDataPools.filter((dataPool: any) => {
-          return dataPool.pool_name !== selectedPoolName;
-        })
+        return dataPool.pool_name !== selectedPoolName;
+      })
       : [];
     this.namespaces = null;
     if (selectedPoolName in this.namespacesByPoolCache) {

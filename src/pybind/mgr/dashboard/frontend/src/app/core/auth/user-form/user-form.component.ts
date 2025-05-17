@@ -16,7 +16,7 @@ import { SelectMessages } from '~/app/shared/components/select/select-messages.m
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -34,7 +34,7 @@ import { UserFormModel } from './user-form.model';
   templateUrl: './user-form.component.html',
   styleUrls: ['./user-form.component.scss']
 })
-export class UserFormComponent extends CdForm implements OnInit {
+export class UserFormComponent extends CdFormCanDeactivate implements OnInit {
   @ViewChild('removeSelfUserReadUpdatePermissionTpl', { static: true })
   removeSelfUserReadUpdatePermissionTpl: TemplateRef<any>;
 
@@ -75,6 +75,10 @@ export class UserFormComponent extends CdForm implements OnInit {
     this.resource = $localize`user`;
     this.createForm();
     this.messages = new SelectMessages({ empty: $localize`There are no roles.` });
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.userForm;
   }
 
   createForm() {

@@ -3,7 +3,7 @@ import { AbstractControl, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { Account } from '../models/rgw-user-accounts';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -19,7 +19,7 @@ import _ from 'lodash';
   templateUrl: './rgw-user-accounts-form.component.html',
   styleUrls: ['./rgw-user-accounts-form.component.scss']
 })
-export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
+export class RgwUserAccountsFormComponent extends CdFormCanDeactivate implements OnInit {
   accountForm: CdFormGroup;
   action: string;
   resource: string;
@@ -89,6 +89,10 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
         });
       });
     }
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.accountForm;
   }
 
   mapValuesForMode(value: any, formControlName: string) {

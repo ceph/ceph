@@ -12,7 +12,7 @@ import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -27,7 +27,7 @@ import { Pool } from '../../pool/pool';
   templateUrl: './cephfs-form.component.html',
   styleUrls: ['./cephfs-form.component.scss']
 })
-export class CephfsVolumeFormComponent extends CdForm implements OnInit {
+export class CephfsVolumeFormComponent extends CdFormCanDeactivate implements OnInit {
   @ViewChild('crushInfoTabs') crushInfoTabs: NgbNav;
   @ViewChild('crushDeletionBtn') crushDeletionBtn: NgbTooltip;
   @ViewChild('ecpInfoTabs') ecpInfoTabs: NgbNav;
@@ -183,6 +183,10 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
     }
     this.orchStatus$ = this.orchService.status();
     this.loadingReady();
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.form;
   }
 
   onPoolChange(poolName: string, metadataChange = false) {

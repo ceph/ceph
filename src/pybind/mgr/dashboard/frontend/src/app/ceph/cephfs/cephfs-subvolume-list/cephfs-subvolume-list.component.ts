@@ -26,7 +26,7 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { FormControl } from '@angular/forms';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
@@ -42,7 +42,7 @@ import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impa
   templateUrl: './cephfs-subvolume-list.component.html',
   styleUrls: ['./cephfs-subvolume-list.component.scss']
 })
-export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnChanges {
+export class CephfsSubvolumeListComponent extends CdFormCanDeactivate implements OnInit, OnChanges {
   @ViewChild('quotaUsageTpl', { static: true })
   quotaUsageTpl: any;
 
@@ -196,6 +196,10 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
         )
       )
     );
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.removeForm;
   }
 
   fetchData() {
