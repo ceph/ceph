@@ -1555,11 +1555,6 @@ PGBackend::omap_get_vals_by_keys(
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
 {
-  if (!os.exists || os.oi.is_whiteout()) {
-    logger().debug("{}: object does not exist: {}", __func__, os.oi.soid);
-    return crimson::ct_error::enoent::make();
-  }
-
   std::set<std::string> keys_to_get;
   try {
     auto p = osd_op.indata.cbegin();
