@@ -3137,8 +3137,7 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
     auto& k = p.first;
     auto cksum_type =  rgw::cksum::parse_cksum_type_hdr(k);
     if (cksum_type != rgw::cksum::Type::none) {
-      put_prop("HTTP_X_AMZ_CHECKSUM_ALGORITHM",
-	       boost::to_upper_copy(to_string(cksum_type)));
+      put_prop("HTTP_X_AMZ_CHECKSUM_ALGORITHM", to_uc_string(cksum_type));
       bufferlist& d = p.second.data;
       std::string v {
 	rgw_trim_whitespace(std::string_view(d.c_str(), d.length()))};
@@ -4540,8 +4539,7 @@ void RGWInitMultipart_ObjStore_S3::send_response()
     dump_header_if_nonempty(s, "x-amz-abort-rule-id", rule_id);
   }
   if (cksum_algo != rgw::cksum::Type::none) {
-    dump_header(s, "x-amz-checksum-algorithm",
-		boost::to_upper_copy(to_string(cksum_algo)));
+    dump_header(s, "x-amz-checksum-algorithm", to_uc_string(cksum_algo));
   }
   end_header(s, this, to_mime_type(s->format));
   if (op_ret == 0) {
@@ -4666,8 +4664,7 @@ void RGWListMultipart_ObjStore_S3::send_response()
        Container element that identifies who initiated the multipart upload. If the initiator is an AWS account, this element provides the same information as the Owner element. If the initiator is an IAM User, this element provides the user ARN and display name, see https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html */
 
     if (cksum && cksum->aws()) {
-      s->formatter->dump_string("ChecksumAlgorithm",
-				boost::to_upper_copy(std::string(cksum->type_string())));
+      s->formatter->dump_string("ChecksumAlgorithm", cksum->uc_type_string());
     }
 
     for (; iter != upload->get_parts().end(); ++iter) {
