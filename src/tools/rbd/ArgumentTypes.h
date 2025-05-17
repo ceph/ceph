@@ -71,6 +71,7 @@ static const std::string IMAGE_STRIPE_UNIT("stripe-unit");
 static const std::string IMAGE_STRIPE_COUNT("stripe-count");
 static const std::string IMAGE_DATA_POOL("data-pool");
 static const std::string IMAGE_SPARSE_SIZE("sparse-size");
+static const std::string IMAGE_ESTIMATED_SIZE("estimated-size");
 static const std::string IMAGE_THICK_PROVISION("thick-provision");
 static const std::string IMAGE_FLATTEN("flatten");
 static const std::string IMAGE_MIRROR_IMAGE_MODE("mirror-image-mode");
@@ -185,6 +186,8 @@ void add_create_journal_options(
   boost::program_options::options_description *opt);
 
 void add_size_option(boost::program_options::options_description *opt);
+
+void add_estimated_size_option(boost::program_options::options_description *opt);
 
 void add_sparse_size_option(boost::program_options::options_description *opt);
 
