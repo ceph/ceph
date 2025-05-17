@@ -73,6 +73,7 @@ private:
   cls::rbd::GroupSnapshot m_start_after;
   std::string m_start_after_order;
   bufferlist m_out_bl;
+  bool m_retried_snap_orders = false;
 
   void list_snaps();
   void handle_list_snaps(int r);
