@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    cluster-conf:
+      mds:
+        mds use global snaprealm seq for subvol: false
