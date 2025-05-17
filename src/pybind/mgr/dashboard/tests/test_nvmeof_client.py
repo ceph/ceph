@@ -301,6 +301,11 @@ class EmptyModel(NamedTuple):
     pass
 
 
+class ModelWithDefaultParam(NamedTuple):
+    a: str
+    b: str = 'iamdefault'
+
+
 @pytest.fixture(name="person_func")
 def fixture_person_func():
     @convert_to_model(Boy)
@@ -354,6 +359,23 @@ class TestConvertToModel:
 
         result = get_adult()
         assert result == {'name': 'Charlie', 'age': 40, "children": [], 'hobby': None}
+
+    def test_fields_default_value(self, disable_message_to_dict):
+        # pylint: disable=unused-argument
+        @convert_to_model(ModelWithDefaultParam)
+        def get() -> dict:
+            return {"a": "bla"}
+
+        result = get()
+        assert result == {'a': 'bla', 'b': "iamdefault"}
+
+        # pylint: disable=unused-argument
+        @convert_to_model(ModelWithDefaultParam)
+        def get2() -> dict:
+            return {"a": "bla", "b": 'notdefault'}
+
+        result = get2()
+        assert result == {'a': 'bla', 'b': "notdefault"}
 
     def test_nested_fields(self, disable_message_to_dict):
         # pylint: disable=unused-argument
