@@ -306,7 +306,18 @@ std::optional<double> OsdScrub::LoadTracker::update_load_average()
 
 bool OsdScrub::LoadTracker::scrub_load_below_threshold() const
 {
-  // allow scrub if below configured threshold
+  // if the 1-min load average - even before dividing by the number of CPUs -
+  // is below the configured threshold, scrubs are allowed. No need to call
+  // sysconf().
+  if (loadavg_1min < conf->osd_scrub_load_threshold) {
+    dout(20) << fmt::format(
+		    "loadavg {:.3f} < max {:.3f} = yes",
+		    loadavg_1min, conf->osd_scrub_load_threshold)
+	     << dendl;
+    return true;
+  }
+
+  // check the load per CPU
   const long cpus = sysconf(_SC_NPROCESSORS_ONLN);
   const double loadavg_per_cpu = cpus > 0 ? loadavg_1min / cpus : loadavg_1min;
   if (loadavg_per_cpu < conf->osd_scrub_load_threshold) {
