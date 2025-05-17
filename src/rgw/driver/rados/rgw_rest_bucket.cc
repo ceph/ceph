@@ -153,7 +153,7 @@ void RGWOp_Bucket_Link::execute(optional_yield y)
   op_state.set_new_bucket_name(new_bucket_name);
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -192,7 +192,7 @@ void RGWOp_Bucket_Unlink::execute(optional_yield y)
   op_state.set_bucket_name(bucket);
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;

@@ -337,6 +337,9 @@ void set_req_state_err(struct rgw_err& err,	/* out */
     err_no = -err_no;
 
   err.ret = -err_no;
+  if (!err.err_code.empty()) { // request already set the error
+    return;
+  }
 
   if (prot_flags & RGW_REST_SWIFT) {
     if (search_err(rgw_http_swift_errors, err_no, err.http_ret, err.err_code))
