@@ -186,10 +186,6 @@
                     <cd-help-text>
                       <span i18n>Choose the cluster where you want to apply this multisite configuration. The selected cluster will integrate the defined Realm, Zonegroup, and Zones, enabling data synchronization and management across the multisite setup.</span>
                     </cd-help-text>
-                    <cd-alert-panel type="info"
-                                    [showTitle]="false">
-                      <span i18n>Before submitting this form, please verify that the selected cluster has an active RGW (Rados Gateway) service running.</span>
-                    </cd-alert-panel>
                   </div>
                 </div>
                 <div class="form-group row">
@@ -267,9 +263,12 @@
 
 <ng-template #progressCompleteTemplate>
   <div *ngIf="isMultiClusterConfigured && !stepsToSkip['Select Cluster']; else exportTokenTemplate">
-    <div class="text-center text-success"
+    <div class="d-flex flex-column align-items-center bold text-success"
          i18n>
-      Multi-site replication setup is complete.
+      <h4>
+        <i [ngClass]="[icons.large, icons.success]"></i>
+        Multi-site replication setup completed successfully.
+      </h4>
     </div>
   </div>
 </ng-template>
