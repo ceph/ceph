@@ -20,19 +20,7 @@ export interface StorageClassDetails {
   multipart_sync_threshold: number;
   host_style: string;
   retain_head_object: boolean;
-}
-
-export interface S3Details {
-  endpoint: string;
-  access_key: string;
-  storage_class: string;
-  target_path: string;
-  target_storage_class: string;
-  region: string;
-  secret: string;
-  multipart_min_part_size: number;
-  multipart_sync_threshold: number;
-  host_style: boolean;
+  allow_read_through: boolean;
 }
 
 export interface TierTarget {
@@ -40,6 +28,7 @@ export interface TierTarget {
     storage_class: string;
     tier_type: string;
     retain_head_object: boolean;
+    allow_read_through: boolean;
     s3: S3Details;
   };
 }
@@ -47,15 +36,6 @@ export interface TierTarget {
 export interface Target {
   name: string;
   tier_targets: TierTarget[];
-}
-
-export interface StorageClassDetails {
-  target_path: string;
-  access_key: string;
-  secret: string;
-  multipart_min_part_size: number;
-  multipart_sync_threshold: number;
-  host_style: string;
 }
 
 export interface ZoneGroup {
@@ -76,6 +56,7 @@ export interface S3Details {
   multipart_sync_threshold: number;
   host_style: boolean;
   retain_head_object?: boolean;
+  allow_read_through?: boolean;
 }
 export interface RequestModel {
   zone_group: string;
@@ -92,6 +73,7 @@ export interface PlacementTarget {
     secret: string;
     target_path: string;
     retain_head_object: boolean;
+    allow_read_through: boolean;
     region: string;
     multipart_sync_threshold: number;
     multipart_min_part_size: number;

@@ -119,6 +119,18 @@
             </td>
             <td>{{ selection?.retain_head_object }}</td>
           </tr>
+          <tr>
+            <td
+                class="bold">
+              Allow Read Through
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  Enables fetching objects from remote cloud S3 if not found locally (default: false).
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.allow_read_through }}</td>
+          </tr>
         </tbody>
       </table>
     </cds-tab>
