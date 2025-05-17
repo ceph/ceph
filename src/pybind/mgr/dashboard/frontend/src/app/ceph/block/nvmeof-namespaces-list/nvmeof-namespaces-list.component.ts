@@ -65,12 +65,12 @@ export class NvmeofNamespacesListComponent implements OnInit {
         flexGrow: 2
       },
       {
-        name: $localize`Image`,
+        name: $localize`Volume`,
         prop: 'rbd_image_name',
         flexGrow: 3
       },
       {
-        name: $localize`Image Size`,
+        name: $localize`Volume Size`,
         prop: 'rbd_image_size',
         pipe: this.dimlessBinaryPipe
       },
