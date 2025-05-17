@@ -74,7 +74,14 @@ inline depth_le_t init_depth_le(uint32_t i) {
 }
 
 using checksum_t = uint32_t;
+using checksum_le_t = ceph_le32;
 constexpr checksum_t CRC_NULL = 0;
+
+// XXX: It happens to be true that the width of node
+// 	index in lba and omap tree are the same.
+using btreenode_pos_t = uint16_t;
+constexpr auto BTREENODE_POS_MAX = std::numeric_limits<btreenode_pos_t>::max();
+constexpr auto BTREENODE_POS_NULL = BTREENODE_POS_MAX;
 
 // Immutable metadata for seastore to set at mkfs time
 struct seastore_meta_t {
