@@ -31,6 +31,7 @@ class MDSRank;
 class LogSegment;
 
 class MDSTableClient {
+  using LogSegmentRef = boost::intrusive_ptr<LogSegment>;
 public:
   MDSTableClient(MDSRank *m, int tab) :
     mds(m), table(tab) {}
@@ -39,13 +40,13 @@ public:
   void handle_request(const cref_t<MMDSTableRequest> &m);
 
   void _prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl, MDSContext *onfinish);
-  void commit(version_t tid, LogSegment *ls);
+  void commit(version_t tid, LogSegmentRef ls);
 
   void resend_commits();
   void resend_prepares();
 
   // for recovery (by me)
-  void got_journaled_agree(version_t tid, LogSegment *ls);
+  void got_journaled_agree(version_t tid, LogSegmentRef ls);
   void got_journaled_ack(version_t tid);
 
   bool has_committed(version_t tid) const {
@@ -103,7 +104,7 @@ protected:
   std::list<_pending_prepare> waiting_for_reqid;
 
   // pending commits
-  std::map<version_t, LogSegment*> pending_commit;
+  std::map<version_t, LogSegmentRef> pending_commit;
   std::map<version_t, std::vector<MDSContext*> > ack_waiters;
 };
 #endif

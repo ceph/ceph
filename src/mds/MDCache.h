@@ -38,6 +38,7 @@
 #include "OpenFileTable.h"
 #include "MDSContext.h"
 #include "Mutation.h"
+#include "LogSegment.h"
 
 class EMetaBlob;
 class MCacheExpire;
@@ -66,6 +67,8 @@ class Migrator;
 class Session;
 
 class ESubtreeMap;
+
+class LogSegment;
 
 enum {
   l_mdc_first = 3000,
@@ -144,6 +147,7 @@ static const int PREDIRTY_SHALLOW = 4; // only go to immediate parent (for easie
 using namespace std::literals::chrono_literals;
 
 class MDCache {
+  using LogSegmentRef = boost::intrusive_ptr<LogSegment>;
  public:
   typedef std::map<mds_rank_t, ref_t<MCacheExpire>> expiremap;
 
@@ -452,7 +456,7 @@ class MDCache {
 				snapid_t follows=CEPH_NOSNAP);
 
   // peers
-  void add_uncommitted_leader(metareqid_t reqid, LogSegment *ls, std::set<mds_rank_t> &peers, bool safe=false) {
+  void add_uncommitted_leader(metareqid_t reqid, LogSegmentRef ls, std::set<mds_rank_t> &peers, bool safe=false) {
     uncommitted_leaders[reqid].ls = ls;
     uncommitted_leaders[reqid].peers = peers;
     uncommitted_leaders[reqid].safe = safe;
@@ -470,7 +474,7 @@ class MDCache {
   void committed_leader_peer(metareqid_t r, mds_rank_t from);
   void finish_committed_leaders();
 
-  void add_uncommitted_peer(metareqid_t reqid, LogSegment*, mds_rank_t, MDPeerUpdate *su=nullptr);
+  void add_uncommitted_peer(metareqid_t reqid, LogSegmentRef, mds_rank_t, MDPeerUpdate *su=nullptr);
   void wait_for_uncommitted_peer(metareqid_t reqid, MDSContext *c) {
     uncommitted_peers.at(reqid).waiters.push_back(c);
   }
@@ -787,7 +791,7 @@ private:
   std::pair<bool, uint64_t> trim(uint64_t count=0);
 
   bool trim_non_auth_subtree(CDir *directory);
-  void standby_trim_segment(LogSegment *ls);
+  void standby_trim_segment(LogSegmentRef ls);
   void try_trim_non_auth_subtree(CDir *dir);
   bool can_trim_non_auth_dirfrag(CDir *dir) {
     return my_ambiguous_imports.count((dir)->dirfrag()) == 0 &&
@@ -902,20 +906,20 @@ private:
   }
 
   // truncate
-  void truncate_inode(CInode *in, LogSegment *ls);
-  void _truncate_inode(CInode *in, LogSegment *ls);
-  void truncate_inode_finish(CInode *in, LogSegment *ls);
-  void truncate_inode_write_finish(CInode *in, LogSegment *ls,
+  void truncate_inode(CInode *in, LogSegmentRef ls);
+  void _truncate_inode(CInode *in, LogSegmentRef ls);
+  void truncate_inode_finish(CInode *in, LogSegmentRef ls);
+  void truncate_inode_write_finish(CInode *in, LogSegmentRef ls,
                                    uint32_t block_size);
   void truncate_inode_logged(CInode *in, MutationRef& mut);
 
-  void add_recovered_truncate(CInode *in, LogSegment *ls);
-  void remove_recovered_truncate(CInode *in, LogSegment *ls);
+  void add_recovered_truncate(CInode *in, LogSegmentRef ls);
+  void remove_recovered_truncate(CInode *in, LogSegmentRef ls);
   void start_recovered_truncates();
 
   // purge unsafe inodes
   void start_purge_inodes();
-  void purge_inodes(const interval_set<inodeno_t>& i, LogSegment *ls);
+  void purge_inodes(const interval_set<inodeno_t>& i, LogSegmentRef ls);
 
   CDir *get_auth_container(CDir *in);
   CDir *get_export_container(CDir *dir);
@@ -1205,9 +1209,8 @@ private:
  protected:
   // track leader requests whose peers haven't acknowledged commit
   struct uleader {
-    uleader() {}
     std::set<mds_rank_t> peers;
-    LogSegment *ls = nullptr;
+    LogSegmentRef ls;
     std::vector<MDSContext*> waiters;
     bool safe = false;
     bool committing = false;
@@ -1215,9 +1218,8 @@ private:
   };
 
   struct upeer {
-    upeer() {}
     mds_rank_t leader;
-    LogSegment *ls = nullptr;
+    LogSegmentRef ls;
     MDPeerUpdate *su = nullptr;
     std::vector<MDSContext*> waiters;
   };
@@ -1437,10 +1439,9 @@ private:
 
   // -- fragmenting --
   struct ufragment {
-    ufragment() {}
     int bits = 0;
     bool committed = false;
-    LogSegment *ls = nullptr;
+    LogSegmentRef ls;
     std::vector<MDSContext*> waiters;
     frag_vec_t old_frags;
     bufferlist rollback;
@@ -1539,7 +1540,7 @@ private:
   void handle_fragment_notify_ack(const cref_t<MMDSFragmentNotifyAck> &m);
 
   void add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, const frag_vec_t& old_frag,
-				LogSegment *ls, bufferlist *rollback=NULL);
+				LogSegmentRef ls, bufferlist *rollback=NULL);
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
 
