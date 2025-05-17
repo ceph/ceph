@@ -1245,7 +1245,10 @@ class RgwMultisiteAutomation:
         try:
             # Create the realm and zonegroup
             self.update_progress(
-                f"Creating realm: {realm_name}, zonegroup: {zonegroup_name} and zone: {zone_name}")
+                f"Initializing multi-site configuration || Creating realm: {realm_name}, \
+                    zonegroup: {zonegroup_name}, and zone: {zone_name} along \
+                        with system user: {username}"
+            )
             logger.info("Creating realm: %s", realm_name)
             rgw_multisite_instance.create_realm(realm_name=realm_name, default=True)
             logger.info("Creating zonegroup: %s", zonegroup_name)
@@ -1288,7 +1291,10 @@ class RgwMultisiteAutomation:
             raise
         try:
             logger.info("Restarting RGW daemons and setting credentials")
-            self.update_progress("Restarting RGW daemons and setting credentials")
+            self.update_progress(
+                "Restarting RGW daemons and configuring credentials || Restarts rgw services and \
+                    applies access and secret keys on the source cluster"
+            )
             rgw_service_manager = RgwServiceManager()
             rgw_service_manager.restart_rgw_daemons_and_set_credentials()
             self.progress_done += 1
@@ -1304,7 +1310,11 @@ class RgwMultisiteAutomation:
 
             if cluster_fsid and realm_token_info and replication_zone_name and cluster_details_dict:
                 logger.info("Importing realm token to cluster: %s", cluster_fsid)
-                self.update_progress(f"Importing realm token to cluster: {cluster_fsid}")
+                self.update_progress(
+                    f"Setting up replication on cluster {cluster_fsid} || Enabling RGW \
+                        module (if disabled), importing realm configuration, and \
+                            establishing target zone"
+                )
                 self.import_realm_token_to_cluster(cluster_fsid, realm_name,
                                                    zonegroup_name, realm_token_info,
                                                    username, replication_zone_name,
@@ -1338,8 +1348,58 @@ class RgwMultisiteAutomation:
                     cluster_url += '/'
 
                 path = 'api/rgw/realm/import_realm_token'
+                mgr_modules_path = 'api/mgr/module'
                 try:
+                    # Enable RGW module if not already enabled
                     multi_cluster_instance = MultiCluster()
+                    mgr_modules_info = multi_cluster_instance._proxy(
+                        method='GET',
+                        base_url=cluster_url,
+                        path=mgr_modules_path,
+                        token=cluster_token
+                    )
+                    logger.debug("mgr modules info in the selected cluster: %s", mgr_modules_info)
+
+                    rgw_module = next((mod for mod in mgr_modules_info if mod["name"] == "rgw"), None)
+                    rgw_module_status = rgw_module and rgw_module.get('enabled', False)
+
+                    if not rgw_module_status:
+                        logger.info("RGW module not enabled. Sending request to enable it.")
+                        try:
+                            multi_cluster_instance._proxy(
+                                method='POST',
+                                base_url=cluster_url,
+                                path='api/mgr/module/rgw/enable',
+                                token=cluster_token
+                            )
+                        except Exception as e:
+                            logger.warning("RGW enable request failed (likely due to connection reset). Ignoring and retrying later: %s", e)
+
+                        max_retries = 10
+                        delay = 5
+                        retries = 0
+
+                        while retries < max_retries:
+                            time.sleep(delay)
+                            try:
+                                mgr_modules_info = multi_cluster_instance._proxy(
+                                    method='GET',
+                                    base_url=cluster_url,
+                                    path=mgr_modules_path,
+                                    token=cluster_token
+                                )
+                                rgw_module = next((mod for mod in mgr_modules_info if mod["name"] == "rgw"), None)
+                                if rgw_module and rgw_module.get('enabled'):
+                                    logger.info("RGW module is now enabled after %d retries.", retries)
+                                    break
+                            except Exception as e:
+                                logger.warning("Failed to fetch RGW module status on retry %d: %s", retries, str(e))
+                            retries += 1
+                        else:
+                            logger.error("RGW module failed to enable after %d retries.", max_retries)
+                            raise DashboardException('RGW module failed to enable after maximum retries',
+                                                     http_status_code=500, component='rgw')
+
                     daemon_name = f"{realm_name}.{replication_zone_name}"
                     # pylint: disable=protected-access
                     config_payload = {
@@ -1371,7 +1431,11 @@ class RgwMultisiteAutomation:
                                                                           token=cluster_token)
                     logger.info("Import realm token response: %s", token_import_response)
                     self.progress_done += 1
-                    self.update_progress(f"Checking for user {username} in the selected cluster and setting credentials")  # noqa E501  # pylint: disable=line-too-long
+                    self.update_progress(
+                        f"Verifying system user and completing replication setup on \
+                            cluster {cluster_fsid} || Ensuring presence of user '{username}' \
+                                and assigning necessary RGW credentials"
+                    )
                     service_name = f"rgw.{daemon_name}"
                     daemons_status = multi_cluster_instance._proxy(method='GET',
                                                                    base_url=cluster_url,
