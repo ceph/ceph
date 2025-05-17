@@ -14,7 +14,7 @@
 
 // included for get_extent_by_type
 #include "crimson/os/seastore/collection_manager/collection_flat_node.h"
-#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/lba/lba_btree_node.h"
 #include "crimson/os/seastore/omap_manager/btree/omap_btree_node_impl.h"
 #include "crimson/os/seastore/object_data_handler.h"
 #include "crimson/os/seastore/collection_manager/collection_flat_node.h"
@@ -1090,9 +1090,9 @@ CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
     ceph_assert(0 == "ROOT is never directly alloc'd");
     return CachedExtentRef();
   case extent_types_t::LADDR_INTERNAL:
-    return alloc_new_non_data_extent<lba_manager::btree::LBAInternalNode>(t, length, hint, gen);
+    return alloc_new_non_data_extent<lba::LBAInternalNode>(t, length, hint, gen);
   case extent_types_t::LADDR_LEAF:
-    return alloc_new_non_data_extent<lba_manager::btree::LBALeafNode>(
+    return alloc_new_non_data_extent<lba::LBALeafNode>(
       t, length, hint, gen);
   case extent_types_t::ROOT_META:
     return alloc_new_non_data_extent<RootMetaBlock>(
@@ -1231,6 +1231,7 @@ record_t Cache::prepare_record(
   auto trans_src = t.get_src();
   assert(!t.is_weak());
   assert(trans_src != Transaction::src_t::READ);
+  assert(t.read_set.size() + t.num_replace_placeholder == t.read_items.size());
 
   auto& efforts = get_by_src(stats.committed_efforts_by_src,
                              trans_src);
@@ -1247,7 +1248,7 @@ record_t Cache::prepare_record(
                i.ref->get_type()).increment(i.ref->get_length());
     read_stat.increment(i.ref->get_length());
   }
-  t.read_set.clear();
+  t.clear_read_set();
   t.write_set.clear();
 
   record_t record(record_type_t::JOURNAL, trans_src);
@@ -1365,6 +1366,7 @@ record_t Cache::prepare_record(
     // retiering extents, this is because logical linked tree
     // nodes needs to access their prior instances in this
     // phase if they are rewritten.
+    e->set_io_wait();
     e->prepare_commit();
   });
 
@@ -1449,7 +1451,7 @@ record_t Cache::prepare_record(
     if (i->is_logical()) {
       fresh_laddr = i->cast<LogicalCachedExtent>()->get_laddr();
     } else if (is_lba_node(i->get_type())) {
-      fresh_laddr = i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin;
+      fresh_laddr = i->cast<lba::LBANode>()->get_node_meta().begin;
     } else {
       fresh_laddr = L_ADDR_NULL;
     }
@@ -1468,7 +1470,7 @@ record_t Cache::prepare_record(
       if (i->is_logical()) {
 	alloc_laddr = i->cast<LogicalCachedExtent>()->get_laddr();
       } else if (is_lba_node(i->get_type())) {
-	alloc_laddr = i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin;
+	alloc_laddr = i->cast<lba::LBANode>()->get_node_meta().begin;
       } else {
 	assert(i->get_type() == extent_types_t::TEST_BLOCK_PHYSICAL);
 	alloc_laddr = L_ADDR_MIN;
@@ -1494,7 +1496,7 @@ record_t Cache::prepare_record(
         alloc_laddr = i->cast<LogicalCachedExtent>()->get_laddr();
       } else {
         assert(is_lba_node(i->get_type()));
-        alloc_laddr = i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin;
+        alloc_laddr = i->cast<lba::LBANode>()->get_node_meta().begin;
       }
       alloc_delta.alloc_blk_ranges.emplace_back(
 	alloc_blk_t::create_alloc(
@@ -1796,6 +1798,7 @@ void Cache::complete_commit(
     assert(!i->is_dirty());
     const auto t_src = t.get_src();
     touch_extent(*i, &t_src, t.get_cache_hint());
+    i->complete_io();
     epm.commit_space_used(i->get_paddr(), i->get_length());
 
     // Note: commit extents and backref allocations in the same place
@@ -1808,7 +1811,7 @@ void Cache::complete_commit(
       if (i->is_logical()) {
 	alloc_laddr = i->cast<LogicalCachedExtent>()->get_laddr();
       } else if (is_lba_node(i->get_type())) {
-	alloc_laddr = i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin;
+	alloc_laddr = i->cast<lba::LBANode>()->get_node_meta().begin;
       } else {
 	assert(i->get_type() == extent_types_t::TEST_BLOCK_PHYSICAL);
 	alloc_laddr = L_ADDR_MIN;
@@ -2253,13 +2256,13 @@ Cache::do_get_caching_extent_by_type(
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::LADDR_INTERNAL:
-      return do_get_caching_extent<lba_manager::btree::LBAInternalNode>(
+      return do_get_caching_extent<lba::LBAInternalNode>(
 	offset, length, std::move(extent_init_func), std::move(on_cache), p_src
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::LADDR_LEAF:
-      return do_get_caching_extent<lba_manager::btree::LBALeafNode>(
+      return do_get_caching_extent<lba::LBALeafNode>(
 	offset, length, std::move(extent_init_func), std::move(on_cache), p_src
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);

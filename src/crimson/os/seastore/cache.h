@@ -476,6 +476,8 @@ public:
       ext_type);
 
     CachedExtent* p_extent;
+    bool needs_step_2 = false;
+    bool needs_touch = false;
     if (extent->is_stable()) {
       p_extent = extent->get_transactional_view(t);
       if (p_extent != extent.get()) {
@@ -495,7 +497,8 @@ public:
       } else {
         // stable from trans-view
         assert(!p_extent->is_pending_in_trans(t.get_trans_id()));
-        if (t.maybe_add_to_read_set(p_extent)) {
+        auto ret = t.maybe_add_to_read_set(p_extent);
+        if (ret.added) {
           if (p_extent->is_dirty()) {
             ++access_stats.cache_dirty;
             ++stats.access.cache_dirty;
@@ -503,8 +506,13 @@ public:
             ++access_stats.cache_lru;
             ++stats.access.cache_lru;
           }
-          touch_extent(*p_extent, &t_src, t.get_cache_hint());
+          if (ret.is_paddr_known) {
+            touch_extent(*p_extent, &t_src, t.get_cache_hint());
+          } else {
+            needs_touch = true;
+          }
         } else {
+          // already exists
           if (p_extent->is_dirty()) {
             ++access_stats.trans_dirty;
             ++stats.access.trans_dirty;
@@ -513,6 +521,9 @@ public:
             ++stats.access.trans_lru;
           }
         }
+        // step 2 maybe reordered after wait_io(),
+        // always try step 2 if paddr unknown
+        needs_step_2 = !ret.is_paddr_known;
       }
     } else {
       assert(!extent->is_stable_writting());
@@ -538,7 +549,13 @@ public:
 
     return trans_intr::make_interruptible(
       p_extent->wait_io()
-    ).then_interruptible([p_extent] {
+    ).then_interruptible([p_extent, needs_touch, needs_step_2, &t, this, &t_src] {
+      if (needs_step_2) {
+	t.maybe_add_to_read_set_step_2(p_extent);
+      }
+      if (needs_touch) {
+	touch_extent(*p_extent, &t_src, t.get_cache_hint());
+      }
       return get_extent_iertr::make_ready_future<CachedExtentRef>(
         CachedExtentRef(p_extent));
     });

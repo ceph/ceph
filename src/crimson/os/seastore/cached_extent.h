@@ -67,11 +67,16 @@ class read_set_item_t {
   using set_hook_t = boost::intrusive::set_member_hook<
     boost::intrusive::link_mode<
       boost::intrusive::auto_unlink>>;
-  set_hook_t trans_hook;
-  using set_hook_options = boost::intrusive::member_hook<
+  set_hook_t trans_hook; // used to attach transactions to extents
+  set_hook_t extent_hook; // used to attach extents to transactions
+  using trans_hook_options = boost::intrusive::member_hook<
     read_set_item_t,
     set_hook_t,
     &read_set_item_t::trans_hook>;
+  using extent_hook_options = boost::intrusive::member_hook<
+    read_set_item_t,
+    set_hook_t,
+    &read_set_item_t::extent_hook>;
 
 public:
   struct extent_cmp_t {
@@ -101,12 +106,25 @@ public:
 
   using trans_set_t =  boost::intrusive::set<
     read_set_item_t,
-    set_hook_options,
+    trans_hook_options,
     boost::intrusive::constant_time_size<false>,
     boost::intrusive::compare<trans_cmp_t>>;
+  using extent_set_t =  boost::intrusive::set<
+    read_set_item_t,
+    extent_hook_options,
+    boost::intrusive::constant_time_size<false>,
+    boost::intrusive::compare<extent_cmp_t>>;
 
   T *t = nullptr;
   CachedExtentRef ref;
+
+  bool is_extent_attached_to_trans() const {
+    return extent_hook.is_linked();
+  }
+
+  bool is_trans_attached_to_extent() const {
+    return trans_hook.is_linked();
+  }
 
   read_set_item_t(T *t, CachedExtentRef ref);
   read_set_item_t(const read_set_item_t &) = delete;
@@ -115,9 +133,7 @@ public:
 };
 
 template <typename T>
-using read_extent_set_t = std::set<
-  read_set_item_t<T>,
-  typename read_set_item_t<T>::extent_cmp_t>;
+using read_extent_set_t = typename read_set_item_t<T>::extent_set_t;
 
 template <typename T>
 using read_trans_set_t = typename read_set_item_t<T>::trans_set_t;
@@ -549,12 +565,15 @@ public:
   }
 
   bool is_stable_writting() const {
-    // MUTATION_PENDING and under-io extents are already stable and visible,
-    // see prepare_record().
+    // MUTATION_PENDING/INITIAL_WRITE_PENDING and under-io extents are already
+    // stable and visible, see prepare_record().
     //
-    // XXX: It might be good to mark this case as DIRTY from the definition,
+    // XXX: It might be good to mark this case as DIRTY/CLEAN from the definition,
     // which probably can make things simpler.
-    return is_mutation_pending() && is_pending_io();
+    if (is_pending_io()) {
+      assert(is_mutation_pending() || is_initial_pending());
+    }
+    return is_pending_io();
   }
 
   /// Returns true if extent is stable and shared among transactions
@@ -788,6 +807,25 @@ public:
   bool is_pending_in_trans(transaction_id_t id) const {
     return is_pending() && pending_for_transaction == id;
   }
+
+  enum class viewable_state_t {
+    stable,                // viewable
+    pending,               // viewable
+    invalid,               // unviewable
+    stable_become_retired, // unviewable
+    stable_become_pending, // unviewable
+  };
+
+  /**
+   * is_viewable_by_trans
+   *
+   * Check if this extent is still viewable by transaction t.
+   *
+   * Precondition: *this was previously visible to t, which indicates
+   * this extent is either in the read set of t or created(pending) by t.
+   */
+  std::pair<bool, viewable_state_t>
+  is_viewable_by_trans(Transaction &t);
 
 private:
   template <typename T>
@@ -1091,8 +1129,7 @@ protected:
   friend class crimson::os::seastore::SegmentedAllocator;
   friend class crimson::os::seastore::TransactionManager;
   friend class crimson::os::seastore::ExtentPlacementManager;
-  template <typename, typename>
-  friend class BtreeNodeMapping;
+  friend class LBAMapping;
   friend class ::btree_lba_manager_test;
   friend class ::lba_btree_test;
   friend class ::btree_test_base;
@@ -1102,6 +1139,7 @@ protected:
 };
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);
+std::ostream &operator<<(std::ostream &, CachedExtent::viewable_state_t);
 std::ostream &operator<<(std::ostream &, const CachedExtent&);
 
 /// Compare extents by paddr
@@ -1293,41 +1331,6 @@ private:
   uint64_t bytes = 0;
 };
 
-template <typename key_t, typename>
-class PhysicalNodeMapping;
-
-template <typename key_t, typename val_t>
-using PhysicalNodeMappingRef = std::unique_ptr<PhysicalNodeMapping<key_t, val_t>>;
-
-template <typename key_t, typename val_t>
-class PhysicalNodeMapping {
-public:
-  PhysicalNodeMapping() = default;
-  PhysicalNodeMapping(const PhysicalNodeMapping&) = delete;
-  virtual extent_len_t get_length() const = 0;
-  virtual val_t get_val() const = 0;
-  virtual key_t get_key() const = 0;
-  virtual bool has_been_invalidated() const = 0;
-  virtual CachedExtentRef get_parent() const = 0;
-  virtual uint16_t get_pos() const = 0;
-  virtual uint32_t get_checksum() const {
-    ceph_abort("impossible");
-    return 0;
-  }
-  virtual bool is_parent_viewable() const = 0;
-  virtual bool is_parent_valid() const = 0;
-  virtual bool parent_modified() const {
-    ceph_abort("impossible");
-    return false;
-  };
-
-  virtual void maybe_fix_pos() {
-    ceph_abort("impossible");
-  }
-
-  virtual ~PhysicalNodeMapping() {}
-};
-
 /**
  * RetiredExtentPlaceholder
  *
@@ -1430,8 +1433,6 @@ public:
   void set_laddr(laddr_t nladdr) {
     laddr = nladdr;
   }
-
-  void maybe_set_intermediate_laddr(LBAMapping &mapping);
 
   void apply_delta_and_adjust_crc(
     paddr_t base, const ceph::bufferlist &bl) final {
@@ -1542,5 +1543,6 @@ using lextent_list_t = addr_extent_list_base_t<
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::CachedExtent> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::CachedExtent::viewable_state_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::LogicalCachedExtent> : fmt::ostream_formatter {};
 #endif
