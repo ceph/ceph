@@ -19,6 +19,8 @@
 #include "CDentry.h"
 #include "CInode.h"
 #include "CDir.h"
+#include "messages/MClientRequest.h"
+#include "messages/MMDSPeerRequest.h"
 
 using namespace std;
 
@@ -287,6 +289,15 @@ void MutationImpl::_dump_op_descriptor(ostream& stream) const
 }
 
 // MDRequestImpl
+
+MDRequestImpl::Params::Params() = default;
+MDRequestImpl::Params::~Params() noexcept = default;
+
+MDRequestImpl::MDRequestImpl(const Params* params, OpTracker *tracker) :
+  MutationImpl(tracker, params->initiated,
+	       params->reqid, params->attempt, params->peer_to),
+  item_session_request(this), client_request(params->client_req),
+  internal_op(params->internal_op) {}
 
 MDRequestImpl::~MDRequestImpl()
 {

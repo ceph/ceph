@@ -29,6 +29,7 @@
 #include "common/safe_io.h"
 #include "include/ceph_fs.h"
 #include "include/compat.h"
+#include "include/intarith.h" // for p2align()
 #include "common/Formatter.h"
 #include "common/debug.h"
 #include <errno.h>

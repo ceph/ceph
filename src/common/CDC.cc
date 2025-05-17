@@ -1,11 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "CDC.h"
+
 #include <random>
 
-#include "CDC.h"
 #include "FastCDC.h"
 #include "FixedCDC.h"
+#include "include/byteorder.h" // for ceph_le64
 
 std::unique_ptr<CDC> CDC::create(
   const std::string& type,

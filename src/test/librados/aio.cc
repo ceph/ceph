@@ -6,6 +6,8 @@
 #include <boost/scoped_ptr.hpp>
 #include <fmt/format.h>
 
+#include "include/buffer.h"
+#include "include/byteorder.h" // for ceph_le32
 #include "include/err.h"
 #include "include/rados/librados.h"
 #include "include/types.h"
