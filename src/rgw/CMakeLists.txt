@@ -1,3 +1,5 @@
+
+
 find_program(GPERF gperf)
 if(NOT GPERF)
   message(FATAL_ERROR "Can't find gperf")
@@ -312,7 +314,6 @@ target_link_libraries(rgw_common
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
     Boost::context
-    ${FMT_LIB}
     OpenSSL::SSL
     BLAKE3::blake3)
 target_include_directories(rgw_common
