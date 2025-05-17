@@ -140,6 +140,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 
   if (site->get_realm().has_value()) {
     *realm = site->get_realm().value();
+    zonegroup->realm_id = realm->get_id();	
   }
 
   ldpp_dout(dpp, 20) << "realm  " << realm->get_name() << " " << realm->get_id() << dendl;
@@ -250,21 +251,64 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 
   /* we have zone now */
 
-  auto zone_iter = zonegroup->zones.find(zone_params->get_id());
-  if (zone_iter == zonegroup->zones.end()) {
-    /* shouldn't happen if relying on period config */
-    if (!init_from_period) {
-      ldpp_dout(dpp, -1) << "Cannot find zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << ")" << dendl;
+ auto zone_iter = zonegroup->zones.find(zone_params->get_id());
+if (zone_iter == zonegroup->zones.end()) {
+  if (using_local) {
+    ldout(cct, 0) << "Zone " << zone_params->get_name()
+                  << " (id=" << zone_params->get_id()
+                  << ") not found in zonegroup " << zonegroup->get_name()
+                  << ". It may not be committed to the period yet; using local info." << dendl;
+
+    // Try to fetch zone metadata from the RGW store
+    RGWZone new_zone;
+    new_zone.id = zone_params->get_id();
+    new_zone.name = zone_params->get_name();
+
+    std::string zone_oid = "zone_info." + new_zone.id;
+    bufferlist bl;
+    int r = sysobj_svc->get_obj(zone_oid)->read(dpp, &bl, nullptr, y);
+    if (r < 0) {
+      lderr(cct) << "Failed to read zone metadata from store for zone id=" << new_zone.id
+                 << ": " << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
+    auto iter = bl.cbegin();
+    try {
+      decode(new_zone, iter);
+    } catch (const buffer::error &e) {
+      lderr(cct) << "Failed to decode zone metadata for zone id=" << new_zone.id << dendl;
+      return -EIO;
+    }
+
+    // Inject into zonegroup
+    zonegroup->zones[new_zone.id] = new_zone;
+    if (zonegroup->master_zone.empty()) {
+      zonegroup->master_zone = new_zone.id;
+    }
+
+    zone_iter = zonegroup->zones.find(new_zone.id);
+  } else {
+    ldout(cct, 1) << "Zone id=" << zone_params->get_id()
+                  << " not found in current period; switching to local zonegroup config" << dendl;
+
+    ret = init_zg_from_local(dpp, y);
+    if (ret < 0) {
+      return ret;
+    }
+
+    zone_iter = zonegroup->zones.find(zone_params->get_id());
+    if (zone_iter == zonegroup->zones.end()) {
+      ldout(cct, -1) << "Still cannot find zone id=" << zone_params->get_id()
+                     << " (name=" << zone_params->get_name() << ")" << dendl;
       return -EINVAL;
     }
-    ldpp_dout(dpp, 1) << "Cannot find zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << "), switching to local zonegroup configuration" << dendl;
-    init_from_period = false;
-    zone_iter = zonegroup->zones.find(zone_params->get_id());
   }
-  if (zone_iter == zonegroup->zones.end()) {
-    ldpp_dout(dpp, -1) << "Cannot find zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << ")" << dendl;
-    return -EINVAL;
-  }
+}
+
+// zone now guaranteed to be found
+*zone_public_config = zone_iter->second;
+
   *zone_public_config = zone_iter->second;
   ldout(cct, 20) << "zone " << zone_params->get_name() << " found"  << dendl;
 
