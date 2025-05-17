@@ -297,7 +297,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   zone_short_id = current_period->get_map().get_zone_short_id(zone_params->get_id());
 
   for (auto ziter : zonegroup->zones) {
-    auto zone_handler = std::make_shared<RGWBucketSyncPolicyHandler>(this, sync_modules_svc, bucket_sync_svc, ziter.second.id);
+    auto zone_handler = std::make_shared<RGWBucketSyncPolicyHandler>(this, sync_modules_svc, bucket_sync_svc, site, ziter.second.id);
     ret = zone_handler->init(dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "ERROR: could not initialize zone policy handler for zone=" << ziter.second.name << dendl;

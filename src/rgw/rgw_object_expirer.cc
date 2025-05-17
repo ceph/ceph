@@ -31,7 +31,7 @@
 #include "rgw_formats.h"
 #include "rgw_usage.h"
 #include "rgw_object_expirer_core.h"
-#include "driver/rados/rgw_zone.h"
+#include "rgw_zone.h"
 #include "rgw_sal_config.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -89,7 +89,14 @@ int main(const int argc, const char **argv)
 
   const DoutPrefix dp(cct.get(), dout_subsys, "rgw object expirer: ");
   DriverManager::Config cfg;
+#ifdef WITH_RADOSGW_RADOS
   cfg.store_name = "rados";
+#elif defined(WITH_RADOSGW_POSIX)
+  cfg.store_name = "posix";
+#else
+  std::cerr << "Niether RADOS nor POSIX are enabled, can't initliaze storage!" << std::endl;
+  exit(1);
+#endif
   cfg.filter_name = "none";
   std::unique_ptr<rgw::sal::ConfigStore> cfgstore;
   auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");

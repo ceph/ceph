@@ -32,7 +32,7 @@
 #include "rgw_op.h"
 #include "rgw_process_env.h"
 #include "rgw_sal_rados.h"
-#include "driver/rados/rgw_zone.h"
+#include "rgw_zone.h"
 #include "rgw_sal_config.h"
 
 using std::string;

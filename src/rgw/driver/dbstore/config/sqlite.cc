@@ -26,7 +26,7 @@
 #include "common/dout.h"
 #include "common/random_string.h"
 
-#include "driver/rados/rgw_zone.h" // FIXME: subclass dependency
+#include "rgw/rgw_zone.h" // FIXME: subclass dependency
 
 #include "common/connection_pool.h"
 #include "sqlite/connection.h"
