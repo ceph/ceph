@@ -34,11 +34,12 @@ protected:
 
   PeeringCtx rctx;
   const bool do_init;
+  const bool split_child;
 
 public:
   PGAdvanceMap(
     Ref<PG> pg, ShardServices &shard_services, epoch_t to,
-    PeeringCtx &&rctx, bool do_init);
+    PeeringCtx &&rctx, bool do_init, bool split_child);
   ~PGAdvanceMap();
 
   void print(std::ostream &) const final;
