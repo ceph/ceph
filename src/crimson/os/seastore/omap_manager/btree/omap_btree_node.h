@@ -73,11 +73,26 @@ struct OMapNode : LogicalChildNode {
     const std::string &key,
     const ceph::bufferlist &value) = 0;
 
+  using rm_key_range_iertr = base_iertr;
+  using rm_key_range_ret = rm_key_range_iertr::future<mutation_result_t>;
+  virtual rm_key_range_ret rm_key_range(
+    omap_context_t oc,
+    const std::string &first,
+    const std::string &last) = 0;
+
   using rm_key_iertr = base_iertr;
   using rm_key_ret = rm_key_iertr::future<mutation_result_t>;
   virtual rm_key_ret rm_key(
     omap_context_t oc,
     const std::string &key) = 0;
+
+  using iterate_iertr = base_iertr;
+  using iterate_ret = OMapManager::omap_iterate_ret;
+  using omap_iterate_cb_t = OMapManager::omap_iterate_cb_t;
+  virtual iterate_ret iterate(
+    omap_context_t oc,
+    ObjectStore::omap_iter_seek_t &start_from,
+    omap_iterate_cb_t callback) = 0;
 
   using omap_list_config_t = OMapManager::omap_list_config_t;
   using list_iertr = base_iertr;

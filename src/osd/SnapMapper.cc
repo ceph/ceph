@@ -109,8 +109,8 @@ int OSDriver::get_next(
   CRIMSON_DEBUG("OSDriver::{} key {}", __func__, key);
   using crimson::os::FuturizedStore;
   return interruptor::green_get(os->omap_get_values(
-    ch, hoid, key
-  ).safe_then_unpack([&key, next] (bool, FuturizedStore::Shard::omap_values_t&& vals) {
+    ch, hoid, FuturizedStore::Shard::omap_keys_t{key}
+  ).safe_then([&key, next] (FuturizedStore::Shard::omap_values_t&& vals) {
     CRIMSON_DEBUG("OSDriver::get_next key {} got omap values", key);
     if (auto nit = std::begin(vals);
         nit == std::end(vals) || !SnapMapper::is_mapping(nit->first)) {
