@@ -466,7 +466,7 @@ done:
     rgw_log_op(rest, s, op, penv.olog.get());
   }
 
-  if (op) {
+  if (op && op->get_type() != RGW_OP_PUT_OBJ) {
     std::ignore = rgw::bucketlogging::log_record(driver, 
         rgw::bucketlogging::LoggingType::Standard,
         s->object.get(),
