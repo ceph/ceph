@@ -26,9 +26,14 @@ Metadata
 ^^^^^^^^
 
 RGW stores multiple types of metadata.  The list of types can be shown
-with the below command. The types as of 2025 April are shown below::
+with the below command. The types as of 2025 April are shown below:
 
-    $ bin/radosgw-admin metadata list
+.. prompt:: bash #
+
+   radosgw-admin metadata list
+
+::
+
     [
         "account",
         "bucket",
@@ -40,16 +45,17 @@ with the below command. The types as of 2025 April are shown below::
         "user"
     ]
 
-Use commands of the following forms to inspect metadata entries: ::
+Use commands of the following forms to inspect metadata entries:
 
-    $ radosgw-admin metadata list
-    $ radosgw-admin metadata list bucket
-    $ radosgw-admin metadata list bucket.instance
-    $ radosgw-admin metadata list user
+.. prompt:: bash #
 
-    $ radosgw-admin metadata get bucket:<bucket>
-    $ radosgw-admin metadata get bucket.instance:<bucket>:<bucket_id>
-    $ radosgw-admin metadata get user:<user>   # get or set
+   radosgw-admin metadata list
+   radosgw-admin metadata list bucket
+   radosgw-admin metadata list bucket.instance
+   radosgw-admin metadata list user
+   radosgw-admin metadata get bucket:<bucket>
+   radosgw-admin metadata get bucket.instance:<bucket>:<bucket_id>
+   radosgw-admin metadata get user:<user>   # get or set
     
 Variables are used in above command examples; when issuing commands you must
 substitute your specific values:
@@ -119,7 +125,7 @@ is controlled by a 'policy' setting.[3]
 An RGW object may comprise multiple RADOS objects, the first of which
 is the ``HEAD`` that contains metadata including manifest, ACLs, content type,
 ETag, and user-defined metadata. The metadata is stored in xattrs.
-The ``HEAD` object may also inline up to :confval:`rgw_max_chunk_size` of object data, for efficiency
+The ``HEAD`` object may also inline up to :confval:`rgw_max_chunk_size` of object data, for efficiency
 and atomicity.  This enables a convenenient tiering strategy:  index pools
 are necessarily replicated (cannot be EC) and should be placed on fast SSD
 OSDs.  With a mix of small/hot RGW objects and larger, warm/cold RGW
@@ -194,7 +200,7 @@ Known pools:
       testcont
 
   namespace: ``users.uid``
-    Contains _both_ per-user information (RGWUserInfo) in "<user>" objects
+    Contains *both* per-user information (RGWUserInfo) in "<user>" objects
     and per-user lists of buckets in omaps of "<user>.buckets" objects.
     The "<user>" may contain the tenant if non-empty, for example::
 
@@ -223,7 +229,7 @@ Known pools:
   example: ``default.7593.4__shadow_.488urDFerTYXavx4yAd-Op8mxehnvTI_1``
   <marker>_<key>
 
-An example of a marker would be ``default.16004.1`` or `default.7593.4``.
+An example of a marker would be ``default.16004.1`` or ``default.7593.4``.
 The current format is ``<zone>.<instance_id>.<bucket_id>``. But once
 generated, a marker is not parsed again, so its format may change
 freely in the future.
