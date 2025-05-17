@@ -558,7 +558,7 @@ public:
 	  pin->maybe_fix_pos();
 	}
 
-	fut = fut.si_then([this, &t, &pin] {
+	fut = fut.si_then([this, &t, &pin, original_paddr, original_len] {
 	  if (full_extent_integrity_check) {
 	    return read_pin<T>(t, pin->duplicate()
             ).si_then([](auto maybe_indirect_extent) {
@@ -579,6 +579,7 @@ public:
 	      });
 	    } else {
 	      // absent
+	      cache->retire_absent_extent_addr(t, original_paddr, original_len);
 	      return base_iertr::make_ready_future<TCachedExtentRef<T>>();
 	    }
 	  }
@@ -599,8 +600,6 @@ public:
 	  if (ext) {
 	    assert(ext->is_seen_by_users());
 	    cache->retire_extent(t, ext);
-	  } else {
-	    cache->retire_absent_extent_addr(t, original_paddr, original_len);
 	  }
 	  for (auto &remap : remaps) {
 	    auto remap_offset = remap.offset;
