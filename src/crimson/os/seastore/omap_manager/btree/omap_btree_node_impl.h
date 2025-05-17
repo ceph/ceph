@@ -152,6 +152,12 @@ struct OMapInnerNode
     const std::string &key,
     const ceph::bufferlist &value) final;
 
+  bool exceeds_max_kv_limit(
+    const std::string &key,
+    const ceph::bufferlist &value) const final {
+    return (key.length() + sizeof(laddr_le_t)) > (capacity() / 4);
+  }
+
   rm_key_ret rm_key(
     omap_context_t oc,
     const std::string &key) final;
@@ -187,7 +193,8 @@ struct OMapInnerNode
     omap_context_t oc,
     internal_const_iterator_t iter, OMapNodeRef entry);
 
-  using handle_split_iertr = base_iertr;
+  using handle_split_iertr = base_iertr::extend<
+    crimson::ct_error::value_too_large>;
   using handle_split_ret = handle_split_iertr::future<mutation_result_t>;
   handle_split_ret handle_split(
     omap_context_t oc, internal_const_iterator_t iter,
@@ -364,6 +371,12 @@ struct OMapLeafNode
     omap_context_t oc,
     const std::string &key,
     const ceph::bufferlist &value) final;
+
+  bool exceeds_max_kv_limit(
+    const std::string &key,
+    const ceph::bufferlist &value) const final {
+    return (key.length() + value.length()) > (capacity() / 4);
+  }
 
   rm_key_ret rm_key(
     omap_context_t oc, const std::string &key) final;
