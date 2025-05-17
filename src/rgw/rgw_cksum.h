@@ -289,12 +289,12 @@ namespace rgw { namespace cksum {
   static inline const std::optional<rgw::cksum::Cksum> no_cksum{std::nullopt};
 
   /* XXX would like std::string view */
-  static inline std::string to_string(const Type type) {
+  static inline std::string_view to_string(const Type type) {
     const auto& ckd = Cksum::checksums[uint16_t(type)];
     return ckd.name;
   }
 
-  static inline std::string to_uc_string(const Type type) {
+  static inline std::string_view to_uc_string(const Type type) {
     const auto& ckd = Cksum::checksums[uint16_t(type)];
     return ckd.name_uc;
   }
