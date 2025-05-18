@@ -1,0 +1,11 @@
+overrides:
+  install:
+    ceph:
+      flavor: crimson
+tasks:
+- install:
+- ceph:
+    conf:
+      osd:
+        debug monc: 20
+    flavor: crimson
