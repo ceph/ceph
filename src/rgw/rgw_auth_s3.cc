@@ -1480,9 +1480,7 @@ void AWSv4ComplMulti::modify_request_state(const DoutPrefixProvider* dpp, req_st
   const char* const decoded_length = \
     s_rw->info.env->get("HTTP_X_AMZ_DECODED_CONTENT_LENGTH");
 
-  if (!decoded_length) {
-    throw -EINVAL;
-  } else {
+  if (decoded_length) {
     /* XXXX oh my, we forget the original content length */
     s_rw->length = decoded_length;
     s_rw->content_length = parse_content_length(decoded_length);
