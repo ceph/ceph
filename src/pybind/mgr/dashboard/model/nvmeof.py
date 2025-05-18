@@ -2,6 +2,10 @@ from typing import List, NamedTuple, Optional
 
 
 class GatewayInfo(NamedTuple):
+    bool_status: bool
+    status: int
+    error_message: str
+    hostname: str
     cli_version: str
     version: str
     name: str
@@ -9,10 +13,17 @@ class GatewayInfo(NamedTuple):
     addr: str
     port: int
     load_balancing_group: int
+    max_hosts: int
+    max_hosts_per_subsystem: int
+    max_namespaces: int
+    max_namespaces_per_subsystem: int
+    max_subsystems: int
     spdk_version: Optional[str] = ""
 
 
 class GatewayVersion(NamedTuple):
+    status: int
+    error_message: str
     version: str
 
 
@@ -22,11 +33,17 @@ class GatewayLogLevelInfo(NamedTuple):
     log_level: str
 
 
+class NvmfLogFLag(NamedTuple):
+    name: str
+    enabled: bool
+
+
 class SpdkNvmfLogFlagsAndLevelInfo(NamedTuple):
     status: int
     error_message: str
     log_level: str
     log_print_level: str
+    nvmf_log_flags: List[NvmfLogFLag]
 
 
 class Subsystem(NamedTuple):
