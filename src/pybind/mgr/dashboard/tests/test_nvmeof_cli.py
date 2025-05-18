@@ -2,11 +2,12 @@ import errno
 import json
 import unittest
 from unittest.mock import MagicMock
+from typing import Annotated, NamedTuple, List
 
 import pytest
 from mgr_module import CLICommand, HandleCommandResult
 
-from ..services.nvmeof_cli import NvmeofCLICommand
+from ..services.nvmeof_cli import NvmeofCLICommand, AnnotatedDataTextOutputFormatter, convert_from_bytes
 from ..tests import CLICommandTestMixin
 
 
@@ -269,3 +270,78 @@ class TestNVMeoFConfCLI(unittest.TestCase, CLICommandTestMixin):
         self.assertEqual(
             config['gateways'], {}
         )
+
+class TestAnnotatedDataTextOutputFormatter():
+    def test_size_bytes_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            age: int
+            byte: Annotated[int, 'size-bytes']
+            
+        data = {'name': 'Alice', 'age': 30,"byte": 20971520}
+        
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == '+-----+---+----+\n|Name |Age|Byte|\n+-----+---+----+\n|Alice|30|20MB|\n+-----+---+----+'
+        
+    def test_drop_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            age: Annotated[int, 'drop']
+            
+        data = {'name': 'Alice', 'age': 30}
+        
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == '+-----+---+----+\n|Name |\n+-----+---+----+\n|Alice|\n+-----+---+----+'
+        
+    def test_override_header_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            age: Annotated[int, 'override-header:test']
+            
+        data = {'name': 'Alice', 'age': 30}
+        
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == '+-----+---+----+\n|Name |test|\n+-----+---+----+\n|Alice|30|\n+-----+---+----+'
+        
+    def test_override_exclusive_list_field_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            age: Annotated[int, 'override-header:test']
+        
+        class SampleList(NamedTuple):
+            status: int
+            error_message: str
+            samples: Annotated[List[Sample], 'exclusive-list-field']
+
+        data = {"status": 0, "error_message": '' , "samples": [{'name': 'Alice', 'age': 30}, {'name': 'Bob', 'age': 40}]}
+        
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == '+-----+----+\n|Name |Test|\n+-----+----+\n|Alice|30  |\n|Bob  |40  |\n+-----+----+'
+
+    def test_exclusive_result_indicator_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            status: Annotated[int, 'exclusive-result-indicator']
+            
+        data = {'name': 'Alice', 'status': 30}
+        
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == 'Failure'
+        
+        data = {'name': 'Alice', 'status': 0}
+        output = formatter.format_output(data, Sample)
+        
+        assert output == 'Success'
+        
+class TestConverFromBytes:
+    def test_valid_inputs(self):
+        assert convert_from_bytes(209715200) == '200MB'
+        assert convert_from_bytes(219715200) == '209.5MB'
+        assert convert_from_bytes(1048576) == '1MB'
+        assert convert_from_bytes(123) == '123B'
+        assert convert_from_bytes(5368709120) == '5G'
