@@ -7028,7 +7028,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
     fmt::format("INFO: {}->get_multipart_upload for obj {}, {} cksum_type {}",
 		s->bucket->get_name(),
 		s->object->get_name(), upload_id,
-		(!!upload) ? to_string(upload->cksum_type) : 0)
+		(!!upload) ? to_string(upload->cksum_type) : "nil")
 		<< dendl;
 
   rgw_placement_rule* dest_placement;
