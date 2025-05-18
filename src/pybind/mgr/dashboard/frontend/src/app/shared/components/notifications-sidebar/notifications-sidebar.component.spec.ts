@@ -115,7 +115,7 @@ describe('NotificationsSidebarComponent', () => {
     expect(component.isSidebarOpened).toBe(false);
   });
 
-  it('should categorize notifications correctly with limits', () => {
+  it('should categorize notifications correctly', () => {
     const today = new Date();
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
@@ -128,9 +128,9 @@ describe('NotificationsSidebarComponent', () => {
 
     component.categorizeNotifications();
     
-    // Should be limited to 3 today and 2 previous
-    expect(component.todayNotifications.length).toBe(3);
-    expect(component.previousNotifications.length).toBe(2);
+    // Should show all notifications
+    expect(component.todayNotifications.length).toBe(5);
+    expect(component.previousNotifications.length).toBe(5);
   });
 
   it('should return correct notification icon class', () => {

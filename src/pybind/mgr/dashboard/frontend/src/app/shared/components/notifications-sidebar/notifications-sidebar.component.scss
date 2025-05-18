@@ -22,7 +22,7 @@
   color: #fff;
   display: flex;
   flex-direction: column;
-  max-height: 500px;
+  max-height: 550px;
   overflow: hidden;
   width: 100%;
 }
@@ -136,8 +136,25 @@
 .notifications-section {
   display: flex;
   flex-direction: column;
-  max-height: 400px;
+  max-height: 260px;
   overflow-y: auto;
+  
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: #333;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: #666;
+    border-radius: 3px;
+  }
+  
+  &::-webkit-scrollbar-thumb:hover {
+    background: #888;
+  }
 }
 
 .section-header {

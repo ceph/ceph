@@ -239,12 +239,10 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
     const today = moment().startOf('day');
     
     this.todayNotifications = this.notifications
-      .filter(notification => moment(notification.timestamp).isSameOrAfter(today))
-      .slice(0, 3); // Limit to 3 notifications for today
+      .filter(notification => moment(notification.timestamp).isSameOrAfter(today));
     
     this.previousNotifications = this.notifications
-      .filter(notification => moment(notification.timestamp).isBefore(today))
-      .slice(0, 2); // Limit to 2 notifications for previous
+      .filter(notification => moment(notification.timestamp).isBefore(today));
   }
 
   getNotificationIconClass(notification: CdNotification) {
