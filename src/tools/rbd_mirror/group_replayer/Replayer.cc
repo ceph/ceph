@@ -352,15 +352,19 @@ void Replayer<I>::load_local_group_snapshots() {
       if (local_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
         continue;
       }
+      auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+          &local_snap.snapshot_namespace);
+      if (ns != nullptr &&
+          ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
+        continue;
+      }
       // do not forward until previous local mirror group snapshot is COMPLETE
       validate_image_snaps_sync_complete(local_snap.id);
       auto snap_type = cls::rbd::get_group_snap_namespace_type(
           local_snap.snapshot_namespace);
-      if (snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR
-          || m_retry_validate_snap) {
-        m_retry_validate_snap = false;
-        schedule_load_group_snapshots();
-        return;
+      if (snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR) {
+        m_retry_validate_snap = true;
+        break;
       }
     }
   }
@@ -406,11 +410,30 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
       continue;
     }
     if (ns->state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
+      if (ns->is_orphan()) {
+        dout(5) << "local group being force promoted" << dendl;
+        locker.unlock();
+        handle_replay_complete(0, "orphan (force promoting)");
+        return;
+      } else if (m_retry_validate_snap) {
+        m_retry_validate_snap = false;
+        locker.unlock();
+        schedule_load_group_snapshots();
+        return; // previous snap is syncing, reload local snaps to confirm its completeness.
+      }
       break;
+    } else  { // primary
+      if (it->state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+        dout(10) << "found incomplete primary group snapshot: "
+                 << it->id << dendl;
+        locker.unlock();
+        schedule_load_group_snapshots();
+        return;
+      }
+      locker.unlock();
+      handle_replay_complete(0, "local group is primary");
+      return;
     }
-    locker.unlock();
-    handle_replay_complete(0, "local group is primary");
-    return;
   }
 
   load_remote_group_snapshots(&locker);
