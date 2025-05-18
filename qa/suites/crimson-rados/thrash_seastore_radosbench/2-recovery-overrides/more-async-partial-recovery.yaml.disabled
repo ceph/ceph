@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        osd_async_recovery_min_cost: 1
+        osd_object_clean_region_max_num_intervals: 1000
