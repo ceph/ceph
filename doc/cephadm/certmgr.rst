@@ -90,7 +90,7 @@ Known Certificates and Keys
 The `CertMgr` class maintains a list of known certificates and keys. These are
 automatically documented below:
 
-.. automodule:: mgr.cephadm.certmgr
+.. automodule:: mgr.cephadm.cert_mgr
    :members: known_certs, known_keys
    :undoc-members:
    :show-inheritance:
