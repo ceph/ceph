@@ -118,7 +118,7 @@ else:
             log_level = log_level.upper() if log_level else None
             print_level = print_level.upper() if print_level else None
             spdk_log_level = NVMeoFClient(gw_group=gw_group,
-                                          traddr=traddr).stub.set_gateway_log_level(
+                                          traddr=traddr).stub.set_spdk_nvmf_logs_req(
                 NVMeoFClient.pb2.set_spdk_nvmf_logs_req(log_level=log_level,
                                                         print_level=print_level)
             )
