@@ -1,16 +1,13 @@
 @use './src/styles/vendor/variables' as vv;
 
 :host {
-  bottom: 10px;
-  max-width: 90vw;
+  bottom: auto;
+  max-width: 400px;
   position: fixed;
-  right: -350px;
+  right: -400px;
   top: vv.$navbar-height + 10px;
-
-  transition: all 0.6s;
-
-  width: 350px;
-
+  transition: all 0.3s;
+  width: 400px;
   z-index: 9;
 }
 
@@ -18,47 +15,238 @@
   right: 20px;
 }
 
-.card {
-  height: 100%;
-}
-
-.card-body {
-  padding-left: 0;
-  padding-right: 5px;
-  padding-top: 3px;
-}
-
-ngx-simplebar {
-  height: calc(100% - 42.2px);
-}
-
-.separator {
-  background-color: vv.$gray-200;
-  color: vv.$gray-600;
-  font-size: 1rem;
-  padding: 5px 12px;
-}
-
-.btn-block {
-  width: 98%;
-}
-
-.btn-link .fa-trash-o {
-  color: vv.$black;
-}
-
-table {
+.notifications-panel {
+  background-color: #222;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  max-height: 500px;
+  overflow: hidden;
   width: 100%;
 }
 
-.row {
-  margin-left: 0;
-  margin-right: 0;
-  padding-bottom: 1rem;
-  padding-top: 1rem;
+.notifications-header {
+  align-items: center;
+  background-color: #1e1e1e;
+  border-bottom: 1px solid #444;
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 16px;
 }
 
-hr {
-  margin-bottom: 2px;
-  margin-top: 2px;
+.notifications-title {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.notifications-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dismiss-all-btn {
+  background: transparent;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+  transition: color 0.2s;
+
+  &:hover {
+    color: #fff;
+  }
+}
+
+.close-btn {
+  background: transparent;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  
+  &:hover {
+    color: #fff;
+  }
+}
+
+.do-not-disturb {
+  align-items: center;
+  background-color: #2a2a2a;
+  display: flex;
+  gap: 12px;
+  padding: 10px 16px;
+}
+
+.toggle-switch {
+  display: inline-block;
+  height: 20px;
+  position: relative;
+  width: 36px;
+  
+  input {
+    height: 0;
+    opacity: 0;
+    width: 0;
+    
+    &:checked + .toggle-slider {
+      background-color: vv.$primary;
+      
+      &:before {
+        transform: translateX(16px);
+      }
+    }
+  }
+  
+  .toggle-slider {
+    background-color: #666;
+    border-radius: 20px;
+    bottom: 0;
+    cursor: pointer;
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+    transition: .4s;
+    
+    &:before {
+      background-color: white;
+      border-radius: 50%;
+      bottom: 3px;
+      content: "";
+      height: 14px;
+      left: 3px;
+      position: absolute;
+      transition: .4s;
+      width: 14px;
+    }
+  }
+}
+
+.dnd-text {
+  color: #ccc;
+  font-size: 14px;
+}
+
+.notifications-section {
+  display: flex;
+  flex-direction: column;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.section-header {
+  background-color: #2a2a2a;
+  color: #ccc;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 16px;
+  text-transform: uppercase;
+}
+
+.notification-item {
+  background-color: #333;
+  border-bottom: 1px solid #444;
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  
+  &:hover {
+    background-color: #3a3a3a;
+  }
+}
+
+.notification-icon {
+  align-items: center;
+  border-radius: 50%;
+  display: flex;
+  height: 28px;
+  justify-content: center;
+  min-width: 28px;
+  width: 28px;
+  
+  &.error {
+    background-color: #f44336;
+  }
+  
+  &.info {
+    background-color: #2196f3;
+  }
+  
+  &.success {
+    background-color: #4caf50;
+  }
+  
+  &.running {
+    background-color: #ff9800;
+  }
+
+  i {
+    color: white;
+    font-size: 14px;
+  }
+}
+
+.notification-content {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.notification-time {
+  color: #aaa;
+  font-size: 11px;
+}
+
+.notification-title {
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.notification-message {
+  color: #ccc;
+  font-size: 12px;
+  margin-bottom: 4px;
+  max-width: 100%;
+  overflow: hidden;
+  
+  ::ng-deep ul {
+    margin-bottom: 0;
+    padding-left: 20px;
+  }
+}
+
+.notification-progress {
+  margin-top: 4px;
+}
+
+.empty-state {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 30px 16px;
+  text-align: center;
+  
+  .empty-state-message {
+    color: #aaa;
+    
+    i {
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    
+    p {
+      font-size: 13px;
+      margin: 0;
+    }
+  }
 }

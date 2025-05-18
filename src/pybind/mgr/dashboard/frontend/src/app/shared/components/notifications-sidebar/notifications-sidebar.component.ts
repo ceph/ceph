@@ -41,6 +41,10 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   @HostBinding('class.active') isSidebarOpened = false;
 
   notifications: CdNotification[];
+  todayNotifications: CdNotification[] = [];
+  previousNotifications: CdNotification[] = [];
+  
+  doNotDisturb = false;
   private interval: number;
   private timeout: number;
 
@@ -81,6 +85,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.last_task = window.localStorage.getItem('last_task');
+    this.doNotDisturb = window.localStorage.getItem('doNotDisturb') === 'true';
 
     const permissions = this.authStorageService.getPermissions();
     if (permissions.prometheus.read && permissions.configOpt.read) {
@@ -97,6 +102,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.notificationService.data$.subscribe((notifications: CdNotification[]) => {
         this.notifications = _.orderBy(notifications, ['timestamp'], ['desc']);
+        this.categorizeNotifications();
         this.cdRef.detectChanges();
       })
     );
@@ -135,7 +141,9 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
               window.localStorage.setItem('last_task', this.last_task);
             }
 
-            this.notificationService.save(notification);
+            if (!this.doNotDisturb) {
+              this.notificationService.save(notification);
+            }
           });
 
           this.cdRef.detectChanges();
@@ -224,5 +232,65 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
         resp['application'] = 'Prometheus';
       }
     );
+  }
+
+  // Helper methods for the new design
+  categorizeNotifications() {
+    const today = moment().startOf('day');
+    
+    this.todayNotifications = this.notifications
+      .filter(notification => moment(notification.timestamp).isSameOrAfter(today))
+      .slice(0, 3); // Limit to 3 notifications for today
+    
+    this.previousNotifications = this.notifications
+      .filter(notification => moment(notification.timestamp).isBefore(today))
+      .slice(0, 2); // Limit to 2 notifications for previous
+  }
+
+  getNotificationIconClass(notification: CdNotification) {
+    switch (notification.type) {
+      case NotificationType.error:
+        return 'error';
+      case NotificationType.info:
+        return 'info';
+      case NotificationType.success:
+        return 'success';
+      default:
+        return '';
+    }
+  }
+
+  getRelativeTime(notification: CdNotification) {
+    const time = moment(notification.timestamp);
+    const now = moment();
+    
+    // Within the last hour
+    if (now.diff(time, 'minutes') < 60) {
+      const mins = now.diff(time, 'minutes');
+      return mins === 0 ? 'Now' : `${mins} minutes ago`;
+    }
+    
+    // Within the last day
+    if (now.diff(time, 'hours') < 24) {
+      return `${now.diff(time, 'hours')} hours ago`;
+    }
+    
+    // More than a day
+    return `${now.diff(time, 'days')} days ago`;
+  }
+
+  getNotificationIndex(notification: CdNotification): number {
+    return this.notifications.indexOf(notification);
+  }
+
+  toggleDoNotDisturb() {
+    window.localStorage.setItem('doNotDisturb', String(this.doNotDisturb));
+    this.notificationService.suspendToasties(this.doNotDisturb);
+  }
+
+  showViewLogsButton(notification: CdNotification): boolean {
+    // Show View logs button for specific notification types
+    // For example, return true if notification is log-related
+    return notification.message && notification.message.includes('log');
   }
 }
