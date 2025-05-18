@@ -497,6 +497,18 @@ std::string prepare_primary_mirror_snap_name(CephContext *cct,
   return ind_snap_name_stream.str();
 }
 
+std::string prepare_non_primary_mirror_snap_name(CephContext *cct,
+                                            const std::string &global_group_id,
+                                            const std::string &snap_id) {
+  ldout(cct, 10) << "global_group_id: " << global_group_id
+                 << ", snap_id: " << snap_id << dendl;
+
+  std::stringstream ind_snap_name_stream;
+  ind_snap_name_stream << ".mirror.non-primary."
+                       << global_group_id << "." << snap_id;
+  return ind_snap_name_stream.str();
+}
+
 int get_last_mirror_snapshot_state(librados::IoCtx &group_ioctx,
                                    const std::string &group_id,
                                    cls::rbd::MirrorSnapshotState *state,
@@ -3019,6 +3031,131 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
   return 0;
 }
 
+bool get_rollback_group_snap_id(
+    std::vector<cls::rbd::GroupSnapshot>::reverse_iterator it,
+    std::vector<cls::rbd::GroupSnapshot>::reverse_iterator end,
+    std::string &rollback_snap_id) {
+
+  for (; it != end; it++) {
+    auto mirror_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+      &it->snapshot_namespace);
+    if (mirror_ns == nullptr) {
+      continue;
+    }
+    if (mirror_ns->state != cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY) {
+      break;
+    }
+    if (it->state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+      break;
+    }
+  }
+
+  if (it != end) {
+    rollback_snap_id = it->id;
+    return true;
+  }
+
+  return false;
+}
+
+bool can_create_primary_group_snapshot(IoCtx& group_ioctx,
+    std::vector<cls::rbd::GroupSnapshot> *group_snaps, bool demoted,
+    bool force, bool* requires_orphan, std::string &rollback_snap_id) {
+  CephContext *cct = (CephContext *)group_ioctx.cct();
+
+  if (requires_orphan != nullptr) {
+    *requires_orphan = false;
+  }
+
+  auto snap =  group_snaps->rbegin();
+  for (; snap != group_snaps->rend(); ++snap) {
+    auto mirror_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+        &snap->snapshot_namespace);
+    if (mirror_ns == nullptr) {
+      continue;
+    }
+    ldout(cct, 20) << "previous snapshot snap_id=" << snap->id << " "
+                   << *mirror_ns << dendl;
+
+    if (mirror_ns->is_demoted() && !force) {
+      lderr(cct) << "trying to create primary snapshot without force "
+                 << "when previous primary snapshot is demoted"
+                 << dendl;
+      return false;
+    }
+
+    if (mirror_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY) {
+      if (!force) {
+        lderr(cct) << "trying to create primary snapshot without force "
+                   << "when previous snapshot is non-primary"
+                   << dendl;
+        return false;
+      }
+      if (demoted) {
+        lderr(cct) << "trying to create primary demoted snapshot "
+                   << "when previous snapshot is non-primary"
+                   << dendl;
+        return false;
+      }
+
+      if (requires_orphan != nullptr) {
+        *requires_orphan = !mirror_ns->is_demoted();
+      }
+      if (snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+        ldout(cct, 20) << "needs rollback" << dendl;
+        if (!get_rollback_group_snap_id(++snap, group_snaps->rend(),
+                                        rollback_snap_id)) {
+          lderr(cct) << "cannot rollback" << dendl;
+          return false;
+        }
+        ldout(cct, 20) << "rollback_snap_id=" << rollback_snap_id << dendl;
+      }
+      return true;
+    }
+
+    return true;
+  }
+
+  ldout(cct, 20) << "no previous mirror snapshots found" << dendl;
+  return true;
+}
+
+int create_orphan_group_snapshot(IoCtx& group_ioctx,
+                                 std::string &group_id,
+                                 std::string &global_group_id) {
+  CephContext *cct = (CephContext *)group_ioctx.cct();
+  std::string group_snap_id = librbd::util::generate_image_id(group_ioctx);
+  ldout(cct, 20) << "io_ctx=" << &group_ioctx
+		 << ", group_id=" << group_id
+                 << ", group_snap_id=" << group_snap_id
+                 << dendl;
+
+  cls::rbd::GroupSnapshot group_snap{
+      group_snap_id,
+      cls::rbd::GroupSnapshotNamespaceMirror{},
+      prepare_non_primary_mirror_snap_name(cct, global_group_id, group_snap_id),
+      cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
+
+  std::string group_header_oid = librbd::util::group_header_name(group_id);
+  int r = cls_client::group_snap_set(&group_ioctx,
+                                     group_header_oid, group_snap);
+  if (r < 0) {
+    lderr(cct) << "failed to set group snapshot metadata: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+  r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
+  if (r < 0) {
+    lderr(cct) << "failed to set group snapshot metadata: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
 template <typename I>
 int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
                              bool force) {
@@ -3124,36 +3261,61 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
                  << " :" << cpp_strerror(r) << dendl;
       return r;
     }
-    auto snap =  snaps.rbegin();
-    for (; snap != snaps.rend(); ++snap) {
-      auto snap_type = cls::rbd::get_group_snap_namespace_type(
-          snap->snapshot_namespace);
-      if (snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR &&
-          snap->state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
-        break;
+
+    bool requires_orphan = false;
+    std::string rollback_snap_id = {};
+    if (!can_create_primary_group_snapshot(group_ioctx, &snaps, false,
+                                           true, &requires_orphan,
+                                           rollback_snap_id)) {
+      lderr(cct) << "cannot promote" << dendl;
+      return -EINVAL;
+    } else if (!rollback_snap_id.empty() || requires_orphan) {
+      ldout(cct, 10) << "requires_orphan: " << requires_orphan
+                     << ", rollback_snap_id: " << rollback_snap_id
+                     << dendl;
+
+      if (!rollback_snap_id.empty()) {
+         auto snap =  snaps.rbegin();
+        for (; snap != snaps.rend(); ++snap) {
+          if (snap->id == rollback_snap_id) {
+            break;
+          }
+        }
+
+        if (snap == snaps.rend()) {
+          ldout(cct, 10) << "rolling back snapshot not found: "
+                         << rollback_snap_id << dendl;
+          return -EINVAL;
+        }
+
+        // Check for group membership match
+        std::vector<cls::rbd::GroupImageSpec> rollback_images;
+        for (auto& it : snap->snaps) {
+          rollback_snap_ids.push_back(it.snap_id);
+          rollback_images.emplace_back(it.image_id, it.pool);
+        }
+
+        if (rollback_images != current_images) {
+          lderr(cct) << "group snapshot membership does not match group membership"
+                     << dendl;
+          return -EINVAL;
+        }
+
+        ldout(cct, 10) << "rolling back to group snap id: " << snap->id << dendl;
       }
-    }
 
-    if (snap == snaps.rend()) {
-      lderr(cct) << "failed to rollback, no mirror group snapshot available"
-                 << dendl;
-      return -EINVAL;
+      r = create_orphan_group_snapshot(group_ioctx, group_id,
+                                       mirror_group.global_group_id);
+      if (r < 0 ) {
+        lderr(cct) << "orphan snap creation failed: "
+                   << cpp_strerror(r) << dendl;
+        return r;
+      }
+    } else {
+      ldout(cct, 10) << "no orphan snap required"
+                     << ", rollback_snap_id: " << rollback_snap_id
+                     << dendl;
     }
-
-    // Check for group membership match
-    std::vector<cls::rbd::GroupImageSpec> rollback_images;
-    for (auto& it : snap->snaps) {
-      rollback_snap_ids.push_back(it.snap_id);
-      rollback_images.emplace_back(it.image_id, it.pool);
-    }
-
-    if (rollback_images != current_images) {
-      lderr(cct) << "group snapshot membership does not match group membership"
-                 << dendl;
-      return -EINVAL;
-    }
-
-    ldout(cct, 10) << "rolling back to group snap id: " << snap->id << dendl;
   }
 
   std::string group_snap_id = librbd::util::generate_image_id(group_ioctx);
