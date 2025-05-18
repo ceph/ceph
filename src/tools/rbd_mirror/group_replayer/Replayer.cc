@@ -326,46 +326,43 @@ template <typename I>
 void Replayer<I>::load_local_group_snapshots() {
   dout(10) << "m_local_group_id=" << m_local_group_id << dendl;
 
-  {
-    std::unique_lock locker{m_lock};
-    if (is_replay_interrupted(&locker)) {
-      return;
-    }
-
-    if (m_state != STATE_COMPLETE) {
-      m_state = STATE_REPLAYING;
-    }
-
-    if (m_stop_requested) {
-      return;
-    } else if (is_rename_requested()) {
-      dout(10) << "remote group renamed" << dendl;
-      locker.unlock();
-      handle_replay_complete(0, "remote group renamed");
-      return;
-    }
+  std::unique_lock locker{m_lock};
+  if (is_replay_interrupted(&locker)) {
+    return;
   }
 
-  //FIXME: This is not accessed under a lock
+  if (m_state != STATE_COMPLETE) {
+    m_state = STATE_REPLAYING;
+  }
+
+  if (m_stop_requested) {
+    return;
+  } else if (is_rename_requested()) {
+    dout(10) << "remote group renamed" << dendl;
+    locker.unlock();
+    handle_replay_complete(0, "remote group renamed");
+    return;
+  }
+
   if (!m_local_group_snaps.empty()) {
     for (auto &local_snap : m_local_group_snaps) {
       if (local_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
         continue;
       }
       // do not forward until previous local mirror group snapshot is COMPLETE
-      validate_image_snaps_sync_complete(local_snap.id);
+      validate_image_snaps_sync_complete(local_snap.id, &locker);
       auto snap_type = cls::rbd::get_group_snap_namespace_type(
           local_snap.snapshot_namespace);
       if (snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR
           || m_retry_validate_snap) {
         m_retry_validate_snap = false;
+        locker.unlock();
         schedule_load_group_snapshots();
         return;
       }
     }
   }
 
-  std::unique_lock locker{m_lock};
   m_in_flight_op_tracker.start_op();
   m_local_group_snaps.clear();
 
@@ -503,9 +500,8 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
 
 template <typename I>
 void Replayer<I>::validate_image_snaps_sync_complete(
-    const std::string &group_snap_id) {
-  std::unique_lock locker{m_lock};
-  if (is_replay_interrupted(&locker)) {
+    const std::string &group_snap_id, std::unique_lock<ceph::mutex>* locker) {
+  if (is_replay_interrupted(locker)) {
     return;
   }
   dout(10) << "group snap_id: " << group_snap_id << dendl;
@@ -542,7 +538,6 @@ void Replayer<I>::validate_image_snaps_sync_complete(
   auto snap_type = cls::rbd::get_group_snap_namespace_type(
       itl->snapshot_namespace);
   if (snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER) {
-    locker.unlock();
     C_SaferCond *ctx = new C_SaferCond;
     regular_snapshot_complete(group_snap_id, ctx);
     r = ctx->wait();
@@ -575,11 +570,11 @@ void Replayer<I>::validate_image_snaps_sync_complete(
     derr << "failed group image list: " << cpp_strerror(r) << dendl;
     return;
   }
-  locker.unlock();
+  locker->unlock();
 
   std::vector<cls::rbd::ImageSnapshotSpec> image_snap_spec;
   for (auto& image : local_images) {
-    std::unique_lock locker{m_lock};
+    locker->lock();
     bool image_snap_complete = false;
     std::string image_header_oid = librbd::util::header_name(
         image.spec.image_id);
@@ -628,7 +623,7 @@ void Replayer<I>::validate_image_snaps_sync_complete(
                  << mirror_ns->group_snap_id << dendl;
       }
     }
-    locker.unlock();
+    locker->unlock();
 
     // In case if the image replayer is not yet updated with the limits, do it here
     if (!image_snap_complete) {
@@ -637,8 +632,8 @@ void Replayer<I>::validate_image_snaps_sync_complete(
     image_snap_complete = false; // reset
   }
 
+  locker->lock();
   if (itr->snaps.size() == image_snap_spec.size()) {
-    std::unique_lock locker{m_lock};
     for (auto &spec : image_snap_spec) {
       C_SaferCond *ctx = new C_SaferCond;
       mirror_snapshot_complete(group_snap_id, &spec, ctx);
@@ -647,7 +642,6 @@ void Replayer<I>::validate_image_snaps_sync_complete(
         m_retry_validate_snap = true;
       }
     }
-    locker.unlock();
   }
 }
 
@@ -1323,7 +1317,7 @@ template <typename I>
 void Replayer<I>::regular_snapshot_complete(
     const std::string &group_snap_id,
     Context *on_finish) {
-  std::unique_lock locker{m_lock};
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
   auto itl = std::find_if(
       m_local_group_snaps.begin(), m_local_group_snaps.end(),
       [group_snap_id](const cls::rbd::GroupSnapshot &s) {
@@ -1359,10 +1353,7 @@ void Replayer<I>::regular_snapshot_complete(
       on_finish->complete(r);
       return;
     }
-    locker.unlock();
     for (auto& image : local_images) {
-      std::unique_lock locker{m_lock};
-      bool image_snap_complete = false;
       std::string image_header_oid = librbd::util::header_name(
           image.spec.image_id);
       ::SnapContext snapc;
@@ -1390,7 +1381,6 @@ void Replayer<I>::regular_snapshot_complete(
         auto ns = std::get_if<cls::rbd::ImageSnapshotNamespaceGroup>(
             &snap_info.snapshot_namespace);
         if (ns != nullptr && ns->group_snapshot_id == group_snap_id) {
-          image_snap_complete = true;
           cls::rbd::ImageSnapshotSpec snap_spec;
           snap_spec.pool = image.spec.pool_id;
           snap_spec.image_id = image.spec.image_id;
@@ -1399,16 +1389,9 @@ void Replayer<I>::regular_snapshot_complete(
           local_image_snap_specs.push_back(snap_spec);
         }
       }
-      locker.unlock();
-      // In case if the image replayer is not yet updated with the limits, do it here
-      if (!image_snap_complete) {
-        set_image_replayer_limits(image.spec.image_id, &(*itr));
-      }
-      image_snap_complete = false; // reset
     }
   }
   if (itr->snaps.size() == local_image_snap_specs.size()) {
-    locker.lock();
     itl->snaps = local_image_snap_specs;
     itl->state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
     librados::ObjectWriteOperation op;
@@ -1421,7 +1404,6 @@ void Replayer<I>::regular_snapshot_complete(
     int r = m_local_io_ctx.aio_operate(
         librbd::util::group_header_name(m_local_group_id), comp, &op);
     ceph_assert(r == 0);
-    locker.unlock();
     comp->release();
 
     dout(10) << "local group snap info: "
