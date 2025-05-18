@@ -50,7 +50,14 @@
         <i [ngClass]="notification.iconClass"></i>
       </div>
       <div class="notification-content">
-        <div class="notification-time">{{ getRelativeTime(notification) }}</div>
+        <div class="notification-header">
+          <div class="notification-time">{{ getRelativeTime(notification) }}</div>
+          <button class="dismiss-notification-btn" 
+                  (click)="remove(getNotificationIndex(notification)); $event.stopPropagation()"
+                  title="Dismiss notification">
+            <i [ngClass]="[icons.close]"></i>
+          </button>
+        </div>
         <div class="notification-title">{{ notification.title }}</div>
         <div class="notification-message" [innerHtml]="notification.message"></div>
       </div>
@@ -66,7 +73,14 @@
         <i [ngClass]="notification.iconClass"></i>
       </div>
       <div class="notification-content">
-        <div class="notification-time">{{ getRelativeTime(notification) }}</div>
+        <div class="notification-header">
+          <div class="notification-time">{{ getRelativeTime(notification) }}</div>
+          <button class="dismiss-notification-btn" 
+                  (click)="remove(getNotificationIndex(notification)); $event.stopPropagation()"
+                  title="Dismiss notification">
+            <i [ngClass]="[icons.close]"></i>
+          </button>
+        </div>
         <div class="notification-title">{{ notification.title }}</div>
         <div class="notification-message" [innerHtml]="notification.message"></div>
       </div>

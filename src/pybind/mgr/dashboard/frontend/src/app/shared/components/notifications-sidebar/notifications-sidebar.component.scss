@@ -250,3 +250,25 @@
     }
   }
 }
+
+.notification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dismiss-notification-btn {
+  background: transparent;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 10px;
+  height: 18px;
+  line-height: 1;
+  padding: 0;
+  width: 18px;
+  
+  &:hover {
+    color: #fff;
+  }
+}
