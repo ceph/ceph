@@ -1,8 +1,8 @@
-from typing import List, NamedTuple, Optional
+from typing import List, NamedTuple, Optional, Annotated
 
 
 class GatewayInfo(NamedTuple):
-    cli_version: str
+    cli_version: Annotated[str, 'drop']
     version: str
     name: str
     group: str
@@ -34,8 +34,8 @@ class Subsystem(NamedTuple):
     enable_ha: bool
     serial_number: str
     model_number: str
-    min_cntlid: int
-    max_cntlid: int
+    min_cntlid: Annotated[int, 'drop']
+    max_cntlid: Annotated[int, 'drop']
     namespace_count: int
     subtype: str
     max_namespaces: int
@@ -44,7 +44,7 @@ class Subsystem(NamedTuple):
 class SubsystemList(NamedTuple):
     status: int
     error_message: str
-    subsystems: List[Subsystem]
+    subsystems: Annotated[List[Subsystem], 'exclusive-list-field']
 
 
 class Connection(NamedTuple):
@@ -61,11 +61,11 @@ class ConnectionList(NamedTuple):
     status: int
     error_message: str
     subsystem_nqn: str
-    connections: List[Connection]
+    connections: Annotated[List[Connection], 'exclusive-list-field']
 
 
 class NamespaceCreation(NamedTuple):
-    status: int
+    status: Annotated[int, 'exclusive-result-indicator']
     error_message: str
     nsid: int
 
@@ -77,35 +77,35 @@ class Namespace(NamedTuple):
     rbd_image_name: str
     rbd_pool_name: str
     load_balancing_group: int
-    rbd_image_size: int
-    block_size: int
-    rw_ios_per_second: int
-    rw_mbytes_per_second: int
-    r_mbytes_per_second: int
-    w_mbytes_per_second: int
+    rbd_image_size: Annotated[int, 'size-bytes']
+    block_size: Annotated[int, 'size-bytes']
+    rw_ios_per_second: Annotated[int, 'override-header: R/W IOs per second']
+    rw_mbytes_per_second: Annotated[int, 'override-header: R/W MBs per second']
+    r_mbytes_per_second: Annotated[int, 'override-header: Read MBs per second']
+    w_mbytes_per_second: Annotated[int, 'override-header: Write MBs per second']
     trash_image: bool
 
 
 class NamespaceList(NamedTuple):
     status: int
     error_message: str
-    namespaces: List[Namespace]
+    namespaces: Annotated[List[Namespace], 'exclusive-list-field']
 
 
 class NamespaceIOStats(NamedTuple):
-    status: int
-    error_message: str
+    status: Annotated[int, 'drop']
+    error_message: Annotated[str, 'drop']
     subsystem_nqn: str
     nsid: int
     uuid: str
     bdev_name: str
     tick_rate: int
     ticks: int
-    bytes_read: int
+    bytes_read: Annotated[int, 'size-bytes']
     num_read_ops: int
-    bytes_written: int
+    bytes_written: Annotated[int, 'size-bytes']
     num_write_ops: int
-    bytes_unmapped: int
+    bytes_unmapped: Annotated[int, 'size-bytes']
     num_unmap_ops: int
     read_latency_ticks: int
     max_read_latency_ticks: int
@@ -133,7 +133,7 @@ class Listener(NamedTuple):
 class ListenerList(NamedTuple):
     status: int
     error_message: str
-    listeners: List[Listener]
+    listeners: Annotated[List[Listener], 'exclusive-list-field']
 
 
 class Host(NamedTuple):
@@ -149,5 +149,5 @@ class HostsInfo(NamedTuple):
 
 
 class RequestStatus(NamedTuple):
-    status: int
+    status: Annotated[int, 'exclusive-result-indicator']
     error_message: str
