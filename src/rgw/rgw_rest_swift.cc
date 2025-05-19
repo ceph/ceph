@@ -1481,7 +1481,7 @@ int RGWCopyObj_ObjStore_SWIFT::init_dest_policy()
 int RGWCopyObj_ObjStore_SWIFT::get_params(optional_yield y)
 {
   if_mod = s->info.env->get("HTTP_IF_MODIFIED_SINCE");
-  if_unmod = s->info.env->get("HTTP_IF_UNMODIFIED_SINCE");
+  if_unmod = s->info.env->get("HTTP_IF_MATCH_LAST_MODIFIED_TIME");
   if_match = s->info.env->get("HTTP_COPY_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_COPY_IF_NONE_MATCH");
 

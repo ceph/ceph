@@ -7064,8 +7064,13 @@ int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
         }
       } else {
         bufferlist bl;
-        if (!state->get_attr(RGW_ATTR_ETAG, bl) ||
-            strncmp(if_match, bl.c_str(), bl.length()) != 0) {
+        if (state->get_attr(RGW_ATTR_ETAG, bl)) {
+          string if_match_str = rgw_string_unquote(if_match);
+          string etag = string(bl.c_str(), bl.length());
+          if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
+            return -ERR_PRECONDITION_FAILED;
+          }
+        } else {
           return -ERR_PRECONDITION_FAILED;
         }
       }
@@ -7079,8 +7084,13 @@ int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
         }
       } else {
         bufferlist bl;
-        if (!state->get_attr(RGW_ATTR_ETAG, bl) ||
-            strncmp(if_nomatch, bl.c_str(), bl.length()) == 0) {
+        if (state->get_attr(RGW_ATTR_ETAG, bl)) {
+          string if_match_str = rgw_string_unquote(if_nomatch);
+          string etag = string(bl.c_str(), bl.length());
+          if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
+            return -ERR_PRECONDITION_FAILED;
+          }
+        } else {
           return -ERR_PRECONDITION_FAILED;
         }
       }
