@@ -46,6 +46,19 @@ RGW {
         name = "client.{{ rgw_user }}";
 }
 
+{% if kmip_addrs %}
+KMIP {
+            HOST {
+{% for kmip_addr in kmip_addrs %}
+                     addr = {{ kmip_addr }};
+{% endfor %}
+            }
+            cert = /etc/ganesha/kmip/kmip_cert.pem;
+            key = /etc/ganesha/kmip/kmip_key.pem;
+            ca = /etc/ganesha/kmip/kmip_ca_cert.pem;
+}
+
+{% endif %}
 {% if tls_add %}
 TLS_CONFIG{
         Enable_TLS = {{ tls_add }};
@@ -67,4 +80,5 @@ TLS_CONFIG{
 }
 
 {% endif %}
+
 %url    {{ url }}

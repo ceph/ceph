@@ -147,6 +147,8 @@ class NFSService(CephService):
         if monitoring_ip:
             daemon_spec.port_ips.update({str(monitoring_port): monitoring_ip})
 
+        add_kmip_block = (spec.kmip_cert and spec.kmip_key and spec.kmip_ca_cert and spec.kmip_host_list)
+
         # generate the ganesha config
         def get_ganesha_conf() -> str:
             context: Dict[str, Any] = {
@@ -165,6 +167,7 @@ class NFSService(CephService):
                 "nfs_idmap_conf": nfs_idmap_conf,
                 "enable_nlm": str(spec.enable_nlm).lower(),
                 "cluster_id": self.mgr._cluster_fsid,
+                "kmip_addrs": spec.kmip_host_list if add_kmip_block else None,
                 "tls_add": spec.ssl,
                 "tls_ciphers": spec.tls_ciphers,
                 "tls_min_version": spec.tls_min_version,
