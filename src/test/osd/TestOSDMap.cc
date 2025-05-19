@@ -3063,8 +3063,8 @@ TEST_F(OSDMapTest, pgtemp_primaryfirst) {
   decoded = osdmap.pgtemp_undo_primaryfirst(pool, pgid, encoded);
   ASSERT_EQ(set, decoded);
 
-  // With nonprimary_shards
-  for (int seed = 1; seed < 64; seed++) {
+  // With nonprimary_shards, shard 0 is never a non-primary
+  for (int seed = 2; seed < 64; seed += 2) {
     for (int osd = 0; osd < 6; osd++ ) {
       if (seed & (1 << osd)) {
 	pool.nonprimary_shards.insert(shard_id_t(osd));
@@ -3081,6 +3081,22 @@ TEST_F(OSDMapTest, pgtemp_primaryfirst) {
       } else {
 	// non-primary shards last
 	ASSERT_TRUE(pool.is_nonprimary_shard(shard_id_t(encoded[osd])));
+      }
+      std::cout << osd << " " << seed << " " << osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd)) << std::endl;
+      // Encode and decode should be equivalent
+      ASSERT_EQ(osdmap.pgtemp_undo_primaryfirst(pool, pgid,
+		  osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd))),
+		shard_id_t(osd));
+      // Shard 0 never changes, seed 62 is a special case because all the other
+      // shards are non-primary
+      if ((osd != 0) && (seed != 62)) {
+	// Encode should be different
+	ASSERT_NE(osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd)),
+		  shard_id_t(osd));
+      } else {
+	// Encode should not change
+	ASSERT_EQ(osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd)),
+		  shard_id_t(osd));
       }
     }
     decoded = osdmap.pgtemp_undo_primaryfirst(pool, pgid, encoded);
