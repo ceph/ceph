@@ -534,14 +534,15 @@ void ECBackend::objects_read_and_reconstruct(
   GenContextURef<ec_extents_t &&> &&func)
 {
   return read_pipeline.objects_read_and_reconstruct(
-    reads, fast_read, std::move(func));
+    reads, fast_read, object_size, std::move(func));
 }
 
 void ECBackend::objects_read_and_reconstruct_for_rmw(
   std::map<hobject_t, ECCommon::read_request_t> &&to_read,
   GenContextURef<ECCommon::ec_extents_t&&> &&func)
 {
-  // TODO XXX FIXME
+  return read_pipeline.objects_read_and_reconstruct_for_rmw(
+    std::move(to_read), std::move(func));
 }
 
 ECBackend::ll_read_ierrorator::future<ECSubReadReply>
