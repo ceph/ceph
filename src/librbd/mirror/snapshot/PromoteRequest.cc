@@ -248,7 +248,7 @@ void PromoteRequest<I>::handle_acquire_exclusive_lock(int r) {
 
 template <typename I>
 void PromoteRequest<I>::rollback() {
-  if (m_rollback_snap_id == CEPH_NOSNAP) {
+  if (!m_group_snap_id.empty() || (m_rollback_snap_id == CEPH_NOSNAP)) {
     create_promote_snapshot();
     return;
   }
