@@ -3,6 +3,7 @@ Rados benchmarking
 """
 import contextlib
 import logging
+import shlex
 
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
@@ -19,6 +20,7 @@ def task(ctx, config):
     The config should be as follows:
 
     radosbench:
+        extra_args: ...
         auth_exit_on_failure: <int>
         clients: [client list]
         expected_rc: <int>
@@ -55,6 +57,7 @@ def task(ctx, config):
     manager = ctx.managers['ceph']
     runtype = config.get('type', 'write')
 
+    config_extra_args = shlex.split(config.setdefault('extra_args', ''))
     expected_rc = config.setdefault('expected_rc', 0)
 
     create_pool = config.get('create_pool', True)
@@ -97,6 +100,7 @@ def task(ctx, config):
             'rados',
         ]
         extra_args = [
+            *config_extra_args,
             '--no-log-to-stderr',
             f'--name={role}',
             f'--pool={pool}',
