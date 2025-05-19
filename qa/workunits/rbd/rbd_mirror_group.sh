@@ -328,7 +328,9 @@ testlog " - force promote cluster1"
 wait_for_group_replay_started ${CLUSTER1} ${POOL}/${group} 1
 write_image ${CLUSTER2} ${POOL} ${image} 100
 mirror_group_snapshot_and_wait_for_sync_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${group}
+stop_mirrors ${CLUSTER1}
 mirror_group_promote ${CLUSTER1} ${POOL}/${group} '--force'
+start_mirrors ${CLUSTER1}
 test_fields_in_group_info ${CLUSTER1} ${POOL}/${group} 'snapshot' 'enabled' 'true'
 test_fields_in_group_info ${CLUSTER2} ${POOL}/${group} 'snapshot' 'enabled' 'true'
 
@@ -474,7 +476,9 @@ wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+replaying' 1
 compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 
 testlog "TEST: split-brain"
+stop_mirrors ${CLUSTER1}
 mirror_group_promote ${CLUSTER1} ${POOL}/${group} --force
+start_mirrors ${CLUSTER1}
 test_fields_in_group_info ${CLUSTER1} ${POOL}/${group} 'snapshot' 'enabled' 'true'
 test_fields_in_group_info ${CLUSTER2} ${POOL}/${group} 'snapshot' 'enabled' 'true'
 wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+stopped' 1
