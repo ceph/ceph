@@ -108,7 +108,7 @@ if [[ ! "$ARGS $@" =~ "-DCMAKE_BUILD_TYPE" ]]; then
     if [ -d ../.git ]; then
         printf "
 ****
-WARNING: do_cmake.sh now creates debug builds by default if .git exists.
+WARNING: Debug builds are created by default if .git exists.
 Performance may be severely affected. Please use -DCMAKE_BUILD_TYPE=RelWithDebInfo
 if a performance sensitive build is required.
 ****
@@ -116,7 +116,7 @@ if a performance sensitive build is required.
     else
         printf "
 ****
-WARNING: do_cmake.sh now creates RelWithDebInfo builds by default when .git is absent.
+WARNING: CMAKE_BUILD_TYPE not specified and will be unset because .git does NOT exist.
 ****
 "
     fi
