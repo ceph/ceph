@@ -1034,6 +1034,11 @@ public:
 
 
 protected:
+  struct FSCrypt_Options {
+    std::vector<uint8_t> fscrypt_auth;
+    std::vector<uint8_t> fscrypt_file;
+  };
+
   struct walk_dentry_result {
     DentryRef dn;
     InodeRef target;
@@ -1114,13 +1119,14 @@ protected:
 
   int create_and_open(int dirfd, const char *relpath, int flags, const UserPerm& perms,
                       mode_t mode, int stripe_unit, int stripe_count, int object_size,
-                      const char *data_pool, std::string alternate_name);
+                      const char *data_pool, std::string alternate_name,
+                      FSCrypt_Options fscrypt_options={});
 
-  int do_mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPerm& perm, std::string alternate_name="");
+  int do_mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPerm& perm, std::string alternate_name="", FSCrypt_Options fscrypt_options={});
   int do_rename(const char *from, const char *to, const UserPerm& perm, std::string alternate_name="");
   int do_link(const char *existing, const char *newname, const UserPerm& perm, std::string alternate_name="");
-  int do_symlinkat(const char *target, int dirfd, const char *linkpath, const UserPerm& perms, std::string alternate_name="");
-  int do_openat(int dirfd, const char *path, int flags, const UserPerm& perms, mode_t mode, int stripe_unit, int stripe_count, int object_size, const char *data_pool, std::string alternate_name="");
+  int do_symlinkat(const char *target, int dirfd, const char *linkpath, const UserPerm& perms, std::string alternate_name="", FSCrypt_Options fscrypt_options={});
+  int do_openat(int dirfd, const char *path, int flags, const UserPerm& perms, mode_t mode, int stripe_unit, int stripe_count, int object_size, const char *data_pool, std::string alternate_name="", FSCrypt_Options fscrypt_options={});
 
   struct PathWalk_ExtraOptions {
     bool followsym = true;
@@ -2061,10 +2067,10 @@ private:
   int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, const UserPerm& perm, std::string alternate_name);
   int _mkdir(const walk_dentry_result& wdr, mode_t mode, const UserPerm& perm,
 	     InodeRef *inp = 0, const std::map<std::string, std::string> &metadata={},
-             std::string alternate_name="");
+             std::string alternate_name="", FSCrypt_Options={});
   int _rmdir(Inode *dir, const char *name, const UserPerm& perms, bool check_perms=true);
   int _symlink(Inode *dir, const char *name, const char *target,
-	       const UserPerm& perms, std::string alternate_name, InodeRef *inp = 0);
+	       const UserPerm& perms, std::string alternate_name, InodeRef *inp = 0, FSCrypt_Options fscrypt_options = {});
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
 	     const UserPerm& perms, InodeRef *inp = 0);
   bool make_absolute_path_string(const InodeRef& in, std::string& path);
@@ -2102,7 +2108,7 @@ private:
   int _create(const walk_dentry_result& wdr, int flags, mode_t mode, InodeRef *inp,
 	      Fh **fhp, int stripe_unit, int stripe_count, int object_size,
 	      const char *data_pool, bool *created, const UserPerm &perms,
-              std::string alternate_name);
+              std::string alternate_name, FSCrypt_Options fscrypt_options={});
 
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl,
