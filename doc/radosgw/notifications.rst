@@ -189,6 +189,7 @@ updating, use the name of an existing topic and different endpoint values).
    [&Attributes.entry.15.key=Policy&Attributes.entry.15.value=<policy-JSON-string>]
    [&Attributes.entry.16.key=user-name&Attributes.entry.16.value=<user-name-string>]
    [&Attributes.entry.17.key=password&Attributes.entry.17.value=<password-string>]
+   [&Attributes.entry.18.key=kafka-brokers&Attributes.entry.18.value=<kafka-broker-list>]
 
 Request parameters:
 
@@ -296,6 +297,8 @@ Request parameters:
   - "none": Messages are considered "delivered" if sent to the broker.
   - "broker": Messages are considered "delivered" if acked by the broker. (This
     is the default.)
+
+ - kafka-brokers: A command-separated list of host:port of kafka brokers. These brokers (may contain a broker which is defined in kafka uri) will be added to kafka uri to support sending notifcations to a kafka cluster.
 
 .. note::
 
@@ -572,6 +575,7 @@ Valid AttributeName that can be passed:
   - mechanism: may be provided together with user/password (default: ``PLAIN``).
   - kafka-ack-level: No end2end acknowledgement is required. Messages may persist in the
     broker before being delivered to their final destinations. 
+  - kafka-brokers: Set endpoint with broker(s) as a comma-separated list of host or host:port (default port 9092).
 
 Notifications
 ~~~~~~~~~~~~~
