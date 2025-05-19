@@ -294,47 +294,43 @@ std::optional<double> OsdScrub::LoadTracker::update_load_average()
 
   double loadavg;
   if (getloadavg(&loadavg, 1) == 1) {
+    loadavg_1min = loadavg;
     daily_loadavg = (daily_loadavg * (n_samples - 1) + loadavg) / n_samples;
     return 100 * loadavg;
   }
 
-  return std::nullopt;	// getloadavg() failed
+  // getloadavg() failed
+  loadavg_1min = 0;
+  return std::nullopt;
 }
 
 bool OsdScrub::LoadTracker::scrub_load_below_threshold() const
 {
-  double loadavgs[3];
-  if (getloadavg(loadavgs, 3) != 3) {
-    dout(10) << "couldn't read loadavgs" << dendl;
-    return false;
-  }
-
-  // allow scrub if below configured threshold
-  long cpus = sysconf(_SC_NPROCESSORS_ONLN);
-  double loadavg_per_cpu = cpus > 0 ? loadavgs[0] / cpus : loadavgs[0];
-  if (loadavg_per_cpu < conf->osd_scrub_load_threshold) {
+  // if the 1-min load average - even before dividing by the number of CPUs -
+  // is below the configured threshold, scrubs are allowed. No need to call
+  // sysconf().
+  if (loadavg_1min < conf->osd_scrub_load_threshold) {
     dout(20) << fmt::format(
-		    "loadavg per cpu {:.3f} < max {:.3f} = yes",
-		    loadavg_per_cpu, conf->osd_scrub_load_threshold)
+		    "loadavg {:.3f} < max {:.3f} = yes",
+		    loadavg_1min, conf->osd_scrub_load_threshold)
 	     << dendl;
     return true;
   }
 
-  // allow scrub if below daily avg and currently decreasing
-  if (loadavgs[0] < daily_loadavg && loadavgs[0] < loadavgs[2]) {
+  // check the load per CPU
+  const long cpus = sysconf(_SC_NPROCESSORS_ONLN);
+  const double loadavg_per_cpu = cpus > 0 ? loadavg_1min / cpus : loadavg_1min;
+  if (loadavg_per_cpu < conf->osd_scrub_load_threshold) {
     dout(20) << fmt::format(
-		    "loadavg {:.3f} < daily_loadavg {:.3f} and < 15m avg "
-		    "{:.3f} = yes",
-		    loadavgs[0], daily_loadavg, loadavgs[2])
+		    "loadavg per cpu {:.3f} < max {:.3f}  (#CPUs: {}) = yes",
+		    loadavg_per_cpu, conf->osd_scrub_load_threshold, cpus)
 	     << dendl;
     return true;
   }
 
   dout(10) << fmt::format(
-		  "loadavg {:.3f} >= max {:.3f} and ( >= daily_loadavg {:.3f} "
-		  "or >= 15m avg {:.3f} ) = no",
-		  loadavgs[0], conf->osd_scrub_load_threshold, daily_loadavg,
-		  loadavgs[2])
+		  "loadavg {:.3f} >= max {:.3f} (#CPUs: {}) = no", loadavg_1min,
+		  conf->osd_scrub_load_threshold, cpus)
 	   << dendl;
   return false;
 }
