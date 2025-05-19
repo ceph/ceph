@@ -1278,9 +1278,10 @@ int RGWBucketAdminOp::check_index(rgw::sal::Driver* driver, RGWBucketAdminOpStat
   return 0;
 }
 
-int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
+int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
+                                    RGWBucketAdminOpState& op_state,
 				    optional_yield y, const DoutPrefixProvider *dpp, 
-                                    bool bypass_gc, bool keep_index_consistent)
+                                    bool bypass_gc, bool keep_index_consistent, bool forwarded_request)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
@@ -1290,10 +1291,36 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpSt
   if (ret < 0)
     return ret;
 
+  // check if the bucket is owned by my zonegroup, if not, refuse to remove it
+  if (!forwarded_request && bucket->get_info().zonegroup != driver->get_zone()->get_zonegroup().get_id()) {
+    ldpp_dout(dpp, 0) << "ERROR: The bucket's zonegroup does not match. "
+                      << "Removal is not allowed. Please execute this operation "
+                      << "on the bucket's zonegroup: " << bucket->get_info().zonegroup << dendl;
+    return -ERR_PERMANENT_REDIRECT;
+  }
+
   if (bypass_gc)
     ret = bucket->remove_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
   else
     ret = bucket->remove(dpp, op_state.will_delete_children(), y);
+  if (ret < 0)
+    return ret;
+
+  // forward to master zonegroup
+  const std::string delpath = "/admin/bucket";
+  RGWEnv env;
+  env.set("REQUEST_METHOD", "DELETE");
+  env.set("SCRIPT_URI", delpath);
+  env.set("REQUEST_URI", delpath);
+  env.set("QUERY_STRING", fmt::format("bucket={}&tenant={}", bucket->get_name(), bucket->get_tenant()));
+  req_info req(dpp->get_cct(), &env);
+
+  ret = rgw_forward_request_to_master(dpp, site, bucket->get_owner(), nullptr, nullptr, req, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to forward request to master zonegroup: "
+                      << ret << dendl;
+    return ret;
+  }
 
   return ret;
 }
