@@ -452,6 +452,14 @@ class NFSService(CephService):
                 'ganesha.conf': get_ganesha_conf(),
                 'idmap.conf': get_idmap_conf()
             }
+
+            if add_kmip_block:
+                for kmip_cert_key_field in [
+                    'kmip_cert',
+                    'kmip_key',
+                    'kmip_ca_cert',
+                ]:
+                    config['files'][kmip_cert_key_field] = getattr(nfs_spec, kmip_cert_key_field)
             if nfs_spec.ssl:
                 tls_creds = self.get_certificates(
                     daemon_spec,
