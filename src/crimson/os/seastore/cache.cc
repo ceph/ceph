@@ -1188,12 +1188,13 @@ CachedExtentRef Cache::duplicate_for_write(
 
     t.add_mutated_extent(i);
     DEBUGT("duplicate existing extent {}", t, *i);
+    assert(!i->prior_instance);
     return i;
   }
 
   auto ret = i->duplicate_for_write(t);
   ret->pending_for_transaction = t.get_trans_id();
-  ret->prior_instance = i;
+  ret->set_prior_instance(i);
   // duplicate_for_write won't occur after ool write finished
   assert(!i->prior_poffset);
   auto [iter, inserted] = i->mutation_pending_extents.insert(*ret);
@@ -1790,7 +1791,7 @@ void Cache::complete_commit(
     i->on_initial_write();
 
     i->state = CachedExtent::extent_state_t::CLEAN;
-    i->prior_instance.reset();
+    i->reset_prior_instance();
     DEBUGT("add extent as fresh, inline={} -- {}",
 	   t, is_inline, *i);
     i->invalidate_hints();
@@ -1842,7 +1843,7 @@ void Cache::complete_commit(
 	   i->prior_instance);
     i->on_delta_write(final_block_start);
     i->pending_for_transaction = TRANS_ID_NULL;
-    i->prior_instance = CachedExtentRef();
+    i->reset_prior_instance();
     i->state = CachedExtent::extent_state_t::DIRTY;
     assert(i->version > 0);
     if (i->version == 1 || is_root_type(i->get_type())) {

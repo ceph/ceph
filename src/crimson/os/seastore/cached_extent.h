@@ -270,8 +270,10 @@ class CachedExtent
       CachedExtent, boost::thread_unsafe_counter>,
     public trans_spec_view_t {
   enum class extent_state_t : uint8_t {
-    INITIAL_WRITE_PENDING, // In Transaction::write_set and fresh_block_list
-    MUTATION_PENDING,      // In Transaction::write_set and mutated_block_list
+    INITIAL_WRITE_PENDING, // In Transaction::write_set and fresh_block_list,
+                           // has prior_instance under rewrite
+    MUTATION_PENDING,      // In Transaction::write_set and mutated_block_list,
+                           // has prior_instance
     CLEAN,                 // In Cache::extent_index, Transaction::read_set
                            //  during write, contents match disk, version == 0
     DIRTY,                 // Same as CLEAN, but contents do not match disk,
@@ -296,7 +298,8 @@ class CachedExtent
 
   uint32_t last_committed_crc = 0;
 
-  // Points at current version while in state MUTATION_PENDING
+  // Points at the prior stable version while in state MUTATION_PENDING
+  // or is rewriting (in state INITIAL_PENDING).
   CachedExtentRef prior_instance;
 
   // time of the last modification
@@ -434,10 +437,10 @@ public:
   void rewrite(Transaction &t, CachedExtent &e, extent_len_t o) {
     assert(is_initial_pending());
     if (!e.is_pending()) {
-      prior_instance = &e;
+      set_prior_instance(&e);
     } else {
       assert(e.is_mutation_pending());
-      prior_instance = e.get_prior_instance();
+      set_prior_instance(e.prior_instance);
     }
     e.get_bptr().copy_out(
       o,
@@ -1030,6 +1033,7 @@ protected:
   virtual void update_in_extent_chksum_field(uint32_t) {}
 
   void set_prior_instance(CachedExtentRef p) {
+    assert(!prior_instance);
     prior_instance = p;
   }
 
@@ -1465,8 +1469,7 @@ protected:
   virtual void logical_on_delta_write() {}
 
   void on_delta_write(paddr_t record_block_offset) final {
-    assert(is_exist_mutation_pending() ||
-	   get_prior_instance());
+    assert(is_exist_mutation_pending() || get_prior_instance());
     logical_on_delta_write();
   }
 

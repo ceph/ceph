@@ -149,7 +149,7 @@ public:
       assert(ref->prior_instance);
       retired_set.emplace(ref->prior_instance, trans_id);
       assert(read_set.count(ref->prior_instance->get_paddr(), extent_cmp_t{}));
-      ref->prior_instance.reset();
+      ref->reset_prior_instance();
     } else {
       // && retired_set.count(ref->get_paddr()) == 0
       // If it's already in the set, insert here will be a noop,
