@@ -1889,7 +1889,6 @@ public:
 				      bool run_notification_thread,
 				      bool background_tasks,
 				      optional_yield y,
-              rgw::sal::ConfigStore* cfgstore,
 				      bool use_cache = true,
 				      bool use_gc = true) {
     rgw::sal::Driver* driver = init_storage_provider(dpp, cct, cfg, io_context,
@@ -1899,21 +1898,19 @@ public:
 						   quota_threads,
 						   run_sync_thread,
 						   run_reshard_thread,
-               run_notification_thread,
+                                                   run_notification_thread,
 						   use_cache, use_gc,
-						   background_tasks, y, cfgstore);
+						   background_tasks, y);
     return driver;
   }
   /** Get a stripped down driver by service name */
   static rgw::sal::Driver* get_raw_storage(const DoutPrefixProvider* dpp,
 					  CephContext* cct, const Config& cfg,
 					  boost::asio::io_context& io_context,
-					  const rgw::SiteConfig& site_config,
-            rgw::sal::ConfigStore* cfgstore) {
+					  const rgw::SiteConfig& site_config) {
     rgw::sal::Driver* driver = init_raw_storage_provider(dpp, cct, cfg,
 							 io_context,
-							 site_config,
-               cfgstore);
+							 site_config);
     return driver;
   }
   /** Initialize a new full Driver */
@@ -1927,17 +1924,16 @@ public:
 						bool quota_threads,
 						bool run_sync_thread,
 						bool run_reshard_thread,
-            bool run_notification_thread,
+                                                bool run_notification_thread,
 						bool use_metadata_cache,
 						bool use_gc, bool background_tasks,
-						optional_yield y, rgw::sal::ConfigStore* cfgstore);
+						optional_yield y);
   /** Initialize a new raw Driver */
   static rgw::sal::Driver* init_raw_storage_provider(const DoutPrefixProvider* dpp,
 						    CephContext* cct,
 						    const Config& cfg,
 						    boost::asio::io_context& io_context,
-						    const rgw::SiteConfig& site_config,
-                rgw::sal::ConfigStore* cfgstore);
+						    const rgw::SiteConfig& site_config);
   /** Close a Driver when it's no longer needed */
   static void close_storage(rgw::sal::Driver* driver);
 

@@ -416,7 +416,7 @@ public:
   int read_recovering_shards(const DoutPrefixProvider *dpp, const int num_shards, std::set<int>& recovering_shards);
   int read_shard_status(const DoutPrefixProvider *dpp, int shard_id, std::set<std::string>& lagging_buckets,std::set<std::string>& recovering_buckets, rgw_data_sync_marker* sync_marker, const int max_entries);
   int init_sync_status(const DoutPrefixProvider *dpp, int num_shards);
-  int run_sync(const DoutPrefixProvider *dpp, int num_shards, rgw::sal::ConfigStore* cfgstore);
+  int run_sync(const DoutPrefixProvider *dpp, int num_shards);
 
   void wakeup(int shard_id, bc::flat_set<rgw_data_notify_entry>& entries);
 };
@@ -483,7 +483,7 @@ public:
     return source_log.read_source_log_shards_next(dpp, shard_markers, result);
   }
 
-  int run(const DoutPrefixProvider *dpp, rgw::sal::ConfigStore* cfgstore) { return source_log.run_sync(dpp, num_shards, cfgstore); }
+  int run(const DoutPrefixProvider *dpp) { return source_log.run_sync(dpp, num_shards); }
 
   void wakeup(int shard_id, bc::flat_set<rgw_data_notify_entry>& entries) { return source_log.wakeup(shard_id, entries); }
 

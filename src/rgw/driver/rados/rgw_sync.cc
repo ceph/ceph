@@ -2210,7 +2210,7 @@ int RGWRemoteMetaLog::store_sync_info(const DoutPrefixProvider *dpp, const rgw_m
 static RGWPeriodHistory::Cursor get_period_at(const DoutPrefixProvider *dpp,
                                               rgw::sal::RadosStore* store,
                                               const rgw_meta_sync_info& info,
-					      optional_yield y, rgw::sal::ConfigStore* cfgstore)
+					      optional_yield y)
 {
   if (info.period.empty()) {
     // return an empty cursor with error=0
@@ -2233,14 +2233,14 @@ static RGWPeriodHistory::Cursor get_period_at(const DoutPrefixProvider *dpp,
 
   // read the period from rados or pull it from the master
   RGWPeriod period;
-  int r = store->svc()->mdlog->pull_period(dpp, info.period, period, y, cfgstore);
+  int r = store->svc()->mdlog->pull_period(dpp, info.period, period, y);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed to read period id "
         << info.period << ": " << cpp_strerror(r) << dendl;
     return RGWPeriodHistory::Cursor{r};
   }
   // attach the period to our history
-  cursor = store->svc()->mdlog->get_period_history()->attach(dpp, std::move(period), y, cfgstore);
+  cursor = store->svc()->mdlog->get_period_history()->attach(dpp, std::move(period), y);
   if (!cursor) {
     r = cursor.get_error();
     ldpp_dout(dpp, -1) << "ERROR: failed to read period history back to "
@@ -2249,7 +2249,7 @@ static RGWPeriodHistory::Cursor get_period_at(const DoutPrefixProvider *dpp,
   return cursor;
 }
 
-int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y, rgw::sal::ConfigStore* cfgstore)
+int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y)
 {
   if (store->svc()->zone->is_meta_master()) {
     return 0;
@@ -2383,7 +2383,7 @@ int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y, 
       case rgw_meta_sync_info::StateSync:
         tn->log(20, "sync");
         // find our position in the period history (if any)
-        cursor = get_period_at(dpp, store, sync_status.sync_info, y, cfgstore);
+        cursor = get_period_at(dpp, store, sync_status.sync_info, y);
         r = cursor.get_error();
         if (r < 0) {
           return r;
