@@ -57,26 +57,27 @@ RADOS_URLS {
         watch_url = "{{ url }}";
 }
 
-CEPH {
-        Ceph_Conf = "/etc/ceph/ceph.conf";
-        umask = 0000;
-        client_oc = false;
-        async = false;
-        zerocopy = false;
-        use_old_uuid = false;
-
-        register_service = true;
-        nodeid = "{{ nodeid }}";
-}
-
 RGW {
         cluster = "ceph";
         name = "client.{{ rgw_user }}";
 }
 
 {% if use_old_nodeid %}
-Ceph {
+CEPH {
 	Use_old_uuid = true;
+}
+
+{% endif %}
+{% if kmip_addrs %}
+KMIP {
+            HOST {
+{% for kmip_addr in kmip_addrs %}
+                     addr = {{ kmip_addr }};
+{% endfor %}
+            }
+            cert = /etc/ganesha/kmip/kmip_cert.pem;
+            key = /etc/ganesha/kmip/kmip_key.pem;
+            ca = /etc/ganesha/kmip/kmip_ca_cert.pem;
 }
 
 {% endif %}
@@ -100,4 +101,5 @@ TLS_CONFIG{
 {% endif %}
 }
 {% endif %}
+
 %url    {{ url }}
