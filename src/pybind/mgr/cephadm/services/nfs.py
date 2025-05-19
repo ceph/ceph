@@ -165,6 +165,13 @@ class NFSService(CephService):
                 'ganesha.conf': get_ganesha_conf(),
                 'idmap.conf': get_idmap_conf()
             }
+            if add_kmip_block:
+                for kmip_cert_key_field in [
+                    'kmip_cert',
+                    'kmip_key',
+                    'kmip_ca_cert',
+                ]:
+                    config['files'][kmip_cert_key_field] = getattr(spec, kmip_cert_key_field)
             config.update(
                 self.get_config_and_keyring(
                     daemon_type, daemon_id,
