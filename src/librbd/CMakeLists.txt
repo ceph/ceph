@@ -165,6 +165,7 @@ set(librbd_internal_srcs
   mirror/snapshot/GroupUnlinkPeerRequest.cc
   mirror/snapshot/ImageMeta.cc
   mirror/snapshot/PromoteRequest.cc
+  mirror/snapshot/RemoveGroupSnapshotRequest.cc
   mirror/snapshot/RemoveImageStateRequest.cc
   mirror/snapshot/SetImageStateRequest.cc
   mirror/snapshot/Types.cc
