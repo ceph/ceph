@@ -371,6 +371,8 @@ class NFSService(CephService):
         elif nfs_spec.cluster_qos_port:
             cluster_qos_port = nfs_spec.cluster_qos_port
 
+        add_kmip_block = (nfs_spec.kmip_cert and nfs_spec.kmip_key and nfs_spec.kmip_ca_cert and nfs_spec.kmip_host_list)
+
         # generate the ganesha config
         rdma_port = None
         if nfs_spec.enable_rdma and daemon_spec.ports and len(daemon_spec.ports) > 3:
@@ -403,6 +405,7 @@ class NFSService(CephService):
                 "tls_min_version": nfs_spec.tls_min_version,
                 "tls_ktls": nfs_spec.tls_ktls,
                 "tls_debug": nfs_spec.tls_debug,
+                "kmip_addrs": nfs_spec.kmip_host_list if add_kmip_block else None,
                 "ceph_nodes": ceph_nodes,
                 "protocols": "3, 4" if nfs_spec.enable_nfsv3 else "4",
                 "enable_nfs_metrics": nfs_spec.enable_nfs_metrics,
