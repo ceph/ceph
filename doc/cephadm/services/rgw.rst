@@ -203,6 +203,25 @@ The ``wildcard_enabled`` flag ensures that a wildcard SAN entry is included in t
 allowing access to buckets in virtual host mode. By default, this flag is disabled.
 example: wildcard SAN - (``*.s3.cephlab.com``)
 
+QAT configuration
+-----------------
+
+In the RGW spec, the following optional configuration is supported:
+
+.. code-block:: yaml
+
+  spec:
+    qat:
+      compression: hw | sw
+
+compression:
+
+hw: Enables hardware QAT offload (if QAT hardware and VFs are present on the node)
+
+sw: Enables QAT software fallback mode
+
+No other keys are currently supported in the qat block.
+
 Disabling multisite sync traffic
 --------------------------------
 
