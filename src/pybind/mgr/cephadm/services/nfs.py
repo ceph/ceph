@@ -98,32 +98,28 @@ class NFSService(CephService):
         self.create_rados_config_obj(spec)
 
         port = daemon_spec.ports[0] if daemon_spec.ports else 2049
-        monitoring_port = spec.monitoring_port if spec.monitoring_port else 9587
+        monitoring_ip, monitoring_port = self.get_monitoring_details(daemon_spec.service_name, host)
 
         # create the RGW keyring
         rgw_user = f'{rados_user}-rgw'
         rgw_keyring = self.create_rgw_keyring(daemon_spec)
+        bind_addr = ''
         if spec.virtual_ip and not spec.enable_haproxy_protocol:
             bind_addr = spec.virtual_ip
             daemon_spec.port_ips = {str(port): spec.virtual_ip}
-        else:
-            bind_addr = daemon_spec.ip if daemon_spec.ip else ''
+            # update daemon spec ip for prometheus, as monitoring will happen on this
+            # ip, if no monitor ip specified
+            daemon_spec.ip = bind_addr
+        elif daemon_spec.ip:
+            bind_addr = daemon_spec.ip
+            daemon_spec.port_ips = {str(port): daemon_spec.ip}
         if not bind_addr:
             logger.warning(f'Bind address in {daemon_type}.{daemon_id}\'s ganesha conf is defaulting to empty')
         else:
             logger.debug("using haproxy bind address: %r", bind_addr)
 
-        # check if monitor needs to be bind on specific ip
-        monitoring_addr = spec.monitoring_ip_addrs.get(host) if spec.monitoring_ip_addrs else None
-        if monitoring_addr and monitoring_addr not in self.mgr.cache.get_host_network_ips(host):
-            logger.debug(f"Monitoring IP {monitoring_addr} is not configured on host {daemon_spec.host}.")
-            monitoring_addr = None
-        if not monitoring_addr and spec.monitoring_networks:
-            monitoring_addr = self.mgr.get_first_matching_network_ip(daemon_spec.host, spec, spec.monitoring_networks)
-            if not monitoring_addr:
-                logger.debug(f"No IP address found in the network {spec.monitoring_networks} on host {daemon_spec.host}.")
-        if monitoring_addr:
-            daemon_spec.port_ips.update({str(monitoring_port): monitoring_addr})
+        if monitoring_ip:
+            daemon_spec.port_ips.update({str(monitoring_port): monitoring_ip})
 
         # generate the ganesha config
         def get_ganesha_conf() -> str:
@@ -136,7 +132,7 @@ class NFSService(CephService):
                 "url": f'rados://{POOL_NAME}/{spec.service_id}/{spec.rados_config_name()}',
                 # fall back to default NFS port if not present in daemon_spec
                 "port": port,
-                "monitoring_addr": monitoring_addr,
+                "monitoring_addr": monitoring_ip,
                 "monitoring_port": monitoring_port,
                 "bind_addr": bind_addr,
                 "haproxy_hosts": [],
@@ -386,3 +382,18 @@ class NFSService(CephService):
                     # one address per interface/subnet is enough
                     cluster_ips.append(addrs[0])
         return cluster_ips
+
+    def get_monitoring_details(self, service_name: str, host: str) -> Tuple[Optional[str], Optional[int]]:
+        spec = cast(NFSServiceSpec, self.mgr.spec_store[service_name].spec)
+        monitoring_port = spec.monitoring_port if spec.monitoring_port else 9587
+
+        # check if monitor needs to be bind on specific ip
+        monitoring_addr = spec.monitoring_ip_addrs.get(host) if spec.monitoring_ip_addrs else None
+        if monitoring_addr and monitoring_addr not in self.mgr.cache.get_host_network_ips(host):
+            logger.debug(f"Monitoring IP {monitoring_addr} is not configured on host {host}.")
+            monitoring_addr = None
+        if not monitoring_addr and spec.monitoring_networks:
+            monitoring_addr = self.mgr.get_first_matching_network_ip(host, spec, spec.monitoring_networks)
+            if not monitoring_addr:
+                logger.debug(f"No IP address found in the network {spec.monitoring_networks} on host {host}.")
+        return monitoring_addr, monitoring_port

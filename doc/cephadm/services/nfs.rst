@@ -47,6 +47,11 @@ Alternatively, an NFS service can be applied using a YAML specification.
       hosts:
         - host1
         - host2
+    networks:
+    - 1.2.3.4/24
+    ip_addrs:
+      host1: 10.0.0.100
+      host2: 10.0.0.101
     spec:
       port: 12345
       monitoring_port: 567
@@ -59,7 +64,13 @@ Alternatively, an NFS service can be applied using a YAML specification.
 
 In this example, we run the server on the non-default ``port`` of
 12345 (instead of the default 2049) on ``host1`` and ``host2``.
-The default monitoring port can be customized using the ``monitoring_port``
+You can bind the NFS data port to a specific IP address using either the
+``ip_addrs`` or ``networks`` section. If ``ip_addrs`` is provided and
+the specified IP is assigned to the host, that IP will be used. If the
+IP is not present but ``networks`` is specified, an IP matching one of
+the given networks will be selected. If neither condition is met, the
+daemon will not start on that node.
+The default NFS monitoring port can be customized using the ``monitoring_port``
 parameter. Additionally, you can specify the ``monitoring_ip_addrs`` or
 ``monitoring_networks`` parameters to bind the monitoring port to a specific
 IP address or network. If ``monitoring_ip_addrs`` is provided and the specified
