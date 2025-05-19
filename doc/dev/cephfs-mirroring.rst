@@ -207,6 +207,7 @@ mirroring module. This means that ``/a/b/../b`` is equivalent to ``/a/b``:
    mkdir -p /d0/d1/d2
    ceph fs snapshot mirror add cephfs /d0/d1/d2 {}
    ceph fs snapshot mirror add cephfs /d0/d1/../d1/d2
+
 ::
 
   Error EEXIST: directory /d0/d1/d2 is already tracked
@@ -217,6 +218,7 @@ directories are not allowed to be added for mirroring:
 .. prompt:: bash $
 
    ceph fs snapshot mirror add cephfs /d0/d1
+
 ::
 
    Error EINVAL: /d0/d1 is a ancestor of tracked path /d0/d1/d2
@@ -224,6 +226,7 @@ directories are not allowed to be added for mirroring:
 .. prompt:: bash $
 
    ceph fs snapshot mirror add cephfs /d0/d1/d2/d3
+
 ::
 
    Error EINVAL: /d0/d1/d2/d3 is a subtree of tracked path /d0/d1/d2
