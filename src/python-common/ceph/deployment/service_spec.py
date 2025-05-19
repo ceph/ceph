@@ -1238,6 +1238,7 @@ class RGWSpec(ServiceSpec):
                  disable_multisite_sync_traffic: Optional[bool] = None,
                  wildcard_enabled: Optional[bool] = False,
                  rgw_exit_timeout_secs: int = 120,
+                 qat: Optional[Dict[str, str]] = None,
                  ):
         assert service_type == 'rgw', service_type
 
@@ -1300,6 +1301,8 @@ class RGWSpec(ServiceSpec):
         #: How long the RGW will wait to try and complete client requests when told to shut down
         self.rgw_exit_timeout_secs = rgw_exit_timeout_secs
 
+        self.qat = qat or {}
+
     def get_port_start(self) -> List[int]:
         ports = self.get_port()
         return ports
@@ -1359,6 +1362,14 @@ class RGWSpec(ServiceSpec):
                     raise SpecValidationError(
                         'invalid option in data_pool_attribues "erasure_code_profile"'
                         'ec profile will be generated automatically based on provided attributes'
+                    )
+
+        valid_compression_modes = ('sw', 'hw')
+        if self.qat:
+            compression = self.qat.get('compression')
+            if compression and compression not in valid_compression_modes:
+                raise SpecValidationError(
+                    f"Invalid compression mode {compression}. Only 'sw' and 'hw' are allowed"
                     )
 
 
