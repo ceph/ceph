@@ -1,3 +1,5 @@
+
+
 import fnmatch
 import os
 import re
@@ -1413,6 +1415,10 @@ class NFSServiceSpec(ServiceSpec):
                  custom_configs: Optional[List[CustomConfig]] = None,
                  cluster_qos_config: Optional[Dict[str, Union[str, bool, int]]] = None,
                  cluster_qos_port: Optional[int] = None,
+                 kmip_cert: Optional[str] = None,
+                 kmip_key: Optional[str] = None,
+                 kmip_ca_cert: Optional[str] = None,
+                 kmip_host_list: Optional[List[str]] = None,
                  ssl: bool = False,
                  ssl_cert: Optional[str] = None,
                  ssl_key: Optional[str] = None,
@@ -1459,6 +1465,11 @@ class NFSServiceSpec(ServiceSpec):
         # The first daemon always uses port and monitoring_port from the spec
         # Format: [{'data_port': 1234, 'monitoring_port': 5678}, ...]
         self.colocation_ports = colocation_ports
+
+        self.kmip_cert = kmip_cert
+        self.kmip_key = kmip_key
+        self.kmip_ca_cert = kmip_ca_cert
+        self.kmip_host_list = kmip_host_list
 
         # TLS fields
         self.tls_ciphers = tls_ciphers
@@ -1544,6 +1555,17 @@ class NFSServiceSpec(ServiceSpec):
         if self.virtual_ip and (self.ip_addrs or self.networks):
             raise SpecValidationError("Invalid NFS spec: Cannot set virtual_ip and "
                                       f"{'ip_addrs' if self.ip_addrs else 'networks'} fields")
+        kmip_field_names = [
+            'kmip_cert',
+            'kmip_key',
+            'kmip_ca_cert',
+            'kmip_host_list'
+        ]
+        kmip_fields = [getattr(self, kmip_field) for kmip_field in kmip_field_names]
+        if any(kmip_fields) and not all(kmip_fields):
+            raise SpecValidationError(
+                f'Either none or all of {kmip_field_names} attrbutes must be set'
+            )
 
         # Validate colocation_ports
         self.validate_colocation_ports()
