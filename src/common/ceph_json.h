@@ -131,18 +131,18 @@ class JSONObjIter final {
   map_iter_t last;
 
 private:
-  JSONObjIter(const JSONObjIter::map_iter_t& cur, const JSONObjIter::map_iter_t& end) 
-   : cur(cur),
-     last(end)
+  JSONObjIter(const JSONObjIter::map_iter_t& cur_, const JSONObjIter::map_iter_t& end_) 
+   : cur(cur_),
+     last(end_)
   {}
 
 public:
   JSONObjIter() = default;
 
 public:
-  void set(const JSONObjIter::map_iter_t &_cur, const JSONObjIter::map_iter_t &_end) {
-	cur = _cur;
-	last = _end;
+  void set(const JSONObjIter::map_iter_t &cur_, const JSONObjIter::map_iter_t &end_) {
+	cur = cur_;
+	last = end_;
   }
 
   void operator++() { if (cur != last) ++cur; }
@@ -244,7 +244,13 @@ public:
  }
 
   JSONObjIter find(std::string_view name) {
-	return { children.find(name), children.upper_bound(name) };
+	auto fst = children.find(name); 
+
+	if(end(children) != fst) {
+	  return { fst, children.upper_bound(name) };
+        }
+
+	return { fst, std::end(children) };
   }
 
   JSONObjIter find_first() { 

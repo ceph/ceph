@@ -2019,7 +2019,7 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
 
   // push period to the master with an empty period id
   period.set_id(string());
-cerr << "JFW: pushing explicitly empty period id" << std::endl;
+cerr << "JFW: pushing explicitly empty period id" << std::endl; // JFW: logs show this is totally fine/expected-- we GET valid data back
 
   RGWEnv env;
   req_info info(g_ceph_context, &env);
@@ -2045,6 +2045,7 @@ cerr << "JFW: pushing explicitly empty period id" << std::endl;
     return ret;
   }
 
+/* JFW: this is where the object appears to come back bad: */
   // decode the response and driver it back
   try {
     decode_json_obj(period, &p);
@@ -2053,7 +2054,9 @@ cerr << "JFW: pushing explicitly empty period id" << std::endl;
     return -EINVAL;
   }
   if (period.get_id().empty()) {
+// JFW: this /is/ happening
     cerr << "commit_period(): Period commit got back an empty period id" << std::endl;
+// JFW: sure enough, /in the returned JSON/ id=""
 cerr << "JFW: period encoded as (len=" << bl.length() << "):\n" << bl.c_str() << "\n----- JFW" << std::endl;
     return -EINVAL;
   }
