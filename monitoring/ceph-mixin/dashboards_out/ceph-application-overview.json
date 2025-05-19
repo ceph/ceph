@@ -24,9 +24,8 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 21,
+  "id": 14,
   "links": [],
-  "liveNow": false,
   "panels": [
     {
       "collapsed": false,
@@ -57,8 +56,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -78,6 +76,7 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -89,7 +88,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "10.4.16",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": {
@@ -122,8 +121,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -143,6 +141,7 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -154,7 +153,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "10.4.16",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": {
@@ -184,9 +183,9 @@
       "type": "stat"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "SXxUTQhHk"
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
       },
       "gridPos": {
         "h": 10,
@@ -204,6 +203,7 @@
         ],
         "groupMode": "custom",
         "maxItems": 20,
+        "showInactiveAlerts": false,
         "sortOrder": 1,
         "stateFilter": {
           "error": true,
@@ -214,6 +214,7 @@
         },
         "viewMode": "list"
       },
+      "pluginVersion": "11.6.0",
       "title": "Application Alerts",
       "type": "alertlist"
     },
@@ -233,8 +234,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -251,6 +251,12 @@
       "id": 59,
       "options": {
         "displayMode": "gradient",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
         "maxVizHeight": 300,
         "minVizHeight": 16,
         "minVizWidth": 8,
@@ -267,7 +273,7 @@
         "sizing": "auto",
         "valueMode": "color"
       },
-      "pluginVersion": "10.4.16",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": {
@@ -303,8 +309,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -324,6 +329,7 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -335,7 +341,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "10.4.16",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": {
@@ -365,7 +371,6 @@
       "type": "stat"
     },
     {
-      "columns": [],
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -386,8 +391,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -397,54 +401,6 @@
           }
         },
         "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Time"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "instance"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "job"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
           {
             "matcher": {
               "id": "byName",
@@ -458,46 +414,6 @@
               {
                 "id": "unit",
                 "value": "short"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "pool_id"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Pool ID"
-              },
-              {
-                "id": "unit",
-                "value": "none"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #A"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Compression Factor"
-              },
-              {
-                "id": "unit",
-                "value": "none"
               },
               {
                 "id": "decimals",
@@ -534,66 +450,6 @@
               {
                 "id": "displayName",
                 "value": "Usable Free"
-              },
-              {
-                "id": "unit",
-                "value": "bytes"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #C"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Compression Eligibility"
-              },
-              {
-                "id": "unit",
-                "value": "percent"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #E"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Compression Savings"
-              },
-              {
-                "id": "unit",
-                "value": "bytes"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #F"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Growth (5d)"
               },
               {
                 "id": "unit",
@@ -648,74 +504,6 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "__name__"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "type"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "compression_mode"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "description"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Type"
-              },
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
               "options": "Value #J"
             },
             "properties": [
@@ -726,42 +514,6 @@
               {
                 "id": "unit",
                 "value": "bytes"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #I"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #K"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Compression"
-              },
-              {
-                "id": "unit",
-                "value": "short"
               },
               {
                 "id": "decimals",
@@ -826,25 +578,12 @@
         "sortBy": [
           {
             "desc": true,
-            "displayName": "Application"
+            "displayName": "% Used"
           }
         ]
       },
-      "pluginVersion": "10.4.16",
-      "styles": "",
+      "pluginVersion": "11.6.0",
       "targets": [
-        {
-          "datasource": {
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "(\n  (ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } /\n    ceph_pool_compress_bytes_used{cluster=~\"$cluster\", }) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",application=~\"$application\", name=~\"$pool\"} > 0\n) and on(pool_id) (\n  (\n    ((ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } > 0) /\n      ceph_pool_stored_raw{cluster=~\"$cluster\", })*\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",application=~\"$application\", name=~\"$pool\"}\n  ) * 100 > 0.5\n)\n",
-          "format": "table",
-          "instant": true,
-          "intervalFactor": 1,
-          "legendFormat": "A",
-          "refId": "A"
-        },
         {
           "datasource": {
             "uid": "${datasource}"
@@ -852,6 +591,7 @@
           "editorMode": "code",
           "expr": "(ceph_pool_quota_bytes{cluster=~\"$cluster\",}*\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",application=~\"$application\", name=~\"$pool\"}\n   - \n   (ceph_pool_stored{cluster=~\"$cluster\",}  *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",application=~\"$application\", name=~\"$pool\"})) > 0 \n  or\n  \n(ceph_pool_max_avail{cluster=~\"$cluster\",} *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",application=~\"$application\", name=~\"$pool\"})",
           "format": "table",
+          "hide": false,
           "instant": true,
           "intervalFactor": 1,
           "legendFormat": "B",
@@ -862,22 +602,9 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "exemplar": false,
-          "expr": "((\n  (ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } > 0) /\n    ceph_pool_stored_raw{cluster=~\"$cluster\", }\n)  * 100) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",application=~\"$application\", name=~\"$pool\"}\n ",
+          "expr": "(ceph_pool_stored{cluster=~\"$cluster\",} *on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",name=~\"$pool\"})\n  /\n  (((ceph_pool_quota_bytes{cluster=~\"$cluster\"} > 0) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\", name=~\"$pool\", application=~\"$application\"}) or \n((ceph_pool_max_avail{cluster=~\"$cluster\"} \n+\nceph_pool_stored{cluster=~\"$cluster\", }) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",name=~\"$pool\", application=~\"$application\"}))",
           "format": "table",
-          "instant": true,
-          "intervalFactor": 1,
-          "legendFormat": "C",
-          "range": false,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "(ceph_pool_stored{cluster=~\"$cluster\",} *on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",name=~\"$pool\"})\n  /\n  (((ceph_pool_quota_bytes{cluster=~\"$cluster\"} > 0) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\", name=~\"$pool\", application=~\"$application\"}) or \n((ceph_pool_max_avail{cluster=~\"$cluster\"}+ceph_pool_stored{cluster=~\"$cluster\"}) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",name=~\"$pool\", application=~\"$application\"}))",
-          "format": "table",
+          "hide": false,
           "instant": true,
           "intervalFactor": 1,
           "legendFormat": "D",
@@ -888,33 +615,9 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } -\n  ceph_pool_compress_bytes_used{cluster=~\"$cluster\", } > 0) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",application=~\"$application\", name=~\"$pool\"}\n",
-          "format": "table",
-          "instant": true,
-          "intervalFactor": 1,
-          "legendFormat": "E",
-          "refId": "E"
-        },
-        {
-          "datasource": {
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "delta(ceph_pool_stored{cluster=~\"$cluster\", }[5d]) *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\", name=~\"$pool\"}",
-          "format": "table",
-          "hide": true,
-          "instant": true,
-          "intervalFactor": 1,
-          "legendFormat": "F",
-          "refId": "F"
-        },
-        {
-          "datasource": {
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
           "expr": "rate(ceph_pool_rd{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\", name=~\"$pool\"}\n  + rate(ceph_pool_wr{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\", name=~\"$pool\"}\n",
           "format": "table",
+          "hide": false,
           "instant": true,
           "intervalFactor": 1,
           "legendFormat": "G",
@@ -927,6 +630,7 @@
           "editorMode": "code",
           "expr": "rate(ceph_pool_rd_bytes{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\", name=~\"$pool\"} +\n  rate(ceph_pool_wr_bytes{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\", name=~\"$pool\"}\n",
           "format": "table",
+          "hide": false,
           "instant": true,
           "intervalFactor": 1,
           "legendFormat": "H",
@@ -952,38 +656,11 @@
           "editorMode": "code",
           "expr": "ceph_pool_stored{cluster=~\"$cluster\", } * on(pool_id) group_left ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\", name=~\"$pool\"}",
           "format": "table",
+          "hide": false,
           "instant": true,
           "intervalFactor": 1,
           "legendFormat": "J",
           "refId": "J"
-        },
-        {
-          "datasource": {
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "ceph_pool_metadata{compression_mode!=\"none\", cluster=~\"$cluster\", application=~\"$application\", name=~\"$pool\"}",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "intervalFactor": 1,
-          "legendFormat": "K",
-          "refId": "K"
-        },
-        {
-          "datasource": {
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "ceph_pool_quota_bytes{cluster=~\"$cluster\"} * on(pool_id) group_left ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\", name=~\"$pool\"}}",
-          "format": "table",
-          "hide": true,
-          "instant": true,
-          "intervalFactor": "",
-          "legendFormat": "L",
-          "range": false,
-          "refId": "L"
         },
         {
           "datasource": {
@@ -992,7 +669,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "ceph_pool_quota_bytes{cluster=~\"$cluster\",} *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\",name=~\"$pool\", application=~\"$application\"}",
+          "expr": "ceph_pool_quota_bytes{cluster=~\"$cluster\",} *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\", application=~\"$application\",name=~\"$pool\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -1020,10 +697,6 @@
       "transformations": [
         {
           "id": "merge",
-          "options": {}
-        },
-        {
-          "id": "seriesToRows",
           "options": {}
         },
         {
@@ -1073,7 +746,18 @@
               "type": 17
             },
             "renameByName": {
-              "application": "Application"
+              "Value #B": "",
+              "Value #D": "",
+              "Value #G": "",
+              "Value #H": "",
+              "Value #J": "",
+              "Value #N": "",
+              "__name__": "",
+              "application": "Application",
+              "compression_mode": "",
+              "description": "Replication",
+              "instance": "",
+              "type": ""
             }
           }
         }
@@ -1098,6 +782,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1128,8 +813,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1156,11 +840,12 @@
           "sortDesc": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "single",
           "sort": "none"
         }
       },
-      "pluginVersion": "9.4.7",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": {
@@ -1194,6 +879,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1224,8 +910,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1256,10 +941,12 @@
           "sortDesc": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "single",
           "sort": "none"
         }
       },
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": {
@@ -1305,6 +992,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1335,8 +1023,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1367,10 +1054,12 @@
           "sortDesc": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "single",
           "sort": "none"
         }
       },
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": {
@@ -1416,6 +1105,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1446,8 +1136,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1478,10 +1167,12 @@
           "sortDesc": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "single",
           "sort": "none"
         }
       },
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": {
@@ -1499,23 +1190,20 @@
       "type": "timeseries"
     }
   ],
+  "preload": false,
   "refresh": "30s",
-  "revision": 1,
-  "schemaVersion": 39,
+  "schemaVersion": 41,
   "tags": [],
   "templating": {
     "list": [
       {
-        "hide": 0,
         "includeAll": false,
-        "multi": false,
+        "label": "Data Source",
         "name": "datasource",
         "options": [],
         "query": "prometheus",
-        "queryValue": "",
         "refresh": 1,
         "regex": "",
-        "skipUrlSync": false,
         "type": "datasource"
       },
       {
@@ -1524,10 +1212,8 @@
           "uid": "${datasource}"
         },
         "definition": "label_values(ceph_health_status, cluster)",
-        "hide": 0,
         "includeAll": false,
         "label": "Cluster",
-        "multi": false,
         "name": "cluster",
         "options": [],
         "query": {
@@ -1536,14 +1222,10 @@
         },
         "refresh": 2,
         "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
         "type": "query"
       },
       {
-        "allValue": "",
         "current": {
-          "selected": false,
           "text": "All",
           "value": "$__all"
         },
@@ -1551,26 +1233,23 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(ceph_pool_metadata, application)",
-        "hide": 0,
+        "definition": "label_values(ceph_pool_metadata{cluster=\"$cluster\"},application)",
         "includeAll": true,
         "label": "Application",
-        "multi": false,
         "name": "application",
         "options": [],
         "query": {
-          "query": "label_values(ceph_pool_metadata, application)",
-          "refId": "StandardVariableQuery"
+          "qryType": 1,
+          "query": "label_values(ceph_pool_metadata{cluster=\"$cluster\"},application)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
         "regex": "^(?=.*\\Filesystem\\b)|(?=.*\\Object\\b)|(?=.*\\Block\\b).*$",
-        "skipUrlSync": false,
         "sort": 6,
         "type": "query"
       },
       {
         "current": {
-          "selected": false,
           "text": "All",
           "value": "$__all"
         },
@@ -1578,21 +1257,18 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(ceph_pool_metadata{application=~'$application'}, name)",
-        "hide": 0,
+        "definition": "label_values(ceph_pool_metadata{application=~\"$application\", cluster=\"$cluster\"},name)",
         "includeAll": true,
-        "label": "Pools",
-        "multi": false,
+        "label": "Pool",
         "name": "pool",
         "options": [],
         "query": {
-          "query": "label_values(ceph_pool_metadata{application=~'$application'}, name)",
-          "refId": "StandardVariableQuery"
+          "qryType": 1,
+          "query": "label_values(ceph_pool_metadata{application=~\"$application\", cluster=\"$cluster\"},name)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
         "regex": "^[^.].*",
-        "skipUrlSync": false,
-        "sort": 0,
         "type": "query"
       }
     ]
@@ -1605,6 +1281,5 @@
   "timezone": "",
   "title": "Ceph - Application Overview",
   "uid": "92LBIaJIz2",
-  "version": 3,
-  "weekStart": ""
+  "version": 1
 }
