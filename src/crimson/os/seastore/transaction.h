@@ -294,6 +294,7 @@ public:
   }
 
   void replace_placeholder(CachedExtent& placeholder, CachedExtent& extent) {
+    LOG_PREFIX(Transaction::replace_placeholder);
     ceph_assert(!is_weak());
 
     assert(is_retired_placeholder_type(placeholder.get_type()));
@@ -303,8 +304,17 @@ public:
     assert(extent.get_paddr().is_absolute());
     {
       auto where = read_set.find(placeholder.get_paddr(), extent_cmp_t{});
-      assert(where != read_set.end());
-      assert(where->ref.get() == &placeholder);
+      if (unlikely(where == read_set.end())) {
+	SUBERRORT(seastore_t,
+	  "unable to find placeholder {}", *this, placeholder);
+	ceph_abort();
+      }
+      if (unlikely(where->ref.get() != &placeholder)) {
+	SUBERRORT(seastore_t,
+	  "inconsistent placeholder, current: {}; should-be: {}",
+	  *this, *where->ref.get(), placeholder);
+	ceph_abort();
+      }
       placeholder.read_transactions.erase(
 	read_trans_set_t<Transaction>::s_iterator_to(*where));
       where = read_set.erase(where);
