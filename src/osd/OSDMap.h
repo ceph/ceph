@@ -1338,16 +1338,16 @@ public:
     return false;
   }
   bool get_primary_shard(const pg_t& pgid, int *primary, spg_t *out) const {
-    auto i = get_pools().find(pgid.pool());
-    if (i == get_pools().end()) {
+    auto poolit = get_pools().find(pgid.pool());
+    if (poolit == get_pools().end()) {
       return false;
     }
     std::vector<int> acting;
     pg_to_acting_osds(pgid, &acting, primary);
-    if (i->second.is_erasure()) {
+    if (poolit->second.is_erasure()) {
       for (uint8_t i = 0; i < acting.size(); ++i) {
 	if (acting[i] == *primary) {
-	  *out = spg_t(pgid, shard_id_t(i));
+	  *out = spg_t(pgid, pgtemp_undo_primaryfirst(poolit->second, pgid, shard_id_t(i)));
 	  return true;
 	}
       }
@@ -1363,6 +1363,12 @@ public:
   const std::vector<int> pgtemp_undo_primaryfirst(const pg_pool_t& pool,
 			   const pg_t pg,
 			   const std::vector<int>& acting) const;
+  const shard_id_t pgtemp_primaryfirst(const pg_pool_t& pool,
+				       const pg_t pg,
+				       const shard_id_t shard) const;
+  shard_id_t pgtemp_undo_primaryfirst(const pg_pool_t& pool,
+					    const pg_t pg,
+					    const shard_id_t shard) const;
 
   bool in_removed_snaps_queue(int64_t pool, snapid_t snap) const {
     auto p = removed_snaps_queue.find(pool);
