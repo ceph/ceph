@@ -71,8 +71,6 @@ class NamespaceCreation(NamedTuple):
 
 
 class Namespace(NamedTuple):
-    nsid: Optional[int]
-    uuid: Optional[str]
     bdev_name: str
     rbd_image_name: str
     rbd_pool_name: str
@@ -83,7 +81,12 @@ class Namespace(NamedTuple):
     rw_mbytes_per_second: int
     r_mbytes_per_second: int
     w_mbytes_per_second: int
-    trash_image: bool
+    auto_visible: bool
+    hosts: List[str]
+    nsid: Optional[int]
+    uuid: Optional[str]
+    ns_subsystem_nqn: Optional[str]
+    trash_image: Optional[bool]
 
 
 class NamespaceList(NamedTuple):
@@ -126,6 +129,7 @@ class Listener(NamedTuple):
     host_name: str
     trtype: str
     traddr: str
+    secure: bool
     adrfam: int = 0  # 0: IPv4, 1: IPv6
     trsvcid: int = 4420
 
@@ -138,6 +142,8 @@ class ListenerList(NamedTuple):
 
 class Host(NamedTuple):
     nqn: str
+    use_psk: Optional[bool]
+    use_dhchap: Optional[bool]
 
 
 class RequestStatus(NamedTuple):
