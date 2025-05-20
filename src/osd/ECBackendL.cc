@@ -1444,7 +1444,7 @@ struct ECClassicalOp : ECCommonL::RMWPipeline::Op {
       DoutPrefixProvider *dpp,
       const ceph_release_t require_osd_release) final
   {
-    assert(t);
+    ceph_assert(t);
     ECTransactionL::generate_transactions(
       t.get(),
       plan,
