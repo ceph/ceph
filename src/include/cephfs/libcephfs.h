@@ -40,7 +40,7 @@ extern "C" {
 #endif
 
 #define LIBCEPHFS_VER_MAJOR 10
-#define LIBCEPHFS_VER_MINOR 0
+#define LIBCEPHFS_VER_MINOR 1
 #define LIBCEPHFS_VER_EXTRA 3
 
 #define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
@@ -2285,6 +2285,23 @@ int ceph_get_snap_info(struct ceph_mount_info *cmount,
  * @param snap_info snapshot info struct (fetched via call to ceph_get_snap_info()).
  */
 void ceph_free_snap_info_buffer(struct snap_info *snap_info);
+
+/**
+ * perf counters via libcephfs API.
+ */
+
+/**
+ * Get a json string of performance counters
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param perf_dump buffer holding the perf dump
+ *
+ * Returns 0 success with the performance counters populated in the
+ * passed in perf_dump buffer. Caller is responsible for freeing the
+ * @perf_dump buffer using free().
+ */
+int ceph_get_perf_counters(struct ceph_mount_info *cmount, char **perf_dump);
+
 #ifdef __cplusplus
 }
 #endif
