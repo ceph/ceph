@@ -188,14 +188,19 @@ int32_t Estimator::split_and_compress(
     encode(chdr, bd.back().disk_data);
     bd.back().disk_data.claim_append(t);
     uint32_t len = bd.back().disk_data.length();
-    bd.back().compressed_length = len;
-    uint32_t rem = p2nphase(len, au_size);
-    if (rem > 0) {
-      bd.back().disk_data.append_zero(rem);
+    if (p2roundup(len, au_size) < bd.back().real_length) {
+      bd.back().compressed_length = len;
+      uint32_t rem = p2nphase(len, au_size);
+      if (rem > 0) {
+        bd.back().disk_data.append_zero(rem);
+      }
+      actual_compressed += len;
+      actual_compressed_plus_pad += len + rem;
+      disk_needed += len + rem;
+    } else {
+      bd.back().disk_data = bd.back().object_data;
+      disk_needed += bd.back().real_length;
     }
-    actual_compressed += len;
-    actual_compressed_plus_pad += len + rem;
-    disk_needed += len + rem;
   }
   return disk_needed;
 }
