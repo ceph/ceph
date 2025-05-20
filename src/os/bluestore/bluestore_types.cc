@@ -1092,7 +1092,7 @@ bool bluestore_blob_t::release_extents(bool all,
       ++pext_it;
     }
     else {
-      //assert(pext_loffs == pext_loffs_start);
+      //ceph_assert(pext_loffs == pext_loffs_start);
       int delta0 = pext_loffs - pext_loffs_start;
       ceph_assert(delta0 >= 0);
 
