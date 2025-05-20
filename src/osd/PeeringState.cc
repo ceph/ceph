@@ -4500,7 +4500,7 @@ void PeeringState::merge_new_log_entries(
   }
 }
 
-void PeeringState::add_log_entry(const pg_log_entry_t& e, bool applied)
+void PeeringState::add_log_entry(const pg_log_entry_t& e, ObjectStore::Transaction &t, bool applied)
 {
   // raise last_complete only if we were previously up to date
   if (info.last_complete == info.last_update)
@@ -4517,7 +4517,8 @@ void PeeringState::add_log_entry(const pg_log_entry_t& e, bool applied)
 
   // log mutation
   enum PGLog::NonPrimary nonprimary{pool.info.is_nonprimary_shard(info.pgid.shard)};
-  pg_log.add(e, nonprimary, applied);
+  PGLog::LogEntryHandlerRef handler{pl->get_log_handler(t)};
+  pg_log.add(e, nonprimary, applied, &info, handler.get());
   psdout(10) << "add_log_entry " << e << dendl;
 }
 
@@ -4573,7 +4574,7 @@ void PeeringState::append_log(
   }
 
   for (auto p = logv.begin(); p != logv.end(); ++p) {
-    add_log_entry(*p, transaction_applied);
+    add_log_entry(*p, t, transaction_applied);
 
     /* We don't want to leave the rollforward artifacts around
      * here past last_backfill.  It's ok for the same reason as
