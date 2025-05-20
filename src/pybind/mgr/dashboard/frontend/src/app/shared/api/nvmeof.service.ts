@@ -28,6 +28,7 @@ export type NamespaceCreateRequest = NvmeofRequest & {
   rbd_image_name: string;
   rbd_pool: string;
   rbd_image_size?: number;
+  create_image: boolean;
 };
 
 export type NamespaceUpdateRequest = NvmeofRequest & {
