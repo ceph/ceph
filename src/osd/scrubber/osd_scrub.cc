@@ -275,7 +275,7 @@ std::optional<double> OsdScrub::update_load_average()
   if (getloadavg(&loadavg, 1) != 1) {
     return std::nullopt;
   }
-  return 100 * loadavg;
+  return loadavg;
 }
 
 
@@ -299,7 +299,7 @@ bool OsdScrub::scrub_load_below_threshold() const
     return true;
   }
 
-  dout(10) << fmt::format(
+  dout(5) << fmt::format(
 		  "loadavg {:.3f} >= max {:.3f} (#CPUs:{}) = no",
 		  loadavg_per_cpu, conf->osd_scrub_load_threshold,
 		  loadavg_cpu_count)
