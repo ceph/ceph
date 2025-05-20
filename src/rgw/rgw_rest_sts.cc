@@ -577,9 +577,14 @@ WebTokenEngine::validate_signature_using_n_e(const DoutPrefixProvider* dpp, cons
   return true;
 }
 
-bool WebTokenEngine::validate_cert_url(const DoutPrefixProvider* dpp, const std::string& cert_url,
+bool WebTokenEngine::verify_oidc_thumbprint(const DoutPrefixProvider* dpp, const std::string& cert_url,
     const std::vector<std::string>& thumbprints) const
 {
+  if (!cct->_conf.get_val<bool>("rgw_verify_oidc_thumbprint")) {
+    ldpp_dout(dpp, 5) << "Validation of JWKS endpoint is turned off." << dendl;
+    return true;
+  }
+
   // Fetch and verify cert according to https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc_verify-thumbprint.html
   const auto hostname = get_top_level_domain_from_host(dpp, cert_url);
   ldpp_dout(dpp, 20) << "Validating hostname: " << hostname << dendl;
@@ -606,7 +611,7 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
 {
   if (algorithm != "HS256" && algorithm != "HS384" && algorithm != "HS512") {
     const auto cert_url = get_cert_url(iss, dpp, y);
-    if (cert_url.empty() || !validate_cert_url(dpp, cert_url, thumbprints)) {
+    if (cert_url.empty() || !verify_oidc_thumbprint(dpp, cert_url, thumbprints)) {
       ldpp_dout(dpp, 5) << "Not able to validate JWKS url with registered thumbprints" << dendl;
       throw std::system_error(EINVAL, std::system_category());
     }
