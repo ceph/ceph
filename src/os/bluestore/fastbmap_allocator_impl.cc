@@ -593,7 +593,7 @@ void AllocatorLevel01Loose::foreach_internal(
                 if (p < bits_per_slot) {
                   //now @p are 1s
                   ssize_t free_count = count_1s(allocation_pattern, p);
-                  assert(free_count > 0);
+                  ceph_assert(free_count > 0);
                   len = free_count;
                   off = (pos + t) * bits_per_slot + p;
                   p += free_count;
