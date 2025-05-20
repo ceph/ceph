@@ -893,7 +893,7 @@ public:
   }
 
   bool exists(int osd) const {
-    //assert(osd >= 0);
+    //ceph_assert(osd >= 0);
     return osd >= 0 && osd < max_osd && (osd_state[osd] & CEPH_OSD_EXISTS);
   }
 
