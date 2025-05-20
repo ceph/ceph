@@ -6274,12 +6274,9 @@ void OSD::heartbeat_check()
 void OSD::heartbeat()
 {
   ceph_assert(ceph_mutex_is_locked_by_me(heartbeat_lock));
-  dout(30) << "heartbeat" << dendl;
-
-  auto load_for_logger = service.get_scrub_services().update_load_average();
-  if (load_for_logger) {
-    logger->set(l_osd_loadavg, load_for_logger.value());
-  }
+  logger->set(
+      l_osd_loadavg,
+      100.0 * service.get_scrub_services().update_load_average().value_or(0.0));
   dout(30) << "heartbeat checking stats" << dendl;
 
   // refresh peer list and osd stats

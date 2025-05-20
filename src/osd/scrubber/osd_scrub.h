@@ -118,13 +118,13 @@ class OsdScrub {
   [[nodiscard]] bool scrub_time_permit(utime_t t) const;
 
   /**
-   * An external interface into the LoadTracker object. Used by
-   * the OSD tick to update the load data in the logger.
+   * Fetch the 1-minute load average. Used by
+   * the OSD heartbeat handler to update a performance counter.
+   * Also updates the number of CPUs, required internally by the
+   * scrub queue.
    *
-   * \returns 100*(the decaying (running) average of the CPU load
-   *          over the last 24 hours) or nullopt if the load is not
-   *          available.
-   * Note that the multiplication by 100 is required by the logger interface
+   * \returns the 1-minute element of getloadavg() or nullopt
+   *          if the load is not available.
    */
   std::optional<double> update_load_average();
 
