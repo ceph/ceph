@@ -98,6 +98,7 @@ public:
   inline int operator()(
                 const cls::rbd::GroupSnapshotNamespaceMirror& snap_namespace) {
     mirror_snap->state = static_cast<snap_mirror_state_t>(snap_namespace.state);
+    mirror_snap->complete = snap_namespace.complete;
     mirror_snap->mirror_peer_uuids = snap_namespace.mirror_peer_uuids;
     mirror_snap->primary_mirror_uuid = snap_namespace.primary_mirror_uuid;
     mirror_snap->primary_snap_id = snap_namespace.primary_snap_id;
