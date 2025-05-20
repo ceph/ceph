@@ -982,6 +982,7 @@ struct GroupSnapshotNamespaceMirror {
     GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR;
 
   MirrorSnapshotState state = MIRROR_SNAPSHOT_STATE_NON_PRIMARY;
+  bool complete = false; // TODO: modify methods to handle this field
   std::set<std::string> mirror_peer_uuids;
 
   std::string primary_mirror_uuid;
