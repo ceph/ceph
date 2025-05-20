@@ -341,7 +341,7 @@ struct FixedKVInternalNode
   make_balanced(
     op_context_t<NODE_KEY> c,
     Ref &_right,
-    bool prefer_left) {
+    uint32_t pivot_idx) {
     ceph_assert(_right->get_type() == this->get_type());
     auto &right = *_right->template cast<node_type_t>();
     auto replacement_left = c.cache.template alloc_new_non_data_extent<node_type_t>(
@@ -353,13 +353,13 @@ struct FixedKVInternalNode
       c.trans,
       static_cast<node_type_t&>(*this),
       right,
-      prefer_left,
+      pivot_idx,
       *replacement_left,
       *replacement_right);
     auto pivot = this->balance_into_new_nodes(
       *this,
       right,
-      prefer_left,
+      pivot_idx,
       *replacement_left,
       *replacement_right);
     replacement_left->range = replacement_left->get_meta();
@@ -368,7 +368,7 @@ struct FixedKVInternalNode
       c.trans,
       static_cast<node_type_t&>(*this),
       right,
-      prefer_left,
+      pivot_idx,
       *replacement_left,
       *replacement_right);
     return std::make_tuple(
@@ -688,14 +688,14 @@ struct FixedKVLeafNode
     Transaction &t,
     node_type_t &left,
     node_type_t &right,
-    bool prefer_left,
+    uint32_t pivot_idx,
     node_type_t &replacement_left,
     node_type_t &replacement_right) = 0;
   virtual void adjust_copy_src_dest_on_balance(
     Transaction &t,
     node_type_t &left,
     node_type_t &right,
-    bool prefer_left,
+    uint32_t pivot_idx,
     node_type_t &replacement_left,
     node_type_t &replacement_right) = 0;
 
@@ -703,7 +703,7 @@ struct FixedKVLeafNode
   make_balanced(
     op_context_t<NODE_KEY> c,
     Ref &_right,
-    bool prefer_left) {
+    uint32_t pivot_idx) {
     ceph_assert(_right->get_type() == this->get_type());
     auto &right = *_right->template cast<node_type_t>();
     auto replacement_left = c.cache.template alloc_new_non_data_extent<node_type_t>(
@@ -715,13 +715,13 @@ struct FixedKVLeafNode
       c.trans,
       static_cast<node_type_t&>(*this),
       right,
-      prefer_left,
+      pivot_idx,
       *replacement_left,
       *replacement_right);
     auto pivot = this->balance_into_new_nodes(
       *this,
       right,
-      prefer_left,
+      pivot_idx,
       *replacement_left,
       *replacement_right);
     replacement_left->range = replacement_left->get_meta();
@@ -730,7 +730,7 @@ struct FixedKVLeafNode
       c.trans,
       static_cast<node_type_t&>(*this),
       right,
-      prefer_left,
+      pivot_idx,
       *replacement_left,
       *replacement_right);
     return std::make_tuple(

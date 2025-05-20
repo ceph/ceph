@@ -304,21 +304,21 @@ struct LBALeafNode
     Transaction &t,
     LBALeafNode &left,
     LBALeafNode &right,
-    bool prefer_left,
+    uint32_t pivot_idx,
     LBALeafNode &replacement_left,
     LBALeafNode &replacement_right) final {
     this->balance_child_ptrs(
-      t, left, right, prefer_left, replacement_left, replacement_right);
+      t, left, right, pivot_idx, replacement_left, replacement_right);
   }
   void adjust_copy_src_dest_on_balance(
     Transaction &t,
     LBALeafNode &left,
     LBALeafNode &right,
-    bool prefer_left,
+    uint32_t pivot_idx,
     LBALeafNode &replacement_left,
     LBALeafNode &replacement_right) final {
     this->parent_node_t::adjust_copy_src_dest_on_balance(
-      t, left, right, prefer_left, replacement_left, replacement_right);
+      t, left, right, pivot_idx, replacement_left, replacement_right);
   }
 
   CachedExtentRef duplicate_for_write(Transaction&) final {

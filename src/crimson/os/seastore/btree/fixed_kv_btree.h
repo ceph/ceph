@@ -312,17 +312,6 @@ public:
       }
       return get_depth();
     }
-
-    depth_t check_merge() const {
-      if (!leaf.node->below_min_capacity()) {
-	return 0;
-      }
-      for (depth_t merge_from = 1; merge_from < get_depth(); ++merge_from) {
-	if (!get_internal(merge_from + 1).node->below_min_capacity())
-	  return merge_from;
-      }
-      return get_depth();
-    }
   };
 
   FixedKVBtree(RootBlockRef &root_block) : root_block(root_block) {}
@@ -2064,12 +2053,13 @@ private:
         c.cache.retire_extent(c.trans, r);
         get_tree_stats<self_type>(c.trans).extents_num_delta--;
       } else {
+        auto pivot_idx = l->get_balance_pivot_idx(*l, *r);
         LOG_PREFIX(FixedKVBtree::merge_level);
         auto [replacement_l, replacement_r, pivot] =
           l->make_balanced(
             c,
             r,
-            !donor_is_left);
+            pivot_idx);
 
         parent_pos.node->update(
           liter,
