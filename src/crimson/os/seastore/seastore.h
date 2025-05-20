@@ -381,7 +381,8 @@ public:
       uint64_t off,
       uint64_t len) const;
 
-    using tm_iertr = base_iertr;
+    using tm_iertr = base_iertr::extend<
+      crimson::ct_error::value_too_large>;
     using tm_ret = tm_iertr::future<>;
     tm_ret _do_transaction_step(
       internal_context_t &ctx,
@@ -502,7 +503,9 @@ public:
       omap_root_t&& root,
       const std::optional<std::string>& start) const;
 
-    base_iertr::future<> omaptree_set_keys(
+    using omaptree_set_keys_iertr = base_iertr::extend<
+      crimson::ct_error::value_too_large>;
+    omaptree_set_keys_iertr::future<> omaptree_set_keys(
       Transaction& t,
       omap_root_t&& root,
       Onode& onode,
