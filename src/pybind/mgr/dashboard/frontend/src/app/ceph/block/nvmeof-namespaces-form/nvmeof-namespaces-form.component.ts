@@ -152,7 +152,8 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       const request: NamespaceCreateRequest = {
         gw_group: this.group,
         rbd_image_name: `nvme_${pool}_${this.group}_${this.randomString()}`,
-        rbd_pool: pool
+        rbd_pool: pool,
+        create_image: true
       };
       if (rbdImageSize) {
         request['rbd_image_size'] = rbdImageSize;
