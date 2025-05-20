@@ -47,6 +47,12 @@ class SubsystemList(NamedTuple):
     subsystems: List[Subsystem]
 
 
+class SubsystemStatus(NamedTuple):
+    status: int
+    error_message: str
+    nqn: str
+
+
 class Connection(NamedTuple):
     traddr: str
     trsvcid: int
