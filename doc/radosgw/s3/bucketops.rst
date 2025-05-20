@@ -860,7 +860,8 @@ Syntax
 Response Entities
 ~~~~~~~~~~~~~~~~~
 
-Response is XML encoded in the body of the request, in the following format:
+Response header contains ``Last-Modified`` date/time of the logging configuration.
+Logging configuration is XML encoded in the body of the response, in the following format:
 
 ::
 
