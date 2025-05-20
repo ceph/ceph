@@ -69,7 +69,7 @@ class WebTokenEngine : public rgw::auth::Engine {
   std::string connect_to_host_get_cert_chain(const DoutPrefixProvider* dpp, const std::string& hostname, int port = 443) const;
   std::string get_top_level_domain_from_host(const DoutPrefixProvider* dpp, const std::string& hostname) const;
   std::string extract_last_certificate(const DoutPrefixProvider* dpp, const std::string& pem_chain) const;
-  bool validate_cert_url(const DoutPrefixProvider* dpp, const std::string& cert_url,
+  bool verify_oidc_thumbprint(const DoutPrefixProvider* dpp, const std::string& cert_url,
       const std::vector<std::string>& thumbprints) const;
   void shutdown_ssl(const DoutPrefixProvider* dpp, SSL* ssl, SSL_CTX* ctx) const;
 
