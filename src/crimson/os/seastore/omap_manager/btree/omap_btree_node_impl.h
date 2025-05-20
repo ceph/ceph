@@ -156,6 +156,16 @@ struct OMapInnerNode
     omap_context_t oc,
     const std::string &key) final;
 
+  rm_key_range_ret rm_key_range(
+    omap_context_t oc,
+    const std::string &first,
+    const std::string &last) final;
+
+  iterate_ret iterate(
+    omap_context_t oc,
+    ObjectStore::omap_iter_seek_t &start_from,
+    omap_iterate_cb_t callback) final;
+
   list_ret list(
     omap_context_t oc,
     const std::optional<std::string> &first,
@@ -186,6 +196,10 @@ struct OMapInnerNode
   merge_entry_ret merge_entry(
     omap_context_t oc,
     internal_const_iterator_t iter, OMapNodeRef entry);
+
+  merge_entry_ret merge_entry_for_node(
+    omap_context_t oc,
+    std::map<uint16_t, OMapNodeRef> entries);
 
   using handle_split_iertr = base_iertr;
   using handle_split_ret = handle_split_iertr::future<mutation_result_t>;
@@ -367,6 +381,16 @@ struct OMapLeafNode
 
   rm_key_ret rm_key(
     omap_context_t oc, const std::string &key) final;
+
+  rm_key_range_ret rm_key_range(
+    omap_context_t oc,
+    const std::string &first,
+    const std::string &last) final;
+
+  iterate_ret iterate(
+    omap_context_t oc,
+    ObjectStore::omap_iter_seek_t &start_from,
+    omap_iterate_cb_t callback) final;
 
   list_ret list(
     omap_context_t oc,
