@@ -15475,6 +15475,9 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
   }
   ceph_assert(!to_trim.empty());
 
+  utime_t lat = ceph_clock_now() - begin_get_trim_object_time;
+  pg->osd->logger->tinc(l_osd_snap_trim_get_raw_object_lat, lat);
+
   for (auto &&object: to_trim) {
     // Get next
     ldout(pg->cct, 10) << "AwaitAsyncWork react trimming " << object << dendl;

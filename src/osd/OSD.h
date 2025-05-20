@@ -185,6 +185,8 @@ enum {
   l_osd_pg_fastinfo,
   l_osd_pg_biginfo,
 
+  l_osd_snap_trim_get_raw_object_lat,
+
   l_osd_last,
 };
 
