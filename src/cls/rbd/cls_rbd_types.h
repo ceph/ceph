@@ -980,6 +980,7 @@ struct GroupSnapshotNamespaceMirror {
     GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR;
 
   MirrorSnapshotState state = MIRROR_SNAPSHOT_STATE_NON_PRIMARY;
+  bool complete = false; // TODO: modify methods to handle this field
   std::set<std::string> mirror_peer_uuids;
 
   std::string primary_mirror_uuid;
@@ -1022,24 +1023,7 @@ struct GroupSnapshotNamespaceMirror {
 
   void dump(ceph::Formatter *f) const;
 
-  inline bool operator==(const GroupSnapshotNamespaceMirror& rhs) const {
-    return state == rhs.state &&
-           mirror_peer_uuids == rhs.mirror_peer_uuids &&
-           primary_mirror_uuid == rhs.primary_mirror_uuid &&
-           primary_snap_id == rhs.primary_snap_id;
-  }
-
-  inline bool operator<(const GroupSnapshotNamespaceMirror& rhs) const {
-    if (state != rhs.state) {
-      return state < rhs.state;
-    } else if (mirror_peer_uuids != rhs.mirror_peer_uuids) {
-      return mirror_peer_uuids < rhs.mirror_peer_uuids;
-    } else if (primary_mirror_uuid != rhs.primary_mirror_uuid) {
-      return primary_mirror_uuid < rhs.primary_mirror_uuid;
-    } else {
-      return primary_snap_id < rhs.primary_snap_id;
-    }
-  }
+  auto operator<=>(const GroupSnapshotNamespaceMirror&) const = default;
 };
 
 struct GroupSnapshotNamespaceUnknown {

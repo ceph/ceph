@@ -8023,6 +8023,7 @@ extern "C" int rbd_group_snap_get_mirror_namespace(
     strncpy(p, peer.c_str(), peer.size() + 1);
     p += peer.size() + 1;
   }
+  mirror_namespace->complete = mirror_namespace_cpp.complete;
 
   return 0;
 }
