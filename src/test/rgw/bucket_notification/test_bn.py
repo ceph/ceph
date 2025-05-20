@@ -1605,6 +1605,169 @@ def test_notification_push_kafka_multiple_brokers_append():
     notification_push('kafka', conn, kafka_brokers='localhost:19092')
 
 
+def _faulty_http(persistent=False):
+    hostname = get_ip()
+    conn = connection()
+    zonegroup = get_config_zonegroup()
+
+    # create random port for the http server
+    # no http server is running
+    host = get_ip()
+    port = random.randint(10000, 20000)
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create s3 topic (non persistent)
+    wait_factor = 1.5
+    if persistent:
+        endpoint_args = 'push-endpoint=http://'+host+':'+str(port)+ \
+            '&persistent=true&max_retries=1&time_to_live=1&retry_sleep_duration=0'
+        wait_buffer = 30
+    else:
+        endpoint_args = 'push-endpoint=http://'+host+':'+str(port)
+        wait_buffer = 0
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:Put']
+                       }]
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket
+    client_threads = []
+    start_time = time.time()
+    number_of_objects = 10
+    for i in range(number_of_objects):
+        content = str(os.urandom(randint(1, 1024)))
+        key = bucket.new_key(str(i))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+    if persistent:
+        wait_for_queue_to_drain(topic_name, sleep_time=1)
+    time_diff = time.time() - start_time
+    connection_timeout = 5
+    assert time_diff < connection_timeout*wait_factor + wait_buffer, 'http notifications time: ' + str(time_diff) + ' seconds'
+
+    # start http server with 60 sec delay
+    http_server = HTTPServerWithEvents((host, port), delay=60)
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        content = str(os.urandom(randint(1, 1024)))
+        key = bucket.new_key(str(i))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+    if persistent:
+        wait_for_queue_to_drain(topic_name, sleep_time=1)
+    time_diff = time.time() - start_time
+    message_timeout = 10
+    assert time_diff < message_timeout*wait_factor + wait_buffer, 'http notifications time: ' + str(time_diff) + ' seconds'
+
+    # cleanup
+    topic_conf.del_config()
+    s3_notification_conf.del_config(notification=notification_name)
+    # delete the bucket
+    delete_all_objects(conn, bucket_name)
+    conn.delete_bucket(bucket_name)
+    http_server.close()
+
+
+@attr('http_test')
+def test_faulty_http():
+    _faulty_http()
+
+
+@attr('http_test')
+def test_faulty_http_persistent():
+    _faulty_http(True)
+
+
+# for the inflight tests use the following vstart command:
+# MON=1 OSD=1 MDS=0 MGR=0 RGW=1 ../src/vstart.sh -n -d -o rgw_http_notif_max_inflight=100 -o rgw_http_notif_connection_timeout=0 -o rgw_http_notif_message_timeout=0
+def _http_inflight(persistent=False):
+    hostname = get_ip()
+    conn = connection()
+    zonegroup = get_config_zonegroup()
+
+    # create random port for the http server
+    # no http server is running
+    host = get_ip()
+    port = random.randint(10000, 20000)
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create s3 topic (non persistent)
+    if persistent:
+        endpoint_args = 'push-endpoint=http://'+host+':'+str(port)+ \
+            '&persistent=true&max_retries=1&time_to_live=1&retry_sleep_duration=0'
+    else:
+        endpoint_args = 'push-endpoint=http://'+host+':'+str(port)
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:Put']
+                       }]
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # start http server
+    http_server = HTTPServerWithEvents((host, port), delay=10)
+    client_threads = []
+    start_time = time.time()
+    number_of_objects = 10000
+    for i in range(number_of_objects):
+        content = str(os.urandom(randint(1, 1024)))
+        key = bucket.new_key(str(i))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+        if i%1000 == 0:
+            [thr.join() for thr in client_threads]
+            client_threads = []
+    [thr.join() for thr in client_threads]
+    if persistent:
+        wait_for_queue_to_drain(topic_name, sleep_time=1)
+    time_diff = time.time() - start_time
+    print('http notifications time: ' + str(time_diff) + ' seconds')
+
+    # cleanup
+    topic_conf.del_config()
+    s3_notification_conf.del_config(notification=notification_name)
+    # delete the bucket
+    delete_all_objects(conn, bucket_name)
+    conn.delete_bucket(bucket_name)
+    http_server.close()
+
+
+@attr('manual_test')
+def test_http_inflight():
+    _http_inflight()
+
+
+@attr('manual_test')
+def test_http_inflight_persistent():
+    _http_inflight(persistent=True)
+
+
 @attr('http_test')
 def test_ps_s3_notification_multi_delete_on_master():
     """ test deletion of multiple keys on master """
@@ -2977,7 +3140,7 @@ def check_http_server(http_port):
     log.info(out.decode('utf-8'))
 
 
-def wait_for_queue_to_drain(topic_name, tenant=None, account=None, http_port=None):
+def wait_for_queue_to_drain(topic_name, tenant=None, account=None, http_port=None, sleep_time=5):
     retries = 0
     entries = 1
     start_time = time.time()
@@ -3000,7 +3163,7 @@ def wait_for_queue_to_drain(topic_name, tenant=None, account=None, http_port=Non
         if retries > 30:
             log.warning('queue %s still has %d entries after %ds', topic_name, entries, time_diff)
             assert_equal(entries, 0)
-        time.sleep(5)
+        time.sleep(sleep_time)
     time_diff = time.time() - start_time
     log.info('waited for %ds for queue %s to drain', time_diff, topic_name)
 

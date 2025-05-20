@@ -64,12 +64,19 @@ def delete_all_objects(conn, bucket_name):
                       aws_access_key_id=conn.aws_access_key_id,
                       aws_secret_access_key=conn.aws_secret_access_key)
 
-    objects = []
-    for key in client.list_objects(Bucket=bucket_name)['Contents']:
-        objects.append({'Key': key['Key']})
-    # delete objects from the bucket
-    response = client.delete_objects(Bucket=bucket_name,
+    is_truncated = True
+    marker = ''
+    while is_truncated:
+        objects = []
+        result = client.list_objects(Bucket=bucket_name, Marker=marker)
+        for key in result['Contents']:
+            objects.append({'Key': key['Key']})
+        # delete objects from the bucket
+        response = client.delete_objects(Bucket=bucket_name,
             Delete={'Objects': objects})
+        is_truncated = result['IsTruncated']
+        if is_truncated:
+            marker = result['NextMarker']
 
 
 class PSTopicS3:
