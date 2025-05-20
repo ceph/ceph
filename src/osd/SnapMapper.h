@@ -71,9 +71,12 @@ public:
   int get_keys(
     const std::set<std::string> &keys,
     std::map<std::string, bufferlist> *out) override;
+  // If "with_lower_bound = false",
+  // After that, creating iter will not be called "it->lower_bound(head);"
   int get_next(
     const std::string &key,
-    pair<std::string, bufferlist> *next) override;
+    pair<std::string, bufferlist> *next,
+    bool with_lower_bound = true) override;
 };
 
 /**
@@ -216,7 +219,9 @@ public:
   int get_next_objects_to_trim(
     snapid_t snap,              ///< [in] snap to check
     unsigned max,               ///< [in] max to get
-    vector<hobject_t> *out      ///< [out] next objects to trim (must be empty)
+    vector<hobject_t> *out,     ///< [out] next objects to trim (must be empty)
+    std::string &last_key,      ///< [out] last trim key
+    std::set<string>& last_prefixes      ///< [out] last_prefixes to trim
     );  ///< @return error, -ENOENT if no more objects
 
   /// Remove mapping for oid

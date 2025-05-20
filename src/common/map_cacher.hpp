@@ -57,7 +57,8 @@ public:
   /// Returns next key
   virtual int get_next(
     const K &key,       ///< [in] key after which to get next
-    pair<K, V> *next    ///< [out] first key after key
+    pair<K, V> *next,    ///< [out] first key after key
+    bool with_lower_bound = true ///< [in] need rocksdb call lower_bound to seek
     ) = 0; ///< @return 0 on success, -ENOENT if there is no next
 
   virtual ~StoreDriver() {}
@@ -83,7 +84,8 @@ public:
   /// Fetch first key/value pair after specified key
   int get_next(
     K key,               ///< [in] key after which to get next
-    pair<K, V> *next     ///< [out] next key
+    pair<K, V> *next,     ///< [out] next key
+    bool with_lower_bound = true ///< [in] need rocksdb call lower_bound to seek
     ) {
     while (true) {
       pair<K, boost::optional<V> > cached;
@@ -91,7 +93,7 @@ public:
       bool got_cached = in_progress.get_next(key, &cached);
 
       bool got_store = false;
-      int r = driver->get_next(key, &store);
+      int r = driver->get_next(key, &store, with_lower_bound);
       if (r < 0 && r != -ENOENT) {
 	return r;
       } else if (r == 0) {

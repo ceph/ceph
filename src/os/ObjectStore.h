@@ -1889,6 +1889,14 @@ public:
     const ghobject_t &oid  ///< [in] object
     ) = 0;
 
+  virtual ObjectMap::ObjectMapIterator get_omap_iterator(
+    CollectionHandle &c,   ///< [in] collection
+    const ghobject_t &oid,  ///< [in] object
+    bool with_lower_bound  ///< [in] if invoke lower_bound to rocksdb's seek
+    ) {
+    return get_omap_iterator(c, oid);
+  };
+
   virtual int flush_journal() { return -EOPNOTSUPP; }
 
   virtual int dump_journal(ostream& out) { return -EOPNOTSUPP; }

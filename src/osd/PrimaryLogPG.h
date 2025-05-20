@@ -31,6 +31,7 @@
 #include "ReplicatedBackend.h"
 #include "PGTransaction.h"
 #include "cls/cas/cls_cas_ops.h"
+#include "rocksdb/perf_context.h"
 
 class CopyFromCallback;
 class PromoteCallback;
@@ -1561,6 +1562,9 @@ private:
   struct DoSnapWork : boost::statechart::event< DoSnapWork > {
     DoSnapWork() : boost::statechart::event < DoSnapWork >() {}
   };
+  struct SleepTimerReady : boost::statechart::event< SleepTimerReady > {
+    SleepTimerReady() : boost::statechart::event < SleepTimerReady >() {}
+  };
   struct KickTrim : boost::statechart::event< KickTrim > {
     KickTrim() : boost::statechart::event < KickTrim >() {}
   };
@@ -1611,6 +1615,10 @@ private:
 
     set<hobject_t> in_flight;
     snapid_t snap_to_trim;
+    // Record the key deleted during the last trim
+    string last_trim_key;
+    // Record the PG prefixes during the last trims
+    set<string> last_prefixes;
 
     explicit Trimming(my_context ctx)
       : my_base(ctx),
@@ -1745,8 +1753,10 @@ private:
     /* WaitReservation is a sub-state of trimming simply so that exiting Trimming
      * always cancels the reservation */
     typedef boost::mpl::list <
-      boost::statechart::custom_reaction< SnapTrimReserved >
+      boost::statechart::custom_reaction< SnapTrimReserved >,
+      boost::statechart::custom_reaction< SleepTimerReady >
       > reactions;
+    Context *wakeup = nullptr;
     struct ReservationCB : public Context {
       PrimaryLogPGRef pg;
       bool canceled;
@@ -1764,6 +1774,19 @@ private:
       }
     };
     ReservationCB *pending = nullptr;
+    // Add an OnSleepTimer timer in WaitReservation for delay processing to prevent the situation 
+    // where cpu usage is too high when empty snapshots accumulate
+    struct OnSleepTimer : Context {
+      PrimaryLogPGRef pg;
+      epoch_t epoch;
+      explicit OnSleepTimer(PrimaryLogPGRef pg, epoch_t epoch) : pg(pg), epoch(epoch) {}
+      void finish(int) override {
+    pg->lock();
+    if (!pg->pg_has_reset_since(epoch)) 
+      pg->snap_trimmer_machine.process_event(SleepTimerReady());
+    pg->unlock();
+      }
+    };
 
     explicit WaitReservation(my_context ctx)
       : my_base(ctx),
@@ -1780,12 +1803,20 @@ private:
       pg->publish_stats_to_osd();
     }
     boost::statechart::result react(const SnapTrimReserved&);
+    boost::statechart::result react(const SleepTimerReady&);
     void exit() {
+      auto *pg = context< SnapTrimmer >().pg;
       context< SnapTrimmer >().log_exit(state_name, enter_time);
+      if (wakeup) {
+        std::lock_guard l(pg->osd->sleep_lock);
+        pg->osd->sleep_timer.cancel_event(wakeup);
+      }
+      wakeup = nullptr;
+  
       if (pending)
 	pending->cancel();
       pending = nullptr;
-      auto *pg = context< SnapTrimmer >().pg;
+      
       pg->state_clear(PG_STATE_SNAPTRIM_WAIT);
       pg->state_clear(PG_STATE_SNAPTRIM_ERROR);
       pg->publish_stats_to_osd();

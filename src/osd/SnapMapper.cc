@@ -33,10 +33,11 @@ int OSDriver::get_keys(
 
 int OSDriver::get_next(
   const std::string &key,
-  pair<std::string, bufferlist> *next)
+  pair<std::string, bufferlist> *next,
+  bool with_lower_bound)
 {
   ObjectMap::ObjectMapIterator iter =
-    os->get_omap_iterator(ch, hoid);
+    os->get_omap_iterator(ch, hoid, with_lower_bound);
   if (!iter) {
     ceph_abort();
     return -EINVAL;
@@ -291,19 +292,32 @@ void SnapMapper::add_oid(
 int SnapMapper::get_next_objects_to_trim(
   snapid_t snap,
   unsigned max,
-  vector<hobject_t> *out)
+  vector<hobject_t> *out,
+  string &last_key,
+  std::set<string>& last_prefixes)
 {
   ceph_assert(out);
   ceph_assert(out->empty());
   int r = 0;
-  for (set<string>::iterator i = prefixes.begin();
-       i != prefixes.end() && out->size() < max && r == 0;
+  size_t prefix_snap = get_prefix(snap).size();
+  size_t prefix_pg = (*prefixes.begin()).size();
+  if(last_prefixes != prefixes) {
+    // pg may split or merge, reset last_key
+    last_key = string();
+    last_prefixes = prefixes;
+  }
+  string target = (prefix_snap + prefix_pg ) < last_key.size() ? last_key.substr(prefix_snap, prefix_pg) : "";
+  auto i = prefixes.lower_bound(target);
+  for (; i != prefixes.end() && out->size() < max && r == 0;
        ++i) {
+    // Construct the prefix of the snapshot object to be deleted.
     string prefix(get_prefix(snap) + *i);
-    string pos = prefix;
+    // last_key.size() = 0, pg may split or merge, pos use the prefix.
+    string pos = last_key.size() > 0 ? last_key : prefix;
     while (out->size() < max) {
       pair<string, bufferlist> next;
-      r = backend.get_next(pos, &next);
+      r = backend.get_next(pos, &next, false);
+      last_key = string();
       dout(20) << __func__ << " get_next(" << pos << ") returns " << r
 	       << " " << next << dendl;
       if (r != 0) {
@@ -323,7 +337,7 @@ int SnapMapper::get_next_objects_to_trim(
       ceph_assert(check(next_decoded.second));
 
       out->push_back(next_decoded.second);
-      pos = next.first;
+      last_key = pos = next.first;
     }
   }
   if (out->size() == 0) {

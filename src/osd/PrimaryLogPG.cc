@@ -15344,10 +15344,36 @@ boost::statechart::result PrimaryLogPG::NotTrimming::react(const KickTrim&)
   }
 }
 
+boost::statechart::result PrimaryLogPG::WaitReservation::react(const SleepTimerReady&) {
+  PrimaryLogPG *pg = context< SnapTrimmer >().pg;
+  wakeup = nullptr; 
+
+  pending = nullptr;
+  if (!context< SnapTrimmer >().can_trim()) {
+    post_event(KickTrim());
+    return transit< NotTrimming >();
+  }
+
+  context<Trimming>().snap_to_trim = pg->snap_trimq.range_start();
+  ldout(pg->cct, 10) << "NotTrimming: trimming " << pg->snap_trimq.range_start() << dendl;
+  return transit< AwaitAsyncWork >();
+}
+
 boost::statechart::result PrimaryLogPG::WaitReservation::react(const SnapTrimReserved&)
 {
   PrimaryLogPG *pg = context< SnapTrimmer >().pg;
   ldout(pg->cct, 10) << "WaitReservation react SnapTrimReserved" << dendl;
+
+  float osd_next_snap_trim_sleep = pg->osd->osd->get_osd_next_snap_trim_sleep();
+  if (osd_next_snap_trim_sleep > 0) {
+    std::lock_guard l(pg->osd->sleep_lock);
+    wakeup = pg->osd->sleep_timer.add_event_after(
+      osd_next_snap_trim_sleep,
+      new OnSleepTimer{pg, pg->get_osdmap_epoch()}
+    );
+    // keep state, wait SleepTimerReady
+    return discard_event();
+  }
 
   pending = nullptr;
   if (!context< SnapTrimmer >().can_trim()) {
@@ -15381,6 +15407,13 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
   snapid_t snap_to_trim = context<Trimming>().snap_to_trim;
   auto &in_flight = context<Trimming>().in_flight;
   ceph_assert(in_flight.empty());
+  
+  // Get the key of the last trim.
+  // And use it as the query object of this trim.
+  auto &last_trim_key = context<Trimming>().last_trim_key;
+  // Get the pg prefix of the last trim.
+  // And it is used to determine whether there is a pg split and merger.
+  auto &last_prefixes = context<Trimming>().last_prefixes;
 
   ceph_assert(pg->is_primary() && pg->is_active());
   if (!context< SnapTrimmer >().can_trim()) {
@@ -15394,15 +15427,30 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
   vector<hobject_t> to_trim;
   unsigned max = pg->cct->_conf->osd_pg_max_concurrent_snap_trims;
   to_trim.reserve(max);
+  utime_t begin_get_trim_object_time = ceph_clock_now();
+  if (g_conf()->rocksdb_perf) {
+    rocksdb::SetPerfLevel(rocksdb::PerfLevel::kEnableCount);
+    rocksdb::get_perf_context()->Reset();
+  }
   int r = pg->snap_mapper.get_next_objects_to_trim(
     snap_to_trim,
     max,
-    &to_trim);
+    &to_trim
+    last_trim_key,
+    last_prefixes);
+  
+  if (g_conf()->rocksdb_perf) {
+    uint64_t internal_delete_skipped_count;
+    internal_delete_skipped_count = rocksdb::get_perf_context()->internal_delete_skipped_count;
+    ldout(pg->cct, 20) << " << current internal_delete_skipped_count : " << internal_delete_skipped_count << ">>" << dendl;
+  }  
   if (r != 0 && r != -ENOENT) {
     lderr(pg->cct) << "get_next_objects_to_trim returned "
 		   << cpp_strerror(r) << dendl;
     ceph_abort_msg("get_next_objects_to_trim returned an invalid code");
   } else if (r == -ENOENT) {
+    utime_t lat = ceph_clock_now() - begin_get_trim_object_time;
+    ldout(pg->cct, 20) << " Get the objects required by snaptrim takes :" << lat << dendl;
     // Done!
     ldout(pg->cct, 10) << "got ENOENT" << dendl;
 
