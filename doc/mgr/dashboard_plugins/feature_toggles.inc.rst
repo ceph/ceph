@@ -27,30 +27,30 @@ By default all features come enabled.
 
 To retrieve a list of features and their current statuses:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph dashboard feature status
 
 ::
 
-  Feature 'cephfs': 'enabled'
-  Feature 'iscsi': 'enabled'
-  Feature 'mirroring': 'enabled'
-  Feature 'rbd': 'enabled'
-  Feature 'rgw': 'enabled'
-  Feature 'nfs': 'enabled'
+    Feature 'cephfs': 'enabled'
+    Feature 'iscsi': 'enabled'
+    Feature 'mirroring': 'enabled'
+    Feature 'rbd': 'enabled'
+    Feature 'rgw': 'enabled'
+    Feature 'nfs': 'enabled'
 
 To enable or disable the status of a single or multiple features:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph dashboard feature disable iscsi mirroring
 
-:: 
+::
 
-  Feature 'iscsi': disabled
-  Feature 'mirroring': disabled
+   Feature 'iscsi': disabled
+   Feature 'mirroring': disabled
 
-After a feature status has changed, the API REST endpoints immediately respond to
-that change, while for the front-end UI elements, it may take up to 20 seconds to
-reflect it.
+After a feature status has changed, the API REST endpoints immediately respond
+to that change, but it make take up to twenty (20) seconds  for the front-end
+UI elements seconds to reflect the change.
