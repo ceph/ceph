@@ -1468,6 +1468,7 @@ std::ostream& operator<<(std::ostream& os, MirrorSnapshotState state) {
 void GroupSnapshotNamespaceMirror::encode(bufferlist& bl) const {
   using ceph::encode;
   encode(state, bl);
+  encode(complete, bl);
   encode(mirror_peer_uuids, bl);
   encode(primary_mirror_uuid, bl);
   encode(primary_snap_id, bl);
@@ -1477,6 +1478,7 @@ void GroupSnapshotNamespaceMirror::decode(uint8_t version,
                                           bufferlist::const_iterator& it) {
   using ceph::decode;
   decode(state, it);
+  decode(complete, it);
   decode(mirror_peer_uuids, it);
   decode(primary_mirror_uuid, it);
   decode(primary_snap_id, it);
@@ -1484,6 +1486,7 @@ void GroupSnapshotNamespaceMirror::decode(uint8_t version,
 
 void GroupSnapshotNamespaceMirror::dump(Formatter *f) const {
   f->dump_stream("state") << state;
+  f->dump_bool("complete", complete);
   f->open_array_section("mirror_peer_uuids");
   for (auto &peer : mirror_peer_uuids) {
     f->dump_string("mirror_peer_uuid", peer);
@@ -1623,6 +1626,7 @@ std::ostream& operator<<(std::ostream& os,
                          const GroupSnapshotNamespaceMirror& ns) {
   os << "[" << GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR << " "
      << "state=" << ns.state << ", "
+     << "complete=" << ns.complete << ", "
      << "mirror_peer_uuids=" << ns.mirror_peer_uuids;
   if (ns.is_non_primary()) {
     os << ", "
