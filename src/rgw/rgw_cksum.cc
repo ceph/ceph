@@ -72,7 +72,9 @@ namespace rgw::cksum {
 	  cck3 =  crc32iscsi_comb(cck1, cck2, len1);
 	  break;
 	default:
-	  break;
+	  /* unreachable (already checked by outer switch/case) */
+	  // TODO change to std::unreachable() once we are C++23
+	  goto out;
 	}
         /* and byteswap */
 	cck3 = rgw::digest::byteswap(cck3);
