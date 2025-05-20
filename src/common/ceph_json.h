@@ -16,6 +16,9 @@
 #ifndef CEPH_JSON_H
 #define CEPH_JSON_H
 
+//JFW
+#include <iostream>
+
 #include <strings.h>
 
 #include <map>
@@ -172,7 +175,8 @@ public:
     }
   };
 
-protected:
+// JFW: protected:
+public:
   std::string name; // corresponds to obj_type in XMLObj
 
   boost::json::value data;
@@ -258,6 +262,7 @@ public:
   }
 
   JSONObjIter find_first(std::string_view name) { 
+std::cerr << "JFW: JSONObj::find_first(); looking for " << name << std::endl;
 	return { children.find(name), children.end() };
   }
 
@@ -357,11 +362,14 @@ void decode_json_obj(IntegerT& val, JSONObj *obj)
 template<class T>
 void decode_json_obj(T& val, JSONObj *obj)
 {
+std::cout << "JFW: decode_json(val, obj)" << std::endl;
   val.decode_json(obj);
 }
 
 inline void decode_json_obj(std::string& val, JSONObj *obj)
 {
+std::cout << "JFW: decode_json(std::string& val, obj)" << std::endl;
+std::cout << "JFW:  obj->get_data() = " << obj->get_data() << std::endl;
   val = obj->get_data();
 }
 
@@ -509,15 +517,19 @@ void decode_json_obj(C& container, void (*cb)(C&, JSONObj *obj), JSONObj *obj)
 template<class T>
 bool JSONDecoder::decode_json(std::string_view name, T& val, JSONObj *obj, bool mandatory)
 {
+std::cerr << "JFW: JSONDecoder::decode_json(): name = " << name << std::endl;
   JSONObjIter iter = obj->find_first(name);
   if (iter.end()) {
+std::cerr << "JFW: NOT FOUND" << std::endl;
     if (mandatory) {
       std::string s = "missing mandatory field " + std::string(name);
       throw err(s);
     }
     if constexpr (std::is_default_constructible_v<T>) {
+std::cerr << "JFW: setting val to default (empty)" << std::endl;
       val = T();
     }
+std::cerr << "JFW: returning false" << std::endl;
     return false;
   }
 
@@ -560,6 +572,8 @@ bool JSONDecoder::decode_json(std::string_view name, C& container, void (*cb)(C&
 template<class T>
 void JSONDecoder::decode_json(std::string_view name, T& val, const T& default_val, JSONObj *obj)
 {
+std::cerr << "JSONDecoder::decode_json(std::string_view name, T& val, const T& default_val, JSONObj *obj)" << std::endl;
+
   JSONObjIter iter = obj->find_first(name);
   if (iter.end()) {
     val = default_val;

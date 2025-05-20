@@ -2168,6 +2168,7 @@ static int do_period_pull(rgw::sal::ConfigStore* cfgstore,
     params["realm_id"] = realm_id;
   if (!realm_name.empty())
     params["realm_name"] = realm_name;
+cerr << "JFW: do_period_pull(): period_id = " << period_id << std::endl;
   if (!period_id.empty())
     params["period_id"] = period_id;
   if (!period_epoch.empty())
@@ -2181,6 +2182,7 @@ static int do_period_pull(rgw::sal::ConfigStore* cfgstore,
     cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
     return ret;
   }
+cerr << "JFW: do_period_pull(): decode in do_period_pull..." << std::endl;
   try {
     decode_json_obj(*period, &p);
   } catch (const JSONDecoder::err& e) {
@@ -2192,6 +2194,7 @@ static int do_period_pull(rgw::sal::ConfigStore* cfgstore,
   if (ret < 0) {
     cerr << "Error storing period " << period->get_id() << ": " << cpp_strerror(ret) << std::endl;
   }
+cerr << "JFW: do_period_pull(): stored period " << period->get_id() << std::endl;
   return 0;
 }
 

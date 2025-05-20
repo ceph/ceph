@@ -28,13 +28,15 @@ RGWPeriod rgw_p;
 rgw_p.id = "7e616bb8-a7ca-4218-b5e9-5c205fc4bd9c";
 
 JSONParser p;
+const auto id_before = rgw_p.get_id();
+CAPTURE(id_before);
+
 decode_json_obj(rgw_p, &p);
 
-auto id = rgw_p.get_id();
+const auto id_after = rgw_p.get_id();
+CAPTURE(id_after);
 
-CAPTURE(id);
-
-throw std::exception();
+SUCCEED();
 /*
 
 2025-05-17T16:43:32.734 INFO:teuthology.orchestra.run.smithi089.stderr:JFW: pushing explicitly empty period id
