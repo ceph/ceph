@@ -620,7 +620,7 @@ public:
     }
 
     // actors
-    void add(const pg_log_entry_t& e, bool nonprimary, bool applied) {
+    void add(const pg_log_entry_t& e, bool nonprimary, bool applied, pg_info_t *info, LogEntryHandler *h) {
       if (!applied) {
         if (!nonprimary) {
           ceph_assert(get_can_rollback_to() == head);
@@ -662,14 +662,14 @@ public:
       }
 
       if (!applied) {
-	skip_can_rollback_to_to_head();
+	skip_can_rollback_to_to_head(info, h);
       }
     } // add
 
     // nonprimary and applied must either both be provided or neither. If
     // neither is provided applied = true and the nonprimary is irrelevant.
     void add(const pg_log_entry_t& e) {
-      add(e, false, true);
+      add(e, false, true, nullptr, nullptr);
     }
 
     void trim(
@@ -839,13 +839,13 @@ public:
 
   void unindex() { log.unindex(); }
 
-  void add(const pg_log_entry_t& e, bool nonprimary, bool applied) {
+  void add(const pg_log_entry_t& e, bool nonprimary, bool applied, pg_info_t *info, LogEntryHandler *h) {
     mark_writeout_from(e.version);
-    log.add(e, nonprimary, applied);
+    log.add(e, nonprimary, applied, info, h);
   }
 
   void add(const pg_log_entry_t& e) {
-      add(e, false, true);
+    add(e, false, true, nullptr, nullptr);
   }
 
   void reset_recovery_pointers() { log.reset_recovery_pointers(); }
