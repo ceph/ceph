@@ -32,12 +32,21 @@ namespace {
     }
     return 0;
   }
+
+  void update_mtime_attribute(const DoutPrefixProvider* dpp, rgw::sal::Attrs& attrs) {
+    bufferlist mtime_bl;
+    const auto mtime = ceph::coarse_real_time::clock::now();
+    encode(mtime, mtime_bl);
+    attrs[RGW_ATTR_BUCKET_LOGGING_MTIME] = std::move(mtime_bl);
+    ldpp_dout(dpp, 20) << "INFO: logging config modified at: " << mtime << dendl;
+  }
 }
 
 // GET /<bucket name>/?logging
 // reply is XML encoded
 class RGWGetBucketLoggingOp : public RGWOp {
   rgw::bucketlogging::configuration configuration;
+  std::optional<ceph::real_time> mtime;
 
 public:
   int verify_permission(optional_yield y) override {
@@ -73,6 +82,20 @@ public:
       try {
         configuration.enabled = true;
         decode(configuration, iter->second);
+        if (auto mtime_it = src_bucket->get_attrs().find(RGW_ATTR_BUCKET_LOGGING_MTIME);
+            mtime_it != src_bucket->get_attrs().end()) {
+          try {
+            ceph::real_time tmp_mtime;
+            decode(tmp_mtime, mtime_it->second);
+            mtime = std::move(tmp_mtime);
+          } catch (buffer::error& err) {
+            ldpp_dout(this, 5) << "WARNING: failed to decode logging mtime attribute '" << RGW_ATTR_BUCKET_LOGGING_MTIME
+              << "' for bucket '" << src_bucket_id << "', error: " << err.what() << dendl;
+          }
+        } else {
+          ldpp_dout(this, 5) << "WARNING: no logging mtime attribute '" << RGW_ATTR_BUCKET_LOGGING_MTIME
+            << "' for bucket '" << src_bucket_id << "'" << dendl;
+        }
       } catch (buffer::error& err) {
         ldpp_dout(this, 1) << "WARNING: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
           << "' for bucket '" << src_bucket_id << "', error: " << err.what() << dendl;
@@ -89,6 +112,9 @@ public:
 
   void send_response() override {
     dump_errno(s);
+    if (mtime) {
+      dump_last_modified(s, *mtime);
+    }
     end_header(s, this, to_mime_type(s->format));
     dump_start(s);
 
@@ -253,6 +279,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
         if (!old_conf || (old_conf && *old_conf != configuration)) {
           // conf changed (or was unknown) - update
           it->second = conf_bl;
+          update_mtime_attribute(this, attrs);
           return src_bucket->merge_and_store_attrs(this, attrs, y);
         }
         // nothing to update
@@ -260,6 +287,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       }
       // conf was added
       attrs.insert(std::make_pair(RGW_ATTR_BUCKET_LOGGING, conf_bl));
+      update_mtime_attribute(this, attrs);
       return src_bucket->merge_and_store_attrs(this, attrs, y);
     }, y);
     if (op_ret < 0) {
