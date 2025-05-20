@@ -1583,7 +1583,8 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 		   << " fnode=" << fnode
 		   << " delta=" << delta
 		   << dendl;
-	      ceph_assert(delta.offset == fnode.allocated);
+	      // be leanient, if there is no extents just produce error message
+	      ceph_assert(delta.offset == fnode.allocated || delta.extents.empty());
 	    }
 	    if (cct->_conf->bluefs_log_replay_check_allocations) {
               int r = _check_allocations(fnode,
@@ -3641,15 +3642,16 @@ uint64_t BlueFS::_flush_special(FileWriter *h)
 int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
 {
   std::lock_guard hl(h->lock);
+  auto& fnode = h->file->fnode;
   dout(10) << __func__ << " 0x" << std::hex << offset << std::dec
-           << " file " << h->file->fnode << dendl;
+           << " file " << fnode << dendl;
   if (h->file->deleted) {
     dout(10) << __func__ << "  deleted, no-op" << dendl;
     return 0;
   }
 
   // we never truncate internal log files
-  ceph_assert(h->file->fnode.ino > 1);
+  ceph_assert(fnode.ino > 1);
 
   // truncate off unflushed data?
   if (h->pos < offset &&
@@ -3663,20 +3665,57 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
     if (r < 0)
       return r;
   }
-  if (offset == h->file->fnode.size) {
-    return 0;  // no-op!
-  }
-  if (offset > h->file->fnode.size) {
+  if (offset > fnode.size) {
     ceph_abort_msg("truncate up not supported");
   }
-  ceph_assert(h->file->fnode.size >= offset);
-  _flush_bdev(h);
 
-  std::lock_guard ll(log.lock);
-  vselector->sub_usage(h->file->vselector_hint, h->file->fnode.size - offset);
-  h->file->fnode.size = offset;
-  h->file->is_dirty = true;
-  log.t.op_file_update_inc(h->file->fnode);
+  _flush_bdev(h);
+  {
+    std::lock_guard ll(log.lock);
+    std::lock_guard dl(dirty.lock);
+    bool changed_extents = false;
+    vselector->sub_usage(h->file->vselector_hint, fnode);
+    uint64_t x_off = 0;
+    auto p = fnode.seek(offset, &x_off);
+    if (p != fnode.extents.end()) {
+      uint64_t cut_off = p2roundup(x_off, alloc_size[p->bdev]);
+      if (0 == cut_off) {
+        // whole pextent to remove
+        fnode.allocated = offset;
+        changed_extents = true;
+      } else if (cut_off < p->length) {
+        dirty.pending_release[p->bdev].insert(p->offset + cut_off,
+                                              p->length - cut_off);
+        fnode.allocated = (offset - x_off) + cut_off;
+        p->length = cut_off;
+        changed_extents = true;
+        ++p;
+      } else {
+        // cut_off > p->length means that we misaligned the extent
+        ceph_assert(cut_off == p->length);
+        fnode.allocated = (offset - x_off) + p->length;
+        ++p; // leave extent untouched
+      }
+      while (p != fnode.extents.end()) {
+        dirty.pending_release[p->bdev].insert(p->offset, p->length);
+        p = fnode.extents.erase(p);
+        changed_extents = true;
+      }
+    }
+    if (changed_extents) {
+      fnode.size = offset;
+      fnode.reset_delta();
+      fnode.recalc_allocated();
+      log.t.op_file_update(fnode);
+      // sad, but is_dirty must be set to signal flushing of the log
+      h->file->is_dirty = true;
+    } else if (offset != fnode.size) {
+      fnode.size = offset;
+      // skipping log.t.op_file_update_inc, it will be done by flush()
+      h->file->is_dirty = true;
+    }
+    vselector->add_usage(h->file->vselector_hint, fnode);
+  }
   return 0;
 }
 
