@@ -49,7 +49,6 @@ void RGWOp_Period_Base::send_response()
   }
 
 ldpp_dout(this, 1) << "JFW: RGWOp_Period_Base::send_response()" << dendl;
-
   encode_json("period", period, s->formatter);
   end_header(s, NULL, "application/json", s->formatter->get_len());
   flusher.flush();

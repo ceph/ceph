@@ -2074,7 +2074,7 @@ cerr << "JFW: pushing explicitly empty period id" << std::endl; // JFW: logs sho
 // JFW: this /is/ happening
     cerr << "commit_period(): Period commit got back an empty period id" << std::endl;
 // JFW: sure enough, /in the returned JSON/ id=""
-cerr << "JFW: period encoded as (len=" << bl.length() << "):\n" << bl.c_str() << "\n----- JFW" << std::endl;
+cerr << "JFW: period encoded as BL (len=" << bl.length() << "):\n" << bl.c_str() << "\n----- JFW" << std::endl;
     return -EINVAL;
   }
 else {
@@ -2149,6 +2149,7 @@ static int update_period(rgw::sal::ConfigStore* cfgstore,
       return ret;
     }
   }
+else { std::cout << "JFW: NOT COMMITTING period\n"; }
   encode_json("period", period, formatter);
   formatter->flush(cout);
   return 0;
@@ -2185,6 +2186,7 @@ static int do_period_pull(rgw::sal::ConfigStore* cfgstore,
     params["realm_id"] = realm_id;
   if (!realm_name.empty())
     params["realm_name"] = realm_name;
+cerr << "JFW: do_period_pull(): period_id = " << period_id << std::endl;
   if (!period_id.empty())
     params["period_id"] = period_id;
   if (!period_epoch.empty())
@@ -2198,6 +2200,7 @@ static int do_period_pull(rgw::sal::ConfigStore* cfgstore,
     cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
     return ret;
   }
+cerr << "JFW: do_period_pull(): decode in do_period_pull..." << std::endl;
   try {
     decode_json_obj(*period, &p);
   } catch (const JSONDecoder::err& e) {
@@ -2209,6 +2212,7 @@ static int do_period_pull(rgw::sal::ConfigStore* cfgstore,
   if (ret < 0) {
     cerr << "Error storing period " << period->get_id() << ": " << cpp_strerror(ret) << std::endl;
   }
+cerr << "JFW: do_period_pull(): stored period " << period->get_id() << std::endl;
   return 0;
 }
 

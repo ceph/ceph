@@ -58,7 +58,17 @@ void RGWPeriod::dump(Formatter *f) const
 
 void RGWPeriod::decode_json(JSONObj *obj)
 {
+// JFW: reads from JSON obj into *this:
+std::cerr << "JFW: RGWPeriod::decode_json(): id of target = " << id << std::endl;
+
+std::cerr << "JFW: obj->get_name() = " << obj->get_name() << std::endl;
+std::cerr << "JFW: children:\n";
+for(const auto& c : obj->children) {
+  std::cerr << "k(" << c.first << " (" << c.first.length() << ")) => " << (c.second)->name << " (" << (c.second)->name.length() << ')' << std::endl;
+}
+
   JSONDecoder::decode_json("id", id, obj);
+std::cerr << "JFW: RGWPeriod::decode_json(): AFTER decode, id = " << id << std::endl;
   JSONDecoder::decode_json("epoch", epoch, obj);
   JSONDecoder::decode_json("predecessor_uuid", predecessor_uuid, obj);
   JSONDecoder::decode_json("sync_status", sync_status, obj);
