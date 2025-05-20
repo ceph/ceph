@@ -214,6 +214,7 @@ namespace librbd {
   typedef struct {
     snap_mirror_state_t state;
     std::set<std::string> mirror_peer_uuids;
+    bool complete;
     std::string primary_mirror_uuid;
     std::string primary_snap_id;
   } group_snap_mirror_namespace_t;

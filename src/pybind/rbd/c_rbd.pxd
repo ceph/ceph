@@ -268,6 +268,7 @@ cdef extern from "rbd/librbd.h" nogil:
         rbd_snap_mirror_state_t state;
         size_t mirror_peer_uuids_count;
         char* mirror_peer_uuids;
+        bint complete
         char* primary_mirror_uuid;
         char* primary_snap_id;
 
