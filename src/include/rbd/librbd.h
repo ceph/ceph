@@ -361,6 +361,7 @@ typedef struct {
   rbd_snap_mirror_state_t state;
   size_t mirror_peer_uuids_count;
   char* mirror_peer_uuids;
+  bool complete;
   char* primary_mirror_uuid;
   char* primary_snap_id;
 } rbd_group_snap_mirror_namespace_t;

@@ -3048,6 +3048,9 @@ cdef class Group(object):
 
             * ``mirror_peer_uuids`` (list) - mirror peer uuids
 
+            * ``complete`` (bool) - True if snapshot is complete from
+              mirroring perspective (e.g. non-primary snapshot is synced)
+
             * ``primary_mirror_uuid`` (str) - primary mirror uuid
 
             * ``primary_snap_id`` (str) - primary snapshot id
@@ -3073,6 +3076,7 @@ cdef class Group(object):
         info = {
                 'state' : sn.state,
                 'mirror_peer_uuids' : uuids,
+                'complete' : sn.complete,
                 'primary_mirror_uuid' : decode_cstr(sn.primary_mirror_uuid),
                 'primary_snap_id' : decode_cstr(sn.primary_snap_id),
             }
