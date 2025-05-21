@@ -39,10 +39,12 @@ ReplicatedBackend::ReplicatedBackend(pg_t pgid,
 
 ReplicatedBackend::ll_read_ierrorator::future<ceph::bufferlist>
 ReplicatedBackend::_read(const hobject_t& hoid,
+                         const uint64_t object_size,
                          const uint64_t off,
                          const uint64_t len,
                          const uint32_t flags)
 {
+  std::ignore = object_size;
   return store->read(coll, ghobject_t{hoid}, off, len, flags);
 }
 
