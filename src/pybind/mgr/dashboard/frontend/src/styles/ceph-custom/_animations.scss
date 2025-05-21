@@ -1,0 +1,77 @@
+// Toast notifications animations
+
+// Slide-in from right animation
+@keyframes toast-slide-in-right {
+  0% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+// Slide-out to right animation
+@keyframes toast-slide-out-right {
+  0% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+// Fade-in animation
+@keyframes toast-fade-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+// Fade-out animation
+@keyframes toast-fade-out {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+// Pulse animation for important toasts
+@keyframes toast-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 130, 142, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(37, 130, 142, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 130, 142, 0);
+  }
+}
+
+// Apply animations to toast container
+#toast-container {
+  .toast-info,
+  .toast-success,
+  .toast-warning,
+  .toast-error {
+    animation: toast-slide-in-right 0.3s ease-out, toast-fade-in 0.3s ease-out;
+  }
+  
+  .toast-error {
+    animation: toast-slide-in-right 0.3s ease-out, toast-pulse 2s infinite;
+  }
+}
+
+// Special animation for high-priority notifications
+.toast-high-priority {
+  animation: toast-pulse 2s infinite !important;
+} 

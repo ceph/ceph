@@ -14,6 +14,12 @@ import { ApiInterceptorService } from './shared/services/api-interceptor.service
 import { JsErrorHandler } from './shared/services/js-error-handler.service';
 import { SharedModule } from './shared/shared.module';
 
+// Configuration for toast notifications
+export const TOAST_CONFIG = {
+  textBranding: true, // Set to true to show "Ceph" text, false to use icon
+  brandingEnabled: true // Set to false to disable branding completely
+};
+
 @NgModule({
   declarations: [AppComponent],
   exports: [SharedModule],
@@ -24,7 +30,17 @@ import { SharedModule } from './shared/shared.module';
     ToastrModule.forRoot({
       positionClass: 'toast-top-right',
       preventDuplicates: true,
-      enableHtml: true
+      enableHtml: true,
+      timeOut: 5000,
+      closeButton: true,
+      progressBar: true,
+      easing: 'ease-in-out',
+      easeTime: 300,
+      tapToDismiss: true,
+      maxOpened: 3,
+      autoDismiss: true,
+      newestOnTop: true,
+      extendedTimeOut: 1000
     }),
     AppRoutingModule,
     CoreModule,
