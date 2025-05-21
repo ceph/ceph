@@ -2929,40 +2929,25 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
     return r;
   }
 
+  mirror::PromotionState promotion_state;
   cls::rbd::MirrorGroup mirror_group;
-  r = cls_client::mirror_group_get(&group_ioctx, group_id, &mirror_group);
-  if (r == -EOPNOTSUPP) {
-    ldout(cct, 5) << "group mirroring not supported by OSD" << dendl;
-    return r;
-  } else if (r == -ENOENT) {
-    ldout(cct, 10) << "mirroring for group " << group_name
-                   << " already disabled" << dendl;
-    return 0;
-  } else if (r < 0) {
-    lderr(cct) << "failed to retrieve mirror group metadata: "
-               << cpp_strerror(r) << dendl;
-    return r;
-  } else if (mirror_group.mirror_image_mode !=
-             cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
-    auto mode = static_cast<rbd_mirror_image_mode_t>(
-        mirror_group.mirror_image_mode);
-    lderr(cct) << "cannot disable, mirror mode is set to: " << mode << dendl;
-    return -EOPNOTSUPP;
-  }
-
-  cls::rbd::MirrorSnapshotState state;
-  r = get_last_mirror_snapshot_state(group_ioctx, group_id, &state, nullptr);
+  C_SaferCond ctx;
+  // pass group_id to get ENOENT error returned back when group is not mirror enabled
+  auto request = mirror::GroupGetInfoRequest<I>::create(
+    group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
+  request->send();
+  r = ctx.wait();
   if (r == -ENOENT) {
     ldout(cct, 10) << "mirroring for group " << group_name
                    << " already disabled" << dendl;
     return 0;
   } else if (r < 0) {
-    lderr(cct) << "failed to get last mirror snapshot state: "
+    lderr(cct) << "failed to get mirror group info: "
                << cpp_strerror(r) << dendl;
     return r;
   }
 
-  if (state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY && !force) {
+  if (promotion_state != mirror::PROMOTION_STATE_PRIMARY && !force) {
     lderr(cct) << "mirrored group " << group_name
                << " is not primary, add force option to disable mirroring"
                << dendl;
@@ -3112,19 +3097,13 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
   cls::rbd::MirrorGroup mirror_group;
   r = cls_client::mirror_group_get(&group_ioctx, group_id, &mirror_group);
   if (r == -ENOENT) {
-    ldout(cct, 10) << "mirroring for group " << group_name
-                   << " disabled" << dendl;
+    ldout(cct, 10) << "group is not enabled for mirroring: " << group_name
+                   << dendl;
     return -EINVAL;
   } else if (r < 0) {
     lderr(cct) << "failed to retrieve mirror group metadata: "
                << cpp_strerror(r) << dendl;
     return r;
-  } else if (mirror_group.mirror_image_mode !=
-             cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
-    auto mode = static_cast<rbd_mirror_image_mode_t>(
-        mirror_group.mirror_image_mode);
-    lderr(cct) << "cannot promote, mirror mode is set to: " << mode << dendl;
-    return -EOPNOTSUPP;
   }
 
   cls::rbd::MirrorSnapshotState state;
@@ -3344,35 +3323,25 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
     return r;
   }
 
+  mirror::PromotionState promotion_state;
   cls::rbd::MirrorGroup mirror_group;
-  r = cls_client::mirror_group_get(&group_ioctx, group_id, &mirror_group);
+  C_SaferCond ctx;
+  // pass group_id to get ENOENT error returned back when group is not mirror enabled
+  auto request = mirror::GroupGetInfoRequest<I>::create(
+    group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
+  request->send();
+  r = ctx.wait();
   if (r == -ENOENT) {
-    ldout(cct, 10) << "mirroring for group " << group_name
-                   << " disabled" << dendl;
+    ldout(cct, 10) << "group is not enabled for mirroring: " << group_name
+                   << dendl;
     return -EINVAL;
   } else if (r < 0) {
-    lderr(cct) << "failed to retrieve mirror group metadata: "
+    lderr(cct) << "failed to get mirror group info: "
                << cpp_strerror(r) << dendl;
     return r;
-  } else if (mirror_group.mirror_image_mode !=
-             cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
-    auto mode = static_cast<rbd_mirror_image_mode_t>(
-        mirror_group.mirror_image_mode);
-    lderr(cct) << "cannot demote, mirror mode is set to: " << mode << dendl;
-    return -EOPNOTSUPP;
   }
 
-  cls::rbd::MirrorSnapshotState state;
-  r = get_last_mirror_snapshot_state(group_ioctx, group_id, &state, nullptr);
-  if (r == -ENOENT) {
-    state = cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY;
-    r = 0;
-  }
-  if (r < 0) {
-    return r;
-  }
-
-  if (state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
+  if (promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
     lderr(cct) << "group " << group_name << " is not primary" << dendl;
     return -EINVAL;
   }
@@ -3498,35 +3467,25 @@ int Mirror<I>::group_resync(IoCtx& group_ioctx, const char *group_name) {
     return r;
   }
 
+  mirror::PromotionState promotion_state;
   cls::rbd::MirrorGroup mirror_group;
-  r = cls_client::mirror_group_get(&group_ioctx, group_id, &mirror_group);
+  C_SaferCond ctx;
+  // pass group_id to get ENOENT error returned back when group is not mirror enabled
+  auto request = mirror::GroupGetInfoRequest<I>::create(
+    group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
+  request->send();
+  r = ctx.wait();
   if (r == -ENOENT) {
-    ldout(cct, 10) << "mirroring for group " << group_name
-                   << " disabled" << dendl;
+    ldout(cct, 10) << "group is not enabled for mirroring: " << group_name
+                   << dendl;
     return -EINVAL;
   } else if (r < 0) {
-    lderr(cct) << "failed to retrieve mirror group metadata: "
+    lderr(cct) << "failed to get mirror group info: "
                << cpp_strerror(r) << dendl;
     return r;
-  } else if (mirror_group.mirror_image_mode !=
-             cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
-    auto mode = static_cast<rbd_mirror_image_mode_t>(
-        mirror_group.mirror_image_mode);
-    lderr(cct) << "cannot resync, mirror mode is set to: " << mode << dendl;
-    return -EOPNOTSUPP;
   }
 
-  cls::rbd::MirrorSnapshotState state;
-  r = get_last_mirror_snapshot_state(group_ioctx, group_id, &state, nullptr);
-  if (r == -ENOENT) {
-    state = cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY;
-    r = 0;
-  }
-  if (r < 0) {
-    return r;
-  }
-
-  if (state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
+  if (promotion_state == mirror::PROMOTION_STATE_PRIMARY) {
     lderr(cct) << "group=" << group_name
                << " is primary, cannot resync to itself" << dendl;
     return -EINVAL;
@@ -3763,7 +3722,7 @@ int Mirror<I>::group_info_list(librados::IoCtx& io_ctx,
                                                          max, &groups,
                                                          &statuses);
     if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "failed to list mirror image statuses: "
+      lderr(cct) << "failed to list mirror group statuses: "
                  << cpp_strerror(r) << dendl;
       return r;
     }
@@ -3776,22 +3735,29 @@ int Mirror<I>::group_info_list(librados::IoCtx& io_ctx,
         continue;
       }
 
-      auto &info = (*entries)[group_id];
-      info.global_id = group.global_group_id;
-      info.mirror_image_mode = mode;
-      info.state = static_cast<rbd_mirror_group_state_t>(group.state);
-
-      cls::rbd::MirrorSnapshotState promotion_state;
-      r = get_last_mirror_snapshot_state(io_ctx, group_id, &promotion_state, nullptr);
+      mirror::PromotionState promotion_state;
+      cls::rbd::MirrorGroup mirror_group;
+      C_SaferCond ctx;
+      // pass group_id to get ENOENT error returned back when group is not mirror enabled
+      auto request = mirror::GroupGetInfoRequest<I>::create(
+          io_ctx, "", group_id, &mirror_group, &promotion_state, &ctx);
+      request->send();
+      r = ctx.wait();
       if (r == -ENOENT) {
-	promotion_state = cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY;
+        ldout(cct, 10) << "mirroring for group " << group.global_group_id
+                       << " already disabled" << dendl;
+        continue;
       } else if (r < 0) {
-	lderr(cct) << "failed to get last mirror snapshot state: "
-		    << cpp_strerror(r) << dendl;
-	return r;
+        lderr(cct) << "failed to get mirror group info: "
+                   << cpp_strerror(r) << dendl;
+        return r;
       }
-      info.primary =
-	(promotion_state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY);
+
+      auto &info = (*entries)[group_id];
+      info.global_id = mirror_group.global_group_id;
+      info.mirror_image_mode = mode;
+      info.state = static_cast<rbd_mirror_group_state_t>(mirror_group.state);
+      info.primary = (promotion_state == mirror::PROMOTION_STATE_PRIMARY);
 
       if (entries->size() == max) {
         break;
