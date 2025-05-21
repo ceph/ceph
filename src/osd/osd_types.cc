@@ -1416,7 +1416,7 @@ bool pool_opts_t::unset(pool_opts_t::key_t key) {
   return opts.erase(key) > 0;
 }
 
-class pool_opts_dumper_t : public boost::static_visitor<> {
+class pool_opts_dumper_t {
 public:
   pool_opts_dumper_t(const std::string& name_, Formatter* f_) :
     name(name_.c_str()), f(f_) {}
@@ -1443,7 +1443,7 @@ void pool_opts_t::dump(const std::string& name, Formatter* f) const
   if (i == opts.end()) {
       return;
   }
-  boost::apply_visitor(pool_opts_dumper_t(name, f), i->second);
+  std::visit(pool_opts_dumper_t(name, f), i->second);
 }
 
 void pool_opts_t::dump(Formatter* f) const
@@ -1455,11 +1455,11 @@ void pool_opts_t::dump(Formatter* f) const
     if (j == opts.end()) {
       continue;
     }
-    boost::apply_visitor(pool_opts_dumper_t(name, f), j->second);
+    std::visit(pool_opts_dumper_t(name, f), j->second);
   }
 }
 
-class pool_opts_encoder_t : public boost::static_visitor<> {
+class pool_opts_encoder_t {
 public:
   explicit pool_opts_encoder_t(ceph::buffer::list& bl_, uint64_t features)
     : bl(bl_),
@@ -1498,7 +1498,7 @@ void pool_opts_t::encode(ceph::buffer::list& bl, uint64_t features) const
   encode(n, bl);
   for (auto i = opts.cbegin(); i != opts.cend(); ++i) {
     encode(static_cast<int32_t>(i->first), bl);
-    boost::apply_visitor(pool_opts_encoder_t(bl, features), i->second);
+    std::visit(pool_opts_encoder_t(bl, features), i->second);
   }
   ENCODE_FINISH(bl);
 }
