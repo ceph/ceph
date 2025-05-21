@@ -17,3 +17,7 @@ roles:
   - osd.7
   - client.2
   - ceph.iscsi.iscsi.b
+overrides:
+  ceph:
+    log-ignorelist:
+      - MON_DOWN
