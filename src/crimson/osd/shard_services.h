@@ -27,6 +27,7 @@
 #include "common/AsyncReserver.h"
 #include "crimson/net/Connection.h"
 #include "mgr/OSDPerfMetricTypes.h"
+#include "osd/ECExtentCache.h"
 
 namespace crimson::net {
   class Messenger;
@@ -207,6 +208,11 @@ class PerShardState {
   OSDSuperblock per_shard_superblock;
   std::list<OSDPerfMetricQuery> m_perf_queries;
   std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> m_perf_limits;
+
+  // This is an extent cache for the erasure coding. Specifically, this acts as
+  // a least-recently-used cache invalidator, allowing for cache shards to last
+  // longer than the most recent IO in each object.
+  ECExtentCache::LRU ec_extent_cache_lru;
 
 public:
   PerShardState(
@@ -624,6 +630,10 @@ public:
       }, e).then([](auto fmap) {
 	return make_local_shared_foreign(std::move(fmap));
       });
+  }
+
+  ECExtentCache::LRU &lookup_ec_extent_cache_lru() {
+    return local_state.ec_extent_cache_lru;
   }
 
   FORWARD_TO_OSD_SINGLETON(get_pool_info)
