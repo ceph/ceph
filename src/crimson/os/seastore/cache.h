@@ -633,7 +633,7 @@ private:
     //
     // TODO(implement fine-grained-wait)
     assert(!extent->is_range_loaded(partial_off, partial_len));
-    assert(!extent->is_mutable());
+    assert(extent->is_data_stable());
     if (extent->is_pending_io()) {
       std::optional<Transaction::src_t> src;
       if (p_src) {
@@ -1685,7 +1685,7 @@ private:
       CachedExtent &extent,
       extent_len_t increased_length,
       const Transaction::src_t* p_src) {
-      assert(!extent.is_mutable());
+      assert(extent.is_data_stable());
 
       if (extent.primary_ref_list_hook.is_linked()) {
         assert(extent.is_stable_clean() && !extent.is_placeholder());
