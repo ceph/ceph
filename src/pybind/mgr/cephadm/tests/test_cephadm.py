@@ -462,7 +462,7 @@ class TestCephadm(object):
 
                 now = str_to_datetime('2023-10-18T22:45:29.119250Z')
                 with mock.patch("cephadm.inventory.datetime_now", lambda: now):
-                    c = cephadm_module.daemon_action('redeploy', d_name)
+                    c = cephadm_module.daemon_action('redeploy', d_name, force=True)
                     assert wait(cephadm_module,
                                 c) == f"Scheduled to redeploy rgw.{daemon_id} on host 'test'"
 
@@ -474,7 +474,7 @@ class TestCephadm(object):
 
                 later = str_to_datetime('2023-10-18T23:46:37.119250Z')
                 with mock.patch("cephadm.inventory.datetime_now", lambda: later):
-                    c = cephadm_module.daemon_action('redeploy', d_name)
+                    c = cephadm_module.daemon_action('redeploy', d_name, force=True)
                     assert wait(cephadm_module,
                                 c) == f"Scheduled to redeploy rgw.{daemon_id} on host 'test'"
 
@@ -501,7 +501,7 @@ class TestCephadm(object):
             with with_service(cephadm_module, ServiceSpec(service_type='grafana'), CephadmOrchestrator.apply_grafana, 'test') as d_names:
                 [daemon_name] = d_names
 
-                cephadm_module._schedule_daemon_action(daemon_name, action)
+                cephadm_module._schedule_daemon_action(daemon_name, action, force=True)
 
                 assert cephadm_module.cache.get_scheduled_daemon_action(
                     'test', daemon_name) == action
@@ -2888,3 +2888,93 @@ Traceback (most recent call last):
         # on nvmeof.foo.foo's daemons
         nvmeof_bar_blocking_hosts = NvmeofService(cephadm_module).get_blocking_daemon_hosts('nvmeof.bar.bar')
         assert set([h.hostname for h in nvmeof_bar_blocking_hosts]) == set(['host1', 'host2'])
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.module.HostCache.save_host")
+    def test_daemon_action_schedule_and_remove(self, _save_host, cephadm_module: CephadmOrchestrator):
+        """
+        Test scheduling and removing a daemon action
+        """
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, RGWSpec(service_id='foo'), CephadmOrchestrator.apply_rgw, 'test') as d_names:
+                [daemon_name] = d_names
+
+                cephadm_module._schedule_daemon_action(daemon_name, 'restart')
+                assert cephadm_module.cache.get_scheduled_daemon_action('test', daemon_name) == 'restart'
+
+                actions = wait(cephadm_module, cephadm_module.list_daemon_actions())
+                assert len(actions) == 1
+                assert actions[0] == ('test', daemon_name, 'restart', False)
+
+                # Verify that _check_daemons did not restart a daemon not passing ok-to-stop
+                CephadmServe(cephadm_module)._check_daemons()
+
+                actions = wait(cephadm_module, cephadm_module.list_daemon_actions())
+                assert len(actions) == 1
+                assert actions[0] == ('test', daemon_name, 'restart', False)
+
+                assert wait(cephadm_module, cephadm_module.cancel_daemon_action(daemon_name)) is True
+                assert cephadm_module.cache.get_scheduled_daemon_action('test', daemon_name) is None
+
+                actions = wait(cephadm_module, cephadm_module.list_daemon_actions())
+                assert len(actions) == 0
+
+                _save_host.assert_called_with('test')
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.module.HostCache.save_host")
+    def test_daemon_action_schedule_and_force(self, _save_host, cephadm_module: CephadmOrchestrator):
+        """
+        Test scheduling and setting force flag
+        """
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, RGWSpec(service_id='foo'), CephadmOrchestrator.apply_rgw, 'test') as d_names:
+                [daemon_name] = d_names
+
+                cephadm_module._schedule_daemon_action(daemon_name, 'stop')
+                assert cephadm_module.cache.get_scheduled_daemon_action('test', daemon_name) == 'stop'
+
+                actions = wait(cephadm_module, cephadm_module.list_daemon_actions())
+                assert len(actions) == 1
+                assert actions[0] == ('test', daemon_name, 'stop', False)
+                assert wait(cephadm_module, cephadm_module.force_daemon_action(daemon_name=daemon_name, force=True)) is True
+
+                CephadmServe(cephadm_module)._check_daemons()
+
+                assert cephadm_module.cache.get_scheduled_daemon_action('test', daemon_name) is None
+                actions = wait(cephadm_module, cephadm_module.list_daemon_actions())
+                assert len(actions) == 0
+
+                _save_host.assert_called_with('test')
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.module.HostCache.save_host")
+    def test_daemon_force_action_flags(self, _save_host, cephadm_module: CephadmOrchestrator):
+        """
+        Test to verify the behavior of force flag management functions:
+        """
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, RGWSpec(service_id='foo'), CephadmOrchestrator.apply_rgw, 'test') as d_names:
+                [daemon_name] = d_names
+
+                cephadm_module._schedule_daemon_action(daemon_name, 'stop')
+                assert cephadm_module.cache.get_scheduled_daemon_action('test', daemon_name) == 'stop'
+
+                assert cephadm_module.cache.is_force_action('test', daemon_name) is False
+
+                # Set force flag to True and verify it changes state
+                assert cephadm_module.cache.set_force_action('test', daemon_name, True) is True
+                assert cephadm_module.cache.is_force_action('test', daemon_name) is True
+
+                # Clear force flag by setting force=False
+                assert cephadm_module.cache.set_force_action('test', daemon_name, False) is True
+                assert cephadm_module.cache.is_force_action('test', daemon_name) is False
+
+                actions = wait(cephadm_module, cephadm_module.list_daemon_actions())
+                assert len(actions) == 1
+                assert cephadm_module.cancel_service_actions("rgw.foo")
+
+                actions = wait(cephadm_module, cephadm_module.list_daemon_actions())
+                assert len(actions) == 0
+
+                _save_host.assert_called_with('test')
