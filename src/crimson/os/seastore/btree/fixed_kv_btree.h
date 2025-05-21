@@ -509,7 +509,7 @@ public:
             auto &prior = (child_node_t &)*child_node->get_prior_instance();
             assert(prior.is_valid());
             assert(prior.is_parent_valid());
-            if (node->is_mutation_pending()) {
+            if (node->is_pending()) {
               auto &n = node->get_stable_for_key(i->get_key());
               assert(prior.peek_parent_node().get() == &n);
               auto pos = n.lower_bound(i->get_key()).get_offset();
