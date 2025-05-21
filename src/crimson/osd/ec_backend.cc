@@ -49,7 +49,7 @@ ECBackend::ECBackend(pg_shard_t whoami,
     fast_read{fast_read},
     allows_ecoverwrites{allows_ecoverwrites},
     read_pipeline{shard_services.get_cct(), ec_impl, sinfo, &eclistener, *this},
-    rmw_pipeline{shard_services.get_cct(), ec_impl, sinfo, &eclistener, *this}
+    rmw_pipeline{shard_services.get_cct(), ec_impl, sinfo, &eclistener, *this, shard_services.lookup_ec_extent_cache_lru()}
 {
 }
 
