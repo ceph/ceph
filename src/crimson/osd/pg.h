@@ -177,9 +177,6 @@ public:
   const PGLog &get_log() const override {
     return peering_state.get_pg_log();
   }
-  DoutPrefixProvider *get_dpp() override {
-    return this;
-  }
   void add_temp_obj(const hobject_t &oid) override {
     get_backend().add_temp_obj(oid);
   }
@@ -923,8 +920,8 @@ public:
   ShardServices& get_shard_services() final {
     return shard_services;
   }
-  DoutPrefixProvider& get_dpp() final {
-    return *this;
+  DoutPrefixProvider* get_dpp() final {
+    return this;
   }
   seastar::future<> stop();
 private:
