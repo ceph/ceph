@@ -789,6 +789,25 @@ public:
     return is_pending() && pending_for_transaction == id;
   }
 
+  enum class viewable_state_t {
+    stable,                // viewable
+    pending,               // viewable
+    invalid,               // unviewable
+    stable_become_retired, // unviewable
+    stable_become_pending, // unviewable
+  };
+
+  /**
+   * is_viewable_by_trans
+   *
+   * Check if this extent is still viewable by transaction t.
+   *
+   * Precondition: *this was previously visible to t, which indicates
+   * this extent is either in the read set of t or created(pending) by t.
+   */
+  std::pair<bool, viewable_state_t>
+  is_viewable_by_trans(Transaction &t);
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -1091,8 +1110,7 @@ protected:
   friend class crimson::os::seastore::SegmentedAllocator;
   friend class crimson::os::seastore::TransactionManager;
   friend class crimson::os::seastore::ExtentPlacementManager;
-  template <typename, typename>
-  friend class BtreeNodeMapping;
+  friend class LBAMapping;
   friend class ::btree_lba_manager_test;
   friend class ::lba_btree_test;
   friend class ::btree_test_base;
@@ -1102,6 +1120,7 @@ protected:
 };
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);
+std::ostream &operator<<(std::ostream &, CachedExtent::viewable_state_t);
 std::ostream &operator<<(std::ostream &, const CachedExtent&);
 
 /// Compare extents by paddr
@@ -1293,41 +1312,6 @@ private:
   uint64_t bytes = 0;
 };
 
-template <typename key_t, typename>
-class PhysicalNodeMapping;
-
-template <typename key_t, typename val_t>
-using PhysicalNodeMappingRef = std::unique_ptr<PhysicalNodeMapping<key_t, val_t>>;
-
-template <typename key_t, typename val_t>
-class PhysicalNodeMapping {
-public:
-  PhysicalNodeMapping() = default;
-  PhysicalNodeMapping(const PhysicalNodeMapping&) = delete;
-  virtual extent_len_t get_length() const = 0;
-  virtual val_t get_val() const = 0;
-  virtual key_t get_key() const = 0;
-  virtual bool has_been_invalidated() const = 0;
-  virtual CachedExtentRef get_parent() const = 0;
-  virtual uint16_t get_pos() const = 0;
-  virtual uint32_t get_checksum() const {
-    ceph_abort("impossible");
-    return 0;
-  }
-  virtual bool is_parent_viewable() const = 0;
-  virtual bool is_parent_valid() const = 0;
-  virtual bool parent_modified() const {
-    ceph_abort("impossible");
-    return false;
-  };
-
-  virtual void maybe_fix_pos() {
-    ceph_abort("impossible");
-  }
-
-  virtual ~PhysicalNodeMapping() {}
-};
-
 /**
  * RetiredExtentPlaceholder
  *
@@ -1430,8 +1414,6 @@ public:
   void set_laddr(laddr_t nladdr) {
     laddr = nladdr;
   }
-
-  void maybe_set_intermediate_laddr(LBAMapping &mapping);
 
   void apply_delta_and_adjust_crc(
     paddr_t base, const ceph::bufferlist &bl) final {
@@ -1542,5 +1524,6 @@ using lextent_list_t = addr_extent_list_base_t<
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::CachedExtent> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::CachedExtent::viewable_state_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::LogicalCachedExtent> : fmt::ostream_formatter {};
 #endif

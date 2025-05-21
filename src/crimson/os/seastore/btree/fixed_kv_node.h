@@ -16,7 +16,7 @@
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
 
-#include "crimson/os/seastore/btree/btree_range_pin.h"
+#include "crimson/os/seastore/btree/btree_types.h"
 #include "crimson/os/seastore/btree/fixed_kv_btree.h"
 #include "crimson/os/seastore/root_block.h"
 
@@ -307,7 +307,7 @@ struct FixedKVInternalNode
   }
 
   std::tuple<Ref, Ref, NODE_KEY>
-  make_split_children(op_context_t<NODE_KEY> c) {
+  make_split_children(op_context_t c) {
     auto left = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     auto right = c.cache.template alloc_new_non_data_extent<node_type_t>(
@@ -324,7 +324,7 @@ struct FixedKVInternalNode
   }
 
   Ref make_full_merge(
-    op_context_t<NODE_KEY> c,
+    op_context_t c,
     Ref &right) {
     auto replacement = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
@@ -339,7 +339,7 @@ struct FixedKVInternalNode
 
   std::tuple<Ref, Ref, NODE_KEY>
   make_balanced(
-    op_context_t<NODE_KEY> c,
+    op_context_t c,
     Ref &_right,
     uint32_t pivot_idx) {
     ceph_assert(_right->get_type() == this->get_type());
@@ -646,7 +646,7 @@ struct FixedKVLeafNode
     node_type_t &right) = 0;
 
   std::tuple<Ref, Ref, NODE_KEY>
-  make_split_children(op_context_t<NODE_KEY> c) {
+  make_split_children(op_context_t c) {
     auto left = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     auto right = c.cache.template alloc_new_non_data_extent<node_type_t>(
@@ -672,7 +672,7 @@ struct FixedKVLeafNode
     node_type_t &right) = 0;
 
   Ref make_full_merge(
-    op_context_t<NODE_KEY> c,
+    op_context_t c,
     Ref &right) {
     auto replacement = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
@@ -701,7 +701,7 @@ struct FixedKVLeafNode
 
   std::tuple<Ref, Ref, NODE_KEY>
   make_balanced(
-    op_context_t<NODE_KEY> c,
+    op_context_t c,
     Ref &_right,
     uint32_t pivot_idx) {
     ceph_assert(_right->get_type() == this->get_type());

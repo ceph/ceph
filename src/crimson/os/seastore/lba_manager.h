@@ -45,7 +45,7 @@ public:
    * lba value.
    */
   using get_mappings_iertr = base_iertr;
-  using get_mappings_ret = get_mappings_iertr::future<lba_pin_list_t>;
+  using get_mappings_ret = get_mappings_iertr::future<lba_mapping_list_t>;
   virtual get_mappings_ret get_mappings(
     Transaction &t,
     laddr_t offset, extent_len_t length) = 0;
@@ -59,7 +59,7 @@ public:
    */
   using get_mapping_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
-  using get_mapping_ret = get_mapping_iertr::future<LBAMappingRef>;
+  using get_mapping_ret = get_mapping_iertr::future<LBAMapping>;
   virtual get_mapping_ret get_mapping(
     Transaction &t,
     laddr_t offset) = 0;
@@ -72,15 +72,15 @@ public:
    * is called on the LBAMapping.
    */
   using alloc_extent_iertr = base_iertr;
-  using alloc_extent_ret = alloc_extent_iertr::future<LBAMappingRef>;
+  using alloc_extent_ret = alloc_extent_iertr::future<LBAMapping>;
   virtual alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
     LogicalChildNode &nextent,
-    extent_ref_count_t refcount = EXTENT_DEFAULT_REF_COUNT) = 0;
+    extent_ref_count_t refcount) = 0;
 
   using alloc_extents_ret = alloc_extent_iertr::future<
-    std::vector<LBAMappingRef>>;
+    std::vector<LBAMapping>>;
   virtual alloc_extents_ret alloc_extents(
     Transaction &t,
     laddr_t hint,
@@ -118,20 +118,16 @@ public:
     Transaction &t,
     laddr_t addr) = 0;
 
-  struct remap_entry {
+  struct remap_entry_t {
     extent_len_t offset;
     extent_len_t len;
-    remap_entry(extent_len_t _offset, extent_len_t _len) {
+    remap_entry_t(extent_len_t _offset, extent_len_t _len) {
       offset = _offset;
       len = _len;
     }
   };
-  struct lba_remap_ret_t {
-    ref_update_result_t ruret;
-    std::vector<LBAMappingRef> remapped_mappings;
-  };
   using remap_iertr = ref_iertr;
-  using remap_ret = remap_iertr::future<lba_remap_ret_t>;
+  using remap_ret = remap_iertr::future<std::vector<LBAMapping>>;
 
   /**
    * remap_mappings
@@ -141,8 +137,8 @@ public:
    */
   virtual remap_ret remap_mappings(
     Transaction &t,
-    LBAMappingRef orig_mapping,
-    std::vector<remap_entry> remaps,
+    LBAMapping orig_mapping,
+    std::vector<remap_entry_t> remaps,
     std::vector<LogicalChildNodeRef> extents  // Required if and only
 						 // if pin isn't indirect
     ) = 0;
@@ -234,12 +230,18 @@ public:
     laddr_t laddr,
     extent_len_t len) = 0;
 
+  using refresh_lba_mapping_iertr = base_iertr;
+  using refresh_lba_mapping_ret = refresh_lba_mapping_iertr::future<LBAMapping>;
+  virtual refresh_lba_mapping_ret refresh_lba_mapping(
+    Transaction &t,
+    LBAMapping mapping) = 0;
+
   virtual ~LBAManager() {}
 };
 using LBAManagerRef = std::unique_ptr<LBAManager>;
 
 class Cache;
-namespace lba_manager {
+namespace lba {
 LBAManagerRef create_lba_manager(Cache &cache);
 }
 
