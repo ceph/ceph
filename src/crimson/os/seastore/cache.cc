@@ -1273,7 +1273,7 @@ record_t Cache::prepare_record(
     i->set_modify_time(commit_time);
     DEBUGT("mutated extent with {}B delta -- {}",
 	   t, delta_length, *i);
-    if (!i->is_exist_mutation_pending()) {
+    if (i->is_mutation_pending()) {
       DEBUGT("commit replace extent ... -- {}, prior={}",
 	     t, *i, *i->prior_instance);
 
@@ -1298,6 +1298,8 @@ record_t Cache::prepare_record(
       // the existing extents should be added into Cache
       // during complete_commit to sync with gc transaction.
       commit_replace_extent(t, i, i->prior_instance);
+    } else {
+      assert(i->is_exist_mutation_pending());
     }
 
     i->prepare_write();

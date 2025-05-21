@@ -439,7 +439,7 @@ public:
     if (!e.is_pending()) {
       set_prior_instance(&e);
     } else {
-      assert(e.is_mutation_pending());
+      assert(e.has_mutation());
       set_prior_instance(e.prior_instance);
     }
     e.get_bptr().copy_out(
@@ -565,12 +565,12 @@ public:
   }
 
   bool is_stable_writting() const {
-    // MUTATION_PENDING/INITIAL_WRITE_PENDING and under-io extents are already
+    // mutated/INITIAL_WRITE_PENDING and under-io extents are already
     // stable and visible, see prepare_record().
     //
     // XXX: It might be good to mark this case as DIRTY/CLEAN from the definition,
     // which probably can make things simpler.
-    return (is_mutation_pending() || is_initial_pending()) && is_pending_io();
+    return (has_mutation() || is_initial_pending()) && is_pending_io();
   }
 
   /// Returns true if extent is stable and shared among transactions
@@ -583,9 +583,13 @@ public:
   }
 
   /// Returns true if extent has a pending delta
-  bool is_mutation_pending() const {
+  bool has_mutation() const {
     return state == extent_state_t::MUTATION_PENDING
       || state == extent_state_t::EXIST_MUTATION_PENDING;
+  }
+
+  bool is_mutation_pending() const {
+    return state == extent_state_t::MUTATION_PENDING;
   }
 
   /// Returns true if extent is a fresh extent
@@ -636,10 +640,10 @@ public:
 
   /// Returns true if extent or prior_instance has been invalidated
   bool has_been_invalidated() const {
-    return !is_valid() || (is_mutation_pending() && !prior_instance->is_valid());
+    return !is_valid() || (prior_instance && !prior_instance->is_valid());
   }
 
-  /// Returns true if extent is a plcaeholder
+  /// Returns true if extent is a placeholder
   bool is_placeholder() const {
     return is_retired_placeholder_type(get_type());
   }
@@ -1077,7 +1081,7 @@ protected:
     if (is_initial_pending() && addr.is_record_relative()) {
       return addr.block_relative_to(get_paddr());
     } else {
-      ceph_assert(!addr.is_record_relative() || is_mutation_pending());
+      ceph_assert(!addr.is_record_relative() || has_mutation());
       return addr;
     }
   }
