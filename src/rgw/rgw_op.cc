@@ -4001,6 +4001,12 @@ int RGWPutObj::init_processing(optional_yield y) {
       copy_source_object_name =
         url_decode(copy_source_object_name.substr(0, pos));
     }
+    if (copy_source_object_name.empty()) {
+      //means url_decode returned empty string so the url is formatted badly
+      ret = -EINVAL;
+      ldpp_dout(this, 5) << "x-amz-copy-source bad format" << dendl;
+      return ret;
+    }
     pos = copy_source_bucket_name.find(":");
     if (pos == std::string::npos) {
       // if tenant is not specified in x-amz-copy-source, use tenant of the requester
