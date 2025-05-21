@@ -10,7 +10,6 @@
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ObjectDispatch.h"
 #include "librbd/io/ObjectDispatchSpec.h"
-#include <boost/variant.hpp>
 
 #include <shared_mutex> // for std::shared_lock
 
@@ -35,7 +34,7 @@ struct ObjectDispatcher<I>::C_ResetExistenceCache : public C_LayerIterator {
 };
 
 template <typename I>
-struct ObjectDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
+struct ObjectDispatcher<I>::SendVisitor {
   ObjectDispatchInterface* object_dispatch;
   ObjectDispatchSpec* object_dispatch_spec;
 
@@ -199,7 +198,7 @@ template <typename I>
 bool ObjectDispatcher<I>::send_dispatch(
     ObjectDispatchInterface* object_dispatch,
     ObjectDispatchSpec* object_dispatch_spec) {
-  return boost::apply_visitor(
+  return std::visit(
     SendVisitor{object_dispatch, object_dispatch_spec},
     object_dispatch_spec->request);
 }

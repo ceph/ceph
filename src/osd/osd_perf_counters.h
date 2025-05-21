@@ -7,7 +7,7 @@
 #include "common/perf_counters.h"
 #include "common/perf_counters_key.h"
 
-enum {
+enum osd_counter_idx_t {
   l_osd_first = 10000,
   l_osd_op_wip,
   l_osd_op,
@@ -143,6 +143,75 @@ enum {
 
   l_osd_watch_timeouts,
 
+  // scrub I/O (no EC vs. replicated differentiation)
+  l_osd_scrub_omapgetheader_cnt,  ///< omap get header calls count
+  l_osd_scrub_omapgetheader_bytes,  ///< bytes read by omap get header
+  l_osd_scrub_omapget_cnt,      ///< omap get calls count
+  l_osd_scrub_omapget_bytes,    ///< total bytes read by omap get
+
+  // ----   scrub I/O - replicated pools
+  l_osd_scrub_rppool_getattr_cnt, ///< get_attr calls count
+  l_osd_scrub_rppool_stats_cnt, ///< stats calls count
+  l_osd_scrub_rppool_read_cnt, ///< read calls count
+  l_osd_scrub_rppool_read_bytes, ///< total bytes read
+
+  // ----   scrub I/O - EC
+  l_osd_scrub_ec_getattr_cnt, ///< get_attr calls count
+  l_osd_scrub_ec_stats_cnt, ///< stats calls count
+  l_osd_scrub_ec_read_cnt, ///< read calls count
+  l_osd_scrub_ec_read_bytes, ///< total bytes read
+
+  // ----   scrub - replicated pools
+  l_osd_scrub_rppool_started, ///< scrubs that got started
+  l_osd_scrub_rppool_active_started, ///< scrubs that got past replicas reservation
+  l_osd_scrub_rppool_successful, ///< successful scrubs count
+  l_osd_scrub_rppool_successful_elapsed, ///< time to complete a successful scrub
+  l_osd_scrub_rppool_failed, ///< failed scrubs count
+  l_osd_scrub_rppool_failed_elapsed, ///< time from start to failure
+
+  // ----   scrub reservation process - replicated pools
+
+  /// successful replicas reservation count
+  l_osd_scrub_rppool_reserv_success,
+  /// time to complete a successful replicas reservation
+  l_osd_scrub_rppool_reserv_successful_elapsed,
+  /// failed attempt to reserve replicas due to an abort
+  l_osd_scrub_rppool_reserv_aborted,
+  /// reservation failed due to a 'rejected' response
+  l_osd_scrub_rppool_reserv_rejected,
+  /// reservation skipped for high-priority scrubs
+  l_osd_scrub_rppool_reserv_skipped,
+  /// time for a replicas reservation process to fail
+  l_osd_scrub_rppool_reserv_failed_elapsed,
+  /// number of replicas
+  l_osd_scrub_rppool_reserv_secondaries_num,
+
+
+  // ----   scrub - EC
+  l_osd_scrub_ec_started, ///< scrubs that got started
+  l_osd_scrub_ec_active_started, /// scrubs that got past secondaries reservation
+  l_osd_scrub_ec_successful, ///< successful scrubs count
+  l_osd_scrub_ec_successful_elapsed, ///< time to complete a successful scrub
+  l_osd_scrub_ec_failed, ///< failed scrubs count
+  l_osd_scrub_ec_failed_elapsed, ///< time from start to failure
+
+  // ----   scrub reservation process - EC
+
+  /// successful replicas reservation count
+  l_osd_scrub_ec_reserv_success,
+  /// time to complete a successful replicas reservation
+  l_osd_scrub_ec_reserv_successful_elapsed,
+  /// failed attempt to reserve replicas due to an abort
+  l_osd_scrub_ec_reserv_aborted,
+  /// reservation failed due to a 'rejected' response
+  l_osd_scrub_ec_reserv_rejected,
+  /// reservation skipped for high-priority scrubs
+  l_osd_scrub_ec_reserv_skipped,
+  /// time for a replicas reservation process to fail
+  l_osd_scrub_ec_reserv_failed_elapsed,
+  /// number of replicas
+  l_osd_scrub_ec_reserv_secondaries_num,
+
   l_osd_last,
 };
 
@@ -192,20 +261,6 @@ PerfCounters *build_recoverystate_perf(CephContext *cct);
 enum {
   scrbcnt_first = 20500,
 
-  // -- basic statistics --
-  /// The number of times we started a scrub
-  scrbcnt_started,
-  /// # scrubs that got past replicas reservation
-  scrbcnt_active_started,
-  /// # successful scrubs
-  scrbcnt_successful,
-  /// time to complete a successful scrub
-  scrbcnt_successful_elapsed,
-  /// # failed scrubs
-  scrbcnt_failed,
-  /// time for a scrub to fail
-  scrbcnt_failed_elapsed,
-
   // -- interruptions of various types
   /// # preemptions
   scrbcnt_preempted,
@@ -217,22 +272,6 @@ enum {
   scrbcnt_blocked,
   /// # write blocked by the scrub
   scrbcnt_write_blocked,
-
-  // -- replicas reservation
-  /// # successfully completed reservation steps
-  scrbcnt_resrv_success,
-  /// time to complete a successful replicas reservation
-  scrbcnt_resrv_successful_elapsed,
-  /// # failed attempt to reserve replicas due to an abort
-  scrbcnt_resrv_aborted,
-  /// # reservation failed due to a 'rejected' response
-  scrbcnt_resrv_rejected,
-  /// # reservation skipped for high-priority scrubs
-  scrbcnt_resrv_skipped,
-  /// time for a replicas reservation process to fail
-  scrbcnt_resrv_failed_elapsed,
-  /// # number of replicas
-  scrbcnt_resrv_replicas_num,
 
   scrbcnt_last,
 };

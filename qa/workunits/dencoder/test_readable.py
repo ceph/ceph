@@ -96,7 +96,6 @@ def process_type(file_path, type):
     return 0  # File passed the test
 
 def test_object_wrapper(type, vdir, arversion, current_ver):
-    global incompat_paths
     _numtests = 0
     _failed = 0
     unrecognized = ""
@@ -161,8 +160,6 @@ def should_skip_object(type, arversion, current_ver):
     Returns:
         bool: True if the object should be skipped, False otherwise.
     """
-    global backward_compat
-    global fast_shouldnt_skip
 
     # Validate global structures
     if not isinstance(backward_compat, dict) or not isinstance(fast_shouldnt_skip, list):

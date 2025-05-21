@@ -287,7 +287,7 @@ Use a command of the following form to create a subvolume:
 
 .. prompt:: bash #
 
-   ceph fs subvolume create <vol_name> <subvol_name> [--size <size_in_bytes>] [--group_name <subvol_group_name>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--namespace-isolated] [--earmark <earmark>]
+   ceph fs subvolume create <vol_name> <subvol_name> [--size <size_in_bytes>] [--group_name <subvol_group_name>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--namespace-isolated] [--earmark <earmark>] [--normalization <form>] [--casesensitive <bool>]
 
 
 The command succeeds even if the subvolume already exists.
@@ -327,6 +327,29 @@ Valid Earmarks
    be aware that user permissions and ACLs associated with the previous scope might still apply. Ensure that
    any necessary permissions are updated as needed to maintain proper access control.
 
+When creating a subvolume you can also specify an unicode normalization form by
+using the ``--normalization`` option. This will be used to internally mangle
+file names so that unicode characters that can be represented by different
+unicode code point sequences are all mapped to the representation, which means
+that they will all access the same file. However, users will continue to see
+the same name that they used when the file was created.
+
+The valid values for the unicode normalization form are:
+
+    - nfd: canonical decomposition (default)
+    - nfc: canonical decomposition, followed by canonical composition
+    - nfkd: compatibility decomposition
+    - nfkc: compatibility decomposition, followed by canonical composition
+
+To learn more about unicode normalization forms see https://unicode.org/reports/tr15
+
+It's also possible to configure a subvolume for case insensitive access when
+the ``--casesensitive=0`` option is used. When this option is added, file
+names that only differ in the case of its characters will be mapped to the same
+file. The case of the file name used when the file was created is preserved.
+
+.. note:: Setting ``--casesensitive=0`` option implicitly enables
+   unicode normalization on the subvolume.
 
 Removing a subvolume
 ~~~~~~~~~~~~~~~~~~~~
@@ -611,6 +634,15 @@ Using the ``--force`` flag allows the command to succeed when it would
 otherwise fail (if the snapshot did not exist).
 
 .. note:: if the last snapshot within a snapshot retained subvolume is removed, the subvolume is also removed
+
+Fetching Path of a Snapshot of a Subvolume
+------------------------------------------
+Use a command of the following form to fetch the absolute path of a snapshot of
+a subvolume:
+
+.. prompt:: base #
+
+    ceph fs subvolume snapshot getpath <volname> <subvol_name> <snap_name> [<group_name>]
 
 Listing the Snapshots of a Subvolume
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1591,7 +1623,8 @@ services on the Ceph cluster accessed through this plugin.
 Before resorting to a measure as drastic as this, it is a good idea to try less
 drastic measures and then assess if the file system experience has improved due
 to it. One example of such less drastic measure is to disable asynchronous
-threads launched by volumes plugins for cloning and purging trash.
+threads launched by volumes plugins for cloning and purging trash. For details
+on these see: :ref:`Pause Purge threads<pause-purge-threads>` and :ref:`Pause Clone Threads<pause-clone-threads>`.
 
 
 .. _manila: https://github.com/openstack/manila

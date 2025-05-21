@@ -13,6 +13,8 @@
  */
 
 #include "Server.h"
+#include "RetryMessage.h"
+#include "RetryRequest.h"
 #include "BatchOp.h"
 
 #include <boost/lexical_cast.hpp>
@@ -190,6 +192,14 @@ void Server::create_logger()
                       PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_u64_counter(l_mdss_cap_revoke_eviction, "cap_revoke_eviction",
                       "Cap Revoke Client Eviction", "cre", PerfCountersBuilder::PRIO_INTERESTING);
+  plb.add_u64_counter(l_mdss_cache_trim_throttle, "cache_trim_throttle",
+                      "Cache trim throttle counter", "ctt", PerfCountersBuilder::PRIO_INTERESTING);
+  plb.add_u64_counter(l_mdss_session_recall_throttle, "session_recall_throttle",
+                      "Session recall throttle counter", "srt", PerfCountersBuilder::PRIO_INTERESTING);
+  plb.add_u64_counter(l_mdss_session_recall_throttle2o, "session_recall_throttle2o",
+                      "Session recall throttle2o counter", "srt2", PerfCountersBuilder::PRIO_INTERESTING);
+  plb.add_u64_counter(l_mdss_global_recall_throttle, "global_recall_throttle",
+        "Global recall throttle counter", "grt", PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_u64_counter(l_mdss_cap_acquisition_throttle,
                       "cap_acquisition_throttle", "Cap acquisition throttle counter", "cat",
                       PerfCountersBuilder::PRIO_INTERESTING);
@@ -291,6 +301,12 @@ Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
   dispatch_killpoint_random = g_conf().get_val<double>("mds_server_dispatch_killpoint_random");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
   supported_metric_spec = feature_bitset_t(CEPHFS_METRIC_FEATURES_ALL);
+}
+
+Server::~Server() {
+  g_ceph_context->get_perfcounters_collection()->remove(logger);
+  delete logger;
+  delete reconnect_done;
 }
 
 void Server::dispatch(const cref_t<Message> &m)
@@ -1994,14 +2010,23 @@ std::pair<bool, uint64_t> Server::recall_client_state(MDSGatherBuilder* gather, 
       const uint64_t global_recall_throttle = recall_throttle.get();
       if (session_recall_throttle+recall > recall_max_decay_threshold) {
         dout(15) << "  session recall threshold (" << recall_max_decay_threshold << ") hit at " << session_recall_throttle << "; skipping!" << dendl;
+        if (logger) {
+          logger->inc(l_mdss_session_recall_throttle);
+        }
         throttled = true;
         continue;
       } else if (session_recall_throttle2o+recall > recall_max_caps*2) {
         dout(15) << "  session recall 2nd-order threshold (" << 2*recall_max_caps << ") hit at " << session_recall_throttle2o << "; skipping!" << dendl;
+        if (logger) {
+          logger->inc(l_mdss_session_recall_throttle2o);
+        }
         throttled = true;
         continue;
       } else if (global_recall_throttle+recall > recall_global_max_decay_threshold) {
         dout(15) << "  global recall threshold (" << recall_global_max_decay_threshold << ") hit at " << global_recall_throttle << "; skipping!" << dendl;
+        if (logger) {
+          logger->inc(l_mdss_global_recall_throttle);
+        }
         throttled = true;
         break;
       }
@@ -6346,11 +6371,10 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     client_t exclude_ct = mdr->get_client();
     mdcache->broadcast_quota_to_client(cur, exclude_ct, true);
   } else if (name == "ceph.quiesce.block"sv) {
-    bool val;
-    try {
-      val = boost::lexical_cast<bool>(value);
-    } catch (boost::bad_lexical_cast const&) {
-      dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
+    std::string errstr;
+    bool val = strict_strtob(value, &errstr);
+    if (!errstr.empty()) {
+      dout(10) << "bad vxattr value, unable to parse bool for " << name << ": " << errstr << dendl;
       respond_to_request(mdr, -EINVAL);
       return;
     }
@@ -6408,7 +6432,13 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
 	}
         value = "0";
       }
-      val = boost::lexical_cast<bool>(value);
+      std::string errstr;
+      val = strict_strtob(value, &errstr);
+      if (!errstr.empty()) {
+        dout(10) << "bad vxattr value, unable to parse bool for " << name << ": " << errstr << dendl;
+        respond_to_request(mdr, -EINVAL);
+        return;
+      }
     } catch (boost::bad_lexical_cast const&) {
       dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
       respond_to_request(mdr, -EINVAL);
@@ -6557,7 +6587,13 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
 	}
         value = "0";
       }
-      val = boost::lexical_cast<bool>(value);
+      std::string errstr;
+      val = strict_strtob(value, &errstr);
+      if (!errstr.empty()) {
+        dout(10) << "bad vxattr value, unable to parse bool for " << name << ": " << errstr << dendl;
+        respond_to_request(mdr, -EINVAL);
+        return;
+      }
     } catch (boost::bad_lexical_cast const&) {
       dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
       respond_to_request(mdr, -EINVAL);
@@ -6584,11 +6620,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     if (!xlock_policylock(mdr, cur, false, false, std::move(lov)))
       return;
 
-    if (_dir_is_nonempty(mdr, cur)) {
-      respond_to_request(mdr, -ENOTEMPTY);
-      return;
-    }
-    if (cur->snaprealm && cur->snaprealm->srnode.snaps.size()) {
+    if (_dir_is_nonempty(mdr, cur) || _dir_has_snaps(mdr, cur)) {
       respond_to_request(mdr, -ENOTEMPTY);
       return;
     }
@@ -6616,20 +6648,15 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     if (!xlock_policylock(mdr, cur, false, false, std::move(lov)))
       return;
 
-    if (_dir_is_nonempty(mdr, cur)) {
-      respond_to_request(mdr, -ENOTEMPTY);
-      return;
-    }
-    if (cur->snaprealm && cur->snaprealm->srnode.snaps.size()) {
+    if (_dir_is_nonempty(mdr, cur) || _dir_has_snaps(mdr, cur)) {
       respond_to_request(mdr, -ENOTEMPTY);
       return;
     }
 
-    bool val;
-    try {
-      val = boost::lexical_cast<bool>(value);
-    } catch (boost::bad_lexical_cast const&) {
-      dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
+    std::string errstr;
+    bool val = strict_strtob(value, &errstr);
+    if (!errstr.empty()) {
+      dout(10) << "bad vxattr value, unable to parse bool for " << name << ": " << errstr << dendl;
       respond_to_request(mdr, -EINVAL);
       return;
     }
@@ -6654,11 +6681,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     if (!xlock_policylock(mdr, cur, false, false, std::move(lov)))
       return;
 
-    if (_dir_is_nonempty(mdr, cur)) {
-      respond_to_request(mdr, -ENOTEMPTY);
-      return;
-    }
-    if (cur->snaprealm && cur->snaprealm->srnode.snaps.size()) {
+    if (_dir_is_nonempty(mdr, cur) || _dir_has_snaps(mdr, cur)) {
       respond_to_request(mdr, -ENOTEMPTY);
       return;
     }
@@ -6682,11 +6705,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     if (!xlock_policylock(mdr, cur, false, false, std::move(lov)))
       return;
 
-    if (_dir_is_nonempty(mdr, cur)) {
-      respond_to_request(mdr, -ENOTEMPTY);
-      return;
-    }
-    if (cur->snaprealm && cur->snaprealm->srnode.snaps.size()) {
+    if (_dir_is_nonempty(mdr, cur) || _dir_has_snaps(mdr, cur)) {
       respond_to_request(mdr, -ENOTEMPTY);
       return;
     }
@@ -9213,6 +9232,16 @@ bool Server::_dir_is_nonempty_unlocked(const MDRequestRef& mdr, CInode *in)
   }
 
   return false;
+}
+
+bool Server::_dir_has_snaps(const MDRequestRef& mdr, CInode *diri)
+{
+  dout(10) << __func__ << ": " << *diri << dendl;
+  ceph_assert(diri->is_auth());
+  ceph_assert(diri->snaplock.can_read(mdr->get_client()));
+
+  SnapRealm *realm = diri->find_snaprealm();
+  return !realm->get_snaps().empty();
 }
 
 bool Server::_dir_is_nonempty(const MDRequestRef& mdr, CInode *in)
@@ -12555,17 +12584,17 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
   mdr->set_mds_stamp(now);
 
   mdr->snapid_diff_other = (uint64_t)req->head.args.snapdiff.snap_other;
+  dout(10) << __func__
+    << " snap " << mdr->snapid
+    << " vs. snap " << mdr->snapid_diff_other
+    << dendl;
+
   if (mdr->snapid_diff_other == mdr->snapid ||
       mdr->snapid == CEPH_NOSNAP ||
       mdr->snapid_diff_other == CEPH_NOSNAP) {
     dout(10) << "reply to " << *req << " snapdiff -EINVAL" << dendl;
     respond_to_request(mdr, -EINVAL);
   }
-
-  dout(10) << __func__
-    << " snap " << mdr->snapid
-    << " vs. snap " << mdr->snapid_diff_other
-    << dendl;
 
   unsigned max = req->head.args.snapdiff.max_entries;
   if (!max)

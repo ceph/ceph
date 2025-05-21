@@ -429,6 +429,24 @@ class Module(MgrModule, CherryPyConfig):
 
         return 0, 'RGW credentials configured', ''
 
+    @CLIWriteCommand("dashboard set-rgw-hostname")
+    def set_rgw_hostname(self, daemon_name: str, hostname: str):
+        try:
+            rgw_service_manager = RgwServiceManager()
+            rgw_service_manager.set_rgw_hostname(daemon_name, hostname)
+            return 0, f'RGW hostname for daemon {daemon_name} configured', ''
+        except Exception as error:
+            return -errno.EINVAL, '', str(error)
+
+    @CLIWriteCommand("dashboard unset-rgw-hostname")
+    def unset_rgw_hostname(self, daemon_name: str):
+        try:
+            rgw_service_manager = RgwServiceManager()
+            rgw_service_manager.unset_rgw_hostname(daemon_name)
+            return 0, f'RGW hostname for daemon {daemon_name} resetted', ''
+        except Exception as error:
+            return -errno.EINVAL, '', str(error)
+
     @CLIWriteCommand("dashboard set-login-banner")
     def set_login_banner(self, inbuf: str):
         '''

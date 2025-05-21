@@ -563,7 +563,7 @@ def list_topics(assert_len=None, tenant=''):
         result = admin(['topic', 'list', '--tenant', tenant], get_config_cluster())
     parsed_result = json.loads(result[0])
     if assert_len:
-        assert_equal(len(parsed_result['topics']), assert_len)
+        assert_equal(len(parsed_result), assert_len)
     return parsed_result
 
 
@@ -5780,7 +5780,7 @@ def test_topic_migration_to_an_account():
         assert_equal(status / 100, 2)
         # verify both buckets are subscribed to the topic
         rgw_topic_entry = [
-            t for t in list_topics()["topics"] if t["name"] == topic_name
+            t for t in list_topics() if t["name"] == topic_name
         ]
         assert_equal(len(rgw_topic_entry), 1)
         subscribed_buckets = rgw_topic_entry[0]["subscribed_buckets"]
@@ -5858,7 +5858,7 @@ def test_topic_migration_to_an_account():
         # verify subscriptions to the account topic
         rgw_topic_entry = [
             t
-            for t in list_topics(tenant=account_id)["topics"]
+            for t in list_topics(tenant=account_id)
             if t["name"] == topic_name
         ]
         assert_equal(len(rgw_topic_entry), 1)
@@ -5896,7 +5896,7 @@ def test_topic_migration_to_an_account():
         # now verify account topic serves both buckets
         rgw_topic_entry = [
             t
-            for t in list_topics(tenant=account_id)["topics"]
+            for t in list_topics(tenant=account_id)
             if t["name"] == topic_name
         ]
         assert_equal(len(rgw_topic_entry), 1)

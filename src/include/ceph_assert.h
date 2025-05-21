@@ -50,13 +50,14 @@ struct assert_data {
   const char *function;
 };
 
-extern void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *function)
-  __attribute__ ((__noreturn__));
-extern void __ceph_assert_fail(const assert_data &ctx)
-  __attribute__ ((__noreturn__));
+extern void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *function);
+extern void __ceph_assert_fail(const assert_data &ctx);
+template <const assert_data* AssertCtxV>
+[[gnu::noinline, gnu::cold]] static void __ceph_assert_fail()  {
+  __ceph_assert_fail(*AssertCtxV);
+}
 
-extern void __ceph_assertf_fail(const char *assertion, const char *file, int line, const char *function, const char* msg, ...)
-  __attribute__ ((__noreturn__));
+extern void __ceph_assertf_fail(const char *assertion, const char *file, int line, const char *function, const char* msg, ...);
 extern void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *function);
 
 [[noreturn]] void __ceph_abort(const char *file, int line, const char *func,
@@ -101,11 +102,14 @@ using namespace ceph;
   } while (false)
 #else
 #define ceph_assert(expr)							\
-  do { static const ceph::assert_data assert_data_ctx = \
-   {__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION}; \
-   ((expr) \
-   ? _CEPH_ASSERT_VOID_CAST (0) \
-    : ::ceph::__ceph_assert_fail(assert_data_ctx)); } while(false)
+  do { \
+    static const auto func_name = __CEPH_ASSERT_FUNCTION; \
+    [] (const bool eval) { \
+    static const ceph::assert_data assert_data_ctx = \
+    {__STRING(expr), __FILE__, __LINE__, func_name}; \
+    ((eval) \
+    ? _CEPH_ASSERT_VOID_CAST (0) \
+    : ::ceph::__ceph_assert_fail<&assert_data_ctx>()); }((bool)(expr)); } while(false)
 #endif
 
 // this variant will *never* get compiled out to NDEBUG in the future.
@@ -119,11 +123,14 @@ using namespace ceph;
   } while(false)
 #else
 #define ceph_assert_always(expr)							\
-  do { static const ceph::assert_data assert_data_ctx = \
-   {__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION}; \
-   ((expr) \
-   ? _CEPH_ASSERT_VOID_CAST (0) \
-    : ::ceph::__ceph_assert_fail(assert_data_ctx)); } while(false)
+  do { \
+    static const auto func_name = __CEPH_ASSERT_FUNCTION; \
+    [] (const bool eval) { \
+    static const ceph::assert_data assert_data_ctx = \
+    {__STRING(expr), __FILE__, __LINE__, func_name}; \
+    ((eval) \
+    ? _CEPH_ASSERT_VOID_CAST (0) \
+    : ::ceph::__ceph_assert_fail<&assert_data_ctx>()); }((bool)(expr)); } while(false)
 #endif
 
 // Named by analogy with printf.  Along with an expression, takes a format
@@ -144,4 +151,10 @@ using namespace ceph;
    ? _CEPH_ASSERT_VOID_CAST (0)					\
    : ::ceph::__ceph_assertf_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__))
 
+#define consteval_assert(expr, msg)	\
+  do {					\
+    if (!(expr)) {			\
+      throw (msg);			\
+    }					\
+  } while(false)
 #endif

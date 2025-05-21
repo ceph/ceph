@@ -21,7 +21,7 @@ MDSPerfMetricCollector::MDSPerfMetricCollector(MetricListener &listener)
 }
 
 void MDSPerfMetricCollector::process_reports(const MetricPayload &payload) {
-  const MDSPerfMetricReport &metric_report = boost::get<MDSMetricPayload>(payload).metric_report;
+  const MDSPerfMetricReport &metric_report = std::get<MDSMetricPayload>(payload).metric_report;
 
   std::lock_guard locker(lock);
   process_reports_generic(

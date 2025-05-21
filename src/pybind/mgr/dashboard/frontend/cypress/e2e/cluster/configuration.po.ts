@@ -21,7 +21,7 @@ export class ConfigurationPageHelper extends PageHelper {
       cy.get(`#${i}`).clear();
     }
     // Clicks save button and checks that values are not present for the selected config
-    cy.get('[data-cy=submitBtn]').click();
+    cy.get('[data-testid=submitBtn]').click();
 
     cy.wait(3 * 1000);
 
@@ -64,7 +64,7 @@ export class ConfigurationPageHelper extends PageHelper {
 
     // Clicks save button then waits until the desired config is visible, clicks it,
     // then checks that each desired value appears with the desired number
-    cy.get('[data-cy=submitBtn]').click();
+    cy.get('[data-testid=submitBtn]').click();
     cy.wait(3 * 1000);
 
     // Enter config setting name into filter box

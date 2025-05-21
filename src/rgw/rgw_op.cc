@@ -15,6 +15,7 @@
 #include <boost/utility/in_place_factory.hpp>
 #include <fmt/format.h>
 
+#include "common/dout.h"
 #include "include/scope_guard.h"
 #include "common/Clock.h"
 #include "common/armor.h"
@@ -119,11 +120,35 @@ static constexpr auto S3_EXISTING_OBJTAG = "s3:ExistingObjectTag";
 static constexpr auto S3_RESOURCE_TAG = "s3:ResourceTag";
 static constexpr auto S3_RUNTIME_RESOURCE_VAL = "${s3:ResourceTag";
 
+// try to parse the xml <Error> response body
+bool parse_aws_s3_error(const std::string& input, rgw_err& err)
+{
+  RGWXMLParser parser;
+  if (!parser.init()) {
+    return false;
+  }
+  if (!parser.parse(input.c_str(), input.length(), 1)) {
+    return false;
+  }
+  auto error = parser.find_first("Error");
+  if (!error) {
+    return false;
+  }
+  if (auto code = error->find_first("Code"); code) {
+    err.err_code = code->get_data();
+  }
+  if (auto message = error->find_first("Message"); message) {
+    err.message = message->get_data();
+  }
+  return true;
+}
+
 int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw::SiteConfig& site,
                                   const rgw_owner& effective_owner,
                                   bufferlist* indata, JSONParser* jp,
-                                  req_info& req, optional_yield y)
+                                  const req_info& req, rgw_err& err,
+                                  optional_yield y)
 {
   const auto& period = site.get_period();
   if (!period) {
@@ -154,8 +179,16 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                           creds, site.get_zonegroup().id, zg->second.api_name};
   bufferlist outdata;
   constexpr size_t max_response_size = 128 * 1024; // we expect a very small response
-  int ret = conn.forward(dpp, effective_owner, req, nullptr,
-                         max_response_size, indata, &outdata, y);
+  auto result = conn.forward(dpp, effective_owner, req,
+                             max_response_size, indata, &outdata, y);
+  if (!result) {
+    return result.error();
+  }
+  err.http_ret = *result;
+  if (err.is_err() && outdata.length()) { // 4xx or 5xx
+    std::ignore = parse_aws_s3_error(rgw_bl_str(outdata), err);
+  }
+  int ret = rgw_http_error_to_errno(err.http_ret);
   if (ret < 0) {
     return ret;
   }
@@ -359,7 +392,7 @@ static int read_bucket_policy(const DoutPrefixProvider *dpp,
                               rgw_bucket& bucket,
 			      optional_yield y)
 {
-  if (!s->system_request && bucket_info.flags & BUCKET_SUSPENDED) {
+  if (!s->auth.identity->is_admin() && bucket_info.flags & BUCKET_SUSPENDED) {
     ldpp_dout(dpp, 0) << "NOTICE: bucket " << bucket_info.bucket.name
         << " is suspended" << dendl;
     return -ERR_USER_SUSPENDED;
@@ -396,7 +429,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   std::unique_ptr<rgw::sal::Object> mpobj;
   rgw_obj obj;
 
-  if (!s->system_request && bucket_info.flags & BUCKET_SUSPENDED) {
+  if (!s->auth.identity->is_admin() && bucket_info.flags & BUCKET_SUSPENDED) {
     ldpp_dout(dpp, 0) << "NOTICE: bucket " << bucket_info.bucket.name
         << " is suspended" << dendl;
     return -ERR_USER_SUSPENDED;
@@ -427,7 +460,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
       return ret;
     }
 
-    if (s->auth.identity->is_admin_of(bucket_policy.get_owner().id)) {
+    if (s->auth.identity->is_admin()) {
       return -ENOENT;
     }
 
@@ -603,7 +636,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     // send a PutBucketPolicy or DeleteBucketPolicy request as an admin/system
     // user. We can allow such requests, because even if the policy denied
     // access, admin/system users override that error from verify_permission().
-    if (!s->system_request) {
+    if (!s->auth.identity->is_admin()) {
       ret = -EACCES;
     }
   }
@@ -632,7 +665,7 @@ int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     return -ERR_NO_SUCH_BUCKET;
   }
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
   if (prefetch_data) {
     s->object->set_prefetch_data();
   }
@@ -643,7 +676,7 @@ int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
 }
 
 static int rgw_iam_remove_objtags(const DoutPrefixProvider *dpp, req_state* s, rgw::sal::Object* object, bool has_existing_obj_tag, bool has_resource_tag) {
-  object->set_atomic();
+  object->set_atomic(true);
   int op_ret = object->get_obj_attrs(s->yield, dpp);
   if (op_ret < 0)
     return op_ret;
@@ -719,7 +752,7 @@ static int rgw_iam_add_tags_from_bl(req_state* s, bufferlist& bl, bool has_exist
 }
 
 static int rgw_iam_add_objtags(const DoutPrefixProvider *dpp, req_state* s, rgw::sal::Object* object, bool has_existing_obj_tag, bool has_resource_tag) {
-  object->set_atomic();
+  object->set_atomic(true);
   int op_ret = object->get_obj_attrs(s->yield, dpp);
   if (op_ret < 0)
     return op_ret;
@@ -910,19 +943,20 @@ void rgw_build_iam_environment(rgw::sal::Driver* driver,
 }
 
 void handle_replication_status_header(
-    const DoutPrefixProvider *dpp,
+    const DoutPrefixProvider *dpp, optional_yield y,
     rgw::sal::Attrs& attrs,
     req_state* s,
     const ceph::real_time &obj_mtime) {
   auto attr_iter = attrs.find(RGW_ATTR_OBJ_REPLICATION_STATUS);
   if (attr_iter != attrs.end() && attr_iter->second.to_str() == "PENDING") {
-    if (s->object->is_sync_completed(dpp, obj_mtime)) {
-      s->object->set_atomic();
+    if (s->object->is_sync_completed(dpp, y, obj_mtime)) {
+      s->object->set_atomic(true);
       rgw::sal::Attrs setattrs, rmattrs;
       bufferlist bl;
       bl.append("COMPLETED");
       setattrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = bl;
-      int ret = s->object->set_obj_attrs(dpp, &setattrs, &rmattrs, s->yield, 0);
+      int ret = s->object->set_obj_attrs(dpp, &setattrs, &rmattrs, y, 0);
+      s->object->set_atomic(false);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: failed to set object replication status to COMPLETED ret=" << ret << dendl;
         return;
@@ -1092,7 +1126,7 @@ void rgw_bucket_object_pre_exec(req_state *s)
 
 int RGWGetObj::verify_permission(optional_yield y)
 {
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   if (prefetch_data()) {
     s->object->set_prefetch_data();
@@ -1102,27 +1136,71 @@ int RGWGetObj::verify_permission(optional_yield y)
     if (has_s3_existing_tag || has_s3_resource_tag)
       rgw_iam_add_objtags(this, s, has_s3_existing_tag, has_s3_resource_tag);
 
-  if (get_torrent) {
-    if (s->object->get_instance().empty()) {
-      action = rgw::IAM::s3GetObjectTorrent;
-    } else {
-      action = rgw::IAM::s3GetObjectVersionTorrent;
-    }
-  } else {
-    if (s->object->get_instance().empty()) {
-      action = rgw::IAM::s3GetObject;
-    } else {
-      action = rgw::IAM::s3GetObjectVersion;
-    }
-  }
-
-  if (!verify_object_permission(this, s, action)) {
-    return -EACCES;
-  }
+  // for system requests, assume replication context and validate replication permissions.
+  // non-impersonated or standard system requests will be handled in rgw_process_authenticated().
+  const bool is_replication_request = s->system_request;
 
   if (s->bucket->get_info().obj_lock_enabled()) {
     get_retention = verify_object_permission(this, s, rgw::IAM::s3GetObjectRetention);
+    if (is_replication_request && !get_retention) {
+      s->err.message = "missing s3:GetObjectRetention permission";
+      ldpp_dout(this, 4) << "ERROR: fetching object for replication object=" << s->object << " reason=" << s->err.message << dendl;
+
+      return -EACCES;
+    }
+
     get_legal_hold = verify_object_permission(this, s, rgw::IAM::s3GetObjectLegalHold);
+    if (is_replication_request && !get_legal_hold) {
+      s->err.message = "missing s3:GetObjectLegalHold permission";
+      ldpp_dout(this, 4) << "ERROR: fetching object for replication object=" << s->object << " reason=" << s->err.message << dendl;
+
+      return -EACCES;
+    }
+  }
+
+  if (is_replication_request) {
+    // check for s3:GetObject(Version)Acl permission
+    action = s->object->get_instance().empty() ? rgw::IAM::s3GetObjectAcl : rgw::IAM::s3GetObjectVersionAcl;
+    if (!verify_object_permission(this, s, action)) {
+      s->err.message = fmt::format("missing {} permission", rgw::IAM::action_bit_string(action));
+      ldpp_dout(this, 4) << "ERROR: fetching object for replication object=" << s->object << " reason=" << s->err.message << dendl;
+
+      return -EACCES;
+    }
+
+    // check for s3:GetObjectForReplication permission
+    // for versioned buckets, sync requests include `versionId`; for non-versioned, they don't.
+    // so s3:GetObjectForReplication doesn't help to be introduced as it doesn't add any value.
+    action = rgw::IAM::s3GetObjectVersionForReplication;
+    if (verify_object_permission(this, s, action)) {
+      return 0;
+    }
+
+    // fallback to s3:GetObject(Version) permission
+    action = s->object->get_instance().empty() ? rgw::IAM::s3GetObject : rgw::IAM::s3GetObjectVersion;
+
+    // sse-kms is not supported by s3:GetObject(Version) permission
+    bufferlist bl;
+    if (s->object->get_attr(RGW_ATTR_CRYPT_MODE, bl) && bl.to_str() == "SSE-KMS") {
+      s->err.message = "object is encrypted with SSE-KMS, missing s3:GetObjectVersionForReplication permission";
+      ldpp_dout(this, 4) << "ERROR: fetching object for replication object=" << s->object << " reason=" << s->err.message << dendl;
+
+      return -EACCES;
+    }
+  } else if (get_torrent) {
+    action = s->object->get_instance().empty() ? rgw::IAM::s3GetObjectTorrent : rgw::IAM::s3GetObjectVersionTorrent;
+  } else {
+    action = s->object->get_instance().empty() ? rgw::IAM::s3GetObject : rgw::IAM::s3GetObjectVersion;
+  }
+
+  if (!verify_object_permission(this, s, action)) {
+    s->err.message = fmt::format("missing {} permission", rgw::IAM::action_bit_string(action));
+
+    if (is_replication_request) {
+      ldpp_dout(this, 4) << "ERROR: fetching object for replication object=" << s->object << " reason=" << s->err.message << dendl;
+    }
+
+    return -EACCES;
   }
 
   return 0;
@@ -1174,7 +1252,7 @@ void RGWGetObjTags::execute(optional_yield y)
 {
   rgw::sal::Attrs attrs;
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   op_ret = s->object->get_obj_attrs(y, this);
 
@@ -1217,7 +1295,7 @@ void RGWPutObjTags::execute(optional_yield y)
     return;
   }
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
   op_ret = s->object->modify_obj_attrs(RGW_ATTR_TAGS, tags_bl, y, this);
   if (op_ret == -ECANCELED){
     op_ret = -ERR_TAG_CONFLICT;
@@ -1304,7 +1382,7 @@ void RGWPutBucketTags::execute(optional_yield y)
     return;
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         &in_data, nullptr, s->info, y);
+                                         &in_data, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1339,7 +1417,7 @@ int RGWDeleteBucketTags::verify_permission(optional_yield y)
 void RGWDeleteBucketTags::execute(optional_yield y)
 {
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1400,7 +1478,7 @@ void RGWPutBucketReplication::execute(optional_yield y) {
     return;
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         &in_data, nullptr, s->info, y);
+                                         &in_data, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1446,7 +1524,7 @@ int RGWDeleteBucketReplication::verify_permission(optional_yield y)
 void RGWDeleteBucketReplication::execute(optional_yield y)
 {
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1496,7 +1574,7 @@ int RGWOp::do_aws4_auth_completion()
   return 0;
 }
 
-static int get_owner_quota_info(DoutPrefixProvider* dpp,
+int get_owner_quota_info(const DoutPrefixProvider* dpp,
                                 optional_yield y,
                                 rgw::sal::Driver* driver,
                                 const rgw_owner& owner,
@@ -1761,7 +1839,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
   ldpp_dout(this, 20) << "reading obj=" << part << " ofs=" << cur_ofs
       << " end=" << cur_end << dendl;
 
-  part->set_atomic();
+  part->set_atomic(true);
   part->set_prefetch_data();
 
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op = part->get_read_op();
@@ -1811,9 +1889,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
 
   /* We can use global user_acl because LOs cannot have segments
    * stored inside different accounts. */
-  if (s->system_request) {
-    ldpp_dout(this, 2) << "overriding permissions due to system operation" << dendl;
-  } else if (s->auth.identity->is_admin_of(s->user->get_id())) {
+  if (s->auth.identity->is_admin()) {
     ldpp_dout(this, 2) << "overriding permissions due to admin operation" << dendl;
   } else if (!verify_object_permission(this, s, part->get_obj(), s->user_acl,
 				       bucket_acl, obj_policy, bucket_policy,
@@ -2455,7 +2531,7 @@ void RGWGetObj::execute(optional_yield y)
     filter = &*decompress;
   }
 
-  handle_replication_status_header(this, attrs, s, lastmod);
+  handle_replication_status_header(this, y, attrs, s, lastmod);
 
   attr_iter = attrs.find(RGW_ATTR_OBJ_REPLICATION_TRACE);
   if (attr_iter != attrs.end()) {
@@ -2931,7 +3007,7 @@ void RGWSetBucketVersioning::execute(optional_yield y)
   }
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         &in_data, nullptr, s->info, y);
+                                         &in_data, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -3029,7 +3105,7 @@ void RGWSetBucketWebsite::execute(optional_yield y)
   }
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         &in_data, nullptr, s->info, y);
+                                         &in_data, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << " forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -3075,7 +3151,7 @@ void RGWDeleteBucketWebsite::execute(optional_yield y)
   }
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: forward_to_master failed on bucket=" << s->bucket->get_name()
       << "returned err=" << op_ret << dendl;
@@ -3121,7 +3197,7 @@ static int load_bucket_stats(const DoutPrefixProvider* dpp, optional_yield y,
   std::string bver, mver; // ignored
   std::map<RGWObjCategory, RGWStorageStats> categories;
 
-  int r = bucket.read_stats(dpp, index, -1, &bver, &mver, categories);
+  int r = bucket.read_stats(dpp, y, index, -1, &bver, &mver, categories);
   if (r < 0) {
     return r;
   }
@@ -3729,7 +3805,7 @@ void RGWCreateBucket::execute(optional_yield y)
     // apply bucket creation on the master zone first
     JSONParser jp;
     op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                           &in_data, &jp, s->info, y);
+                                           &in_data, &jp, s->info, s->err, y);
     if (op_ret < 0) {
       return;
     }
@@ -3813,8 +3889,8 @@ void RGWCreateBucket::execute(optional_yield y)
     if (op_ret >= 0) {
       op_ret = -ERR_BUCKET_EXISTS;
     }
-  }
-}
+  } /* if (need_metadata_upload() && existed) */
+} /* RGWCreateBucket::execute() */
 
 int RGWDeleteBucket::verify_permission(optional_yield y)
 {
@@ -3846,38 +3922,24 @@ void RGWDeleteBucket::execute(optional_yield y)
     op_ret = -ERR_NO_SUCH_BUCKET;
     return;
   }
-  RGWObjVersionTracker ot;
-  ot.read_version = s->bucket->get_version();
 
-  if (s->system_request) {
-    string tag = s->info.args.get(RGW_SYS_PARAM_PREFIX "tag");
-    string ver_str = s->info.args.get(RGW_SYS_PARAM_PREFIX "ver");
-    if (!tag.empty()) {
-      ot.read_version.tag = tag;
-      uint64_t ver;
-      string err;
-      ver = strict_strtol(ver_str.c_str(), 10, &err);
-      if (!err.empty()) {
-        ldpp_dout(this, 0) << "failed to parse ver param" << dendl;
-        op_ret = -EINVAL;
-        return;
-      }
-      ot.read_version.ver = ver;
+  const bool own_bucket = s->penv.site->get_zonegroup().get_id() == s->bucket->get_info().zonegroup;
+
+  if (own_bucket) {
+    // only if we own the bucket
+    op_ret = s->bucket->sync_owner_stats(this, y, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
+    }
+
+    op_ret = s->bucket->check_empty(this, y);
+    if (op_ret < 0) {
+      return;
     }
   }
 
-  op_ret = s->bucket->sync_owner_stats(this, y, nullptr);
-  if ( op_ret < 0) {
-     ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
-  }
-
-  op_ret = s->bucket->check_empty(this, y);
-  if (op_ret < 0) {
-    return;
-  }
-
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
       /* adjust error, we want to return with NoSuchBucket and not
@@ -3887,9 +3949,11 @@ void RGWDeleteBucket::execute(optional_yield y)
     return;
   }
 
-  op_ret = rgw_remove_sse_s3_bucket_key(s, y);
-  if (op_ret != 0) {
-      // do nothing; it will already have been logged
+  if (own_bucket) {
+    op_ret = rgw_remove_sse_s3_bucket_key(s, y);
+    if (op_ret != 0) {
+        // do nothing; it will already have been logged
+    }
   }
 
   op_ret = s->bucket->remove(this, false, y);
@@ -4025,7 +4089,7 @@ int RGWPutObj::verify_permission(optional_yield y)
     auto cs_bucket = driver->get_bucket(copy_source_bucket_info);
     auto cs_object = cs_bucket->get_object(rgw_obj_key(copy_source_object_name,
                                                        copy_source_version_id));
-    cs_object->set_atomic();
+    cs_object->set_atomic(true);
     cs_object->set_prefetch_data();
 
     /* check source object permissions */
@@ -4359,6 +4423,7 @@ void RGWPutObj::execute(optional_yield y)
     }
 
     multipart_cksum_type = upload->cksum_type;
+    multipart_cksum_flags = upload->cksum_flags;
 
     /* upload will go out of scope, so copy the dest placement for later use */
     s->dest_placement = *pdest_placement;
@@ -4490,7 +4555,10 @@ void RGWPutObj::execute(optional_yield y)
     /* optional streaming checksum */
     try {
       cksum_filter =
-	rgw::putobj::RGWPutObj_Cksum::Factory(filter, *s->info.env, multipart_cksum_type);
+	rgw::putobj::RGWPutObj_Cksum::Factory(
+               filter, *s->info.env,
+	       multipart_cksum_type,
+	       multipart_cksum_flags);
     } catch (const rgw::io::Exception& e) {
       op_ret = -e.code().value();
       return;
@@ -4642,6 +4710,7 @@ void RGWPutObj::execute(optional_yield y)
 
   if (cksum_filter) {
     const auto& hdr = cksum_filter->header();
+
     auto expected_ck = cksum_filter->expected(*s->info.env);
     auto cksum_verify =
       cksum_filter->verify(*s->info.env); // valid or no supplied cksum
@@ -4653,7 +4722,7 @@ void RGWPutObj::execute(optional_yield y)
       ldpp_dout_fmt(this, 16,
 		    "{} checksum verified "
 		    "\n\tcomputed={} == \n\texpected={}",
-		    hdr.second,
+		    (hdr.second) ? hdr.second : "(no supplied checksum header)",
 		    cksum->to_armor(),
 		    (!!expected_ck) ? expected_ck : "(checksum unavailable)");
 
@@ -4670,7 +4739,7 @@ void RGWPutObj::execute(optional_yield y)
 		    computed_ck,
 		    (!!expected_ck) ? expected_ck : "(checksum unavailable)");
 
-      op_ret = -ERR_INVALID_REQUEST;
+      op_ret = -ERR_BAD_DIGEST;
       return;
     }
   }
@@ -4865,7 +4934,8 @@ void RGWPostObj::execute(optional_yield y)
     try {
       cksum_filter =
 	rgw::putobj::RGWPutObj_Cksum::Factory(
-	  filter, *s->info.env, rgw::cksum::Type::none /* no override */);
+               filter, *s->info.env, rgw::cksum::Type::none /* no override */,
+	       rgw::cksum::Cksum::FLAG_CKSUM_NONE);
     } catch (const rgw::io::Exception& e) {
       op_ret = -e.code().value();
       return;
@@ -4916,6 +4986,7 @@ void RGWPostObj::execute(optional_yield y)
 
     s->obj_size = ofs;
     s->object->set_obj_size(ofs);
+    obj->set_obj_size(ofs);
 
 
     op_ret = s->bucket->check_quota(this, quota, s->obj_size, y);
@@ -4979,7 +5050,7 @@ void RGWPostObj::execute(optional_yield y)
 		      cksum->to_armor(),
 		      cksum_filter->expected(*s->info.env));
 
-        op_ret = -ERR_INVALID_REQUEST;
+        op_ret = -ERR_BAD_DIGEST;
         return;
       }
     }
@@ -5241,7 +5312,7 @@ void RGWPutMetadataObject::execute(optional_yield y)
 {
   rgw::sal::Attrs attrs, rmattrs;
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   op_ret = get_params(y);
   if (op_ret < 0) {
@@ -5314,7 +5385,7 @@ void RGWRestoreObj::execute(optional_yield y)
     return;
   }
   
-  s->object->set_atomic();
+  s->object->set_atomic(true);
   int op_ret = s->object->get_obj_attrs(y, this);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to fetch get_obj_attrs op ret = " << op_ret << dendl;
@@ -5512,7 +5583,7 @@ void RGWDeleteObj::execute(optional_yield y)
       return;
     }
 
-    s->object->set_atomic();
+    s->object->set_atomic(true);
     
     bool ver_restored = false;
     op_ret = s->object->swift_versioning_restore(s->owner, s->user->get_id(),
@@ -5672,7 +5743,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
 
   /* get buckets info (source and dest) */
   if (s->local_source &&  source_zone.empty()) {
-    s->src_object->set_atomic();
+    s->src_object->set_atomic(true);
     s->src_object->set_prefetch_data();
 
     rgw_placement_rule src_placement;
@@ -5724,7 +5795,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
 
   RGWAccessControlPolicy dest_bucket_policy;
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   /* check dest bucket permissions */
   op_ret = read_bucket_policy(this, driver, s, s->bucket->get_info(),
@@ -5837,8 +5908,8 @@ void RGWCopyObj::execute(optional_yield y)
     s->object->gen_rand_obj_instance_name();
   }
 
-  s->src_object->set_atomic();
-  s->object->set_atomic();
+  s->src_object->set_atomic(true);
+  s->object->set_atomic(true);
 
   encode_delete_at_attr(delete_at, attrs);
 
@@ -6222,7 +6293,7 @@ void RGWPutACLs::execute(optional_yield y)
   // forward bucket acl requests to meta master zone
   if ((rgw::sal::Object::empty(s->object.get()))) {
     op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                           &data, nullptr, s->info, y);
+                                           &data, nullptr, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
@@ -6251,7 +6322,7 @@ void RGWPutACLs::execute(optional_yield y)
   map<string, bufferlist> attrs;
 
   if (!rgw::sal::Object::empty(s->object.get())) {
-    s->object->set_atomic();
+    s->object->set_atomic(true);
     //if instance is empty, we should modify the latest object
     op_ret = s->object->modify_obj_attrs(RGW_ATTR_ACL, bl, s->yield, this);
   } else {
@@ -6355,7 +6426,7 @@ void RGWPutLC::execute(optional_yield y)
   }
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         &data, nullptr, s->info, y);
+                                         &data, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -6372,14 +6443,16 @@ void RGWPutLC::execute(optional_yield y)
 void RGWDeleteLC::execute(optional_yield y)
 {
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
 
+  // remove RGW_ATTR_LC and remove the bucket from the 'lc list'
+  constexpr bool update_attrs = true;
   op_ret = driver->get_rgwlc()->remove_bucket_config(this, y, s->bucket.get(),
-                                                     s->bucket_attrs);
+                                                     update_attrs);
   if (op_ret < 0) {
     return;
   }
@@ -6434,7 +6507,7 @@ void RGWPutCORS::execute(optional_yield y)
     return;
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         &in_data, nullptr, s->info, y);
+                                         &in_data, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -6464,7 +6537,7 @@ int RGWDeleteCORS::verify_permission(optional_yield y)
 void RGWDeleteCORS::execute(optional_yield y)
 {
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -6595,7 +6668,7 @@ void RGWSetRequestPayment::execute(optional_yield y)
     return;
   
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         &in_data, nullptr, s->info, y);
+                                         &in_data, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -6672,18 +6745,24 @@ void RGWInitMultipart::execute(optional_yield y)
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
   upload = s->bucket->get_multipart_upload(s->object->get_name(),
 				       upload_id);
+
+  /* apparently, we are assured of upload */
   upload->obj_legal_hold = obj_legal_hold;
   upload->obj_retention = obj_retention;
   upload->cksum_type = cksum_algo;
-  op_ret = upload->init(this, s->yield, s->owner, s->dest_placement, attrs);
+  /* cksum_flags have been validated against algorithm, so, e.g., if
+   * FLAG_COMPOSITE is set, the algorithm can be used with a composite/
+   * digest checksum (e.g., it's not CRC64NVME) */
+  upload->cksum_flags = cksum_flags;
 
+  op_ret = upload->init(this, s->yield, s->owner, s->dest_placement, attrs);
   if (op_ret == 0) {
     upload_id = upload->get_upload_id();
   }
   s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
   multipart_trace->UpdateName(tracing::rgw::MULTIPART + upload_id);
 
-}
+} /* RGWInitMultipart::execute() */
 
 int RGWCompleteMultipart::verify_permission(optional_yield y)
 {
@@ -6713,6 +6792,7 @@ try_sum_part_cksums(const DoutPrefixProvider *dpp,
 		    rgw::sal::MultipartUpload* upload,
 		    RGWMultiCompleteUpload* parts,
 		    std::optional<rgw::cksum::Cksum>& out_cksum,
+		    std::optional<std::string>& armored_cksum,
 		    optional_yield y)
 {
   /* 1. need checksum-algorithm header (if invalid, fail)
@@ -6735,6 +6815,7 @@ try_sum_part_cksums(const DoutPrefixProvider *dpp,
   auto num_parts = int(parts->parts.size());
 
   rgw::cksum::Type& cksum_type = upload->cksum_type;
+  uint16_t cksum_flags = upload->cksum_flags;
 
   int again_count{0};
  again:
@@ -6761,8 +6842,7 @@ try_sum_part_cksums(const DoutPrefixProvider *dpp,
     return 0;
   }
 
-  rgw::cksum::DigestVariant dv = rgw::cksum::digest_factory(cksum_type);
-  rgw::cksum::Digest* digest = rgw::cksum::get_digest(dv);
+  auto cksum_combiner = rgw::cksum::CombinerFactory(cksum_type, cksum_flags);
 
   /* returns the parts (currently?) in cache */
   auto parts_ix{0};
@@ -6787,12 +6867,12 @@ try_sum_part_cksums(const DoutPrefixProvider *dpp,
     if ((part_cksum->type != cksum_type)) {
       /* if parts have inconsistent checksum, fail now */
 
-    ldpp_dout_fmt(dpp, 14,
-		  "ERROR: multipart part checksum type mismatch\n\tcomplete "
-		  "multipart header={} part={}",
-		  to_string(part_cksum->type), to_string(cksum_type));
+      ldpp_dout_fmt(dpp, 14,
+		    "ERROR: multipart part checksum type mismatch\n\tcomplete "
+		    "multipart header={} part={}",
+		    to_string(part_cksum->type), to_string(cksum_type));
 
-    op_ret = -ERR_INVALID_REQUEST;
+      op_ret = -ERR_INVALID_REQUEST;
       return op_ret;
     }
 
@@ -6801,18 +6881,27 @@ try_sum_part_cksums(const DoutPrefixProvider *dpp,
      * "-<num-parts>.  See
      * https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums
      */
-    auto ckr = part_cksum->raw();
-    digest->Update((unsigned char *)ckr.data(), ckr.length());
+    cksum_combiner->append(*part_cksum, part.second->get_size());
+
   } /* all-parts */
 
   /* we cannot verify this checksum, only compute it */
-  out_cksum = rgw::cksum::finalize_digest(digest, cksum_type);
+  out_cksum = cksum_combiner->final();
+
+  armored_cksum = [&]() -> std::string {
+    std::string armor = out_cksum->to_armor();
+    if (out_cksum->composite()) {
+      armor += fmt::format("-{}", num_parts);
+    }
+    return armor;
+  }();
 
   ldpp_dout_fmt(dpp, 16,
-		"INFO: {} combined checksum {} {}-{}",
+		"INFO: {} combined checksum {} {}",
 		__func__,
 		out_cksum->type_string(),
-		out_cksum->to_armor(), num_parts);
+		out_cksum->to_armor(),
+		*armored_cksum);
 
   return op_ret;
 } /* try_sum_part_chksums */
@@ -6929,7 +7018,8 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   /* checksum computation */
   if (upload->cksum_type != rgw::cksum::Type::none) {
-    op_ret = try_sum_part_cksums(this, s->cct, upload.get(), parts, cksum, y);
+    op_ret = try_sum_part_cksums(this, s->cct, upload.get(), parts, cksum,
+				 armored_cksum, y);
     if (op_ret < 0) {
       ldpp_dout(this, 16) << "ERROR: try_sum_part_cksums failed, obj="
 			  << meta_obj << " ret=" << op_ret << dendl;
@@ -6949,9 +7039,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
   auto& target_attrs = meta_obj->get_attrs();
 
   if (cksum) {
-    armored_cksum =
-      fmt::format("{}-{}", cksum->to_armor(), parts->parts.size());
-
     /* validate computed checksum against supplied checksum, if present */
     auto [hdr_cksum, supplied_cksum] =
       rgw::putobj::find_hdr_cksum(*(s->info.env));
@@ -6960,19 +7047,37 @@ void RGWCompleteMultipart::execute(optional_yield y)
 		    "INFO: client supplied checksum {}: {} ",
 		    hdr_cksum.header_name(), supplied_cksum);
 
-    if (! (supplied_cksum.empty()) &&
-	(supplied_cksum != armored_cksum)) {
-      /* some minio SDK clients assert a checksum that is cryptographically
-       * valid but omits the part count */
-      auto parts_suffix = fmt::format("-{}", parts->parts.size());
-      auto suffix_len = armored_cksum->size() - parts_suffix.size();
-      if (armored_cksum->compare(0, suffix_len, supplied_cksum) != 0) {
-	ldpp_dout_fmt(this, 4,
-		      "{} content checksum mismatch"
-		      "\n\tcalculated={} != \n\texpected={}",
-		      hdr_cksum.header_name(), armored_cksum, supplied_cksum);
-	op_ret = -ERR_INVALID_REQUEST;
-	return;
+    /* in late 2024, we observed some minio SDK clients assert a checksum that
+     * was a cryptographically valid *digest*, but omitted the part count;
+     *
+     * in addition, from 2025, AWS specifies that multipart uploads using CRC
+     * checksums may (CRC32, CRC32c) or must (CRC64NVME) be computed as full
+     * object checksums [1], so perhaps should not suffix a part count.
+     *
+     * for the present, it appears safe to accept both forms regardless of the
+     * checksum algorithm.
+     *
+     * [1] https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+     */
+
+    if (! supplied_cksum.empty()) {
+      const std::string_view acm = *armored_cksum;
+      const std::string_view scm = supplied_cksum;
+      if (scm != acm) {
+        auto c_len = acm.length();
+        if (cksum->composite()) {
+          auto parts_suffix = fmt::format("-{}", parts->parts.size());
+          c_len -= parts_suffix.length();
+        }
+        auto c_res = scm.compare(0, c_len, acm, 0, c_len);
+        if (c_res != 0) {
+          ldpp_dout_fmt(this, 4,
+                        "{} content checksum mismatch"
+                        "\n\tcalculated={} != \n\texpected={}",
+                        hdr_cksum.header_name(), armored_cksum, supplied_cksum);
+          op_ret = -ERR_BAD_DIGEST;
+          return;
+        }
       }
     }
 
@@ -7418,7 +7523,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
     return;
   }
 
-  obj->set_atomic();
+  obj->set_atomic(true);
 
   std::string version_id; // empty
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
@@ -7585,7 +7690,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
 
     bucket_owner.id = bucket->get_info().owner;
     std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(path.obj_key);
-    obj->set_atomic();
+    obj->set_atomic(true);
 
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
     del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
@@ -7602,8 +7707,9 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
       req_info req = s->info;
       forward_req_info(dpp, s->cct, req, path.bucket_name);
 
+      rgw_err err; // unused
       ret = rgw_forward_request_to_master(dpp, *s->penv.site, s->owner.id,
-                                          nullptr, nullptr, req, y);
+                                          nullptr, nullptr, req, err, y);
       if (ret < 0) {
         goto delop_fail;
       }
@@ -7859,7 +7965,7 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path, optional_yield y)
     forward_req_info(this, s->cct, req, bucket_name);
 
     ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                        &in_data, &jp, req, y);
+                                        &in_data, &jp, req, s->err, y);
     if (ret < 0) {
       return ret;
     }
@@ -8197,7 +8303,7 @@ ssize_t RGWBulkUploadOp::AlignedStreamGetter::get_exactly(const size_t want,
 
 int RGWGetAttrs::verify_permission(optional_yield y)
 {
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s);
     if (has_s3_existing_tag || has_s3_resource_tag)
@@ -8225,7 +8331,7 @@ void RGWGetAttrs::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   op_ret = s->object->get_obj_attrs(s->yield, this);
   if (op_ret < 0) {
@@ -8281,7 +8387,7 @@ void RGWRMAttrs::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   op_ret = s->object->set_obj_attrs(this, nullptr, &attrs, y, rgw::sal::FLAG_LOG_OP);
   if (op_ret < 0) {
@@ -8536,7 +8642,7 @@ void RGWPutBucketPolicy::execute(optional_yield y)
   }
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         &data, nullptr, s->info, y);
+                                         &data, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -8663,7 +8769,7 @@ int RGWDeleteBucketPolicy::verify_permission(optional_yield y)
 void RGWDeleteBucketPolicy::execute(optional_yield y)
 {
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -8736,7 +8842,7 @@ void RGWPutBucketObjectLock::execute(optional_yield y)
   }
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         &data, nullptr, s->info, y);
+                                         &data, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -9114,7 +9220,7 @@ void RGWPutBucketPublicAccessBlock::execute(optional_yield y)
   }
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         &data, nullptr, s->info, y);
+                                         &data, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -9196,7 +9302,7 @@ int RGWDeleteBucketPublicAccessBlock::verify_permission(optional_yield y)
 void RGWDeleteBucketPublicAccessBlock::execute(optional_yield y)
 {
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -9252,7 +9358,7 @@ void RGWPutBucketEncryption::execute(optional_yield y)
   }
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         &data, nullptr, s->info, y);
+                                         &data, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -9307,7 +9413,7 @@ int RGWDeleteBucketEncryption::verify_permission(optional_yield y)
 void RGWDeleteBucketEncryption::execute(optional_yield y)
 {
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                         nullptr, nullptr, s->info, y);
+                                         nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;

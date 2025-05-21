@@ -1021,6 +1021,11 @@ struct OSDShard {
 
   ContextQueue context_queue;
 
+  //This is an extent cache for the erasure coding. Specifically, this acts as
+  //a least-recently-used cache invalidator, allowing for cache shards to last
+  //longer than the most recent IO in each object.
+  ECExtentCache::LRU ec_extent_cache_lru;
+
   void _attach_pg(OSDShardPGSlot *slot, PG *pg);
   void _detach_pg(OSDShardPGSlot *slot);
 
@@ -1206,6 +1211,12 @@ public:
    */
   static CompatSet get_osd_compat_set();
 
+  /**
+   * lookup_ec_extent_cache_lru()
+   * @param pgid -
+   * @return extent cache for LRU
+   */
+  ECExtentCache::LRU &lookup_ec_extent_cache_lru(spg_t pgid) const;
 
 private:
   class C_Tick;
@@ -1669,13 +1680,24 @@ protected:
  protected:
 
   // -- osd map --
-  // TODO: switch to std::atomic<OSDMapRef> when C++20 will be available.
-  OSDMapRef       _osdmap;
+#ifdef __cpp_lib_atomic_shared_ptr
+  std::atomic<OSDMapRef> _osdmap;
+#else
+  OSDMapRef _osdmap;
+#endif
   void set_osdmap(OSDMapRef osdmap) {
+#ifdef __cpp_lib_atomic_shared_ptr
+    _osdmap.store(osdmap);
+#else
     std::atomic_store(&_osdmap, osdmap);
+#endif
   }
   OSDMapRef get_osdmap() const {
+#ifdef __cpp_lib_atomic_shared_ptr
+    return _osdmap.load();
+#else
     return std::atomic_load(&_osdmap);
+#endif
   }
   epoch_t get_osdmap_epoch() const {
     // XXX: performance?

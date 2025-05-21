@@ -15,16 +15,18 @@
 #ifndef CEPH_MDS_MUTATION_H
 #define CEPH_MDS_MUTATION_H
 
+#include <list>
+#include <map>
 #include <optional>
+#include <ostream>
+#include <set>
 #include <unordered_map>
+#include <vector>
 
 #include "include/interval_set.h"
 #include "include/elist.h"
 #include "include/filepath.h"
 
-#include "MDSContext.h"
-
-#include "SimpleLock.h"
 #include "Capability.h"
 
 #include "common/StackStringStream.h"
@@ -38,8 +40,10 @@ class CInode;
 class CDir;
 class CDentry;
 class MDSCacheObject;
+class MDSContext;
 class Session;
 class ScatterLock;
+class SimpleLock;
 struct sr_t;
 struct MDLockCache;
 
@@ -79,15 +83,7 @@ public:
       return lock < r.lock;
     }
 
-    void print(std::ostream& out) const {
-      CachedStackStringStream css;
-      *css << "0x" << std::hex << flags;
-      out << "LockOp(l=" << *lock << ",f=" << css->strv();
-      if (wrlock_target != MDS_RANK_NONE) {
-        out << ",wt=" << wrlock_target;
-      }
-      out << ")";
-    }
+    void print(std::ostream& out) const;
 
     SimpleLock* lock;
     mutable unsigned flags;
@@ -348,7 +344,7 @@ struct MDRequestImpl : public MutationImpl {
     Context *peer_commit = nullptr;
     ceph::buffer::list rollback_bl;
 
-    MDSContext::vec waiting_for_finish;
+    std::vector<MDSContext*> waiting_for_finish;
 
     std::map<inodeno_t, metareqid_t> quiesce_ops;
 

@@ -63,6 +63,7 @@ namespace rgw { namespace cksum {
   typedef TDigest<ceph::crypto::SHA1> SHA1;
   typedef TDigest<ceph::crypto::SHA256> SHA256;
   typedef TDigest<ceph::crypto::SHA512> SHA512;
+  typedef TDigest<rgw::digest::Crc64Nvme> Crc64Nvme;
 
   typedef boost::variant<boost::blank,
 			 Blake3,
@@ -71,7 +72,8 @@ namespace rgw { namespace cksum {
 			 XXH3,
 			 SHA1,
 			 SHA256,
-			 SHA512> DigestVariant;
+			 SHA512,
+			 Crc64Nvme> DigestVariant;
 
   struct get_digest_ptr : public boost::static_visitor<Digest*>
   {
@@ -84,6 +86,7 @@ namespace rgw { namespace cksum {
     Digest* operator()(SHA1& digest) const { return &digest; }
     Digest* operator()(SHA256& digest) const { return &digest; }
     Digest* operator()(SHA512& digest) const { return &digest; }
+    Digest* operator()(Crc64Nvme& digest) const { return &digest; }
   };
 
   static inline Digest* get_digest(DigestVariant& ev)
@@ -105,6 +108,9 @@ namespace rgw { namespace cksum {
       break;
     case Type::crc32c:
       return Crc32c();
+      break;
+    case Type::crc64nvme:
+      return Crc64Nvme();
       break;
     case Type::xxh3:
       return XXH3();

@@ -412,7 +412,8 @@ SnapTrimObjSubEvent::start()
     obc_manager, RWState::RWWRITE
   ).handle_error_interruptible(
     remove_or_update_iertr::pass_further{},
-    crimson::ct_error::assert_all{"unexpected error in SnapTrimObjSubEvent"}
+    crimson::ct_error::assert_all{fmt::format(
+      "{} error SnapTrimObjSubEvent::snap_trim_obj_subevent_ret_t with {}", *this, coid).c_str()}
   );
 
   logger().debug("{}: got obc={}", *this, obc_manager.get_obc()->get_oid());

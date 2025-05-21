@@ -50,7 +50,7 @@
     bi put                           store bucket index object entries
     bi list                          list raw bucket index entries
     bi purge                         purge bucket index entries
-    object rm                        remove object
+    object rm                        remove object; include --yes-i-really-mean-it to force removal from bucket index
     object put                       put object
     object stat                      stat an object for its metadata
     object unlink                    unlink object from bucket index
@@ -162,6 +162,8 @@
     datalog trim                     trim data log
     datalog status                   read data log status
     datalog type                     change datalog type to --log_type={fifo,omap}
+    datalog semaphore list           List recovery semaphores
+    datalog semaphore reset          Reset recovery semaphore (use marker)
     orphans find                     deprecated -- init and run search for leaked rados objects (use job-id, pool)
     orphans finish                   deprecated -- clean up search for leaked rados objects
     orphans list-jobs                deprecated -- list the current job-ids for orphans search
@@ -249,6 +251,8 @@
      --end-date=<date>                 end date in the format yyyy-mm-dd
      --bucket-id=<bucket-id>           bucket id
      --bucket-new-name=<bucket>        for bucket link: optional new name
+     --count=<count>                   optional for:
+                                         datalog semaphore reset
      --shard-id=<shard-id>             optional for:
                                          mdlog list
                                          data sync status

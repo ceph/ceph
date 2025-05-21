@@ -81,7 +81,7 @@ click on `New issue`_.
 Slack
 -----
 
-Ceph's Slack is https://ceph-storage.slack.com/.
+.. _`Ceph's Slack`: https://join.slack.com/t/ceph-storage/shared_invite/zt-32hkefbs5-f6qZDZLd5U8CYj7drBTHFw
 
 .. _mailing-list:
 

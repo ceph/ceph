@@ -98,6 +98,7 @@ RBD_MIRROR_IMAGE_MODE_SNAPSHOT = _RBD_MIRROR_IMAGE_MODE_SNAPSHOT
 RBD_MIRROR_IMAGE_DISABLING = _RBD_MIRROR_IMAGE_DISABLING
 RBD_MIRROR_IMAGE_ENABLED = _RBD_MIRROR_IMAGE_ENABLED
 RBD_MIRROR_IMAGE_DISABLED = _RBD_MIRROR_IMAGE_DISABLED
+RBD_MIRROR_IMAGE_CREATING = _RBD_MIRROR_IMAGE_CREATING
 
 MIRROR_IMAGE_STATUS_STATE_UNKNOWN = _MIRROR_IMAGE_STATUS_STATE_UNKNOWN
 MIRROR_IMAGE_STATUS_STATE_ERROR = _MIRROR_IMAGE_STATUS_STATE_ERROR
@@ -270,6 +271,12 @@ class ImageHasSnapshots(OSError):
                 "RBD image has snapshots (%s)" % message, errno)
 
 
+class ImageMemberOfGroup(OSError):
+    def __init__(self, message, errno=None):
+        super(ImageMemberOfGroup, self).__init__(
+                "RBD image is member of group (%s)" % message, errno)
+
+
 class FunctionNotSupported(OSError):
     def __init__(self, message, errno=None):
         super(FunctionNotSupported, self).__init__(
@@ -319,6 +326,7 @@ cdef errno_to_exception = {
     errno.EROFS      : ReadOnlyImage,
     errno.EBUSY      : ImageBusy,
     errno.ENOTEMPTY  : ImageHasSnapshots,
+    errno.EMLINK     : ImageMemberOfGroup,
     errno.ENOSYS     : FunctionNotSupported,
     errno.EDOM       : ArgumentOutOfRange,
     errno.ESHUTDOWN  : ConnectionShutdown,
@@ -338,6 +346,7 @@ cdef group_errno_to_exception = {
     errno.EROFS      : ReadOnlyImage,
     errno.EBUSY      : ImageBusy,
     errno.ENOTEMPTY  : ImageHasSnapshots,
+    errno.EMLINK     : ImageMemberOfGroup,
     errno.ENOSYS     : FunctionNotSupported,
     errno.EDOM       : ArgumentOutOfRange,
     errno.ESHUTDOWN  : ConnectionShutdown,

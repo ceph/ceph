@@ -1,3 +1,5 @@
+.. _radosgw-config-ref:
+
 ======================================
  Ceph Object Gateway Config Reference
 ======================================
@@ -260,7 +262,7 @@ SSE-S3 Settings
 
 
 QoS settings
-------------
+============
 
 .. versionadded:: Nautilus
 

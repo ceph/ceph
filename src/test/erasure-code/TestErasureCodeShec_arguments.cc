@@ -39,7 +39,7 @@ unsigned int count_num = 0;
 unsigned int unexpected_count = 0;
 unsigned int value_count = 0;
 
-map<set<int>,set<set<int> > > shec_table;
+map<shard_id_set,set<shard_id_set>> shec_table;
 
 constexpr int getint(std::initializer_list<int> is) {
   int a = 0;
@@ -50,8 +50,8 @@ constexpr int getint(std::initializer_list<int> is) {
 }
 
 void create_table_shec432() {
-  set<int> table_key,vec_avails;
-  set<set<int> > table_value;
+  shard_id_set table_key, vec_avails;
+  set<shard_id_set> table_value;
 
   for (int want_count = 0; want_count < 7; ++want_count) {
     for (unsigned want = 1; want < (1<<7); ++want) {
@@ -63,7 +63,7 @@ void create_table_shec432() {
       {
         for (int i = 0; i < 7; ++i) {
           if (want & (1 << i)) {
-            table_key.insert(i);
+            table_key.insert(shard_id_t(i));
           }
         }
       }
@@ -110,7 +110,7 @@ void create_table_shec432() {
         vec_avails.clear();
         for (int j = 0; j < 7; ++j) {
           if (vec[i] & (1 << j)) {
-            vec_avails.insert(j);
+            vec_avails.insert(shard_id_t(j));
           }
         }
         table_value.insert(vec_avails);
@@ -120,17 +120,17 @@ void create_table_shec432() {
   }
 }
 
-bool search_table_shec432(set<int> want_to_read, set<int> available_chunks) {
-  set<set<int> > tmp;
-  set<int> settmp;
+bool search_table_shec432(shard_id_set want_to_read, shard_id_set available_chunks) {
+  set<shard_id_set > tmp;
+  shard_id_set settmp;
   bool found;
 
   tmp = shec_table.find(want_to_read)->second;
-  for (set<set<int> >::iterator itr = tmp.begin();itr != tmp.end(); ++itr) {
+  for (set<shard_id_set >::iterator itr = tmp.begin();itr != tmp.end(); ++itr) {
     found = true;
     value_count = 0;
     settmp = *itr;
-    for (set<int>::iterator setitr = settmp.begin();setitr != settmp.end(); ++setitr) {
+    for (shard_id_set::const_iterator setitr = settmp.begin();setitr != settmp.end(); ++setitr) {
       if (!available_chunks.count(*setitr)) {
         found = false;
       }
@@ -143,6 +143,7 @@ bool search_table_shec432(set<int> want_to_read, set<int> available_chunks) {
   return false;
 }
 
+IGNORE_DEPRECATED
 TEST(ParameterTest, combination_all)
 {
   const unsigned int kObjectSize = 128;
@@ -345,6 +346,7 @@ TEST(ParameterTest, combination_all)
   delete shec;
   delete profile;
 }
+END_IGNORE_DEPRECATED
 
 int main(int argc, char **argv)
 {

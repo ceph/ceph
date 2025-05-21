@@ -15,6 +15,7 @@
 #ifndef CEPH_MDS_SERVER_H
 #define CEPH_MDS_SERVER_H
 
+#include "Mutation.h"
 #include "mds/mdstypes.h" // for xattr_map
 
 #include <common/DecayCounter.h>
@@ -22,15 +23,15 @@
 
 #include "include/common_fwd.h"
 #include "include/Context.h" // for C_GatherBase
+#include "include/mempool.h"
 
-#include "CInode.h"
-#include "Mutation.h"
-
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
 #else
 #include "common/perf_counters_collection.h"
 #endif
+
+#include <boost/intrusive_ptr.hpp>
 
 #include <map>
 #include <memory>
@@ -40,6 +41,9 @@
 
 using namespace std::literals::string_view_literals;
 
+class CDentry;
+class CDir;
+class CInode;
 class OSDMap;
 class LogEvent;
 class EMetaBlob;
@@ -48,6 +52,10 @@ class LogSegment;
 class MDCache;
 class MDLog;
 class MDSContext;
+class C_MDSInternalNoop;
+using MDSGather = C_GatherBase<MDSContext, C_MDSInternalNoop>;
+using MDSGatherBuilder = C_GatherBuilderBase<MDSContext, MDSGather>;
+class MDSLogContextBase;
 class MDSRank;
 class Session;
 struct SnapInfo;
@@ -63,6 +71,14 @@ class MClientReclaim;
 class MClientReclaimReply;
 class MLock;
 class MMDSPeerRequest;
+class filepath;
+
+template<template<typename> class Allocator> struct inode_t;
+using mempool_inode = inode_t<mempool::mds_co::pool_allocator>;
+using inode_const_ptr = std::shared_ptr<const mempool_inode>;
+using mempool_xattr_map = xattr_map<mempool::mds_co::pool_allocator>; // FIXME bufferptr not in mempool
+using xattr_map_ptr = std::shared_ptr<mempool_xattr_map>;
+using xattr_map_const_ptr = std::shared_ptr<const mempool_xattr_map>;
 
 enum {
   l_mdss_first = 1000,
@@ -101,6 +117,10 @@ enum {
   l_mdss_req_symlink_latency,
   l_mdss_req_unlink_latency,
   l_mdss_cap_revoke_eviction,
+  l_mdss_cache_trim_throttle,
+  l_mdss_session_recall_throttle,
+  l_mdss_session_recall_throttle2o,
+  l_mdss_global_recall_throttle,
   l_mdss_cap_acquisition_throttle,
   l_mdss_req_getvxattr_latency,
   l_mdss_req_file_blockdiff_latency,
@@ -121,11 +141,7 @@ public:
   };
 
   explicit Server(MDSRank *m, MetricsHandler *metrics_handler);
-  ~Server() {
-    g_ceph_context->get_perfcounters_collection()->remove(logger);
-    delete logger;
-    delete reconnect_done;
-  }
+  ~Server();
 
   void create_logger();
 
@@ -302,6 +318,7 @@ public:
   void handle_client_unlink(const MDRequestRef& mdr);
   bool _dir_is_nonempty_unlocked(const MDRequestRef& mdr, CInode *rmdiri);
   bool _dir_is_nonempty(const MDRequestRef& mdr, CInode *rmdiri);
+  bool _dir_has_snaps(const MDRequestRef& mdr, CInode *diri);
   void _unlink_local(const MDRequestRef& mdr, CDentry *dn, CDentry *straydn);
   void _unlink_local_finish(const MDRequestRef& mdr,
 			    CDentry *dn, CDentry *straydn,
@@ -426,15 +443,15 @@ private:
     // reject xattr request (set or remove), zero to proceed. handlers
     // may parse xattr value for verification if needed and have an
     // option to store custom data in XattrOp::xinfo.
-    int (Server::*validate)(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+    int (Server::*validate)(CInode *cur, const xattr_map_const_ptr xattrs,
                             XattrOp *xattr_op);
 
     // set xattr for an inode in xattr_map
-    void (Server::*setxattr)(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+    void (Server::*setxattr)(CInode *cur, xattr_map_ptr xattrs,
                              const XattrOp &xattr_op);
 
     // remove xattr for an inode from xattr_map
-    void (Server::*removexattr)(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+    void (Server::*removexattr)(CInode *cur, xattr_map_ptr xattrs,
                                 const XattrOp &xattr_op);
   };
 
@@ -444,28 +461,28 @@ private:
   const XattrHandler* get_xattr_or_default_handler(std::string_view xattr_name);
 
   // generic variant to set/remove xattr in/from xattr_map
-  int xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+  int xattr_validate(CInode *cur, const xattr_map_const_ptr xattrs,
                      const std::string &xattr_name, int op, int flags);
-  void xattr_set(InodeStoreBase::xattr_map_ptr xattrs, const std::string &xattr_name,
+  void xattr_set(xattr_map_ptr xattrs, const std::string &xattr_name,
                  const bufferlist &xattr_value);
-  void xattr_rm(InodeStoreBase::xattr_map_ptr xattrs, const std::string &xattr_name);
+  void xattr_rm(xattr_map_ptr xattrs, const std::string &xattr_name);
 
   // default xattr handlers
-  int default_xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+  int default_xattr_validate(CInode *cur, const xattr_map_const_ptr xattrs,
                              XattrOp *xattr_op);
-  void default_setxattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+  void default_setxattr_handler(CInode *cur, xattr_map_ptr xattrs,
                                 const XattrOp &xattr_op);
-  void default_removexattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+  void default_removexattr_handler(CInode *cur, xattr_map_ptr xattrs,
                                    const XattrOp &xattr_op);
 
   // mirror info xattr handler
   int parse_mirror_info_xattr(const std::string &name, const std::string &value,
                               std::string &cluster_id, std::string &fs_id);
-  int mirror_info_xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+  int mirror_info_xattr_validate(CInode *cur, const xattr_map_const_ptr xattrs,
                                  XattrOp *xattr_op);
-  void mirror_info_setxattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+  void mirror_info_setxattr_handler(CInode *cur, xattr_map_ptr xattrs,
                                     const XattrOp &xattr_op);
-  void mirror_info_removexattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+  void mirror_info_removexattr_handler(CInode *cur, xattr_map_ptr xattrs,
                                        const XattrOp &xattr_op);
 
   static bool is_ceph_vxattr(std::string_view xattr_name) {

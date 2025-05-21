@@ -1727,6 +1727,7 @@ int ECBackendL::objects_get_attrs(
 }
 
 int ECBackendL::be_deep_scrub(
+  const Scrub::ScrubCounterSet& io_counters,
   const hobject_t &poid,
   ScrubMap &map,
   ScrubMapBuilder &pos,
@@ -1734,10 +1735,6 @@ int ECBackendL::be_deep_scrub(
 {
   dout(10) << __func__ << " " << poid << " pos " << pos << dendl;
   int r;
-
-  uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
-                           CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
-                           CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE;
 
   utime_t sleeptime;
   sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
@@ -1754,6 +1751,8 @@ int ECBackendL::be_deep_scrub(
   if (stride % sinfo.get_chunk_size())
     stride += sinfo.get_chunk_size() - (stride % sinfo.get_chunk_size());
 
+  auto& perf_logger = *(get_parent()->get_logger());
+  perf_logger.inc(io_counters.read_cnt);
   bufferlist bl;
   r = switcher->store->read(
     switcher->ch,
@@ -1761,7 +1760,7 @@ int ECBackendL::be_deep_scrub(
       poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     pos.data_pos,
     stride, bl,
-    fadvise_flags);
+    ECCommonL::scrub_fadvise_flags);
   if (r < 0) {
     dout(20) << __func__ << "  " << poid << " got "
 	     << r << " on read, read_error" << dendl;
@@ -1778,6 +1777,7 @@ int ECBackendL::be_deep_scrub(
   if (r > 0) {
     pos.data_hash << bl;
   }
+  perf_logger.inc(io_counters.read_bytes, r);
   pos.data_pos += r;
   if (r == (int)stride) {
     return -EINPROGRESS;

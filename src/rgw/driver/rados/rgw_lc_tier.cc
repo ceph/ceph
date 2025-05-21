@@ -822,10 +822,8 @@ void RGWLCCloudStreamPut::send_ready(const DoutPrefixProvider *dpp, const rgw_re
 }
 
 void RGWLCCloudStreamPut::handle_headers(const map<string, string>& headers) {
-  for (const auto& h : headers) {
-    if (h.first == "ETAG") {
-      etag = h.second;
-    }
+  if (auto h = headers.find("ETAG"); h != headers.end()) {
+    etag = h->second;
   }
 }
 
@@ -924,7 +922,7 @@ static int cloud_tier_plain_transfer(RGWLCCloudTierCtx& tier_ctx) {
 
   rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
 
-  tier_ctx.obj->set_atomic();
+  tier_ctx.obj->set_atomic(true);
 
   /* Prepare Read from source */
   /* TODO: Define readf, writef as stack variables. For some reason,
@@ -968,7 +966,7 @@ static int cloud_tier_send_multipart_part(RGWLCCloudTierCtx& tier_ctx,
 
   rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
 
-  tier_ctx.obj->set_atomic();
+  tier_ctx.obj->set_atomic(true);
 
   /* TODO: Define readf, writef as stack variables. For some reason,
    * when used as stack variables (esp., readf), the transition seems to

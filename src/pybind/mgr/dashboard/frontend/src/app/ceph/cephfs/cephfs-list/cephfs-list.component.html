@@ -20,3 +20,10 @@
     </cd-table-actions>
   </div>
 </cd-table>
+
+<ng-template #deleteTpl>
+  <cd-alert-panel type="danger"
+                  i18n>
+    This will remove its data and metadata pools. It'll also remove the MDS daemon associated with the volume.
+  </cd-alert-panel>
+</ng-template>

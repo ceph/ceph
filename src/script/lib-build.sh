@@ -32,6 +32,16 @@ function ci_debug() {
     fi
 }
 
+function wrap_sudo() {
+    # set or unset the SUDO env var so that scripts already running
+    # as root do not call into sudo to escalate privs
+    if test $(id -u) != 0 ; then
+        SUDO=sudo
+    else
+        SUDO=""
+    fi
+}
+
 # get_processors returns 1/2 the value of the value returned by
 # the nproc program OR the value of the environment variable NPROC
 # allowing the user to tune the number of cores visible to the

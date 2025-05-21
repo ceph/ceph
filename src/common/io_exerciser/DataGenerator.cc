@@ -226,6 +226,8 @@ bool HeaderedSeededRandomGenerator::validate(bufferlist& bufferlist,
   }
 
   if (!invalid_block_offsets.empty()) {
+    dout(0) << "Miscompare for read of " << m_model.get_oid() <<
+      " offset=" << offset << " length=" << length << dendl;
     printDebugInformationForOffsets(offset, invalid_block_offsets, bufferlist);
   }
 

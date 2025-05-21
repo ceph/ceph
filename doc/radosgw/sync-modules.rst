@@ -32,7 +32,7 @@ for configuring any sync plugin
    Archive Sync Module <archive-sync-module>
 
 .. note ``rgw`` is the default sync plugin and there is no need to explicitly
-   configure this
+   configure this.
 
 Requirements and Assumptions
 ----------------------------
@@ -50,25 +50,24 @@ Configuring Sync Modules
 
 Create the third zone similar to the :ref:`multisite` docs, for example
 
-::
+.. prompt:: bash #
 
-   # radosgw-admin zone create --rgw-zonegroup=us --rgw-zone=us-east-es \
-   --access-key={system-key} --secret={secret} --endpoints=http://rgw-es:80
-
+   radosgw-admin zone create --rgw-zonegroup=us --rgw-zone=us-east-es \
+                               --access-key={system-key} --secret={secret} --endpoints=http://rgw-es:80
 
 
 A sync module can be configured for this zone via the following
 
-::
+.. prompt:: bash #
 
-   # radosgw-admin zone modify --rgw-zone={zone-name} --tier-type={tier-type} --tier-config={set of key=value pairs}
+   radosgw-admin zone modify --rgw-zone={zone-name} --tier-type={tier-type} --tier-config={set of key=value pairs}
 
 
 For example in the ``elasticsearch`` sync module
 
-::
+.. prompt:: bash #
 
-   # radosgw-admin zone modify --rgw-zone={zone-name} --tier-type=elasticsearch \
+   radosgw-admin zone modify --rgw-zone={zone-name} --tier-type=elasticsearch \
                                --tier-config=endpoint=http://localhost:9200,num_shards=10,num_replicas=1
 
 
@@ -76,18 +75,17 @@ For the various supported tier-config options refer to the `elasticsearch sync m
 
 Finally update the period
 
+.. prompt:: bash #
 
-::
-
-    # radosgw-admin period update --commit
+   radosgw-admin period update --commit
 
 
 Now start the radosgw in the zone
 
-::
+.. prompt:: bash #
 
-    # systemctl start ceph-radosgw@rgw.`hostname -s`
-    # systemctl enable ceph-radosgw@rgw.`hostname -s`
+   systemctl start ceph-radosgw@rgw.`hostname -s`
+   systemctl enable ceph-radosgw@rgw.`hostname -s`
 
 
 

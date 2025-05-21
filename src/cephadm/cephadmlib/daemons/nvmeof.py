@@ -211,12 +211,29 @@ class CephNvmeof(ContainerDaemonForm):
         return cmd.split()
 
     def get_sysctl_settings(self) -> List[str]:
-        if 'spdk_mem_size' not in self.files:
-            return [
-                'vm.nr_hugepages = 4096',
-            ]
-        else:
+        if 'spdk_mem_size' in self.files:
             return []
+
+        if 'spdk_huge_pages' in self.files:
+            try:
+                val = self.files['spdk_huge_pages']
+                huge_pages_value = int(val)
+                logger.debug(
+                    f'Found SPDK huge pages value {huge_pages_value}'
+                )
+                return [
+                    f'vm.nr_hugepages = {huge_pages_value}',
+                ]
+            except KeyError:
+                logger.exception('Failure getting SPDK huge pages value')
+            except ValueError:
+                logger.error(
+                    f'Invalid SPDK huge pages value {self.files[val]}'
+                )
+
+        return [
+            'vm.nr_hugepages = 4096',
+        ]
 
     def container(self, ctx: CephadmContext) -> CephContainer:
         ctr = daemon_to_container(ctx, self)
@@ -239,3 +256,11 @@ class CephNvmeof(ContainerDaemonForm):
         args.extend(['--cap-add=CAP_SYS_NICE'])
         if 'spdk_mem_size' not in self.files:
             args.extend(['--cap-add=SYS_ADMIN'])
+            if 'spdk_huge_pages' in self.files:
+                try:
+                    huge_pages_value = int(self.files['spdk_huge_pages'])
+                    args.extend(['-e', f'HUGEPAGES={huge_pages_value}'])
+                except KeyError:
+                    pass
+                except ValueError:
+                    pass

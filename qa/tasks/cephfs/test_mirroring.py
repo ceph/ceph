@@ -686,7 +686,7 @@ class TestMirroring(CephFSTestCase):
 
         # create a bunch of files in a directory to snap
         self.mount_a.run_shell(["mkdir", "d0"])
-        for i in range(8):
+        for i in range(100):
             filename = f'file.{i}'
             self.mount_a.write_n_mb(os.path.join('d0', filename), 1024)
 
@@ -1625,4 +1625,54 @@ class TestMirroring(CephFSTestCase):
                    snap_name == res[dir_name]['last_synced_snap']['name'] and \
                    expected_snap_count == res[dir_name]['snaps_synced']):
                     break
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_sync_already_existing_snapshots(self):
+        """
+        That mirroring syncs the already existing snapshot correctly.
+        """
+        log.debug('reconfigure client auth caps')
+        self.get_ceph_cmd_result(
+            'auth', 'caps', "client.{0}".format(self.mount_b.client_id),
+                'mds', 'allow rw',
+                'mon', 'allow r',
+                'osd', 'allow rw pool={0}, allow rw pool={1}'.format(
+                    self.backup_fs.get_data_pool_name(),
+                    self.backup_fs.get_data_pool_name()))
+
+        log.debug(f'mounting filesystem {self.secondary_fs_name}')
+        self.mount_b.umount_wait()
+        self.mount_b.mount_wait(cephfs_name=self.secondary_fs_name)
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        peer_spec = "client.mirror_remote@ceph"
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec, self.secondary_fs_name)
+
+        dir_name = 'dir'
+
+        # make some change in the fs and take a snapshot
+        snap_a = "snap_a"
+        self.mount_a.run_shell(['mkdir', '-p', f'{dir_name}/d1'])
+        self.mount_a.write_n_mb(os.path.join(f'{dir_name}/d1', 'file1'), 1)
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/{snap_a}'])
+
+        # make some more changes in the fs and take another snapshot
+        snap_b = "snap_b"
+        self.mount_a.write_n_mb(os.path.join(f'{dir_name}/d1', 'file2'), 1)
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/{snap_b}'])
+
+        # make another change in the fs and don't take snapshot
+        self.mount_a.run_shell(['rm', f'{dir_name}/d1/file2'])
+
+        # add the directory for mirroring
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+
+        time.sleep(60)
+
+        # confirm snapshot synced and status 'idle'
+        expected_snap_count = 2
+        self.check_peer_status_idle(self.primary_fs_name, self.primary_fs_id,
+                                    peer_spec, f'/{dir_name}', snap_b, expected_snap_count)
+        self.verify_snapshot(dir_name, snap_a)
+        self.verify_snapshot(dir_name, snap_b)
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)

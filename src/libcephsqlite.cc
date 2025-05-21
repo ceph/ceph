@@ -52,7 +52,7 @@ SQLITE_EXTENSION_INIT1
 #include "include/libcephsqlite.h"
 #include "SimpleRADOSStriper.h"
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
 #else
 #include "common/perf_counters_collection.h"

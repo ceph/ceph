@@ -22,7 +22,7 @@ class CctCleaner {
 public:
   CctCleaner(CephContext* _cct) : cct(_cct) {}
   ~CctCleaner() { 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
     delete cct; 
 #else
     cct->put(); 
@@ -42,7 +42,7 @@ public:
     return 0;
   };
 
-  bool is_admin_of(const rgw_owner& o) const override {
+  bool is_admin() const override {
     return false;
   }
 

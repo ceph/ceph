@@ -23,21 +23,21 @@
 #include "include/buffer_fwd.h"
 #include "include/lru.h"
 #include "include/elist.h"
-#include "include/filepath.h"
 #include <boost/intrusive/set.hpp>
 
-#include "BatchOp.h"
 #include "MDSCacheObject.h"
-#include "MDSContext.h"
 #include "SimpleLock.h"
 #include "LocalLockC.h"
-#include "ScrubHeader.h"
 
+class filepath;
+class BatchOp;
 class CInode;
 class CDir;
 class Locker;
 class CDentry;
 class LogSegment;
+class MDSContext;
+
 class Session;
 
 struct ClientLease : public boost::intrusive::set_base_hook<>
@@ -132,35 +132,13 @@ public:
 
   CDentry(std::string_view n, __u32 h,
           mempool::mds_co::string alternate_name,
-	  snapid_t f, snapid_t l) :
-    hash(h),
-    first(f), last(l),
-    item_dirty(this),
-    lock(this, &lock_type),
-    versionlock(this, &versionlock_type),
-    name(n),
-    alternate_name(std::move(alternate_name))
-  {}
+	  snapid_t f, snapid_t l);
   CDentry(std::string_view n, __u32 h,
           mempool::mds_co::string alternate_name,
           inodeno_t ino, inodeno_t referent_ino,
-	  unsigned char dt, snapid_t f, snapid_t l) :
-    hash(h),
-    first(f), last(l),
-    item_dirty(this),
-    lock(this, &lock_type),
-    versionlock(this, &versionlock_type),
-    name(n),
-    alternate_name(std::move(alternate_name))
-  {
-    linkage.remote_ino = ino;
-    linkage.remote_d_type = dt;
-    linkage.referent_ino = referent_ino;
-  }
+	  unsigned char dt, snapid_t f, snapid_t l);
 
-  ~CDentry() override {
-    ceph_assert(batch_ops.empty());
-  }
+  ~CDentry() override;
 
   std::string_view pin_name(int p) const override {
     switch (p) {

@@ -8,7 +8,7 @@
 #include "common/config.h"
 #include "rgw_dmclock.h"
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
 #else
 #include "common/perf_counters_collection.h"

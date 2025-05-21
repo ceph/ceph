@@ -42,7 +42,7 @@ bool decode_client_meta(const cls::journal::Client& client,
     return false;
   }
 
-  auto local_client_meta = boost::get<librbd::journal::MirrorPeerClientMeta>(
+  auto local_client_meta = std::get_if<librbd::journal::MirrorPeerClientMeta>(
     &client_data.client_meta);
   if (local_client_meta == nullptr) {
     derr << "unknown peer registration" << dendl;

@@ -157,7 +157,7 @@ struct TestMockCryptoCryptoObjectDispatch : public TestMockFixture {
     EXPECT_CALL(*mock_image_ctx->io_object_dispatcher, send(_))
             .WillOnce(Invoke([this, extents,
                               version](io::ObjectDispatchSpec* spec) {
-                auto* read = boost::get<io::ObjectDispatchSpec::ReadRequest>(
+                auto* read = std::get_if<io::ObjectDispatchSpec::ReadRequest>(
                         &spec->request);
                 ASSERT_TRUE(read != nullptr);
 
@@ -193,7 +193,7 @@ struct TestMockCryptoCryptoObjectDispatch : public TestMockFixture {
     EXPECT_CALL(*mock_image_ctx->io_object_dispatcher, send(_))
             .WillOnce(Invoke([this, object_off, data, write_flags,
                               assert_version](io::ObjectDispatchSpec* spec) {
-                auto* write = boost::get<io::ObjectDispatchSpec::WriteRequest>(
+                auto* write = std::get_if<io::ObjectDispatchSpec::WriteRequest>(
                         &spec->request);
                 ASSERT_TRUE(write != nullptr);
 
@@ -210,7 +210,7 @@ struct TestMockCryptoCryptoObjectDispatch : public TestMockFixture {
   void expect_object_write_same() {
     EXPECT_CALL(*mock_image_ctx->io_object_dispatcher, send(_))
             .WillOnce(Invoke([this](io::ObjectDispatchSpec* spec) {
-                auto* write_same = boost::get<
+                auto* write_same = std::get_if<
                         io::ObjectDispatchSpec::WriteSameRequest>(
                                 &spec->request);
                 ASSERT_TRUE(write_same != nullptr);

@@ -4,6 +4,12 @@ if(CMAKE_SIZEOF_VOID_P EQUAL 8)
   set(sysctl_pid_max "kernel.pid_max = 4194304")
 endif()
 
-configure_file(90-ceph-osd.conf.in
-  ${CMAKE_CURRENT_SOURCE_DIR}/90-ceph-osd.conf
-  @ONLY)
+if(WITH_CRIMSON)
+  configure_file(90-crimson-osd.conf.in
+    ${CMAKE_CURRENT_SOURCE_DIR}/90-ceph-osd.conf
+    @ONLY)
+else()
+  configure_file(90-ceph-osd.conf.in
+    ${CMAKE_CURRENT_SOURCE_DIR}/90-ceph-osd.conf
+    @ONLY)
+endif()

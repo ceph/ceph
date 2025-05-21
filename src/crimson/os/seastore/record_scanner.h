@@ -30,11 +30,11 @@ public:
   ); ///< @return used budget
 
   device_off_t get_segment_off(paddr_t addr) const {
-    if (addr.get_addr_type() == paddr_types_t::SEGMENT) {
+    if (addr.is_absolute_segmented()) {
       auto& seg_addr = addr.as_seg_paddr();
       return seg_addr.get_segment_off();
     }
-    assert(addr.get_addr_type() == paddr_types_t::RANDOM_BLOCK);
+    assert(addr.is_absolute_random_block());
     auto& blk_addr = addr.as_blk_paddr();
     return blk_addr.get_device_off();
   }

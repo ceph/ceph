@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "include/expected.hpp"
 #include "rgw_http_client.h"
 
 class RGWGetDataCB;
@@ -24,6 +25,7 @@ protected:
   bufferlist response;
 
   virtual int handle_header(const std::string& name, const std::string& val);
+  virtual int handle_headers(const std::map<std::string, std::string>& headers, int http_status) { return 0; }
   void get_params_str(std::map<std::string, std::string>& extra_args, std::string& dest);
 
 public:
@@ -65,7 +67,9 @@ public:
                        param_vec_t *_headers, param_vec_t *_params,
                        std::optional<std::string> _api_name) : RGWHTTPSimpleRequest(_cct, _method, _url, _headers, _params), api_name(_api_name) {}
 
-  int forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, const req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service="");
+  // return the http status of the response or an error code from the transport
+  auto forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, const req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service="")
+    -> tl::expected<int, int>;
 };
 
 class RGWWriteDrainCB {
@@ -123,6 +127,7 @@ protected:
   bufferlist outbl;
 
   int handle_header(const std::string& name, const std::string& val) override;
+  int handle_headers(const std::map<std::string, std::string>& headers, int http_status) override;
 public:
   int send_data(void *ptr, size_t len, bool *pause) override;
   int receive_data(void *ptr, size_t len, bool *pause) override;
@@ -134,6 +139,7 @@ public:
       ReceiveCB() = default;
       virtual ~ReceiveCB() = default;
       virtual int handle_data(bufferlist& bl, bool *pause = nullptr) = 0;
+      virtual int handle_headers(const std::map<std::string, std::string>& headers, int http_status) { return 0; }
       virtual void set_extra_data_len(uint64_t len) {
         extra_data_len = len;
       }

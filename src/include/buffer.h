@@ -65,14 +65,14 @@
 
 #define CEPH_BUFFER_API
 
-#ifdef HAVE_SEASTAR
+#ifdef WITH_CRIMSON
 namespace seastar {
 template <typename T> class temporary_buffer;
 namespace net {
 class packet;
 }
 }
-#endif // HAVE_SEASTAR
+#endif // WITH_CRIMSON
 class deleter;
 
 template<typename T> class DencDumper;
@@ -149,7 +149,7 @@ struct error_code;
   ceph::unique_leakable_ptr<raw> create_small_page_aligned(unsigned len);
   ceph::unique_leakable_ptr<raw> claim_buffer(unsigned len, char *buf, deleter del);
 
-#ifdef HAVE_SEASTAR
+#ifdef WITH_CRIMSON
   /// create a raw buffer to wrap seastar cpu-local memory, using foreign_ptr to
   /// make it safe to share between cpus
   ceph::unique_leakable_ptr<buffer::raw> create(seastar::temporary_buffer<char>&& buf);
@@ -335,12 +335,12 @@ struct error_code;
     void zero(unsigned o, unsigned l, bool crc_reset = true);
     unsigned append_zeros(unsigned l);
 
-#ifdef HAVE_SEASTAR
+#ifdef WITH_CRIMSON
     /// create a temporary_buffer, copying the ptr as its deleter
     operator seastar::temporary_buffer<char>() &;
     /// convert to temporary_buffer, stealing the ptr as its deleter
     operator seastar::temporary_buffer<char>() &&;
-#endif // HAVE_SEASTAR
+#endif // WITH_CRIMSON
 
   };
 
@@ -834,6 +834,7 @@ struct error_code;
       contiguous_filler(char* const pos) : pos(pos) {}
 
     public:
+      contiguous_filler() : pos(nullptr) {}
       void advance(const unsigned len) {
 	pos += len;
       }
@@ -1105,7 +1106,7 @@ struct error_code;
       }
     }
 
-#ifdef HAVE_SEASTAR
+#ifdef WITH_CRIMSON
     /// convert the bufferlist into a network packet
     operator seastar::net::packet() &&;
 #endif

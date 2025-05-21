@@ -96,7 +96,7 @@
 
 #include "auth/none/AuthNoneClientHandler.h"
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
 #else
 #include "common/perf_counters_collection.h"
@@ -2296,7 +2296,7 @@ void Monitor::win_election(epoch_t epoch, const set<int>& active, uint64_t featu
     encode(m, bl);
     t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
   }
-
+  elector.process_pending_pings();
   finish_election();
   if (monmap->size() > 1 &&
       monmap->get_epoch() > 0) {
@@ -2349,7 +2349,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
   _finish_svc_election();
 
   logger->inc(l_mon_election_lose);
-
+  elector.process_pending_pings();
   finish_election();
 }
 
@@ -3106,7 +3106,9 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
   } else {
     ss << "  cluster:\n";
     ss << "    id:     " << monmap->get_fsid() << "\n";
-
+    if (is_stretch_mode()){
+      ss << "    stretch_mode: ENABLED\n";
+    }
     string health;
     healthmon()->get_health_status(false, nullptr, &health,
 				   "\n            ", "\n            ");
@@ -3139,7 +3141,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
       const auto mon_count = monmap->mon_info.size();
       auto mnow = ceph::mono_clock::now();
       ss << "    mon: " << spacing << mon_count << " daemons, quorum "
-	 << quorum_names << " (age " << timespan_str(mnow - quorum_since) << ")";
+	 << quorum_names << " (age " << timespan_str(mnow - quorum_since) << ")"
+   << " [leader: " << get_leader_name() << "]";
       if (quorum_names.size() != mon_count) {
 	std::list<std::string> out_of_q;
 	for (size_t i = 0; i < monmap->ranks.size(); ++i) {
@@ -4193,10 +4196,10 @@ struct AnonConnection : public Connection {
   entity_addr_t socket_addr;
 
   int send_message(Message *m) override {
-    ceph_assert(!"send_message on anonymous connection");
+    ceph_abort_msg("send_message on anonymous connection");
   }
   void send_keepalive() override {
-    ceph_assert(!"send_keepalive on anonymous connection");
+    ceph_abort_msg("send_keepalive on anonymous connection");
   }
   void mark_down() override {
     // silently ignore

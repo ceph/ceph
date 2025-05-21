@@ -24,7 +24,16 @@ ReplicatedBackend::ReplicatedBackend(pg_t pgid,
   : PGBackend{whoami.shard, coll, shard_services, dpp},
     pgid{pgid},
     whoami{whoami},
-    pg(pg)
+    pg(pg),
+    pct_timer([this, &pg]() mutable {
+      Ref<crimson::osd::PG> pgref(&pg);
+      std::ignore = interruptor::with_interruption([this] {
+	return send_pct_update();
+      }, [](std::exception_ptr ep) {
+	// nothing to do, new interval
+	return seastar::now();
+      }, pgref, pgref->get_osdmap_epoch());
+    })
 {}
 
 ReplicatedBackend::ll_read_ierrorator::future<ceph::bufferlist>
@@ -39,7 +48,8 @@ ReplicatedBackend::_read(const hobject_t& hoid,
 MURef<MOSDRepOp> ReplicatedBackend::new_repop_msg(
   const pg_shard_t &pg_shard,
   const hobject_t &hoid,
-  const bufferlist &encoded_txn,
+  bufferlist &encoded_txn_p_bl,
+  bufferlist &encoded_txn_d_bl,
   const osd_op_params_t &osd_op_p,
   epoch_t min_epoch,
   epoch_t map_epoch,
@@ -59,7 +69,13 @@ MURef<MOSDRepOp> ReplicatedBackend::new_repop_msg(
     tid,
     osd_op_p.at_version);
   if (send_op) {
-    m->set_data(encoded_txn);
+    if (encoded_txn_d_bl.length() != 0) {
+      m->set_txn_payload(encoded_txn_p_bl);
+      m->set_data(encoded_txn_d_bl);
+    } else {
+      // Pre-tentacle format - everything in data
+      m->set_data(encoded_txn_p_bl);
+    }
   } else {
     ceph::os::Transaction t;
     bufferlist bl;
@@ -90,6 +106,8 @@ ReplicatedBackend::submit_transaction(
   auto osd_op_p = std::move(opp);
   auto _new_clone = std::move(new_clone);
 
+  cancel_pct_update();
+
   const ceph_tid_t tid = shard_services.get_tid();
   auto pending_txn =
     pending_trans.try_emplace(
@@ -97,8 +115,8 @@ ReplicatedBackend::submit_transaction(
       pg_shards.size(),
       osd_op_p.at_version,
       pg.get_last_complete()).first;
-  bufferlist encoded_txn;
-  encode(txn, encoded_txn);
+  bufferlist encoded_txn_p_bl, encoded_txn_d_bl;
+  txn.encode(encoded_txn_p_bl, encoded_txn_d_bl, pg.min_peer_features());
 
   bool is_delete = false;
   for (auto &le : log_entries) {
@@ -120,11 +138,11 @@ ReplicatedBackend::submit_transaction(
     MURef<MOSDRepOp> m;
     if (pg.should_send_op(pg_shard, hoid)) {
       m = new_repop_msg(
-	pg_shard, hoid, encoded_txn, osd_op_p,
+	pg_shard, hoid, encoded_txn_p_bl, encoded_txn_d_bl, osd_op_p,
 	min_epoch, map_epoch, log_entries, true, tid);
     } else {
       m = new_repop_msg(
-	pg_shard, hoid, encoded_txn, osd_op_p,
+	pg_shard, hoid, encoded_txn_p_bl, encoded_txn_d_bl, osd_op_p,
 	min_epoch, map_epoch, log_entries, false, tid);
       if (pg.is_missing_on_peer(pg_shard, hoid)) {
 	if (_new_clone) {
@@ -188,6 +206,7 @@ ReplicatedBackend::submit_transaction(
     if (!to_push_delete.empty()) {
       pg.enqueue_delete_for_backfill(hoid, {}, to_push_delete);
     }
+    maybe_kick_pct_update();
     return seastar::now();
   });
 
@@ -204,6 +223,7 @@ void ReplicatedBackend::on_actingset_changed(bool same_primary)
     pending_txn.all_committed.set_exception(e_actingset_changed);
   }
   pending_trans.clear();
+  cancel_pct_update();
 }
 
 void ReplicatedBackend::got_rep_op_reply(const MOSDRepOpReply& reply)
@@ -271,4 +291,67 @@ ReplicatedBackend::request_committed(const osd_reqid_t& reqid,
   } else {
     return seastar::now();
   }
+}
+
+ReplicatedBackend::interruptible_future<> ReplicatedBackend::send_pct_update()
+{
+  LOG_PREFIX(ReplicatedBackend::send_pct_update);
+  DEBUGDPP("", dpp);
+  ceph_assert(
+    PG_HAVE_FEATURE(pg.peering_state.get_pg_acting_features(), PCT));
+  for (const auto &i: pg.peering_state.get_actingset()) {
+    if (i == pg.get_pg_whoami()) continue;
+
+    auto pct_update = crimson::make_message<MOSDPGPCT>(
+      spg_t(pg.get_pgid().pgid, i.shard),
+      pg.get_osdmap_epoch(), pg.get_same_interval_since(),
+      pg.peering_state.get_pg_committed_to()
+    );
+
+    co_await interruptor::make_interruptible(
+      shard_services.send_to_osd(
+	i.osd,
+	std::move(pct_update),
+	pg.get_osdmap_epoch()));
+  }
+}
+
+void ReplicatedBackend::maybe_kick_pct_update()
+{
+  LOG_PREFIX(ReplicatedBackend::maybe_kick_pct_update);
+  DEBUGDPP("", dpp);
+  if (!pending_trans.empty()) {
+    DEBUGDPP("pending_trans queue not empty", dpp);
+    return;
+  }
+
+  if (!PG_HAVE_FEATURE(
+	pg.peering_state.get_pg_acting_features(), PCT)) {
+    DEBUGDPP("no PCT feature", dpp);
+    return;
+  }
+
+  int64_t pct_delay;
+  if (!pg.peering_state.get_pgpool().info.opts.get(
+        pool_opts_t::PCT_UPDATE_DELAY, &pct_delay)) {
+    DEBUGDPP("pct update delay not set", dpp);
+    return;
+  }
+
+  DEBUGDPP("scheduling pct callback in {} seconds", dpp, pct_delay);
+  pct_timer.arm(std::chrono::seconds(pct_delay));
+}
+
+void ReplicatedBackend::cancel_pct_update()
+{
+  LOG_PREFIX(ReplicatedBackend::cancel_pct_update);
+  DEBUGDPP("", dpp);
+  pct_timer.cancel();
+}
+
+void ReplicatedBackend::do_pct(const MOSDPGPCT &m)
+{
+  LOG_PREFIX(ReplicatedBackend::do_pct);
+  DEBUGDPP("{}", dpp, m);
+  pg.peering_state.update_pct(m.pg_committed_to);
 }

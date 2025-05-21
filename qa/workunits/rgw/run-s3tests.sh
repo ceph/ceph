@@ -30,7 +30,7 @@ cd $dir
 git clone https://github.com/ceph/s3-tests
 cd s3-tests
 git checkout ceph-$branch
-S3TEST_CONF=s3tests.conf.SAMPLE tox -- -m "not fails_on_rgw and not sse_s3 and not lifecycle_expiration and not test_of_sts and not webidentity_test" -v
+S3TEST_CONF=s3tests.conf.SAMPLE tox -- -m "not fails_on_rgw and not sse_s3 and not lifecycle_expiration and not test_of_sts and not webidentity_test and not fails_without_logging_rollover" -v
 
 cd ../..
 rm -rf $dir

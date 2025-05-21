@@ -368,6 +368,12 @@ prometheus_stats_interval = 10
 verify_nqns = True
 verify_keys = True
 verify_listener_ip = True
+# This is a development flag, do not change it
+abort_on_errors = True
+# This is a development flag, do not change it
+omap_file_ignore_unlock_errors = False
+# This is a development flag, do not change it
+omap_file_lock_on_read = True
 omap_file_lock_duration = 20
 omap_file_lock_retries = 30
 omap_file_lock_retry_sleep_interval = 1.0
@@ -380,7 +386,7 @@ max_hosts_per_namespace = 8
 max_namespaces_with_netmask = 1000
 max_subsystems = 128
 max_hosts = 2048
-max_namespaces = 1024
+max_namespaces = 2048
 max_namespaces_per_subsystem = 256
 max_hosts_per_subsystem = 128
 
@@ -397,6 +403,8 @@ log_directory = /var/log/ceph/
 [discovery]
 addr = 192.168.100.100
 port = 8009
+# This is a development flag, do not change it
+abort_on_errors = True
 
 [ceph]
 pool = {pool}
@@ -415,7 +423,7 @@ tgt_path = /usr/local/bin/nvmf_tgt
 rpc_socket_dir = /var/tmp/
 rpc_socket_name = spdk.sock
 timeout = 60.0
-bdevs_per_cluster = 32
+cluster_connections = 32
 protocol_log_level = WARNING
 conn_retries = 10
 transports = tcp
@@ -1588,8 +1596,8 @@ class TestMonitoring:
                                       client_secret='my_client_secret',
                                       oidc_issuer_url='http://192.168.10.10:8888/dex',
                                       cookie_secret='kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ=',
-                                      ssl_certificate=ceph_generated_cert,
-                                      ssl_certificate_key=ceph_generated_key)
+                                      ssl_cert=ceph_generated_cert,
+                                      ssl_key=ceph_generated_key)
 
         with with_host(cephadm_module, "test"):
             cephadm_module.cert_mgr.save_cert('grafana_cert', ceph_generated_cert, host='test')
@@ -3347,7 +3355,7 @@ class TestIngressService:
             '        Delegations = false;\n'
             '        RecoveryBackend = "rados_cluster";\n'
             '        Minor_Versions = 1, 2;\n'
-            f'        Server_Scope = {cephadm_module._cluster_fsid}-foo\n'
+            f'        Server_Scope = "{cephadm_module._cluster_fsid}-foo";\n'
             '        IdmapConf = "/etc/ganesha/idmap.conf";\n'
             '}\n'
             '\n'
@@ -4005,8 +4013,8 @@ class TestMgmtGateway:
 
         server_port = 5555
         spec = MgmtGatewaySpec(port=server_port,
-                               ssl_certificate=ceph_generated_cert,
-                               ssl_certificate_key=ceph_generated_key)
+                               ssl_cert=ceph_generated_cert,
+                               ssl_key=ceph_generated_key)
 
         expected = {
             "fsid": "fsid",
@@ -4037,7 +4045,7 @@ class TestMgmtGateway:
                                          http {
 
                                              #access_log /dev/stdout;
-                                             error_log /dev/stderr info;
+                                             error_log /dev/stderr warn;
                                              client_header_buffer_size 32K;
                                              large_client_header_buffers 4 32k;
                                              proxy_busy_buffers_size 512k;
@@ -4253,8 +4261,8 @@ class TestMgmtGateway:
 
         server_port = 5555
         spec = MgmtGatewaySpec(port=server_port,
-                               ssl_certificate=ceph_generated_cert,
-                               ssl_certificate_key=ceph_generated_key,
+                               ssl_cert=ceph_generated_cert,
+                               ssl_key=ceph_generated_key,
                                enable_auth=True)
 
         expected = {
@@ -4286,7 +4294,7 @@ class TestMgmtGateway:
                                          http {
 
                                              #access_log /dev/stdout;
-                                             error_log /dev/stderr info;
+                                             error_log /dev/stderr warn;
                                              client_header_buffer_size 32K;
                                              large_client_header_buffers 4 32k;
                                              proxy_busy_buffers_size 512k;
@@ -4603,19 +4611,22 @@ class TestMgmtGateway:
 
         server_port = 5555
         mgmt_gw_spec = MgmtGatewaySpec(port=server_port,
-                                       ssl_certificate=ceph_generated_cert,
-                                       ssl_certificate_key=ceph_generated_key,
+                                       ssl_cert=ceph_generated_cert,
+                                       ssl_key=ceph_generated_key,
                                        enable_auth=True,
                                        virtual_ip=virtual_ip)
 
+        allowed_domain = '192.168.100.1:8080'
         oauth2_spec = OAuth2ProxySpec(provider_display_name='my_idp_provider',
                                       client_id='my_client_id',
                                       client_secret='my_client_secret',
                                       oidc_issuer_url='http://192.168.10.10:8888/dex',
                                       cookie_secret='kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ=',
-                                      ssl_certificate=ceph_generated_cert,
-                                      ssl_certificate_key=ceph_generated_key)
+                                      ssl_cert=ceph_generated_cert,
+                                      ssl_key=ceph_generated_key,
+                                      allowlist_domains=[allowed_domain])
 
+        whitelist_domains = f"{allowed_domain},1::4,ceph-node" if virtual_ip is None else f"{allowed_domain},{virtual_ip},1::4,ceph-node"
         redirect_url = f"https://{virtual_ip if virtual_ip else 'host_fqdn'}:5555/oauth2/callback"
         expected = {
             "fsid": "fsid",
@@ -4669,7 +4680,7 @@ class TestMgmtGateway:
                                          # Secret value for encrypting cookies.
                                          cookie_secret= "kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ="
                                          email_domains= "*"
-                                         whitelist_domains= "1::4,ceph-node\""""),
+                                         whitelist_domains= "{whitelist_domains}\""""),
                     "oauth2-proxy.crt": f"{ceph_generated_cert}",
                     "oauth2-proxy.key": f"{ceph_generated_key}",
                 }

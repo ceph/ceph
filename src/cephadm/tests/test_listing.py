@@ -229,6 +229,28 @@ def test_list_daemons_detail_minimal(cephadm_fs, funkypatch):
     edl.assert_checked_all()
 
 
+def test_core_status_update_no_cinfo(cephadm_fs, funkypatch):
+    _cephadm = import_cephadm()
+
+    _get_container_stats = funkypatch.patch('cephadmlib.container_types.get_container_stats')
+    _get_container_stats.return_value = None
+
+    fsid = 'dc93cfee-ddc5-11ef-a056-525400220000'
+    _cinfo_key = '_keep_container_info'
+
+    updater = _cephadm.CoreStatusUpdater(keep_container_info=_cinfo_key)
+    d_id = _cephadm.DaemonIdentity(
+        fsid = fsid,
+        daemon_type = 'mon',
+        daemon_id = 'host1',
+    )
+    val = {}
+    with with_cephadm_ctx([], mock_cephadm_call_fn=False) as ctx:
+        updater.update(val, ctx, d_id, f'/var/lib/ceph/{fsid}')
+    assert _cinfo_key in val
+    assert val[_cinfo_key] is None
+
+
 def test_list_daemons_detail_mgrnotrunning(cephadm_fs, funkypatch):
     _cephadm = import_cephadm()
     _call = funkypatch.patch('cephadmlib.call_wrappers.call')

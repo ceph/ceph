@@ -60,6 +60,7 @@
 #include "common/async/waiter.h"
 #include "error_code.h"
 
+#include "neorados/RADOSImpl.h"
 
 using std::list;
 using std::make_pair;
@@ -728,7 +729,7 @@ void Objecter::_send_linger_ping(LingerOp *info)
 
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 std::move(opv), info->target.flags | CEPH_OSD_FLAG_READ,
-		 fu2::unique_function<Op::OpSig>{CB_Linger_Ping(this, info, now)},
+		 CB_Linger_Ping(this, info, now),
 		 nullptr, nullptr);
   o->target = info->target;
   o->should_resend = false;
@@ -756,7 +757,7 @@ void Objecter::_linger_ping(LingerOp *info, bs::error_code ec, ceph::coarse_mono
       ec = _normalize_watch_error(ec);
       info->last_error = ec;
       if (info->handle) {
-	asio::defer(finish_strand, CB_DoWatchError(this, info, ec));
+	asio::post(finish_strand, CB_DoWatchError(this, info, ec));
       }
     }
   } else {
@@ -2420,6 +2421,23 @@ void Objecter::_send_op_account(Op *op)
   }
 }
 
+struct op_cancellation {
+  ceph_tid_t tid;
+  Objecter* objecter;
+
+  op_cancellation(ceph_tid_t tid, Objecter* objecter)
+    : tid(tid), objecter(objecter) {}
+
+  void operator ()(asio::cancellation_type_t type) {
+    if (type == asio::cancellation_type::total ||
+	type == asio::cancellation_type::terminal) {
+      // Since nobody can cancel until we return (I hope) we shouldn't
+      // need a mutex or anything.
+      objecter->op_cancel(tid, asio::error::operation_aborted);
+    }
+  }
+};
+
 void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid)
 {
   // rwlock is locked
@@ -2502,6 +2520,16 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
 		 << dendl;
 
   _session_op_assign(s, op);
+
+
+  auto compptr = std::get_if<Op::OpComp>(&op->onfinish);
+  if (compptr) {
+    // arrange for per-op cancellation
+    auto slot = boost::asio::get_associated_cancellation_slot(*compptr);
+    if (slot.is_connected()) {
+      slot.template emplace<op_cancellation>(op->tid, this);
+    }
+  }
 
   if (need_send) {
     _send_op(op);
@@ -2934,6 +2962,8 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 	pi->peering_crush_bucket_barrier,
 	t->peering_crush_mandatory_member,
 	pi->peering_crush_mandatory_member,
+	t->allows_ecoptimizations,
+	pi->allows_ecoptimizations(),
 	prev_pgid)) {
     force_resend = true;
   }
@@ -2989,6 +3019,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     t->peering_crush_bucket_target = pi->peering_crush_bucket_target;
     t->peering_crush_bucket_barrier = pi->peering_crush_bucket_barrier;
     t->peering_crush_mandatory_member = pi->peering_crush_mandatory_member;
+    t->allows_ecoptimizations = pi->allows_ecoptimizations();
     ldout(cct, 10) << __func__ << " "
 		   << " raw pgid " << pgid << " -> actual " << t->actual_pgid
 		   << " acting " << t->acting

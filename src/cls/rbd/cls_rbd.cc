@@ -5073,7 +5073,8 @@ int image_status_set(cls_method_context_t hctx, const string &global_image_id,
   if (r < 0) {
     return 0;
   }
-  if (mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+  if (mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED &&
+      mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_CREATING) {
     return 0;
   }
 
@@ -5938,8 +5939,6 @@ int mirror_remote_namespace_get(cls_method_context_t hctx, bufferlist *in,
   std::string mirror_ns_decode;
   int r = read_key(hctx, mirror::REMOTE_NAMESPACE, &mirror_ns_decode);
   if (r < 0) {
-    CLS_ERR("error getting mirror remote namespace: %s",
-            cpp_strerror(r).c_str());
     return r;
   }
 

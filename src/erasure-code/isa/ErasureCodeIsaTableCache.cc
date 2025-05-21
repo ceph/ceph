@@ -192,7 +192,7 @@ ErasureCodeIsaTableCache::setEncodingTable(int matrix, int k, int m, unsigned ch
   if (*ec_out_table) {
     // somebody might have deposited this table in the meanwhile, so clean
     // the input table and return the stored one
-    free (ec_in_table);
+    delete[] ec_in_table;
     return *ec_out_table;
   } else {
     // we store the provided input table and return this one

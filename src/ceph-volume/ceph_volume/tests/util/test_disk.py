@@ -682,6 +682,7 @@ E:DM_LV_NAME=fake-lv1
 E:DM_LV_LAYER=
 E:NVME_HOST_IFACE=none
 E:SYSTEMD_READY=1
+E:ENV_WITH_EQUALS_SIGN=test=abc
 G:systemd
 Q:systemd
 V:1"""

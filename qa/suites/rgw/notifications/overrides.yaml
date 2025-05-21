@@ -14,4 +14,6 @@ overrides:
     realm: MyRealm
     zonegroup: MyZoneGroup
     zone: MyZone
-    storage classes: LUKEWARM, FROZEN
+    storage classes:
+      LUKEWARM:
+      FROZEN:

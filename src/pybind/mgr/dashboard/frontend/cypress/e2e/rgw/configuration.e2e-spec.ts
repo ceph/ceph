@@ -33,4 +33,10 @@ describe('RGW configuration page', () => {
       configurations.getDataTables().should('contain.text', 'https://localhost:9090');
     });
   });
+
+  describe('check bucket encryption checkbox', () => {
+    it('should ensure encryption checkbox to be enabled in bucket form', () => {
+      configurations.checkBucketEncryption();
+    });
+  });
 });

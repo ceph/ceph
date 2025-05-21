@@ -399,6 +399,12 @@ You may set values for the following keys:
    :Description: Sets the maximum size for chunks: that is, chunks larger than this are broken into smaller blobs no larger than this size before compression is performed.
    :Type: Unsigned Integer
 
+.. note:: Compressed pool statistics are visible using ``ceph df detail``.
+   Objects within compressed pools will show their original uncompressed
+   sizes via most API calls or CLI commands. For example: RGW buckets 
+   placed directly in a compressed RADOS pool with no RGW level compression 
+   will report uncompressed bucket sizes via ``radosgw-admin``.
+
 .. _size:
 
 .. describe:: size
@@ -551,7 +557,7 @@ You may set values for the following keys:
 
 .. describe:: scrub_min_interval
    
-   :Description: Sets the minimum interval (in seconds) between successive shallow / light scrubs of the pool's PGs when the load is low. If the default value of ``0`` is in effect, then the value of ``osd_scrub_min_interval`` from central config is used.
+   :Description: Sets the minimum interval (in seconds) between successive shallow (light) scrubs of the pool's PGs. If this pool attribute is unchanged from its default (``0``), the value of ``osd_scrub_min_interval`` from central config is used instead.
 
    :Type: Double
    :Default: ``0``
@@ -560,7 +566,7 @@ You may set values for the following keys:
 
 .. describe:: scrub_max_interval
    
-   :Description: Sets the maximum interval (in seconds) between successive shallow / light scrubs of the pool's PGs regardless of cluster load. If the value of ``scrub_max_interval`` is ``0``, then the value ``osd_scrub_max_interval`` from central config is used.
+   :Description: Sets the maximum interval (in seconds) between successive shallow (light) scrubs of the pool's PGs. Affects the 'overdue' attribute appearing in scrub scheduler dumps. If unchanged from its default of ``0``, the value of ``osd_scrub_max_interval`` from central config is used instead.
 
    :Type: Double
    :Default: ``0``
@@ -569,7 +575,7 @@ You may set values for the following keys:
 
 .. describe:: deep_scrub_interval
    
-   :Description: Sets the interval (in seconds) for successive pool deep scrubs of the pool's PGs. If the value of ``deep_scrub_interval`` is ``0``, the value ``osd_deep_scrub_interval`` from central config is used.
+   :Description: Sets the interval (in seconds) for successive pool deep scrubs of the pool's PGs. If unchanged from its default of ``0``, the value of ``osd_deep_scrub_interval`` from central config is used instead.
 
    :Type: Double
    :Default: ``0``

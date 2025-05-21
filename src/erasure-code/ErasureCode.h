@@ -20,111 +20,164 @@
 /*! @file ErasureCode.h
     @brief Base class for erasure code plugins implementors
 
- */ 
+ */
 
 #include "ErasureCodeInterface.h"
+ #include "include/ceph_assert.h"
 
 namespace ceph {
 
-  class ErasureCode : public ErasureCodeInterface {
-  public:
-    static const unsigned SIMD_ALIGN;
+class ErasureCode : public ErasureCodeInterface {
+ public:
+  static const unsigned SIMD_ALIGN;
 
-    std::vector<int> chunk_mapping;
-    ErasureCodeProfile _profile;
+  std::vector<shard_id_t> chunk_mapping;
+  ErasureCodeProfile _profile;
 
-    // for CRUSH rule
-    std::string rule_root;
-    std::string rule_failure_domain;
-    std::string rule_device_class;
-    int rule_osds_per_failure_domain = -1;
-    int rule_num_failure_domains = -1;
+  // for CRUSH rule
+  std::string rule_root;
+  std::string rule_failure_domain;
+  std::string rule_device_class;
+  int rule_osds_per_failure_domain = -1;
+  int rule_num_failure_domains = -1;
 
-    ~ErasureCode() override {}
+  ~ErasureCode() override {
+  }
 
-    int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
+  int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
 
-    const ErasureCodeProfile &get_profile() const override {
-      return _profile;
-    }
+  const ErasureCodeProfile &get_profile() const override {
+    return _profile;
+  }
 
-    int create_rule(const std::string &name,
-		    CrushWrapper &crush,
-		    std::ostream *ss) const override;
+  int create_rule(const std::string &name,
+                  CrushWrapper &crush,
+                  std::ostream *ss) const override;
 
-    int sanity_check_k_m(int k, int m, std::ostream *ss);
+  int sanity_check_k_m(int k, int m, std::ostream *ss);
 
-    unsigned int get_coding_chunk_count() const override {
-      return get_chunk_count() - get_data_chunk_count();
-    }
+  unsigned int get_coding_chunk_count() const override {
+    return get_chunk_count() - get_data_chunk_count();
+  }
 
-    virtual int get_sub_chunk_count() override {
-      return 1;
-    }
+  virtual int get_sub_chunk_count() override {
+    return 1;
+  }
 
-    virtual int _minimum_to_decode(const std::set<int> &want_to_read,
-				   const std::set<int> &available_chunks,
-				   std::set<int> *minimum);
+  [[deprecated]]
+  virtual int _minimum_to_decode(const std::set<int> &want_to_read,
+                                 const std::set<int> &available_chunks,
+                                 std::set<int> *minimum);
 
-    int minimum_to_decode(const std::set<int> &want_to_read,
-			  const std::set<int> &available,
-			  std::map<int, std::vector<std::pair<int, int>>> *minimum) override;
+  virtual int _minimum_to_decode(const shard_id_set &want_to_read,
+                                 const shard_id_set &available_chunks,
+                                 shard_id_set *minimum);
 
-    int minimum_to_decode_with_cost(const std::set<int> &want_to_read,
-                                            const std::map<int, int> &available,
-                                            std::set<int> *minimum) override;
+  [[deprecated]]
+  int minimum_to_decode(const std::set<int> &want_to_read,
+                        const std::set<int> &available,
+                        std::map<int,
+                                 std::vector<std::pair<int,
+                                                       int>>> *minimum) override;
 
-    int encode_prepare(const bufferlist &raw,
-                       std::map<int, bufferlist> &encoded) const;
+  int minimum_to_decode(const shard_id_set &want_to_read,
+                        const shard_id_set &available,
+                        shard_id_set &minimum_set,
+                        mini_flat_map<shard_id_t, std::vector<std::pair<int, int>>> *minimum_sub_chunks) override;
 
-    int encode(const std::set<int> &want_to_encode,
-                       const bufferlist &in,
-                       std::map<int, bufferlist> *encoded) override;
+  [[deprecated]]
+  int minimum_to_decode_with_cost(const std::set<int> &want_to_read,
+                                  const std::map<int, int> &available,
+                                  std::set<int> *minimum) override;
 
-    int decode(const std::set<int> &want_to_read,
-                const std::map<int, bufferlist> &chunks,
-                std::map<int, bufferlist> *decoded, int chunk_size) override;
+  int minimum_to_decode_with_cost(const shard_id_set &want_to_read,
+                                  const mini_flat_map<shard_id_t, int> &available,
+                                  shard_id_set *minimum) override;
 
-    virtual int _decode(const std::set<int> &want_to_read,
-			const std::map<int, bufferlist> &chunks,
-			std::map<int, bufferlist> *decoded);
+  int encode_prepare(const bufferlist &raw,
+                     mini_flat_map<shard_id_t, bufferlist> &encoded) const;
 
-    const std::vector<int> &get_chunk_mapping() const override;
+  [[deprecated]]
+  int encode_prepare(const bufferlist &raw,
+                     std::map<int, bufferlist> &encoded) const;
 
-    int to_mapping(const ErasureCodeProfile &profile,
-		   std::ostream *ss);
+  int encode(const shard_id_set &want_to_encode,
+             const bufferlist &in,
+             mini_flat_map<shard_id_t, bufferlist> *encoded) override;
 
-    static int to_int(const std::string &name,
-		      ErasureCodeProfile &profile,
-		      int *value,
-		      const std::string &default_value,
-		      std::ostream *ss);
+  [[deprecated]]
+  int encode(const std::set<int> &want_to_encode,
+             const bufferlist &in,
+             std::map<int, bufferlist> *encoded) override;
 
-    static int to_bool(const std::string &name,
-		       ErasureCodeProfile &profile,
-		       bool *value,
-		       const std::string &default_value,
-		       std::ostream *ss);
+  [[deprecated]]
+  int decode(const std::set<int> &want_to_read,
+             const std::map<int, bufferlist> &chunks,
+             std::map<int, bufferlist> *decoded,
+             int chunk_size) override;
 
-    static int to_string(const std::string &name,
-			 ErasureCodeProfile &profile,
-			 std::string *value,
-			 const std::string &default_value,
-			 std::ostream *ss);
+  int decode(const shard_id_set &want_to_read,
+             const mini_flat_map<shard_id_t, bufferlist> &chunks,
+             mini_flat_map<shard_id_t, bufferlist> *decoded, int chunk_size) override;
 
-    int decode_concat(const std::set<int>& want_to_read,
-		      const std::map<int, bufferlist> &chunks,
-		      bufferlist *decoded) override;
-    int decode_concat(const std::map<int, bufferlist> &chunks,
-		      bufferlist *decoded) override;
+  [[deprecated]]
+  virtual int _decode(const std::set<int> &want_to_read,
+                      const std::map<int, bufferlist> &chunks,
+                      std::map<int, bufferlist> *decoded);
 
-  protected:
-    int parse(const ErasureCodeProfile &profile,
-	      std::ostream *ss);
+  virtual int _decode(const shard_id_set &want_to_read,
+                      const mini_flat_map<shard_id_t, bufferlist> &chunks,
+                      mini_flat_map<shard_id_t, bufferlist> *decoded);
 
-  private:
-    int chunk_index(unsigned int i) const;
-  };
+  const std::vector<shard_id_t> &get_chunk_mapping() const override;
+
+  int to_mapping(const ErasureCodeProfile &profile, std::ostream *ss);
+
+  static int to_int(const std::string &name,
+                    ErasureCodeProfile &profile,
+                    int *value,
+                    const std::string &default_value,
+                    std::ostream *ss);
+
+  static int to_bool(const std::string &name,
+                     ErasureCodeProfile &profile,
+                     bool *value,
+                     const std::string &default_value,
+                     std::ostream *ss);
+
+  static int to_string(const std::string &name,
+                       ErasureCodeProfile &profile,
+                       std::string *value,
+                       const std::string &default_value,
+                       std::ostream *ss);
+
+  [[deprecated]]
+  int decode_concat(const std::set<int> &want_to_read,
+                    const std::map<int, bufferlist> &chunks,
+                    bufferlist *decoded) override;
+  [[deprecated]]
+  int decode_concat(const std::map<int, bufferlist> &chunks,
+                    bufferlist *decoded) override;
+
+  void encode_delta(const bufferptr &old_data,
+                    const bufferptr &new_data,
+                    bufferptr *delta_maybe_in_place) override {
+    ceph_abort("Not yet supported by this plugin");
+  }
+
+  void apply_delta(const shard_id_map< bufferptr> &in,
+                   shard_id_map< bufferptr> &out) override {
+    ceph_abort("Not yet supported by this plugin");
+  }
+
+ protected:
+  int parse(const ErasureCodeProfile &profile, std::ostream *ss);
+
+ private:
+  [[deprecated]]
+  unsigned int chunk_index(unsigned int i) const;
+  shard_id_t chunk_index(raw_shard_id_t i) const;
+};
 }
 
 #endif

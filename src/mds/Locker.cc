@@ -26,6 +26,8 @@
 #include "MDLog.h"
 #include "MDSRank.h"
 #include "MDSMap.h"
+#include "RetryMessage.h"
+#include "RetryRequest.h"
 #include "SimpleLock.h"
 #include "SnapRealm.h"
 #include "messages/MClientCaps.h"
@@ -449,7 +451,7 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
 	} else if (CDentry *dn = dynamic_cast<CDentry*>(object)) {
 	  dir = dn->get_dir();
 	} else {
-	  ceph_assert(0 == "unknown type of lock parent");
+	  ceph_abort_msg("unknown type of lock parent");
 	}
 	if (dir->get_inode() == mdr->lock_cache->get_dir_inode()) {
 	  // forcibly auth pin if there is lock cache on parent dir

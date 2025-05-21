@@ -6,7 +6,7 @@
 
 #include <string>
 #include <set>
-#include <boost/variant.hpp>
+#include <variant>
 
 #include "include/buffer_fwd.h"
 #include "include/encoding.h"
@@ -143,12 +143,12 @@ struct UnknownPayload {
   void dump(Formatter *f) const;
 };
 
-typedef boost::variant<ImageAcquirePayload,
-                       ImageReleasePayload,
-                       PeerImageRemovedPayload,
-                       SyncRequestPayload,
-                       SyncStartPayload,
-                       UnknownPayload> Payload;
+typedef std::variant<ImageAcquirePayload,
+		     ImageReleasePayload,
+		     PeerImageRemovedPayload,
+		     SyncRequestPayload,
+		     SyncStartPayload,
+		     UnknownPayload> Payload;
 
 struct NotifyMessage {
   NotifyMessage(const Payload &payload = UnknownPayload()) : payload(payload) {

@@ -137,8 +137,7 @@ int NVMeofGwMonitorClient::init()
   }
 
   monc.sub_want("NVMeofGw", 0, 0);
-  monc.set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD
-      |CEPH_ENTITY_TYPE_MDS|CEPH_ENTITY_TYPE_MGR);
+  monc.set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD);
   monc.set_messenger(client_messenger.get());
 
   // We must register our config callback before calling init(), so
@@ -427,9 +426,10 @@ Dispatcher::dispatch_result_t NVMeofGwMonitorClient::ms_dispatch2(const ref_t<Me
 
   if (m->get_type() == MSG_MNVMEOF_GW_MAP) {
     handle_nvmeof_gw_map(ref_cast<MNVMeofGwMap>(m));
+    return Dispatcher::HANDLED();
+
   }
-  bool handled = false;
-  return handled;
+  return Dispatcher::ACKNOWLEDGED();
 }
 
 int NVMeofGwMonitorClient::main(std::vector<const char *> args)

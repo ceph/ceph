@@ -140,4 +140,3 @@ double Allocator::get_fragmentation_score()
   double terrible = (sum / block_size) * get_score(block_size);
   return (ideal - score_sum) / (ideal - terrible);
 }
-

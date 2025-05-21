@@ -12,14 +12,20 @@
  * 
  */
 
+#include "MDCache.h"
+#include "RetryMessage.h"
+#include "RetryRequest.h"
+
 #include <errno.h>
+
+#include <deque>
 #include <ostream>
 #include <string>
 #include <string_view>
 #include <map>
 #include <memory>
+#include <queue>
 
-#include "MDCache.h"
 #include "MDSRank.h"
 #include "Server.h"
 #include "Locker.h"
@@ -27,8 +33,10 @@
 #include "MDBalancer.h"
 #include "Migrator.h"
 #include "ScrubStack.h"
+#include "BatchOp.h"
 
 #include "SnapClient.h"
+#include "SnapRealm.h"
 
 #include "MDSMap.h"
 
@@ -41,18 +49,43 @@
 #include "include/filepath.h"
 #include "include/util.h"
 
+#include "messages/MCacheExpire.h"
 #include "messages/MClientCaps.h"
+#include "messages/MClientQuota.h"
+#include "messages/MClientRequest.h"
+#include "messages/MClientSnap.h"
+#include "messages/MDentryLink.h"
+#include "messages/MDentryUnlink.h"
+#include "messages/MDirUpdate.h"
+#include "messages/MDiscover.h"
+#include "messages/MDiscoverReply.h"
+#include "messages/MGatherCaps.h"
+#include "messages/MMDSCacheRejoin.h"
+#include "messages/MMDSFindIno.h"
+#include "messages/MMDSFindInoReply.h"
+#include "messages/MMDSFragmentNotify.h"
+#include "messages/MMDSFragmentNotifyAck.h"
+#include "messages/MMDSOpenIno.h"
+#include "messages/MMDSOpenInoReply.h"
+#include "messages/MMDSPeerRequest.h"
+#include "messages/MMDSResolve.h"
+#include "messages/MMDSResolveAck.h"
+#include "messages/MMDSSnapUpdate.h"
 
 #include "msg/Message.h"
 #include "msg/Messenger.h"
 
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "common/safe_io.h"
 
 #include "osdc/Journaler.h"
 #include "osdc/Filer.h"
+#include "osdc/Objecter.h"
+#include "osdc/Striper.h"
 
+#include "events/EMetaBlob.h"
 #include "events/ESubtreeMap.h"
 #include "events/ELid.h"
 #include "events/EUpdate.h"
@@ -6965,7 +6998,12 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
   bool throttled = false;
   while (1) {
     throttled |= trim_counter_start+trimmed >= trim_threshold;
-    if (throttled) break;
+    if (throttled) {
+      if (logger) {
+        logger->inc(l_mdss_cache_trim_throttle);
+      }
+      break;
+    }
     CDentry *dn = static_cast<CDentry*>(bottom_lru.lru_expire());
     if (!dn)
       break;
@@ -6991,7 +7029,12 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
   // trim dentries from the LRU until count is reached
   while (!throttled && (cache_toofull() || count > 0)) {
     throttled |= trim_counter_start+trimmed >= trim_threshold;
-    if (throttled) break;
+    if (throttled) {
+      if (logger) {
+        logger->inc(l_mdss_cache_trim_throttle);
+      }
+      break;
+    }
     CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
     if (!dn) {
       break;
@@ -11214,7 +11257,7 @@ void MDCache::decode_replica_dir(CDir *&dir, bufferlist::const_iterator& p, CIno
 
 void MDCache::decode_replica_dentry(CDentry *&dn, bufferlist::const_iterator& p, CDir *dir, MDSContext::vec& finished)
 {
-  DECODE_START(1, p);
+  DECODE_START(3, p);
   string name;
   snapid_t last;
   decode(name, p);
@@ -11490,7 +11533,7 @@ void MDCache::encode_remote_dentry_link(CDentry::linkage_t *dnl, bufferlist& bl)
 
 void MDCache::decode_remote_dentry_link(CDir *dir, CDentry *dn, bufferlist::const_iterator& p)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   inodeno_t ino;
   __u8 d_type;
   decode(ino, p);
@@ -13454,7 +13497,7 @@ class C_MDC_DataUninlinedSubmitted : public MDCacheLogContext {
 
   void finish(int r) {
     auto mds = get_mds(); // to keep dout happy
-    auto in = mds->server->rdlock_path_pin_ref(mdr, true);
+    auto in = mdr->in[0];
 
     ceph_assert(in != nullptr);
 
@@ -13471,6 +13514,7 @@ class C_MDC_DataUninlinedSubmitted : public MDCacheLogContext {
     h->record_uninline_passed();
     in->uninline_finished();
     mdr->apply();
+    in->auth_unpin(this); // for uninline data
     mds->server->respond_to_request(mdr, r);
   }
 };
@@ -13487,7 +13531,9 @@ struct C_IO_DataUninlined : public MDSIOContext {
 
   void finish(int r) override {
     auto mds = get_mds(); // to keep dout/derr happy
-    auto in = mds->server->rdlock_path_pin_ref(mdr, true);
+    auto in = mdr->in[0];
+
+    ceph_assert(in != nullptr);
 
     // return faster if operation has failed (non-zero) status
     if (r) {
@@ -13501,6 +13547,7 @@ struct C_IO_DataUninlined : public MDSIOContext {
       in->make_path_string(path);
       h->record_uninline_status(in->ino(), r, path);
       in->uninline_finished();
+      in->auth_unpin(this); // for uninline data
       mds->server->respond_to_request(mdr, r);
       return;
     }
@@ -13542,11 +13589,9 @@ struct C_IO_DataUninlined : public MDSIOContext {
 
 void MDCache::uninline_data_work(MDRequestRef mdr)
 {
-  CInode *in = mds->server->rdlock_path_pin_ref(mdr, true);
+  CInode *in = mdr->in[0];
 
-  if (!in) {
-    return;
-  }
+  ceph_assert(in != nullptr);
 
   MutationImpl::LockOpVec lov;
   lov.add_xlock(&in->authlock);
@@ -13561,6 +13606,7 @@ void MDCache::uninline_data_work(MDRequestRef mdr)
   if (!in->has_inline_data()) {
     dout(20) << "(uninline_data) inode doesn't have inline data anymore " << *in << dendl;
     in->uninline_finished();
+    in->auth_unpin(this); // for uninline_data
     mds->server->respond_to_request(mdr, 0);
     return;
   }

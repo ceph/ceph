@@ -50,9 +50,10 @@ class RGWSI_MDLog : public RGWServiceInstance
   std::unique_ptr<RGWPeriodPuller> period_puller;
   // maintains a connected history of periods
   std::unique_ptr<RGWPeriodHistory> period_history;
+  rgw::sal::ConfigStore* cfgstore{nullptr};
 
 public:
-  RGWSI_MDLog(CephContext *cct, bool run_sync);
+  RGWSI_MDLog(CephContext *cct, bool run_sync, rgw::sal::ConfigStore* _cfgstore);
   virtual ~RGWSI_MDLog();
 
   librados::Rados* rados{nullptr};
@@ -75,11 +76,11 @@ public:
 
   // traverse all the way back to the beginning of the period history, and
   // return a cursor to the first period in a fully attached history
-  RGWPeriodHistory::Cursor find_oldest_period(const DoutPrefixProvider *dpp, optional_yield y);
+  RGWPeriodHistory::Cursor find_oldest_period(const DoutPrefixProvider *dpp, optional_yield y, rgw::sal::ConfigStore* cfgstore);
 
   /// initialize the oldest log period if it doesn't exist, and attach it to
   /// our current history
-  RGWPeriodHistory::Cursor init_oldest_log_period(optional_yield y, const DoutPrefixProvider *dpp);
+  RGWPeriodHistory::Cursor init_oldest_log_period(optional_yield y, const DoutPrefixProvider *dpp, rgw::sal::ConfigStore* cfgstore);
 
   /// read the oldest log period, and return a cursor to it in our existing
   /// period history
@@ -115,7 +116,7 @@ public:
     return period_history.get();
   }
 
-  int pull_period(const DoutPrefixProvider *dpp, const std::string& period_id, RGWPeriod& period, optional_yield y);
+  int pull_period(const DoutPrefixProvider *dpp, const std::string& period_id, RGWPeriod& period, optional_yield y, rgw::sal::ConfigStore* cfgstore);
 
   /// find or create the metadata log for the given period
   RGWMetadataLog* get_log(const std::string& period);

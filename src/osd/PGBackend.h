@@ -20,12 +20,14 @@
 
 #include "ECListener.h"
 #include "ECTypes.h"
+#include "ECExtentCache.h"
 #include "osd_types.h"
 #include "pg_features.h"
 #include "common/intrusive_timer.h"
 #include "common/WorkQueue.h"
 #include "include/Context.h"
 #include "os/ObjectStore.h"
+#include "osd/scrubber_common.h"
 #include "common/LogClient.h"
 #include <string>
 #include "PGTransaction.h"
@@ -426,7 +428,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual IsPGReadablePredicate *get_is_readable_predicate() const = 0;
    virtual unsigned int get_ec_data_chunk_count() const { return 0; };
    virtual int get_ec_stripe_chunk_size() const { return 0; };
-   virtual uint64_t object_size_to_shard_size(const uint64_t size, int shard) const { return size; };
+   virtual uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard) const { return size; };
    virtual void dump_recovery_info(ceph::Formatter *f) const = 0;
 
  private:
@@ -491,6 +493,10 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      const pg_log_entry_t &entry,
      ObjectStore::Transaction *t);
 
+   void partial_write(
+     pg_info_t *info,
+     const pg_log_entry_t &entry);
+
    void remove(
      const hobject_t &hoid,
      ObjectStore::Transaction *t);
@@ -504,7 +510,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    void rollback_setattrs(
      const hobject_t &hoid,
      std::map<std::string, std::optional<ceph::buffer::list> > &old_attrs,
-     ObjectStore::Transaction *t);
+     ObjectStore::Transaction *t,
+     bool only_oi);
 
    /// Truncate object to rollback append
    void rollback_append(
@@ -534,8 +541,10 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    /// Clone the extents back into place
    void rollback_extents(
      version_t gen,
-     const std::vector<std::pair<uint64_t, uint64_t> > &extents,
+     const uint64_t offset,
+     uint64_t length,
      const hobject_t &hoid,
+     const uint64_t shard_size,
      ObjectStore::Transaction *t);
  public:
 
@@ -591,14 +600,17 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      Context *on_complete, bool fast_read = false) = 0;
 
    virtual bool auto_repair_supported() const = 0;
+
    int be_scan_list(
+     const Scrub::ScrubCounterSet& io_counters,
      ScrubMap &map,
      ScrubMapBuilder &pos);
 
-   virtual uint64_t be_get_ondisk_size(
-     uint64_t logical_size) const = 0;
+   virtual uint64_t be_get_ondisk_size(uint64_t logical_size,
+                                       shard_id_t shard_id) const = 0;
 
    virtual int be_deep_scrub(
+     [[maybe_unused]] const Scrub::ScrubCounterSet& io_counters,
      const hobject_t &oid,
      ScrubMap &map,
      ScrubMapBuilder &pos,
@@ -611,7 +623,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      coll_t coll,
      ObjectStore::CollectionHandle &ch,
      ObjectStore *store,
-     CephContext *cct);
+     CephContext *cct,
+     ECExtentCache::LRU &ec_extent_cache_lru);
 };
 
 #endif

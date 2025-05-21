@@ -4,6 +4,7 @@
 #pragma once
 
 #include "crimson/common/operation.h"
+#include "crimson/net/Connection.h"
 #include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/scheduler/scheduler.h"
 #include "osd/osd_types.h"
@@ -89,6 +90,7 @@ enum class OperationTypeCode {
   pg_advance_map,
   pg_creation,
   replicated_request,
+  replicated_request_reply,
   background_recovery,
   background_recovery_sub,
   internal_client_request,
@@ -103,6 +105,7 @@ enum class OperationTypeCode {
   scrub_find_range,
   scrub_reserve_range,
   scrub_scan,
+  pgpct_request,
   last_op
 };
 
@@ -112,6 +115,7 @@ static constexpr const char* const OP_NAMES[] = {
   "pg_advance_map",
   "pg_creation",
   "replicated_request",
+  "replicated_request_reply",
   "background_recovery",
   "background_recovery_sub",
   "internal_client_request",
@@ -126,6 +130,7 @@ static constexpr const char* const OP_NAMES[] = {
   "scrub_find_range",
   "scrub_reserve_range",
   "scrub_scan",
+  "pgpct_request",
 };
 
 // prevent the addition of OperationTypeCode-s with no matching OP_NAMES entry:
@@ -161,6 +166,61 @@ struct OperationT : InterruptibleOperation {
 
 private:
   virtual void dump_detail(ceph::Formatter *f) const = 0;
+};
+
+class RemoteOperation {
+  crimson::net::ConnectionRef l_conn;
+  crimson::net::ConnectionXcoreRef r_conn;
+
+public:
+  RemoteOperation(crimson::net::ConnectionRef &&conn)
+    : l_conn(std::move(conn)) {}
+
+  crimson::net::Connection &get_local_connection() {
+    assert(l_conn);
+    assert(!r_conn);
+    return *l_conn;
+  };
+
+  crimson::net::Connection &get_foreign_connection() {
+    assert(r_conn);
+    assert(!l_conn);
+    return *r_conn;
+  };
+
+  crimson::net::ConnectionFFRef prepare_remote_submission() {
+    assert(l_conn);
+    assert(!r_conn);
+    auto ret = seastar::make_foreign(std::move(l_conn));
+    l_conn.reset();
+    return ret;
+  }
+
+  void finish_remote_submission(crimson::net::ConnectionFFRef conn) {
+    assert(conn);
+    assert(!l_conn);
+    assert(!r_conn);
+    r_conn = make_local_shared_foreign(std::move(conn));
+  }
+
+  crimson::net::Connection &get_connection() const {
+    if (l_conn) {
+      return *l_conn;
+    } else {
+      assert(r_conn);
+      return *r_conn;
+    }
+  }
+
+  /**
+   * get_remote_connection
+   *
+   * Return a reference to the remote connection to allow caller to
+   * perform a copy only as needed.
+   */
+  crimson::net::ConnectionXcoreRef &get_remote_connection() {
+    return r_conn;
+  }
 };
 
 template <class T>
@@ -298,34 +358,6 @@ class OperationThrottler : public BlockerT<OperationThrottler>,
   friend BlockerT<OperationThrottler>;
   static constexpr const char* type_name = "OperationThrottler";
 
-  template <typename OperationT, typename F>
-  auto with_throttle(
-    OperationT* op,
-    crimson::osd::scheduler::params_t params,
-    F &&f) {
-    if (!max_in_progress) return f();
-    return acquire_throttle(params)
-      .then(std::forward<F>(f))
-      .then([this](auto x) {
-	release_throttle();
-	return x;
-      });
-  }
-
-  template <typename OperationT, typename F>
-  seastar::future<> with_throttle_while(
-    OperationT* op,
-    crimson::osd::scheduler::params_t params,
-    F &&f) {
-    return with_throttle(op, params, f).then([this, params, op, f](bool cont) {
-      return cont
-	? seastar::yield().then([params, op, f, this] {
-	  return with_throttle_while(op, params, f); })
-	: seastar::now();
-    });
-  }
-
-
 public:
   OperationThrottler(ConfigProxy &conf);
 
@@ -334,24 +366,32 @@ public:
 			  const std::set<std::string> &changed) final;
   void update_from_config(const ConfigProxy &conf);
 
-  template <class OpT, class... Args>
-  seastar::future<> with_throttle_while(
-    BlockingEvent::Trigger<OpT>&& trigger,
-    Args&&... args) {
-    return trigger.maybe_record_blocking(
-      with_throttle_while(std::forward<Args>(args)...), *this);
+  bool available() const {
+    return !max_in_progress || in_progress < max_in_progress;
   }
 
-  // Returns std::nullopt if the throttle is acquired immediately,
-  // returns the future for the acquiring otherwise
-  std::optional<seastar::future<>>
-  try_acquire_throttle_now(crimson::osd::scheduler::params_t params) {
-    if (!max_in_progress || in_progress < max_in_progress) {
-      ++in_progress;
-      --pending;
-      return std::nullopt;
+  class ThrottleReleaser {
+    OperationThrottler *parent = nullptr;
+  public:
+    ThrottleReleaser(OperationThrottler *parent) : parent(parent) {}
+    ThrottleReleaser(const ThrottleReleaser &) = delete;
+    ThrottleReleaser(ThrottleReleaser &&rhs) noexcept {
+      std::swap(parent, rhs.parent);
     }
-    return acquire_throttle(params);
+
+    ~ThrottleReleaser() {
+      if (parent) {
+	parent->release_throttle();
+      }
+    }
+  };
+
+  auto get_throttle(crimson::osd::scheduler::params_t params) {
+    return acquire_throttle(
+      params
+    ).then([this] {
+      return ThrottleReleaser{this};
+    });
   }
 
 private:

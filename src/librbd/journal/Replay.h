@@ -10,7 +10,6 @@
 #include "common/ceph_mutex.h"
 #include "librbd/io/Types.h"
 #include "librbd/journal/Types.h"
-#include <boost/variant.hpp>
 #include <list>
 #include <unordered_set>
 #include <unordered_map>
@@ -102,7 +101,7 @@ private:
     }
   };
 
-  struct EventVisitor : public boost::static_visitor<void> {
+  struct EventVisitor {
     Replay *replay;
     Context *on_ready;
     Context *on_safe;

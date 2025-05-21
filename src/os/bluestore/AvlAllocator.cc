@@ -239,14 +239,14 @@ int64_t AvlAllocator::_allocate(
   uint64_t want,
   uint64_t unit,
   uint64_t max_alloc_size,
-  int64_t  hint, // unused, for now!
+  int64_t  hint,
   PExtentVector* extents)
 {
   uint64_t allocated = 0;
   while (allocated < want) {
     uint64_t offset, length;
     int r = _allocate(std::min(max_alloc_size, want - allocated),
-      unit, &offset, &length);
+      unit, hint, &offset, &length);
     if (r < 0) {
       // Allocation failed.
       break;
@@ -260,6 +260,7 @@ int64_t AvlAllocator::_allocate(
 int AvlAllocator::_allocate(
   uint64_t size,
   uint64_t unit,
+  int64_t  hint,
   uint64_t *offset,
   uint64_t *length)
 {
@@ -296,7 +297,9 @@ int AvlAllocator::_allocate(
      */
     uint64_t align = size & -size;
     ceph_assert(align != 0);
-    uint64_t* cursor = &lbas[cbits(align) - 1];
+    uint64_t dummy_cursor = (uint64_t)hint;
+    uint64_t* cursor =
+      hint == -1 ? &lbas[cbits(align) - 1] : &dummy_cursor;
     start = _pick_block_after(cursor, size, unit);
     dout(20) << __func__
              << std::hex << " first fit params: 0x" << start << "~" << size
@@ -399,7 +402,7 @@ int64_t AvlAllocator::allocate(
   uint64_t want,
   uint64_t unit,
   uint64_t max_alloc_size,
-  int64_t  hint, // unused, for now!
+  int64_t  hint,
   PExtentVector* extents)
 {
   ldout(cct, 10) << __func__ << std::hex

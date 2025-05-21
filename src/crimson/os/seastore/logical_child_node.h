@@ -5,26 +5,25 @@
 
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/linked_tree_node.h"
-#include "crimson/os/seastore/btree/btree_range_pin.h"
-#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/btree/btree_types.h"
+#include "crimson/os/seastore/lba/lba_btree_node.h"
 
 namespace crimson::os::seastore {
 
 class LogicalChildNode : public LogicalCachedExtent,
-			 public ChildNode<lba_manager::btree::LBALeafNode,
+			 public ChildNode<lba::LBALeafNode,
 					  LogicalChildNode,
 					  laddr_t> {
-  using child_node_t = ChildNode<
-    lba_manager::btree::LBALeafNode, LogicalChildNode, laddr_t>;
+  using lba_child_node_t = ChildNode<
+    lba::LBALeafNode, LogicalChildNode, laddr_t>;
 public:
   template <typename... T>
   LogicalChildNode(T&&... t) : LogicalCachedExtent(std::forward<T>(t)...) {}
 
   virtual ~LogicalChildNode() {
-    if (this->has_parent_tracker() &&
-	this->is_valid() &&
+    if (this->is_valid() &&
 	!this->is_pending()) {
-      child_node_t::destroy();
+      lba_child_node_t::destroy();
     }
   }
 
@@ -41,8 +40,11 @@ public:
   }
 protected:
   void on_replace_prior() final {
-    child_node_t::on_replace_prior();
+    assert(is_seen_by_users());
+    lba_child_node_t::on_replace_prior();
+    do_on_replace_prior();
   }
+  virtual void do_on_replace_prior() {}
 };
 using LogicalChildNodeRef = TCachedExtentRef<LogicalChildNode>;
 } // namespace crimson::os::seastore

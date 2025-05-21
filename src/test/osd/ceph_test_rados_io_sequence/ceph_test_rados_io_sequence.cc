@@ -2,7 +2,6 @@
 
 #include <boost/asio/io_context.hpp>
 #include <iostream>
-#include <map>
 #include <vector>
 
 #include "common/Formatter.h"
@@ -11,6 +10,11 @@
 #include "common/ceph_json.h"
 #include "common/debug.h"
 #include "common/dout.h"
+#include "common/split.h"
+#include "common/strtol.h" // for strict_iecstrtoll()
+#include "common/ceph_json.h"
+#include "common/Formatter.h"
+
 #include "common/io_exerciser/DataGenerator.h"
 #include "common/io_exerciser/EcIoSequence.h"
 #include "common/io_exerciser/IoOp.h"
@@ -21,9 +25,6 @@
 #include "common/json/BalancerStructures.h"
 #include "common/json/ConfigStructures.h"
 #include "common/json/OSDStructures.h"
-#include "common/split.h"
-#include "common/strtol.h"  // for strict_iecstrtoll()
-#include "erasure-code/ErasureCodePlugin.h"
 #include "fmt/format.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
@@ -184,7 +185,12 @@ po::options_description get_options_description() {
       "allow_pool_balancer", "Enables pool balancing. Disabled by default.")(
       "allow_pool_deep_scrubbing",
       "Enables pool deep scrub. Disabled by default.")(
-      "allow_pool_scrubbing", "Enables pool scrubbing. Disabled by default.");
+      "allow_pool_scrubbing", "Enables pool scrubbing. Disabled by default.")(
+      "disable_pool_ec_optimizations",
+      "Disables EC optimizations. Enabled by default.")(
+      "allow_unstable_pool_configs",
+      "Permits pool configs that are known to be unstable. This option "
+      " may be removed. at a later date. Disabled by default if ec optimized");
 
   return desc;
 }
@@ -272,22 +278,28 @@ ceph::io_sequence::tester::SelectErasureTechnique::SelectErasureTechnique(
     : ProgramOptionGeneratedSelector<std::string>(rng, vm, "technique",
                                                   first_use),
       rng(rng),
-      plugin(plugin) {}
+      plugin(plugin),
+      stable(!vm.contains("allow_unstable_pool_configs") ||
+        vm.contains("disable_pool_ec_optimizations")) {}
 
 const std::vector<std::string>
 ceph::io_sequence::tester::SelectErasureTechnique::generate_selections() {
   std::vector<std::string> techniques = {};
   if (plugin == "jerasure") {
     techniques.push_back("reed_sol_van");
-    techniques.push_back("reed_sol_r6_op");
-    techniques.push_back("cauchy_orig");
-    techniques.push_back("cauchy_good");
-    techniques.push_back("liberation");
-    techniques.push_back("blaum_roth");
-    techniques.push_back("liber8tion");
+    if (!stable) {
+      techniques.push_back("reed_sol_r6_op");
+      techniques.push_back("cauchy_orig");
+      techniques.push_back("cauchy_good");
+      techniques.push_back("liberation");
+      techniques.push_back("blaum_roth");
+      techniques.push_back("liber8tion");
+    }
   } else if (plugin == "isa") {
     techniques.push_back("reed_sol_van");
-    techniques.push_back("cauchy");
+    if (!stable) {
+      techniques.push_back("cauchy");
+    }
   } else if (plugin == "shec") {
     techniques.push_back("single");
     techniques.push_back("multiple");
@@ -337,28 +349,24 @@ ceph::io_sequence::tester::SelectErasureKM::generate_selections() {
        (technique == "reed_sol_van" || technique == "cauchy_orig" ||
         technique == "cauchy_good" || technique == std::nullopt))) {
     for (int m = 1; m <= 3; m++)
-      for (int k = 2; k <= 6; k++) selection.push_back({k, m});
+      for (int k = 2; k <= 4; k++) selection.push_back({k, m});
   } else if (plugin == "shec" ||
              (plugin == "jerasure" &&
               (technique == "liberation" || technique == "blaum_roth"))) {
     for (int m = 1; m <= 2; m++)
-      for (int k = 2; k <= 6; k++) selection.push_back({k, m});
+      for (int k = 2; k <= 4; k++) selection.push_back({k, m});
   } else if (plugin == "jerasure" &&
              (technique == "reed_sol_r6_op" || technique == "liber8tion")) {
-    for (int k = 2; k <= 6; k++) selection.push_back({k, 2});
+    for (int k = 2; k <= 4; k++) selection.push_back({k, 2});
   }
 
   // We want increased chances of these as we will test with c=1 and c=2
   if (plugin == "shec")
     for (int i = 0; i < 2; i++)
-      for (int k = 3; k <= 6; k++) selection.push_back({k, 3});
+      for (int k = 3; k <= 4; k++) selection.push_back({k, 3});
 
   // Add extra miscelaneous interesting options for testing w values
   if (plugin == "jerasure") {
-    if (technique == "reed_sol_van")
-      // Double chance of chosing to test more w values
-      for (int i = 0; i < 2; i++) selection.push_back({6, 3});
-
     if (technique == "liberation" || technique == "blaum_roth")
       // Double chance of chosing to test more different w values
       for (int i = 0; i < 2; i++) selection.push_back({6, 2});
@@ -756,7 +764,8 @@ ceph::io_sequence::tester::SelectErasurePool::SelectErasurePool(
     bool allow_pool_balancer,
     bool allow_pool_deep_scrubbing,
     bool allow_pool_scrubbing,
-    bool test_recovery)
+    bool test_recovery,
+    bool disable_pool_ec_optimizations)
     : ProgramOptionReader<std::string>(vm, "pool"),
       rados(rados),
       dry_run(dry_run),
@@ -765,6 +774,7 @@ ceph::io_sequence::tester::SelectErasurePool::SelectErasurePool(
       allow_pool_deep_scrubbing(allow_pool_deep_scrubbing),
       allow_pool_scrubbing(allow_pool_scrubbing),
       test_recovery(test_recovery),
+      disable_pool_ec_optimizations(disable_pool_ec_optimizations),
       first_use(true),
       sep{cct, rng, vm, rados, dry_run, first_use} {
   if (isForced()) {
@@ -827,7 +837,8 @@ std::string ceph::io_sequence::tester::SelectErasurePool::create() {
 
   std::string pool_name;
   profile = sep.select();
-  pool_name = fmt::format("testpool-pr{}", profile->name);
+  pool_name = fmt::format("testpool-pr{}{}", profile->name,
+    disable_pool_ec_optimizations?"_no_ec_opt":"");
 
   ceph::messaging::osd::OSDECPoolCreateRequest pool_create_request{
       pool_name, "erasure", 8, 8, profile->name};
@@ -955,7 +966,7 @@ ceph::io_sequence::tester::TestObject::TestObject(
 
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(
         rados, asio, pool, oid, cached_shard_order, sbs.select(), rng(),
-        threads, lock, cond);
+        threads, lock, cond, spo.get_allow_pool_ec_optimizations());
     dout(0) << "= " << oid << " pool=" << pool << " threads=" << threads
             << " blocksize=" << exerciser_model->get_block_size() << " ="
             << dendl;
@@ -1047,7 +1058,8 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
           vm.contains("allow_pool_balancer"),
           vm.contains("allow_pool_deep_scrubbing"),
           vm.contains("allow_pool_scrubbing"),
-          vm.contains("test_recovery")},
+          vm.contains("test_recovery"),
+          vm.contains("disable_pool_ec_optimizations")},
       snt{rng, vm, "threads", true},
       ssr{vm} {
   dout(0) << "Test using seed " << seed << dendl;
@@ -1068,6 +1080,7 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
   allow_pool_balancer = vm.contains("allow_pool_balancer");
   allow_pool_deep_scrubbing = vm.contains("allow_pool_deep_scrubbing");
   allow_pool_scrubbing = vm.contains("allow_pool_scrubbing");
+  disable_pool_ec_optimizations = vm.contains("disable_pool_ec_optimizations");
 
   if (!dryrun) {
     guard.emplace(boost::asio::make_work_guard(asio));
@@ -1222,7 +1235,8 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
     model = std::make_unique<ceph::io_exerciser::RadosIo>(
         rados, asio, pool, object_name, osd_map_reply.acting, sbs.select(), rng(),
         1,  // 1 thread
-        lock, cond);
+        lock, cond,
+        spo.get_allow_pool_ec_optimizations());
   }
 
   while (!done) {

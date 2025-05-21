@@ -95,7 +95,7 @@ DaemonServer::DaemonServer(MonClient *monc_,
 					g_conf().get_val<uint64_t>("mgr_client_messages"))),
       osd_byte_throttler(new Throttle(g_ceph_context, "mgr_osd_bytes",
 				      g_conf().get_val<Option::size_t>("mgr_osd_bytes"))),
-      osd_msg_throttler(new Throttle(g_ceph_context, "mgr_osd_messsages",
+      osd_msg_throttler(new Throttle(g_ceph_context, "mgr_osd_messages",
 				     g_conf().get_val<uint64_t>("mgr_osd_messages"))),
       mds_byte_throttler(new Throttle(g_ceph_context, "mgr_mds_bytes",
 				      g_conf().get_val<Option::size_t>("mgr_mds_bytes"))),
@@ -812,7 +812,7 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
 
   if (m->metric_report_message) {
     const MetricReportMessage &message = *m->metric_report_message;
-    boost::apply_visitor(HandlePayloadVisitor(this), message.payload);
+    std::visit(HandlePayloadVisitor(this), message.payload);
   }
 
   return true;

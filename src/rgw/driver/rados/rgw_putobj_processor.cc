@@ -394,7 +394,7 @@ int AtomicObjectProcessor::complete(
     return r;
   }
 
-  obj_ctx.set_atomic(head_obj);
+  obj_ctx.set_atomic(head_obj, true);
 
   RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
 
@@ -717,7 +717,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
       tail_placement_rule.storage_class = RGW_STORAGE_CLASS_STANDARD;
     }
     manifest.set_prefix(cur_manifest->get_prefix());
-    astate->keep_tail = true;
+    keep_tail = true;
   }
   manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, cur_part_num);
 
@@ -768,7 +768,7 @@ int AppendObjectProcessor::complete(
   if (r < 0) {
     return r;
   }
-  obj_ctx.set_atomic(head_obj);
+  obj_ctx.set_atomic(head_obj, true);
   RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
   //For Append obj, disable versioning
   op_target.set_versioning_disabled(true);
@@ -789,6 +789,7 @@ int AppendObjectProcessor::complete(
   obj_op.meta.user_data = user_data;
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
+  obj_op.meta.keep_tail = keep_tail;
   obj_op.meta.appendable = true;
   //Add the append part number
   bufferlist cur_part_num_bl;

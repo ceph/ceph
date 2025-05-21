@@ -144,7 +144,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=gid,type=CephInt,req=false '
                    'name=mode,type=CephString,req=false '
                    'name=namespace_isolated,type=CephBool,req=false '
-                   'name=earmark,type=CephString,req=false ',
+                   'name=earmark,type=CephString,req=false '
+                   'name=normalization,type=CephChoices,strings=nfd|nfc|nfkd|nfkc,req=false '
+                   'name=casesensitive,type=CephBool,req=false ',
             'desc': "Create a CephFS subvolume in a volume, and optionally, "
                     "with a specific size (in bytes), a specific data pool layout, "
                     "a specific mode, in a specific subvolume group and in separate "
@@ -467,6 +469,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs subvolume snapshot getpath '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': 'Get path for a snapshot of a CephFS subvolume located in '
+                    'a specific volume, and optionally, in a specific '
+                    'subvolume group',
+            'perm': 'r'
+        },
+        {
             'cmd': 'fs subvolume resize '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
@@ -759,7 +772,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                         gid=cmd.get('gid', None),
                                         mode=cmd.get('mode', '755'),
                                         namespace_isolated=cmd.get('namespace_isolated', False),
-                                        earmark=cmd.get('earmark', None))
+                                        earmark=cmd.get('earmark', None),
+                                        normalization=cmd.get('normalization', None),
+                                        casesensitive=cmd.get('casesensitive', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_rm(self, inbuf, cmd):
@@ -994,6 +1009,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.list_subvolume_snapshots(vol_name=cmd['vol_name'],
                                                 sub_name=cmd['sub_name'],
                                                 group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_snapshot_getpath(self, inbuf, cmd):
+        return self.vc.subvolume_snapshot_getpath(vol_name=cmd['vol_name'],
+                                                  sub_name=cmd['sub_name'],
+                                                  snap_name=cmd['snap_name'],
+                                                  group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_resize(self, inbuf, cmd):

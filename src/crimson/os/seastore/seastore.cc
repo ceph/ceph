@@ -2747,13 +2747,16 @@ SeaStore::Shard::omaptree_clone(
 	      seastar::stop_iteration>(
 		seastar::stop_iteration::no);
 	  }
-	});
+	}).handle_error_interruptible(
+	  base_iertr::pass_further{},
+	  crimson::ct_error::assert_all{"unexpected value_too_large"}
+	);
       });
     });
   });
 }
 
-SeaStore::base_iertr::future<>
+SeaStore::Shard::omaptree_set_keys_iertr::future<>
 SeaStore::Shard::omaptree_set_keys(
   Transaction& t,
   omap_root_t&& root,

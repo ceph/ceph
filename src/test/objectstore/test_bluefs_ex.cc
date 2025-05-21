@@ -133,7 +133,7 @@ public:
     conf.ApplyChanges();
 
     auto stop_at_fixed_point = [&](uint32_t i) -> void {
-      if (i == stop_point) exit(107);
+      if (i == stop_point) _exit(107);
     };
     BlueFS fs(g_ceph_context);
     fs.tracepoint_async_compact = stop_at_fixed_point;

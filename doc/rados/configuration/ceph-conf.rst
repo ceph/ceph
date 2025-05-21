@@ -475,7 +475,7 @@ The following CLI commands are used to configure the cluster:
   (for example, ``mds.a``), or, if that value is not present in the monitor
   configuration database, the compiled-in default value.
 
-* ``ceph config set <who> <option> <value>`` specifies a configuration
+* ``ceph config set <who> <option> <value>`` sets a configuration
   option in the monitor configuration database.
 
 * ``ceph config show <who>`` shows the configuration for a running daemon.
@@ -492,8 +492,8 @@ The following CLI commands are used to configure the cluster:
   useful for transitioning from legacy configuration files to centralized
   monitor-based configuration.
 
-Note that ``ceph config set <who> <option> <value>`` and ``ceph config get
-<who> <option>`` will not necessarily return the same values. The latter
+Note that ``ceph config get <who> [<option>]`` and ``ceph config show
+<who>`` will not necessarily return the same values. The former
 command will show compiled-in default values. In order to determine whether a
 configuration option is present in the monitor configuration database, run
 ``ceph config dump``.
@@ -583,7 +583,7 @@ command of the following form:
 .. note:: If an option has been customized in a local configuration file, the
    `central config
    <https://ceph.io/en/news/blog/2018/new-mimic-centralized-configuration-management/>`_
-   setting will be ignored because it has a lower priority than the local
+   setting will be ignored because it has a lower precedence than the local
    configuration file.
 
 .. note:: Log levels range from 0 to 20.

@@ -556,67 +556,6 @@ int MemStore::omap_check_keys(
   return 0;
 }
 
-class MemStore::OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
-  CollectionRef c;
-  ObjectRef o;
-  std::map<std::string,ceph::buffer::list>::iterator it;
-public:
-  OmapIteratorImpl(CollectionRef c, ObjectRef o)
-    : c(c), o(o), it(o->omap.begin()) {}
-
-  int seek_to_first() override {
-    std::lock_guard lock{o->omap_mutex};
-    it = o->omap.begin();
-    return 0;
-  }
-  int upper_bound(const std::string &after) override {
-    std::lock_guard lock{o->omap_mutex};
-    it = o->omap.upper_bound(after);
-    return 0;
-  }
-  int lower_bound(const std::string &to) override {
-    std::lock_guard lock{o->omap_mutex};
-    it = o->omap.lower_bound(to);
-    return 0;
-  }
-  bool valid() override {
-    std::lock_guard lock{o->omap_mutex};
-    return it != o->omap.end();
-  }
-  int next() override {
-    std::lock_guard lock{o->omap_mutex};
-    ++it;
-    return 0;
-  }
-  std::string key() override {
-    std::lock_guard lock{o->omap_mutex};
-    return it->first;
-  }
-  ceph::buffer::list value() override {
-    std::lock_guard lock{o->omap_mutex};
-    return it->second;
-  }
-  std::string_view value_as_sv() override {
-    std::lock_guard lock{o->omap_mutex};
-    return std::string_view{it->second.c_str(), it->second.length()};
-  }
-  int status() override {
-    return 0;
-  }
-};
-
-ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(
-  CollectionHandle& ch,
-  const ghobject_t& oid)
-{
-  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
-  Collection *c = static_cast<Collection*>(ch.get());
-  ObjectRef o = c->get_object(oid);
-  if (!o)
-    return ObjectMap::ObjectMapIterator();
-  return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o));
-}
-
 int MemStore::omap_iterate(
   CollectionHandle &ch,   ///< [in] collection
   const ghobject_t &oid, ///< [in] object
@@ -629,8 +568,9 @@ int MemStore::omap_iterate(
     return -ENOENT;
   }
 
+  bool more = false;
   {
-    std::lock_guard lock{o->omap_mutex};
+    std::shared_lock lock{o->omap_mutex};
 
     // obtain seek the iterator
     decltype(o->omap)::iterator it;
@@ -648,6 +588,7 @@ int MemStore::omap_iterate(
       omap_iter_ret_t ret =
         f(it->first, std::string_view{it->second.c_str(), it->second.length()});
       if (ret == omap_iter_ret_t::STOP) {
+        more = true;
         break;
       } else if (ret == omap_iter_ret_t::NEXT) {
         ++it;
@@ -656,7 +597,7 @@ int MemStore::omap_iterate(
       }
     }
   }
-  return 0;
+  return more;
 }
 
 

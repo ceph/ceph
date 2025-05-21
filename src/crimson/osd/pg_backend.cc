@@ -1759,8 +1759,9 @@ PGBackend::tmapup_iertr::future<> PGBackend::tmapup(
       return seastar::make_ready_future<bufferlist>();
     }),
     PGBackend::write_iertr::pass_further{},
-    crimson::ct_error::assert_all{"read error in mutate_object_contents"}
-  ).si_then([this, &os, &osd_op, &txn,
+    crimson::ct_error::assert_all{fmt::format(
+      "read error in mutate_object_contents of {}", os.oi.soid).c_str()
+    }).si_then([this, &os, &osd_op, &txn,
 	     &delta_stats, &osd_op_params]
 	    (auto &&bl) mutable -> PGBackend::tmapup_iertr::future<> {
     auto result = crimson::common::do_tmap_up(

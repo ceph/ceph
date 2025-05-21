@@ -48,7 +48,7 @@
 #include "common/PluginRegistry.h"
 #include "common/valgrind.h"
 #include "include/spinlock.h"
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 #include "mon/MonMap.h"
 #endif
 
@@ -64,7 +64,7 @@ using ceph::bufferlist;
 using ceph::HeartbeatMap;
 
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 namespace crimson::common {
 CephContext::CephContext()
   : _conf{crimson::common::local_conf()},
@@ -105,7 +105,7 @@ PerfCountersCollectionImpl* CephContext::get_perfcounters_collection()
 }
 
 }
-#else  // WITH_SEASTAR
+#else  // WITH_CRIMSON
 namespace {
 
 #ifdef CEPH_DEBUG_MUTEX
@@ -999,11 +999,13 @@ void CephContext::_refresh_perf_values()
     _cct_perf->set(l_cct_total_workers, _heartbeat_map->get_total_workers());
     _cct_perf->set(l_cct_unhealthy_workers, _heartbeat_map->get_unhealthy_workers());
   }
-  unsigned l = l_mempool_first + 1;
-  for (unsigned i = 0; i < mempool::num_pools; ++i) {
-    mempool::pool_t& p = mempool::get_pool(mempool::pool_index_t(i));
-    _mempool_perf->set(l++, p.allocated_bytes());
-    _mempool_perf->set(l++, p.allocated_items());
+  if (_mempool_perf) {
+    unsigned l = l_mempool_first + 1;
+    for (unsigned i = 0; i < mempool::num_pools; ++i) {
+      mempool::pool_t& p = mempool::get_pool(mempool::pool_index_t(i));
+      _mempool_perf->set(l++, p.allocated_bytes());
+      _mempool_perf->set(l++, p.allocated_items());
+    }
   }
 }
 
@@ -1063,4 +1065,4 @@ void CephContext::set_mon_addrs(const MonMap& mm) {
   set_mon_addrs(mon_addrs);
 }
 }
-#endif	// WITH_SEASTAR
+#endif	// WITH_CRIMSON

@@ -1,7 +1,6 @@
 set(libos_srcs
   ObjectStore.cc
   Transaction.cc
-  DBObjectMap.cc
   memstore/MemStore.cc
   kstore/KStore.cc
   kstore/kstore_types.cc
@@ -28,6 +27,8 @@ if(WITH_BLUESTORE)
     bluestore/Btree2Allocator.cc
     bluestore/HybridAllocator.cc
     bluestore/Writer.cc
+    bluestore/Compression.cc
+    bluestore/BlueAdmin.cc
   )
 endif(WITH_BLUESTORE)
 

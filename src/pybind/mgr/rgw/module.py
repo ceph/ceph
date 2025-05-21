@@ -6,7 +6,13 @@ import base64
 import functools
 import sys
 
-from mgr_module import MgrModule, CLICommand, HandleCommandResult, Option
+from mgr_module import (
+    MgrModule,
+    CLICommand,
+    HandleCommandResult,
+    Option,
+    MonCommandFailed,
+)
 import orchestrator
 
 from ceph.deployment.service_spec import RGWSpec, PlacementSpec, SpecValidationError
@@ -46,6 +52,10 @@ else:
 
 
 class RGWSpecParsingError(Exception):
+    pass
+
+
+class PoolCreationError(Exception):
     pass
 
 
@@ -196,10 +206,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         try:
             for spec in rgw_specs:
+                self.create_pools(spec)
                 RGWAM(self.env).realm_bootstrap(spec, start_radosgw)
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
             return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
+        except PoolCreationError as e:
+            self.log.error(f'Pool creation failure: {str(e)}')
+            return HandleCommandResult(retval=-errno.EINVAL, stderr=str(e))
 
         return HandleCommandResult(retval=0, stdout="Realm(s) created correctly. Please, use 'ceph rgw realm tokens' to get the token.", stderr='')
 
@@ -228,6 +242,85 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 rgw_specs.append(rgw_spec)
 
         return rgw_specs
+
+    def create_pools(self, spec: RGWSpec) -> None:
+        def _pool_create_command(
+            pool_name: str,
+            pool_type: str,
+            pool_attrs: Optional[Dict[str, Union[str, List[str]]]] = None
+        ) -> None:
+            try:
+                cmd_dict: Dict[str, Union[str, List[str]]] = {
+                    'prefix': 'osd pool create',
+                    'pool': pool_name,
+                    'pool_type': pool_type,
+                }
+                if pool_attrs:
+                    for k, v in pool_attrs.items():
+                        cmd_dict[k] = v
+                self.check_mon_command(cmd_dict)
+            except MonCommandFailed as e:
+                raise PoolCreationError(f'RGW module failed to create pool {pool_name} '
+                                        f'of type {pool_type} with attrs [{pool_attrs}]: {str(e)}')
+            # enable the rgw application on the pool
+            try:
+                self.check_mon_command({
+                    'prefix': 'osd pool application enable',
+                    'pool': pool_name,
+                    'app': 'rgw',
+                })
+            except MonCommandFailed as e:
+                raise PoolCreationError(f'Failed enabling application "rgw" on pool {pool_name}: {str(e)}')
+
+        zone_name = spec.rgw_zone
+        for pool_suffix in [
+            'buckets.index',
+            'meta',
+            'log',
+            'control'
+        ]:
+            # TODO: add size?
+            non_data_pool_attrs: Dict[str, Union[str, List[str]]] = {
+                'pg-num': '16' if 'index' in pool_suffix else '8',
+            }
+            _pool_create_command(f'{zone_name}.rgw.{pool_suffix}', 'replicated', non_data_pool_attrs)
+
+        if spec.data_pool_attributes:
+            if spec.data_pool_attributes.get('type', 'ec') == 'ec':
+                # we need to create ec profile
+                assert zone_name is not None
+                profile_name = self.create_zone_ec_profile(zone_name, spec.data_pool_attributes)
+                # now we can pass the ec profile into the pool create command
+                data_pool_attrs: Dict[str, Union[str, List[str]]] = {
+                    'erasure_code_profile': profile_name
+                }
+                if 'pg_num' in spec.data_pool_attributes:
+                    data_pool_attrs['pg_num'] = spec.data_pool_attributes['pg_num']
+                _pool_create_command(f'{zone_name}.rgw.buckets.data', 'erasure', data_pool_attrs)
+            else:
+                # replicated pool
+                data_pool_attrs = {k: v for k, v in spec.data_pool_attributes.items() if k != 'type'}
+                _pool_create_command(f'{zone_name}.rgw.buckets.data', 'replicated', data_pool_attrs)
+
+    def create_zone_ec_profile(self, zone_name: str, pool_attributes: Optional[Dict[str, str]]) -> str:
+        # creates ec profile and returns profile name
+        ec_pool_kv_pairs = {}
+        if pool_attributes is not None:
+            ec_pool_kv_pairs = {k: v for k, v in pool_attributes.items() if k not in ['type', 'pg_num']}
+        profile_name = f'{zone_name}_zone_data_pool_ec_profile'
+        profile_attrs = [f'{k}={v}' for k, v in ec_pool_kv_pairs.items()]
+        cmd_dict: Dict[str, Union[str, List[str]]] = {
+            'prefix': 'osd erasure-code-profile set',
+            'name': profile_name,
+        }
+        if profile_attrs:
+            cmd_dict['profile'] = profile_attrs
+        try:
+            self.check_mon_command(cmd_dict)
+        except MonCommandFailed as e:
+            raise PoolCreationError(f'RGW module failed to create ec profile {profile_name} '
+                                    f'with attrs {profile_attrs}: {str(e)}')
+        return profile_name
 
     @CLICommand('rgw realm zone-creds create', perm='rw')
     def _cmd_rgw_realm_new_zone_creds(self,

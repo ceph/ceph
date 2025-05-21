@@ -131,15 +131,11 @@ DATEFORMAT="%Y-%m-%d"
 function check_dump_scrubs() {
     local primary=$1
     local sched_time_check="$2"
-    local deadline_check="$3"
 
     DS="$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) dump_scrubs)"
     # use eval to drop double-quotes
     eval SCHED_TIME=$(echo $DS | jq '.[0].sched_time')
     test $(echo $SCHED_TIME | sed $DATESED) = $(date +${DATEFORMAT} -d "now + $sched_time_check") || return 1
-    # use eval to drop double-quotes
-    eval DEADLINE=$(echo $DS | jq '.[0].deadline')
-    test $(echo $DEADLINE | sed $DATESED) = $(date +${DATEFORMAT} -d "now + $deadline_check") || return 1
 }
 
 function TEST_interval_changes() {
@@ -178,27 +174,27 @@ function TEST_interval_changes() {
     local primary=$(get_primary $poolname obj1)
 
     # Check initial settings from above (min 1 day, min 1 week)
-    check_dump_scrubs $primary "1 day" "1 week" || return 1
+    check_dump_scrubs $primary "1 day" || return 1
 
     # Change global osd_scrub_min_interval to 2 days
     CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) config set osd_scrub_min_interval $(expr $day \* 2)
     sleep $WAIT_FOR_UPDATE
-    check_dump_scrubs $primary "2 days" "1 week" || return 1
+    check_dump_scrubs $primary "2 days" || return 1
 
     # Change global osd_scrub_max_interval to 2 weeks
     CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) config set osd_scrub_max_interval $(expr $week \* 2)
     sleep $WAIT_FOR_UPDATE
-    check_dump_scrubs $primary "2 days" "2 week" || return 1
+    check_dump_scrubs $primary "2 days" || return 1
 
     # Change pool osd_scrub_min_interval to 3 days
     ceph osd pool set $poolname scrub_min_interval $(expr $day \* 3)
     sleep $WAIT_FOR_UPDATE
-    check_dump_scrubs $primary "3 days" "2 week" || return 1
+    check_dump_scrubs $primary "3 days" || return 1
 
     # Change pool osd_scrub_max_interval to 3 weeks
     ceph osd pool set $poolname scrub_max_interval $(expr $week \* 3)
     sleep $WAIT_FOR_UPDATE
-    check_dump_scrubs $primary "3 days" "3 week" || return 1
+    check_dump_scrubs $primary "3 days" || return 1
     perf_counters $dir $OSDS
 }
 

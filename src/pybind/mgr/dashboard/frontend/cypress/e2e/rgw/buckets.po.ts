@@ -35,6 +35,7 @@ export class BucketsPageHelper extends PageHelper {
     // Select bucket owner
     this.selectOwner(owner);
     cy.get('#owner').should('have.class', 'ng-valid');
+    cy.get('input[name=encryption_enabled]').should('be.disabled');
 
     if (isLocking) {
       cy.get('#lock_enabled_input').click({ force: true });

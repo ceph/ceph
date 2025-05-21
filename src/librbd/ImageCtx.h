@@ -366,7 +366,11 @@ namespace librbd {
                                    ceph::mutex **timer_lock);
 
   private:
+#ifdef __cpp_lib_atomic_shared_ptr
+    std::atomic<std::shared_ptr<neorados::IOContext>> data_io_context;
+#else
     std::shared_ptr<neorados::IOContext> data_io_context;
+#endif
   };
 }
 

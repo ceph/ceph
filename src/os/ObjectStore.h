@@ -24,7 +24,6 @@
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
 #include "common/WorkQueue.h"
-#include "ObjectMap.h"
 #include "os/Transaction.h"
 
 #include <errno.h>
@@ -79,7 +78,7 @@ public:
    * @param journal path (or other descriptor) for journal (optional)
    * @param flags which filestores should check if applicable
    */
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   static std::unique_ptr<ObjectStore> create(
     CephContext *cct,
     const std::string& type,
@@ -744,20 +743,6 @@ public:
     std::set<std::string> *out         ///< [out] Subset of keys defined on oid
     ) = 0;
 
-  /**
-   * Returns an object map iterator
-   *
-   * Warning!  The returned iterator is an implicit lock on filestore
-   * operations in c.  Do not use filestore methods on c while the returned
-   * iterator is live.  (Filling in a transaction is no problem).
-   *
-   * @return iterator, null on error
-   */
-  virtual ObjectMap::ObjectMapIterator get_omap_iterator(
-    CollectionHandle &c,   ///< [in] collection
-    const ghobject_t &oid  ///< [in] object
-    ) = 0;
-
   struct omap_iter_seek_t {
     std::string seek_position;
     enum {
@@ -790,7 +775,10 @@ public:
    *                object's OMAP or till the iteration is stopped
    *                by `STOP`. Please note that if there is no such
    *                entry, `visitor` will be called 0 times.
-   * @return error code, zero on success
+   * @return  - error code (negative value) on failure,
+   *          - positive value when the iteration has been
+   *            stopped (omap_iter_ret_t::STOP) by the callable,
+   *          - 0 otherwise.
    */
   virtual int omap_iterate(
     CollectionHandle &c,

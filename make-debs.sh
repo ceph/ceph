@@ -23,17 +23,28 @@ rm -fr $(dirname $releasedir)
 #
 # remove all files not under git so they are not
 # included in the distribution.
-#
-git clean -dxf
-#
+
+[ -e .git ] && git clean -dxf
+
 # git describe provides a version that is
 # a) human readable
 # b) is unique for each commit
 # c) compares higher than any previous commit
 # d) contains the short hash of the commit
 #
-vers=$(git describe --match "v*" | sed s/^v//)
-./make-dist $vers
+# CI builds compute the version at an earlier stage, via the same method. Since
+# git metadata is not part of the source distribution, we take the version as
+# an argument to this script.
+#
+if [ -z "${2}" ]; then
+    vers=$(git describe --match "v*" | sed s/^v//)
+    dvers=${vers}-1
+else
+    vers=${2}
+    dvers=${vers}-1${VERSION_CODENAME}
+fi
+
+test -f "ceph-$vers.tar.bz2" || ./make-dist $vers
 #
 # rename the tarbal to match debian conventions and extract it
 #
@@ -48,12 +59,7 @@ cp -a debian $releasedir/ceph-$vers/debian
 cd $releasedir
 perl -ni -e 'print if(!(/^Package: .*-dbg$/../^$/))' ceph-$vers/debian/control
 perl -pi -e 's/--dbg-package.*//' ceph-$vers/debian/rules
-#
-# always set the debian version to 1 which is ok because the debian
-# directory is included in the sources and the upstream version will
-# change each time it is modified.
-#
-dvers="$vers-1"
+
 #
 # update the changelog to match the desired version
 #
@@ -72,7 +78,10 @@ fi
 if test $NPROC -gt 1 ; then
     j=-j${NPROC}
 fi
-PATH=/usr/lib/ccache:$PATH dpkg-buildpackage $j -uc -us
+if [ "$SCCACHE" != "true" ] ; then
+    PATH=/usr/lib/ccache:$PATH
+fi
+PATH=$PATH dpkg-buildpackage $j -uc -us
 cd ../..
 mkdir -p $VERSION_CODENAME/conf
 cat > $VERSION_CODENAME/conf/distributions <<EOF

@@ -215,42 +215,50 @@ Pool metrics
 ============
 
 Ceph pool metrics have the following labels:
+
 * ``instance``: The IP address of the exporter providing the metric
 * ``pool_id``: Numeric identifier of the Ceph pool
 * ``job``: Prometheus scrape job name
 
 
 Pool-specific metrics include:
-* ``ceph_pool_metadata``: Information about the pool that can be used together
-  with other metrics to provide more information in query resultss and
-  graphs. In addition to the above three common labels this metric
-  provides the following:
 
-    * ``compression_mode``: Compression type enabled for the pool. Values are ``lz4``, ``snappy``,
-       ``zlib``, ``zstd``, and ``none`). Example: ``compression_mode="none"``
+   * ``ceph_pool_metadata``: Information about the pool that can be used
+     together with other metrics to provide more information in query resultss
+     and graphs.  In addition to the above three common labels this metric
+     provides the following:
+
+    * ``compression_mode``: Compression type enabled for the pool. Values are
+      ``lz4``, ``snappy``, ``zlib``, ``zstd``, and ``none`). Example:
+      ``compression_mode="none"``
 
     * ``description``: Brief description of the pool data protection strategy
-      including replica number or EC profile. Example: ``description="replica:3"``
+      including replica number or EC profile. Example:
+      ``description="replica:3"``
 
     * ``name``: Name of the pool. Example: ``name=".mgr"``
 
-    * ``type``: Data protection strategy, replicated or EC. ``Example: type="replicated"``
+    * ``type``: Data protection strategy, replicated or EC. ``Example:
+      type="replicated"``
 
-* ``ceph_pool_bytes_used``: Total raw capacity (after replication or EC) consumed by user data and metadata
+    * ``ceph_pool_bytes_used``: Total raw capacity (after replication or EC)
+      consumed by user data and metadata
 
-* ``ceph_pool_stored``: Total client data stored in the pool (before data protection)
+    * ``ceph_pool_stored``: Total client data stored in the pool (before data
+      protection)
 
-* ``ceph_pool_compress_under_bytes``: Data eligible to be compressed in the pool
+    * ``ceph_pool_compress_under_bytes``: Data eligible to be compressed in
+      the pool
 
-* ``ceph_pool_compress_bytes_used``:  Data compressed in the pool
+    * ``ceph_pool_compress_bytes_used``:  Data compressed in the pool
 
-* ``ceph_pool_rd``: Client read operations per pool (reads per second)
+    * ``ceph_pool_rd``: Client read operations per pool (reads per second)
 
-* ``ceph_pool_rd_bytes``: Client read operations in bytes per pool
+    * ``ceph_pool_rd_bytes``: Client read operations in bytes per pool
 
-* ``ceph_pool_wr``: Client write operations per pool (writes per second)
+    * ``ceph_pool_wr``: Client write operations per pool (writes per second)
 
-* ``ceph_pool_wr_bytes``: Client write operation in bytes per pool
+    * ``ceph_pool_wr_bytes``: Client write operation in bytes per pool
 
 
 **Useful queries**:
@@ -295,26 +303,31 @@ Example:
 
 Generic metrics
 ---------------
-* ``ceph_rgw_metadata``: Provides generic information about an RGW daemon. This
-  can be used together with other metrics to provide contextual
-  information in queries and graphs. In addtion to the three common labels, this
-  metric provides the following:
 
-    * ``ceph_daemon``: Name of the RGW daemon instance. Example:
+* ``ceph_rgw_metadata``: Provides generic information about an RGW daemon.
+  This can be used together with other metrics to provide contextual
+  information in queries and graphs. In addtion to the three common labels,
+  this metric provides the following:
+
+  * ``ceph_daemon``: Name of the RGW daemon instance. Example:
     ``ceph_daemon="rgw.rgwtest.cephtest-node-00.sxizyq"``
-    * ``ceph_version``: Version of the RGW daemon. Example: ``ceph_version="ceph
-    version 17.2.6 (d7ff0d10654d2280e08f1ab989c7cdf3064446a5) quincy (stable)"``
-    * ``hostname``: Name of the host where the daemon runs. Example:
+
+  * ``ceph_version``: Version of the RGW daemon. Example: ``ceph_version="ceph
+    version 17.2.6 (d7ff0d10654d2280e08f1ab989c7cdf3064446a5) quincy
+    (stable)"``
+
+  * ``hostname``: Name of the host where the daemon runs. Example:
     ``hostname:"cephtest-node-00.cephlab.com"``
 
-* ``ceph_rgw_req``: Number of requests processed by the daemon (``GET``+``PUT``+``DELETE``).
-    Useful for detecting bottlenecks and optimizing load distribution.
+  * ``ceph_rgw_req``: Number of requests processed by the daemon
+    (``GET``+``PUT``+``DELETE``).  Useful for detecting bottlenecks and
+    optimizing load distribution.
 
-* ``ceph_rgw_qlen``: Operations queue length for the daemon.
-    Useful for detecting bottlenecks and optimizing load distribution.
+  * ``ceph_rgw_qlen``: Operations queue length for the daemon.  Useful for
+    detecting bottlenecks and optimizing load distribution.
 
-* ``ceph_rgw_failed_req``: Aborted requests.
-    Useful for detecting daemon errors.
+  * ``ceph_rgw_failed_req``: Aborted requests.  Useful for detecting daemon
+    errors.
 
 
 GET operation metrics

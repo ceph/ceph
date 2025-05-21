@@ -258,7 +258,7 @@ Context *DisableRequest<I>::handle_get_clients(int *result) {
     m_ret[client.id] = 0;
 
     journal::MirrorPeerClientMeta client_meta =
-      boost::get<journal::MirrorPeerClientMeta>(client_data.client_meta);
+      std::get<journal::MirrorPeerClientMeta>(client_data.client_meta);
 
     for (const auto& sync : client_meta.sync_points) {
       send_remove_snap(client.id, sync.snap_namespace, sync.snap_name);

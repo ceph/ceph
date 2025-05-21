@@ -122,14 +122,15 @@ class RgwMultisiteStatus(RESTController):
     def setup_multisite_replication(self, daemon_name=None, realm_name=None, zonegroup_name=None,
                                     zonegroup_endpoints=None, zone_name=None, zone_endpoints=None,
                                     username=None, cluster_fsid=None, replication_zone_name=None,
-                                    cluster_details=None):
+                                    cluster_details=None, selectedRealmName=None):
         multisite_instance = RgwMultisiteAutomation()
         result = multisite_instance.setup_multisite_replication(realm_name, zonegroup_name,
                                                                 zonegroup_endpoints, zone_name,
                                                                 zone_endpoints, username,
                                                                 cluster_fsid,
                                                                 replication_zone_name,
-                                                                cluster_details)
+                                                                cluster_details,
+                                                                selectedRealmName)
         return result
 
     @RESTController.Collection(method='PUT', path='/setup-rgw-credentials')
@@ -726,13 +727,18 @@ class RgwBucket(RgwRESTController):
     @RESTController.Collection(method='PUT', path='/lifecycle')
     @allow_empty_body
     def set_lifecycle_policy(self, bucket_name: str = '', lifecycle: str = '', daemon_name=None,
-                             owner=None):
+                             owner=None, tenant=None):
+        owner = self._get_owner(owner)
+        bucket_name = RgwBucket.get_s3_bucket_name(bucket_name, tenant)
         if lifecycle == '{}':
             return self._delete_lifecycle(bucket_name, daemon_name, owner)
         return self._set_lifecycle(bucket_name, lifecycle, daemon_name, owner)
 
     @RESTController.Collection(method='GET', path='/lifecycle')
-    def get_lifecycle_policy(self, bucket_name: str = '', daemon_name=None, owner=None):
+    def get_lifecycle_policy(self, bucket_name: str = '', daemon_name=None, owner=None,
+                             tenant=None):
+        owner = self._get_owner(owner)
+        bucket_name = RgwBucket.get_s3_bucket_name(bucket_name, tenant)
         return self._get_lifecycle(bucket_name, daemon_name, owner)
 
     @Endpoint(method='GET', path='/ratelimit')
@@ -851,7 +857,8 @@ class RgwUser(RgwRESTController):
     @allow_empty_body
     def create(self, uid, display_name, email=None, max_buckets=None,
                system=None, suspended=None, generate_key=None, access_key=None,
-               secret_key=None, daemon_name=None):
+               secret_key=None, daemon_name=None, account_id: Optional[str] = None,
+               account_root_user: Optional[bool] = False):
         params = {'uid': uid}
         if display_name is not None:
             params['display-name'] = display_name
@@ -869,13 +876,18 @@ class RgwUser(RgwRESTController):
             params['access-key'] = access_key
         if secret_key is not None:
             params['secret-key'] = secret_key
+        if account_id is not None:
+            params['account-id'] = account_id
+        if account_root_user:
+            params['account-root'] = account_root_user
         result = self.proxy(daemon_name, 'PUT', 'user', params)
         result['uid'] = result['full_user_id']
         return result
 
     @allow_empty_body
     def set(self, uid, display_name=None, email=None, max_buckets=None,
-            system=None, suspended=None, daemon_name=None):
+            system=None, suspended=None, daemon_name=None, account_id: Optional[str] = None,
+            account_root_user: Optional[bool] = False):
         params = {'uid': uid}
         if display_name is not None:
             params['display-name'] = display_name
@@ -887,6 +899,10 @@ class RgwUser(RgwRESTController):
             params['system'] = system
         if suspended is not None:
             params['suspended'] = suspended
+        if account_id is not None:
+            params['account-id'] = account_id
+        if account_root_user:
+            params['account-root'] = account_root_user
         result = self.proxy(daemon_name, 'POST', 'user', params)
         result['uid'] = result['full_user_id']
         return result
@@ -1491,7 +1507,7 @@ class RgwTopic(RESTController):
     def list(self, uid: Optional[str] = None, tenant: Optional[str] = None):
         rgw_topic_instance = RgwTopicmanagement()
         result = rgw_topic_instance.list_topics(uid, tenant)
-        return result
+        return result['topics'] if 'topics' in result else []
 
     @EndpointDoc(
         "Get RGW Topic",

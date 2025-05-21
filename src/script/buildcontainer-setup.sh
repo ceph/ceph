@@ -2,6 +2,9 @@
 
 install_container_deps() {
     source ./src/script/run-make.sh
+    # set JENKINS_HOME in order to have the build container look as much
+    # like an existing jenkins build environment as possible
+    export JENKINS_HOME=/ceph
     prepare
 }
 
@@ -28,18 +31,18 @@ fi
 # packages etc.
 case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
     *~*centos*8)
-        dnf install -y java-1.8.0-openjdk-headless /usr/bin/rpmbuild wget curl
+        dnf install -y java-1.8.0-openjdk-headless /usr/bin/{rpmbuild,wget,curl}
         install_container_deps
         dnf_clean
     ;;
     *~*centos*9|*~*centos*10*|*~fedora*)
-        dnf install -y /usr/bin/rpmbuild wget curl
+        dnf install -y /usr/bin/{rpmbuild,wget,curl}
         install_container_deps
         dnf_clean
     ;;
     *~*ubuntu*)
         apt-get update
-        apt-get install -y wget reprepro curl
+        apt-get install -y wget reprepro curl software-properties-common lksctp-tools libsctp-dev protobuf-compiler ragel libc-ares-dev
         install_container_deps
     ;;
     *)

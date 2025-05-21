@@ -4,8 +4,15 @@ import { HttpClient } from '@angular/common/http';
 import _ from 'lodash';
 import { Observable, of as observableOf } from 'rxjs';
 import { catchError, mapTo } from 'rxjs/operators';
+import { CephServiceSpec } from '../models/service.interface';
 
 export const MAX_NAMESPACE = 1024;
+
+export type GroupsComboboxItem = {
+  content: string;
+  serviceName?: string;
+  selected?: boolean;
+};
 
 type NvmeofRequest = {
   gw_group: string;
@@ -39,6 +46,28 @@ const UI_API_PATH = 'ui-api/nvmeof';
 })
 export class NvmeofService {
   constructor(private http: HttpClient) {}
+
+  // formats the gateway groups to be consumed for combobox item
+  formatGwGroupsList(
+    data: CephServiceSpec[][],
+    isGatewayList: boolean = false
+  ): GroupsComboboxItem[] {
+    return data[0].reduce((gwGrpList: GroupsComboboxItem[], group: CephServiceSpec) => {
+      if (isGatewayList && group?.spec?.group && group?.service_name) {
+        gwGrpList.push({
+          content: group.spec.group,
+          serviceName: group.service_name
+        });
+      } else {
+        if (group?.spec?.group) {
+          gwGrpList.push({
+            content: group.spec.group
+          });
+        }
+      }
+      return gwGrpList;
+    }, []);
+  }
 
   // Gateway groups
   listGatewayGroups() {
@@ -115,12 +144,19 @@ export class NvmeofService {
     });
   }
 
-  deleteListener(subsystemNQN: string, hostName: string, traddr: string, trsvcid: string) {
+  deleteListener(
+    subsystemNQN: string,
+    group: string,
+    hostName: string,
+    traddr: string,
+    trsvcid: string
+  ) {
     return this.http.delete(
       `${API_PATH}/subsystem/${subsystemNQN}/listener/${hostName}/${traddr}`,
       {
         observe: 'response',
         params: {
+          gw_group: group,
           trsvcid
         }
       }

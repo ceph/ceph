@@ -22,7 +22,7 @@
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECUtilL.h"
 #include "ECTypes.h"
-#if WITH_SEASTAR
+#if WITH_CRIMSON
 #include "ECExtentCacheL.h"
 #include "crimson/osd/object_context.h"
 #include "os/Transaction.h"
@@ -63,6 +63,11 @@ struct ECCommonL {
   };
   friend std::ostream &operator<<(std::ostream &lhs, const ec_extent_t &rhs);
   using ec_extents_t = std::map<hobject_t, ec_extent_t>;
+
+  static inline const uint32_t scrub_fadvise_flags{
+      CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
+      CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE};
 
   virtual ~ECCommonL() = default;
 

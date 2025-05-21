@@ -1023,6 +1023,8 @@ std::string mirror_image_state(librbd::mirror_image_state_t state) {
       return "enabled";
     case RBD_MIRROR_IMAGE_DISABLED:
       return "disabled";
+    case RBD_MIRROR_IMAGE_CREATING:
+      return "creating";
     default:
       return "unknown";
   }

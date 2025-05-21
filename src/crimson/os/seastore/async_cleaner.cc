@@ -1091,7 +1091,7 @@ double SegmentCleaner::calc_gc_benefit_cost(
 SegmentCleaner::do_reclaim_space_ret
 SegmentCleaner::do_reclaim_space(
     const std::vector<CachedExtentRef> &backref_extents,
-    const backref_pin_list_t &pin_list,
+    const backref_mapping_list_t &pin_list,
     std::size_t &reclaimed,
     std::size_t &runs)
 {
@@ -1142,10 +1142,10 @@ SegmentCleaner::do_reclaim_space(
         backref_entry_query_set_t backref_entries;
         for (auto &pin : pin_list) {
           backref_entries.emplace(
-            pin->get_key(),
-            pin->get_val(),
-            pin->get_length(),
-            pin->get_type());
+            pin.get_key(),
+            pin.get_val(),
+            pin.get_length(),
+            pin.get_type());
         }
         for (auto &cached_backref : cached_backref_entries) {
           if (cached_backref.laddr == L_ADDR_NULL) {
@@ -1236,7 +1236,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
   // transactions.  So, concurrent transactions between trim and reclaim are
   // not allowed right now.
   return seastar::do_with(
-    std::pair<std::vector<CachedExtentRef>, backref_pin_list_t>(),
+    std::pair<std::vector<CachedExtentRef>, backref_mapping_list_t>(),
     [this](auto &weak_read_ret) {
     return repeat_eagain([this, &weak_read_ret] {
       // Note: not tracked by shard_stats_t intentionally.
@@ -1253,7 +1253,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
 	  if (!pin_list.empty()) {
 	    auto it = pin_list.begin();
 	    auto &first_pin = *it;
-	    if (first_pin->get_key() < reclaim_state->start_pos) {
+	    if (first_pin.get_key() < reclaim_state->start_pos) {
 	      // BackrefManager::get_mappings may include a entry before
 	      // reclaim_state->start_pos, which is semantically inconsistent
 	      // with the requirements of the cleaner
@@ -1521,10 +1521,11 @@ bool SegmentCleaner::check_usage()
         extent_types_t type,
         laddr_t laddr)
     {
-      if (paddr.get_addr_type() == paddr_types_t::SEGMENT) {
+      if (paddr.is_absolute_segmented()) {
         if (is_backref_node(type)) {
 	  assert(laddr == L_ADDR_NULL);
-	  assert(backref_key != P_ADDR_NULL);
+	  assert(backref_key.is_absolute_segmented()
+                 || backref_key == P_ADDR_MIN);
           tracker->allocate(
             paddr.as_seg_paddr().get_segment_id(),
             paddr.as_seg_paddr().get_segment_off(),
@@ -1556,7 +1557,7 @@ void SegmentCleaner::mark_space_used(
   assert(background_callback->get_state() >= state_t::SCAN_SPACE);
   assert(len);
   // TODO: drop
-  if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
+  if (!addr.is_absolute_segmented()) {
     return;
   }
 
@@ -1587,7 +1588,7 @@ void SegmentCleaner::mark_space_free(
   assert(background_callback->get_state() >= state_t::SCAN_SPACE);
   assert(len);
   // TODO: drop
-  if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
+  if (!addr.is_absolute_segmented()) {
     return;
   }
 
@@ -1721,7 +1722,7 @@ void RBMCleaner::mark_space_used(
   extent_len_t len)
 {
   LOG_PREFIX(RBMCleaner::mark_space_used);
-  assert(addr.get_addr_type() == paddr_types_t::RANDOM_BLOCK);
+  assert(addr.is_absolute_random_block());
   auto rbms = rb_group->get_rb_managers();
   for (auto rbm : rbms) {
     if (addr.get_device_id() == rbm->get_device_id()) {
@@ -1740,7 +1741,7 @@ void RBMCleaner::mark_space_free(
   extent_len_t len)
 {
   LOG_PREFIX(RBMCleaner::mark_space_free);
-  assert(addr.get_addr_type() == paddr_types_t::RANDOM_BLOCK);
+  assert(addr.is_absolute_random_block());
   auto rbms = rb_group->get_rb_managers();
   for (auto rbm : rbms) {
     if (addr.get_device_id() == rbm->get_device_id()) {
@@ -1832,7 +1833,8 @@ bool RBMCleaner::check_usage()
 	if (rbm->get_device_id() == paddr.get_device_id()) {
 	  if (is_backref_node(type)) {
 	    assert(laddr == L_ADDR_NULL);
-	    assert(backref_key != P_ADDR_NULL);
+	    assert(backref_key.is_absolute_random_block()
+	           || backref_key == P_ADDR_MIN);
 	    tracker.allocate(
 	      paddr,
 	      len);

@@ -1,6 +1,6 @@
 
 server {
-{% if spec.disable_https %}
+{% if not spec.ssl %}
     listen {{ spec.port or 80 }};
 {% else %}
     listen                    {{ spec.port or 443 }} ssl;

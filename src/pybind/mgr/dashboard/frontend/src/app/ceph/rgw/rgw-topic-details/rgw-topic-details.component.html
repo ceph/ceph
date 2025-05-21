@@ -1,0 +1,89 @@
+<ng-container *ngIf="!!selection">
+  <cds-tabs type="contained"
+            theme="light">
+    <cds-tab heading="Details"
+             i18n-heading>
+      <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
+             data-testid="rgw-topic-details">
+        <tbody>
+          <tr>
+            <td i18n
+                class="bold">Push endpoint arguments</td>
+            <td>{{ selection?.dest?.push_endpoint_args }}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold w-25">Push endpoint topic</td>
+            <td class="w-75">{{ selection?.dest?.push_endpoint_topic}}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold w-25">Push endpoint</td>
+            <td class="w-75">{{ selection?.dest?.push_endpoint }}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold w-25">Stored secret</td>
+            <td class="w-75">{{ selection?.dest?.stored_secret}}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold">Persistent</td>
+            <td>{{ selection?.dest?.persistent }}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold">Persistent queue</td>
+            <td>{{ selection?.dest?.persistent_queue }}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold">Time to live</td>
+            <td>{{ selection?.dest?.time_to_live }}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold">Max retries</td>
+            <td>{{ selection?.dest?.max_retries }}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold">Retry sleep duration</td>
+            <td>{{ selection?.dest?.retry_sleep_duration }}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold">Opaque data</td>
+            <td>{{ selection?.opaqueData }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </cds-tab>
+    <cds-tab heading="Policies"
+             i18n-heading>
+      <div class="table-scroller">
+        <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
+          <tbody>
+            <tr>
+              <td i18n
+                  class="bold w-25 ">Policy</td>
+              <td><pre>{{ policy | json  }}</pre></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </cds-tab>
+    <cds-tab heading="Subscribed buckets"
+             i18n-heading>
+      <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
+        <tbody>
+          <tr>
+            <td i18n
+                class="bold w-25">Subscribed buckets</td>
+            <td><pre>{{ selection.subscribed_buckets | json}}</pre></td>
+          </tr>
+        </tbody>
+      </table>
+    </cds-tab>
+  </cds-tabs>
+</ng-container>

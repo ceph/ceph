@@ -73,7 +73,7 @@ seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
         }
         ceph_assert_always(primary_mapping.core_to_num_pgs.end() != count_iter);
         ++(count_iter->second);
-        auto [insert_iter, inserted] =
+        [[maybe_unused]] auto [insert_iter, inserted] =
           primary_mapping.pg_to_core.emplace(pgid, core_to_update);
         assert(inserted);
         DEBUG("mapping pg {} to core {} (primary): num_pgs {}",
@@ -86,7 +86,7 @@ seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
         if (find_iter == other_mapping.pg_to_core.end()) {
           DEBUG("mapping pg {} to core {} (others)",
                 pgid, core_to_update);
-          auto [insert_iter, inserted] =
+          [[maybe_unused]] auto [insert_iter, inserted] =
             other_mapping.pg_to_core.emplace(pgid, core_to_update);
           assert(inserted);
         } else {

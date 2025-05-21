@@ -86,6 +86,12 @@ class NvmeofService(CephService):
         # Indicate to the daemon whether to utilize huge pages
         if spec.spdk_mem_size:
             daemon_spec.extra_files['spdk_mem_size'] = str(spec.spdk_mem_size)
+        elif spec.spdk_huge_pages:
+            try:
+                huge_pages_value = int(spec.spdk_huge_pages)
+                daemon_spec.extra_files['spdk_huge_pages'] = str(huge_pages_value)
+            except ValueError:
+                logger.error(f"Invalid value for SPDK huge pages: {spec.spdk_huge_pages}")
 
         if spec.enable_auth:
             if (
@@ -171,7 +177,7 @@ class NvmeofService(CephService):
                         'prefix': 'dashboard nvmeof-gateway-add',
                         'inbuf': service_url,
                         'name': service_name,
-                        'group': spec.group,
+                        'group': spec.group if spec.group else '',
                         'daemon_name': dd.name()
                     })
             return cmd_dicts
@@ -192,10 +198,14 @@ class NvmeofService(CephService):
             return HandleCommandResult(-errno.EBUSY, '', warn_message)
 
         # if reached here, there is > 1 nvmeof daemon. make sure none are down
-        warn_message = ('ALERT: 1 nvmeof daemon is already down. Please bring it back up before stopping this one')
-        nvmeof_daemons = self.mgr.cache.get_daemons_by_type(self.TYPE)
-        for i in nvmeof_daemons:
-            if i.status != DaemonDescriptionStatus.running:
+        if not force:
+            warn_message = ('WARNING: Only one nvmeof daemon is running. Please bring another nvmeof daemon up before stopping the current one.')
+            unreachable_hosts = [h.hostname for h in self.mgr.cache.get_unreachable_hosts()]
+            running_nvmeof_daemons = [
+                d for d in self.mgr.cache.get_daemons_by_type(self.TYPE)
+                if d.status == DaemonDescriptionStatus.running and d.hostname not in unreachable_hosts
+            ]
+            if len(running_nvmeof_daemons) < 2:
                 return HandleCommandResult(-errno.EBUSY, '', warn_message)
 
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
@@ -241,18 +251,15 @@ class NvmeofService(CephService):
             self.mgr.log.error(f"Unable to send monitor command {cmd}, error {err}")
 
     def get_blocking_daemon_hosts(self, service_name: str) -> List[HostSpec]:
-        # we should not deploy nvmeof daemons on hosts that have nvmeof daemons
-        # from services with a different "group" attribute (as recommended by
-        # the nvmeof team)
+        # we should not deploy nvmeof daemons on hosts that already have nvmeof daemons
         spec = cast(NvmeofServiceSpec, self.mgr.spec_store[service_name].spec)
-        nvmeof_group = cast(NvmeofServiceSpec, spec).group
         blocking_daemons: List[DaemonDescription] = []
-        other_group_nvmeof_services = [
+        other_nvmeof_services = [
             nspec for nspec in self.mgr.spec_store.get_specs_by_type('nvmeof').values()
-            if cast(NvmeofServiceSpec, nspec).group != nvmeof_group
+            if nspec.service_name() != spec.service_name()
         ]
-        for other_group_nvmeof_service in other_group_nvmeof_services:
-            blocking_daemons += self.mgr.cache.get_daemons_by_service(other_group_nvmeof_service.service_name())
+        for other_nvmeof_service in other_nvmeof_services:
+            blocking_daemons += self.mgr.cache.get_daemons_by_service(other_nvmeof_service.service_name())
         blocking_daemon_hosts = [
             HostSpec(hostname=blocking_daemon.hostname)
             for blocking_daemon in blocking_daemons if blocking_daemon.hostname is not None

@@ -108,10 +108,19 @@ inline static constexpr std::array<uint64_t, block_size_array_size> block_size_c
     {2048,  // Default - test boundaries for EC 4K chunk size
      512, 3767, 4096, 32768}};
 
+// Choices for block size
+inline static constexpr int block_size_array_size_stable = 2;
+inline static constexpr std::array<uint64_t, block_size_array_size_stable> block_size_choices_stable = {
+  {2048,  // Default - test boundaries for EC 4K chunk size
+   32768}};
+
+
 using SelectBlockSize =
-    ProgramOptionSelector<uint64_t,
-                          io_sequence::tester::block_size_array_size,
-                          io_sequence::tester::block_size_choices>;
+  StableOptionSelector<uint64_t,
+                        io_sequence::tester::block_size_array_size,
+                        io_sequence::tester::block_size_choices,
+                        io_sequence::tester::block_size_array_size_stable,
+                        io_sequence::tester::block_size_choices_stable>;
 
 // Choices for number of threads
 inline static constexpr int thread_array_size = 4;
@@ -138,10 +147,16 @@ inline static constexpr int plugin_array_size = 5;
 inline static constexpr std::array<std::string_view, plugin_array_size>
     plugin_choices = {{"jerasure", "isa", "clay", "shec", "lrc"}};
 
+inline static constexpr int plugin_array_size_stable = 2;
+inline static constexpr std::array<std::string_view, plugin_array_size_stable>
+    plugin_choices_stable = {{"jerasure", "isa"}};
+
 using SelectErasurePlugin =
-    ProgramOptionSelector<std::string_view,
+    StableOptionSelector<std::string_view,
                           io_sequence::tester::plugin_array_size,
-                          io_sequence::tester::plugin_choices>;
+                          io_sequence::tester::plugin_choices,
+                          io_sequence::tester::plugin_array_size_stable,
+                          io_sequence::tester::plugin_choices_stable>;
 
 class SelectErasureKM
     : public ProgramOptionGeneratedSelector<std::pair<int, int>> {
@@ -306,6 +321,7 @@ class SelectErasureTechnique
   ceph::util::random_number_generator<int>& rng;
 
   std::string_view plugin;
+  bool stable;
 };
 
 class SelectErasureChunkSize : public ProgramOptionGeneratedSelector<uint64_t> {
@@ -372,7 +388,8 @@ class SelectErasurePool : public ProgramOptionReader<std::string> {
                     bool allow_pool_balancer,
                     bool allow_pool_deep_scrubbing,
                     bool allow_pool_scrubbing,
-                    bool test_recovery);
+                    bool test_recovery,
+                    bool disable_pool_ec_optimizations);
   const std::string select() override;
   std::string create();
   void configureServices(bool allow_pool_autoscaling,
@@ -387,7 +404,9 @@ class SelectErasurePool : public ProgramOptionReader<std::string> {
     return allow_pool_deep_scrubbing;
   }
   inline bool get_allow_pool_scrubbing() { return allow_pool_scrubbing; }
-
+  inline bool get_allow_pool_ec_optimizations() {
+    return !disable_pool_ec_optimizations;
+  }
   inline std::optional<Profile> getProfile() { return profile; }
 
  private:
@@ -399,6 +418,7 @@ class SelectErasurePool : public ProgramOptionReader<std::string> {
   bool allow_pool_deep_scrubbing;
   bool allow_pool_scrubbing;
   bool test_recovery;
+  bool disable_pool_ec_optimizations;
 
   bool first_use;
 
@@ -489,6 +509,7 @@ class TestRunner {
   bool allow_pool_balancer;
   bool allow_pool_deep_scrubbing;
   bool allow_pool_scrubbing;
+  bool disable_pool_ec_optimizations;
 
   bool show_sequence;
   bool show_help;

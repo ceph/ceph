@@ -24,6 +24,7 @@
 #include "svc_tier_rados.h"
 
 struct rgw_bucket_dir_header;
+struct rgw_cls_list_ret;
 
 class RGWSI_BILog_RADOS;
 
@@ -66,6 +67,8 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
                               uint64_t gen_id, const std::string& obj_key,
                               std::string* bucket_obj, int* shard_id);
 
+public:
+
   int cls_bucket_head(const DoutPrefixProvider *dpp,
 		      const RGWBucketInfo& bucket_info,
                       const rgw::bucket_index_layout_generation& idx_layout,
@@ -73,8 +76,6 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
                       std::vector<rgw_bucket_dir_header> *headers,
                       std::map<int, std::string> *bucket_instance_ids,
                       optional_yield y);
-
-public:
 
   librados::Rados* rados{nullptr};
 
@@ -99,15 +100,15 @@ public:
     return rgw_shard_id(key, max_shards);
   }
 
-  static uint32_t bucket_shard_index(const std::string& key,
-                                     int num_shards) {
+  static int32_t bucket_shard_index(const std::string& key,
+				    int num_shards) {
     uint32_t sid = ceph_str_hash_linux(key.c_str(), key.size());
     uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
     return rgw_shards_mod(sid2, num_shards);
   }
 
-  static uint32_t bucket_shard_index(const rgw_obj_key& obj_key,
-				     int num_shards)
+  static int32_t bucket_shard_index(const rgw_obj_key& obj_key,
+				    int num_shards)
   {
     std::string sharding_key;
     if (obj_key.ns == RGW_OBJ_NS_MULTIPART) {
@@ -121,11 +122,11 @@ public:
     return bucket_shard_index(sharding_key, num_shards);
   }
 
-  int init_index(const DoutPrefixProvider *dpp,
+  int init_index(const DoutPrefixProvider *dpp, optional_yield y,
                  const RGWBucketInfo& bucket_info,
                  const rgw::bucket_index_layout_generation& idx_layout,
                  bool judge_support_logrecord = false) override;
-  int clean_index(const DoutPrefixProvider *dpp,
+  int clean_index(const DoutPrefixProvider *dpp, optional_yield y,
                   const RGWBucketInfo& bucket_info,
                   const rgw::bucket_index_layout_generation& idx_layout) override;
 
@@ -136,8 +137,34 @@ public:
                  RGWBucketEnt *stats,
                  optional_yield y) override;
 
-  int get_reshard_status(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
+  int get_reshard_status(const DoutPrefixProvider *dpp, optional_yield y,
+                         const RGWBucketInfo& bucket_info,
                          std::list<cls_rgw_bucket_instance_entry> *status);
+  int set_reshard_status(const DoutPrefixProvider *dpp, optional_yield y,
+                         const RGWBucketInfo& bucket_info,
+                         cls_rgw_reshard_status status);
+  int trim_reshard_log(const DoutPrefixProvider* dpp, optional_yield,
+                       const RGWBucketInfo& bucket_info);
+
+  int set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y,
+                      const RGWBucketInfo& bucket_info, uint64_t timeout);
+
+  int check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                  const RGWBucketInfo& bucket_info,
+                  std::map<int, bufferlist>& buffers);
+
+  int rebuild_index(const DoutPrefixProvider *dpp, optional_yield y,
+                    const RGWBucketInfo& bucket_info);
+
+  /// Read the requested number of entries from each index shard object.
+  int list_objects(const DoutPrefixProvider* dpp, optional_yield y,
+                   librados::IoCtx& index_pool,
+                   const std::map<int, std::string>& bucket_objs,
+                   const cls_rgw_obj_key& start_obj,
+                   const std::string& prefix,
+                   const std::string& delimiter,
+                   uint32_t num_entries, bool list_versions,
+                   std::map<int, rgw_cls_list_ret>& results);
 
   int handle_overwrite(const DoutPrefixProvider *dpp, const RGWBucketInfo& info,
                        const RGWBucketInfo& orig_info,

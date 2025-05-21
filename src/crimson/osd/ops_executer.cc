@@ -903,6 +903,7 @@ pg_log_entry_t OpsExecuter::prepare_head_update(
 {
   LOG_PREFIX(OpsExecuter::prepare_head_update);
   assert(obc->obs.oi.soid.snap >= CEPH_MAXSNAP);
+  assert(obc->obs.oi.soid.is_head());
 
   update_clone_overlap();
   if (cloning_ctx) {
@@ -911,7 +912,6 @@ pg_log_entry_t OpsExecuter::prepare_head_update(
   if (snapc.seq > obc->ssc->snapset.seq) {
      // update snapset with latest snap context
      obc->ssc->snapset.seq = snapc.seq;
-     obc->ssc->snapset.snaps.clear();
   }
 
   pg_log_entry_t ret{
@@ -1102,17 +1102,18 @@ void OpsExecuter::apply_stats()
   pg->apply_stats(get_target(), delta_stats);
 }
 
-OpsExecuter::OpsExecuter(Ref<PG> pg,
+OpsExecuter::OpsExecuter(Ref<PG> _pg,
                          ObjectContextRef _obc,
                          const OpInfo& op_info,
                          abstracted_msg_t&& msg,
                          crimson::net::ConnectionXcoreRef conn,
                          const SnapContext& _snapc)
-  : pg(std::move(pg)),
+  : pg(std::move(_pg)),
     obc(std::move(_obc)),
     op_info(op_info),
     msg(std::move(msg)),
     conn(conn),
+    txn(pg->min_peer_features()),
     snapc(_snapc)
 {
   if (op_info.may_write() && should_clone(*obc, snapc)) {

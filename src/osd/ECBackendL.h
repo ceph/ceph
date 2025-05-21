@@ -369,7 +369,9 @@ public:
 	have.insert(static_cast<int>(i->shard));
       }
       std::map<int, std::vector<std::pair<int, int>>> min;
+IGNORE_DEPRECATED
       return ec_impl->minimum_to_decode(want, have, &min) == 0;
+END_IGNORE_DEPRECATED
     }
   };
   std::unique_ptr<ECRecPred> get_is_recoverable_predicate() const {
@@ -383,6 +385,9 @@ public:
     return sinfo.get_chunk_size();
   }
   uint64_t object_size_to_shard_size(const uint64_t size) const {
+    if (size == std::numeric_limits<uint64_t>::max()) {
+      return size;
+    }
     return sinfo.logical_to_next_chunk_offset(size);
   }
   /**
@@ -431,6 +436,7 @@ public:
   bool auto_repair_supported() const { return true; }
 
   int be_deep_scrub(
+    const Scrub::ScrubCounterSet& io_counters,
     const hobject_t &poid,
     ScrubMap &map,
     ScrubMapBuilder &pos,

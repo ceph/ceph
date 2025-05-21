@@ -47,6 +47,11 @@ function iterate_ci {
         commit=$(cut -f1 <<<"$commit_ref")
         ref=$(cut -f2 <<<"$commit_ref")
 
+        if [[ "$ref" == 'refs/heads/main' ]]; then
+          eprintf 'Ignoring main branch'
+          continue
+        fi
+
         eprintf 'Examining %s (commit %s)' "$ref" "$commit"
 
         commit_date=$(git log -1 --format="%ct" "$commit")

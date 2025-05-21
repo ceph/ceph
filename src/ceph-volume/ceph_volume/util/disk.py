@@ -1396,7 +1396,7 @@ class UdevData:
             if data_type == 'I':
                 self.id = data
             if data_type == 'E':
-                key, value = data.split('=')
+                key, value = data.split('=', maxsplit=1)
                 self.environment[key] = value
             if data_type == 'G':
                 self.group = data

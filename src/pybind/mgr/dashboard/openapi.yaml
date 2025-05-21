@@ -1692,6 +1692,10 @@ paths:
           application/json:
             schema:
               properties:
+                data_pool:
+                  type: string
+                metadata_pool:
+                  type: string
                 name:
                   type: string
                 service_spec:
@@ -8238,6 +8242,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -8288,6 +8297,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -8317,6 +8331,8 @@ paths:
                 gw_group:
                   type: string
                 log_level:
+                  type: string
+                traddr:
                   type: string
               required:
               - log_level
@@ -8353,6 +8369,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -8378,6 +8399,11 @@ paths:
       - allowEmptyValue: true
         in: query
         name: gw_group
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
         schema:
           type: string
       responses:
@@ -8411,6 +8437,8 @@ paths:
                 log_level:
                   type: string
                 print_level:
+                  type: string
+                traddr:
                   type: string
               type: object
       responses:
@@ -8447,6 +8475,8 @@ paths:
               properties:
                 gw_group:
                   type: string
+                traddr:
+                  type: string
               type: object
       responses:
         '200':
@@ -8480,6 +8510,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -8508,6 +8543,7 @@ paths:
             schema:
               properties:
                 enable_ha:
+                  default: true
                   description: Enable high availability
                   type: boolean
                 gw_group:
@@ -8520,9 +8556,10 @@ paths:
                 nqn:
                   description: NVMeoF subsystem NQN
                   type: string
+                traddr:
+                  type: string
               required:
               - nqn
-              - enable_ha
               type: object
       responses:
         '201':
@@ -8570,6 +8607,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -8609,6 +8651,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -8644,6 +8691,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -8677,6 +8729,11 @@ paths:
         description: NVMeoF gateway group
         in: query
         name: gw_group
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
         schema:
           type: string
       responses:
@@ -8717,6 +8774,8 @@ paths:
                   type: string
                 host_nqn:
                   description: NVMeoF host NQN. Use "*" to allow any host.
+                  type: string
+                traddr:
                   type: string
               required:
               - host_nqn
@@ -8767,6 +8826,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -8805,6 +8869,11 @@ paths:
         description: NVMeoF gateway group
         in: query
         name: gw_group
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
         schema:
           type: string
       responses:
@@ -8970,6 +9039,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -9040,6 +9114,8 @@ paths:
                   default: 1024
                   description: RBD image size
                   type: integer
+                traddr:
+                  type: string
                 trash_image:
                   default: false
                   description: Trash the RBD image when namespace is removed
@@ -9093,6 +9169,11 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
       - default: 'false'
         description: Force remove the RBD image
         in: query
@@ -9142,6 +9223,11 @@ paths:
         description: NVMeoF gateway group
         in: query
         name: gw_group
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
         schema:
           type: string
       responses:
@@ -9201,6 +9287,8 @@ paths:
                 rw_mbytes_per_second:
                   description: Read/Write MB/s
                   type: integer
+                traddr:
+                  type: string
                 trash_image:
                   description: Trash RBD image after removing namespace
                   type: boolean
@@ -9247,6 +9335,11 @@ paths:
         description: NVMeoF gateway group
         in: query
         name: gw_group
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
         schema:
           type: string
       responses:
@@ -11040,6 +11133,11 @@ paths:
         \ detailed account info.\n        - If detailed=False, returns only account\
         \ ids.\n        "
       parameters:
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       - default: false
         in: query
         name: detailed
@@ -11076,6 +11174,9 @@ paths:
               properties:
                 account_name:
                   description: Account name
+                  type: string
+                daemon_name:
+                  description: Name of the daemon
                   type: string
                 email:
                   description: Email
@@ -11137,6 +11238,12 @@ paths:
         required: true
         schema:
           type: string
+      - allowEmptyValue: true
+        description: Name of the daemon
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -11169,6 +11276,12 @@ paths:
         in: path
         name: account_id
         required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: Name of the daemon
+        in: query
+        name: daemon_name
         schema:
           type: string
       responses:
@@ -11209,6 +11322,9 @@ paths:
               properties:
                 account_name:
                   description: Account name
+                  type: string
+                daemon_name:
+                  description: Name of the daemon
                   type: string
                 email:
                   description: Email
@@ -11607,6 +11723,11 @@ paths:
         name: owner
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: tenant
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -11642,6 +11763,8 @@ paths:
                   default: ''
                   type: string
                 owner:
+                  type: string
+                tenant:
                   type: string
               type: object
       responses:
@@ -13203,6 +13326,11 @@ paths:
               properties:
                 access_key:
                   type: string
+                account_id:
+                  type: integer
+                account_root_user:
+                  default: false
+                  type: integer
                 daemon_name:
                   type: string
                 display_name:
@@ -13384,6 +13512,11 @@ paths:
           application/json:
             schema:
               properties:
+                account_id:
+                  type: integer
+                account_root_user:
+                  default: false
+                  type: integer
                 daemon_name:
                   type: string
                 display_name:

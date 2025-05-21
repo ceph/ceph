@@ -396,18 +396,15 @@ private:
 		"test_suite_name must not be empty");                          \
   static_assert(sizeof(GTEST_STRINGIFY_(test_name)) > 1,                       \
 		"test_name must not be empty");                                \
-  class GTEST_TEST_CLASS_NAME_(test_suite_name, test_name) : public fixture {  \
+  class GTEST_TEST_CLASS_NAME_(test_suite_name, test_name)                     \
+    : public fixture, private ::testing::internal::GTestNonCopyable {          \
   public:                                                                      \
     GTEST_TEST_CLASS_NAME_(test_suite_name, test_name)() = default;            \
     ~GTEST_TEST_CLASS_NAME_(test_suite_name, test_name)() override = default;  \
-    GTEST_DISALLOW_COPY_AND_ASSIGN_(GTEST_TEST_CLASS_NAME_(test_suite_name,    \
-							   test_name));        \
-    GTEST_DISALLOW_MOVE_AND_ASSIGN_(GTEST_TEST_CLASS_NAME_(test_suite_name,    \
-							   test_name));        \
 									       \
   private:                                                                     \
     boost::asio::awaitable<void> CoTestBody() override;                        \
-    static ::testing::TestInfo *const test_info_ GTEST_ATTRIBUTE_UNUSED_;      \
+    [[maybe_unused]] static ::testing::TestInfo *const test_info_;             \
   };                                                                           \
 									       \
   ::testing::TestInfo *const GTEST_TEST_CLASS_NAME_(test_suite_name,           \

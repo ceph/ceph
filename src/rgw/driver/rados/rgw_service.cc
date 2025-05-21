@@ -51,8 +51,11 @@ int RGWServices_Def::init(CephContext *cct,
 			  bool have_cache,
                           bool raw,
 			  bool run_sync,
+			  bool background_tasks,
 			  optional_yield y,
-                          const DoutPrefixProvider *dpp)
+                          const DoutPrefixProvider *dpp,
+                          rgw::sal::ConfigStore* cfgstore,
+                          const rgw::SiteConfig* site)
 {
   finisher = std::make_unique<RGWSI_Finisher>(cct);
   bucket_sobj = std::make_unique<RGWSI_Bucket_SObj>(cct);
@@ -62,9 +65,9 @@ int RGWServices_Def::init(CephContext *cct,
   cls = std::make_unique<RGWSI_Cls>(cct);
   config_key_rados = std::make_unique<RGWSI_ConfigKey_RADOS>(cct);
   datalog_rados = std::make_unique<RGWDataChangesLog>(cct);
-  mdlog = std::make_unique<RGWSI_MDLog>(cct, run_sync);
+  mdlog = std::make_unique<RGWSI_MDLog>(cct, run_sync, cfgstore);
   notify = std::make_unique<RGWSI_Notify>(cct);
-  zone = std::make_unique<RGWSI_Zone>(cct);
+  zone = std::make_unique<RGWSI_Zone>(cct, cfgstore, site);
   zone_utils = std::make_unique<RGWSI_ZoneUtils>(cct);
   quota = std::make_unique<RGWSI_Quota>(cct);
   sync_modules = std::make_unique<RGWSI_SyncModules>(cct);
@@ -136,7 +139,7 @@ int RGWServices_Def::init(CephContext *cct,
 
     r = datalog_rados->start(dpp, &zone->get_zone(),
 			     zone->get_zone_params(),
-			     driver->getRados()->get_rados_handle());
+			     driver, background_tasks);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to start datalog_rados service (" << cpp_strerror(-r) << dendl;
       return r;
@@ -261,12 +264,12 @@ void RGWServices_Def::shutdown()
   has_shutdown = true;
 }
 
-int RGWServices::do_init(CephContext *_cct, rgw::sal::RadosStore* driver, bool have_cache, bool raw, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp, const rgw::SiteConfig& _site)
+int RGWServices::do_init(CephContext *_cct, rgw::sal::RadosStore* driver, bool have_cache, bool raw, bool run_sync, bool background_tasks, optional_yield y, const DoutPrefixProvider *dpp, const rgw::SiteConfig& _site, rgw::sal::ConfigStore* cfgstore)
 {
   cct = _cct;
   site = &_site;
 
-  int r = _svc.init(cct, driver, have_cache, raw, run_sync, y, dpp);
+  int r = _svc.init(cct, driver, have_cache, raw, run_sync, background_tasks, y, dpp, cfgstore, site);
   if (r < 0) {
     return r;
   }
@@ -335,17 +338,18 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
   bucket.reset(new RGWBucketCtl(svc.zone,
                                 svc.bucket,
                                 svc.bucket_sync,
-                                svc.bi, svc.user));
+                                svc.bi, svc.user,
+                                svc.datalog_rados));
 
   auto sync_module = svc.sync_modules->get_sync_module();
   if (sync_module) {
     meta.bucket = sync_module->alloc_bucket_meta_handler(rados, svc.bucket, bucket.get());
     meta.bucket_instance = sync_module->alloc_bucket_instance_meta_handler(
-        driver, svc.zone, svc.bucket, svc.bi);
+        driver, svc.zone, svc.bucket, svc.bi, svc.datalog_rados);
   } else {
     meta.bucket = create_bucket_metadata_handler(rados, svc.bucket, bucket.get());
     meta.bucket_instance = create_bucket_instance_metadata_handler(
-        driver, svc.zone, svc.bucket, svc.bi);
+        driver, svc.zone, svc.bucket, svc.bi, svc.datalog_rados);
   }
 
   meta.otp = rgwrados::otp::create_metadata_handler(

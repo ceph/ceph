@@ -351,6 +351,8 @@ def _mk_fake_call(enabled, active):
             if isinstance(active, Exception):
                 raise active
             return active
+        if "enable" in cmd:
+            return enabled
         raise ValueError("should not get here")
 
     return _fake_call
@@ -420,28 +422,8 @@ def test_check_unit(enabled_out, active_out, expected):
     assert (enabled, state, installed) == expected
 
 
-class FakeEnabler:
-    def __init__(self, should_be_called):
-        self._should_be_called = should_be_called
-        self._services = []
-
-    def enable_service(self, service):
-        self._services.append(service)
-
-    def check_expected(self):
-        if not self._should_be_called:
-            assert not self._services
-            return
-        # there are currently seven chron/chrony type services that
-        # cephadm looks for. Make sure it probed for each of them
-        # or more in case someone adds to the list.
-        assert len(self._services) >= 7
-        assert "chrony.service" in self._services
-        assert "ntp.service" in self._services
-
-
 @pytest.mark.parametrize(
-    "call_fn, enabler, expected",
+    "call_fn, expected",
     [
         # Test that time sync services are not enabled
         (
@@ -449,7 +431,6 @@ class FakeEnabler:
                 enabled=("", "", 1),
                 active=("", "", 1),
             ),
-            None,
             False,
         ),
         # Test that time sync service is enabled
@@ -458,7 +439,6 @@ class FakeEnabler:
                 enabled=("", "", 0),
                 active=("active", "", 0),
             ),
-            None,
             True,
         ),
         # Test that time sync is not enabled, and try to enable them.
@@ -470,7 +450,6 @@ class FakeEnabler:
                 enabled=("disabled", "", 1),
                 active=("", "", 1),
             ),
-            FakeEnabler(True),
             False,
         ),
         # Test that time sync is enabled, with an enabler passed which
@@ -480,22 +459,19 @@ class FakeEnabler:
                 enabled=("", "", 0),
                 active=("active", "", 0),
             ),
-            FakeEnabler(False),
             True,
         ),
     ],
 )
-def test_check_time_sync(call_fn, enabler, expected):
+def test_check_time_sync(call_fn, expected):
     """The check_time_sync call actually checks if a time synchronization service
     is enabled. It is also the only consumer of check_units.
     """
     with with_cephadm_ctx([]) as ctx:
         with mock.patch('cephadmlib.systemd.call') as _call:
             _call.side_effect = call_fn
-            result = _cephadm.check_time_sync(ctx, enabler=enabler)
+            result = _cephadm.check_time_sync(ctx)
             assert result == expected
-            if enabler is not None:
-                enabler.check_expected()
 
 
 @pytest.mark.parametrize(

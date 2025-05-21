@@ -118,6 +118,8 @@ class ConfigStore {
                               optional_yield y, const std::string& marker,
                               std::span<std::string> entries,
                               ListResult<std::string>& result) = 0;
+  virtual int update_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
+                                  std::string_view period_id, uint32_t epoch) = 0;
   ///@}
 
   /// @group ZoneGroup

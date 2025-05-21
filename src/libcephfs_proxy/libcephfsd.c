@@ -2,8 +2,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/uio.h>
 #include <getopt.h>
 #include <endian.h>
+#include <string.h>
+#include <stdarg.h>
 
 #include "include/cephfs/libcephfs.h"
 
@@ -238,7 +241,7 @@ static int32_t libcephfsd_conf_set(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		option = CEPH_STR_GET(req->conf_set, option, data);
 		value = CEPH_STR_GET(req->conf_set, value,
-				     data + req->conf_set.option);
+				     (const char *)(data) + req->conf_set.option);
 
 		err = proxy_mount_set(mount, option, value);
 		TRACE("ceph_conf_set(%p, '%s', '%s') -> %d", mount, option,
@@ -810,7 +813,7 @@ static int32_t libcephfsd_ll_rename(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		old_name = CEPH_STR_GET(req->ll_rename, old_name, data);
 		new_name = CEPH_STR_GET(req->ll_rename, new_name,
-					data + req->ll_rename.old_name);
+					(const char *)data + req->ll_rename.old_name);
 
 		err = ceph_ll_rename(proxy_cmount(mount), old_parent, old_name,
 				     new_parent, new_name, perms);
@@ -1220,7 +1223,7 @@ static int32_t libcephfsd_ll_setxattr(proxy_client_t *client, proxy_req_t *req,
 	}
 	if (err >= 0) {
 		name = CEPH_STR_GET(req->ll_setxattr, name, data);
-		value = data + req->ll_setxattr.name;
+		value = (const char *)data + req->ll_setxattr.name;
 		size = req->ll_setxattr.size;
 		flags = req->ll_setxattr.flags;
 
@@ -1326,7 +1329,7 @@ static int32_t libcephfsd_ll_symlink(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		name = CEPH_STR_GET(req->ll_symlink, name, data);
 		value = CEPH_STR_GET(req->ll_symlink, target,
-				     data + req->ll_symlink.name);
+				     (const char *)data + req->ll_symlink.name);
 		want = req->ll_symlink.want;
 		flags = req->ll_symlink.flags;
 
@@ -1558,12 +1561,12 @@ static int32_t libcephfsd_ll_nonblocking_rw(proxy_client_t *client,
 	}
 	io_info = &async_io->io_info;
 
+	memset(io_info, 0, sizeof(struct ceph_ll_io_info));
 	io_info->callback = libcephfsd_ll_nonblocking_rw_cbk;
 	io_info->priv = (void *)(uintptr_t)req->ll_nonblocking_rw.info;
 	io_info->iov = &async_io->iov;
 	io_info->iovcnt = 1;
 	io_info->off = req->ll_nonblocking_rw.off;
-	io_info->result = 0;
 	io_info->write = req->ll_nonblocking_rw.write;
 	io_info->fsync = req->ll_nonblocking_rw.fsync;
 	io_info->syncdataonly = req->ll_nonblocking_rw.syncdataonly;
@@ -1825,10 +1828,54 @@ static int32_t server_start(proxy_manager_t *manager)
 				 accept_connection, check_stop);
 }
 
+static void log_format(struct iovec *iov, char *buffer, size_t size,
+		       const char *fmt, const char *err, ...)
+{
+	va_list args;
+	int32_t len;
+
+	va_start(args, err);
+	len = vsnprintf(buffer, size, fmt, args);
+	va_end(args);
+
+	if (len < 0) {
+		iov->iov_base = (void *)err;
+		iov->iov_len = strlen(err);
+	} else {
+		if (len >= size) {
+			memcpy(buffer + size - 6, "[...]", 6);
+			len = size - 1;
+		}
+
+		iov->iov_base = buffer;
+		iov->iov_len = len;
+	}
+}
+
 static void log_print(proxy_log_handler_t *handler, int32_t level, int32_t err,
 		      const char *msg)
 {
-	printf("[%d] %s\n", level, msg);
+	static const char level_chars[] = "CEWID";
+
+	char emsg[256];
+	char header[8];
+	struct iovec iov[3];
+
+	log_format(&iov[0], header, sizeof(header), "[%c] ", "[?] ",
+		   level_chars[level]);
+
+	iov[1].iov_base = (void *)msg;
+	iov[1].iov_len = strlen(msg);
+
+	if (err != 0) {
+		log_format(&iov[2], emsg, sizeof(emsg), " (error %d: %s)\n",
+			   " (error ?)\n", err, strerror(err));
+	} else {
+		iov[2].iov_base = "\n";
+		iov[2].iov_len = 1;
+	}
+
+	writev(STDOUT_FILENO, iov, 3);
 }
 
 static struct option main_opts[] = {

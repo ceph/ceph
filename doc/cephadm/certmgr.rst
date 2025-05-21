@@ -41,35 +41,37 @@ while allowing users to manage certificate policies according to their needs.
 Configuration
 =============
 
-To manage certificate lifecycles, `certmgr` continuously monitors certificates
-and applies renewal policies based on the certificate type and configured
-parameters. Cephadm provides several configuration options to manage certificate
-lifecycle and renewal:
+To manage certificate lifecycles, ``certmgr`` continuously monitors
+certificates and applies renewal policies based on the certificate type and
+configured parameters. Cephadm provides several configuration options to manage
+certificate lifecycle and renewal:
 
-- **`mgr/cephadm/certificate_automated_rotation_enabled`** (default: `True`):
-  Enabled by default, this configuration option controls
-  whether Cephadm automatically rotates certificates upon expiration. This helps
-  ensure continuity and security without manual intervention. When disabled cephadm will
-  still check periodically the certificates but instead of automatically renewing self-signed
-  expired ones it will issue a health error/warning when an issue is detected.
+- ``mgr/cephadm/certificate_automated_rotation_enabled`` (default: ``True``):
+  Enabled by default, this configuration option controls whether Cephadm
+  automatically rotates certificates upon expiration. This helps ensure
+  continuity and security without manual intervention. When disabled cephadm
+  will still check periodically the certificates but instead of automatically
+  renewing self-signed expired ones it will issue a health error/warning when
+  an issue is detected.
 
-- **`mgr/cephadm/certificate_duration_days`** (default: `3 * 365`, min: `90`, max: `10 *
-  365`): Specifies the duration (in days) of self-signed certificates generated
-  and signed by the Cephadm root CA. This determines the validity period before
-  renewal is required.
+- ``mgr/cephadm/certificate_duration_days`` (default: ``3 * 365``, min: ``90``,
+  max: ``10 * 365``): Specifies the duration (in days) of self-signed
+  certificates generated and signed by the Cephadm root CA. This determines the
+  validity period before renewal is required.
 
-- **`mgr/cephadm/certificate_renewal_threshold_days`** (default: `30`, min: `10`, max:
-  `90`): Defines the number of days before a certificate's expiration when
-  Cephadm should initiate renewal. This ensures timely replacement before
-  expiration occurs. This applies to both self-signed and user-provided
-  certificates. In the case of user-provided certificates, Cephadm will issue a
-  health error or warning alerting administrators about the upcoming renewal
-  period proximity.
+- ``mgr/cephadm/certificate_renewal_threshold_days`` (default: ``30``, min:
+  ``10``, max: ``90``): Defines the number of days before a certificate's
+  expiration when Cephadm should initiate renewal. This ensures timely
+  replacement before expiration occurs. This applies to both self-signed and
+  user-provided certificates. In the case of user-provided certificates,
+  Cephadm will issue a health error or warning alerting administrators about
+  the upcoming renewal period proximity.
 
-- **`mgr/cephadm/certificate_check_period`** (default: `1`, min: `0`, max: `30`):
-  Specifies how often (in days) the certificate should be checked for validity.
-  This ensures timely detection of any issues related to certificate expiration.
-  Setting this to `0` disables the certificate check functionality.
+- ``mgr/cephadm/certificate_check_period`` (default: ``1``, min: ``0``, max:
+  ``30``): Specifies how often (in days) the certificate should be checked for
+  validity.  This ensures timely detection of any issues related to certificate
+  expiration.  Setting this to ``0`` disables the certificate check
+  functionality.
 
 Certificate Health Monitoring
 =============================

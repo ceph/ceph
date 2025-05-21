@@ -118,6 +118,7 @@ private:
 
   void start_image_replayer(ImageReplayer<ImageCtxT> *image_replayer);
   void queue_start_image_replayers();
+  void start_image_replayers(const std::unique_lock<ceph::mutex>&);
   void start_image_replayers(int r);
 
   void stop_image_replayer(ImageReplayer<ImageCtxT> *image_replayer,

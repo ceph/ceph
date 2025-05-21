@@ -5,3 +5,5 @@ overrides:
         lockdep: true
       mon:
         lockdep: true
+      client:
+        lockdep: true

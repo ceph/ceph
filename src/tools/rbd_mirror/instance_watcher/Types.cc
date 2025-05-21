@@ -12,7 +12,7 @@ namespace instance_watcher {
 
 namespace {
 
-class EncodePayloadVisitor : public boost::static_visitor<void> {
+class EncodePayloadVisitor {
 public:
   explicit EncodePayloadVisitor(bufferlist &bl) : m_bl(bl) {}
 
@@ -27,7 +27,7 @@ private:
   bufferlist &m_bl;
 };
 
-class DecodePayloadVisitor : public boost::static_visitor<void> {
+class DecodePayloadVisitor {
 public:
   DecodePayloadVisitor(__u8 version, bufferlist::const_iterator &iter)
     : m_version(version), m_iter(iter) {}
@@ -42,7 +42,7 @@ private:
   bufferlist::const_iterator &m_iter;
 };
 
-class DumpPayloadVisitor : public boost::static_visitor<void> {
+class DumpPayloadVisitor {
 public:
   explicit DumpPayloadVisitor(Formatter *formatter) : m_formatter(formatter) {}
 
@@ -139,7 +139,7 @@ void UnknownPayload::dump(Formatter *f) const {
 
 void NotifyMessage::encode(bufferlist& bl) const {
   ENCODE_START(2, 2, bl);
-  boost::apply_visitor(EncodePayloadVisitor(bl), payload);
+  std::visit(EncodePayloadVisitor(bl), payload);
   ENCODE_FINISH(bl);
 }
 
@@ -171,12 +171,12 @@ void NotifyMessage::decode(bufferlist::const_iterator& iter) {
     break;
   }
 
-  apply_visitor(DecodePayloadVisitor(struct_v, iter), payload);
+  std::visit(DecodePayloadVisitor(struct_v, iter), payload);
   DECODE_FINISH(iter);
 }
 
 void NotifyMessage::dump(Formatter *f) const {
-  apply_visitor(DumpPayloadVisitor(f), payload);
+  std::visit(DumpPayloadVisitor(f), payload);
 }
 
 void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {

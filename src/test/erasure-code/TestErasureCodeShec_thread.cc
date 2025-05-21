@@ -86,6 +86,7 @@ TEST(ErasureCodeShec, thread)
   pthread_join(tid5, NULL);
 }
 
+IGNORE_DEPRECATED
 void* thread1(void* pParam)
 {
   TestParam* param = static_cast<TestParam*>(pParam);
@@ -217,3 +218,4 @@ void* thread1(void* pParam)
 
   return NULL;
 }
+END_IGNORE_DEPRECATED

@@ -30,8 +30,11 @@
 #include "LogSegment.h"
 #include "MDBalancer.h"
 #include "SnapClient.h"
+#include "SnapRealm.h"
+#include "events/EMetaBlob.h"
 
 #include "common/bloom_filter.hpp"
+#include "common/debug.h"
 #include "common/likely.h"
 #include "include/Context.h"
 #include "common/Clock.h"
@@ -41,6 +44,8 @@
 #include "common/config.h"
 #include "include/ceph_assert.h"
 #include "include/compat.h"
+
+#include "messages/MClientReply.h" // for struct DirStat
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -218,6 +223,8 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdc, bool auth) :
   if (auth)
     state_set(STATE_AUTH);
 }
+
+CDir::~CDir() noexcept = default;
 
 /**
  * Check the recursive statistics on size for consistency.
@@ -859,6 +866,10 @@ bool CDir::is_in_bloom(std::string_view name)
   if (!bloom)
     return false;
   return bloom->contains(name.data(), name.size());
+}
+
+void CDir::remove_bloom() {
+  bloom.reset();
 }
 
 void CDir::remove_null_dentries() {

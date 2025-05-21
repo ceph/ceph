@@ -26,14 +26,15 @@ class PGBackend;
 class PGRecovery : public crimson::osd::BackfillState::BackfillListener {
 public:
   using interruptor =
-    crimson::interruptible::interruptor<crimson::osd::IOInterruptCondition>;
+    ::crimson::interruptible::interruptor<
+      ::crimson::osd::IOInterruptCondition>;
   template <typename T = void>
   using interruptible_future = RecoveryBackend::interruptible_future<T>;
   PGRecovery(PGRecoveryListener* pg) : pg(pg) {}
   virtual ~PGRecovery() {}
   void start_pglogbased_recovery();
 
-  interruptible_future<bool> start_recovery_ops(
+  interruptible_future<seastar::stop_iteration> start_recovery_ops(
     RecoveryBackend::RecoveryBlockingEvent::TriggerI&,
     crimson::osd::PglogBasedRecovery &recover_op,
     size_t max_to_start);
@@ -67,7 +68,9 @@ private:
   }
   RecoveryBackend::interruptible_future<> recover_missing(
     RecoveryBackend::RecoveryBlockingEvent::TriggerI&,
-    const hobject_t &soid, eversion_t need);
+    const hobject_t &soid,
+    eversion_t need,
+    bool with_throttle);
   RecoveryBackend::interruptible_future<> prep_object_replica_deletes(
     RecoveryBackend::RecoveryBlockingEvent::TriggerI& trigger,
     const hobject_t& soid,
@@ -99,6 +102,18 @@ private:
   friend class ReplicatedRecoveryBackend;
   friend class crimson::osd::UrgentRecovery;
 
+  interruptible_future<> recover_object_with_throttle(
+    hobject_t soid,
+    eversion_t need);
+
+  interruptible_future<> recover_object(
+    const hobject_t &soid,
+    eversion_t need) {
+    auto backend = pg->get_recovery_backend();
+    assert(backend);
+    return backend->recover_object(soid, need);
+  }
+
   // backfill begin
   std::unique_ptr<crimson::osd::BackfillState> backfill_state;
   std::map<pg_shard_t,
@@ -122,7 +137,13 @@ private:
   void update_peers_last_backfill(
     const hobject_t& new_last_backfill) final;
   bool budget_available() const final;
+
+  template <typename T>
+  void start_peering_event_operation_listener(T &&evt, float delay = 0);
   void backfilled() final;
+  void request_backfill();
+  void all_replicas_recovered();
+
   friend crimson::osd::BackfillState::PGFacade;
   friend crimson::osd::PG;
   // backfill end

@@ -31,7 +31,7 @@ function(add_options name)
   set(options_yamls ${options_yamls} PARENT_SCOPE)
   set(cc_file "${name}_options.cc")
   set(h_file "${PROJECT_BINARY_DIR}/include/${name}_legacy_options.h")
-  add_custom_command(PRE_BUILD
+  add_custom_command(
     OUTPUT ${cc_file} ${h_file}
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/y2c.py
       --input ${yaml_file}

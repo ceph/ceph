@@ -111,7 +111,7 @@ SegmentedJournal::prep_replay_segments(
     auto journal_tail = trimmer.get_journal_tail();
     auto journal_tail_paddr = journal_tail.offset;
     ceph_assert(journal_tail != JOURNAL_SEQ_NULL);
-    ceph_assert(journal_tail_paddr != P_ADDR_NULL);
+    ceph_assert(journal_tail_paddr.is_absolute_segmented());
     auto from = std::find_if(
       segments.begin(),
       segments.end(),

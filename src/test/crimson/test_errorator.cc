@@ -14,6 +14,14 @@
 struct errorator_test_t : public seastar_test_suite_t {
   using ertr = crimson::errorator<crimson::ct_error::invarg>;
 
+  ertr::future<> invarg_foo() {
+    return crimson::ct_error::invarg::make();
+  };
+
+  ertr::future<> clean_foo() {
+    return ertr::now();
+  };
+
   struct noncopyable_t {
     constexpr noncopyable_t() = default;
     ~noncopyable_t() = default;
@@ -84,4 +92,44 @@ TEST_F(errorator_test_t, test_futurization)
       return ertr::make_ready_future<int>(life);
     }).unsafe_get();
   });
+}
+
+TEST_F(errorator_test_t, no_handle_error)
+{
+  run_async([this] {
+    return clean_foo().handle_error(
+      crimson::ct_error::assert_all("unexpected error")
+    ).get();
+  });
+}
+
+TEST_F(errorator_test_t, handle_specific_error)
+{
+  int res = 0;
+  run_async([&res, this] {
+  return invarg_foo().handle_error(
+    crimson::ct_error::invarg::handle([&res] (const auto& ec) {
+      EXPECT_EQ(ec.value(), EINVAL);
+      res = 1;
+      return seastar::now();
+    }),
+    crimson::ct_error::assert_all("unexpected error")).get();
+  });
+  EXPECT_EQ(res, 1);
+}
+
+TEST_F(errorator_test_t, pass_further_error)
+{
+  int res = 0;
+  run_async([&res, this] {
+    return invarg_foo().handle_error(
+      ertr::pass_further{}
+    ).handle_error(
+      crimson::ct_error::invarg::handle([&res] (const auto& ec) {
+      res = 1;
+      return seastar::now();
+    }),
+    crimson::ct_error::assert_all("unexpected error")).get();
+  });
+  EXPECT_EQ(res, 1);
 }

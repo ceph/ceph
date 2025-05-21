@@ -1,5 +1,7 @@
 <ng-container *ngIf="smbShares$ | async as smbShares">
   <cd-table
+    headerTitle="Shares"
+    headerDescription="Logical unit hosted by the cluster that maps to the given CephFS volume and path"
     [data]="smbShares"
     columnMode="flex"
     [columns]="columns"
