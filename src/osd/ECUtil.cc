@@ -160,10 +160,13 @@ void ECUtil::stripe_info_t::trim_shard_extent_set_for_ro_offset(
     uint64_t shard_offset = ro_offset_to_shard_offset(
       ro_offset, raw_shard_id_t(0));
     for (auto &&iter = shard_extent_set.begin(); iter != shard_extent_set.end()
-         ;) {
+         /* see below */;) {
       iter->second.erase_after(align_page_next(shard_offset));
-      if (iter->second.empty()) iter = shard_extent_set.erase(iter);
-      else ++iter;
+      if (iter->second.empty()) {
+        iter = shard_extent_set.erase(iter);
+      } else {
+        ++iter;
+      }
     }
   }
 }
