@@ -54,6 +54,7 @@ ECBackend::ECBackend(pg_shard_t whoami,
 
 ECBackend::ll_read_ierrorator::future<ceph::bufferlist>
 ECBackend::_read(const hobject_t& hoid,
+                 const uint64_t object_size,
                  const uint64_t off,
                  const uint64_t len,
                  const uint32_t flags)
@@ -69,16 +70,17 @@ ECBackend::_read(const hobject_t& hoid,
   objects_read_and_reconstruct(
     reads,
     fast_read,
+    object_size,
     make_gen_lambda_context<ec_extents_t &&>(
       [hoid, off, len, promise=std::move(promise), FNAME](auto&& results) mutable {
         ceph_assert(results.size() == 1);
         ceph_assert(results.count(hoid) == 1);
-        auto& [err, extents] = results[hoid];
-        if (err < 0) {
+        auto& got = results.at(hoid);
+        if (got.err < 0) {
           ceph_abort_msg("implement error handling");
           return;
         }
-	auto range = extents.get_containing_range(off, len);
+	auto range = got.emap.get_containing_range(off, len);
 	ceph_assert(range.first != range.second);
 	ceph_assert(range.first.get_off() <= off);
         DEBUG("offset: {}", off);
