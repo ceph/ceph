@@ -1,13 +1,10 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">Create System User</ng-container>
+<cd-modal title="Create System User">
 
   <ng-container class="modal-content">
     <form name="multisiteSystemUserForm"
           #formDir="ngForm"
           [formGroup]="multisiteSystemUserForm"
           novalidate>
-      <div class="modal-body">
         <div class="form-group row">
           <label class="cd-col-form-label required"
                  for="userName"
@@ -27,11 +24,12 @@
                   i18n>The chosen realm name is already in use.</span>
           </div>
         </div>
-      </div>
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="submit()"
-                              [form]="multisiteSystemUserForm"></cd-form-button-panel>
-      </div>
     </form>
+
+    <ng-container class="modal-footer">
+      <cd-form-button-panel (submitActionEvent)="submit()"
+                            [modalForm]="true"
+                            [form]="multisiteSystemUserForm"></cd-form-button-panel>
+    </ng-container>
   </ng-container>
 </cd-modal>

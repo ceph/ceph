@@ -17,7 +17,6 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -25,6 +24,7 @@ import { configureTestBed, expectItemTasks, Mocks } from '~/testing/unit-test-he
 import { Pool } from '../pool';
 import { PoolDetailsComponent } from '../pool-details/pool-details.component';
 import { PoolListComponent } from './pool-list.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 describe('PoolListComponent', () => {
   let component: PoolListComponent;
@@ -172,7 +172,7 @@ describe('PoolListComponent', () => {
     };
 
     beforeEach(() => {
-      spyOn(TestBed.inject(ModalService), 'show').and.callFake((deletionClass, initialState) => {
+      spyOn(TestBed.inject(ModalCdsService), 'show').and.callFake((deletionClass, initialState) => {
         modalRef = {
           componentInstance: Object.assign(new deletionClass(), initialState)
         };

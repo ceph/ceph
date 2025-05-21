@@ -1,12 +1,9 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">Delete Zone</ng-container>
+<cd-modal title="Delete Zone">
 
   <ng-container class="modal-content">
     <form name="zoneForm"
           [formGroup]="zoneForm"
           novalidate>
-      <div class="modal-body ms-4">
         <label i18n>
           This will delete your <strong>{{zone?.name}}</strong> Zone.
         </label>
@@ -40,15 +37,14 @@
             </div>
           </div>
         </ng-container>
-      </div>
-
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="submit()"
-                              [form]="zoneForm"
-                              [submitText]="actionLabels.DELETE">
-        </cd-form-button-panel>
-      </div>
     </form>
   </ng-container>
 
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="submit()"
+                          [form]="zoneForm"
+                          [modalForm]="true"
+                          [submitText]="actionLabels.DELETE">
+    </cd-form-button-panel>
+  </ng-container>
 </cd-modal>

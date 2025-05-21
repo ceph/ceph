@@ -1,15 +1,8 @@
-<cds-modal size="md"
+<cd-modal size="md"
            [open]="open"
-           [hasScrollingContent]="true"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>
-      {mode, select, edit {Edit} other {Add}} pool mirror peer
-    </h3>
-  </cds-modal-header>
+           title="{mode, select, edit {Edit} other {Add}} pool mirror peer">
 
-  <section cdsModalContent>
+  <ng-container class="modal-content">
     <form name="editPeerForm"
           class="form"
           #formDir="ngForm"
@@ -114,10 +107,12 @@
         </ng-template>
       </div>
     </form>
-  </section>
+  </ng-container>
 
-  <cd-form-button-panel (submitActionEvent)="update()"
-                        [form]="editPeerForm"
-                        [submitText]="actionLabels.SUBMIT"
-                        [modalForm]="true"></cd-form-button-panel>
-</cds-modal>
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="update()"
+                          [form]="editPeerForm"
+                          [submitText]="actionLabels.SUBMIT"
+                          [modalForm]="true"></cd-form-button-panel>
+  </ng-container>
+</cd-modal>

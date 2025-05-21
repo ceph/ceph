@@ -1,20 +1,18 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container class="modal-title"
-                i18n>OSD creation preview</ng-container>
+<cd-modal title="OSD creation preview">
 
   <ng-container class="modal-content">
     <form #frm="ngForm"
           [formGroup]="formGroup"
           novalidate>
-      <div class="modal-body">
-        <h4 i18n>DriveGroups</h4>
-        <pre>{{ driveGroups | json}}</pre>
-      </div>
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                              [form]="formGroup"
-                              [submitText]="action | titlecase"></cd-form-button-panel>
-      </div>
+      <h4 i18n>DriveGroups</h4>
+      <pre>{{ driveGroups | json}}</pre>
     </form>
+  </ng-container>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                          [form]="formGroup"
+                          [submitText]="action | titlecase"
+                          [modalForm]="true"></cd-form-button-panel>
   </ng-container>
 </cd-modal>

@@ -1,7 +1,8 @@
 import { Component, EventEmitter, Output, ViewChild } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 
-import { NgbActiveModal, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
+import { NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import _ from 'lodash';
 import { merge, Observable, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators';
@@ -21,7 +22,7 @@ import { PrometheusSilenceMatcherService } from '~/app/shared/services/prometheu
   templateUrl: './silence-matcher-modal.component.html',
   styleUrls: ['./silence-matcher-modal.component.scss']
 })
-export class SilenceMatcherModalComponent {
+export class SilenceMatcherModalComponent extends BaseModal {
   @ViewChild(NgbTypeahead, { static: true })
   typeahead: NgbTypeahead;
   @Output()
@@ -55,9 +56,9 @@ export class SilenceMatcherModalComponent {
   constructor(
     private formBuilder: CdFormBuilder,
     private silenceMatcher: PrometheusSilenceMatcherService,
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.createForm();
     this.subscribeToChanges();
   }
@@ -102,6 +103,6 @@ export class SilenceMatcherModalComponent {
 
   onSubmit() {
     this.submitAction.emit(this.form.value);
-    this.activeModal.close();
+    this.closeModal();
   }
 }

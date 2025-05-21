@@ -3,7 +3,6 @@ import { Component, EventEmitter, Input, OnInit, Output, ViewChild } from '@angu
 import { UntypedFormGroup, NgForm } from '@angular/forms';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
 import { ModalCdsService } from '../../services/modal-cds.service';
 import { ActivatedRoute } from '@angular/router';
@@ -48,7 +47,6 @@ export class FormButtonPanelComponent implements OnInit {
   constructor(
     private location: Location,
     private actionLabels: ActionLabelsI18n,
-    private modalService: ModalService,
     private cdsModalService: ModalCdsService,
     private route: ActivatedRoute
   ) {}
@@ -69,8 +67,8 @@ export class FormButtonPanelComponent implements OnInit {
         this.cdsModalService.dismissAll();
       } else if (this.modalForm && this.hasModalOutlet) {
         this.location.back();
-      } else if (this.modalService.hasOpenModals()) {
-        this.modalService.dismissAll();
+      } else if (this.cdsModalService.hasOpenModals()) {
+        this.cdsModalService.dismissAll();
       } else {
         this.location.back();
       }

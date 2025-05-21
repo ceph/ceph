@@ -11,10 +11,10 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { CephfsVolumeFormComponent } from '../cephfs-form/cephfs-form.component';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephfsListComponent } from './cephfs-list.component';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({ selector: 'cd-cephfs-tabs', template: '' })
 class CephfsTabsStubComponent {
@@ -81,7 +81,7 @@ describe('CephfsListComponent', () => {
     };
 
     beforeEach(() => {
-      spyOn(TestBed.inject(ModalService), 'show').and.callFake((deletionClass, initialState) => {
+      spyOn(TestBed.inject(ModalCdsService), 'show').and.callFake((deletionClass, initialState) => {
         modalRef = {
           componentInstance: Object.assign(new deletionClass(), initialState)
         };

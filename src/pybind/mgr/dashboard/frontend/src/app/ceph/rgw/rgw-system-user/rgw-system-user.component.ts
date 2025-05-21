@@ -1,6 +1,7 @@
 import { Component, EventEmitter, Output } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
@@ -12,7 +13,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   templateUrl: './rgw-system-user.component.html',
   styleUrls: ['./rgw-system-user.component.scss']
 })
-export class RgwSystemUserComponent {
+export class RgwSystemUserComponent extends BaseModal {
   multisiteSystemUserForm: CdFormGroup;
   zoneName: string;
 
@@ -25,6 +26,7 @@ export class RgwSystemUserComponent {
     public rgwZoneService: RgwZoneService,
     public notificationService: NotificationService
   ) {
+    super();
     this.createForm();
   }
 
@@ -44,7 +46,7 @@ export class RgwSystemUserComponent {
         NotificationType.success,
         $localize`User: '${this.multisiteSystemUserForm.getValue('userName')}' created successfully`
       );
-      this.activeModal.close();
+      this.closeModal();
     });
   }
 }
