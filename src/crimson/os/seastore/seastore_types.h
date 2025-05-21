@@ -969,7 +969,7 @@ enum class backend_type_t {
 std::ostream& operator<<(std::ostream& out, backend_type_t);
 
 constexpr backend_type_t get_default_backend_of_device(device_type_t dtype) {
-  ceph_assert(dtype != device_type_t::NONE &&
+  assert(dtype != device_type_t::NONE &&
 	 dtype != device_type_t::NUM_TYPES);
   if (dtype >= device_type_t::HDD &&
       dtype <= device_type_t::EPHEMERAL_MAIN) {
@@ -1476,11 +1476,11 @@ constexpr bool is_logical_type(extent_types_t type) {
   if ((type >= extent_types_t::ROOT_META &&
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
       type == extent_types_t::TEST_BLOCK) {
-    ceph_assert(is_logical_metadata_type(type) ||
+    assert(is_logical_metadata_type(type) ||
            is_data_type(type));
     return true;
   } else {
-    ceph_assert(!is_logical_metadata_type(type) &&
+    assert(!is_logical_metadata_type(type) &&
            !is_data_type(type));
     return false;
   }
@@ -1513,12 +1513,12 @@ constexpr bool is_physical_type(extent_types_t type) {
   if (type <= extent_types_t::DINK_LADDR_LEAF ||
       (type >= extent_types_t::TEST_BLOCK_PHYSICAL &&
        type <= extent_types_t::BACKREF_LEAF)) {
-    ceph_assert(is_root_type(type) ||
+    assert(is_root_type(type) ||
            is_lba_backref_node(type) ||
            type == extent_types_t::TEST_BLOCK_PHYSICAL);
     return true;
   } else {
-    ceph_assert(!is_root_type(type) &&
+    assert(!is_root_type(type) &&
            !is_lba_backref_node(type) &&
            type != extent_types_t::TEST_BLOCK_PHYSICAL);
     return false;
@@ -1530,12 +1530,12 @@ constexpr bool is_backref_mapped_type(extent_types_t type) {
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
       type == extent_types_t::TEST_BLOCK ||
       type == extent_types_t::TEST_BLOCK_PHYSICAL) {
-    ceph_assert(is_logical_type(type) ||
+    assert(is_logical_type(type) ||
 	   is_lba_node(type) ||
 	   type == extent_types_t::TEST_BLOCK_PHYSICAL);
     return true;
   } else {
-    ceph_assert(!is_logical_type(type) &&
+    assert(!is_logical_type(type) &&
 	   !is_lba_node(type) &&
 	   type != extent_types_t::TEST_BLOCK_PHYSICAL);
     return false;
@@ -1546,11 +1546,11 @@ constexpr bool is_real_type(extent_types_t type) {
   if (type <= extent_types_t::OBJECT_DATA_BLOCK ||
       (type >= extent_types_t::TEST_BLOCK &&
        type <= extent_types_t::BACKREF_LEAF)) {
-    ceph_assert(is_logical_type(type) ||
+    assert(is_logical_type(type) ||
            is_physical_type(type));
     return true;
   } else {
-    ceph_assert(!is_logical_type(type) &&
+    assert(!is_logical_type(type) &&
            !is_physical_type(type));
     return false;
   }
@@ -1669,10 +1669,10 @@ std::ostream &operator<<(std::ostream &out, mod_time_point_printer_t tp);
 constexpr sea_time_point
 get_average_time(const sea_time_point& t1, std::size_t n1,
                  const sea_time_point& t2, std::size_t n2) {
-  ceph_assert(t1 != NULL_TIME);
-  ceph_assert(t2 != NULL_TIME);
+  assert(t1 != NULL_TIME);
+  assert(t2 != NULL_TIME);
   auto new_size = n1 + n2;
-  ceph_assert(new_size > 0);
+  assert(new_size > 0);
   auto c1 = t1.time_since_epoch().count();
   auto c2 = t2.time_since_epoch().count();
   auto c_ret = c1 / new_size * n1 + c2 / new_size * n2;
