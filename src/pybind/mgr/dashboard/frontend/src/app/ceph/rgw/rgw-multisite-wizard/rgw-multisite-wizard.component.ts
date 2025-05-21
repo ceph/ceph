@@ -192,9 +192,13 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
   }
 
   showCancelButtonLabel() {
-    return !this.wizardStepsService.isFirstStep()
-      ? this.actionLabels.BACK
-      : this.actionLabels.CANCEL;
+    if (this.loading) {
+      return this.actionLabels.CLOSE;
+    } else if (this.wizardStepsService.isFirstStep()) {
+      return this.actionLabels.CANCEL;
+    } else {
+      return this.actionLabels.BACK;
+    }
   }
 
   onNextStep() {
@@ -278,7 +282,9 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
   }
 
   onPreviousStep() {
-    if (!this.wizardStepsService.isFirstStep()) {
+    if (this.loading) {
+      this.location.back();
+    } else if (!this.wizardStepsService.isFirstStep()) {
       this.wizardStepsService.moveToPreviousStep();
     } else {
       this.location.back();
