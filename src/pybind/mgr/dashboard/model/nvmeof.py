@@ -39,6 +39,9 @@ class Subsystem(NamedTuple):
     namespace_count: int
     subtype: str
     max_namespaces: int
+    has_dhchap_key: bool
+    allow_any_host: bool
+    created_without_key: bool = False
 
 
 class SubsystemList(NamedTuple):
