@@ -979,13 +979,6 @@ void Replayer<I>::handle_create_mirror_snapshot(
       derr << "failed to remove group snapshot : "
            << snap->id << " : " << cpp_strerror(r) << dendl;
     }
-    for (auto local_snap = m_local_group_snaps.begin();
-        local_snap != m_local_group_snaps.end(); ++local_snap) {
-      if (local_snap->id != snap->id) {
-        continue;
-      }
-      m_local_group_snaps.erase(local_snap);
-    }
   }
 
   on_finish->complete(r);
@@ -1224,7 +1217,6 @@ void Replayer<I>::unlink_group_snapshots() {
       derr << "failed to remove group snapshot : "
            << local_snap->id << " : " << cpp_strerror(r) << dendl;
     }
-    m_local_group_snaps.erase(local_snap);
     locker.unlock();
   }
 }
