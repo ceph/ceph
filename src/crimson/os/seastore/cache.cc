@@ -1162,6 +1162,7 @@ CachedExtentRef Cache::duplicate_for_write(
   Transaction &t,
   CachedExtentRef i) {
   LOG_PREFIX(Cache::duplicate_for_write);
+  ceph_assert(i->is_valid());
   assert(i->is_fully_loaded());
 
 #ifndef NDEBUG

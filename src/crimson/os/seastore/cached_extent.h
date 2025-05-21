@@ -542,7 +542,8 @@ public:
     return TCachedExtentRef<const T>(static_cast<const T*>(this));
   }
 
-  /// Returns true if extent can be mutated in an open transaction
+  /// Returns true if extent can be mutated in an open transaction,
+  /// normally equivalent to !is_data_stable.
   bool is_mutable() const {
     return state == extent_state_t::INITIAL_WRITE_PENDING ||
       state == extent_state_t::MUTATION_PENDING ||
@@ -578,6 +579,8 @@ public:
     return is_stable_written() || is_stable_writting();
   }
 
+  /// Returns true if extent can not be mutated,
+  /// normally equivalent to !is_mutable.
   bool is_data_stable() const {
     return is_stable() || is_exist_clean();
   }
