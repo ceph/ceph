@@ -19678,13 +19678,13 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
     sout.width(width);
     switch (l + LEVEL_FIRST) {
     case LEVEL_LOG:
-      sout << "LOG"; break;
+      sout << "log"; break;
     case LEVEL_WAL:
-      sout << "WAL"; break;
+      sout << "db.wal"; break;
     case LEVEL_DB:
-      sout << "DB"; break;
+      sout << "db"; break;
     case LEVEL_SLOW:
-      sout << "SLOW"; break;
+      sout << "db.slow"; break;
     case LEVEL_MAX:
       sout << "TOTAL"; break;
     }
@@ -19705,13 +19705,13 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
     sout.width(width);
     switch (l + LEVEL_FIRST) {
     case LEVEL_LOG:
-      sout << "LOG"; break;
+      sout << "log"; break;
     case LEVEL_WAL:
-      sout << "WAL"; break;
+      sout << "db.wal"; break;
     case LEVEL_DB:
-      sout << "DB"; break;
+      sout << "db"; break;
     case LEVEL_SLOW:
-      sout << "SLOW"; break;
+      sout << "db.slow"; break;
     case LEVEL_MAX:
       sout << "TOTAL"; break;
     }
