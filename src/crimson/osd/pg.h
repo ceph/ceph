@@ -1037,6 +1037,9 @@ public:
   const std::set<pg_shard_t> &get_acting_recovery_backfill() const {
     return peering_state.get_acting_recovery_backfill();
   }
+  const shard_id_set &get_acting_recovery_backfill_shard_id_set() const {
+    return peering_state.get_acting_recovery_backfill_shard_id_set();
+  }
   bool is_backfill_target(pg_shard_t osd) const {
     return peering_state.is_backfill_target(osd);
   }
