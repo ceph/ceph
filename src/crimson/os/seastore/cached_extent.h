@@ -436,7 +436,8 @@ public:
 
   void rewrite(Transaction &t, CachedExtent &e, extent_len_t o) {
     assert(is_initial_pending());
-    if (!e.is_pending()) {
+    assert(e.is_valid());
+    if (e.is_stable()) {
       set_prior_instance(&e);
     } else {
       assert(e.has_mutation());
@@ -550,7 +551,8 @@ public:
       state == extent_state_t::EXIST_MUTATION_PENDING;
   }
 
-  /// Returns true if extent is part of an open transaction
+  /// Returns true if extent is part of an open transaction,
+  /// normally equivalent to !is_stable.
   bool is_pending() const {
     return is_mutable() || state == extent_state_t::EXIST_CLEAN;
   }
@@ -574,7 +576,8 @@ public:
     return (has_mutation() || is_initial_pending()) && is_pending_io();
   }
 
-  /// Returns true if extent is stable and shared among transactions
+  /// Returns true if extent is stable and shared among transactions,
+  /// normally equivalent to !is_pending
   bool is_stable() const {
     return is_stable_written() || is_stable_writting();
   }
