@@ -238,13 +238,13 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
   }
 
   void generate_transactions(
-      ceph::ErasureCodeInterfaceRef &ecimpl,
+      ceph::ErasureCodeInterfaceRef &ec_impl,
       pg_t pgid,
       const ECUtil::stripe_info_t &sinfo,
-      std::map<hobject_t,extent_map> *written,
-      std::map<shard_id_t, ObjectStore::Transaction> *transactions,
+      std::map<hobject_t, ECUtil::shard_extent_map_t> *written,
+      shard_id_map<ceph::os::Transaction> *transactions,
       DoutPrefixProvider *dpp,
-      const ceph_release_t require_osd_release) final
+      const OSDMapRef &osdmap) final
   {
     assert(t);
 #if 1
@@ -263,6 +263,17 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
       dpp,
       require_osd_release);
 #endif
+  }
+
+  bool skip_transaction(
+      std::set<shard_id_t> &pending_roll_forward,
+      shard_id_t shard,
+      ceph::os::Transaction &transaction) final {
+    if (transaction.empty()) {
+      return true;
+    }
+    pending_roll_forward.insert(shard);
+    return false;
   }
 };
 
