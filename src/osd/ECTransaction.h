@@ -18,6 +18,7 @@
 #include "ECUtil.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "os/Transaction.h"
+#include "OSDMap.h"
 #include "PGTransaction.h"
 
 namespace ECTransaction {
