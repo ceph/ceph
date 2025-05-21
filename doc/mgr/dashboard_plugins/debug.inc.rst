@@ -6,29 +6,29 @@ Debug
 This plugin allows to customize the behaviour of the dashboard according to the
 debug mode. It can be enabled, disabled or checked with the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph dashboard debug status
 
 ::
 
-  Debug: 'disabled'
+   Debug: 'disabled'
 
-.. prompt:: bash $
+.. prompt:: bash 
 
    ceph dashboard debug enable
 
 ::
 
-  Debug: 'enabled'
+   Debug: 'enabled'
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph dashboard debug disable
 
 ::
 
-  Debug: 'disabled'
+   Debug: 'disabled'
 
 By default, it's disabled. This is the recommended setting for production
 deployments. If required, debug mode can be enabled without need of restarting.
