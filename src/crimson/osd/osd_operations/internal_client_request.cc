@@ -28,8 +28,8 @@ namespace crimson::osd {
 InternalClientRequest::InternalClientRequest(Ref<PG> pg)
   : pg(pg), start_epoch(pg->get_osdmap_epoch())
 {
-  assert(bool(this->pg));
-  assert(this->pg->is_primary());
+  ceph_assert(bool(this->pg));
+  ceph_assert(this->pg->is_primary());
 }
 
 InternalClientRequest::~InternalClientRequest()
@@ -55,7 +55,7 @@ InternalClientRequest::interruptible_future<>
 InternalClientRequest::with_interruption()
 {
   LOG_PREFIX(InternalClientRequest::with_interruption);
-  assert(pg->is_active());
+  ceph_assert(pg->is_active());
 
   obc_orderer = pg->obc_loader.get_obc_orderer(get_target_oid());
   auto obc_manager = pg->obc_loader.get_obc_manager(
@@ -81,7 +81,7 @@ InternalClientRequest::with_interruption()
 	 std::size(osd_ops));
   [[maybe_unused]] const int ret = op_info.set_from_op(
     std::as_const(osd_ops), pg->get_pgid().pgid, *pg->get_osdmap());
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 
   co_await pg->obc_loader.load_and_lock(
     obc_manager, pg->get_lock_type(op_info)

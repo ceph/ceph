@@ -200,7 +200,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_watch(
       return seastar::now();
     },
     [](auto&& ctx, ObjectContextRef obc, Ref<PG> pg) {
-      assert(pg);
+      ceph_assert(pg);
       auto [it, emplaced] = obc->watchers.try_emplace(ctx.key, nullptr);
       if (emplaced) {
         const auto& [cookie, entity] = ctx.key;
@@ -397,8 +397,8 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_list_watchers(
   for (const auto& [key, info] : os.oi.watchers) {
     logger().debug("{}: key cookie={}, entity={}",
                    __func__, key.first, key.second);
-    assert(key.first == info.cookie);
-    assert(key.second.is_client());
+    ceph_assert(key.first == info.cookie);
+    ceph_assert(key.second.is_client());
     response.entries.emplace_back(watch_item_t{
       key.second, info.cookie, info.timeout_seconds, info.addr});
   }
@@ -839,8 +839,8 @@ OpsExecuter::flush_changes_and_submit(
 {
   const bool want_mutate = !txn.empty();
   // osd_op_params are instantiated by every wr-like operation.
-  assert(osd_op_params || !want_mutate);
-  assert(obc);
+  ceph_assert(osd_op_params || !want_mutate);
+  ceph_assert(obc);
 
   auto submitted = interruptor::now();
   auto all_completed = interruptor::now();
@@ -902,8 +902,8 @@ pg_log_entry_t OpsExecuter::prepare_head_update(
   ceph::os::Transaction &txn)
 {
   LOG_PREFIX(OpsExecuter::prepare_head_update);
-  assert(obc->obs.oi.soid.snap >= CEPH_MAXSNAP);
-  assert(obc->obs.oi.soid.is_head());
+  ceph_assert(obc->obs.oi.soid.snap >= CEPH_MAXSNAP);
+  ceph_assert(obc->obs.oi.soid.is_head());
 
   update_clone_overlap();
   if (cloning_ctx) {
@@ -1071,7 +1071,7 @@ void OpsExecuter::update_clone_overlap() {
     return;
   }
 
-  assert(osd_op_params);
+  ceph_assert(osd_op_params);
   osd_op_params->modified_ranges.intersection_of(*newest_overlap);
   newest_overlap->subtract(osd_op_params->modified_ranges);
   delta_stats.num_bytes += osd_op_params->modified_ranges.size();

@@ -40,7 +40,7 @@ private:
 
 const hobject_t& WatchTimeoutRequest::get_target_oid() const
 {
-  assert(watch->obc);
+  ceph_assert(watch->obc);
   return watch->obc->get_oid();
 }
 
@@ -64,7 +64,7 @@ WatchTimeoutRequest::get_do_osd_ops_params() const
 std::vector<OSDOp> WatchTimeoutRequest::create_osd_ops()
 {
   logger().debug("{}", __func__);
-  assert(watch);
+  ceph_assert(watch);
   OSDOp osd_op;
   osd_op.op.op = CEPH_OSD_OP_WATCH;
   osd_op.op.flags = 0;
@@ -202,13 +202,13 @@ void Watch::cancel_notify(const uint64_t notify_id)
                  __func__,  get_watcher_gid(), get_cookie(),
                  notify_id);
   const auto it = in_progress_notifies.find(notify_id);
-  assert(it != std::end(in_progress_notifies));
+  ceph_assert(it != std::end(in_progress_notifies));
   in_progress_notifies.erase(it);
 }
 
 void Watch::do_watch_timeout()
 {
-  assert(pg);
+  ceph_assert(pg);
   auto [op, fut] = pg->get_shard_services().start_operation<WatchTimeoutRequest>(
     shared_from_this(), pg);
   std::ignore = std::move(fut).then([op=std::move(op), this] {
@@ -261,11 +261,11 @@ seastar::future<> Notify::remove_watcher(WatchRef watch)
     return seastar::now();
   }
   [[maybe_unused]] const auto num_removed = watchers.erase(watch);
-  assert(num_removed > 0);
+  ceph_assert(num_removed > 0);
   if (watchers.empty()) {
     complete = true;
     [[maybe_unused]] bool was_armed = timeout_timer.cancel();
-    assert(was_armed);
+    ceph_assert(was_armed);
     return send_completion();
   } else {
     return seastar::now();

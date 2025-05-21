@@ -234,7 +234,7 @@ void segments_info_t::mark_empty(
        num_empty, num_open, num_closed);
   ceph_assert(segment_info.is_closed());
   auto type = segment_info.type;
-  assert(type != segment_type_t::NULL_SEG);
+  ceph_assert(type != segment_type_t::NULL_SEG);
   ceph_assert(num_closed > 0);
   --num_closed;
   ++num_empty;
@@ -351,7 +351,7 @@ JournalTrimmerImpl::config_t
 JournalTrimmerImpl::config_t::get_default(
   std::size_t roll_size, backend_type_t type)
 {
-  assert(roll_size);
+  ceph_assert(roll_size);
   std::size_t target_dirty_bytes = 0;
   std::size_t target_alloc_bytes = 0;
   std::size_t max_journal_bytes = 0;
@@ -360,7 +360,7 @@ JournalTrimmerImpl::config_t::get_default(
     target_alloc_bytes = 2 * roll_size;
     max_journal_bytes = 16 * roll_size;
   } else {
-    assert(type == backend_type_t::RANDOM_BLOCK);
+    ceph_assert(type == backend_type_t::RANDOM_BLOCK);
     target_dirty_bytes = roll_size / 4;
     target_alloc_bytes = roll_size / 4;
     max_journal_bytes = roll_size / 2;
@@ -378,7 +378,7 @@ JournalTrimmerImpl::config_t
 JournalTrimmerImpl::config_t::get_test(
   std::size_t roll_size, backend_type_t type)
 {
-  assert(roll_size);
+  ceph_assert(roll_size);
   std::size_t target_dirty_bytes = 0;
   std::size_t target_alloc_bytes = 0;
   std::size_t max_journal_bytes = 0;
@@ -387,7 +387,7 @@ JournalTrimmerImpl::config_t::get_test(
     target_alloc_bytes = 2 * roll_size;
     max_journal_bytes = 4 * roll_size;
   } else {
-    assert(type == backend_type_t::RANDOM_BLOCK);
+    ceph_assert(type == backend_type_t::RANDOM_BLOCK);
     target_dirty_bytes = roll_size / 36;
     target_alloc_bytes = roll_size / 4;
     max_journal_bytes = roll_size / 2;
@@ -505,7 +505,7 @@ void JournalTrimmerImpl::update_journal_tails(
 
 journal_seq_t JournalTrimmerImpl::get_tail_limit() const
 {
-  assert(background_callback->is_ready());
+  ceph_assert(background_callback->is_ready());
   auto ret = journal_head.add_offset(
       backend_type,
       -static_cast<device_off_t>(config.max_journal_bytes),
@@ -516,7 +516,7 @@ journal_seq_t JournalTrimmerImpl::get_tail_limit() const
 
 journal_seq_t JournalTrimmerImpl::get_dirty_tail_target() const
 {
-  assert(background_callback->is_ready());
+  ceph_assert(background_callback->is_ready());
   auto ret = journal_head.add_offset(
       backend_type,
       -static_cast<device_off_t>(config.target_journal_dirty_bytes),
@@ -527,7 +527,7 @@ journal_seq_t JournalTrimmerImpl::get_dirty_tail_target() const
 
 journal_seq_t JournalTrimmerImpl::get_alloc_tail_target() const
 {
-  assert(background_callback->is_ready());
+  ceph_assert(background_callback->is_ready());
   auto ret = journal_head.add_offset(
       backend_type,
       -static_cast<device_off_t>(config.target_journal_alloc_bytes),
@@ -597,7 +597,7 @@ JournalTrimmerImpl::trim_ertr::future<>
 JournalTrimmerImpl::trim_alloc()
 {
   LOG_PREFIX(JournalTrimmerImpl::trim_alloc);
-  assert(background_callback->is_ready());
+  ceph_assert(background_callback->is_ready());
 
   auto& shard_stats = extent_callback->get_shard_stats();
   ++(shard_stats.trim_alloc_num);
@@ -633,7 +633,7 @@ JournalTrimmerImpl::trim_alloc()
   }).finally([this, FNAME, &shard_stats] {
     DEBUG("finish, alloc_tail={}", journal_alloc_tail);
 
-    assert(shard_stats.pending_bg_num);
+    ceph_assert(shard_stats.pending_bg_num);
     --(shard_stats.pending_bg_num);
   });
 }
@@ -642,7 +642,7 @@ JournalTrimmerImpl::trim_ertr::future<>
 JournalTrimmerImpl::trim_dirty()
 {
   LOG_PREFIX(JournalTrimmerImpl::trim_dirty);
-  assert(background_callback->is_ready());
+  ceph_assert(background_callback->is_ready());
 
   auto& shard_stats = extent_callback->get_shard_stats();
   ++(shard_stats.trim_dirty_num);
@@ -684,7 +684,7 @@ JournalTrimmerImpl::trim_dirty()
   }).finally([this, FNAME, &shard_stats] {
     DEBUG("finish, dirty_tail={}", journal_dirty_tail);
 
-    assert(shard_stats.pending_bg_num);
+    ceph_assert(shard_stats.pending_bg_num);
     --(shard_stats.pending_bg_num);
   });
 }
@@ -734,7 +734,7 @@ bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
 
   if (other.live_bytes_by_segment.size() != live_bytes_by_segment.size()) {
     ERROR("different segment counts, bug in test");
-    assert(0 == "segment counts should match");
+    ceph_assert(0 == "segment counts should match");
     return false;
   }
 
@@ -757,8 +757,8 @@ int64_t SpaceTrackerDetailed::SegmentMap::allocate(
   const extent_len_t block_size)
 {
   LOG_PREFIX(SegmentMap::allocate);
-  assert(offset % block_size == 0);
-  assert(len % block_size == 0);
+  ceph_assert(offset % block_size == 0);
+  ceph_assert(len % block_size == 0);
 
   const auto b = (offset / block_size);
   const auto e = (offset + len) / block_size;
@@ -784,8 +784,8 @@ int64_t SpaceTrackerDetailed::SegmentMap::release(
   const extent_len_t block_size)
 {
   LOG_PREFIX(SegmentMap::release);
-  assert(offset % block_size == 0);
-  assert(len % block_size == 0);
+  ceph_assert(offset % block_size == 0);
+  ceph_assert(len % block_size == 0);
 
   const auto b = (offset / block_size);
   const auto e = (offset + len) / block_size;
@@ -811,7 +811,7 @@ bool SpaceTrackerDetailed::equals(const SpaceTrackerI &_other) const
 
   if (other.segment_usage.size() != segment_usage.size()) {
     ERROR("different segment counts, bug in test");
-    assert(0 == "segment counts should match");
+    ceph_assert(0 == "segment counts should match");
     return false;
   }
 
@@ -999,7 +999,7 @@ segment_id_t SegmentCleaner::allocate_segment(
     rewrite_gen_t generation)
 {
   LOG_PREFIX(SegmentCleaner::allocate_segment);
-  assert(seq != NULL_SEG_SEQ);
+  ceph_assert(seq != NULL_SEG_SEQ);
   ceph_assert(type == segment_type_t::OOL ||
               trimmer != nullptr); // segment_type_t::JOURNAL
   for (auto it = segments.begin();
@@ -1011,7 +1011,7 @@ segment_id_t SegmentCleaner::allocate_segment(
       auto old_usage = calc_utilization(seg_id);
       segments.mark_open(seg_id, seq, type, category, generation);
       if (type == segment_type_t::JOURNAL) {
-        assert(trimmer != nullptr);
+        ceph_assert(trimmer != nullptr);
         trimmer->set_journal_head_sequence(seq);
       }
       background_callback->maybe_wake_background();
@@ -1072,13 +1072,13 @@ double SegmentCleaner::calc_gc_benefit_cost(
     }
   }
 
-  assert(gc_formula == gc_formula_t::BENEFIT);
+  ceph_assert(gc_formula == gc_formula_t::BENEFIT);
   auto modify_time = segments[id].modify_time;
   double age_factor = 0.5; // middle value if age is invalid
   if (likely(bound_time != NULL_TIME &&
              modify_time != NULL_TIME &&
              now_time > modify_time)) {
-    assert(modify_time >= bound_time);
+    ceph_assert(modify_time >= bound_time);
     double age_bound = bound_time.time_since_epoch().count();
     double age_now = now_time.time_since_epoch().count();
     double age_segment = modify_time.time_since_epoch().count();
@@ -1150,7 +1150,7 @@ SegmentCleaner::do_reclaim_space(
         for (auto &cached_backref : cached_backref_entries) {
           if (cached_backref.laddr == L_ADDR_NULL) {
             auto it = backref_entries.find(cached_backref.paddr);
-            assert(it->len == cached_backref.len);
+            ceph_assert(it->len == cached_backref.len);
             backref_entries.erase(it);
           } else {
             backref_entries.emplace(cached_backref);
@@ -1202,7 +1202,7 @@ SegmentCleaner::do_reclaim_space(
       });
     });
   }).finally([&shard_stats] {
-    assert(shard_stats.pending_bg_num);
+    ceph_assert(shard_stats.pending_bg_num);
     --(shard_stats.pending_bg_num);
   });
 }
@@ -1210,7 +1210,7 @@ SegmentCleaner::do_reclaim_space(
 SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
 {
   LOG_PREFIX(SegmentCleaner::clean_space);
-  assert(background_callback->is_ready());
+  ceph_assert(background_callback->is_ready());
   ceph_assert(can_clean_space());
   if (!reclaim_state) {
     segment_id_t seg_id = get_next_reclaim_segment();
@@ -1336,7 +1336,7 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
   const auto& sms = sm_group->get_segment_managers();
   INFO("{} segment managers", sms.size());
 
-  assert(background_callback->get_state() == state_t::MOUNT);
+  ceph_assert(background_callback->get_state() == state_t::MOUNT);
   
   space_tracker.reset(
     detailed ?
@@ -1523,21 +1523,21 @@ bool SegmentCleaner::check_usage()
     {
       if (paddr.is_absolute_segmented()) {
         if (is_backref_node(type)) {
-	  assert(laddr == L_ADDR_NULL);
-	  assert(backref_key.is_absolute_segmented()
+	  ceph_assert(laddr == L_ADDR_NULL);
+	  ceph_assert(backref_key.is_absolute_segmented()
                  || backref_key == P_ADDR_MIN);
           tracker->allocate(
             paddr.as_seg_paddr().get_segment_id(),
             paddr.as_seg_paddr().get_segment_off(),
             len);
         } else if (laddr == L_ADDR_NULL) {
-	  assert(backref_key == P_ADDR_NULL);
+	  ceph_assert(backref_key == P_ADDR_NULL);
           tracker->release(
             paddr.as_seg_paddr().get_segment_id(),
             paddr.as_seg_paddr().get_segment_off(),
             len);
         } else {
-	  assert(backref_key == P_ADDR_NULL);
+	  ceph_assert(backref_key == P_ADDR_NULL);
           tracker->allocate(
             paddr.as_seg_paddr().get_segment_id(),
             paddr.as_seg_paddr().get_segment_off(),
@@ -1554,8 +1554,8 @@ void SegmentCleaner::mark_space_used(
   extent_len_t len)
 {
   LOG_PREFIX(SegmentCleaner::mark_space_used);
-  assert(background_callback->get_state() >= state_t::SCAN_SPACE);
-  assert(len);
+  ceph_assert(background_callback->get_state() >= state_t::SCAN_SPACE);
+  ceph_assert(len);
   // TODO: drop
   if (!addr.is_absolute_segmented()) {
     return;
@@ -1572,7 +1572,7 @@ void SegmentCleaner::mark_space_used(
   adjust_segment_util(old_usage, new_usage);
 
   background_callback->maybe_wake_background();
-  assert(ret > 0);
+  ceph_assert(ret > 0);
   DEBUG("segment {} new len: {}~0x{:x}, live_bytes: 0x{:x}",
         seg_addr.get_segment_id(),
         addr,
@@ -1585,8 +1585,8 @@ void SegmentCleaner::mark_space_free(
   extent_len_t len)
 {
   LOG_PREFIX(SegmentCleaner::mark_space_free);
-  assert(background_callback->get_state() >= state_t::SCAN_SPACE);
-  assert(len);
+  ceph_assert(background_callback->get_state() >= state_t::SCAN_SPACE);
+  ceph_assert(len);
   // TODO: drop
   if (!addr.is_absolute_segmented()) {
     return;
@@ -1606,7 +1606,7 @@ void SegmentCleaner::mark_space_free(
   auto new_usage = calc_utilization(seg_addr.get_segment_id());
   adjust_segment_util(old_usage, new_usage);
   background_callback->maybe_wake_blocked_io();
-  assert(ret >= 0);
+  ceph_assert(ret >= 0);
   DEBUG("segment {} free len: {}~0x{:x}, live_bytes: 0x{:x}",
         seg_addr.get_segment_id(),
         addr,
@@ -1659,7 +1659,7 @@ segment_id_t SegmentCleaner::get_next_reclaim_segment() const
 
 bool SegmentCleaner::try_reserve_projected_usage(std::size_t projected_usage)
 {
-  assert(background_callback->is_ready());
+  ceph_assert(background_callback->is_ready());
   stats.projected_used_bytes += projected_usage;
   if (should_block_io_on_clean()) {
     stats.projected_used_bytes -= projected_usage;
@@ -1673,7 +1673,7 @@ bool SegmentCleaner::try_reserve_projected_usage(std::size_t projected_usage)
 
 void SegmentCleaner::release_projected_usage(std::size_t projected_usage)
 {
-  assert(background_callback->is_ready());
+  ceph_assert(background_callback->is_ready());
   ceph_assert(stats.projected_used_bytes >= projected_usage);
   stats.projected_used_bytes -= projected_usage;
   background_callback->maybe_wake_blocked_io();
@@ -1722,7 +1722,7 @@ void RBMCleaner::mark_space_used(
   extent_len_t len)
 {
   LOG_PREFIX(RBMCleaner::mark_space_used);
-  assert(addr.is_absolute_random_block());
+  ceph_assert(addr.is_absolute_random_block());
   auto rbms = rb_group->get_rb_managers();
   for (auto rbm : rbms) {
     if (addr.get_device_id() == rbm->get_device_id()) {
@@ -1741,7 +1741,7 @@ void RBMCleaner::mark_space_free(
   extent_len_t len)
 {
   LOG_PREFIX(RBMCleaner::mark_space_free);
-  assert(addr.is_absolute_random_block());
+  ceph_assert(addr.is_absolute_random_block());
   auto rbms = rb_group->get_rb_managers();
   for (auto rbm : rbms) {
     if (addr.get_device_id() == rbm->get_device_id()) {
@@ -1771,14 +1771,14 @@ void RBMCleaner::commit_space_used(paddr_t addr, extent_len_t len)
 
 bool RBMCleaner::try_reserve_projected_usage(std::size_t projected_usage)
 {
-  assert(background_callback->is_ready());
+  ceph_assert(background_callback->is_ready());
   stats.projected_used_bytes += projected_usage;
   return true;
 }
 
 void RBMCleaner::release_projected_usage(std::size_t projected_usage)
 {
-  assert(background_callback->is_ready());
+  ceph_assert(background_callback->is_ready());
   ceph_assert(stats.projected_used_bytes >= projected_usage);
   stats.projected_used_bytes -= projected_usage;
   background_callback->maybe_wake_blocked_io();
@@ -1813,7 +1813,7 @@ RBMCleaner::mount_ret RBMCleaner::mount()
 
 bool RBMCleaner::check_usage()
 {
-  assert(detailed);
+  ceph_assert(detailed);
   const auto& rbms = rb_group->get_rb_managers();
   RBMSpaceTracker tracker(rbms);
   extent_callback->with_transaction_weak(
@@ -1832,19 +1832,19 @@ bool RBMCleaner::check_usage()
       for (auto rbm : rbms) {
 	if (rbm->get_device_id() == paddr.get_device_id()) {
 	  if (is_backref_node(type)) {
-	    assert(laddr == L_ADDR_NULL);
-	    assert(backref_key.is_absolute_random_block()
+	    ceph_assert(laddr == L_ADDR_NULL);
+	    ceph_assert(backref_key.is_absolute_random_block()
 	           || backref_key == P_ADDR_MIN);
 	    tracker.allocate(
 	      paddr,
 	      len);
 	  } else if (laddr == L_ADDR_NULL) {
-	    assert(backref_key == P_ADDR_NULL);
+	    ceph_assert(backref_key == P_ADDR_NULL);
 	    tracker.release(
 	      paddr,
 	      len);
 	  } else {
-	    assert(backref_key == P_ADDR_NULL);
+	    ceph_assert(backref_key == P_ADDR_NULL);
 	    tracker.allocate(
 	      paddr,
 	      len);
@@ -1863,11 +1863,11 @@ bool RBMCleaner::equals(const RBMSpaceTracker &_other) const
   auto rbs = rb_group->get_rb_managers();
   //TODO: multiple rbm allocator
   auto rbm = rbs[0];
-  assert(rbm);
+  ceph_assert(rbm);
 
   if (rbm->get_device()->get_available_size() / rbm->get_block_size()
       != other.block_usage.size()) {
-    assert(0 == "block counts should match");
+    ceph_assert(0 == "block counts should match");
     return false;
   }
   bool all_match = true;

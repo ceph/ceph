@@ -31,7 +31,7 @@ public:
   FrameAssemblerV2(FrameAssemblerV2 &&) = delete;
 
   void set_shard_id(seastar::shard_id _sid) {
-    assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     clear();
     sid = _sid;
   }
@@ -134,7 +134,7 @@ public:
 
   template <class F>
   ceph::bufferlist get_buffer(F &tx_frame) {
-    assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     auto bl = tx_frame.get_buffer(tx_frame_asm);
     log_main_preamble(bl);
     return bl;
@@ -142,7 +142,7 @@ public:
 
   template <class F, bool may_cross_core = true>
   seastar::future<> write_flush_frame(F &tx_frame) {
-    assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     auto bl = get_buffer(tx_frame);
 #ifdef UNIT_TESTS_BUILT
     return intercept_frame(F::tag, true

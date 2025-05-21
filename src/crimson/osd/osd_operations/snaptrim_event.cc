@@ -149,7 +149,7 @@ SnapTrimObjSubEvent::remove_clone(
                    *this, coid.snap);
     return crimson::ct_error::enoent::make();
   }
-  assert(p != head_obc->ssc->snapset.clones.end());
+  ceph_assert(p != head_obc->ssc->snapset.clones.end());
   snapid_t last = coid.snap;
   delta_stats.num_bytes -= head_obc->ssc->snapset.get_clone_bytes(last);
 

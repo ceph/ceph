@@ -39,7 +39,7 @@ class SegmentAllocator : public JournalAllocator {
                    SegmentSeqAllocator &ssa);
 
   segment_id_t get_segment_id() const {
-    assert(can_write());
+    ceph_assert(can_write());
     return current_segment->get_segment_id();
   }
 
@@ -64,14 +64,14 @@ class SegmentAllocator : public JournalAllocator {
   }
 
   segment_nonce_t get_nonce() const final {
-    assert(can_write());
+    ceph_assert(can_write());
     return current_segment_nonce;
   }
 
   // returns true iff the current segment has insufficient space
   bool needs_roll(std::size_t length) const final {
-    assert(can_write());
-    assert(current_segment->get_write_capacity() ==
+    ceph_assert(can_write());
+    ceph_assert(current_segment->get_write_capacity() ==
            sm_group.get_segment_size());
     auto write_capacity = current_segment->get_write_capacity() -
                           sm_group.get_rounded_tail_length();

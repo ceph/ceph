@@ -43,7 +43,7 @@ CircularJournalSpace::roll_ertr::future<> CircularJournalSpace::roll() {
     get_device_id());
   auto seq = get_written_to();
   seq.segment_seq++;
-  assert(seq.segment_seq < MAX_SEG_SEQ);
+  ceph_assert(seq.segment_seq < MAX_SEG_SEQ);
   set_written_to(
     journal_seq_t{seq.segment_seq, paddr});
   return roll_ertr::now();
@@ -52,17 +52,17 @@ CircularJournalSpace::roll_ertr::future<> CircularJournalSpace::roll() {
 CircularJournalSpace::write_ertr::future<>
 CircularJournalSpace::write(ceph::bufferlist&& to_write) {
   LOG_PREFIX(CircularJournalSpace::write);
-  assert(get_written_to().segment_seq != NULL_SEG_SEQ);
+  ceph_assert(get_written_to().segment_seq != NULL_SEG_SEQ);
   auto encoded_size = to_write.length();
   if (encoded_size > get_records_available_size()) {
     ceph_abort("should be impossible with EPM reservation");
   }
-  assert(encoded_size + get_rbm_addr(get_written_to())
+  ceph_assert(encoded_size + get_rbm_addr(get_written_to())
 	 < get_journal_end());
 
   auto target = get_rbm_addr(get_written_to());
   auto new_written_to = target + encoded_size;
-  assert(new_written_to < get_journal_end());
+  ceph_assert(new_written_to < get_journal_end());
   paddr_t paddr = convert_abs_addr_to_paddr(
     new_written_to,
     get_device_id());
@@ -94,10 +94,10 @@ CircularJournalSpace::open_ret CircularJournalSpace::open(bool is_mkfs) {
 
   if (is_mkfs) {
     LOG_PREFIX(CircularJournalSpace::open);
-    assert(device);
+    ceph_assert(device);
     ceph::bufferlist bl;
     CircularJournalSpace::cbj_header_t head;
-    assert(device->get_journal_size());
+    ceph_assert(device->get_journal_size());
     head.dirty_tail =
       journal_seq_t{0,
 	convert_abs_addr_to_paddr(
@@ -180,7 +180,7 @@ CircularJournalSpace::read_header_ret
 CircularJournalSpace::read_header()
 {
   LOG_PREFIX(CircularJournalSpace::read_header);
-  assert(device);
+  ceph_assert(device);
   auto bptr = bufferptr(ceph::buffer::create_page_aligned(
 			device->get_block_size()));
   DEBUG("reading {}", device->get_shard_journal_start());
@@ -228,9 +228,9 @@ CircularJournalSpace::write_header()
   DEBUG(
     "sync header of CircularJournalSpace, length {}",
     bl.length());
-  assert(device);
+  ceph_assert(device);
   auto iter = bl.begin();
-  assert(bl.length() < get_block_size());
+  ceph_assert(bl.length() < get_block_size());
   bufferptr bp = bufferptr(ceph::buffer::create_page_aligned(get_block_size()));
   iter.copy(bl.length(), bp.c_str());
   return device->write(device->get_shard_journal_start(), std::move(bp)

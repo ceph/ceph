@@ -43,7 +43,7 @@ Device::make_device(const std::string& device, device_type_t dtype)
       return ret;
     });
   } 
-  assert(get_default_backend_of_device(dtype) == backend_type_t::RANDOM_BLOCK);
+  ceph_assert(get_default_backend_of_device(dtype) == backend_type_t::RANDOM_BLOCK);
   return get_rb_device(device
   ).then([](DeviceRef ret) {
     return ret;

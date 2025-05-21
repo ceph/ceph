@@ -64,7 +64,7 @@ struct node_cmp_t {
   using is_transparent = key_t;
   bool operator()(const TCachedExtentRef<T> &l,
 		  const TCachedExtentRef<T> &r) const {
-    assert(l->get_end() <= r->get_begin()
+    ceph_assert(l->get_end() <= r->get_begin()
       || r->get_end() <= l->get_begin()
       || (l->get_begin() == r->get_begin()
 	  && l->get_end() == r->get_end()));
@@ -106,7 +106,7 @@ protected:
 
   void set_root_parent_from_prior_instance() {
     auto &me = down_cast();
-    assert(me.is_mutation_pending());
+    ceph_assert(me.is_mutation_pending());
     auto pi = me.get_prior_instance();
     auto &prior = *pi->template cast<T>();
     ceph_assert(prior.parent_of_root);
@@ -121,7 +121,7 @@ protected:
   }
 
   void destroy() {
-    assert(down_cast().is_btree_root());
+    ceph_assert(down_cast().is_btree_root());
     ceph_assert(parent_of_root);
     TreeRootLinker<ParentT, T>::unlink_root(parent_of_root);
   }
@@ -131,7 +131,7 @@ protected:
 
   void on_initial_write() {
     auto &me = down_cast();
-    assert(me.is_btree_root());
+    ceph_assert(me.is_btree_root());
     me.reset_parent_tracker();
   }
 private:
@@ -197,7 +197,7 @@ public:
     return parent_tracker && parent_tracker->is_valid();
   }
   TCachedExtentRef<ParentT> get_parent_node() const {
-    assert(parent_tracker);
+    ceph_assert(parent_tracker);
     return parent_tracker->get_parent();
   }
   virtual key_t node_begin() const = 0;
@@ -301,11 +301,11 @@ class ParentNode {
 public:
   TCachedExtentRef<T> find_pending_version(Transaction &t, node_key_t key) {
     auto &me = down_cast();
-    assert(me.is_stable());
+    ceph_assert(me.is_stable());
     auto mut_iter = me.mutation_pending_extents.find(
       t.get_trans_id(), trans_spec_view_t::cmp_t());
     if (mut_iter != me.mutation_pending_extents.end()) {
-      assert(copy_dests_by_trans.find(t.get_trans_id()) ==
+      ceph_assert(copy_dests_by_trans.find(t.get_trans_id()) ==
 	copy_dests_by_trans.end());
       return static_cast<T*>(&(*mut_iter));
     }
@@ -330,8 +330,8 @@ public:
     node_key_t key)
   {
     auto &me = down_cast();
-    assert(children.capacity());
-    assert(key == down_cast().iter_idx(pos).get_key());
+    ceph_assert(children.capacity());
+    ceph_assert(key == down_cast().iter_idx(pos).get_key());
     auto child = children[pos];
     ceph_assert(!is_reserved_ptr(child));
     if (is_valid_child_ptr(child)) {
@@ -354,12 +354,12 @@ public:
 
   void link_child(BaseChildNode<T, node_key_t>* child, btreenode_pos_t pos) {
     auto &me = down_cast();
-    assert(pos < me.get_size());
-    assert(pos < children.capacity());
-    assert(child);
+    ceph_assert(pos < me.get_size());
+    ceph_assert(pos < children.capacity());
+    ceph_assert(child);
     ceph_assert(!me.is_pending());
-    assert(child->valid() && !child->pending());
-    assert(!children[pos]);
+    ceph_assert(child->valid() && !child->pending());
+    ceph_assert(!children[pos]);
     ceph_assert(is_valid_child_ptr(child));
     update_child_ptr(pos, child);
   }
@@ -369,13 +369,13 @@ public:
     BaseChildNode<T, node_key_t>* child,
     btreenode_pos_t size = 0)
   {
-    assert(child);
+    ceph_assert(child);
     auto &me = down_cast();
     if (size == 0) {
       size = me.get_size();
     }
     maybe_expand_children(size + 1);
-    assert(size < children.capacity());
+    ceph_assert(size < children.capacity());
     auto raw_children = children.data();
     std::memmove(
       &raw_children[offset + 1],
@@ -415,7 +415,7 @@ protected:
     auto &copy_dests = static_cast<copy_dests_t&>(*iter);
     [[maybe_unused]] auto [it, inserted] =
       copy_dests.dests_by_key.insert(dest);
-    assert(inserted || it->get() == dest.get());
+    ceph_assert(inserted || it->get() == dest.get());
   }
 
   void del_copy_dest(Transaction &t, TCachedExtentRef<T> dest) {
@@ -555,8 +555,8 @@ protected:
     T &right)
   {
     auto &me = down_cast();
-    assert(!left.my_tracker);
-    assert(!right.my_tracker);
+    ceph_assert(!left.my_tracker);
+    ceph_assert(!right.my_tracker);
     btreenode_pos_t pivot = me.get_node_split_pivot();
     left.maybe_expand_children(pivot);
     right.maybe_expand_children(me.get_size() - pivot);
@@ -639,8 +639,8 @@ protected:
     replacement_left.maybe_expand_children(pivot_idx);
     replacement_right.maybe_expand_children(r_size + l_size - pivot_idx);
 
-    assert(!replacement_left.my_tracker);
-    assert(!replacement_right.my_tracker);
+    ceph_assert(!replacement_left.my_tracker);
+    ceph_assert(!replacement_right.my_tracker);
     if (pivot_idx < l_size) {
       // deal with left
       if (left.is_pending()) {
@@ -720,9 +720,9 @@ protected:
 
   void set_children_from_prior_instance() {
     auto &me = down_cast();
-    assert(me.get_prior_instance());
+    ceph_assert(me.get_prior_instance());
     auto &prior = *me.get_prior_instance()->template cast<T>();
-    assert(prior.my_tracker || prior.is_children_empty());
+    ceph_assert(prior.my_tracker || prior.is_children_empty());
 
     if (prior.my_tracker) {
       prior.my_tracker->reset_parent(&me);
@@ -732,7 +732,7 @@ protected:
       // to adjust them to point to the new tracker
       adjust_ptracker_for_children();
     }
-    assert(my_tracker || is_children_empty());
+    ceph_assert(my_tracker || is_children_empty());
   }
 
   template<typename iter_t>
@@ -803,9 +803,9 @@ protected:
   // for mutation pending and rewritten extents
   void take_children_from_prior_instance() {
     auto &me = down_cast();
-    assert(me.is_mutation_pending() ? true : copy_sources.size() == 1);
+    ceph_assert(me.is_mutation_pending() ? true : copy_sources.size() == 1);
     auto prior = me.get_prior_instance()->template cast<T>();
-    assert(
+    ceph_assert(
       me.is_mutation_pending()
 	? true
 	: copy_sources.begin()->get() == prior.get());
@@ -829,7 +829,7 @@ protected:
       } else {
 	take_children_from_stable_sources();
       }
-      assert(me.validate_stable_children());
+      ceph_assert(me.validate_stable_children());
       me.copy_sources.clear();
     }
   }
@@ -861,7 +861,7 @@ protected:
     auto &me = down_cast();
     ceph_assert(!me.is_rewrite());
     take_children_from_prior_instance();
-    assert(me.validate_stable_children());
+    ceph_assert(me.validate_stable_children());
   }
 
   // children are considered stable if any of the following case is true:
@@ -876,13 +876,13 @@ protected:
     node_key_t key,
     bool data_only = false) const {
     auto &me = down_cast();
-    assert(key == me.iter_idx(pos).get_key());
+    ceph_assert(key == me.iter_idx(pos).get_key());
     auto child = this->children[pos];
     if (is_reserved_ptr(child)) {
       return true;
     } else if (is_valid_child_ptr(child)) {
-      assert(dynamic_cast<CachedExtent*>(child)->is_logical());
-      assert(
+      ceph_assert(dynamic_cast<CachedExtent*>(child)->is_logical());
+      ceph_assert(
 	dynamic_cast<CachedExtent*>(child)->is_pending_in_trans(t.get_trans_id())
 	|| me.is_stable_written());
       if (data_only) {
@@ -898,7 +898,7 @@ protected:
       auto spos = sparent.lower_bound(key).get_offset();
       auto child = sparent.children[spos];
       if (is_valid_child_ptr(child)) {
-	assert(dynamic_cast<CachedExtent*>(child)->is_logical());
+	ceph_assert(dynamic_cast<CachedExtent*>(child)->is_logical());
 	if (data_only) {
 	  return etvr.is_viewable_extent_data_stable(
 	    t, dynamic_cast<CachedExtent*>(child));
@@ -929,7 +929,7 @@ private:
       }
     } else {
       // children.capacity() is static and assigned upon construction
-      assert(size <= children.capacity());
+      ceph_assert(size <= children.capacity());
     }
   }
   void maybe_shink_children() {
@@ -996,11 +996,11 @@ protected:
   // because they will be destroyed altogether with their parents
   // upon transaction invalidation.
   void destroy() {
-    assert(!down_cast().is_btree_root());
-    assert(this->has_parent_tracker());
+    ceph_assert(!down_cast().is_btree_root());
+    ceph_assert(this->has_parent_tracker());
     auto off = get_parent_pos();
     auto parent = this->get_parent_node();
-    assert(parent->children[off] == &down_cast());
+    ceph_assert(parent->children[off] == &down_cast());
     parent->children[off] = nullptr;
   }
 private:
@@ -1013,13 +1013,13 @@ private:
 
   void _take_parent_from_prior() {
     auto &me = down_cast();
-    assert(!me.is_btree_root());
+    ceph_assert(!me.is_btree_root());
     auto &prior = static_cast<T&>(*me.get_prior_instance());
     this->parent_tracker = prior.BaseChildNode<ParentT, key_t>::parent_tracker;
-    assert(this->has_parent_tracker());
+    ceph_assert(this->has_parent_tracker());
     auto off = get_parent_pos();
     auto parent = this->get_parent_node();
-    assert(me.get_prior_instance().get() ==
+    ceph_assert(me.get_prior_instance().get() ==
 	   dynamic_cast<CachedExtent*>(parent->children[off]));
     parent->children[off] = &me;
   }
@@ -1027,15 +1027,15 @@ private:
   btreenode_pos_t get_parent_pos() const {
     auto &me = down_cast();
     auto parent = this->get_parent_node();
-    assert(parent);
+    ceph_assert(parent);
     //TODO: can this search be avoided?
     auto key = me.get_begin();
     auto iter = parent->lower_bound(key);
     if (iter.get_key() > key) {
-      assert(iter != parent->end());
+      ceph_assert(iter != parent->end());
       iter--;
     }
-    assert(iter.get_key() == me.get_begin());
+    ceph_assert(iter.get_key() == me.get_begin());
     return iter.get_offset();
   }
   bool valid() const final {

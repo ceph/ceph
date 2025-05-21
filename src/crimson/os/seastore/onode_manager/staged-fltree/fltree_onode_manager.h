@@ -76,7 +76,7 @@ struct FLTreeOnode final : Onode, Value {
     return status != status_t::DELETED;
   }
   const onode_layout_t &get_layout() const final {
-    assert(status != status_t::DELETED);
+    ceph_assert(status != status_t::DELETED);
     return *read_payload<onode_layout_t>();
   }
 
@@ -84,7 +84,7 @@ struct FLTreeOnode final : Onode, Value {
   void with_mutable_layout(
     Transaction &t,
     layout_func_t &&layout_func) {
-    assert(status != status_t::DELETED);
+    ceph_assert(status != status_t::DELETED);
     auto p = prepare_mutate_payload<
       onode_layout_t,
       Recorder>(t);
@@ -120,7 +120,7 @@ struct FLTreeOnode final : Onode, Value {
   }
 
   void update_omap_root(Transaction &t, omap_root_t &oroot) final {
-    assert(oroot.get_type() == omap_type_t::OMAP);
+    ceph_assert(oroot.get_type() == omap_type_t::OMAP);
     with_mutable_layout(
       t,
       [&oroot](NodeExtentMutable &payload_mut, Recorder *recorder) {
@@ -135,7 +135,7 @@ struct FLTreeOnode final : Onode, Value {
   }
 
   void update_log_root(Transaction &t, omap_root_t &lroot) final {
-    assert(lroot.get_type() == omap_type_t::LOG);
+    ceph_assert(lroot.get_type() == omap_type_t::LOG);
     with_mutable_layout(
       t,
       [&lroot](NodeExtentMutable &payload_mut, Recorder *recorder) {
@@ -150,7 +150,7 @@ struct FLTreeOnode final : Onode, Value {
   }
 
   void update_xattr_root(Transaction &t, omap_root_t &xroot) final {
-    assert(xroot.get_type() == omap_type_t::XATTR);
+    ceph_assert(xroot.get_type() == omap_type_t::XATTR);
     with_mutable_layout(
       t,
       [&xroot](NodeExtentMutable &payload_mut, Recorder *recorder) {
@@ -246,7 +246,7 @@ struct FLTreeOnode final : Onode, Value {
   }
 
   void mark_delete() {
-    assert(status != status_t::DELETED);
+    ceph_assert(status != status_t::DELETED);
     status = status_t::DELETED;
   }
 

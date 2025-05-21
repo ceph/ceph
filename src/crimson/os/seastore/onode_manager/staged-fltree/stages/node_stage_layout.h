@@ -94,7 +94,7 @@ const char* fields_start(const FieldType& node) {
 template <node_type_t NODE_TYPE, typename FieldType>
 node_range_t fields_free_range_before(
     const FieldType& node, index_t index, extent_len_t node_size) {
-  assert(index <= node.num_keys);
+  ceph_assert(index <= node.num_keys);
   extent_len_t offset_start = node.get_key_start_offset(index, node_size);
   extent_len_t offset_end = node.get_item_end_offset(index, node_size);
   if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
@@ -102,8 +102,8 @@ node_range_t fields_free_range_before(
       offset_end -= sizeof(laddr_t);
     }
   }
-  assert(offset_start <= offset_end);
-  assert(offset_end - offset_start < node_size);
+  ceph_assert(offset_start <= offset_end);
+  ceph_assert(offset_end - offset_start < node_size);
   return {offset_start, offset_end};
 }
 
@@ -148,25 +148,25 @@ struct _node_fields_013_t {
   }
   key_get_type get_key(
       index_t index, extent_len_t node_size) const {
-    assert(index < num_keys);
+    ceph_assert(index < num_keys);
     return slots[index].key;
   }
   node_offset_t get_key_start_offset(
       index_t index, extent_len_t node_size) const {
-    assert(index <= num_keys);
+    ceph_assert(index <= num_keys);
     auto offset = HEADER_SIZE + sizeof(SlotType) * index;
-    assert(offset < node_size);
+    ceph_assert(offset < node_size);
     return offset;
   }
   node_offset_t get_item_start_offset(
       index_t index, extent_len_t node_size) const {
-    assert(index < num_keys);
+    ceph_assert(index < num_keys);
     auto offset = slots[index].right_offset;
-    assert(offset < node_size);
+    ceph_assert(offset < node_size);
     return offset;
   }
   const void* p_offset(index_t index) const {
-    assert(index < num_keys);
+    ceph_assert(index < num_keys);
     return &slots[index].right_offset;
   }
   extent_len_t get_item_end_offset(
@@ -242,27 +242,27 @@ struct node_fields_2_t {
   }
   key_get_type get_key(
       index_t index, extent_len_t node_size) const {
-    assert(index < num_keys);
+    ceph_assert(index < num_keys);
     auto item_end_offset = get_item_end_offset(index, node_size);
     const char* p_start = fields_start(*this);
     return key_t(p_start + item_end_offset);
   }
   node_offset_t get_key_start_offset(
       index_t index, extent_len_t node_size) const {
-    assert(index <= num_keys);
+    ceph_assert(index <= num_keys);
     auto offset = HEADER_SIZE + sizeof(node_offset_t) * num_keys;
-    assert(offset < node_size);
+    ceph_assert(offset < node_size);
     return offset;
   }
   node_offset_t get_item_start_offset(
       index_t index, extent_len_t node_size) const {
-    assert(index < num_keys);
+    ceph_assert(index < num_keys);
     auto offset = offsets[index];
-    assert(offset < node_size);
+    ceph_assert(offset < node_size);
     return offset;
   }
   const void* p_offset(index_t index) const {
-    assert(index < num_keys);
+    ceph_assert(index < num_keys);
     return &offsets[index];
   }
   extent_len_t get_item_end_offset(
@@ -340,14 +340,14 @@ struct internal_fields_3_t {
   }
   key_get_type get_key(
       index_t index, extent_len_t node_size) const {
-    assert(index < num_keys);
+    ceph_assert(index < num_keys);
     return keys[index];
   }
   template <node_type_t NODE_TYPE>
   std::enable_if_t<NODE_TYPE == node_type_t::INTERNAL, node_offset_t>
   free_size_before(index_t index, extent_len_t node_size) const {
-    assert(index <= num_keys);
-    assert(num_keys <= get_max_num_keys(node_size));
+    ceph_assert(index <= num_keys);
+    ceph_assert(num_keys <= get_max_num_keys(node_size));
     extent_len_t free = total_size(node_size) - HEADER_SIZE -
                         index * ITEM_SIZE;
     if (is_level_tail() && index == num_keys) {
@@ -360,15 +360,15 @@ struct internal_fields_3_t {
       index_t index, extent_len_t node_size) const {
 #ifndef NDEBUG
     if (is_level_tail()) {
-      assert(index <= num_keys);
+      ceph_assert(index <= num_keys);
     } else {
-      assert(index < num_keys);
+      ceph_assert(index < num_keys);
     }
 #endif
     auto p_addrs = reinterpret_cast<const laddr_packed_t*>(
         &keys[get_num_keys_limit(node_size)]);
     auto ret = p_addrs + index;
-    assert((const char*)ret < fields_start(*this) + node_size);
+    ceph_assert((const char*)ret < fields_start(*this) + node_size);
     return ret;
   }
 

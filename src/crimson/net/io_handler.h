@@ -164,7 +164,7 @@ public:
    */
 
   void set_handshake_listener(HandshakeListener &hl) {
-    assert(seastar::this_shard_id() == get_shard_id());
+    ceph_assert(seastar::this_shard_id() == get_shard_id());
     ceph_assert_always(handshake_listener == nullptr);
     handshake_listener = &hl;
   }
@@ -261,13 +261,13 @@ public:
     }
 
     io_state_t get_io_state() const {
-      assert(seastar::this_shard_id() == sid);
+      ceph_assert(seastar::this_shard_id() == sid);
       return io_state;
     }
 
     void set_io_state(io_state_t new_state) {
-      assert(seastar::this_shard_id() == sid);
-      assert(io_state != new_state);
+      ceph_assert(seastar::this_shard_id() == sid);
+      ceph_assert(io_state != new_state);
       pr_io_state_changed.set_value();
       pr_io_state_changed = seastar::promise<>();
       if (io_state == io_state_t::open) {
@@ -281,35 +281,35 @@ public:
     }
 
     seastar::future<> wait_state_change() {
-      assert(seastar::this_shard_id() == sid);
+      ceph_assert(seastar::this_shard_id() == sid);
       return pr_io_state_changed.get_future();
     }
 
     template <typename Func>
     void dispatch_in_background(
         const char *what, SocketConnection &who, Func &&func) {
-      assert(seastar::this_shard_id() == sid);
+      ceph_assert(seastar::this_shard_id() == sid);
       ceph_assert_always(!gate.is_closed());
       gate.dispatch_in_background(what, who, std::move(func));
     }
 
     void enter_in_dispatching() {
-      assert(seastar::this_shard_id() == sid);
-      assert(io_state == io_state_t::open);
+      ceph_assert(seastar::this_shard_id() == sid);
+      ceph_assert(io_state == io_state_t::open);
       ceph_assert_always(!in_exit_dispatching.has_value());
       in_exit_dispatching = seastar::promise<>();
     }
 
     void exit_in_dispatching() {
-      assert(seastar::this_shard_id() == sid);
-      assert(io_state != io_state_t::open);
+      ceph_assert(seastar::this_shard_id() == sid);
+      ceph_assert(io_state != io_state_t::open);
       ceph_assert_always(in_exit_dispatching.has_value());
       in_exit_dispatching->set_value();
       in_exit_dispatching = std::nullopt;
     }
 
     bool try_enter_out_dispatching(SocketConnection &conn) {
-      assert(seastar::this_shard_id() == sid);
+      ceph_assert(seastar::this_shard_id() == sid);
       if (out_dispatching) {
         // already dispatching out
         return false;
@@ -338,7 +338,7 @@ public:
 
     void exit_out_dispatching(
         const char *what, SocketConnection &conn) {
-      assert(seastar::this_shard_id() == sid);
+      ceph_assert(seastar::this_shard_id() == sid);
       ceph_assert_always(out_dispatching);
       out_dispatching = false;
       notify_out_dispatching_stopped(what, conn);
@@ -347,13 +347,13 @@ public:
     seastar::future<> wait_io_exit_dispatching();
 
     seastar::future<> close() {
-      assert(seastar::this_shard_id() == sid);
-      assert(!gate.is_closed());
+      ceph_assert(seastar::this_shard_id() == sid);
+      ceph_assert(!gate.is_closed());
       return gate.close();
     }
 
     bool assert_closed_and_exit() const {
-      assert(seastar::this_shard_id() == sid);
+      ceph_assert(seastar::this_shard_id() == sid);
       if (gate.is_closed()) {
         ceph_assert_always(io_state == io_state_t::drop ||
                            io_state == io_state_t::switched);

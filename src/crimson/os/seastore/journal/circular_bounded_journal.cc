@@ -67,7 +67,7 @@ CircularBoundedJournal::submit_record(
 {
   LOG_PREFIX(CircularBoundedJournal::submit_record);
   DEBUG("H{} {} start ...", (void*)&handle, record);
-  assert(write_pipeline);
+  ceph_assert(write_pipeline);
   return do_submit_record(
     std::move(record), handle, std::move(on_submission)
   ).safe_then([this, t_src] {
@@ -150,7 +150,7 @@ Journal::replay_ret CircularBoundedJournal::replay_segment(
               r_header, locator.record_block_base);
         return crimson::ct_error::input_output_error::make();
       }
-      assert(locator.write_result.start_seq != JOURNAL_SEQ_NULL);
+      ceph_assert(locator.write_result.start_seq != JOURNAL_SEQ_NULL);
       auto cursor_addr = convert_paddr_to_abs_addr(locator.write_result.start_seq.offset);
       DEBUG("{} at {}", r_header, cursor_addr);
       journal_seq_t start_seq = locator.write_result.start_seq;

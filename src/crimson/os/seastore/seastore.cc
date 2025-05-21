@@ -219,7 +219,7 @@ seastar::future<> SeaStore::start()
   using crimson::common::get_conf;
   std::string type = get_conf<std::string>("seastore_main_device_type");
   device_type_t d_type = string_to_device_type(type);
-  assert(d_type == device_type_t::SSD ||
+  ceph_assert(d_type == device_type_t::SSD ||
          d_type == device_type_t::RANDOM_BLOCK_SSD);
 
   ceph_assert(root != "");
@@ -309,7 +309,7 @@ SeaStore::mount_ertr::future<> SeaStore::mount()
 	    ceph_assert(sec_dev->get_sharded_device().get_block_size()
 			>= laddr_t::UNIT_SIZE);
             boost::ignore_unused(magic);  // avoid clang warning;
-            assert(sec_dev->get_sharded_device().get_magic() == magic);
+            ceph_assert(sec_dev->get_sharded_device().get_magic() == magic);
             secondaries.emplace_back(std::move(sec_dev));
           });
         }).safe_then([this] {
@@ -442,7 +442,7 @@ SeaStore::Shard::mkfs_managers()
       "Invalid error in Shard::mkfs_managers"
     }
   ).finally([this] {
-    assert(shard_stats.pending_io_num);
+    ceph_assert(shard_stats.pending_io_num);
     --(shard_stats.pending_io_num);
     // XXX: it's wrong to assume no failure
     --(shard_stats.processing_postlock_io_num);
@@ -566,7 +566,7 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
         return fut.then([this, &sds, new_osd_fsid] {
           device_id_t id = 0;
           device_type_t d_type = device->get_device_type();
-          assert(d_type == device_type_t::SSD ||
+          ceph_assert(d_type == device_type_t::SSD ||
             d_type == device_type_t::RANDOM_BLOCK_SSD);
           if (d_type == device_type_t::RANDOM_BLOCK_SSD) {
             id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN);
@@ -979,11 +979,11 @@ SeaStore::Shard::list_objects(CollectionRef ch,
 		    next_objects.begin(),
 		    next_objects.end());
 		  std::get<1>(ret) = std::get<1>(_ret);
-		  assert(limit >= next_objects.size());
+		  ceph_assert(limit >= next_objects.size());
 		  limit -= next_objects.size();
 		  DEBUGT("got {} objects, left limit {}",
 		    t, next_objects.size(), limit);
-		  assert(limit == 0 ||
+		  ceph_assert(limit == 0 ||
 			 std::get<1>(ret) == pend ||
 			 std::get<1>(ret) == ghobject_t::get_max());
 		  if (last && std::get<1>(ret) == pend) {
@@ -1013,7 +1013,7 @@ SeaStore::Shard::list_objects(CollectionRef ch,
       }
     );
   }).finally([this] {
-    assert(shard_stats.pending_read_num);
+    ceph_assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
 }
@@ -1097,7 +1097,7 @@ SeaStore::Shard::list_collections()
       "Invalid error in SeaStoreS::list_collections"
     }
   ).finally([this] {
-    assert(shard_stats.pending_read_num);
+    ceph_assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
 }
@@ -1159,7 +1159,7 @@ SeaStore::Shard::read(
     [this, offset, len, op_flags](auto &t, auto &onode) {
     return _read(t, onode, offset, len, op_flags);
   }).finally([this] {
-    assert(shard_stats.pending_read_num);
+    ceph_assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
 }
@@ -1191,7 +1191,7 @@ SeaStore::Shard::exists(
     }),
     crimson::ct_error::assert_all{"unexpected error"}
   ).finally([this] {
-    assert(shard_stats.pending_read_num);
+    ceph_assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
 }
@@ -1274,7 +1274,7 @@ SeaStore::Shard::get_attr(
       "EIO when getting attrs"},
     crimson::ct_error::pass_further_all{}
   ).finally([this] {
-    assert(shard_stats.pending_read_num);
+    ceph_assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
 }
@@ -1329,7 +1329,7 @@ SeaStore::Shard::get_attrs(
       "EIO when getting attrs"},
     crimson::ct_error::pass_further_all{}
   ).finally([this] {
-    assert(shard_stats.pending_read_num);
+    ceph_assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
 }
@@ -1373,7 +1373,7 @@ seastar::future<struct stat> SeaStore::Shard::stat(
       "Invalid error in SeaStoreS::stat"
     }
   ).finally([this] {
-    assert(shard_stats.pending_read_num);
+    ceph_assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
 }
@@ -1421,7 +1421,7 @@ SeaStore::Shard::omap_get_values(
     return omaptree_get_values(
       t, std::move(root), keys);
   }).finally([this] {
-    assert(shard_stats.pending_read_num);
+    ceph_assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
 }
@@ -1449,7 +1449,7 @@ SeaStore::Shard::omap_get_values(
     return omaptree_get_values(
       t, std::move(root), start);
   }).finally([this] {
-    assert(shard_stats.pending_read_num);
+    ceph_assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
 }
@@ -1511,7 +1511,7 @@ SeaStore::Shard::fiemap(
     [this, off, len](auto &t, auto &onode) {
     return _fiemap(t, onode, off, len);
   }).finally([this] {
-    assert(shard_stats.pending_read_num);
+    ceph_assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
   });
 }
@@ -1592,7 +1592,7 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
       });
     }
   ).finally([this] {
-    assert(shard_stats.pending_io_num);
+    ceph_assert(shard_stats.pending_io_num);
     --(shard_stats.pending_io_num);
     // XXX: it's wrong to assume no failure
     --(shard_stats.processing_postlock_io_num);
@@ -1615,7 +1615,7 @@ seastar::future<> SeaStore::Shard::flush(CollectionRef ch)
       });
     }
   ).finally([this] {
-    assert(shard_stats.pending_flush_num);
+    ceph_assert(shard_stats.pending_flush_num);
     --(shard_stats.pending_flush_num);
   });
 }
@@ -1683,7 +1683,7 @@ SeaStore::Shard::_do_transaction_step(
   return fut.si_then([&, op, this, FNAME](auto get_onode) {
     OnodeRef& onode = onodes[op->oid];
     if (!onode) {
-      assert(get_onode);
+      ceph_assert(get_onode);
       onode = get_onode;
     }
     OnodeRef& d_onode = onodes[op->dest_oid];
@@ -1697,8 +1697,8 @@ SeaStore::Shard::_do_transaction_step(
       //      support parallel extents loading
       return onode_manager->get_or_create_onode(*ctx.transaction, dest_oid
       ).si_then([&d_onode](auto dest_onode) {
-	assert(dest_onode);
-	assert(!d_onode);
+	ceph_assert(dest_onode);
+	ceph_assert(!d_onode);
 	d_onode = dest_onode;
 	return seastar::now();
       });
@@ -1708,7 +1708,7 @@ SeaStore::Shard::_do_transaction_step(
   }).si_then([&ctx, &i, &onodes, op, this, FNAME]() -> tm_ret {
     const ghobject_t& oid = i.get_oid(op->oid);
     OnodeRef& onode = onodes[op->oid];
-    assert(onode);
+    ceph_assert(onode);
     try {
       switch (op->op) {
       case Transaction::OP_REMOVE:
@@ -2354,7 +2354,7 @@ seastar::future<> SeaStore::Shard::write_meta(
   }).handle_error(
     crimson::ct_error::assert_all{"Invalid error in SeaStoreS::write_meta"}
   ).finally([this] {
-    assert(shard_stats.pending_io_num);
+    ceph_assert(shard_stats.pending_io_num);
     --(shard_stats.pending_io_num);
     // XXX: it's wrong to assume no failure,
     // but failure leads to fatal error
@@ -2631,7 +2631,7 @@ SeaStore::Shard::omaptree_do_clear(
   Transaction& t,
   omap_root_t&& root)
 {
-  assert(!root.is_null());
+  ceph_assert(!root.is_null());
   return seastar::do_with(
     BtreeOMapManager(*transaction_manager),
     std::move(root),
@@ -2639,7 +2639,7 @@ SeaStore::Shard::omaptree_do_clear(
   {
     return omap_manager.omap_clear(root, t
     ).si_then([&root] {
-      assert(root.is_null());
+      ceph_assert(root.is_null());
       return root;
     });
   });
@@ -2668,13 +2668,13 @@ void omaptree_update_root(
   omap_root_t& root,
   Onode& onode)
 {
-  assert(root.must_update());
+  ceph_assert(root.must_update());
   if (root.get_type() == omap_type_t::OMAP) {
     onode.update_omap_root(t, root);
   } else if (root.get_type() == omap_type_t::XATTR) {
     onode.update_xattr_root(t, root);
   } else {
-    assert(root.get_type() == omap_type_t::LOG);
+    ceph_assert(root.get_type() == omap_type_t::LOG);
     onode.update_log_root(t, root);
   }
 }
@@ -2693,8 +2693,8 @@ SeaStore::Shard::omaptree_clear(
   DEBUGT("{} ...", t, root.get_type());
   return omaptree_do_clear(t, std::move(root)
   ).si_then([&t, &onode, FNAME](auto root) {
-    assert(root.is_null());
-    assert(root.must_update());
+    ceph_assert(root.is_null());
+    ceph_assert(root.must_update());
     omaptree_update_root(t, root, onode);
     DEBUGT("{} done", t, root.get_type());
   });
@@ -2722,7 +2722,7 @@ SeaStore::Shard::omaptree_clone(
 	auto &attrs = std::get<1>(p);
 	if (attrs.empty()) {
 	  DEBUGT("{} list got 0 values, all complete", t, type);
-	  assert(complete);
+	  ceph_assert(complete);
 	  return base_iertr::make_ready_future<
 	    seastar::stop_iteration>(
 	      seastar::stop_iteration::yes);
@@ -2769,7 +2769,7 @@ SeaStore::Shard::omaptree_set_keys(
     [this, &t, &onode, kvs=std::move(kvs)]
     (auto &omap_manager, auto &root) mutable
   {
-    assert(root.get_type() < omap_type_t::NONE);
+    ceph_assert(root.get_type() < omap_type_t::NONE);
     base_iertr::future<> maybe_create_root = base_iertr::now();
     if (root.is_null()) {
       maybe_create_root = omaptree_initialize(

@@ -15,8 +15,8 @@ class Dispatcher;
 class ChainedDispatchers {
 public:
   void assign(const dispatchers_t& _dispatchers) {
-    assert(empty());
-    assert(!_dispatchers.empty());
+    ceph_assert(empty());
+    ceph_assert(!_dispatchers.empty());
     dispatchers = _dispatchers;
   }
   void clear() {

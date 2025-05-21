@@ -36,7 +36,7 @@ class node_extent_t {
 
   node_extent_t(const FieldType* p_fields, extent_len_t node_size)
       : p_fields{p_fields}, node_size{node_size} {
-    assert(is_valid_node_size(node_size));
+    ceph_assert(is_valid_node_size(node_size));
     validate(*p_fields);
   }
 
@@ -55,13 +55,13 @@ class node_extent_t {
   template <node_type_t T = NODE_TYPE>
   std::enable_if_t<T == node_type_t::INTERNAL, const laddr_packed_t*>
   get_end_p_laddr() const {
-    assert(is_level_tail());
+    ceph_assert(is_level_tail());
     if constexpr (FIELD_TYPE == field_type_t::N3) {
       return p_fields->get_p_child_addr(keys(), node_size);
     } else {
       auto offset_start = p_fields->get_item_end_offset(
           keys(), node_size);
-      assert(offset_start <= node_size);
+      ceph_assert(offset_start <= node_size);
       offset_start -= sizeof(laddr_packed_t);
       auto p_addr = p_start() + offset_start;
       return reinterpret_cast<const laddr_packed_t*>(p_addr);
@@ -78,7 +78,7 @@ class node_extent_t {
   extent_len_t size_before(index_t index) const {
     auto free_size = p_fields->template free_size_before<NODE_TYPE>(
         index, node_size);
-    assert(total_size() >= free_size);
+    ceph_assert(total_size() >= free_size);
     return total_size() - free_size;
   }
   node_offset_t size_to_nxt_at(index_t index) const;
@@ -89,19 +89,19 @@ class node_extent_t {
   template <typename T = FieldType>
   std::enable_if_t<T::FIELD_TYPE == field_type_t::N3, const value_t*>
   get_p_value(index_t index) const {
-    assert(index < keys());
+    ceph_assert(index < keys());
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
       return p_fields->get_p_child_addr(index, node_size);
     } else {
       auto range = get_nxt_container(index).range;
       auto ret = reinterpret_cast<const value_header_t*>(range.p_start);
-      assert(range.p_start + ret->allocation_size() == range.p_end);
+      ceph_assert(range.p_start + ret->allocation_size() == range.p_end);
       return ret;
     }
   }
 
   void encode(const char* p_node_start, ceph::bufferlist& encoded) const {
-    assert(p_node_start == p_start());
+    ceph_assert(p_node_start == p_start());
     // nothing to encode as the container range is the entire extent
   }
 
@@ -116,12 +116,12 @@ class node_extent_t {
 
   static void validate(const FieldType& fields) {
 #ifndef NDEBUG
-    assert(fields.header.get_node_type() == NODE_TYPE);
-    assert(fields.header.get_field_type() == FieldType::FIELD_TYPE);
+    ceph_assert(fields.header.get_node_type() == NODE_TYPE);
+    ceph_assert(fields.header.get_field_type() == FieldType::FIELD_TYPE);
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
-      assert(fields.header.level > 0u);
+      ceph_assert(fields.header.level > 0u);
     } else {
-      assert(fields.header.level == 0u);
+      ceph_assert(fields.header.level == 0u);
     }
 #endif
   }
@@ -192,9 +192,9 @@ class node_extent_t<FieldType, NODE_TYPE>::Appender {
     : p_mut{p_mut}, p_start{p_append} {
 #ifndef NDEBUG
     auto p_fields = reinterpret_cast<const FieldType*>(p_append);
-    assert(*(p_fields->header.get_field_type()) == FIELD_TYPE);
-    assert(p_fields->header.get_node_type() == NODE_TYPE);
-    assert(p_fields->num_keys == 0);
+    ceph_assert(*(p_fields->header.get_field_type()) == FIELD_TYPE);
+    ceph_assert(p_fields->header.get_node_type() == NODE_TYPE);
+    ceph_assert(p_fields->num_keys == 0);
 #endif
     p_append_left = p_start + FieldType::HEADER_SIZE;
     p_append_right = p_start + p_mut->get_length();
@@ -207,12 +207,12 @@ class node_extent_t<FieldType, NODE_TYPE>::Appender {
   std::tuple<NodeExtentMutable*, char*> open_nxt(const full_key_t<KT>&);
   void wrap_nxt(char* p_append) {
     if constexpr (FIELD_TYPE != field_type_t::N3) {
-      assert(p_append < p_append_right);
-      assert(p_append_left < p_append);
+      ceph_assert(p_append < p_append_right);
+      ceph_assert(p_append_left < p_append);
       p_append_right = p_append;
       auto new_offset = p_append - p_start;
-      assert(new_offset > 0);
-      assert(new_offset < p_mut->get_length());
+      ceph_assert(new_offset > 0);
+      ceph_assert(new_offset < p_mut->get_length());
       FieldType::append_offset(*p_mut, new_offset, p_append_left);
       ++num_keys;
     } else {

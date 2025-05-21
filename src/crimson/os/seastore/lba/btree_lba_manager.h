@@ -82,7 +82,7 @@ public:
       return alloc_contiguous_mappings(
 	t, hint, alloc_infos, alloc_policy_t::linear_search
       ).si_then([](auto cursors) {
-	assert(cursors.size() == 1);
+	ceph_assert(cursors.size() == 1);
 	return LBAMapping::create_direct(std::move(cursors.front()));
       });
     });
@@ -108,7 +108,7 @@ public:
 	  ceph_assert(cursors.front()->is_indirect());
 	  return update_refcount(t, intermediate_base, 1, false
 	  ).si_then([cursors=std::move(cursors)](auto p) mutable {
-	    assert(p.is_alive_mapping());
+	    ceph_assert(p.is_alive_mapping());
 	    auto mapping = LBAMapping::create_indirect(
 	      p.take_cursor(), std::move(cursors.front()));
 	    ceph_assert(mapping.is_stable());
@@ -128,8 +128,8 @@ public:
     extent_ref_count_t refcount) final
   {
     // The real checksum will be updated upon transaction commit
-    assert(ext.get_last_committed_crc() == 0);
-    assert(!ext.has_laddr());
+    ceph_assert(ext.get_last_committed_crc() == 0);
+    ceph_assert(!ext.has_laddr());
     std::vector<alloc_mapping_info_t> alloc_infos = {
       alloc_mapping_info_t::create_direct(
 	L_ADDR_NULL,
@@ -144,7 +144,7 @@ public:
       return alloc_contiguous_mappings(
 	t, hint, alloc_infos, alloc_policy_t::linear_search
       ).si_then([](auto cursors) {
-	assert(cursors.size() == 1);
+	ceph_assert(cursors.size() == 1);
 	return LBAMapping::create_direct(std::move(cursors.front()));
       });
     });
@@ -157,11 +157,11 @@ public:
     extent_ref_count_t refcount) final
   {
     std::vector<alloc_mapping_info_t> alloc_infos;
-    assert(!extents.empty());
+    ceph_assert(!extents.empty());
     auto has_laddr = extents.front()->has_laddr();
     for (auto &extent : extents) {
-      assert(extent);
-      assert(extent->has_laddr() == has_laddr);
+      ceph_assert(extent);
+      ceph_assert(extent->has_laddr() == has_laddr);
       alloc_infos.emplace_back(
 	alloc_mapping_info_t::create_direct(
 	  extent->has_laddr() ? extent->get_laddr() : L_ADDR_NULL,
@@ -180,12 +180,12 @@ public:
 	  t, hint, alloc_infos, alloc_policy_t::deterministic)
 #ifndef NDEBUG
 	.si_then([&alloc_infos](std::list<LBACursorRef> cursors) {
-	  assert(alloc_infos.size() == cursors.size());
+	  ceph_assert(alloc_infos.size() == cursors.size());
 	  auto info_p = alloc_infos.begin();
 	  auto cursor_p = cursors.begin();
 	  for (; info_p != alloc_infos.end(); info_p++, cursor_p++) {
 	    auto &cursor = *cursor_p;
-	    assert(cursor->get_laddr() == info_p->key);
+	    ceph_assert(cursor->get_laddr() == info_p->key);
 	  }
 	  return alloc_extent_iertr::make_ready_future<
 	    std::list<LBACursorRef>>(std::move(cursors));
@@ -352,7 +352,7 @@ private:
 
     bool is_alive_mapping() const {
       if (ret.index() == 1) {
-	assert(std::get<1>(ret));
+	ceph_assert(std::get<1>(ret));
 	return true;
       } else {
 	return false;
@@ -360,17 +360,17 @@ private:
     }
 
     const removed_mapping_t& get_removed_mapping() const {
-      assert(is_removed_mapping());
+      ceph_assert(is_removed_mapping());
       return std::get<0>(ret);
     }
 
     const LBACursor& get_cursor() const {
-      assert(is_alive_mapping());
+      ceph_assert(is_alive_mapping());
       return *std::get<1>(ret);
     }
 
     LBACursorRef take_cursor() {
-      assert(is_alive_mapping());
+      ceph_assert(is_alive_mapping());
       return std::move(std::get<1>(ret));
     }
 
@@ -381,9 +381,9 @@ private:
 	ceph_assert(val.pladdr.is_paddr());
 	return {v.laddr, val.refcount, val.pladdr, val.len};
       } else {
-	assert(is_alive_mapping());
+	ceph_assert(is_alive_mapping());
 	auto &c = get_cursor();
-	assert(c.val);
+	ceph_assert(c.val);
 	ceph_assert(!c.is_indirect());
 	return {c.get_laddr(), c.val->refcount, c.val->pladdr, c.val->len};
       }

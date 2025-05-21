@@ -36,13 +36,13 @@ using lba::LBALeafNode;
 get_child_ret_t<LBALeafNode, LogicalChildNode>
 LBAMapping::get_logical_extent(Transaction &t)
 {
-  assert(is_linked_direct());
+  ceph_assert(is_linked_direct());
   ceph_assert(direct_cursor->is_viewable());
   ceph_assert(direct_cursor->ctx.trans.get_trans_id()
 	      == t.get_trans_id());
-  assert(!direct_cursor->is_end());
+  ceph_assert(!direct_cursor->is_end());
   auto &i = *direct_cursor;
-  assert(i.pos != BTREENODE_POS_NULL);
+  ceph_assert(i.pos != BTREENODE_POS_NULL);
   ceph_assert(t.get_trans_id() == i.ctx.trans.get_trans_id());
   auto p = direct_cursor->parent->cast<LBALeafNode>();
   return p->template get_child<LogicalChildNode>(
@@ -50,9 +50,9 @@ LBAMapping::get_logical_extent(Transaction &t)
 }
 
 bool LBAMapping::is_stable() const {
-  assert(is_linked_direct());
+  ceph_assert(is_linked_direct());
   ceph_assert(direct_cursor->is_viewable());
-  assert(!direct_cursor->is_end());
+  ceph_assert(!direct_cursor->is_end());
   auto leaf = direct_cursor->parent->cast<LBALeafNode>();
   return leaf->is_child_stable(
     direct_cursor->ctx,
@@ -61,9 +61,9 @@ bool LBAMapping::is_stable() const {
 }
 
 bool LBAMapping::is_data_stable() const {
-  assert(is_linked_direct());
+  ceph_assert(is_linked_direct());
   ceph_assert(direct_cursor->is_viewable());
-  assert(!direct_cursor->is_end());
+  ceph_assert(!direct_cursor->is_end());
   auto leaf = direct_cursor->parent->cast<LBALeafNode>();
   return leaf->is_child_data_stable(
     direct_cursor->ctx,

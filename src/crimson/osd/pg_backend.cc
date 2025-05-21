@@ -483,7 +483,7 @@ PGBackend::write_iertr::future<> PGBackend::_truncate(
   uint32_t truncate_seq)
 {
   if (truncate_seq) {
-    assert(offset == truncate_size);
+    ceph_assert(offset == truncate_size);
     if (truncate_seq <= os.oi.truncate_seq) {
       logger().debug("{} truncate seq {} <= current {}, no-op",
                      __func__, truncate_seq, os.oi.truncate_seq);
@@ -756,7 +756,7 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
 {
   const ceph_osd_op& op = osd_op.op;
   snapid_t snapid = (uint64_t)op.snap.snapid;
-  assert(os.oi.soid.is_head());
+  ceph_assert(os.oi.soid.is_head());
   logger().debug("{} deleting {} and rolling back to old snap {}",
                   __func__, os.oi.soid ,snapid);
   hobject_t target_coid = os.oi.soid;
@@ -1515,7 +1515,7 @@ PGBackend::omap_get_vals(
   .safe_then_interruptible(
     [=, &osd_op] (auto&& ret) {
       auto [done, vals] = std::move(ret);
-      assert(done);
+      ceph_assert(done);
       ceph::bufferlist result;
       bool truncated = false;
       uint32_t num = 0;

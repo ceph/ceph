@@ -10,7 +10,7 @@ namespace crimson::os::seastore::onode {
 void string_key_view_t::append_str(
     NodeExtentMutable& mut, std::string_view str, char*& p_append)
 {
-  assert(is_valid_size(str.length()));
+  ceph_assert(is_valid_size(str.length()));
   p_append -= sizeof(string_size_t);
   string_size_t len = str.length();
   mut.copy_in_absolute(p_append, len);

@@ -149,8 +149,8 @@ class CircularJournalSpace : public JournalAllocator {
   }
   void set_written_to(journal_seq_t seq) {
     [[maybe_unused]] rbm_abs_addr addr = convert_paddr_to_abs_addr(seq.offset);
-    assert(addr >= get_records_start());
-    assert(addr < get_journal_end());
+    ceph_assert(addr >= get_records_start());
+    ceph_assert(addr < get_journal_end());
     written_to = seq;
   }
   device_id_t get_device_id() const {
@@ -186,12 +186,12 @@ class CircularJournalSpace : public JournalAllocator {
       - rbm_tail;
   }
   size_t get_records_total_size() const {
-    assert(device);
+    ceph_assert(device);
     // a block is for header and a block is reserved to denote the end
     return device->get_journal_size() - (2 * get_block_size());
   }
   rbm_abs_addr get_records_start() const {
-    assert(device);
+    ceph_assert(device);
     return device->get_shard_journal_start() + get_block_size();
   }
   size_t get_records_available_size() const {
@@ -209,14 +209,14 @@ class CircularJournalSpace : public JournalAllocator {
     return get_records_available_size() >= size;
   }
   rbm_abs_addr get_journal_end() const {
-    assert(device);
+    ceph_assert(device);
     return device->get_shard_journal_start() + device->get_journal_size();
   }
 
   read_ertr::future<> read(
     uint64_t offset,
     bufferptr &bptr) {
-    assert(device);
+    ceph_assert(device);
     return device->read(offset, bptr);
   }
 

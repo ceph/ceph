@@ -54,8 +54,8 @@ struct FixedKVNode : CachedExtent {
   }
 
   void on_rewrite(Transaction &t, CachedExtent &extent, extent_len_t off) final {
-    assert(get_type() == extent.get_type());
-    assert(off == 0);
+    ceph_assert(get_type() == extent.get_type());
+    ceph_assert(off == 0);
     range = get_node_meta();
     do_on_rewrite(t, extent);
     
@@ -74,14 +74,14 @@ struct FixedKVNode : CachedExtent {
 	make_record_relative_paddr(0).block_relative_to(get_paddr()));
     } else {
       // backend_type_t::RANDOM_BLOCK
-      assert(get_paddr().is_absolute());
+      ceph_assert(get_paddr().is_absolute());
     }
   }
 
   void on_delta_write(paddr_t record_block_offset) final {
     // All in-memory relative addrs are necessarily record-relative
-    assert(get_prior_instance());
-    assert(pending_for_transaction);
+    ceph_assert(get_prior_instance());
+    ceph_assert(pending_for_transaction);
     resolve_relative_addrs(record_block_offset);
   }
 
@@ -226,7 +226,7 @@ struct FixedKVInternalNode
   }
 
   CachedExtentRef duplicate_for_write(Transaction&) override {
-    assert(delta_buffer.empty());
+    ceph_assert(delta_buffer.empty());
     return CachedExtentRef(new node_type_t(*this));
   };
 
@@ -407,7 +407,7 @@ struct FixedKVInternalNode
     if (this->is_initial_pending()) {
       for (auto i = from; i != to; ++i) {
 	if (i->get_val().is_relative()) {
-	  assert(i->get_val().is_block_relative());
+	  ceph_assert(i->get_val().is_block_relative());
 	  i->set_val(this->get_paddr().add_relative(i->get_val()));
 	}
       }
@@ -419,7 +419,7 @@ struct FixedKVInternalNode
     if (this->is_initial_pending()) {
       for (auto i = from; i != to; ++i) {
 	if (i->get_val().is_relative()) {
-	  assert(i->get_val().is_record_relative());
+	  ceph_assert(i->get_val().is_record_relative());
 	  i->set_val(i->get_val().block_relative_to(this->get_paddr()));
 	}
       }
@@ -447,7 +447,7 @@ struct FixedKVInternalNode
 
   void apply_delta_and_adjust_crc(
     paddr_t base, const ceph::bufferlist &_bl) {
-    assert(_bl.length());
+    ceph_assert(_bl.length());
     ceph::bufferlist bl = _bl;
     bl.rebuild();
     typename node_layout_t::delta_buffer_t buffer;
@@ -464,17 +464,17 @@ struct FixedKVInternalNode
   }
 
   bool at_max_capacity() const {
-    assert(this->get_size() <= node_layout_t::get_capacity());
+    ceph_assert(this->get_size() <= node_layout_t::get_capacity());
     return this->get_size() == node_layout_t::get_capacity();
   }
 
   bool at_min_capacity() const {
-    assert(this->get_size() >= (get_min_capacity() - 1));
+    ceph_assert(this->get_size() >= (get_min_capacity() - 1));
     return this->get_size() <= get_min_capacity();
   }
 
   bool below_min_capacity() const {
-    assert(this->get_size() >= (get_min_capacity() - 1));
+    ceph_assert(this->get_size() >= (get_min_capacity() - 1));
     return this->get_size() < get_min_capacity();
   }
 };
@@ -624,7 +624,7 @@ struct FixedKVLeafNode
   }
 
   CachedExtentRef duplicate_for_write(Transaction&) override {
-    assert(delta_buffer.empty());
+    ceph_assert(delta_buffer.empty());
     return CachedExtentRef(new node_type_t(*static_cast<node_type_t*>(this)));
   };
 
@@ -749,7 +749,7 @@ struct FixedKVLeafNode
 
   void apply_delta_and_adjust_crc(
     paddr_t base, const ceph::bufferlist &_bl) {
-    assert(_bl.length());
+    ceph_assert(_bl.length());
     ceph::bufferlist bl = _bl;
     bl.rebuild();
     typename node_layout_t::delta_buffer_t buffer;
@@ -772,17 +772,17 @@ struct FixedKVLeafNode
   }
 
   bool at_max_capacity() const {
-    assert(this->get_size() <= node_layout_t::get_capacity());
+    ceph_assert(this->get_size() <= node_layout_t::get_capacity());
     return this->get_size() == node_layout_t::get_capacity();
   }
 
   bool at_min_capacity() const {
-    assert(this->get_size() >= (get_min_capacity() - 1));
+    ceph_assert(this->get_size() >= (get_min_capacity() - 1));
     return this->get_size() <= get_min_capacity();
   }
 
   bool below_min_capacity() const {
-    assert(this->get_size() >= (get_min_capacity() - 1));
+    ceph_assert(this->get_size() >= (get_min_capacity() - 1));
     return this->get_size() < get_min_capacity();
   }
 };

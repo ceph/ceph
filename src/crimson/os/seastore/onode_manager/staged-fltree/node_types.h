@@ -20,8 +20,8 @@ enum class field_type_t : uint8_t {
 };
 inline uint8_t to_unsigned(field_type_t type) {
   auto value = static_cast<uint8_t>(type);
-  assert(value >= FIELD_TYPE_MAGIC);
-  assert(value < static_cast<uint8_t>(field_type_t::_MAX));
+  ceph_assert(value >= FIELD_TYPE_MAGIC);
+  ceph_assert(value < static_cast<uint8_t>(field_type_t::_MAX));
   return value - FIELD_TYPE_MAGIC;
 }
 inline std::ostream& operator<<(std::ostream &os, field_type_t type) {
@@ -38,7 +38,7 @@ enum class node_type_t : uint8_t {
 inline std::ostream& operator<<(std::ostream &os, const node_type_t& type) {
   const char* const names[] = {"L", "I"};
   auto index = static_cast<uint8_t>(type);
-  assert(index <= 1u);
+  ceph_assert(index <= 1u);
   os << names[index];
   return os;
 }

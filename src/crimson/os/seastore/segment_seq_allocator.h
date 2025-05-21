@@ -32,7 +32,7 @@ private:
       type,
       segment_seq_printer_t{seq},
       segment_seq_printer_t{next_segment_seq});
-    assert(type == segment_type_t::JOURNAL
+    ceph_assert(type == segment_type_t::JOURNAL
       ? seq >= next_segment_seq
       : true);
     if (seq > next_segment_seq)

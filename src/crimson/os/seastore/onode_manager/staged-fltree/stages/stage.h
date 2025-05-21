@@ -25,7 +25,7 @@ template <typename FGetKey>
 search_result_bs_t binary_search(
     const key_hobj_t& key,
     index_t begin, index_t end, FGetKey&& f_get_key) {
-  assert(begin <= end);
+  ceph_assert(begin <= end);
   while (begin < end) {
     auto total = begin + end;
     auto mid = total >> 1;
@@ -46,7 +46,7 @@ search_result_bs_t binary_search(
 template <typename PivotType, typename FGet>
 search_result_bs_t binary_search_r(
     index_t rend, index_t rbegin, FGet&& f_get, const PivotType& key) {
-  assert(rend <= rbegin);
+  ceph_assert(rend <= rbegin);
   while (rend < rbegin) {
     auto total = rend + rbegin + 1;
     auto mid = total >> 1;
@@ -65,7 +65,7 @@ search_result_bs_t binary_search_r(
 }
 
 inline bool matchable(field_type_t type, match_stat_t mstat) {
-  assert(mstat >= MSTAT_MIN && mstat <= MSTAT_MAX);
+  ceph_assert(mstat >= MSTAT_MIN && mstat <= MSTAT_MAX);
   /*
    * compressed prefix by field type:
    * N0: NONE
@@ -78,7 +78,7 @@ inline bool matchable(field_type_t type, match_stat_t mstat) {
    */
 #ifndef NDEBUG
   if (mstat == MSTAT_END) {
-    assert(type == field_type_t::N0);
+    ceph_assert(type == field_type_t::N0);
   }
 #endif
   return mstat + to_unsigned(type) < 4;
@@ -88,23 +88,23 @@ inline void assert_mstat(
     const key_hobj_t& key,
     const key_view_t& index,
     match_stat_t mstat) {
-  assert(mstat >= MSTAT_MIN && mstat <= MSTAT_LT2);
+  ceph_assert(mstat >= MSTAT_MIN && mstat <= MSTAT_LT2);
   // key < index ...
   switch (mstat) {
    case MSTAT_EQ:
     break;
    case MSTAT_LT0:
-    assert(key < index.snap_gen_packed());
+    ceph_assert(key < index.snap_gen_packed());
     break;
    case MSTAT_LT1:
-    assert(key < index.ns_oid_view());
+    ceph_assert(key < index.ns_oid_view());
     break;
    case MSTAT_LT2:
     if (index.has_shard_pool()) {
-      assert((key < shard_pool_crush_t{
+      ceph_assert((key < shard_pool_crush_t{
                index.shard_pool_packed(), index.crush_packed()}));
     } else {
-      assert(key < index.crush_packed());
+      ceph_assert(key < index.crush_packed());
     }
     break;
    default:
@@ -113,19 +113,19 @@ inline void assert_mstat(
   // key == index ...
   switch (mstat) {
    case MSTAT_EQ:
-    assert(key == index.snap_gen_packed());
+    ceph_assert(key == index.snap_gen_packed());
    case MSTAT_LT0:
     if (!index.has_ns_oid())
       break;
-    assert(index.ns_oid_view().type() == ns_oid_view_t::Type::MAX ||
+    ceph_assert(index.ns_oid_view().type() == ns_oid_view_t::Type::MAX ||
            key == index.ns_oid_view());
    case MSTAT_LT1:
     if (!index.has_crush())
       break;
-    assert(key == index.crush_packed());
+    ceph_assert(key == index.crush_packed());
     if (!index.has_shard_pool())
       break;
-    assert(key == index.shard_pool_packed());
+    ceph_assert(key == index.shard_pool_packed());
    default:
     break;
   }
@@ -173,8 +173,8 @@ struct staged {
   template <bool is_exclusive>
   static void _left_or_right(index_t& split_index, index_t insert_index,
                              std::optional<bool>& is_insert_left) {
-    assert(!is_insert_left.has_value());
-    assert(is_valid_index(split_index));
+    ceph_assert(!is_insert_left.has_value());
+    ceph_assert(is_valid_index(split_index));
     if constexpr (is_exclusive) {
       if (split_index <= insert_index) {
         // ...[s_index-1] |!| (i_index) [s_index]...
@@ -234,28 +234,28 @@ struct staged {
     using me_t = _iterator_t<CTYPE>;
 
     _iterator_t(const container_t& container) : container{container} {
-      assert(container.keys());
+      ceph_assert(container.keys());
     }
 
     index_t index() const {
       return _index;
     }
     key_get_type get_key() const {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return container[_index];
     }
     node_offset_t size_to_nxt() const {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return container.size_to_nxt_at(_index);
     }
     template <typename T = typename NXT_STAGE_T::container_t>
     std::enable_if_t<!IS_BOTTOM, T> get_nxt_container() const {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return container.get_nxt_container(_index);
     }
     template <typename T = value_t>
     std::enable_if_t<IS_BOTTOM, const T*> get_p_value() const {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return container.get_p_value(_index);
     }
     bool is_last() const {
@@ -263,52 +263,52 @@ struct staged {
     }
     bool is_end() const { return _index == container.keys(); }
     node_offset_t size() const {
-      assert(!is_end());
-      assert(header_size() == container.size_before(0));
-      assert(container.size_before(_index + 1) > container.size_before(_index));
+      ceph_assert(!is_end());
+      ceph_assert(header_size() == container.size_before(0));
+      ceph_assert(container.size_before(_index + 1) > container.size_before(_index));
       return container.size_before(_index + 1) -
              container.size_before(_index);
     }
     node_offset_t size_overhead() const {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return container.size_overhead_at(_index);
     }
 
     me_t& operator++() {
-      assert(!is_end());
-      assert(!is_last());
+      ceph_assert(!is_end());
+      ceph_assert(!is_last());
       ++_index;
       return *this;
     }
     void seek_at(index_t index) {
-      assert(index < container.keys());
+      ceph_assert(index < container.keys());
       seek_till_end(index);
     }
     void seek_till_end(index_t index) {
-      assert(!is_end());
-      assert(this->index() == 0);
-      assert(index <= container.keys());
+      ceph_assert(!is_end());
+      ceph_assert(this->index() == 0);
+      ceph_assert(index <= container.keys());
       _index = index;
     }
     void seek_last() {
-      assert(!is_end());
-      assert(index() == 0);
+      ceph_assert(!is_end());
+      ceph_assert(index() == 0);
       _index = container.keys() - 1;
     }
     void set_end() {
-      assert(!is_end());
-      assert(is_last());
+      ceph_assert(!is_end());
+      ceph_assert(is_last());
       ++_index;
     }
     // Note: possible to return an end iterator
     MatchKindBS seek(const key_hobj_t& key, bool exclude_last) {
-      assert(!is_end());
-      assert(index() == 0);
+      ceph_assert(!is_end());
+      ceph_assert(index() == 0);
       index_t end_index = container.keys();
       if (exclude_last) {
-        assert(end_index);
+        ceph_assert(end_index);
         --end_index;
-        assert(key < container[end_index]);
+        ceph_assert(key < container[end_index]);
       }
       auto ret = binary_search(key, _index, end_index,
           [this] (index_t index) { return container[index]; });
@@ -338,7 +338,7 @@ struct staged {
     template <typename T = void>
     std::enable_if_t<!IS_BOTTOM, T>
     update_size(NodeExtentMutable& mut, int insert_size) {
-      assert(!is_end());
+      ceph_assert(!is_end());
       container_t::update_size_at(mut, container, _index, insert_size);
     }
 
@@ -348,8 +348,8 @@ struct staged {
         size_t start_size, size_t extra_size, size_t target_size,
         index_t& insert_index, size_t insert_size,
         std::optional<bool>& is_insert_left) {
-      assert(!is_end());
-      assert(index() == 0);
+      ceph_assert(!is_end());
+      ceph_assert(index() == 0);
       // replace insert_index placeholder
       if constexpr (!is_exclusive) {
         if (insert_index == INDEX_LAST) {
@@ -360,7 +360,7 @@ struct staged {
           insert_index = container.keys();
         }
       }
-      assert(insert_index <= container.keys());
+      ceph_assert(insert_index <= container.keys());
 
       auto start_size_1 = start_size + extra_size;
       auto f_get_used_size = [this, start_size, start_size_1,
@@ -389,15 +389,15 @@ struct staged {
       }
       _index = binary_search_r(0, s_end, f_get_used_size, target_size).index;
       size_t current_size = f_get_used_size(_index);
-      assert(current_size <= target_size);
+      ceph_assert(current_size <= target_size);
 
       _left_or_right<is_exclusive>(_index, insert_index, is_insert_left);
       return current_size;
     }
 
     size_t seek_split(size_t start_size, size_t extra_size, size_t target_size) {
-      assert(!is_end());
-      assert(index() == 0);
+      ceph_assert(!is_end());
+      ceph_assert(index() == 0);
       auto start_size_1 = start_size + extra_size;
       auto f_get_used_size = [this, start_size, start_size_1] (index_t index) {
         size_t current_size;
@@ -412,7 +412,7 @@ struct staged {
       _index = binary_search_r(
           0, container.keys() - 1, f_get_used_size, target_size).index;
       size_t current_size = f_get_used_size(_index);
-      assert(current_size <= target_size);
+      ceph_assert(current_size <= target_size);
       return current_size;
     }
 
@@ -428,14 +428,14 @@ struct staged {
         _index = num_keys;
         to_index = _index;
       } else if (to_index == INDEX_LAST) {
-        assert(!is_end());
+        ceph_assert(!is_end());
         items = num_keys - 1 - _index;
         appender.append(container, _index, items);
         _index = num_keys - 1;
         to_index = _index;
       } else {
-        assert(_index <= to_index);
-        assert(to_index <= num_keys);
+        ceph_assert(_index <= to_index);
+        ceph_assert(to_index <= num_keys);
         items = to_index - _index;
         appender.append(container, _index, items);
         _index = to_index;
@@ -453,14 +453,14 @@ struct staged {
     }
 
     node_offset_t erase(NodeExtentMutable& mut, const char* p_left_bound) {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return container_t::erase_at(mut, container, _index, p_left_bound);
     }
 
     template <KeyT KT>
     typename container_t::template Appender<KT>
     get_appender(NodeExtentMutable* p_mut) {
-      assert(_index + 1 == container.keys());
+      ceph_assert(_index + 1 == container.keys());
       return typename container_t::template Appender<KT>(p_mut, container);
     }
 
@@ -468,7 +468,7 @@ struct staged {
     typename container_t::template Appender<KT>
     get_appender_opened(NodeExtentMutable* p_mut) {
       if constexpr (!IS_BOTTOM) {
-        assert(_index + 1 == container.keys());
+        ceph_assert(_index + 1 == container.keys());
         return typename container_t::template Appender<KT>(p_mut, container, true);
       } else {
         ceph_abort("impossible path");
@@ -547,59 +547,59 @@ struct staged {
       }
     }
     key_get_type get_key() const {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return container.get_key();
     }
     node_offset_t size_to_nxt() const {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return container.size_to_nxt();
     }
     const typename NXT_STAGE_T::container_t get_nxt_container() const {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return container.get_nxt_container();
     }
     bool is_last() const {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return !container.has_next();
     }
     bool is_end() const {
 #ifndef NDEBUG
       if (_is_end) {
-        assert(!container.has_next());
+        ceph_assert(!container.has_next());
       }
 #endif
       return _is_end;
     }
     node_offset_t size() const {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return container.size();
     }
     node_offset_t size_overhead() const {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return container.size_overhead();
     }
 
     me_t& operator++() {
-      assert(!is_end());
-      assert(!is_last());
+      ceph_assert(!is_end());
+      ceph_assert(!is_last());
       ++container;
       return *this;
     }
     void seek_at(index_t index) {
-      assert(!is_end());
-      assert(this->index() == 0);
+      ceph_assert(!is_end());
+      ceph_assert(this->index() == 0);
       while (index > 0) {
-        assert(container.has_next());
+        ceph_assert(container.has_next());
         ++container;
         --index;
       }
     }
     void seek_till_end(index_t index) {
-      assert(!is_end());
-      assert(this->index() == 0);
+      ceph_assert(!is_end());
+      ceph_assert(this->index() == 0);
       while (index > 0) {
         if (!container.has_next()) {
-          assert(index == 1);
+          ceph_assert(index == 1);
           set_end();
           break;
         }
@@ -608,24 +608,24 @@ struct staged {
       }
     }
     void seek_last() {
-      assert(!is_end());
-      assert(index() == 0);
+      ceph_assert(!is_end());
+      ceph_assert(index() == 0);
       while (container.has_next()) {
         ++container;
       }
     }
     void set_end() {
-      assert(!is_end());
-      assert(is_last());
+      ceph_assert(!is_end());
+      ceph_assert(is_last());
       _is_end = true;
     }
     // Note: possible to return an end iterator
     MatchKindBS seek(const key_hobj_t& key, bool exclude_last) {
-      assert(!is_end());
-      assert(index() == 0);
+      ceph_assert(!is_end());
+      ceph_assert(index() == 0);
       do {
         if (exclude_last && is_last()) {
-          assert(key < get_key());
+          ceph_assert(key < get_key());
           return MatchKindBS::NE;
         }
         auto match = key <=> get_key();
@@ -642,7 +642,7 @@ struct staged {
           }
         }
       } while (true);
-      assert(!exclude_last);
+      ceph_assert(!exclude_last);
       set_end();
       return MatchKindBS::NE;
     }
@@ -656,7 +656,7 @@ struct staged {
     }
 
     void update_size(NodeExtentMutable& mut, int insert_size) {
-      assert(!is_end());
+      ceph_assert(!is_end());
       container_t::update_size(mut, container, insert_size);
     }
 
@@ -667,19 +667,19 @@ struct staged {
         size_t start_size, size_t extra_size, size_t target_size,
         index_t& insert_index, size_t insert_size,
         std::optional<bool>& is_insert_left) {
-      assert(!is_end());
-      assert(index() == 0);
+      ceph_assert(!is_end());
+      ceph_assert(index() == 0);
       size_t current_size = start_size;
       index_t split_index = 0;
       extra_size += header_size();
       do {
         if constexpr (!is_exclusive) {
           if (is_last()) {
-            assert(split_index == index());
+            ceph_assert(split_index == index());
             if (insert_index == INDEX_LAST) {
               insert_index = index();
             }
-            assert(insert_index <= index());
+            ceph_assert(insert_index <= index());
             break;
           }
         }
@@ -706,13 +706,13 @@ struct staged {
 
         if constexpr (is_exclusive) {
           if (is_last()) {
-            assert(split_index == index());
+            ceph_assert(split_index == index());
             set_end();
             split_index = index();
             if (insert_index == INDEX_END) {
               insert_index = index();
             }
-            assert(insert_index == index());
+            ceph_assert(insert_index == index());
             break;
           } else {
             ++(*this);
@@ -723,16 +723,16 @@ struct staged {
           ++split_index;
         }
       } while (true);
-      assert(current_size <= target_size);
+      ceph_assert(current_size <= target_size);
 
       _left_or_right<is_exclusive>(split_index, insert_index, is_insert_left);
-      assert(split_index == index());
+      ceph_assert(split_index == index());
       return current_size;
     }
 
     size_t seek_split(size_t start_size, size_t extra_size, size_t target_size) {
-      assert(!is_end());
-      assert(index() == 0);
+      ceph_assert(!is_end());
+      ceph_assert(index() == 0);
       size_t current_size = start_size;
       do {
         if (is_last()) {
@@ -750,7 +750,7 @@ struct staged {
         current_size = nxt_size;
         ++(*this);
       } while (true);
-      assert(current_size <= target_size);
+      ceph_assert(current_size <= target_size);
       return current_size;
     }
 
@@ -759,19 +759,19 @@ struct staged {
     void copy_out_until(
         typename container_t::template Appender<KT>& appender, index_t& to_index) {
       if (is_end()) {
-        assert(!container.has_next());
+        ceph_assert(!container.has_next());
         if (to_index == INDEX_END) {
           to_index = index();
         }
-        assert(to_index == index());
+        ceph_assert(to_index == index());
         return;
       }
       index_t items;
       if (to_index == INDEX_END || to_index == INDEX_LAST) {
         items = to_index;
       } else {
-        assert(is_valid_index(to_index));
-        assert(index() <= to_index);
+        ceph_assert(is_valid_index(to_index));
+        ceph_assert(index() <= to_index);
         items = to_index - index();
       }
       if (appender.append(container, items)) {
@@ -788,12 +788,12 @@ struct staged {
     }
 
     node_offset_t trim_at(NodeExtentMutable& mut, node_offset_t trimmed) {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return container_t::trim_at(mut, container, trimmed);
     }
 
     node_offset_t erase(NodeExtentMutable& mut, const char* p_left_bound) {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return container_t::erase(mut, container, p_left_bound);
     }
 
@@ -934,17 +934,17 @@ struct staged {
   static result_t smallest_result(
       const iterator_t& iter, key_view_t* p_index_key) {
     static_assert(!IS_BOTTOM);
-    assert(!iter.is_end());
+    ceph_assert(!iter.is_end());
     auto nxt_container = iter.get_nxt_container();
     auto pos_smallest = NXT_STAGE_T::position_t::begin();
     const value_t* p_value;
     NXT_STAGE_T::template get_slot<GET_KEY, true>(
         nxt_container, pos_smallest, p_index_key, &p_value);
     if constexpr (GET_KEY) {
-      assert(p_index_key);
+      ceph_assert(p_index_key);
       p_index_key->set(iter.get_key());
     } else {
-      assert(!p_index_key);
+      ceph_assert(!p_index_key);
     }
     return result_t{{iter.index(), pos_smallest}, p_value, STAGE};
   }
@@ -954,7 +954,7 @@ struct staged {
       const key_hobj_t& key, iterator_t& iter,
       MatchHistory& history, key_view_t* index_key) {
     static_assert(!IS_BOTTOM);
-    assert(!iter.is_end());
+    ceph_assert(!iter.is_end());
     auto nxt_container = iter.get_nxt_container();
     auto nxt_result = NXT_STAGE_T::template lower_bound<GET_KEY>(
         nxt_container, key, history, index_key);
@@ -981,23 +981,23 @@ struct staged {
     auto iter = iterator_t(container);
     iter.seek_last();
     if constexpr (GET_KEY) {
-      assert(p_index_key);
+      ceph_assert(p_index_key);
       p_index_key->set(iter.get_key());
     } else {
-      assert(!p_index_key);
+      ceph_assert(!p_index_key);
     }
     if constexpr (GET_POS) {
-      assert(p_position);
+      ceph_assert(p_position);
       p_position->index = iter.index();
     } else {
-      assert(!p_position);
+      ceph_assert(!p_position);
     }
     if constexpr (IS_BOTTOM) {
       if constexpr (GET_VAL) {
-        assert(pp_value);
+        ceph_assert(pp_value);
         *pp_value = iter.get_p_value();
       } else {
-        assert(!pp_value);
+        ceph_assert(!pp_value);
       }
     } else {
       auto nxt_container = iter.get_nxt_container();
@@ -1021,10 +1021,10 @@ struct staged {
     iter.seek_at(pos.index);
 
     if constexpr (GET_KEY) {
-      assert(p_index_key);
+      ceph_assert(p_index_key);
       p_index_key->set(iter.get_key());
     } else {
-      assert(!p_index_key);
+      ceph_assert(!p_index_key);
     }
 
     if constexpr (!IS_BOTTOM) {
@@ -1033,10 +1033,10 @@ struct staged {
           nxt_container, pos.nxt, p_index_key, pp_value);
     } else {
       if constexpr (GET_VAL) {
-        assert(pp_value);
+        ceph_assert(pp_value);
         *pp_value = iter.get_p_value();
       } else {
-        assert(!pp_value);
+        ceph_assert(!pp_value);
       }
     }
   }
@@ -1052,7 +1052,7 @@ struct staged {
       if (*history.get<STAGE>() == MatchKindCMP::EQ) {
         // lookup is short-circuited
         if constexpr (!IS_BOTTOM) {
-          assert(history.get<STAGE - 1>().has_value());
+          ceph_assert(history.get<STAGE - 1>().has_value());
           if (history.is_GT<STAGE - 1>()) {
             auto iter = iterator_t(container);
             bool test_key_equal;
@@ -1060,14 +1060,14 @@ struct staged {
               // TODO(cross-node string dedup)
               // test_key_equal = (iter.get_key().type() == ns_oid_view_t::Type::MIN);
               auto cmp = key <=> iter.get_key();
-              assert(cmp != std::strong_ordering::greater);
+              ceph_assert(cmp != std::strong_ordering::greater);
               test_key_equal = (cmp == 0);
             } else {
               auto cmp = key <=> iter.get_key();
               // From history, key[stage] == parent[stage][index - 1]
               // which should be the smallest possible value for all
               // index[stage][*]
-              assert(cmp != std::strong_ordering::greater);
+              ceph_assert(cmp != std::strong_ordering::greater);
               test_key_equal = (cmp == 0);
             }
             if (test_key_equal) {
@@ -1083,10 +1083,10 @@ struct staged {
         iter.seek_last();
         if constexpr (STAGE == STAGE_STRING) {
           // TODO(cross-node string dedup)
-          // assert(iter.get_key().type() == ns_oid_view_t::Type::MAX);
-          assert(key == iter.get_key());
+          // ceph_assert(iter.get_key().type() == ns_oid_view_t::Type::MAX);
+          ceph_assert(key == iter.get_key());
         } else {
-          assert(key == iter.get_key());
+          ceph_assert(key == iter.get_key());
         }
         if constexpr (GET_KEY) {
           index_key->set(iter.get_key());
@@ -1100,7 +1100,7 @@ struct staged {
               nxt_container, key, history, index_key);
           // !history.is_GT<STAGE - 1>() means
           // key[stage+1 ...] <= index[stage+1 ...][*]
-          assert(!nxt_result.is_end());
+          ceph_assert(!nxt_result.is_end());
           return result_t::from_nxt(iter.index(), nxt_result);
         }
       } else if (*history.get<STAGE>() == MatchKindCMP::LT) {
@@ -1110,8 +1110,8 @@ struct staged {
     auto iter = iterator_t(container);
     auto bs_match = iter.seek(key, exclude_last);
     if (iter.is_end()) {
-      assert(!exclude_last);
-      assert(bs_match == MatchKindBS::NE);
+      ceph_assert(!exclude_last);
+      ceph_assert(bs_match == MatchKindBS::NE);
       history.set<STAGE>(MatchKindCMP::GT);
       return result_t::end();
     }
@@ -1152,7 +1152,7 @@ struct staged {
     if (stage == STAGE) {
       return insert_size(key, value);
     } else {
-      assert(stage < STAGE);
+      ceph_assert(stage < STAGE);
       return NXT_STAGE_T::insert_size_at(stage, key, value);
     }
   }
@@ -1168,7 +1168,7 @@ struct staged {
       index = iter.index();
       // evaluate the previous index
     } else {
-      assert(is_valid_index(index));
+      ceph_assert(is_valid_index(index));
       // evaluate the current index
       iter.seek_at(index);
       auto match = key <=> iter.get_key();
@@ -1182,7 +1182,7 @@ struct staged {
               nxt_container, key, value, position.nxt, false);
         }
       } else {
-        assert(match == std::strong_ordering::less);
+        ceph_assert(match == std::strong_ordering::less);
         if (index == 0) {
           // already the first index, so insert at the current index
           return {STAGE, insert_size(key, value)};
@@ -1201,7 +1201,7 @@ struct staged {
       ++index;
       return {STAGE, insert_size(key, value)};
     } else {
-      assert(match == std::strong_ordering::equal);
+      ceph_assert(match == std::strong_ordering::equal);
       if constexpr (IS_BOTTOM) {
         // ceph_abort?
         ceph_abort("insert conflict at the previous index!");
@@ -1219,7 +1219,7 @@ struct staged {
   compensate_insert_position_at(match_stage_t stage, position_t& position) {
     auto& index = position.index;
     if (stage == STAGE) {
-      assert(index == 0);
+      ceph_assert(index == 0);
       // insert at the end of the current stage
       index = INDEX_END;
       return true;
@@ -1227,11 +1227,11 @@ struct staged {
       if constexpr (IS_BOTTOM) {
         ceph_abort("impossible path");
       } else {
-        assert(stage < STAGE);
+        ceph_assert(stage < STAGE);
         bool compensate = NXT_STAGE_T::
           compensate_insert_position_at(stage, position.nxt);
         if (compensate) {
-          assert(is_valid_index(index));
+          ceph_assert(is_valid_index(index));
           if (index == 0) {
             // insert into the *last* index of the current stage
             index = INDEX_LAST;
@@ -1248,7 +1248,7 @@ struct staged {
   }
 
   static void patch_insert_end(position_t& insert_pos, match_stage_t insert_stage) {
-    assert(insert_stage <= STAGE);
+    ceph_assert(insert_stage <= STAGE);
     if (insert_stage == STAGE) {
       insert_pos.index = INDEX_END;
     } else if constexpr (!IS_BOTTOM) {
@@ -1263,18 +1263,18 @@ struct staged {
       const MatchHistory& history, match_stat_t mstat, position_t& position) {
     match_stage_t insert_stage = STAGE_TOP;
     while (*history.get_by_stage(insert_stage) == MatchKindCMP::EQ) {
-      assert(insert_stage != STAGE_BOTTOM && "insert conflict!");
+      ceph_assert(insert_stage != STAGE_BOTTOM && "insert conflict!");
       --insert_stage;
     }
 
     if (history.is_GT()) {
       if (position.is_end()) {
         // no need to compensate insert position
-        assert(insert_stage <= STAGE && "impossible insert stage");
+        ceph_assert(insert_stage <= STAGE && "impossible insert stage");
       } else if (position == position_t::begin()) {
         // I must be short-circuited by staged::smallest_result()
         // in staged::lower_bound(), so we need to rely on mstat instead
-        assert(mstat >= MSTAT_LT0 && mstat <= MSTAT_LT3);
+        ceph_assert(mstat >= MSTAT_LT0 && mstat <= MSTAT_LT3);
         if (mstat == MSTAT_LT0) {
           insert_stage = STAGE_RIGHT;
         } else if (mstat == MSTAT_LT1) {
@@ -1284,11 +1284,11 @@ struct staged {
         }
         // XXX(multi-type): need to upgrade node type before inserting an
         // incompatible index at front.
-        assert(insert_stage <= STAGE && "incompatible insert");
+        ceph_assert(insert_stage <= STAGE && "incompatible insert");
       } else {
-        assert(insert_stage <= STAGE && "impossible insert stage");
+        ceph_assert(insert_stage <= STAGE && "impossible insert stage");
         [[maybe_unused]] bool ret = compensate_insert_position_at(insert_stage, position);
-        assert(!ret);
+        ceph_assert(!ret);
       }
     }
 
@@ -1311,7 +1311,7 @@ struct staged {
     appender.init_empty(&mut, p_insert);
     appender.append(key, value, p_value);
     [[maybe_unused]] const char* p_insert_front = appender.wrap();
-    assert(p_insert_front == range.p_start);
+    ceph_assert(p_insert_front == range.p_start);
     return p_value;
   }
 
@@ -1322,7 +1322,7 @@ struct staged {
       position_t& position, match_stage_t& stage,
       node_offset_t& _insert_size, const char* p_left_bound) {
     // proceed insert from right to left
-    assert(stage <= STAGE);
+    ceph_assert(stage <= STAGE);
     auto iter = iterator_t(container);
     auto& index = position.index;
 
@@ -1333,7 +1333,7 @@ struct staged {
         iter.set_end();
         index = iter.index();
       } else {
-        assert(is_valid_index(index));
+        ceph_assert(is_valid_index(index));
         iter.seek_till_end(index);
       }
       do_insert = true;
@@ -1342,7 +1342,7 @@ struct staged {
         iter.seek_last();
         index = iter.index();
       } else {
-        assert(is_valid_index(index));
+        ceph_assert(is_valid_index(index));
         iter.seek_till_end(index);
       }
       if constexpr (SPLIT) {
@@ -1353,7 +1353,7 @@ struct staged {
           stage = STAGE;
         }
       } else {
-        assert(!iter.is_end());
+        ceph_assert(!iter.is_end());
       }
     }
 
@@ -1361,7 +1361,7 @@ struct staged {
       if constexpr (!IS_BOTTOM) {
         position.nxt = position_t::nxt_t::begin();
       }
-      assert(_insert_size == insert_size(key, value));
+      ceph_assert(_insert_size == insert_size(key, value));
       if constexpr (IS_BOTTOM) {
         return iter.insert(
             mut, key, value, _insert_size, p_left_bound);
@@ -1393,8 +1393,8 @@ struct staged {
     if (unlikely(!container.keys())) {
       if (position.is_end()) {
         position = position_t::begin();
-        assert(stage == STAGE);
-        assert(_insert_size == insert_size(key, value));
+        ceph_assert(stage == STAGE);
+        ceph_assert(_insert_size == insert_size(key, value));
       } else if (position == position_t::begin()) {
         // when insert into a trimmed and empty left node
         stage = STAGE;
@@ -1423,7 +1423,7 @@ struct staged {
                             size_t& size,
                             const char* p_start) {
     auto iter = iterator_t(container);
-    assert(!iter.is_end());
+    ceph_assert(!iter.is_end());
     std::string prefix_blank(prefix.size(), ' ');
     const std::string* p_prefix = &prefix;
     size += iterator_t::header_size();
@@ -1460,7 +1460,7 @@ struct staged {
 
   static void validate(const container_t& container) {
     auto iter = iterator_t(container);
-    assert(!iter.is_end());
+    ceph_assert(!iter.is_end());
     auto key = iter.get_key();
     do {
       if constexpr (!IS_BOTTOM) {
@@ -1471,7 +1471,7 @@ struct staged {
         break;
       } else {
         ++iter;
-        assert(key < iter.get_key());
+        ceph_assert(key < iter.get_key());
         key = iter.get_key();
       }
     } while (true);
@@ -1480,7 +1480,7 @@ struct staged {
   static void get_stats(const container_t& container, node_stats_t& stats,
                         key_view_t& index_key) {
     auto iter = iterator_t(container);
-    assert(!iter.is_end());
+    ceph_assert(!iter.is_end());
     stats.size_overhead += iterator_t::header_size();
     do {
       index_key.replace(iter.get_key());
@@ -1516,7 +1516,7 @@ struct staged {
       key_view_t* p_index_key,              // OUT
       const value_t** pp_value) {           // OUT
     auto iter = iterator_t(container);
-    assert(!iter.is_end());
+    ceph_assert(!iter.is_end());
     iter.seek_at(pos.index);
     bool find_next;
     if constexpr (!IS_BOTTOM) {
@@ -1541,10 +1541,10 @@ struct staged {
       }
     } else { // !find_next && !IS_BOTTOM
       if constexpr (GET_KEY) {
-        assert(p_index_key);
+        ceph_assert(p_index_key);
         p_index_key->set(iter.get_key());
       } else {
-        assert(!p_index_key);
+        ceph_assert(!p_index_key);
       }
       return false;
     }
@@ -1556,14 +1556,14 @@ struct staged {
       position_t& pos,                      // IN&OUT
       key_view_t* p_index_key,              // OUT
       const value_t** pp_value) {           // OUT
-    assert(pos != position_t::begin());
-    assert(!pos.is_end());
+    ceph_assert(pos != position_t::begin());
+    ceph_assert(!pos.is_end());
     auto& index = pos.index;
     auto iter = iterator_t(container);
     if constexpr (!IS_BOTTOM) {
       auto& nxt_pos = pos.nxt;
       if (nxt_pos == NXT_STAGE_T::position_t::begin()) {
-        assert(index);
+        ceph_assert(index);
         --index;
         iter.seek_at(index);
         auto nxt_container = iter.get_nxt_container();
@@ -1576,20 +1576,20 @@ struct staged {
             nxt_container, nxt_pos, p_index_key, pp_value);
       }
     } else {
-      assert(index);
+      ceph_assert(index);
       --index;
       iter.seek_at(index);
       if constexpr (GET_VAL) {
-        assert(pp_value);
+        ceph_assert(pp_value);
         *pp_value = iter.get_p_value();
       } else {
-        assert(!pp_value);
+        ceph_assert(!pp_value);
       }
     }
     if constexpr (GET_KEY) {
       p_index_key->set(iter.get_key());
     } else {
-      assert(!p_index_key);
+      ceph_assert(!p_index_key);
     }
   }
 
@@ -1608,8 +1608,8 @@ struct staged {
     }
     bool is_end() const { return iter->is_end(); }
     bool in_progress() const {
-      assert(valid());
-      assert(!is_end());
+      ceph_assert(valid());
+      ceph_assert(!is_end());
       if constexpr (!IS_BOTTOM) {
         if (this->_nxt.valid()) {
           if (this->_nxt.index() == 0) {
@@ -1628,7 +1628,7 @@ struct staged {
 
     iterator_t& get() { return *iter; }
     void set(const container_t& container) {
-      assert(!valid());
+      ceph_assert(!valid());
       iter = iterator_t(container);
     }
     void set_end() { iter->set_end(); }
@@ -1737,11 +1737,11 @@ struct staged {
   static bool recursively_locate_split(
       size_t& current_size, size_t extra_size,
       size_t target_size, StagedIterator& split_at) {
-    assert(current_size <= target_size);
+    ceph_assert(current_size <= target_size);
     iterator_t& split_iter = split_at.get();
     current_size = split_iter.seek_split(current_size, extra_size, target_size);
-    assert(current_size <= target_size);
-    assert(!split_iter.is_end());
+    ceph_assert(current_size <= target_size);
+    ceph_assert(!split_iter.is_end());
     if (split_iter.index() == 0) {
       extra_size += iterator_t::header_size();
     } else {
@@ -1755,7 +1755,7 @@ struct staged {
     } else { // IS_BOTTOM
       // located upper_bound, fair split strategy
       size_t nxt_size = split_iter.size() + extra_size;
-      assert(current_size + nxt_size > target_size);
+      ceph_assert(current_size + nxt_size > target_size);
       if (current_size + nxt_size/2 < target_size) {
         // include next
         current_size += nxt_size;
@@ -1781,16 +1781,16 @@ struct staged {
       size_t& current_size, size_t extra_size, size_t target_size,
       position_t& insert_pos, match_stage_t insert_stage, size_t insert_size,
       std::optional<bool>& is_insert_left, StagedIterator& split_at) {
-    assert(current_size <= target_size);
-    assert(!is_insert_left.has_value());
+    ceph_assert(current_size <= target_size);
+    ceph_assert(!is_insert_left.has_value());
     iterator_t& split_iter = split_at.get();
     auto& insert_index = insert_pos.index;
     if (insert_stage == STAGE) {
       current_size = split_iter.template seek_split_inserted<true>(
           current_size, extra_size, target_size,
           insert_index, insert_size, is_insert_left);
-      assert(is_insert_left.has_value());
-      assert(current_size <= target_size);
+      ceph_assert(is_insert_left.has_value());
+      ceph_assert(current_size <= target_size);
       if (split_iter.index() == 0) {
         if (insert_index == 0) {
           if (*is_insert_left == false) {
@@ -1812,7 +1812,7 @@ struct staged {
         // located upper-bound, fair split strategy
         // look at the next slot (the insert item)
         size_t nxt_size = insert_size + extra_size;
-        assert(current_size + nxt_size > target_size);
+        ceph_assert(current_size + nxt_size > target_size);
         if (current_size + nxt_size/2 < target_size) {
           // include next
           *is_insert_left = true;
@@ -1831,7 +1831,7 @@ struct staged {
         // Already considered insert effect in the current stage.
         // Look into the next stage to identify the target_size lower-bound w/o
         // insert effect.
-        assert(!split_iter.is_end());
+        ceph_assert(!split_iter.is_end());
         bool locate_nxt;
         if constexpr (!IS_BOTTOM) {
           locate_nxt = NXT_STAGE_T::recursively_locate_split(
@@ -1841,7 +1841,7 @@ struct staged {
           // located upper-bound, fair split strategy
           // look at the next slot
           size_t nxt_size = split_iter.size() + extra_size;
-          assert(current_size + nxt_size > target_size);
+          ceph_assert(current_size + nxt_size > target_size);
           if (current_size + nxt_size/2 < target_size) {
             // include next
             current_size += nxt_size;
@@ -1857,14 +1857,14 @@ struct staged {
             if (insert_index == INDEX_END) {
               insert_index = end_index;
             }
-            assert(insert_index <= end_index);
+            ceph_assert(insert_index <= end_index);
             if (insert_index == end_index) {
-              assert(*is_insert_left == false);
+              ceph_assert(*is_insert_left == false);
               split_iter.set_end();
               // ...[s_index-1] |!| (i_index)
               return false;
             } else {
-              assert(*is_insert_left == true);
+              ceph_assert(*is_insert_left == true);
               return true;
             }
           } else {
@@ -1877,12 +1877,12 @@ struct staged {
       }
     } else {
       if constexpr (!IS_BOTTOM) {
-        assert(insert_stage < STAGE);
+        ceph_assert(insert_stage < STAGE);
         current_size = split_iter.template seek_split_inserted<false>(
             current_size, extra_size, target_size,
             insert_index, insert_size, is_insert_left);
-        assert(!split_iter.is_end());
-        assert(current_size <= target_size);
+        ceph_assert(!split_iter.is_end());
+        ceph_assert(current_size <= target_size);
         if (split_iter.index() == 0) {
           extra_size += iterator_t::header_size();
         } else {
@@ -1894,15 +1894,15 @@ struct staged {
           // in the lower stage.
           // Look into the next stage to identify the target_size lower-bound w/
           // insert effect.
-          assert(split_iter.index() == insert_index);
+          ceph_assert(split_iter.index() == insert_index);
           locate_nxt = NXT_STAGE_T::recursively_locate_split_inserted(
               current_size, extra_size + split_iter.size_to_nxt(), target_size,
               insert_pos.nxt, insert_stage, insert_size,
               is_insert_left, split_at.nxt());
-          assert(is_insert_left.has_value());
+          ceph_assert(is_insert_left.has_value());
 #ifndef NDEBUG
           if (locate_nxt) {
-            assert(*is_insert_left == true);
+            ceph_assert(*is_insert_left == true);
           }
 #endif
         } else {
@@ -1910,15 +1910,15 @@ struct staged {
           // Insert will *not* happen in the lower stage.
           // Need to look into the next stage to identify the target_size
           // lower-bound w/ insert effect
-          assert(split_iter.index() != insert_index);
+          ceph_assert(split_iter.index() != insert_index);
           locate_nxt = NXT_STAGE_T::recursively_locate_split(
               current_size, extra_size + split_iter.size_to_nxt(),
               target_size, split_at.nxt());
 #ifndef NDEBUG
           if (split_iter.index() < insert_index) {
-            assert(*is_insert_left == false);
+            ceph_assert(*is_insert_left == false);
           } else {
-            assert(*is_insert_left == true);
+            ceph_assert(*is_insert_left == true);
           }
 #endif
         }
@@ -1962,35 +1962,35 @@ struct staged {
    public:
     StagedAppender() = default;
     ~StagedAppender() {
-      assert(!require_wrap_nxt);
-      assert(!valid());
+      ceph_assert(!require_wrap_nxt);
+      ceph_assert(!valid());
     }
     bool valid() const { return appender.has_value(); }
     index_t index() const {
-      assert(valid());
+      ceph_assert(valid());
       return _index;
     }
     bool in_progress() const { return require_wrap_nxt; }
     // TODO: pass by reference
     void init_empty(NodeExtentMutable* p_mut, char* p_start) {
-      assert(!valid());
+      ceph_assert(!valid());
       appender = typename container_t::template Appender<KT>(p_mut, p_start);
       _index = 0;
     }
     void init_tail(NodeExtentMutable* p_mut,
                    const container_t& container,
                    match_stage_t stage) {
-      assert(!valid());
+      ceph_assert(!valid());
       auto iter = iterator_t(container);
       iter.seek_last();
       if (stage == STAGE) {
         appender = iter.template get_appender<KT>(p_mut);
         _index = iter.index() + 1;
         if constexpr (!IS_BOTTOM) {
-          assert(!this->_nxt.valid());
+          ceph_assert(!this->_nxt.valid());
         }
       } else {
-        assert(stage < STAGE);
+        ceph_assert(stage < STAGE);
         if constexpr (!IS_BOTTOM) {
           appender = iter.template get_appender_opened<KT>(p_mut);
           _index = iter.index();
@@ -2004,11 +2004,11 @@ struct staged {
     }
     // possible to make src_iter end if to_index == INDEX_END
     void append_until(StagedIterator& src_iter, index_t& to_index) {
-      assert(!require_wrap_nxt);
+      ceph_assert(!require_wrap_nxt);
       auto s_index = src_iter.index();
       src_iter.get().template copy_out_until<KT>(*appender, to_index);
-      assert(src_iter.index() == to_index);
-      assert(to_index >= s_index);
+      ceph_assert(src_iter.index() == to_index);
+      ceph_assert(to_index >= s_index);
       auto increment = (to_index - s_index);
       if (increment) {
         _index += increment;
@@ -2019,7 +2019,7 @@ struct staged {
     }
     void append(const full_key_t<KT>& key,
                 const value_input_t& value, const value_t*& p_value) {
-      assert(!require_wrap_nxt);
+      ceph_assert(!require_wrap_nxt);
       if constexpr (!IS_BOTTOM) {
         auto& nxt = open_nxt(key);
         nxt.append(key, value, p_value);
@@ -2030,8 +2030,8 @@ struct staged {
       }
     }
     char* wrap() {
-      assert(valid());
-      assert(_index > 0);
+      ceph_assert(valid());
+      ceph_assert(_index > 0);
       if constexpr (!IS_BOTTOM) {
         if (require_wrap_nxt) {
           wrap_nxt();
@@ -2043,7 +2043,7 @@ struct staged {
     }
     typename NXT_STAGE_T::template StagedAppender<KT>&
     open_nxt(key_get_type paritial_key) {
-      assert(!require_wrap_nxt);
+      ceph_assert(!require_wrap_nxt);
       if constexpr (!IS_BOTTOM) {
         require_wrap_nxt = true;
         auto [p_mut, p_append] = appender->open_nxt(paritial_key);
@@ -2055,7 +2055,7 @@ struct staged {
     }
     typename NXT_STAGE_T::template StagedAppender<KT>&
     open_nxt(const full_key_t<KT>& key) {
-      assert(!require_wrap_nxt);
+      ceph_assert(!require_wrap_nxt);
       if constexpr (!IS_BOTTOM) {
         require_wrap_nxt = true;
         auto [p_mut, p_append] = appender->open_nxt(key);
@@ -2067,7 +2067,7 @@ struct staged {
     }
     typename NXT_STAGE_T::template StagedAppender<KT>& get_nxt() {
       if constexpr (!IS_BOTTOM) {
-        assert(require_wrap_nxt);
+        ceph_assert(require_wrap_nxt);
         return this->_nxt;
       } else {
         ceph_abort("impossible path");
@@ -2075,7 +2075,7 @@ struct staged {
     }
     void wrap_nxt() {
       if constexpr (!IS_BOTTOM) {
-        assert(require_wrap_nxt);
+        ceph_assert(require_wrap_nxt);
         require_wrap_nxt = false;
         auto p_append = this->_nxt.wrap();
         appender->wrap_nxt(p_append);
@@ -2095,7 +2095,7 @@ struct staged {
       StagedIterator& src_iter, StagedAppender<KT>& appender, index_t& to_index) {
     if (src_iter.is_end()) {
       // append done
-      assert(to_index == INDEX_END);
+      ceph_assert(to_index == INDEX_END);
       to_index = src_iter.index();
     } else if constexpr (!IS_BOTTOM) {
       if (appender.in_progress()) {
@@ -2124,7 +2124,7 @@ struct staged {
   template <KeyT KT>
   static void _append_into(StagedIterator& src_iter, StagedAppender<KT>& appender,
                            position_t& position, match_stage_t stage) {
-    assert(position.index == src_iter.index());
+    ceph_assert(position.index == src_iter.index());
     // reaches the last item
     if (stage == STAGE) {
       // done, end recursion
@@ -2132,7 +2132,7 @@ struct staged {
         position.nxt = position_t::nxt_t::begin();
       }
     } else {
-      assert(stage < STAGE);
+      ceph_assert(stage < STAGE);
       // proceed append in the next stage
       NXT_STAGE_T::template append_until<KT>(
           src_iter.nxt(), appender.open_nxt(src_iter.get_key()),
@@ -2145,19 +2145,19 @@ struct staged {
                            position_t& position, match_stage_t stage) {
     index_t from_index = src_iter.index();
     index_t& to_index = position.index;
-    assert(from_index <= to_index);
+    ceph_assert(from_index <= to_index);
     if constexpr (IS_BOTTOM) {
-      assert(stage == STAGE);
+      ceph_assert(stage == STAGE);
       appender.append_until(src_iter, to_index);
     } else {
-      assert(stage <= STAGE);
+      ceph_assert(stage <= STAGE);
       if (src_iter.index() == to_index) {
         _append_into<KT>(src_iter, appender, position, stage);
       } else {
         if (to_index == INDEX_END) {
-          assert(stage == STAGE);
+          ceph_assert(stage == STAGE);
         } else if (to_index == INDEX_LAST) {
-          assert(stage < STAGE);
+          ceph_assert(stage < STAGE);
         }
         _append_range<KT>(src_iter, appender, to_index);
         _append_into<KT>(src_iter, appender, position, stage);
@@ -2171,7 +2171,7 @@ struct staged {
       const full_key_t<KT>& key, const value_input_t& value,
       StagedIterator& src_iter, StagedAppender<KT>& appender,
       bool is_front_insert, match_stage_t& stage, const value_t*& p_value) {
-    assert(src_iter.valid());
+    ceph_assert(src_iter.valid());
     if (stage == STAGE) {
       appender.append(key, value, p_value);
       if (src_iter.is_end()) {
@@ -2180,7 +2180,7 @@ struct staged {
         return false;
       }
     } else {
-      assert(stage < STAGE);
+      ceph_assert(stage < STAGE);
       if constexpr (!IS_BOTTOM) {
         auto nxt_is_end = NXT_STAGE_T::template append_insert<KT>(
             key, value, src_iter.get_nxt(), appender.get_nxt(),
@@ -2252,7 +2252,7 @@ struct staged {
   static void trim(NodeExtentMutable& mut, StagedIterator& trim_at) {
     auto [type, trimmed] = recursively_trim(mut, trim_at);
     if (type == TrimType::BEFORE) {
-      assert(trim_at.valid());
+      ceph_assert(trim_at.valid());
       auto& iter = trim_at.get();
       iter.trim_until(mut);
     }
@@ -2266,7 +2266,7 @@ struct staged {
       position_t& pos) {                // IN&OUT
     auto iter = iterator_t(container);
     auto& index = pos.index;
-    assert(is_valid_index(index));
+    ceph_assert(is_valid_index(index));
     iter.seek_at(index);
     bool is_last = iter.is_last();
 
@@ -2277,7 +2277,7 @@ struct staged {
       if (ret.has_value()) {
         // erased at lower level
         auto [r_stage, r_erase_size, r_done] = *ret;
-        assert(r_erase_size != 0);
+        ceph_assert(r_erase_size != 0);
         iter.update_size(mut, -r_erase_size);
         if (r_done) {
           // done, the next_pos is calculated
@@ -2303,14 +2303,14 @@ struct staged {
       return std::nullopt;
     } else {
       auto erase_size = iter.erase(mut, p_left_bound);
-      assert(erase_size != 0);
+      ceph_assert(erase_size != 0);
       if (is_last) {
         // need to find the next pos at upper stage
         return {{STAGE, erase_size, false}};
       } else {
         // done, calculate the next pos (should be correct already)
         if constexpr (!IS_BOTTOM) {
-          assert(pos.nxt == NXT_STAGE_T::position_t::begin());
+          ceph_assert(pos.nxt == NXT_STAGE_T::position_t::begin());
         }
         return {{STAGE, erase_size, true}};
       }
@@ -2328,7 +2328,7 @@ struct staged {
       auto [r_stage, r_erase_size, r_done] = *ret;
       std::ignore = r_erase_size;
       if (r_done) {
-        assert(!erase_pos.is_end());
+        ceph_assert(!erase_pos.is_end());
         return r_stage;
       } else {
         // erased the last kv
@@ -2336,7 +2336,7 @@ struct staged {
         return r_stage;
       }
     } else {
-      assert(node_stage.keys() == 1);
+      ceph_assert(node_stage.keys() == 1);
       node_stage.erase_at(mut, node_stage, 0, p_left_bound);
       erase_pos = position_t::end();
       return STAGE;

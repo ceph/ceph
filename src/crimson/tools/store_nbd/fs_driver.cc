@@ -37,7 +37,7 @@ void add_log_entry(
   unsigned entry_size,
   std::map<std::string, ceph::buffer::list> *omap)
 {
-  assert(omap);
+  ceph_assert(omap);
   bufferlist bl;
   bl.append(ceph::buffer::create('0', entry_size));
 
@@ -181,7 +181,7 @@ seastar::future<> FSDriver::mkfs()
 {
   return init(
   ).then([this] {
-    assert(fs);
+    ceph_assert(fs);
     uuid_d uuid;
     uuid.generate_random();
     return fs->mkfs(uuid).handle_error(

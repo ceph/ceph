@@ -44,12 +44,12 @@ class internal_sub_items_t {
 
   internal_sub_items_t(const container_range_t& _range)
       : node_size{_range.node_size} {
-    assert(is_valid_node_size(node_size));
+    ceph_assert(is_valid_node_size(node_size));
     auto& range = _range.range;
-    assert(range.p_start < range.p_end);
-    assert((range.p_end - range.p_start) % sizeof(internal_sub_item_t) == 0);
+    ceph_assert(range.p_start < range.p_end);
+    ceph_assert((range.p_end - range.p_start) % sizeof(internal_sub_item_t) == 0);
     num_items = (range.p_end - range.p_start) / sizeof(internal_sub_item_t);
-    assert(num_items > 0);
+    ceph_assert(num_items > 0);
     auto _p_first_item = range.p_end - sizeof(internal_sub_item_t);
     p_first_item = reinterpret_cast<const internal_sub_item_t*>(_p_first_item);
   }
@@ -59,16 +59,16 @@ class internal_sub_items_t {
   static constexpr auto CONTAINER_TYPE = ContainerType::INDEXABLE;
   num_keys_t keys() const { return num_items; }
   key_get_type operator[](index_t index) const {
-    assert(index < num_items);
+    ceph_assert(index < num_items);
     return (p_first_item - index)->get_key();
   }
   node_offset_t size_before(index_t index) const {
     size_t ret = index * sizeof(internal_sub_item_t);
-    assert(ret < node_size);
+    ceph_assert(ret < node_size);
     return ret;
   }
   const laddr_packed_t* get_p_value(index_t index) const {
-    assert(index < num_items);
+    ceph_assert(index < num_items);
     return (p_first_item - index)->get_p_value();
   }
   node_offset_t size_overhead_at(index_t index) const { return 0u; }
@@ -78,9 +78,9 @@ class internal_sub_items_t {
     auto p_start = p_end - num_items * sizeof(internal_sub_item_t);
     int start_offset = p_start - p_node_start;
     int stage_size = p_end - p_start;
-    assert(start_offset > 0);
-    assert(stage_size > 0);
-    assert(start_offset + stage_size < (int)node_size);
+    ceph_assert(start_offset > 0);
+    ceph_assert(stage_size > 0);
+    ceph_assert(start_offset + stage_size < (int)node_size);
     ceph::encode(static_cast<node_offset_t>(start_offset), encoded);
     ceph::encode(static_cast<node_offset_t>(stage_size), encoded);
   }
@@ -93,9 +93,9 @@ class internal_sub_items_t {
     ceph::decode(start_offset, delta);
     node_offset_t stage_size;
     ceph::decode(stage_size, delta);
-    assert(start_offset > 0);
-    assert(stage_size > 0);
-    assert((unsigned)start_offset + stage_size < node_size);
+    ceph_assert(start_offset > 0);
+    ceph_assert(stage_size > 0);
+    ceph_assert((unsigned)start_offset + stage_size < node_size);
     return internal_sub_items_t({{p_node_start + start_offset,
                                   p_node_start + start_offset + stage_size},
                                  node_size});
@@ -137,7 +137,7 @@ class internal_sub_items_t::Appender {
   Appender(NodeExtentMutable* p_mut, const internal_sub_items_t& sub_items)
     : p_mut{p_mut},
       p_append{(char*)(sub_items.p_first_item + 1 - sub_items.keys())} {
-    assert(sub_items.keys());
+    ceph_assert(sub_items.keys());
   }
   void append(const internal_sub_items_t& src, index_t from, index_t items);
   void append(const full_key_t<KT>&, const laddr_t&, const laddr_packed_t*&);
@@ -177,19 +177,19 @@ class leaf_sub_items_t {
 
   leaf_sub_items_t(const container_range_t& _range)
       : node_size{_range.node_size} {
-    assert(is_valid_node_size(node_size));
+    ceph_assert(is_valid_node_size(node_size));
     auto& range = _range.range;
-    assert(range.p_start < range.p_end);
+    ceph_assert(range.p_start < range.p_end);
     auto _p_num_keys = range.p_end - sizeof(num_keys_t);
-    assert(range.p_start < _p_num_keys);
+    ceph_assert(range.p_start < _p_num_keys);
     p_num_keys = reinterpret_cast<const num_keys_packed_t*>(_p_num_keys);
-    assert(keys());
+    ceph_assert(keys());
     auto _p_offsets = _p_num_keys - sizeof(node_offset_t);
-    assert(range.p_start < _p_offsets);
+    ceph_assert(range.p_start < _p_offsets);
     p_offsets = reinterpret_cast<const node_offset_packed_t*>(_p_offsets);
     p_items_end = reinterpret_cast<const char*>(&get_offset(keys() - 1));
-    assert(range.p_start < p_items_end);
-    assert(range.p_start == p_start());
+    ceph_assert(range.p_start < p_items_end);
+    ceph_assert(range.p_start == p_start());
   }
 
   bool operator==(const leaf_sub_items_t& x) {
@@ -201,12 +201,12 @@ class leaf_sub_items_t {
   const char* p_start() const { return get_item_end(keys()); }
 
   const node_offset_packed_t& get_offset(index_t index) const {
-    assert(index < keys());
+    ceph_assert(index < keys());
     return *(p_offsets - index);
   }
 
   const node_offset_t get_offset_to_end(index_t index) const {
-    assert(index <= keys());
+    ceph_assert(index <= keys());
     return index == 0 ? 0 : get_offset(index - 1).value;
   }
 
@@ -223,15 +223,15 @@ class leaf_sub_items_t {
   static constexpr auto CONTAINER_TYPE = ContainerType::INDEXABLE;
   num_keys_t keys() const { return p_num_keys->value; }
   key_get_type operator[](index_t index) const {
-    assert(index < keys());
+    ceph_assert(index < keys());
     auto pointer = get_item_end(index);
-    assert(get_item_start(index) < pointer);
+    ceph_assert(get_item_start(index) < pointer);
     pointer -= sizeof(snap_gen_t);
-    assert(get_item_start(index) < pointer);
+    ceph_assert(get_item_start(index) < pointer);
     return *reinterpret_cast<const snap_gen_t*>(pointer);
   }
   node_offset_t size_before(index_t index) const {
-    assert(index <= keys());
+    ceph_assert(index <= keys());
     size_t ret;
     if (index == 0) {
       ret = sizeof(num_keys_t);
@@ -241,15 +241,15 @@ class leaf_sub_items_t {
             (index + 1) * sizeof(node_offset_t) +
             get_offset(index).value;
     }
-    assert(ret < node_size);
+    ceph_assert(ret < node_size);
     return ret;
   }
   node_offset_t size_overhead_at(index_t index) const { return sizeof(node_offset_t); }
   const value_header_t* get_p_value(index_t index) const {
-    assert(index < keys());
+    ceph_assert(index < keys());
     auto pointer = get_item_start(index);
     auto value = reinterpret_cast<const value_header_t*>(pointer);
-    assert(pointer + value->allocation_size() + sizeof(snap_gen_t) ==
+    ceph_assert(pointer + value->allocation_size() + sizeof(snap_gen_t) ==
            get_item_end(index));
     return value;
   }
@@ -258,9 +258,9 @@ class leaf_sub_items_t {
                   sizeof(num_keys_t);
     int start_offset = p_start() - p_node_start;
     int stage_size = p_end - p_start();
-    assert(start_offset > 0);
-    assert(stage_size > 0);
-    assert(start_offset + stage_size < (int)node_size);
+    ceph_assert(start_offset > 0);
+    ceph_assert(stage_size > 0);
+    ceph_assert(start_offset + stage_size < (int)node_size);
     ceph::encode(static_cast<node_offset_t>(start_offset), encoded);
     ceph::encode(static_cast<node_offset_t>(stage_size), encoded);
   }
@@ -273,9 +273,9 @@ class leaf_sub_items_t {
     ceph::decode(start_offset, delta);
     node_offset_t stage_size;
     ceph::decode(stage_size, delta);
-    assert(start_offset > 0);
-    assert(stage_size > 0);
-    assert((unsigned)start_offset + stage_size < node_size);
+    ceph_assert(start_offset > 0);
+    ceph_assert(stage_size > 0);
+    ceph_assert((unsigned)start_offset + stage_size < node_size);
     return leaf_sub_items_t({{p_node_start + start_offset,
                               p_node_start + start_offset + stage_size},
                              node_size});
@@ -330,16 +330,16 @@ class leaf_sub_items_t::Appender {
   }
   Appender(NodeExtentMutable* p_mut, const leaf_sub_items_t& sub_items)
     : p_mut{p_mut} , op_dst(sub_items) {
-    assert(sub_items.keys());
+    ceph_assert(sub_items.keys());
   }
 
   void append(const leaf_sub_items_t& src, index_t from, index_t items);
   void append(const full_key_t<KT>& key,
               const value_config_t& value, const value_header_t*& p_value) {
     // append from empty
-    assert(p_append);
-    assert(pp_value == nullptr);
-    assert(cnt <= APPENDER_LIMIT);
+    ceph_assert(p_append);
+    ceph_assert(pp_value == nullptr);
+    ceph_assert(cnt <= APPENDER_LIMIT);
     appends[cnt] = kv_item_t{&key, value};
     ++cnt;
     pp_value = &p_value;

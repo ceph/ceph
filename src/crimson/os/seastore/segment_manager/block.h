@@ -60,14 +60,14 @@ public:
   }
 
   segment_state_t get(device_segment_id_t offset) const {
-    assert(offset < get_capacity());
+    ceph_assert(offset < get_capacity());
     return static_cast<segment_state_t>(
       layout.template Pointer<0>(
 	bptr.c_str())[offset]);
   }
 
   void set(device_segment_id_t offset, segment_state_t state) {
-    assert(offset < get_capacity());
+    ceph_assert(offset < get_capacity());
     layout.template Pointer<0>(bptr.c_str())[offset] =
       static_cast<uint8_t>(state);
   }
@@ -163,7 +163,7 @@ public:
   }
 
   device_id_t get_device_id() const final {
-    assert(device_id <= DEVICE_ID_MAX_VALID);
+    ceph_assert(device_id <= DEVICE_ID_MAX_VALID);
     return device_id;
   }
   secondary_device_set_t& get_secondary_devices() final {
@@ -223,8 +223,8 @@ private:
   seastar::file device;
 
   void set_device_id(device_id_t id) {
-    assert(id <= DEVICE_ID_MAX_VALID);
-    assert(device_id == DEVICE_ID_NULL ||
+    ceph_assert(id <= DEVICE_ID_MAX_VALID);
+    ceph_assert(device_id == DEVICE_ID_NULL ||
            device_id == id);
     device_id = id;
   }

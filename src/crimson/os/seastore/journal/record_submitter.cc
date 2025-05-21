@@ -29,22 +29,22 @@ RecordBatch::add_pending(
         pending.get_size() + 1,
         new_size.get_encoded_length(),
         dlength_offset);
-  assert(state != state_t::SUBMITTING);
-  assert(evaluate_submit(record.size, block_size).submit_size == new_size);
+  ceph_assert(state != state_t::SUBMITTING);
+  ceph_assert(evaluate_submit(record.size, block_size).submit_size == new_size);
 
   pending.push_back(
       std::move(record), block_size);
-  assert(pending.size == new_size);
+  ceph_assert(pending.size == new_size);
   if (state == state_t::EMPTY) {
-    assert(!io_promise.has_value());
+    ceph_assert(!io_promise.has_value());
     io_promise = seastar::shared_promise<maybe_promise_result_t>();
-    assert(maybe_write_base.has_value());
-    assert(!write_base.has_value());
+    ceph_assert(maybe_write_base.has_value());
+    ceph_assert(!write_base.has_value());
     write_base = maybe_write_base;
   }
   state = state_t::PENDING;
-  assert(write_base.has_value());
-  assert(io_promise.has_value());
+  ceph_assert(write_base.has_value());
+  ceph_assert(io_promise.has_value());
 
   auto _write_base = *write_base;
   auto fut = io_promise->get_shared_future(
@@ -72,10 +72,10 @@ RecordBatch::encode_ret_t RecordBatch::encode_batch(
   const journal_seq_t& committed_to,
   segment_nonce_t segment_nonce)
 {
-  assert(state == state_t::PENDING);
-  assert(pending.get_size() > 0);
-  assert(io_promise.has_value());
-  assert(write_base.has_value());
+  ceph_assert(state == state_t::PENDING);
+  ceph_assert(pending.get_size() > 0);
+  ceph_assert(io_promise.has_value());
+  ceph_assert(write_base.has_value());
 
   state = state_t::SUBMITTING;
   auto _write_base = *write_base;
@@ -85,7 +85,7 @@ RecordBatch::encode_ret_t RecordBatch::encode_batch(
   submitting_mdlength = pending.size.get_mdlength();
   auto bl = encode_records(pending, committed_to, segment_nonce);
   // Note: pending is cleared here
-  assert(bl.length() == submitting_length);
+  ceph_assert(bl.length() == submitting_length);
   return {_write_base, std::move(bl)};
 }
 
@@ -94,15 +94,15 @@ void RecordBatch::set_result(
 {
   maybe_promise_result_t result;
   if (maybe_write_length.has_value()) {
-    assert(*maybe_write_length == submitting_length);
+    ceph_assert(*maybe_write_length == submitting_length);
     result = promise_result_t{
       *maybe_write_length,
       submitting_mdlength
     };
   }
-  assert(state == state_t::SUBMITTING);
-  assert(io_promise.has_value());
-  assert(!write_base.has_value());
+  ceph_assert(state == state_t::SUBMITTING);
+  ceph_assert(io_promise.has_value());
+  ceph_assert(!write_base.has_value());
 
   state = state_t::EMPTY;
   submitting_size = 0;
@@ -119,16 +119,16 @@ RecordBatch::submit_pending_fast(
   const journal_seq_t& committed_to,
   segment_nonce_t segment_nonce)
 {
-  assert(group.get_size() == 1);
+  ceph_assert(group.get_size() == 1);
   auto& record = group.records[0];
   auto new_size = get_encoded_length_after(record, block_size);
   std::ignore = new_size;
-  assert(state == state_t::EMPTY);
-  assert(evaluate_submit(record.size, block_size).submit_size == new_size);
-  assert(group.size == new_size);
+  ceph_assert(state == state_t::EMPTY);
+  ceph_assert(evaluate_submit(record.size, block_size).submit_size == new_size);
+  ceph_assert(group.size == new_size);
   auto bl = encode_records(group, committed_to, segment_nonce);
   // Note: group is cleared here
-  assert(bl.length() == new_size.get_encoded_length());
+  ceph_assert(bl.length() == new_size.get_encoded_length());
   return bl;
 }
 
@@ -195,7 +195,7 @@ RecordSubmitter::wa_ertr::future<>
 RecordSubmitter::wait_available()
 {
   LOG_PREFIX(RecordSubmitter::wait_available);
-  assert(!is_available());
+  ceph_assert(!is_available());
   if (has_io_error) {
     ERROR("{} I/O is failed before wait", get_name());
     return crimson::ct_error::input_output_error::make();
@@ -214,7 +214,7 @@ RecordSubmitter::action_t
 RecordSubmitter::check_action(
   const record_size_t& rsize) const
 {
-  assert(is_available());
+  ceph_assert(is_available());
   auto eval = p_current_batch->evaluate_submit(
       rsize, journal_allocator.get_block_size());
   if (journal_allocator.needs_roll(eval.submit_size.get_encoded_length())) {
@@ -247,7 +247,7 @@ RecordSubmitter::roll_segment()
         return seastar::now();
       }
     } else {
-      assert(p_current_batch->is_empty());
+      ceph_assert(p_current_batch->is_empty());
       return seastar::now();
     }
   }().then_wrapped([FNAME, this](auto fut) {
@@ -263,7 +263,7 @@ RecordSubmitter::roll_segment()
       ).safe_then([FNAME, this] {
         // good
         DEBUG("{} rolling done, available", get_name());
-        assert(!has_io_error);
+        ceph_assert(!has_io_error);
         wait_available_promise->set_value();
         wait_available_promise.reset();
       }).handle_error(
@@ -293,7 +293,7 @@ RecordSubmitter::submit(
 {
   LOG_PREFIX(RecordSubmitter::submit);
   ceph_assert(is_available());
-  assert(check_action(record.size) != action_t::ROLL);
+  ceph_assert(check_action(record.size) != action_t::ROLL);
   journal_allocator.update_modify_time(record);
   auto eval = p_current_batch->evaluate_submit(
       record.size, journal_allocator.get_block_size());
@@ -312,7 +312,7 @@ RecordSubmitter::submit(
     auto block_size = journal_allocator.get_block_size();
     auto rg = record_group_t(std::move(record), block_size);
     account_submission(rg);
-    assert(stats.record_batch_stats.num_io ==
+    ceph_assert(stats.record_batch_stats.num_io ==
            stats.io_depth_stats.num_io);
     record_group_size_t sizes = rg.size;
     auto to_write = p_current_batch->submit_pending_fast(
@@ -341,8 +341,8 @@ RecordSubmitter::submit(
   if (p_current_batch->is_empty()) {
     maybe_write_base = journal_allocator.get_written_to();
   } else {
-    assert(p_current_batch->get_write_base().has_value());
-    assert(*p_current_batch->get_write_base() ==
+    ceph_assert(p_current_batch->get_write_base().has_value());
+    ceph_assert(*p_current_batch->get_write_base() ==
            journal_allocator.get_written_to());
   }
   auto ret = p_current_batch->add_pending(
@@ -360,7 +360,7 @@ RecordSubmitter::submit(
       if (with_atomic_roll_segment) {
         // wait_available_promise and wait_unfull_flush_promise
         // need to be delegated to the follow-up atomic roll_segment();
-        assert(p_current_batch->is_pending());
+        ceph_assert(p_current_batch->is_pending());
       } else {
         wait_available_promise = seastar::shared_promise<>();
         ceph_assert(!wait_unfull_flush_promise.has_value());
@@ -383,7 +383,7 @@ RecordSubmitter::submit(
           get_name(),
           p_current_batch->get_num_records(),
           num_outstanding_io);
-    assert(!p_current_batch->needs_flush());
+    ceph_assert(!p_current_batch->needs_flush());
   }
   return ret;
 }
@@ -476,7 +476,7 @@ void RecordSubmitter::update_state()
 void RecordSubmitter::decrement_io_with_flush()
 {
   LOG_PREFIX(RecordSubmitter::decrement_io_with_flush);
-  assert(num_outstanding_io > 0);
+  ceph_assert(num_outstanding_io > 0);
   auto prv_state = state;
   --num_outstanding_io;
   update_state();
@@ -484,8 +484,8 @@ void RecordSubmitter::decrement_io_with_flush()
   if (prv_state == state_t::FULL) {
     if (wait_unfull_flush_promise.has_value()) {
       DEBUG("{} flush, resolve wait_unfull_flush_promise", get_name());
-      assert(!p_current_batch->is_empty());
-      assert(wait_available_promise.has_value());
+      ceph_assert(!p_current_batch->is_empty());
+      ceph_assert(wait_available_promise.has_value());
       flush_current_batch();
       wait_unfull_flush_promise->set_value();
       wait_unfull_flush_promise.reset();
@@ -518,7 +518,7 @@ void RecordSubmitter::account_submission(
 
   for (const record_t& r : rg.records) {
     auto src = r.trans_type;
-    assert(is_modify_transaction(src));
+    ceph_assert(is_modify_transaction(src));
     auto& trans_stats = get_by_src(stats.stats_by_src, src);
     ++(trans_stats.num_records);
     trans_stats.metadata_bytes += r.size.get_raw_mdlength();
@@ -530,7 +530,7 @@ void RecordSubmitter::finish_submit_batch(
   RecordBatch* p_batch,
   maybe_result_t maybe_result)
 {
-  assert(p_batch->is_submitting());
+  ceph_assert(p_batch->is_submitting());
   p_batch->set_result(maybe_result);
   free_batch_ptrs.push_back(p_batch);
   decrement_io_with_flush();
@@ -540,17 +540,17 @@ void RecordSubmitter::flush_current_batch()
 {
   LOG_PREFIX(RecordSubmitter::flush_current_batch);
   RecordBatch* p_batch = p_current_batch;
-  assert(p_batch->is_pending());
+  ceph_assert(p_batch->is_pending());
   p_current_batch = nullptr;
   pop_free_batch();
 
   increment_io();
   auto num = p_batch->get_num_records();
   const auto& rg = p_batch->get_record_group();
-  assert(rg.get_size() == num);
+  ceph_assert(rg.get_size() == num);
   record_group_size_t sizes = rg.size;
   account_submission(rg);
-  assert(stats.record_batch_stats.num_io ==
+  ceph_assert(stats.record_batch_stats.num_io ==
          stats.io_depth_stats.num_io);
   auto encode_ret = p_batch->encode_batch(
     get_committed_to(), journal_allocator.get_nonce());
@@ -561,7 +561,7 @@ void RecordSubmitter::flush_current_batch()
         get_name(), num, sizes,
         write_result_t{write_base, write_len},
         get_committed_to(), num_outstanding_io);
-  assert(write_base == journal_allocator.get_written_to());
+  ceph_assert(write_base == journal_allocator.get_written_to());
   std::ignore = journal_allocator.write(std::move(encode_ret.bl)
   ).safe_then([this, p_batch, FNAME, num, sizes, write_len] {
     TRACE("{} {} records, {}, write done",

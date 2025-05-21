@@ -44,7 +44,7 @@ class DummyNodeExtent final: public NodeExtent {
   ~DummyNodeExtent() override = default;
 
   void retire() {
-    assert(state == extent_state_t::INITIAL_WRITE_PENDING);
+    ceph_assert(state == extent_state_t::INITIAL_WRITE_PENDING);
     state = extent_state_t::INVALID;
     bufferptr empty_bptr;
     get_bptr().swap(empty_bptr);
@@ -137,30 +137,30 @@ class DummyNodeExtentManager final: public NodeExtentManager {
   read_iertr::future<NodeExtentRef> read_extent_sync(
       Transaction& t, laddr_t addr) {
     auto iter = allocate_map.find(addr);
-    assert(iter != allocate_map.end());
+    ceph_assert(iter != allocate_map.end());
     auto extent = iter->second;
     SUBTRACET(seastore_onode,
         "read {}B at {} -- {}",
         t, extent->get_length(), extent->get_laddr(), *extent);
-    assert(extent->get_laddr() == addr);
+    ceph_assert(extent->get_laddr() == addr);
     return read_iertr::make_ready_future<NodeExtentRef>(extent);
   }
 
   alloc_iertr::future<NodeExtentRef> alloc_extent_sync(
       Transaction& t, extent_len_t len) {
-    assert(len % ALIGNMENT == 0);
+    ceph_assert(len % ALIGNMENT == 0);
     auto r = ceph::buffer::create_aligned(len, ALIGNMENT);
     auto addr = laddr_t::from_byte_offset(
       reinterpret_cast<laddr_t::Unsigned>(r->get_data()));
     auto bp = ceph::bufferptr(std::move(r));
     auto extent = Ref<DummyNodeExtent>(new DummyNodeExtent(std::move(bp)));
     extent->set_laddr(addr);
-    assert(allocate_map.find(extent->get_laddr()) == allocate_map.end());
+    ceph_assert(allocate_map.find(extent->get_laddr()) == allocate_map.end());
     allocate_map.insert({extent->get_laddr(), extent});
     SUBDEBUGT(seastore_onode,
         "allocated {}B at {} -- {}",
         t, extent->get_length(), extent->get_laddr(), *extent);
-    assert(extent->get_length() == len);
+    ceph_assert(extent->get_length() == len);
     return alloc_iertr::make_ready_future<NodeExtentRef>(extent);
   }
 
@@ -171,7 +171,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     auto len = extent.get_length();
     extent.retire();
     auto iter = allocate_map.find(addr);
-    assert(iter != allocate_map.end());
+    ceph_assert(iter != allocate_map.end());
     allocate_map.erase(iter);
     SUBDEBUGT(seastore_onode, "retired {}B at {}", t, len, addr);
     return retire_iertr::now();

@@ -522,7 +522,7 @@ ClientRequest::do_process(
   {
     auto all_completed = interruptor::now();
     if (ret) {
-      assert(should_log_error(*ret));
+      ceph_assert(should_log_error(*ret));
       if (op_info.may_write()) {
 	auto rep_tid = pg->shard_services.get_tid();
 	auto version = co_await pg->submit_error_log(
@@ -562,7 +562,7 @@ ClientRequest::do_process(
     // For all ops except for CMPEXT, the correct error value is encoded
     // in e. For CMPEXT, osdop.rval has the actual error value.
     if (err == -ct_error::cmp_fail_error_value) {
-      assert(!m->ops.empty());
+      ceph_assert(!m->ops.empty());
       for (auto &osdop : m->ops) {
 	if (osdop.rval < 0) {
 	  reply->set_result(osdop.rval);

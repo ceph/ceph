@@ -14,6 +14,7 @@
 #include <seastar/core/resource.hh>
 #include <seastar/core/semaphore.hh>
 #include <seastar/core/sharded.hh>
+#include "include/ceph_assert.h"
 
 // std::counting_semaphore is buggy in libstdc++-11
 // (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=104928),
@@ -85,7 +86,7 @@ public:
       if (!is_stopping()) {
         WorkItem* work_item = nullptr;
         [[maybe_unused]] bool popped = pending.pop(work_item);
-        assert(popped);
+        ceph_assert(popped);
         return work_item;
       }
     }
@@ -97,7 +98,7 @@ public:
   }
   void push_back(WorkItem* work_item) {
     [[maybe_unused]] bool pushed = pending.push(work_item);
-    assert(pushed);
+    ceph_assert(pushed);
     sem.release();
   }
 private:

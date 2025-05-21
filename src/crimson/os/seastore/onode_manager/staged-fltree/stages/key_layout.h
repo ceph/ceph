@@ -84,7 +84,7 @@ struct string_key_view_t {
       auto _p_key = p_length - length;
       p_key = static_cast<const char*>(_p_key);
     } else {
-      assert(length == MARKER_MAX || length == MARKER_MIN);
+      ceph_assert(length == MARKER_MAX || length == MARKER_MIN);
       p_key = nullptr;
     }
   }
@@ -94,7 +94,7 @@ struct string_key_view_t {
     } else if (length == MARKER_MAX) {
       return Type::MAX;
     } else {
-      assert(is_valid_size(length));
+      ceph_assert(is_valid_size(length));
       return Type::STR;
     }
   }
@@ -114,22 +114,22 @@ struct string_key_view_t {
   }
   node_offset_t size() const {
     size_t ret = length + sizeof(string_size_t);
-    assert(ret < MAX_NODE_SIZE);
+    ceph_assert(ret < MAX_NODE_SIZE);
     return ret;
   }
   node_offset_t size_logical() const {
-    assert(type() == Type::STR);
-    assert(is_valid_size(length));
+    ceph_assert(type() == Type::STR);
+    ceph_assert(is_valid_size(length));
     return length;
   }
   node_offset_t size_overhead() const {
-    assert(type() == Type::STR);
+    ceph_assert(type() == Type::STR);
     return sizeof(string_size_t);
   }
 
   std::string_view to_string_view() const {
-    assert(type() == Type::STR);
-    assert(is_valid_size(length));
+    ceph_assert(type() == Type::STR);
+    ceph_assert(is_valid_size(length));
     return {p_key, length};
   }
   bool operator==(const string_key_view_t& x) const {
@@ -151,7 +151,7 @@ struct string_key_view_t {
 #ifndef NDEBUG
     string_size_t current_length;
     std::memcpy(&current_length, p_length, sizeof(string_size_t));
-    assert(length == current_length);
+    ceph_assert(length == current_length);
 #endif
   }
 
@@ -159,7 +159,7 @@ struct string_key_view_t {
       NodeExtentMutable&, std::string_view, char*& p_append);
 
   static void test_append_str(std::string_view str, char*& p_append) {
-    assert(is_valid_size(str.length()));
+    ceph_assert(is_valid_size(str.length()));
     p_append -= sizeof(string_size_t);
     string_size_t len = str.length();
     std::memcpy(p_append, &len, sizeof(string_size_t));
@@ -208,17 +208,17 @@ class string_view_masked_t {
   }
   explicit string_view_masked_t(std::string_view str)
       : type{Type::STR}, view{str} {
-    assert(string_key_view_t::is_valid_size(view.size()));
+    ceph_assert(string_key_view_t::is_valid_size(view.size()));
   }
 
   Type get_type() const { return type; }
   std::string_view to_string_view() const {
-    assert(get_type() == Type::STR);
+    ceph_assert(get_type() == Type::STR);
     return view;
   }
   string_size_t size() const {
-    assert(get_type() == Type::STR);
-    assert(string_key_view_t::is_valid_size(view.size()));
+    ceph_assert(get_type() == Type::STR);
+    ceph_assert(string_key_view_t::is_valid_size(view.size()));
     return view.size();
   }
   bool operator==(const string_view_masked_t& x) const {
@@ -232,14 +232,14 @@ class string_view_masked_t {
   }
   auto operator<=>(std::string_view rhs) const {
     using Type = string_view_masked_t::Type;
-    assert(string_key_view_t::is_valid_size(rhs.size()));
+    ceph_assert(string_key_view_t::is_valid_size(rhs.size()));
     auto lhs_type = get_type();
     if (lhs_type == Type::MIN) {
       return std::strong_ordering::less;
     } else if (lhs_type == Type::MAX) {
       return std::strong_ordering::greater;
     } else { // r_type == Type::STR
-      assert(string_key_view_t::is_valid_size(size()));
+      ceph_assert(string_key_view_t::is_valid_size(size()));
       return to_string_view() <=> rhs;
     }
   }
@@ -282,8 +282,8 @@ inline auto operator<=>(const string_view_masked_t& l, const string_view_masked_
   auto l_type = l.get_type();
   auto r_type = r.get_type();
   if (l_type == Type::STR && r_type == Type::STR) {
-    assert(string_key_view_t::is_valid_size(l.size()));
-    assert(string_key_view_t::is_valid_size(r.size()));
+    ceph_assert(string_key_view_t::is_valid_size(l.size()));
+    ceph_assert(string_key_view_t::is_valid_size(r.size()));
     return l.to_string_view() <=> r.to_string_view();
   } else if (l_type == r_type) {
     return std::strong_ordering::equal;
@@ -323,18 +323,18 @@ struct ns_oid_view_t {
   node_offset_t size() const {
     if (type() == Type::STR) {
       size_t ret = nspace.size() + oid.size();
-      assert(ret < MAX_NODE_SIZE);
+      ceph_assert(ret < MAX_NODE_SIZE);
       return ret;
     } else {
       return sizeof(string_size_t);
     }
   }
   node_offset_t size_logical() const {
-    assert(type() == Type::STR);
+    ceph_assert(type() == Type::STR);
     return nspace.size_logical() + oid.size_logical();
   }
   node_offset_t size_overhead() const {
-    assert(type() == Type::STR);
+    ceph_assert(type() == Type::STR);
     return nspace.size_overhead() + oid.size_overhead();
   }
   bool operator==(const ns_oid_view_t& x) const {
@@ -386,7 +386,7 @@ inline auto operator<=>(const ns_oid_view_t& l, const ns_oid_view_t& r) {
 }
 
 inline const ghobject_t _MIN_OID() {
-  assert(ghobject_t().is_min());
+  ceph_assert(ghobject_t().is_min());
   // don't extern _MIN_OID
   return ghobject_t();
 }
@@ -399,7 +399,7 @@ inline const ghobject_t _MIN_OID() {
 inline const ghobject_t _MAX_OID() {
   auto ret = ghobject_t(shard_id_t(MAX_SHARD), MAX_POOL, MAX_CRUSH,
                         "MAX", "MAX", MAX_SNAP, MAX_GEN);
-  assert(ret.hobj.get_hash() == ret.hobj.get_bitwise_key_u32());
+  ceph_assert(ret.hobj.get_hash() == ret.hobj.get_bitwise_key_u32());
   return ret;
 }
 
@@ -423,8 +423,8 @@ class key_hobj_t {
       ghobj = _ghobj;
     }
     // I can be in the range of [_MIN_OID, _MAX_OID]
-    assert(ghobj >= _MIN_OID());
-    assert(ghobj <= _MAX_OID());
+    ceph_assert(ghobj >= _MIN_OID());
+    ceph_assert(ghobj <= _MAX_OID());
   }
   /*
    * common interfaces as a full_key_t
@@ -492,11 +492,11 @@ class key_hobj_t {
     std::string nspace;
     [[maybe_unused]] auto nspace_masked = string_view_masked_t::decode(nspace, delta);
     // TODO(cross-node string dedup)
-    assert(nspace_masked.get_type() == string_view_masked_t::Type::STR);
+    ceph_assert(nspace_masked.get_type() == string_view_masked_t::Type::STR);
     std::string oid;
     [[maybe_unused]] auto oid_masked = string_view_masked_t::decode(oid, delta);
     // TODO(cross-node string dedup)
-    assert(oid_masked.get_type() == string_view_masked_t::Type::STR);
+    ceph_assert(oid_masked.get_type() == string_view_masked_t::Type::STR);
     snap_t snap;
     ceph::decode(snap, delta);
     gen_t gen;
@@ -574,19 +574,19 @@ class key_view_t {
   }
 
   const shard_pool_t& shard_pool_packed() const {
-    assert(has_shard_pool());
+    ceph_assert(has_shard_pool());
     return *p_shard_pool;
   }
   const crush_t& crush_packed() const {
-    assert(has_crush());
+    ceph_assert(has_crush());
     return *p_crush;
   }
   const ns_oid_view_t& ns_oid_view() const {
-    assert(has_ns_oid());
+    ceph_assert(has_ns_oid());
     return *p_ns_oid;
   }
   const snap_gen_t& snap_gen_packed() const {
-    assert(has_snap_gen());
+    ceph_assert(has_snap_gen());
     return *p_snap_gen;
   }
 
@@ -596,7 +596,7 @@ class key_view_t {
   }
 
   ghobject_t to_ghobj() const {
-    assert(is_valid_key(*this));
+    ceph_assert(is_valid_key(*this));
     return ghobject_t(
         shard_id_t(shard()), pool(), crush(),
         std::string(nspace()), std::string(oid()), snap(), gen());
@@ -604,19 +604,19 @@ class key_view_t {
 
   void replace(const crush_t& key) { p_crush = &key; }
   void set(const crush_t& key) {
-    assert(!has_crush());
+    ceph_assert(!has_crush());
     replace(key);
   }
   inline void replace(const shard_pool_crush_t& key);
   inline void set(const shard_pool_crush_t& key);
   void replace(const ns_oid_view_t& key) { p_ns_oid = key; }
   void set(const ns_oid_view_t& key) {
-    assert(!has_ns_oid());
+    ceph_assert(!has_ns_oid());
     replace(key);
   }
   void replace(const snap_gen_t& key) { p_snap_gen = &key; }
   void set(const snap_gen_t& key) {
-    assert(!has_snap_gen());
+    ceph_assert(!has_snap_gen());
     replace(key);
   }
 
@@ -773,7 +773,7 @@ void key_view_t::replace(const shard_pool_crush_t& key) {
 
 void key_view_t::set(const shard_pool_crush_t& key) {
   set(key.crush);
-  assert(!has_shard_pool());
+  ceph_assert(!has_shard_pool());
   replace(key);
 }
 

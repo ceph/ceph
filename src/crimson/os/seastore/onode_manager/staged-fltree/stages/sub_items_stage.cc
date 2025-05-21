@@ -13,8 +13,8 @@ const laddr_packed_t* internal_sub_items_t::insert_at(
     const Key& key, const laddr_t& value,
     index_t index, node_offset_t size, const char* p_left_bound)
 {
-  assert(index <= sub_items.keys());
-  assert(size == estimate_insert(key, value));
+  ceph_assert(index <= sub_items.keys());
+  ceph_assert(size == estimate_insert(key, value));
   const char* p_shift_start = p_left_bound;
   const char* p_shift_end = reinterpret_cast<const char*>(
       sub_items.p_first_item + 1 - index);
@@ -36,11 +36,11 @@ IA_TEMPLATE(key_hobj_t);
 node_offset_t internal_sub_items_t::trim_until(
     NodeExtentMutable& mut, internal_sub_items_t& items, index_t index)
 {
-  assert(index != 0);
+  ceph_assert(index != 0);
   auto keys = items.keys();
-  assert(index <= keys);
+  ceph_assert(index <= keys);
   size_t ret = sizeof(internal_sub_item_t) * (keys - index);
-  assert(ret < mut.get_length());
+  ceph_assert(ret < mut.get_length());
   return ret;
 }
 
@@ -48,7 +48,7 @@ node_offset_t internal_sub_items_t::erase_at(
     NodeExtentMutable& mut, const internal_sub_items_t& sub_items,
     index_t index, const char* p_left_bound)
 {
-  assert(index < sub_items.keys());
+  ceph_assert(index < sub_items.keys());
   node_offset_t erase_size = sizeof(internal_sub_item_t);
   const char* p_shift_start = p_left_bound;
   const char* p_shift_end = reinterpret_cast<const char*>(
@@ -61,12 +61,12 @@ template <KeyT KT>
 void internal_sub_items_t::Appender<KT>::append(
     const internal_sub_items_t& src, index_t from, index_t items)
 {
-  assert(from <= src.keys());
+  ceph_assert(from <= src.keys());
   if (items == 0) {
     return;
   }
-  assert(from < src.keys());
-  assert(from + items <= src.keys());
+  ceph_assert(from < src.keys());
+  ceph_assert(from + items <= src.keys());
   node_offset_t size = sizeof(internal_sub_item_t) * items;
   p_append -= size;
   p_mut->copy_in_absolute(p_append, src.p_first_item + 1 - from - items, size);
@@ -90,8 +90,8 @@ const value_header_t* leaf_sub_items_t::insert_at(
     const Key& key, const value_config_t& value,
     index_t index, node_offset_t size, const char* p_left_bound)
 {
-  assert(index <= sub_items.keys());
-  assert(size == estimate_insert(key, value));
+  ceph_assert(index <= sub_items.keys());
+  ceph_assert(size == estimate_insert(key, value));
   // a. [... item(index)] << size
   const char* p_shift_start = p_left_bound;
   const char* p_shift_end = sub_items.get_item_end(index);
@@ -103,7 +103,7 @@ const value_header_t* leaf_sub_items_t::insert_at(
   p_value->initiate(mut, value);
   p_insert += value.allocation_size();
   mut.copy_in_absolute(p_insert, snap_gen_t::from_key(key));
-  assert(p_insert + sizeof(snap_gen_t) + sizeof(node_offset_t) == p_shift_end);
+  ceph_assert(p_insert + sizeof(snap_gen_t) + sizeof(node_offset_t) == p_shift_end);
 
   // c. compensate affected offsets
   auto item_size = value.allocation_size() + sizeof(snap_gen_t);
@@ -137,9 +137,9 @@ template const value_header_t* leaf_sub_items_t::insert_at<key_hobj_t>(
 node_offset_t leaf_sub_items_t::trim_until(
     NodeExtentMutable& mut, leaf_sub_items_t& items, index_t index)
 {
-  assert(index != 0);
+  ceph_assert(index != 0);
   auto keys = items.keys();
-  assert(index <= keys);
+  ceph_assert(index <= keys);
   if (index == keys) {
     return 0;
   }
@@ -152,7 +152,7 @@ node_offset_t leaf_sub_items_t::trim_until(
                      size_trim_offsets);
   mut.copy_in_absolute((void*)items.p_num_keys, num_keys_t(index));
   size_t ret = size_trim_offsets + (p_shift_start - p_items_start);
-  assert(ret < mut.get_length());
+  ceph_assert(ret < mut.get_length());
   return ret;
 }
 
@@ -160,11 +160,11 @@ node_offset_t leaf_sub_items_t::erase_at(
     NodeExtentMutable& mut, const leaf_sub_items_t& sub_items,
     index_t index, const char* p_left_bound)
 {
-  assert(sub_items.keys() > 0);
-  assert(index < sub_items.keys());
+  ceph_assert(sub_items.keys() > 0);
+  ceph_assert(index < sub_items.keys());
   auto p_item_start = sub_items.get_item_start(index);
   auto p_item_end = sub_items.get_item_end(index);
-  assert(p_item_start < p_item_end);
+  ceph_assert(p_item_start < p_item_end);
   node_offset_t item_erase_size = p_item_end - p_item_start;
   node_offset_t erase_size = item_erase_size + sizeof(node_offset_t);
   auto p_offset_end = (const char*)&sub_items.get_offset(index);
@@ -201,27 +201,27 @@ void leaf_sub_items_t::Appender<KT>::append(
 {
   if (p_append) {
     // append from empty
-    assert(cnt <= APPENDER_LIMIT);
-    assert(from <= src.keys());
+    ceph_assert(cnt <= APPENDER_LIMIT);
+    ceph_assert(from <= src.keys());
     if (items == 0) {
       return;
     }
     if (op_src) {
-      assert(*op_src == src);
+      ceph_assert(*op_src == src);
     } else {
       op_src = src;
     }
-    assert(from < src.keys());
-    assert(from + items <= src.keys());
+    ceph_assert(from < src.keys());
+    ceph_assert(from + items <= src.keys());
     appends[cnt] = range_items_t{from, items};
     ++cnt;
   } else {
     // append from existing
-    assert(op_dst.has_value());
-    assert(!p_appended);
-    assert(from == 0);
-    assert(items);
-    assert(items == src.keys());
+    ceph_assert(op_dst.has_value());
+    ceph_assert(!p_appended);
+    ceph_assert(from == 0);
+    ceph_assert(items);
+    ceph_assert(items == src.keys());
 
     num_keys_t num_keys = op_dst->keys();
     node_offset_t compensate = op_dst->get_offset(num_keys - 1).value;
@@ -260,11 +260,11 @@ char* leaf_sub_items_t::Appender<KT>::wrap()
 {
   if (op_dst.has_value()) {
     // append from existing
-    assert(p_appended);
+    ceph_assert(p_appended);
     return p_appended;
   }
   // append from empty
-  assert(p_append);
+  ceph_assert(p_append);
   auto p_cur = p_append;
   num_keys_t num_keys = 0;
   for (auto i = 0u; i < cnt; ++i) {
@@ -274,7 +274,7 @@ char* leaf_sub_items_t::Appender<KT>::wrap()
       [&] (const kv_item_t& arg) { ++num_keys; }
     }, a);
   }
-  assert(num_keys);
+  ceph_assert(num_keys);
   p_cur -= sizeof(num_keys_t);
   p_mut->copy_in_absolute(p_cur, num_keys);
 
@@ -310,7 +310,7 @@ char* leaf_sub_items_t::Appender<KT>::wrap()
         p_mut->copy_in_absolute(p_cur, _p_start, _len);
       },
       [&] (const kv_item_t& arg) {
-        assert(pp_value);
+        ceph_assert(pp_value);
         p_cur -= sizeof(snap_gen_t);
         p_mut->copy_in_absolute(p_cur, snap_gen_t::from_key(*arg.p_key));
         p_cur -= arg.value_config.allocation_size();

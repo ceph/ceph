@@ -61,7 +61,7 @@ IOHandler::~IOHandler()
   ceph_assert_always(maybe_prv_shard_states == nullptr);
   // should be true in the according shard
   // ceph_assert_always(shard_states->assert_closed_and_exit());
-  assert(!conn_ref);
+  ceph_assert(!conn_ref);
 }
 
 #ifdef UNIT_TESTS_BUILT
@@ -206,7 +206,7 @@ seastar::future<> IOHandler::do_send(
   core_id_t source_core,
   MessageFRef msg)
 {
-  assert(seastar::this_shard_id() == get_shard_id());
+  ceph_assert(seastar::this_shard_id() == get_shard_id());
   if (io_crosscore.proceed_or_wait(cc_seq, source_core)) {
     logger().debug("{} got {} do_send() from core {} -- {}",
                    conn, cc_seq, source_core, *msg);
@@ -269,7 +269,7 @@ seastar::future<> IOHandler::do_send_keepalive(
   cc_seq_t cc_seq,
   core_id_t source_core)
 {
-  assert(seastar::this_shard_id() == get_shard_id());
+  ceph_assert(seastar::this_shard_id() == get_shard_id());
   if (io_crosscore.proceed_or_wait(cc_seq, source_core)) {
     logger().debug("{} got {} do_send_keeplive() from core {}: need_keepalive={}",
                    conn, cc_seq, source_core, need_keepalive);
@@ -312,7 +312,7 @@ void IOHandler::mark_down()
 
 void IOHandler::print_io_stat(std::ostream &out) const
 {
-  assert(seastar::this_shard_id() == get_shard_id());
+  ceph_assert(seastar::this_shard_id() == get_shard_id());
   out << "io_stat("
       << "io_state=" << fmt::format("{}", get_io_state())
       << ", in_seq=" << in_seq
@@ -327,7 +327,7 @@ void IOHandler::print_io_stat(std::ostream &out) const
 
 void IOHandler::assign_frame_assembler(FrameAssemblerV2Ref fa)
 {
-  assert(fa != nullptr);
+  ceph_assert(fa != nullptr);
   ceph_assert_always(frame_assembler == nullptr);
   frame_assembler = std::move(fa);
   ceph_assert_always(
@@ -363,7 +363,7 @@ void IOHandler::do_set_io_state(
       assign_frame_assembler(std::move(fa));
       frame_assembler->shutdown_socket<false>(nullptr);
     } else {
-      assert(fa == nullptr);
+      ceph_assert(fa == nullptr);
     }
     return;
   }
@@ -378,11 +378,11 @@ void IOHandler::do_set_io_state(
     // from open
     ceph_assert_always(protocol_is_connected == true);
     protocol_is_connected = false;
-    assert(fa == nullptr);
+    ceph_assert(fa == nullptr);
     ceph_assert_always(frame_assembler->is_socket_valid());
     frame_assembler->shutdown_socket<false>(nullptr);
   } else {
-    assert(fa == nullptr);
+    ceph_assert(fa == nullptr);
   }
 
   if (new_state == io_state_t::delay) {
@@ -391,7 +391,7 @@ void IOHandler::do_set_io_state(
       maybe_notify_out_dispatch();
     }
   } else {
-    assert(set_notify_out == false);
+    ceph_assert(set_notify_out == false);
     need_notify_out = false;
   }
 
@@ -415,7 +415,7 @@ seastar::future<> IOHandler::set_io_state(
     FrameAssemblerV2Ref fa,
     bool set_notify_out)
 {
-  assert(seastar::this_shard_id() == get_shard_id());
+  ceph_assert(seastar::this_shard_id() == get_shard_id());
   if (!proto_crosscore.proceed_or_wait(cc_seq)) {
     logger().debug("{} got {} set_io_state(), wait at {}",
                    conn, cc_seq, proto_crosscore.get_in_seq());
@@ -434,7 +434,7 @@ seastar::future<IOHandler::exit_dispatching_ret>
 IOHandler::wait_io_exit_dispatching(
     cc_seq_t cc_seq)
 {
-  assert(seastar::this_shard_id() == get_shard_id());
+  ceph_assert(seastar::this_shard_id() == get_shard_id());
   if (!proto_crosscore.proceed_or_wait(cc_seq)) {
     logger().debug("{} got {} wait_io_exit_dispatching(), wait at {}",
                    conn, cc_seq, proto_crosscore.get_in_seq());
@@ -453,11 +453,11 @@ IOHandler::wait_io_exit_dispatching(
     // cannot be running in parallel with to_new_sid()
     if (maybe_dropped_sid.has_value()) {
       ceph_assert_always(get_io_state() == io_state_t::drop);
-      assert(shard_states->assert_closed_and_exit());
+      ceph_assert(shard_states->assert_closed_and_exit());
       auto prv_sid = *maybe_dropped_sid;
       return seastar::smp::submit_to(prv_sid, [this] {
         logger().debug("{} got wait_io_exit_dispatching from prv_sid", conn);
-        assert(maybe_prv_shard_states != nullptr);
+        ceph_assert(maybe_prv_shard_states != nullptr);
         return maybe_prv_shard_states->wait_io_exit_dispatching();
       });
     } else {
@@ -479,7 +479,7 @@ seastar::future<> IOHandler::reset_session(
     cc_seq_t cc_seq,
     bool full)
 {
-  assert(seastar::this_shard_id() == get_shard_id());
+  ceph_assert(seastar::this_shard_id() == get_shard_id());
   if (!proto_crosscore.proceed_or_wait(cc_seq)) {
     logger().debug("{} got {} reset_session(), wait at {}",
                    conn, cc_seq, proto_crosscore.get_in_seq());
@@ -491,7 +491,7 @@ seastar::future<> IOHandler::reset_session(
 
   logger().debug("{} got {} reset_session({})",
                  conn, cc_seq, full);
-  assert(get_io_state() != io_state_t::open);
+  ceph_assert(get_io_state() != io_state_t::open);
   reset_in();
   if (full) {
     reset_out();
@@ -503,7 +503,7 @@ seastar::future<> IOHandler::reset_session(
 seastar::future<> IOHandler::reset_peer_state(
     cc_seq_t cc_seq)
 {
-  assert(seastar::this_shard_id() == get_shard_id());
+  ceph_assert(seastar::this_shard_id() == get_shard_id());
   if (!proto_crosscore.proceed_or_wait(cc_seq)) {
     logger().debug("{} got {} reset_peer_state(), wait at {}",
                    conn, cc_seq, proto_crosscore.get_in_seq());
@@ -515,7 +515,7 @@ seastar::future<> IOHandler::reset_peer_state(
 
   logger().debug("{} got {} reset_peer_state()",
                  conn, cc_seq);
-  assert(get_io_state() != io_state_t::open);
+  ceph_assert(get_io_state() != io_state_t::open);
   reset_in();
   do_requeue_out_sent_up_to(0);
   discard_out_sent();
@@ -525,7 +525,7 @@ seastar::future<> IOHandler::reset_peer_state(
 seastar::future<> IOHandler::requeue_out_sent(
     cc_seq_t cc_seq)
 {
-  assert(seastar::this_shard_id() == get_shard_id());
+  ceph_assert(seastar::this_shard_id() == get_shard_id());
   if (!proto_crosscore.proceed_or_wait(cc_seq)) {
     logger().debug("{} got {} requeue_out_sent(), wait at {}",
                    conn, cc_seq, proto_crosscore.get_in_seq());
@@ -543,7 +543,7 @@ seastar::future<> IOHandler::requeue_out_sent(
 
 void IOHandler::do_requeue_out_sent()
 {
-  assert(get_io_state() != io_state_t::open);
+  ceph_assert(get_io_state() != io_state_t::open);
   if (out_sent_msgs.empty()) {
     return;
   }
@@ -567,7 +567,7 @@ seastar::future<> IOHandler::requeue_out_sent_up_to(
     cc_seq_t cc_seq,
     seq_num_t msg_seq)
 {
-  assert(seastar::this_shard_id() == get_shard_id());
+  ceph_assert(seastar::this_shard_id() == get_shard_id());
   if (!proto_crosscore.proceed_or_wait(cc_seq)) {
     logger().debug("{} got {} requeue_out_sent_up_to(), wait at {}",
                    conn, cc_seq, proto_crosscore.get_in_seq());
@@ -585,7 +585,7 @@ seastar::future<> IOHandler::requeue_out_sent_up_to(
 
 void IOHandler::do_requeue_out_sent_up_to(seq_num_t seq)
 {
-  assert(get_io_state() != io_state_t::open);
+  ceph_assert(get_io_state() != io_state_t::open);
   if (out_sent_msgs.empty() && out_pending_msgs.empty()) {
     logger().debug("{} nothing to requeue, reset out_seq from {} to seq {}",
                    conn, out_seq, seq);
@@ -607,13 +607,13 @@ void IOHandler::do_requeue_out_sent_up_to(seq_num_t seq)
 
 void IOHandler::reset_in()
 {
-  assert(get_io_state() != io_state_t::open);
+  ceph_assert(get_io_state() != io_state_t::open);
   in_seq = 0;
 }
 
 void IOHandler::reset_out()
 {
-  assert(get_io_state() != io_state_t::open);
+  ceph_assert(get_io_state() != io_state_t::open);
   discard_out_sent();
   out_pending_msgs.clear();
   need_keepalive = false;
@@ -623,7 +623,7 @@ void IOHandler::reset_out()
 
 void IOHandler::discard_out_sent()
 {
-  assert(get_io_state() != io_state_t::open);
+  ceph_assert(get_io_state() != io_state_t::open);
   out_seq = 0;
   out_sent_msgs.clear();
 }
@@ -650,10 +650,10 @@ IOHandler::dispatch_connect(
 seastar::future<>
 IOHandler::cleanup_prv_shard(seastar::shard_id prv_sid)
 {
-  assert(seastar::this_shard_id() == get_shard_id());
+  ceph_assert(seastar::this_shard_id() == get_shard_id());
   return seastar::smp::submit_to(prv_sid, [this] {
     logger().debug("{} got cleanup_prv_shard()", conn);
-    assert(maybe_prv_shard_states != nullptr);
+    ceph_assert(maybe_prv_shard_states != nullptr);
     auto ref_prv_states = std::move(maybe_prv_shard_states);
     auto &prv_states = *ref_prv_states;
     return prv_states.close(
@@ -702,7 +702,7 @@ IOHandler::to_new_sid(
   } else {
     // it is possible that both io_handler and protocolv2 are
     // trying to close each other from different cores simultaneously.
-    assert(!protocol_is_connected);
+    ceph_assert(!protocol_is_connected);
   }
 
   if (get_io_state() != io_state_t::drop) {
@@ -714,7 +714,7 @@ IOHandler::to_new_sid(
     }
     protocol_is_connected = true;
   } else {
-    assert(!protocol_is_connected);
+    ceph_assert(!protocol_is_connected);
   }
 
   bool is_dropped = false;
@@ -731,7 +731,7 @@ IOHandler::to_new_sid(
   maybe_prv_shard_states = std::move(shard_states);
   shard_states = shard_states_t::create_from_previous(
       *maybe_prv_shard_states, new_sid);
-  assert(new_sid == get_shard_id());
+  ceph_assert(new_sid == get_shard_id());
   // broadcast shard change to all the io waiters, atomically.
   io_crosscore.reset_wait();
 
@@ -788,11 +788,11 @@ seastar::future<> IOHandler::set_accepted_sid(
     seastar::shard_id sid,
     ConnectionFRef conn_fref)
 {
-  assert(seastar::this_shard_id() == get_shard_id());
-  assert(get_io_state() == io_state_t::delay);
+  ceph_assert(seastar::this_shard_id() == get_shard_id());
+  ceph_assert(get_io_state() == io_state_t::delay);
   ceph_assert_always(conn_ref);
   conn_ref.reset();
-  assert(maybe_prv_shard_states == nullptr);
+  ceph_assert(maybe_prv_shard_states == nullptr);
   shard_states.reset();
   shard_states = shard_states_t::create(sid, io_state_t::delay);
   logger().debug("{} send {} set_accepted_sid() to core {}", conn, cc_seq, sid);
@@ -804,7 +804,7 @@ seastar::future<> IOHandler::set_accepted_sid(
     logger().debug("{} set accepted sid", conn);
     ceph_assert_always(seastar::this_shard_id() == get_shard_id());
     ceph_assert_always(get_io_state() == io_state_t::delay);
-    assert(maybe_prv_shard_states == nullptr);
+    ceph_assert(maybe_prv_shard_states == nullptr);
     ceph_assert_always(!conn_ref);
     conn_ref = make_local_shared_foreign(std::move(conn_fref));
   });
@@ -873,7 +873,7 @@ IOHandler::do_out_dispatch(shard_states_t &ctx)
       auto maybe_keepalive_ack = next_keepalive_ack;
       next_keepalive_ack = std::nullopt;
       auto to_ack = ack_left;
-      assert(to_ack == 0 || in_seq > 0);
+      ceph_assert(to_ack == 0 || in_seq > 0);
       ack_left = 0;
 #ifdef UNIT_TESTS_BUILT
       auto ret = sweep_out_pending_msgs_to_sent(
@@ -970,7 +970,7 @@ void IOHandler::maybe_notify_out_dispatch()
 void IOHandler::notify_out_dispatch()
 {
   ceph_assert_always(seastar::this_shard_id() == get_shard_id());
-  assert(is_out_queued());
+  ceph_assert(is_out_queued());
   if (need_notify_out) {
     auto cc_seq = proto_crosscore.prepare_submit();
     logger().debug("{} send {} notify_out()",
@@ -1103,8 +1103,8 @@ IOHandler::read_message(
 
     // TODO: change MessageRef with seastar::shared_ptr
     auto msg_ref = MessageRef{message, false};
-    assert(ctx.get_io_state() == io_state_t::open);
-    assert(get_io_state() == io_state_t::open);
+    ceph_assert(ctx.get_io_state() == io_state_t::open);
+    ceph_assert(get_io_state() == io_state_t::open);
     ceph_assert_always(conn_ref);
 
     // throttle the reading process by the returned future
@@ -1260,13 +1260,13 @@ IOHandler::close_io(
 
   // cannot be running in parallel with to_new_sid()
   if (maybe_dropped_sid.has_value()) {
-    assert(shard_states->assert_closed_and_exit());
+    ceph_assert(shard_states->assert_closed_and_exit());
     auto prv_sid = *maybe_dropped_sid;
     return cleanup_prv_shard(prv_sid);
   } else {
     return shard_states->close(
     ).then([this] {
-      assert(shard_states->assert_closed_and_exit());
+      ceph_assert(shard_states->assert_closed_and_exit());
     });
   }
 }
@@ -1279,7 +1279,7 @@ void
 IOHandler::shard_states_t::notify_out_dispatching_stopped(
     const char *what, SocketConnection &conn)
 {
-  assert(seastar::this_shard_id() == sid);
+  ceph_assert(seastar::this_shard_id() == sid);
   if (unlikely(out_exit_dispatching.has_value())) {
     out_exit_dispatching->set_value();
     out_exit_dispatching = std::nullopt;
@@ -1296,9 +1296,9 @@ IOHandler::shard_states_t::notify_out_dispatching_stopped(
 seastar::future<>
 IOHandler::shard_states_t::wait_io_exit_dispatching()
 {
-  assert(seastar::this_shard_id() == sid);
-  assert(io_state != io_state_t::open);
-  assert(!gate.is_closed());
+  ceph_assert(seastar::this_shard_id() == sid);
+  ceph_assert(io_state != io_state_t::open);
+  ceph_assert(!gate.is_closed());
   return seastar::when_all(
     [this] {
       if (out_exit_dispatching) {
@@ -1323,7 +1323,7 @@ IOHandler::shard_states_t::create_from_previous(
     seastar::shard_id new_sid)
 {
   auto io_state = prv_states.io_state;
-  assert(io_state != io_state_t::open);
+  ceph_assert(io_state != io_state_t::open);
   auto ret = shard_states_t::create(new_sid, io_state);
   if (io_state == io_state_t::drop) {
     // the new gate should not never be used

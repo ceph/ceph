@@ -23,11 +23,11 @@ public:
   }
 
   std::vector<RandomBlockManager*> get_rb_managers() const {
-    assert(device_ids.size());
+    ceph_assert(device_ids.size());
     std::vector<RandomBlockManager*> ret;
     for (auto& device_id : device_ids) {
       auto rb_device = rb_devices[device_id].get();
-      assert(rb_device->get_device_id() == device_id);
+      ceph_assert(rb_device->get_device_id() == device_id);
       ret.emplace_back(rb_device);
     }
     return ret;
@@ -47,18 +47,18 @@ public:
   }
 
   auto get_block_size() const {
-    assert(device_ids.size());
+    ceph_assert(device_ids.size());
     return rb_devices[*device_ids.begin()]->get_block_size();
   }
 
   const seastore_meta_t &get_meta() const {
-    assert(device_ids.size());
+    ceph_assert(device_ids.size());
     return rb_devices[*device_ids.begin()]->get_meta();
   }
 
 private:
   bool has_device(device_id_t id) const {
-    assert(id <= DEVICE_ID_MAX_VALID);
+    ceph_assert(id <= DEVICE_ID_MAX_VALID);
     return device_ids.count(id) >= 1;
   }
 

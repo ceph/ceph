@@ -11,7 +11,7 @@ WaitUpdate::WaitUpdate(my_context ctx) : ScrubState(ctx)
 {
   auto &cs = context<ChunkState>();
   cs.range_reserved = true;
-  assert(cs.range);
+  ceph_assert(cs.range);
   get_scrub_context().reserve_range(cs.range->start, cs.range->end);
 }
 

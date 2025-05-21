@@ -32,7 +32,7 @@ const char* NODE_T::p_left_bound() const
 template <typename FieldType, node_type_t NODE_TYPE>
 node_offset_t NODE_T::size_to_nxt_at(index_t index) const
 {
-  assert(index < keys());
+  ceph_assert(index < keys());
   if constexpr (FIELD_TYPE == field_type_t::N0 ||
                 FIELD_TYPE == field_type_t::N1) {
     return FieldType::estimate_insert_one();
@@ -55,13 +55,13 @@ container_range_t NODE_T::get_nxt_container(index_t index) const
         index, node_size);
     auto item_end_offset = p_fields->get_item_end_offset(
         index, node_size);
-    assert(item_start_offset < item_end_offset);
+    ceph_assert(item_start_offset < item_end_offset);
     auto item_p_start = p_start() + item_start_offset;
     auto item_p_end = p_start() + item_end_offset;
     if constexpr (FIELD_TYPE == field_type_t::N2) {
       // range for sub_items_t<NODE_TYPE>
       item_p_end = ns_oid_view_t(item_p_end).p_start();
-      assert(item_p_start < item_p_end);
+      ceph_assert(item_p_start < item_p_end);
     } else {
       // range for item_iterator_t<NODE_TYPE>
     }
@@ -85,8 +85,8 @@ template <typename FieldType, node_type_t NODE_TYPE>
 void NODE_T::update_is_level_tail(
     NodeExtentMutable& mut, const node_extent_t& extent, bool value)
 {
-  assert(mut.get_length() == extent.node_size);
-  assert(mut.get_read() == extent.p_start());
+  ceph_assert(mut.get_length() == extent.node_size);
+  ceph_assert(mut.get_read() == extent.p_start());
   node_header_t::update_is_level_tail(mut, extent.p_fields->header, value);
 }
 
@@ -96,13 +96,13 @@ memory_range_t NODE_T::insert_prefix_at(
     NodeExtentMutable& mut, const node_extent_t& node, const Key& key,
     index_t index, node_offset_t size, const char* p_left_bound)
 {
-  assert(mut.get_length() == node.node_size);
-  assert(mut.get_read() == node.p_start());
+  ceph_assert(mut.get_length() == node.node_size);
+  ceph_assert(mut.get_read() == node.p_start());
   if constexpr (FIELD_TYPE == field_type_t::N0 ||
                 FIELD_TYPE == field_type_t::N1) {
-    assert(index <= node.keys());
-    assert(p_left_bound == node.p_left_bound());
-    assert(size > FieldType::estimate_insert_one());
+    ceph_assert(index <= node.keys());
+    ceph_assert(p_left_bound == node.p_left_bound());
+    ceph_assert(size > FieldType::estimate_insert_one());
     auto size_right = size - FieldType::estimate_insert_one();
     const char* p_insert = node.p_start() +
                            node.fields().get_item_end_offset(index, mut.get_length());
@@ -139,9 +139,9 @@ template <typename FieldType, node_type_t NODE_TYPE>
 void NODE_T::update_size_at(
     NodeExtentMutable& mut, const node_extent_t& node, index_t index, int change)
 {
-  assert(mut.get_length() == node.node_size);
-  assert(mut.get_read() == node.p_start());
-  assert(index < node.keys());
+  ceph_assert(mut.get_length() == node.node_size);
+  ceph_assert(mut.get_read() == node.p_start());
+  ceph_assert(index < node.keys());
   FieldType::update_size_at(mut, node.fields(), index, change);
 }
 
@@ -149,11 +149,11 @@ template <typename FieldType, node_type_t NODE_TYPE>
 node_offset_t NODE_T::trim_until(
     NodeExtentMutable& mut, const node_extent_t& node, index_t index)
 {
-  assert(mut.get_length() == node.node_size);
-  assert(mut.get_read() == node.p_start());
-  assert(!node.is_level_tail());
+  ceph_assert(mut.get_length() == node.node_size);
+  ceph_assert(mut.get_read() == node.p_start());
+  ceph_assert(!node.is_level_tail());
   auto keys = node.keys();
-  assert(index <= keys);
+  ceph_assert(index <= keys);
   if (index == keys) {
     return 0;
   }
@@ -172,10 +172,10 @@ node_offset_t NODE_T::trim_at(
     NodeExtentMutable& mut, const node_extent_t& node,
     index_t index, node_offset_t trimmed)
 {
-  assert(mut.get_length() == node.node_size);
-  assert(mut.get_read() == node.p_start());
-  assert(!node.is_level_tail());
-  assert(index < node.keys());
+  ceph_assert(mut.get_length() == node.node_size);
+  ceph_assert(mut.get_read() == node.p_start());
+  ceph_assert(!node.is_level_tail());
+  ceph_assert(index < node.keys());
   if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
     ceph_abort("not implemented");
   } else {
@@ -183,7 +183,7 @@ node_offset_t NODE_T::trim_at(
     node_offset_t offset = node.p_fields->get_item_start_offset(
         index, node_size);
     size_t new_offset = offset + trimmed;
-    assert(new_offset < node.p_fields->get_item_end_offset(index, node_size));
+    ceph_assert(new_offset < node.p_fields->get_item_end_offset(index, node_size));
     mut.copy_in_absolute(const_cast<void*>(node.p_fields->p_offset(index)),
                          node_offset_t(new_offset));
     mut.copy_in_absolute(
@@ -198,13 +198,13 @@ node_offset_t NODE_T::erase_at(
     NodeExtentMutable& mut, const node_extent_t& node,
     index_t index, const char* p_left_bound)
 {
-  assert(mut.get_length() == node.node_size);
-  assert(mut.get_read() == node.p_start());
+  ceph_assert(mut.get_length() == node.node_size);
+  ceph_assert(mut.get_read() == node.p_start());
   if constexpr (FIELD_TYPE == field_type_t::N0 ||
                 FIELD_TYPE == field_type_t::N1) {
-    assert(node.keys() > 0);
-    assert(index < node.keys());
-    assert(p_left_bound == node.p_left_bound());
+    ceph_assert(node.keys() > 0);
+    ceph_assert(index < node.keys());
+    ceph_assert(p_left_bound == node.p_left_bound());
     return FieldType::erase_at(mut, node.fields(), index, p_left_bound);
   } else {
     ceph_abort("not implemented");
@@ -228,9 +228,9 @@ template <KeyT KT>
 APPEND_T::Appender(NodeExtentMutable* p_mut, const node_extent_t& node, bool open)
     : p_mut{p_mut}, p_start{p_mut->get_write()}
 {
-  assert(p_start == node.p_start());
-  assert(node.keys());
-  assert(node.node_size == p_mut->get_length());
+  ceph_assert(p_start == node.p_start());
+  ceph_assert(node.keys());
+  ceph_assert(node.node_size == p_mut->get_length());
   extent_len_t node_size = node.node_size;
   if (open) {
     // seek as open_nxt()
@@ -267,19 +267,19 @@ template <typename FieldType, node_type_t NODE_TYPE>
 template <KeyT KT>
 void APPEND_T::append(const node_extent_t& src, index_t from, index_t items)
 {
-  assert(from <= src.keys());
+  ceph_assert(from <= src.keys());
   if (p_src == nullptr) {
     p_src = &src;
   } else {
-    assert(p_src == &src);
+    ceph_assert(p_src == &src);
   }
-  assert(p_src->node_size == p_mut->get_length());
+  ceph_assert(p_src->node_size == p_mut->get_length());
   extent_len_t node_size = src.node_size;
   if (items == 0) {
     return;
   }
-  assert(from < src.keys());
-  assert(from + items <= src.keys());
+  ceph_assert(from < src.keys());
+  ceph_assert(from + items <= src.keys());
   num_keys += items;
   if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
     std::ignore = node_size;
@@ -293,8 +293,8 @@ void APPEND_T::append(const node_extent_t& src, index_t from, index_t items)
     node_offset_t left_size = offset_left_end - offset_left_start;
     if (num_keys == 0) {
       // no need to adjust offset
-      assert(from == 0);
-      assert(p_start + offset_left_start == p_append_left);
+      ceph_assert(from == 0);
+      ceph_assert(p_start + offset_left_start == p_append_left);
       p_mut->copy_in_absolute(p_append_left,
           src.p_start() + offset_left_start, left_size);
     } else {
@@ -313,12 +313,12 @@ void APPEND_T::append(const node_extent_t& src, index_t from, index_t items)
       for (auto i = from; i < from + items; ++i) {
         int new_offset = src.fields().get_item_start_offset(i, node_size) +
                          offset_change;
-        assert(new_offset > 0);
-        assert(new_offset < (int)node_size);
+        ceph_assert(new_offset > 0);
+        ceph_assert(new_offset < (int)node_size);
         p_mut->copy_in_absolute(p_offset_dst, node_offset_t(new_offset));
         p_offset_dst += step_size;
       }
-      assert(p_append_left + left_size + sizeof(typename FieldType::key_t) ==
+      ceph_assert(p_append_left + left_size + sizeof(typename FieldType::key_t) ==
              p_offset_dst);
     }
     p_append_left += left_size;
@@ -329,8 +329,8 @@ void APPEND_T::append(const node_extent_t& src, index_t from, index_t items)
     auto offset_right_end = src.fields().get_item_end_offset(
         from, node_size);
     int right_size = offset_right_end - offset_right_start;
-    assert(right_size > 0);
-    assert(right_size < (int)node_size);
+    ceph_assert(right_size > 0);
+    ceph_assert(right_size < (int)node_size);
     p_append_right -= right_size;
     p_mut->copy_in_absolute(p_append_right,
         src.p_start() + offset_right_start, node_offset_t(right_size));
@@ -385,13 +385,13 @@ template <typename FieldType, node_type_t NODE_TYPE>
 template <KeyT KT>
 char* APPEND_T::wrap()
 {
-  assert(p_append_left <= p_append_right);
-  assert(p_src);
+  ceph_assert(p_append_left <= p_append_right);
+  ceph_assert(p_src);
   if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
     if (p_src->is_level_tail()) {
       laddr_t tail_value = p_src->get_end_p_laddr()->value;
       p_append_right -= sizeof(laddr_t);
-      assert(p_append_left <= p_append_right);
+      ceph_assert(p_append_left <= p_append_right);
       p_mut->copy_in_absolute(p_append_right, tail_value);
     }
   }

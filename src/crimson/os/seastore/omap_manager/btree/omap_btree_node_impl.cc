@@ -233,7 +233,7 @@ OMapInnerNode::list(
   LOG_PREFIX(OMapInnerNode::list);
   if (first && last) {
     DEBUGT("first: {}, last: {}, this: {}", oc.t, *first, *last, *this);
-    assert(*first <= *last);
+    ceph_assert(*first <= *last);
   } else if (first) {
     DEBUGT("first: {}, this: {}", oc.t, *first, *this);
   } else if (last) {
@@ -248,7 +248,7 @@ OMapInnerNode::list(
   auto last_iter = last ?
     get_containing_child(*last) + 1:
     iter_cend();
-  assert(first_iter != iter_cend());
+  ceph_assert(first_iter != iter_cend());
 
   return seastar::do_with(
     first_iter,
@@ -271,7 +271,7 @@ OMapInnerNode::list(
           return list_iertr::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
         }
-	assert(result.size() < config.max_result_size);
+	ceph_assert(result.size() < config.max_result_size);
         return get_child_node(oc, iter
         ).si_then([&, config, oc](auto &&extent) {
 	  ceph_assert(!extent->is_btree_root());
@@ -290,21 +290,21 @@ OMapInnerNode::list(
 	    boost::ignore_unused(config);   // avoid clang warning;
             auto &[child_complete, child_result] = child_ret;
             if (result.size() && child_result.size()) {
-              assert(child_result.begin()->first > result.rbegin()->first);
+              ceph_assert(child_result.begin()->first > result.rbegin()->first);
             }
             if (child_result.size() && first && iter == fiter) {
 	      if (config.first_inclusive) {
-		assert(child_result.begin()->first >= *first);
+		ceph_assert(child_result.begin()->first >= *first);
 	      } else {
-		assert(child_result.begin()->first > *first);
+		ceph_assert(child_result.begin()->first > *first);
 	      }
             }
             if (child_result.size() && last && iter == liter - 1) {
 	      [[maybe_unused]] auto biter = --(child_result.end());
 	      if (config.last_inclusive) {
-		assert(biter->first <= *last);
+		ceph_assert(biter->first <= *last);
 	      } else {
-		assert(biter->first < *last);
+		ceph_assert(biter->first < *last);
 	      }
             }
             result.merge(std::move(child_result));
@@ -313,7 +313,7 @@ OMapInnerNode::list(
 		seastar::stop_iteration::yes);
 	    }
             ++iter;
-            assert(child_complete);
+            ceph_assert(child_complete);
             return list_iertr::make_ready_future<seastar::stop_iteration>(
               seastar::stop_iteration::no);
           });
@@ -344,7 +344,7 @@ OMapInnerNode::clear(omap_context_t oc)
 	return clear_iertr::now();
       });
     } else {
-      assert(ndepth == 1);
+      ceph_assert(ndepth == 1);
       return dec_ref(oc, laddr
       ).si_then([ref = OMapNodeRef(this)] {
 	return clear_iertr::now();
@@ -452,7 +452,7 @@ OMapInnerNode::merge_entry(
     if (l->can_merge(r)) {
       DEBUGT("make_full_merge l {} r {} liter {} riter {}",
 	oc.t, *l, *r, liter->get_key(), riter->get_key());
-      assert(entry->extent_is_below_min());
+      ceph_assert(entry->extent_is_below_min());
       return l->make_full_merge(oc, r
       ).si_then([liter=liter, riter=riter, l=l, r=r, oc, this]
 		(auto &&replacement) {
@@ -471,7 +471,7 @@ OMapInnerNode::merge_entry(
         std::vector<laddr_t> dec_laddrs {l->get_laddr(), r->get_laddr()};
 	auto next = liter + 1;
 	auto end = next == iter_cend() ? get_end() : next.get_key();
-	assert(end == r->get_end());
+	ceph_assert(end == r->get_end());
 	replacement->init_range(liter.get_key(), std::move(end));
 	if (get_meta().depth > 2) { // replacement is an inner node
 	  auto &rep = *replacement->template cast<OMapInnerNode>();
@@ -582,7 +582,7 @@ OMapInnerNode::get_containing_child(const std::string &key)
 {
   auto iter = string_upper_bound(key);
   iter--;
-  assert(iter.contains(key));
+  ceph_assert(iter.contains(key));
   return iter;
 }
 
@@ -833,7 +833,7 @@ OMapInnerNode::get_child_node(
   omap_context_t oc,
   internal_const_iterator_t child_pt)
 {
-  assert(get_meta().depth > 1);
+  ceph_assert(get_meta().depth > 1);
   child_pos_t<OMapInnerNode> child_pos(nullptr, 0);
   auto laddr = child_pt->get_val();
   auto next = child_pt + 1;

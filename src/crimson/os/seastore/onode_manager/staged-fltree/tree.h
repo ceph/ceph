@@ -40,7 +40,7 @@ class Btree {
   Btree(NodeExtentManagerURef&& _nm)
     : nm{std::move(_nm)},
       root_tracker{RootNodeTracker::create(nm->is_read_isolated())} {}
-  ~Btree() { assert(root_tracker->is_clean()); }
+  ~Btree() { ceph_assert(root_tracker->is_clean()); }
 
   Btree(const Btree&) = delete;
   Btree(Btree&&) = delete;
@@ -67,7 +67,7 @@ class Btree {
       } else {
         // we don't actually store end cursor because it will hold a reference
         // to an end leaf node and is not kept updated.
-        assert(p_cursor->is_end());
+        ceph_assert(p_cursor->is_end());
         ceph_abort("impossible");
       }
     }
@@ -79,18 +79,18 @@ class Btree {
 
     // XXX: return key_view_t to avoid unecessary ghobject_t constructions
     ghobject_t get_ghobj() const {
-      assert(!is_end());
+      ceph_assert(!is_end());
       auto view = p_cursor->get_key_view(
           p_tree->value_builder.get_header_magic());
-      assert(view.nspace().size() <=
+      ceph_assert(view.nspace().size() <=
              p_tree->value_builder.get_max_ns_size());
-      assert(view.oid().size() <=
+      ceph_assert(view.oid().size() <=
              p_tree->value_builder.get_max_oid_size());
       return view.to_ghobj();
     }
 
     ValueImpl value() {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return p_tree->value_builder.build_value(
         get_ghobj().hobj, *p_tree->nm, p_tree->value_builder, p_cursor);
     }
@@ -98,27 +98,27 @@ class Btree {
     bool operator==(const Cursor& o) const { return operator<=>(o) == 0; }
 
     eagain_ifuture<Cursor> get_next(Transaction& t) {
-      assert(!is_end());
+      ceph_assert(!is_end());
       auto this_obj = *this;
       return p_cursor->get_next(p_tree->get_context(t)
       ).si_then([this_obj] (Ref<tree_cursor_t> next_cursor) {
         next_cursor->assert_next_to(
             *this_obj.p_cursor, this_obj.p_tree->value_builder.get_header_magic());
         auto ret = Cursor{this_obj.p_tree, next_cursor};
-        assert(this_obj < ret);
+        ceph_assert(this_obj < ret);
         return ret;
       });
     }
 
     template <bool FORCE_MERGE = false>
     eagain_ifuture<Cursor> erase(Transaction& t) {
-      assert(!is_end());
+      ceph_assert(!is_end());
       auto this_obj = *this;
       return p_cursor->erase<FORCE_MERGE>(p_tree->get_context(t), true
       ).si_then([this_obj, this] (Ref<tree_cursor_t> next_cursor) {
-        assert(p_cursor->is_invalid());
+        ceph_assert(p_cursor->is_invalid());
         if (next_cursor) {
-          assert(!next_cursor->is_end());
+          ceph_assert(!next_cursor->is_end());
           return Cursor{p_tree, next_cursor};
         } else {
           return Cursor{p_tree};
@@ -135,14 +135,14 @@ class Btree {
         // we don't actually store end cursor because it will hold a reference
         // to an end leaf node and is not kept updated.
       } else {
-        assert(_p_cursor->is_tracked());
+        ceph_assert(_p_cursor->is_tracked());
         p_cursor = _p_cursor;
       }
     }
     Cursor(Btree* p_tree) : p_tree{p_tree} {}
 
     std::strong_ordering operator<=>(const Cursor& o) const {
-      assert(p_tree == o.p_tree);
+      ceph_assert(p_tree == o.p_tree);
       return p_cursor->compare_to(
           *o.p_cursor, p_tree->value_builder.get_header_magic());
     }
@@ -295,12 +295,12 @@ class Btree {
   }
 
   eagain_ifuture<> erase(Transaction& t, Value& value) {
-    assert(value.is_tracked());
+    ceph_assert(value.is_tracked());
     auto ref_cursor = value.p_cursor;
     return ref_cursor->erase(get_context(t), false
     ).si_then([ref_cursor] (auto next_cursor) {
-      assert(ref_cursor->is_invalid());
-      assert(!next_cursor);
+      ceph_assert(ref_cursor->is_invalid());
+      ceph_assert(!next_cursor);
     });
   }
 

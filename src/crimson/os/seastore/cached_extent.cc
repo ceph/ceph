@@ -72,7 +72,7 @@ std::ostream &operator<<(std::ostream &out, const CachedExtent &ext)
 CachedExtent::~CachedExtent()
 {
   if (parent_index) {
-    assert(is_linked());
+    ceph_assert(is_linked());
     parent_index->erase(*this);
   }
 }
@@ -117,8 +117,8 @@ CachedExtent::is_viewable_by_trans(Transaction &t) {
   }
 
   // shared by multiple transactions
-  assert(t.is_in_read_set(this));
-  assert(is_stable_written());
+  ceph_assert(t.is_in_read_set(this));
+  ceph_assert(is_stable_written());
 
   auto cmp = trans_spec_view_t::cmp_t();
   if (mutation_pending_extents.find(trans_id, cmp) !=
@@ -128,7 +128,7 @@ CachedExtent::is_viewable_by_trans(Transaction &t) {
 
   if (retired_transactions.find(trans_id, cmp) !=
       retired_transactions.end()) {
-    assert(t.is_stable_extent_retired(get_paddr(), get_length()));
+    ceph_assert(t.is_stable_extent_retired(get_paddr(), get_length()));
     return std::make_pair(false, viewable_state_t::stable_become_retired);
   }
 
@@ -157,15 +157,15 @@ std::ostream &operator<<(
 
 bool BufferSpace::is_range_loaded(extent_len_t offset, extent_len_t length) const
 {
-  assert(length > 0);
+  ceph_assert(length > 0);
   auto i = buffer_map.upper_bound(offset);
   if (i == buffer_map.begin()) {
     return false;
   }
   --i;
   auto& [i_offset, i_bl] = *i;
-  assert(offset >= i_offset);
-  assert(i_bl.length() > 0);
+  ceph_assert(offset >= i_offset);
+  ceph_assert(i_bl.length() > 0);
   if (offset + length > i_offset + i_bl.length()) {
     return false;
   } else {
@@ -175,14 +175,14 @@ bool BufferSpace::is_range_loaded(extent_len_t offset, extent_len_t length) cons
 
 ceph::bufferlist BufferSpace::get_buffer(extent_len_t offset, extent_len_t length) const
 {
-  assert(length > 0);
+  ceph_assert(length > 0);
   auto i = buffer_map.upper_bound(offset);
-  assert(i != buffer_map.begin());
+  ceph_assert(i != buffer_map.begin());
   --i;
   auto& [i_offset, i_bl] = *i;
-  assert(offset >= i_offset);
-  assert(i_bl.length() > 0);
-  assert(offset + length <= i_offset + i_bl.length());
+  ceph_assert(offset >= i_offset);
+  ceph_assert(i_bl.length() > 0);
+  ceph_assert(offset + length <= i_offset + i_bl.length());
   ceph::bufferlist res;
   res.substr_of(i_bl, offset - i_offset, length);
   return res;
@@ -190,7 +190,7 @@ ceph::bufferlist BufferSpace::get_buffer(extent_len_t offset, extent_len_t lengt
 
 load_ranges_t BufferSpace::load_ranges(extent_len_t offset, extent_len_t length)
 {
-  assert(length > 0);
+  ceph_assert(length > 0);
   load_ranges_t ret;
   auto next = buffer_map.upper_bound(offset);
 
@@ -234,7 +234,7 @@ load_ranges_t BufferSpace::load_ranges(extent_len_t offset, extent_len_t length)
     // "next" is valid
     auto& [n_offset, n_bl] = *next;
     // next is from upper_bound()
-    assert(offset < n_offset);
+    ceph_assert(offset < n_offset);
     extent_len_t hole_length = n_offset - offset;
     if (length < hole_length) {
       // "next" is beyond the range end,
@@ -262,18 +262,18 @@ load_ranges_t BufferSpace::load_ranges(extent_len_t offset, extent_len_t length)
     // "previous" is valid
     previous = std::prev(next);
     auto& [p_offset, p_bl] = *previous;
-    assert(offset >= p_offset);
+    ceph_assert(offset >= p_offset);
     extent_len_t p_end = p_offset + p_bl.length();
     if (offset <= p_end) {
       // "previous" is adjacent or overlaps the range
       range_offset = p_end;
-      assert(offset + length > p_end);
+      ceph_assert(offset + length > p_end);
       range_length = offset + length - p_end;
       // start the main-loop (merge "previous")
     } else {
       // "previous" is not adjacent to the range
       // range and buffer_map should not overlap
-      assert(offset > p_end);
+      ceph_assert(offset > p_end);
       if (!f_prepare_without_merge_previous()) {
         return ret;
       }
@@ -287,13 +287,13 @@ load_ranges_t BufferSpace::load_ranges(extent_len_t offset, extent_len_t length)
    * "next": the next buffer_map entry, maybe end, maybe mergable
    * range_offset/length: the current range right after "previous"
    */
-  assert(std::next(previous) == next);
+  ceph_assert(std::next(previous) == next);
   auto& [p_offset, p_bl] = *previous;
-  assert(range_offset == p_offset + p_bl.length());
-  assert(range_length > 0);
+  ceph_assert(range_offset == p_offset + p_bl.length());
+  ceph_assert(range_length > 0);
   while (next != buffer_map.end()) {
     auto& [n_offset, n_bl] = *next;
-    assert(range_offset < n_offset);
+    ceph_assert(range_offset < n_offset);
     extent_len_t hole_length = n_offset - range_offset;
     if (range_length < hole_length) {
       // "next" offset is beyond the range end
@@ -304,9 +304,9 @@ load_ranges_t BufferSpace::load_ranges(extent_len_t offset, extent_len_t length)
     if (!f_merge_next_check_hole(p_bl, hole_length, n_offset, n_bl)) {
       return ret;
     }
-    assert(std::next(previous) == next);
-    assert(range_offset == p_offset + p_bl.length());
-    assert(range_length > 0);
+    ceph_assert(std::next(previous) == next);
+    ceph_assert(range_offset == p_offset + p_bl.length());
+    ceph_assert(range_length > 0);
   }
   // range has no "next" to merge:
   // 1. "next" reaches end
@@ -317,19 +317,19 @@ load_ranges_t BufferSpace::load_ranges(extent_len_t offset, extent_len_t length)
 
 ceph::bufferptr BufferSpace::to_full_ptr(extent_len_t length)
 {
-  assert(length > 0);
-  assert(buffer_map.size() == 1);
+  ceph_assert(length > 0);
+  ceph_assert(buffer_map.size() == 1);
   auto it = buffer_map.begin();
   auto& [i_off, i_buf] = *it;
-  assert(i_off == 0);
+  ceph_assert(i_off == 0);
   if (!i_buf.is_contiguous()) {
     // Allocate page aligned ptr, also see create_extent_ptr_*()
     i_buf.rebuild();
   }
-  assert(i_buf.get_num_buffers() == 1);
+  ceph_assert(i_buf.get_num_buffers() == 1);
   ceph::bufferptr ptr(i_buf.front());
-  assert(ptr.is_page_aligned());
-  assert(ptr.length() == length);
+  ceph_assert(ptr.is_page_aligned());
+  ceph_assert(ptr.length() == length);
   buffer_map.clear();
   return ptr;
 }

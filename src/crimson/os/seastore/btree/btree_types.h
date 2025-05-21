@@ -239,12 +239,12 @@ struct BtreeCursor {
 
   bool is_end() const {
     auto max_key = min_max_t<key_t>::max;
-    assert((key != max_key) == (bool)val);
+    ceph_assert((key != max_key) == (bool)val);
     return key == max_key;
   }
 
   extent_len_t get_length() const {
-    assert(!is_end());
+    ceph_assert(!is_end());
     return val->len;
   }
 };
@@ -253,30 +253,30 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
   using Base = BtreeCursor<laddr_t, lba::lba_map_val_t>;
   using Base::BtreeCursor;
   bool is_indirect() const {
-    assert(!is_end());
+    ceph_assert(!is_end());
     return val->pladdr.is_laddr();
   }
   laddr_t get_laddr() const {
     return key;
   }
   paddr_t get_paddr() const {
-    assert(!is_indirect());
-    assert(!is_end());
+    ceph_assert(!is_indirect());
+    ceph_assert(!is_end());
     return val->pladdr.get_paddr();
   }
   laddr_t get_intermediate_key() const {
-    assert(is_indirect());
-    assert(!is_end());
+    ceph_assert(is_indirect());
+    ceph_assert(!is_end());
     return val->pladdr.get_laddr();
   }
   checksum_t get_checksum() const {
-    assert(!is_end());
-    assert(!is_indirect());
+    ceph_assert(!is_end());
+    ceph_assert(!is_indirect());
     return val->checksum;
   }
   extent_ref_count_t get_refcount() const {
-    assert(!is_end());
-    assert(!is_indirect());
+    ceph_assert(!is_end());
+    ceph_assert(!is_indirect());
     return val->refcount;
   }
   std::unique_ptr<LBACursor> duplicate() const {
@@ -292,11 +292,11 @@ struct BackrefCursor : BtreeCursor<paddr_t, backref::backref_map_val_t> {
     return key;
   }
   laddr_t get_laddr() const {
-    assert(!is_end());
+    ceph_assert(!is_end());
     return val->laddr;
   }
   extent_types_t get_type() const {
-    assert(!is_end());
+    ceph_assert(!is_end());
     return val->type;
   }
 };

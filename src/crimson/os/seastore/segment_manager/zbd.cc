@@ -83,12 +83,12 @@ static zbd_sm_metadata_t make_metadata(
 
   // Using only SWR zones in a SMR drive, for now
   auto skipped_zones = RESERVED_ZONES + nr_cnv_zones;
-  assert(num_zones > skipped_zones);
+  ceph_assert(num_zones > skipped_zones);
 
   // TODO: support Option::size_t seastore_segment_size
   // to allow zones_per_segment > 1 with striping.
   size_t zone_size = zone_size_sectors << SECT_SHIFT;
-  assert(total_size == num_zones * zone_size);
+  ceph_assert(total_size == num_zones * zone_size);
   size_t zone_capacity = zone_capacity_sectors << SECT_SHIFT;
   size_t segment_size = zone_size;
   size_t zones_per_segment = segment_size / zone_size;
@@ -324,7 +324,7 @@ static write_ertr::future<> do_writev(
 static ZBDSegmentManager::access_ertr::future<>
 write_metadata(seastar::file &device, zbd_sm_metadata_t sb)
 {
-  assert(ceph::encoded_sizeof_bounded<zbd_sm_metadata_t>() <
+  ceph_assert(ceph::encoded_sizeof_bounded<zbd_sm_metadata_t>() <
 	 sb.block_size);
   return seastar::do_with(
     bufferptr(ceph::buffer::create_page_aligned(sb.block_size)),
@@ -334,7 +334,7 @@ write_metadata(seastar::file &device, zbd_sm_metadata_t sb)
       bufferlist bl;
       encode(sb, bl);
       auto iter = bl.begin();
-      assert(bl.length() < sb.block_size);
+      ceph_assert(bl.length() < sb.block_size);
       DEBUG("buffer length 0x{:x}", bl.length());
       iter.copy(bl.length(), bp.c_str());
       DEBUG("doing writeout");
@@ -349,7 +349,7 @@ static read_ertr::future<> do_read(
   bufferptr &bptr)
 {
   LOG_PREFIX(ZBDSegmentManager::do_read);
-  assert(len <= bptr.length());
+  ceph_assert(len <= bptr.length());
   DEBUG("offset 0x{:x} len 0x{:x}",
     offset,
     len);
@@ -375,7 +375,7 @@ static
 ZBDSegmentManager::access_ertr::future<zbd_sm_metadata_t>
 read_metadata(seastar::file &device, seastar::stat_data sd)
 {
-  assert(ceph::encoded_sizeof_bounded<zbd_sm_metadata_t>() <
+  ceph_assert(ceph::encoded_sizeof_bounded<zbd_sm_metadata_t>() <
 	 sd.block_size);
   return seastar::do_with(
     bufferptr(ceph::buffer::create_page_aligned(sd.block_size)),
@@ -701,8 +701,8 @@ Segment::write_ertr::future<> ZBDSegmentManager::segment_write(
   bool ignore_check)
 {
   LOG_PREFIX(ZBDSegmentManager::segment_write);
-  assert(addr.get_device_id() == get_device_id());
-  assert((bl.length() % metadata.block_size) == 0);
+  ceph_assert(addr.get_device_id() == get_device_id());
+  ceph_assert((bl.length() % metadata.block_size) == 0);
   auto& seg_addr = addr.as_seg_paddr();
   DEBUG("write to segment {} at offset 0x{:x}, physical offset 0x{:x}, len 0x{:x}",
     seg_addr.get_segment_id(),
@@ -816,7 +816,7 @@ Segment::write_ertr::future<> ZBDSegment::advance_wp(
     return write_ertr::now();
   }
 
-  assert(padding_bytes % manager.metadata.block_size == 0);
+  ceph_assert(padding_bytes % manager.metadata.block_size == 0);
 
   return write_padding_bytes(padding_bytes);
 }

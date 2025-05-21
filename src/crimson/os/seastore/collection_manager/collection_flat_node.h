@@ -108,7 +108,7 @@ struct CollectionNode : LogicalChildNode {
   delta_buffer_t delta_buffer;
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
-    assert(delta_buffer.empty());
+    ceph_assert(delta_buffer.empty());
     return CachedExtentRef(new CollectionNode(*this));
   }
   delta_buffer_t *maybe_get_delta_buffer() {
@@ -148,7 +148,7 @@ struct CollectionNode : LogicalChildNode {
     encode((base_coll_map_t&)decoded, bl);
     auto iter = bl.begin();
     auto size = encoded_sizeof((base_coll_map_t&)decoded);
-    assert(size <= get_bptr().length());
+    ceph_assert(size <= get_bptr().length());
     get_bptr().zero();
     iter.copy(size, get_bptr().c_str());
 
@@ -172,7 +172,7 @@ struct CollectionNode : LogicalChildNode {
   }
 
   void apply_delta(const ceph::bufferlist &bl) final {
-    assert(bl.length());
+    ceph_assert(bl.length());
     delta_buffer_t buffer;
     auto bptr = bl.begin();
     decode(buffer, bptr);

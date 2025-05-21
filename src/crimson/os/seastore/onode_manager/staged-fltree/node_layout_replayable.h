@@ -67,7 +67,7 @@ struct NodeLayoutReplayableT {
 
   static void update_child_addr(
       NodeExtentMutable& mut, const laddr_t new_addr, laddr_packed_t* p_addr) {
-    assert(NODE_TYPE == node_type_t::INTERNAL);
+    ceph_assert(NODE_TYPE == node_type_t::INTERNAL);
     mut.copy_in_absolute(p_addr, new_addr);
   }
 
@@ -77,12 +77,12 @@ struct NodeLayoutReplayableT {
       const position_t& _erase_pos) {
     if (_erase_pos.is_end()) {
       // must be internal node
-      assert(node_stage.is_level_tail());
+      ceph_assert(node_stage.is_level_tail());
       // return erase_stage, last_pos
       return update_last_to_tail(mut, node_stage);
     }
 
-    assert(node_stage.keys() != 0);
+    ceph_assert(node_stage.keys() != 0);
     position_t erase_pos = _erase_pos;
     auto erase_stage = stage_t::erase(mut, node_stage, erase_pos);
     // return erase_stage, next_pos
@@ -92,7 +92,7 @@ struct NodeLayoutReplayableT {
   static position_t make_tail(
       NodeExtentMutable& mut,
       const node_stage_t& node_stage) {
-    assert(!node_stage.is_level_tail());
+    ceph_assert(!node_stage.is_level_tail());
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
       auto [r_stage, r_last_pos] = update_last_to_tail(mut, node_stage);
       std::ignore = r_stage;
@@ -109,7 +109,7 @@ struct NodeLayoutReplayableT {
       NodeExtentMutable& mut,
       const node_stage_t& node_stage) {
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
-      assert(node_stage.keys() != 0);
+      ceph_assert(node_stage.keys() != 0);
       position_t last_pos;
       laddr_t last_value;
       {
@@ -121,7 +121,7 @@ struct NodeLayoutReplayableT {
 
       auto erase_pos = last_pos;
       auto erase_stage = stage_t::erase(mut, node_stage, erase_pos);
-      assert(erase_pos.is_end());
+      ceph_assert(erase_pos.is_end());
 
       node_stage_t::update_is_level_tail(mut, node_stage, true);
       auto p_last_value = const_cast<laddr_packed_t*>(

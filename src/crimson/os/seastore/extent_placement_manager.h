@@ -162,12 +162,12 @@ public:
   }
 
   paddr_t alloc_paddr(extent_len_t length) final {
-    assert(rb_cleaner);
+    ceph_assert(rb_cleaner);
     return rb_cleaner->alloc_paddr(length);
   }
 
   std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) final {
-    assert(rb_cleaner);
+    ceph_assert(rb_cleaner);
     return rb_cleaner->alloc_paddrs(length);
   }
 
@@ -176,7 +176,7 @@ public:
     if (!extent->is_dirty()) {
       return false;
     }
-    assert(t.get_src() == transaction_type_t::TRIM_DIRTY);
+    ceph_assert(t.get_src() == transaction_type_t::TRIM_DIRTY);
     ceph_assert_always(is_root_type(extent->get_type()) ||
 	extent->get_paddr().is_absolute());
     return crimson::os::seastore::can_inplace_rewrite(extent->get_type());
@@ -288,13 +288,13 @@ public:
   }
 
   extent_len_t get_block_size() const {
-    assert(primary_device != nullptr);
+    ceph_assert(primary_device != nullptr);
     // assume all the devices have the same block size
     return primary_device->get_block_size();
   }
 
   Device& get_primary_device() {
-    assert(primary_device != nullptr);
+    ceph_assert(primary_device != nullptr);
     return *primary_device;
   }
 
@@ -342,9 +342,9 @@ public:
     rewrite_gen_t gen
 #endif
   ) {
-    assert(hint < placement_hint_t::NUM_HINTS);
-    assert(is_target_rewrite_generation(gen));
-    assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
+    ceph_assert(hint < placement_hint_t::NUM_HINTS);
+    ceph_assert(is_target_rewrite_generation(gen));
+    ceph_assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
 
     data_category_t category = get_extent_category(type);
     gen = adjust_generation(category, type, hint, gen);
@@ -352,7 +352,7 @@ public:
     paddr_t addr;
 #ifdef UNIT_TESTS_BUILT
     if (unlikely(external_paddr.has_value())) {
-      assert(external_paddr->is_fake());
+      ceph_assert(external_paddr->is_fake());
       addr = *external_paddr;
     } else if (gen == INLINE_GENERATION) {
 #else
@@ -360,10 +360,10 @@ public:
 #endif
       addr = make_record_relative_paddr(0);
     } else {
-      assert(category == data_category_t::METADATA);
+      ceph_assert(category == data_category_t::METADATA);
       addr = get_writer(hint, category, gen)->alloc_paddr(length);
     }
-    assert(!(category == data_category_t::DATA));
+    ceph_assert(!(category == data_category_t::DATA));
 
     if (addr.is_null()) {
       return std::nullopt;
@@ -389,27 +389,27 @@ public:
 #endif
   ) {
     LOG_PREFIX(ExtentPlacementManager::alloc_new_data_extents);
-    assert(hint < placement_hint_t::NUM_HINTS);
-    assert(is_target_rewrite_generation(gen));
-    assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
+    ceph_assert(hint < placement_hint_t::NUM_HINTS);
+    ceph_assert(is_target_rewrite_generation(gen));
+    ceph_assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
 
     data_category_t category = get_extent_category(type);
     gen = adjust_generation(category, type, hint, gen);
-    assert(gen != INLINE_GENERATION);
+    ceph_assert(gen != INLINE_GENERATION);
 
     // XXX: bp might be extended to point to different memory (e.g. PMem)
     // according to the allocator.
     std::list<alloc_result_t> allocs;
 #ifdef UNIT_TESTS_BUILT
     if (unlikely(external_paddr.has_value())) {
-      assert(external_paddr->is_fake());
+      ceph_assert(external_paddr->is_fake());
       auto bp = create_extent_ptr_zero(length);
       allocs.emplace_back(alloc_result_t{*external_paddr, std::move(bp), gen});
     } else {
 #else
     {
 #endif
-      assert(category == data_category_t::DATA);
+      ceph_assert(category == data_category_t::DATA);
       auto addrs = get_writer(hint, category, gen)->alloc_paddrs(length);
       for (auto &ext : addrs) {
         auto left = ext.len;
@@ -507,7 +507,7 @@ public:
     size_t len,
     ceph::bufferptr &out
   ) {
-    assert(devices_by_id[addr.get_device_id()] != nullptr);
+    ceph_assert(devices_by_id[addr.get_device_id()] != nullptr);
     return devices_by_id[addr.get_device_id()]->read(addr, len, out);
   }
 
@@ -536,14 +536,14 @@ public:
       return background_process.get_main_backend_type();
     } 
     // for test
-    assert(primary_device);
+    ceph_assert(primary_device);
     return primary_device->get_backend_type();
   }
 
   // Testing interfaces
 
   void test_init_no_background(Device *test_device) {
-    assert(test_device->get_backend_type() == backend_type_t::SEGMENTED);
+    ceph_assert(test_device->get_backend_type() == backend_type_t::SEGMENTED);
     add_device(test_device);
     set_primary_device(test_device);
   }
@@ -563,7 +563,7 @@ public:
       return true;
     }
 #endif
-    assert(addr.is_absolute());
+    ceph_assert(addr.is_absolute());
     return !devices_by_id[addr.get_device_id()]->is_end_to_end_data_protection();
   }
 
@@ -573,14 +573,14 @@ private:
       extent_types_t type,
       placement_hint_t hint,
       rewrite_gen_t gen) {
-    assert(is_real_type(type));
+    ceph_assert(is_real_type(type));
     if (is_root_type(type)) {
       gen = INLINE_GENERATION;
     } else if (get_main_backend_type() == backend_type_t::SEGMENTED &&
                is_lba_backref_node(type)) {
       gen = INLINE_GENERATION;
     } else if (hint == placement_hint_t::COLD) {
-      assert(gen == INIT_GENERATION);
+      ceph_assert(gen == INIT_GENERATION);
       if (background_process.has_cold_tier()) {
         gen = MIN_COLD_GENERATION;
       } else {
@@ -595,12 +595,12 @@ private:
           gen = INLINE_GENERATION;
         } else {
           // with RBM, all extents must be OOL
-          assert(get_main_backend_type() ==
+          ceph_assert(get_main_backend_type() ==
                  backend_type_t::RANDOM_BLOCK);
           gen = OOL_GENERATION;
         }
       } else {
-        assert(category == data_category_t::DATA);
+        ceph_assert(category == data_category_t::DATA);
         gen = OOL_GENERATION;
       }
     } else if (background_process.has_cold_tier()) {
@@ -636,40 +636,40 @@ private:
   ExtentOolWriter* get_writer(placement_hint_t hint,
                               data_category_t category,
                               rewrite_gen_t gen) {
-    assert(hint < placement_hint_t::NUM_HINTS);
+    ceph_assert(hint < placement_hint_t::NUM_HINTS);
     // TODO: might worth considering the hint
     return get_writer(category, gen);
   }
 
   ExtentOolWriter* get_writer(data_category_t category,
                               rewrite_gen_t gen) {
-    assert(is_rewrite_generation(gen));
-    assert(gen != INLINE_GENERATION);
-    assert(gen <= dynamic_max_rewrite_generation);
+    ceph_assert(is_rewrite_generation(gen));
+    ceph_assert(gen != INLINE_GENERATION);
+    ceph_assert(gen <= dynamic_max_rewrite_generation);
     ExtentOolWriter* ret = nullptr;
     if (category == data_category_t::DATA) {
       ret = data_writers_by_gen[generation_to_writer(gen)];
     } else {
-      assert(category == data_category_t::METADATA);
+      ceph_assert(category == data_category_t::METADATA);
       ret = md_writers_by_gen[generation_to_writer(gen)];
     }
-    assert(ret != nullptr);
+    ceph_assert(ret != nullptr);
     return ret;
   }
 
   const ExtentOolWriter* get_writer(data_category_t category,
                                     rewrite_gen_t gen) const {
-    assert(is_rewrite_generation(gen));
-    assert(gen != INLINE_GENERATION);
-    assert(gen <= dynamic_max_rewrite_generation);
+    ceph_assert(is_rewrite_generation(gen));
+    ceph_assert(gen != INLINE_GENERATION);
+    ceph_assert(gen <= dynamic_max_rewrite_generation);
     ExtentOolWriter* ret = nullptr;
     if (category == data_category_t::DATA) {
       ret = data_writers_by_gen[generation_to_writer(gen)];
     } else {
-      assert(category == data_category_t::METADATA);
+      ceph_assert(category == data_category_t::METADATA);
       ret = md_writers_by_gen[generation_to_writer(gen)];
     }
-    assert(ret != nullptr);
+    ceph_assert(ret != nullptr);
     return ret;
   }
 
@@ -766,13 +766,13 @@ private:
       }
 
       if (!has_cold_tier()) {
-        assert(main_cleaner);
+        ceph_assert(main_cleaner);
         main_cleaner->mark_space_used(addr, len);
       } else {
         auto id = addr.get_device_id();
-        assert(id < cleaners_by_device_id.size());
+        ceph_assert(id < cleaners_by_device_id.size());
         auto cleaner = cleaners_by_device_id[id];
-        assert(cleaner);
+        ceph_assert(cleaner);
         cleaner->mark_space_used(addr, len);
       }
     }
@@ -783,13 +783,13 @@ private:
       }
 
       if (!has_cold_tier()) {
-        assert(main_cleaner);
+        ceph_assert(main_cleaner);
         main_cleaner->mark_space_free(addr, len);
       } else {
         auto id = addr.get_device_id();
-        assert(id < cleaners_by_device_id.size());
+        ceph_assert(id < cleaners_by_device_id.size());
         auto cleaner = cleaners_by_device_id[id];
-        assert(cleaner);
+        ceph_assert(cleaner);
         cleaner->mark_space_free(addr, len);
       }
     }
@@ -800,13 +800,13 @@ private:
       }
 
       if (!has_cold_tier()) {
-        assert(main_cleaner);
+        ceph_assert(main_cleaner);
         main_cleaner->commit_space_used(addr, len);
       } else {
         auto id = addr.get_device_id();
-        assert(id < cleaners_by_device_id.size());
+        ceph_assert(id < cleaners_by_device_id.size());
         auto cleaner = cleaners_by_device_id[id];
-        assert(cleaner);
+        ceph_assert(cleaner);
         cleaner->commit_space_used(addr, len);
       }
     }
@@ -880,10 +880,10 @@ private:
 
     bool is_running() const {
       if (state == state_t::RUNNING) {
-        assert(process_join);
+        ceph_assert(process_join);
         return true;
       } else {
-        assert(!process_join);
+        ceph_assert(!process_join);
         return false;
       }
     }
@@ -902,7 +902,7 @@ private:
     // background_should_run() should be atomic with do_background_cycle()
     // to make sure the condition is consistent.
     bool background_should_run() {
-      assert(is_ready());
+      ceph_assert(is_ready());
       maybe_update_eviction_mode();
       return main_cleaner_should_run()
         || cold_cleaner_should_run()
@@ -916,19 +916,19 @@ private:
     }
 
     bool main_cleaner_should_run() const {
-      assert(is_ready());
+      ceph_assert(is_ready());
       return main_cleaner->should_clean_space() ||
         main_cleaner_should_fast_evict();
     }
 
     bool cold_cleaner_should_run() const {
-      assert(is_ready());
+      ceph_assert(is_ready());
       return has_cold_tier() &&
         cold_cleaner->should_clean_space();
     }
 
     bool should_block_io() const {
-      assert(is_ready());
+      ceph_assert(is_ready());
       return trimmer->should_block_io_on_trim() ||
              main_cleaner->should_block_io_on_clean() ||
              (has_cold_tier() &&
@@ -1046,7 +1046,7 @@ private:
             eviction_mode = eviction_mode_t::DEFAULT;
           }
         } else {
-          assert(main_alive_ratio > fast_evict_ratio);
+          ceph_assert(main_alive_ratio > fast_evict_ratio);
           eviction_mode = eviction_mode_t::FAST;
         }
       }

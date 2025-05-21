@@ -135,7 +135,7 @@ public:
     );
     SUBDEBUGT(seastore_t, "created name={}, source={}, is_weak={}",
               *ret, name, src, is_weak);
-    assert(!is_weak || src == Transaction::src_t::READ);
+    ceph_assert(!is_weak || src == Transaction::src_t::READ);
     return ret;
   }
 
@@ -182,7 +182,7 @@ public:
   RootBlockRef get_root_fast(Transaction &t) {
     LOG_PREFIX(Cache::get_root_fast);
     SUBTRACET(seastore_cache, "root already on t -- {}", t, *t.root);
-    assert(t.root);
+    ceph_assert(t.root);
     return t.root;
   }
 
@@ -251,7 +251,7 @@ public:
       });
     }
 
-    assert(paddr.is_absolute());
+    ceph_assert(paddr.is_absolute());
     // get_extent_ret::ABSENT from transaction
     ret = query_cache(paddr);
     if (!ret) {
@@ -338,7 +338,7 @@ public:
                 t, T::TYPE, offset, length, *ret);
       ceph_abort("impossible");
     } else if (result == Transaction::get_extent_ret::PRESENT) {
-      assert(ret->get_length() == length);
+      ceph_assert(ret->get_length() == length);
       if (ret->is_fully_loaded()) {
         SUBTRACET(seastore_cache, "{} {}~0x{:x} is present on t -- {}",
                   t, T::TYPE, offset, length, *ret);
@@ -395,9 +395,9 @@ public:
 	      t, T::TYPE, offset, length);
     const auto t_src = t.get_src();
     auto f = [&t, this, t_src](CachedExtent &ext) {
-      // FIXME: assert(ext.is_stable_clean());
-      assert(ext.is_stable());
-      assert(T::TYPE == ext.get_type());
+      // FIXME: ceph_assert(ext.is_stable_clean());
+      ceph_assert(ext.is_stable());
+      ceph_assert(T::TYPE == ext.get_type());
       cache_access_stats_t& access_stats = get_by_ext(
         get_by_src(stats.access_by_src_ext, t_src),
         T::TYPE);
@@ -448,7 +448,7 @@ public:
     Transaction &t,
     CachedExtentRef extent) final
   {
-    assert(extent);
+    ceph_assert(extent);
     auto view = extent->get_transactional_view(t);
     return view->is_stable();
   }
@@ -457,7 +457,7 @@ public:
     Transaction &t,
     CachedExtentRef extent) final
   {
-    assert(extent);
+    ceph_assert(extent);
     auto view = extent->get_transactional_view(t);
     return view->is_data_stable();
   }
@@ -467,7 +467,7 @@ public:
     Transaction &t,
     CachedExtentRef extent) final
   {
-    assert(extent->is_valid());
+    ceph_assert(extent->is_valid());
 
     const auto t_src = t.get_src();
     auto ext_type = extent->get_type();
@@ -479,22 +479,22 @@ public:
     if (extent->is_stable()) {
       p_extent = extent->get_transactional_view(t);
       if (p_extent != extent.get()) {
-        assert(!extent->is_stable_writting());
-        assert(p_extent->is_pending_in_trans(t.get_trans_id()));
-        assert(!p_extent->is_stable_writting());
+        ceph_assert(!extent->is_stable_writting());
+        ceph_assert(p_extent->is_pending_in_trans(t.get_trans_id()));
+        ceph_assert(!p_extent->is_stable_writting());
         ++access_stats.trans_pending;
         ++stats.access.trans_pending;
         if (p_extent->is_mutable()) {
-          assert(p_extent->is_fully_loaded());
-          assert(!p_extent->is_pending_io());
+          ceph_assert(p_extent->is_fully_loaded());
+          ceph_assert(!p_extent->is_pending_io());
           return get_extent_iertr::make_ready_future<CachedExtentRef>(
             CachedExtentRef(p_extent));
         } else {
-          assert(p_extent->is_exist_clean());
+          ceph_assert(p_extent->is_exist_clean());
         }
       } else {
         // stable from trans-view
-        assert(!p_extent->is_pending_in_trans(t.get_trans_id()));
+        ceph_assert(!p_extent->is_pending_in_trans(t.get_trans_id()));
         if (t.maybe_add_to_read_set(p_extent)) {
           if (p_extent->is_dirty()) {
             ++access_stats.cache_dirty;
@@ -515,16 +515,16 @@ public:
         }
       }
     } else {
-      assert(!extent->is_stable_writting());
-      assert(extent->is_pending_in_trans(t.get_trans_id()));
+      ceph_assert(!extent->is_stable_writting());
+      ceph_assert(extent->is_pending_in_trans(t.get_trans_id()));
       ++access_stats.trans_pending;
       ++stats.access.trans_pending;
       if (extent->is_mutable()) {
-        assert(extent->is_fully_loaded());
-        assert(!extent->is_pending_io());
+        ceph_assert(extent->is_fully_loaded());
+        ceph_assert(!extent->is_pending_io());
         return get_extent_iertr::make_ready_future<CachedExtentRef>(extent);
       } else {
-        assert(extent->is_exist_clean());
+        ceph_assert(extent->is_exist_clean());
         p_extent = extent.get();
       }
     }
@@ -533,7 +533,7 @@ public:
     ceph_assert(!is_retired_placeholder_type(p_extent->get_type()));
     // for logical extents, handle partial load in TM::read_pin(),
     // also see read_extent_maybe_partial() and get_absent_extent()
-    assert(is_logical_type(p_extent->get_type()) ||
+    ceph_assert(is_logical_type(p_extent->get_type()) ||
            p_extent->is_fully_loaded());
 
     return trans_intr::make_interruptible(
@@ -552,7 +552,7 @@ public:
     TCachedExtentRef<T> extent,
     extent_len_t partial_off,
     extent_len_t partial_len) {
-    assert(is_logical_type(extent->get_type()));
+    ceph_assert(is_logical_type(extent->get_type()));
     if (!extent->is_range_loaded(partial_off, partial_len)) {
       LOG_PREFIX(Cache::read_extent_maybe_partial);
       SUBDEBUGT(seastore_cache,
@@ -586,7 +586,7 @@ public:
 // Interfaces only for tests.
 public:
   CachedExtentRef test_query_cache(paddr_t offset) {
-    assert(offset.is_absolute());
+    ceph_assert(offset.is_absolute());
     return query_cache(offset);
   }
 
@@ -609,8 +609,8 @@ private:
     // because the extents in Caches can be accessed concurrently
     //
     // TODO(implement fine-grained-wait)
-    assert(!extent->is_range_loaded(partial_off, partial_len));
-    assert(!extent->is_mutable());
+    ceph_assert(!extent->is_range_loaded(partial_off, partial_len));
+    ceph_assert(!extent->is_mutable());
     if (extent->is_pending_io()) {
       std::optional<Transaction::src_t> src;
       if (p_src) {
@@ -675,7 +675,7 @@ private:
     const Transaction::src_t* p_src
   ) {
     LOG_PREFIX(Cache::do_get_caching_extent);
-    assert(offset.is_absolute());
+    ceph_assert(offset.is_absolute());
     auto cached = query_cache(offset);
     if (!cached) {
       // partial read
@@ -822,7 +822,7 @@ private:
                 t, type, offset, length, laddr, *ret);
       ceph_abort("impossible");
     } else if (status == Transaction::get_extent_ret::PRESENT) {
-      assert(ret->get_length() == length);
+      ceph_assert(ret->get_length() == length);
       if (ret->is_fully_loaded()) {
         SUBTRACET(seastore_cache, "{} {}~0x{:x} {} is present on t -- {}",
                   t, type, offset, length, laddr, *ret);
@@ -874,8 +874,8 @@ private:
 	      t, type, offset, length, laddr);
     const auto t_src = t.get_src();
     auto f = [&t, this, t_src](CachedExtent &ext) {
-      // FIXME: assert(ext.is_stable_clean());
-      assert(ext.is_stable());
+      // FIXME: ceph_assert(ext.is_stable_clean());
+      ceph_assert(ext.is_stable());
       cache_access_stats_t& access_stats = get_by_ext(
         get_by_src(stats.access_by_src_ext, t_src),
         ext.get_type());
@@ -981,7 +981,7 @@ public:
                backref_entryrefs_by_seq.rbegin()->first,
                backref_entryrefs_by_seq.begin()->first,
                backref_entryrefs_by_seq.size());
-      assert(backref_entryrefs_by_seq.rbegin()->first >= trim_to);
+      ceph_assert(backref_entryrefs_by_seq.rbegin()->first >= trim_to);
       auto iter = backref_entryrefs_by_seq.upper_bound(trim_to);
       backref_entryrefs_by_seq.erase(backref_entryrefs_by_seq.begin(), iter);
     }
@@ -1096,7 +1096,7 @@ public:
     laddr_t original_laddr,
     std::optional<ceph::bufferptr> &original_bptr) {
     LOG_PREFIX(Cache::alloc_remapped_extent);
-    assert(remap_laddr >= original_laddr);
+    ceph_assert(remap_laddr >= original_laddr);
     TCachedExtentRef<T> ext;
     if (original_bptr.has_value()) {
       // shallow copy the buffer from original extent
@@ -1272,7 +1272,7 @@ public:
 
     // journal replay should has been finished at this point,
     // Cache::root should have been inserted to the dirty list
-    assert(root->is_dirty());
+    ceph_assert(root->is_dirty());
     std::vector<CachedExtentRef> _dirty;
     for (auto &e : extents_index) {
       _dirty.push_back(CachedExtentRef(&e));
@@ -1482,7 +1482,7 @@ private:
       const Transaction::src_t* p_src,
       cache_hint_t hint)
   {
-    assert(ext.get_paddr().is_absolute());
+    ceph_assert(ext.get_paddr().is_absolute());
     if (hint == CACHE_HINT_NOCACHE && is_logical_type(ext.get_type())) {
       return;
     }
@@ -1519,10 +1519,10 @@ private:
     paddr_t paddr,
     paddr_t key,
     extent_types_t type) {
-    assert(paddr.is_absolute());
+    ceph_assert(paddr.is_absolute());
     auto [iter, inserted] = backref_extents.emplace(paddr, key, type);
     boost::ignore_unused(inserted);
-    assert(inserted);
+    ceph_assert(inserted);
   }
 
   void remove_backref_extent(paddr_t paddr) {
@@ -1571,11 +1571,11 @@ private:
     void do_remove_from_lru(
         CachedExtent &extent,
         const Transaction::src_t* p_src) {
-      assert(extent.is_stable_clean() && !extent.is_placeholder());
-      assert(extent.primary_ref_list_hook.is_linked());
-      assert(lru.size() > 0);
+      ceph_assert(extent.is_stable_clean() && !extent.is_placeholder());
+      ceph_assert(extent.primary_ref_list_hook.is_linked());
+      ceph_assert(lru.size() > 0);
       auto extent_loaded_length = extent.get_loaded_length();
-      assert(current_size >= extent_loaded_length);
+      ceph_assert(current_size >= extent_loaded_length);
 
       lru.erase(lru.s_iterator_to(extent));
       current_size -= extent_loaded_length;
@@ -1618,7 +1618,7 @@ private:
         double seconds) const;
 
     void remove_from_lru(CachedExtent &extent) {
-      assert(extent.is_stable_clean() && !extent.is_placeholder());
+      ceph_assert(extent.is_stable_clean() && !extent.is_placeholder());
 
       if (extent.primary_ref_list_hook.is_linked()) {
         do_remove_from_lru(extent, nullptr);
@@ -1628,13 +1628,13 @@ private:
     void move_to_top(
         CachedExtent &extent,
         const Transaction::src_t* p_src) {
-      assert(extent.is_stable_clean() && !extent.is_placeholder());
+      ceph_assert(extent.is_stable_clean() && !extent.is_placeholder());
 
       auto extent_loaded_length = extent.get_loaded_length();
       if (extent.primary_ref_list_hook.is_linked()) {
         // present, move to top (back)
-        assert(lru.size() > 0);
-        assert(current_size >= extent_loaded_length);
+        ceph_assert(lru.size() > 0);
+        ceph_assert(current_size >= extent_loaded_length);
         lru.erase(lru.s_iterator_to(extent));
         lru.push_back(extent);
       } else {
@@ -1662,12 +1662,12 @@ private:
       CachedExtent &extent,
       extent_len_t increased_length,
       const Transaction::src_t* p_src) {
-      assert(!extent.is_mutable());
+      ceph_assert(!extent.is_mutable());
 
       if (extent.primary_ref_list_hook.is_linked()) {
-        assert(extent.is_stable_clean() && !extent.is_placeholder());
+        ceph_assert(extent.is_stable_clean() && !extent.is_placeholder());
         // present, increase size
-        assert(lru.size() > 0);
+        ceph_assert(lru.size() > 0);
         current_size += increased_length;
         get_by_ext(sizes_by_ext, extent.get_type()).account_parital_in(increased_length);
         overall_io.in_sizes.account_in(increased_length);
@@ -1803,22 +1803,22 @@ private:
     last_access_by_src_ext;
 
   void account_conflict(Transaction::src_t src1, Transaction::src_t src2) {
-    assert(src1 < Transaction::src_t::MAX);
-    assert(src2 < Transaction::src_t::MAX);
+    ceph_assert(src1 < Transaction::src_t::MAX);
+    ceph_assert(src2 < Transaction::src_t::MAX);
     if (src1 > src2) {
       std::swap(src1, src2);
     }
     // impossible combinations
     // should be consistent with trans_srcs_invalidated in register_metrics()
-    assert(!(src1 == Transaction::src_t::READ &&
+    ceph_assert(!(src1 == Transaction::src_t::READ &&
              src2 == Transaction::src_t::READ));
-    assert(!(src1 == Transaction::src_t::TRIM_DIRTY &&
+    ceph_assert(!(src1 == Transaction::src_t::TRIM_DIRTY &&
              src2 == Transaction::src_t::TRIM_DIRTY));
-    assert(!(src1 == Transaction::src_t::CLEANER_MAIN &&
+    ceph_assert(!(src1 == Transaction::src_t::CLEANER_MAIN &&
 	     src2 == Transaction::src_t::CLEANER_MAIN));
-    assert(!(src1 == Transaction::src_t::CLEANER_COLD &&
+    ceph_assert(!(src1 == Transaction::src_t::CLEANER_COLD &&
 	     src2 == Transaction::src_t::CLEANER_COLD));
-    assert(!(src1 == Transaction::src_t::TRIM_ALLOC &&
+    ceph_assert(!(src1 == Transaction::src_t::TRIM_ALLOC &&
              src2 == Transaction::src_t::TRIM_ALLOC));
 
     auto src1_value = static_cast<std::size_t>(src1);
@@ -1826,7 +1826,7 @@ private:
     auto num_srcs = static_cast<std::size_t>(Transaction::src_t::MAX);
     auto conflict_index = num_srcs * src1_value + src2_value -
         src1_value * (src1_value + 1) / 2;
-    assert(conflict_index < NUM_SRC_COMB);
+    ceph_assert(conflict_index < NUM_SRC_COMB);
     ++stats.trans_conflicts_by_srcs[conflict_index];
   }
 
@@ -1912,26 +1912,26 @@ private:
     const Transaction::src_t* p_src
   ) {
     LOG_PREFIX(Cache::read_extent);
-    assert(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING ||
+    ceph_assert(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING ||
            extent->state == CachedExtent::extent_state_t::EXIST_CLEAN ||
            extent->state == CachedExtent::extent_state_t::CLEAN);
-    assert(!extent->is_range_loaded(offset, length));
-    assert(is_aligned(offset, get_block_size()));
-    assert(is_aligned(length, get_block_size()));
-    assert(extent->get_paddr().is_absolute());
+    ceph_assert(!extent->is_range_loaded(offset, length));
+    ceph_assert(is_aligned(offset, get_block_size()));
+    ceph_assert(is_aligned(length, get_block_size()));
+    ceph_assert(extent->get_paddr().is_absolute());
     extent->set_io_wait();
     auto old_length = extent->get_loaded_length();
     load_ranges_t to_read = extent->load_ranges(offset, length);
     auto new_length = extent->get_loaded_length();
-    assert(new_length > old_length);
+    ceph_assert(new_length > old_length);
     lru.increase_cached_size(*extent, new_length - old_length, p_src);
     return seastar::do_with(to_read.ranges, [extent, this, FNAME](auto &read_ranges) {
       return ExtentPlacementManager::read_ertr::parallel_for_each(
           read_ranges, [extent, this, FNAME](auto &read_range) {
         SUBDEBUG(seastore_cache, "reading extent {} 0x{:x}~0x{:x} ...",
                  extent->get_paddr(), read_range.offset, read_range.get_length());
-        assert(is_aligned(read_range.offset, get_block_size()));
-        assert(is_aligned(read_range.get_length(), get_block_size()));
+        ceph_assert(is_aligned(read_range.offset, get_block_size()));
+        ceph_assert(is_aligned(read_range.get_length(), get_block_size()));
         return epm.read(
           extent->get_paddr() + read_range.offset,
           read_range.get_length(),
@@ -1982,7 +1982,7 @@ private:
   CachedExtentRef query_cache(paddr_t offset) {
     if (auto iter = extents_index.find_offset(offset);
         iter != extents_index.end()) {
-      assert(iter->is_stable());
+      ceph_assert(iter->is_stable());
       return CachedExtentRef(&*iter);
     } else {
       return CachedExtentRef();

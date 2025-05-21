@@ -156,7 +156,7 @@ public:
     }
 
     auto with_reduced_max(size_t reduced_by) const {
-      assert(reduced_by <= max_result_size);
+      ceph_assert(reduced_by <= max_result_size);
       return omap_list_config_t(
 	max_result_size - reduced_by,
 	first_inclusive,

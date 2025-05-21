@@ -23,11 +23,11 @@ public:
   }
 
   std::vector<SegmentManager*> get_segment_managers() const {
-    assert(device_ids.size());
+    ceph_assert(device_ids.size());
     std::vector<SegmentManager*> ret;
     for (auto& device_id : device_ids) {
       auto segment_manager = segment_managers[device_id];
-      assert(segment_manager->get_device_id() == device_id);
+      ceph_assert(segment_manager->get_device_id() == device_id);
       ret.emplace_back(segment_manager);
     }
     return ret;
@@ -57,17 +57,17 @@ public:
    * Assume all segment managers share the same following information.
    */
   extent_len_t get_block_size() const {
-    assert(device_ids.size());
+    ceph_assert(device_ids.size());
     return segment_managers[*device_ids.begin()]->get_block_size();
   }
 
   segment_off_t get_segment_size() const {
-    assert(device_ids.size());
+    ceph_assert(device_ids.size());
     return segment_managers[*device_ids.begin()]->get_segment_size();
   }
 
   const seastore_meta_t &get_meta() const {
-    assert(device_ids.size());
+    ceph_assert(device_ids.size());
     return segment_managers[*device_ids.begin()]->get_meta();
   }
 
@@ -110,19 +110,19 @@ public:
 
   using open_ertr = SegmentManager::open_ertr;
   open_ertr::future<SegmentRef> open(segment_id_t id) {
-    assert(has_device(id.device_id()));
+    ceph_assert(has_device(id.device_id()));
     return segment_managers[id.device_id()]->open(id);
   }
 
   using release_ertr = SegmentManager::release_ertr;
   release_ertr::future<> release_segment(segment_id_t id) {
-    assert(has_device(id.device_id()));
+    ceph_assert(has_device(id.device_id()));
     return segment_managers[id.device_id()]->release(id);
   }
 
 private:
   bool has_device(device_id_t id) const {
-    assert(id <= DEVICE_ID_MAX_VALID);
+    ceph_assert(id <= DEVICE_ID_MAX_VALID);
     return device_ids.count(id) >= 1;
   }
 

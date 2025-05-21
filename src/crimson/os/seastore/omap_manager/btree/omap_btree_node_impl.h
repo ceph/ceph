@@ -80,7 +80,7 @@ struct OMapInnerNode
     if (is_rewrite() && !is_btree_root()) {
       auto &prior = *get_prior_instance()->template cast<OMapInnerNode>();
       if (prior.base_child_t::has_parent_tracker()) {
-        assert(prior.is_seen_by_users());
+        ceph_assert(prior.is_seen_by_users());
 	// unlike fixed-kv nodes, rewriting child nodes of the omap tree
 	// won't affect parent nodes, so we have to manually take prior
 	// instances' parent trackers here.
@@ -88,7 +88,7 @@ struct OMapInnerNode
       } else {
         // dirty omap extent may not be accessed yet during rewrite,
         // this means the extent may not be initalized yet as linked.
-        assert(!prior.is_seen_by_users());
+        ceph_assert(!prior.is_seen_by_users());
       }
     }
   }
@@ -97,7 +97,7 @@ struct OMapInnerNode
     this->parent_node_t::on_replace_prior();
     if (!this->is_btree_root()) {
       auto &prior = *get_prior_instance()->template cast<OMapInnerNode>();
-      assert(prior.base_child_t::has_parent_tracker());
+      ceph_assert(prior.base_child_t::has_parent_tracker());
       this->child_node_t::on_replace_prior();
     }
   }
@@ -136,7 +136,7 @@ struct OMapInnerNode
   }
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
-    assert(delta_buffer.empty());
+    ceph_assert(delta_buffer.empty());
     return CachedExtentRef(new OMapInnerNode(*this));
   }
 
@@ -217,7 +217,7 @@ struct OMapInnerNode
   }
 
   void apply_delta(const ceph::bufferlist &bl) final {
-    assert(bl.length());
+    ceph_assert(bl.length());
     delta_inner_buffer_t buffer;
     auto bptr = bl.cbegin();
     decode(buffer, bptr);
@@ -257,7 +257,7 @@ private:
 
   get_child_node_ret get_child_node(omap_context_t oc, const std::string &key) {
     auto child_pt = get_containing_child(key);
-    assert(child_pt != iter_cend());
+    ceph_assert(child_pt != iter_cend());
     return get_child_node(oc, child_pt);
   }
 };
@@ -295,7 +295,7 @@ struct OMapLeafNode
     if (is_rewrite() && !is_btree_root()) {
       auto &prior = *get_prior_instance()->template cast<OMapLeafNode>();
       if (prior.base_child_t::has_parent_tracker()) {
-        assert(prior.is_seen_by_users());
+        ceph_assert(prior.is_seen_by_users());
 	// unlike fixed-kv nodes, rewriting child nodes of the omap tree
 	// won't affect parent nodes, so we have to manually take prior
 	// instances' parent trackers here.
@@ -303,7 +303,7 @@ struct OMapLeafNode
       } else {
         // dirty omap extent may not be accessed yet during rewrite,
         // this means the extent may not be initalized yet as linked.
-        assert(!prior.is_seen_by_users());
+        ceph_assert(!prior.is_seen_by_users());
       }
     }
   }
@@ -312,7 +312,7 @@ struct OMapLeafNode
     ceph_assert(!this->is_rewrite());
     if (!this->is_btree_root()) {
       auto &prior = *get_prior_instance()->template cast<OMapLeafNode>();
-      assert(prior.base_child_t::has_parent_tracker());
+      ceph_assert(prior.base_child_t::has_parent_tracker());
       this->child_node_t::on_replace_prior();
     }
   }
@@ -355,7 +355,7 @@ struct OMapLeafNode
   }
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
-    assert(delta_buffer.empty());
+    ceph_assert(delta_buffer.empty());
     return CachedExtentRef(new OMapLeafNode(*this));
   }
 
@@ -419,7 +419,7 @@ struct OMapLeafNode
   }
 
   void apply_delta(const ceph::bufferlist &_bl) final {
-    assert(_bl.length());
+    ceph_assert(_bl.length());
     ceph::bufferlist bl = _bl;
     bl.rebuild();
     delta_leaf_buffer_t buffer;
@@ -452,30 +452,30 @@ omap_load_extent(
   std::optional<child_pos_t<OMapInnerNode>> chp = std::nullopt)
 {
   LOG_PREFIX(omap_load_extent);
-  assert(end <= END_KEY);
+  ceph_assert(end <= END_KEY);
   auto size = std::is_same_v<OMapInnerNode, T>
     ? OMAP_INNER_BLOCK_SIZE : get_leaf_size(oc.type);
   return oc.tm.read_extent<T>(
     oc.t, laddr, size,
     [begin=std::move(begin), end=std::move(end), FNAME,
     oc, chp=std::move(chp)](T &extent) mutable {
-      assert(!extent.is_seen_by_users());
+      ceph_assert(!extent.is_seen_by_users());
       extent.init_range(std::move(begin), std::move(end));
       if (extent.is_btree_root()) {
         return;
       }
       SUBDEBUGT(seastore_omap, "linking {} to {}",
         oc.t, extent, *chp->get_parent());
-      assert(chp);
-      assert(!extent.T::base_child_t::is_parent_valid());
+      ceph_assert(chp);
+      ceph_assert(!extent.T::base_child_t::is_parent_valid());
       chp->link_child(&extent);
     }
   ).handle_error_interruptible(
     omap_load_extent_iertr::pass_further{},
     crimson::ct_error::assert_all{ "Invalid error in omap_load_extent" }
   ).si_then([](auto maybe_indirect_extent) {
-    assert(!maybe_indirect_extent.is_indirect());
-    assert(!maybe_indirect_extent.is_clone);
+    ceph_assert(!maybe_indirect_extent.is_indirect());
+    ceph_assert(!maybe_indirect_extent.is_clone);
     return seastar::make_ready_future<TCachedExtentRef<T>>(
 	std::move(maybe_indirect_extent.extent));
   });

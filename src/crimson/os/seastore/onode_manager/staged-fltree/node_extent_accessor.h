@@ -82,7 +82,7 @@ class DeltaRecorderT final: public DeltaRecorder {
     ceph::encode(node_delta_op_t::UPDATE_CHILD_ADDR, encoded);
     ceph::encode(new_addr, encoded);
     int node_offset = reinterpret_cast<const char*>(p_addr) - p_node_start;
-    assert(node_offset > 0 && node_offset < (int)node_size);
+    ceph_assert(node_offset > 0 && node_offset < (int)node_size);
     ceph::encode(static_cast<node_offset_t>(node_offset), encoded);
   }
 
@@ -113,7 +113,7 @@ class DeltaRecorderT final: public DeltaRecorder {
                    NodeExtentMutable& mut,
                    const NodeExtent& node) override {
     LOG_PREFIX(OTree::Extent::Replay);
-    assert(is_empty());
+    ceph_assert(is_empty());
     node_stage_t stage(reinterpret_cast<const FieldType*>(mut.get_read()),
                        mut.get_length());
     node_delta_op_t op;
@@ -291,24 +291,24 @@ class NodeExtentAccessorT {
       : extent{extent},
         node_stage{reinterpret_cast<const FieldType*>(extent->get_read()),
                    extent->get_length()} {
-    assert(is_valid_node_size(extent->get_length()));
+    ceph_assert(is_valid_node_size(extent->get_length()));
     if (extent->is_initial_pending()) {
       state = nextent_state_t::FRESH;
       mut.emplace(extent->get_mutable());
-      assert(extent->get_recorder() == nullptr);
+      ceph_assert(extent->get_recorder() == nullptr);
       recorder = nullptr;
     } else if (extent->is_mutation_pending()) {
       state = nextent_state_t::MUTATION_PENDING;
       mut.emplace(extent->get_mutable());
       auto p_recorder = extent->get_recorder();
-      assert(p_recorder != nullptr);
-      assert(p_recorder->node_type() == NODE_TYPE);
-      assert(p_recorder->field_type() == FIELD_TYPE);
+      ceph_assert(p_recorder != nullptr);
+      ceph_assert(p_recorder->node_type() == NODE_TYPE);
+      ceph_assert(p_recorder->field_type() == FIELD_TYPE);
       recorder = static_cast<recorder_t*>(p_recorder);
     } else if (!extent->is_mutable() && extent->is_valid()) {
       state = nextent_state_t::READ_ONLY;
       // mut is empty
-      assert(extent->get_recorder() == nullptr ||
+      ceph_assert(extent->get_recorder() == nullptr ||
              extent->get_recorder()->is_empty());
       recorder = nullptr;
     } else {
@@ -332,11 +332,11 @@ class NodeExtentAccessorT {
   laddr_t get_laddr() const { return extent->get_laddr(); }
   extent_len_t get_length() const {
     auto len = extent->get_length();
-    assert(is_valid_node_size(len));
+    ceph_assert(is_valid_node_size(len));
     return len;
   }
   nextent_state_t get_state() const {
-    assert(!is_retired());
+    ceph_assert(!is_retired());
     // we cannot rely on the underlying extent state because
     // FRESH/MUTATION_PENDING can become DIRTY after transaction submission.
     return state;
@@ -353,20 +353,20 @@ class NodeExtentAccessorT {
   // must be called before any mutate attempes.
   // for the safety of mixed read and mutate, call before read.
   void prepare_mutate(context_t c) {
-    assert(!is_retired());
+    ceph_assert(!is_retired());
     if (state == nextent_state_t::READ_ONLY) {
-      assert(!extent->is_mutable());
+      ceph_assert(!extent->is_mutable());
       auto ref_recorder = recorder_t::create_for_encode(c.vb);
       recorder = static_cast<recorder_t*>(ref_recorder.get());
       extent = extent->mutate(c, std::move(ref_recorder));
       state = nextent_state_t::MUTATION_PENDING;
-      assert(extent->is_mutation_pending());
+      ceph_assert(extent->is_mutation_pending());
       node_stage = node_stage_t(reinterpret_cast<const FieldType*>(extent->get_read()),
                                 get_length());
-      assert(recorder == static_cast<recorder_t*>(extent->get_recorder()));
+      ceph_assert(recorder == static_cast<recorder_t*>(extent->get_recorder()));
       mut.emplace(extent->get_mutable());
     }
-    assert(extent->is_mutable());
+    ceph_assert(extent->is_mutable());
   }
 
   template <KeyT KT>
@@ -376,8 +376,8 @@ class NodeExtentAccessorT {
       position_t& insert_pos,
       match_stage_t& insert_stage,
       node_offset_t& insert_size) {
-    assert(extent->is_mutable());
-    assert(state != nextent_state_t::READ_ONLY);
+    ceph_assert(extent->is_mutable());
+    ceph_assert(state != nextent_state_t::READ_ONLY);
     if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->template encode_insert<KT>(
           key, value, insert_pos, insert_stage, insert_size);
@@ -397,8 +397,8 @@ class NodeExtentAccessorT {
   }
 
   void split_replayable(StagedIterator& split_at) {
-    assert(extent->is_mutable());
-    assert(state != nextent_state_t::READ_ONLY);
+    ceph_assert(extent->is_mutable());
+    ceph_assert(state != nextent_state_t::READ_ONLY);
     if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->encode_split(split_at, read().p_start());
     }
@@ -420,8 +420,8 @@ class NodeExtentAccessorT {
       position_t& insert_pos,
       match_stage_t& insert_stage,
       node_offset_t& insert_size) {
-    assert(extent->is_mutable());
-    assert(state != nextent_state_t::READ_ONLY);
+    ceph_assert(extent->is_mutable());
+    ceph_assert(state != nextent_state_t::READ_ONLY);
     if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->template encode_split_insert<KT>(
           split_at, key, value, insert_pos, insert_stage, insert_size,
@@ -444,8 +444,8 @@ class NodeExtentAccessorT {
 
   void update_child_addr_replayable(
       const laddr_t new_addr, laddr_packed_t* p_addr) {
-    assert(extent->is_mutable());
-    assert(state != nextent_state_t::READ_ONLY);
+    ceph_assert(extent->is_mutable());
+    ceph_assert(state != nextent_state_t::READ_ONLY);
     if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->encode_update_child_addr(
           new_addr, p_addr, read().p_start(), get_length());
@@ -462,8 +462,8 @@ class NodeExtentAccessorT {
   }
 
   std::tuple<match_stage_t, position_t> erase_replayable(const position_t& pos) {
-    assert(extent->is_mutable());
-    assert(state != nextent_state_t::READ_ONLY);
+    ceph_assert(extent->is_mutable());
+    ceph_assert(state != nextent_state_t::READ_ONLY);
     if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->encode_erase(pos);
     }
@@ -479,8 +479,8 @@ class NodeExtentAccessorT {
   }
 
   position_t make_tail_replayable() {
-    assert(extent->is_mutable());
-    assert(state != nextent_state_t::READ_ONLY);
+    ceph_assert(extent->is_mutable());
+    ceph_assert(state != nextent_state_t::READ_ONLY);
     if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->encode_make_tail();
     }
@@ -506,19 +506,19 @@ class NodeExtentAccessorT {
   }
 
   void test_copy_to(NodeExtentMutable& to) const {
-    assert(extent->get_length() == to.get_length());
+    ceph_assert(extent->get_length() == to.get_length());
     std::memcpy(to.get_write(), extent->get_read(), get_length());
   }
 
   eagain_ifuture<NodeExtentMutable> rebuild(context_t c, laddr_t hint) {
     LOG_PREFIX(OTree::Extent::rebuild);
-    assert(!is_retired());
+    ceph_assert(!is_retired());
     if (state == nextent_state_t::FRESH) {
-      assert(extent->is_initial_pending());
+      ceph_assert(extent->is_initial_pending());
       // already fresh and no need to record
       return eagain_iertr::make_ready_future<NodeExtentMutable>(*mut);
     }
-    assert(!extent->is_initial_pending());
+    ceph_assert(!extent->is_initial_pending());
     auto alloc_size = get_length();
     return c.nm.alloc_extent(c.t, hint, alloc_size
     ).handle_error_interruptible(
@@ -530,10 +530,10 @@ class NodeExtentAccessorT {
       SUBDEBUGT(seastore_onode,
           "update addr from {} to {} ...",
           c.t, extent->get_laddr(), fresh_extent->get_laddr());
-      assert(fresh_extent);
-      assert(fresh_extent->is_initial_pending());
-      assert(fresh_extent->get_recorder() == nullptr);
-      assert(get_length() == fresh_extent->get_length());
+      ceph_assert(fresh_extent);
+      ceph_assert(fresh_extent->is_initial_pending());
+      ceph_assert(fresh_extent->get_recorder() == nullptr);
+      ceph_assert(get_length() == fresh_extent->get_length());
       auto fresh_mut = fresh_extent->get_mutable();
       std::memcpy(fresh_mut.get_write(), extent->get_read(), get_length());
       NodeExtentRef to_discard = extent;
@@ -554,14 +554,14 @@ class NodeExtentAccessorT {
       );
     }).si_then([this, c] {
       boost::ignore_unused(c);  // avoid clang warning;
-      assert(!c.t.is_conflicted());
+      ceph_assert(!c.t.is_conflicted());
       return *mut;
     });
   }
 
   eagain_ifuture<> retire(context_t c) {
     LOG_PREFIX(OTree::Extent::retire);
-    assert(!is_retired());
+    ceph_assert(!is_retired());
     auto addr = extent->get_laddr();
     return c.nm.retire_extent(c.t, std::move(extent)
     ).handle_error_interruptible(
@@ -570,7 +570,7 @@ class NodeExtentAccessorT {
         "{} addr={}", FNAME, addr).c_str())
 #ifndef NDEBUG
     ).si_then([c] {
-      assert(!c.t.is_conflicted());
+      ceph_assert(!c.t.is_conflicted());
     }
 #endif
     );

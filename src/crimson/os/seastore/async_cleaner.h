@@ -86,8 +86,8 @@ struct segment_info_t {
 
   void update_modify_time(sea_time_point _modify_time, std::size_t _num_extents) {
     ceph_assert(!is_closed());
-    assert(_modify_time != NULL_TIME);
-    assert(_num_extents != 0);
+    ceph_assert(_modify_time != NULL_TIME);
+    ceph_assert(_num_extents != 0);
     if (modify_time == NULL_TIME) {
       modify_time = _modify_time;
       num_extents = _num_extents;
@@ -125,11 +125,11 @@ public:
   }
 
   std::size_t get_num_segments() const {
-    assert(segments.size() > 0);
+    ceph_assert(segments.size() > 0);
     return segments.size();
   }
   segment_off_t get_segment_size() const {
-    assert(segment_size > 0);
+    ceph_assert(segment_size > 0);
     return segment_size;
   }
   std::size_t get_num_in_journal_open() const {
@@ -178,7 +178,7 @@ public:
   }
   /// the unavailable space that is not writable
   std::size_t get_unavailable_bytes() const {
-    assert(total_bytes >= get_available_bytes());
+    ceph_assert(total_bytes >= get_available_bytes());
     return total_bytes - get_available_bytes();
   }
   std::size_t get_available_bytes_in_open() const {
@@ -193,9 +193,9 @@ public:
       return JOURNAL_SEQ_NULL;
     }
     auto &segment_info = segments[journal_segment_id];
-    assert(!segment_info.is_empty());
-    assert(segment_info.type == segment_type_t::JOURNAL);
-    assert(segment_info.seq != NULL_SEG_SEQ);
+    ceph_assert(!segment_info.is_empty());
+    ceph_assert(segment_info.type == segment_type_t::JOURNAL);
+    ceph_assert(segment_info.seq != NULL_SEG_SEQ);
     return journal_seq_t{
       segment_info.seq,
       paddr_t::make_seg_paddr(
@@ -250,7 +250,7 @@ public:
       return;
     }
 
-    assert(tp != NULL_TIME);
+    ceph_assert(tp != NULL_TIME);
     segments[id].update_modify_time(tp, num);
   }
 
@@ -483,9 +483,9 @@ public:
     if (!check_is_ready()) {
       return 0;
     }
-    assert(get_journal_head().segment_seq >=
+    ceph_assert(get_journal_head().segment_seq >=
            get_journal_tail().segment_seq);
-    assert(get_journal_head_sequence() >=
+    ceph_assert(get_journal_head_sequence() >=
            get_journal_head().segment_seq);
     return get_journal_head_sequence() + 1 -
            get_journal_tail().segment_seq;
@@ -732,7 +732,7 @@ class SpaceTrackerSimple : public SpaceTrackerI {
 
   int64_t update_usage(segment_id_t segment, int64_t delta) {
     live_bytes_by_segment[segment].live_bytes += delta;
-    assert(live_bytes_by_segment[segment].live_bytes >= 0);
+    ceph_assert(live_bytes_by_segment[segment].live_bytes >= 0);
     return live_bytes_by_segment[segment].live_bytes;
   }
 public:
@@ -993,7 +993,7 @@ public:
     }
 
     void find_valid() {
-      assert(!is_end());
+      ceph_assert(!is_end());
       auto &device_vec = parent.device_to_blocks[device_id];
       if (device_vec.size() == 0 ||
 	  get_block_id() == device_vec.size()) {
@@ -1038,7 +1038,7 @@ public:
     }
 
     iterator<is_const>& operator++() {
-      assert(!is_end());
+      ceph_assert(!is_end());
       auto block_size = parent.device_block_size[device_id];
       blk_off += block_size;
       find_valid();
@@ -1055,22 +1055,22 @@ public:
     }
     template <bool c = is_const, std::enable_if_t<c, int> = 0>
     const std::pair<const device_off_t, const T&> *operator->() {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return &*current;
     }
     template <bool c = is_const, std::enable_if_t<!c, int> = 0>
     std::pair<const device_off_t, T&> *operator->() {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return &*current;
     }
     template <bool c = is_const, std::enable_if_t<c, int> = 0>
     const std::pair<const device_off_t, const T&> &operator*() {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return *current;
     }
     template <bool c = is_const, std::enable_if_t<!c, int> = 0>
     std::pair<const device_off_t, T&> &operator*() {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return *current;
     }
   };
@@ -1294,7 +1294,7 @@ public:
   void close_segment(segment_id_t segment) final;
 
   void update_segment_avail_bytes(segment_type_t type, paddr_t offset) final {
-    assert(type == segment_type_t::OOL ||
+    ceph_assert(type == segment_type_t::OOL ||
            trimmer != nullptr); // segment_type_t::JOURNAL
     segments.update_written_to(type, offset);
     background_callback->maybe_wake_background();
@@ -1355,7 +1355,7 @@ public:
   void release_projected_usage(size_t) final;
 
   bool should_block_io_on_clean() const final {
-    assert(background_callback->is_ready());
+    ceph_assert(background_callback->is_ready());
     if (get_segments_reclaimable() == 0) {
       return false;
     }
@@ -1364,12 +1364,12 @@ public:
   }
 
   bool can_clean_space() const final {
-    assert(background_callback->is_ready());
+    ceph_assert(background_callback->is_ready());
     return get_segments_reclaimable() > 0;
   }
 
   bool should_clean_space() const final {
-    assert(background_callback->is_ready());
+    ceph_assert(background_callback->is_ready());
     if (get_segments_reclaimable() == 0) {
       return false;
     }
@@ -1406,7 +1406,7 @@ private:
   static constexpr std::size_t UTIL_BUCKETS = 12;
   static std::size_t get_bucket_index(double util) {
     auto index = std::floor(util * 10);
-    assert(index < UTIL_BUCKETS);
+    ceph_assert(index < UTIL_BUCKETS);
     return index;
   }
   double calc_utilization(segment_id_t id) const {
@@ -1417,7 +1417,7 @@ private:
       return UTIL_STATE_EMPTY;
     } else {
       auto ret = space_tracker->calc_utilization(id);
-      assert(ret >= 0 && ret < 1);
+      ceph_assert(ret >= 0 && ret < 1);
       return ret;
     }
   }
@@ -1453,7 +1453,7 @@ private:
         target_gen = generation + 1;
       }
 
-      assert(is_target_rewrite_generation(target_gen));
+      ceph_assert(is_target_rewrite_generation(target_gen));
       return {generation,
               target_gen,
               segment_size,
@@ -1470,7 +1470,7 @@ private:
     }
 
     void advance(std::size_t bytes) {
-      assert(!is_complete());
+      ceph_assert(!is_complete());
       start_pos = end_pos;
       auto &end_seg_paddr = end_pos.as_seg_paddr();
       auto next_off = end_seg_paddr.get_segment_off() + bytes;
@@ -1511,7 +1511,7 @@ private:
     }
   }
   std::size_t get_segments_reclaimable() const {
-    assert(segments.get_num_closed() >= get_segments_in_journal_closed());
+    ceph_assert(segments.get_num_closed() >= get_segments_in_journal_closed());
     return segments.get_num_closed() - get_segments_in_journal_closed();
   }
 
@@ -1522,7 +1522,7 @@ private:
   std::size_t get_unavailable_unreclaimable_bytes() const {
     auto ret = (segments.get_num_open() + get_segments_in_journal_closed()) *
                segments.get_segment_size();
-    assert(ret >= segments.get_available_bytes_in_open());
+    ceph_assert(ret >= segments.get_available_bytes_in_open());
     return ret - segments.get_available_bytes_in_open();
   }
   /// the unavailable space that can be reclaimed
@@ -1533,7 +1533,7 @@ private:
   }
   /// the unavailable space that is not alive
   std::size_t get_unavailable_unused_bytes() const {
-    assert(segments.get_unavailable_bytes() > stats.used_bytes);
+    ceph_assert(segments.get_unavailable_bytes() > stats.used_bytes);
     return segments.get_unavailable_bytes() - stats.used_bytes;
   }
   double get_reclaim_ratio() const {
@@ -1566,7 +1566,7 @@ private:
   void adjust_segment_util(double old_usage, double new_usage) {
     auto old_index = get_bucket_index(old_usage);
     auto new_index = get_bucket_index(new_usage);
-    assert(stats.segment_util.buckets[old_index].count > 0);
+    ceph_assert(stats.segment_util.buckets[old_index].count > 0);
     stats.segment_util.buckets[old_index].count--;
     stats.segment_util.buckets[new_index].count++;
   }
@@ -1577,7 +1577,7 @@ private:
       segment_type_t s_type,
       data_category_t category,
       rewrite_gen_t generation) {
-    assert(background_callback->get_state() == state_t::MOUNT);
+    ceph_assert(background_callback->get_state() == state_t::MOUNT);
     ceph_assert(s_type == segment_type_t::OOL ||
                 trimmer != nullptr); // segment_type_t::JOURNAL
     auto old_usage = calc_utilization(segment);

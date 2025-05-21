@@ -40,7 +40,7 @@ public:
   }
 protected:
   void on_replace_prior() final {
-    assert(is_seen_by_users());
+    ceph_assert(is_seen_by_users());
     lba_child_node_t::on_replace_prior();
     do_on_replace_prior();
   }

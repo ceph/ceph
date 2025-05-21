@@ -322,7 +322,7 @@ BackfillState::Enqueuing::update_on_peers(const hobject_t& check)
 	std::ignore = backfill_state().progress_tracker->enqueue_push(
 	  primary_bi.begin);
 	auto &[v, peers] = backfills[primary_bi.begin];
-	assert(v == obj_v || v == eversion_t());
+	ceph_assert(v == obj_v || v == eversion_t());
 	v = obj_v;
 	peers.push_back(bt);
       } else {
@@ -337,7 +337,7 @@ BackfillState::Enqueuing::update_on_peers(const hobject_t& check)
 	std::ignore = backfill_state().progress_tracker->enqueue_push(
 	  primary_bi.begin);
 	auto &[v, peers] = backfills[primary_bi.begin];
-	assert(v == obj_v || v == eversion_t());
+	ceph_assert(v == obj_v || v == eversion_t());
 	v = obj_v;
 	peers.push_back(bt);
       }
@@ -715,11 +715,11 @@ void BackfillState::ProgressTracker::complete_to(
          it->second.stage != op_stage_t::enqueued_push;
        it = registry.erase(it)) {
     auto& [soid, item] = *it;
-    assert(item.stats);
+    ceph_assert(item.stats);
     peering_state().update_complete_backfill_object_stats(
       soid,
       *item.stats);
-    assert(soid > new_last_backfill);
+    ceph_assert(soid > new_last_backfill);
     new_last_backfill = soid;
   }
   if (may_push_to_max &&

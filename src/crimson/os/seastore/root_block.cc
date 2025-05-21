@@ -21,7 +21,7 @@ void RootBlock::on_replace_prior() {
 	  static_cast<lba::LBAInternalNode*>(prior.lba_root_node)
 	);
       } else {
-	assert(lba_root->range.depth == 1);
+	ceph_assert(lba_root->range.depth == 1);
 	TreeRootLinker<RootBlock, lba::LBALeafNode>::link_root(
 	  this_ref,
 	  static_cast<lba::LBALeafNode*>(prior.lba_root_node)
@@ -41,7 +41,7 @@ void RootBlock::on_replace_prior() {
 	  static_cast<backref::BackrefInternalNode*>(prior.backref_root_node)
 	);
       } else {
-	assert(backref_root->range.depth == 1);
+	ceph_assert(backref_root->range.depth == 1);
 	TreeRootLinker<RootBlock, backref::BackrefLeafNode>::link_root(
 	  this_ref,
 	  static_cast<backref::BackrefLeafNode*>(prior.backref_root_node)

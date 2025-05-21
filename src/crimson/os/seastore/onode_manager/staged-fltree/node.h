@@ -110,7 +110,7 @@ class tree_cursor_t final
 
   /// Returns the key view in tree if it is not an end cursor.
   const key_view_t& get_key_view(value_magic_t magic) const {
-    assert(is_tracked());
+    ceph_assert(is_tracked());
     return cache.get_key_view(magic, position);
   }
 
@@ -130,14 +130,14 @@ class tree_cursor_t final
 
   /// Get the latest value_header_t pointer for read.
   const value_header_t* read_value_header(value_magic_t magic) const {
-    assert(is_tracked());
+    ceph_assert(is_tracked());
     return cache.get_p_value_header(magic, position);
   }
 
   /// Prepare the node extent to be mutable and recorded.
   std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
   prepare_mutate_value_payload(context_t c) {
-    assert(is_tracked());
+    ceph_assert(is_tracked());
     if (!is_mutated) {
       is_mutated = true;
       ++(c.t.get_onode_tree_stats().num_updates);
@@ -268,22 +268,22 @@ class Node
     match_stat_t mstat;
 
     MatchKindBS match() const {
-      assert(mstat >= MSTAT_MIN && mstat <= MSTAT_MAX);
+      ceph_assert(mstat >= MSTAT_MIN && mstat <= MSTAT_MAX);
       return (mstat == MSTAT_EQ ? MatchKindBS::EQ : MatchKindBS::NE);
     }
 
     void validate_input_key(const key_hobj_t& key, value_magic_t magic) const {
 #ifndef NDEBUG
       if (match() == MatchKindBS::EQ) {
-        assert(key == p_cursor->get_key_view(magic));
+        ceph_assert(key == p_cursor->get_key_view(magic));
       } else {
-        assert(match() == MatchKindBS::NE);
+        ceph_assert(match() == MatchKindBS::NE);
         if (p_cursor->is_tracked()) {
-          assert(key < p_cursor->get_key_view(magic));
+          ceph_assert(key < p_cursor->get_key_view(magic));
         } else if (p_cursor->is_end()) {
           // good
         } else {
-          assert(p_cursor->is_invalid());
+          ceph_assert(p_cursor->is_invalid());
           ceph_abort("impossible");
         }
       }
@@ -397,23 +397,23 @@ class Node
   Node(NodeImplURef&&);
 
   bool is_tracked() const {
-    assert(!(super && _parent_info.has_value()));
+    ceph_assert(!(super && _parent_info.has_value()));
     return (super || _parent_info.has_value());
   }
 
   bool is_root() const {
-    assert(is_tracked());
+    ceph_assert(is_tracked());
     return !_parent_info.has_value();
   }
 
   // as root
   void make_root(context_t c, Super::URef&& _super);
   void make_root_new(context_t c, Super::URef&& _super) {
-    assert(_super->get_root_laddr() == L_ADDR_NULL);
+    ceph_assert(_super->get_root_laddr() == L_ADDR_NULL);
     make_root(c, std::move(_super));
   }
   void make_root_from(context_t c, Super::URef&& _super, laddr_t from_addr) {
-    assert(_super->get_root_laddr() == from_addr);
+    ceph_assert(_super->get_root_laddr() == from_addr);
     make_root(c, std::move(_super));
   }
   void as_root(Super::URef&& _super);
@@ -480,7 +480,7 @@ class InternalNode final : public Node {
  public:
   // public to Node
   InternalNode(InternalNodeImpl*, NodeImplURef&&);
-  ~InternalNode() override { assert(tracked_child_nodes.empty()); }
+  ~InternalNode() override { ceph_assert(tracked_child_nodes.empty()); }
   InternalNode(const InternalNode&) = delete;
   InternalNode(InternalNode&&) = delete;
   InternalNode& operator=(const InternalNode&) = delete;
@@ -496,22 +496,22 @@ class InternalNode final : public Node {
       validate_child(child);
     }
     auto& child_pos = child.parent_info().position;
-    assert(tracked_child_nodes.find(child_pos) == tracked_child_nodes.end());
+    ceph_assert(tracked_child_nodes.find(child_pos) == tracked_child_nodes.end());
     tracked_child_nodes[child_pos] = &child;
   }
 
   void do_untrack_child(const Node& child) {
-    assert(check_is_tracking(child));
+    ceph_assert(check_is_tracking(child));
     auto& child_pos = child.parent_info().position;
     [[maybe_unused]] auto removed = tracked_child_nodes.erase(child_pos);
-    assert(removed);
+    ceph_assert(removed);
   }
 
   bool check_is_tracking(const Node& child) const {
     auto& child_pos = child.parent_info().position;
     auto found = tracked_child_nodes.find(child_pos);
     if (found != tracked_child_nodes.end() && found->second == &child) {
-      assert(child.parent_info().ptr == this);
+      ceph_assert(child.parent_info().ptr == this);
       return true;
     } else {
       return false;
@@ -532,9 +532,9 @@ class InternalNode final : public Node {
 
   void validate_child_tracked(const Node& child) const {
     validate_child(child);
-    assert(tracked_child_nodes.find(child.parent_info().position) !=
+    ceph_assert(tracked_child_nodes.find(child.parent_info().position) !=
            tracked_child_nodes.end());
-    assert(tracked_child_nodes.find(child.parent_info().position)->second == &child);
+    ceph_assert(tracked_child_nodes.find(child.parent_info().position)->second == &child);
   }
 
   void validate_child_inconsistent(const Node& child) const;
@@ -542,7 +542,7 @@ class InternalNode final : public Node {
   void validate_tracked_children() const {
 #ifndef NDEBUG
     for (auto& kv : tracked_child_nodes) {
-      assert(kv.first == kv.second->parent_info().position);
+      ceph_assert(kv.first == kv.second->parent_info().position);
       validate_child(*kv.second);
     }
 #endif
@@ -616,7 +616,7 @@ class InternalNode final : public Node {
 class LeafNode final : public Node {
  public:
   // public to tree_cursor_t
-  ~LeafNode() override { assert(tracked_cursors.empty()); }
+  ~LeafNode() override { ceph_assert(tracked_cursors.empty()); }
   LeafNode(const LeafNode&) = delete;
   LeafNode(LeafNode&&) = delete;
   LeafNode& operator=(const LeafNode&) = delete;
@@ -647,21 +647,21 @@ class LeafNode final : public Node {
       validate_cursor(cursor);
     }
     auto& cursor_pos = cursor.get_position();
-    assert(tracked_cursors.find(cursor_pos) == tracked_cursors.end());
+    ceph_assert(tracked_cursors.find(cursor_pos) == tracked_cursors.end());
     tracked_cursors.emplace(cursor_pos, &cursor);
   }
   void do_untrack_cursor(const tree_cursor_t& cursor) {
     validate_cursor(cursor);
     auto& cursor_pos = cursor.get_position();
-    assert(check_is_tracking(cursor));
+    ceph_assert(check_is_tracking(cursor));
     [[maybe_unused]] auto removed = tracked_cursors.erase(cursor_pos);
-    assert(removed);
+    ceph_assert(removed);
   }
   bool check_is_tracking(const tree_cursor_t& cursor) const {
     auto& cursor_pos = cursor.get_position();
     auto found = tracked_cursors.find(cursor_pos);
     if (found != tracked_cursors.end() && found->second == &cursor) {
-      assert(cursor.ref_leaf_node == this);
+      ceph_assert(cursor.ref_leaf_node == this);
       return true;
     } else {
       return false;
@@ -708,7 +708,7 @@ class LeafNode final : public Node {
   void validate_tracked_cursors() const {
 #ifndef NDEBUG
     for (auto& kv : tracked_cursors) {
-      assert(kv.first == kv.second->get_position());
+      ceph_assert(kv.first == kv.second->get_position());
       validate_cursor(*kv.second);
     }
 #endif

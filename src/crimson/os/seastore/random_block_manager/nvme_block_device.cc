@@ -70,7 +70,7 @@ open_ertr::future<> NVMeBlockDevice::open_for_io(
   return seastar::do_for_each(io_device, [=, this](auto &target_device) {
     return seastar::open_file_dma(in_path, mode).then([this](
       auto file) {
-      assert(io_device.size() > stream_index_to_open);
+      ceph_assert(io_device.size() > stream_index_to_open);
       io_device[stream_index_to_open] = std::move(file);
       return seastar::now();
     });
@@ -120,7 +120,7 @@ write_ertr::future<> NVMeBlockDevice::write(
       bptr.length());
   auto length = bptr.length();
 
-  assert((length % super.block_size) == 0);
+  ceph_assert((length % super.block_size) == 0);
   uint16_t supported_stream = stream;
   if (stream >= stream_id_count) {
     supported_stream = WRITE_LIFE_NOT_SET;
@@ -161,7 +161,7 @@ read_ertr::future<> NVMeBlockDevice::read(
   if (length == 0) {
     return read_ertr::now();
   }
-  assert((length % super.block_size) == 0);
+  ceph_assert((length % super.block_size) == 0);
 
   if (is_end_to_end_data_protection()) {
     return nvme_read(offset, length, bptr.c_str());

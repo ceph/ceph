@@ -168,9 +168,9 @@ void PG::check_blocklisted_watchers()
 {
   logger().debug("{}", __func__);
   obc_registry.for_each([this](ObjectContextRef obc) {
-    assert(obc);
+    ceph_assert(obc);
     for (const auto& [key, watch] : obc->watchers) {
-      assert(watch->get_pg() == this);
+      ceph_assert(watch->get_pg() == this);
       const auto& ea = watch->get_peer_addr();
       logger().debug("watch: Found {} cookie {}. Checking entity_add_t {}",
                      watch->get_entity(), watch->get_cookie(), ea);
@@ -656,7 +656,7 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
     }
     logger().info("{}: {} new removed snaps {}, snap_trimq now{}",
                   *this, __func__, it->second, snap_trimq);
-    assert(!bad || !local_conf().get_val<bool>("osd_debug_verify_cached_snaps"));
+    ceph_assert(!bad || !local_conf().get_val<bool>("osd_debug_verify_cached_snaps"));
   }
 }
 
@@ -668,7 +668,7 @@ PG::interruptible_future<bool> PG::do_recover_missing(
   DEBUGDPP(
     "reqid {} check for recovery, {}",
     *this, reqid, soid);
-  assert(is_primary());
+  ceph_assert(is_primary());
   eversion_t ver;
   auto &missing_loc = peering_state.get_missing_loc();
   bool needs_recovery_or_backfill = false;
@@ -785,7 +785,7 @@ seastar::future<> PG::init(
   peering_state.init(
     role, newup, new_up_primary, newacting,
     new_acting_primary, history, pi, t);
-  assert(coll_ref);
+  ceph_assert(coll_ref);
   return shard_services.get_store().exists(
     get_collection_ref(), pgid.make_snapmapper_oid()
   ).safe_then([&t, this](bool existed) {
@@ -937,8 +937,8 @@ void PG::enqueue_push_for_backfill(
   const eversion_t &v,
   const std::vector<pg_shard_t> &peers)
 {
-  assert(recovery_handler);
-  assert(recovery_handler->backfill_state);
+  ceph_assert(recovery_handler);
+  ceph_assert(recovery_handler->backfill_state);
   auto backfill_state = recovery_handler->backfill_state.get();
   backfill_state->enqueue_standalone_push(obj, v, peers);
 }
@@ -948,8 +948,8 @@ void PG::enqueue_delete_for_backfill(
   const eversion_t &v,
   const std::vector<pg_shard_t> &peers)
 {
-  assert(recovery_handler);
-  assert(recovery_handler->backfill_state);
+  ceph_assert(recovery_handler);
+  ceph_assert(recovery_handler->backfill_state);
   auto backfill_state = recovery_handler->backfill_state.get();
   backfill_state->enqueue_standalone_delete(obj, v, peers);
 }
@@ -1003,10 +1003,10 @@ PG::interruptible_future<> PG::repair_object(
   eversion_t& v) 
 {
   // see also PrimaryLogPG::rep_repair_primary_object()
-  assert(is_primary());
+  ceph_assert(is_primary());
   logger().debug("{}: {} peers osd.{}", __func__, oid, get_acting_recovery_backfill());
   // Add object to PG's missing set if it isn't there already
-  assert(!get_local_missing().is_missing(oid));
+  ceph_assert(!get_local_missing().is_missing(oid));
   peering_state.force_object_missing(pg_whoami, oid, v);
   auto [op, fut] = get_shard_services().start_operation<UrgentRecovery>(
     oid, v, this, get_shard_services(), get_osdmap_epoch());
@@ -1276,7 +1276,7 @@ void PG::check_blocklisted_obc_watchers(
         obc, winfo, src.second, this);
       watch->disconnect();
       auto [it, emplaced] = obc->watchers.emplace(src, std::move(watch));
-      assert(emplaced);
+      ceph_assert(emplaced);
       logger().debug("added watch for obj {}, client {}",
         obc->get_oid(), src.second);
     }
@@ -1579,7 +1579,7 @@ void PG::on_change(ceph::os::Transaction &t) {
 void PG::context_registry_on_change() {
   std::vector<seastar::shared_ptr<crimson::osd::Watch>> watchers;
   obc_registry.for_each([&watchers](ObjectContextRef obc) {
-    assert(obc);
+    ceph_assert(obc);
     for (auto j = obc->watchers.begin();
          j != obc->watchers.end();
          j = obc->watchers.erase(j)) {

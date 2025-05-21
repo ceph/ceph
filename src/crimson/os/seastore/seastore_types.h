@@ -171,7 +171,7 @@ public:
 
   segment_id_t(internal_segment_id_t _segment)
     : segment(_segment) {
-    assert(device_id_to_paddr_type(device_id()) == paddr_types_t::SEGMENT);
+    ceph_assert(device_id_to_paddr_type(device_id()) == paddr_types_t::SEGMENT);
   }
 
   [[gnu::always_inline]]
@@ -299,11 +299,11 @@ public:
   }
 
   T& operator[](segment_id_t id) {
-    assert(id.device_segment_id() < device_to_segments[id.device_id()].size());
+    ceph_assert(id.device_segment_id() < device_to_segments[id.device_id()].size());
     return device_to_segments[id.device_id()][id.device_segment_id()];
   }
   const T& operator[](segment_id_t id) const {
-    assert(id.device_segment_id() < device_to_segments[id.device_id()].size());
+    ceph_assert(id.device_segment_id() < device_to_segments[id.device_id()].size());
     return device_to_segments[id.device_id()][id.device_segment_id()];
   }
 
@@ -332,7 +332,7 @@ public:
 
   auto device_begin(device_id_t id) {
     auto ret = iterator<false>::lower_bound(*this, id, 0);
-    assert(ret->first.device_id() == id);
+    ceph_assert(ret->first.device_id() == id);
     return ret;
   }
   auto device_end(device_id_t id) {
@@ -370,7 +370,7 @@ private:
     }
 
     void find_valid() {
-      assert(!is_end());
+      ceph_assert(!is_end());
       auto &device_vec = parent.device_to_segments[device_id];
       if (device_vec.size() == 0 ||
 	  device_segment_id == device_vec.size()) {
@@ -415,7 +415,7 @@ private:
     }
 
     iterator<is_const>& operator++() {
-      assert(!is_end());
+      ceph_assert(!is_end());
       ++device_segment_id;
       find_valid();
       return *this;
@@ -432,12 +432,12 @@ private:
 
     template <bool c = is_const, std::enable_if_t<c, int> = 0>
     const std::pair<const segment_id_t, const T&> *operator->() {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return &*current;
     }
     template <bool c = is_const, std::enable_if_t<!c, int> = 0>
     std::pair<const segment_id_t, T&> *operator->() {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return &*current;
     }
 
@@ -445,7 +445,7 @@ private:
       is_const, const std::pair<const segment_id_t, const T&>&,
       std::pair<const segment_id_t, T&>&>;
     reference operator*() {
-      assert(!is_end());
+      ceph_assert(!is_end());
       return *current;
     }
   };
@@ -553,14 +553,14 @@ public:
   static paddr_t make_blk_paddr(
     device_id_t device,
     device_off_t offset) {
-    assert(device_id_to_paddr_type(device) == paddr_types_t::RANDOM_BLOCK);
+    ceph_assert(device_id_to_paddr_type(device) == paddr_types_t::RANDOM_BLOCK);
     return paddr_t(device, offset);
   }
 
   static paddr_t make_res_paddr(
     device_id_t device,
     device_off_t offset) {
-    assert(device_id_to_paddr_type(device) == paddr_types_t::RESERVED);
+    ceph_assert(device_id_to_paddr_type(device) == paddr_types_t::RESERVED);
     return paddr_t(device, offset);
   }
 
@@ -578,13 +578,13 @@ public:
 
   paddr_t add_block_relative(paddr_t o) const {
     // special version mainly for documentation purposes
-    assert(o.is_block_relative());
+    ceph_assert(o.is_block_relative());
     return add_relative(o);
   }
 
   paddr_t add_record_relative(paddr_t o) const {
     // special version mainly for documentation purposes
-    assert(o.is_record_relative());
+    ceph_assert(o.is_record_relative());
     return add_relative(o);
   }
 
@@ -597,7 +597,7 @@ public:
    * base must be either absolute or record_relative.
    */
   paddr_t maybe_relative_to(paddr_t base) const {
-    assert(!base.is_block_relative());
+    ceph_assert(!base.is_block_relative());
     if (is_block_relative()) {
       return base.add_block_relative(*this);
     } else {
@@ -715,9 +715,9 @@ private:
   paddr_t(device_id_t d_id, device_off_t offset)
     : paddr_t((static_cast<internal_paddr_t>(d_id) << DEVICE_OFF_BITS) |
               encode_device_off(offset)) {
-    assert(offset >= DEVICE_OFF_MIN);
-    assert(offset <= DEVICE_OFF_MAX);
-    assert(!is_absolute_segmented());
+    ceph_assert(offset >= DEVICE_OFF_MIN);
+    ceph_assert(offset <= DEVICE_OFF_MAX);
+    ceph_assert(!is_absolute_segmented());
   }
 
   paddr_t(internal_paddr_t val);
@@ -754,15 +754,15 @@ struct seg_paddr_t : public paddr_t {
   }
 
   void set_segment_off(segment_off_t off) {
-    assert(off >= 0);
+    ceph_assert(off >= 0);
     internal_paddr = (internal_paddr & SEGMENT_ID_MASK);
     internal_paddr |= static_cast<u_segment_off_t>(off);
   }
 
   paddr_t add_offset(device_off_t o) const {
     device_off_t off = get_segment_off() + o;
-    assert(off >= 0);
-    assert(off <= SEGMENT_OFF_MAX);
+    ceph_assert(off >= 0);
+    ceph_assert(off <= SEGMENT_OFF_MAX);
     return paddr_t::make_seg_paddr(
         get_segment_id(), static_cast<segment_off_t>(off));
   }
@@ -779,15 +779,15 @@ struct blk_paddr_t : public paddr_t {
   }
 
   void set_device_off(device_off_t off) {
-    assert(off >= 0);
-    assert(off <= DEVICE_OFF_MAX);
+    ceph_assert(off >= 0);
+    ceph_assert(off <= DEVICE_OFF_MAX);
     internal_paddr = (internal_paddr & DEVICE_ID_MASK);
     internal_paddr |= encode_device_off(off);
   }
 
   paddr_t add_offset(device_off_t o) const {
-    assert(o >= DEVICE_OFF_MIN);
-    assert(o <= DEVICE_OFF_MAX);
+    ceph_assert(o >= DEVICE_OFF_MIN);
+    ceph_assert(o <= DEVICE_OFF_MAX);
     auto off = get_device_off() + o;
     return paddr_t::make_blk_paddr(get_device_id(), off);
   }
@@ -804,23 +804,23 @@ struct res_paddr_t : public paddr_t {
   }
 
   void set_device_off(device_off_t off) {
-    assert(has_device_off(get_device_id()));
-    assert(off >= DEVICE_OFF_MIN);
-    assert(off <= DEVICE_OFF_MAX);
+    ceph_assert(has_device_off(get_device_id()));
+    ceph_assert(off >= DEVICE_OFF_MIN);
+    ceph_assert(off <= DEVICE_OFF_MAX);
     internal_paddr = (internal_paddr & DEVICE_ID_MASK);
     internal_paddr |= encode_device_off(off);
   }
 
   paddr_t add_offset(device_off_t o) const {
-    assert(has_device_off(get_device_id()));
-    assert(o >= DEVICE_OFF_MIN);
-    assert(o <= DEVICE_OFF_MAX);
+    ceph_assert(has_device_off(get_device_id()));
+    ceph_assert(o >= DEVICE_OFF_MIN);
+    ceph_assert(o <= DEVICE_OFF_MAX);
     auto off = get_device_off() + o;
     return paddr_t::make_res_paddr(get_device_id(), off);
   }
 
   paddr_t block_relative_to(const res_paddr_t &rhs) const {
-    assert(rhs.is_record_relative() && is_record_relative());
+    ceph_assert(rhs.is_record_relative() && is_record_relative());
     auto off = get_device_off() - rhs.get_device_off();
     return paddr_t::make_res_paddr(DEVICE_ID_BLOCK_RELATIVE, off);
   }
@@ -847,32 +847,32 @@ inline paddr_t make_delayed_temp_paddr(device_off_t off) {
 }
 
 inline const seg_paddr_t& paddr_t::as_seg_paddr() const {
-  assert(is_absolute_segmented());
+  ceph_assert(is_absolute_segmented());
   return *static_cast<const seg_paddr_t*>(this);
 }
 
 inline seg_paddr_t& paddr_t::as_seg_paddr() {
-  assert(is_absolute_segmented());
+  ceph_assert(is_absolute_segmented());
   return *static_cast<seg_paddr_t*>(this);
 }
 
 inline const blk_paddr_t& paddr_t::as_blk_paddr() const {
-  assert(is_absolute_random_block());
+  ceph_assert(is_absolute_random_block());
   return *static_cast<const blk_paddr_t*>(this);
 }
 
 inline blk_paddr_t& paddr_t::as_blk_paddr() {
-  assert(is_absolute_random_block());
+  ceph_assert(is_absolute_random_block());
   return *static_cast<blk_paddr_t*>(this);
 }
 
 inline const res_paddr_t& paddr_t::as_res_paddr() const {
-  assert(get_addr_type() == paddr_types_t::RESERVED);
+  ceph_assert(get_addr_type() == paddr_types_t::RESERVED);
   return *static_cast<const res_paddr_t*>(this);
 }
 
 inline res_paddr_t& paddr_t::as_res_paddr() {
-  assert(get_addr_type() == paddr_types_t::RESERVED);
+  ceph_assert(get_addr_type() == paddr_types_t::RESERVED);
   return *static_cast<res_paddr_t*>(this);
 }
 
@@ -880,13 +880,13 @@ inline paddr_t::paddr_t(internal_paddr_t val) : internal_paddr(val) {
 #ifndef NDEBUG
   auto type = get_addr_type();
   if (type == paddr_types_t::SEGMENT) {
-    assert(as_seg_paddr().get_segment_off() >= 0);
+    ceph_assert(as_seg_paddr().get_segment_off() >= 0);
   } else if (type == paddr_types_t::RANDOM_BLOCK) {
-    assert(as_blk_paddr().get_device_off() >= 0);
+    ceph_assert(as_blk_paddr().get_device_off() >= 0);
   } else {
-    assert(type == paddr_types_t::RESERVED);
+    ceph_assert(type == paddr_types_t::RESERVED);
     if (!has_device_off(get_device_id())) {
-      assert(as_res_paddr().get_device_off() == 0);
+      ceph_assert(as_res_paddr().get_device_off() == 0);
     }
   }
 #endif
@@ -906,7 +906,7 @@ inline paddr_t paddr_t::add_offset(device_off_t o) const {
 }
 
 inline paddr_t paddr_t::add_relative(paddr_t o) const {
-  assert(o.is_relative());
+  ceph_assert(o.is_relative());
   auto &res_o = o.as_res_paddr();
   return add_offset(res_o.get_device_off());
 }
@@ -969,7 +969,7 @@ enum class backend_type_t {
 std::ostream& operator<<(std::ostream& out, backend_type_t);
 
 constexpr backend_type_t get_default_backend_of_device(device_type_t dtype) {
-  assert(dtype != device_type_t::NONE &&
+  ceph_assert(dtype != device_type_t::NONE &&
 	 dtype != device_type_t::NUM_TYPES);
   if (dtype >= device_type_t::HDD &&
       dtype <= device_type_t::EPHEMERAL_MAIN) {
@@ -1094,7 +1094,7 @@ public:
   static constexpr unsigned UNIT_MASK = UNIT_SIZE - 1;
 
   static laddr_t from_byte_offset(Unsigned value) {
-    assert((value & UNIT_MASK) == 0);
+    ceph_assert((value & UNIT_MASK) == 0);
     return laddr_t(value >> UNIT_SHIFT);
   }
 
@@ -1110,7 +1110,7 @@ public:
     p += sizeof(Unsigned);
   }
   void decode(::ceph::buffer::ptr::const_iterator& p) {
-    assert(static_cast<std::size_t>(p.get_end() - p.get_pos()) >= sizeof(Unsigned));
+    ceph_assert(static_cast<std::size_t>(p.get_end() - p.get_pos()) >= sizeof(Unsigned));
     memcpy((char *)&value, p.get_pos_add(sizeof(Unsigned)), sizeof(Unsigned));
   }
 
@@ -1122,51 +1122,51 @@ public:
 	: base(base.value), offset(0) {}
     laddr_offset_t(laddr_t base, extent_len_t offset)
 	: base(base.value), offset(offset) {
-      assert(offset < laddr_t::UNIT_SIZE);
+      ceph_assert(offset < laddr_t::UNIT_SIZE);
     }
 
     laddr_t get_roundup_laddr() const {
       if (offset == 0) {
 	return laddr_t(base);
       } else {
-	assert(offset < laddr_t::UNIT_SIZE);
+	ceph_assert(offset < laddr_t::UNIT_SIZE);
 	return laddr_t(base + 1);
       }
     }
     laddr_t get_aligned_laddr() const { return laddr_t(base); }
     extent_len_t get_offset() const {
-      assert(offset < laddr_t::UNIT_SIZE);
+      ceph_assert(offset < laddr_t::UNIT_SIZE);
       return offset;
     }
     laddr_t checked_to_laddr() const {
-      assert(offset == 0);
+      ceph_assert(offset == 0);
       return laddr_t(base);
     }
 
     template<std::unsigned_integral U>
     U get_byte_distance(const laddr_t &l) const {
-      assert(offset < UNIT_SIZE);
+      ceph_assert(offset < UNIT_SIZE);
       if (base >= l.value) {
 	Unsigned udiff = base - l.value;
-	assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
+	ceph_assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
 	return (static_cast<U>(udiff) << UNIT_SHIFT) + offset;
       } else { // base < l.value
 	Unsigned udiff = l.value - base;
-	assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
+	ceph_assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
 	return (static_cast<U>(udiff) << UNIT_SHIFT) - offset;
       }
     }
 
     template<std::unsigned_integral U>
     U get_byte_distance(const laddr_offset_t &l) const {
-      assert(offset < UNIT_SIZE);
+      ceph_assert(offset < UNIT_SIZE);
       if (*this >= l) {
 	Unsigned udiff = base - l.base;
-	assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
+	ceph_assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
 	return ((static_cast<U>(udiff) << UNIT_SHIFT) + offset) - l.offset;
       } else { // *this < l
 	Unsigned udiff = l.base - base;
-	assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
+	ceph_assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
 	return ((static_cast<U>(udiff) << UNIT_SHIFT) + l.offset) - offset;
       }
     }
@@ -1209,11 +1209,11 @@ public:
   U get_byte_distance(const laddr_offset_t &l) const {
     if (value <= l.base) {
       Unsigned udiff = l.base - value;
-      assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
+      ceph_assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
       return (static_cast<U>(udiff) << UNIT_SHIFT) + l.offset;
     } else { // value > l.base
       Unsigned udiff = value - l.base;
-      assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
+      ceph_assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
       return (static_cast<U>(udiff) << UNIT_SHIFT) - l.offset;
     }
   }
@@ -1223,7 +1223,7 @@ public:
     Unsigned diff = value > l.value
 	? value - l.value
 	: l.value - value;
-    assert(diff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
+    ceph_assert(diff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
     return static_cast<U>(diff) << UNIT_SHIFT;
   }
 
@@ -1253,7 +1253,7 @@ public:
 				  const loffset_t &offset) {
     auto base = laddr;
     base.value += offset >> laddr_t::UNIT_SHIFT;
-    assert(base.value >= laddr.value);
+    ceph_assert(base.value >= laddr.value);
     return laddr_offset_t(base, offset & laddr_t::UNIT_MASK);
   }
   friend laddr_offset_t operator+(const loffset_t &offset,
@@ -1265,7 +1265,7 @@ public:
     auto base = laddr;
     auto diff = (offset + laddr_t::UNIT_SIZE - 1) >> laddr_t::UNIT_SHIFT;
     base.value -= diff;
-    assert(base.value <= laddr.value);
+    ceph_assert(base.value <= laddr.value);
     offset = (diff << laddr_t::UNIT_SHIFT) - offset;
     return laddr_offset_t(base, offset);
   }
@@ -1342,12 +1342,12 @@ struct pladdr_t {
   bool operator==(const pladdr_t &) const = default;
 
   paddr_t get_paddr() const {
-    assert(pladdr.index() == 1);
+    ceph_assert(pladdr.index() == 1);
     return paddr_t(std::get<1>(pladdr));
   }
 
   laddr_t get_laddr() const {
-    assert(pladdr.index() == 0);
+    ceph_assert(pladdr.index() == 0);
     return laddr_t(std::get<0>(pladdr));
   }
 
@@ -1383,7 +1383,7 @@ struct __attribute__((packed)) pladdr_le_t {
     if (addr_type == addr_type_t::LADDR) {
       return pladdr_t(laddr_t(pladdr));
     } else {
-      assert(addr_type == addr_type_t::PADDR);
+      ceph_assert(addr_type == addr_type_t::PADDR);
       return pladdr_t(paddr_t(pladdr));
     }
   }
@@ -1476,11 +1476,11 @@ constexpr bool is_logical_type(extent_types_t type) {
   if ((type >= extent_types_t::ROOT_META &&
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
       type == extent_types_t::TEST_BLOCK) {
-    assert(is_logical_metadata_type(type) ||
+    ceph_assert(is_logical_metadata_type(type) ||
            is_data_type(type));
     return true;
   } else {
-    assert(!is_logical_metadata_type(type) &&
+    ceph_assert(!is_logical_metadata_type(type) &&
            !is_data_type(type));
     return false;
   }
@@ -1513,12 +1513,12 @@ constexpr bool is_physical_type(extent_types_t type) {
   if (type <= extent_types_t::DINK_LADDR_LEAF ||
       (type >= extent_types_t::TEST_BLOCK_PHYSICAL &&
        type <= extent_types_t::BACKREF_LEAF)) {
-    assert(is_root_type(type) ||
+    ceph_assert(is_root_type(type) ||
            is_lba_backref_node(type) ||
            type == extent_types_t::TEST_BLOCK_PHYSICAL);
     return true;
   } else {
-    assert(!is_root_type(type) &&
+    ceph_assert(!is_root_type(type) &&
            !is_lba_backref_node(type) &&
            type != extent_types_t::TEST_BLOCK_PHYSICAL);
     return false;
@@ -1530,12 +1530,12 @@ constexpr bool is_backref_mapped_type(extent_types_t type) {
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
       type == extent_types_t::TEST_BLOCK ||
       type == extent_types_t::TEST_BLOCK_PHYSICAL) {
-    assert(is_logical_type(type) ||
+    ceph_assert(is_logical_type(type) ||
 	   is_lba_node(type) ||
 	   type == extent_types_t::TEST_BLOCK_PHYSICAL);
     return true;
   } else {
-    assert(!is_logical_type(type) &&
+    ceph_assert(!is_logical_type(type) &&
 	   !is_lba_node(type) &&
 	   type != extent_types_t::TEST_BLOCK_PHYSICAL);
     return false;
@@ -1546,11 +1546,11 @@ constexpr bool is_real_type(extent_types_t type) {
   if (type <= extent_types_t::OBJECT_DATA_BLOCK ||
       (type >= extent_types_t::TEST_BLOCK &&
        type <= extent_types_t::BACKREF_LEAF)) {
-    assert(is_logical_type(type) ||
+    ceph_assert(is_logical_type(type) ||
            is_physical_type(type));
     return true;
   } else {
-    assert(!is_logical_type(type) &&
+    ceph_assert(!is_logical_type(type) &&
            !is_physical_type(type));
     return false;
   }
@@ -1669,10 +1669,10 @@ std::ostream &operator<<(std::ostream &out, mod_time_point_printer_t tp);
 constexpr sea_time_point
 get_average_time(const sea_time_point& t1, std::size_t n1,
                  const sea_time_point& t2, std::size_t n2) {
-  assert(t1 != NULL_TIME);
-  assert(t2 != NULL_TIME);
+  ceph_assert(t1 != NULL_TIME);
+  ceph_assert(t2 != NULL_TIME);
   auto new_size = n1 + n2;
-  assert(new_size > 0);
+  ceph_assert(new_size > 0);
   auto c1 = t1.time_since_epoch().count();
   auto c2 = t2.time_since_epoch().count();
   auto c_ret = c1 / new_size * n1 + c2 / new_size * n2;
@@ -2046,7 +2046,7 @@ struct alloc_blk_t {
     extent_len_t len,
     extent_types_t type)
     : paddr(paddr), laddr(laddr), len(len), type(type) {
-    assert(len > 0);
+    ceph_assert(len > 0);
   }
 
   explicit alloc_blk_t() = default;
@@ -2069,8 +2069,8 @@ struct alloc_blk_t {
       const laddr_t& laddr,
       extent_len_t len,
       extent_types_t type) {
-    assert(is_backref_mapped_type(type));
-    assert(laddr != L_ADDR_NULL);
+    ceph_assert(is_backref_mapped_type(type));
+    ceph_assert(laddr != L_ADDR_NULL);
     return alloc_blk_t(paddr, laddr, len, type);
   }
 
@@ -2078,7 +2078,7 @@ struct alloc_blk_t {
       const paddr_t& paddr,
       extent_len_t len,
       extent_types_t type) {
-    assert(is_backref_mapped_type(type) ||
+    ceph_assert(is_backref_mapped_type(type) ||
 	   is_retired_placeholder_type(type));
     return alloc_blk_t(paddr, L_ADDR_NULL, len, type);
   }
@@ -2286,7 +2286,7 @@ struct record_t {
   record_t(record_type_t r_type,
            transaction_type_t t_type)
   : trans_type{t_type} {
-    assert(r_type != RECORD_TYPE_NULL);
+    ceph_assert(r_type != RECORD_TYPE_NULL);
     size.record_type = r_type;
   }
 
@@ -2316,10 +2316,10 @@ struct record_t {
   }
 
   std::size_t get_delta_size() const {
-    assert(size.record_type < record_type_t::MAX);
+    ceph_assert(size.record_type < record_type_t::MAX);
     if (size.record_type == record_type_t::OOL) {
       // OOL won't contain metadata
-      assert(deltas.size() == 0);
+      ceph_assert(deltas.size() == 0);
       return 0;
     }
     // JOURNAL
@@ -2335,7 +2335,7 @@ struct record_t {
   void push_back(extent_t&& extent, sea_time_point &t) {
     ceph_assert(t != NULL_TIME);
     if (extents.size() == 0) {
-      assert(modify_time == NULL_TIME);
+      ceph_assert(modify_time == NULL_TIME);
       modify_time = t;
     } else {
       modify_time = get_average_time(modify_time, extents.size(), t, 1);
@@ -2407,20 +2407,20 @@ struct record_group_size_t {
   extent_len_t get_raw_mdlength() const;
 
   extent_len_t get_mdlength() const {
-    assert(block_size > 0);
-    assert(record_type < record_type_t::MAX);
+    ceph_assert(block_size > 0);
+    ceph_assert(record_type < record_type_t::MAX);
     if (record_type == record_type_t::JOURNAL) {
       return p2roundup(get_raw_mdlength(), block_size);
     } else {
       // OOL won't contain metadata
-      assert(get_raw_mdlength() == 0);
+      ceph_assert(get_raw_mdlength() == 0);
       return 0;
     }
   }
 
   extent_len_t get_encoded_length() const {
-    assert(block_size > 0);
-    assert(dlength % block_size == 0);
+    ceph_assert(block_size > 0);
+    ceph_assert(dlength % block_size == 0);
     return get_mdlength() + dlength;
   }
 
@@ -2433,7 +2433,7 @@ struct record_group_size_t {
   }
 
   double get_fullness() const {
-    assert(block_size > 0);
+    ceph_assert(block_size > 0);
     return ((double)(get_raw_mdlength() + dlength) /
             get_encoded_length());
   }
@@ -2465,7 +2465,7 @@ struct record_group_t {
       extent_len_t block_size) {
     size.account(record.size, block_size);
     records.push_back(std::move(record));
-    assert(size.get_encoded_length() < SEGMENT_OFF_MAX);
+    ceph_assert(size.get_encoded_length() < SEGMENT_OFF_MAX);
   }
 
   void reserve(std::size_t limit) {
@@ -2587,7 +2587,7 @@ struct scan_valid_records_cursor {
   void emplace_record_group(const record_group_header_t&, ceph::bufferlist&&);
 
   void pop_record_group() {
-    assert(!pending_record_groups.empty());
+    ceph_assert(!pending_record_groups.empty());
     ++num_consumed_records;
     pending_record_groups.pop_front();
   }
@@ -2605,7 +2605,7 @@ template <typename CounterT>
 CounterT& get_by_src(
     counter_by_src_t<CounterT>& counters_by_src,
     transaction_type_t src) {
-  assert(static_cast<std::size_t>(src) < counters_by_src.size());
+  ceph_assert(static_cast<std::size_t>(src) < counters_by_src.size());
   return counters_by_src[static_cast<std::size_t>(src)];
 }
 
@@ -2613,7 +2613,7 @@ template <typename CounterT>
 const CounterT& get_by_src(
     const counter_by_src_t<CounterT>& counters_by_src,
     transaction_type_t src) {
-  assert(static_cast<std::size_t>(src) < counters_by_src.size());
+  ceph_assert(static_cast<std::size_t>(src) < counters_by_src.size());
   return counters_by_src[static_cast<std::size_t>(src)];
 }
 
@@ -2641,7 +2641,7 @@ CounterT& get_by_ext(
     counter_by_extent_t<CounterT>& counters_by_ext,
     extent_types_t ext) {
   auto index = static_cast<uint8_t>(ext);
-  assert(index < EXTENT_TYPES_MAX);
+  ceph_assert(index < EXTENT_TYPES_MAX);
   return counters_by_ext[index];
 }
 
@@ -2650,7 +2650,7 @@ const CounterT& get_by_ext(
     const counter_by_extent_t<CounterT>& counters_by_ext,
     extent_types_t ext) {
   auto index = static_cast<uint8_t>(ext);
-  assert(index < EXTENT_TYPES_MAX);
+  ceph_assert(index < EXTENT_TYPES_MAX);
   return counters_by_ext[index];
 }
 
@@ -2886,8 +2886,8 @@ struct cache_size_stats_t {
   }
 
   void account_out(extent_len_t sz) {
-    assert(size >= sz);
-    assert(num_extents > 0);
+    ceph_assert(size >= sz);
+    ceph_assert(num_extents > 0);
     size -= sz;
     --num_extents;
   }

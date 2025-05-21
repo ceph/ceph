@@ -182,7 +182,7 @@ class KVPool {
         } else {
           ns_size = ns_sizes[rd() % ns_sizes.size()];
           oid_size = oid_sizes[rd() % oid_sizes.size()];
-          assert(ns_size && oid_size);
+          ceph_assert(ns_size && oid_size);
         }
         for (index_t k = range0.first; k < range0.second; ++k) {
           kvs.emplace_back(
@@ -226,21 +226,21 @@ class KVPool {
   static ghobject_t make_raw_oid(
       index_t index2, index_t index1, index_t index0,
       size_t ns_size, size_t oid_size) {
-    assert(index1 < 10);
+    ceph_assert(index1 < 10);
     std::ostringstream os_ns;
     std::ostringstream os_oid;
     if (index1 == 0) {
-      assert(!ns_size);
-      assert(!oid_size);
+      ceph_assert(!ns_size);
+      ceph_assert(!oid_size);
     } else {
       os_ns << "ns" << index1;
       auto current_size = (size_t)os_ns.tellp();
-      assert(ns_size >= current_size);
+      ceph_assert(ns_size >= current_size);
       os_ns << std::string(ns_size - current_size, '_');
 
       os_oid << "oid" << index1;
       current_size = (size_t)os_oid.tellp();
-      assert(oid_size >= current_size);
+      ceph_assert(oid_size >= current_size);
       os_oid << std::string(oid_size - current_size, '_');
     }
 
@@ -317,7 +317,7 @@ class TreeBuilder {
       validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
       return tree->find(t, p_kv->key
       ).si_then([cursor, p_kv](auto cursor_) mutable {
-        assert(!cursor_.is_end());
+        ceph_assert(!cursor_.is_end());
         ceph_assert(cursor_.get_ghobj() == p_kv->key);
         ceph_assert(cursor_.value() == cursor.value());
         validate_cursor_from_item(p_kv->key, p_kv->value, cursor_);
@@ -371,7 +371,7 @@ class TreeBuilder {
               return seastar::make_ready_future<seastar::stop_iteration>(
                 seastar::stop_iteration::yes);
             }
-            assert(c_iter != cursors->end());
+            ceph_assert(c_iter != cursors->end());
             auto p_kv = **ref_kv_iter;
             // validate values in tree keep intact
             return tree->find(t, p_kv->key).si_then([&c_iter, ref_kv_iter](auto cursor) {
@@ -416,7 +416,7 @@ class TreeBuilder {
   }
 
   eagain_ifuture<> erase(Transaction& t, std::size_t erase_size) {
-    assert(erase_size <= kvs.size());
+    ceph_assert(erase_size <= kvs.size());
     kvs.shuffle();
     auto erase_end = kvs.random_begin() + erase_size;
     auto ref_kv_iter = seastar::make_lw_shared<iterator_t>();
@@ -487,7 +487,7 @@ class TreeBuilder {
       if constexpr (TRACK) {
         *ref_kv_iter = kvs.begin();
         for (auto& [k, c] : *cursors) {
-          assert(*ref_kv_iter != kvs.end());
+          ceph_assert(*ref_kv_iter != kvs.end());
           auto p_kv = **ref_kv_iter;
           validate_cursor_from_item(p_kv->key, p_kv->value, c);
           ++(*ref_kv_iter);
@@ -514,7 +514,7 @@ class TreeBuilder {
 
   eagain_ifuture<> validate_one(
       Transaction& t, const iterator_t& iter_seq) {
-    assert(iter_seq != kvs.end());
+    ceph_assert(iter_seq != kvs.end());
     auto next_iter = iter_seq + 1;
     auto p_kv = *iter_seq;
     return tree->find(t, p_kv->key

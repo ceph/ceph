@@ -76,7 +76,7 @@ RecordScanner::scan_valid_records(
 	      });
 	  });
 	} else {
-	  assert(!cursor.pending_record_groups.empty());
+	  ceph_assert(!cursor.pending_record_groups.empty());
 	  auto &next = cursor.pending_record_groups.front();
 	  return read_validate_data(next.offset, next.header
 	  ).safe_then([this, FNAME, &budget_used, &cursor, &handler, &next](auto valid) {

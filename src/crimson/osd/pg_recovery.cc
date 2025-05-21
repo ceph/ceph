@@ -43,8 +43,8 @@ PGRecovery::start_recovery_ops(
   LOG_PREFIX(PGRecovery::start_recovery_ops);
   DEBUGDPP("{} max {}", pg->get_dpp(), recover_op, max_to_start);
 
-  assert(pg->is_primary());
-  assert(pg->is_peered());
+  ceph_assert(pg->is_primary());
+  ceph_assert(pg->is_peered());
 
   if (pg->has_reset_since(recover_op.get_epoch_started()) ||
       recover_op.is_cancelled()) {
@@ -59,8 +59,8 @@ PGRecovery::start_recovery_ops(
   // and do_recovery() is actually solely for pg log-based recovery.
   // At the time of writing it's considered to move it to FSM and fix
   // the naming as well.
-  assert(!pg->is_backfilling());
-  assert(!pg->get_peering_state().is_deleting());
+  ceph_assert(!pg->is_backfilling());
+  ceph_assert(!pg->get_peering_state().is_deleting());
 
   std::vector<interruptible_future<>> started;
   started.reserve(max_to_start);
@@ -133,7 +133,7 @@ size_t PGRecovery::start_primary_recovery_ops(
     if (it_objects != pg->get_peering_state().get_pg_log().get_log().objects.end()) {
       // look at log!
       pg_log_entry_t *latest = it_objects->second;
-      assert(latest->is_update() || latest->is_delete());
+      ceph_assert(latest->is_update() || latest->is_delete());
       soid = latest->soid;
     } else {
       soid = p->second;
@@ -178,7 +178,7 @@ size_t PGRecovery::start_primary_recovery_ops(
     } else {
       if (head_missing) {
 	auto it = missing.get_items().find(head);
-	assert(it != missing.get_items().end());
+	ceph_assert(it != missing.get_items().end());
 	auto head_need = it->second.need;
 	out->emplace_back(recover_missing(trigger, head, head_need, true));
 	++skipped;
@@ -208,11 +208,11 @@ size_t PGRecovery::start_replica_recovery_ops(
   }
   uint64_t started = 0;
 
-  assert(!pg->get_peering_state().get_acting_recovery_backfill().empty());
+  ceph_assert(!pg->get_peering_state().get_acting_recovery_backfill().empty());
 
   auto recovery_order = get_replica_recovery_order();
   for (auto &peer : recovery_order) {
-    assert(peer != pg->get_peering_state().get_primary());
+    ceph_assert(peer != pg->get_peering_state().get_primary());
     const auto& pm = pg->get_peering_state().get_peer_missing(peer);
 
     DEBUGDPP("peer osd.{} missing {} objects", pg->get_dpp(), peer, pm.num_missing());
@@ -381,7 +381,7 @@ PGRecovery::on_local_recover(
       !is_delete &&
       log.get_missing().is_missing(recovery_info.soid) &&
       log.get_missing().get_items().find(recovery_info.soid)->second.need > recovery_info.version) {
-    assert(pg->is_primary());
+    ceph_assert(pg->is_primary());
     if (const auto* latest = log.get_log().objects.find(recovery_info.soid)->second;
         latest->op == pg_log_entry_t::LOST_REVERT) {
       ceph_abort_msg("mark_unfound_lost (LOST_REVERT) is not implemented yet");
@@ -393,12 +393,12 @@ PGRecovery::on_local_recover(
     if (soid.is_snap()) {
       OSDriver::OSTransaction _t(pg->get_osdriver().get_transaction(&t));
       [[maybe_unused]] int r = pg->get_snap_mapper().remove_oid(soid, &_t);
-      assert(r == 0 || r == -ENOENT);
+      ceph_assert(r == 0 || r == -ENOENT);
 
       if (!is_delete) {
 	set<snapid_t> snaps;
 	auto p = recovery_info.ss.clone_snaps.find(soid.snap);
-	assert(p != recovery_info.ss.clone_snaps.end());
+	ceph_assert(p != recovery_info.ss.clone_snaps.end());
 	snaps.insert(p->second.begin(), p->second.end());
 	pg->get_snap_mapper().add_oid(recovery_info.soid, snaps, &_t);
       }
@@ -673,7 +673,7 @@ void PGRecovery::dispatch_backfill_event(
 {
   LOG_PREFIX(PGRecovery::dispatch_backfill_event);
   DEBUGDPP("", pg->get_dpp());
-  assert(backfill_state);
+  ceph_assert(backfill_state);
   backfill_state->process_event(evt);
   // TODO: Do we need to worry about cases in which the pg has
   //       been through both backfill cancellations and backfill

@@ -27,7 +27,7 @@ ReplicatedRecoveryBackend::recover_object(
   LOG_PREFIX(ReplicatedRecoveryBackend::recover_object);
   DEBUGDPP("{}, {}", pg, soid, need);
   // always add_recovering(soid) before recover_object(soid)
-  assert(is_recovering(soid));
+  ceph_assert(is_recovering(soid));
   // start tracking the recovery of soid
   return maybe_pull_missing_obj(
     soid, need
@@ -168,7 +168,7 @@ ReplicatedRecoveryBackend::push_delete(
   DEBUGDPP("{}, {}", pg, soid, need);
   epoch_t min_epoch = pg.get_last_peering_reset();
 
-  assert(pg.get_acting_recovery_backfill().size() > 0);
+  ceph_assert(pg.get_acting_recovery_backfill().size() > 0);
   return interruptor::parallel_for_each(pg.get_acting_recovery_backfill(),
     [FNAME, this, soid, need, min_epoch](pg_shard_t shard)
     -> interruptible_future<> {
@@ -419,7 +419,7 @@ ReplicatedRecoveryBackend::prep_push(
   pg.begin_peer_recover(pg_shard, soid);
   const auto pmissing_iter = pg.get_shard_missing().find(pg_shard);
   const auto missing_iter = pmissing_iter->second.get_items().find(soid);
-  assert(missing_iter != pmissing_iter->second.get_items().end());
+  ceph_assert(missing_iter != pmissing_iter->second.get_items().end());
 
   push_info.obc = obc;
   push_info.recovery_info.size = obc->obs.oi.size;
@@ -459,10 +459,10 @@ void ReplicatedRecoveryBackend::prepare_pull(
   pg_missing_tracker_t local_missing = pg.get_local_missing();
   const auto missing_iter = local_missing.get_items().find(soid);
   auto &m = pg.get_missing_loc_shards();
-  assert(m.contains(soid));
+  ceph_assert(m.contains(soid));
   auto &locs = m.at(soid);
   auto iter = locs.begin();
-  assert(iter != locs.end());
+  ceph_assert(iter != locs.end());
   pg_shard_t fromshard = *(iter);
 
   pull_op.recovery_info =
@@ -490,8 +490,8 @@ ObjectRecoveryInfo ReplicatedRecoveryBackend::set_recovery_info(
   const auto missing_iter = local_missing.get_items().find(soid);
   ObjectRecoveryInfo recovery_info;
   if (soid.is_snap()) {
-    assert(!local_missing.is_missing(soid.get_head()));
-    assert(ssc);
+    ceph_assert(!local_missing.is_missing(soid.get_head()));
+    ceph_assert(ssc);
     recovery_info.ss = ssc->snapset;
     auto subsets = crimson::osd::calc_clone_subsets(
       ssc->snapset, soid, local_missing, pg.get_info().last_backfill);
@@ -758,13 +758,13 @@ std::vector<pg_shard_t>
 ReplicatedRecoveryBackend::get_shards_to_push(const hobject_t& soid) const
 {
   std::vector<pg_shard_t> shards;
-  assert(pg.get_acting_recovery_backfill().size() > 0);
+  ceph_assert(pg.get_acting_recovery_backfill().size() > 0);
   for (const auto& peer : pg.get_acting_recovery_backfill()) {
     if (peer == pg.get_pg_whoami())
       continue;
     auto shard_missing =
       pg.get_shard_missing().find(peer);
-    assert(shard_missing != pg.get_shard_missing().end());
+    ceph_assert(shard_missing != pg.get_shard_missing().end());
     if (shard_missing->second.is_missing(soid)) {
       shards.push_back(shard_missing->first);
     }
@@ -797,7 +797,7 @@ ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
           } else {
             recovery_info.copy_subset.clear();
           }
-          assert(recovery_info.clone_subset.empty());
+          ceph_assert(recovery_info.clone_subset.empty());
         }
         return build_push_op(recovery_info, progress, 0);
       }).then_interruptible([this, from](auto push_op) {
@@ -920,7 +920,7 @@ void ReplicatedRecoveryBackend::recalc_subsets(
     ObjectRecoveryInfo& recovery_info,
     crimson::osd::SnapSetContextRef ssc)
 {
-  assert(ssc);
+  ceph_assert(ssc);
   auto subsets = crimson::osd::calc_clone_subsets(
     ssc->snapset, recovery_info.soid, pg.get_local_missing(),
     pg.get_info().last_backfill);
@@ -1255,7 +1255,7 @@ ReplicatedRecoveryBackend::submit_push_data(
   // Punch zeros for data, if fiemap indicates nothing but it is marked dirty
   if (!data_zeros.empty()) {
     data_zeros.intersection_of(recovery_info.copy_subset);
-    assert(intervals_included.subset_of(data_zeros));
+    ceph_assert(intervals_included.subset_of(data_zeros));
     data_zeros.subtract(intervals_included);
 
     DEBUGDPP("recovering object {} copy_subset: {} "

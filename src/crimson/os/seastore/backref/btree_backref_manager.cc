@@ -72,7 +72,7 @@ BtreeBackrefManager::mkfs(
   LOG_PREFIX(BtreeBackrefManager::mkfs);
   INFOT("start", t);
   return cache.get_root(t).si_then([this, &t](auto croot) {
-    assert(croot->is_mutation_pending());
+    ceph_assert(croot->is_mutation_pending());
     croot->get_root().backref_root = BackrefBtree::mkfs(croot, get_context(t));
     return mkfs_iertr::now();
   }).handle_error_interruptible(
@@ -565,7 +565,7 @@ BtreeBackrefManager::retrieve_backref_extents_in_range(
       [this, &extents, &t](auto &ent) {
       // only the gc fiber which is single can rewrite backref extents,
       // so it must be alive
-      assert(is_backref_node(ent.type));
+      ceph_assert(is_backref_node(ent.type));
       LOG_PREFIX(BtreeBackrefManager::retrieve_backref_extents_in_range);
       DEBUGT("getting backref extent of type {} at {}, key {}",
 	t,
@@ -582,7 +582,7 @@ BtreeBackrefManager::retrieve_backref_extents_in_range(
 	  return btree.get_internal_if_live(
 	    c, ent.paddr, ent.key, BACKREF_NODE_SIZE);
 	} else {
-	  assert(ent.type == extent_types_t::BACKREF_LEAF);
+	  ceph_assert(ent.type == extent_types_t::BACKREF_LEAF);
 	  return btree.get_leaf_if_live(
 	    c, ent.paddr, ent.key, BACKREF_NODE_SIZE);
 	}

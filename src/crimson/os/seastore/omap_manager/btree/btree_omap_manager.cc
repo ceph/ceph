@@ -43,7 +43,7 @@ BtreeOMapManager::initialize_omap(Transaction &t, laddr_t hint,
 BtreeOMapManager::get_root_ret
 BtreeOMapManager::get_omap_root(omap_context_t oc, const omap_root_t &omap_root)
 {
-  assert(omap_root.get_location() != L_ADDR_NULL);
+  ceph_assert(omap_root.get_location() != L_ADDR_NULL);
   laddr_t laddr = omap_root.get_location();
   if (omap_root.get_depth() > 1) {
     return omap_load_extent<OMapInnerNode>(
@@ -233,7 +233,7 @@ BtreeOMapManager::omap_rm_key_range(
 {
   LOG_PREFIX(BtreeOMapManager::omap_rm_key_range);
   DEBUGT("{} ~ {}", t, first, last);
-  assert(first <= last);
+  ceph_assert(first <= last);
   return seastar::do_with(
     std::make_optional<std::string>(first),
     std::make_optional<std::string>(last),
@@ -276,7 +276,7 @@ BtreeOMapManager::omap_list(
   LOG_PREFIX(BtreeOMapManager::omap_list);
   if (first && last) {
     DEBUGT("{}, first: {}, last: {}", t, omap_root, *first, *last);
-    assert(last >= first);
+    ceph_assert(last >= first);
   } else if (first) {
     DEBUGT("{}, first: {}", t, omap_root, *first);
   } else if (last) {

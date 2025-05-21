@@ -46,14 +46,14 @@ seastar::future<epoch_t> PGMeta::get_epoch()
       {
         // sanity check
         auto infover = find_value<__u8>(values, infover_key);
-        assert(infover);
+        ceph_assert(infover);
         if (*infover < 10) {
           throw std::runtime_error("incompatible pg meta");
         }
       }
       {
         auto epoch = find_value<epoch_t>(values, epoch_key);
-        assert(epoch);
+        ceph_assert(epoch);
         return seastar::make_ready_future<epoch_t>(*epoch);
       }
     },
@@ -76,7 +76,7 @@ seastar::future<std::tuple<pg_info_t, PastIntervals>> PGMeta::load()
     {
       // sanity check
       auto infover = find_value<__u8>(values, infover_key);
-      assert(infover);
+      ceph_assert(infover);
       if (infover < 10) {
         throw std::runtime_error("incompatible pg meta");
       }
@@ -84,14 +84,14 @@ seastar::future<std::tuple<pg_info_t, PastIntervals>> PGMeta::load()
     pg_info_t info;
     {
       auto found = find_value<pg_info_t>(values, info_key);
-      assert(found);
+      ceph_assert(found);
       info = *std::move(found);
     }
     PastIntervals past_intervals;
     {
       using biginfo_t = std::pair<PastIntervals, decltype(info.purged_snaps)>;
       auto big_info = find_value<biginfo_t>(values, biginfo_key);
-      assert(big_info);
+      ceph_assert(big_info);
       past_intervals = std::move(big_info->first);
       info.purged_snaps = std::move(big_info->second);
     }

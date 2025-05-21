@@ -154,7 +154,7 @@ struct LBALeafNode
       this->pending_for_transaction,
       iter.get_offset(),
       iter.get_key());
-    assert(iter != this->end());
+    ceph_assert(iter != this->end());
     this->on_modify();
     this->remove_child_ptr(iter.get_offset());
     return this->journal_remove(
@@ -173,7 +173,7 @@ struct LBALeafNode
 	auto val = i->get_val();
 	if (val.pladdr.is_paddr()
 	    && val.pladdr.get_paddr().is_relative()) {
-	  assert(val.pladdr.get_paddr().is_block_relative());
+	  ceph_assert(val.pladdr.get_paddr().is_block_relative());
 	  val.pladdr = this->get_paddr().add_relative(val.pladdr.get_paddr());
 	  i->set_val(val);
 	}
@@ -189,7 +189,7 @@ struct LBALeafNode
 	auto val = i->get_val();
 	if (val.pladdr.is_paddr()
 	    && val.pladdr.get_paddr().is_relative()) {
-	  assert(val.pladdr.get_paddr().is_record_relative());
+	  ceph_assert(val.pladdr.get_paddr().is_record_relative());
 	  val.pladdr = val.pladdr.get_paddr().block_relative_to(this->get_paddr());
 	  i->set_val(val);
 	}

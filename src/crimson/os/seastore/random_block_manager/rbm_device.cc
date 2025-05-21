@@ -51,7 +51,7 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
 	  ((super.size / shard_num) % super.block_size);
 	shard_infos[i].size = aligned_size;
 	shard_infos[i].start_offset = i * aligned_size;
-	assert(shard_infos[i].size > super.journal_size);
+	ceph_assert(shard_infos[i].size > super.journal_size);
       }
       super.shard_infos = shard_infos;
       super.shard_num = shard_num;
@@ -100,7 +100,7 @@ write_ertr::future<> RBMDevice::write_rbm_superblock()
   encode(super, bl);
   auto iter = bl.begin();
   auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
-  assert(bl.length() < super.block_size);
+  ceph_assert(bl.length() < super.block_size);
   iter.copy(bl.length(), bp.c_str());
   return write(RBM_START_ADDRESS, bp);
 }
@@ -109,7 +109,7 @@ read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
   rbm_abs_addr addr)
 {
   LOG_PREFIX(RBMDevice::read_rbm_superblock);
-  assert(super.block_size > 0);
+  ceph_assert(super.block_size > 0);
   return seastar::do_with(
     bufferptr(ceph::buffer::create_page_aligned(super.block_size)),
     [this, addr, FNAME](auto &bptr) {
@@ -134,7 +134,7 @@ read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
       bufferlist meta_b_header;
       super_block.crc = 0;
       encode(super_block, meta_b_header);
-      assert(ceph::encoded_sizeof<rbm_superblock_t>(super_block) <
+      ceph_assert(ceph::encoded_sizeof<rbm_superblock_t>(super_block) <
 	  super_block.block_size);
 
       // Do CRC verification only if data protection is not supported.
@@ -169,7 +169,7 @@ RBMDevice::mount_ret RBMDevice::do_shard_mount()
       crimson::ct_error::assert_all{
       "Invalid error stat_device in RBMDevice::do_shard_mount"}
     ).safe_then([this](auto st) {
-      assert(st.block_size > 0);
+      ceph_assert(st.block_size > 0);
       super.block_size = st.block_size;
       return read_rbm_superblock(RBM_START_ADDRESS
       ).safe_then([this](auto s) {

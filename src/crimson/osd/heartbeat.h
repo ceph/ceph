@@ -142,14 +142,14 @@ class Heartbeat::ConnectionListener {
   ConnectionListener(size_t connections) : connections{connections} {}
 
   void increase_connected() {
-    assert(connected < connections);
+    ceph_assert(connected < connections);
     ++connected;
     if (connected == connections) {
       on_connected();
     }
   }
   void decrease_connected() {
-    assert(connected > 0);
+    ceph_assert(connected > 0);
     if (connected == connections) {
       on_disconnected();
     }
@@ -280,7 +280,7 @@ class Heartbeat::Session {
   bool pinged() const {
     if (clock::is_zero(first_tx)) {
       // i can never receive a pong without sending any ping message first.
-      assert(clock::is_zero(last_rx_front) &&
+      ceph_assert(clock::is_zero(last_rx_front) &&
              clock::is_zero(last_rx_back));
       return false;
     } else {
@@ -319,14 +319,14 @@ class Heartbeat::Session {
   }
 
   void on_connected() {
-    assert(!connected);
+    ceph_assert(!connected);
     connected = true;
     ping_history.clear();
   }
 
   void on_ping(const utime_t& sent_stamp,
                const clock::time_point& deadline) {
-    assert(connected);
+    ceph_assert(connected);
     [[maybe_unused]] auto [reply, added] =
       ping_history.emplace(sent_stamp, reply_t{deadline, 2});
   }
@@ -334,14 +334,14 @@ class Heartbeat::Session {
   bool on_pong(const utime_t& ping_stamp,
                Connection::type_t type,
                clock::time_point now) {
-    assert(connected);
+    ceph_assert(connected);
     auto ping = ping_history.find(ping_stamp);
     if (ping == ping_history.end()) {
       // old replies, deprecated by newly sent pings.
       return false;
     }
     auto& unacked = ping->second.unacknowledged;
-    assert(unacked);
+    ceph_assert(unacked);
     if (type == Connection::type_t::front) {
       last_rx_front = now;
       unacked--;
@@ -356,7 +356,7 @@ class Heartbeat::Session {
   }
 
   void on_disconnected() {
-    assert(connected);
+    ceph_assert(connected);
     connected = false;
     if (!ping_history.empty()) {
       // we lost our ping_history of the last session, but still need to keep
