@@ -50,7 +50,7 @@ ECBackend::ECBackend(pg_shard_t whoami,
     allows_ecoverwrites{allows_ecoverwrites},
     unstable_hashinfo_registry{shard_services.get_cct(), ec_impl},
     read_pipeline{shard_services.get_cct(), ec_impl, sinfo, &eclistener, *this},
-    rmw_pipeline{shard_services.get_cct(), ec_impl, sinfo, &eclistener, *this}
+    rmw_pipeline{shard_services.get_cct(), ec_impl, sinfo, &eclistener, *this, shard_services.lookup_ec_extent_cache_lru()}
 {
 }
 
