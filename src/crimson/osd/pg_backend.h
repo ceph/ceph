@@ -469,6 +469,7 @@ public:
 private:
   virtual ll_read_ierrorator::future<ceph::bufferlist> _read(
     const hobject_t& hoid,
+    size_t object_size,
     size_t offset,
     size_t length,
     uint32_t flags) = 0;
