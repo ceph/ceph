@@ -234,7 +234,7 @@ private:
     objaddr_t offset,     ///< [in] write offset
     extent_len_t len,     ///< [in] len to write, len == bl->length() if bl
     std::optional<bufferlist> &&bl, ///< [in] buffer to write, empty for zeros
-    lba_pin_list_t &&pins ///< [in] set of pins overlapping above region
+    lba_mapping_list_t &&pins ///< [in] set of pins overlapping above region
   );
 
   /// Ensures object_data reserved region is prepared
@@ -252,7 +252,7 @@ private:
   clone_ret clone_extents(
     context_t ctx,
     object_data_t &object_data,
-    lba_pin_list_t &pins,
+    lba_mapping_list_t &pins,
     laddr_t data_base);
 
 private:
