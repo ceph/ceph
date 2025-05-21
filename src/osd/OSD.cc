@@ -3034,6 +3034,18 @@ float OSD::get_osd_snap_trim_sleep()
   return cct->_conf.get_val<double>("osd_snap_trim_sleep_hdd");
 }
 
+float OSD::get_osd_next_snap_trim_sleep()
+{
+  float osd_next_snap_trim_sleep = cct->_conf.get_val<double>("osd_next_snap_trim_sleep");
+  if (osd_next_snap_trim_sleep > 0)
+    return osd_next_snap_trim_sleep;
+  if (!store_is_rotational && !journal_is_rotational)
+    return cct->_conf.get_val<double>("osd_next_snap_trim_sleep_ssd");
+  if (store_is_rotational && !journal_is_rotational)
+    return cct->_conf.get_val<double>("osd_next_snap_trim_sleep_hybrid");
+  return cct->_conf.get_val<double>("osd_next_snap_trim_sleep_hdd");
+}
+
 int OSD::init()
 {
   OSDMapRef osdmap;
@@ -3955,6 +3967,9 @@ void OSD::create_logger()
     "PG updated its info using fastinfo attr");
   osd_plb.add_u64_counter(
     l_osd_pg_biginfo, "osd_pg_biginfo", "PG updated its biginfo attr");
+
+  osd_plb.add_time_avg(
+    l_osd_snap_trim_get_raw_object_lat, "osd_snap_trim_get_raw_object_lat", "snaptrim clone objects read latency");
 
   logger = osd_plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);

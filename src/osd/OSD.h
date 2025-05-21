@@ -185,6 +185,8 @@ enum {
   l_osd_pg_fastinfo,
   l_osd_pg_biginfo,
 
+  l_osd_snap_trim_get_raw_object_lat,
+
   l_osd_last,
 };
 
@@ -2337,6 +2339,7 @@ private:
   float get_osd_recovery_sleep();
   float get_osd_delete_sleep();
   float get_osd_snap_trim_sleep();
+  float get_osd_next_snap_trim_sleep();
 
   void probe_smart(const string& devid, ostream& ss);
 
