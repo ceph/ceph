@@ -150,6 +150,7 @@ public:
       assert(read_set.count(ref->prior_instance->get_paddr()));
       ref->reset_prior_instance();
     } else {
+      assert(ref->is_stable_written());
       // && retired_set.count(ref->get_paddr()) == 0
       // If it's already in the set, insert here will be a noop,
       // which is what we want.
@@ -271,9 +272,10 @@ public:
     assert(ref->is_exist_mutation_pending() ||
 	   read_set.count(ref->prior_instance->get_paddr()));
     mutated_block_list.push_back(ref);
-    if (!ref->is_exist_mutation_pending()) {
+    if (ref->is_mutation_pending()) {
       write_set.insert(*ref);
     } else {
+      assert(ref->is_exist_mutation_pending());
       // already added as fresh extent in write_set
       assert(write_set.exists(*ref));
     }
