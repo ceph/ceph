@@ -232,7 +232,7 @@ PGBackend::read(const ObjectState& os, OSDOp& osd_op,
       return read_errorator::now();
     }
   }
-  return _read(oi.soid, offset, length, op.flags).safe_then_interruptible_tuple(
+  return _read(oi.soid, oi.size, offset, length, op.flags).safe_then_interruptible_tuple(
     [&delta_stats, &oi, &osd_op](auto&& bl) -> read_errorator::future<> {
     if (!_read_verify_data(oi, bl)) {
       // crc mismatches
@@ -371,7 +371,7 @@ PGBackend::checksum(const ObjectState& os, OSDOp& osd_op)
   }
 
   // read the chunk to be checksum'ed
-  return _read(os.oi.soid, checksum.offset, checksum.length, osd_op.op.flags)
+  return _read(os.oi.soid, os.oi.size, checksum.offset, checksum.length, osd_op.op.flags)
   .safe_then_interruptible(
     [&osd_op](auto&& read_bl) mutable -> checksum_errorator::future<> {
     auto& checksum = osd_op.op.checksum;
@@ -428,7 +428,7 @@ PGBackend::cmp_ext(const ObjectState& os, OSDOp& osd_op)
   } else if (!os.exists || os.oi.is_whiteout()) {
     logger().debug("{}: {} DNE", __func__, os.oi.soid);
   } else {
-    read_ext = _read(os.oi.soid, op.extent.offset, ext_len, 0);
+    read_ext = _read(os.oi.soid, os.oi.size, op.extent.offset, ext_len, 0);
   }
   return read_ext.safe_then_interruptible([&osd_op](auto&& read_bl)
     -> cmp_ext_errorator::future<> {
@@ -1801,7 +1801,7 @@ PGBackend::tmapup_iertr::future<> PGBackend::tmapup(
   logger().debug("PGBackend::tmapup: {}", os.oi.soid);
   return PGBackend::write_iertr::now(
   ).si_then([this, &os] {
-    return _read(os.oi.soid, 0, os.oi.size, 0);
+    return _read(os.oi.soid, os.oi.size, 0, os.oi.size, 0);
   }).handle_error_interruptible(
     crimson::ct_error::enoent::handle([](auto &) {
       return seastar::make_ready_future<bufferlist>();
@@ -1858,7 +1858,7 @@ PGBackend::read_ierrorator::future<> PGBackend::tmapget(
     return crimson::ct_error::enoent::make();
   }
 
-  return _read(oi.soid, 0, oi.size, 0).safe_then_interruptible_tuple(
+  return _read(oi.soid, os.oi.size, 0, oi.size, 0).safe_then_interruptible_tuple(
     [&delta_stats, &osd_op](auto&& bl) -> read_errorator::future<> {
       logger().debug("PGBackend::tmapget: data length: {}", bl.length());
       osd_op.op.extent.length = bl.length();
