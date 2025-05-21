@@ -3327,7 +3327,22 @@ void PeeringState::proc_master_log(
     // See if we can wind forward partially written entries
     map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
     all_info[pg_whoami] = info;
-    while (p->version == olog.head) {
+    // Normal case is that both logs have entry olog.head
+    bool can_check_next_entry = (p->version == olog.head);
+    if (p->version < olog.head) {
+      // After a PG split there may be gaps in the log where entries were
+      // split to the other PG. This can result in olog.head being ahead
+      // of p->version. So long as there are no entries in olog between
+      // p->version and olog.head we can still try to wind forward
+      // partially written entries
+      auto op = olog.log.end();
+      if (op == olog.log.begin()) {
+	can_check_next_entry = true;
+      } else if (op->version.version < p->version.version) {
+	can_check_next_entry = true;
+      }
+    }
+    while (can_check_next_entry) {
       ++p;
       if (p == pg_log.get_log().log.end()) {
 	break;
@@ -3338,39 +3353,40 @@ void PeeringState::proc_master_log(
 	// This entry was meant to be written on from, this is the first
 	// divergent entry
 	break;
-      } else {
-	// Test if enough shards have the update
-	shard_id_set shards_with_update;
-	shard_id_set shards_without_update;
-        for (auto&& [pg_shard, pi] : all_info) {
-	  psdout(20) << "version " << p->version
-		     << " testing osd " << pg_shard
-		     << " written=" << p->written_shards
-		     << " present=" << p->present_shards << dendl;
-	  if (p->is_present_shard(pg_shard.shard) &&
-	      p->is_written_shard(pg_shard.shard)) {
-	    if (pi.last_update < p->version) {
-	      if (!shards_with_update.contains(pg_shard.shard)) {
-		shards_without_update.insert(pg_shard.shard);
-	      }
-	    } else {
-	      shards_with_update.insert(pg_shard.shard);
-	      shards_without_update.erase(pg_shard.shard);
+      }
+      // Test if enough shards have the update
+      shard_id_set shards_with_update;
+      shard_id_set shards_without_update;
+      for (auto&& [pg_shard, pi] : all_info) {
+	psdout(20) << "version " << p->version
+		   << " testing osd " << pg_shard
+		   << " written=" << p->written_shards
+		   << " present=" << p->present_shards << dendl;
+	if (p->is_present_shard(pg_shard.shard) &&
+	    p->is_written_shard(pg_shard.shard)) {
+	  if (pi.last_update < p->version) {
+	    if (!shards_with_update.contains(pg_shard.shard)) {
+	      shards_without_update.insert(pg_shard.shard);
 	    }
+	  } else {
+	    shards_with_update.insert(pg_shard.shard);
+	    shards_without_update.erase(pg_shard.shard);
 	  }
 	}
-	psdout(20) << "shards_with_update=" << shards_with_update
-		   << " shards_without_update=" << shards_without_update
-		   << dendl;
-	if (!shards_without_update.empty()) {
-	  // A shard is missing this write - this is the first divergent entry
-	  break;
-	}
-	// This entry can be kept, only shards that didn't participate in
-	// the partial write missed the update
-        psdout(20) << "keeping entry " << p->version << dendl;
-	olog.head = p->version;
       }
+      psdout(20) << "shards_with_update=" << shards_with_update
+		 << " shards_without_update=" << shards_without_update
+		 << dendl;
+      if (!shards_without_update.empty()) {
+	// A shard is missing this write - this is the first divergent entry
+	break;
+      }
+      // This entry can be kept, only shards that didn't participate in
+      // the partial write missed the update
+      psdout(20) << "keeping entry " << p->version << dendl;
+      olog.head = p->version;
+
+      // We need to continue processing the log, so don't break.
     }
   }
   // merge log into our own log to build master log.  no need to
