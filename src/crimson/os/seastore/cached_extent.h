@@ -568,7 +568,7 @@ public:
   }
 
   bool is_stable_writting() const {
-    // mutated/INITIAL_WRITE_PENDING and under-io extents are already
+    // mutated/INITIAL_PENDING and under-io extents are already
     // stable and visible, see prepare_record().
     //
     // XXX: It might be good to mark this case as DIRTY/CLEAN from the definition,
