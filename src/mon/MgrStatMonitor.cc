@@ -69,6 +69,14 @@ void MgrStatMonitor::create_initial()
 void MgrStatMonitor::calc_pool_availability()
 {
   dout(20) << __func__ << dendl;
+
+  // if feature is disabled by user, do not update the uptime 
+  // and downtime, exit early
+  if (!g_conf().get_val<bool>("enable_availability_tracking")) {
+    dout(20) << __func__ << " tracking availability score is disabled" << dendl;
+    return;
+  }
+
   auto pool_avail_end = pool_availability.end();
   for (const auto& i : digest.pool_pg_unavailable_map) {
     const auto& poolid = i.first;
