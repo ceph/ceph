@@ -7,21 +7,26 @@
         data-testid="rgw-storage-details"
       >
         <tbody>
-          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.LOCAL">
+          @if( isTierMatch(
+            TIER_TYPE_DISPLAY.LOCAL
+          )){
+          <tr>
             <td class="bold"
                 i18n>
               Zone Group
               <cd-helper class="text-pre-wrap">
                 <span>
-                  A Zone Group is a logical grouping of one or more zones that share the same data
-                  and metadata, allowing for multi-site replication and geographic distribution of
-                  data.
+                  {{ zoneGroupText }}
                 </span>
               </cd-helper>
             </td>
             <td>{{ selection?.zonegroup_name }}</td>
           </tr>
-          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.LOCAL">
+        }
+        @if(isTierMatch(
+            TIER_TYPE_DISPLAY.LOCAL
+          )){
+          <tr>
             <td class="bold"
                 i18n>
               Placement Target
@@ -34,19 +39,23 @@
             </td>
             <td>{{ selection?.placement_target }}</td>
           </tr>
-          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
+        }
+        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
+          <tr>
             <td class="bold"
                 i18n>
               Target Path
               <cd-helper class="text-pre-wrap">
                 <span>
-                 {{ targetPathText }}
+                  {{ targetPathText }}
                 </span>
               </cd-helper>
             </td>
             <td>{{ selection?.target_path }}</td>
           </tr>
-          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
+        }
+        @if(isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
+          <tr>
             <td class="bold"
                 i18n>
               Access key
@@ -74,7 +83,9 @@
               </div>
             </td>
           </tr>
-          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
+        }
+        @if(isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
+          <tr>
             <td class="bold"
                 i18n>
               Secret key
@@ -100,7 +111,9 @@
               </div>
             </td>
           </tr>
-          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
+        }
+        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
+          <tr>
             <td class="bold"
                 i18n>
               Host Style
@@ -110,7 +123,91 @@
             </td>
             <td>{{ selection?.host_style }}</td>
           </tr>
-          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
+        }
+        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
+          <tr>
+            <td class="bold"
+                i18n>
+              Head Object (Stub File)
+              <cd-helper class="text-pre-wrap">
+                <span> {{ retainHeadObjectText }}</span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.retain_head_object ? 'Enabled' : 'Disabled' }}</td>
+          </tr>
+        }
+        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
+          <tr>
+            <td class="bold"
+                i18n>
+              Allow Read Through
+              <cd-helper class="text-pre-wrap">
+                <span>
+                  {{ allowReadThroughText }}
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.allow_read_through ? 'Enabled' : 'Disabled' }}</td>
+          </tr>
+        }
+        @if(isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER) && (selection?.allow_read_through)) {
+          <tr *ngIf="isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER) && (selection?.allow_read_through)">
+            <td class="bold"
+                i18n>
+              Read through Restore Days
+              <cd-helper class="text-pre-wrap">
+                <span>
+                  {{ readthroughrestoreDaysText }}
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.read_through_restore_days }}</td>
+          </tr>
+        }
+        @if(isTierMatch( TIER_TYPE_DISPLAY.GLACIER)){
+          <tr>
+            <td class="bold"
+                i18n>
+              Glacier Restore Days
+              <cd-helper class="text-pre-wrap">
+                <span>
+                  {{ glacierRestoreDayText }}
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.glacier_restore_days }}</td>
+          </tr>
+        }
+        @if(isTierMatch( TIER_TYPE_DISPLAY.GLACIER)) {
+          <tr>
+            <td class="bold"
+                i18n>
+              Glacier Restore Tier Type
+              <cd-helper class="text-pre-wrap">
+                <span>
+                  {{ glacierRestoreTiertypeText }}
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.glacier_restore_tier_type }}</td>
+          </tr>
+        }
+        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
+          <tr>
+            <td class="bold"
+                i18n>
+              Restore Storage Class
+              <cd-helper class="text-pre-wrap">
+                <span>
+                  {{ restoreStorageClassText }}
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.restore_storage_class }}</td>
+          </tr>
+        }
+          @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
+          <tr>
             <td class="bold"
                 i18n>
               Multipart Minimum Part Size
@@ -122,42 +219,21 @@
             </td>
             <td>{{ selection?.multipart_min_part_size }}</td>
           </tr>
-          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
+        }
+        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
+          <tr>
             <td class="bold"
                 i18n>
               Multipart Sync Threshold
               <cd-helper class="text-pre-wrap">
                 <span>
-                  {{ multipartSyncThreholdText }}
+                  {{ multipartSyncThreholdText  }}
                 </span>
               </cd-helper>
             </td>
             <td>{{ selection?.multipart_sync_threshold }}</td>
           </tr>
-          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
-            <td class="bold"
-                i18n>
-              Retain Head Object
-              <cd-helper class="text-pre-wrap">
-                <span>
-                  Retain object metadata after transition to the cloud (default: false).
-                </span>
-              </cd-helper>
-            </td>
-            <td>{{ selection?.retain_head_object }}</td>
-          </tr>
-          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
-            <td class="bold"
-                i18n>
-              Allow Read Through
-              <cd-helper class="text-pre-wrap">
-                <span>
-                  {{ allowReadThroughText }}
-                </span>
-              </cd-helper>
-            </td>
-            <td>{{ selection?.allow_read_through }}</td>
-          </tr>
+        }
         </tbody>
       </table>
     </cds-tab>
