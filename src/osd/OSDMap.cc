@@ -2026,7 +2026,9 @@ void OSDMap::clean_temps(CephContext *cct,
     int primary;
     nextmap.pg_to_raw_up(pg.first, &raw_up, &primary);
     bool remove = false;
-    if (raw_up == pg.second) {
+    const pg_pool_t *pool = nextmap.get_pg_pool(pg.first.pool());
+    auto acting_set = nextmap.pgtemp_undo_primaryfirst(*pool, pg.first, pg.second);
+    if (raw_up == acting_set) {
       ldout(cct, 10) << __func__ << "  removing pg_temp " << pg.first << " "
 		     << pg.second << " that matches raw_up mapping" << dendl;
       remove = true;
