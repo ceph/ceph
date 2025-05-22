@@ -205,6 +205,7 @@ class OsdScrub {
     const ceph::common::ConfigProxy& conf;
     const std::string log_prefix;
     double daily_loadavg{0.0};
+    double loadavg_1min{0.0};
 
    public:
     explicit LoadTracker(
