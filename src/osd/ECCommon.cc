@@ -734,14 +734,20 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       delete f;
       *_dout << dendl;
     }
-    if (op.skip_transaction(pending_roll_forward, shard, transaction)) {
+    bool should_send = get_parent()->should_send_op(pg_shard, op.hoid);
+    /* should_send being false indicates that a recovery is going on to this
+     * object this makes it critical that the log on the non-primary shards is
+     * complete:- We may need to update "missing" with the latest version.
+     * As such we must never skip a transaction completely.  Note that if
+     * should_send is false, then an empty transaction is sent.
+     */
+    if (should_send && op.skip_transaction(pending_roll_forward, shard, transaction)) {
       // Must be an empty transaction
       ceph_assert(transaction.empty());
       dout(20) << __func__ << " Skipping transaction for shard " << shard << dendl;
       continue;
     }
     op.pending_commits++;
-    bool should_send = get_parent()->should_send_op(pg_shard, op.hoid);
     const pg_stat_t &stats =
         (should_send || !backfill_shards.contains(pg_shard))
           ? get_info().stats
