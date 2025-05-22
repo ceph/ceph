@@ -7,7 +7,7 @@
         data-testid="rgw-storage-details"
       >
         <tbody>
-          <tr *ngIf="selection.tier_type ==='cloud-s3'">
+          <tr>
             <td class="bold">
               Target Path
               <cd-helper class="text-pre-wrap">
@@ -19,7 +19,7 @@
             </td>
             <td>{{ selection?.target_path }}</td>
           </tr>
-          <tr *ngIf="selection.tier_type ==='cloud-s3'">
+          <tr>
             <td class="bold">
               Access key
               <cd-helper class="text-pre-wrap">
@@ -46,7 +46,7 @@
               </div>
             </td>
           </tr>
-          <tr *ngIf="selection.tier_type ==='cloud-s3'">
+          <tr>
             <td class="bold">
               Secret key
               <cd-helper class="text-pre-wrap">
@@ -71,7 +71,7 @@
               </div>
             </td>
           </tr>
-          <tr *ngIf="selection.tier_type ==='cloud-s3'">
+          <tr>
             <td
                 class="bold">
               Host Style
@@ -82,7 +82,7 @@
             </td>
             <td>{{ selection?.host_style }}</td>
           </tr>
-          <tr *ngIf="selection.tier_type ==='cloud-s3'">
+          <tr>
             <td
                 class="bold">
               Multipart Minimum Part Size
@@ -94,7 +94,7 @@
             </td>
             <td>{{ selection?.multipart_min_part_size }}</td>
           </tr>
-          <tr *ngIf="selection.tier_type ==='cloud-s3'">
+          <tr>
             <td
                 class="bold">
               Multipart Sync Threshold
@@ -154,6 +154,30 @@
               </cd-helper>
             </td>
             <td>{{ selection?.glacier_restore_tier_type }}</td>
+          </tr>
+          <tr *ngIf="selection.tier_type ==='cloud-s3-glacier'">
+            <td
+                class="bold">
+              Read through Restore Days
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  The duration for which objects restored via read-through are retained. Default value is 1 day.
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.read_through_restore_days }}</td>
+          </tr>
+          <tr *ngIf="selection.tier_type ==='cloud-s3-glacier'">
+            <td
+                class="bold">
+              Restore Storage Class
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  The storage class to which object data is to be restored. 
+                </span>
+              </cd-helper>
+            </td>
+            <td>Standara</td>
           </tr>
         </tbody>
       </table>

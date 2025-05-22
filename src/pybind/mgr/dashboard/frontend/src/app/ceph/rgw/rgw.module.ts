@@ -98,6 +98,7 @@ import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-
 import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
 import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
+import { RgwGlacierStorageclassFormComponent } from './rgw-glacier-storageclass-form/rgw-glacier-storageclass-form.component';
 
 @NgModule({
   imports: [
@@ -193,6 +194,7 @@ import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.
     RgwStorageClassListComponent,
     RgwStorageClassDetailsComponent,
     RgwStorageClassFormComponent,
+    RgwGlacierStorageclassFormComponent,
     RgwBucketTieringFormComponent,
     RgwBucketLifecycleListComponent,
     RgwRateLimitDetailsComponent,

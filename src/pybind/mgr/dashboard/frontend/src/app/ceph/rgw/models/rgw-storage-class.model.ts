@@ -41,6 +41,8 @@ export interface TierTarget {
     tier_type: string;
     retain_head_object: boolean;
     allow_read_through: boolean;
+    read_through_restore_days: number;
+    restore_storage_class: string;
     s3?: S3Details;
     's3-glacier': S3Glacier;
   };
