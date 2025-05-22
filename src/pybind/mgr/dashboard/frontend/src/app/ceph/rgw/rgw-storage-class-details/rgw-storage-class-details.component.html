@@ -7,22 +7,51 @@
         data-testid="rgw-storage-details"
       >
         <tbody>
-          <tr>
-            <td class="bold">
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.LOCAL">
+            <td class="bold"
+                i18n>
+              Zone Group
+              <cd-helper class="text-pre-wrap">
+                <span>
+                  A Zone Group is a logical grouping of one or more zones that share the same data
+                  and metadata, allowing for multi-site replication and geographic distribution of
+                  data.
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.zonegroup_name }}</td>
+          </tr>
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.LOCAL">
+            <td class="bold"
+                i18n>
+              Placement Target
+              <cd-helper class="text-pre-wrap">
+                <span>
+                  Placement Target defines the destination and rules for moving objects between
+                  storage tiers.
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.placement_target }}</td>
+          </tr>
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
+            <td class="bold"
+                i18n>
               Target Path
               <cd-helper class="text-pre-wrap">
-                <span i18n>
+                <span>
                  {{ targetPathText }}
                 </span>
               </cd-helper>
             </td>
             <td>{{ selection?.target_path }}</td>
           </tr>
-          <tr>
-            <td class="bold">
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
+            <td class="bold"
+                i18n>
               Access key
               <cd-helper class="text-pre-wrap">
-                <span i18n>
+                <span>
                   {{ targetAccessKeyText }}
                 </span>
               </cd-helper>
@@ -45,11 +74,12 @@
               </div>
             </td>
           </tr>
-          <tr>
-            <td class="bold">
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
+            <td class="bold"
+                i18n>
               Secret key
               <cd-helper class="text-pre-wrap">
-                <span i18n> {{ targetSecretKeyText }} </span>
+                <span> {{ targetSecretKeyText }} </span>
               </cd-helper>
             </td>
             <td>
@@ -70,59 +100,63 @@
               </div>
             </td>
           </tr>
-          <tr>
-            <td class="bold">
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
+            <td class="bold"
+                i18n>
               Host Style
               <cd-helper class="text-pre-wrap">
-                <span i18n>{{ hostStyleText }}</span
-                >
+                <span>{{ hostStyleText }}</span>
               </cd-helper>
             </td>
             <td>{{ selection?.host_style }}</td>
           </tr>
-          <tr>
-            <td class="bold">
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
+            <td class="bold"
+                i18n>
               Multipart Minimum Part Size
               <cd-helper class="text-pre-wrap">
-                <span i18n>
+                <span>
                   {{ multipartMinPartText }}
                 </span>
               </cd-helper>
             </td>
             <td>{{ selection?.multipart_min_part_size }}</td>
           </tr>
-          <tr>
-            <td class="bold">
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
+            <td class="bold"
+                i18n>
               Multipart Sync Threshold
               <cd-helper class="text-pre-wrap">
-                <span i18n>
-                 {{ multipartSyncThreholdText }}
+                <span>
+                  {{ multipartSyncThreholdText }}
                 </span>
               </cd-helper>
             </td>
             <td>{{ selection?.multipart_sync_threshold }}</td>
           </tr>
-          <tr>
-            <td class="bold">
-              <span i18n>Allow Read Through </span>
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
+            <td class="bold"
+                i18n>
+              Retain Head Object
               <cd-helper class="text-pre-wrap">
-                <span i18n>
+                <span>
+                  Retain object metadata after transition to the cloud (default: false).
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.retain_head_object }}</td>
+          </tr>
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
+            <td class="bold"
+                i18n>
+              Allow Read Through
+              <cd-helper class="text-pre-wrap">
+                <span>
                   {{ allowReadThroughText }}
                 </span>
               </cd-helper>
             </td>
             <td>{{ selection?.allow_read_through }}</td>
-          </tr>
-          <tr>
-            <td class="bold">
-              Head Object (Stub File)
-              <cd-helper class="text-pre-wrap">
-                <span i18n>
-                  {{ retainHeadObjectText }}
-                </span>
-              </cd-helper>
-            </td>
-            <td>{{ selection?.retain_head_object }}</td>
           </tr>
         </tbody>
       </table>
