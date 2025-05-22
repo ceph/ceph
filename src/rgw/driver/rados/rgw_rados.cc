@@ -10522,6 +10522,10 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
     max_objs_per_shard /= 3;
   }
 
+  // make sure it's at least 1, as in some testing scenarios it's artificially low
+  constexpr uint64_t min_max_objs_per_shard = 1;
+  max_objs_per_shard = std::max(min_max_objs_per_shard, max_objs_per_shard);
+
   // TODO: consider per-bucket sync policy here?
   const bool is_multisite = svc.zone->need_to_log_data();
 
