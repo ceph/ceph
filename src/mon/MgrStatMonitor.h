@@ -8,7 +8,8 @@
 #include "mon/PGMap.h"
 #include "mgr/ServiceMap.h"
 
-class MgrStatMonitor : public PaxosService {
+ class MgrStatMonitor : public PaxosService, 
+                        public md_config_obs_t {
   // live version
   version_t version = 0;
   PGMapDigest digest;
@@ -114,4 +115,9 @@ public:
 		       bool verbose) const {
     digest.dump_pool_stats_full(osdm, ss, f, verbose);
   }
+
+  // config observer 
+  std::vector<std::string> get_tracked_keys() const noexcept override;
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set <std::string> &changed) override;
 };
