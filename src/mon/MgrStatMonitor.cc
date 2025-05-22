@@ -52,9 +52,28 @@ static ostream& _prefix(std::ostream *_dout, Monitor &mon) {
 MgrStatMonitor::MgrStatMonitor(Monitor &mn, Paxos &p, const string& service_name)
   : PaxosService(mn, p, service_name)
 {
+    g_conf().add_observer(this);
 }
 
-MgrStatMonitor::~MgrStatMonitor() = default;
+MgrStatMonitor::~MgrStatMonitor() 
+{
+  g_conf().remove_observer(this);
+}
+
+std::vector<std::string> MgrStatMonitor::get_tracked_keys() const noexcept
+{
+  return {
+    "enable_availability_tracking",
+  };
+}
+
+void MgrStatMonitor::handle_conf_change(
+  const ConfigProxy& conf,
+  const std::set<std::string>& changed)
+{
+  // implement changes here 
+  dout(10) << __func__ << " enable_availability_tracking config option is changed." << dendl;
+}
 
 void MgrStatMonitor::create_initial()
 {
