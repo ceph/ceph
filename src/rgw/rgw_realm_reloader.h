@@ -7,6 +7,7 @@
 
 #include "rgw_realm_watcher.h"
 #include "common/Cond.h"
+#include "common/Timer.h"
 #include "rgw_sal_fwd.h"
 
 struct RGWProcessEnv;
