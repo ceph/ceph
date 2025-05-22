@@ -25,7 +25,7 @@ from .operations.volume import open_volume_lockless, list_volumes
 from .operations.subvolume import open_clone_subvol_pair_in_vol, open_subvol_in_vol
 from .operations.template import SubvolumeOpType
 from .operations.clone_index import open_clone_index, PATH_MAX
-from .operations.trash import Trash
+from .operations.trash import get_trashcan_stats
 from .operations.resolver import resolve_group_and_subvolume_name
 from .exception import VolumeException
 from .async_cloner import get_clone_state
@@ -460,23 +460,23 @@ class PurgeProgressBar(VolumesProgressBar):
                   f'initial stats: {self.init_subvol_count} subvols containing '
                   f'{self.init_file_count} files')
 
-
     def _get_trash_stats(self):
-        file_count = 0
-        subvol_count = 0
-        TRASH_PATH = os_path_join(self.volspec.DEFAULT_SUBVOL_PREFIX,
-                                  Trash.GROUP_NAME).encode('utf-8')
+        total_subvol_count = 0
+        total_file_count = 0
 
+        volnames = list_volumes(self.volclient.mgr)
+        for volname in volnames:
+            with open_volume_lockless(self.volclient, volname) as fs:
+                subvol_count, file_count, _ = get_trashcan_stats(fs, self.volspec)
+                log.debug(f'In trash directory of volume "fs", {subvol_count} '
+                          f'subvolumes containing {file_count} files were found')
+                total_subvol_count += subvol_count
+                total_file_count += file_count
 
-        for volname in list_volumes(self.volclient.mgr):
-            with open_volume_lockless(self.volclient, volname) as fs_handle:
-                file_count += int(fs_handle.getxattr(TRASH_PATH,
-                                                     'ceph.dir.rfiles'))
-                subvol_count += int(fs_handle.getxattr(TRASH_PATH,
-                                                       'ceph.dir.subdirs'))
-
-            log.debug(f'{file_count} files found in {subvol_count} subvolumes')
-        return subvol_count, file_count
+        log.debug(f'In trash directory of {len(volnames)} volumes, '
+                  f'{total_subvol_count} subvolumes containing total '
+                  f'{total_file_count} files were found')
+        return total_subvol_count, total_file_count
 
     def _update_progress_bars(self):
         if self.volclient.purge_queue.disable_purge_progress_bars:

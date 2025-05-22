@@ -7,6 +7,7 @@ from contextlib import contextmanager
 import cephfs
 
 from .template import GroupTemplate
+from .clone_index import PATH_MAX
 from ..exception import VolumeException
 
 log = logging.getLogger(__name__)
@@ -179,6 +180,60 @@ class Trash(GroupTemplate):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
+    def _get_stats(self):
+        subvol_count = 0
+        file_count = 0
+        trash_size = 0
+
+        dir_found = False
+
+        with self.fs.opendir(self.path) as dir_handle:
+            de = self.fs.readdir(dir_handle)
+            while de:
+                if de.d_name in (b'.', b'..'):
+                    de = self.fs.readdir(dir_handle)
+                    continue
+
+                # each trash entry, whether it's symlink or a directory, it
+                # points to a subvolume.
+                subvol_count += 1
+
+                try:
+                    if de.is_dir():
+                        # NOTE: fetching xattr rfiles once on self.path and
+                        # then adjusting it is better than running it for every
+                        # dir in trash dir. this reduces calls to getxattr to a
+                        # great amount, reducing load we place on MDS.
+                        #file_count += int(self.fs.getxattr(de_path, 'ceph.dir.rfiles'))
+                        dir_found = True
+                    elif de.is_symbol_file():
+                        de_path = os.path.join(self.path, de.d_name)
+                        sv_path = self.fs.readlink(de_path, PATH_MAX)
+                        file_count += int(self.fs.getxattr(sv_path, 'ceph.dir.rfiles'))
+                        trash_size += int(self.fs.getxattr(sv_path, 'ceph.dir.rbytes'))
+                    else:
+                        log.debug('Trash entry was neither directory nor '
+                                  'symlink, this was unexpected. Details: '
+                                  f'entry path = {de_path.decode("utf-8")}')
+                except cephfs.ObjectNotFound:
+                    # we are scanning trash entries while purge threads are
+                    # actively deleting them. thus if we get ObjectNotFound it
+                    # probably means that it was deleted
+                    de = self.fs.readdir(dir_handle)
+                    continue
+
+                de = self.fs.readdir(dir_handle)
+
+        # for every subvolume, the subvol dir and the .meta file also needs
+        # to unlinked and therefore both should included in the count.
+        file_count += subvol_count * 2
+
+        if dir_found:
+            file_count += int(self.fs.getxattr(self.path, 'ceph.dir.rfiles'))
+            trash_size += int(self.fs.getxattr(self.path, 'ceph.dir.rbytes'))
+
+        return subvol_count, file_count, trash_size
+
     def get_stats(self):
         try:
             file_count = int(self.fs.getxattr(self.path, 'ceph.dir.rfiles'))
@@ -235,3 +290,14 @@ def open_trashcan(fs, vol_spec):
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
     yield trashcan
+
+
+def get_trashcan_stats(fs, volspec):
+    trashcan = Trash(fs, volspec)
+
+    try:
+        fs.stat(trashcan.path)
+    except cephfs.Error as e:
+        raise VolumeException(-e.args[0], e.args[1])
+
+    return trashcan._get_stats()
