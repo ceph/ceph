@@ -1274,10 +1274,9 @@ record_t Cache::prepare_record(
     i->set_modify_time(commit_time);
     DEBUGT("mutated extent with {}B delta -- {}",
 	   t, delta_length, *i);
-    if (i->is_mutation_pending()) {
-      DEBUGT("commit replace extent ... -- {}, prior={}",
-	     t, *i, *i->prior_instance);
+    assert(delta_length);
 
+    if (i->is_mutation_pending()) {
       // If inplace rewrite happens from a concurrent transaction,
       // i->prior_instance will be changed from DIRTY to CLEAN implicitly, thus
       // i->prior_instance->version become 0. This won't cause conflicts
@@ -1286,26 +1285,35 @@ record_t Cache::prepare_record(
       // However, this leads to version mismatch below, thus we reset the
       // version to 1 in this case.
       if (i->prior_instance->version == 0 && i->version > 1) {
+        DEBUGT("commit replace extent (inplace-rewrite) ... -- {}, prior={}",
+               t, *i, *i->prior_instance);
+
 	assert(can_inplace_rewrite(i->get_type()));
 	assert(can_inplace_rewrite(i->prior_instance->get_type()));
 	assert(i->prior_instance->dirty_from == JOURNAL_SEQ_MIN);
 	assert(i->prior_instance->state == CachedExtent::extent_state_t::CLEAN);
 	assert(i->prior_instance->get_paddr().is_absolute_random_block());
 	i->version = 1;
+      } else {
+        DEBUGT("commit replace extent ... -- {}, prior={}",
+               t, *i, *i->prior_instance);
       }
-
-      // extent with EXIST_MUTATION_PENDING doesn't have
-      // prior_instance field so skip these extents.
-      // the existing extents should be added into Cache
-      // during complete_commit to sync with gc transaction.
-      commit_replace_extent(t, i, i->prior_instance);
     } else {
       assert(i->is_exist_mutation_pending());
     }
 
     i->prepare_write();
-    i->set_io_wait();
     i->prepare_commit();
+
+    if (i->is_mutation_pending()) {
+      i->set_io_wait();
+      // extent with EXIST_MUTATION_PENDING doesn't have
+      // prior_instance field so skip these extents.
+      // the existing extents should be added into Cache
+      // during complete_commit to sync with gc transaction.
+      commit_replace_extent(t, i, i->prior_instance);
+    } // Note, else, add_extent() below
+    // Note, i->state become DIRTY in complete_commit()
 
     assert(i->get_version() > 0);
     auto final_crc = i->calc_crc32c();
@@ -1359,7 +1367,7 @@ record_t Cache::prepare_record(
 	});
       i->last_committed_crc = final_crc;
     }
-    assert(delta_length);
+
     get_by_ext(efforts.delta_bytes_by_ext,
                i->get_type()) += delta_length;
     delta_stat.increment(delta_length);
@@ -1370,7 +1378,6 @@ record_t Cache::prepare_record(
     // retiering extents, this is because logical linked tree
     // nodes needs to access their prior instances in this
     // phase if they are rewritten.
-    e->set_io_wait();
     e->prepare_commit();
   });
 
@@ -1486,6 +1493,9 @@ record_t Cache::prepare_record(
 	  i->get_length(),
 	  i->get_type()));
     }
+    i->set_io_wait();
+    // Note, paddr is known until complete_commit(),
+    // so add_extent() later.
   }
 
   for (auto &i: t.ool_block_list) {
@@ -1509,6 +1519,9 @@ record_t Cache::prepare_record(
 	  i->get_length(),
 	  i->get_type()));
     }
+    i->set_io_wait();
+    // Note, paddr is (can be) known until complete_commit(),
+    // so add_extent() later.
   }
 
   for (auto &i: t.inplace_ool_block_list) {
@@ -1522,6 +1535,7 @@ record_t Cache::prepare_record(
     // in order to handle this transparently
     i->version = 0;
     i->dirty_from = JOURNAL_SEQ_MIN;
+    // no set_io_wait()
     i->state = CachedExtent::extent_state_t::CLEAN;
     assert(i->is_logical());
     i->clear_modified_region();
@@ -1543,10 +1557,12 @@ record_t Cache::prepare_record(
     }
 
     if (i->is_exist_clean()) {
+      // no set_io_wait()
       i->state = CachedExtent::extent_state_t::CLEAN;
     } else {
       assert(i->is_exist_mutation_pending());
-      // i->state must become DIRTY in complete_commit()
+      i->set_io_wait();
+      // Note, i->state become DIRTY in complete_commit()
     }
 
     // exist mutation pending extents must be in t.mutated_block_list
@@ -1855,6 +1871,7 @@ void Cache::complete_commit(
     } else {
       DEBUGT("commit extent done -- {}", t, *i);
     }
+    i->complete_io();
   }
 
   for (auto &i: t.retired_set) {
@@ -1867,24 +1884,16 @@ void Cache::complete_commit(
     }
     epm.mark_space_used(i->get_paddr(), i->get_length());
   }
-
-  for (auto &i: t.mutated_block_list) {
+  for (auto &i: t.pre_alloc_list) {
     if (!i->is_valid()) {
-      continue;
+      epm.mark_space_free(i->get_paddr(), i->get_length());
     }
-    i->complete_io();
   }
 
   last_commit = start_seq;
 
   apply_backref_byseq(t.move_backref_entries(), start_seq);
   commit_backref_entries(std::move(backref_entries), start_seq);
-
-  for (auto &i: t.pre_alloc_list) {
-    if (!i->is_valid()) {
-      epm.mark_space_free(i->get_paddr(), i->get_length());
-    }
-  }
 }
 
 void Cache::init()
