@@ -11151,6 +11151,10 @@ void RGWRados::calculate_preferred_shards(const DoutPrefixProvider* dpp,
     max_objs_per_shard /= 3;
   }
 
+  // make sure it's at least 1, as in some testing scenarios it's artificially low
+  constexpr uint64_t min_max_objs_per_shard = 1;
+  max_objs_per_shard = std::max(min_max_objs_per_shard, max_objs_per_shard);
+
   const bool is_multisite = svc.zone->need_to_log_data();
 
   RGWBucketReshard::calculate_preferred_shards(dpp,
