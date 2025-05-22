@@ -79,6 +79,7 @@ class VolumeClient(CephfsClient["Module"]):
         # following is how this dictionary will look -
         # {'volname': {'total_files': x, 'total_subvols': y}}
         self.pre_rm_subvol_stats = {}
+        self.prev_purge_status = {}
 
         # on startup, queue purge job for available volumes to kickstart
         # purge for leftover subvolume entries in trash. note that, if the
@@ -1188,6 +1189,12 @@ class VolumeClient(CephfsClient["Module"]):
         files_purged = total_files - stats['files_left']
         size_purged = total_size - stats['size_left']
 
+        if subvols_purged < 0 or files_purged < 0 or size_purged < 0:
+            self._update_pre_rm_subvol_stats(volname, stats)
+            self.prev_purge_status['status']['progress_report']['note'] = \
+                'MDS rstats are laggy at the moment'
+            return self.prev_purge_status
+
         subvols_purged_percent = round(subvols_purged/total_subvols * 100)
         files_purged_percent = round(files_purged/total_files * 100)
         size_purged_percent = round(size_purged/total_size * 100)
@@ -1216,6 +1223,7 @@ class VolumeClient(CephfsClient["Module"]):
             purge_rate_msg = f'{self.purge_queue.purge_rate} unlink+rmdir per sec'
             status['status']['progress_report']['purge_rate'] = purge_rate_msg # type: ignore
 
+        self.prev_purge_status = status
         log.debug(f'purge status - {status}')
         return status
 
