@@ -4,7 +4,10 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { StorageClass, ZoneGroupDetails } from '../models/rgw-storage-class.model';
+import {
+  StorageClass,
+  ZoneGroupDetails
+} from '../models/rgw-storage-class.model';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -51,8 +54,18 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
   ngOnInit() {
     this.columns = [
       {
+        prop: 'uniqueId',
+        isInvisible: true,
+        isHidden: true
+      },
+      {
         name: $localize`Storage Class`,
         prop: 'storage_class',
+        flexGrow: 2
+      },
+      {
+        name: $localize`Type`,
+        prop: 'tier_type',
         flexGrow: 2
       },
       {
@@ -110,7 +123,12 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         (data: ZoneGroupDetails) => {
           this.storageClassList = [];
           const tierObj = BucketTieringUtils.filterAndMapTierTargets(data);
-          this.storageClassList.push(...tierObj);
+          const tierConfig = tierObj.map((item) => ({
+            ...item,
+            tier_type: item.tier_type
+          }));
+          this.transformTierData(tierConfig);
+          this.storageClassList.push(...tierConfig);
           resolve();
         },
         (error) => {
@@ -118,6 +136,15 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         }
       );
     });
+  }
+
+  transformTierData(tierConfig: any[]) {
+    tierConfig.forEach((item, index) => {
+      const storageClass = item?.val?.storage_class;
+      const uniqueId = `${storageClass}-${index}`;
+      item.uniqueId = uniqueId;
+    });
+    return tierConfig;
   }
 
   removeStorageClassModal() {

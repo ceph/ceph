@@ -9,6 +9,8 @@
   [columns]="columns"
   (fetchData)="loadStorageClass()"
   selectionType="single"
+  identifier="uniqueId"
+  [forceIdentifier]="true"
   [hasDetails]="true"
   (setExpandedRow)="setExpandedRow($event)"
   (updateSelection)="updateSelection($event)"
