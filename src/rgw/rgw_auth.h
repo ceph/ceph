@@ -687,9 +687,7 @@ public:
   void write_ops_log_entry(rgw_log_entry& entry) const override;
   uint32_t get_identity_type() const override { return info.acct_type; }
 
-  std::optional<rgw::ARN> get_caller_identity() const override {
-    return std::nullopt;
-  }
+  std::optional<rgw::ARN> get_caller_identity() const override;
 
   std::string get_acct_name() const override { return info.acct_name; }
   std::string get_subuser() const override { return {}; }
@@ -858,7 +856,7 @@ public:
     rgw::Partition partition = rgw::Partition::aws;
     rgw::Service service = rgw::Service::sts;
     std::string acct = role.account->id.empty() ? role.tenant : role.account->id;
-    std::string resource = "assumed-role/" + role.name + "/" + token_attrs.role_session_name;
+    std::string resource = "assumed-role" + role.path + role.name + "/" + token_attrs.role_session_name;
 
     return rgw::ARN(partition, service, "", acct, resource);
   }

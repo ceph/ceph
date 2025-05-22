@@ -203,6 +203,15 @@ public:
   RGWOpType get_type() override { return RGW_STS_GET_SESSION_TOKEN; }
 };
 
+class RGWSTSGetCallerIdentity : public RGWREST_STS {
+public:
+  RGWSTSGetCallerIdentity() = default;
+  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y) override;
+  const char* name() const override { return "get_caller_identity"; }
+  RGWOpType get_type() override { return RGW_STS_GET_CALLER_IDENTITY; }
+};
+
 class RGW_Auth_STS {
 public:
   static int authorize(const DoutPrefixProvider *dpp,
