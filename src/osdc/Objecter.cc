@@ -2033,6 +2033,7 @@ void Objecter::maybe_request_map()
 
 void Objecter::_maybe_request_map()
 {
+  last_osdmap_request_time = ceph::coarse_mono_clock::now();
   // rwlock is locked
   int flag = 0;
   if (_osdmap_full_flag()
@@ -2220,6 +2221,7 @@ void Objecter::tick()
     if (found)
       toping.insert(s);
   }
+
   if (num_homeless_ops || !toping.empty()) {
     _maybe_request_map();
   } else if (last_osdmap_request_time != ceph::coarse_mono_clock::time_point()) {
