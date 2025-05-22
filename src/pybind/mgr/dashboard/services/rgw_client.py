@@ -2246,7 +2246,7 @@ class RgwMultisite:
                         except SubprocessError as error:
                             raise DashboardException(error, http_status_code=500, component='rgw')
                         if tier_type in CLOUD_S3_TIER_TYPES:
-                            self.ensure_realm_and_sync_period()
+                           self.ensure_realm_and_sync_period()
 
     def delete_placement_targets(self, placement_id: str, storage_class: str):
         rgw_zonegroup_delete_cmd = ['zonegroup', 'placement', 'rm',
