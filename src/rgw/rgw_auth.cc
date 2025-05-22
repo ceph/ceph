@@ -1032,9 +1032,18 @@ auto rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp) con
 
 void rgw::auth::RemoteApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const
 {
+  string key = "aws:userid";
+  string value = info.acct_user.id;
+  s->env.emplace(key, value);
+
   // copy our identity policies into req_state
   s->iam_identity_policies.insert(s->iam_identity_policies.end(),
                                   policies.begin(), policies.end());
+}
+
+std::optional<rgw::ARN> rgw::auth::RemoteApplier::get_caller_identity() const 
+{
+  return rgw::ARN(owner_acct_user.id, "user", owner_acct_user.tenant, true);
 }
 
 /* rgw::auth::LocalApplier */
@@ -1144,6 +1153,10 @@ auto rgw::auth::LocalApplier::load_acct_info(const DoutPrefixProvider* dpp) cons
 
 void rgw::auth::LocalApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const
 {
+  string key = "aws:userid";
+  string value = user_info.type == TYPE_ROOT ? user_info.account_id : user_info.user_id.id;
+  s->env.emplace(key, value);
+
   // copy our identity policies into req_state
   s->iam_identity_policies.insert(s->iam_identity_policies.end(),
                                   policies.begin(), policies.end());

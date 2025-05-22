@@ -472,6 +472,7 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
 bool is_non_s3_op(RGWOpType op_type)
 {
   switch (op_type) {
+  case RGW_STS_GET_CALLER_IDENTITY:
   case RGW_STS_GET_SESSION_TOKEN:
   case RGW_STS_ASSUME_ROLE:
   case RGW_STS_ASSUME_ROLE_WEB_IDENTITY:
