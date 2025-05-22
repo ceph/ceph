@@ -882,10 +882,6 @@ void PGMapDigest::dump_object_stat_sum(
   const object_stat_sum_t &sum = pool_stat.stats.sum;
   const store_statfs_t statfs = pool_stat.store_stats;
 
-  if (sum.num_object_copies > 0) {
-    raw_used_rate *= (float)(sum.num_object_copies - sum.num_objects_degraded) / sum.num_object_copies;
-  }
-
   uint64_t used_data_bytes = pool_stat.get_allocated_data_bytes(per_pool);
   uint64_t used_omap_bytes = pool_stat.get_allocated_omap_bytes(per_pool_omap);
   uint64_t used_bytes = used_data_bytes + used_omap_bytes;
