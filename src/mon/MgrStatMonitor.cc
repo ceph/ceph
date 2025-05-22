@@ -71,8 +71,24 @@ void MgrStatMonitor::handle_conf_change(
   const ConfigProxy& conf,
   const std::set<std::string>& changed)
 {
-  // implement changes here 
-  dout(10) << __func__ << " enable_availability_tracking config option is changed." << dendl;
+  if (changed.count("enable_availability_tracking")) {
+    std::scoped_lock l(lock);
+    bool oldval = enable_availability_tracking;
+    bool newval = g_conf().get_val<bool>("enable_availability_tracking");
+    dout(10) << __func__ << " enable_availability_tracking config option is changed from " 
+             << oldval << " to " << newval
+             << dendl;
+
+    // if fetaure is toggled from off to on, 
+    // store the new value of last_uptime and last_downtime 
+    // (to be updated in calc_pool_availability) 
+    if (newval > oldval) {
+      reset_availability_last_uptime_downtime_val = ceph_clock_now();
+      dout(10) << __func__ << " reset_availability_last_uptime_downtime_val " 
+               <<  reset_availability_last_uptime_downtime_val << dendl; 
+    }
+    enable_availability_tracking = newval;
+  }
 }
 
 void MgrStatMonitor::create_initial()
@@ -88,12 +104,27 @@ void MgrStatMonitor::create_initial()
 void MgrStatMonitor::calc_pool_availability()
 {
   dout(20) << __func__ << dendl;
+  std::scoped_lock l(lock);
 
   // if feature is disabled by user, do not update the uptime 
   // and downtime, exit early
-  if (!g_conf().get_val<bool>("enable_availability_tracking")) {
+  if (!enable_availability_tracking) {
     dout(20) << __func__ << " tracking availability score is disabled" << dendl;
     return;
+  }
+
+  // if reset_availability_last_uptime_downtime_val is not utime_t(1, 2), 
+  // update last_uptime and last_downtime for all pools to the 
+  // recorded values
+  if (reset_availability_last_uptime_downtime_val.has_value()) {
+    for (const auto& i : pool_availability) {
+      const auto& poolid = i.first;
+      pool_availability[poolid].last_downtime = reset_availability_last_uptime_downtime_val.value();
+      pool_availability[poolid].last_uptime = reset_availability_last_uptime_downtime_val.value();
+    }
+    dout(20) << __func__ << " reset last_uptime and last_downtime to " 
+             << reset_availability_last_uptime_downtime_val << dendl;
+    reset_availability_last_uptime_downtime_val.reset();
   }
 
   auto pool_avail_end = pool_availability.end();
