@@ -160,6 +160,7 @@ set(librgw_common_srcs
   rgw_tracer.cc
   rgw_lua_background.cc
   rgw_data_access.cc
+  rgw_realm_watcher.cc
   driver/rados/account.cc
   driver/rados/buckets.cc
   rgw_bucket_logging.cc
@@ -225,6 +226,7 @@ list(APPEND librgw_common_srcs
   driver/rados/config/period.cc
   driver/rados/config/period_config.cc
   driver/rados/config/realm.cc
+  driver/rados/config/realm_watcher.cc
   driver/rados/config/store.cc
   driver/rados/config/zone.cc
   driver/rados/config/zonegroup.cc)
@@ -395,7 +397,6 @@ set(rgw_a_srcs
   rgw_period_pusher.cc
   rgw_process.cc
   rgw_realm_reloader.cc
-  rgw_realm_watcher.cc
   rgw_rest_config.cc
   rgw_rest_info.cc
   rgw_rest_metadata.cc

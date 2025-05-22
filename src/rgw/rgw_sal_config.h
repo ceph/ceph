@@ -26,6 +26,7 @@ class optional_yield;
 struct RGWPeriod;
 struct RGWPeriodConfig;
 struct RGWRealm;
+struct RGWRealmWatcher;
 struct RGWZoneGroup;
 struct RGWZoneParams;
 
@@ -91,6 +92,12 @@ class ConfigStore {
   virtual int realm_notify_new_period(const DoutPrefixProvider* dpp,
                                       optional_yield y,
                                       const RGWPeriod& period) = 0;
+  /// Create a RGWRealmWatcher that dispatches cluster notifications from
+  /// realm_notify_new_period(). May return nullptr if not supported.
+  virtual auto create_realm_watcher(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    const RGWRealm& realm)
+      -> std::unique_ptr<RGWRealmWatcher> = 0;
   /// List up to 'entries.size()' realm names starting from the given marker
   virtual int list_realm_names(const DoutPrefixProvider* dpp,
                                optional_yield y, const std::string& marker,
