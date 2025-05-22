@@ -121,6 +121,54 @@ public:
   const omap_root_le_t& get_root(omap_type_t type) const {
     return get_layout().get_root(type);
   }
+  std::optional<laddr_t> get_clone_prefix() const {
+    std::optional<laddr_t> prefix = std::nullopt;
+
+    const auto &layout = get_layout();
+    auto omap_root = layout.omap_root.get(L_ADDR_NULL);
+    if (!omap_root.is_null()) {
+      prefix.emplace(omap_root.addr.get_clone_prefix());
+    }
+
+    auto log_root = layout.log_root.get(L_ADDR_NULL);
+    if (!log_root.is_null()) {
+      auto laddr = log_root.addr.get_clone_prefix();
+      if (prefix) {
+        ceph_assert(*prefix == laddr);
+      } else {
+        prefix.emplace(laddr);
+      }
+    }
+
+    auto xattr_root = layout.xattr_root.get(L_ADDR_NULL);
+    if (!xattr_root.is_null()) {
+      auto laddr = xattr_root.addr.get_clone_prefix();
+      if (prefix) {
+        ceph_assert(*prefix == laddr);
+      } else {
+        prefix.emplace(laddr);
+      }
+    }
+
+    auto obj_data = layout.object_data.get();
+    if (!obj_data.is_null()) {
+      auto laddr = obj_data.get_reserved_data_base().get_clone_prefix();
+      if (prefix) {
+        ceph_assert(*prefix == laddr);
+      } else {
+        prefix.emplace(laddr);
+      }
+    }
+
+    return prefix;
+  }
+  std::optional<laddr_t> get_object_prefix() const {
+    auto prefix = get_clone_prefix();
+    if (prefix) {
+      return prefix->get_object_prefix();
+    }
+    return std::nullopt;
+  }
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };
 
