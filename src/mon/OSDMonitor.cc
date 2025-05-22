@@ -14409,7 +14409,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd pool availability-status") {
     if (!g_conf().get_val<bool>("enable_availability_tracking")) {
       ss << "availability tracking is disabled; you can enable it by setting the config option enable_availability_tracking";
-      err = -EPERM;
+      err = -EOPNOTSUPP;
       goto reply_no_propose;
     }
     TextTable tbl;
