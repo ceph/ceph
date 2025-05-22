@@ -1055,6 +1055,45 @@ void RGWSTSAssumeRole::execute(optional_yield y)
   }
 }
 
+int RGWSTSGetCallerIdentity::verify_permission(optional_yield y)
+{
+  // https://docs.aws.amazon.com/STS/latest/APIReference/API_GetCallerIdentity.html
+  // Permissions are not required because the same information is returned when access is denied.
+
+  return 0;
+}
+
+void RGWSTSGetCallerIdentity::execute(optional_yield y)
+{
+  std::string account;
+  std::string userid;
+  std::string arn;
+
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    account = acc->id;
+  }
+
+  if(account.empty()) {
+    account = s->user->get_tenant();
+  }
+  if (auto it = s->env.find("aws:userid"); it != s->env.end()) {
+    userid = it->second;
+  }
+
+  auto a = s->auth.identity->get_caller_identity();
+  if(a) {
+    arn = a->to_string();
+  }
+
+  s->formatter->open_object_section_in_ns("GetCallerIdentityResponse", RGW_REST_STS_XMLNS);
+  s->formatter->open_object_section("GetCallerIdentityResult");
+  encode_json("Arn",  arn, s->formatter);
+  encode_json("UserId", userid, s->formatter);
+  encode_json("Account", account, s->formatter);
+  s->formatter->close_section();
+  s->formatter->close_section();
+}
+
 int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
                             rgw::sal::Driver* driver,
                             const rgw::auth::StrategyRegistry& auth_registry,
@@ -1067,7 +1106,8 @@ using op_generator = RGWOp*(*)();
 static const std::unordered_map<std::string_view, op_generator> op_generators = {
   {"AssumeRole", []() -> RGWOp* {return new RGWSTSAssumeRole;}},
   {"GetSessionToken", []() -> RGWOp* {return new RGWSTSGetSessionToken;}},
-  {"AssumeRoleWithWebIdentity", []() -> RGWOp* {return new RGWSTSAssumeRoleWithWebIdentity;}}
+  {"AssumeRoleWithWebIdentity", []() -> RGWOp* {return new RGWSTSAssumeRoleWithWebIdentity;}},
+  {"GetCallerIdentity", []() -> RGWOp* {return new RGWSTSGetCallerIdentity;}}
 };
 
 bool RGWHandler_REST_STS::action_exists(const req_state* s)
