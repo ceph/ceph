@@ -6,6 +6,8 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import {
   StorageClass,
+  TIER_TYPE,
+  TIER_TYPE_DISPLAY,
   ZoneGroupDetails
 } from '../models/rgw-storage-class.model';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -20,7 +22,6 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Permission } from '~/app/shared/models/permissions';
 import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
-
 import { Router } from '@angular/router';
 
 const BASE_URL = 'rgw/tiering';
@@ -125,7 +126,14 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
           const tierObj = BucketTieringUtils.filterAndMapTierTargets(data);
           const tierConfig = tierObj.map((item) => ({
             ...item,
-            tier_type: item.tier_type
+            tier_type:
+              item.tier_type?.toLowerCase() === TIER_TYPE.CLOUD_TIER
+                ? TIER_TYPE_DISPLAY.CLOUD_TIER
+                : item.tier_type?.toLowerCase() === TIER_TYPE.LOCAL
+                ? TIER_TYPE_DISPLAY.LOCAL
+                : item.tier_type?.toLowerCase() === TIER_TYPE.GLACIER
+                ? TIER_TYPE_DISPLAY.GLACIER
+                : item.tier_type
           }));
           this.transformTierData(tierConfig);
           this.storageClassList.push(...tierConfig);
@@ -140,8 +148,9 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
 
   transformTierData(tierConfig: any[]) {
     tierConfig.forEach((item, index) => {
-      const storageClass = item?.val?.storage_class;
-      const uniqueId = `${storageClass}-${index}`;
+      const zone_group = item?.zone_group;
+      const storageClass = item?.storage_class;
+      const uniqueId = `${zone_group}-${storageClass}-${index}`;
       item.uniqueId = uniqueId;
     });
     return tierConfig;

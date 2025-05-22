@@ -13,19 +13,22 @@
       </div>
       <div class="form-item">
         <cds-select
-          label="Storage Class "
+          label="Type"
+          i18n-label
           for="storageClassType"
           formControlName="storageClassType"
           [helperText]="storageClassText"
           id="storageClassType"
-          cdRequiredField="Storage Class"
           [invalid]="storageClassForm.showError('storageClassType', formDir, 'required')"
           [invalidText]="storageError"
         >
-          <option value="" i18n>-- Select Storage Class --</option>
-          <option value="local" i18n>Local</option>
-          <option value="cloud-s3" i18n>Cloud S3</option>
-          <option value="cloud-s3-glacier" i18n>Glacier</option>
+          <option value=""
+                  i18n>-- Select Storage Class --</option>
+          <option value="local"
+                  i18n>Local</option>
+          <option value="cloud-s3"
+                  i18n>Cloud S3</option>
+                  <option value="cloud-s3-glacier" i18n>Glacier</option>
         </cds-select>
         <ng-template #storageError>
           <span
@@ -36,7 +39,8 @@
           >
         </ng-template>
       </div>
-      <div class="form-item form-item-append" cdsRow>
+      <div class="form-item form-item-append"
+           cdsRow>
         <div cdsCol>
           <!-- Zone Group -->
           <cds-select
@@ -44,16 +48,16 @@
             i18n-label
             formControlName="zonegroup"
             id="zonegroup"
-            [invalid]="
-              storageClassForm.showError('zonegroup', formDir, 'required')
-            "
+            [invalid]="storageClassForm.showError('zonegroup', formDir, 'required')"
             (change)="onZonegroupChange()"
             [invalidText]="zonegroupError"
           >
-            <option *ngFor="let zonegrp of zonegroupNames"
-                    [value]="zonegrp.name"
-                    [selected]="zonegrp.name === storageClassForm.getValue('zonegroup')"
-                    i18n>
+            <option
+              *ngFor="let zonegrp of zonegroupNames"
+              [value]="zonegrp.name"
+              [selected]="zonegrp.name === storageClassForm.getValue('zonegroup')"
+              i18n
+            >
               {{ zonegrp.name }}
             </option>
           </cds-select>
@@ -73,19 +77,19 @@
             i18n-label
             formControlName="placement_target"
             id="placement_target"
-            [invalid]="
-              storageClassForm.showError('placement_target', formDir, 'required')
-            "
+            [invalid]="storageClassForm.showError('placement_target', formDir, 'required')"
             [invalidText]="placementError"
           >
-          <option [value]=""
-                  i18n> --Select-- </option>
-          <option *ngFor="let placementTarget of placementTargets"
-                  [value]="placementTarget"
-                  [selected]="placementTarget === storageClassForm.getValue('placement_target')"
-                  i18n>
+            <option [value]=""
+                    i18n>--Select--</option>
+            <option
+              *ngFor="let placementTarget of placementTargets"
+              [value]="placementTarget"
+              [selected]="placementTarget === storageClassForm.getValue('placement_target')"
+              i18n
+            >
               {{ placementTarget }}
-          </option>
+            </option>
           </cds-select>
           <ng-template #placementError>
             <span
@@ -107,20 +111,17 @@
             storageClassForm.controls.storage_class.invalid &&
             storageClassForm.controls.storage_class.dirty
           "
-          [invalidText]="storageClassTypeError"
-          cdRequiredField="Storage Class Type"
-          >Storage Class Name
+          [invalidText]="storageClassError"
+          >Name
           <input
             cdsText
             type="type"
             id="storage_class"
             formControlName="storage_class"
-            [invalid]="
-            storageClassForm.showError('storage_class', formDir, 'required')
-            "
+            [invalid]="storageClassForm.showError('storage_class', formDir, 'required')"
           />
         </cds-text-label>
-        <ng-template #storageClassTypeError>
+        <ng-template #storageClassError>
           <span
             class="invalid-feedback"
             *ngIf="storageClassForm.showError('storage_class', formDir, 'required')"
@@ -129,15 +130,10 @@
           >
         </ng-template>
       </div>
-      <div
-        *ngIf="
-          storageClassForm.getValue('storageClassType') === 'cloud-s3' ||
-          storageClassForm.getValue('storageClassType') === 'cloud-s3-glacier'
-        "
-      >
+      <div *ngIf="(storageClassForm.getValue('storageClassType') === TIER_TYPE.CLOUD_TIER) || (storageClassForm.getValue('storageClassType') === TIER_TYPE.GLACIER)">
         <div class="form-item form-item-append"
              cdsRow>
-          <div cdsCol>
+          <div cdsCol> 
             <!-- Target Region -->
             <cds-text-label
               labelInputID="region"
@@ -287,51 +283,8 @@
         </ng-template>
       </div>
       <fieldset>
-        <cds-accordion size="lg"
-                       class="form-item">
-          <cds-accordion-item
-            [title]="title"
-            id="advanced-fieldset"
-            (selected)="showAdvanced = !showAdvanced"
-          >
-            <!-- Multi Part Sync Threshold -->
-            <div class="form-item form-item-append"
-                 cdsRow>
-              <div cdsCol>
-                <cds-text-label
-                  labelInputID="multipart_sync_threshold"
-                  i18n
-                  [helperText]="multipartSyncThreholdText"
-                  cdOptionalField="Multipart Sync Threshold"
-                  >Multipart Sync Threshold
-                  <input
-                    cdsText
-                    type="text"
-                    id="multipart_sync_threshold"
-                    formControlName="multipart_sync_threshold"
-                  />
-                </cds-text-label>
-              </div>
-              <div cdsCol>
-                <cds-text-label
-                  labelInputID="multipart_min_part_size"
-                  i18n
-                  [helperText]="multipartMinPartText"
-                  cdOptionalField="Multipart Minimum Part Size"
-                  >Multipart Minimum Part Size
-                  <input
-                    cdsText
-                    type="text"
-                    id="multipart_min_part_size"
-                    formControlName="multipart_min_part_size"
-                  />
-                </cds-text-label>
-              </div>
-            </div>
-          </cds-accordion-item>
-        </cds-accordion>
         <cd-form-advanced-fieldset title="Glacier Storage Class"
-                                   *ngIf="storageClassForm.getValue('storageClassType') === 'cloud-s3-glacier'">
+                                   *ngIf="storageClassForm.getValue('storageClassType') === TIER_TYPE.GLACIER">
    
         <div class="form-item form-item-append"
              cdsRow>
@@ -412,12 +365,8 @@
         </div>
         </div>
         </cd-form-advanced-fieldset>
-      <div
-        *ngIf="
-          storageClassForm.getValue('storageClassType') === 'cloud-s3' ||
-          storageClassForm.getValue('storageClassType') === 'cloud-s3-glacier'
-        "
-      >
+      <div *ngIf="(storageClassForm.getValue('storageClassType') === TIER_TYPE.CLOUD_TIER) || (
+      storageClassForm.getValue('storageClassType') === TIER_TYPE.GLACIER)">
         <ng-template #title>
           <h5 class="cds--accordion__title cd-header">Advanced</h5>
         </ng-template>
@@ -465,53 +414,24 @@
               </div>
               <div class="form-item">
                 <cds-checkbox
-                  id="retain_head_object"
-                  formControlName="retain_head_object"
-                  cdOptionalField="Retain Head Object"
-                  i18n-label
-                  >Retain Head Object
-                  <cd-help-text>{{ retainHeadObjectText }}</cd-help-text>
-                </cds-checkbox>
-              </div>
-              <div class="form-item">
-                <cds-checkbox
                   id="allow_read_through"
                   formControlName="allow_read_through"
                   cdOptionalField="Allow Read Through"
-                  i18n-label
+                  i18n
+                  (change)="onAllowReadThroughChange($event)"
                   >Allow Read Through
                   <cd-help-text>{{ allowReadThroughText }}</cd-help-text>
                 </cds-checkbox>
               </div>
-              <div
-                class="form-item"
-                *ngIf="storageClassForm.getValue('storageClassType') === 'cloud-s3-glacier'"
-              >
-                <cds-text-label
-                  labelInputID="storage_class"
+              <div class="form-item">
+                <cds-checkbox
+                  id="retain_head_object"
+                  formControlName="retain_head_object"
+                  cdOptionalField="Head Object (Stub File)"
                   i18n
-                  [disabled]="editing"
-                  [invalid]="
-                    storageClassForm.controls.acl.invalid && storageClassForm.controls.acl.dirty
-                  "
-                  [invalidText]="storageError"
-                  >ACLs
-                  <input
-                    cdsText
-                    type="type"
-                    id="acl"
-                    formControlName="acl"
-                    [invalid]="storageClassForm.showError('acl', formDir, 'required')"
-                  />
-                </cds-text-label>
-                <ng-template #storageError>
-                  <span
-                    class="invalid-feedback"
-                    *ngIf="storageClassForm.showError('acl', formDir, 'required')"
-                    i18n
-                    >This field is required.</span
-                  >
-                </ng-template>
+                  >Head Object (Stub File)
+                  <cd-help-text>{{ retainHeadObjectText }}</cd-help-text>
+                </cds-checkbox>
               </div>
             </cds-accordion-item>
           </cds-accordion>
@@ -521,10 +441,7 @@
       <cd-alert-panel
         type="warning"
         spacingClass="mb-2"
-        *ngIf="
-          storageClassForm.getValue('storageClassType') === 'cloud-s3' ||
-          storageClassForm.getValue('storageClassType') === 'cloud-s3-glacier'
-        "
+        *ngIf="storageClassForm.getValue('storageClassType') === TIER_TYPE.CLOUD_TIER || (storageClassForm.getValue('storageClassType') === TIER_TYPE.GLACIER)"
       >
         <span i18n>RGW service would be restarted after creating the storage class.</span>
       </cd-alert-panel>

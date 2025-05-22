@@ -10,9 +10,9 @@ import {
   TARGET_ACCESS_KEY_TEXT,
   TARGET_PATH_TEXT,
   TARGET_SECRET_KEY_TEXT,
-  TIER_TYPE
+  TIER_TYPE,
+  TIER_TYPE_DISPLAY
 } from '../models/rgw-storage-class.model';
-
 @Component({
   selector: 'cd-rgw-storage-class-details',
   templateUrl: './rgw-storage-class-details.component.html',
@@ -32,6 +32,7 @@ export class RgwStorageClassDetailsComponent implements OnChanges {
   targetPathText = TARGET_PATH_TEXT;
   hostStyleText = HOST_STYLE;
   TIER_TYPE = TIER_TYPE;
+  TIER_TYPE_DISPLAY = TIER_TYPE_DISPLAY;
 
   ngOnChanges() {
     if (this.selection) {

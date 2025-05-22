@@ -7,7 +7,7 @@
         data-testid="rgw-storage-details"
       >
         <tbody>
-          <tr *ngIf="selection.tier_type === TIER_TYPE.LOCAL">
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.LOCAL">
             <td class="bold"
                 i18n>
               Zone Group
@@ -21,7 +21,7 @@
             </td>
             <td>{{ selection?.zonegroup_name }}</td>
           </tr>
-          <tr *ngIf="selection.tier_type === TIER_TYPE.LOCAL">
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.LOCAL">
             <td class="bold"
                 i18n>
               Placement Target
@@ -34,7 +34,7 @@
             </td>
             <td>{{ selection?.placement_target }}</td>
           </tr>
-          <tr *ngIf="(selection.tier_type === TIER_TYPE.CLOUD_TIER) || (selection.tier_type === TIER_TYPE.GLACIER)">
+          <tr *ngIf="(selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER) || (selection.tier_type === TIER_TYPE_DISPLAY.GLACIER)">
             <td class="bold"
                 i18n>
               Target Path
@@ -46,13 +46,13 @@
             </td>
             <td>{{ selection?.target_path }}</td>
           </tr>
-          <tr *ngIf="(selection.tier_type === TIER_TYPE.CLOUD_TIER) || (selection.tier_type === TIER_TYPE.GLACIER)">
+          <tr *ngIf="(selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER) || (selection.tier_type === TIER_TYPE_DISPLAY.GLACIER)">
             <td class="bold"
                 i18n>
               Access key
               <cd-helper class="text-pre-wrap">
                 <span>
-                  Access key is the remote cloud S3 access key used for a specific connection.
+                  {{ targetAccessKeyText }}
                 </span>
               </cd-helper>
             </td>
@@ -74,7 +74,7 @@
               </div>
             </td>
           </tr>
-          <tr *ngIf="(selection.tier_type === TIER_TYPE.CLOUD_TIER) || (selection.tier_type === TIER_TYPE.GLACIER)">
+          <tr *ngIf="(selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER) || (selection.tier_type === TIER_TYPE_DISPLAY.GLACIER)">
             <td class="bold"
                 i18n>
               Secret key
@@ -100,7 +100,7 @@
               </div>
             </td>
           </tr>
-          <tr *ngIf="(selection.tier_type === TIER_TYPE.CLOUD_TIER) || (selection.tier_type === TIER_TYPE.GLACIER)">
+          <tr *ngIf="(selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER) || (selection.tier_type === TIER_TYPE_DISPLAY.GLACIER)">
             <td class="bold"
                 i18n>
               Host Style
@@ -110,7 +110,7 @@
             </td>
             <td>{{ selection?.host_style }}</td>
           </tr>
-          <tr *ngIf="selection.tier_type === TIER_TYPE.CLOUD_TIER">
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER">
             <td class="bold"
                 i18n>
               Multipart Minimum Part Size
@@ -122,7 +122,7 @@
             </td>
             <td>{{ selection?.multipart_min_part_size }}</td>
           </tr>
-          <tr *ngIf="(selection.tier_type === TIER_TYPE.CLOUD_TIER) || (selection.tier_type === TIER_TYPE.GLACIER)">
+          <tr *ngIf="(selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER) || (selection.tier_type === TIER_TYPE_DISPLAY.GLACIER)">
             <td class="bold"
                 i18n>
               Multipart Sync Threshold
@@ -134,7 +134,7 @@
             </td>
             <td>{{ selection?.multipart_sync_threshold }}</td>
           </tr>
-          <tr *ngIf="(selection.tier_type === TIER_TYPE.CLOUD_TIER) || (selection.tier_type === TIER_TYPE.GLACIER)">
+          <tr *ngIf="(selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER) || (selection.tier_type === TIER_TYPE_DISPLAY.GLACIER)">
             <td class="bold"
                 i18n>
                 Head Object (Stub File)
@@ -145,7 +145,7 @@
             </td>
             <td>{{ selection?.retain_head_object }}</td>
           </tr>
-          <tr *ngIf="(selection.tier_type === TIER_TYPE.CLOUD_TIER) || (selection.tier_type === TIER_TYPE.GLACIER)">
+          <tr *ngIf="(selection.tier_type === TIER_TYPE_DISPLAY.CLOUD_TIER) || (selection.tier_type === TIER_TYPE_DISPLAY.GLACIER)">
             <td class="bold"
                 i18n>
               Allow Read Through
@@ -157,7 +157,7 @@
             </td>
             <td>{{ selection?.allow_read_through }}</td>
           </tr>
-          <tr *ngIf="selection.tier_type === TIER_TYPE.GLACIER">
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.GLACIER">
             <td
                 class="bold"
                 i18n>
@@ -170,7 +170,7 @@
             </td>
             <td>{{ selection?.glacier_restore_days }}</td>
           </tr>
-          <tr *ngIf="selection.tier_type === TIER_TYPE.GLACIER">
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.GLACIER">
             <td
                 class="bold"
                 i18n>
@@ -183,7 +183,7 @@
             </td>
             <td>{{ selection?.glacier_restore_tier_type }}</td>
           </tr>
-          <tr *ngIf="selection.tier_type === TIER_TYPE.GLACIER">
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.GLACIER">
             <td
                 class="bold"
                 i18n>
@@ -196,7 +196,7 @@
             </td>
             <td>{{ selection?.read_through_restore_days }}</td>
           </tr>
-          <tr *ngIf="selection.tier_type === TIER_TYPE.GLACIER">
+          <tr *ngIf="selection.tier_type === TIER_TYPE_DISPLAY.GLACIER">
             <td
                 class="bold"
                 i18n>

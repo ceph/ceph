@@ -2040,7 +2040,8 @@ class RgwMultisite:
                 '--rgw-zonegroup', zonegroup_name,
                 '--placement-id', placement_target['placement_id']
             ]
-            storage_class_name = placement_target.get('storage_class')
+            storage_class_name = placement_target.get('storage_class', None)
+            tier_type = placement_target.get('tier_type', None)
 
             tier_type = placement_target.get('tier_type')
 

@@ -26,7 +26,10 @@ import {
   TierTarget,
   TIER_TYPE,
   ZoneGroup,
-  ZoneGroupDetails
+  ZoneGroupDetails,
+  CLOUDS3_STORAGE_CLASS_TEXT,
+  LOCAL_STORAGE_CLASS_TEXT,
+  GLACIER_STORAGE_CLASS_TEXT
 } from '../models/rgw-storage-class.model';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -61,7 +64,6 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   storageClassInfo: StorageClass;
   tierTargetInfo: TierTarget;
   allowReadThroughText: string;
-  allowReadThrough: boolean = false;
   glacierRestoreDayText: string;
   glacierRestoreTiertypeText: string;
   tiertypeText: string;
@@ -69,6 +71,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   readthroughrestoreDaysText: string;
   restoreStorageClassText: string;
   glacierStorageClassDetails: any;
+  allowReadThrough: boolean = false;
+  TIER_TYPE = TIER_TYPE;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -95,36 +99,19 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     this.targetSecretKeyText = TARGET_SECRET_KEY_TEXT;
     this.retainHeadObjectText = RETAIN_HEAD_OBJECT_TEXT;
     this.allowReadThroughText = ALLOW_READ_THROUGH_TEXT;
-    this.storageClassText =
-      'A storage class type defines the performance, availability, and cost characteristics of data storage in a system or cloud service.';
-    this.multipartMinPartText =
-      'It specifies that objects this size or larger are transitioned to the cloud using multipart upload.';
-    this.multipartSyncThreholdText =
-      'It specifies the minimum part size to use when transitioning objects using multipart upload.';
-    this.targetPathText =
-      'Target Path refers to the storage location (e.g., bucket or container) in the cloud where data will be stored.';
-    this.targetRegionText = 'The region of the remote cloud service where storage is located.';
-    this.targetEndpointText = 'The URL endpoint of the remote cloud service for accessing storage.';
-    this.targetAccessKeyText =
-      "To view or copy your access key, go to your cloud service's user management or credentials section, find your user profile, and locate the access key. You can view and copy the key by following the instructions provided.";
-
-    this.targetSecretKeyText =
-      "To view or copy your secret key, go to your cloud service's user management or credentials section, find your user profile, and locate the access key. You can view and copy the key by following the instructions provided.";
-    this.retainHeadObjectText =
-      'Retain object metadata after transition to the cloud (default: false).';
-    this.allowReadThroughText =
-      'Enables fetching objects from remote cloud S3 if not found locally (default: false).';
-    this.glacierRestoreDayText =
-      'Refers to no. of days to the object will be restored on glacier/tape endpoint.';
-    this.glacierRestoreTiertypeText = 'Restore retrieval type.';
-    this.tiertypeText = 'Restore retrieval type either Standard or Expedited.';
-    this.restoreDaysText =
-      'Refers to no. of days to the object will be restored on glacier/tape endpoint .';
-    this.readthroughrestoreDaysText =
-      'The duration for which objects restored via read-through are retained. Default value is 1 day.';
-    this.restoreStorageClassText =
-      'The storage class to which object data is to be restored. Default value is STANDARD.';
+    this.storageClassText = LOCAL_STORAGE_CLASS_TEXT;
+  this.glacierRestoreDayText =
+    'Refers to no. of days to the object will be restored on glacier/tape endpoint.';
+  this.glacierRestoreTiertypeText = 'Restore retrieval type.';
+  this.tiertypeText = 'Restore retrieval type either Standard or Expedited.';
+  this.restoreDaysText =
+    'Refers to no. of days to the object will be restored on glacier/tape endpoint .';
+  this.readthroughrestoreDaysText =
+    'The duration for which objects restored via read-through are retained. Default value is 1 day.';
+  this.restoreStorageClassText =
+    'The storage class to which object data is to be restored. Default value is STANDARD.';
     this.createForm();
+    this.storageClassTypeText();
     this.loadingReady();
     this.loadZoneGroup();
     if (this.editing) {
@@ -216,6 +203,21 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
         control.updateValueAndValidity();
       });
     });
+    this.storageClassForm.get('allow_read_through').valueChanges.subscribe((value) => {
+      this.onAllowReadThroughChange(value);
+    });
+  }
+
+  storageClassTypeText() {
+    this.storageClassForm?.get('storageClassType')?.valueChanges.subscribe((value) => {
+      if (value === TIER_TYPE.LOCAL) {
+        this.storageClassText = LOCAL_STORAGE_CLASS_TEXT;
+      } else if (value === TIER_TYPE.CLOUD_TIER) {
+        this.storageClassText = CLOUDS3_STORAGE_CLASS_TEXT;
+      } else  if (value === TIER_TYPE.GLACIER) {
+        this.storageClassText = GLACIER_STORAGE_CLASS_TEXT;
+      }
+    });
   }
 
   createForm() {
@@ -245,23 +247,23 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
         CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
       ]),
       retain_head_object: new FormControl(false),
-      multipart_sync_threshold: new FormControl(33554432),
-      multipart_min_part_size: new FormControl(33554432),
-      allow_read_through: new FormControl(false),
-      storageClassType: new FormControl('local', Validators.required),
       glacier_restore_tier_type: new FormControl('', [
         CdValidators.composeIf({ storageClassType: TIER_TYPE.GLACIER }, [Validators.required])
       ]),
-      glacier_restore_days: new FormControl('', [
+      glacier_restore_days: new FormControl(1, [
         CdValidators.composeIf({ storageClassType: TIER_TYPE.GLACIER }, [Validators.required])
       ]),
       restore_storage_class: new FormControl('', [
         CdValidators.composeIf({ storageClassType: TIER_TYPE.GLACIER }, [Validators.required])
       ]),
-      readthrough_restore_days: new FormControl('', [
+      readthrough_restore_days: new FormControl(1, [
         CdValidators.composeIf({ storageClassType: TIER_TYPE.GLACIER }, [Validators.required])
       ]),
-      acl: new FormControl('')
+      acl: new FormControl(''),
+      multipart_sync_threshold: new FormControl(33554432),
+      multipart_min_part_size: new FormControl(33554432),
+      allow_read_through: new FormControl(false),
+      storageClassType: new FormControl(TIER_TYPE.LOCAL, Validators.required)
     });
   }
 
@@ -378,12 +380,14 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     const storageClass = this.storageClassForm.get('storage_class').value;
     const placementId = this.storageClassForm.get('placement_target').value;
     const storageClassType = this.storageClassForm.get('storageClassType').value;
+    const retain_head_object = this.storageClassForm.get('retain_head_object').value;
 
     return this.buildPlacementTargets(
       storageClassType,
       zoneGroup,
       placementId,
       storageClass,
+      retain_head_object,
       rawFormValue
     );
   }
@@ -393,6 +397,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     zoneGroup: string,
     placementId: string,
     storageClass: string,
+    retain_head_object: boolean,
     rawFormValue: any
   ): RequestModel {
     switch (storageClassType) {
@@ -422,7 +427,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
                 access_key: rawFormValue.access_key,
                 secret: rawFormValue.secret_key,
                 target_path: rawFormValue.target_path,
-                retain_head_object: rawFormValue.retain_head_object,
+                retain_head_object: retain_head_object,
                 allow_read_through: rawFormValue.allow_read_through,
                 region: rawFormValue.region,
                 multipart_sync_threshold: rawFormValue.multipart_sync_threshold,

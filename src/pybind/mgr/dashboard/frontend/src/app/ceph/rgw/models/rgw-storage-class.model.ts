@@ -69,6 +69,8 @@ export interface StorageClassDetails {
   glacier_restore_tier_type?: string;
   readthrough_restore_days?: number;
   restore_storage_class?: string;
+  zonegroup_name?: string;
+  placement_targets?: string;
 }
 
 export interface ZoneGroup {
@@ -164,10 +166,17 @@ export const RETAIN_HEAD_OBJECT_TEXT = 'Retain object metadata after transition 
 export const HOST_STYLE = `The URL format for accessing the remote S3 endpoint:
   - 'Path': Use for a path-based URL
   - 'Virtual': Use for a domain-based URL`;
-export type TIER_TYPE = typeof TIER_TYPE[keyof typeof TIER_TYPE];
 
 export const TIER_TYPE_DISPLAY = {
   LOCAL: 'Local',
   CLOUD_TIER: 'Cloud S3',
   GLACIER: 'Cloud S3 Glacier'
 };
+
+export type TIER_TYPE = typeof TIER_TYPE[keyof typeof TIER_TYPE];
+
+export const LOCAL_STORAGE_CLASS_TEXT = $localize`Local storage uses on-premises or directly attached devices for data storage.`;
+
+export const CLOUDS3_STORAGE_CLASS_TEXT = $localize`Cloud S3 storage uses Amazon S3-compatible cloud services for tiering.`;
+
+export const GLACIER_STORAGE_CLASS_TEXT = $localize`Glacier storage uses Amazon S3 Glacier for low-cost, long-term archival data storage.`;
