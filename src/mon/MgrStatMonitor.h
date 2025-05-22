@@ -53,6 +53,7 @@ public:
   bool preprocess_statfs(MonOpRequestRef op);
 
   void calc_pool_availability();
+  bool enable_availability_tracking = true; ///< tracking availability score feature 
 
   void check_sub(Subscription *sub);
   void check_subs();
