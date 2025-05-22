@@ -2519,6 +2519,9 @@ public:
   ceph::timespan mon_timeout;
   ceph::timespan osd_timeout;
 
+  // last time osdmap was requested
+  ceph::coarse_mono_time last_osdmap_request_time;
+
   MOSDOp *_prepare_osd_op(Op *op);
   void _send_op(Op *op);
   void _send_op_account(Op *op);
