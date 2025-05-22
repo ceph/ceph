@@ -136,6 +136,7 @@ class D4NFilterObject : public FilterObject {
     bool delete_marker{false};
     bool exists_in_cache{false};
     bool load_from_store{false};
+    bool attrs_read_from_cache{false};
 
   public:
     struct D4NFilterReadOp : FilterReadOp {
