@@ -897,6 +897,11 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
 
 int D4NFilterObject::get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y)
 {
+  //if attrs have already been set due to a previous call, do not read again.
+  if (attrs_read_from_cache) {
+    return true;
+  }
+
   std::string head_oid_in_cache;
   rgw::sal::Attrs attrs;
   rgw::d4n::CacheBlock block;
@@ -957,6 +962,7 @@ int D4NFilterObject::get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, opt
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): D4NFilterObject set_attrs method failed." << dendl;
     }
+    attrs_read_from_cache = true;
   } // if found_in_cache = true
 
   return found_in_cache;
