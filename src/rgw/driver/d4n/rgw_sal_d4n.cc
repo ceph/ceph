@@ -1849,25 +1849,12 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
       std::pair<uint64_t, uint64_t> ofs_len_pair = it->second;
       uint64_t ofs = ofs_len_pair.first;
       uint64_t len = ofs_len_pair.second;
-      bool dirty = false;
-
-      rgw::d4n::CacheBlock block;
-      block.cacheObj.objName = source->get_key().get_oid();
-      block.cacheObj.bucketName = source->get_bucket()->get_bucket_id();
-      block.blockID = ofs;
-      block.size = len;
 
       std::string oid_in_cache = get_key_in_cache(prefix, std::to_string(ofs), std::to_string(len));
 
-      if (source->driver->get_block_dir()->get(dpp, &block, y) == 0){
-        if (block.cacheObj.dirty){ 
-          dirty = true;
-        }
-      }
-
       ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " calling update for offset: " << offset << " adjusted offset: " << ofs  << " length: " << len << " oid_in_cache: " << oid_in_cache << dendl;
       ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " version stored in update method is: " << version << " " << source->get_object_version() << dendl;
-      source->driver->get_policy_driver()->get_cache_policy()->update(dpp, oid_in_cache, ofs, len, version, dirty, rgw::d4n::RefCount::DECR, y);
+      source->driver->get_policy_driver()->get_cache_policy()->update(dpp, oid_in_cache, ofs, len, version, std::nullopt, rgw::d4n::RefCount::DECR, y);
       blocks_info.erase(it);
       if (source->dest_object && source->dest_bucket) {
         D4NFilterObject* d4n_dest_object = dynamic_cast<D4NFilterObject*>(source->dest_object);

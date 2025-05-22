@@ -428,7 +428,7 @@ bool LFUDAPolicy::update_refcount_if_key_exists(const DoutPrefixProvider* dpp, c
   return true;
 }
 
-void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, uint8_t op, optional_yield y, std::string& restore_val)
+void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, std::optional<bool> dirty, uint8_t op, optional_yield y, std::string& restore_val)
 {
   ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): updating entry: " << key << dendl;
   using handle_type = boost::heap::fibonacci_heap<LFUDAEntry*, boost::heap::compare<EntryComparator<LFUDAEntry>>>::handle_type;
@@ -447,12 +447,16 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, 
   /* check the dirty flag in the existing entry for the key and the incoming dirty flag. If the
      incoming dirty flag is false, that means update() is invoked as part of cleaning process,
      so we must not update its localWeight. */
-  if (entry != nullptr) {
+  if (entry) {
     refcount = entry->refcount;
-    if ((entry->dirty && !dirty)) {
-      localWeight = entry->localWeight;
-      updateLocalWeight = false;
-    } else {
+    if (entry->dirty && dirty.has_value()) {
+      bool is_dirty = dirty.value();
+      if (!is_dirty) {
+        localWeight = entry->localWeight;
+        updateLocalWeight = false;
+      }
+    }
+    if (updateLocalWeight) {
       localWeight = entry->localWeight + age;
     }
     if (op == RefCount::INCR) {
@@ -463,10 +467,17 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, 
         refcount -= 1;
       }
     }
-  }  
+  }
+  //pick the existing value of dirty, if no value has been passed in
+  bool is_dirty = false;
+  if (dirty.has_value()) {
+    is_dirty = dirty.value();
+  } else if (entry) {
+    is_dirty = entry->dirty;
+  }
   _erase(dpp, key, y);
   ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): updated refcount is: " << refcount << dendl;
-  LFUDAEntry* e = new LFUDAEntry(key, offset, len, version, dirty, refcount, localWeight);
+  LFUDAEntry* e = new LFUDAEntry(key, offset, len, version, is_dirty, refcount, localWeight);
   handle_type handle = entries_heap.push(e);
   e->set_handle(handle);
   entries_map.emplace(key, e);
@@ -998,11 +1009,15 @@ int LRUPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_y
   return 0;
 }
 
-void LRUPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, uint8_t op, optional_yield y, std::string& restore_val)
+void LRUPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, std::optional<bool> dirty, uint8_t op, optional_yield y, std::string& restore_val)
 {
   const std::lock_guard l(lru_lock);
   _erase(dpp, key, y);
-  Entry* e = new Entry(key, offset, len, version, dirty, 0);
+  bool is_dirty = false;
+  if (dirty.has_value()) {
+    is_dirty = dirty.value();
+  }
+  Entry* e = new Entry(key, offset, len, version, is_dirty, 0);
   entries_lru_list.push_back(*e);
   entries_map.emplace(key, e);
 }
