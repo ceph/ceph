@@ -124,15 +124,27 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         (data: ZoneGroupDetails) => {
           this.storageClassList = [];
           const tierObj = BucketTieringUtils.filterAndMapTierTargets(data);
-          const tierConfig = tierObj.map((item) => ({
-            ...item,
-            tier_type:
-              item.tier_type?.toLowerCase() === TIER_TYPE.CLOUD_TIER
-                ? TIER_TYPE_DISPLAY.CLOUD_TIER
-                : item.tier_type?.toLowerCase() === TIER_TYPE.LOCAL
-                ? TIER_TYPE_DISPLAY.LOCAL
-                : item.tier_type
-          }));
+          const tierConfig = tierObj.map((item) => {
+            let tierTypeDisplay;
+
+            switch (item.tier_type?.toLowerCase()) {
+              case TIER_TYPE.CLOUD_TIER:
+                tierTypeDisplay = TIER_TYPE_DISPLAY.CLOUD_TIER;
+                break;
+              case TIER_TYPE.LOCAL:
+                tierTypeDisplay = TIER_TYPE_DISPLAY.LOCAL;
+                break;
+              case TIER_TYPE.GLACIER:
+                tierTypeDisplay = TIER_TYPE_DISPLAY.GLACIER;
+                break;
+              default:
+                tierTypeDisplay = item.tier_type;
+            }
+            return {
+              ...item,
+              tier_type: tierTypeDisplay
+            };
+          });
           this.transformTierData(tierConfig);
           this.storageClassList.push(...tierConfig);
           resolve();
