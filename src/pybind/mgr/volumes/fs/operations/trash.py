@@ -236,22 +236,7 @@ class Trash(GroupTemplate):
 
     def get_stats(self):
         try:
-            file_count = int(self.fs.getxattr(self.path, 'ceph.dir.rfiles'))
-            trash_size = int(self.fs.getxattr(self.path, 'ceph.dir.rbytes'))
-
-            trash_dirs_count = int(self.fs.getxattr(self.path, 'ceph.dir.rsubdirs'))
-            # "_deleting" dir was undesirably counted in the variable
-            # "trash_dirs_count", reducing count by one now.
-            trash_subdirs_count = trash_dirs_count - 1
-            # each subvol is placed in under a new UUID dir which is directly
-            # located under trash (_deleting) dir. therefore the value of
-            # "trash_subdirs_count" is twice of number of subvols.
-            #
-            # trash_subdirs_count = 1 (one dir per subvol) + 1 (one dir that
-            # contains each individual subvol)
-            #
-            # therefore adjusting this count to get exact  number of subvol
-            subvol_count = int(trash_subdirs_count / 2)
+            subvol_count, file_count, trash_size = self._get_stats()
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
