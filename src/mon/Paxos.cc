@@ -979,7 +979,7 @@ void Paxos::handle_commit(MonOpRequestRef op)
 void Paxos::extend_lease()
 {
   ceph_assert(mon.is_leader());
-  //assert(is_active());
+  //ceph_assert(is_active());
 
   lease_expire = ceph::real_clock::now();
   lease_expire += ceph::make_timespan(g_conf()->mon_lease);

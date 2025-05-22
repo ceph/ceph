@@ -86,7 +86,7 @@ void ElectionLogic::bump_epoch(epoch_t e)
 
 void ElectionLogic::declare_standalone_victory()
 {
-  assert(elector->paxos_size() == 1 && elector->get_my_rank() == 0);
+  ceph_assert(elector->paxos_size() == 1 && elector->get_my_rank() == 0);
   init();
   bump_epoch(epoch+1);
 }
