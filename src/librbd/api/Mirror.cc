@@ -28,6 +28,7 @@
 #include "librbd/mirror/GetInfoRequest.h"
 #include "librbd/mirror/GetStatusRequest.h"
 #include "librbd/mirror/GetUuidRequest.h"
+#include "librbd/mirror/GroupEnableRequest.h"
 #include "librbd/mirror/GroupGetInfoRequest.h"
 #include "librbd/mirror/PromoteRequest.h"
 #include "librbd/mirror/Types.h"
@@ -2756,6 +2757,21 @@ int Mirror<I>::group_enable(IoCtx& group_ioctx, const char *group_name,
     return -EINVAL;
   }
 
+  C_SaferCond cond;
+  auto req = mirror::GroupEnableRequest<>::create(group_ioctx, group_id,
+                                                  static_cast<cls::rbd::MirrorImageMode>(mirror_image_mode),
+                                                  &cond);
+  req->send();
+  r = cond.wait();
+  if (r < 0) { 
+    lderr(cct) << "failed to mirror enable group: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+  return 0;
+
+/*
+
   cls::rbd::MirrorGroup mirror_group;
   r = cls_client::mirror_group_get(&group_ioctx, group_id, &mirror_group);
   if (r == -EOPNOTSUPP) {
@@ -2895,8 +2911,7 @@ cleanup:
       // not fatal
     }
   }
-
-  return ret_code;
+*/
 }
 
 template <typename I>
