@@ -209,3 +209,11 @@ def _get_default_service(gateways):
         service_name = gateway_keys[0]
         return service_name, gateways[service_name][0]['service_url']
     return None
+
+
+def is_encryption_enabled(service_name: str):
+    try:
+        orch = OrchClient.instance()
+        return orch.services.get(service_name)[0].spec.enable_auth
+    except OrchestratorError:
+        return False
