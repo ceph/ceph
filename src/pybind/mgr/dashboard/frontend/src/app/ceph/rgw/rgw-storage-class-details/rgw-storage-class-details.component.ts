@@ -1,6 +1,6 @@
 import { Component, Input, OnChanges } from '@angular/core';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
-import { StorageClassDetails } from '../models/rgw-storage-class.model';
+import { StorageClassDetails, TIER_TYPE } from '../models/rgw-storage-class.model';
 
 @Component({
   selector: 'cd-rgw-storage-class-details',
@@ -12,6 +12,7 @@ export class RgwStorageClassDetailsComponent implements OnChanges {
   selection: StorageClassDetails;
   columns: CdTableColumn[] = [];
   storageDetails: StorageClassDetails;
+  TIER_TYPE = TIER_TYPE;
 
   ngOnChanges() {
     if (this.selection) {

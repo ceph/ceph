@@ -1910,6 +1910,7 @@ class RgwMultisite:
                 '--placement-id', placement_target['placement_id']
             ]
             storage_class_name = placement_target.get('storage_class', None)
+            tier_type = placement_target.get('tier_type', None)
 
             if (
                 placement_target.get('tier_type') == CLOUD_S3_TIER_TYPE
@@ -1947,7 +1948,8 @@ class RgwMultisite:
                         )
                 except SubprocessError as error:
                     raise DashboardException(error, http_status_code=500, component='rgw')
-                self.ensure_realm_and_sync_period()
+                if tier_type == CLOUD_S3_TIER_TYPE:
+                    self.ensure_realm_and_sync_period()
 
             if storage_classes:
                 for sc in storage_classes:
@@ -1970,7 +1972,8 @@ class RgwMultisite:
                                 )
                         except SubprocessError as error:
                             raise DashboardException(error, http_status_code=500, component='rgw')
-                        self.ensure_realm_and_sync_period()
+                        if tier_type == CLOUD_S3_TIER_TYPE:
+                            self.ensure_realm_and_sync_period()
 
     def modify_placement_targets(self, zonegroup_name: str, placement_targets: List[Dict]):
         rgw_add_placement_cmd = ['zonegroup', 'placement', 'modify']
@@ -2020,7 +2023,6 @@ class RgwMultisite:
                         )
                 except SubprocessError as error:
                     raise DashboardException(error, http_status_code=500, component='rgw')
-                self.ensure_realm_and_sync_period()
 
             if storage_classes:
                 for sc in storage_classes:
@@ -2043,7 +2045,6 @@ class RgwMultisite:
                                 )
                         except SubprocessError as error:
                             raise DashboardException(error, http_status_code=500, component='rgw')
-                        self.ensure_realm_and_sync_period()
 
     def delete_placement_targets(self, placement_id: str, storage_class: str):
         rgw_zonegroup_delete_cmd = ['zonegroup', 'placement', 'rm',
