@@ -543,7 +543,11 @@ struct transaction_manager_test_t :
 	"get_extent got invalid error"
       }
     ).get();
+    if (t.t->is_conflicted()) {
+      return nullptr;
+    }
     if (ext) {
+      ceph_assert(ext->is_valid());
       EXPECT_EQ(addr, ext->get_laddr());
     }
     return ext;
@@ -569,7 +573,11 @@ struct transaction_manager_test_t :
 	"get_extent got invalid error"
       }
     ).get();
+    if (t.t->is_conflicted()) {
+      return nullptr;
+    }
     if (ext) {
+      ceph_assert(ext->is_valid());
       EXPECT_EQ(addr, ext->get_laddr());
     }
     return ext;
@@ -1572,14 +1580,12 @@ struct transaction_manager_test_t :
               last_pin = pin->duplicate();
 	    }
             auto last_ext = try_get_extent(t, last_pin.get_key());
-            if (last_ext) {
-	      auto last_ext1 = mutate_extent(t, last_ext);
-	      ASSERT_TRUE(last_ext1->is_exist_mutation_pending());
-            } else {
-	      conflicted++;
-	      return;
+            if (!last_ext) {
+              conflicted++;
+              return;
             }
-
+            auto last_ext1 = mutate_extent(t, last_ext);
+            ASSERT_TRUE(last_ext1->is_exist_mutation_pending());
 	    if (try_submit_transaction(std::move(t))) {
 	      success++;
 	      logger().info("transaction {} submit the transction",
