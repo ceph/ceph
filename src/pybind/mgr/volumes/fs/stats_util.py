@@ -441,6 +441,9 @@ class PurgeProgressBar(VolumesProgressBar):
 
         self.pev_id = 'mgr-vol-ongoing-purge'
 
+        self.prev_msg = None
+        self.prev_fraction = None
+
     def initiate(self):
         if self.volclient.purge_queue.disable_purge_progress_bars:
             return
@@ -487,12 +490,21 @@ class PurgeProgressBar(VolumesProgressBar):
             self.finish()
             return
 
+        # XXX: latest stats are higher than initial stats, it means either
+        # rstats are laggy. update init_file_count and init_subvol_count.
         if self.init_file_count < latest_file_count:
-            self.init_subvol_count, self.init_file_count = latest_subvol_count, latest_file_count
+            self.init_subvol_count, self.init_file_count = \
+                latest_subvol_count, latest_file_count
             log.debug(f'rstats for trash dir increased instead of decreasing, '
                        'updating initial stats to latest stats found: '
                       f'{latest_subvol_count} subvols, {latest_file_count} '
                        'files')
+            # XXX: to avoid printing negative progress, print previous progress and
+            # inform user that rstats are laggy
+            if self.prev_msg and self.prev_fraction:
+                self.prev_msg += 'Note: MDS rstats are laggy'
+                self._update_progress_bar_event(self.pev_id, self.prev_msg,
+                                                self.prev_fraction)
             return
 
         files_purged = self.init_file_count - latest_file_count
@@ -504,6 +516,11 @@ class PurgeProgressBar(VolumesProgressBar):
                f'{percent}%')
         self._update_progress_bar_event(self.pev_id, msg, fraction)
         log.debug(f'finished updating purge progress bar with message: {msg}')
+
+        # save msg and fraction so that they can be reused in case rstats are
+        # found to be laggy in next round.
+        self.prev_msg = msg
+        self.prev_fraction = fraction
 
     def _finish_progress_events(self):
         '''
