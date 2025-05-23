@@ -253,7 +253,7 @@ void ReplicatedBackend::got_rep_op_reply(const MOSDRepOpReply& reply)
 seastar::future<> ReplicatedBackend::stop()
 {
   LOG_PREFIX(ReplicatedBackend::stop);
-  INFODPP("cid {}", coll->get_cid());
+  INFODPP("cid {}", dpp, coll->get_cid());
   for (auto& [tid, pending_on] : pending_trans) {
     pending_on.all_committed.set_exception(
 	crimson::common::system_shutdown_exception());
