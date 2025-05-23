@@ -1,0 +1,23 @@
+# When the --kernel option is given to teuthology-suite, the kernel is set for
+# all nodes (also, the kernel is "distro" when the --kernel option is not set).
+# We don't generally want to use a custom kernel for all tests, so unset it.
+# The k-testing.yaml will set it, if given, for only the client nodes.
+#
+# Allow overriding this by using a branch ending in "-all".
+
+teuthology:
+  postmerge:
+    - |
+      local branch = yaml.kernel.branch
+      if branch and not yaml.kernel.branch:find "-all$" then
+        log.debug("removing default kernel specification: %s", yaml.kernel)
+        py_attrgetter(yaml.kernel).pop('branch', nil)
+        py_attrgetter(yaml.kernel).pop('deb', nil)
+        py_attrgetter(yaml.kernel).pop('flavor', nil)
+        py_attrgetter(yaml.kernel).pop('kdb', nil)
+        py_attrgetter(yaml.kernel).pop('koji', nil)
+        py_attrgetter(yaml.kernel).pop('koji_task', nil)
+        py_attrgetter(yaml.kernel).pop('rpm', nil)
+        py_attrgetter(yaml.kernel).pop('sha1', nil)
+        py_attrgetter(yaml.kernel).pop('tag', nil)
+      end
