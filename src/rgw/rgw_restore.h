@@ -136,5 +136,7 @@ public:
    * to be procesed later by RestoreWorker thread. */
   int restore_obj_from_cloud(rgw::sal::Bucket* pbucket, rgw::sal::Object* pobj,
 		  	     rgw::sal::PlacementTier* tier,
-			     std::optional<uint64_t> days, optional_yield y);
+			     std::optional<uint64_t> days,
+			     const DoutPrefixProvider* dpp,
+			     optional_yield y);
 };
