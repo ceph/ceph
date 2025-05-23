@@ -5070,7 +5070,8 @@ int image_status_set(cls_method_context_t hctx, const string &global_image_id,
   if (r < 0) {
     return 0;
   }
-  if (mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+  if (mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED &&
+      mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_CREATING) {
     return 0;
   }
 
