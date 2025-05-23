@@ -1666,7 +1666,7 @@ bool SegmentCleaner::try_reserve_projected_usage(std::size_t projected_usage)
     return false;
   } else {
     ++stats.projected_count;
-    stats.projected_used_bytes_sum += stats.projected_used_bytes;
+    stats.projected_used_bytes_sum += projected_usage;
     return true;
   }
 }
