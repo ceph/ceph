@@ -1379,7 +1379,12 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
     lc->start_processor();
 
   restore = new RGWRestore();
-  restore->initialize(cct, this->driver);
+  ret = restore->initialize(cct, this->driver);
+
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to initialize restore thread" << dendl;
+    return ret;
+  }
 
   if (use_restore_thread)
     restore->start_processor();

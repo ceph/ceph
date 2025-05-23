@@ -68,7 +68,7 @@ class RGWRestore : public DoutPrefixProvider {
   rgw::sal::Driver* driver;
   std::unique_ptr<rgw::sal::Restore> sal_restore;
   int max_objs{0};
-  std::vector<std::string_view> obj_names;
+  std::vector<std::string> obj_names;
   std::atomic<bool> down_flag = { false };
 
   class RestoreWorker : public Thread
@@ -107,7 +107,7 @@ public:
 
   RGWRestore() : cct(nullptr), driver(nullptr), max_objs(0) {}
 
-  void initialize(CephContext *_cct, rgw::sal::Driver* _driver);
+  int initialize(CephContext *_cct, rgw::sal::Driver* _driver);
   void finalize();
 
   bool going_down();
