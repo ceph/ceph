@@ -615,7 +615,7 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
   // reset the old shard reads, we are going to read them again.
   read_request.shard_reads.clear();
   return get_remaining_shards(hoid, rop.complete.at(hoid), read_request,
-                              rop.do_redundant_reads, want_attrs);
+                              rop.for_recovery, want_attrs);
 }
 
 void ECCommon::ReadPipeline::kick_reads() {
