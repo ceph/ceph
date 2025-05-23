@@ -135,6 +135,17 @@ Options
 :Default: ``16384``
 :Maximum: ``65536``
 
+``so_reuseport``
+
+:Description:  If set allows multiple RGW instances on a host to listen on the same TCP port.
+
+              ``1`` Enable running multiple RGW on same port.
+
+              ``0`` Disallow running multiple RGW on same port.
+
+:Type: Integer (0 or 1)
+:Default: 0
+
 
 Generic Options
 ===============
