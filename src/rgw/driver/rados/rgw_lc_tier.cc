@@ -292,7 +292,7 @@ int rgw_cloud_tier_restore_object(RGWLCCloudTierCtx& tier_ctx,
   }
 
   // now send HEAD request and verify if restore is complete on glacier/tape endpoint
-  static constexpr int MAX_RETRIES = 10;
+  static constexpr int MAX_RETRIES = 2;
   uint32_t retries = 0;
   do {
     ret = rgw_cloud_tier_get_object(tier_ctx, true, headers, nullptr, etag,

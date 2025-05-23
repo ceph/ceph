@@ -475,8 +475,7 @@ class Driver {
     /** Get a @a Lifecycle object. Used to manage/run lifecycle transitions */
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
     /** Get a @a Restore object. Used to manage/run restore objects */
-    virtual std::unique_ptr<Restore> get_restore(const int n_objs,
-		    		const std::vector<std::string_view>& obj_names) = 0;
+    virtual std::unique_ptr<Restore> get_restore(void) = 0;
     /** Reset the temporarily restored objects which are expired */
     virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) = 0;
 
@@ -1691,6 +1690,8 @@ class Restore {
 public:
   Restore() = default;
   virtual ~Restore() = default;
+  virtual int initialize(const DoutPrefixProvider* dpp, optional_yield y,
+		  int n_objs, std::vector<std::string>& obj_names) = 0;  
   /** Add a single restore entry state */
   virtual int add_entry(const DoutPrefixProvider* dpp, optional_yield y,
 		  int index, const RGWRestoreEntry& r_entry) = 0;
