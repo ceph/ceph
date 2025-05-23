@@ -1688,6 +1688,7 @@ SeaStore::Shard::_do_transaction_step(
       assert(get_onode);
       onode = get_onode;
     }
+    onode->handle_siblings(onodevec.left.get(), onodevec.right.get());
     OnodeRef& d_onode = onodes[op->dest_oid];
     if ((op->op == Transaction::OP_CLONE
 	  || op->op == Transaction::OP_COLL_MOVE_RENAME
@@ -1704,6 +1705,7 @@ SeaStore::Shard::_do_transaction_step(
 	assert(dest_onode);
 	assert(!d_onode);
 	d_onode = dest_onode;
+	d_onode->handle_siblings(onodevec.left.get(), onodevec.right.get());
 	return seastar::now();
       });
     } else {
