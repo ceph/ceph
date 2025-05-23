@@ -2029,9 +2029,25 @@ void OSDMap::clean_temps(CephContext *cct,
     const pg_pool_t *pool = nextmap.get_pg_pool(pg.first.pool());
     auto acting_set = nextmap.pgtemp_undo_primaryfirst(*pool, pg.first, pg.second);
     if (raw_up == acting_set) {
-      ldout(cct, 10) << __func__ << "  removing pg_temp " << pg.first << " "
-		     << pg.second << " that matches raw_up mapping" << dendl;
-      remove = true;
+      bool keep = false;
+      // Optimized EC pools may set acting to be the same as up to
+      // force a change of primary shard - do not remove pg_temp
+      // if it is being used for this purpose
+      if (pool->allows_ecoptimizations()) {
+	for (uint8_t i = 0; i < acting_set.size(); ++i) {
+	  if (acting_set[i] == primary) {
+	    if (pool->is_nonprimary_shard(shard_id_t(i))) {
+	      // pg_temp still required
+	      keep = true;
+	    }
+	  }
+	}
+      }
+      if (!keep) {
+	ldout(cct, 10) << __func__ << "  removing pg_temp " << pg.first << " "
+		       << pg.second << " that matches raw_up mapping" << dendl;
+	remove = true;
+      }
     }
     // oversized pg_temp?
     if (pg.second.size() > nextmap.get_pg_pool(pg.first.pool())->get_size()) {
