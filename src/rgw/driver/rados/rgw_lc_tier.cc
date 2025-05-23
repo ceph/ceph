@@ -400,7 +400,8 @@ int rgw_cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
     }
     
     if (header.first == "CONTENT_LENGTH") {
-      accounted_size = atoi(val.c_str());
+      char* end = nullptr;
+      accounted_size = strtoull(val.c_str(), &end, 10);	    
     }
   }
 
