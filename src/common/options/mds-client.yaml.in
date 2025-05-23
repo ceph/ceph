@@ -589,3 +589,12 @@ options:
   - mds_client
   flags:
   - runtime
+- name: client_file_blockdiff_max_concurrent_object_scans
+  type: uint
+  level: advanced
+  desc: maximum number of concurrent object scans
+  long_desc: Maximum number of concurrent listsnaps operations sent to RADOS.
+  default: 16
+  services:
+  - mds_client
+  min: 1
