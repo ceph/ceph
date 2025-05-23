@@ -619,14 +619,15 @@ void SnapMapper::reset_prefix_itr(snapid_t snap, const char *s)
 
 vector<hobject_t> SnapMapper::get_objects_by_prefixes(
   snapid_t snap,
-  unsigned max)
+  unsigned max,
+  std::string& last_key)
 {
   vector<hobject_t> out;
 
   /// maintain the prefix_itr between calls to avoid searching depleted prefixes
   for ( ; prefix_itr != prefixes.end(); prefix_itr++) {
     const string prefix(get_prefix(pool, snap) + *prefix_itr);
-    string pos = prefix;
+    string pos = (last_key.size() > 0) ? last_key : prefix;
     while (out.size() < max) {
       pair<string, ceph::buffer::list> next;
       // access RocksDB (an expensive operation!)
@@ -655,6 +656,7 @@ vector<hobject_t> SnapMapper::get_objects_by_prefixes(
       out.push_back(next_decoded.second);
 
       pos = next.first;
+      last_key = pos;
     }
 
     if (out.size() >= max) {
@@ -669,7 +671,10 @@ vector<hobject_t> SnapMapper::get_objects_by_prefixes(
 
 std::optional<vector<hobject_t>> SnapMapper::get_next_objects_to_trim(
   snapid_t snap,
-  unsigned max)
+  unsigned max,
+  std::string &last_key,       ///< [out] last trim key
+  std::set<string>& last_prefixes      ///< [out] last_prefixes to trim
+  )
 {
   dout(20) << *this << __func__ << "snapid=" << snap << dendl;
 
@@ -688,6 +693,12 @@ std::optional<vector<hobject_t>> SnapMapper::get_next_objects_to_trim(
     }
   }
 
+  if (last_prefixes != prefixes) {
+    last_key = string();
+    last_prefixes = prefixes;
+  }
+  vector<hobject_t> objs;
+  objs = get_objects_by_prefixes(snap, max, last_key);
   // when reaching the end of the DB reset the prefix_ptr and verify
   // we didn't miss objects which were added after we started trimming
   // This should never happen in reality because the snap was logically deleted
@@ -695,10 +706,10 @@ std::optional<vector<hobject_t>> SnapMapper::get_next_objects_to_trim(
   // For more info see PG::filter_snapc()
   //
   // We still like to be extra careful and run one extra loop over all prefixes
-  auto objs = get_objects_by_prefixes(snap, max);
   if (unlikely(objs.size() == 0)) {
     reset_prefix_itr(snap, "Second pass trim");
-    objs = get_objects_by_prefixes(snap, max);
+    last_key = string();
+    objs = get_objects_by_prefixes(snap, max, last_key);
 
     if (unlikely(objs.size() > 0)) {
       derr << *this << __func__ << " New Clone-Objects were added to Snap " << snap

@@ -76,6 +76,7 @@ enum osd_counter_idx_t {
 
   l_osd_recovery_queue_lat,
   l_osd_recovery_context_queue_lat,
+  l_osd_snap_trim_get_raw_object_lat,
 
   l_osd_loadavg,
   l_osd_cached_crc,
