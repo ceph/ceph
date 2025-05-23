@@ -160,7 +160,7 @@ public:
 
   // Returns true if added, false if already added or weak
   bool maybe_add_to_read_set(CachedExtentRef ref) {
-    assert(ref->get_paddr().is_absolute());
+    ceph_assert(ref->get_paddr().is_absolute());
     if (is_weak()) {
       return false;
     }
