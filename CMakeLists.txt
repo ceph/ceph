@@ -231,6 +231,12 @@ if(WITH_RBD AND LINUX)
   set(HAVE_LIBCRYPTSETUP ${LIBCRYPTSETUP_FOUND})
 endif()
 
+# libnbd
+if(WITH_RBD AND NOT WIN32)
+  find_package(libnbd 1.0 REQUIRED)
+  set(HAVE_LIBNBD ${LIBNBD_FOUND})
+endif()
+
 include(CMakeDependentOption)
 
 CMAKE_DEPENDENT_OPTION(WITH_LIBURING "Enable io_uring bluestore backend" ON

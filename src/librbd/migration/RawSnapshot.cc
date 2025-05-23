@@ -205,13 +205,9 @@ void RawSnapshot<I>::list_snap(io::Extents&& image_extents,
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
 
-  // raw does support sparse extents so list the full IO extent as a delta
-  for (auto& [image_offset, image_length] : image_extents) {
-    sparse_extents->insert(image_offset, image_length,
-                           {io::SPARSE_EXTENT_STATE_DATA, image_length});
-  }
-
-  on_finish->complete(0);
+  // raw directly maps the image-extent IO down to a byte IO extent
+  m_stream->list_sparse_extents(std::move(image_extents), sparse_extents,
+                                on_finish);
 }
 
 } // namespace migration

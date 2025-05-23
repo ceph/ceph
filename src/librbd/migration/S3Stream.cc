@@ -194,6 +194,18 @@ void S3Stream<I>::process_request(HttpRequest& http_request) {
                    << "authorization=" << authorization << dendl;
 }
 
+template <typename I>
+void S3Stream<I>::list_sparse_extents(io::Extents&& byte_extents,
+                                      io::SparseExtents* sparse_extents,
+                                      Context* on_finish) {
+  // no sparseness information -- list the full range as DATA
+  for (auto [byte_offset, byte_length] : byte_extents) {
+    sparse_extents->insert(byte_offset, byte_length,
+                           {io::SPARSE_EXTENT_STATE_DATA, byte_length});
+  }
+  on_finish->complete(0);
+}
+
 } // namespace migration
 } // namespace librbd
 
