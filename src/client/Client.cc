@@ -9994,7 +9994,7 @@ int Client::file_blockdiff(struct scan_state_t *state, const UserPerm &perms,
     cct->_conf.get_val<uint64_t>("client_file_blockdiff_max_concurrent_object_scans");
 
   bufferlist bl;
-  r = make_request(req, perms, nullptr, nullptr, -1, &bl);
+  r = make_request(req, perms, nullptr, nullptr, -1, &bl, CEPHFS_FEATURE_BLOCKDIFF);
   ldout(cct, 10) << __func__ << ": result=" << r << dendl;
 
   if (r < 0) {
