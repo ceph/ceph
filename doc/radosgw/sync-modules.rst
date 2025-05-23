@@ -9,7 +9,7 @@ create multiple zones and mirror data and metadata between them. ``Sync Modules`
 are built atop of the multisite framework that allows for forwarding data and
 metadata to a different external tier. A sync module allows for a set of actions
 to be performed whenever a change in data occurs (metadata ops like bucket or
-user creation etc. are also regarded as changes in data). As the rgw multisite
+user creation etc. are also regarded as changes in data). As the RGW multisite
 changes are eventually consistent at remote sites, changes are propagated
 asynchronously. This would allow for unlocking use cases such as backing up the
 object storage to an external cloud cluster or a custom backup solution using
@@ -17,12 +17,12 @@ tape drives, indexing metadata in ElasticSearch etc.
 
 A sync module configuration is local to a zone. The sync module determines
 whether the zone exports data or can only consume data that was modified in
-another zone. As of luminous the supported sync plugins are `elasticsearch`_,
+another zone. As of Luminous the supported sync plugins are `elasticsearch`_,
 ``rgw``, which is the default sync plugin that synchronizes data between the
 zones and ``log`` which is a trivial sync plugin that logs the metadata
 operation that happens in the remote zones. The following docs are written with
 the example of a zone using `elasticsearch sync module`_, the process would be similar
-for configuring any sync plugin
+for configuring any sync plugin.
 
 .. toctree::
    :maxdepth: 1
@@ -40,7 +40,7 @@ Requirements and Assumptions
 Let us assume a simple multisite configuration as described in the :ref:`multisite`
 docs, of 2 zones ``us-east`` and ``us-west``, let's add a third zone
 ``us-east-es`` which is a zone that only processes metadata from the other
-sites. This zone can be in the same or a different ceph cluster as ``us-east``.
+sites. This zone can be in the same or a different Ceph cluster as ``us-east``.
 This zone would only consume metadata from other zones and RGWs in this zone
 will not serve any end user requests directly.
 
@@ -71,7 +71,7 @@ For example in the ``elasticsearch`` sync module
                                --tier-config=endpoint=http://localhost:9200,num_shards=10,num_replicas=1
 
 
-For the various supported tier-config options refer to the `elasticsearch sync module`_ docs
+For the various supported tier-config options refer to the `elasticsearch sync module`_ docs.
 
 Finally update the period
 
