@@ -17,7 +17,6 @@ from orchestrator import OrchestratorClientMixin, raise_if_exception, Orchestrat
 from rbd import RBD
 
 from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List, Callable, IO
-
 LabelValues = Tuple[str, ...]
 Number = Union[int, float]
 MetricValue = Dict[LabelValues, Number]
@@ -94,7 +93,7 @@ OSD_STATUS = ['weight', 'up', 'in']
 
 OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
-POOL_METADATA = ('pool_id', 'name', 'type', 'description', 'compression_mode')
+POOL_METADATA = ('pool_id', 'name', 'type', 'description', 'compression_mode', 'application')
 
 RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version', 'instance_id')
 
@@ -125,6 +124,12 @@ class Format(enum.Enum):
     json = 'json'
     json_pretty = 'json-pretty'
     yaml = 'yaml'
+
+
+class StorageType(enum.Enum):
+    rbd = "Block"
+    cephfs = "Filesystem"
+    rgw = "Object"
 
 
 class HealthCheckEvent:
@@ -1267,13 +1272,20 @@ class Module(MgrModule, OrchestratorClientMixin):
             if 'options' in pool:
                 compression_mode = pool['options'].get('compression_mode', 'none')
 
+            application_metadata = pool.get('application_metadata', {})
+            application_metadata_str = ', '.join(StorageType[k].value
+                                                 if k in StorageType.__members__ else str(k)
+                                                 for k in application_metadata
+                                                 )
             self.metrics['pool_metadata'].set(
                 1, (
                     pool['pool'],
                     pool['pool_name'],
                     pool_type,
                     pool_description,
-                    compression_mode)
+                    compression_mode,
+                    application_metadata_str,
+                ),
             )
 
         # Populate other servers metadata
