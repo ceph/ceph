@@ -5,17 +5,17 @@
 
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/linked_tree_node.h"
-#include "crimson/os/seastore/btree/btree_range_pin.h"
-#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/btree/btree_types.h"
+#include "crimson/os/seastore/lba/lba_btree_node.h"
 
 namespace crimson::os::seastore {
 
 class LogicalChildNode : public LogicalCachedExtent,
-			 public ChildNode<lba_manager::btree::LBALeafNode,
+			 public ChildNode<lba::LBALeafNode,
 					  LogicalChildNode,
 					  laddr_t> {
   using lba_child_node_t = ChildNode<
-    lba_manager::btree::LBALeafNode, LogicalChildNode, laddr_t>;
+    lba::LBALeafNode, LogicalChildNode, laddr_t>;
 public:
   template <typename... T>
   LogicalChildNode(T&&... t) : LogicalCachedExtent(std::forward<T>(t)...) {}
