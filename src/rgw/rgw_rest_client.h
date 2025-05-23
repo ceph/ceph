@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "include/expected.hpp"
 #include "rgw_http_client.h"
 
 class RGWGetDataCB;
@@ -66,7 +67,9 @@ public:
                        param_vec_t *_headers, param_vec_t *_params,
                        std::optional<std::string> _api_name) : RGWHTTPSimpleRequest(_cct, _method, _url, _headers, _params), api_name(_api_name) {}
 
-  int forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, const req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service="");
+  // return the http status of the response or an error code from the transport
+  auto forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, const req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service="")
+    -> tl::expected<int, int>;
 };
 
 class RGWWriteDrainCB {
