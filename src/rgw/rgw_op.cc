@@ -1080,7 +1080,7 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
       }
 
       op_ret = driver->get_rgwrestore()->restore_obj_from_cloud(s->bucket.get(),
-		      s->object.get(), tier.get(), days, y);
+		      s->object.get(), tier.get(), days, dpp, y);
 
       if (op_ret < 0) {
 	ldpp_dout(dpp, 0) << "Restore of object " << s->object->get_key() << " failed" << op_ret << dendl;
@@ -1088,7 +1088,7 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
         return op_ret;
       }
 
-      ldpp_dout(dpp, 20) << "Restore of object " << s->object->get_key() << " succeed" << dendl;
+      ldpp_dout(dpp, 20) << "Restore of object " << s->object->get_key() << " initiated" << dendl;
       /*  Even if restore is complete the first read through request will return
        *  but actually downloaded object asyncronously.
        */
