@@ -565,6 +565,7 @@ public:
   bool try_reads_to_commit();
   bool try_finish_rmw();
   void check_ops();
+  bool should_send_nop(Op *op);
 
   ceph::ErasureCodeInterfaceRef ec_impl;
 
