@@ -3627,6 +3627,9 @@ void Client::put_cap_ref(Inode *in, int cap)
     if (last & CEPH_CAP_FILE_CACHE) {
       ldout(cct, 5) << __func__ << " dropped last FILE_CACHE ref on " << *in << dendl;
       ++put_nref;
+
+      ldout(cct, 10) << __func__ << " calling signal_caps_inode" << dendl;
+      signal_caps_inode(in);
     }
     if (drop)
       check_caps(in, 0);
