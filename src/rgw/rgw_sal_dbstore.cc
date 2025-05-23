@@ -1920,8 +1920,7 @@ namespace rgw::sal {
     return std::make_unique<LCDBSerializer>(store, oid, lock_name, cookie);
   }
 
-  std::unique_ptr<Restore> DBStore::get_restore(const int n_objs,
-		  	const std::vector<std::string_view>& obj_names)
+  std::unique_ptr<Restore> DBStore::get_restore()
   {
     return nullptr;
   }
