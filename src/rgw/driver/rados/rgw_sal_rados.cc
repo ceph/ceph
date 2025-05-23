@@ -2026,10 +2026,9 @@ std::unique_ptr<Lifecycle> RadosStore::get_lifecycle(void)
   return std::make_unique<RadosLifecycle>(this);
 }
 
-std::unique_ptr<Restore> RadosStore::get_restore(const int n_objs,
-	       			const std::vector<std::string_view>& obj_names)
+std::unique_ptr<Restore> RadosStore::get_restore(void)	
 {
-  return std::make_unique<RadosRestore>(this, n_objs, obj_names);
+  return std::make_unique<RadosRestore>(this);
 }
 
 bool RadosStore::process_expired_objects(const DoutPrefixProvider *dpp,
@@ -4673,11 +4672,44 @@ std::unique_ptr<RestoreSerializer> RadosRestore::get_serializer(
   return std::make_unique<RadosRestoreSerializer>(store, oid, lock_name, cookie);
 }
 
+int RadosRestore::initialize(const DoutPrefixProvider* dpp, optional_yield y,
+		int n_objs, std::vector<std::string>& o_names)
+{
+  int ret = 0;
+  num_objs = n_objs;
+  obj_names = o_names;
+
+  for (auto i=0; i < num_objs; i++) {
+    std::unique_ptr<rgw::cls::fifo::FIFO> fifo_tmp;
+    ret = rgw::cls::fifo::FIFO::create(dpp, ioctx, obj_names[i], &fifo_tmp, y);
+
+    ldpp_dout(dpp, 20) << "creating fifo object for index=" << i
+	   << ", objname=" << obj_names[i] <<
+	   " returned ret=" << ret << dendl;
+
+    if (ret) {
+      return ret;
+    }
+
+    fifos.push_back(std::move(fifo_tmp));
+  }
+
+  return ret;
+}
+
+void RadosRestore::finalize() {
+  obj_names.clear();
+  fifos.clear();
+}
+
 int RadosRestore::add_entry(const DoutPrefixProvider* dpp, optional_yield y,
 		int index, const RGWRestoreEntry& entry) {
   bufferlist bl;
 
   encode(entry, bl);
+
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
+		 << "Adding entry:(" << entry.bucket << "," << entry.obj_key << ") to FIFO:" << obj_names[index] << dendl;
 
   auto ret = push(dpp, y, index, std::move(bl));
   if (ret < 0) {
@@ -4701,6 +4733,9 @@ int RadosRestore::add_entries(const DoutPrefixProvider* dpp, optional_yield y,
 
   }
 
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
+		 << "Adding " << restore_entries.size() << " entries to FIFO:" << obj_names[index] << dendl;
+
   int ret = push(dpp, y, index, std::move(ent_list));
 
   if (ret < 0) {
@@ -4713,7 +4748,10 @@ int RadosRestore::add_entries(const DoutPrefixProvider* dpp, optional_yield y,
 
 int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
 		int index, std::vector<ceph::buffer::list>&& items) {
-  auto r = fifos[index].push(dpp, items, y);
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
+		 << "Pushing entries to FIFO:" << obj_names[index] << dendl;
+
+  auto r = fifos[index]->push(dpp, items, y);
   if (r < 0) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to push to FIFO: " << obj_names[index]
@@ -4724,7 +4762,10 @@ int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
 
 int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
 		int index, ceph::buffer::list&& bl) {
-  auto r = fifos[index].push(dpp, std::move(bl), y);
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
+		 << "Pushing entry to FIFO:" << obj_names[index] << dendl;
+
+  auto r = fifos[index]->push(dpp, std::move(bl), y);
   if (r < 0) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to push to FIFO: " << obj_names[index]
@@ -4768,8 +4809,10 @@ int RadosRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
   std::vector<rgw::cls::fifo::list_entry> restore_entries;
   bool more = false;
 
-  auto r = fifos[index].list(dpp, max_entries, marker, &restore_entries, &more, y);
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
+		 << "Listing entries from FIFO:" << obj_names[index] << dendl;
 
+  auto r = fifos[index]->list(dpp, max_entries, marker, &restore_entries, &more, y);
   if (r < 0) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to list FIFO: " << obj_names[index]
@@ -4804,6 +4847,11 @@ int RadosRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
     *out_marker = restore_entries.back().marker;
   }
 
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
+		 << "Listing from FIFO:" << obj_names[index] << ", returned:"
+		 << restore_entries.size() << " entries, truncated:" << more
+		 << ", out_marker:" << (out_marker ? *out_marker : "") << dendl;
+
   return 0;
 }
 
@@ -4818,7 +4866,10 @@ int RadosRestore::trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
 
 int RadosRestore::trim(const DoutPrefixProvider *dpp, optional_yield y,
 		int index, const std::string_view& marker) {
-  auto r = fifos[index].trim(dpp, marker, false, y);
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
+		 << "Trimming FIFO:" << obj_names[index] << " upto marker:" << marker << dendl;
+
+  auto r = fifos[index]->trim(dpp, marker, false, y);
   if (r < 0) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to trim FIFO: " << obj_names[index]
@@ -4838,7 +4889,7 @@ int RadosRestore::is_empty(const DoutPrefixProvider *dpp, optional_yield y) {
     bool more = false;
 
     for (auto shard = 0u; shard < fifos.size(); ++shard) {
-      auto r = fifos[shard].list(dpp, 1, {}, &restore_entries, &more, y);
+      auto r = fifos[shard]->list(dpp, 1, {}, &restore_entries, &more, y);
       if (r < 0) {
 	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		   << ": unable to list FIFO: " << obj_names[shard]
@@ -4846,6 +4897,8 @@ int RadosRestore::is_empty(const DoutPrefixProvider *dpp, optional_yield y) {
 	return r;
       }
       if (!restore_entries.empty()) {
+  	ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
+		 << "Entries found in FIFO:" << obj_names[shard] << dendl;	      
 	return 0;
       }
     }

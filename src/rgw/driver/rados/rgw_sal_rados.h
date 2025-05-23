@@ -27,7 +27,6 @@
 #include "rgw_putobj_processor.h"
 #include "services/svc_tier_rados.h"
 #include "cls/lock/cls_lock_client.h"
-#include "rgw_log_backing.h"
 
 namespace rgw { namespace sal {
 
@@ -283,8 +282,7 @@ class RadosStore : public StoreDriver {
     virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) override;
     virtual int cluster_stat(RGWClusterStat& stats) override;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
-    virtual std::unique_ptr<Restore> get_restore(const int n_objs,
-		    const std::vector<std::string_view>& obj_names) override;
+    virtual std::unique_ptr<Restore> get_restore(void) override;
     virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s, rgw::notify::EventType event_type, optional_yield y, const std::string* object_name=nullptr) override;
     virtual std::unique_ptr<Notification> get_notification(
@@ -961,23 +959,24 @@ public:
   }
 };
 
-class RadosRestore : public Restore {
+class RadosRestore : public StoreRestore {
   RadosStore* store;
-  const int num_objs;
-  const std::vector<std::string_view>& obj_names;
   librados::IoCtx& ioctx;
-  ceph::containers::tiny_vector<LazyFIFO> fifos;
+  int num_objs;
+  std::vector<std::string> obj_names;
+  std::vector<std::unique_ptr<rgw::cls::fifo::FIFO>> fifos;  
 
 public:
-  RadosRestore(RadosStore* _st, const int n_objs, const std::vector<std::string_view>& o_names) : store(_st),
-       num_objs(n_objs), obj_names(o_names),
-       ioctx(*store->getRados()->get_restore_pool_ctx()),
-       fifos(num_objs,
-	[&](const size_t ix, auto emplacer) {
-	  emplacer.emplace(ioctx, std::string(obj_names[ix]));
-	}) {}
+  RadosRestore(RadosStore* _st) : store(_st),
+       	ioctx(*store->getRados()->get_restore_pool_ctx()) {}
 
-  ~RadosRestore() override = default;
+  ~RadosRestore() override {
+    finalize();
+  }
+
+  virtual int initialize(const DoutPrefixProvider* dpp, optional_yield y,
+		  int n_objs, std::vector<std::string>& obj_names) override;
+  void finalize();  
 
   virtual int add_entry(const DoutPrefixProvider* dpp, optional_yield y,
 		  int index, const RGWRestoreEntry& r_entry) override;

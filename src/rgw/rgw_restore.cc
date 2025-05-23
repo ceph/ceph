@@ -105,25 +105,48 @@ void RGWRestoreEntry::generate_test_instances(std::list<RGWRestoreEntry*>& l)
   l.push_back(new RGWRestoreEntry);
 }
 
-void RGWRestore::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
+int RGWRestore::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
+  int ret = 0;
   cct = _cct;
   driver = _driver;
 
+  ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": initializing RGWRestore handle" << dendl;
   /* max_objs indicates the number of shards or objects
    * used to store Restore Entries */
   max_objs = cct->_conf->rgw_restore_max_objs;
   if (max_objs > HASH_PRIME)
     max_objs = HASH_PRIME;
 
+  obj_names.clear();
   for (int i = 0; i < max_objs; i++) {
-    obj_names.push_back(fmt::format("{}.{}", restore_oid_prefix, i));
+    std::string s = fmt::format("{}.{}", restore_oid_prefix, i);
+    obj_names.push_back(s); 
+    ldpp_dout(this, 30) << __PRETTY_FUNCTION__ << ": obj_name_i=" << obj_names[i] << dendl;
   }
-  sal_restore = driver->get_restore(max_objs, obj_names);
+
+  sal_restore = driver->get_restore();
+
+  if (!sal_restore) {
+    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": failed to create sal_restore" << dendl;
+    return -EINVAL;
+  }
+
+  ret = sal_restore->initialize(this, null_yield, max_objs, obj_names);
+
+  if (ret < 0) {
+    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": failed to initialize sal_restore" << dendl;
+  }
+
+  ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": initializing RGWRestore handle completed" << dendl;
+
+  return ret;	  
 }
 
 void RGWRestore::finalize()
 {
+  sal_restore.reset(nullptr);
   obj_names.clear();
+  ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": finalize RGWRestore handle" << dendl;
 }
 
 static inline std::ostream& operator<<(std::ostream &os, RGWRestoreEntry& ent) {
@@ -193,7 +216,7 @@ void *RGWRestore::RestoreWorker::entry() {
     int r = 0;
     r = restore->process(this, null_yield);
     if (r < 0) {
-      ldpp_dout(dpp, -1) << "ERROR: restore process() returned error r=" << r << dendl;
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ": ERROR: restore process() returned error r=" << r << dendl;	    
     }
     if (restore->going_down())
       break;
@@ -236,7 +259,7 @@ int RGWRestore::process(RestoreWorker* worker, optional_yield y)
  */ 
 int RGWRestore::process(int index, int max_secs, optional_yield y)
 {
-  ldpp_dout(this, 20) << "RGWRestore::process entered with Restore index_shard="
+  ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": process entered index="	
 		      << index << ", max_secs=" << max_secs << dendl;
 
   /* list used to gather still IN_PROGRESS */
@@ -261,7 +284,7 @@ int RGWRestore::process(int index, int max_secs, optional_yield y)
   int ret = serializer->try_lock(this, time, null_yield);
   if (ret == -EBUSY || ret == -EEXIST) {
     /* already locked by another lc processor */
-    ldpp_dout(this, 0) << "RGWRestore::process() failed to acquire lock on "
+    ldpp_dout(this, 0) << __PRETTY_FUNCTION__ << ": failed to acquire lock on "	 
 		       << obj_names[index] << dendl;
     return -EBUSY;
   }
@@ -278,9 +301,10 @@ int RGWRestore::process(int index, int max_secs, optional_yield y)
     std::vector<RGWRestoreEntry> entries;
 
     ret = sal_restore->list(this, y, index, marker, &next_marker, max, entries, &truncated);
-    ldpp_dout(this, 20) <<
-      "RGWRestore::process sal_restore->list returned with returned:" << ret <<
+    ldpp_dout(this, 20) << __PRETTY_FUNCTION__ <<
+      ": list on shard:" << obj_names[index] << " returned:" << ret <<
       ", entries.size=" << entries.size() << ", truncated=" << truncated <<
+      ", marker='" << marker << "'" <<
       ", next_marker='" << next_marker << "'" << dendl;
 
     if (entries.size() == 0) {
@@ -298,8 +322,11 @@ int RGWRestore::process(int index, int max_secs, optional_yield y)
 
       ret = process_restore_entry(entry, y);
 
-      if (entry.status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
+      if (!ret && entry.status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
 	 r_entries.push_back(entry);
+         ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": re-pushing entry: '" << entry
+		 	 << "' on shard:"
+  	  	         << obj_names[index] << dendl;	 
       }
 
       ///process all entries, trim and re-add
@@ -314,16 +341,18 @@ int RGWRestore::process(int index, int max_secs, optional_yield y)
 	goto done;
       }
     }
+    ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": trimming till marker: '" << marker
+		 	 << "' on shard:"
+  	  	         << obj_names[index] << dendl;    
     ret = sal_restore->trim_entries(this, y, index, marker);
     if (ret < 0) {
-      ldpp_dout(this, -1) << "ERROR: RGWRestore::process() failed to trim entries on "
-  	  	         << obj_names[index] << dendl;
+      ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to trim entries on "	    	  	         << obj_names[index] << dendl;
     }
 
     if (!r_entries.empty()) {
       ret = sal_restore->add_entries(this, y, index, r_entries);
       if (ret < 0) {
-        ldpp_dout(this, -1) << "ERROR: RGWRestore::process() failed to add entries on "
+        ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to add entries on "    
   	  	           << obj_names[index] << dendl;
       }
     }
@@ -340,10 +369,15 @@ done:
 int RGWRestore::process_restore_entry(RGWRestoreEntry& entry, optional_yield y)
 {
   int ret = 0;
+  bool in_progress = true;
   std::unique_ptr<rgw::sal::Bucket> bucket;
   std::unique_ptr<rgw::sal::Object> obj;
   std::unique_ptr<rgw::sal::PlacementTier> tier;
   std::optional<uint64_t> days = entry.days;
+  rgw::sal::RGWRestoreStatus restore_status = rgw::sal::RGWRestoreStatus::None;
+  RGWObjState* obj_state{nullptr};
+  rgw_placement_rule target_placement;
+
   // Ensure its the same source zone processing temp entries as we do not
   // replicate temp restored copies
   if (days) { // temp copy
@@ -358,7 +392,8 @@ int RGWRestore::process_restore_entry(RGWRestoreEntry& entry, optional_yield y)
   // bucket, obj, days, state=in_progress
   ret = driver->load_bucket(this, entry.bucket, &bucket, null_yield);
   if (ret < 0) {
-    ldpp_dout(this, -1) << "ERROR: Restore:get_bucket for " << bucket->get_name()
+    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: get_bucket for "
+	   		<< bucket->get_name()	  
 		       << " failed" << dendl;
     return ret;
   }
@@ -367,26 +402,27 @@ int RGWRestore::process_restore_entry(RGWRestoreEntry& entry, optional_yield y)
   ret = obj->load_obj_state(this, null_yield, true);
 
   if (ret < 0) {
-    ldpp_dout(this, 0) << "ERROR: Restore:get_object for " << entry.obj_key
+    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: get_object for "
+	   	       << entry.obj_key	  
 		       << " failed" << dendl;
     return ret;
   }
 
-  rgw_placement_rule target_placement;
   target_placement.inherit_from(bucket->get_placement_rule());
 
   auto& attrs = obj->get_attrs();
   auto attr_iter = attrs.find(RGW_ATTR_RESTORE_STATUS);
-  rgw::sal::RGWRestoreStatus restore_status = rgw::sal::RGWRestoreStatus::None;
   if (attr_iter != attrs.end()) {
     bufferlist bl = attr_iter->second;
     auto iter = bl.cbegin();
     decode(restore_status, iter);
   }
-  if (restore_status == rgw::sal::RGWRestoreStatus::CloudRestored) {
+  if (restore_status != rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
     // XXX: Check if expiry-date needs to be update
-    ldpp_dout(this, 5) << "Restore of object " << obj->get_key() << " already done" << dendl;
-    entry.status = rgw::sal::RGWRestoreStatus::CloudRestored;
+    ldpp_dout(this, 5) << __PRETTY_FUNCTION__ << ": Restore of object " << obj->get_key()
+	   	       << " not in progress state" << dendl;
+
+    entry.status = restore_status;  
     return 0;
   }
 
@@ -397,17 +433,19 @@ int RGWRestore::process_restore_entry(RGWRestoreEntry& entry, optional_yield y)
   ret = driver->get_zone()->get_zonegroup().get_placement_tier(target_placement, &tier);
 
   if (ret < 0) {
-    ldpp_dout(this, -1) << "ERROR: failed to fetch tier placement handle, ret = " << ret << dendl;
-    return ret;
+    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to fetch tier placement handle, ret = " << ret << dendl;
+    goto done;	  
   } else {
-    ldpp_dout(this, 20) << "getting tier placement handle cloud tier for " <<
+    ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": getting tier placement handle"
+	   		 << " cloud tier for " <<	  
                          " storage class " << target_placement.storage_class << dendl;
   }
 
   if (!tier->is_tier_type_s3()) {
-    ldpp_dout(this, -1) << "ERROR: not s3 tier type - " << tier->get_tier_type() << 
+    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: not s3 tier type - "
+	   		<< tier->get_tier_type() << 	  
                       " for storage class " << target_placement.storage_class << dendl;
-    return -EINVAL;
+    goto done;
   }
 
   // now go ahead with restoring object
@@ -416,20 +454,25 @@ int RGWRestore::process_restore_entry(RGWRestoreEntry& entry, optional_yield y)
   ret = obj->restore_obj_from_cloud(bucket.get(), tier.get(), cct, days, in_progress,
 		  		      this, y);
   if (ret < 0) {
-    ldpp_dout(this, -1) << "Restore of object(" << obj->get_key() << ") failed" << ret << dendl;
+    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Restore of object(" << obj->get_key() << ") failed" << ret << dendl;	  
     auto reset_ret = set_cloud_restore_status(this, obj.get(), y, rgw::sal::RGWRestoreStatus::RestoreFailed);
-    entry.status = rgw::sal::RGWRestoreStatus::RestoreFailed;
     if (reset_ret < 0) {
-      ldpp_dout(this, -1) << "Setting restore status ad RestoreFailed failed for object(" << obj->get_key() << ") " << reset_ret << dendl;
+      ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Setting restore status ad RestoreFailed failed for object(" << obj->get_key() << ") " << reset_ret << dendl;	    
     }
-    return ret;
+    goto done;
   }
 
   if (in_progress) {
-    ldpp_dout(this, 15) << "Restore of object " << obj->get_key() << " is still in progress" << dendl;
+    ldpp_dout(this, 15) << __PRETTY_FUNCTION__ << ": Restore of object " << obj->get_key() << " is still in progress" << dendl;
     entry.status = rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress;
   } else {
-    ldpp_dout(this, 15) << "Restore of object " << obj->get_key() << " succeeded" << dendl;
+    ldpp_dout(this, 15) << __PRETTY_FUNCTION__ << ": Restore of object " << obj->get_key() << " succeeded" << dendl;
+    entry.status = rgw::sal::RGWRestoreStatus::CloudRestored;
+  }
+
+done:
+  if (ret < 0) {
+    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Restore of entry:'" << entry << "' failed" << ret << dendl;	  
     entry.status = rgw::sal::RGWRestoreStatus::RestoreFailed;
   }
   return ret;
@@ -473,14 +516,14 @@ int RGWRestore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
   int ret = 0;
 
   if (!pbucket || !pobj) {
-    ldpp_dout(this, -1) << "ERROR: Invalid bucket/object. Restore failed" << dendl;
+    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: Invalid bucket/object. Restore failed" << dendl;	  
     return -EINVAL;
   }
 
   // set restore_status as RESTORE_ALREADY_IN_PROGRESS
   ret = set_cloud_restore_status(this, pobj, y, rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress);
   if (ret < 0) {
-    ldpp_dout(this, 0) << " Setting cloud restore status to RESTORE_ALREADY_IN_PROGRESS for the object(" << pobj->get_key() << " failed, ret=" << ret << dendl;
+    ldpp_dout(this, 0) << __PRETTY_FUNCTION__ << ": Setting cloud restore status to RESTORE_ALREADY_IN_PROGRESS for the object(" << pobj->get_key() << " failed, ret=" << ret << dendl;	  
     return ret;
   }
 
@@ -489,11 +532,11 @@ int RGWRestore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
   ret = pobj->restore_obj_from_cloud(pbucket, tier, cct, days, in_progress, dpp, y);
 
   if (ret < 0) {
-    ldpp_dout(this, 0) << "ERROR: object " << pobj->get_key() << " fetching failed" << ret << dendl;
+   ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: object " << pobj->get_key() << " fetching failed" << ret << dendl;	  
     auto reset_ret = set_cloud_restore_status(this, pobj, y, rgw::sal::RGWRestoreStatus::RestoreFailed);
 
     if (reset_ret < 0) {
-      ldpp_dout(this, -1) << "Setting restore status to RestoreFailed failed for object(" << pobj->get_key() << ") " << reset_ret << dendl;
+      ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Setting restore status to RestoreFailed failed for object(" << pobj->get_key() << ") " << reset_ret << dendl;	    
     }
 
     return ret;
@@ -511,20 +554,22 @@ int RGWRestore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
     ldpp_dout(this, 10) << "RGWRestore:: Adding restore entry of object(" << pobj->get_key() << ") entry: " << entry << dendl;
 
     int index = choose_oid(entry);
+    ldpp_dout(this, 10) << __PRETTY_FUNCTION__ << ": Adding restore entry of object(" << pobj->get_key() << ") entry: " << entry << ", to shard:" << obj_names[index] << dendl;
+
     ret = sal_restore->add_entry(this, y, index, entry);
 
     if (ret < 0) {
-      ldpp_dout(this, -1) << "ERROR: Adding restore entry of object(" << pobj->get_key() << ") failed" << ret << dendl;
+      ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: Adding restore entry of object(" << pobj->get_key() << ") failed" << ret << dendl;	    
 
       auto reset_ret = set_cloud_restore_status(this, pobj, y, rgw::sal::RGWRestoreStatus::RestoreFailed);
       if (reset_ret < 0) {
-        ldpp_dout(this, -1) << "Setting restore status as RestoreFailed failed for object(" << pobj->get_key() << ") " << reset_ret << dendl;
+        ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Setting restore status as RestoreFailed failed for object(" << pobj->get_key() << ") " << reset_ret << dendl;	      
       }
 
       return ret;
     }
   }
 
-  ldpp_dout(this, 10) << "Restore of object " << pobj->get_key() << (in_progress ? " is in progress" : " succeeded") << dendl;
+  ldpp_dout(this, 10) << __PRETTY_FUNCTION__ << ": Restore of object " << pobj->get_key() << (in_progress ? " is in progress" : " succeeded") << dendl;  
   return ret;
 }
