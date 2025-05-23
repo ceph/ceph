@@ -963,6 +963,8 @@ void SegmentCleaner::register_metrics()
 		    sm::description("the number of projected usage reservations")),
     sm::make_counter("projected_used_bytes_sum", stats.projected_used_bytes_sum,
 		    sm::description("the sum of the projected usage in bytes")),
+    sm::make_counter("projected_used_bytes", stats.projected_used_bytes,
+		    sm::description("the current projected usage in bytes")),
 
     sm::make_counter("reclaimed_bytes", stats.reclaimed_bytes,
 		     sm::description("rewritten bytes due to reclaim")),
