@@ -1,13 +1,21 @@
-<cd-table [data]="data"
-          columnMode="flex"
-          [columns]="columns"
-          [autoReload]="-1"
-          (fetchData)="refresh()"
-          [status]="tableStatus">
-</cd-table>
+<div class="col-md-12">
+  <div class="daemon">
+    <div>
+      <b>Daemons:&nbsp;</b>
+    </div>
+    <ng-template *ngIf="daemonData.length == 0">There are no Daemons
+    </ng-template>
 
-<ng-template #healthTmpl
-             let-row="data.row"
-             let-value="data.value">
-  <span [ngClass]="row.health_color | mirrorHealthColor">{{ value }}</span>
-</ng-template>
+    <div *ngIf="daemonData.length > 0"
+          class="dataContainer">
+        <div *ngFor="let item of daemonData">
+        <div
+          [ngClass]="item.health_color | mirrorHealthColor"
+          (click)="navigateToServices()"
+          class="daemonElem">
+          {{ item.health }} : {{ item.count }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
