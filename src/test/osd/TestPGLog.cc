@@ -235,6 +235,7 @@ public:
       const pg_log_entry_t &entry) override {}
     void partial_write(
       pg_info_t *info,
+      const eversion_t previous_version,
       const pg_log_entry_t &entry) override {}
   };
 
@@ -361,6 +362,7 @@ struct TestHandler : public PGLog::LogEntryHandler {
     const pg_log_entry_t &entry) override {}
   void partial_write(
     pg_info_t *info,
+    const eversion_t previous_version,
     const pg_log_entry_t &entry) override {}
 };
 

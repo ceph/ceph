@@ -364,7 +364,7 @@ void PeeringState::update_peer_info(const pg_shard_t &from,
   }
   // 3 cases:
   // We are the primary - from is the shard that sent the oinfo
-  // We are a replica - from is the primary, it will not have pwlc infomation
+  // We are a replica - from is the primary, it will not have pwlc infomation for itself
   // Merge - from is pg_whoami, oinfo is a source pg that is being merged
   if ((from != pg_whoami) &&
       info.partial_writes_last_complete.contains(from.shard)) {
@@ -385,6 +385,34 @@ void PeeringState::update_peer_info(const pg_shard_t &from,
       } else {
 	psdout(10) << "osd." << from << " has last_complete "
 		   << peer_info[from].last_complete
+		   << " cannot apply pwlc from " << fromversion
+		   << " to " << toversion
+		   << dendl;
+      }
+    }
+  }
+  // Non-primary shards might need to apply pwlc to update info
+  if (info.partial_writes_last_complete.contains(pg_whoami.shard)) {
+    // Check if last_complete and last_update can be advanced based on
+    // knowledge of partial_writes
+    const auto & [fromversion, toversion] =
+      info.partial_writes_last_complete[pg_whoami.shard];
+    if (toversion > info.last_complete) {
+      if (fromversion <= info.last_complete) {
+	psdout(10) << "osd." << pg_whoami << " has last_complete "
+		   << info.last_complete
+		   << " but pwlc says its at " << toversion
+		   << dendl;
+	info.last_complete = toversion;
+	if (toversion > info.last_update) {
+	  info.last_update = toversion;
+	}
+	if (toversion > pg_log.get_head()) {
+	  pg_log.set_head(toversion);
+	}
+      } else {
+	psdout(10) << "osd." << pg_whoami << " has last_complete "
+		   << info.last_complete
 		   << " cannot apply pwlc from " << fromversion
 		   << " to " << toversion
 		   << dendl;
@@ -3288,7 +3316,22 @@ void PeeringState::proc_master_log(
     // See if we can wind forward partially written entries
     map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
     all_info[pg_whoami] = info;
-    while (p->version == olog.head) {
+    // Normal case is that both logs have entry olog.head
+    bool can_check_next_entry = (p->version == olog.head);
+    if (p->version < olog.head) {
+      // After a PG split there may be gaps in the log where entries were
+      // split to the other PG. This can result in olog.head being ahead
+      // of p->version. So long as there are no entries in olog between
+      // p->version and olog.head we can still try to wind forward
+      // partially written entries
+      auto op = olog.log.end();
+      if (op == olog.log.begin()) {
+	can_check_next_entry = true;
+      } else if (op->version.version < p->version.version) {
+	can_check_next_entry = true;
+      }
+    }
+    while (can_check_next_entry) {
       ++p;
       if (p == pg_log.get_log().log.end()) {
 	break;
@@ -3332,6 +3375,7 @@ void PeeringState::proc_master_log(
         psdout(20) << "keeping entry " << p->version << dendl;
 	olog.head = p->version;
       }
+      can_check_next_entry = true;
     }
   }
   // merge log into our own log to build master log.  no need to
@@ -4461,7 +4505,7 @@ void PeeringState::merge_new_log_entries(
   }
 }
 
-void PeeringState::add_log_entry(const pg_log_entry_t& e, bool applied)
+void PeeringState::add_log_entry(const pg_log_entry_t& e, ObjectStore::Transaction &t, bool applied)
 {
   // raise last_complete only if we were previously up to date
   if (info.last_complete == info.last_update)
@@ -4477,7 +4521,9 @@ void PeeringState::add_log_entry(const pg_log_entry_t& e, bool applied)
     info.last_user_version = e.user_version;
 
   // log mutation
-  pg_log.add(e, applied);
+  bool nonprimary = pool.info.is_nonprimary_shard(info.pgid.shard);
+  PGLog::LogEntryHandlerRef handler{pl->get_log_handler(t)};
+  pg_log.add(e, nonprimary, applied, &info, handler.get());
   psdout(10) << "add_log_entry " << e << dendl;
 }
 
@@ -4491,6 +4537,20 @@ void PeeringState::append_log(
   bool transaction_applied,
   bool async)
 {
+  /* With EC optimisations on, it is possible that we are told to commit a
+   * version we don't have. This happens when the multiple transactions were
+   * in flight and the last was a partial write.
+   * While this is technically valid, there are a number of asserts which can
+   * be avoided by refusing to roll forward beyond the head of the log.
+   */
+  if (pool.info.allows_ecoptimizations()) {
+    if (roll_forward_to > pg_log.get_head()) {
+      roll_forward_to = pg_log.get_head();
+    }
+    if (pct > pg_log.get_head()) {
+      pct = pg_log.get_head();
+    }
+  }
   /* The primary has sent an info updating the history, but it may not
    * have arrived yet.  We want to make sure that we cannot remember this
    * write without remembering that it happened in an interval which went
@@ -4519,7 +4579,7 @@ void PeeringState::append_log(
   }
 
   for (auto p = logv.begin(); p != logv.end(); ++p) {
-    add_log_entry(*p, transaction_applied);
+    add_log_entry(*p, t, transaction_applied);
 
     /* We don't want to leave the rollforward artifacts around
      * here past last_backfill.  It's ok for the same reason as
@@ -4572,7 +4632,7 @@ void PeeringState::recover_got(
   }
 
   psdout(10) << "got missing " << oid << " v " << v << dendl;
-  pg_log.recover_got(oid, v, info);
+  pg_log.recover_got(oid, v, info, pool.info.allows_ecoptimizations());
   if (pg_log.get_log().log.empty()) {
     psdout(10) << "last_complete now " << info.last_complete
                << " while log is empty" << dendl;
@@ -4585,7 +4645,7 @@ void PeeringState::recover_got(
 	       << " log.complete_to at end" << dendl;
     //below is not true in the repair case.
     //assert(missing.num_missing() == 0);  // otherwise, complete_to was wrong.
-    ceph_assert(info.last_complete == info.last_update);
+    //ceph_assert(info.last_complete == info.last_update);
   }
 
   if (is_primary()) {

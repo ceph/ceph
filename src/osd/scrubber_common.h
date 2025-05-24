@@ -264,10 +264,13 @@ struct PgScrubBeListener {
 
   // query the PG backend for the on-disk size of an object
   virtual uint64_t logical_to_ondisk_size(uint64_t logical_size,
-                                 int8_t shard_id) const = 0;
+                                 shard_id_t shard_id) const = 0;
 
   // used to verify our "cleanliness" before scrubbing
   virtual bool is_waiting_for_unreadable_object() const = 0;
+  virtual bool get_is_nonprimary_shard(const pg_shard_t &pg_shard) const = 0;
+  virtual bool get_is_hinfo_required() const = 0;
+  virtual bool get_is_ec_optimized() const = 0;
 };
 
 // defining a specific subset of performance counters. Each of the members

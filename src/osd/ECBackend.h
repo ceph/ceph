@@ -252,7 +252,7 @@ class ECBackend : public ECCommon {
       hobject_t hoid;
       eversion_t v;
       std::set<pg_shard_t> missing_on;
-      std::set<shard_id_t> missing_on_shards;
+      shard_id_set missing_on_shards;
 
       ObjectRecoveryInfo recovery_info;
       ObjectRecoveryProgress recovery_progress;
@@ -444,6 +444,14 @@ class ECBackend : public ECCommon {
   uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard
     ) const {
     return sinfo.object_size_to_shard_size(size, shard);
+  }
+
+  uint64_t get_is_nonprimary_shard(const shard_id_t shard) const {
+    return sinfo.is_nonprimary_shard(shard);
+  }
+
+  bool get_is_hinfo_required() const {
+    return sinfo.get_is_hinfo_required();
   }
 
   /**
