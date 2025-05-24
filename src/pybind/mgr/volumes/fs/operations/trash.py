@@ -1,11 +1,13 @@
 import os
 import uuid
 import logging
+from time import monotonic
 from contextlib import contextmanager
 
 import cephfs
 
 from .template import GroupTemplate
+from .clone_index import PATH_MAX
 from ..exception import VolumeException
 
 log = logging.getLogger(__name__)
@@ -51,7 +53,7 @@ class Trash(GroupTemplate):
         """
         return self._get_single_dir_entry(exclude_list)
 
-    def purge(self, trashpath, should_cancel):
+    def purge(self, trashpath, should_cancel, purge_queue):
         """
         purge a trash entry.
 
@@ -60,6 +62,8 @@ class Trash(GroupTemplate):
         :return: None
         """
         def rmtree(root_path):
+            nonlocal mpr # type: ignore
+
             log.debug("rmtree {0}".format(root_path))
             try:
                 with self.fs.opendir(root_path) as dir_handle:
@@ -71,6 +75,8 @@ class Trash(GroupTemplate):
                                 rmtree(d_full)
                             else:
                                 self.fs.unlink(d_full)
+                                mpr.inc_count()
+
                         d = self.fs.readdir(dir_handle)
             except cephfs.ObjectNotFound:
                 return
@@ -80,6 +86,67 @@ class Trash(GroupTemplate):
             # (else we would fail to remove this anyway)
             if not should_cancel():
                 self.fs.rmdir(root_path)
+                mpr.inc_count()
+
+        class MeasurePurgeRate:
+
+            def __init__(self, period, purge_queue):
+                # measuring period -- period during which attempt to measure
+                # current purge rate is made
+                self.period = period
+                # this instance variable allows measuring only when measuring
+                # period is on
+                self.measuring = True
+
+                self.count = 0
+                self.rate = 0
+                self.time1 = None
+                self.time2 = None
+
+            def inc_count(self):
+                if not self.measuring:
+                    return
+
+                if self.count == 0:
+                    self.time1 = monotonic()
+                else:
+                    assert self.time1
+                    self.time2 = monotonic()
+                self.count += 1
+
+                if self.time2:
+                    time_diff = self.time2 - self.time1
+                    if time_diff >= self.period:
+                        self.rate = round(self.count / time_diff, 3)
+                        log.debug(f'purge rate = {self.rate}')
+                        # save the "purge rate" in purge queue object so that
+                        # it can be accessed in volume.py
+                        purge_queue.purge_rate = self.rate
+                        self.reset()
+
+            def pause(self):
+                '''
+                Stop measuring purge rate.
+                '''
+                self.measuring = False
+
+            def resume(self):
+                '''
+                Stop measuring purge rate.
+                '''
+                self.measuring = True
+
+            def reset(self):
+                self.count = 0
+                self.rate = 0
+
+                self.time1 = None
+                self.time2 = None
+
+        # mpr = measure purge rate. It is an instance of class MeasurePurgeRate
+        # (see below) for counting number of calls to unlink() and rmdir() and
+        # then compute number of these calls made per second.
+        mpr = MeasurePurgeRate(0.001, purge_queue)
 
         # catch any unlink errors
         try:
@@ -113,6 +180,72 @@ class Trash(GroupTemplate):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
+    def _get_stats(self):
+        subvol_count = 0
+        file_count = 0
+        trash_size = 0
+
+        dir_found = False
+
+        with self.fs.opendir(self.path) as dir_handle:
+            de = self.fs.readdir(dir_handle)
+            while de:
+                if de.d_name in (b'.', b'..'):
+                    de = self.fs.readdir(dir_handle)
+                    continue
+
+                # each trash entry, whether it's symlink or a directory, it
+                # points to a subvolume.
+                subvol_count += 1
+
+                try:
+                    if de.is_dir():
+                        # NOTE: fetching xattr rfiles once on self.path and
+                        # then adjusting it is better than running it for every
+                        # dir in trash dir. this reduces calls to getxattr to a
+                        # great amount, reducing load we place on MDS.
+                        #file_count += int(self.fs.getxattr(de_path, 'ceph.dir.rfiles'))
+                        dir_found = True
+                    elif de.is_symbol_file():
+                        de_path = os.path.join(self.path, de.d_name)
+                        sv_path = self.fs.readlink(de_path, PATH_MAX)
+                        file_count += int(self.fs.getxattr(sv_path, 'ceph.dir.rfiles'))
+                        trash_size += int(self.fs.getxattr(sv_path, 'ceph.dir.rbytes'))
+                    else:
+                        log.debug('Trash entry was neither directory nor '
+                                  'symlink, this was unexpected. Details: '
+                                  f'entry path = {de_path.decode("utf-8")}')
+                except cephfs.ObjectNotFound:
+                    # we are scanning trash entries while purge threads are
+                    # actively deleting them. thus if we get ObjectNotFound it
+                    # probably means that it was deleted
+                    de = self.fs.readdir(dir_handle)
+                    continue
+
+                de = self.fs.readdir(dir_handle)
+
+        # for every subvolume, the subvol dir and the .meta file also needs
+        # to unlinked and therefore both should included in the count.
+        file_count += subvol_count * 2
+
+        if dir_found:
+            file_count += int(self.fs.getxattr(self.path, 'ceph.dir.rfiles'))
+            trash_size += int(self.fs.getxattr(self.path, 'ceph.dir.rbytes'))
+
+        return subvol_count, file_count, trash_size
+
+    def get_stats(self):
+        try:
+            subvol_count, file_count, trash_size = self._get_stats()
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+        if file_count:
+            return {'subvols_left': subvol_count, 'files_left': file_count,
+                    'size_left': trash_size}
+        else:
+            return {}
+
 def create_trashcan(fs, vol_spec):
     """
     create a trash can.
@@ -142,3 +275,14 @@ def open_trashcan(fs, vol_spec):
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
     yield trashcan
+
+
+def get_trashcan_stats(fs, volspec):
+    trashcan = Trash(fs, volspec)
+
+    try:
+        fs.stat(trashcan.path)
+    except cephfs.Error as e:
+        raise VolumeException(-e.args[0], e.args[1])
+
+    return trashcan._get_stats()
