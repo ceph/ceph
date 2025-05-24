@@ -14,7 +14,7 @@ find_path(LIBNBD_INCLUDE_DIR
         PATHS ${PC_libnbd_INCLUDE_DIRS})
 
 find_library(LIBNBD_LIBRARIES
-        NAMES libnbd.so
+        NAMES libnbd
         PATHS ${PC_libnbd_LIBRARY_DIRS})
 
 set(LIBNBD_VERSION ${PC_libnbd_VERSION})
