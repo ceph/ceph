@@ -1089,6 +1089,8 @@ ObjectContextRef OpsExecuter::prepare_clone(
   clone_obs.oi.copy_user_bits(initial_obs.oi);
   clone_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
 
+  osd_op_params->at_version.version++;
+
   auto [clone_obc, existed] = pg->obc_registry.get_cached_obc(std::move(coid));
   ceph_assert(!existed);
 
@@ -1415,8 +1417,8 @@ static PG::interruptible_future<ceph::bufferlist> do_pgls_common(
           }),
         seastar::make_ready_future<hobject_t>(next));
     }).then_interruptible([pg_end](auto&& ret) {
-      auto entries = std::move(std::get<0>(ret).get());
-      auto next = std::move(std::get<1>(ret).get());
+      auto entries = std::get<0>(ret).get();
+      auto next = std::get<1>(std::move(ret)).get();
       pg_ls_response_t response;
       response.handle = next.is_max() ? pg_end : next;
       response.entries = std::move(entries);
