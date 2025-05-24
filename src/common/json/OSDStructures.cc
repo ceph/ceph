@@ -68,7 +68,7 @@ void OSDPoolGetReply::decode_json(JSONObj* obj) {
 }
 
 void OSDECProfileGetRequest::dump(Formatter* f) const {
-  encode_json("prefix", "osd pool get", f);
+  encode_json("prefix", "osd erasure-code-profile get", f);
   encode_json("name", name, f);
   encode_json("format", format, f);
 }
