@@ -78,6 +78,8 @@ set(librbd_internal_srcs
   exclusive_lock/PreReleaseRequest.cc
   exclusive_lock/StandardPolicy.cc
   group/ListSnapshotsRequest.cc
+  group/AddImageRequest.cc
+  group/RemoveImageRequest.cc
   image/AttachChildRequest.cc
   image/AttachParentRequest.cc
   image/CloneRequest.cc
@@ -149,8 +151,11 @@ set(librbd_internal_srcs
   mirror/DisableRequest.cc
   mirror/EnableRequest.cc
   mirror/GetInfoRequest.cc
+  mirror/GetMirrorImageRequest.cc
   mirror/GetStatusRequest.cc
   mirror/GetUuidRequest.cc
+  mirror/GroupEnableRequest.cc
+  mirror/GroupGetInfoRequest.cc
   mirror/ImageRemoveRequest.cc
   mirror/ImageStateUpdateRequest.cc
   mirror/PromoteRequest.cc
@@ -158,6 +163,8 @@ set(librbd_internal_srcs
   mirror/snapshot/CreatePrimaryRequest.cc
   mirror/snapshot/DemoteRequest.cc
   mirror/snapshot/GetImageStateRequest.cc
+  mirror/snapshot/GroupCreatePrimaryRequest.cc
+  mirror/snapshot/GroupUnlinkPeerRequest.cc
   mirror/snapshot/ImageMeta.cc
   mirror/snapshot/PromoteRequest.cc
   mirror/snapshot/RemoveImageStateRequest.cc
