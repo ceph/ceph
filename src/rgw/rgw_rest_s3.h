@@ -83,6 +83,7 @@ class RGWDeleteObjTags_ObjStore_S3 : public RGWDeleteObjTags
 public:
   ~RGWDeleteObjTags_ObjStore_S3() override {}
   void send_response() override;
+  virtual std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT_TAGGING", s->info.method); }
 };
 
 class RGWGetBucketTags_ObjStore_S3 : public RGWGetBucketTags_ObjStore
