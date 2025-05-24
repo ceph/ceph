@@ -55,10 +55,12 @@ function prepare() {
 
         if in_jenkins; then
             if ! type clang-19 > /dev/null 2>&1 ; then
+                ci_debug "Removing existing llvm packages"
+                wrap_sudo
+                $DRY_RUN $SUDO apt-get purge --auto-remove llvm python3-lldb -y
                 ci_debug "Getting clang-19"
                 wget https://download.ceph.com/qa/llvm.sh
                 chmod +x llvm.sh
-                wrap_sudo
                 $DRY_RUN $SUDO ./llvm.sh 19
                 rm llvm.sh
             fi
