@@ -119,6 +119,66 @@
             </td>
             <td>{{ selection?.retain_head_object }}</td>
           </tr>
+          <tr>
+            <td
+                class="bold">
+              Allow Read Through
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  Enables fetching objects from remote cloud S3 if not found locally (default: false).
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.allow_read_through }}</td>
+          </tr>
+          <tr *ngIf="selection.tier_type ==='cloud-s3-glacier'">
+            <td
+                class="bold">
+              Glacier Restore Days
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  Refers to no. of days to the object will be restored on glacier/tape endpoint.
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.glacier_restore_days }}</td>
+          </tr>
+          <tr *ngIf="selection.tier_type ==='cloud-s3-glacier'">
+            <td
+                class="bold">
+              Glacier Restore Tier Type
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  Restore retrieval type.
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.glacier_restore_tier_type }}</td>
+          </tr>
+          <tr *ngIf="selection.tier_type ==='cloud-s3-glacier'">
+            <td
+                class="bold">
+              Read through Restore Days
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  The duration for which objects restored via read-through are retained. Default value is 1 day.
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.read_through_restore_days }}</td>
+          </tr>
+          <tr *ngIf="selection.tier_type ==='cloud-s3-glacier'">
+            <td
+                class="bold">
+              Restore Storage Class
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  The storage class to which object data is to be restored. 
+                </span>
+              </cd-helper>
+            </td>
+            <td>Standara</td>
+          </tr>
         </tbody>
       </table>
     </cds-tab>
