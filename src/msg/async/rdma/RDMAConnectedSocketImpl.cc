@@ -246,7 +246,7 @@ void RDMAConnectedSocketImpl::handle_connection() {
   }
 }
 
-ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
+ssize_t RDMAConnectedSocketImpl::read(std::span<char> dest)
 {
   eventfd_t event_val = 0;
   int r = eventfd_read(notify_fd, &event_val);
@@ -254,16 +254,16 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
                  << " r = " << r << dendl;
 
   if (!active) {
-    ldout(cct, 1) << __func__ << " when ib not active. len: " << len << dendl;
+    ldout(cct, 1) << __func__ << " when ib not active. len: " << dest.size() << dendl;
     return -EAGAIN;
   }
 
   if (0 == connected) {
-    ldout(cct, 1) << __func__ << " when ib not connected. len: " << len <<dendl;
+    ldout(cct, 1) << __func__ << " when ib not connected. len: " << dest.size() <<dendl;
     return -EAGAIN;
   }
   ssize_t read = 0;
-  read = read_buffers(buf,len);
+  read = read_buffers(dest.data(), dest.size());
 
   if (is_server && connected == 0) {
     ldout(cct, 20) << __func__ << " we do not need last handshake, QP: " << local_qpn << " peer QP: " << peer_qpn << dendl;
