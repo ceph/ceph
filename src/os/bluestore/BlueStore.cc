@@ -1250,7 +1250,7 @@ struct LruBufferCacheShard : public BlueStore::BufferCacheShard {
   void _rm(BlueStore::Buffer *b) override {
     ceph_assert(buffer_bytes >= b->length);
     buffer_bytes -= b->length;
-    assert(*(b->cache_age_bin) >= b->length);
+    ceph_assert(*(b->cache_age_bin) >= b->length);
     *(b->cache_age_bin) -= b->length;
     auto q = lru.iterator_to(*b);
     lru.erase(q);
@@ -1263,7 +1263,7 @@ struct LruBufferCacheShard : public BlueStore::BufferCacheShard {
   void _adjust_size(BlueStore::Buffer *b, int64_t delta) override {
     ceph_assert((int64_t)buffer_bytes + delta >= 0);
     buffer_bytes += delta;
-    assert(*(b->cache_age_bin) + delta >= 0);
+    ceph_assert(*(b->cache_age_bin) + delta >= 0);
     *(b->cache_age_bin) += delta;
   }
   void _touch(BlueStore::Buffer *b) override {
@@ -1289,7 +1289,7 @@ struct LruBufferCacheShard : public BlueStore::BufferCacheShard {
       BlueStore::Buffer *b = &*i;
       ceph_assert(b->is_clean());
       dout(20) << __func__ << " rm " << *b << dendl;
-      assert(*(b->cache_age_bin) >= b->length);
+      ceph_assert(*(b->cache_age_bin) >= b->length);
       *(b->cache_age_bin) -= b->length;
       b->space->_rm_buffer(this, b);
     }
@@ -1424,7 +1424,7 @@ public:
       buffer_bytes -= b->length;
       ceph_assert(list_bytes[b->cache_private] >= b->length);
       list_bytes[b->cache_private] -= b->length;
-      assert(*(b->cache_age_bin) >= b->length);
+      ceph_assert(*(b->cache_age_bin) >= b->length);
       *(b->cache_age_bin) -= b->length;
     }
     switch (b->cache_private) {
@@ -1481,7 +1481,7 @@ public:
       buffer_bytes += delta;
       ceph_assert((int64_t)list_bytes[b->cache_private] + delta >= 0);
       list_bytes[b->cache_private] += delta;
-      assert(*(b->cache_age_bin) + delta >= 0);
+      ceph_assert(*(b->cache_age_bin) + delta >= 0);
       *(b->cache_age_bin) += delta;
     }
   }
@@ -1551,7 +1551,7 @@ public:
         buffer_bytes -= b->length;
         ceph_assert(list_bytes[BUFFER_WARM_IN] >= b->length);
         list_bytes[BUFFER_WARM_IN] -= b->length;
-        assert(*(b->cache_age_bin) >= b->length);
+        ceph_assert(*(b->cache_age_bin) >= b->length);
         *(b->cache_age_bin) -= b->length;
 	to_evict_bytes -= b->length;
         evicted += b->length;
