@@ -58,7 +58,8 @@ void PrepareReplayRequest<I>::handle_load_local_image_meta(int r) {
     return;
   }
 
-  *m_resync_requested = m_state_builder->local_image_meta->resync_requested;
+  *m_resync_requested = m_state_builder->is_remote_primary() &&
+                        m_state_builder->local_image_meta->resync_requested;
   finish(0);
 }
 

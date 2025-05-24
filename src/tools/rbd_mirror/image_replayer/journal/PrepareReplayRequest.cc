@@ -54,8 +54,9 @@ void PrepareReplayRequest<I>::send() {
     return;
   }
 
+  bool resync_requested = false;
   int r = m_state_builder->local_image_ctx->journal->is_resync_requested(
-    m_resync_requested);
+    &resync_requested);
   if (r < 0) {
     image_locker.unlock();
 
@@ -63,6 +64,7 @@ void PrepareReplayRequest<I>::send() {
     finish(r);
     return;
   }
+  *m_resync_requested = m_state_builder->is_remote_primary() && resync_requested;
 
   m_local_tag_tid = m_state_builder->local_image_ctx->journal->get_tag_tid();
   m_local_tag_data = m_state_builder->local_image_ctx->journal->get_tag_data();
