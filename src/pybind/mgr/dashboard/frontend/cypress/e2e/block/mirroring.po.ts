@@ -34,7 +34,7 @@ export class MirroringPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   generateToken(poolName: string) {
-    cy.get('[aria-label="Create Bootstrap Token"]').click();
+    cy.get('[aria-label="Setup Replication"]').click();
     cy.get('cd-bootstrap-create-modal').within(() => {
       cy.get(`input[name=${poolName}]`).click({ force: true });
       cy.get('button[type=submit]').click();

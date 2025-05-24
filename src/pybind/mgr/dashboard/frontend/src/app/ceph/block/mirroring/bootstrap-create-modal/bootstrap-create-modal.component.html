@@ -4,7 +4,7 @@
            (overlaySelected)="closeModal()">
   <cds-modal-header (closeSelect)="closeModal()">
     <h3 cdsModalHeaderHeading
-        i18n>Create Bootstrap Token</h3>
+        i18n>Setup Replication</h3>
   </cds-modal-header>
 
   <section cdsModalContent>
@@ -63,6 +63,7 @@
       </div>
 
       <cd-submit-button i18n
+                        [disabled]="generateBtnDisable"
                         [form]="createBootstrapForm"
                         (submitAction)="generate()">Generate</cd-submit-button>
 
