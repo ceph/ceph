@@ -597,6 +597,9 @@ bool CryptoObjectDispatch<I>::discard(
   if (object_no < m_data_offset_object_no) {
     return false;
   }
+  if (object_off == 0 && object_len == m_image_ctx->get_object_size()) {
+    return false;
+  }
 
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
