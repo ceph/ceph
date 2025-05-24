@@ -182,7 +182,7 @@ struct FixedKVInternalNode
   }
 
   virtual ~FixedKVInternalNode() {
-    if (this->is_valid() && !this->is_pending()) {
+    if (this->is_stable()) {
       if (this->is_btree_root()) {
 	this->root_node_t::destroy();
       } else {
@@ -571,7 +571,7 @@ struct FixedKVLeafNode
   }
 
   virtual ~FixedKVLeafNode() {
-    if (this->is_valid() && !this->is_pending()) {
+    if (this->is_stable()) {
       if (this->is_btree_root()) {
 	this->root_node_t::destroy();
       } else {

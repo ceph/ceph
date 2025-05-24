@@ -629,17 +629,18 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   }
 
   assert(extent->is_valid() && !extent->is_initial_pending());
-  if (extent->is_dirty()) {
+  if (extent->has_delta()) {
     assert(extent->get_version() > 0);
     if (is_root_type(extent->get_type())) {
       // pass
-    } else if (extent->get_version() == 1 && extent->is_mutation_pending()) {
+    } else if (extent->get_version() == 1 && extent->has_mutation()) {
       t.get_rewrite_stats().account_n_dirty();
     } else {
+      // extent->get_version() > 1 or DIRTY
       t.get_rewrite_stats().account_dirty(extent->get_version());
     }
     if (epm->can_inplace_rewrite(t, extent)) {
-      // FIXME: is_dirty() is true for mutation pending extents
+      // FIXME: has_delta() is true for mutation pending extents
       // which shouldn't do inplace rewrite because a pending transaction
       // may fail.
       t.add_inplace_rewrite_extent(extent);

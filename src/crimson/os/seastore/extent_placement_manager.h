@@ -173,7 +173,7 @@ public:
 
   bool can_inplace_rewrite(Transaction& t,
     CachedExtentRef extent) final {
-    if (!extent->is_dirty()) {
+    if (!extent->has_delta()) {
       return false;
     }
     assert(t.get_src() == transaction_type_t::TRIM_DIRTY);

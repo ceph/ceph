@@ -148,8 +148,9 @@ public:
       assert(ref->prior_instance);
       retired_set.emplace(ref->prior_instance, trans_id);
       assert(read_set.count(ref->prior_instance->get_paddr()));
-      ref->prior_instance.reset();
+      ref->reset_prior_instance();
     } else {
+      assert(ref->is_stable_written());
       // && retired_set.count(ref->get_paddr()) == 0
       // If it's already in the set, insert here will be a noop,
       // which is what we want.
@@ -159,7 +160,7 @@ public:
 
   // Returns true if added, false if already added or weak
   bool maybe_add_to_read_set(CachedExtentRef ref) {
-    assert(ref->get_paddr().is_absolute());
+    ceph_assert(ref->get_paddr().is_absolute());
     if (is_weak()) {
       return false;
     }
@@ -271,9 +272,10 @@ public:
     assert(ref->is_exist_mutation_pending() ||
 	   read_set.count(ref->prior_instance->get_paddr()));
     mutated_block_list.push_back(ref);
-    if (!ref->is_exist_mutation_pending()) {
+    if (ref->is_mutation_pending()) {
       write_set.insert(*ref);
     } else {
+      assert(ref->is_exist_mutation_pending());
       // already added as fresh extent in write_set
       assert(write_set.exists(*ref));
     }
