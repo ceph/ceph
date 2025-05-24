@@ -97,7 +97,8 @@ struct librados_handler {
   }
 
   void operator ()(std::exception_ptr e) {
-    (*this)(ceph::from_exception(e));
+    std::string what;
+    (*this)(ceph::from_exception(e, &what));
   }
 };
 } // namespace detail
