@@ -184,6 +184,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  placement: Optional[str] = None,
                                  zone_endpoints: Optional[str] = None,
                                  start_radosgw: Optional[bool] = True,
+                                 resume: Optional[bool] = False,
                                  inbuf: Optional[str] = None) -> HandleCommandResult:
         """Bootstrap new rgw realm, zonegroup, and zone"""
 
@@ -207,9 +208,26 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         try:
             for spec in rgw_specs:
                 self.create_pools(spec)
-                RGWAM(self.env).realm_bootstrap(spec, start_radosgw)
+                RGWAM(self.env).realm_bootstrap(spec, start_radosgw, resume)
+
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
+            if rgw_specs:
+                spec = rgw_specs[0]
+                existing = []
+                if spec.rgw_realm in RGWAM(self.env).realm_op().list():
+                    existing.append(f"realm: {spec.rgw_realm}")
+                if spec.rgw_zonegroup in RGWAM(self.env).zonegroup_op().list():
+                    existing.append(f"realm: {spec.rgw_zonegroup}")
+                if spec.rgw_zone in RGWAM(self.env).zone_op().list():
+                    existing.append(f"realm: {spec.rgw_zone}")
+
+                if existing:
+                    e.stderr = (e.stderr or '') + (
+                        f"\nNote: Partial bootstrap detected – {', '.join(existing)} already exist.\n"
+                        f"To resume, run:\n  ceph rgw realm bootstrap --resume -i <spec.yaml>\n"
+                    )
+
             return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
         except PoolCreationError as e:
             self.log.error(f'Pool creation failure: {str(e)}')
