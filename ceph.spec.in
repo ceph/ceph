@@ -297,7 +297,6 @@ BuildRequires:	libnbd-devel
 BuildRequires:	libcurl-devel
 BuildRequires:	libcap-devel
 BuildRequires:	libcap-ng-devel
-BuildRequires:	fmt-devel >= 6.2.1
 BuildRequires:	pkgconfig(libudev)
 BuildRequires:	libnl3-devel
 BuildRequires:	liboath-devel
