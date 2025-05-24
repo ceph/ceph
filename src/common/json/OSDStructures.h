@@ -190,6 +190,20 @@ struct InjectECClearErrorRequest {
     JSONDecoder::decode_json("type", type, obj);
   }
 };
+struct InjectECParityRead {
+  std::string pool;
+  std::string objname;
+
+  void dump(Formatter* f) const;
+  void decode_json(JSONObj* obj);
+};
+struct InjectECClearParityRead {
+  std::string pool;
+  std::string objname;
+
+  void dump(Formatter* f) const;
+  void decode_json(JSONObj* obj);
+};
 }  // namespace osd
 }  // namespace messaging
 }  // namespace ceph
