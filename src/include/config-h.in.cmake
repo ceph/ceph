@@ -405,4 +405,7 @@
 /* libexec directory path */
 #cmakedefine CMAKE_INSTALL_LIBEXECDIR "@CMAKE_INSTALL_LIBEXECDIR@"
 
+/* Define if breakpad is available */
+#cmakedefine HAVE_BREAKPAD
+
 #endif /* CONFIG_H */
