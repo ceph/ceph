@@ -40,6 +40,7 @@ class MDSContext;
 
 class Session;
 
+
 struct ClientLease : public boost::intrusive::set_base_hook<>
 {
   MEMPOOL_CLASS_HELPERS();
@@ -72,6 +73,7 @@ bool operator<(const CDentry& l, const CDentry& r);
 
 // dentry
 class CDentry : public MDSCacheObject, public LRUObject, public Counter<CDentry> {
+  using LogSegmentRef = boost::intrusive_ptr<LogSegment>;
 public:
   MEMPOOL_CLASS_HELPERS();
   friend class CDir;
@@ -263,8 +265,8 @@ public:
   mds_authority_t authority() const override;
 
   version_t pre_dirty(version_t min=0);
-  void _mark_dirty(LogSegment *ls);
-  void mark_dirty(version_t pv, LogSegment *ls);
+  void _mark_dirty(LogSegmentRef ls);
+  void mark_dirty(version_t pv, LogSegmentRef ls);
   void mark_clean();
 
   void mark_new();
@@ -302,26 +304,7 @@ public:
   void abort_export() {
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(ceph::buffer::list::const_iterator& blp, LogSegment *ls) {
-    DECODE_START(1, blp);
-    decode(first, blp);
-    __u32 nstate;
-    decode(nstate, blp);
-    decode(version, blp);
-    decode(projected_version, blp);
-    decode(lock, blp);
-    decode(get_replicas(), blp);
-
-    // twiddle
-    state &= MASK_STATE_IMPORT_KEPT;
-    mark_auth();
-    if (nstate & STATE_DIRTY)
-      _mark_dirty(ls);
-    if (is_replicated())
-      get(PIN_REPLICATED);
-    replica_nonce = 0;
-    DECODE_FINISH(blp);
-  }
+  void decode_import(ceph::buffer::list::const_iterator& blp, LogSegmentRef ls);
 
   // -- locking --
   SimpleLock* get_lock(int type) override {
