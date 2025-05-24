@@ -373,7 +373,7 @@ int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_obj& obj, cons
   }
 
   set_date_header(in_params.mod_ptr, extra_headers, in_params.high_precision_time, "HTTP_IF_MODIFIED_SINCE");
-  set_date_header(in_params.unmod_ptr, extra_headers, in_params.high_precision_time, "HTTP_IF_UNMODIFIED_SINCE");
+  set_date_header(in_params.unmod_ptr, extra_headers, in_params.high_precision_time, "HTTP_IF_MATCH_LAST_MODIFIED_TIME");
   if (!in_params.etag.empty()) {
     set_header(in_params.etag, extra_headers, "HTTP_IF_MATCH");
   }
