@@ -52,9 +52,47 @@ static ostream& _prefix(std::ostream *_dout, Monitor &mon) {
 MgrStatMonitor::MgrStatMonitor(Monitor &mn, Paxos &p, const string& service_name)
   : PaxosService(mn, p, service_name)
 {
+    g_conf().add_observer(this);
 }
 
-MgrStatMonitor::~MgrStatMonitor() = default;
+MgrStatMonitor::~MgrStatMonitor() 
+{
+  g_conf().remove_observer(this);
+}
+
+std::vector<std::string> MgrStatMonitor::get_tracked_keys() const noexcept
+{
+  return {
+    "enable_availability_tracking",
+  };
+}
+
+void MgrStatMonitor::handle_conf_change(
+  const ConfigProxy& conf,
+  const std::set<std::string>& changed)
+{
+  if (changed.count("enable_availability_tracking")) {
+    // TODO: do we need a lock here to ensure no changes happen to the config 
+    // while we are updating the pool_availability struct? 
+    bool oldval = enable_availability_tracking;
+    bool newval = g_conf().get_val<bool>("enable_availability_tracking");
+    dout(10) << __func__ << " enable_availability_tracking config option is changed from " 
+             << oldval << " to " << newval
+             << dendl;
+
+    // reset last_uptime and last_downtime if feature is toggled
+    // from disabled to enabled. 
+    if (newval > oldval) {
+      utime_t now(ceph_clock_now());
+      for (const auto& i : pool_availability) {
+        const auto& poolid = i.first;
+        pool_availability[poolid].last_downtime = now;
+        pool_availability[poolid].last_uptime = now;
+      }
+    }
+    enable_availability_tracking = newval;
+  }
+}
 
 void MgrStatMonitor::create_initial()
 {
@@ -69,6 +107,14 @@ void MgrStatMonitor::create_initial()
 void MgrStatMonitor::calc_pool_availability()
 {
   dout(20) << __func__ << dendl;
+
+  // if feature is disabled by user, do not update the uptime 
+  // and downtime, exit early
+  if (!enable_availability_tracking) {
+    dout(20) << __func__ << "tracking availability score is disabled" << dendl;
+    return;
+  }
+
   auto pool_avail_end = pool_availability.end();
   for (const auto& i : digest.pool_pg_unavailable_map) {
     const auto& poolid = i.first;
