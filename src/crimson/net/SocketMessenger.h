@@ -54,12 +54,12 @@ public:
   bool set_addr_unknowns(const entity_addrvec_t &addr) override;
 
   void set_auth_client(crimson::auth::AuthClient *ac) override {
-    assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     auth_client = ac;
   }
 
   void set_auth_server(crimson::auth::AuthServer *as) override {
-    assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     auth_server = as;
   }
 
@@ -71,23 +71,23 @@ public:
                         const entity_name_t& peer_name) override;
 
   bool owns_connection(Connection &conn) const override {
-    assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     return this == &static_cast<SocketConnection&>(conn).get_messenger();
   }
 
   // can only wait once
   seastar::future<> wait() override {
-    assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     return shutdown_promise.get_future();
   }
 
   void stop() override {
-    assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     dispatchers.clear();
   }
 
   bool is_started() const override {
-    assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     return !dispatchers.empty();
   }
 
@@ -112,12 +112,12 @@ public:
 // SocketMessenger public interfaces
 public:
   crimson::auth::AuthClient* get_auth_client() const {
-    assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     return auth_client;
   }
 
   crimson::auth::AuthServer* get_auth_server() const {
-    assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     return auth_server;
   }
 

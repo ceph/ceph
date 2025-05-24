@@ -44,7 +44,7 @@ public:
     changes.push_back(b);
   }
   void apply_changes_to(bufferptr &b) const {
-    assert(!changes.empty());
+    ceph_assert(!changes.empty());
     for (auto p : changes) {
       auto iter = p.bl.cbegin();
       iter.copy(p.bl.length(), b.c_str() + p.offset);
@@ -60,13 +60,13 @@ public:
     return *ptr;
   }
   bufferptr &&move_cached_bptr() {
-    assert(has_cached_bptr());
+    ceph_assert(has_cached_bptr());
     apply_changes_to(*ptr);
     return std::move(*ptr);
   }
 private:
   void apply_changes_to_cache(const bufferptr &_ptr) const {
-    assert(!is_empty());
+    ceph_assert(!is_empty());
     if (!has_cached_bptr()) {
       ptr = ceph::buffer::copy(_ptr.c_str(), _ptr.length());
     }
@@ -137,7 +137,7 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
         cached_overwrites.apply_changes_to(CachedExtent::get_bptr());
       }
     } else {
-      assert(cached_overwrites.is_empty());
+      ceph_assert(cached_overwrites.is_empty());
     }
   }
 

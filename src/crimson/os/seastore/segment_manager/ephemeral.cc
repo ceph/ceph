@@ -38,7 +38,7 @@ device_config_t get_ephemeral_device_config(
     std::size_t num_cold_devices)
 {
   auto num_devices = num_main_devices + num_cold_devices;
-  assert(num_devices > index);
+  ceph_assert(num_devices > index);
   auto get_sec_dtype = [num_main_devices](std::size_t idx) {
     if (idx < num_main_devices) {
       return device_type_t::EPHEMERAL_MAIN;

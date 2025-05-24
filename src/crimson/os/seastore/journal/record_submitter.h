@@ -98,7 +98,7 @@ public:
   }
 
   const record_group_size_t& get_submit_size() const {
-    assert(state != state_t::EMPTY);
+    ceph_assert(state != state_t::EMPTY);
     return pending.size;
   }
 
@@ -107,12 +107,12 @@ public:
   }
 
   bool needs_flush() const {
-    assert(state != state_t::SUBMITTING);
-    assert(pending.get_size() <= batch_capacity);
+    ceph_assert(state != state_t::SUBMITTING);
+    ceph_assert(pending.get_size() <= batch_capacity);
     if (state == state_t::EMPTY) {
       return false;
     } else {
-      assert(state == state_t::PENDING);
+      ceph_assert(state == state_t::PENDING);
       return (pending.get_size() >= batch_capacity ||
               pending.size.get_encoded_length() > batch_flush_size);
     }
@@ -129,7 +129,7 @@ public:
   evaluation_t evaluate_submit(
       const record_size_t& rsize,
       extent_len_t block_size) const {
-    assert(!needs_flush());
+    ceph_assert(!needs_flush());
     auto submit_size = pending.size.get_encoded_length_after(
         rsize, block_size);
     bool is_full = submit_size.get_encoded_length() > batch_flush_size;
@@ -285,8 +285,8 @@ public:
   submit_ret submit(record_t&&, bool with_atomic_roll_segment=false);
 
   void update_committed_to(const journal_seq_t& new_committed_to) {
-    assert(new_committed_to != JOURNAL_SEQ_NULL);
-    assert(committed_to == JOURNAL_SEQ_NULL ||
+    ceph_assert(new_committed_to != JOURNAL_SEQ_NULL);
+    ceph_assert(committed_to == JOURNAL_SEQ_NULL ||
            committed_to <= new_committed_to);
     committed_to = new_committed_to;
   }
@@ -311,11 +311,11 @@ private:
   void decrement_io_with_flush();
 
   void pop_free_batch() {
-    assert(p_current_batch == nullptr);
-    assert(!free_batch_ptrs.empty());
+    ceph_assert(p_current_batch == nullptr);
+    ceph_assert(!free_batch_ptrs.empty());
     p_current_batch = free_batch_ptrs.front();
-    assert(p_current_batch->is_empty());
-    assert(p_current_batch == &batches[p_current_batch->get_index()]);
+    ceph_assert(p_current_batch->is_empty());
+    ceph_assert(p_current_batch == &batches[p_current_batch->get_index()]);
     free_batch_ptrs.pop_front();
   }
 

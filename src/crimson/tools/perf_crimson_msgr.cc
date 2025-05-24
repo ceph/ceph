@@ -64,10 +64,10 @@ seastar::future<T*> create_sharded(Args... args) {
 double get_reactor_utilization() {
   auto &value_map = seastar::metrics::impl::get_value_map();
   auto found = value_map.find("reactor_utilization");
-  assert(found != value_map.end());
+  ceph_assert(found != value_map.end());
   auto &[full_name, metric_family] = *found;
   std::ignore = full_name;
-  assert(metric_family.size() == 1);
+  ceph_assert(metric_family.size() == 1);
   const auto& [labels, metric] = *metric_family.begin();
   std::ignore = labels;
   auto value = (*metric)();
@@ -220,7 +220,7 @@ static seastar::future<> run(
 
       std::optional<seastar::future<>> ms_dispatch(
           crimson::net::ConnectionRef c, MessageRef m) override {
-        assert(c->get_shard_id() == seastar::this_shard_id());
+        ceph_assert(c->get_shard_id() == seastar::this_shard_id());
         ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
 
         auto &server = container().local();
@@ -610,7 +610,7 @@ static seastar::future<> run(
           crimson::net::ConnectionRef conn,
           seastar::shard_id prv_shard) override {
         ceph_assert_always(prv_shard == seastar::this_shard_id());
-        assert(is_active());
+        ceph_assert(is_active());
         unsigned index = static_cast<ConnectionPriv&>(conn->get_user_private()).index;
         auto &conn_state = conn_states[index];
         conn_state.conn_stats.finish_connecting();
@@ -618,12 +618,12 @@ static seastar::future<> run(
 
       std::optional<seastar::future<>> ms_dispatch(
           crimson::net::ConnectionRef conn, MessageRef m) override {
-        assert(is_active());
+        ceph_assert(is_active());
         // server replies with MOSDOp to generate server-side write workload
         ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
 
         unsigned index = static_cast<ConnectionPriv&>(conn->get_user_private()).index;
-        assert(index < num_conns);
+        ceph_assert(index < num_conns);
         auto &conn_state = conn_states[index];
 
         auto msg_id = m->get_tid();
@@ -906,7 +906,7 @@ static seastar::future<> run(
           }
           if (client.server_sid.has_value() &&
               seastar::this_shard_id() == *client.server_sid) {
-            assert(!client.is_active());
+            ceph_assert(!client.is_active());
             report.set_server_reactor_utilization(get_reactor_utilization());
           }
         }).then([&report] {

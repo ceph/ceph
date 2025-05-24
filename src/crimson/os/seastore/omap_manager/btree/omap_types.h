@@ -17,13 +17,13 @@ struct omap_node_meta_t {
 
   static omap_node_meta_t merge_from(
     const omap_node_meta_t &lhs, const omap_node_meta_t &rhs) {
-    assert(lhs.depth == rhs.depth);
+    ceph_assert(lhs.depth == rhs.depth);
     return omap_node_meta_t{lhs.depth};
   }
 
   static std::pair<omap_node_meta_t, omap_node_meta_t>
   rebalance(const omap_node_meta_t &lhs, const omap_node_meta_t &rhs) {
-    assert(lhs.depth == rhs.depth);
+    ceph_assert(lhs.depth == rhs.depth);
     return std::make_pair(
       omap_node_meta_t{lhs.depth},
       omap_node_meta_t{lhs.depth});

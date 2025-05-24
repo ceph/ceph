@@ -149,23 +149,23 @@ journal_seq_t journal_seq_t::add_offset(
       device_off_t roll_start,
       device_off_t roll_size) const
 {
-  assert(offset.is_absolute());
-  assert(off <= DEVICE_OFF_MAX && off >= DEVICE_OFF_MIN);
-  assert(roll_start >= 0);
-  assert(roll_size > 0);
+  ceph_assert(offset.is_absolute());
+  ceph_assert(off <= DEVICE_OFF_MAX && off >= DEVICE_OFF_MIN);
+  ceph_assert(roll_start >= 0);
+  ceph_assert(roll_size > 0);
 
   segment_seq_t jseq = segment_seq;
   device_off_t joff;
   if (type == backend_type_t::SEGMENTED) {
     joff = offset.as_seg_paddr().get_segment_off();
   } else {
-    assert(type == backend_type_t::RANDOM_BLOCK);
+    ceph_assert(type == backend_type_t::RANDOM_BLOCK);
     auto boff = offset.as_blk_paddr().get_device_off();
     joff = boff;
   }
   auto roll_end = roll_start + roll_size;
-  assert(joff >= roll_start);
-  assert(joff <= roll_end);
+  ceph_assert(joff >= roll_start);
+  ceph_assert(joff <= roll_end);
 
   if (off >= 0) {
     device_off_t new_jseq = jseq + (off / roll_size);
@@ -174,7 +174,7 @@ journal_seq_t journal_seq_t::add_offset(
       ++new_jseq;
       joff -= roll_size;
     }
-    assert(std::cmp_less(new_jseq, MAX_SEG_SEQ));
+    ceph_assert(std::cmp_less(new_jseq, MAX_SEG_SEQ));
     jseq = static_cast<segment_seq_t>(new_jseq);
   } else {
     device_off_t mod = (-off) / roll_size;
@@ -189,8 +189,8 @@ journal_seq_t journal_seq_t::add_offset(
       return JOURNAL_SEQ_MIN;
     }
   }
-  assert(joff >= roll_start);
-  assert(joff < roll_end);
+  ceph_assert(joff >= roll_start);
+  ceph_assert(joff < roll_end);
   return journal_seq_t{jseq, make_block_relative_paddr(joff)};
 }
 
@@ -200,10 +200,10 @@ device_off_t journal_seq_t::relative_to(
       device_off_t roll_start,
       device_off_t roll_size) const
 {
-  assert(offset.is_absolute());
-  assert(r.offset.is_absolute());
-  assert(roll_start >= 0);
-  assert(roll_size > 0);
+  ceph_assert(offset.is_absolute());
+  ceph_assert(r.offset.is_absolute());
+  ceph_assert(roll_start >= 0);
+  ceph_assert(roll_size > 0);
 
   device_off_t ret = static_cast<device_off_t>(segment_seq) - r.segment_seq;
   ret *= roll_size;
@@ -211,11 +211,11 @@ device_off_t journal_seq_t::relative_to(
     ret += (static_cast<device_off_t>(offset.as_seg_paddr().get_segment_off()) -
             static_cast<device_off_t>(r.offset.as_seg_paddr().get_segment_off()));
   } else {
-    assert(type == backend_type_t::RANDOM_BLOCK);
+    ceph_assert(type == backend_type_t::RANDOM_BLOCK);
     ret += offset.as_blk_paddr().get_device_off() -
            r.offset.as_blk_paddr().get_device_off();
   }
-  assert(ret <= DEVICE_OFF_MAX && ret >= DEVICE_OFF_MIN);
+  ceph_assert(ret <= DEVICE_OFF_MAX && ret >= DEVICE_OFF_MIN);
   return ret;
 }
 
@@ -406,21 +406,21 @@ std::ostream &operator<<(std::ostream &out, const segment_tail_t &tail)
 
 extent_len_t record_size_t::get_raw_mdlength() const
 {
-  assert(record_type < record_type_t::MAX);
+  ceph_assert(record_type < record_type_t::MAX);
   // empty record is allowed to submit
   extent_len_t ret = plain_mdlength;
   if (record_type == record_type_t::JOURNAL) {
     ret += ceph::encoded_sizeof_bounded<record_header_t>();
   } else {
     // OOL won't contain metadata
-    assert(ret == 0);
+    ceph_assert(ret == 0);
   }
   return ret;
 }
 
 void record_size_t::account_extent(extent_len_t extent_len)
 {
-  assert(extent_len);
+  ceph_assert(extent_len);
   if (record_type == record_type_t::JOURNAL) {
     plain_mdlength += ceph::encoded_sizeof_bounded<extent_info_t>();
   } else {
@@ -431,8 +431,8 @@ void record_size_t::account_extent(extent_len_t extent_len)
 
 void record_size_t::account(const delta_info_t& delta)
 {
-  assert(record_type == record_type_t::JOURNAL);
-  assert(delta.bl.length());
+  ceph_assert(record_type == record_type_t::JOURNAL);
+  ceph_assert(delta.bl.length());
   plain_mdlength += ceph::encoded_sizeof(delta);
 }
 
@@ -519,14 +519,14 @@ std::ostream& operator<<(std::ostream& out, const record_group_header_t& h)
 
 extent_len_t record_group_size_t::get_raw_mdlength() const
 {
-  assert(record_type < record_type_t::MAX);
+  ceph_assert(record_type < record_type_t::MAX);
   extent_len_t ret = plain_mdlength;
   if (record_type == record_type_t::JOURNAL) {
     ret += sizeof(checksum_t);
     ret += ceph::encoded_sizeof_bounded<record_group_header_t>();
   } else {
     // OOL won't contain metadata
-    assert(ret == 0);
+    ceph_assert(ret == 0);
   }
   return ret;
 }
@@ -536,10 +536,10 @@ void record_group_size_t::account(
     extent_len_t _block_size)
 {
   // empty record is allowed to submit
-  assert(_block_size > 0);
-  assert(rsize.dlength % _block_size == 0);
-  assert(block_size == 0 || block_size == _block_size);
-  assert(record_type == RECORD_TYPE_NULL ||
+  ceph_assert(_block_size > 0);
+  ceph_assert(rsize.dlength % _block_size == 0);
+  ceph_assert(block_size == 0 || block_size == _block_size);
+  ceph_assert(record_type == RECORD_TYPE_NULL ||
          record_type == rsize.record_type);
   block_size = _block_size;
   record_type = rsize.record_type;
@@ -547,7 +547,7 @@ void record_group_size_t::account(
     plain_mdlength += rsize.get_raw_mdlength();
   } else {
     // OOL won't contain metadata
-    assert(rsize.get_raw_mdlength() == 0);
+    ceph_assert(rsize.get_raw_mdlength() == 0);
   }
   dlength += rsize.dlength;
 }
@@ -589,21 +589,21 @@ ceph::bufferlist encode_records(
   const journal_seq_t& committed_to,
   segment_nonce_t current_segment_nonce)
 {
-  assert(record_group.size.record_type < record_type_t::MAX);
-  assert(record_group.size.block_size > 0);
-  assert(record_group.records.size() > 0);
+  ceph_assert(record_group.size.record_type < record_type_t::MAX);
+  ceph_assert(record_group.size.block_size > 0);
+  ceph_assert(record_group.records.size() > 0);
 
   bufferlist data_bl;
   for (auto& r: record_group.records) {
     for (auto& i: r.extents) {
-      assert(i.bl.length());
+      ceph_assert(i.bl.length());
       data_bl.append(i.bl);
     }
   }
 
   if (record_group.size.record_type == record_type_t::OOL) {
     // OOL won't contain metadata
-    assert(record_group.size.get_mdlength() == 0);
+    ceph_assert(record_group.size.get_mdlength() == 0);
     ceph_assert(data_bl.length() ==
                 record_group.size.get_encoded_length());
     record_group.clear();
@@ -646,7 +646,7 @@ ceph::bufferlist encode_records(
 
   auto aligned_mdlength = record_group.size.get_mdlength();
   if (bl.length() != aligned_mdlength) {
-    assert(bl.length() < aligned_mdlength);
+    ceph_assert(bl.length() < aligned_mdlength);
     bl.append_zero(aligned_mdlength - bl.length());
   }
 

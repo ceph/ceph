@@ -33,13 +33,13 @@ static void copy_from_foreign(
   iterator tgt,
   const_iterator from_src,
   const_iterator to_src) {
-  assert(tgt->node != from_src->node);
-  assert(to_src->node == from_src->node);
+  ceph_assert(tgt->node != from_src->node);
+  ceph_assert(to_src->node == from_src->node);
   if (from_src == to_src)
     return;
 
   auto to_copy = from_src->get_right_ptr_end() - to_src->get_right_ptr_end();
-  assert(to_copy > 0);
+  ceph_assert(to_copy > 0);
   memcpy(
     tgt->get_right_ptr_end() - to_copy,
     to_src->get_right_ptr_end(),
@@ -67,11 +67,11 @@ static void copy_from_local(
   iterator tgt,
   iterator from_src,
   iterator to_src) {
-  assert(tgt->node == from_src->node);
-  assert(to_src->node == from_src->node);
+  ceph_assert(tgt->node == from_src->node);
+  ceph_assert(to_src->node == from_src->node);
 
   auto to_copy = from_src->get_right_ptr_end() - to_src->get_right_ptr_end();
-  assert(to_copy > 0);
+  ceph_assert(to_copy > 0);
   int adjust_offset = tgt > from_src? -len : len;
   memmove(to_src->get_right_ptr_end() + adjust_offset,
           to_src->get_right_ptr_end(),
@@ -344,19 +344,19 @@ public:
 
     iter_t operator--(int) {
       auto ret = *this;
-      assert(index > 0);
+      ceph_assert(index > 0);
       --index;
       return ret;
     }
 
     iter_t &operator--() {
-      assert(index > 0);
+      ceph_assert(index > 0);
       --index;
       return *this;
     }
 
     uint16_t operator-(const iter_t &rhs) const {
-      assert(rhs.node == node);
+      ceph_assert(rhs.node == node);
       return index - rhs.index;
     }
 
@@ -368,17 +368,17 @@ public:
     }
 
     uint16_t operator<(const iter_t &rhs) const {
-      assert(rhs.node == node);
+      ceph_assert(rhs.node == node);
       return index < rhs.index;
     }
 
     uint16_t operator>(const iter_t &rhs) const {
-      assert(rhs.node == node);
+      ceph_assert(rhs.node == node);
       return index > rhs.index;
     }
 
     friend bool operator==(const iter_t &lhs, const iter_t &rhs) {
-      assert(lhs.node == rhs.node);
+      ceph_assert(lhs.node == rhs.node);
       return lhs.index == rhs.index;
     }
 
@@ -418,7 +418,7 @@ public:
     void update_offset(int offset) {
       static_assert(!is_const);
       auto key = get_node_key();
-      assert(offset + key.key_off >= 0);
+      ceph_assert(offset + key.key_off >= 0);
       key.key_off += offset;
       set_node_key(key);
     }
@@ -432,10 +432,10 @@ public:
 
     void set_node_val(const std::string &str) {
       static_assert(!is_const);
-      assert(str.size() == get_node_key().key_len);
-      assert(get_node_key().key_off >= str.size());
-      assert(get_node_key().key_off < OMAP_INNER_BLOCK_SIZE);
-      assert(str.size() < OMAP_INNER_BLOCK_SIZE);
+      ceph_assert(str.size() == get_node_key().key_len);
+      ceph_assert(get_node_key().key_off >= str.size());
+      ceph_assert(get_node_key().key_off < OMAP_INNER_BLOCK_SIZE);
+      ceph_assert(str.size() < OMAP_INNER_BLOCK_SIZE);
       ::memcpy(get_node_val_ptr(), str.data(), str.size());
     }
 
@@ -455,7 +455,7 @@ public:
     }
 
     bool contains(std::string_view key) const {
-      assert(*this != node->iter_end());
+      ceph_assert(*this != node->iter_end());
       auto next = *this + 1;
       if (next == node->iter_end()) {
         return get_key() <= key;
@@ -507,8 +507,8 @@ public:
   StringKVInnerNodeLayout(char *buf) : buf(buf) {}
 
   void set_layout_buf(char *_buf) {
-    assert(buf == nullptr);
-    assert(_buf != nullptr);
+    ceph_assert(buf == nullptr);
+    ceph_assert(_buf != nullptr);
     buf = _buf;
   }
 
@@ -699,7 +699,7 @@ public:
     StringKVInnerNodeLayout &left,
     StringKVInnerNodeLayout &right) const {
     auto piviter = get_split_pivot();
-    assert(piviter != iter_end());
+    ceph_assert(piviter != iter_end());
 
     copy_from_foreign(left.iter_begin(), iter_begin(), piviter);
     left.set_size(piviter - iter_begin());
@@ -851,12 +851,12 @@ private:
     const std::string &key,
     laddr_t val) {
     if (iter != iter_begin()) {
-      assert((iter - 1)->get_key() < key);
+      ceph_assert((iter - 1)->get_key() < key);
     }
     if (iter != iter_end()) {
-      assert(iter->get_key() > key);
+      ceph_assert(iter->get_key() > key);
     }
-    assert(!is_overflow(key.size()));
+    ceph_assert(!is_overflow(key.size()));
 
     if (iter != iter_end()) {
       copy_from_local(key.size(), iter + 1, iter, iter_end());
@@ -880,14 +880,14 @@ private:
   void inner_update(
     iterator iter,
     laddr_t addr) {
-    assert(iter != iter_end());
+    ceph_assert(iter != iter_end());
     auto node_key = iter->get_node_key();
     node_key.laddr = addr;
     iter->set_node_key(node_key);
   }
 
   void inner_remove(iterator iter) {
-    assert(iter != iter_end());
+    ceph_assert(iter != iter_end());
     if ((iter + 1) != iter_end())
       copy_from_local(iter->get_node_key().key_len, iter, iter + 1, iter_end());
     set_size(get_size() - 1);
@@ -980,7 +980,7 @@ public:
     }
 
     uint16_t operator-(const iter_t &rhs) const {
-      assert(rhs.node == node);
+      ceph_assert(rhs.node == node);
       return index - rhs.index;
     }
 
@@ -996,22 +996,22 @@ public:
     }
 
     uint16_t operator<(const iter_t &rhs) const {
-      assert(rhs.node == node);
+      ceph_assert(rhs.node == node);
       return index < rhs.index;
     }
 
     uint16_t operator>(const iter_t &rhs) const {
-      assert(rhs.node == node);
+      ceph_assert(rhs.node == node);
       return index > rhs.index;
     }
 
     bool operator==(const iter_t &rhs) const {
-      assert(node == rhs.node);
+      ceph_assert(node == rhs.node);
       return rhs.index == index;
     }
 
     bool operator!=(const iter_t &rhs) const {
-      assert(node == rhs.node);
+      ceph_assert(node == rhs.node);
       return index != rhs.index;
     }
 
@@ -1050,7 +1050,7 @@ public:
 
     void update_offset(int offset) {
       auto key = get_node_key();
-      assert(offset + key.key_off >= 0);
+      ceph_assert(offset + key.key_off >= 0);
       key.key_off += offset;
       set_node_key(key);
     }
@@ -1065,8 +1065,8 @@ public:
     void set_node_val(const std::string &key, const ceph::bufferlist &val) {
       static_assert(!is_const);
       auto node_key = get_node_key();
-      assert(key.size() == node_key.key_len);
-      assert(val.length() == node_key.val_len);
+      ceph_assert(key.size() == node_key.key_len);
+      ceph_assert(val.length() == node_key.val_len);
       ::memcpy(get_node_val_ptr(), key.data(), key.size());
       auto bliter = val.begin();
       bliter.copy(node_key.val_len, get_node_val_ptr() + node_key.key_len);
@@ -1144,9 +1144,9 @@ public:
   StringKVLeafNodeLayout() : buf(nullptr) {}
 
   void set_layout_buf(char *_buf, extent_len_t _len) {
-    assert(_len > 0);
-    assert(buf == nullptr);
-    assert(_buf != nullptr);
+    ceph_assert(_len > 0);
+    ceph_assert(buf == nullptr);
+    ceph_assert(_buf != nullptr);
     buf = _buf;
     len = _len;
   }
@@ -1298,7 +1298,7 @@ public:
   }
 
   auto get_len() const {
-    assert(len > 0);
+    ceph_assert(len > 0);
     return len;
   }
 
@@ -1476,12 +1476,12 @@ private:
     const std::string &key,
     const bufferlist &val) {
     if (iter != iter_begin()) {
-      assert((iter - 1)->get_key() < key);
+      ceph_assert((iter - 1)->get_key() < key);
     }
     if (iter != iter_end()) {
-      assert(iter->get_key() > key);
+      ceph_assert(iter->get_key() > key);
     }
-    assert(!is_overflow(key.size(), val.length()));
+    ceph_assert(!is_overflow(key.size(), val.length()));
     omap_leaf_key_t node_key;
     if (iter == iter_begin()) {
       node_key.key_off = key.size() + val.length();
@@ -1505,14 +1505,14 @@ private:
     iterator iter,
     const std::string &key,
     const ceph::bufferlist &val) {
-    assert(iter != iter_end());
+    ceph_assert(iter != iter_end());
     leaf_remove(iter);
-    assert(!is_overflow(key.size(), val.length()));
+    ceph_assert(!is_overflow(key.size(), val.length()));
     leaf_insert(iter, key, val);
   }
 
   void leaf_remove(iterator iter) {
-    assert(iter != iter_end());
+    ceph_assert(iter != iter_end());
     if ((iter + 1) != iter_end()) {
       omap_leaf_key_t key = iter->get_node_key();
       copy_from_local(key.key_len + key.val_len, iter, iter + 1, iter_end());
@@ -1542,18 +1542,18 @@ inline void delta_inner_t::replay(StringKVInnerNodeLayout &l) {
     }
     case op_t::UPDATE: {
       auto iter = l.find_string_key(key);
-      assert(iter != l.iter_end());
+      ceph_assert(iter != l.iter_end());
       l.inner_update(iter, addr);
       break;
     }
     case op_t::REMOVE: {
       auto iter = l.find_string_key(key);
-      assert(iter != l.iter_end());
+      ceph_assert(iter != l.iter_end());
       l.inner_remove(iter);
       break;
     }
     default:
-      assert(0 == "Impossible");
+      ceph_assert(0 == "Impossible");
   }
 }
 
@@ -1565,18 +1565,18 @@ inline void delta_leaf_t::replay(StringKVLeafNodeLayout &l) {
     }
     case op_t::UPDATE: {
       auto iter = l.find_string_key(key);
-      assert(iter != l.iter_end());
+      ceph_assert(iter != l.iter_end());
       l.leaf_update(iter, key, val);
       break;
     }
     case op_t::REMOVE: {
       auto iter = l.find_string_key(key);
-      assert(iter != l.iter_end());
+      ceph_assert(iter != l.iter_end());
       l.leaf_remove(iter);
       break;
     }
     default:
-      assert(0 == "Impossible");
+      ceph_assert(0 == "Impossible");
   }
 }
 

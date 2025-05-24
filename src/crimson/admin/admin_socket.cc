@@ -61,7 +61,7 @@ void AdminSocket::register_command(std::unique_ptr<AdminSocketHook>&& hook)
 {
   auto prefix = hook->prefix;
   auto [it, added] = hooks.emplace(prefix, std::move(hook));
-  assert(added);
+  ceph_assert(added);
   logger().info("register_command(): {})", it->first);
 }
 
@@ -252,7 +252,7 @@ seastar::future<> AdminSocket::start(const std::string& path)
   // listen in background
   task = seastar::keep_doing([this] {
     return seastar::try_with_gate(stop_gate, [this] {
-      assert(!connected_sock.has_value());
+      ceph_assert(!connected_sock.has_value());
       return server_sock->accept().then([this](seastar::accept_result acc) {
         connected_sock = std::move(acc.connection);
         return seastar::do_with(connected_sock->input(),
@@ -260,7 +260,7 @@ seastar::future<> AdminSocket::start(const std::string& path)
           [this](auto& input, auto& output) mutable {
           return handle_client(input, output);
         }).finally([this] {
-          assert(connected_sock.has_value());
+          ceph_assert(connected_sock.has_value());
           connected_sock.reset();
         });
       }).handle_exception([this](auto ep) {
@@ -287,7 +287,7 @@ seastar::future<> AdminSocket::stop()
     connected_sock->shutdown_output();
   }
   return stop_gate.close().then([this] {
-    assert(task.has_value());
+    ceph_assert(task.has_value());
     return task->then([] {
       logger().info("AdminSocket: stopped");
       return seastar::now();
@@ -457,7 +457,7 @@ public:
   {
     std::string var;
     [[maybe_unused]] bool found = cmd_getval(cmdmap, "var", var);
-    assert(found);
+    ceph_assert(found);
     std::string conf_val;
     if (int r = local_conf().get_val(var, &conf_val); r < 0) {
       return seastar::make_ready_future<tell_result_t>(

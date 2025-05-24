@@ -110,7 +110,7 @@ private:
     const hobject_t &soid,
     eversion_t need) {
     auto backend = pg->get_recovery_backend();
-    assert(backend);
+    ceph_assert(backend);
     return backend->recover_object(soid, need);
   }
 

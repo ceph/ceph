@@ -18,7 +18,7 @@ ValueDeltaRecorder::get_encoded(NodeExtentMutable& payload_mut)
 {
   ceph::encode(node_delta_op_t::SUBOP_UPDATE_VALUE, encoded);
   node_offset_t offset = payload_mut.get_node_offset();
-  assert(offset > sizeof(value_header_t));
+  ceph_assert(offset > sizeof(value_header_t));
   offset -= sizeof(value_header_t);
   ceph::encode(offset, encoded);
   return encoded;
@@ -33,7 +33,7 @@ Value::~Value() {}
 
 bool Value::is_tracked() const
 {
-  assert(!p_cursor->is_end());
+  ceph_assert(!p_cursor->is_end());
   return p_cursor->is_tracked();
 }
 
@@ -44,12 +44,12 @@ void Value::invalidate()
 
 eagain_ifuture<> Value::extend(Transaction& t, value_size_t extend_size)
 {
-  assert(is_tracked());
+  ceph_assert(is_tracked());
   [[maybe_unused]] auto target_size = get_payload_size() + extend_size;
   return p_cursor->extend_value(get_context(t), extend_size)
 #ifndef NDEBUG
   .si_then([this, target_size] {
-    assert(target_size == get_payload_size());
+    ceph_assert(target_size == get_payload_size());
   })
 #endif
   ;
@@ -57,13 +57,13 @@ eagain_ifuture<> Value::extend(Transaction& t, value_size_t extend_size)
 
 eagain_ifuture<> Value::trim(Transaction& t, value_size_t trim_size)
 {
-  assert(is_tracked());
-  assert(get_payload_size() > trim_size);
+  ceph_assert(is_tracked());
+  ceph_assert(get_payload_size() > trim_size);
   [[maybe_unused]] auto target_size = get_payload_size() - trim_size;
   return p_cursor->trim_value(get_context(t), trim_size)
 #ifndef NDEBUG
   .si_then([this, target_size] {
-    assert(target_size == get_payload_size());
+    ceph_assert(target_size == get_payload_size());
   })
 #endif
   ;
@@ -72,7 +72,7 @@ eagain_ifuture<> Value::trim(Transaction& t, value_size_t trim_size)
 const value_header_t* Value::read_value_header() const
 {
   auto ret = p_cursor->read_value_header(vb.get_header_magic());
-  assert(ret->payload_size <= vb.get_max_value_payload_size());
+  ceph_assert(ret->payload_size <= vb.get_max_value_payload_size());
   return ret;
 }
 
@@ -109,7 +109,7 @@ build_value_recorder_by_type(ceph::bufferlist& encoded,
     ret = nullptr;
     break;
   }
-  assert(!ret || ret->get_header_magic() == magic);
+  ceph_assert(!ret || ret->get_header_magic() == magic);
   return ret;
 }
 

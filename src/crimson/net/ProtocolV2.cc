@@ -129,7 +129,7 @@ ProtocolV2::~ProtocolV2() {}
 void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
                                const entity_name_t& _peer_name)
 {
-  assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
+  ceph_assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
   ceph_assert(state == state_t::NONE);
   ceph_assert(!gate.is_closed());
   conn.peer_addr = _peer_addr;
@@ -150,7 +150,7 @@ void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
 void ProtocolV2::start_accept(SocketFRef&& new_socket,
                               const entity_addr_t& _peer_addr)
 {
-  assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
+  ceph_assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
   ceph_assert(state == state_t::NONE);
   // until we know better
   conn.target_addr = _peer_addr;
@@ -214,13 +214,13 @@ void ProtocolV2::trigger_state_phase2(
 
   FrameAssemblerV2Ref fa;
   if (new_state == state_t::READY) {
-    assert(new_io_state == io_state_t::open);
-    assert(io_handler.get_shard_id() ==
+    ceph_assert(new_io_state == io_state_t::open);
+    ceph_assert(io_handler.get_shard_id() ==
            frame_assembler->get_socket_shard_id());
     frame_assembler->set_shard_id(io_handler.get_shard_id());
     fa = std::move(frame_assembler);
   } else {
-    assert(new_io_state != io_state_t::open);
+    ceph_assert(new_io_state != io_state_t::open);
   }
 
   auto cc_seq = crosscore.prepare_submit();
@@ -246,8 +246,8 @@ void ProtocolV2::trigger_state_phase2(
     auto cc_seq = crosscore.prepare_submit();
     logger().debug("{} send {} IOHandler::wait_io_exit_dispatching() ...",
                    conn, cc_seq);
-    assert(pr_exit_io.has_value());
-    assert(new_io_state != io_state_t::open);
+    ceph_assert(pr_exit_io.has_value());
+    ceph_assert(new_io_state != io_state_t::open);
     need_exit_io = false;
     gate.dispatch_in_background("exit_io", conn, [this, cc_seq] {
       return seastar::smp::submit_to(
@@ -257,11 +257,11 @@ void ProtocolV2::trigger_state_phase2(
         logger().debug("{} finish {} IOHandler::wait_io_exit_dispatching(), {}",
                        conn, cc_seq, ret.io_states);
         frame_assembler = std::move(ret.frame_assembler);
-        assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
+        ceph_assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
         ceph_assert_always(
             seastar::this_shard_id() == frame_assembler->get_shard_id());
         ceph_assert_always(!frame_assembler->is_socket_valid());
-        assert(!need_exit_io);
+        ceph_assert(!need_exit_io);
         io_states = ret.io_states;
         pr_exit_io->set_value();
         pr_exit_io = std::nullopt;
@@ -275,7 +275,7 @@ void ProtocolV2::fault(
     const char *where,
     std::exception_ptr eptr)
 {
-  assert(expected_state == state_t::CONNECTING ||
+  ceph_assert(expected_state == state_t::CONNECTING ||
          expected_state == state_t::ESTABLISHING ||
          expected_state == state_t::REPLACING ||
          expected_state == state_t::READY);
@@ -295,20 +295,20 @@ void ProtocolV2::fault(
                   e_what);
 #ifndef NDEBUG
     if (expected_state == state_t::REPLACING) {
-      assert(state == state_t::CLOSING);
+      ceph_assert(state == state_t::CLOSING);
     } else if (expected_state == state_t::READY) {
-      assert(state == state_t::CLOSING ||
+      ceph_assert(state == state_t::CLOSING ||
              state == state_t::REPLACING ||
              state == state_t::CONNECTING ||
              state == state_t::STANDBY);
     } else {
-      assert(state == state_t::CLOSING ||
+      ceph_assert(state == state_t::CLOSING ||
              state == state_t::REPLACING);
     }
 #endif
     return;
   }
-  assert(state == expected_state);
+  ceph_assert(state == expected_state);
 
   if (state != state_t::CONNECTING && conn.policy.lossy) {
     // socket will be shutdown in do_close()
@@ -328,7 +328,7 @@ void ProtocolV2::fault(
     }
   } else { // !has_socket
     ceph_assert_always(state == state_t::CONNECTING);
-    assert(!is_socket_valid);
+    ceph_assert(!is_socket_valid);
   }
 
   if (conn.policy.server ||
@@ -359,7 +359,7 @@ void ProtocolV2::fault(
                   e_what);
     execute_wait(false);
   } else {
-    assert(state == state_t::READY ||
+    ceph_assert(state == state_t::READY ||
            state == state_t::ESTABLISHING);
     logger().info("{} protocol {} {} fault, going to CONNECTING {} -- {}",
                   conn,
@@ -450,7 +450,7 @@ ProtocolV2::banner_exchange(bool is_connect)
 
     bptr.set_offset(bptr.offset() + banner_prefix_len);
     bptr.set_length(bptr.length() - banner_prefix_len);
-    assert(bptr.length() == sizeof(ceph_le16));
+    ceph_assert(bptr.length() == sizeof(ceph_le16));
 
     uint16_t payload_len;
     bufferlist buf;
@@ -878,14 +878,14 @@ void ProtocolV2::execute_connecting()
   trigger_state(state_t::CONNECTING, io_state_t::delay);
   gated_execute("execute_connecting", conn, [this] {
     global_seq = messenger.get_global_seq();
-    assert(client_cookie != 0);
+    ceph_assert(client_cookie != 0);
     if (!conn.policy.lossy && server_cookie != 0) {
       ++connect_seq;
       logger().debug("{} UPDATE: gs={}, cs={} for reconnect",
                      conn, global_seq, connect_seq);
     } else { // conn.policy.lossy || server_cookie == 0
-      assert(connect_seq == 0);
-      assert(server_cookie == 0);
+      ceph_assert(connect_seq == 0);
+      ceph_assert(server_cookie == 0);
       logger().debug("{} UPDATE: gs={} for connect", conn, global_seq);
     }
     return wait_exit_io().then([this] {
@@ -1623,7 +1623,7 @@ ProtocolV2::server_reconnect()
 
 void ProtocolV2::execute_accepting()
 {
-  assert(is_socket_valid);
+  ceph_assert(is_socket_valid);
   trigger_state(state_t::ACCEPTING, io_state_t::delay);
   gate.dispatch_in_background("execute_accepting", conn, [this] {
     return seastar::futurize_invoke([this] {
@@ -1681,7 +1681,7 @@ void ProtocolV2::execute_accepting()
     }).then([this] (next_step_t next) {
       switch (next) {
        case next_step_t::ready:
-        assert(state != state_t::ACCEPTING);
+        ceph_assert(state != state_t::ACCEPTING);
         break;
        case next_step_t::wait:
         if (unlikely(state != state_t::ACCEPTING)) {
@@ -2043,7 +2043,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
         return frame_assembler->write_flush_frame(reconnect_ok);
       } else {
         client_cookie = new_client_cookie;
-        assert(conn.get_peer_type() == new_peer_name.type());
+        ceph_assert(conn.get_peer_type() == new_peer_name.type());
         if (conn.get_peer_id() == entity_name_t::NEW) {
           conn.set_peer_id(new_peer_name.num());
         }
@@ -2081,7 +2081,7 @@ seastar::future<> ProtocolV2::notify_out_fault(
     std::exception_ptr eptr,
     io_handler_state _io_states)
 {
-  assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
+  ceph_assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
   if (!crosscore.proceed_or_wait(cc_seq)) {
     logger().debug("{} got {} notify_out_fault(), wait at {}",
                    conn, cc_seq, crosscore.get_in_seq());
@@ -2100,7 +2100,7 @@ seastar::future<> ProtocolV2::notify_out_fault(
 
 void ProtocolV2::execute_ready()
 {
-  assert(conn.policy.lossy || (client_cookie != 0 && server_cookie != 0));
+  ceph_assert(conn.policy.lossy || (client_cookie != 0 && server_cookie != 0));
   protocol_timer.cancel();
   ceph_assert_always(is_socket_valid);
   // I'm not responsible to shutdown the socket at READY
@@ -2126,7 +2126,7 @@ void ProtocolV2::execute_standby()
 seastar::future<> ProtocolV2::notify_out(
     cc_seq_t cc_seq)
 {
-  assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
+  ceph_assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
   if (!crosscore.proceed_or_wait(cc_seq)) {
     logger().debug("{} got {} notify_out(), wait at {}",
                    conn, cc_seq, crosscore.get_in_seq());
@@ -2179,7 +2179,7 @@ void ProtocolV2::execute_wait(bool max_backoff)
       }
       logger().info("{} execute_wait(): protocol aborted at {} -- {}",
                     conn, get_state_name(state), e_what);
-      assert(state == state_t::REPLACING ||
+      ceph_assert(state == state_t::REPLACING ||
              state == state_t::CLOSING);
     });
   });
@@ -2215,7 +2215,7 @@ void ProtocolV2::execute_server_wait()
 seastar::future<> ProtocolV2::notify_mark_down(
     cc_seq_t cc_seq)
 {
-  assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
+  ceph_assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
   if (!crosscore.proceed_or_wait(cc_seq)) {
     logger().debug("{} got {} notify_mark_down(), wait at {}",
                    conn, cc_seq, crosscore.get_in_seq());

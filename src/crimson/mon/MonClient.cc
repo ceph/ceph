@@ -232,7 +232,7 @@ Connection::do_auth_single(Connection::request_t what)
     }
     break;
   default:
-    assert(0);
+    ceph_assert(0);
   }
   logger().info("sending {}", *m);
   return conn->send(std::move(m)).then([this] {
@@ -371,13 +371,13 @@ int Connection::handle_auth_bad_method(uint32_t old_auth_method,
   auth_registry.get_supported_methods(conn->get_peer_type(), &auth_supported);
   auto p = std::find(auth_supported.begin(), auth_supported.end(),
                      old_auth_method);
-  assert(p != auth_supported.end());
+  ceph_assert(p != auth_supported.end());
   p = std::find_first_of(std::next(p), auth_supported.end(),
                          allowed_methods.begin(), allowed_methods.end());
   if (p == auth_supported.end()) {
     logger().error("server allowed_methods {} but i only support {}",
                    allowed_methods, auth_supported);
-    assert(auth_done);
+    ceph_assert(auth_done);
     auth_done->set_exception(std::system_error(make_error_code(
       crimson::net::error::negotiation_failure)));
     return -EACCES;
@@ -472,7 +472,7 @@ void Client::tick()
                                        active_con->renew_tickets(),
                                        active_con->renew_rotating_keyring()).discard_result();
     } else {
-      assert(is_hunting());
+      ceph_assert(is_hunting());
       logger().info("{} continuing the hunt", __func__);
       return authenticate();
     }
@@ -1005,7 +1005,7 @@ seastar::future<bool> Client::reopen_session(int rank)
     auto conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MON);
     auto& mc = pending_conns.emplace_back(
       seastar::make_shared<Connection>(auth_registry, conn, &keyring));
-    assert(conn->get_peer_addr().is_msgr2());
+    ceph_assert(conn->get_peer_addr().is_msgr2());
     return mc->authenticate_v2().then([peer, this](auto result) {
       if (result == Connection::auth_result_t::success) {
         _finish_auth(peer);
@@ -1077,7 +1077,7 @@ Client::run_command(std::string&& cmd,
 seastar::future<> Client::send_message(MessageURef m)
 {
   if (active_con && ready_to_send) {
-    assert(pending_messages.empty());
+    ceph_assert(pending_messages.empty());
     return active_con->get_conn()->send(std::move(m));
   } else {
     auto& delayed = pending_messages.emplace_back(std::move(m));
@@ -1152,7 +1152,7 @@ seastar::future<> Client::renew_subs()
 
 seastar::future<> Client::wait_for_config()
 {
-  assert(!config_updated);
+  ceph_assert(!config_updated);
   config_updated = seastar::promise<>();
   return config_updated->get_future();
 }

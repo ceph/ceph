@@ -115,7 +115,7 @@ SegmentAllocator::do_open(bool is_mkfs)
     bl.append(bp);
 
     ceph_assert(sref->get_write_ptr() == 0);
-    assert((unsigned)header_length == bl.length());
+    ceph_assert((unsigned)header_length == bl.length());
     written_to = header_length;
     auto new_journal_seq = journal_seq_t{
       new_segment_seq,
@@ -185,15 +185,15 @@ SegmentAllocator::write_ertr::future<>
 SegmentAllocator::write(ceph::bufferlist&& to_write)
 {
   LOG_PREFIX(SegmentAllocator::write);
-  assert(can_write());
+  ceph_assert(can_write());
   auto write_length = to_write.length();
   auto write_start_offset = written_to;
   if (unlikely(LOCAL_LOGGER.is_enabled(seastar::log_level::trace))) {
     TRACE("{} {}~0x{:x}", print_name, get_written_to(), write_length);
   }
-  assert(write_length > 0);
-  assert((write_length % get_block_size()) == 0);
-  assert(!needs_roll(write_length));
+  ceph_assert(write_length > 0);
+  ceph_assert((write_length % get_block_size()) == 0);
+  ceph_assert(!needs_roll(write_length));
 
   written_to += write_length;
   segment_provider.update_segment_avail_bytes(
@@ -232,7 +232,7 @@ SegmentAllocator::close_segment_ertr::future<>
 SegmentAllocator::close_segment()
 {
   LOG_PREFIX(SegmentAllocator::close_segment);
-  assert(can_write());
+  ceph_assert(can_write());
   // Note: make sure no one can access the current segment once closing
   auto seg_to_close = std::move(current_segment);
   auto close_segment_id = seg_to_close->get_segment_id();
@@ -262,7 +262,7 @@ SegmentAllocator::close_segment()
   bl.clear();
   bl.append(bp);
 
-  assert(bl.length() == sm_group.get_rounded_tail_length());
+  ceph_assert(bl.length() == sm_group.get_rounded_tail_length());
 
   auto p_seg_to_close = seg_to_close.get();
   return p_seg_to_close->advance_wp(

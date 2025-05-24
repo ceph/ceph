@@ -49,7 +49,7 @@ struct MatchHistory {
 
   const std::optional<MatchKindCMP>&
   get_by_stage(match_stage_t stage) const {
-    assert(is_valid_stage(stage));
+    ceph_assert(is_valid_stage(stage));
     if (stage == STAGE_RIGHT) {
       return right_match;
     } else if (stage == STAGE_STRING) {
@@ -66,9 +66,9 @@ struct MatchHistory {
   void set(MatchKindCMP match) {
     static_assert(is_valid_stage(STAGE));
     if constexpr (STAGE < STAGE_TOP) {
-      assert(*get<STAGE + 1>() == MatchKindCMP::EQ);
+      ceph_assert(*get<STAGE + 1>() == MatchKindCMP::EQ);
     }
-    assert(!get<STAGE>().has_value() || *get<STAGE>() != MatchKindCMP::EQ);
+    ceph_assert(!get<STAGE>().has_value() || *get<STAGE>() != MatchKindCMP::EQ);
     const_cast<std::optional<MatchKindCMP>&>(get<STAGE>()) = match;
   }
 
@@ -123,7 +123,7 @@ template <match_stage_t STAGE>
 const bool MatchHistory::is_GT() const {
   static_assert(is_valid_stage(STAGE));
   if constexpr (STAGE < STAGE_TOP) {
-    assert(get<STAGE + 1>() == MatchKindCMP::EQ);
+    ceph_assert(get<STAGE + 1>() == MatchKindCMP::EQ);
   }
   return _check_GT_t<STAGE>::eval(this);
 }
@@ -137,12 +137,12 @@ struct staged_position_t {
     if (index == INDEX_END) {
       return true;
     } else {
-      assert(is_valid_index(index));
+      ceph_assert(is_valid_index(index));
       return false;
     }
   }
   index_t& index_by_stage(match_stage_t stage) {
-    assert(stage <= STAGE);
+    ceph_assert(stage <= STAGE);
     if (STAGE == stage) {
       return index;
     } else {
@@ -155,24 +155,24 @@ struct staged_position_t {
   void assert_next_to(const me_t& prv) const {
 #ifndef NDEBUG
     if (is_end()) {
-      assert(!prv.is_end());
+      ceph_assert(!prv.is_end());
     } else if (index == prv.index) {
-      assert(!nxt.is_end());
+      ceph_assert(!nxt.is_end());
       nxt.assert_next_to(prv.nxt);
     } else if (index == prv.index + 1) {
-      assert(!prv.nxt.is_end());
-      assert(nxt == nxt_t::begin());
+      ceph_assert(!prv.nxt.is_end());
+      ceph_assert(nxt == nxt_t::begin());
     } else {
-      assert(false);
+      ceph_assert(false);
     }
 #endif
   }
 
   me_t& operator-=(const me_t& o) {
-    assert(is_valid_index(o.index));
-    assert(index >= o.index);
+    ceph_assert(is_valid_index(o.index));
+    ceph_assert(index >= o.index);
     if (index != INDEX_END) {
-      assert(is_valid_index(index));
+      ceph_assert(is_valid_index(index));
       index -= o.index;
       if (index == 0) {
         nxt -= o.nxt;
@@ -182,8 +182,8 @@ struct staged_position_t {
   }
 
   me_t& operator+=(const me_t& o) {
-    assert(is_valid_index(index));
-    assert(is_valid_index(o.index));
+    ceph_assert(is_valid_index(index));
+    ceph_assert(is_valid_index(o.index));
     index += o.index;
     nxt += o.nxt;
     return *this;
@@ -216,7 +216,7 @@ struct staged_position_t {
     if (index == INDEX_LAST) {
       return fmt::format("LAST, {}", nxt.fmt_print());
     }
-    assert(is_valid_index(index));
+    ceph_assert(is_valid_index(index));
     return fmt::format("{}, {}", index, nxt.fmt_print());
   }
 };
@@ -228,30 +228,30 @@ struct staged_position_t<STAGE_BOTTOM> {
     if (index == INDEX_END) {
       return true;
     } else {
-      assert(is_valid_index(index));
+      ceph_assert(is_valid_index(index));
       return false;
     }
   }
   index_t& index_by_stage(match_stage_t stage) {
-    assert(stage == STAGE_BOTTOM);
+    ceph_assert(stage == STAGE_BOTTOM);
     return index;
   }
 
   auto operator<=>(const me_t&) const = default;
 
   me_t& operator-=(const me_t& o) {
-    assert(is_valid_index(o.index));
-    assert(index >= o.index);
+    ceph_assert(is_valid_index(o.index));
+    ceph_assert(index >= o.index);
     if (index != INDEX_END) {
-      assert(is_valid_index(index));
+      ceph_assert(is_valid_index(index));
       index -= o.index;
     }
     return *this;
   }
 
   me_t& operator+=(const me_t& o) {
-    assert(is_valid_index(index));
-    assert(is_valid_index(o.index));
+    ceph_assert(is_valid_index(index));
+    ceph_assert(is_valid_index(o.index));
     index += o.index;
     return *this;
   }
@@ -259,9 +259,9 @@ struct staged_position_t<STAGE_BOTTOM> {
   void assert_next_to(const me_t& prv) const {
 #ifndef NDEBUG
     if (is_end()) {
-      assert(!prv.is_end());
+      ceph_assert(!prv.is_end());
     } else {
-      assert(index == prv.index + 1);
+      ceph_assert(index == prv.index + 1);
     }
 #endif
   }
@@ -287,7 +287,7 @@ struct staged_position_t<STAGE_BOTTOM> {
     if (index == INDEX_LAST) {
       return "LAST";
     }
-    assert(is_valid_index(index));
+    ceph_assert(is_valid_index(index));
     return std::to_string(index);
   }
 };
@@ -301,19 +301,19 @@ const staged_position_t<STAGE>& cast_down(const search_position_t& pos) {
   } else if constexpr (STAGE == STAGE_STRING) {
 #ifndef NDEBUG
     if (pos.is_end()) {
-      assert(pos.nxt.is_end());
+      ceph_assert(pos.nxt.is_end());
     } else {
-      assert(pos.index == 0u);
+      ceph_assert(pos.index == 0u);
     }
 #endif
     return pos.nxt;
   } else if constexpr (STAGE == STAGE_RIGHT) {
 #ifndef NDEBUG
     if (pos.is_end()) {
-      assert(pos.nxt.nxt.is_end());
+      ceph_assert(pos.nxt.nxt.is_end());
     } else {
-      assert(pos.index == 0u);
-      assert(pos.nxt.index == 0u);
+      ceph_assert(pos.index == 0u);
+      ceph_assert(pos.nxt.index == 0u);
     }
 #endif
     return pos.nxt.nxt;

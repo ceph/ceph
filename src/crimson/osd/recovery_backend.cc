@@ -207,7 +207,7 @@ RecoveryBackend::handle_backfill_remove(
 {
   LOG_PREFIX(RecoveryBackend::handle_backfill_remove);
   DEBUGDPP("m.ls={}", pg, m.ls);
-  assert(m.get_type() == MSG_OSD_PG_BACKFILL_REMOVE);
+  ceph_assert(m.get_type() == MSG_OSD_PG_BACKFILL_REMOVE);
 
   ObjectStore::Transaction t;
   for ([[maybe_unused]] const auto& [soid, ver] : m.ls) {

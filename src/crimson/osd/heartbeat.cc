@@ -121,7 +121,7 @@ crimson::net::Messenger& Heartbeat::get_back_msgr() const
 
 void Heartbeat::add_peer(osd_id_t _peer, epoch_t epoch)
 {
-  assert(whoami != _peer);
+  ceph_assert(whoami != _peer);
   auto [iter, added] = peers.try_emplace(_peer, *this, _peer);
   auto& peer = iter->second;
   peer.set_epoch_added(epoch);
@@ -203,7 +203,7 @@ Heartbeat::osds_t Heartbeat::get_peers() const
 
 void Heartbeat::remove_peer(osd_id_t peer)
 {
-  assert(peers.count(peer) == 1);
+  ceph_assert(peers.count(peer) == 1);
   peers.erase(peer);
 }
 
@@ -492,13 +492,13 @@ void Heartbeat::Connection::reset(bool is_replace)
 
 seastar::future<> Heartbeat::Connection::send(MessageURef msg)
 {
-  assert(is_connected);
+  ceph_assert(is_connected);
   return conn->send(std::move(msg));
 }
 
 void Heartbeat::Connection::validate()
 {
-  assert(is_connected);
+  ceph_assert(is_connected);
   auto peer_addr = listener.get_peer_addr(type);
   if (conn->get_peer_addr() != peer_addr) {
     logger().info("Heartbeat::Connection::validate(): "
@@ -525,8 +525,8 @@ void Heartbeat::Connection::retry()
 
 void Heartbeat::Connection::set_connected()
 {
-  assert(conn);
-  assert(!is_connected);
+  ceph_assert(conn);
+  ceph_assert(!is_connected);
   ceph_assert(conn->is_connected());
   is_connected = true;
   listener.increase_connected();
@@ -534,8 +534,8 @@ void Heartbeat::Connection::set_connected()
 
 void Heartbeat::Connection::set_unconnected()
 {
-  assert(conn);
-  assert(is_connected);
+  ceph_assert(conn);
+  ceph_assert(is_connected);
   conn = nullptr;
   is_connected = false;
   listener.decrease_connected();
@@ -543,7 +543,7 @@ void Heartbeat::Connection::set_unconnected()
 
 void Heartbeat::Connection::connect()
 {
-  assert(!conn);
+  ceph_assert(!conn);
   auto addr = listener.get_peer_addr(type);
   conn = msgr.connect(addr, entity_name_t(CEPH_ENTITY_TYPE_OSD, peer));
   if (conn->is_connected()) {
@@ -576,14 +576,14 @@ Heartbeat::Session::failed_since(Heartbeat::clock::time_point now) const
 
 void Heartbeat::Session::set_inactive_history(clock::time_point now)
 {
-  assert(!connected);
+  ceph_assert(!connected);
   if (ping_history.empty()) {
     const utime_t sent_stamp{now};
     const auto deadline =
       now + std::chrono::seconds(local_conf()->osd_heartbeat_grace);
     ping_history.emplace(sent_stamp, reply_t{deadline, 0});
   } else { // the entry is already added
-    assert(ping_history.size() == 1);
+    ceph_assert(ping_history.size() == 1);
   }
 }
 

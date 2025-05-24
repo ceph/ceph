@@ -26,7 +26,7 @@ subsets_t calc_clone_subsets(
   subsets_t subsets;
   logger().debug("{}: {} clone_overlap {} ",
                  __func__, soid, snapset.clone_overlap);
-  assert(missing.get_items().contains(soid));
+  ceph_assert(missing.get_items().contains(soid));
   const pg_missing_item &missing_item = missing.get_items().at(soid);
   auto dirty_regions = missing_item.clean_regions.get_dirty_regions();
   if (dirty_regions.empty()) {
@@ -65,7 +65,7 @@ subsets_t calc_clone_subsets(
   auto soid_snap_iter = find(snapset.clones.begin(),
                              snapset.clones.end(),
                              soid.snap);
-  assert(soid_snap_iter != snapset.clones.end());
+  ceph_assert(soid_snap_iter != snapset.clones.end());
   auto soid_snap_index = soid_snap_iter - snapset.clones.begin();
 
   // any overlap with next older clone?
@@ -156,7 +156,7 @@ subsets_t calc_head_subsets(
   if (obj_size) {
     subsets.data_subset.insert(0, obj_size);
   }
-  assert(missing.get_items().contains(head));
+  ceph_assert(missing.get_items().contains(head));
   const pg_missing_item &missing_item = missing.get_items().at(head);
   // let data_subset store only the modified content of the object.
   subsets.data_subset.intersection_of(missing_item.clean_regions.get_dirty_regions());

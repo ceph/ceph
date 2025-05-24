@@ -181,7 +181,7 @@ ReplicatedBackend::submit_transaction(
       // for now, only actingset_changed can cause peers
       // to be nullptr
       ERRORDPP("peers is null, this should be impossible", dpp);
-      assert(0 == "impossible");
+      ceph_assert(0 == "impossible");
     }
     if (--peers->pending == 0) {
       // no peers other than me, replication size is 1
@@ -279,13 +279,13 @@ ReplicatedBackend::request_committed(const osd_reqid_t& reqid,
   // mustn't have finished, as that would mean later client_requests
   // has finished before earlier ones.
   //
-  // The following line of code should be "assert(pending_txn.at_version == at_version)",
+  // The following line of code should be "ceph_assert(pending_txn.at_version == at_version)",
   // as there can be only one transaction at any time in pending_trans due to
   // PG::request_pg_pipeline. But there's a high possibility that we will
   // improve the parallelism here in the future, which means there may be multiple
   // client requests in flight, so we loosed the restriction to as follows. Correct
   // me if I'm wrong:-)
-  assert(iter != pending_trans.end() && iter->second.at_version == at_version);
+  ceph_assert(iter != pending_trans.end() && iter->second.at_version == at_version);
   if (iter->second.pending) {
     return iter->second.all_committed.get_shared_future();
   } else {

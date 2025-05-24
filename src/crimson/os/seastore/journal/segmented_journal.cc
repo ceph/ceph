@@ -152,7 +152,7 @@ SegmentedJournal::scan_last_segment(
   const segment_header_t &segment_header)
 {
   LOG_PREFIX(SegmentedJournal::scan_last_segment);
-  assert(segment_id == segment_header.physical_segment_id);
+  ceph_assert(segment_id == segment_header.physical_segment_id);
   trimmer.update_journal_tails(
       segment_header.dirty_tail, segment_header.alloc_tail);
   auto seq = journal_seq_t{
@@ -295,7 +295,7 @@ SegmentedJournal::replay_segment(
 	      auto [is_applied, ext] = ret;
               if (is_applied) {
                 // see Cache::replay_delta()
-                assert(delta_type != extent_types_t::JOURNAL_TAIL);
+                ceph_assert(delta_type != extent_types_t::JOURNAL_TAIL);
                 if (delta_type == extent_types_t::ALLOC_INFO) {
                   ++stats.num_alloc_deltas;
                 } else {
@@ -359,7 +359,7 @@ seastar::future<> SegmentedJournal::flush(OrderingHandle &handle)
 {
   LOG_PREFIX(SegmentedJournal::flush);
   DEBUG("H{} flush ...", (void*)&handle);
-  assert(write_pipeline);
+  ceph_assert(write_pipeline);
   return handle.enter(write_pipeline->device_submission
   ).then([this, &handle] {
     return handle.enter(write_pipeline->finalize);
@@ -427,7 +427,7 @@ SegmentedJournal::submit_record(
 {
   LOG_PREFIX(SegmentedJournal::submit_record);
   DEBUG("H{} {} start ...", (void*)&handle, record);
-  assert(write_pipeline);
+  ceph_assert(write_pipeline);
   auto expected_size = record_group_size_t(
       record.size,
       journal_segment_allocator.get_block_size()

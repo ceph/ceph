@@ -55,7 +55,7 @@ NodeExtentRef SeastoreNodeExtent::mutate(
   auto ret = extent->cast<SeastoreNodeExtent>();
   // A replayed extent may already have an empty recorder, we discard it for
   // simplicity.
-  assert(!ret->recorder || ret->recorder->is_empty());
+  ceph_assert(!ret->recorder || ret->recorder->is_empty());
   ret->recorder = std::move(_recorder);
   return ret;
 }
@@ -75,8 +75,8 @@ void SeastoreNodeExtent::apply_delta(const ceph::bufferlist& bl)
   } else {
 #ifndef NDEBUG
     auto header = get_header();
-    assert(recorder->node_type() == header.get_node_type());
-    assert(recorder->field_type() == *header.get_field_type());
+    ceph_assert(recorder->node_type() == header.get_node_type());
+    ceph_assert(recorder->field_type() == *header.get_field_type());
 #endif
   }
   auto mut = do_get_mutable();

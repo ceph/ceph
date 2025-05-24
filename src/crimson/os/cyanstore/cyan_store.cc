@@ -48,7 +48,7 @@ private:
       return "singleton_ec";
     }
     std::string message([[maybe_unused]] const int ev) const final {
-      assert(ev == 42);
+      ceph_assert(ev == 42);
       return MsgV;
     }
   };
@@ -666,7 +666,7 @@ int CyanStore::Shard::_write(
 {
   logger().debug("{} {} {} {} ~ {}",
                 __func__, cid, oid, offset, len);
-  assert(len == bl.length());
+  ceph_assert(len == bl.length());
 
   auto c = _get_collection(cid);
   if (!c)
@@ -907,7 +907,7 @@ int CyanStore::Shard::_create_collection(const coll_t& cid, int bits)
   if (!result.second)
     return -EEXIST;
   auto p = new_coll_map.find(cid);
-  assert(p != new_coll_map.end());
+  ceph_assert(p != new_coll_map.end());
   result.first->second = p->second;
   result.first->second->bits = bits;
   new_coll_map.erase(p);

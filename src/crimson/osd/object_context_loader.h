@@ -61,7 +61,7 @@ public:
       }
 
       void demote_excl_to(RWState::State lock_type) {
-	assert(state == RWState::RWEXCL);
+	ceph_assert(state == RWState::RWEXCL);
 	switch (lock_type) {
 	case RWState::RWWRITE:
 	  obc->lock.demote_to_write();
@@ -84,7 +84,7 @@ public:
       }
 
       auto lock_to(RWState::State lock_type) {
-	assert(state == RWState::RWNONE);
+	ceph_assert(state == RWState::RWNONE);
 	switch (lock_type) {
 	case RWState::RWWRITE:
 	  return interruptor::make_interruptible(

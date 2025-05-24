@@ -258,7 +258,7 @@ public:
       op_type_t op_type,
       F &&f) {
       // The below repeat_io_num requires MUTATE
-      assert(src == Transaction::src_t::MUTATE);
+      ceph_assert(src == Transaction::src_t::MUTATE);
       return seastar::do_with(
         internal_context_t(
           ch, std::move(t),
@@ -266,20 +266,20 @@ public:
 	    src, tname, t.get_fadvise_flags())),
         std::forward<F>(f),
         [this, op_type](auto &ctx, auto &f) {
-        assert(shard_stats.starting_io_num);
+        ceph_assert(shard_stats.starting_io_num);
         --(shard_stats.starting_io_num);
         ++(shard_stats.waiting_collock_io_num);
 
 	return ctx.transaction->get_handle().take_collection_lock(
 	  static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
 	).then([this] {
-	  assert(shard_stats.waiting_collock_io_num);
+	  ceph_assert(shard_stats.waiting_collock_io_num);
 	  --(shard_stats.waiting_collock_io_num);
 	  ++(shard_stats.waiting_throttler_io_num);
 
 	  return throttler.get(1);
 	}).then([&, this] {
-	  assert(shard_stats.waiting_throttler_io_num);
+	  ceph_assert(shard_stats.waiting_throttler_io_num);
 	  --(shard_stats.waiting_throttler_io_num);
 	  ++(shard_stats.processing_inlock_io_num);
 
@@ -319,7 +319,7 @@ public:
         ](auto &oid, auto &ret, auto &f)
       {
         return repeat_eagain([&, this, ch, src, tname, cache_hint_flags] {
-          assert(src == Transaction::src_t::READ);
+          ceph_assert(src == Transaction::src_t::READ);
           ++(shard_stats.repeat_read_num);
 
           return transaction_manager->with_transaction_intr(
@@ -452,7 +452,7 @@ public:
 
     seastar::metrics::histogram& get_latency(
       op_type_t op_type) {
-      assert(static_cast<std::size_t>(op_type) < stats.op_lat.size());
+      ceph_assert(static_cast<std::size_t>(op_type) < stats.op_lat.size());
       return stats.op_lat[static_cast<std::size_t>(op_type)];
     }
 

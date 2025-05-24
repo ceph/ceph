@@ -36,9 +36,9 @@ SegmentedOolWriter::write_record(
   bool with_atomic_roll_segment)
 {
   LOG_PREFIX(SegmentedOolWriter::write_record);
-  assert(extents.size());
-  assert(extents.size() == record.extents.size());
-  assert(!record.deltas.size());
+  ceph_assert(extents.size());
+  ceph_assert(extents.size() == record.extents.size());
+  ceph_assert(!record.deltas.size());
 
   // account transactional ool writes before write()
   auto& stats = t.get_ool_write_stats();
@@ -70,7 +70,7 @@ SegmentedOolWriter::write_record(
     TRACET("{} finish {}=={}",
            t, segment_allocator.get_name(), ret, record_base);
     // ool won't write metadata, so the paddrs must be equal
-    assert(ret.record_block_base == record_base.offset);
+    ceph_assert(ret.record_block_base == record_base.offset);
   });
 }
 
@@ -80,7 +80,7 @@ SegmentedOolWriter::do_write(
   std::list<CachedExtentRef>& extents)
 {
   LOG_PREFIX(SegmentedOolWriter::do_write);
-  assert(!extents.empty());
+  ceph_assert(!extents.empty());
   if (!record_submitter.is_available()) {
     DEBUGT("{} extents={} wait ...",
            t, segment_allocator.get_name(),
@@ -97,7 +97,7 @@ SegmentedOolWriter::do_write(
 
   for (auto it = extents.begin(); it != extents.end();) {
     auto& ext = *it;
-    assert(ext->is_logical());
+    ceph_assert(ext->is_logical());
     auto extent = ext->template cast<LogicalCachedExtent>();
     record_size_t wouldbe_rsize = record.size;
     wouldbe_rsize.account_extent(extent->get_bptr().length());
@@ -110,7 +110,7 @@ SegmentedOolWriter::do_write(
              extents.size(), num_extents);
       auto fut_write = alloc_write_ertr::now();
       if (num_extents > 0) {
-        assert(record_submitter.check_action(record.size) !=
+        ceph_assert(record_submitter.check_action(record.size) !=
                action_t::ROLL);
         fut_write = write_record(
             t, std::move(record), std::move(pending_extents),
@@ -132,7 +132,7 @@ SegmentedOolWriter::do_write(
     ceph::bufferlist bl;
     extent->prepare_write();
     bl.append(extent->get_bptr());
-    assert(bl.length() == extent->get_length());
+    ceph_assert(bl.length() == extent->get_length());
     auto modify_time = extent->get_modify_time();
     if (modify_time == NULL_TIME) {
       modify_time = commit_time;
@@ -146,7 +146,7 @@ SegmentedOolWriter::do_write(
     pending_extents.push_back(extent);
     it = extents.erase(it);
 
-    assert(record_submitter.check_action(record.size) == action);
+    ceph_assert(record_submitter.check_action(record.size) == action);
     if (action == action_t::SUBMIT_FULL) {
       DEBUGT("{} extents={} submit {} extents ...",
              t, segment_allocator.get_name(),
@@ -168,7 +168,7 @@ SegmentedOolWriter::do_write(
   DEBUGT("{} submit the rest {} extents ...",
          t, segment_allocator.get_name(),
          num_extents);
-  assert(num_extents > 0);
+  ceph_assert(num_extents > 0);
   return trans_intr::make_interruptible(
     write_record(t, std::move(record), std::move(pending_extents)));
 }
@@ -224,7 +224,7 @@ void ExtentPlacementManager::init(
       add_device(device);
     }
   } else {
-    assert(trimmer->get_backend_type() == backend_type_t::RANDOM_BLOCK);
+    ceph_assert(trimmer->get_backend_type() == backend_type_t::RANDOM_BLOCK);
     auto rb_cleaner = dynamic_cast<RBMCleaner*>(cleaner.get());
     ceph_assert(rb_cleaner != nullptr);
     auto num_writers = generation_to_writer(dynamic_max_rewrite_generation + 1);
@@ -468,7 +468,7 @@ ExtentPlacementManager::dispatch_delayed_extents(Transaction &t)
       if (extent->get_rewrite_generation() < MIN_COLD_GENERATION) {
         res.usage.cleaner_usage.main_usage += extent->get_length();
       } else {
-        assert(background_process.has_cold_tier());
+        ceph_assert(background_process.has_cold_tier());
         res.usage.cleaner_usage.cold_ool_usage += extent->get_length();
       }
       t.mark_delayed_extent_ool(extent);
@@ -494,10 +494,10 @@ ExtentPlacementManager::write_delayed_ool_extents(
       extents.begin(),
       extents.end(),
       [](auto &extent) {
-      assert(extent->is_valid());
+      ceph_assert(extent->is_valid());
     });
 #endif
-    assert(writer->get_type() == backend_type_t::SEGMENTED);
+    ceph_assert(writer->get_type() == backend_type_t::SEGMENTED);
     return writer->alloc_write_ool_extents(t, extents);
   });
 }
@@ -510,7 +510,7 @@ ExtentPlacementManager::write_preallocated_ool_extents(
   LOG_PREFIX(ExtentPlacementManager::write_preallocated_ool_extents);
   DEBUGT("start with {} allocated extents",
          t, extents.size());
-  assert(writer_refs.size());
+  ceph_assert(writer_refs.size());
   return seastar::do_with(
       std::map<ExtentOolWriter*, std::list<CachedExtentRef>>(),
       [this, &t, extents=std::move(extents)](auto& alloc_map) {
@@ -524,7 +524,7 @@ ExtentPlacementManager::write_preallocated_ool_extents(
     return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
       auto writer = p.first;
       auto& extents = p.second;
-      assert(writer->get_type() == backend_type_t::RANDOM_BLOCK);
+      ceph_assert(writer->get_type() == backend_type_t::RANDOM_BLOCK);
       return writer->alloc_write_ool_extents(t, extents);
     });
   });
@@ -576,10 +576,10 @@ void ExtentPlacementManager::BackgroundProcess::start_background()
   }
   ceph_assert(trimmer->check_is_ready());
   ceph_assert(state == state_t::SCAN_SPACE);
-  assert(!is_running());
+  ceph_assert(!is_running());
   process_join = seastar::now();
   state = state_t::RUNNING;
-  assert(is_running());
+  ceph_assert(is_running());
   process_join = run();
 }
 
@@ -601,7 +601,7 @@ ExtentPlacementManager::BackgroundProcess::stop_background()
     auto ret = std::move(*process_join);
     process_join.reset();
     state = state_t::HALT;
-    assert(!is_running());
+    ceph_assert(!is_running());
     do_wake_background();
     return ret;
   }).then([this, FNAME] {
@@ -621,7 +621,7 @@ ExtentPlacementManager::BackgroundProcess::run_until_halt()
   // unit test only
   LOG_PREFIX(BackgroundProcess::run_until_halt);
   ceph_assert(state == state_t::HALT);
-  assert(!is_running());
+  ceph_assert(!is_running());
   if (is_running_until_halt) {
     WARN("already running");
     return seastar::now();
@@ -631,7 +631,7 @@ ExtentPlacementManager::BackgroundProcess::run_until_halt()
   return seastar::do_until(
     [this] {
       log_state("run_until_halt");
-      assert(is_running_until_halt);
+      ceph_assert(is_running_until_halt);
       if (background_should_run()) {
         return false;
       } else {
@@ -688,7 +688,7 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
         auto res = try_reserve_io(usage);
         if (res.is_successful()) {
           DEBUG("unblocked");
-          assert(stats.io_blocking_num == 1);
+          ceph_assert(stats.io_blocking_num == 1);
           --stats.io_blocking_num;
           return seastar::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
@@ -728,7 +728,7 @@ ExtentPlacementManager::BackgroundProcess::maybe_wake_blocked_io()
 seastar::future<>
 ExtentPlacementManager::BackgroundProcess::run()
 {
-  assert(is_running());
+  ceph_assert(is_running());
   return seastar::repeat([this] {
     if (!is_running()) {
       log_state("run(exit)");
@@ -797,7 +797,7 @@ bool ExtentPlacementManager::BackgroundProcess::try_reserve_cold(std::size_t usa
   if (has_cold_tier()) {
     return cold_cleaner->try_reserve_projected_usage(usage);
   } else {
-    assert(usage == 0);
+    ceph_assert(usage == 0);
     return true;
   }
 }
@@ -853,7 +853,7 @@ seastar::future<>
 ExtentPlacementManager::BackgroundProcess::do_background_cycle()
 {
   LOG_PREFIX(BackgroundProcess::do_background_cycle);
-  assert(is_ready());
+  ceph_assert(is_ready());
   bool should_trim = trimmer->should_trim();
   bool proceed_trim = false;
   auto trim_size = trimmer->get_trim_size_per_cycle();
@@ -887,7 +887,7 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
       abort_cleaner_usage(trim_usage, {true, true});
     });
   } else {
-    assert(!proceed_trim);
+    ceph_assert(!proceed_trim);
     bool should_clean_main_for_trim =
       should_trim && !trim_reserve_res.reserve_main_success;
     bool should_clean_main =
@@ -990,7 +990,7 @@ RandomBlockOolWriter::alloc_write_ool_extents(
     seastar::lw_shared_ptr<rbm_pending_ool_t> ptr =
       seastar::make_lw_shared<rbm_pending_ool_t>();
     ptr->pending_extents = t.get_pre_alloc_list();
-    assert(!t.is_conflicted());
+    ceph_assert(!t.is_conflicted());
     t.set_pending_ool(ptr);
     return do_write(t, extents
     ).finally([this, ptr=ptr] {
@@ -1009,15 +1009,15 @@ RandomBlockOolWriter::do_write(
   std::list<CachedExtentRef>& extents)
 {
   LOG_PREFIX(RandomBlockOolWriter::do_write);
-  assert(!extents.empty());
+  ceph_assert(!extents.empty());
   DEBUGT("start with {} allocated extents",
          t, extents.size());
   std::vector<write_info_t> writes;
   for (auto& ex : extents) {
     auto paddr = ex->get_paddr();
-    assert(paddr.is_absolute());
+    ceph_assert(paddr.is_absolute());
     RandomBlockManager * rbm = rb_cleaner->get_rbm(paddr); 
-    assert(rbm);
+    ceph_assert(rbm);
     TRACE("write extent {}, paddr {} ...",
           fmt::ptr(ex.get()), paddr);
     auto& stats = t.get_ool_write_stats();
@@ -1027,7 +1027,7 @@ RandomBlockOolWriter::do_write(
 
     bufferptr bp;
     if (can_inplace_rewrite(t, ex)) {
-      assert(ex->is_logical());
+      ceph_assert(ex->is_logical());
       auto r = ex->template cast<LogicalCachedExtent>()->get_modified_region();
       ceph_assert(r.has_value());
       extent_len_t offset = p2align(r->offset, rbm->get_block_size());
@@ -1045,7 +1045,7 @@ RandomBlockOolWriter::do_write(
     if (ex->is_initial_pending()) {
       t.mark_allocated_extent_ool(ex);
     } else if (can_inplace_rewrite(t, ex)) {
-      assert(ex->is_logical());
+      ceph_assert(ex->is_logical());
       t.mark_inplace_rewrite_extent_ool(
         ex->template cast<LogicalCachedExtent>());
     } else {

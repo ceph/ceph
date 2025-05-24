@@ -523,7 +523,7 @@ void OpsExecuter::RollbackHelper<Func>::rollback_obc_if_modified()
   // typically append them before any write. If OpsExecuter hasn't
   // seen any modifying operation, `obc` is supposed to be kept
   // unchanged.
-  assert(ox);
+  ceph_assert(ox);
   const auto need_rollback = ox->has_seen_write();
   crimson::get_logger(ceph_subsys_osd).debug(
     "{}: object {} got error, need_rollback={}",

@@ -38,11 +38,11 @@ bool modified_since(T &&extent, uint64_t iter_modifications) {
   using backref::BackrefLeafNode;
   using lba::LBALeafNode;
   if constexpr (std::is_same_v<key_t, laddr_t>) {
-    assert(extent->get_type() == extent_types_t::LADDR_LEAF);
+    ceph_assert(extent->get_type() == extent_types_t::LADDR_LEAF);
     auto leaf = extent->template cast<LBALeafNode>();
     return leaf->modified_since(iter_modifications);
   } else {
-    assert(extent->get_type() == extent_types_t::BACKREF_LEAF);
+    ceph_assert(extent->get_type() == extent_types_t::BACKREF_LEAF);
     auto leaf = extent->template cast<BackrefLeafNode>();
     return leaf->modified_since(iter_modifications);
   }
@@ -58,7 +58,7 @@ bool BtreeCursor<key_t, val_t>::is_viewable() const {
   }
 
   auto [viewable, state] = parent->is_viewable_by_trans(ctx.trans);
-  assert(state != CachedExtent::viewable_state_t::invalid);
+  ceph_assert(state != CachedExtent::viewable_state_t::invalid);
   SUBTRACET(seastore_cache, "{} with viewable state {}",
             ctx.trans, *parent, state);
   return viewable;

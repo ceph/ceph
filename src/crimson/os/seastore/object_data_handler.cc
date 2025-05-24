@@ -122,7 +122,7 @@ struct extent_to_remap_t {
   }
 
   bool is_remap2() const {
-    assert((new_offset != 0) && (pin.get_length() != new_offset + new_len));
+    ceph_assert((new_offset != 0) && (pin.get_length() != new_offset + new_len));
     return type == type_t::REMAP2;
   }
 
@@ -132,21 +132,21 @@ struct extent_to_remap_t {
 
   using remap_entry_t = TransactionManager::remap_entry_t;
   remap_entry_t create_remap_entry() {
-    assert(is_remap1());
+    ceph_assert(is_remap1());
     return remap_entry_t(
       new_offset,
       new_len);
   }
 
   remap_entry_t create_left_remap_entry() {
-    assert(is_remap2());
+    ceph_assert(is_remap2());
     return remap_entry_t(
       0,
       new_offset);
   }
 
   remap_entry_t create_right_remap_entry() {
-    assert(is_remap2());
+    ceph_assert(is_remap2());
     return remap_entry_t(
       new_offset + new_len,
       pin.get_length() - new_offset - new_len);
@@ -250,7 +250,7 @@ overwrite_ops_t prepare_ops_list(
   lba_mapping_list_t &pins_to_remove,
   extent_to_write_list_t &to_write,
   size_t delta_based_overwrite_max_extent_size) {
-  assert(pins_to_remove.size() != 0);
+  ceph_assert(pins_to_remove.size() != 0);
   overwrite_ops_t ops;
   ops.to_remove.swap(pins_to_remove);
   if (to_write.empty()) {
@@ -265,10 +265,10 @@ overwrite_ops_t prepare_ops_list(
   if (ops.to_remove.size() == 1 &&
       front.is_existing() && back.is_existing()) {
       visitted += 2;
-      assert(to_write.size() > 2);
-      assert(front.pin);
-      assert(front.addr == front.pin->get_key());
-      assert(back.addr > back.pin->get_key());
+      ceph_assert(to_write.size() > 2);
+      ceph_assert(front.pin);
+      ceph_assert(front.addr == front.pin->get_key());
+      ceph_assert(back.addr > back.pin->get_key());
       ops.to_remap.push_back(extent_to_remap_t::create_remap2(
 	std::move(*front.pin),
 	front.len,
@@ -278,9 +278,9 @@ overwrite_ops_t prepare_ops_list(
     // prepare to_remap, happens in one or multiple extents
     if (front.is_existing()) {
       visitted++;
-      assert(to_write.size() > 1);
-      assert(front.pin);
-      assert(front.addr == front.pin->get_key());
+      ceph_assert(to_write.size() > 1);
+      ceph_assert(front.pin);
+      ceph_assert(front.addr == front.pin->get_key());
       ops.to_remap.push_back(extent_to_remap_t::create_remap1(
 	std::move(*front.pin),
 	0,
@@ -289,9 +289,9 @@ overwrite_ops_t prepare_ops_list(
     }
     if (back.is_existing()) {
       visitted++;
-      assert(to_write.size() > 1);
-      assert(back.pin);
-      assert(back.addr + back.len ==
+      ceph_assert(to_write.size() > 1);
+      ceph_assert(back.pin);
+      ceph_assert(back.addr + back.len ==
 	back.pin->get_key() + back.pin->get_length());
       auto key = back.pin->get_key();
       ops.to_remap.push_back(extent_to_remap_t::create_remap1(
@@ -322,7 +322,7 @@ overwrite_ops_t prepare_ops_list(
   for (auto &region : to_write) {
     if (region.is_data()) {
       visitted++;
-      assert(region.to_write.has_value());
+      ceph_assert(region.to_write.has_value());
       int erased_num = 0;
       if (pre_alloc_addr_removed.contains(region.addr, region.len) &&
 	  region.len <= delta_based_overwrite_max_extent_size) {
@@ -356,7 +356,7 @@ overwrite_ops_t prepare_ops_list(
 	    }
 	    return false;
 	  });
-	assert(erased_num > 0);
+	ceph_assert(erased_num > 0);
       }
       if (erased_num == 0)  {
 	ops.to_insert.push_back(extent_to_insert_t::create_data(
@@ -364,7 +364,7 @@ overwrite_ops_t prepare_ops_list(
       }
     } else if (region.is_zero()) {
       visitted++;
-      assert(!(region.to_write.has_value()));
+      ceph_assert(!(region.to_write.has_value()));
       ops.to_insert.push_back(extent_to_insert_t::create_zero(
 	region.addr, region.len));
     }
@@ -376,7 +376,7 @@ overwrite_ops_t prepare_ops_list(
     " to_insert list size: {}"
     " to_remove list size: {}",
     ops.to_remap.size(), ops.to_insert.size(), ops.to_remove.size());
-  assert(visitted == to_write.size());
+  ceph_assert(visitted == to_write.size());
   return ops;
 }
 
@@ -390,7 +390,7 @@ overwrite_ops_t prepare_ops_list(
 void append_extent_to_write(
   extent_to_write_list_t &to_write, extent_to_write_t &&to_append)
 {
-  assert(to_write.empty() ||
+  ceph_assert(to_write.empty() ||
          to_write.back().get_end_addr() == to_append.addr);
   if (to_write.empty() ||
       to_write.back().is_data() ||
@@ -468,7 +468,7 @@ ObjectDataHandler::write_ret do_remappings(
 	  }
 	).si_then([&region](auto extent) {
 	  extent_len_t off = region.new_offset;
-	  assert(region.bl->length() == region.new_len);
+	  ceph_assert(region.bl->length() == region.new_len);
 	  extent->overwrite(off, *region.bl);
 	  return ObjectDataHandler::write_iertr::now();
 	});
@@ -732,8 +732,8 @@ public:
       is_right_fresh(!pins.back().is_stable()) {
     validate();
     evaluate_operations();
-    assert(left_operation != overwrite_operation_t::UNKNOWN);
-    assert(right_operation != overwrite_operation_t::UNKNOWN);
+    ceph_assert(left_operation != overwrite_operation_t::UNKNOWN);
+    ceph_assert(right_operation != overwrite_operation_t::UNKNOWN);
   }
 
 private:
@@ -794,13 +794,13 @@ private:
       }
       if (left_ext_size >= right_ext_size) {
         // split left
-        assert(left_operation == overwrite_operation_t::UNKNOWN);
+        ceph_assert(left_operation == overwrite_operation_t::UNKNOWN);
         actual_write_size -= left_ext_size;
         left_ext_size = 0;
         left_operation = overwrite_operation_t::SPLIT_EXISTING;
       } else { // left_ext_size < right_ext_size
         // split right
-        assert(right_operation == overwrite_operation_t::UNKNOWN);
+        ceph_assert(right_operation == overwrite_operation_t::UNKNOWN);
         actual_write_size -= right_ext_size;
         right_ext_size = 0;
         right_operation = overwrite_operation_t::SPLIT_EXISTING;
@@ -845,7 +845,7 @@ operate_ret operate_left(context_t ctx, LBAMapping &pin, const overwrite_plan_t 
   }
 
   if (overwrite_plan.left_operation == overwrite_operation_t::OVERWRITE_ZERO) {
-    assert(pin.get_val().is_zero());
+    ceph_assert(pin.get_val().is_zero());
 
     auto zero_extent_len = overwrite_plan.get_left_extent_size();
     assert_aligned(zero_extent_len);
@@ -885,10 +885,10 @@ operate_ret operate_left(context_t ctx, LBAMapping &pin, const overwrite_plan_t 
       });
     }
   } else {
-    assert(overwrite_plan.left_operation == overwrite_operation_t::SPLIT_EXISTING);
+    ceph_assert(overwrite_plan.left_operation == overwrite_operation_t::SPLIT_EXISTING);
 
     auto extent_len = overwrite_plan.get_left_extent_size();
-    assert(extent_len);
+    ceph_assert(extent_len);
     std::optional<extent_to_write_t> left_to_write_extent =
       std::make_optional(extent_to_write_t::create_existing(
         pin.duplicate(),
@@ -931,9 +931,9 @@ operate_ret operate_right(context_t ctx, LBAMapping &pin, const overwrite_plan_t
   }
 
   auto right_pin_begin = pin.get_key();
-  assert(overwrite_plan.data_end >= right_pin_begin);
+  ceph_assert(overwrite_plan.data_end >= right_pin_begin);
   if (overwrite_plan.right_operation == overwrite_operation_t::OVERWRITE_ZERO) {
-    assert(pin.get_val().is_zero());
+    ceph_assert(pin.get_val().is_zero());
 
     auto zero_suffix_len = overwrite_plan.get_right_alignment_size();
     std::optional<ceph::bufferlist> suffix_bl;
@@ -977,10 +977,10 @@ operate_ret operate_right(context_t ctx, LBAMapping &pin, const overwrite_plan_t
       });
     }
   } else {
-    assert(overwrite_plan.right_operation == overwrite_operation_t::SPLIT_EXISTING);
+    ceph_assert(overwrite_plan.right_operation == overwrite_operation_t::SPLIT_EXISTING);
 
     auto extent_len = overwrite_plan.get_right_extent_size();
-    assert(extent_len);
+    ceph_assert(extent_len);
     std::optional<extent_to_write_t> right_to_write_extent =
       std::make_optional(extent_to_write_t::create_existing(
         pin.duplicate(),
@@ -1215,16 +1215,16 @@ extent_to_write_list_t get_to_writes_with_zero_buffer(
     (offset + len + tailbl->length()) :
     (offset + len);
 
-  assert(
+  ceph_assert(
     (headbl && ((zero_left - left) ==
 		 p2roundup(headbl->length(), block_size))) ^
     (!headbl && (zero_left == left)));
-  assert(
+  ceph_assert(
     (tailbl && ((right - zero_right) ==
 		 p2roundup(tailbl->length(), block_size))) ^
     (!tailbl && (right == zero_right)));
 
-  assert(right > left);
+  ceph_assert(right > left);
 
   // zero region too small for a reserved section,
   // headbl and tailbl in same extent
@@ -1238,8 +1238,8 @@ extent_to_write_list_t get_to_writes_with_zero_buffer(
     if (tailbl) {
       bl.append(*tailbl);
     }
-    assert(bl.length() % block_size == 0);
-    assert(bl.length() == (right - left));
+    ceph_assert(bl.length() % block_size == 0);
+    ceph_assert(bl.length() == (right - left));
     extent_to_write_list_t ret;
     ret.push_back(extent_to_write_t::create_data(
       (data_base + left).checked_to_laddr(), bl));
@@ -1251,8 +1251,8 @@ extent_to_write_list_t get_to_writes_with_zero_buffer(
       bufferlist head_zero_bl;
       head_zero_bl.append(*headbl);
       head_zero_bl.append_zero(zero_left - left - head_zero_bl.length());
-      assert(head_zero_bl.length() % block_size == 0);
-      assert(head_zero_bl.length() > 0);
+      ceph_assert(head_zero_bl.length() % block_size == 0);
+      ceph_assert(head_zero_bl.length() > 0);
       ret.push_back(extent_to_write_t::create_data(
         (data_base + left).checked_to_laddr(), head_zero_bl));
     }
@@ -1260,14 +1260,14 @@ extent_to_write_list_t get_to_writes_with_zero_buffer(
     ret.push_back(extent_to_write_t::create_zero(
       (data_base + zero_left).checked_to_laddr(),
       zero_right - zero_left));
-    assert(ret.back().len % block_size == 0);
-    assert(ret.back().len > 0);
+    ceph_assert(ret.back().len % block_size == 0);
+    ceph_assert(ret.back().len > 0);
     if (tailbl) {
       bufferlist tail_zero_bl;
       tail_zero_bl.append(*tailbl);
       tail_zero_bl.append_zero(right - zero_right - tail_zero_bl.length());
-      assert(tail_zero_bl.length() % block_size == 0);
-      assert(tail_zero_bl.length() > 0);
+      ceph_assert(tail_zero_bl.length() % block_size == 0);
+      ceph_assert(tail_zero_bl.length() > 0);
       ret.push_back(extent_to_write_t::create_data(
         (data_base + zero_right).checked_to_laddr(), tail_zero_bl));
     }
@@ -1298,7 +1298,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
   lba_mapping_list_t &&_pins)
 {
   if (bl.has_value()) {
-    assert(bl->length() == len);
+    ceph_assert(bl->length() == len);
   }
   overwrite_plan_t overwrite_plan(data_base, offset, len, _pins, ctx.tm.get_block_size());
   return seastar::do_with(
@@ -1327,7 +1327,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
         append_extent_to_write(to_write, std::move(*left_extent));
       }
       if (headbl) {
-        assert(headbl->length() > 0);
+        ceph_assert(headbl->length() > 0);
       }
       return operate_right(
         ctx,
@@ -1369,9 +1369,9 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
           ceph_assert(right_extent->get_end_addr() == pin_end);
           append_extent_to_write(to_write, std::move(*right_extent));
         }
-        assert(to_write.size());
-        assert(pin_begin == to_write.front().addr);
-        assert(pin_end == to_write.back().get_end_addr());
+        ceph_assert(to_write.size());
+        ceph_assert(pin_begin == to_write.front().addr);
+        ceph_assert(pin_end == to_write.back().get_end_addr());
 
         return seastar::do_with(
           prepare_ops_list(pins, to_write,
@@ -1525,7 +1525,7 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
                 get_byte_distance<extent_len_t>(pin_start);
               read_start_aligned = p2align(read_start, ctx.tm.get_block_size());
             } else { // non-first pin must match start
-              assert(l_current > l_start);
+              ceph_assert(l_current > l_start);
               ceph_assert(l_current == pin_start);
               read_start = 0;
               read_start_aligned = 0;
@@ -1533,9 +1533,9 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 
             ceph_assert(l_current < l_end);
             auto pin_len = pin.get_length();
-            assert(pin_len > 0);
+            ceph_assert(pin_len > 0);
             laddr_offset_t pin_end = pin_start + pin_len;
-            assert(l_current < pin_end);
+            ceph_assert(l_current < pin_end);
             laddr_offset_t l_current_end = std::min(pin_end, l_end);
             extent_len_t read_len =
               l_current_end.get_byte_distance<extent_len_t>(l_current);
@@ -1580,8 +1580,8 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
                     aligned_bl, unalign_start_offset, read_len);
                 ret.append(std::move(unaligned_bl));
               } else {
-                assert(read_len == read_len_aligned);
-                assert(unalign_start_offset == 0);
+                ceph_assert(read_len == read_len_aligned);
+                ceph_assert(unalign_start_offset == 0);
                 ret.append(std::move(aligned_bl));
               }
               l_current = l_current_end;
@@ -1645,7 +1645,7 @@ ObjectDataHandler::fiemap_ret ObjectDataHandler::fiemap(
 	    laddr_offset_t ret_right = std::min(
 	      i.get_key() + i.get_length(),
 	      l_start + len);
-	    assert(ret_right > ret_left);
+	    ceph_assert(ret_right > ret_left);
 	    ret.emplace(
 	      std::make_pair(
 		ret_left.get_byte_distance<uint64_t>(
@@ -1791,7 +1791,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
       d_object_data,
       object_data.get_reserved_data_len()
     ).si_then([&object_data, &d_object_data, ctx, this] {
-      assert(!object_data.is_null());
+      ceph_assert(!object_data.is_null());
       auto base = object_data.get_reserved_data_base();
       auto len = object_data.get_reserved_data_len();
       object_data.clear();

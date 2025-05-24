@@ -19,9 +19,9 @@ class LBAMapping {
     : direct_cursor(std::move(direct)),
       indirect_cursor(std::move(indirect))
   {
-    assert(is_linked_direct());
-    assert(!direct_cursor->is_indirect());
-    assert(!indirect_cursor || indirect_cursor->is_indirect());
+    ceph_assert(is_linked_direct());
+    ceph_assert(!direct_cursor->is_indirect());
+    ceph_assert(!indirect_cursor || indirect_cursor->is_indirect());
   }
 
 public:
@@ -45,12 +45,12 @@ public:
   }
 
   bool is_indirect() const {
-    assert(is_linked_direct());
+    ceph_assert(is_linked_direct());
     return (bool)indirect_cursor;
   }
 
   bool is_viewable() const {
-    assert(is_linked_direct());
+    ceph_assert(is_linked_direct());
     return direct_cursor->is_viewable()
 	&& (!indirect_cursor || indirect_cursor->is_viewable());
   }
@@ -60,16 +60,16 @@ public:
   bool is_stable() const;
   bool is_data_stable() const;
   bool is_clone() const {
-    assert(is_linked_direct());
+    ceph_assert(is_linked_direct());
     return direct_cursor->get_refcount() > 1;
   }
   bool is_zero_reserved() const {
-    assert(is_linked_direct());
+    ceph_assert(is_linked_direct());
     return get_val().is_zero();
   }
 
   extent_len_t get_length() const {
-    assert(is_linked_direct());
+    ceph_assert(is_linked_direct());
     if (is_indirect()) {
       return indirect_cursor->get_length();
     }
@@ -77,17 +77,17 @@ public:
   }
 
   paddr_t get_val() const {
-    assert(is_linked_direct());
+    ceph_assert(is_linked_direct());
     return direct_cursor->get_paddr();
   }
 
   checksum_t get_checksum() const {
-    assert(is_linked_direct());
+    ceph_assert(is_linked_direct());
     return direct_cursor->get_checksum();
   }
 
   laddr_t get_key() const {
-    assert(is_linked_direct());
+    ceph_assert(is_linked_direct());
     if (is_indirect()) {
       return indirect_cursor->get_laddr();
     }
@@ -96,22 +96,22 @@ public:
 
    // An lba pin may be indirect, see comments in lba/btree_lba_manager.h
   laddr_t get_intermediate_key() const {
-    assert(is_indirect());
+    ceph_assert(is_indirect());
     return indirect_cursor->get_intermediate_key();
   }
   laddr_t get_intermediate_base() const {
-    assert(is_linked_direct());
+    ceph_assert(is_linked_direct());
     return direct_cursor->get_laddr();
   }
   extent_len_t get_intermediate_length() const {
-    assert(is_linked_direct());
+    ceph_assert(is_linked_direct());
     return direct_cursor->get_length();
   }
   // The start offset of the indirect cursor related to direct cursor
   extent_len_t get_intermediate_offset() const {
-    assert(is_indirect());
-    assert(get_intermediate_base() <= get_intermediate_key());
-    assert(get_intermediate_key() + get_length() <=
+    ceph_assert(is_indirect());
+    ceph_assert(get_intermediate_base() <= get_intermediate_key());
+    ceph_assert(get_intermediate_key() + get_length() <=
 	   get_intermediate_base() + get_intermediate_length());
     return get_intermediate_base().get_byte_distance<
       extent_len_t>(get_intermediate_key());

@@ -40,7 +40,7 @@ struct RootMetaBlock : LogicalChildNode {
   /// overwrites root
   void apply_delta(const ceph::bufferlist &_bl) final
   {
-    assert(_bl.length() == MAX_META_LENGTH);
+    ceph_assert(_bl.length() == MAX_META_LENGTH);
     ceph::bufferlist bl = _bl;
     bl.rebuild();
     get_bptr().copy_in(0, MAX_META_LENGTH, bl.front().c_str());

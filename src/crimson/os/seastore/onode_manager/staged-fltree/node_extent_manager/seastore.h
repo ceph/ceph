@@ -65,7 +65,7 @@ class SeastoreNodeExtent final: public NodeExtent {
     return CachedExtentRef(new SeastoreNodeExtent(*this));
   }
   ceph::bufferlist get_delta() override {
-    assert(recorder);
+    ceph_assert(recorder);
     return recorder->get_delta();
   }
   void apply_delta(const ceph::bufferlist&) override;
@@ -87,9 +87,9 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       TransactionManager &tm, laddr_t min, double p_eagain)
       : TransactionManagerHandle(tm), addr_min{min}, p_eagain{p_eagain} {
     if constexpr (INJECT_EAGAIN) {
-      assert(p_eagain > 0.0 && p_eagain < 1.0);
+      ceph_assert(p_eagain > 0.0 && p_eagain < 1.0);
     } else {
-      assert(p_eagain == 0.0);
+      ceph_assert(p_eagain == 0.0);
     }
   }
 
@@ -119,9 +119,9 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       SUBTRACET(seastore_onode,
           "read {}B at {} -- {}",
           t, e->get_length(), e->get_laddr(), *e);
-      assert(!maybe_indirect_extent.is_indirect());
-      assert(!maybe_indirect_extent.is_clone);
-      assert(e->get_laddr() == addr);
+      ceph_assert(!maybe_indirect_extent.is_indirect());
+      ceph_assert(!maybe_indirect_extent.is_clone);
+      ceph_assert(e->get_laddr() == addr);
       std::ignore = addr;
       return read_iertr::make_ready_future<NodeExtentRef>(e);
     });
@@ -148,7 +148,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
             t, len, *extent);
         ceph_abort("fatal error");
       }
-      assert(extent->get_length() == len);
+      ceph_assert(extent->get_length() == len);
       std::ignore = len;
       return NodeExtentRef(extent);
     }).handle_error_interruptible(
@@ -175,7 +175,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       }
     }
     return tm.remove(t, extent).si_then([addr, len, &t] (unsigned cnt) {
-      assert(cnt == 0);
+      ceph_assert(cnt == 0);
       SUBTRACET(seastore_onode, "retired {}B at {} ...", t, len, addr);
     });
   }
@@ -213,7 +213,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
   bool trigger_eagain() {
     if (generate_eagain) {
       double dice = rd();
-      assert(rd.min() == 0);
+      ceph_assert(rd.min() == 0);
       dice /= rd.max();
       return dice <= p_eagain;
     } else {

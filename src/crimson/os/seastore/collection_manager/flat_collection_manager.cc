@@ -45,15 +45,15 @@ FlatCollectionManager::get_root_ret
 FlatCollectionManager::get_coll_root(const coll_root_t &coll_root, Transaction &t)
 {
   logger().debug("FlatCollectionManager: {}", __func__);
-  assert(coll_root.get_location() != L_ADDR_NULL);
+  ceph_assert(coll_root.get_location() != L_ADDR_NULL);
   auto cc = get_coll_context(t);
   return cc.tm.read_extent<CollectionNode>(
     cc.t,
     coll_root.get_location(),
     coll_root.get_size()
   ).si_then([](auto maybe_indirect_extent) {
-    assert(!maybe_indirect_extent.is_indirect());
-    assert(!maybe_indirect_extent.is_clone);
+    ceph_assert(!maybe_indirect_extent.is_indirect());
+    ceph_assert(!maybe_indirect_extent.is_clone);
     return get_root_iertr::make_ready_future<CollectionNodeRef>(
         std::move(maybe_indirect_extent.extent));
   });
@@ -76,7 +76,7 @@ FlatCollectionManager::create(coll_root_t &coll_root, Transaction &t,
 
 	// TODO return error probably, but such a nonsensically large number of
 	// collections would create a ton of other problems as well
-	assert(new_size < MAX_FLAT_BLOCK_SIZE);
+	ceph_assert(new_size < MAX_FLAT_BLOCK_SIZE);
         return tm.alloc_non_data_extent<CollectionNode>(
 	  t, L_ADDR_MIN, new_size
 	).si_then([=, this, &coll_root, &t] (auto &&root_extent) {
@@ -86,7 +86,7 @@ FlatCollectionManager::create(coll_root_t &coll_root, Transaction &t,
 	  return root_extent->create(
 	    get_coll_context(t), cid, info.split_bits
 	  ).si_then([=, this, &t](auto result) {
-	    assert(result == CollectionNode::create_result_t::SUCCESS);
+	    ceph_assert(result == CollectionNode::create_result_t::SUCCESS);
 	    return tm.remove(t, extent->get_laddr());
 	  }).si_then([] (auto) {
             return create_iertr::make_ready_future<>();

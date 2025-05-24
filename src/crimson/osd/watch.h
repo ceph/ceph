@@ -63,7 +63,7 @@ public:
       timeout_timer([this] {
         return do_watch_timeout();
       }) {
-    assert(this->pg);
+    ceph_assert(this->pg);
   }
   ~Watch();
 
@@ -172,16 +172,16 @@ class Notify : public seastar::enable_shared_from_this<Notify> {
 
   using ptr_t = seastar::shared_ptr<Notify>;
   friend bool operator<(const ptr_t& lhs, const ptr_t& rhs) {
-    assert(lhs);
-    assert(rhs);
+    ceph_assert(lhs);
+    ceph_assert(rhs);
     return lhs->get_id() < rhs->get_id();
   }
   friend bool operator<(const ptr_t& ptr, const uint64_t id) {
-    assert(ptr);
+    ceph_assert(ptr);
     return ptr->get_id() < id;
   }
   friend bool operator<(const uint64_t id, const ptr_t& ptr) {
-    assert(ptr);
+    ceph_assert(ptr);
     return id < ptr->get_id();
   }
 
@@ -216,7 +216,7 @@ Notify::Notify(WatchIteratorT begin,
     conn(std::move(conn)),
     client_gid(client_gid),
     user_version(user_version) {
-  assert(!std::empty(watchers));
+  ceph_assert(!std::empty(watchers));
   if (ninfo.timeout) {
     timeout_timer.arm(std::chrono::seconds{ninfo.timeout});
   }

@@ -31,7 +31,7 @@ class NodeExtent : public LogicalChildNode {
     return get_bptr().c_str();
   }
   NodeExtentMutable get_mutable() {
-    assert(is_mutable());
+    ceph_assert(is_mutable());
     return do_get_mutable();
   }
 

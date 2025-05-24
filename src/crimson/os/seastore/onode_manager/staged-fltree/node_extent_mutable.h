@@ -19,7 +19,7 @@ namespace crimson::os::seastore::onode {
 class NodeExtentMutable {
  public:
   void copy_in_absolute(void* dst, const void* src, extent_len_t len) {
-    assert(is_safe(dst, len));
+    ceph_assert(is_safe(dst, len));
     std::memcpy(dst, src, len);
   }
   template <typename T>
@@ -41,9 +41,9 @@ class NodeExtentMutable {
   }
 
   void shift_absolute(const void* src, extent_len_t len, int offset) {
-    assert(is_safe(src, len));
+    ceph_assert(is_safe(src, len));
     char* to = (char*)src + offset;
-    assert(is_safe(to, len));
+    ceph_assert(is_safe(to, len));
     if (len != 0) {
       std::memmove(to, src, len);
     }
@@ -53,7 +53,7 @@ class NodeExtentMutable {
   }
 
   void set_absolute(void* dst, int value, extent_len_t len) {
-    assert(is_safe(dst, len));
+    ceph_assert(is_safe(dst, len));
     std::memset(dst, value, len);
   }
   void set_relative(extent_len_t dst_offset, int value, extent_len_t len) {
@@ -63,7 +63,7 @@ class NodeExtentMutable {
 
   template <typename T>
   void validate_inplace_update(const T& updated) {
-    assert(is_safe(&updated, sizeof(T)));
+    ceph_assert(is_safe(&updated, sizeof(T)));
   }
 
   const char* get_read() const { return p_start; }
@@ -71,7 +71,7 @@ class NodeExtentMutable {
   extent_len_t get_length() const {
 #ifndef NDEBUG
     if (node_offset == 0) {
-      assert(is_valid_node_size(length));
+      ceph_assert(is_valid_node_size(length));
     }
 #endif
     return length;
@@ -79,12 +79,12 @@ class NodeExtentMutable {
   node_offset_t get_node_offset() const { return node_offset; }
 
   NodeExtentMutable get_mutable_absolute(const void* dst, node_offset_t len) const {
-    assert(node_offset == 0);
-    assert(is_safe(dst, len));
-    assert((const char*)dst != get_read());
+    ceph_assert(node_offset == 0);
+    ceph_assert(is_safe(dst, len));
+    ceph_assert((const char*)dst != get_read());
     auto ret = *this;
     node_offset_t offset = (const char*)dst - get_read();
-    assert(offset != 0);
+    ceph_assert(offset != 0);
     ret.p_start += offset;
     ret.length = len;
     ret.node_offset = offset;

@@ -30,7 +30,7 @@ void delta_t::replay(coll_map_t &l) const
     break;
   }
   case op_t::INVALID: {
-    assert(0 == "impossible");
+    ceph_assert(0 == "impossible");
     break;
   }
   __builtin_unreachable();
@@ -66,7 +66,7 @@ CollectionNode::create(coll_context_t cc, coll_t coll, unsigned bits)
   }
   logger().debug("CollectionNode::create {} {} {}", coll, bits, *this);
   auto [iter, inserted] = decoded.insert(coll, bits);
-  assert(inserted);
+  ceph_assert(inserted);
   if (encoded_sizeof((base_coll_map_t&)decoded) > get_bptr().length()) {
     decoded.erase(iter);
     return create_ret(

@@ -175,15 +175,15 @@ inline std::ostream& operator<<(std::ostream& os, const tree_stats_t& stats) {
      << "\n  ratio nodes leaf  = " << stats.ratio_nodes_leaf()
      << "\n  ratio filled leaf = " << stats.ratio_filled_leaf()
      << "\n  ratio key compression = " << stats.ratio_key_compression();
-  assert(stats.num_kvs_internal + 1 == stats.num_nodes());
+  ceph_assert(stats.num_kvs_internal + 1 == stats.num_nodes());
   return os;
 }
 
 template <typename PtrType>
 void reset_ptr(PtrType& ptr, const char* origin_base,
                const char* new_base, extent_len_t node_size) {
-  assert((const char*)ptr > origin_base);
-  assert((const char*)ptr - origin_base < (int)node_size);
+  ceph_assert((const char*)ptr > origin_base);
+  ceph_assert((const char*)ptr - origin_base < (int)node_size);
   ptr = reinterpret_cast<PtrType>(
       (const char*)ptr - origin_base + new_base);
 }

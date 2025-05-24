@@ -141,7 +141,7 @@ static read_ertr::future<> do_read(
 {
   LOG_PREFIX(block_do_read);
   TRACE("{} poffset=0x{:x}~0x{:x} ...", device_id_printer_t{device_id}, offset, len);
-  assert(len <= bptr.length());
+  ceph_assert(len <= bptr.length());
   return device.dma_read(
     offset,
     bptr.c_str(),
@@ -287,7 +287,7 @@ write_superblock(
   LOG_PREFIX(block_write_superblock);
   DEBUG("{} write {}", device_id_printer_t{device_id}, sb);
   sb.validate();
-  assert(ceph::encoded_sizeof<block_sm_superblock_t>(sb) <
+  ceph_assert(ceph::encoded_sizeof<block_sm_superblock_t>(sb) <
 	 sb.block_size);
   return seastar::do_with(
     bufferptr(ceph::buffer::create_page_aligned(sb.block_size)),
@@ -296,7 +296,7 @@ write_superblock(
     bufferlist bl;
     encode(sb, bl);
     auto iter = bl.begin();
-    assert(bl.length() < sb.block_size);
+    ceph_assert(bl.length() < sb.block_size);
     iter.copy(bl.length(), bp.c_str());
     return do_write(device_id, device, 0, bp);
   });
@@ -329,7 +329,7 @@ read_superblock(seastar::file &device, seastar::stat_data sd)
         ERROR("got decode error!");
         ceph_assert(0 == "invalid superblock");
       }
-      assert(ceph::encoded_sizeof<block_sm_superblock_t>(ret) <
+      ceph_assert(ceph::encoded_sizeof<block_sm_superblock_t>(ret) <
              sd.block_size);
       return BlockSegmentManager::access_ertr::future<block_sm_superblock_t>(
         BlockSegmentManager::access_ertr::ready_future_marker{},
@@ -392,9 +392,9 @@ Segment::close_ertr::future<> BlockSegmentManager::segment_close(
   int unused_bytes = get_segment_size() - write_pointer;
   INFO("{} unused_bytes=0x{:x} ...", id, unused_bytes);
 
-  assert(unused_bytes >= 0);
-  assert(id.device_id() == get_device_id());
-  assert(tracker);
+  ceph_assert(unused_bytes >= 0);
+  ceph_assert(id.device_id() == get_device_id());
+  ceph_assert(tracker);
 
   tracker->set(s_id, segment_state_t::CLOSED);
   ++stats.closed_segments;
@@ -410,8 +410,8 @@ Segment::write_ertr::future<> BlockSegmentManager::segment_write(
   ceph::bufferlist bl,
   bool ignore_check)
 {
-  assert(addr.get_device_id() == get_device_id());
-  assert((bl.length() % superblock.block_size) == 0);
+  ceph_assert(addr.get_device_id() == get_device_id());
+  ceph_assert((bl.length() % superblock.block_size) == 0);
   stats.data_write.increment(bl.length());
   return do_writev(
       get_device_id(),
@@ -576,7 +576,7 @@ SegmentManager::open_ertr::future<SegmentRef> BlockSegmentManager::open(
   auto s_id = id.device_segment_id();
   INFO("{} ...", id);
 
-  assert(id.device_id() == get_device_id());
+  ceph_assert(id.device_id() == get_device_id());
 
   if (s_id >= get_num_segments()) {
     ERROR("{} segment-id out of range {}", id, get_num_segments());
@@ -609,7 +609,7 @@ SegmentManager::release_ertr::future<> BlockSegmentManager::release(
   auto s_id = id.device_segment_id();
   INFO("{} ...", id);
 
-  assert(id.device_id() == get_device_id());
+  ceph_assert(id.device_id() == get_device_id());
 
   if (s_id >= get_num_segments()) {
     ERROR("{} segment-id out of range {}", id, get_num_segments());
@@ -642,7 +642,7 @@ SegmentManager::read_ertr::future<> BlockSegmentManager::read(
   auto p_off = get_offset(addr);
   DEBUG("{} offset=0x{:x}~0x{:x} poffset=0x{:x} ...", id, s_off, len, p_off);
 
-  assert(addr.get_device_id() == get_device_id());
+  ceph_assert(addr.get_device_id() == get_device_id());
 
   if (s_off % superblock.block_size != 0 ||
       len % superblock.block_size != 0) {

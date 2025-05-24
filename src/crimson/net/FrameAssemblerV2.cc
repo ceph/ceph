@@ -25,13 +25,13 @@ namespace crimson::net {
 FrameAssemblerV2::FrameAssemblerV2(SocketConnection &_conn)
   : conn{_conn}, sid{seastar::this_shard_id()}
 {
-  assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
+  ceph_assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
 }
 
 FrameAssemblerV2::~FrameAssemblerV2()
 {
-  assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
-  assert(seastar::this_shard_id() == sid);
+  ceph_assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
+  ceph_assert(seastar::this_shard_id() == sid);
   if (has_socket()) {
     std::ignore = move_socket();
   }
@@ -43,8 +43,8 @@ seastar::future<> FrameAssemblerV2::intercept_frames(
     std::vector<Breakpoint> bps,
     bp_type_t type)
 {
-  assert(seastar::this_shard_id() == sid);
-  assert(has_socket());
+  ceph_assert(seastar::this_shard_id() == sid);
+  ceph_assert(has_socket());
   if (!conn.interceptor) {
     return seastar::now();
   }
@@ -61,7 +61,7 @@ seastar::future<> FrameAssemblerV2::intercept_frames(
 
 void FrameAssemblerV2::set_is_rev1(bool _is_rev1)
 {
-  assert(seastar::this_shard_id() == sid);
+  ceph_assert(seastar::this_shard_id() == sid);
   is_rev1 = _is_rev1;
   tx_frame_asm.set_is_rev1(_is_rev1);
   rx_frame_asm.set_is_rev1(_is_rev1);
@@ -71,14 +71,14 @@ void FrameAssemblerV2::create_session_stream_handlers(
   const AuthConnectionMeta &auth_meta,
   bool crossed)
 {
-  assert(seastar::this_shard_id() == sid);
+  ceph_assert(seastar::this_shard_id() == sid);
   session_stream_handlers = ceph::crypto::onwire::rxtx_t::create_handler_pair(
       nullptr, auth_meta, is_rev1, crossed);
 }
 
 void FrameAssemblerV2::reset_handlers()
 {
-  assert(seastar::this_shard_id() == sid);
+  ceph_assert(seastar::this_shard_id() == sid);
   session_stream_handlers = { nullptr, nullptr };
   session_comp_handlers = { nullptr, nullptr };
 }
@@ -86,8 +86,8 @@ void FrameAssemblerV2::reset_handlers()
 FrameAssemblerV2::mover_t
 FrameAssemblerV2::to_replace()
 {
-  assert(seastar::this_shard_id() == sid);
-  assert(is_socket_valid());
+  ceph_assert(seastar::this_shard_id() == sid);
+  ceph_assert(is_socket_valid());
 
   clear();
 
@@ -99,7 +99,7 @@ FrameAssemblerV2::to_replace()
 
 seastar::future<> FrameAssemblerV2::replace_by(FrameAssemblerV2::mover_t &&mover)
 {
-  assert(seastar::this_shard_id() == sid);
+  ceph_assert(seastar::this_shard_id() == sid);
 
   clear();
 
@@ -115,7 +115,7 @@ seastar::future<> FrameAssemblerV2::replace_by(FrameAssemblerV2::mover_t &&mover
 
 void FrameAssemblerV2::start_recording()
 {
-  assert(seastar::this_shard_id() == sid);
+  ceph_assert(seastar::this_shard_id() == sid);
   record_io = true;
   rxbuf.clear();
   txbuf.clear();
@@ -124,7 +124,7 @@ void FrameAssemblerV2::start_recording()
 FrameAssemblerV2::record_bufs_t
 FrameAssemblerV2::stop_recording()
 {
-  assert(seastar::this_shard_id() == sid);
+  ceph_assert(seastar::this_shard_id() == sid);
   ceph_assert_always(record_io == true);
   record_io = false;
   return record_bufs_t{std::move(rxbuf), std::move(txbuf)};
@@ -132,16 +132,16 @@ FrameAssemblerV2::stop_recording()
 
 bool FrameAssemblerV2::has_socket() const
 {
-  assert((socket && conn.socket) || (!socket && !conn.socket));
+  ceph_assert((socket && conn.socket) || (!socket && !conn.socket));
   return bool(socket);
 }
 
 bool FrameAssemblerV2::is_socket_valid() const
 {
-  assert(seastar::this_shard_id() == sid);
+  ceph_assert(seastar::this_shard_id() == sid);
 #ifndef NDEBUG
   if (has_socket() && socket->get_shard_id() == sid) {
-    assert(socket->is_shutdown() == is_socket_shutdown);
+    ceph_assert(socket->is_shutdown() == is_socket_shutdown);
   }
 #endif
   return has_socket() && !is_socket_shutdown;
@@ -150,33 +150,33 @@ bool FrameAssemblerV2::is_socket_valid() const
 seastar::shard_id
 FrameAssemblerV2::get_socket_shard_id() const
 {
-  assert(seastar::this_shard_id() == sid);
-  assert(is_socket_valid());
+  ceph_assert(seastar::this_shard_id() == sid);
+  ceph_assert(is_socket_valid());
   return socket->get_shard_id();
 }
 
 SocketFRef FrameAssemblerV2::move_socket()
 {
-  assert(has_socket());
+  ceph_assert(has_socket());
   conn.set_socket(nullptr);
   return std::move(socket);
 }
 
 void FrameAssemblerV2::set_socket(SocketFRef &&new_socket)
 {
-  assert(seastar::this_shard_id() == sid);
-  assert(!has_socket());
-  assert(new_socket);
+  ceph_assert(seastar::this_shard_id() == sid);
+  ceph_assert(!has_socket());
+  ceph_assert(new_socket);
   socket = std::move(new_socket);
   conn.set_socket(socket.get());
   is_socket_shutdown = false;
-  assert(is_socket_valid());
+  ceph_assert(is_socket_valid());
 }
 
 void FrameAssemblerV2::learn_socket_ephemeral_port_as_connector(uint16_t port)
 {
-  assert(seastar::this_shard_id() == sid);
-  assert(has_socket());
+  ceph_assert(seastar::this_shard_id() == sid);
+  ceph_assert(has_socket());
   // Note: may not invoke on the socket core
   socket->learn_ephemeral_port_as_connector(port);
 }
@@ -184,12 +184,12 @@ void FrameAssemblerV2::learn_socket_ephemeral_port_as_connector(uint16_t port)
 template <bool may_cross_core>
 void FrameAssemblerV2::shutdown_socket(crimson::common::Gated *gate)
 {
-  assert(seastar::this_shard_id() == sid);
-  assert(is_socket_valid());
+  ceph_assert(seastar::this_shard_id() == sid);
+  ceph_assert(is_socket_valid());
   is_socket_shutdown = true;
   if constexpr (may_cross_core) {
-    assert(conn.get_messenger_shard_id() == sid);
-    assert(gate);
+    ceph_assert(conn.get_messenger_shard_id() == sid);
+    ceph_assert(gate);
     gate->dispatch_in_background("shutdown_socket", conn, [this] {
       return seastar::smp::submit_to(
           socket->get_shard_id(), [this] {
@@ -197,8 +197,8 @@ void FrameAssemblerV2::shutdown_socket(crimson::common::Gated *gate)
       });
     });
   } else {
-    assert(socket->get_shard_id() == sid);
-    assert(!gate);
+    ceph_assert(socket->get_shard_id() == sid);
+    ceph_assert(!gate);
     socket->shutdown();
   }
 }
@@ -207,9 +207,9 @@ template void FrameAssemblerV2::shutdown_socket<false>(crimson::common::Gated *)
 
 seastar::future<> FrameAssemblerV2::replace_shutdown_socket(SocketFRef &&new_socket)
 {
-  assert(seastar::this_shard_id() == sid);
-  assert(has_socket());
-  assert(!is_socket_valid());
+  ceph_assert(seastar::this_shard_id() == sid);
+  ceph_assert(has_socket());
+  ceph_assert(!is_socket_valid());
   auto old_socket = move_socket();
   auto old_socket_shard_id = old_socket->get_shard_id();
   set_socket(std::move(new_socket));
@@ -223,9 +223,9 @@ seastar::future<> FrameAssemblerV2::replace_shutdown_socket(SocketFRef &&new_soc
 
 seastar::future<> FrameAssemblerV2::close_shutdown_socket()
 {
-  assert(seastar::this_shard_id() == sid);
-  assert(has_socket());
-  assert(!is_socket_valid());
+  ceph_assert(seastar::this_shard_id() == sid);
+  ceph_assert(has_socket());
+  ceph_assert(!is_socket_valid());
   return seastar::smp::submit_to(
       socket->get_shard_id(), [this] {
     return socket->close();
@@ -236,10 +236,10 @@ template <bool may_cross_core>
 seastar::future<ceph::bufferptr>
 FrameAssemblerV2::read_exactly(std::size_t bytes)
 {
-  assert(seastar::this_shard_id() == sid);
-  assert(has_socket());
+  ceph_assert(seastar::this_shard_id() == sid);
+  ceph_assert(has_socket());
   if constexpr (may_cross_core) {
-    assert(conn.get_messenger_shard_id() == sid);
+    ceph_assert(conn.get_messenger_shard_id() == sid);
     return seastar::smp::submit_to(
         socket->get_shard_id(), [this, bytes] {
       return socket->read_exactly(bytes);
@@ -250,7 +250,7 @@ FrameAssemblerV2::read_exactly(std::size_t bytes)
       return bptr;
     });
   } else {
-    assert(socket->get_shard_id() == sid);
+    ceph_assert(socket->get_shard_id() == sid);
     return socket->read_exactly(bytes);
   }
 }
@@ -261,10 +261,10 @@ template <bool may_cross_core>
 seastar::future<ceph::bufferlist>
 FrameAssemblerV2::read(std::size_t bytes)
 {
-  assert(seastar::this_shard_id() == sid);
-  assert(has_socket());
+  ceph_assert(seastar::this_shard_id() == sid);
+  ceph_assert(has_socket());
   if constexpr (may_cross_core) {
-    assert(conn.get_messenger_shard_id() == sid);
+    ceph_assert(conn.get_messenger_shard_id() == sid);
     return seastar::smp::submit_to(
         socket->get_shard_id(), [this, bytes] {
       return socket->read(bytes);
@@ -275,7 +275,7 @@ FrameAssemblerV2::read(std::size_t bytes)
       return buf;
     });
   } else {
-    assert(socket->get_shard_id() == sid);
+    ceph_assert(socket->get_shard_id() == sid);
     return socket->read(bytes);
   }
 }
@@ -286,10 +286,10 @@ template <bool may_cross_core>
 seastar::future<>
 FrameAssemblerV2::write(ceph::bufferlist buf)
 {
-  assert(seastar::this_shard_id() == sid);
-  assert(has_socket());
+  ceph_assert(seastar::this_shard_id() == sid);
+  ceph_assert(has_socket());
   if constexpr (may_cross_core) {
-    assert(conn.get_messenger_shard_id() == sid);
+    ceph_assert(conn.get_messenger_shard_id() == sid);
     if (record_io) {
       txbuf.append(buf);
     }
@@ -298,7 +298,7 @@ FrameAssemblerV2::write(ceph::bufferlist buf)
       return socket->write(std::move(buf));
     });
   } else {
-    assert(socket->get_shard_id() == sid);
+    ceph_assert(socket->get_shard_id() == sid);
     return socket->write(std::move(buf));
   }
 }
@@ -309,16 +309,16 @@ template <bool may_cross_core>
 seastar::future<>
 FrameAssemblerV2::flush()
 {
-  assert(seastar::this_shard_id() == sid);
-  assert(has_socket());
+  ceph_assert(seastar::this_shard_id() == sid);
+  ceph_assert(has_socket());
   if constexpr (may_cross_core) {
-    assert(conn.get_messenger_shard_id() == sid);
+    ceph_assert(conn.get_messenger_shard_id() == sid);
     return seastar::smp::submit_to(
         socket->get_shard_id(), [this] {
       return socket->flush();
     });
   } else {
-    assert(socket->get_shard_id() == sid);
+    ceph_assert(socket->get_shard_id() == sid);
     return socket->flush();
   }
 }
@@ -329,10 +329,10 @@ template <bool may_cross_core>
 seastar::future<>
 FrameAssemblerV2::write_flush(ceph::bufferlist buf)
 {
-  assert(seastar::this_shard_id() == sid);
-  assert(has_socket());
+  ceph_assert(seastar::this_shard_id() == sid);
+  ceph_assert(has_socket());
   if constexpr (may_cross_core) {
-    assert(conn.get_messenger_shard_id() == sid);
+    ceph_assert(conn.get_messenger_shard_id() == sid);
     if (unlikely(record_io)) {
       txbuf.append(buf);
     }
@@ -341,7 +341,7 @@ FrameAssemblerV2::write_flush(ceph::bufferlist buf)
       return socket->write_flush(std::move(buf));
     });
   } else {
-    assert(socket->get_shard_id() == sid);
+    ceph_assert(socket->get_shard_id() == sid);
     return socket->write_flush(std::move(buf));
   }
 }
@@ -352,7 +352,7 @@ template <bool may_cross_core>
 seastar::future<FrameAssemblerV2::read_main_t>
 FrameAssemblerV2::read_main_preamble()
 {
-  assert(seastar::this_shard_id() == sid);
+  ceph_assert(seastar::this_shard_id() == sid);
   rx_preamble.clear();
   return read_exactly<may_cross_core>(
     rx_frame_asm.get_preamble_onwire_len()
@@ -382,7 +382,7 @@ template <bool may_cross_core>
 seastar::future<FrameAssemblerV2::read_payload_t*>
 FrameAssemblerV2::read_frame_payload()
 {
-  assert(seastar::this_shard_id() == sid);
+  ceph_assert(seastar::this_shard_id() == sid);
   rx_segments_data.clear();
   return seastar::do_until(
     [this] {

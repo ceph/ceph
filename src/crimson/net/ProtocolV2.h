@@ -85,7 +85,7 @@ private:
     if (pr_exit_io.has_value()) {
       return pr_exit_io->get_shared_future();
     } else {
-      assert(!need_exit_io);
+      ceph_assert(!need_exit_io);
       return seastar::now();
     }
   }

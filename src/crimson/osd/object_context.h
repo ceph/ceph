@@ -199,7 +199,7 @@ public:
 
   template <typename ListType>
   void remove_from(ListType&& list) {
-    assert(list_link_cnt > 0);
+    ceph_assert(list_link_cnt > 0);
     if (--list_link_cnt == 0) {
       list.erase(std::decay_t<ListType>::s_iterator_to(*this));
     }

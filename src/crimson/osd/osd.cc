@@ -922,7 +922,7 @@ OSD::do_ms_dispatch(
             [f_conn=std::move(f_conn), m=std::move(m), this]() mutable {
           auto conn = make_local_shared_foreign(std::move(f_conn));
           auto ret = do_ms_dispatch(conn, std::move(m));
-          assert(ret.has_value());
+          ceph_assert(ret.has_value());
           return std::move(ret.value());
         });
       });
@@ -1757,7 +1757,7 @@ seastar::future<> OSD::handle_pg_remove(
 seastar::future<> OSD::check_osdmap_features()
 {
   LOG_PREFIX(OSD::check_osdmap_features);
-  assert(seastar::this_shard_id() == PRIMARY_CORE);
+  ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   if (osdmap->require_osd_release != last_require_osd_release) {
     DEBUG("updating require_osd_release from {} to {}",
           to_string(last_require_osd_release),

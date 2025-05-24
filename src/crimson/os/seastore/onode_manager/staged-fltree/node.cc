@@ -33,7 +33,7 @@ namespace crimson::os::seastore::onode {
 tree_cursor_t::tree_cursor_t(Ref<LeafNode> node, const search_position_t& pos)
       : ref_leaf_node{node}, position{pos}, cache{ref_leaf_node}
 {
-  assert(is_tracked());
+  ceph_assert(is_tracked());
   ref_leaf_node->do_track_cursor<true>(*this);
   // do not account updates for the inserted values
   is_mutated = true;
@@ -45,7 +45,7 @@ tree_cursor_t::tree_cursor_t(
     const key_view_t& key_view, const value_header_t* p_value_header)
       : ref_leaf_node{node}, position{pos}, cache{ref_leaf_node}
 {
-  assert(is_tracked());
+  ceph_assert(is_tracked());
   update_cache_same_node(key_view, p_value_header);
   ref_leaf_node->do_track_cursor<true>(*this);
 }
@@ -54,8 +54,8 @@ tree_cursor_t::tree_cursor_t(
 tree_cursor_t::tree_cursor_t(Ref<LeafNode> node)
       : ref_leaf_node{node}, position{search_position_t::end()}, cache{ref_leaf_node}
 {
-  assert(is_end());
-  assert(ref_leaf_node->is_level_tail());
+  ceph_assert(is_end());
+  ceph_assert(ref_leaf_node->is_level_tail());
 }
 
 // create an invalid tree_cursor_t
@@ -69,7 +69,7 @@ tree_cursor_t::~tree_cursor_t()
 eagain_ifuture<Ref<tree_cursor_t>>
 tree_cursor_t::get_next(context_t c)
 {
-  assert(is_tracked());
+  ceph_assert(is_tracked());
   return ref_leaf_node->get_next_cursor(c, position);
 }
 
@@ -77,22 +77,22 @@ void tree_cursor_t::assert_next_to(
     const tree_cursor_t& prv, value_magic_t magic) const
 {
 #ifndef NDEBUG
-  assert(!prv.is_end());
+  ceph_assert(!prv.is_end());
   if (is_end()) {
-    assert(ref_leaf_node == prv.ref_leaf_node);
-    assert(ref_leaf_node->is_level_tail());
+    ceph_assert(ref_leaf_node == prv.ref_leaf_node);
+    ceph_assert(ref_leaf_node->is_level_tail());
   } else if (is_tracked()) {
     auto key = get_key_view(magic);
     auto prv_key = prv.get_key_view(magic);
-    assert(key > prv_key);
+    ceph_assert(key > prv_key);
     if (ref_leaf_node == prv.ref_leaf_node) {
       position.assert_next_to(prv.position);
     } else {
-      assert(!prv.ref_leaf_node->is_level_tail());
-      assert(position == search_position_t::begin());
+      ceph_assert(!prv.ref_leaf_node->is_level_tail());
+      ceph_assert(position == search_position_t::begin());
     }
   } else {
-    assert(is_invalid());
+    ceph_assert(is_invalid());
     ceph_abort("impossible");
   }
 #endif
@@ -102,7 +102,7 @@ template <bool FORCE_MERGE>
 eagain_ifuture<Ref<tree_cursor_t>>
 tree_cursor_t::erase(context_t c, bool get_next)
 {
-  assert(is_tracked());
+  ceph_assert(is_tracked());
   return ref_leaf_node->erase<FORCE_MERGE>(c, position, get_next);
 }
 template eagain_ifuture<Ref<tree_cursor_t>>
@@ -121,7 +121,7 @@ std::strong_ordering tree_cursor_t::compare_to(
     return std::strong_ordering::less;
   }
 
-  assert(is_tracked() && o.is_tracked());
+  ceph_assert(is_tracked() && o.is_tracked());
   // all tracked cursors are singletons
   if (this == &o) {
     return std::strong_ordering::equal;
@@ -135,21 +135,21 @@ std::strong_ordering tree_cursor_t::compare_to(
     auto o_key = o.get_key_view(magic);
     ret = key <=> o_key;
   }
-  assert(ret != 0);
+  ceph_assert(ret != 0);
   return ret;
 }
 
 eagain_ifuture<>
 tree_cursor_t::extend_value(context_t c, value_size_t extend_size)
 {
-  assert(is_tracked());
+  ceph_assert(is_tracked());
   return ref_leaf_node->extend_value(c, position, extend_size);
 }
 
 eagain_ifuture<>
 tree_cursor_t::trim_value(context_t c, value_size_t trim_size)
 {
-  assert(is_tracked());
+  ceph_assert(is_tracked());
   return ref_leaf_node->trim_value(c, position, trim_size);
 }
 
@@ -158,10 +158,10 @@ void tree_cursor_t::update_track(
     Ref<LeafNode> node, const search_position_t& pos)
 {
   // I must be already untracked
-  assert(is_tracked());
-  assert(!ref_leaf_node->check_is_tracking(*this));
+  ceph_assert(is_tracked());
+  ceph_assert(!ref_leaf_node->check_is_tracking(*this));
   // track the new node and new pos
-  assert(!pos.is_end());
+  ceph_assert(!pos.is_end());
   ref_leaf_node = node;
   position = pos;
   // we lazy update the key/value information until user asked
@@ -174,16 +174,16 @@ template void tree_cursor_t::update_track<false>(Ref<LeafNode>, const search_pos
 void tree_cursor_t::update_cache_same_node(const key_view_t& key_view,
                                            const value_header_t* p_value_header) const
 {
-  assert(is_tracked());
+  ceph_assert(is_tracked());
   cache.update_all(ref_leaf_node->get_version(), key_view, p_value_header);
   cache.validate_is_latest(position);
 }
 
 void tree_cursor_t::invalidate()
 {
-  assert(is_tracked());
+  ceph_assert(is_tracked());
   ref_leaf_node.reset();
-  assert(is_invalid());
+  ceph_assert(is_invalid());
   // I must be removed from LeafNode
 }
 
@@ -198,7 +198,7 @@ void tree_cursor_t::Cache::update_all(const node_version_t& current_version,
                                       const key_view_t& _key_view,
                                       const value_header_t* _p_value_header)
 {
-  assert(_p_value_header);
+  ceph_assert(_p_value_header);
 
   needs_update_all = false;
   version = current_version;
@@ -206,8 +206,8 @@ void tree_cursor_t::Cache::update_all(const node_version_t& current_version,
   p_node_base = ref_leaf_node->read();
   key_view = _key_view;
   p_value_header = _p_value_header;
-  assert((const char*)p_value_header > p_node_base);
-  assert((const char*)p_value_header - p_node_base <
+  ceph_assert((const char*)p_value_header > p_node_base);
+  ceph_assert((const char*)p_value_header - p_node_base <
          (int)ref_leaf_node->get_node_size());
 
   value_payload_mut.reset();
@@ -216,18 +216,18 @@ void tree_cursor_t::Cache::update_all(const node_version_t& current_version,
 
 void tree_cursor_t::Cache::maybe_duplicate(const node_version_t& current_version)
 {
-  assert(!needs_update_all);
-  assert(version.layout == current_version.layout);
+  ceph_assert(!needs_update_all);
+  ceph_assert(version.layout == current_version.layout);
   if (version.state == current_version.state) {
     // cache is already latest.
   } else if (version.state < current_version.state) {
     // the extent has been copied but the layout has not been changed.
-    assert(p_node_base != nullptr);
-    assert(key_view.has_value());
-    assert(p_value_header != nullptr);
+    ceph_assert(p_node_base != nullptr);
+    ceph_assert(key_view.has_value());
+    ceph_assert(p_value_header != nullptr);
 
     auto current_p_node_base = ref_leaf_node->read();
-    assert(current_p_node_base != p_node_base);
+    ceph_assert(current_p_node_base != p_node_base);
     auto node_size = ref_leaf_node->get_node_size();
 
     version.state = current_version.state;
@@ -254,20 +254,20 @@ void tree_cursor_t::Cache::make_latest(
   } else {
     maybe_duplicate(current_version);
   }
-  assert(p_value_header->magic == magic);
+  ceph_assert(p_value_header->magic == magic);
   validate_is_latest(pos);
 }
 
 void tree_cursor_t::Cache::validate_is_latest(const search_position_t& pos) const
 {
 #ifndef NDEBUG
-  assert(!needs_update_all);
-  assert(version == ref_leaf_node->get_version());
+  ceph_assert(!needs_update_all);
+  ceph_assert(version == ref_leaf_node->get_version());
 
   auto [_key_view, _p_value_header] = ref_leaf_node->get_kv(pos);
-  assert(p_node_base == ref_leaf_node->read());
-  assert(key_view ==_key_view);
-  assert(p_value_header == _p_value_header);
+  ceph_assert(p_node_base == ref_leaf_node->read());
+  ceph_assert(key_view ==_key_view);
+  ceph_assert(p_value_header == _p_value_header);
 #endif
 }
 
@@ -277,7 +277,7 @@ tree_cursor_t::Cache::prepare_mutate_value_payload(
 {
   make_latest(c.vb.get_header_magic(), pos);
   if (!value_payload_mut.has_value()) {
-    assert(!p_value_recorder);
+    ceph_assert(!p_value_recorder);
     auto value_mutable = ref_leaf_node->prepare_mutate_value_payload(c);
     auto current_version = ref_leaf_node->get_version();
     maybe_duplicate(current_version);
@@ -302,7 +302,7 @@ Node::~Node()
     //   b. Eagain happened after the node extent is allocated/loaded
     //      and before the node is initialized correctly;
   } else {
-    assert(!impl->is_extent_retired());
+    ceph_assert(!impl->is_extent_retired());
     if (is_root()) {
       super->do_untrack_root(*this);
     } else {
@@ -372,8 +372,8 @@ eagain_ifuture<std::size_t> Node::erase(
     auto ref_cursor = result.p_cursor;
     return ref_cursor->erase(c, false
     ).si_then([ref_cursor] (auto next_cursor) {
-      assert(ref_cursor->is_invalid());
-      assert(!next_cursor);
+      ceph_assert(ref_cursor->is_invalid());
+      ceph_assert(!next_cursor);
       return std::size_t(1);
     });
   });
@@ -431,19 +431,19 @@ eagain_ifuture<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_tra
     crimson::ct_error::input_output_error::assert_failure(fmt::format(
         "{} EIO during get_super()", FNAME).c_str())
   ).si_then([c, &root_tracker, FNAME](auto&& _super) {
-    assert(_super);
+    ceph_assert(_super);
     auto root_addr = _super->get_root_laddr();
-    assert(root_addr != L_ADDR_NULL);
+    ceph_assert(root_addr != L_ADDR_NULL);
     TRACET("loading root_addr={} ...", c.t, root_addr);
     return Node::load(c, root_addr, true
     ).si_then([c, _super = std::move(_super),
                  &root_tracker, FNAME](auto root) mutable {
       TRACET("loaded {}", c.t, root->get_name());
-      assert(root->impl->field_type() == field_type_t::N0);
+      ceph_assert(root->impl->field_type() == field_type_t::N0);
       root->as_root(std::move(_super));
       std::ignore = c; // as only used in an assert
       std::ignore = root_tracker;
-      assert(root == root_tracker.get_root(c.t));
+      ceph_assert(root == root_tracker.get_root(c.t));
       return seastar::make_ready_future<Ref<Node>>(root);
     });
   });
@@ -458,29 +458,29 @@ void Node::make_root(context_t c, Super::URef&& _super)
 
 void Node::as_root(Super::URef&& _super)
 {
-  assert(!is_tracked());
-  assert(_super->get_root_laddr() == impl->laddr());
-  assert(impl->is_level_tail());
+  ceph_assert(!is_tracked());
+  ceph_assert(_super->get_root_laddr() == impl->laddr());
+  ceph_assert(impl->is_level_tail());
   super = std::move(_super);
   super->do_track_root(*this);
-  assert(is_root());
+  ceph_assert(is_root());
 }
 
 Super::URef Node::deref_super()
 {
-  assert(is_root());
-  assert(super->get_root_laddr() == impl->laddr());
-  assert(impl->is_level_tail());
+  ceph_assert(is_root());
+  ceph_assert(super->get_root_laddr() == impl->laddr());
+  ceph_assert(impl->is_level_tail());
   super->do_untrack_root(*this);
   auto ret = std::move(super);
-  assert(!is_tracked());
+  ceph_assert(!is_tracked());
   return ret;
 }
 
 eagain_ifuture<> Node::upgrade_root(context_t c, laddr_t hint)
 {
   LOG_PREFIX(OTree::Node::upgrade_root);
-  assert(impl->field_type() == field_type_t::N0);
+  ceph_assert(impl->field_type() == field_type_t::N0);
   auto super_to_move = deref_super();
   return InternalNode::allocate_root(
       c, hint, impl->level(), impl->laddr(), std::move(super_to_move)
@@ -494,28 +494,28 @@ eagain_ifuture<> Node::upgrade_root(context_t c, laddr_t hint)
 template <bool VALIDATE>
 void Node::as_child(const search_position_t& pos, Ref<InternalNode> parent_node)
 {
-  assert(!is_tracked() || !is_root());
+  ceph_assert(!is_tracked() || !is_root());
 #ifndef NDEBUG
   // Although I might have an outdated _parent_info during fixing,
   // I must be already untracked.
   if (_parent_info.has_value()) {
-    assert(!_parent_info->ptr->check_is_tracking(*this));
+    ceph_assert(!_parent_info->ptr->check_is_tracking(*this));
   }
 #endif
   _parent_info = parent_info_t{pos, parent_node};
   parent_info().ptr->do_track_child<VALIDATE>(*this);
-  assert(!is_root());
+  ceph_assert(!is_root());
 }
 template void Node::as_child<true>(const search_position_t&, Ref<InternalNode>);
 template void Node::as_child<false>(const search_position_t&, Ref<InternalNode>);
 
 Ref<InternalNode> Node::deref_parent()
 {
-  assert(!is_root());
+  ceph_assert(!is_root());
   auto parent_ref = std::move(parent_info().ptr);
   parent_ref->do_untrack_child(*this);
   _parent_info.reset();
-  assert(!is_tracked());
+  ceph_assert(!is_tracked());
   return parent_ref;
 }
 
@@ -525,8 +525,8 @@ eagain_ifuture<> Node::apply_split_to_parent(
     Ref<Node>&& split_right,
     bool update_right_index)
 {
-  assert(!is_root());
-  assert(this == this_ref.get());
+  ceph_assert(!is_root());
+  ceph_assert(this == this_ref.get());
   // TODO(cross-node string dedup)
   return parent_info().ptr->apply_child_split(
       c, std::move(this_ref), std::move(split_right), update_right_index);
@@ -535,8 +535,8 @@ eagain_ifuture<> Node::apply_split_to_parent(
 eagain_ifuture<Ref<tree_cursor_t>>
 Node::get_next_cursor_from_parent(context_t c)
 {
-  assert(!impl->is_level_tail());
-  assert(!is_root());
+  ceph_assert(!impl->is_level_tail());
+  ceph_assert(!is_root());
   return parent_info().ptr->get_next_cursor(c, parent_info().position);
 }
 
@@ -546,9 +546,9 @@ Node::try_merge_adjacent(
     context_t c, bool update_parent_index, Ref<Node>&& this_ref)
 {
   LOG_PREFIX(OTree::Node::try_merge_adjacent);
-  assert(this == this_ref.get());
+  ceph_assert(this == this_ref.get());
   impl->validate_non_empty();
-  assert(!is_root());
+  ceph_assert(!is_root());
   if constexpr (!FORCE_MERGE) {
     if (!impl->is_size_underflow() &&
         !impl->has_single_value()) {
@@ -600,7 +600,7 @@ Node::try_merge_adjacent(
     }
 
     if (left_for_merge) {
-      assert(right_for_merge);
+      ceph_assert(right_for_merge);
       auto [merge_stage, merge_size] = left_for_merge->impl->evaluate_merge(
           *right_for_merge->impl);
       if (merge_size <= left_for_merge->impl->total_size()) {
@@ -664,10 +664,10 @@ eagain_ifuture<> Node::erase_node(context_t c, Ref<Node>&& this_ref)
   // 3. unlink me --ref-> parent/super
   // 4. retire extent
   // 5. destruct node
-  assert(this_ref.get() == this);
-  assert(!is_tracking());
-  assert(!is_root());
-  assert(this_ref->use_count() == 1);
+  ceph_assert(this_ref.get() == this);
+  ceph_assert(!is_tracking());
+  ceph_assert(!is_root());
+  ceph_assert(this_ref->use_count() == 1);
   return parent_info().ptr->erase_child(c, std::move(this_ref));
 }
 
@@ -675,8 +675,8 @@ template <bool FORCE_MERGE>
 eagain_ifuture<> Node::fix_parent_index(
     context_t c, Ref<Node>&& this_ref, bool check_downgrade)
 {
-  assert(!is_root());
-  assert(this == this_ref.get());
+  ceph_assert(!is_root());
+  ceph_assert(this == this_ref.get());
   return parent_info().ptr->fix_index<FORCE_MERGE>(
       c, std::move(this_ref), check_downgrade);
 }
@@ -694,7 +694,7 @@ eagain_ifuture<Ref<Node>> Node::load(
       "{} -- addr={}, is_level_tail={}", FNAME, addr, expect_is_level_tail).c_str())
   ).si_then([FNAME, c, addr, expect_is_level_tail](auto extent)
 	      -> eagain_ifuture<Ref<Node>> {
-    assert(extent);
+    ceph_assert(extent);
     auto header = extent->get_header();
     auto field_type = header.get_field_type();
     if (!field_type) {
@@ -743,7 +743,7 @@ eagain_ifuture<NodeExtentMutable> Node::rebuild_extent(context_t c)
 {
   LOG_PREFIX(OTree::Node::rebuild_extent);
   DEBUGT("{} ...", c.t, get_name());
-  assert(!is_root());
+  ceph_assert(!is_root());
   // assume I'm already ref counted by caller
 
   // note: laddr can be changed after rebuild, but we don't fix the parent
@@ -755,10 +755,10 @@ eagain_ifuture<> Node::retire(context_t c, Ref<Node>&& this_ref)
 {
   LOG_PREFIX(OTree::Node::retire);
   DEBUGT("{} ...", c.t, get_name());
-  assert(this_ref.get() == this);
-  assert(!is_tracking());
-  assert(!is_tracked());
-  assert(this_ref->use_count() == 1);
+  ceph_assert(this_ref.get() == this);
+  ceph_assert(!is_tracking());
+  ceph_assert(!is_tracked());
+  ceph_assert(this_ref->use_count() == 1);
 
   return impl->retire_extent(c
   ).si_then([this_ref = std::move(this_ref)]{ /* deallocate node */});
@@ -767,8 +767,8 @@ eagain_ifuture<> Node::retire(context_t c, Ref<Node>&& this_ref)
 void Node::make_tail(context_t c)
 {
   LOG_PREFIX(OTree::Node::make_tail);
-  assert(!impl->is_level_tail());
-  assert(!impl->is_keys_empty());
+  ceph_assert(!impl->is_level_tail());
+  ceph_assert(!impl->is_keys_empty());
   DEBUGT("{} ...", c.t, get_name());
   impl->prepare_mutate(c);
   auto tail_pos = impl->make_tail();
@@ -790,7 +790,7 @@ InternalNode::get_next_cursor(context_t c, const search_position_t& pos)
 {
   impl->validate_non_empty();
   if (pos.is_end()) {
-    assert(impl->is_level_tail());
+    ceph_assert(impl->is_level_tail());
     return get_next_cursor_from_parent(c);
   }
 
@@ -803,7 +803,7 @@ InternalNode::get_next_cursor(context_t c, const search_position_t& pos)
     if (next_pos.is_end()) {
       p_child_addr = impl->get_tail_value();
     }
-    assert(p_child_addr);
+    ceph_assert(p_child_addr);
     return get_or_track_child(c, next_pos, p_child_addr->value
     ).si_then([c](auto child) {
       return child->lookup_smallest(c);
@@ -819,16 +819,16 @@ eagain_ifuture<> InternalNode::apply_child_split(
   auto& left_pos = left_child->parent_info().position;
 
 #ifndef NDEBUG
-  assert(left_child->parent_info().ptr.get() == this);
-  assert(!left_child->impl->is_level_tail());
+  ceph_assert(left_child->parent_info().ptr.get() == this);
+  ceph_assert(!left_child->impl->is_level_tail());
   if (left_pos.is_end()) {
-    assert(impl->is_level_tail());
-    assert(right_child->impl->is_level_tail());
-    assert(!update_right_index);
+    ceph_assert(impl->is_level_tail());
+    ceph_assert(right_child->impl->is_level_tail());
+    ceph_assert(!update_right_index);
   }
 
   // right_child has not assigned parent yet
-  assert(!right_child->is_tracked());
+  ceph_assert(!right_child->is_tracked());
 #endif
 
   impl->prepare_mutate(c);
@@ -880,7 +880,7 @@ eagain_ifuture<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
   LOG_PREFIX(OTree::InternalNode::erase_child);
   // this is a special version of recursive merge
   impl->validate_non_empty();
-  assert(child_ref->use_count() == 1);
+  ceph_assert(child_ref->use_count() == 1);
   validate_child_tracked(*child_ref);
 
   // fix the child's previous node as the new tail,
@@ -904,9 +904,9 @@ eagain_ifuture<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
              "and fix new child tail {} at pos({}) ...",
              c.t, get_name(), child_ref->get_name(), child_pos,
              new_tail_child->get_name(), new_tail_child->parent_info().position);
-      assert(!new_tail_child->impl->is_level_tail());
+      ceph_assert(!new_tail_child->impl->is_level_tail());
       new_tail_child->make_tail(c);
-      assert(new_tail_child->impl->is_level_tail());
+      ceph_assert(new_tail_child->impl->is_level_tail());
       if (new_tail_child->impl->node_type() == node_type_t::LEAF) {
         // no need to proceed merge because the filled size is not changed
         new_tail_child.reset();
@@ -917,7 +917,7 @@ eagain_ifuture<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
     }
 
     Ref<Node> this_ref = child_ref->deref_parent();
-    assert(this_ref == this);
+    ceph_assert(this_ref == this);
     return child_ref->retire(c, std::move(child_ref)
     ).si_then([c, this, child_pos, FNAME,
                  this_ref = std::move(this_ref)] () mutable {
@@ -926,9 +926,9 @@ eagain_ifuture<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
         DEBUGT("{} has one value left, erase ...", c.t, get_name());
 #ifndef NDEBUG
         if (impl->is_level_tail()) {
-          assert(child_pos.is_end());
+          ceph_assert(child_pos.is_end());
         } else {
-          assert(child_pos == search_position_t::begin());
+          ceph_assert(child_pos == search_position_t::begin());
         }
 #endif
 
@@ -949,10 +949,10 @@ eagain_ifuture<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
         }
 
         // track erase
-        assert(tracked_child_nodes.empty());
+        ceph_assert(tracked_child_nodes.empty());
 
         // no child should be referencing this node now, this_ref is the last one.
-        assert(this_ref->use_count() == 1);
+        ceph_assert(this_ref->use_count() == 1);
         return Node::erase_node(c, std::move(this_ref));
       }
 
@@ -983,7 +983,7 @@ eagain_ifuture<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
     }).si_then([c, new_tail_child = std::move(new_tail_child)] () mutable {
       // finally, check if the new tail child needs to merge
       if (new_tail_child && !new_tail_child->is_root()) {
-        assert(new_tail_child->impl->is_level_tail());
+        ceph_assert(new_tail_child->impl->is_level_tail());
         return new_tail_child->try_merge_adjacent(
             c, false, std::move(new_tail_child));
       } else {
@@ -1003,7 +1003,7 @@ eagain_ifuture<> InternalNode::fix_index(
   validate_child_inconsistent(*child);
   auto& child_pos = child->parent_info().position;
   Ref<Node> this_ref = child->deref_parent();
-  assert(this_ref == this);
+  ceph_assert(this_ref == this);
   validate_tracked_children();
 
   impl->prepare_mutate(c);
@@ -1042,7 +1042,7 @@ eagain_ifuture<> InternalNode::fix_index(
         } else {
           // no need to call try_downgrade_root() because the number of keys
           // has not changed, and I must have at least 2 keys.
-          assert(!impl->is_keys_empty());
+          ceph_assert(!impl->is_keys_empty());
           return eagain_iertr::now();
         }
       } else {
@@ -1071,27 +1071,27 @@ eagain_ifuture<> InternalNode::apply_children_merge(
          right_child->get_name(), right_pos, update_index);
 
 #ifndef NDEBUG
-  assert(left_child->parent_info().ptr == this);
-  assert(!left_pos.is_end());
+  ceph_assert(left_child->parent_info().ptr == this);
+  ceph_assert(!left_pos.is_end());
   const laddr_packed_t* p_value_left;
   impl->get_slot(left_pos, nullptr, &p_value_left);
-  assert(p_value_left->value == origin_left_addr);
+  ceph_assert(p_value_left->value == origin_left_addr);
 
-  assert(right_child->use_count() == 1);
-  assert(right_child->parent_info().ptr == this);
+  ceph_assert(right_child->use_count() == 1);
+  ceph_assert(right_child->parent_info().ptr == this);
   const laddr_packed_t* p_value_right;
   if (right_pos.is_end()) {
-    assert(right_child->impl->is_level_tail());
-    assert(left_child->impl->is_level_tail());
-    assert(impl->is_level_tail());
-    assert(!update_index);
+    ceph_assert(right_child->impl->is_level_tail());
+    ceph_assert(left_child->impl->is_level_tail());
+    ceph_assert(impl->is_level_tail());
+    ceph_assert(!update_index);
     p_value_right = impl->get_tail_value();
   } else {
-    assert(!right_child->impl->is_level_tail());
-    assert(!left_child->impl->is_level_tail());
+    ceph_assert(!right_child->impl->is_level_tail());
+    ceph_assert(!left_child->impl->is_level_tail());
     impl->get_slot(right_pos, nullptr, &p_value_right);
   }
-  assert(p_value_right->value == right_addr);
+  ceph_assert(p_value_right->value == right_addr);
 #endif
 
   // XXX: we may jump to try_downgrade_root() without mutating this node.
@@ -1107,7 +1107,7 @@ eagain_ifuture<> InternalNode::apply_children_merge(
   // erase left_pos from layout
   auto [erase_stage, next_pos] = impl->erase(left_pos);
   track_erase<false>(left_pos, erase_stage);
-  assert(next_pos == left_child->parent_info().position);
+  ceph_assert(next_pos == left_child->parent_info().position);
 
   // All good to retire the right_child.
   // I'm already ref-counted by left_child.
@@ -1150,12 +1150,12 @@ eagain_ifuture<std::pair<Ref<Node>, Ref<Node>>> InternalNode::get_child_peers(
   const laddr_packed_t* next_p_child_addr = nullptr;
 
   if (pos.is_end()) {
-    assert(impl->is_level_tail());
+    ceph_assert(impl->is_level_tail());
     if (!impl->is_keys_empty()) {
       // got previous child only
       impl->get_largest_slot(&prev_pos, nullptr, &prev_p_child_addr);
-      assert(prev_pos < pos);
-      assert(prev_p_child_addr != nullptr);
+      ceph_assert(prev_pos < pos);
+      ceph_assert(prev_p_child_addr != nullptr);
     } else {
       // no keys, so no peer children
     }
@@ -1164,8 +1164,8 @@ eagain_ifuture<std::pair<Ref<Node>, Ref<Node>>> InternalNode::get_child_peers(
       // got previous child
       prev_pos = pos;
       impl->get_prev_slot(prev_pos, nullptr, &prev_p_child_addr);
-      assert(prev_pos < pos);
-      assert(prev_p_child_addr != nullptr);
+      ceph_assert(prev_pos < pos);
+      ceph_assert(prev_p_child_addr != nullptr);
     } else {
       // is already the first child, so no previous child
     }
@@ -1176,16 +1176,16 @@ eagain_ifuture<std::pair<Ref<Node>, Ref<Node>>> InternalNode::get_child_peers(
       if (impl->is_level_tail()) {
         // the next child is the tail
         next_p_child_addr = impl->get_tail_value();
-        assert(pos < next_pos);
-        assert(next_p_child_addr != nullptr);
+        ceph_assert(pos < next_pos);
+        ceph_assert(next_p_child_addr != nullptr);
       } else {
         // next child doesn't exist
-        assert(next_p_child_addr == nullptr);
+        ceph_assert(next_p_child_addr == nullptr);
       }
     } else {
       // got the next child
-      assert(pos < next_pos);
-      assert(next_p_child_addr != nullptr);
+      ceph_assert(pos < next_pos);
+      ceph_assert(next_p_child_addr != nullptr);
     }
   }
 
@@ -1219,7 +1219,7 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::allocate_root(
   ).si_then([c, old_root_addr,
                super = std::move(super)](auto fresh_node) mutable {
     auto root = fresh_node.node;
-    assert(root->impl->is_keys_empty());
+    ceph_assert(root->impl->is_keys_empty());
     auto p_value = root->impl->get_tail_value();
     fresh_node.mut.copy_in_absolute(
         const_cast<laddr_packed_t*>(p_value), old_root_addr);
@@ -1248,7 +1248,7 @@ InternalNode::lookup_largest(context_t c)
   // NOTE: unlike LeafNode::lookup_largest(), this only works for the tail
   // internal node to return the tail child address.
   impl->validate_non_empty();
-  assert(impl->is_level_tail());
+  ceph_assert(impl->is_level_tail());
   auto p_child_addr = impl->get_tail_value();
   return get_or_track_child(c, search_position_t::end(), p_child_addr->value
   ).si_then([c](auto child) {
@@ -1318,8 +1318,8 @@ eagain_ifuture<> InternalNode::do_get_tree_stats(
 void InternalNode::track_merge(
     Ref<Node> _right_node, match_stage_t stage, search_position_t& left_last_pos)
 {
-  assert(level() == _right_node->level());
-  assert(impl->node_type() == _right_node->impl->node_type());
+  ceph_assert(level() == _right_node->level());
+  ceph_assert(impl->node_type() == _right_node->impl->node_type());
   auto& right_node = *static_cast<InternalNode*>(_right_node.get());
   if (right_node.tracked_child_nodes.empty()) {
     return;
@@ -1343,8 +1343,8 @@ void InternalNode::track_merge(
     auto rend = right_tracked_children.lower_bound(right_pos_until);
     while (rit != rend) {
       auto new_pos = rit->second->parent_info().position;
-      assert(new_pos == rit->first);
-      assert(rit->second->parent_info().ptr == &right_node);
+      ceph_assert(new_pos == rit->first);
+      ceph_assert(rit->second->parent_info().ptr == &right_node);
       new_pos += left_last_pos;
       auto p_child = rit->second;
       rit = right_tracked_children.erase(rit);
@@ -1356,15 +1356,15 @@ void InternalNode::track_merge(
 
   // fix the end tracked child node of right_node, if exists.
   if (rit != right_tracked_children.end()) {
-    assert(rit->first == search_position_t::end());
-    assert(rit->second->parent_info().position == search_position_t::end());
-    assert(right_node.impl->is_level_tail());
-    assert(impl->is_level_tail());
+    ceph_assert(rit->first == search_position_t::end());
+    ceph_assert(rit->second->parent_info().position == search_position_t::end());
+    ceph_assert(right_node.impl->is_level_tail());
+    ceph_assert(impl->is_level_tail());
     auto p_child = rit->second;
     rit = right_tracked_children.erase(rit);
     p_child->as_child(search_position_t::end(), this);
   }
-  assert(right_tracked_children.empty());
+  ceph_assert(right_tracked_children.empty());
 
   validate_tracked_children();
 }
@@ -1372,9 +1372,9 @@ void InternalNode::track_merge(
 eagain_ifuture<> InternalNode::test_clone_root(
     context_t c_other, RootNodeTracker& tracker_other) const
 {
-  assert(is_root());
-  assert(impl->is_level_tail());
-  assert(impl->field_type() == field_type_t::N0);
+  ceph_assert(is_root());
+  ceph_assert(impl->is_level_tail());
+  ceph_assert(impl->field_type() == field_type_t::N0);
   Ref<const Node> this_ref = this;
   return InternalNode::allocate(c_other, L_ADDR_MIN, field_type_t::N0, true, impl->level()
   ).si_then([this, c_other, &tracker_other](auto fresh_other) {
@@ -1385,7 +1385,7 @@ eagain_ifuture<> InternalNode::test_clone_root(
       eagain_iertr::pass_further{},
       crimson::ct_error::assert_all{"Invalid error during test clone"}
     ).si_then([c_other, cloned_root](auto&& super_other) {
-      assert(super_other);
+      ceph_assert(super_other);
       cloned_root->make_root_new(c_other, std::move(super_other));
       return cloned_root;
     });
@@ -1397,7 +1397,7 @@ eagain_ifuture<> InternalNode::test_clone_root(
       tracked_child_nodes.begin(),
       tracked_child_nodes.end(),
       [this_ref, c_other, cloned_root](auto& kv) {
-        assert(kv.first == kv.second->parent_info().position);
+        ceph_assert(kv.first == kv.second->parent_info().position);
         return kv.second->test_clone_non_root(c_other, cloned_root);
       }
     );
@@ -1408,9 +1408,9 @@ eagain_ifuture<> InternalNode::try_downgrade_root(
     context_t c, Ref<Node>&& this_ref)
 {
   LOG_PREFIX(OTree::InternalNode::try_downgrade_root);
-  assert(this_ref.get() == this);
-  assert(is_root());
-  assert(impl->is_level_tail());
+  ceph_assert(this_ref.get() == this);
+  ceph_assert(is_root());
+  ceph_assert(impl->is_level_tail());
   if (!impl->is_keys_empty()) {
     // I have more than 1 values, no need to downgrade
     return eagain_iertr::now();
@@ -1425,12 +1425,12 @@ eagain_ifuture<> InternalNode::try_downgrade_root(
           c.t, get_name(), child->get_name());
     // Invariant, see InternalNode::erase_child()
     // the new internal root should have at least 2 children.
-    assert(child->impl->is_level_tail());
+    ceph_assert(child->impl->is_level_tail());
     if (child->impl->node_type() == node_type_t::INTERNAL) {
       ceph_assert(!child->impl->is_keys_empty());
     }
 
-    assert(tracked_child_nodes.size() == 1);
+    ceph_assert(tracked_child_nodes.size() == 1);
     child->deref_parent();
     auto super_to_move = deref_super();
     child->make_root_from(c, std::move(super_to_move), impl->laddr());
@@ -1450,7 +1450,7 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
   // XXX: check the insert_child is unlinked from this node
 #ifndef NDEBUG
   auto _insert_key = *insert_child->impl->get_pivot_index();
-  assert(insert_key == _insert_key);
+  ceph_assert(insert_key == _insert_key);
 #endif
   auto insert_value = insert_child->impl->laddr();
   auto insert_pos = pos;
@@ -1465,9 +1465,9 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
     // proceed to insert
     [[maybe_unused]] auto p_value = impl->insert(
         insert_key, insert_value, insert_pos, insert_stage, insert_size);
-    assert(impl->free_size() == free_size - insert_size);
-    assert(insert_pos <= pos);
-    assert(p_value->value == insert_value);
+    ceph_assert(impl->free_size() == free_size - insert_size);
+    ceph_assert(insert_pos <= pos);
+    ceph_assert(p_value->value == insert_value);
 
     if (outdated_child) {
       track_insert<false>(insert_pos, insert_stage, insert_child);
@@ -1514,7 +1514,7 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
     auto [split_pos, is_insert_left, p_value] = impl->split_insert(
         fresh_right.mut, *right_node->impl, insert_key, insert_value,
         insert_pos, insert_stage, insert_size);
-    assert(p_value->value == insert_value);
+    ceph_assert(p_value->value == insert_value);
     track_split(split_pos, right_node);
 
     if (outdated_child) {
@@ -1574,8 +1574,8 @@ eagain_ifuture<Ref<Node>> InternalNode::get_or_track_child(
       return child;
     });
   }().si_then([this_ref, this, position, child_addr] (auto child) {
-    assert(child_addr == child->impl->laddr());
-    assert(position == child->parent_info().position);
+    ceph_assert(child_addr == child->impl->laddr());
+    ceph_assert(position == child->parent_info().position);
     std::ignore = position;
     std::ignore = child_addr;
     validate_child_tracked(*child);
@@ -1600,7 +1600,7 @@ void InternalNode::track_insert(
   tracked_child_nodes.erase(first, last);
   for (auto& node : nodes) {
     auto _pos = node->parent_info().position;
-    assert(!_pos.is_end());
+    ceph_assert(!_pos.is_end());
     ++_pos.index_by_stage(insert_stage);
     node->as_child<VALIDATE>(_pos, this);
   }
@@ -1612,7 +1612,7 @@ void InternalNode::track_insert(
   if (nxt_child) {
     auto iter = tracked_child_nodes.find(insert_pos);
     ++iter;
-    assert(iter->second == nxt_child);
+    ceph_assert(iter->second == nxt_child);
   }
 #endif
 }
@@ -1622,10 +1622,10 @@ template void InternalNode::track_insert<false>(const search_position_t&, match_
 void InternalNode::replace_track(
     Ref<Node> new_child, Ref<Node> old_child, bool is_new_child_outdated)
 {
-  assert(!new_child->is_tracked());
+  ceph_assert(!new_child->is_tracked());
   auto& pos = old_child->parent_info().position;
   auto this_ref = old_child->deref_parent();
-  assert(this_ref == this);
+  ceph_assert(this_ref == this);
   if (is_new_child_outdated) {
     // we need to keep track of the outdated child through
     // insert and split.
@@ -1661,7 +1661,7 @@ void InternalNode::track_erase(
     const search_position_t& erase_pos, match_stage_t erase_stage)
 {
   auto first = tracked_child_nodes.lower_bound(erase_pos);
-  assert(first == tracked_child_nodes.end() ||
+  ceph_assert(first == tracked_child_nodes.end() ||
          first->first != erase_pos);
   auto pos_upper_bound = erase_pos;
   pos_upper_bound.index_by_stage(erase_stage) = INDEX_UPPER_BOUND;
@@ -1673,7 +1673,7 @@ void InternalNode::track_erase(
   tracked_child_nodes.erase(first, last);
   for (auto& p_node: p_nodes) {
     auto new_pos = p_node->parent_info().position;
-    assert(new_pos.index_by_stage(erase_stage) > 0);
+    ceph_assert(new_pos.index_by_stage(erase_stage) > 0);
     --new_pos.index_by_stage(erase_stage);
     p_node->as_child<VALIDATE>(new_pos, this);
   }
@@ -1684,18 +1684,18 @@ template void InternalNode::track_erase<false>(const search_position_t&, match_s
 void InternalNode::track_make_tail(const search_position_t& last_pos)
 {
   // assume I'm ref counted by the caller.
-  assert(impl->is_level_tail());
-  assert(!last_pos.is_end());
-  assert(tracked_child_nodes.find(search_position_t::end()) ==
+  ceph_assert(impl->is_level_tail());
+  ceph_assert(!last_pos.is_end());
+  ceph_assert(tracked_child_nodes.find(search_position_t::end()) ==
          tracked_child_nodes.end());
   auto last_it = tracked_child_nodes.find(last_pos);
   if (last_it != tracked_child_nodes.end()) {
-    assert(std::next(last_it) == tracked_child_nodes.end());
+    ceph_assert(std::next(last_it) == tracked_child_nodes.end());
     auto p_last_child = last_it->second;
     tracked_child_nodes.erase(last_it);
     p_last_child->as_child(search_position_t::end(), this);
   } else {
-    assert(tracked_child_nodes.lower_bound(last_pos) ==
+    ceph_assert(tracked_child_nodes.lower_bound(last_pos) ==
            tracked_child_nodes.end());
   }
 }
@@ -1703,42 +1703,42 @@ void InternalNode::track_make_tail(const search_position_t& last_pos)
 void InternalNode::validate_child(const Node& child) const
 {
 #ifndef NDEBUG
-  assert(impl->level() - 1 == child.impl->level());
-  assert(this == child.parent_info().ptr);
+  ceph_assert(impl->level() - 1 == child.impl->level());
+  ceph_assert(this == child.parent_info().ptr);
   auto& child_pos = child.parent_info().position;
   if (child_pos.is_end()) {
-    assert(impl->is_level_tail());
-    assert(child.impl->is_level_tail());
-    assert(impl->get_tail_value()->value == child.impl->laddr());
+    ceph_assert(impl->is_level_tail());
+    ceph_assert(child.impl->is_level_tail());
+    ceph_assert(impl->get_tail_value()->value == child.impl->laddr());
   } else {
-    assert(!child.impl->is_level_tail());
+    ceph_assert(!child.impl->is_level_tail());
     key_view_t index_key;
     const laddr_packed_t* p_child_addr;
     impl->get_slot(child_pos, &index_key, &p_child_addr);
-    assert(index_key == *child.impl->get_pivot_index());
-    assert(p_child_addr->value == child.impl->laddr());
+    ceph_assert(index_key == *child.impl->get_pivot_index());
+    ceph_assert(p_child_addr->value == child.impl->laddr());
   }
   // XXX(multi-type)
-  assert(impl->field_type() <= child.impl->field_type());
+  ceph_assert(impl->field_type() <= child.impl->field_type());
 #endif
 }
 
 void InternalNode::validate_child_inconsistent(const Node& child) const
 {
 #ifndef NDEBUG
-  assert(impl->level() - 1 == child.impl->level());
-  assert(check_is_tracking(child));
+  ceph_assert(impl->level() - 1 == child.impl->level());
+  ceph_assert(check_is_tracking(child));
   auto& child_pos = child.parent_info().position;
   // the tail value has no key to fix
-  assert(!child_pos.is_end());
-  assert(!child.impl->is_level_tail());
+  ceph_assert(!child_pos.is_end());
+  ceph_assert(!child.impl->is_level_tail());
 
   key_view_t current_key;
   const laddr_packed_t* p_value;
   impl->get_slot(child_pos, &current_key, &p_value);
   key_view_t new_key = *child.impl->get_pivot_index();
-  assert(current_key != new_key);
-  assert(p_value->value == child.impl->laddr());
+  ceph_assert(current_key != new_key);
+  ceph_assert(p_value->value == child.impl->laddr());
 #endif
 }
 
@@ -1816,8 +1816,8 @@ eagain_ifuture<Ref<tree_cursor_t>>
 LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
 {
   LOG_PREFIX(OTree::LeafNode::erase);
-  assert(!pos.is_end());
-  assert(!impl->is_keys_empty());
+  ceph_assert(!pos.is_end());
+  ceph_assert(!impl->is_keys_empty());
   Ref<Node> this_ref = this;
   DEBUGT("erase {}'s pos({}), get_next={} ...",
          c.t, get_name(), pos, get_next);
@@ -1840,9 +1840,9 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
         [c, &pos, this_ref = std::move(this_ref), this, FNAME] () mutable {
       assert_moveable(this_ref);
 #ifndef NDEBUG
-      assert(!impl->is_keys_empty());
+      ceph_assert(!impl->is_keys_empty());
       if (impl->has_single_value()) {
-        assert(pos == search_position_t::begin());
+        ceph_assert(pos == search_position_t::begin());
       }
 #endif
       if (!is_root() && impl->has_single_value()) {
@@ -1850,14 +1850,14 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
         // fast path without mutating the extent
         // track_erase
         DEBUGT("{} has one value left, erase ...", c.t, get_name());
-        assert(tracked_cursors.size() == 1);
+        ceph_assert(tracked_cursors.size() == 1);
         auto iter = tracked_cursors.begin();
-        assert(iter->first == pos);
+        ceph_assert(iter->first == pos);
         iter->second->invalidate();
         tracked_cursors.clear();
 
         // no cursor should be referencing this node now, this_ref is the last one.
-        assert(this_ref->use_count() == 1);
+        ceph_assert(this_ref->use_count() == 1);
         return Node::erase_node(c, std::move(this_ref));
       }
 
@@ -1914,7 +1914,7 @@ eagain_ifuture<Ref<tree_cursor_t>>
 LeafNode::lookup_smallest(context_t)
 {
   if (unlikely(impl->is_keys_empty())) {
-    assert(is_root());
+    ceph_assert(is_root());
     return seastar::make_ready_future<Ref<tree_cursor_t>>(
         tree_cursor_t::create_end(this));
   }
@@ -1930,7 +1930,7 @@ eagain_ifuture<Ref<tree_cursor_t>>
 LeafNode::lookup_largest(context_t)
 {
   if (unlikely(impl->is_keys_empty())) {
-    assert(is_root());
+    ceph_assert(is_root());
     return seastar::make_ready_future<Ref<tree_cursor_t>>(
         tree_cursor_t::create_end(this));
   }
@@ -1950,7 +1950,7 @@ LeafNode::lower_bound_tracked(
   auto result = impl->lower_bound(key, history, &index_key);
   Ref<tree_cursor_t> cursor;
   if (result.position.is_end()) {
-    assert(!result.p_value);
+    ceph_assert(!result.p_value);
     cursor = tree_cursor_t::create_end(this);
   } else {
     cursor = get_or_track_cursor(result.position, index_key, result.p_value);
@@ -1976,8 +1976,8 @@ eagain_ifuture<> LeafNode::do_get_tree_stats(context_t, tree_stats_t& stats)
 void LeafNode::track_merge(
     Ref<Node> _right_node, match_stage_t stage, search_position_t& left_last_pos)
 {
-  assert(level() == _right_node->level());
-  // assert(impl->node_type() == _right_node->impl->node_type());
+  ceph_assert(level() == _right_node->level());
+  // ceph_assert(impl->node_type() == _right_node->impl->node_type());
   auto& right_node = *static_cast<LeafNode*>(_right_node.get());
   if (right_node.tracked_cursors.empty()) {
     return;
@@ -2001,8 +2001,8 @@ void LeafNode::track_merge(
     auto rend = right_tracked_cursors.lower_bound(right_pos_until);
     while (rit != rend) {
       auto new_pos = rit->second->get_position();
-      assert(new_pos == rit->first);
-      assert(rit->second->get_leaf_node().get() == &right_node);
+      ceph_assert(new_pos == rit->first);
+      ceph_assert(rit->second->get_leaf_node().get() == &right_node);
       new_pos += left_last_pos;
       auto p_cursor = rit->second;
       rit = right_tracked_cursors.erase(rit);
@@ -2011,7 +2011,7 @@ void LeafNode::track_merge(
     left_last_pos.index_by_stage(curr_stage) = 0;
     ++curr_stage;
   }
-  assert(right_tracked_cursors.empty());
+  ceph_assert(right_tracked_cursors.empty());
 
   validate_tracked_cursors();
 }
@@ -2019,9 +2019,9 @@ void LeafNode::track_merge(
 eagain_ifuture<> LeafNode::test_clone_root(
     context_t c_other, RootNodeTracker& tracker_other) const
 {
-  assert(is_root());
-  assert(impl->is_level_tail());
-  assert(impl->field_type() == field_type_t::N0);
+  ceph_assert(is_root());
+  ceph_assert(impl->is_level_tail());
+  ceph_assert(impl->field_type() == field_type_t::N0);
   Ref<const Node> this_ref = this;
   return LeafNode::allocate(c_other, L_ADDR_MIN, field_type_t::N0, true
   ).si_then([this, c_other, &tracker_other](auto fresh_other) {
@@ -2032,7 +2032,7 @@ eagain_ifuture<> LeafNode::test_clone_root(
       eagain_iertr::pass_further{},
       crimson::ct_error::assert_all{"Invalid error during test clone"}
     ).si_then([c_other, cloned_root](auto&& super_other) {
-      assert(super_other);
+      ceph_assert(super_other);
       cloned_root->make_root_new(c_other, std::move(super_other));
     });
   }).si_then([this_ref]{});
@@ -2046,7 +2046,7 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
   LOG_PREFIX(OTree::LeafNode::insert_value);
 #ifndef NDEBUG
   if (pos.is_end()) {
-    assert(impl->is_level_tail());
+    ceph_assert(impl->is_level_tail());
   }
 #endif
   DEBUGT("insert {} with insert_key={}, insert_value={}, insert_pos({}), "
@@ -2062,9 +2062,9 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
     on_layout_change();
     impl->prepare_mutate(c);
     auto p_value_header = impl->insert(key, vconf, insert_pos, insert_stage, insert_size);
-    assert(impl->free_size() == free_size - insert_size);
-    assert(insert_pos <= pos);
-    assert(p_value_header->payload_size == vconf.payload_size);
+    ceph_assert(impl->free_size() == free_size - insert_size);
+    ceph_assert(insert_pos <= pos);
+    ceph_assert(p_value_header->payload_size == vconf.payload_size);
     auto ret = track_insert(insert_pos, insert_stage, p_value_header);
     validate_tracked_cursors();
     return eagain_iertr::make_ready_future<Ref<tree_cursor_t>>(ret);
@@ -2094,7 +2094,7 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
     auto [split_pos, is_insert_left, p_value_header] = impl->split_insert(
         fresh_right.mut, *right_node->impl, key, vconf,
         insert_pos, insert_stage, insert_size);
-    assert(p_value_header->payload_size == vconf.payload_size);
+    ceph_assert(p_value_header->payload_size == vconf.payload_size);
     track_split(split_pos, right_node);
     Ref<tree_cursor_t> ret;
     if (is_insert_left) {
@@ -2129,7 +2129,7 @@ eagain_ifuture<Ref<LeafNode>> LeafNode::allocate_root(
       crimson::ct_error::input_output_error::assert_failure(fmt::format(
         "{} EIO during get_super()", FNAME).c_str())
     ).si_then([c, root](auto&& super) {
-      assert(super);
+      ceph_assert(super);
       root->make_root_new(c, std::move(super));
       return root;
     });
@@ -2140,8 +2140,8 @@ Ref<tree_cursor_t> LeafNode::get_or_track_cursor(
     const search_position_t& position,
     const key_view_t& key, const value_header_t* p_value_header)
 {
-  assert(!position.is_end());
-  assert(p_value_header);
+  ceph_assert(!position.is_end());
+  ceph_assert(p_value_header);
   Ref<tree_cursor_t> p_cursor;
   auto found = tracked_cursors.find(position);
   if (found == tracked_cursors.end()) {
@@ -2149,8 +2149,8 @@ Ref<tree_cursor_t> LeafNode::get_or_track_cursor(
         this, position, key, p_value_header);
   } else {
     p_cursor = found->second;
-    assert(p_cursor->get_leaf_node() == this);
-    assert(p_cursor->get_position() == position);
+    ceph_assert(p_cursor->get_leaf_node() == this);
+    ceph_assert(p_cursor->get_position() == position);
     p_cursor->update_cache_same_node(key, p_value_header);
   }
   return p_cursor;
@@ -2159,17 +2159,17 @@ Ref<tree_cursor_t> LeafNode::get_or_track_cursor(
 void LeafNode::validate_cursor(const tree_cursor_t& cursor) const
 {
 #ifndef NDEBUG
-  assert(this == cursor.get_leaf_node().get());
-  assert(cursor.is_tracked());
-  assert(!impl->is_extent_retired());
+  ceph_assert(this == cursor.get_leaf_node().get());
+  ceph_assert(cursor.is_tracked());
+  ceph_assert(!impl->is_extent_retired());
 
   // We need to make sure user has freed all the cursors before submitting the
   // according transaction. Otherwise the below checks will have undefined
   // behaviors.
   auto [key, p_value_header] = get_kv(cursor.get_position());
   auto magic = p_value_header->magic;
-  assert(key == cursor.get_key_view(magic));
-  assert(p_value_header == cursor.read_value_header(magic));
+  ceph_assert(key == cursor.get_key_view(magic));
+  ceph_assert(p_value_header == cursor.read_value_header(magic));
 #endif
 }
 
@@ -2219,12 +2219,12 @@ void LeafNode::track_erase(
 {
   // erase tracking and invalidate the erased cursor
   auto to_erase = tracked_cursors.find(erase_pos);
-  assert(to_erase != tracked_cursors.end());
+  ceph_assert(to_erase != tracked_cursors.end());
   to_erase->second->invalidate();
   auto first = tracked_cursors.erase(to_erase);
 
   // update cursor position
-  assert(first == tracked_cursors.lower_bound(erase_pos));
+  ceph_assert(first == tracked_cursors.lower_bound(erase_pos));
   auto pos_upper_bound = erase_pos;
   pos_upper_bound.index_by_stage(erase_stage) = INDEX_UPPER_BOUND;
   auto last = tracked_cursors.lower_bound(pos_upper_bound);
@@ -2235,7 +2235,7 @@ void LeafNode::track_erase(
   tracked_cursors.erase(first, last);
   for (auto& p_cursor : p_cursors) {
     search_position_t new_pos = p_cursor->get_position();
-    assert(new_pos.index_by_stage(erase_stage) > 0);
+    ceph_assert(new_pos.index_by_stage(erase_stage) > 0);
     --new_pos.index_by_stage(erase_stage);
     p_cursor->update_track<true>(this, new_pos);
   }

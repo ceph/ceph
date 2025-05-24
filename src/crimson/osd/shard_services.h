@@ -266,7 +266,7 @@ private:
     meta_coll = std::make_unique<OSDMeta>(std::forward<Args>(args)...);
   }
   OSDMeta &get_meta_coll() {
-    assert(meta_coll);
+    ceph_assert(meta_coll);
     return *meta_coll;
   }
 

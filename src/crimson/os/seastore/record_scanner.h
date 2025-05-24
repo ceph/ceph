@@ -34,7 +34,7 @@ public:
       auto& seg_addr = addr.as_seg_paddr();
       return seg_addr.get_segment_off();
     }
-    assert(addr.is_absolute_random_block());
+    ceph_assert(addr.is_absolute_random_block());
     auto& blk_addr = addr.as_blk_paddr();
     return blk_addr.get_device_off();
   }

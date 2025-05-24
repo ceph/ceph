@@ -193,12 +193,12 @@ public:
 
   public:
     void add_request(ClientRequest &request) {
-      assert(!request.ordering_hook.is_linked());
+      ceph_assert(!request.ordering_hook.is_linked());
       intrusive_ptr_add_ref(&request);
       list.push_back(request);
     }
     void remove_request(ClientRequest &request) {
-      assert(request.ordering_hook.is_linked());
+      ceph_assert(request.ordering_hook.is_linked());
       list.erase(list_t::s_iterator_to(request));
       intrusive_ptr_release(&request);
     }

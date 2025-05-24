@@ -50,7 +50,7 @@ class Super {
   Super& operator=(const Super&) = delete;
   Super& operator=(Super&&) = delete;
   virtual ~Super() {
-    assert(tracked_root_node == nullptr);
+    ceph_assert(tracked_root_node == nullptr);
     tracker.do_untrack_super(t, *this);
   }
 
@@ -58,15 +58,15 @@ class Super {
   virtual void write_root_laddr(context_t, laddr_t) = 0;
 
   void do_track_root(Node& root) {
-    assert(tracked_root_node == nullptr);
+    ceph_assert(tracked_root_node == nullptr);
     tracked_root_node = &root;
   }
   void do_untrack_root(Node& root) {
-    assert(tracked_root_node == &root);
+    ceph_assert(tracked_root_node == &root);
     tracked_root_node = nullptr;
   }
   Node* get_p_root() const {
-    assert(tracked_root_node != nullptr);
+    ceph_assert(tracked_root_node != nullptr);
     return tracked_root_node;
   }
 
@@ -90,18 +90,18 @@ class Super {
  */
 class RootNodeTrackerIsolated final : public RootNodeTracker {
  public:
-  ~RootNodeTrackerIsolated() override { assert(is_clean()); }
+  ~RootNodeTrackerIsolated() override { ceph_assert(is_clean()); }
  protected:
   bool is_clean() const override {
     return tracked_supers.empty();
   }
   void do_track_super(Transaction& t, Super& super) override {
-    assert(tracked_supers.find(&t) == tracked_supers.end());
+    ceph_assert(tracked_supers.find(&t) == tracked_supers.end());
     tracked_supers[&t] = &super;
   }
   void do_untrack_super(Transaction& t, Super& super) override {
     [[maybe_unused]] auto removed = tracked_supers.erase(&t);
-    assert(removed);
+    ceph_assert(removed);
   }
   ::Ref<Node> get_root(Transaction& t) const override;
   std::map<Transaction*, Super*> tracked_supers;
@@ -115,17 +115,17 @@ class RootNodeTrackerIsolated final : public RootNodeTracker {
  */
 class RootNodeTrackerShared final : public RootNodeTracker {
  public:
-  ~RootNodeTrackerShared() override { assert(is_clean()); }
+  ~RootNodeTrackerShared() override { ceph_assert(is_clean()); }
  protected:
   bool is_clean() const override {
     return tracked_super == nullptr;
   }
   void do_track_super(Transaction&, Super& super) override {
-    assert(is_clean());
+    ceph_assert(is_clean());
     tracked_super = &super;
   }
   void do_untrack_super(Transaction&, Super& super) override {
-    assert(tracked_super == &super);
+    ceph_assert(tracked_super == &super);
     tracked_super = nullptr;
   }
   ::Ref<Node> get_root(Transaction&) const override;

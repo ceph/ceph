@@ -84,7 +84,7 @@ public:
 
   void close() {
     if (!detailed) {
-      assert(reserved_extent_tracker.size() == 0);
+      ceph_assert(reserved_extent_tracker.size() == 0);
     }
     extent_size_tree.clear();
     extent_tree.clear_and_dispose(dispose_rs{});
@@ -106,7 +106,7 @@ public:
 
   void complete_allocation(rbm_abs_addr start, size_t size) final {
     if (detailed) {
-      assert(reserved_extent_tracker.contains(start, size));
+      ceph_assert(reserved_extent_tracker.contains(start, size));
       reserved_extent_tracker.erase(start, size);
     }
   }

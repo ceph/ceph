@@ -122,8 +122,8 @@ struct OMapNode : LogicalChildNode {
     const ceph::bufferlist &value) const = 0;
 
   void init_range(std::string _begin, std::string _end) {
-    assert(begin.empty());
-    assert(end.empty());
+    ceph_assert(begin.empty());
+    ceph_assert(end.empty());
     if (_begin == BEGIN_KEY && _end == END_KEY) {
       root = true;
     }

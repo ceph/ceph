@@ -56,7 +56,7 @@ public:
   }
 
   bool is_shutdown() const {
-    assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     return socket_is_shutdown;
   }
 
@@ -64,7 +64,7 @@ public:
   // unfortunately, there's no way to identify which port I'm using as
   // connector with current seastar interface.
   void learn_ephemeral_port_as_connector(uint16_t port) {
-    assert(side == side_t::connector &&
+    ceph_assert(side == side_t::connector &&
            (ephemeral_port == 0 || ephemeral_port == port));
     ephemeral_port = port;
   }
@@ -95,20 +95,20 @@ public:
 
   // shutdown for tests
   void force_shutdown() {
-    assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     socket.shutdown_input();
     socket.shutdown_output();
   }
 
   // shutdown input_stream only, for tests
   void force_shutdown_in() {
-    assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     socket.shutdown_input();
   }
 
   // shutdown output_stream only, for tests
   void force_shutdown_out() {
-    assert(seastar::this_shard_id() == sid);
+    ceph_assert(seastar::this_shard_id() == sid);
     socket.shutdown_output();
   }
 

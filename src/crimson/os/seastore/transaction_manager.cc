@@ -88,7 +88,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
       }),
       mkfs_ertr::pass_further{}
     ).finally([this] {
-      assert(shard_stats.pending_io_num);
+      ceph_assert(shard_stats.pending_io_num);
       --(shard_stats.pending_io_num);
       // XXX: it's wrong to assume no failure,
       // but failure leads to fatal error
@@ -151,19 +151,19 @@ TransactionManager::mount()
             extent_len_t len,
             extent_types_t type,
             laddr_t laddr) {
-          assert(paddr.is_absolute());
+          ceph_assert(paddr.is_absolute());
           if (is_backref_node(type)) {
-            assert(laddr == L_ADDR_NULL);
-	    assert(backref_key.is_absolute() || backref_key == P_ADDR_MIN);
+            ceph_assert(laddr == L_ADDR_NULL);
+	    ceph_assert(backref_key.is_absolute() || backref_key == P_ADDR_MIN);
             backref_manager->cache_new_backref_extent(paddr, backref_key, type);
             cache->update_tree_extents_num(type, 1);
             epm->mark_space_used(paddr, len);
           } else if (laddr == L_ADDR_NULL) {
-	    assert(backref_key == P_ADDR_NULL);
+	    ceph_assert(backref_key == P_ADDR_NULL);
             cache->update_tree_extents_num(type, -1);
             epm->mark_space_free(paddr, len);
           } else {
-	    assert(backref_key == P_ADDR_NULL);
+	    ceph_assert(backref_key == P_ADDR_NULL);
             cache->update_tree_extents_num(type, 1);
             epm->mark_space_used(paddr, len);
           }
@@ -316,7 +316,7 @@ TransactionManager::update_lba_mappings(
         return;
       }
       if (extent->is_logical()) {
-        assert(is_logical_type(extent->get_type()));
+        ceph_assert(is_logical_type(extent->get_type()));
         // for rewritten extents, last_committed_crc should have been set
         // because the crc of the original extent may be reused.
         // also see rewrite_logical_extent()
@@ -329,14 +329,14 @@ TransactionManager::update_lba_mappings(
 	}
 #ifndef NDEBUG
 	if (get_checksum_needed(extent->get_paddr())) {
-	  assert(extent->get_last_committed_crc() == extent->calc_crc32c());
+	  ceph_assert(extent->get_last_committed_crc() == extent->calc_crc32c());
 	} else {
-	  assert(extent->get_last_committed_crc() == CRC_NULL);
+	  ceph_assert(extent->get_last_committed_crc() == CRC_NULL);
 	}
 #endif
         lextents.emplace_back(extent->template cast<LogicalChildNode>());
       } else {
-        assert(is_physical_type(extent->get_type()));
+        ceph_assert(is_physical_type(extent->get_type()));
         pextents.emplace_back(extent);
       }
     };
@@ -357,7 +357,7 @@ TransactionManager::update_lba_mappings(
       t, lextents
     ).si_then([&pextents, this] {
       for (auto &extent : pextents) {
-        assert(!extent->is_logical() && extent->is_valid());
+        ceph_assert(!extent->is_logical() && extent->is_valid());
         // for non-logical extents, we update its last_committed_crc
         // and in-extent checksum fields
         // For pre-allocated fresh physical extents, update in-extent crc.
@@ -497,7 +497,7 @@ TransactionManager::rewrite_logical_extent(
   }
 
   if (get_extent_category(extent->get_type()) == data_category_t::METADATA) {
-    assert(extent->is_fully_loaded());
+    ceph_assert(extent->is_fully_loaded());
     cache->retire_extent(t, extent);
     auto nextent = cache->alloc_new_non_data_extent_by_type(
       t,
@@ -512,9 +512,9 @@ TransactionManager::rewrite_logical_extent(
 
 #ifndef NDEBUG
     if (get_checksum_needed(extent->get_paddr())) {
-      assert(extent->get_last_committed_crc() == extent->calc_crc32c());
+      ceph_assert(extent->get_last_committed_crc() == extent->calc_crc32c());
     } else {
-      assert(extent->get_last_committed_crc() == CRC_NULL);
+      ceph_assert(extent->get_last_committed_crc() == CRC_NULL);
     }
 #endif
     nextent->set_last_committed_crc(extent->get_last_committed_crc());
@@ -530,12 +530,12 @@ TransactionManager::rewrite_logical_extent(
       *nextent
     ).discard_result();
   } else {
-    assert(get_extent_category(extent->get_type()) == data_category_t::DATA);
+    ceph_assert(get_extent_category(extent->get_type()) == data_category_t::DATA);
     auto length = extent->get_length();
     return cache->read_extent_maybe_partial(
       t, std::move(extent), 0, length
     ).si_then([this, FNAME, &t](auto extent) {
-      assert(extent->is_fully_loaded());
+      ceph_assert(extent->is_fully_loaded());
       cache->retire_extent(t, extent);
       auto extents = cache->alloc_new_data_extents_by_type(
         t,
@@ -568,7 +568,7 @@ TransactionManager::rewrite_logical_extent(
            * avoid this complication. */
           auto fut = base_iertr::now();
           if (first_extent) {
-            assert(off == 0);
+            ceph_assert(off == 0);
             fut = lba_manager->update_mapping(
               t,
               extent->get_laddr(),
@@ -628,9 +628,9 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
     ceph_assert(!extent->is_pending_io());
   }
 
-  assert(extent->is_valid() && !extent->is_initial_pending());
+  ceph_assert(extent->is_valid() && !extent->is_initial_pending());
   if (extent->is_dirty()) {
-    assert(extent->get_version() > 0);
+    ceph_assert(extent->get_version() > 0);
     if (is_root_type(extent->get_type())) {
       // pass
     } else if (extent->get_version() == 1 && extent->is_mutation_pending()) {
@@ -649,11 +649,11 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
     }
     extent->set_target_rewrite_generation(INIT_GENERATION);
   } else {
-    assert(!is_root_type(extent->get_type()));
+    ceph_assert(!is_root_type(extent->get_type()));
     extent->set_target_rewrite_generation(target_generation);
     ceph_assert(modify_time != NULL_TIME);
     extent->set_modify_time(modify_time);
-    assert(extent->get_version() == 0);
+    ceph_assert(extent->get_version() == 0);
     t.get_rewrite_stats().account_n_dirty();
   }
 
@@ -665,12 +665,12 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
 
   auto fut = rewrite_extent_iertr::now();
   if (extent->is_logical()) {
-    assert(is_logical_type(extent->get_type()));
+    ceph_assert(is_logical_type(extent->get_type()));
     fut = rewrite_logical_extent(t, extent->cast<LogicalChildNode>());
   } else if (is_backref_node(extent->get_type())) {
     fut = backref_manager->rewrite_extent(t, extent);
   } else {
-    assert(is_lba_node(extent->get_type()));
+    ceph_assert(is_lba_node(extent->get_type()));
     fut = lba_manager->rewrite_extent(t, extent);
   }
   return fut.si_then([FNAME, &t] {
@@ -699,7 +699,7 @@ TransactionManager::get_extents_if_live(
     if (extent) {
       DEBUGT("{} {}~0x{:x} {} is cached and alive -- {}",
              t, type, laddr, len, paddr, *extent);
-      assert(extent->get_length() == len);
+      ceph_assert(extent->get_length() == len);
       std::list<CachedExtentRef> res;
       res.emplace_back(std::move(extent));
       return get_extents_if_live_ret(

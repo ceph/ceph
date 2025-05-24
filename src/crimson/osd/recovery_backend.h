@@ -46,7 +46,7 @@ public:
   virtual ~RecoveryBackend() {}
   std::pair<WaitForObjectRecovery&, bool> add_recovering(const hobject_t& soid) {
     auto [it, added] = recovering.emplace(soid, new WaitForObjectRecovery(pg));
-    assert(it->second);
+    ceph_assert(it->second);
     return {*(it->second), added};
   }
   seastar::future<> add_unfound(const hobject_t &soid) {
@@ -62,7 +62,7 @@ public:
     }
   }
   WaitForObjectRecovery& get_recovering(const hobject_t& soid) {
-    assert(is_recovering(soid));
+    ceph_assert(is_recovering(soid));
     return *(recovering.at(soid));
   }
   void remove_recovering(const hobject_t& soid) {

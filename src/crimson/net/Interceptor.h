@@ -26,7 +26,7 @@ inline const char* get_bp_name(custom_bp_t bp) {
                                          "BANNER_PAYLOAD_READ",
                                          "SOCKET_CONNECTING",
                                          "SOCKET_ACCEPTED"};
-  assert(index < std::size(bp_names));
+  ceph_assert(index < std::size(bp_names));
   return bp_names[index];
 }
 
@@ -144,7 +144,7 @@ struct fmt::formatter<crimson::net::bp_action_t> : fmt::formatter<std::string_vi
                                                "FAULT",
                                                "BLOCK",
                                                "STALL"};
-    assert(static_cast<size_t>(action) < std::size(action_names));
+    ceph_assert(static_cast<size_t>(action) < std::size(action_names));
     return formatter<std::string_view>::format(action_names[static_cast<size_t>(action)], ctx);
   }
 };
@@ -178,7 +178,7 @@ struct fmt::formatter<crimson::net::Breakpoint> : fmt::formatter<std::string_vie
                                             "KEEPALIVE2",
                                             "KEEPALIVE2_ACK",
                                             "ACK"};
-    assert(static_cast<size_t>(tag_bp.tag) < std::size(tag_names));
+    ceph_assert(static_cast<size_t>(tag_bp.tag) < std::size(tag_names));
     return fmt::format_to(ctx.out(), "{}_{}",
 			  tag_names[static_cast<size_t>(tag_bp.tag)],
 			  tag_bp.type == crimson::net::bp_type_t::WRITE ? "WRITE" : "READ");

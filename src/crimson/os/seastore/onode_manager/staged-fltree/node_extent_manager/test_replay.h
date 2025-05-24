@@ -19,19 +19,19 @@ class TestReplayExtent final: public NodeExtent {
   using Ref = crimson::os::seastore::TCachedExtentRef<TestReplayExtent>;
 
   void prepare_replay(NodeExtentRef from_extent) {
-    assert(get_length() == from_extent->get_length());
+    ceph_assert(get_length() == from_extent->get_length());
     auto mut = do_get_mutable();
     std::memcpy(mut.get_write(), from_extent->get_read(), get_length());
   }
 
   void replay_and_verify(NodeExtentRef replayed_extent) {
-    assert(get_length() == replayed_extent->get_length());
+    ceph_assert(get_length() == replayed_extent->get_length());
     auto mut = do_get_mutable();
     auto bl = recorder->get_delta();
-    assert(bl.length());
+    ceph_assert(bl.length());
     auto p = bl.cbegin();
     recorder->apply_delta(p, mut, *this);
-    assert(p == bl.end());
+    ceph_assert(p == bl.end());
     auto cmp = std::memcmp(get_read(), replayed_extent->get_read(), get_length());
     ceph_assert(cmp == 0 && "replay mismatch!");
   }

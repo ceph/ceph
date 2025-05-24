@@ -221,7 +221,7 @@ FLTreeOnodeManager::erase_onode_ret FLTreeOnodeManager::erase_onode(
   OnodeRef &onode)
 {
   auto &flonode = static_cast<FLTreeOnode&>(*onode);
-  assert(flonode.is_alive());
+  ceph_assert(flonode.is_alive());
   flonode.mark_delete();
   return tree.erase(trans, flonode);
 }

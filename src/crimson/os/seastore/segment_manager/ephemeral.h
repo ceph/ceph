@@ -72,7 +72,7 @@ class EphemeralSegmentManager final : public SegmentManager {
   std::optional<device_config_t> device_config;
 
   device_type_t get_device_type() const final {
-    assert(device_config);
+    ceph_assert(device_config);
     return device_config->spec.dtype;
   }
 
@@ -102,7 +102,7 @@ public:
   }
 
   device_id_t get_device_id() const final {
-    assert(device_config);
+    ceph_assert(device_config);
     return device_config->spec.id;
   }
 
@@ -132,12 +132,12 @@ public:
   }
 
   const seastore_meta_t &get_meta() const final {
-    assert(device_config);
+    ceph_assert(device_config);
     return device_config->meta;
   }
 
   secondary_device_set_t& get_secondary_devices() final {
-    assert(device_config);
+    ceph_assert(device_config);
     return device_config->secondary_devices;
   }
 

@@ -29,27 +29,27 @@ public:
   ~BackrefMapping() = default;
 
   bool is_viewable() const {
-    assert(cursor);
+    ceph_assert(cursor);
     return cursor->is_viewable();
   }
 
   extent_len_t get_length() const {
-    assert(cursor);
+    ceph_assert(cursor);
     return cursor->get_length();
   }
 
   laddr_t get_val() const {
-    assert(cursor);
+    ceph_assert(cursor);
     return cursor->get_laddr();
   }
 
   paddr_t get_key() const {
-    assert(cursor);
+    ceph_assert(cursor);
     return cursor->get_paddr();
   }
 
   extent_types_t get_type() const {
-    assert(cursor);
+    ceph_assert(cursor);
     return cursor->get_type();
   }
 };

@@ -19,7 +19,7 @@ namespace crimson::os::seastore {
 device_config_t get_rbm_ephemeral_device_config(
     std::size_t index, std::size_t num_devices)
 {
-  assert(num_devices > index);
+  ceph_assert(num_devices > index);
   magic_t magic = 0xfffa;
   auto type = device_type_t::RANDOM_BLOCK_EPHEMERAL;
   bool is_major_device;
@@ -49,7 +49,7 @@ device_config_t get_rbm_ephemeral_device_config(
 paddr_t BlockRBManager::alloc_extent(size_t size)
 {
   LOG_PREFIX(BlockRBManager::alloc_extent);
-  assert(allocator);
+  ceph_assert(allocator);
   auto alloc = allocator->alloc_extent(size);
   if (!alloc) {
     return P_ADDR_NULL;
@@ -69,7 +69,7 @@ BlockRBManager::allocate_ret_bare
 BlockRBManager::alloc_extents(size_t size)
 {
   LOG_PREFIX(BlockRBManager::alloc_extents);
-  assert(allocator);
+  ceph_assert(allocator);
   auto alloc = allocator->alloc_extents(size);
   if (!alloc) {
     return {};
@@ -96,16 +96,16 @@ BlockRBManager::alloc_extents(size_t size)
 void BlockRBManager::complete_allocation(
     paddr_t paddr, size_t size)
 {
-  assert(allocator);
+  ceph_assert(allocator);
   rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
   allocator->complete_allocation(addr, size);
 }
 
 BlockRBManager::open_ertr::future<> BlockRBManager::open()
 {
-  assert(device);
-  assert(device->get_available_size() > 0);
-  assert(device->get_block_size() > 0);
+  ceph_assert(device);
+  ceph_assert(device->get_available_size() > 0);
+  ceph_assert(device->get_block_size() > 0);
   auto ool_start = get_start_rbm_addr();
   allocator->init(
     ool_start,

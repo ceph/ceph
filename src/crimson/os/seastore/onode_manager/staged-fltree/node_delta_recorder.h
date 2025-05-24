@@ -33,7 +33,7 @@ class DeltaRecorder {
   }
 
   ValueDeltaRecorder* get_value_recorder() const {
-    assert(value_recorder);
+    ceph_assert(value_recorder);
     return value_recorder.get();
   }
 

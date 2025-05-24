@@ -18,8 +18,8 @@ seastar::future<> TMDriver::write(
   bufferptr ptr)
 {
   logger().debug("Writing offset {}", offset);
-  assert(offset % device->get_block_size() == 0);
-  assert((ptr.length() % device->get_block_size()) == 0);
+  ceph_assert(offset % device->get_block_size() == 0);
+  ceph_assert((ptr.length() % device->get_block_size()) == 0);
   return seastar::do_with(ptr, [this, offset](auto& ptr) {
     return repeat_eagain([this, offset, &ptr] {
       return tm->with_transaction_intr(
@@ -41,13 +41,13 @@ seastar::future<> TMDriver::write(
 	  auto left = ptr.length();
 	  size_t written = 0;
 	  for (auto &ext : extents) {
-	    assert(ext->get_laddr() == laddr_t::from_byte_offset(off));
-	    assert(ext->get_bptr().length() <= left);
+	    ceph_assert(ext->get_laddr() == laddr_t::from_byte_offset(off));
+	    ceph_assert(ext->get_bptr().length() <= left);
 	    ptr.copy_out(written, ext->get_length(), ext->get_bptr().c_str());
 	    off += ext->get_length();
 	    left -= ext->get_length();
 	  }
-	  assert(!left);
+	  ceph_assert(!left);
           logger().debug("submitting transaction");
           return tm->submit_transaction(t);
         });
@@ -84,8 +84,8 @@ TMDriver::read_extents_ret TMDriver::read_extents(
 	      t,
 	      std::move(pin)
 	    ).si_then([&ret](auto maybe_indirect_extent) mutable {
-	      assert(!maybe_indirect_extent.is_indirect());
-	      assert(!maybe_indirect_extent.is_clone);
+	      ceph_assert(!maybe_indirect_extent.is_indirect());
+	      ceph_assert(!maybe_indirect_extent.is_clone);
 	      auto& e = maybe_indirect_extent.extent;
 	      ret.push_back(std::make_pair(e->get_laddr(), e));
 	      logger().debug(
@@ -105,8 +105,8 @@ seastar::future<bufferlist> TMDriver::read(
   size_t size)
 {
   logger().debug("Reading offset {}", offset);
-  assert(offset % device->get_block_size() == 0);
-  assert(size % device->get_block_size() == 0);
+  ceph_assert(offset % device->get_block_size() == 0);
+  ceph_assert(size % device->get_block_size() == 0);
   auto blptrret = std::make_unique<bufferlist>();
   auto &blret = *blptrret;
   return repeat_eagain([=, &blret, this] {
@@ -121,7 +121,7 @@ seastar::future<bufferlist> TMDriver::read(
         auto cur = laddr_t::from_byte_offset(offset);
         for (auto &i: ext_list) {
           if (cur != i.first) {
-            assert(cur < i.first);
+            ceph_assert(cur < i.first);
             blret.append_zero(i.first.template get_byte_distance<size_t>(cur));
             cur = i.first;
           }
@@ -129,7 +129,7 @@ seastar::future<bufferlist> TMDriver::read(
 	  cur = (cur + i.second->get_bptr().length()).checked_to_laddr();
         }
         if (blret.length() != size) {
-          assert(blret.length() < size);
+          ceph_assert(blret.length() < size);
           blret.append_zero(size - blret.length());
         }
       });
@@ -166,7 +166,7 @@ size_t TMDriver::get_size() const
 
 seastar::future<> TMDriver::mkfs()
 {
-  assert(config.path);
+  ceph_assert(config.path);
   logger().debug("mkfs");
   return Device::make_device(*config.path, device_type_t::SSD
   ).then([this](DeviceRef dev) {

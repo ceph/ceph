@@ -77,13 +77,13 @@ public:
   write_ertr::future<> write(rbm_abs_addr addr, bufferlist &bl);
 
   device_id_t get_device_id() const final {
-    assert(device);
+    ceph_assert(device);
     return device->get_device_id();
   }
 
   uint64_t get_free_blocks() const final { 
     // TODO: return correct free blocks after block allocator is introduced
-    assert(device);
+    ceph_assert(device);
     return get_size() / get_block_size();
   }
   const seastore_meta_t &get_meta() const final {
@@ -94,17 +94,17 @@ public:
   }
 
   void mark_space_used(paddr_t paddr, size_t len) final {
-    assert(allocator);
+    ceph_assert(allocator);
     rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
-    assert(addr >= get_start_rbm_addr() &&
+    ceph_assert(addr >= get_start_rbm_addr() &&
 	   addr + len <= device->get_shard_end());
     allocator->mark_extent_used(addr, len);
   }
 
   void mark_space_free(paddr_t paddr, size_t len) final {
-    assert(allocator);
+    ceph_assert(allocator);
     rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
-    assert(addr >= get_start_rbm_addr() &&
+    ceph_assert(addr >= get_start_rbm_addr() &&
 	   addr + len <= device->get_shard_end());
     allocator->free_extent(addr, len);
   }
@@ -116,9 +116,9 @@ public:
   }
 
   rbm_extent_state_t get_extent_state(paddr_t paddr, size_t size) final {
-    assert(allocator);
+    ceph_assert(allocator);
     rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
-    assert(addr >= get_start_rbm_addr() &&
+    ceph_assert(addr >= get_start_rbm_addr() &&
 	   addr + size <= device->get_shard_end());
     return allocator->get_extent_state(addr, size);
   }

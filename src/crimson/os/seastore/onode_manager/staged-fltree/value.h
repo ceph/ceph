@@ -197,7 +197,7 @@ class Value {
 
   /// Returns the value payload size.
   value_size_t get_payload_size() const {
-    assert(is_tracked());
+    ceph_assert(is_tracked());
     return read_value_header()->payload_size;
   }
 
@@ -219,13 +219,13 @@ class Value {
   template <typename PayloadT, typename ValueDeltaRecorderT>
   std::pair<NodeExtentMutable&, ValueDeltaRecorderT*>
   prepare_mutate_payload(Transaction& t) {
-    assert(is_tracked());
-    assert(sizeof(PayloadT) <= get_payload_size());
+    ceph_assert(is_tracked());
+    ceph_assert(sizeof(PayloadT) <= get_payload_size());
 
     auto value_mutable = do_prepare_mutate_payload(t);
-    assert(value_mutable.first.get_write() ==
+    ceph_assert(value_mutable.first.get_write() ==
            const_cast<const Value*>(this)->template read_payload<char>());
-    assert(value_mutable.first.get_length() == get_payload_size());
+    ceph_assert(value_mutable.first.get_length() == get_payload_size());
     return {value_mutable.first,
             static_cast<ValueDeltaRecorderT*>(value_mutable.second)};
   }
@@ -233,10 +233,10 @@ class Value {
   /// Get the latest payload pointer for read.
   template <typename PayloadT>
   const PayloadT* read_payload() const {
-    assert(is_tracked());
+    ceph_assert(is_tracked());
     // see Value documentation
     static_assert(alignof(PayloadT) == 1);
-    assert(sizeof(PayloadT) <= get_payload_size());
+    ceph_assert(sizeof(PayloadT) <= get_payload_size());
     return reinterpret_cast<const PayloadT*>(read_value_header()->get_payload());
   }
 
@@ -308,7 +308,7 @@ struct ValueBuilderImpl final : public ValueBuilder {
   build_value_recorder(ceph::bufferlist& encoded) const override {
     std::unique_ptr<ValueDeltaRecorder> ret =
       std::make_unique<typename ValueImpl::Recorder>(encoded);
-    assert(ret->get_header_magic() == get_header_magic());
+    ceph_assert(ret->get_header_magic() == get_header_magic());
     return ret;
   }
 
@@ -316,7 +316,7 @@ struct ValueBuilderImpl final : public ValueBuilder {
 			NodeExtentManager& nm,
                         const ValueBuilder& vb,
                         Ref<tree_cursor_t>& p_cursor) const {
-    assert(vb.get_header_magic() == get_header_magic());
+    ceph_assert(vb.get_header_magic() == get_header_magic());
     return ValueImpl(hobj, nm, vb, p_cursor);
   }
 };

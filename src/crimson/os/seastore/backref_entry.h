@@ -31,7 +31,7 @@ struct backref_entry_t {
       laddr(laddr),
       len(len),
       type(type) {
-    assert(len > 0);
+    ceph_assert(len > 0);
   }
   paddr_t paddr = P_ADDR_NULL;
   laddr_t laddr = L_ADDR_NULL;
@@ -87,8 +87,8 @@ struct backref_entry_t {
       const laddr_t& laddr,
       extent_len_t len,
       extent_types_t type) {
-    assert(is_backref_mapped_type(type));
-    assert(laddr != L_ADDR_NULL);
+    ceph_assert(is_backref_mapped_type(type));
+    ceph_assert(laddr != L_ADDR_NULL);
     return std::make_unique<backref_entry_t>(
       paddr, laddr, len, type);
   }
@@ -97,7 +97,7 @@ struct backref_entry_t {
       const paddr_t& paddr,
       extent_len_t len,
       extent_types_t type) {
-    assert(is_backref_mapped_type(type) ||
+    ceph_assert(is_backref_mapped_type(type) ||
 	   is_retired_placeholder_type(type));
     return std::make_unique<backref_entry_t>(
       paddr, L_ADDR_NULL, len, type);

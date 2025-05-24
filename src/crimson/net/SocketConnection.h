@@ -120,12 +120,12 @@ class SocketConnection : public Connection {
   }
 
   user_private_t &get_user_private() override {
-    assert(has_user_private());
+    ceph_assert(has_user_private());
     return *user_private;
   }
 
   void set_user_private(std::unique_ptr<user_private_t> new_user_private) override {
-    assert(!has_user_private());
+    ceph_assert(!has_user_private());
     user_private = std::move(new_user_private);
   }
 

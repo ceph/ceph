@@ -51,31 +51,31 @@ bool SocketConnection::is_connected() const
 #ifdef UNIT_TESTS_BUILT
 bool SocketConnection::is_protocol_ready() const
 {
-  assert(seastar::this_shard_id() == msgr_sid);
+  ceph_assert(seastar::this_shard_id() == msgr_sid);
   return protocol->is_ready();
 }
 
 bool SocketConnection::is_protocol_standby() const {
-  assert(seastar::this_shard_id() == msgr_sid);
+  ceph_assert(seastar::this_shard_id() == msgr_sid);
   return protocol->is_standby();
 }
 
 bool SocketConnection::is_protocol_closed() const
 {
-  assert(seastar::this_shard_id() == msgr_sid);
+  ceph_assert(seastar::this_shard_id() == msgr_sid);
   return protocol->is_closed();
 }
 
 bool SocketConnection::is_protocol_closed_clean() const
 {
-  assert(seastar::this_shard_id() == msgr_sid);
+  ceph_assert(seastar::this_shard_id() == msgr_sid);
   return protocol->is_closed_clean();
 }
 
 #endif
 bool SocketConnection::peer_wins() const
 {
-  assert(seastar::this_shard_id() == msgr_sid);
+  ceph_assert(seastar::this_shard_id() == msgr_sid);
   return (messenger.get_myaddr() > peer_addr || policy.server);
 }
 
@@ -115,7 +115,7 @@ void
 SocketConnection::start_connect(const entity_addr_t& _peer_addr,
                                 const entity_name_t& _peer_name)
 {
-  assert(seastar::this_shard_id() == msgr_sid);
+  ceph_assert(seastar::this_shard_id() == msgr_sid);
   protocol->start_connect(_peer_addr, _peer_name);
 }
 
@@ -123,26 +123,26 @@ void
 SocketConnection::start_accept(SocketFRef&& sock,
                                const entity_addr_t& _peer_addr)
 {
-  assert(seastar::this_shard_id() == msgr_sid);
+  ceph_assert(seastar::this_shard_id() == msgr_sid);
   protocol->start_accept(std::move(sock), _peer_addr);
 }
 
 seastar::future<>
 SocketConnection::close_clean_yielded()
 {
-  assert(seastar::this_shard_id() == msgr_sid);
+  ceph_assert(seastar::this_shard_id() == msgr_sid);
   return protocol->close_clean_yielded();
 }
 
 seastar::socket_address SocketConnection::get_local_address() const {
-  assert(seastar::this_shard_id() == msgr_sid);
+  ceph_assert(seastar::this_shard_id() == msgr_sid);
   return socket->get_local_address();
 }
 
 ConnectionRef
 SocketConnection::get_local_shared_foreign_from_this()
 {
-  assert(seastar::this_shard_id() == msgr_sid);
+  ceph_assert(seastar::this_shard_id() == msgr_sid);
   return make_local_shared_foreign(
       seastar::make_foreign(shared_from_this()));
 }
@@ -150,7 +150,7 @@ SocketConnection::get_local_shared_foreign_from_this()
 SocketMessenger &
 SocketConnection::get_messenger() const
 {
-  assert(seastar::this_shard_id() == msgr_sid);
+  ceph_assert(seastar::this_shard_id() == msgr_sid);
   return messenger;
 }
 
@@ -161,40 +161,40 @@ SocketConnection::get_messenger_shard_id() const
 }
 
 void SocketConnection::set_peer_type(entity_type_t peer_type) {
-  assert(seastar::this_shard_id() == msgr_sid);
+  ceph_assert(seastar::this_shard_id() == msgr_sid);
   // it is not allowed to assign an unknown value when the current
   // value is known
-  assert(!(peer_type == 0 &&
+  ceph_assert(!(peer_type == 0 &&
            peer_name.type() != 0));
   // it is not allowed to assign a different known value when the
   // current value is also known.
-  assert(!(peer_type != 0 &&
+  ceph_assert(!(peer_type != 0 &&
            peer_name.type() != 0 &&
            peer_type != peer_name.type()));
   peer_name._type = peer_type;
 }
 
 void SocketConnection::set_peer_id(int64_t peer_id) {
-  assert(seastar::this_shard_id() == msgr_sid);
+  ceph_assert(seastar::this_shard_id() == msgr_sid);
   // it is not allowed to assign an unknown value when the current
   // value is known
-  assert(!(peer_id == entity_name_t::NEW &&
+  ceph_assert(!(peer_id == entity_name_t::NEW &&
            peer_name.num() != entity_name_t::NEW));
   // it is not allowed to assign a different known value when the
   // current value is also known.
-  assert(!(peer_id != entity_name_t::NEW &&
+  ceph_assert(!(peer_id != entity_name_t::NEW &&
            peer_name.num() != entity_name_t::NEW &&
            peer_id != peer_name.num()));
   peer_name._num = peer_id;
 }
 
 void SocketConnection::set_features(uint64_t f) {
-  assert(seastar::this_shard_id() == msgr_sid);
+  ceph_assert(seastar::this_shard_id() == msgr_sid);
   features = f;
 }
 
 void SocketConnection::set_socket(Socket *s) {
-  assert(seastar::this_shard_id() == msgr_sid);
+  ceph_assert(seastar::this_shard_id() == msgr_sid);
   socket = s;
 }
 

@@ -60,11 +60,11 @@ void AvlAllocator::_remove_from_tree(rbm_abs_addr start, rbm_abs_addr size)
     available_size += r->length();
     _extent_size_tree_try_insert(*rs);
   } else if (left_over) {
-    assert(is_aligned(start, block_size));
+    ceph_assert(is_aligned(start, block_size));
     rs->end = start;
     _extent_size_tree_try_insert(*rs);
   } else if (right_over) {
-    assert(is_aligned(end, block_size));
+    ceph_assert(is_aligned(end, block_size));
     rs->start = end;
     _extent_size_tree_try_insert(*rs);
   } else {
@@ -78,7 +78,7 @@ rbm_abs_addr AvlAllocator::find_block(size_t size)
   auto iter = extent_size_tree.lower_bound(
     extent_range_t{base_addr, base_addr + size}, comp);
   for (; iter != extent_size_tree.end(); ++iter) {
-    assert(is_aligned(iter->start, block_size));
+    ceph_assert(is_aligned(iter->start, block_size));
     rbm_abs_addr off = iter->start;
     if (off + size <= iter->end) {
       return off;
@@ -97,7 +97,7 @@ extent_len_t AvlAllocator::find_block(
     max_size = p->end - p->start;
   }
 
-  assert(max_size);
+  ceph_assert(max_size);
   if (max_size <= size) {
     start = p->start;
     return max_size;
@@ -189,12 +189,12 @@ std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extent(
     return std::nullopt;
   }
 
-  assert(!result.empty());
-  assert(result.num_intervals() == 1);
+  ceph_assert(!result.empty());
+  ceph_assert(result.num_intervals() == 1);
   for (auto p : result) {
     DEBUG("result start: {}, end: {}", p.first, p.first + p.second);
     if (detailed) {
-      assert(!reserved_extent_tracker.contains(p.first, p.second));
+      ceph_assert(!reserved_extent_tracker.contains(p.first, p.second));
       reserved_extent_tracker.insert(p.first, p.second);
     }
   }
@@ -233,11 +233,11 @@ std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extents(
   
   try_to_alloc_block(size);
 
-  assert(!result.empty());
+  ceph_assert(!result.empty());
   for (auto p : result) {
     DEBUG("result start: {}, end: {}", p.first, p.first + p.second);
     if (detailed) {
-      assert(!reserved_extent_tracker.contains(p.first, p.second));
+      ceph_assert(!reserved_extent_tracker.contains(p.first, p.second));
       reserved_extent_tracker.insert(p.first, p.second);
     }
   }
@@ -246,8 +246,8 @@ std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extents(
 
 void AvlAllocator::free_extent(rbm_abs_addr addr, size_t size)
 {
-  assert(total_size);
-  assert(total_size > available_size);
+  ceph_assert(total_size);
+  ceph_assert(total_size > available_size);
   _add_to_tree(addr, size);
   if (detailed && reserved_extent_tracker.contains(addr, size)) {
     reserved_extent_tracker.erase(addr, size);

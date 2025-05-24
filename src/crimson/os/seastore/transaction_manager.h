@@ -160,7 +160,7 @@ public:
       if (is_indirect()) {
         return do_get_indirect_range(0, maybe_indirect_info->length);
       } else {
-        assert(extent->is_fully_loaded());
+        ceph_assert(extent->is_fully_loaded());
         bufferlist bl;
         bl.append(extent->get_bptr());
         return bl;
@@ -178,10 +178,10 @@ public:
   private:
     ceph::bufferlist do_get_indirect_range(
         extent_len_t offset, extent_len_t length) const {
-      assert(is_indirect());
-      assert(maybe_indirect_info->intermediate_offset + offset + length <=
+      ceph_assert(is_indirect());
+      ceph_assert(maybe_indirect_info->intermediate_offset + offset + length <=
              extent->get_length());
-      assert(offset + length <= maybe_indirect_info->length);
+      ceph_assert(offset + length <= maybe_indirect_info->length);
       return extent->get_range(
           maybe_indirect_info->intermediate_offset + offset,
           length);
@@ -258,10 +258,10 @@ public:
     lextent_init_func_t<T> maybe_init = [](T&) {})
   {
     static_assert(is_logical_type(T::TYPE));
-    assert(is_aligned(partial_off, get_block_size()));
-    assert(is_aligned(partial_len, get_block_size()));
+    ceph_assert(is_aligned(partial_off, get_block_size()));
+    ceph_assert(is_aligned(partial_len, get_block_size()));
     // must be user-oriented required by maybe_init
-    assert(is_user_transaction(t.get_src()));
+    ceph_assert(is_user_transaction(t.get_src()));
 
     extent_len_t direct_partial_off = partial_off;
     bool is_clone = pin.is_clone();
@@ -381,7 +381,7 @@ public:
       placement_hint,
       INIT_GENERATION);
     // user must initialize the logical extent themselves.
-    assert(is_user_transaction(t.get_src()));
+    ceph_assert(is_user_transaction(t.get_src()));
     ext->set_seen_by_users();
     return lba_manager->alloc_extent(
       t,
@@ -421,7 +421,7 @@ public:
       placement_hint,
       INIT_GENERATION);
     // user must initialize the logical extent themselves
-    assert(is_user_transaction(t.get_src()));
+    ceph_assert(is_user_transaction(t.get_src()));
     for (auto& ext : exts) {
       ext->set_seen_by_users();
     }
@@ -455,8 +455,8 @@ public:
       ceph_assert(pin.get_length() == len);
       return this->read_pin<T>(t, std::move(pin));
     }).si_then([this, &t, FNAME](auto maybe_indirect_extent) {
-      assert(!maybe_indirect_extent.is_indirect());
-      assert(!maybe_indirect_extent.is_clone);
+      ceph_assert(!maybe_indirect_extent.is_indirect());
+      ceph_assert(!maybe_indirect_extent.is_clone);
       auto ext = get_mutable_extent(
           t, maybe_indirect_extent.extent)->template cast<T>();
       SUBDEBUGT(seastore_tm, "got mutable {}", t, *ext);
@@ -483,7 +483,7 @@ public:
     // data extents don't need maybe_init yet, currently,
     static_assert(is_data_type(T::TYPE));
     // must be user-oriented required by (the potential) maybe_init
-    assert(is_user_transaction(t.get_src()));
+    ceph_assert(is_user_transaction(t.get_src()));
 
 #ifndef NDEBUG
     std::sort(remaps.begin(), remaps.end(),
@@ -498,16 +498,16 @@ public:
     for (auto &remap : remaps) {
       auto remap_offset = remap.offset;
       auto remap_len = remap.len;
-      assert(remap_len > 0);
+      ceph_assert(remap_len > 0);
       total_remap_len += remap.len;
-      assert(remap_offset >= (last_offset + last_len));
+      ceph_assert(remap_offset >= (last_offset + last_len));
       last_offset = remap_offset;
       last_len = remap_len;
     }
     if (remaps.size() == 1) {
-      assert(total_remap_len < original_len);
+      ceph_assert(total_remap_len < original_len);
     } else {
-      assert(total_remap_len <= original_len);
+      ceph_assert(total_remap_len <= original_len);
     }
 #endif
 
@@ -533,8 +533,8 @@ public:
 	  if (full_extent_integrity_check) {
 	    return read_pin<T>(t, pin.duplicate()
             ).si_then([](auto maybe_indirect_extent) {
-              assert(!maybe_indirect_extent.is_indirect());
-              assert(!maybe_indirect_extent.is_clone);
+              ceph_assert(!maybe_indirect_extent.is_indirect());
+              ceph_assert(!maybe_indirect_extent.is_clone);
               return maybe_indirect_extent.extent;
             });
 	  } else {
@@ -568,7 +568,7 @@ public:
 	    original_bptr = ext->get_bptr();
 	  }
 	  if (ext) {
-	    assert(ext->is_seen_by_users());
+	    ceph_assert(ext->is_seen_by_users());
 	    cache->retire_extent(t, ext);
 	  } else {
 	    cache->retire_absent_extent_addr(t, original_paddr, original_len);
@@ -783,8 +783,8 @@ public:
       return read_extent<RootMetaBlock>(t, root->root.meta);
     }).si_then([key, &t](auto maybe_indirect_extent) {
       LOG_PREFIX(TransactionManager::read_root_meta);
-      assert(!maybe_indirect_extent.is_indirect());
-      assert(!maybe_indirect_extent.is_clone);
+      ceph_assert(!maybe_indirect_extent.is_indirect());
+      ceph_assert(!maybe_indirect_extent.is_clone);
       auto& mblock = maybe_indirect_extent.extent;
       auto meta = mblock->get_meta();
       auto iter = meta.find(key);
@@ -844,8 +844,8 @@ public:
     ).si_then([this, &t](RootBlockRef root) {
       return read_extent<RootMetaBlock>(t, root->root.meta);
     }).si_then([this, key, value, &t](auto maybe_indirect_extent) {
-      assert(!maybe_indirect_extent.is_indirect());
-      assert(!maybe_indirect_extent.is_clone);
+      ceph_assert(!maybe_indirect_extent.is_indirect());
+      ceph_assert(!maybe_indirect_extent.is_clone);
       auto& mblock = maybe_indirect_extent.extent;
       mblock = get_mutable_extent(t, mblock
 	)->template cast<RootMetaBlock>();
@@ -972,7 +972,7 @@ private:
 #ifndef NDEBUG
         auto lextent = extent->template cast<LogicalChildNode>();
         auto pin_laddr = pin.get_intermediate_base();
-        assert(lextent->get_laddr() == pin_laddr);
+        ceph_assert(lextent->get_laddr() == pin_laddr);
 #endif
 	return extent->template cast<T>();
       });
@@ -989,7 +989,7 @@ private:
     extent_types_t type)
   {
     ceph_assert(pin.is_viewable());
-    assert(!pin.is_indirect());
+    ceph_assert(!pin.is_indirect());
     // Note: pin might be a clone
     auto v = pin.get_logical_extent(t);
     // checking the lba child must be atomic with creating
@@ -1039,7 +1039,7 @@ private:
     lextent_init_func_t<T> &&maybe_init) {
     static_assert(is_logical_type(T::TYPE));
     // must be user-oriented required by maybe_init
-    assert(is_user_transaction(t.get_src()));
+    ceph_assert(is_user_transaction(t.get_src()));
     using ret = pin_to_extent_ret<T>;
     auto direct_length = pin.get_intermediate_length();
     if (full_extent_integrity_check) {
@@ -1059,9 +1059,9 @@ private:
        maybe_init=std::move(maybe_init),
        child_pos=std::move(child_pos)]
       (T &extent) mutable {
-	assert(extent.is_logical());
-	assert(!extent.has_laddr());
-	assert(!extent.has_been_invalidated());
+	ceph_assert(extent.is_logical());
+	ceph_assert(!extent.has_laddr());
+	ceph_assert(!extent.has_been_invalidated());
 	child_pos.link_child(&extent);
 	extent.set_laddr(laddr);
 	maybe_init(extent);
@@ -1094,7 +1094,7 @@ private:
 	  ceph_abort();
         }
       } else {
-        assert(!full_extent_integrity_check);
+        ceph_assert(!full_extent_integrity_check);
       }
       return pin_to_extent_ret<T>(
 	interruptible::ready_future_marker{},
@@ -1118,8 +1118,8 @@ private:
     LOG_PREFIX(TransactionManager::pin_to_extent_by_type);
     SUBTRACET(seastore_tm, "getting absent extent from pin {} type {} ...",
               t, pin, type);
-    assert(is_logical_type(type));
-    assert(is_background_transaction(t.get_src()));
+    ceph_assert(is_logical_type(type));
+    ceph_assert(is_background_transaction(t.get_src()));
     laddr_t direct_key = pin.get_intermediate_base();
     extent_len_t direct_length = pin.get_intermediate_length();
     return cache->get_absent_extent_by_type(
@@ -1129,10 +1129,10 @@ private:
       direct_key,
       direct_length,
       [direct_key, child_pos=std::move(child_pos)](CachedExtent &extent) mutable {
-	assert(extent.is_logical());
+	ceph_assert(extent.is_logical());
 	auto &lextent = static_cast<LogicalChildNode&>(extent);
-	assert(!lextent.has_laddr());
-	assert(!lextent.has_been_invalidated());
+	ceph_assert(!lextent.has_laddr());
+	ceph_assert(!lextent.has_been_invalidated());
 	child_pos.link_child(&lextent);
 	lextent.set_laddr(direct_key);
         // No change to extent::seen_by_user because this path is only
@@ -1147,7 +1147,7 @@ private:
 	*ref,
 	pin.get_checksum(),
 	crc);
-      assert(ref->is_fully_loaded());
+      ceph_assert(ref->is_fully_loaded());
       bool inconsistent = false;
       if (full_extent_integrity_check) {
 	inconsistent = (pin.get_checksum() != crc);

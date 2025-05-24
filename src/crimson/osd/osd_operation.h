@@ -177,29 +177,29 @@ public:
     : l_conn(std::move(conn)) {}
 
   crimson::net::Connection &get_local_connection() {
-    assert(l_conn);
-    assert(!r_conn);
+    ceph_assert(l_conn);
+    ceph_assert(!r_conn);
     return *l_conn;
   };
 
   crimson::net::Connection &get_foreign_connection() {
-    assert(r_conn);
-    assert(!l_conn);
+    ceph_assert(r_conn);
+    ceph_assert(!l_conn);
     return *r_conn;
   };
 
   crimson::net::ConnectionFFRef prepare_remote_submission() {
-    assert(l_conn);
-    assert(!r_conn);
+    ceph_assert(l_conn);
+    ceph_assert(!r_conn);
     auto ret = seastar::make_foreign(std::move(l_conn));
     l_conn.reset();
     return ret;
   }
 
   void finish_remote_submission(crimson::net::ConnectionFFRef conn) {
-    assert(conn);
-    assert(!l_conn);
-    assert(!r_conn);
+    ceph_assert(conn);
+    ceph_assert(!l_conn);
+    ceph_assert(!r_conn);
     r_conn = make_local_shared_foreign(std::move(conn));
   }
 
@@ -207,7 +207,7 @@ public:
     if (l_conn) {
       return *l_conn;
     } else {
-      assert(r_conn);
+      ceph_assert(r_conn);
       return *r_conn;
     }
   }

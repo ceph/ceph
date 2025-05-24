@@ -40,8 +40,8 @@ void intrusive_ptr_release(CachedExtent *);
 // Note: BufferSpace::to_full_ptr() also creates extent ptr.
 
 inline ceph::bufferptr create_extent_ptr_rand(extent_len_t len) {
-  assert(is_aligned(len, CEPH_PAGE_SIZE));
-  assert(len > 0);
+  ceph_assert(is_aligned(len, CEPH_PAGE_SIZE));
+  ceph_assert(len > 0);
   return ceph::bufferptr(buffer::create_page_aligned(len));
 }
 
@@ -179,7 +179,7 @@ struct load_range_t {
 
   extent_len_t get_end() const {
     extent_len_t end = offset + ptr.length();
-    assert(end > offset);
+    ceph_assert(end > offset);
     return end;
   }
 };
@@ -188,9 +188,9 @@ struct load_ranges_t {
   std::list<load_range_t> ranges;
 
   void push_back(extent_len_t offset, ceph::bufferptr ptr) {
-    assert(ranges.empty() ||
+    ceph_assert(ranges.empty() ||
            (ranges.back().get_end() < offset));
-    assert(ptr.length());
+    ceph_assert(ptr.length());
     length += ptr.length();
     ranges.push_back({offset, std::move(ptr)});
   }
@@ -235,12 +235,12 @@ private:
       extent_len_t hole_offset,
       extent_len_t hole_length,
       const map_t::const_iterator& next_it) {
-    assert(!buffer_map.contains(hole_offset));
+    ceph_assert(!buffer_map.contains(hole_offset));
     ceph::bufferlist bl;
     create_hole_append_bl(ret, bl, hole_offset, hole_length);
     auto it = buffer_map.insert(
         next_it, std::pair{hole_offset, std::move(bl)});
-    assert(next_it == std::next(it));
+    ceph_assert(next_it == std::next(it));
     return it;
   }
 
@@ -293,7 +293,7 @@ public:
             placement_hint_t hint,
             rewrite_gen_t gen,
 	    transaction_id_t trans_id) {
-    assert(gen == NULL_GENERATION || is_rewrite_generation(gen));
+    ceph_assert(gen == NULL_GENERATION || is_rewrite_generation(gen));
     state = _state;
     set_paddr(paddr);
     user_hint = hint;
@@ -407,8 +407,8 @@ public:
   virtual extent_types_t get_type() const = 0;
 
   virtual bool is_logical() const {
-    assert(!is_logical_type(get_type()));
-    assert(is_physical_type(get_type()));
+    ceph_assert(!is_logical_type(get_type()));
+    ceph_assert(is_physical_type(get_type()));
     return false;
   }
 
@@ -417,11 +417,11 @@ public:
   }
 
   void rewrite(Transaction &t, CachedExtent &e, extent_len_t o) {
-    assert(is_initial_pending());
+    ceph_assert(is_initial_pending());
     if (!e.is_pending()) {
       prior_instance = &e;
     } else {
-      assert(e.is_mutation_pending());
+      ceph_assert(e.is_mutation_pending());
       prior_instance = e.get_prior_instance();
     }
     e.get_bptr().copy_out(
@@ -645,22 +645,22 @@ public:
   bool is_fully_loaded() const {
     if (ptr.has_value()) {
       // length == 0 iff root
-      assert(length == loaded_length);
-      assert(!buffer_space.has_value());
+      ceph_assert(length == loaded_length);
+      ceph_assert(!buffer_space.has_value());
       return true;
     } else { // ptr is std::nullopt
-      assert(length > loaded_length);
-      assert(buffer_space.has_value());
+      ceph_assert(length > loaded_length);
+      ceph_assert(buffer_space.has_value());
       return false;
     }
   }
 
   /// Return true if range offset~_length is loaded
   bool is_range_loaded(extent_len_t offset, extent_len_t _length) {
-    assert(is_aligned(offset, CEPH_PAGE_SIZE));
-    assert(is_aligned(_length, CEPH_PAGE_SIZE));
-    assert(_length > 0);
-    assert(offset + _length <= length);
+    ceph_assert(is_aligned(offset, CEPH_PAGE_SIZE));
+    ceph_assert(is_aligned(_length, CEPH_PAGE_SIZE));
+    ceph_assert(_length > 0);
+    ceph_assert(offset + _length <= length);
     if (is_fully_loaded()) {
       return true;
     }
@@ -669,7 +669,7 @@ public:
 
   /// Get buffer by given offset and _length.
   ceph::bufferlist get_range(extent_len_t offset, extent_len_t _length) {
-    assert(is_range_loaded(offset, _length));
+    ceph_assert(is_range_loaded(offset, _length));
     ceph::bufferlist res;
     if (is_fully_loaded()) {
       res.append(ceph::bufferptr(get_bptr(), offset, _length));
@@ -712,11 +712,11 @@ public:
 
   /// Get ref to raw buffer
   virtual bufferptr &get_bptr() {
-    assert(ptr.has_value());
+    ceph_assert(ptr.has_value());
     return *ptr;
   }
   virtual const bufferptr &get_bptr() const {
-    assert(ptr.has_value());
+    ceph_assert(ptr.has_value());
     return *ptr;
   }
 
@@ -748,7 +748,7 @@ public:
 
   /// assign the target rewrite generation for the followup rewrite
   void set_target_rewrite_generation(rewrite_gen_t gen) {
-    assert(is_target_rewrite_generation(gen));
+    ceph_assert(is_target_rewrite_generation(gen));
 
     user_hint = placement_hint_t::REWRITE;
     rewrite_generation = gen;
@@ -919,9 +919,9 @@ protected:
       loaded_length(_ptr.length()) {
     ptr = std::move(_ptr);
 
-    assert(ptr->is_page_aligned());
-    assert(length > 0);
-    assert(is_fully_loaded());
+    ceph_assert(ptr->is_page_aligned());
+    ceph_assert(length > 0);
+    ceph_assert(is_fully_loaded());
     // must call init() to fully initialize
   }
 
@@ -931,9 +931,9 @@ protected:
     : length(_length),
       loaded_length(0),
       buffer_space(std::in_place) {
-    assert(is_aligned(length, CEPH_PAGE_SIZE));
-    assert(length > 0);
-    assert(!is_fully_loaded());
+    ceph_assert(is_aligned(length, CEPH_PAGE_SIZE));
+    ceph_assert(length > 0);
+    ceph_assert(!is_fully_loaded());
     // must call init() to fully initialize
   }
 
@@ -946,8 +946,8 @@ protected:
       version(other.version),
       poffset(other.poffset) {
     // the extent must be fully loaded before CoW
-    assert(other.is_fully_loaded());
-    assert(is_aligned(length, CEPH_PAGE_SIZE));
+    ceph_assert(other.is_fully_loaded());
+    ceph_assert(is_aligned(length, CEPH_PAGE_SIZE));
     if (length > 0) {
       ptr = create_extent_ptr_rand(length);
       other.ptr->copy_out(0, length, ptr->c_str());
@@ -955,7 +955,7 @@ protected:
       ptr = ceph::bufferptr(0);
     }
 
-    assert(is_fully_loaded());
+    ceph_assert(is_fully_loaded());
   }
 
   struct share_buffer_t {};
@@ -969,10 +969,10 @@ protected:
       version(other.version),
       poffset(other.poffset) {
     // the extent must be fully loaded before CoW
-    assert(other.is_fully_loaded());
-    assert(is_aligned(length, CEPH_PAGE_SIZE));
-    assert(length > 0);
-    assert(is_fully_loaded());
+    ceph_assert(other.is_fully_loaded());
+    ceph_assert(is_aligned(length, CEPH_PAGE_SIZE));
+    ceph_assert(length > 0);
+    ceph_assert(is_fully_loaded());
   }
 
   // 0 length is only possible for the RootBlock
@@ -981,7 +981,7 @@ protected:
     : ptr(ceph::bufferptr(0)),
       length(0),
       loaded_length(0) {
-    assert(is_fully_loaded());
+    ceph_assert(is_fully_loaded());
     // must call init() to fully initialize
   }
 
@@ -991,8 +991,8 @@ protected:
       length(_length),
       loaded_length(0),
       buffer_space(std::in_place) {
-    assert(!is_fully_loaded());
-    assert(is_aligned(length, CEPH_PAGE_SIZE));
+    ceph_assert(!is_fully_loaded());
+    ceph_assert(is_aligned(length, CEPH_PAGE_SIZE));
     // must call init() to fully initialize
   }
 
@@ -1030,7 +1030,7 @@ protected:
 
   void set_paddr(paddr_t offset, bool need_update_mapping = false) {
     if (need_update_mapping) {
-      assert(!prior_poffset);
+      ceph_assert(!prior_poffset);
       prior_poffset = poffset;
     }
     poffset = offset;
@@ -1070,19 +1070,19 @@ protected:
 
   /// Returns the ranges to load, convert to fully loaded is possible
   load_ranges_t load_ranges(extent_len_t offset, extent_len_t _length) {
-    assert(is_aligned(offset, CEPH_PAGE_SIZE));
-    assert(is_aligned(_length, CEPH_PAGE_SIZE));
-    assert(_length > 0);
-    assert(offset + _length <= length);
-    assert(!is_fully_loaded());
+    ceph_assert(is_aligned(offset, CEPH_PAGE_SIZE));
+    ceph_assert(is_aligned(_length, CEPH_PAGE_SIZE));
+    ceph_assert(_length > 0);
+    ceph_assert(offset + _length <= length);
+    ceph_assert(!is_fully_loaded());
 
     if (loaded_length == 0 && _length == length) {
-      assert(offset == 0);
+      ceph_assert(offset == 0);
       // skip rebuilding the buffer from buffer_space
       ptr = create_extent_ptr_rand(length);
       loaded_length = _length;
       buffer_space.reset();
-      assert(is_fully_loaded());
+      ceph_assert(is_fully_loaded());
       on_fully_loaded();
       load_ranges_t ret;
       ret.push_back(offset, *ptr);
@@ -1091,12 +1091,12 @@ protected:
 
     load_ranges_t ret = buffer_space->load_ranges(offset, _length);
     loaded_length += ret.length;
-    assert(length >= loaded_length);
+    ceph_assert(length >= loaded_length);
     if (length == loaded_length) {
       // convert to fully loaded
       ptr = buffer_space->to_full_ptr(length);
       buffer_space.reset();
-      assert(is_fully_loaded());
+      ceph_assert(is_fully_loaded());
       on_fully_loaded();
       // adjust ret since the ptr has been rebuild
       for (load_range_t& range : ret.ranges) {
@@ -1149,7 +1149,7 @@ struct trans_retired_extent_link_t {
   trans_retired_extent_link_t(CachedExtentRef extent, transaction_id_t id)
     : extent(extent), trans_view{id}
   {
-    assert(extent->is_stable());
+    ceph_assert(extent->is_stable());
     extent->retired_transactions.insert(trans_view);
   }
 };
@@ -1247,25 +1247,25 @@ public:
     ceph_assert(a == b);
 
     [[maybe_unused]] auto [iter, inserted] = extent_index.insert(extent);
-    assert(inserted);
+    ceph_assert(inserted);
     extent.parent_index = this;
 
     bytes += extent.get_length();
   }
 
   void erase(CachedExtent &extent) {
-    assert(extent.parent_index);
-    assert(extent.is_linked());
+    ceph_assert(extent.parent_index);
+    ceph_assert(extent.is_linked());
     [[maybe_unused]] auto erased = extent_index.erase(
       extent_index.s_iterator_to(extent));
     extent.parent_index = nullptr;
 
-    assert(erased);
+    ceph_assert(erased);
     bytes -= extent.get_length();
   }
 
   void replace(CachedExtent &to, CachedExtent &from) {
-    assert(to.get_length() == from.get_length());
+    ceph_assert(to.get_length() == from.get_length());
     extent_index.replace_node(extent_index.s_iterator_to(from), to);
     from.parent_index = nullptr;
     to.parent_index = this;
@@ -1304,8 +1304,8 @@ public:
   }
 
   ~ExtentIndex() {
-    assert(extent_index.empty());
-    assert(bytes == 0);
+    ceph_assert(extent_index.empty());
+    ceph_assert(bytes == 0);
   }
 
 private:
@@ -1382,7 +1382,7 @@ public:
      seen_by_users(other.seen_by_users) {}
 
   void on_rewrite(Transaction &t, CachedExtent &extent, extent_len_t off) final {
-    assert(get_type() == extent.get_type());
+    ceph_assert(get_type() == extent.get_type());
     auto &lextent = (LogicalCachedExtent&)extent;
     set_laddr((lextent.get_laddr() + off).checked_to_laddr());
     seen_by_users = lextent.seen_by_users;
@@ -1398,7 +1398,7 @@ public:
   // handled under TransactionManager,
   // user should not set this by themselves.
   void set_seen_by_users() {
-    assert(!seen_by_users);
+    ceph_assert(!seen_by_users);
     seen_by_users = true;
   }
 
@@ -1407,7 +1407,7 @@ public:
   }
 
   laddr_t get_laddr() const {
-    assert(laddr != L_ADDR_NULL);
+    ceph_assert(laddr != L_ADDR_NULL);
     return laddr;
   }
 
@@ -1422,8 +1422,8 @@ public:
   }
 
   bool is_logical() const final {
-    assert(is_logical_type(get_type()));
-    assert(!is_physical_type(get_type()));
+    ceph_assert(is_logical_type(get_type()));
+    ceph_assert(!is_physical_type(get_type()));
     return true;
   }
 
@@ -1455,7 +1455,7 @@ protected:
   virtual void logical_on_delta_write() {}
 
   void on_delta_write(paddr_t record_block_offset) final {
-    assert(is_exist_mutation_pending() ||
+    ceph_assert(is_exist_mutation_pending() ||
 	   get_prior_instance());
     logical_on_delta_write();
   }

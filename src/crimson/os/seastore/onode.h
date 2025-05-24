@@ -50,7 +50,7 @@ struct onode_layout_t {
     } else if (type == omap_type_t::OMAP) {
       return omap_root;
     } else {
-      assert(type == omap_type_t::LOG);
+      ceph_assert(type == omap_type_t::LOG);
       return log_root;
     }
   }
@@ -96,8 +96,8 @@ public:
   virtual void clear_snapset(Transaction&) = 0;
 
   laddr_t get_metadata_hint(uint64_t block_size) const {
-    assert(default_metadata_offset);
-    assert(default_metadata_range);
+    ceph_assert(default_metadata_offset);
+    ceph_assert(default_metadata_range);
     uint64_t range_blocks = default_metadata_range / block_size;
     auto random_offset = default_metadata_offset +
         (((uint32_t)std::rand() % range_blocks) * block_size);
