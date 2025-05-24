@@ -10,7 +10,7 @@ import { FormatterService } from '~/app/shared/services/formatter.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import _ from 'lodash';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { OctalToHumanReadablePipe } from '~/app/shared/pipes/octal-to-human-readable.pipe';
 
@@ -19,7 +19,7 @@ import { OctalToHumanReadablePipe } from '~/app/shared/pipes/octal-to-human-read
   templateUrl: './cephfs-subvolumegroup-form.component.html',
   styleUrls: ['./cephfs-subvolumegroup-form.component.scss']
 })
-export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit {
+export class CephfsSubvolumegroupFormComponent extends CdFormCanDeactivate implements OnInit {
   subvolumegroupForm: CdFormGroup;
 
   action: string;
@@ -85,6 +85,11 @@ export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit 
     this.createForm();
 
     this.isEdit ? this.populateForm() : this.loadingReady();
+  }
+
+
+  getFormGroup(): CdFormGroup {
+    return this.subvolumegroupForm;
   }
 
   createForm() {
