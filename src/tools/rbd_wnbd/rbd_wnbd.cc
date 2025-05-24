@@ -35,7 +35,8 @@
 #include <memory>
 #include <regex>
 
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
+#include "common/XMLFormatter.h"
 #include "common/TextTable.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"

@@ -16,6 +16,7 @@
 #ifndef CEPH_MPING_H
 #define CEPH_MPING_H
 
+#include "include/ceph_fs.h" // for CEPH_MSG_PING
 #include "msg/Message.h"
 
 class MPing final : public Message {

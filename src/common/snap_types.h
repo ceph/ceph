@@ -2,7 +2,6 @@
 #define __CEPH_SNAP_TYPES_H
 
 #include "include/object.h" // for struct snapid_t
-#include "include/types.h" // for the ceph_mds_snap_realm encoder
 #include "include/utime.h"
 #include "include/fs_types.h" // for struct inodeno_t
 
@@ -91,24 +90,14 @@ struct SnapContext {
   }
   bool empty() const { return seq == 0; }
 
-  void encode(ceph::buffer::list& bl) const {
-    using ceph::encode;
-    encode(seq, bl);
-    encode(snaps, bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    using ceph::decode;
-    decode(seq, bl);
-    decode(snaps, bl);
-  }
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<SnapContext*>& o);
 };
 WRITE_CLASS_ENCODER(SnapContext)
 
-inline std::ostream& operator<<(std::ostream& out, const SnapContext& snapc) {
-  return out << snapc.seq << "=" << snapc.snaps;
-}
+std::ostream& operator<<(std::ostream& out, const SnapContext& snapc);
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<SnapContext> : fmt::ostream_formatter {};

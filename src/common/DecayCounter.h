@@ -16,12 +16,10 @@
 #define CEPH_DECAYCOUNTER_H
 
 #include "include/buffer.h"
-#include "common/StackStringStream.h"
 #include "common/ceph_time.h"
 
 #include <cmath>
 #include <list>
-#include <sstream>
 
 namespace ceph { class Formatter; }
 
@@ -126,12 +124,6 @@ inline void decode(DecayCounter &c, ceph::buffer::list::const_iterator &p) {
   c.decode(p);
 }
 
-inline std::ostream& operator<<(std::ostream& out, const DecayCounter& d) {
-  CachedStackStringStream css;
-  css->precision(2);
-  double val = d.get();
-  *css << "[C " << std::scientific << val << "]";
-  return out << css->strv();
-}
+std::ostream& operator<<(std::ostream& out, const DecayCounter& d);
 
 #endif

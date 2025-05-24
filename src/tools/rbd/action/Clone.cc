@@ -6,6 +6,7 @@
 #include "tools/rbd/Utils.h"
 #include "include/types.h"
 #include "common/errno.h"
+#include "include/rados.h" // for CEPH_NOSNAP
 #include <iostream>
 #include <boost/program_options.hpp>
 

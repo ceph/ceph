@@ -20,7 +20,7 @@
 #include <iosfwd>
 
 #include <include/types.h>
-#include <common/Formatter.h>
+#include <common/XMLFormatter.h>
 #include <common/dout.h>
 #include "rgw_xml.h"
 #include "rgw_cors.h"

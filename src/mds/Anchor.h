@@ -17,9 +17,9 @@
 
 #include <string>
 
-#include "include/types.h"
 #include "mdstypes.h"
 #include "include/buffer.h"
+#include "include/fs_types.h"
 
 /*
  * Anchor represents primary linkage of an inode. When adding inode to an

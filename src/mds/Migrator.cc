@@ -83,6 +83,65 @@
 
 using namespace std;
 
+struct Migrator::export_state_t {
+  export_state_t() {}
+
+  void set_state(int s) {
+    ceph_assert(s != state);
+    if (state != EXPORT_CANCELLED) {
+	auto& t = state_history.at(state);
+	t.second = double(ceph_clock_now()) - double(t.first);
+    }
+    state = s;
+    state_history[state] = std::pair<utime_t, double>(ceph_clock_now(), 0.0);
+  }
+  utime_t get_start_time(int s) const {
+    ceph_assert(state_history.count(s) > 0);
+    return state_history.at(s).first;
+  }
+  double get_time_spent(int s) const {
+    ceph_assert(state_history.count(s) > 0);
+    const auto& t = state_history.at(s);
+    return s == state ? double(ceph_clock_now()) - double(t.first) : t.second;
+  }
+  double get_freeze_tree_time() const {
+    ceph_assert(state >= EXPORT_DISCOVERING);
+    ceph_assert(state_history.count((int)EXPORT_DISCOVERING) > 0);
+    return double(ceph_clock_now()) - double(state_history.at((int)EXPORT_DISCOVERING).first);
+  };
+
+  int state = EXPORT_CANCELLED;
+  mds_rank_t peer = MDS_RANK_NONE;
+  uint64_t tid = 0;
+  std::set<mds_rank_t> warning_ack_waiting;
+  std::set<mds_rank_t> notify_ack_waiting;
+  std::map<inodeno_t,std::map<client_t,Capability::Import> > peer_imported;
+  MutationRef mut;
+  size_t approx_size = 0;
+  // record the start time and time spent of each export state
+  std::map<int, std::pair<utime_t, double> > state_history;
+  // record the clients whose sessions need to be flushed
+  std::set<client_t> export_client_set;
+  // for freeze tree deadlock detection
+  utime_t last_cum_auth_pins_change;
+  int last_cum_auth_pins = 0;
+  int num_remote_waiters = 0; // number of remote authpin waiters
+  std::shared_ptr<export_base_t> parent;
+};
+
+struct Migrator::import_state_t {
+  import_state_t() : mut() {}
+  int state = 0;
+  mds_rank_t peer = 0;
+  uint64_t tid = 0;
+  std::set<mds_rank_t> bystanders;
+  std::list<dirfrag_t> bound_ls;
+  std::list<ScatterLock*> updated_scatterlocks;
+  std::map<client_t,std::pair<Session*,uint64_t> > session_map;
+  std::map<CInode*, std::map<client_t,Capability::Export> > peer_exports;
+  MutationRef mut;
+};
+
 class MigratorContext : public MDSContext {
 protected:
   Migrator *mig;
@@ -637,7 +696,65 @@ void Migrator::show_exporting()
   }
 }
 
+int Migrator::is_exporting(CDir *dir) const {
+  auto it = export_state.find(dir);
+  if (it != export_state.end()) return it->second.state;
+  return 0;
+}
 
+int Migrator::is_importing(dirfrag_t df) const {
+  auto it = import_state.find(df);
+  if (it != import_state.end()) return it->second.state;
+  return 0;
+}
+
+bool Migrator::is_ambiguous_import(dirfrag_t df) const {
+  auto it = import_state.find(df);
+  if (it == import_state.end())
+    return false;
+  if (it->second.state >= IMPORT_LOGGINGSTART &&
+	it->second.state < IMPORT_ABORTING)
+    return true;
+  return false;
+}
+
+int Migrator::get_import_state(dirfrag_t df) const {
+  auto it = import_state.find(df);
+  ceph_assert(it != import_state.end());
+  return it->second.state;
+}
+
+int Migrator::get_import_peer(dirfrag_t df) const {
+  auto it = import_state.find(df);
+  ceph_assert(it != import_state.end());
+  return it->second.peer;
+}
+
+int Migrator::get_export_state(CDir *dir) const {
+  auto it = export_state.find(dir);
+  ceph_assert(it != export_state.end());
+  return it->second.state;
+}
+
+bool Migrator::export_has_warned(CDir *dir, mds_rank_t who) {
+  auto it = export_state.find(dir);
+  ceph_assert(it != export_state.end());
+  ceph_assert(it->second.state == EXPORT_WARNING);
+  return (it->second.warning_ack_waiting.count(who) == 0);
+}
+
+bool Migrator::export_has_notified(CDir *dir, mds_rank_t who) const {
+  auto it = export_state.find(dir);
+  ceph_assert(it != export_state.end());
+  ceph_assert(it->second.state == EXPORT_NOTIFYING);
+  return (it->second.notify_ack_waiting.count(who) == 0);
+}
+
+void Migrator::export_freeze_inc_num_waiters(CDir *dir) {
+  auto it = export_state.find(dir);
+  ceph_assert(it != export_state.end());
+  it->second.num_remote_waiters++;
+}
 
 void Migrator::audit()
 {
@@ -3860,6 +3977,8 @@ Migrator::Migrator(MDSRank *m, MDCache *c) : mds(m), mdcache(c) {
   max_export_size = g_conf().get_val<Option::size_t>("mds_max_export_size");
   inject_session_race = g_conf().get_val<bool>("mds_inject_migrator_session_race");
 }
+
+Migrator::~Migrator() noexcept = default;
 
 void Migrator::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map)
 {
