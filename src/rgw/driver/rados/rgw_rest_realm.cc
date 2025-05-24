@@ -141,7 +141,7 @@ void RGWOp_Period_Post::execute(optional_yield y)
 
   // if period id is empty, handle as 'period commit'
   if (period.get_id().empty()) {
-    op_ret = rgw::commit_period(this, y, s->penv.cfgstore, driver, realm, *realm_writer, current_period, period, error_stream, false);
+    op_ret = rgw::commit_period(this, y, s->penv.cfgstore, driver, realm, *realm_writer, current_period, period, error_stream, false, *s->penv.site);
     if (op_ret == -EEXIST) {
       op_ret = 0; // succeed on retries so the op is idempotent
       return;
