@@ -535,7 +535,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
 
     this.cdsModalService.show(DeleteConfirmationModalComponent, {
       actionDescription: 'remove scheduling on',
-      itemDescription: $localize`image`,
+      itemDescription: $localize`volume`,
       itemNames: [`${imageName}`],
       submitActionObservable: () =>
         new Observable((observer: Subscriber<any>) => {
