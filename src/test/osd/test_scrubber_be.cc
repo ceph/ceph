@@ -145,16 +145,34 @@ class TestScrubber : public ScrubBeListener, public Scrub::SnapMapReaderI {
   }
 
   int get_snaps(const hobject_t& hoid,
-		std::set<snapid_t>* snaps_set) const;
+		std::vector<snapid_t>* snaps_set) const;
 
-  tl::expected<std::set<snapid_t>, result_t> get_snaps(
+  tl::expected<std::vector<snapid_t>, result_t> get_snaps(
     const hobject_t& oid) const final;
 
-  tl::expected<std::set<snapid_t>, result_t> get_snaps_check_consistency(
-    const hobject_t& oid) const final
+  tl::expected<std::vector<snapid_t>, result_t> get_snaps_check_consistency(
+    const hobject_t& oid,
+    const std::vector<snapid_t>& snaps_from_outside) const final
   {
     /// \todo for now
-    return get_snaps(oid);
+    auto snaps = get_snaps(oid);
+    if (!snaps) {
+      return tl::unexpected(snaps.error());
+    }
+    std::sort(snaps->begin(), snaps->end());
+    bool matches = snaps->size() == snaps_from_outside.size();
+    if (matches) {
+      for (auto s : snaps_from_outside) {
+        matches = std::binary_search(snaps->begin(), snaps->end(), s);
+        if (!matches) {
+          break;
+        }
+      }
+    }
+    if (matches) {
+      return tl::unexpected(result_t(result_t::code_t::matched));
+    }
+    return *snaps;
   }
 
   void set_snaps(const hobject_t& hoid, const std::vector<snapid_t>& snaps)
@@ -192,7 +210,7 @@ class TestScrubber : public ScrubBeListener, public Scrub::SnapMapReaderI {
 };
 
 int TestScrubber::get_snaps(const hobject_t& hoid,
-			    std::set<snapid_t>* snaps_set) const
+			    std::vector<snapid_t>* snaps) const
 {
   auto it = m_snaps.find(hoid);
   if (it == m_snaps.end()) {
@@ -200,20 +218,23 @@ int TestScrubber::get_snaps(const hobject_t& hoid,
     return -ENOENT;
   }
 
-  *snaps_set = it->second;
+  snaps->reserve(snaps->size() + it->second.size());
+  for (auto& s : it->second) {
+    snaps->emplace_back(s);
+  }
   std::cout << fmt::format("{}: ({}) -> #{} {}",
 			   __func__,
 			   hoid,
-			   snaps_set->size(),
-			   *snaps_set)
+			   snaps->size(),
+			   *snaps)
 	    << std::endl;
   return 0;
 }
 
-tl::expected<std::set<snapid_t>, Scrub::SnapMapReaderI::result_t>
+tl::expected<std::vector<snapid_t>, Scrub::SnapMapReaderI::result_t>
 TestScrubber::get_snaps(const hobject_t& oid) const
 {
-  std::set<snapid_t> snapset;
+  std::vector<snapid_t> snapset;
   auto r = get_snaps(oid, &snapset);
   if (r >= 0) {
     return snapset;
@@ -620,7 +641,7 @@ TEST_F(TestTScrubberBe_data_1, snapmapper_1)
 	      << std::endl;
   }
   EXPECT_EQ(fix_list[0].hoid, hobj_ms1_snp30_inpool);
-  EXPECT_EQ(fix_list[0].snaps, std::set<snapid_t>{0x30});
+  EXPECT_EQ(fix_list[0].snaps, std::vector<snapid_t>{0x30});
 
   EXPECT_EQ(incons.size(), 0);	// no inconsistency
 }
