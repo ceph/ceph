@@ -1,6 +1,10 @@
 #pragma once
 
 #include "ObjectModel.h"
+#include "librados/AioCompletionImpl.h"
+#include "common/ceph_mutex.h"
+
+namespace boost::asio { class io_context; }
 
 /* Overview
  *
