@@ -312,11 +312,10 @@ A similar parameter can be set for the write operation, which is
    ceph osd pool set {cachepool} min_write_recency_for_promote 2
 
 .. note:: The longer the period and the higher the
-   ``min_read_recency_for_promote`` and
-   ``min_write_recency_for_promote``values, the more RAM the ``ceph-osd``
-   daemon consumes. In particular, when the agent is active to flush
-   or evict cache objects, all ``hit_set_count`` HitSets are loaded
-   into RAM.
+   ``min_read_recency_for_promote`` and ``min_write_recency_for_promote``
+   values, the more RAM the ``ceph-osd`` daemon consumes. In particular, when
+   the agent is active to flush or evict cache objects, all ``hit_set_count``
+   HitSets are loaded into RAM.
 
 
 Cache Sizing
