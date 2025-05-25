@@ -108,8 +108,7 @@ Multiple monitor hosts can be passed by separating addresses with a ``/``:
 
 .. prompt:: bash #
 
-   mount -t ceph cephuser@.cephfs=/ /mnt/mycephfs -o
-   mon_addr=192.168.0.1:6789/192.168.0.2:6789,secretfile=/etc/ceph/cephuser.secret
+   mount -t ceph cephuser@.cephfs=/ /mnt/mycephfs -o mon_addr=192.168.0.1:6789/192.168.0.2:6789,secretfile=/etc/ceph/cephuser.secret
 
 If CephX is disabled, omit any credential-related options. For example:
 
