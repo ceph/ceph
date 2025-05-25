@@ -7,6 +7,7 @@ import tempfile
 from typing import Dict, Tuple, Any, List, cast, Optional
 from configparser import ConfigParser
 from io import StringIO
+from copy import copy
 
 from mgr_module import HandleCommandResult
 from mgr_module import NFS_POOL_NAME as POOL_NAME
@@ -256,14 +257,27 @@ class NFSService(CephService):
         tmp_conf.write(f'\tkeyring = {tmp_keyring.name}\n')
         tmp_conf.flush()
         try:
-            cmd: List[str] = [
+            base_cmd: List[str] = [
                 'ganesha-rados-grace',
                 '--cephconf', tmp_conf.name,
                 '--userid', tmp_id,
                 '--pool', POOL_NAME,
                 '--ns', cast(str, spec.service_id),
-                action, nodeid,
             ]
+            # If action is remove, verify if member exists in ganesha-rados-grace
+            if action == 'remove':
+                member_cmd = copy(base_cmd)
+                member_cmd.extend(['member', nodeid])
+                self.mgr.log.debug(member_cmd)
+                result = subprocess.run(member_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                        timeout=10)
+                if result.returncode:
+                    self.mgr.log.debug(
+                        f'ganesha-rados-grace does not have member {nodeid} for namespace {spec.service_id}'
+                    )
+                    return
+            cmd = copy(base_cmd)
+            cmd.extend([action, nodeid,])
             self.mgr.log.debug(cmd)
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     timeout=10)
