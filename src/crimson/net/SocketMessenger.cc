@@ -48,7 +48,7 @@ SocketMessenger::SocketMessenger(const entity_name_t& myname,
 SocketMessenger::~SocketMessenger()
 {
   logger().debug("~SocketMessenger: {}", logic_name);
-  ceph_assert_always(seastar::this_shard_id() == sid);
+  ceph_assert(seastar::this_shard_id() == sid);
   ceph_assert(!listener);
 }
 

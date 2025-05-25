@@ -119,7 +119,7 @@ int main(int argc, char** argv)
   auto addr = vm["addr"].as<std::string>();
   entity_addr_t target_addr;
   target_addr.parse(addr.c_str(), nullptr);
-  ceph_assert_always(target_addr.is_msgr2());
+  ceph_assert(target_addr.is_msgr2());
   auto bs = vm["bs"].as<unsigned>();
   auto crc_enabled = vm["crc-enabled"].as<bool>();
   auto worker_threads = vm["threads"].as<unsigned>();

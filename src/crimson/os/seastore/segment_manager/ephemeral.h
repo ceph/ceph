@@ -22,12 +22,12 @@ struct ephemeral_config_t {
   size_t segment_size = 0;
 
   void validate() const {
-    ceph_assert_always(size > 0);
-    ceph_assert_always(size <= DEVICE_OFF_MAX);
-    ceph_assert_always(segment_size > 0);
-    ceph_assert_always(segment_size <= SEGMENT_OFF_MAX);
-    ceph_assert_always(size / segment_size > 0);
-    ceph_assert_always(size / segment_size <= DEVICE_SEGMENT_ID_MAX);
+    ceph_assert(size > 0);
+    ceph_assert(size <= DEVICE_OFF_MAX);
+    ceph_assert(segment_size > 0);
+    ceph_assert(segment_size <= SEGMENT_OFF_MAX);
+    ceph_assert(size / segment_size > 0);
+    ceph_assert(size / segment_size <= DEVICE_SEGMENT_ID_MAX);
   }
 };
 

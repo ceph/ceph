@@ -29,7 +29,6 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
     maybe_create = check_create_device(get_device_path(), size);
   }
 
-
   co_await std::move(maybe_create);
   auto st = co_await stat_device(
   ).safe_then([] (auto st) mutable {
@@ -48,9 +47,9 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
   super.size = (*st).size;
   super.config = std::move(config);
   super.journal_size = journal_size;
-  ceph_assert_always(super.journal_size > 0);
-  ceph_assert_always(super.size >= super.journal_size);
-  ceph_assert_always(shard_num > 0);
+  ceph_assert(super.journal_size > 0);
+  ceph_assert(super.size >= super.journal_size);
+  ceph_assert(shard_num > 0);
 
   std::vector<rbm_shard_info_t> shard_infos(shard_num);
   for (int i = 0; i < shard_num; i++) {
@@ -148,7 +147,7 @@ read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
       );
     }
   } else {
-    ceph_assert_always(crc == (checksum_t)-1);
+    ceph_assert(crc == (checksum_t)-1);
   }
   super_block.crc = crc;
   super = super_block;
