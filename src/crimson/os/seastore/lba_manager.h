@@ -235,8 +235,15 @@ public:
   virtual refresh_lba_mapping_ret refresh_lba_mapping(
     Transaction &t,
     LBAMapping mapping) = 0;
+  using resolve_indirect_cursor_ret = get_mappings_iertr::future<LBACursorRef>;
 
   virtual ~LBAManager() {}
+  virtual std::optional<seastar::promise<>>& get_trim_activator() = 0;
+  using trim_pin_ret = get_mappings_iertr::future<>;
+  using trim_action_t = std::tuple<LBACursorRef, LBACursorRef>;
+  virtual trim_pin_ret try_trim_indirect_pin(Transaction& c, trim_action_t& arg) = 0;
+  virtual std::list<trim_action_t>& get_trim_actions() = 0;
+
 };
 using LBAManagerRef = std::unique_ptr<LBAManager>;
 
