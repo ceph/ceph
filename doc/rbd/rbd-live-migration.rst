@@ -4,11 +4,11 @@
 
 .. index:: Ceph Block Device; live-migration
 
-RBD images can be live-migrated between different pools within the same cluster;
-between different image formats and layouts; or from external data sources.
-When started, the source will be deep-copied to the destination image, pulling
-all snapshot history while preserving the sparse allocation of data where
-possible.
+RBD images can be live-migrated between different pools, image formats and/or
+layouts within the same Ceph cluster; from an image in another Ceph cluster; or
+from external data sources. When started, the source will be deep-copied to
+the destination image, pulling all snapshot history while preserving the sparse
+allocation of data where possible.
 
 By default, when live-migrating RBD images within the same Ceph cluster, the
 source image will be marked read-only and all clients will instead redirect
@@ -18,8 +18,9 @@ image during the migration to remove the dependency on the source image's
 parent.
 
 The live-migration process can also be used in an import-only mode where the
-source image remains unmodified and the target image can be linked to an
-external data source such as a backing file, HTTP(s) file, or S3 object.
+source image remains unmodified and the target image can be linked to an image
+in another Ceph cluster or to an external data source such as a backing file,
+HTTP(s) file, S3 object, or NBD export.
 
 The live-migration copy process can safely run in the background while the new
 target image is in use. There is currently a requirement to temporarily stop
@@ -144,8 +145,8 @@ The general format for the ``source-spec`` JSON is as follows::
         }
 
 The following formats are currently supported: ``native``, ``qcow``, and
-``raw``. The following streams are currently supported: ``file``, ``http``, and
-``s3``.
+``raw``. The following streams are currently supported: ``file``, ``http``,
+``s3``, and ``nbd``.
 
 Formats
 ~~~~~~~
@@ -156,11 +157,15 @@ as follows::
 
         {
             "type": "native",
+            ["cluster_name": "<cluster-name>",] (specify if image in another cluster,
+                                                 requires ``<cluster-name>.conf`` file)
+            ["client_name": "<client-name>",] (for connecting to another cluster,
+                                               default is ``client.admin``)
             "pool_name": "<pool-name>",
             ["pool_id": <pool-id>,] (optional alternative to "pool_name")
             ["pool_namespace": "<pool-namespace",] (optional)
             "image_name": "<image-name>",
-            ["image_id": "<image-id>",] (optional if image in trash)
+            ["image_id": "<image-id>",] (specify if image in trash)
             "snap_name": "<snap-name>",
             ["snap_id": "<snap-id>",] (optional alternative to "snap_name")
         }
@@ -301,6 +306,33 @@ as follows::
   stored in the config-key store via ``ceph config-key set <key-path> <value>``
   (e.g. ``ceph config-key set rbd/s3/access_key NX5QOQKC6BH2IDN8HC7A``).
 
+The ``nbd`` stream can be used to import from a remote NBD export. Its
+``source-spec`` JSON is encoded as follows::
+
+        {
+            <format unique parameters>
+            "stream": {
+                "type": "nbd",
+                "uri": "<nbd-uri>",
+            }
+        }
+
+For example, to import a raw-format image from an NBD export located at
+``nbd://nbd.ceph.com`` with export name ``image.raw``, its ``source-spec``
+JSON is encoded as follows::
+
+        {
+            "type": "raw",
+            "stream": {
+                "type": "nbd",
+                "uri": "nbd://nbd.ceph.com/image.raw",
+            }
+        }
+
+``nbd-uri`` parameter should follow the `NBD URI specification`_. The
+default NBD port is ``10809``.
+
+
 Execute Migration
 =================
 
@@ -365,3 +397,4 @@ to the original source image being restored::
 
 
 .. _layered images: ../rbd-snapshot/#layering
+.. _NBD URI specification: https://github.com/NetworkBlockDevice/nbd/blob/master/doc/uri.md

@@ -46,6 +46,10 @@ public:
   void read(io::Extents&& byte_extents, bufferlist* data,
             Context* on_finish) override;
 
+  void list_sparse_extents(io::Extents&& byte_extents,
+                           io::SparseExtents* sparse_extents,
+                           Context* on_finish) override;
+
 private:
   using HttpRequest = boost::beast::http::request<
     boost::beast::http::empty_body>;

@@ -28,7 +28,8 @@ public:
   static int create_image_ctx(librados::IoCtx& dst_io_ctx,
                               const json_spirit::mObject& source_spec_object,
                               bool import_only, uint64_t src_snap_id,
-                              ImageCtxT** src_image_ctx);
+                              ImageCtxT** src_image_ctx,
+                              librados::Rados** src_rados);
 };
 
 } // namespace migration
