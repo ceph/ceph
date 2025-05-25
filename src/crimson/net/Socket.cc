@@ -259,7 +259,7 @@ Socket::close()
 {
   assert(seastar::this_shard_id() == sid);
 #ifndef NDEBUG
-  ceph_assert_always(!closed);
+  ceph_assert(!closed);
   closed = true;
 #endif
   return seastar::when_all_succeed(
@@ -301,14 +301,14 @@ void Socket::set_trap(bp_type_t type, bp_action_t action, socket_blocker* blocke
   assert(seastar::this_shard_id() == sid);
   blocker = blocker_;
   if (type == bp_type_t::READ) {
-    ceph_assert_always(next_trap_read == bp_action_t::CONTINUE);
+    ceph_assert(next_trap_read == bp_action_t::CONTINUE);
     next_trap_read = action;
   } else { // type == bp_type_t::WRITE
     if (next_trap_write == bp_action_t::CONTINUE) {
       next_trap_write = action;
     } else if (next_trap_write == bp_action_t::FAULT) {
       // do_sweep_messages() may combine multiple write events into one socket write
-      ceph_assert_always(action == bp_action_t::FAULT || action == bp_action_t::CONTINUE);
+      ceph_assert(action == bp_action_t::FAULT || action == bp_action_t::CONTINUE);
     } else {
       ceph_abort();
     }
@@ -367,13 +367,13 @@ ShardedServerSocket::~ShardedServerSocket()
 {
   assert(!listener);
   // detect whether user have called destroy() properly
-  ceph_assert_always(!service);
+  ceph_assert(!service);
 }
 
 listen_ertr::future<>
 ShardedServerSocket::listen(entity_addr_t addr)
 {
-  ceph_assert_always(seastar::this_shard_id() == primary_sid);
+  ceph_assert(seastar::this_shard_id() == primary_sid);
   logger().debug("ShardedServerSocket({})::listen()...", addr);
   return this->container().invoke_on_all([addr](auto& ss) {
     ss.listen_addr = addr;
@@ -405,7 +405,7 @@ ShardedServerSocket::listen(entity_addr_t addr)
 seastar::future<>
 ShardedServerSocket::accept(accept_func_t &&_fn_accept)
 {
-  ceph_assert_always(seastar::this_shard_id() == primary_sid);
+  ceph_assert(seastar::this_shard_id() == primary_sid);
   logger().debug("ShardedServerSocket({})::accept()...", listen_addr);
   return this->container().invoke_on_all([_fn_accept](auto &ss) {
     assert(ss.listener);
@@ -420,7 +420,7 @@ ShardedServerSocket::accept(accept_func_t &&_fn_accept)
 #ifndef NDEBUG
           if (ss.dispatch_only_on_primary_sid) {
             // see seastar::listen_options::set_fixed_cpu()
-            ceph_assert_always(seastar::this_shard_id() == ss.primary_sid);
+            ceph_assert(seastar::this_shard_id() == ss.primary_sid);
           }
 #endif
           auto [socket, paddr] = std::move(accept_result);
