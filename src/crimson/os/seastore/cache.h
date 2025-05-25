@@ -1403,6 +1403,30 @@ public:
   /// Dump live extents
   void dump_contents();
 
+  CachedExtentRef adjust_laddr(Transaction &t, paddr_t paddr, laddr_t new_laddr) {
+    CachedExtentRef ext;
+    LOG_PREFIX(Cache::adjust_laddr);
+    auto result = t.get_extent(paddr, &ext);
+    if (result == Transaction::get_extent_ret::PRESENT) {
+      t.add_present_to_retired_set(ext);
+    } else if (result == Transaction::get_extent_ret::ABSENT) {
+      ext = query_cache(paddr);
+      if (ext) {
+        t.add_absent_to_retired_set(ext);
+      } else {
+        return CachedExtentRef();
+      }
+    } else {
+      return CachedExtentRef();
+    }
+    SUBDEBUGT(seastore_cache,"{}", t, *ext);
+    auto new_ext = ext->duplicate_for_write(t);
+    new_ext->init(CachedExtent::extent_state_t::EXIST_CLEAN, paddr,
+                  PLACEMENT_HINT_NULL, NULL_GENERATION, t.get_trans_id());
+    new_ext->template cast<LogicalCachedExtent>()->set_laddr(new_laddr);
+    t.add_fresh_extent(new_ext);
+    return new_ext;
+  }
   /**
    * backref_extent_entry_t
    *
