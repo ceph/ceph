@@ -20,9 +20,10 @@ from .operations.group import open_group, create_group, remove_group, \
     open_group_unique, set_group_attrs
 from .operations.volume import create_volume, delete_volume, rename_volume, \
     list_volumes, open_volume, get_pool_names, get_pool_ids, \
-    get_pending_subvol_deletions_count, get_all_pending_clones_count
+    get_all_pending_clones_count
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone, open_subvol_in_group, open_subvol_in_vol
+from .operations.trash import get_pending_subvol_deletions_count
 
 from .vol_spec import VolSpec
 from .exception import VolumeException, ClusterError, ClusterTimeout, \
@@ -181,7 +182,8 @@ class VolumeClient(CephfsClient["Module"]):
                                          cephfs.AT_SYMLINK_NOFOLLOW)
 
                     usedbytes = st['size']
-                    vol_info_dict = get_pending_subvol_deletions_count(fs_handle, path)
+                    vol_info_dict = get_pending_subvol_deletions_count(
+                            fs_handle, self.volspec)
                     if human_readable:
                         vol_info_dict['used_size'] = mgr_util.format_bytes(int(usedbytes), 5)
                     else:
