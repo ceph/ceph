@@ -3993,16 +3993,14 @@ int RGWPutObj::init_processing(optional_yield y) {
     copy_source_bucket_name = copy_source_bucket_name.substr(0, pos);
 #define VERSION_ID_STR "?versionId="
     pos = copy_source_object_name.find(VERSION_ID_STR);
-    if (pos == std::string::npos) {
-      copy_source_object_name = url_decode(copy_source_object_name);
-    } else {
+    if (pos != std::string::npos) {
       copy_source_version_id =
         copy_source_object_name.substr(pos + sizeof(VERSION_ID_STR) - 1);
       copy_source_object_name =
-        url_decode(copy_source_object_name.substr(0, pos));
+        copy_source_object_name.substr(0, pos);
     }
     if (copy_source_object_name.empty()) {
-      //means url_decode returned empty string so the url is formatted badly
+      //means copy_source_object_name is empty string so the url is formatted badly
       ret = -EINVAL;
       ldpp_dout(this, 5) << "x-amz-copy-source bad format" << dendl;
       return ret;
