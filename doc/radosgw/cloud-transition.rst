@@ -31,6 +31,7 @@ Cloud Storage Class Tier Type
 
   * ``cloud-s3-glacier`` : S3 Glacier or Tape storage services.
 
+.. _radosgw_cloud_tier_configuration:
 
 Cloud Storage Class Tier Configuration
 --------------------------------------
