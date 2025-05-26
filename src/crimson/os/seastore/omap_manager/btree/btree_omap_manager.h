@@ -66,7 +66,9 @@ class BtreeOMapManager : public OMapManager {
 public:
   explicit BtreeOMapManager(TransactionManager &tm);
 
-  initialize_omap_ret initialize_omap(Transaction &t, laddr_t hint,
+  initialize_omap_ret initialize_omap(
+    Transaction &t,
+    laddr_hint_t hint,
     omap_type_t type) final;
 
   omap_get_value_ret omap_get_value(

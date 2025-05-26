@@ -18,7 +18,9 @@ BtreeOMapManager::BtreeOMapManager(
   : tm(tm) {}
 
 BtreeOMapManager::initialize_omap_ret
-BtreeOMapManager::initialize_omap(Transaction &t, laddr_t hint,
+BtreeOMapManager::initialize_omap(
+  Transaction &t,
+  laddr_hint_t hint,
   omap_type_t type)
 {
   LOG_PREFIX(BtreeOMapManager::initialize_omap);
@@ -30,7 +32,10 @@ BtreeOMapManager::initialize_omap(Transaction &t, laddr_t hint,
       omap_node_meta_t meta{1};
       root_extent->set_meta(meta);
       omap_root_t omap_root;
-      omap_root.update(root_extent->get_laddr(), 1, hint, type);
+      laddr_t root_laddr = root_extent->get_laddr();
+      auto new_hint = laddr_hint_t::create_object_md_hint(
+	root_laddr.get_clone_prefix(), hint.block_size);
+      omap_root.update(root_laddr, 1, new_hint, type);
       t.get_omap_tree_stats().depth = 1u;
       t.get_omap_tree_stats().extents_num_delta++;
       return initialize_omap_iertr::make_ready_future<omap_root_t>(omap_root);
@@ -338,7 +343,7 @@ BtreeOMapManager::omap_clear(
     ).si_then([&omap_root] (auto ret) {
       omap_root.update(
 	L_ADDR_NULL,
-	0, L_ADDR_MIN, omap_root.get_type());
+	0, LADDR_HINT_NULL, omap_root.get_type());
       return omap_clear_iertr::now();
     });
   }).handle_error_interruptible(
