@@ -1766,13 +1766,14 @@ std::string url_decode(const std::string_view& src_str, bool in_query)
       const char c1 = hex_to_num(*src++);
       const char c2 = hex_to_num(*src);
       if (c1 < 0 || c2 < 0) {
-        return std::string();
+        src--;
+        src--; //going back to the %
+        dest_str.push_back(*src); //add % to the target destination string
       } else {
         dest_str.push_back(c1 << 4 | c2);
       }
     }
   }
-
   return dest_str;
 }
 
