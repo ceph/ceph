@@ -25,6 +25,7 @@
 #include <variant>
 
 #include <boost/container/small_vector.hpp>
+#include <boost/asio/bind_executor.hpp>
 #include <boost/asio/any_completion_handler.hpp>
 #include <boost/asio/append.hpp>
 #include <boost/asio/async_result.hpp>
@@ -2892,9 +2893,9 @@ public:
       }, consigned);
   }
 
-  auto wait_for_latest_osdmap(std::unique_ptr<ceph::async::Completion<OpSignature>> c) {
+  auto wait_for_latest_osdmap(boost::asio::any_completion_handler<OpSignature> c) {
     wait_for_latest_osdmap([c = std::move(c)](boost::system::error_code e) mutable {
-      c->dispatch(std::move(c), e);
+      boost::asio::dispatch(boost::asio::append(std::move(c), e));
     });
   }
 
@@ -3060,18 +3061,6 @@ public:
     op_submit(o);
   }
 
-  void mutate(const object_t& oid, const object_locator_t& oloc,
-	      ObjectOperation&& op, const SnapContext& snapc,
-	      ceph::real_time mtime, int flags,
-	      std::unique_ptr<ceph::async::Completion<Op::OpSig>> oncommit,
-	      version_t *objver = NULL, osd_reqid_t reqid = osd_reqid_t(),
-	      ZTracer::Trace *parent_trace = nullptr) {
-    mutate(oid, oloc, std::move(op), snapc, mtime, flags,
-	   [c = std::move(oncommit)](boost::system::error_code ec) mutable {
-	     c->dispatch(std::move(c), ec);
-	   }, objver, reqid, parent_trace);
-  }
-
   Op *prepare_read_op(
     const object_t& oid, const object_locator_t& oloc,
     ObjectOperation& op,
@@ -3135,18 +3124,6 @@ public:
     op.clear();
     op_submit(o);
   }
-
-  void read(const object_t& oid, const object_locator_t& oloc,
-	    ObjectOperation&& op, snapid_t snapid, ceph::buffer::list *pbl,
-	    int flags, std::unique_ptr<ceph::async::Completion<Op::OpSig>> onack,
-	    version_t *objver = nullptr, int *data_offset = nullptr,
-	    uint64_t features = 0, ZTracer::Trace *parent_trace = nullptr) {
-    read(oid, oloc, std::move(op), snapid, pbl, flags,
-	 [c = std::move(onack)](boost::system::error_code e) mutable {
-	   c->dispatch(std::move(c), e);
-	 }, objver, data_offset, features, parent_trace);
-  }
-
 
   Op *prepare_pg_read_op(
     uint32_t hash, object_locator_t oloc,

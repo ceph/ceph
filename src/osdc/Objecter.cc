@@ -1598,7 +1598,7 @@ void Objecter::_check_op_pool_dne(Op *op, std::unique_lock<std::shared_mutex> *s
 		     << " dne" << dendl;
       if (op->has_completion()) {
 	num_in_flight--;
-	op->complete(osdc_errc::pool_dne, -ENOENT, service.get_executor());
+	op->complete(make_error_code(osdc_errc::pool_dne), -ENOENT, service.get_executor());
       }
 
       OSDSession *s = op->session;
@@ -1633,7 +1633,8 @@ void Objecter::_check_op_pool_eio(Op *op, std::unique_lock<std::shared_mutex> *s
 		 << " has eio" << dendl;
   if (op->has_completion()) {
     num_in_flight--;
-    op->complete(osdc_errc::pool_eio, -EIO, service.get_executor());
+    op->complete(make_error_code(osdc_errc::pool_eio), -EIO,
+		 service.get_executor());
   }
 
   OSDSession *s = op->session;
@@ -1733,13 +1734,15 @@ void Objecter::_check_linger_pool_dne(LingerOp *op, bool *need_unregister)
       if (op->on_reg_commit) {
 	asio::defer(service.get_executor(),
 		    asio::append(std::move(op->on_reg_commit),
-				 osdc_errc::pool_dne, cb::list{}));
+				 make_error_code(osdc_errc::pool_dne),
+				 cb::list{}));
 	op->on_reg_commit = nullptr;
       }
       if (op->on_notify_finish) {
 	asio::defer(service.get_executor(),
 		    asio::append(std::move(op->on_notify_finish),
-				 osdc_errc::pool_dne, cb::list{}));
+				 make_error_code(osdc_errc::pool_dne),
+				 cb::list{}));
         op->on_notify_finish = nullptr;
       }
       *need_unregister = true;
@@ -1757,12 +1760,12 @@ void Objecter::_check_linger_pool_eio(LingerOp *op)
   if (op->on_reg_commit) {
     asio::defer(service.get_executor(),
 		asio::append(std::move(op->on_reg_commit),
-			     osdc_errc::pool_dne, cb::list{}));
+			     make_error_code(osdc_errc::pool_dne), cb::list{}));
   }
   if (op->on_notify_finish) {
     asio::defer(service.get_executor(),
 		asio::append(std::move(op->on_notify_finish),
-			     osdc_errc::pool_dne, cb::list{}));
+			     make_error_code(osdc_errc::pool_dne), cb::list{}));
   }
 }
 
@@ -2456,7 +2459,8 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
     break;
   case RECALC_OP_TARGET_POOL_EIO:
     if (op->has_completion()) {
-      op->complete(osdc_errc::pool_eio, -EIO, service.get_executor());
+      op->complete(make_error_code(osdc_errc::pool_eio), -EIO,
+		   service.get_executor());
     }
     return;
   }
@@ -4014,7 +4018,8 @@ void Objecter::create_pool_snap(int64_t pool, std::string_view snap_name,
   const pg_pool_t *p = osdmap->get_pg_pool(pool);
   if (!p) {
     asio::defer(service.get_executor(),
-		asio::append(std::move(onfinish), osdc_errc::pool_dne, cb::list{}));
+		asio::append(std::move(onfinish),
+			     make_error_code(osdc_errc::pool_dne), cb::list{}));
     return;
   }
   if (p->snap_exists(snap_name)) {
@@ -4083,14 +4088,17 @@ void Objecter::delete_pool_snap(
   const pg_pool_t *p = osdmap->get_pg_pool(pool);
   if (!p) {
     asio::defer(service.get_executor(),
-		asio::append(std::move(onfinish), osdc_errc::pool_dne,
+		asio::append(std::move(onfinish),
+			     make_error_code(osdc_errc::pool_dne),
 			     cb::list{}));
     return;
   }
 
   if (!p->snap_exists(snap_name)) {
     asio::defer(service.get_executor(),
-		asio::append(std::move(onfinish), osdc_errc::snapshot_dne, cb::list{}));
+		asio::append(std::move(onfinish),
+			     make_error_code(osdc_errc::snapshot_dne),
+			     cb::list{}));
     return;
   }
 
@@ -4131,7 +4139,8 @@ void Objecter::create_pool(std::string_view name,
 
   if (osdmap->lookup_pg_pool_name(name) >= 0) {
     asio::defer(service.get_executor(),
-		asio::append(std::move(onfinish), osdc_errc::pool_exists,
+		asio::append(std::move(onfinish),
+			     make_error_code(osdc_errc::pool_exists),
 			     cb::list{}));
     return;
   }
@@ -4156,7 +4165,8 @@ void Objecter::delete_pool(int64_t pool,
 
   if (!osdmap->have_pg_pool(pool))
     asio::defer(service.get_executor(),
-		asio::append(std::move(onfinish), osdc_errc::pool_dne,
+		asio::append(std::move(onfinish),
+			     make_error_code(osdc_errc::pool_dne),
 			     cb::list{}));
   else
     _do_delete_pool(pool, std::move(onfinish));
@@ -4172,7 +4182,8 @@ void Objecter::delete_pool(std::string_view pool_name,
   if (pool < 0)
     // This only returns one error: -ENOENT.
     asio::defer(service.get_executor(),
-		asio::append(std::move(onfinish), osdc_errc::pool_dne,
+		asio::append(std::move(onfinish),
+			     make_error_code(osdc_errc::pool_dne),
 			     cb::list{}));
   else
     _do_delete_pool(pool, std::move(onfinish));
