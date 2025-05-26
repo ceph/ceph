@@ -928,6 +928,15 @@ int RGWSelectObj_ObjStore_S3::csv_processing(bufferlist& bl, off_t ofs, off_t le
     ldpp_dout(this, 10) << "s3select: chunk:  ofs = " << ofs << " len = " << len << " it.length() = " << it.length() << " m_object_size_for_processing = " << m_object_size_for_processing << dendl;
     
     m_aws_response_handler.update_processed_size(it.length());//NOTE : to run analysis to validate len is aligned with m_processed_bytes
+    
+    //NOTE: checking valgrind report for uninitialized read
+    const char* c = &(it)[0] + ofs + it.length() - 1;
+    if (*c=='a'){
+		  ldpp_dout(this, 10) << "s3select: last char is 'a' in the chunk, ofs = " << ofs << " len = " << len << " it.length() = " << it.length() << dendl;
+		} else {
+		  ldpp_dout(this, 10) << "s3select: last char is not 'a' in the chunk, ofs = " << ofs << " len = " << len << " it.length() = " << it.length() << dendl;
+		}
+
     status = run_s3select_on_csv(m_sql_query.c_str(), &(it)[0] + ofs, it.length());
     if (status<0) {
 	  return -EINVAL;
