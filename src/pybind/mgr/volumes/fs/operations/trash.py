@@ -1,12 +1,14 @@
 import os
 import uuid
 import logging
+import errno
 from contextlib import contextmanager
 
 import cephfs
 
 from .template import GroupTemplate
 from ..exception import VolumeException
+from ..fs_util import listdir
 
 log = logging.getLogger(__name__)
 
@@ -142,3 +144,18 @@ def open_trashcan(fs, vol_spec):
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
     yield trashcan
+
+
+def get_pending_subvol_deletions_count(fs, volspec):
+    """
+    Get the number of pending subvolumes deletions.
+    """
+    trashdir = os.path.join(volspec.base_dir, Trash.GROUP_NAME)
+    try:
+        num_pending_subvol_del = len(listdir(fs, trashdir, filter_entries=None,
+                                             filter_files=False))
+    except VolumeException as ve:
+        if ve.errno == -errno.ENOENT:
+            num_pending_subvol_del = 0
+
+    return {'pending_subvolume_deletions': num_pending_subvol_del}
