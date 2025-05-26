@@ -67,7 +67,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   }
 
   static eagain_ifuture<typename parent_t::fresh_impl_t> allocate(
-      context_t c, laddr_t hint, bool is_level_tail,
+      context_t c, laddr_hint_t hint, bool is_level_tail,
       bool is_level_head, level_t level) {
     LOG_PREFIX(OTree::Layout::allocate);
     extent_len_t extent_size;
@@ -311,7 +311,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     key_view_t first_index;
     stage_t::template get_slot<true, false>(
         extent.read(), position_t::begin(), &first_index, nullptr);
-    auto hint = first_index.get_hint();
+    auto hint = first_index.create_onode_hint();
     return extent.rebuild(c, hint).si_then([this] (auto mut) {
       // addr may change
       build_name();

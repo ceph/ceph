@@ -428,7 +428,7 @@ class Node
     make_root(c, std::move(_super));
   }
   void as_root(Super::URef&& _super);
-  eagain_ifuture<> upgrade_root(context_t, laddr_t);
+  eagain_ifuture<> upgrade_root(context_t, laddr_hint_t);
 
   Super::URef deref_super();
 
@@ -564,7 +564,7 @@ class InternalNode final : public Node {
   void track_make_tail(const search_position_t&);
 
   static eagain_ifuture<Ref<InternalNode>> allocate_root(
-      context_t, laddr_t, level_t, laddr_t, Super::URef&&);
+      context_t, laddr_hint_t, level_t, laddr_t, Super::URef&&);
 
  protected:
   eagain_ifuture<Ref<tree_cursor_t>> lookup_smallest(context_t) override;
@@ -606,7 +606,7 @@ class InternalNode final : public Node {
     }
   };
   static eagain_ifuture<fresh_node_t> allocate(
-    context_t, laddr_t, field_type_t, bool, bool, level_t);
+    context_t, laddr_hint_t, field_type_t, bool, bool, level_t);
 
  private:
   /**
@@ -740,7 +740,7 @@ class LeafNode final : public Node {
       return std::make_pair(Ref<Node>(node), mut);
     }
   };
-  static eagain_ifuture<fresh_node_t> allocate(context_t, laddr_t, field_type_t, bool, bool);
+  static eagain_ifuture<fresh_node_t> allocate(context_t, laddr_hint_t, field_type_t, bool, bool);
 
  private:
   /**

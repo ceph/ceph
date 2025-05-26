@@ -491,7 +491,7 @@ Super::URef Node::deref_super()
   return ret;
 }
 
-eagain_ifuture<> Node::upgrade_root(context_t c, laddr_t hint)
+eagain_ifuture<> Node::upgrade_root(context_t c, laddr_hint_t hint)
 {
   LOG_PREFIX(OTree::Node::upgrade_root);
   assert(impl->field_type() == field_type_t::N0);
@@ -1251,7 +1251,7 @@ eagain_ifuture<std::pair<Ref<Node>, Ref<Node>>> InternalNode::get_child_peers(
 }
 
 eagain_ifuture<Ref<InternalNode>> InternalNode::allocate_root(
-    context_t c, laddr_t hint, level_t old_root_level,
+    context_t c, laddr_hint_t hint, level_t old_root_level,
     laddr_t old_root_addr, Super::URef&& super)
 {
   // support tree height up to 256
@@ -1418,7 +1418,8 @@ eagain_ifuture<> InternalNode::test_clone_root(
   assert(impl->field_type() == field_type_t::N0);
   Ref<const Node> this_ref = this;
   return InternalNode::allocate(
-    c_other, L_ADDR_MIN, field_type_t::N0, true, true, impl->level()
+    c_other, laddr_hint_t::create_global_md_hint(),
+    field_type_t::N0, true, true, impl->level()
   ).si_then([this, c_other, &tracker_other](auto fresh_other) {
     impl->test_copy_to(fresh_other.mut);
     auto cloned_root = fresh_other.node;
@@ -1529,14 +1530,14 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
 
   // proceed to split with insert
   // assume I'm already ref-counted by caller
-  laddr_t left_hint, right_hint;
+  laddr_hint_t left_hint, right_hint;
   {
     key_view_t left_key;
     impl->get_slot(search_position_t::begin(), &left_key, nullptr);
-    left_hint = left_key.get_hint();
+    left_hint = left_key.create_onode_hint();
     key_view_t right_key;
     impl->get_largest_slot(nullptr, &right_key, nullptr);
-    right_hint = right_key.get_hint();
+    right_hint = right_key.create_onode_hint();
   }
   return (is_root() ? upgrade_root(c, left_hint) : eagain_iertr::now()
   ).si_then([this, c, right_hint] {
@@ -1786,7 +1787,7 @@ void InternalNode::validate_child_inconsistent(const Node& child) const
 }
 
 eagain_ifuture<InternalNode::fresh_node_t> InternalNode::allocate(
-    context_t c, laddr_t hint, field_type_t field_type,
+    context_t c, laddr_hint_t hint, field_type_t field_type,
     bool is_level_tail, bool is_level_head, level_t level)
 {
   return InternalNodeImpl::allocate(c, hint, field_type, is_level_tail,
@@ -2090,7 +2091,8 @@ eagain_ifuture<> LeafNode::test_clone_root(
   assert(impl->is_level_tail());
   assert(impl->field_type() == field_type_t::N0);
   Ref<const Node> this_ref = this;
-  return LeafNode::allocate(c_other, L_ADDR_MIN, field_type_t::N0, true, true
+  return LeafNode::allocate(
+    c_other, laddr_hint_t::create_global_md_hint(), field_type_t::N0, true, true
   ).si_then([this, c_other, &tracker_other](auto fresh_other) {
     impl->test_copy_to(fresh_other.mut);
     auto cloned_root = fresh_other.node;
@@ -2138,14 +2140,14 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
   }
   // split and insert
   Ref<Node> this_ref = this;
-  laddr_t left_hint, right_hint;
+  laddr_hint_t left_hint, right_hint;
   {
     key_view_t left_key;
     impl->get_slot(search_position_t::begin(), &left_key, nullptr);
-    left_hint = left_key.get_hint();
+    left_hint = left_key.create_onode_hint();
     key_view_t right_key;
     impl->get_largest_slot(nullptr, &right_key, nullptr);
-    right_hint = right_key.get_hint();
+    right_hint = right_key.create_onode_hint();
   }
   return (is_root() ? upgrade_root(c, left_hint) : eagain_iertr::now()
   ).si_then([this, c, right_hint] {
@@ -2188,7 +2190,8 @@ eagain_ifuture<Ref<LeafNode>> LeafNode::allocate_root(
     context_t c, RootNodeTracker& root_tracker)
 {
   LOG_PREFIX(OTree::LeafNode::allocate_root);
-  return LeafNode::allocate(c, L_ADDR_MIN, field_type_t::N0, true, true
+  return LeafNode::allocate(
+    c, laddr_hint_t::create_global_md_hint(), field_type_t::N0, true, true
   ).si_then([c, &root_tracker, FNAME](auto fresh_node) {
     auto root = fresh_node.node;
     return c.nm.get_super(c.t, root_tracker
@@ -2310,7 +2313,7 @@ void LeafNode::track_erase(
 }
 
 eagain_ifuture<LeafNode::fresh_node_t> LeafNode::allocate(
-    context_t c, laddr_t hint, field_type_t field_type,
+    context_t c, laddr_hint_t hint, field_type_t field_type,
     bool is_level_tail, bool is_level_head)
 {
   return LeafNodeImpl::allocate(c, hint, field_type, is_level_tail, is_level_head
