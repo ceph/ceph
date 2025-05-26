@@ -2306,15 +2306,15 @@ std::ostream &operator<<(std::ostream &out, const omap_type_t &type);
 struct omap_root_t {
   laddr_t addr = L_ADDR_NULL;
   depth_t depth = 0;
-  laddr_t hint = L_ADDR_MIN;
+  laddr_hint_t hint = LADDR_HINT_NULL;
   bool mutated = false;
   omap_type_t type = omap_type_t::NONE;
 
   omap_root_t() = default;
-  omap_root_t(laddr_t addr, depth_t depth, laddr_t addr_min, omap_type_t type)
+  omap_root_t(laddr_t addr, depth_t depth, laddr_hint_t hint, omap_type_t type)
     : addr(addr),
       depth(depth),
-      hint(addr_min),
+      hint(hint),
       type(type) {}
 
   omap_root_t(const omap_root_t &o) = default;
@@ -2330,7 +2330,7 @@ struct omap_root_t {
     return mutated;
   }
   
-  void update(laddr_t _addr, depth_t _depth, laddr_t _hint, omap_type_t _type) {
+  void update(laddr_t _addr, depth_t _depth, laddr_hint_t _hint, omap_type_t _type) {
     mutated = true;
     addr = _addr;
     depth = _depth;
@@ -2346,7 +2346,7 @@ struct omap_root_t {
     return depth;
   }
 
-  laddr_t get_hint() const {
+  laddr_hint_t get_hint() const {
     return hint;
   }
 
@@ -2380,7 +2380,7 @@ public:
     type = nroot.get_type();
   }
   
-  omap_root_t get(laddr_t hint) const {
+  omap_root_t get(laddr_hint_t hint) const {
     return omap_root_t(addr, depth, hint, type);
   }
   
