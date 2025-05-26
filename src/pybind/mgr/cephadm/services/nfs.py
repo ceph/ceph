@@ -459,7 +459,8 @@ class NFSService(CephService):
                     'kmip_key',
                     'kmip_ca_cert',
                 ]:
-                    config['files'][kmip_cert_key_field] = getattr(nfs_spec, kmip_cert_key_field)
+                    config['files'][f'{kmip_cert_key_field}.pem'] = getattr(nfs_spec, kmip_cert_key_field)
+
             if nfs_spec.ssl:
                 tls_creds = self.get_certificates(
                     daemon_spec,
@@ -471,6 +472,7 @@ class NFSService(CephService):
                     'tls_key.pem': tls_creds.key,
                     'tls_ca_cert.pem': tls_creds.ca_cert,
                 })
+
             config.update(
                 self.get_config_and_keyring(
                     daemon_type, daemon_id,
