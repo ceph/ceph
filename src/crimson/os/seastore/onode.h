@@ -155,12 +155,12 @@ public:
     std::optional<laddr_t> prefix = std::nullopt;
 
     const auto &layout = get_layout();
-    auto omap_root = layout.omap_root.get(L_ADDR_NULL);
+    auto omap_root = layout.omap_root.get(LADDR_HINT_NULL);
     if (!omap_root.is_null()) {
       prefix.emplace(omap_root.addr.get_clone_prefix());
     }
 
-    auto xattr_root = layout.xattr_root.get(L_ADDR_NULL);
+    auto xattr_root = layout.xattr_root.get(LADDR_HINT_NULL);
     if (!xattr_root.is_null()) {
       auto laddr = xattr_root.addr.get_clone_prefix();
       if (prefix) {

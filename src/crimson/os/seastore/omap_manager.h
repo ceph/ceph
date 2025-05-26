@@ -58,7 +58,9 @@ public:
    */
   using initialize_omap_iertr = base_iertr;
   using initialize_omap_ret = initialize_omap_iertr::future<omap_root_t>;
-  virtual initialize_omap_ret initialize_omap(Transaction &t, laddr_t hint,
+  virtual initialize_omap_ret initialize_omap(
+    Transaction &t,
+    laddr_hint_t hint,
     omap_type_t type) = 0;
 
   /**
