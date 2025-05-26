@@ -1512,12 +1512,14 @@ public:
     const pg_info_t &info,
     std::ostringstream &oss,
     bool tolerate_divergent_missing_log,
+    bool ec_optimizations_enabled, // Relax asserts for partial writes
     bool debug_verify_stored_missing = false
     ) {
     return read_log_and_missing(
       cct, store, ch, pgmeta_oid, info,
       log, missing, oss,
       tolerate_divergent_missing_log,
+      ec_optimizations_enabled,
       &clear_divergent_priors,
       this,
       (pg_log_debug ? &log_keys_debug : nullptr),
@@ -1535,6 +1537,7 @@ public:
     missing_type &missing,
     std::ostringstream &oss,
     bool tolerate_divergent_missing_log,
+    bool ec_optimizations_enabled, // Relax asserts for partial writes
     bool *clear_divergent_priors = nullptr,
     const DoutPrefixProvider *dpp = nullptr,
     std::set<std::string> *log_keys_debug = nullptr,
@@ -1657,6 +1660,7 @@ public:
 	    continue;
 	  if (!i->is_written_shard(info.pgid.shard)) {
 	    // optimized EC - partial write that this shard didn't participate in
+	    ceph_assert(ec_optimizations_enabled);
 	    continue;
 	  }
 	  if (did.count(i->soid)) continue;
@@ -1700,7 +1704,15 @@ public:
 			miter->second.have == eversion_t()));
 	      } else {
 		ceph_assert(miter != missing.get_items().end());
-		ceph_assert(miter->second.need == i->version);
+		if (ec_optimizations_enabled) {
+		  // Optimized pools do not store log entries for shards that
+		  // did not participate in the write, however missing entries
+		  // are calculated from full log so may be for a newer version
+		  // that the latest log entry
+		  ceph_assert(miter->second.need >= i->version);
+		} else {
+		  ceph_assert(miter->second.need == i->version);
+		}
 		ceph_assert(miter->second.have == eversion_t());
 	      }
 	      checked.insert(i->soid);
