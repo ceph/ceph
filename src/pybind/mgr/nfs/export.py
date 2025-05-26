@@ -707,7 +707,8 @@ class ExportMgr:
                              xprtsec: Optional[str] = None,
                              cmount_path: Optional[str] = "/",
                              transports: Optional[List[str]] = None,
-                             earmark_resolver: Optional[CephFSEarmarkResolver] = None
+                             earmark_resolver: Optional[CephFSEarmarkResolver] = None,
+                             kmip_key_id: Optional[str] = None
                              ) -> Dict[str, Any]:
 
         validate_cephfs_path(self.mgr, fs_name, path)
@@ -732,6 +733,7 @@ class ExportMgr:
             "sectype": sectype,
             "XprtSec": xprtsec,
             "protocols": protocols,
+            "kmip_key_id": kmip_key_id
         }
         if transports is not None:
             export_dict["transports"] = transports
@@ -766,7 +768,8 @@ class ExportMgr:
                           clients: list = [],
                           sectype: Optional[List[str]] = None,
                           xprtsec: Optional[str] = None,
-                          transports: Optional[List[str]] = None) -> Dict[str, Any]:
+                          transports: Optional[List[str]] = None,
+                          kmip_key_id: Optional[str] = None) -> Dict[str, Any]:
         pseudo_path = normalize_path(pseudo_path)
 
         if not bucket and not user_id:
@@ -788,6 +791,7 @@ class ExportMgr:
             "sectype": sectype,
             "XprtSec": xprtsec,
             "protocols": protocols,
+            "kmip_key_id": kmip_key_id
         }
         if transports is not None:
             export_dict["transports"] = transports
