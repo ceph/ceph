@@ -453,7 +453,8 @@ int get_log(CephContext *cct, ObjectStore *fs, __u8 struct_ver,
       pgid.make_pgmeta_oid(),
       info, log, missing,
       oss,
-      g_ceph_context->_conf->osd_ignore_stale_divergent_priors);
+      g_ceph_context->_conf->osd_ignore_stale_divergent_priors,
+      true); // Always use relaxed asserts for this tool.
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
   }
@@ -1173,6 +1174,7 @@ int expand_log(
       info,
       oss,
       cct->_conf->osd_ignore_stale_divergent_priors,
+      true, // Always use relaxed asserts for this tool.
       cct->_conf->osd_debug_verify_missing_on_start);
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
