@@ -177,6 +177,11 @@ class NFSGanesha(ContainerDaemonForm):
 
         # create the ganesha conf dir
         config_dir = os.path.join(data_dir, 'etc/ganesha')
+
+        kmip_dir = os.path.join(data_dir, 'etc/ganesha/kmip')
+        makedirs(config_dir, uid, gid, 0o755)
+        makedirs(kmip_dir, uid, gid, 0o755)
+
         tls_dir = os.path.join(data_dir, 'etc/ganesha/tls')
         makedirs(config_dir, uid, gid, 0o755)
         makedirs(tls_dir, uid, gid, 0o755)
@@ -186,13 +191,20 @@ class NFSGanesha(ContainerDaemonForm):
             for fname, content in self.files.items()
             if fname in ['ganesha.conf', 'idmap.conf']
         }
+        kmip_files = {
+            fname: content
+            for fname, content in self.files.items()
+            if fname.startswith('kmip')
+        }
         tls_files = {
             fname: content
             for fname, content in self.files.items()
             if fname.startswith('tls')
         }
+
         # populate files from the config-json
         populate_files(config_dir, config_files, uid, gid)
+        populate_files(kmip_dir, kmip_files, uid, gid)
         populate_files(tls_dir, tls_files, uid, gid)
 
         # write the RGW keyring
