@@ -63,11 +63,16 @@ class CephUserEndpoints:
             caps.append(cap['entity'])
             caps.append(cap['cap'])
 
-        logger.debug("Sending command 'auth add' of entity '%s' with caps '%s'",
+        logger.debug("Sending command 'auth get-or-create' of entity '%s' with caps '%s'",
                      user_entity, str(caps))
-        CephUserEndpoints._run_auth_command('auth add', entity=user_entity, caps=caps)
+        return CephUserEndpoints._run_auth_command('auth get-or-create', entity=user_entity, caps=caps)
 
-        return f"Successfully created user '{user_entity}'"
+    @staticmethod
+    def user_get(_, user_entity: str):
+        """
+        Get a ceph user with its key and capabilities.
+        """
+        return CephUserEndpoints._run_auth_command('auth get', entity=user_entity)
 
     @staticmethod
     def user_delete(_, user_entities: str):
@@ -218,6 +223,13 @@ edit_form = Form(path='/cluster/user/edit',
                         })
     ),
     extra_endpoints=[
+        ('get', CRUDCollectionMethod(
+            func=CephUserEndpoints.user_get,
+            doc=EndpointDoc("Get Ceph User with key",
+                            parameters={
+                                "user_entity": Param(str, "Entity to get")
+                            })
+        )),
         ('export', CRUDCollectionMethod(
             func=RESTController.Collection('POST', 'export')(CephUserEndpoints.export),
             doc=EndpointDoc("Export Ceph Users",
