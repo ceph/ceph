@@ -2487,7 +2487,7 @@ public:
     clear();
     ostringstream err;
     read_log_and_missing(store.get(), ch, log_oid,
-			 pg_info_t(), err, false);
+			 pg_info_t(), err, false, false);
     ASSERT_EQ(orig_dups.size(), log.dups.size());
     ASSERT_EQ(orig_dups, log.dups);
     auto dups_it = log.dups.begin();
