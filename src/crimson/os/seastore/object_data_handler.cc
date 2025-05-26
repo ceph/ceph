@@ -127,7 +127,7 @@ ObjectDataHandler::write_iertr::future<LBAMapping>
 ObjectDataHandler::prepare_shared_region(
   context_t ctx,
   Onode &onode,
-  laddr_t hint,
+  laddr_hint_t hint,
   extent_len_t len)
 {
   LOG_PREFIX(ObjectDataHandler::prepare_shared_region);
@@ -254,7 +254,8 @@ ObjectDataHandler::write_ret do_zero(
       ctx.tm.get_block_size() - data.tailbl->length());
     fut = ctx.tm.alloc_data_extents<ObjectDataBlock>(
       ctx.t,
-      (overwrite_range.aligned_end - ctx.tm.get_block_size()).checked_to_laddr(),
+      laddr_hint_t::create_as_fixed(
+        (overwrite_range.aligned_end - ctx.tm.get_block_size()).checked_to_laddr()),
       ctx.tm.get_block_size(),
       std::move(zero_pos)
     ).si_then([ctx, &data](auto extents) {
@@ -298,7 +299,7 @@ ObjectDataHandler::write_ret do_zero(
     fut = fut.si_then([ctx, &overwrite_range](auto zero_pos) {
       return ctx.tm.alloc_data_extents<ObjectDataBlock>(
 	ctx.t,
-	overwrite_range.aligned_begin,
+	laddr_hint_t::create_as_fixed(overwrite_range.aligned_begin),
 	ctx.tm.get_block_size(),
 	std::move(*zero_pos));
     }).si_then([&data](auto extents) {
@@ -328,7 +329,7 @@ ObjectDataHandler::write_ret do_write(
   assert(data.bl);
   return ctx.tm.alloc_data_extents<ObjectDataBlock>(
     ctx.t,
-    overwrite_range.aligned_begin,
+    laddr_hint_t::create_as_fixed(overwrite_range.aligned_begin),
     overwrite_range.aligned_end.template get_byte_distance<
       extent_len_t>(overwrite_range.aligned_begin),
     std::move(write_pos)
@@ -1491,7 +1492,7 @@ ObjectDataHandler::do_clone_range(
 	}
 	fut = ctx.tm.alloc_data_extents<ObjectDataBlock>(
 	  ctx.t,
-	  overwrite_range.aligned_begin,
+	  laddr_hint_t::create_as_fixed(overwrite_range.aligned_begin),
 	  ctx.tm.get_block_size(),
 	  std::move(mapping)
 	).si_then([ctx, &data, &overwrite_range](auto extents) {
@@ -1538,8 +1539,9 @@ ObjectDataHandler::do_clone_range(
 	fut = fut.si_then([ctx, &overwrite_range](auto pos) {
 	  return ctx.tm.alloc_data_extents<ObjectDataBlock>(
 	    ctx.t,
-	    (overwrite_range.aligned_end - ctx.tm.get_block_size()
-	     ).checked_to_laddr(),
+	    laddr_hint_t::create_as_fixed(
+	      (overwrite_range.aligned_end - ctx.tm.get_block_size())
+	        .checked_to_laddr()),
 	    ctx.tm.get_block_size(),
 	    std::move(pos));
 	}).si_then([&data, &overwrite_range, ctx](auto extents) {
@@ -1915,7 +1917,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::do_clone(
   ).si_then([ctx, &object_data](auto) {
     return ctx.tm.reserve_region(
       ctx.t,
-      object_data.get_reserved_data_base(),
+      ctx.d_onode->get_data_hint(),
       object_data.get_reserved_data_len()
     ).handle_error_interruptible(
       write_iertr::pass_further{},
@@ -1984,9 +1986,9 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_range(
       }
       return prepare_shared_region(
 	ctx, ctx.onode,
-	object_data.get_reserved_data_base(),
+	ctx.onode.get_data_clone_hint(),
 	object_data.get_reserved_data_len()).discard_result();
-    }).si_then([ctx, &object_data, &d_object_data, srcoff, len, this] {
+    }).si_then([ctx, &object_data, &d_object_data, srcoff, len]() {
       return seastar::do_with(
 	state_t {
 	  std::nullopt, std::nullopt, std::nullopt,
