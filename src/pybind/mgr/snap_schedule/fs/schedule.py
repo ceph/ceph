@@ -364,9 +364,9 @@ class Schedule(object):
             current_retention = json.loads(current)
             for r, v in retention.items():
                 if r in current_retention:
-                    msg = (f'Retention for {r} is already present with value'
-                           f'{current_retention[r]}. Please remove first')
-                    raise ValueError(msg)
+                    msg = (f'Retention for {r} is already present with value '
+                           f'{current_retention[r]}. Please remove it first.')
+                    raise FileExistsError(msg)
             current_retention.update(retention)
             db.execute(cls.UPDATE_RETENTION,
                        (json.dumps(current_retention), path))
