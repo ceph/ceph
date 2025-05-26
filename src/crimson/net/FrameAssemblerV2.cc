@@ -139,7 +139,7 @@ bool FrameAssemblerV2::has_socket() const
 bool FrameAssemblerV2::is_socket_valid() const
 {
   assert(seastar::this_shard_id() == sid);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   if (has_socket() && socket->get_shard_id() == sid) {
     assert(socket->is_shutdown() == is_socket_shutdown);
   }

@@ -192,7 +192,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       dump(sos);
       SUBTRACE(seastore_onode, "-- dump\n{}", sos.str());
     }
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     if (!is_keys_empty()) {
       validate_layout();
     }
@@ -391,7 +391,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   const std::string& get_name() const override { return name; }
 
   void validate_layout() const override {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     stage_t::validate(extent.read());
 #endif
   }
@@ -425,7 +425,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     } else {
       ceph_abort("impossible path");
     }
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     if (pp_value) {
       assert((const char*)(*pp_value) - extent.read().p_start() <
              extent.get_length());
@@ -439,7 +439,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     assert(!is_keys_empty());
     assert(!pos.is_end());
     auto& _pos = cast_down<STAGE>(pos);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     auto nxt_pos = _pos;
 #endif
     if (!p_index_key && pp_value) {
@@ -448,7 +448,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     } else {
       ceph_abort("not implemented");
     }
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     auto _nxt_pos = _pos;
     stage_t::template get_next_slot<false, false>(
         extent.read(), _nxt_pos, nullptr, nullptr);
@@ -514,7 +514,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     if (index_key) {
       result_raw = stage_t::template lower_bound<true>(
           node_stage, key, history, index_key);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
       if (!result_raw.is_end()) {
         key_view_t index;
         stage_t::template get_slot<true, false>(
@@ -525,7 +525,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     } else {
       result_raw = stage_t::lower_bound(node_stage, key, history);
     }
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     if (result_raw.is_end()) {
       assert(result_raw.mstat == MSTAT_END);
     } else {
@@ -588,7 +588,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       SUBTRACE(seastore_onode, "-- dump\n{}", sos.str());
     }
     validate_layout();
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     key_view_t index;
     get_slot(insert_pos, &index, nullptr);
     assert(index == key);
@@ -768,14 +768,14 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
           insert_pos, insert_stage);
       p_value = extent.template split_insert_replayable<KEY_TYPE>(
           split_at, key, value, insert_pos, insert_stage, insert_size);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
       key_view_t index;
       get_slot(_insert_pos, &index, nullptr);
       assert(index == key);
 #endif
     } else {
       SUBDEBUG(seastore_onode, "-- left trim ...");
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
       key_view_t index;
       right_impl.get_slot(_insert_pos, &index, nullptr);
       assert(index == key);

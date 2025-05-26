@@ -115,7 +115,7 @@ class node_extent_t {
   }
 
   static void validate(const FieldType& fields) {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     assert(fields.header.get_node_type() == NODE_TYPE);
     assert(fields.header.get_field_type() == FieldType::FIELD_TYPE);
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
@@ -190,7 +190,7 @@ class node_extent_t<FieldType, NODE_TYPE>::Appender {
  public:
   Appender(NodeExtentMutable* p_mut, char* p_append)
     : p_mut{p_mut}, p_start{p_append} {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     auto p_fields = reinterpret_cast<const FieldType*>(p_append);
     assert(*(p_fields->header.get_field_type()) == FIELD_TYPE);
     assert(p_fields->header.get_node_type() == NODE_TYPE);

@@ -293,7 +293,7 @@ void ProtocolV2::fault(
                   where,
                   get_state_name(state),
                   e_what);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     if (expected_state == state_t::REPLACING) {
       assert(state == state_t::CLOSING);
     } else if (expected_state == state_t::READY) {

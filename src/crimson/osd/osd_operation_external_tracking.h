@@ -236,10 +236,10 @@ struct HistoricBackend
   }
 
   static const ClientRequest& to_client_request(const Operation& op) {
-#ifdef NDEBUG
-    return static_cast<const ClientRequest&>(op);
-#else
+#ifdef CRIMSON_DEBUG
     return dynamic_cast<const ClientRequest&>(op);
+#else
+    return static_cast<const ClientRequest&>(op);
 #endif
   }
 

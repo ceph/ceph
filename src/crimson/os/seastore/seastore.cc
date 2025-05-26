@@ -211,7 +211,7 @@ seastar::future<> SeaStore::start()
   INFO("...");
 
   ceph_assert(seastar::this_shard_id() == primary_core);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   bool is_test = true;
 #else
   bool is_test = false;
@@ -1554,7 +1554,7 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
                num_bytes,
                ctx.iter.colls.size(),
                ctx.iter.objects.size());
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
 	TRACET(" transaction dump:\n", t);
 	JSONFormatter f(true);
 	f.open_object_section("transaction");

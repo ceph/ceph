@@ -383,7 +383,7 @@ public:
     CachedExtentRef ret;
     LOG_PREFIX(Cache::get_absent_extent);
 
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     auto r = t.get_extent(offset, &ret);
     if (r != Transaction::get_extent_ret::ABSENT) {
       SUBERRORT(seastore_cache, "unexpected non-absent extent {}", t, *ret);
@@ -861,7 +861,7 @@ private:
   ) {
     LOG_PREFIX(Cache::_get_absent_extent_by_type);
 
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     CachedExtentRef ret;
     auto r = t.get_extent(offset, &ret);
     if (r != Transaction::get_extent_ret::ABSENT) {

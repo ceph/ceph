@@ -877,7 +877,7 @@ inline res_paddr_t& paddr_t::as_res_paddr() {
 }
 
 inline paddr_t::paddr_t(internal_paddr_t val) : internal_paddr(val) {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   auto type = get_addr_type();
   if (type == paddr_types_t::SEGMENT) {
     assert(as_seg_paddr().get_segment_off() >= 0);

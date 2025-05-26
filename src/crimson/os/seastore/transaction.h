@@ -129,7 +129,7 @@ public:
   void add_present_to_retired_set(CachedExtentRef ref) {
     assert(ref->get_paddr().is_real_location());
     assert(!is_weak());
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     auto [result, ext] = do_get_extent(ref->get_paddr());
     assert(result == get_extent_ret::PRESENT);
     assert(ext == ref);

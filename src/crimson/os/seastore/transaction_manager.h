@@ -485,7 +485,7 @@ public:
     // must be user-oriented required by (the potential) maybe_init
     assert(is_user_transaction(t.get_src()));
 
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     std::sort(remaps.begin(), remaps.end(),
       [](remap_entry_t x, remap_entry_t y) {
         return x.offset < y.offset;
@@ -969,7 +969,7 @@ private:
     if (v.has_child()) {
       return v.get_child_fut(
       ).si_then([pin=std::move(pin)](auto extent) {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
         auto lextent = extent->template cast<LogicalChildNode>();
         auto pin_laddr = pin.get_intermediate_base();
         assert(lextent->get_laddr() == pin_laddr);

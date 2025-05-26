@@ -489,7 +489,7 @@ ExtentPlacementManager::write_delayed_ool_extents(
   return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
     auto writer = p.first;
     auto& extents = p.second;
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     std::for_each(
       extents.begin(),
       extents.end(),

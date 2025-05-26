@@ -147,7 +147,7 @@ void TMDriver::init()
   shard_stats = {};
 
   std::vector<Device*> sec_devices;
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   tm = make_transaction_manager(device.get(), sec_devices, shard_stats, true);
 #else
   tm = make_transaction_manager(device.get(), sec_devices, shard_stats, false);

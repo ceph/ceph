@@ -1708,7 +1708,7 @@ private:
     if (!iter.is_end() && iter.get_key() == laddr) {
       return seastar::now();
     } else if (iter.leaf.node->get_node_meta().begin <= laddr) {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
       auto p = iter;
       if (p.leaf.pos > 0) {
         --p.leaf.pos;

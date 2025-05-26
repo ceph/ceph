@@ -1,6 +1,24 @@
 add_library(crimson::cflags INTERFACE IMPORTED)
 set(crimson_cflag_definitions "WITH_CRIMSON=1")
 
+# In order to keep build in asserts in Crimson in release builds
+# we would need to disable NDEBUG. As some of our code relies on
+# NDEBUG for other checks, let's use a dedicated CRIMSON_DEBUG instead.
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(CRIMSON_DEBUG CACHE BOOL ON)
+endif()
+# Also allow for release builds to disable asserts.
+if(NOT DEFINED CRIMSON_WITH_ASSERTS)
+  set(CRIMSON_WITH_ASSERTS CACHE BOOL ON)
+endif()
+if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+  if(CRIMSON_WITH_ASSERTS)
+    # Enable asserts
+    string(REPLACE "-DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+  endif()
+endif()
+
+
 set_target_properties(crimson::cflags PROPERTIES
   INTERFACE_COMPILE_DEFINITIONS "${crimson_cflag_definitions}"
   INTERFACE_COMPILE_OPTIONS $<$<COMPILE_LANGUAGE:CXX>:-Wno-non-virtual-dtor>

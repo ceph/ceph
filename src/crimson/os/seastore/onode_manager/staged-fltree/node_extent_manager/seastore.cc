@@ -73,7 +73,7 @@ void SeastoreNodeExtent::apply_delta(const ceph::bufferlist& bl)
     auto node_type = header.get_node_type();
     recorder = create_replay_recorder(node_type, *field_type);
   } else {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     auto header = get_header();
     assert(recorder->node_type() == header.get_node_type());
     assert(recorder->field_type() == *header.get_field_type());

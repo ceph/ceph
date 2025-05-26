@@ -279,7 +279,7 @@ class TreeBuilder {
 
   eagain_ifuture<> bootstrap(Transaction& t) {
     std::ostringstream oss;
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     oss << "debug=on, ";
 #else
     oss << "debug=off, ";
@@ -313,7 +313,7 @@ class TreeBuilder {
       auto success = ret.second;
       auto cursor = std::move(ret.first);
       initialize_cursor_from_item(t, p_kv->key, p_kv->value, cursor, success);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
       validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
       return tree->find(t, p_kv->key
       ).si_then([cursor, p_kv](auto cursor_) mutable {
@@ -404,7 +404,7 @@ class TreeBuilder {
       boost::ignore_unused(this);
       boost::ignore_unused(p_kv);
       ceph_assert(size == 1);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
       return tree->contains(t, p_kv->key
       ).si_then([] (bool ret) {
         ceph_assert(ret == false);

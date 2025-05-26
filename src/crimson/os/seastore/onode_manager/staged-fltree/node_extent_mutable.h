@@ -69,7 +69,7 @@ class NodeExtentMutable {
   const char* get_read() const { return p_start; }
   char* get_write() { return p_start; }
   extent_len_t get_length() const {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     if (node_offset == 0) {
       assert(is_valid_node_size(length));
     }

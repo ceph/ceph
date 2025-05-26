@@ -45,11 +45,10 @@ class tri_mutex : private read_lock,
 {
 public:
   tri_mutex() = default;
-#ifdef NDEBUG
-  tri_mutex(const std::string &obj_str) : name() {}
+#ifdef CRIMSON_DEBUG
+  tri_mutex(const std::string &obj_str) : name(obj_str) {}
 #else
-  tri_mutex(const std::string &obj_str) : name(obj_str) {
-  }
+  tri_mutex(const std::string &obj_str) : name() {}
 #endif
   ~tri_mutex();
 

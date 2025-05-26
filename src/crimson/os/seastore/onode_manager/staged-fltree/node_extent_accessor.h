@@ -10,7 +10,7 @@
 #include "node_layout_replayable.h"
 #include "value.h"
 
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
 #include "node_extent_manager/test_replay.h"
 #endif
 
@@ -315,7 +315,7 @@ class NodeExtentAccessorT {
       // extent is invalid or retired
       ceph_abort("impossible path");
     }
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     auto ref_recorder = recorder_t::create_for_replay();
     test_recorder = static_cast<recorder_t*>(ref_recorder.get());
     test_extent = TestReplayExtent::create(
@@ -382,7 +382,7 @@ class NodeExtentAccessorT {
       recorder->template encode_insert<KT>(
           key, value, insert_pos, insert_stage, insert_size);
     }
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     test_extent->prepare_replay(extent);
     test_recorder->template encode_insert<KT>(
         key, value, insert_pos, insert_stage, insert_size);
@@ -390,7 +390,7 @@ class NodeExtentAccessorT {
     auto ret = layout_t::template insert<KT>(
         *mut, read(), key, value,
         insert_pos, insert_stage, insert_size);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     test_extent->replay_and_verify(extent);
 #endif
     return ret;
@@ -402,12 +402,12 @@ class NodeExtentAccessorT {
     if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->encode_split(split_at, read().p_start());
     }
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     test_extent->prepare_replay(extent);
     test_recorder->encode_split(split_at, read().p_start());
 #endif
     layout_t::split(*mut, read(), split_at);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     test_extent->replay_and_verify(extent);
 #endif
   }
@@ -427,7 +427,7 @@ class NodeExtentAccessorT {
           split_at, key, value, insert_pos, insert_stage, insert_size,
           read().p_start());
     }
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     test_extent->prepare_replay(extent);
     test_recorder->template encode_split_insert<KT>(
         split_at, key, value, insert_pos, insert_stage, insert_size,
@@ -436,7 +436,7 @@ class NodeExtentAccessorT {
     auto ret = layout_t::template split_insert<KT>(
         *mut, read(), split_at, key, value,
         insert_pos, insert_stage, insert_size);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     test_extent->replay_and_verify(extent);
 #endif
     return ret;
@@ -450,13 +450,13 @@ class NodeExtentAccessorT {
       recorder->encode_update_child_addr(
           new_addr, p_addr, read().p_start(), get_length());
     }
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     test_extent->prepare_replay(extent);
     test_recorder->encode_update_child_addr(
         new_addr, p_addr, read().p_start(), get_length());
 #endif
     layout_t::update_child_addr(*mut, new_addr, p_addr);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     test_extent->replay_and_verify(extent);
 #endif
   }
@@ -467,12 +467,12 @@ class NodeExtentAccessorT {
     if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->encode_erase(pos);
     }
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     test_extent->prepare_replay(extent);
     test_recorder->encode_erase(pos);
 #endif
     auto ret = layout_t::erase(*mut, read(), pos);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     test_extent->replay_and_verify(extent);
 #endif
     return ret;
@@ -484,12 +484,12 @@ class NodeExtentAccessorT {
     if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->encode_make_tail();
     }
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     test_extent->prepare_replay(extent);
     test_recorder->encode_make_tail();
 #endif
     auto ret = layout_t::make_tail(*mut, read());
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     test_extent->replay_and_verify(extent);
 #endif
     return ret;
@@ -568,7 +568,7 @@ class NodeExtentAccessorT {
       eagain_iertr::pass_further{},
       crimson::ct_error::assert_all(fmt::format(
         "{} addr={}", FNAME, addr).c_str())
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     ).si_then([c] {
       assert(!c.t.is_conflicted());
     }
@@ -584,7 +584,7 @@ class NodeExtentAccessorT {
   // owned by extent
   recorder_t* recorder;
 
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   // verify record replay using a different memory block
   TestReplayExtent::Ref test_extent;
   recorder_t* test_recorder;

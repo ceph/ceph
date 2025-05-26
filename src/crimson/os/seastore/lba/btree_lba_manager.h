@@ -178,7 +178,7 @@ public:
       if (has_laddr) {
 	return alloc_sparse_mappings(
 	  t, hint, alloc_infos, alloc_policy_t::deterministic)
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
 	.si_then([&alloc_infos](std::list<LBACursorRef> cursors) {
 	  assert(alloc_infos.size() == cursors.size());
 	  auto info_p = alloc_infos.begin();

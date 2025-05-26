@@ -76,7 +76,7 @@ inline bool matchable(field_type_t type, match_stat_t mstat) {
    * if key matches the node's compressed prefix, return true
    * else, return false
    */
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   if (mstat == MSTAT_END) {
     assert(type == field_type_t::N0);
   }
@@ -563,7 +563,7 @@ struct staged {
       return !container.has_next();
     }
     bool is_end() const {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
       if (_is_end) {
         assert(!container.has_next());
       }
@@ -1900,7 +1900,7 @@ struct staged {
               insert_pos.nxt, insert_stage, insert_size,
               is_insert_left, split_at.nxt());
           assert(is_insert_left.has_value());
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
           if (locate_nxt) {
             assert(*is_insert_left == true);
           }
@@ -1914,7 +1914,7 @@ struct staged {
           locate_nxt = NXT_STAGE_T::recursively_locate_split(
               current_size, extra_size + split_iter.size_to_nxt(),
               target_size, split_at.nxt());
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
           if (split_iter.index() < insert_index) {
             assert(*is_insert_left == false);
           } else {

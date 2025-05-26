@@ -273,7 +273,7 @@ class Node
     }
 
     void validate_input_key(const key_hobj_t& key, value_magic_t magic) const {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
       if (match() == MatchKindBS::EQ) {
         assert(key == p_cursor->get_key_view(magic));
       } else {
@@ -540,7 +540,7 @@ class InternalNode final : public Node {
   void validate_child_inconsistent(const Node& child) const;
 
   void validate_tracked_children() const {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     for (auto& kv : tracked_child_nodes) {
       assert(kv.first == kv.second->parent_info().position);
       validate_child(*kv.second);
@@ -706,7 +706,7 @@ class LeafNode final : public Node {
   void track_split(const search_position_t&, Ref<LeafNode>);
   void track_erase(const search_position_t&, match_stage_t);
   void validate_tracked_cursors() const {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     for (auto& kv : tracked_cursors) {
       assert(kv.first == kv.second->get_position());
       validate_cursor(*kv.second);

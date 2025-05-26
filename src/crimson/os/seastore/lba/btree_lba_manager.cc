@@ -381,7 +381,7 @@ BtreeLBAManager::alloc_sparse_mappings(
   alloc_policy_t policy)
 {
   ceph_assert(hint != L_ADDR_NULL);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   assert(alloc_infos.front().key != L_ADDR_NULL);
   for (size_t i = 1; i < alloc_infos.size(); i++) {
     auto &prev = alloc_infos[i - 1];
@@ -742,7 +742,7 @@ BtreeLBAManager::refresh_lba_mapping(Transaction &t, LBAMapping mapping)
 	return refresh_lba_cursor(c, btree, *mapping.indirect_cursor);
       }
       return refresh_lba_cursor_iertr::make_ready_future();
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     }).si_then([&mapping] {
       assert(mapping.is_viewable());
 #endif
@@ -986,7 +986,7 @@ BtreeLBAManager::remap_mappings(
       });
     }).si_then([&state] {
       assert(state.ret.size() == state.remaps.size());
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
       auto mapping_it = state.ret.begin();
       auto remap_it = state.remaps.begin();
       for (;mapping_it != state.ret.end(); mapping_it++, remap_it++) {

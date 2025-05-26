@@ -100,7 +100,7 @@ void Cache::retire_absent_extent_addr(
   assert(paddr.is_absolute());
 
   CachedExtentRef ext;
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   auto result = t.get_extent(paddr, &ext);
   assert(result != Transaction::get_extent_ret::PRESENT
     && result != Transaction::get_extent_ret::RETIRED);
@@ -1164,7 +1164,7 @@ CachedExtentRef Cache::duplicate_for_write(
   LOG_PREFIX(Cache::duplicate_for_write);
   assert(i->is_fully_loaded());
 
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   if (i->is_logical()) {
     assert(static_cast<LogicalCachedExtent&>(*i).has_laddr());
     assert(static_cast<LogicalCachedExtent&>(*i).is_seen_by_users());
@@ -1777,7 +1777,7 @@ void Cache::complete_commit(
       is_inline = true;
       i->set_paddr(final_block_start.add_relative(i->get_paddr()));
     }
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     if (i->get_paddr().is_root() || epm.get_checksum_needed(i->get_paddr())) {
       assert(i->get_last_committed_crc() == i->calc_crc32c());
     } else {

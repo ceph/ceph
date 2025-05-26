@@ -37,7 +37,7 @@ void F013_T::update_size_at(
 {
   assert(index <= node.num_keys);
   [[maybe_unused]] extent_len_t node_size = mut.get_length();
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   // check underflow
   if (change < 0 && index != node.num_keys) {
     assert(node.get_item_start_offset(index, node_size) <
@@ -55,7 +55,7 @@ void F013_T::update_size_at(
         (void*)&(p_slot->right_offset),
         node_offset_t(new_offset));
   }
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   // check overflow
   if (change > 0 && index != node.num_keys) {
     assert(node.num_keys > 0);

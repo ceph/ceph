@@ -112,7 +112,7 @@ Socket::Socket(
 Socket::~Socket()
 {
   assert(seastar::this_shard_id() == sid);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   assert(closed);
 #endif
 }
@@ -258,7 +258,7 @@ seastar::future<>
 Socket::close()
 {
   assert(seastar::this_shard_id() == sid);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   ceph_assert_always(!closed);
   closed = true;
 #endif
@@ -417,7 +417,7 @@ ShardedServerSocket::accept(accept_func_t &&_fn_accept)
       return seastar::keep_doing([&ss] {
         return ss.listener->accept(
         ).then([&ss](seastar::accept_result accept_result) {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
           if (ss.dispatch_only_on_primary_sid) {
             // see seastar::listen_options::set_fixed_cpu()
             ceph_assert_always(seastar::this_shard_id() == ss.primary_sid);

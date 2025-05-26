@@ -164,7 +164,7 @@ bool RecordSubmitter::is_available() const
 {
   auto ret = !wait_available_promise.has_value() &&
              !has_io_error;
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   if (ret) {
     // unconditional invariants
     ceph_assert(journal_allocator.can_write());

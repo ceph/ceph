@@ -148,7 +148,7 @@ struct string_key_view_t {
                 extent_len_t node_size) {
     reset_ptr(p_key, origin_base, new_base, node_size);
     reset_ptr(p_length, origin_base, new_base, node_size);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     string_size_t current_length;
     std::memcpy(&current_length, p_length, sizeof(string_size_t));
     assert(length == current_length);

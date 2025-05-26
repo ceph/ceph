@@ -153,7 +153,7 @@ struct staged_position_t {
   auto operator<=>(const me_t& o) const = default;
 
   void assert_next_to(const me_t& prv) const {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     if (is_end()) {
       assert(!prv.is_end());
     } else if (index == prv.index) {
@@ -257,7 +257,7 @@ struct staged_position_t<STAGE_BOTTOM> {
   }
 
   void assert_next_to(const me_t& prv) const {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     if (is_end()) {
       assert(!prv.is_end());
     } else {
@@ -299,7 +299,7 @@ const staged_position_t<STAGE>& cast_down(const search_position_t& pos) {
   if constexpr (STAGE == STAGE_LEFT) {
     return pos;
   } else if constexpr (STAGE == STAGE_STRING) {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     if (pos.is_end()) {
       assert(pos.nxt.is_end());
     } else {
@@ -308,7 +308,7 @@ const staged_position_t<STAGE>& cast_down(const search_position_t& pos) {
 #endif
     return pos.nxt;
   } else if constexpr (STAGE == STAGE_RIGHT) {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     if (pos.is_end()) {
       assert(pos.nxt.nxt.is_end());
     } else {

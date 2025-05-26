@@ -517,7 +517,7 @@ public:
 template <class T>
 class PipelineStageIT : public BlockerT<T> {
 public:
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   const core_id_t core = seastar::this_shard_id();
 #endif
 };

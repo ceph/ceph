@@ -76,7 +76,7 @@ tree_cursor_t::get_next(context_t c)
 void tree_cursor_t::assert_next_to(
     const tree_cursor_t& prv, value_magic_t magic) const
 {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   assert(!prv.is_end());
   if (is_end()) {
     assert(ref_leaf_node == prv.ref_leaf_node);
@@ -260,7 +260,7 @@ void tree_cursor_t::Cache::make_latest(
 
 void tree_cursor_t::Cache::validate_is_latest(const search_position_t& pos) const
 {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   assert(!needs_update_all);
   assert(version == ref_leaf_node->get_version());
 
@@ -495,7 +495,7 @@ template <bool VALIDATE>
 void Node::as_child(const search_position_t& pos, Ref<InternalNode> parent_node)
 {
   assert(!is_tracked() || !is_root());
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   // Although I might have an outdated _parent_info during fixing,
   // I must be already untracked.
   if (_parent_info.has_value()) {
@@ -818,7 +818,7 @@ eagain_ifuture<> InternalNode::apply_child_split(
   LOG_PREFIX(OTree::InternalNode::apply_child_split);
   auto& left_pos = left_child->parent_info().position;
 
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   assert(left_child->parent_info().ptr.get() == this);
   assert(!left_child->impl->is_level_tail());
   if (left_pos.is_end()) {
@@ -924,7 +924,7 @@ eagain_ifuture<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
       if (impl->has_single_value()) {
         // fast path without mutating the extent
         DEBUGT("{} has one value left, erase ...", c.t, get_name());
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
         if (impl->is_level_tail()) {
           assert(child_pos.is_end());
         } else {
@@ -1070,7 +1070,7 @@ eagain_ifuture<> InternalNode::apply_children_merge(
          c.t, get_name(), left_child->get_name(), origin_left_addr, left_pos,
          right_child->get_name(), right_pos, update_index);
 
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   assert(left_child->parent_info().ptr == this);
   assert(!left_pos.is_end());
   const laddr_packed_t* p_value_left;
@@ -1448,7 +1448,7 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
 {
   LOG_PREFIX(OTree::InternalNode::insert_or_split);
   // XXX: check the insert_child is unlinked from this node
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   auto _insert_key = *insert_child->impl->get_pivot_index();
   assert(insert_key == _insert_key);
 #endif
@@ -1472,7 +1472,7 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
     if (outdated_child) {
       track_insert<false>(insert_pos, insert_stage, insert_child);
       validate_child_inconsistent(*outdated_child);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
       do_untrack_child(*outdated_child);
       validate_tracked_children();
       do_track_child<false>(*outdated_child);
@@ -1523,7 +1523,7 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
       } else {
         right_node->template track_insert<false>(insert_pos, insert_stage, insert_child);
       }
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
       auto& _parent = outdated_child->parent_info().ptr;
       _parent->validate_child_inconsistent(*outdated_child);
       _parent->do_untrack_child(*outdated_child);
@@ -1607,7 +1607,7 @@ void InternalNode::track_insert(
   // track insert
   insert_child->as_child(insert_pos, this);
 
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   // validate left_child is before right_child
   if (nxt_child) {
     auto iter = tracked_child_nodes.find(insert_pos);
@@ -1634,7 +1634,7 @@ void InternalNode::replace_track(
     new_child->as_child(pos, this);
   }
 
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   if (is_new_child_outdated) {
     validate_child_inconsistent(*new_child);
   } else {
@@ -1702,7 +1702,7 @@ void InternalNode::track_make_tail(const search_position_t& last_pos)
 
 void InternalNode::validate_child(const Node& child) const
 {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   assert(impl->level() - 1 == child.impl->level());
   assert(this == child.parent_info().ptr);
   auto& child_pos = child.parent_info().position;
@@ -1725,7 +1725,7 @@ void InternalNode::validate_child(const Node& child) const
 
 void InternalNode::validate_child_inconsistent(const Node& child) const
 {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   assert(impl->level() - 1 == child.impl->level());
   assert(check_is_tracking(child));
   auto& child_pos = child.parent_info().position;
@@ -1839,7 +1839,7 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
     return eagain_iertr::now().si_then(
         [c, &pos, this_ref = std::move(this_ref), this, FNAME] () mutable {
       assert_moveable(this_ref);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
       assert(!impl->is_keys_empty());
       if (impl->has_single_value()) {
         assert(pos == search_position_t::begin());
@@ -2044,7 +2044,7 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
     match_stat_t mstat)
 {
   LOG_PREFIX(OTree::LeafNode::insert_value);
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   if (pos.is_end()) {
     assert(impl->is_level_tail());
   }
@@ -2158,7 +2158,7 @@ Ref<tree_cursor_t> LeafNode::get_or_track_cursor(
 
 void LeafNode::validate_cursor(const tree_cursor_t& cursor) const
 {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   assert(this == cursor.get_leaf_node().get());
   assert(cursor.is_tracked());
   assert(!impl->is_extent_retired());

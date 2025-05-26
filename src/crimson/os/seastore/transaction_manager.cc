@@ -327,7 +327,7 @@ TransactionManager::update_lba_mappings(
 	    extent->set_last_committed_crc(CRC_NULL);
 	  }
 	}
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
 	if (get_checksum_needed(extent->get_paddr())) {
 	  assert(extent->get_last_committed_crc() == extent->calc_crc32c());
 	} else {
@@ -510,7 +510,7 @@ TransactionManager::rewrite_logical_extent(
 
     DEBUGT("rewriting meta -- {} to {}", t, *extent, *nextent);
 
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     if (get_checksum_needed(extent->get_paddr())) {
       assert(extent->get_last_committed_crc() == extent->calc_crc32c());
     } else {

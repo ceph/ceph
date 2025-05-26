@@ -47,7 +47,7 @@ eagain_ifuture<> Value::extend(Transaction& t, value_size_t extend_size)
   assert(is_tracked());
   [[maybe_unused]] auto target_size = get_payload_size() + extend_size;
   return p_cursor->extend_value(get_context(t), extend_size)
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   .si_then([this, target_size] {
     assert(target_size == get_payload_size());
   })
@@ -61,7 +61,7 @@ eagain_ifuture<> Value::trim(Transaction& t, value_size_t trim_size)
   assert(get_payload_size() > trim_size);
   [[maybe_unused]] auto target_size = get_payload_size() - trim_size;
   return p_cursor->trim_value(get_context(t), trim_size)
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   .si_then([this, target_size] {
     assert(target_size == get_payload_size());
   })

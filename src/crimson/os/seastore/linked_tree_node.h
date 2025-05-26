@@ -705,7 +705,7 @@ protected:
       push_copy_sources(t, replacement_right, right);
     }
   }
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   bool is_children_empty() const {
     for (auto it = children.begin();
 	it != children.begin() + down_cast().get_size();
@@ -834,7 +834,7 @@ protected:
     }
   }
 
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   bool validate_stable_children() {
     LOG_PREFIX(FixedKVInternalNode::validate_stable_children);
     auto &me = down_cast();

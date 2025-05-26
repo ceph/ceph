@@ -121,7 +121,7 @@ private:
   side_t side;
   uint16_t ephemeral_port;
 
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
   bool closed = false;
 #endif
 

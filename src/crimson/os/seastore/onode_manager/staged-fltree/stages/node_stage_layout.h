@@ -358,7 +358,7 @@ struct internal_fields_3_t {
 
   const laddr_packed_t* get_p_child_addr(
       index_t index, extent_len_t node_size) const {
-#ifndef NDEBUG
+#ifdef CRIMSON_DEBUG
     if (is_level_tail()) {
       assert(index <= num_keys);
     } else {
