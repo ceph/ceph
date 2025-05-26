@@ -728,7 +728,7 @@ static uint32_t crc32_netstring(const uint32_t orig_crc, std::string_view data)
   auto crc = ceph_crc32c(orig_crc, (unsigned char*)&len, sizeof(len));
   crc = ceph_crc32c(crc, (unsigned char*)data.data(), data.length());
 
-#ifndef _NDEBUG
+#ifndef NDEBUG
   // let's verify the compatibility but, due to performance penalty,
   // only in debug builds.
   ceph::bufferlist bl;
