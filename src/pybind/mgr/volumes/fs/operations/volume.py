@@ -1,6 +1,5 @@
 import errno
 import logging
-import os
 
 from typing import List, Tuple
 
@@ -12,7 +11,6 @@ from .lock import GlobalLock
 from ..exception import VolumeException, IndexException
 from ..fs_util import create_pool, remove_pool, rename_pool, create_filesystem, \
     remove_filesystem, rename_filesystem, create_mds, volume_exists, listdir
-from .trash import Trash
 from mgr_util import open_filesystem, CephfsConnectionException
 from .clone_index import open_clone_index
 
@@ -289,20 +287,6 @@ def list_volumes(mgr):
     for fs in mgr.get("fs_map")['filesystems']:
         result.append(fs['mdsmap']['fs_name'])
     return result
-
-
-def get_pending_subvol_deletions_count(fs, path):
-    """
-    Get the number of pending subvolumes deletions.
-    """
-    trashdir = os.path.join(path, Trash.GROUP_NAME)
-    try:
-        num_pending_subvol_del = len(listdir(fs, trashdir, filter_entries=None, filter_files=False))
-    except VolumeException as ve:
-        if ve.errno == -errno.ENOENT:
-            num_pending_subvol_del = 0
-
-    return {'pending_subvolume_deletions': num_pending_subvol_del}
 
 
 def get_all_pending_clones_count(self, mgr, vol_spec):
