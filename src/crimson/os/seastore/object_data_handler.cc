@@ -128,7 +128,7 @@ ObjectDataHandler::write_iertr::future<LBAMapping>
 ObjectDataHandler::prepare_shared_region(
   context_t ctx,
   Onode &onode,
-  laddr_t hint,
+  laddr_hint_t hint,
   extent_len_t len)
 {
   LOG_PREFIX(ObjectDataHandler::prepare_shared_region);
@@ -671,7 +671,8 @@ ObjectDataHandler::write_ret fill_hole(
       ctx.tm.get_block_size() - data.tailbl->length());
     fut = ctx.tm.alloc_data_extents<ObjectDataBlock>(
       ctx.t,
-      (params.data_end - ctx.tm.get_block_size()).checked_to_laddr(),
+      laddr_hint_t::create_as_fixed(
+	(params.data_end - ctx.tm.get_block_size()).checked_to_laddr()),
       ctx.tm.get_block_size(),
       std::move(mapping)
     ).si_then([ctx, &data](auto extents) {
@@ -704,7 +705,7 @@ ObjectDataHandler::write_ret fill_hole(
     fut = fut.si_then([ctx, &params](auto pin) {
       return ctx.tm.alloc_data_extents<ObjectDataBlock>(
 	ctx.t,
-	params.data_begin,
+	laddr_hint_t::create_as_fixed(params.data_begin),
 	ctx.tm.get_block_size(),
 	std::move(pin));
     }).si_then([&data](auto extents) {
@@ -762,7 +763,7 @@ ObjectDataHandler::write_ret do_write(
   assert(data.bl);
   return ctx.tm.alloc_data_extents<ObjectDataBlock>(
     ctx.t,
-    params.data_begin,
+    laddr_hint_t::create_as_fixed(params.data_begin),
     params.data_end.template get_byte_distance<
       extent_len_t>(params.data_begin),
     std::move(mapping)
@@ -1606,7 +1607,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::do_clone(
   ).si_then([ctx, &object_data](auto) {
     return ctx.tm.reserve_region(
       ctx.t,
-      object_data.get_reserved_data_base(),
+      ctx.d_onode->get_data_hint(),
       object_data.get_reserved_data_len()
     ).handle_error_interruptible(
       write_iertr::pass_further{},
@@ -1676,7 +1677,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_range(
       }
       return prepare_shared_region(
 	ctx, ctx.onode,
-	object_data.get_reserved_data_base(),
+	ctx.onode.get_data_clone_hint(),
 	object_data.get_reserved_data_len());
     }).si_then([ctx, &object_data, &d_object_data, srcoff, len](auto) {
       return seastar::do_with(
