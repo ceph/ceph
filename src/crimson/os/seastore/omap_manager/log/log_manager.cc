@@ -26,7 +26,10 @@ LogManager::LogManager(
   : tm(tm) {}
 
 LogManager::initialize_omap_ret
-LogManager::initialize_omap(Transaction &t, laddr_t hint, omap_type_t omap_type) 
+LogManager::initialize_omap(
+  Transaction &t,
+  laddr_hint_t hint,
+  omap_type_t omap_type)
 {
   LOG_PREFIX(LogManager::initialize_omap);
   DEBUGT("hint: {}", t, hint);
@@ -834,7 +837,9 @@ LogManager::omap_clear(omap_root_t &root, Transaction &t)
   );
   root.update(
     L_ADDR_NULL,
-    0, L_ADDR_MIN, root.get_type());
+    0,
+    laddr_hint_t::create_as_fixed(L_ADDR_MIN),
+    root.get_type());
   co_return;
 }
 
