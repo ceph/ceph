@@ -171,7 +171,7 @@ class NFSService(CephService):
                     'kmip_key',
                     'kmip_ca_cert',
                 ]:
-                    config['files'][kmip_cert_key_field] = getattr(spec, kmip_cert_key_field)
+                    config['files'][f'{kmip_cert_key_field}.pem'] = getattr(spec, kmip_cert_key_field)
             config.update(
                 self.get_config_and_keyring(
                     daemon_type, daemon_id,
