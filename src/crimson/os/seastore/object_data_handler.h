@@ -353,7 +353,7 @@ private:
   write_iertr::future<LBAMapping> prepare_shared_region(
     context_t ctx,
     Onode &onode,
-    laddr_t hint,
+    laddr_hint_t hint,
     extent_len_t size);
 
   /// Trims data past size

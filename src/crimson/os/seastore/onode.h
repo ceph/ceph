@@ -131,13 +131,11 @@ public:
   virtual void clear_object_info(Transaction&) = 0;
   virtual void clear_snapset(Transaction&) = 0;
 
-  laddr_t get_metadata_hint(uint64_t block_size = laddr_t::UNIT_SIZE) const {
-    // TODO: return laddr_hint_t
-    return get_hint(block_size, /*is_metadata*/true).addr;
+  laddr_hint_t get_metadata_hint(uint64_t block_size = laddr_t::UNIT_SIZE) const {
+    return get_hint(block_size, /*is_metadata*/true);
   }
-  laddr_t get_data_hint(uint64_t block_size = laddr_t::UNIT_SIZE) const {
-    // TODO: return laddr_hint_t
-    return get_hint(block_size, /*is_metadata*/false).addr;
+  laddr_hint_t get_data_hint(uint64_t block_size = laddr_t::UNIT_SIZE) const {
+    return get_hint(block_size, /*is_metadata*/false);
   }
   laddr_hint_t get_metadata_clone_hint(uint64_t block_size = laddr_t::UNIT_SIZE) const {
     return get_clone_hint(block_size, /*is_metadata*/true);
