@@ -79,3 +79,6 @@
 	path = src/nvmeof/gateway
 	url = https://github.com/ceph/ceph-nvmeof.git
 	fetchRecurseSubmodules = false
+[submodule "src/nvme"]
+	path = src/nvme
+	url = https://github.com/linux-nvme/libnvme
