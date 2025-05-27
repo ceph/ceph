@@ -99,6 +99,26 @@ public:
     return cache->reset_transaction_preserve_handle(t);
   }
 
+  template <typename T>
+  TCachedExtentRef<T> replace_remapped_placeholder(
+    Transaction &t,
+    LogicalChildNodeRef placeholder)
+  {
+    ceph_assert(is_remapped_placeholder_type(placeholder->get_type()));
+    ceph_assert(placeholder->peek_parent_node());
+    ceph_assert(placeholder->read_transactions.empty());
+    cache->retire_extent(t, placeholder);
+    auto extent = cache->template alloc_remapped_extent<T>(
+      t,
+      placeholder->get_laddr(),
+      placeholder->get_paddr(),
+      0,
+      placeholder->get_length(),
+      std::nullopt);
+    extent->replace_placeholder(*placeholder);
+    return extent;
+  }
+
   /**
    * relocate_logical_extent
    *
@@ -1298,7 +1318,7 @@ private:
     LBAMapping mapping;
     child_pos_t<LBALeafNode> child_pos;
   };
-  template <typename T>
+  template <typename T, bool ForRemove = false>
   std::variant<unlinked_child_t, get_child_ifut<T>>
   get_extent_if_linked(
     Transaction &t,
@@ -1310,13 +1330,24 @@ private:
     auto v = pin.get_logical_extent(t);
     if (v.has_child()) {
       return v.get_child_fut(
-      ).si_then([pin=pin.duplicate()](auto extent) {
+      ).si_then([this, &t, pin=pin.duplicate()](auto extent) {
+	boost::ignore_unused(this);
+	boost::ignore_unused(t);
 #ifndef NDEBUG
         auto lextent = extent->template cast<LogicalChildNode>();
         auto pin_laddr = pin.get_intermediate_base();
         assert(lextent->get_laddr() == pin_laddr);
 #endif
-	return extent->template cast<T>();
+	if constexpr (ForRemove) {
+	  return extent->template cast<T>();
+	} else {
+	  if (is_remapped_placeholder_type(extent->get_type())) {
+	    return this->template replace_remapped_placeholder<T>(
+	      t, extent->template cast<LogicalChildNode>());
+	  } else {
+	    return extent->template cast<T>();
+	  }
+	}
       });
     } else {
       return unlinked_child_t{

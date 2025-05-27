@@ -1525,6 +1525,7 @@ private:
       const Transaction::src_t* p_src,
       cache_hint_t hint)
   {
+    assert(!is_remapped_placeholder_type(ext.get_type()));
     assert(ext.get_paddr().is_absolute());
     if (hint == CACHE_HINT_NOCACHE && is_logical_type(ext.get_type())) {
       return;
