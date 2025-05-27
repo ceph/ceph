@@ -30,7 +30,6 @@
 
 #include "fmt/format.h"
 
-#define dout_subsys ceph_subsys_rgw
 namespace file::listing {
 
 namespace bi = boost::intrusive;
