@@ -1044,7 +1044,19 @@ protected:
     this->reset_parent_tracker();
   }
   void take_parent_from_prior() {
-    _take_parent_from_prior();
+    auto &me = down_cast();
+    assert(!me.is_btree_root());
+    auto &prior = static_cast<T&>(*me.get_prior_instance());
+    _take_parent_tracker(me, prior.BaseChildNode<ParentT, key_t>::parent_tracker);
+  }
+  void _take_parent_tracker(T &me, parent_tracker_ref<ParentT> prior_tracker) {
+    this->parent_tracker = prior_tracker;
+    assert(this->has_parent_tracker());
+    auto off = get_parent_pos();
+    auto parent = this->peek_parent_node();
+    assert(me.get_prior_instance().get() ==
+	   dynamic_cast<CachedExtent*>(parent->children[off]));
+    parent->children[off] = &me;
   }
   void on_replace_prior() {
     take_parent_from_prior();
@@ -1079,19 +1091,6 @@ private:
       auto parent = this->peek_parent_node();
       return parent->resolve_transaction(t, key).second;
     });
-  }
-
-  void _take_parent_from_prior() {
-    auto &me = down_cast();
-    assert(!me.is_btree_root());
-    auto &prior = static_cast<T&>(*me.get_prior_instance());
-    this->parent_tracker = prior.BaseChildNode<ParentT, key_t>::parent_tracker;
-    assert(this->has_parent_tracker());
-    auto off = get_parent_pos();
-    auto parent = this->peek_parent_node();
-    assert(me.get_prior_instance().get() ==
-	   dynamic_cast<CachedExtent*>(parent->children[off]));
-    parent->children[off] = &me;
   }
 
   btreenode_pos_t get_parent_pos() const {
