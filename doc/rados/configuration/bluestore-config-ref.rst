@@ -410,7 +410,7 @@ the following command::
 You may also specify a remote NVMeoF target over the TCP transport, as in the
 following example::
 
-  bluestore_block_path = "spdk:trtype:TCP traddr:10.67.110.197 trsvcid:4420 subnqn:nqn.2019-02.io.spdk:cnode1"
+  bluestore_block_path = "spdk:trtype:TCP adrfam:IPv4 traddr:10.67.110.197 trsvcid:4420 subnqn:nqn.2019-02.io.spdk:cnode1"
 
 To run multiple SPDK instances per node, you must make sure each instance uses
 its own DPDK memory by specifying for each instance the amount of DPDK memory
