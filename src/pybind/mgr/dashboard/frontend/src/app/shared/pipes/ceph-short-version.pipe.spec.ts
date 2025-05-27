@@ -1,4 +1,5 @@
 import { CephShortVersionPipe } from './ceph-short-version.pipe';
+import { VERSION_PREFIX } from '~/app/shared/constants/app.constants';
 
 describe('CephShortVersionPipe', () => {
   const pipe = new CephShortVersionPipe();
@@ -8,9 +9,8 @@ describe('CephShortVersionPipe', () => {
   });
 
   it('transforms with correct version format', () => {
-    const value =
-      'ceph version 13.1.0-534-g23d3751b89 \
-       (23d3751b897b31d2bda57aeaf01acb5ff3c4a9cd) nautilus (dev)';
+    const value = `${VERSION_PREFIX} 13.1.0-534-g23d3751b89 \
+       (23d3751b897b31d2bda57aeaf01acb5ff3c4a9cd) nautilus (dev)`;
     expect(pipe.transform(value)).toBe('13.1.0-534-g23d3751b89');
   });
 

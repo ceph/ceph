@@ -2,6 +2,7 @@ import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@an
 
 import { Node } from 'carbon-components-angular/treeview/tree-node.types';
 import _ from 'lodash';
+import { USER } from '~/app/shared/constants/app.constants';
 
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -322,7 +323,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
         });
         // Target level authentication was introduced in ceph-iscsi config v11
         if (this.cephIscsiConfigVersion > 10) {
-          ['user', 'password', 'mutual_user', 'mutual_password'].forEach((key) => {
+          [USER, 'password', 'mutual_user', 'mutual_password'].forEach((key) => {
             this.data.push({
               displayName: key,
               default: null,
