@@ -342,8 +342,12 @@ void JournalTrimmerImpl::config_t::validate() const
 {
   ceph_assert(max_journal_bytes <= DEVICE_OFF_MAX);
   ceph_assert(max_journal_bytes > target_journal_dirty_bytes);
+  ceph_assert(target_journal_dirty_bytes >= min_journal_bytes);
+  ceph_assert(target_journal_dirty_bytes > rewrite_dirty_bytes_per_cycle);
   ceph_assert(max_journal_bytes > target_journal_alloc_bytes);
-  ceph_assert(rewrite_dirty_bytes_per_cycle > 0);
+  ceph_assert(rewrite_dirty_bytes_per_trans > 0);
+  ceph_assert(rewrite_dirty_bytes_per_cycle >=
+    rewrite_dirty_bytes_per_trans);
   ceph_assert(rewrite_backref_bytes_per_cycle > 0);
 }
 
@@ -354,22 +358,27 @@ JournalTrimmerImpl::config_t::get_default(
   assert(roll_size);
   std::size_t target_dirty_bytes = 0;
   std::size_t target_alloc_bytes = 0;
+  std::size_t min_journal_bytes = 0;
   std::size_t max_journal_bytes = 0;
   if (type == backend_type_t::SEGMENTED) {
-    target_dirty_bytes = 12 * roll_size;
+    min_journal_bytes = 12 * roll_size;
     target_alloc_bytes = 2 * roll_size;
+    target_dirty_bytes = 14 * roll_size;
     max_journal_bytes = 16 * roll_size;
   } else {
     assert(type == backend_type_t::RANDOM_BLOCK);
-    target_dirty_bytes = roll_size / 4;
+    min_journal_bytes = roll_size / 4;
     target_alloc_bytes = roll_size / 4;
+    target_dirty_bytes = roll_size / 3;
     max_journal_bytes = roll_size / 2;
   }
   return config_t{
     target_dirty_bytes,
     target_alloc_bytes,
+    min_journal_bytes,
     max_journal_bytes,
-    1<<17,// rewrite_dirty_bytes_per_cycle
+    1<<26,// rewrite_dirty_bytes_per_cycle
+    1<<17,// rewrite_dirty_bytes_per_trans
     1<<24 // rewrite_backref_bytes_per_cycle
   };
 }
@@ -381,22 +390,29 @@ JournalTrimmerImpl::config_t::get_test(
   assert(roll_size);
   std::size_t target_dirty_bytes = 0;
   std::size_t target_alloc_bytes = 0;
+  std::size_t min_journal_bytes = 0;
   std::size_t max_journal_bytes = 0;
   if (type == backend_type_t::SEGMENTED) {
-    target_dirty_bytes = 2 * roll_size;
+    min_journal_bytes = 2 * roll_size;
     target_alloc_bytes = 2 * roll_size;
+    target_dirty_bytes = 3 * roll_size;
     max_journal_bytes = 4 * roll_size;
   } else {
     assert(type == backend_type_t::RANDOM_BLOCK);
-    target_dirty_bytes = roll_size / 36;
+    min_journal_bytes = roll_size / 36;
     target_alloc_bytes = roll_size / 4;
+    target_dirty_bytes = roll_size / 24;
     max_journal_bytes = roll_size / 2;
   }
   return config_t{
     target_dirty_bytes,
     target_alloc_bytes,
+    min_journal_bytes,
     max_journal_bytes,
-    1<<17,// rewrite_dirty_bytes_per_cycle
+    (target_dirty_bytes > 1<<26)
+      ? 1<<25
+      : target_dirty_bytes / 2,// rewrite_dirty_bytes_per_cycle
+    1<<17,// rewrite_dirty_bytes_per_trans
     1<<24 // rewrite_backref_bytes_per_cycle
   };
 }
@@ -514,6 +530,31 @@ journal_seq_t JournalTrimmerImpl::get_tail_limit() const
   return ret;
 }
 
+journal_seq_t JournalTrimmerImpl::get_dirty_tail_min_target() const
+{
+  assert(background_callback->is_ready());
+  auto ret = journal_head.add_offset(
+      backend_type,
+      -static_cast<device_off_t>(config.min_journal_bytes),
+      roll_start,
+      roll_size);
+  return ret;
+}
+
+journal_seq_t JournalTrimmerImpl::get_dirty_tail_target_per_cycle() const
+{
+  assert(background_callback->is_ready());
+  auto journal_dirty_bytes = get_journal_dirty_bytes();
+  assert(journal_dirty_bytes >= get_dirty_bytes_to_trim());
+  auto ret = journal_head.add_offset(
+      backend_type,
+      -static_cast<device_off_t>(
+	journal_dirty_bytes - get_dirty_bytes_to_trim()),
+      roll_start,
+      roll_size);
+  return ret;
+}
+
 journal_seq_t JournalTrimmerImpl::get_dirty_tail_target() const
 {
   assert(background_callback->is_ready());
@@ -579,7 +620,7 @@ seastar::future<> JournalTrimmerImpl::trim() {
       }
     },
     [this] {
-      if (should_trim_dirty()) {
+      if (should_start_trim_dirty()) {
         return trim_dirty(
         ).handle_error(
           crimson::ct_error::assert_all{
@@ -646,46 +687,55 @@ JournalTrimmerImpl::trim_dirty()
 
   auto& shard_stats = extent_callback->get_shard_stats();
   ++(shard_stats.trim_dirty_num);
-  ++(shard_stats.pending_bg_num);
 
-  return repeat_eagain([this, FNAME, &shard_stats] {
-    ++(shard_stats.repeat_trim_dirty_num);
+  auto target = get_dirty_tail_target_per_cycle();
+  return ::crimson::repeat([this, FNAME, &shard_stats, target] {
+    if (should_stop_trim_dirty(target)) {
+      return trim_ertr::make_ready_future<
+	seastar::stop_iteration>(seastar::stop_iteration::yes);
+    }
+    ++(shard_stats.pending_bg_num);
+    return repeat_eagain([this, FNAME, &shard_stats, target] {
+      ++(shard_stats.repeat_trim_dirty_num);
 
-    return extent_callback->with_transaction_intr(
-      Transaction::src_t::TRIM_DIRTY,
-      "trim_dirty",
-      CACHE_HINT_NOCACHE,
-      [this, FNAME](auto &t)
-    {
-      auto target = get_dirty_tail_target();
-      DEBUGT("start, dirty_tail={}, target={}",
-             t, journal_dirty_tail, target);
-      return extent_callback->get_next_dirty_extents(
-        t,
-        target,
-        config.rewrite_dirty_bytes_per_cycle
-      ).si_then([this, FNAME, &t](auto dirty_list) {
-        DEBUGT("rewrite {} dirty extents", t, dirty_list.size());
-        return seastar::do_with(
-          std::move(dirty_list),
-          [this, &t](auto &dirty_list)
-        {
-          return trans_intr::do_for_each(
-            dirty_list,
-            [this, &t](auto &e) {
-            return extent_callback->rewrite_extent(
-                t, e, INIT_GENERATION, NULL_TIME);
-          });
-        });
-      }).si_then([this, &t] {
-        return extent_callback->submit_transaction_direct(t);
+      return extent_callback->with_transaction_intr(
+	Transaction::src_t::TRIM_DIRTY,
+	"trim_dirty",
+	CACHE_HINT_NOCACHE,
+	[this, FNAME, target](auto &t)
+      {
+	DEBUGT("start, dirty_tail={}, target={}",
+	       t, journal_dirty_tail, target);
+	return extent_callback->get_next_dirty_extents(
+	  t,
+	  target,
+	  config.rewrite_dirty_bytes_per_trans
+	).si_then([this, FNAME, &t](auto dirty_list) {
+	  DEBUGT("rewrite {} dirty extents", t, dirty_list.size());
+	  return seastar::do_with(
+	    std::move(dirty_list),
+	    [this, &t](auto &dirty_list)
+	  {
+	    return trans_intr::do_for_each(
+	      dirty_list,
+	      [this, &t](auto &e) {
+	      return extent_callback->rewrite_extent(
+		  t, e, INIT_GENERATION, NULL_TIME);
+	    });
+	  });
+	}).si_then([this, &t] {
+	  return extent_callback->submit_transaction_direct(t);
+	});
       });
-    });
-  }).finally([this, FNAME, &shard_stats] {
-    DEBUG("finish, dirty_tail={}", journal_dirty_tail);
+    }).safe_then([] {
+      return seastar::stop_iteration::no;
+    }).finally([this, FNAME, &shard_stats] {
+      DEBUG("finish, dirty_tail={}", journal_dirty_tail);
 
-    assert(shard_stats.pending_bg_num);
-    --(shard_stats.pending_bg_num);
+      assert(shard_stats.pending_bg_num);
+      --(shard_stats.pending_bg_num);
+      return seastar::stop_iteration::no;
+    });
   });
 }
 
@@ -708,7 +758,7 @@ std::ostream &operator<<(
   os << "JournalTrimmer(";
   if (stats.trimmer.background_callback->is_ready()) {
     os << "should_block_io_on_trim=" << stats.trimmer.should_block_io_on_trim()
-       << ", should_(trim_dirty=" << stats.trimmer.should_trim_dirty()
+       << ", should_(trim_dirty=" << stats.trimmer.should_start_trim_dirty()
        << ", trim_alloc=" << stats.trimmer.should_trim_alloc() << ")";
   } else {
     os << "not-ready";
@@ -719,7 +769,8 @@ std::ostream &operator<<(
        << ", dirty_tail=" << stats.trimmer.get_dirty_tail();
     if (stats.trimmer.background_callback->is_ready()) {
       os << ", alloc_tail_target=" << stats.trimmer.get_alloc_tail_target()
-         << ", dirty_tail_target=" << stats.trimmer.get_dirty_tail_target()
+         << ", dirty_tail_min_target=" << stats.trimmer.get_dirty_tail_min_target()
+	 << ", dirty_tail_target=" << stats.trimmer.get_dirty_tail_target()
          << ", tail_limit=" << stats.trimmer.get_tail_limit();
     }
   }
