@@ -256,7 +256,7 @@ class TestCharMapVxattr(CephFSTestCase, CharMapMixin):
 
     def test_cs_parent_snaps_set_insensitive(self):
         """
-        That setting a charmap succeeds for an empty directory with parent snaps.
+        That setting a charmap fails for an empty directory with parent snaps.
         """
 
         attrs = {
