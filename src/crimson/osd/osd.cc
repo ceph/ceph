@@ -1227,8 +1227,8 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
 }
 
 seastar::future<> OSD::committed_osd_maps(
-  version_t first,
-  version_t last,
+  epoch_t first,
+  epoch_t last,
   Ref<MOSDMap> m)
 {
   LOG_PREFIX(OSD::committed_osd_maps);
