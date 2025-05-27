@@ -1972,7 +1972,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_range(
 	ctx, ctx.onode,
 	ctx.onode.get_data_clone_hint(),
 	object_data.get_reserved_data_len()).discard_result();
-    }).si_then([ctx, &object_data, &d_object_data, srcoff, len]() {
+    }).si_then([ctx, &object_data, &d_object_data, srcoff, len, this]() {
       return seastar::do_with(
 	state_t {
 	  std::nullopt, std::nullopt, std::nullopt,
