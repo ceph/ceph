@@ -28,6 +28,7 @@ namespace crimson::os::seastore {
 
 class BackrefManager;
 class SegmentProvider;
+class RemappedExtentPlaceholder;
 
 /**
  * Cache
@@ -1104,6 +1105,22 @@ public:
     return extents;
   }
 
+  CachedExtentRef alloc_remapped_extent_by_type(
+    Transaction &t,
+    extent_types_t type,
+    laddr_t remap_laddr,
+    paddr_t remap_paddr,
+    extent_len_t remap_offset,
+    extent_len_t remap_length,
+    const std::optional<ceph::bufferptr> &original_bptr);
+
+  TCachedExtentRef<RemappedExtentPlaceholder>
+  alloc_remapped_placeholder(
+    Transaction &t,
+    laddr_t laddr,
+    paddr_t paddr,
+    extent_len_t length);
+
   /**
    * alloc_remapped_extent
    *
@@ -1117,7 +1134,9 @@ public:
     paddr_t remap_paddr,
     extent_len_t remap_offset,
     extent_len_t remap_length,
-    std::optional<ceph::bufferptr> &original_bptr) {
+    const std::optional<ceph::bufferptr> &original_bptr) {
+    static_assert(T::TYPE != extent_types_t::REMAPPED_PLACEHOLDER,
+		  "use Cache::alloc_remapped_placeholder");
     LOG_PREFIX(Cache::alloc_remapped_extent);
     TCachedExtentRef<T> ext;
     if (original_bptr.has_value()) {
