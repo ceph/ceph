@@ -277,6 +277,7 @@ test_group_rename()
 
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" "${image_count}"
   wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}/${group}" 'up+replaying' "${image_count}"
 
   group_rename "${primary_cluster}" "${pool}/${group}" "${pool}/${group}_renamed"
 
@@ -299,6 +300,7 @@ test_group_rename()
 
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group1}" "${image_count}"
   wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group1}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}/${group1}" 'up+replaying' "${image_count}"
 
   group_rename "${primary_cluster}" "${pool}/${group1}" "${pool}/${group1}_renamed"
 
