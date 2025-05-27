@@ -332,7 +332,8 @@ options:
 - name: osd_scrub_min_interval
   type: float
   level: advanced
-  desc: The desired interval between scrubs of a specific PG.
+  desc: The desired interval between scrubs of a specific PG. Note that this option
+    must be set at ``global`` scope, or for both ``mgr`` and``osd``.
   fmt_desc: The desired interval in seconds between scrubs of a specific PG.
   default: 1_day
   see_also:
@@ -341,7 +342,8 @@ options:
 - name: osd_scrub_max_interval
   type: float
   level: advanced
-  desc: Scrub each PG no less often than this interval
+  desc: Scrub each PG no less often than this interval. Note that this option
+    must be set at ``global`` scope, or for both ``mgr`` and``osd``.
   fmt_desc: The maximum interval in seconds for scrubbing each PG.
   default: 7_day
   see_also:
@@ -479,7 +481,8 @@ options:
 - name: osd_deep_scrub_interval
   type: float
   level: advanced
-  desc: Deep scrub each PG (i.e., verify data checksums) at least this often
+  desc: Deep scrub each PG (i.e., verify data checksums) at least this often. Note that this option
+    must be set at ``global`` scope, or for both ``mgr`` and``osd``.
   fmt_desc: The interval for "deep" scrubbing (fully reading all data).
   default: 7_day
   with_legacy: true
@@ -489,14 +492,14 @@ options:
   desc: determining the amount of variation in the deep scrub interval
   long_desc: deep scrub intervals are varied by a random amount to prevent
     stampedes. This parameter determines the amount of variation.
-    Technically - osd_deep_scrub_interval_cv is the coefficient of variation for
+    Technically ``osd_deep_scrub_interval_cv`` is the coefficient of variation for
     the deep scrub interval.
   fmt_desc: The coefficient of variation for the deep scrub interval, specified as a
     ratio. On average, the next deep scrub for a PG is scheduled osd_deep_scrub_interval
     after the last deep scrub . The actual time is randomized to a normal distribution
     with a standard deviation of osd_deep_scrub_interval * osd_deep_scrub_interval_cv
     (clamped to within 2 standard deviations).
-    The default value guarantees that 95% of the deep scrubs will be scheduled in the range
+    The default value guarantees that 95% of deep scrubs will be scheduled in the range
     [0.8 * osd_deep_scrub_interval, 1.2 * osd_deep_scrub_interval].
   min: 0
   max: 0.4
