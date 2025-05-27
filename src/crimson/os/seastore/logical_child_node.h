@@ -46,6 +46,46 @@ protected:
   virtual void do_on_replace_prior() {}
 };
 using LogicalChildNodeRef = TCachedExtentRef<LogicalChildNode>;
+
+/**
+ * RemappedExtentPlaceholder
+ *
+ * This placeholder represents a slice remapped from a logical cached extent
+ * that is stable but not resident in memory. These extents are transaction-local,
+ * so they should not be added to the cache. It is used by the backref manager
+ * to update the extent type of remapped backref entries correctly. See
+ * BtreeBackrefManager::merge_cached_backrefs() for more details.
+ */
+struct RemappedExtentPlaceholder : LogicalChildNode {
+  explicit RemappedExtentPlaceholder(extent_len_t length)
+      : LogicalChildNode(length) {}
+
+  CachedExtentRef duplicate_for_write(Transaction&) final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+    return CachedExtentRef();
+  }
+
+  ceph::bufferlist get_delta() final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+    return ceph::bufferlist();
+  }
+
+  void apply_delta(const ceph::bufferlist &) final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+  }
+
+  static constexpr extent_types_t TYPE = extent_types_t::REMAPPED_PLACEHOLDER;
+  extent_types_t get_type() const final {
+    return TYPE;
+  }
+
+  void unlink_parent() {
+    destroy();
+  }
+};
+using RemappedExtentPlaceholderRef =
+    TCachedExtentRef<RemappedExtentPlaceholder>;
+
 } // namespace crimson::os::seastore
 
 #if FMT_VERSION >= 90000

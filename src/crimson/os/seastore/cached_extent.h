@@ -636,7 +636,8 @@ public:
 
   /// Returns true if extent is a placeholder
   bool is_placeholder() const {
-    return is_retired_placeholder_type(get_type());
+    return is_retired_placeholder_type(get_type())
+	|| is_remapped_placeholder_type(get_type());
   }
 
   bool is_pending_io() const {
