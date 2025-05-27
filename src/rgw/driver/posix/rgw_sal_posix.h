@@ -23,6 +23,7 @@
 #include "common/dout.h"
 #include "bucket_cache.h"
 #include "posixDB.h"
+#include "posix_system_user.h"
 
 namespace rgw { namespace sal {
 
@@ -484,6 +485,7 @@ protected:
   int root_fd;
   RGWSyncModuleInstanceRef sync_module;
   RGWQuotaHandler* quota_handler{nullptr};
+  std::unique_ptr<POSIXSystemManager> sys_mgr;
 
 public:
   POSIXDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
@@ -495,6 +497,7 @@ public:
     
     userDB = std::make_unique<rgw::store::POSIXUserDB>(db_full_path.string(), cct);
     accountDB = std::make_unique<rgw::store::POSIXAccountDB>(db_full_path.string(), cct);
+    sys_mgr = std::make_unique<POSIXSystemManager>();
   }
   virtual ~POSIXDriver() { }
 
@@ -785,6 +788,7 @@ public:
   Directory* get_root_dir() { return root_dir.get(); }
   const std::string& get_base_path() const { return base_path; }
   BucketCache* get_bucket_cache() { return bucket_cache.get(); }
+  POSIXSystemManager* get_sys_mgr() { return sys_mgr.get(); }
 
   /* called by BucketCache layer when a new object is discovered
    * by inotify or similar */
