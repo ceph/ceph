@@ -593,7 +593,6 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
     return ret;
   }
 
-
   ret = lseek(fd, ofs, SEEK_SET);
   if (ret < 0) {
     ret = errno;
@@ -1985,6 +1984,11 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       }
     }
   }
+
+  if ((ret = this->get_sys_mgr()->init(dpp)) < 0) {
+    return ret;
+  }
+
   ldpp_dout(dpp, 20) << "root_fd: " << root_dir->get_fd() << dendl;
 
   ldpp_dout(dpp, 20) << "SUCCESS" << dendl;
@@ -3490,7 +3494,32 @@ int POSIXObject::read(int64_t ofs, int64_t left, bufferlist& bl,
 int POSIXObject::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
 		       optional_yield y)
 {
-  return ent->write(ofs, bl, dpp, y);
+  struct stat statbuf;
+  auto ruser = std::get<rgw_user>(this->get_bucket()->get_info().owner);
+  int ret = driver->get_sys_mgr()->populate_user_data(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  ret = driver->get_sys_mgr()->check_permissions(dpp, ruser, ent.get(), statbuf);
+  if (ret < 0) {
+    return ret;
+  }
+  
+  POSIXSystemUser posix_user;
+  ret = driver->get_sys_mgr()->find_posix_user(dpp, ruser, posix_user);
+  if (ret < 0) {
+    return ret;
+  }
+  int call_ret;
+  RUN_AS(dpp, posix_user.get_uid(), posix_user.get_gid(), statbuf.st_uid, statbuf.st_gid, ent->write(ofs, bl, dpp, y), ret, call_ret);
+  if (call_ret < 0) {
+    return call_ret;
+  }
+
+  return 0;
+
+out:
+  return ret;
 }
 
 int POSIXObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
@@ -3664,6 +3693,7 @@ std::string POSIXObject::gen_temp_fname()
 int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 					int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
+  struct stat statbuf;
   int64_t left;
   int64_t cur_ofs = ofs;
 
@@ -3672,9 +3702,26 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
   else
     left = end - ofs + 1;
 
+  auto ruser = std::get<rgw_user>(source->get_bucket()->get_info().owner);
+  int ret = source->driver->get_sys_mgr()->populate_user_data(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  ret = source->driver->get_sys_mgr()->check_permissions(dpp, ruser, source->ent.get(), statbuf);
+  if (ret < 0) {
+    return ret;
+  }
+  
+  POSIXSystemUser posix_user;
+  ret = source->driver->get_sys_mgr()->find_posix_user(dpp, ruser, posix_user);
+  if (ret < 0) {
+    return ret;
+  }
+
   while (left > 0) {
     bufferlist bl;
-    int len = source->read(cur_ofs, left, bl, dpp, y);
+    int len;
+    RUN_AS(dpp, posix_user.get_uid(), posix_user.get_gid(), statbuf.st_uid, statbuf.st_gid, source->read(cur_ofs, left, bl, dpp, y), ret, len);
     if (len < 0) {
 	ldpp_dout(dpp, 0) << " ERROR: could not read " << source->get_name() <<
 	  " ofs: " << cur_ofs << " error: " << cpp_strerror(len) << dendl;
@@ -3685,7 +3732,7 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
     }
 
     /* Read some */
-    int ret = cb->handle_data(bl, 0, len);
+    ret = cb->handle_data(bl, 0, len);
     if (ret < 0) {
 	ldpp_dout(dpp, 0) << " ERROR: callback failed on " << source->get_name() << ": " << ret << dendl;
 	return ret;
@@ -3697,6 +3744,9 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
 
   /* Doesn't seem to be anything needed from params */
   return 0;
+
+out:
+  return ret;
 }
 
 int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y)
