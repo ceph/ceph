@@ -136,3 +136,51 @@ function(add_tox_test name)
     PYTHONPATH=${CMAKE_SOURCE_DIR}/src/pybind)
   list(APPEND tox_test run-tox-${name})
 endfunction()
+
+# Helper for adding new tests built with Catch2:
+function(add_catch2_test test_name)
+if(NOT WITH_CATCH2)
+  return()
+endif()
+
+set(options NO_CATCH2_MAIN)
+set(oneValueArgs)
+set(multiValueArgs EXTRA_LIBS EXTRA_INCS)
+
+cmake_parse_arguments(PARSE_ARGV 0 catch2_opt
+  "${options}" "${oneValueArgs}" "${multiValueArgs}")
+
+ add_executable(unittest_${test_name}
+ test_${test_name}.cc)
+
+SET(tl_libs
+  librados
+  ceph-common
+  ${EXTRALIBS})
+
+SET(tl_incs
+  SYSTEM PRIVATE ${CMAKE_SOURCE_DIR})
+
+if(DEFINED catch2_opt_EXTRA_LIBS)
+  LIST(APPEND tl_libs ${catch2_opt_EXTRA_LIBS})
+endif()
+
+if(DEFINED catch2_opt_EXTRA_INCS)
+  LIST(APPEND tl_incs ${catch2_opt_EXTRA_INCS})
+endif()
+
+if(${catch2_opt_NO_CATCH2_MAIN})
+  LIST(APPEND tl_libs Catch2)
+else()
+  LIST(APPEND tl_libs Catch2WithMain)
+endif()
+
+target_link_libraries(unittest_${test_name} 
+  ${tl_libs})
+
+target_include_directories(unittest_${test_name}
+  ${tl_incs})
+
+add_ceph_unittest(unittest_${test_name})
+
+endfunction()
