@@ -105,8 +105,10 @@ set(common_srcs
   utf8.c
   util.cc
   version.cc
+  mclock_common.cc
   tcp_info.cc)
 
+include_directories(${CMAKE_SOURCE_DIR}/src/dmclock/support/src)
 if(WITH_SYSTEMD)
   list(APPEND common_srcs
     Journald.cc)
