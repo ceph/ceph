@@ -137,6 +137,10 @@ struct OMapNode : LogicalChildNode {
     return end;
   }
   bool is_btree_root() const { return root; }
+protected:
+  void set_root(bool is_root) {
+    root = is_root;
+  }
 private:
   bool root = false;
   std::string begin;
