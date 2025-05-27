@@ -206,24 +206,6 @@ void Replayer<I>::shut_down(Context* on_finish) {
     dout(10) << "shut down pending on completion of snapshot replay" << dendl;
     return;
   }
-
-  if (!m_prune_snap_ids.empty() || !m_prune_snap_ids_by_gr.empty()) {
-    locker.unlock();
-
-    uint64_t prune_snap_id;
-    if (!m_prune_snap_ids_by_gr.empty()) {
-      prune_snap_id = *m_prune_snap_ids_by_gr.begin();
-    } else {
-      prune_snap_id = *m_prune_snap_ids.begin();
-    }
-    dout(5) << "pruning unused non-primary snapshot " << prune_snap_id << dendl;
-    C_SaferCond ctx;
-    prune_non_primary_snapshot(&ctx, prune_snap_id);
-    ctx.wait();
-    m_on_init_shutdown = nullptr;
-    shut_down(on_finish);
-    return;
-  }
   locker.unlock();
 
   unregister_remote_update_watcher();
@@ -569,14 +551,15 @@ void Replayer<I>::scan_local_mirror_snapshots(
     // remove candidate that is required for delta snapshot sync
     m_prune_snap_ids.erase(m_local_snap_id_start);
   }
-  if (!m_prune_snap_ids.empty() || !m_prune_snap_ids_by_gr.empty()) {
+  if (!m_prune_snap_ids_by_gr.empty()) {
+    m_prune_snap_ids.insert(m_prune_snap_ids_by_gr.begin(),
+                            m_prune_snap_ids_by_gr.end());
+    m_prune_snap_ids_by_gr.clear();
+  }
+  if (!m_prune_snap_ids.empty()) {
     locker->unlock();
     uint64_t prune_snap_id;
-    if (!m_prune_snap_ids_by_gr.empty()) {
-      prune_snap_id = *m_prune_snap_ids_by_gr.begin();
-    } else {
-      prune_snap_id = *m_prune_snap_ids.begin();
-    }
+    prune_snap_id = *m_prune_snap_ids.begin();
     dout(5) << "pruning unused non-primary snapshot " << prune_snap_id << dendl;
     prune_non_primary_snapshot(nullptr, prune_snap_id);
     return;
@@ -842,14 +825,7 @@ void Replayer<I>::prune_non_primary_snapshot(
   cls::rbd::SnapshotNamespace snap_namespace;
   std::string snap_name;
 
-  if (m_prune_snap_ids_by_gr.find(snap_id) != m_prune_snap_ids_by_gr.end()) {
-    dout(10) << "removing from group list snap_id=" << snap_id << dendl;
-    m_prune_snap_ids_by_gr.erase(snap_id);
-  } else {
-    dout(10) << "removing from individual list snap_id=" << snap_id << dendl;
-    m_prune_snap_ids.erase(snap_id);
-  }
-
+  m_prune_snap_ids.erase(snap_id);
   {
     std::shared_lock image_locker{local_image_ctx->image_lock};
     auto snap_info = local_image_ctx->get_snap_info(snap_id);
