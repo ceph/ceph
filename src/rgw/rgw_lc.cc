@@ -499,6 +499,14 @@ struct lc_op_ctx {
       rctx(env.driver), dpp(dpp), wq(wq)
     {
       obj = bucket->get_object(o.key);
+      /* once bucket versioning is enabled, the non-current entries with
+       * instance empty should have instance set to "null" to be able
+       * to correctly read its olh version entry.
+       */
+      if (o.key.instance.empty() && bucket->versioned() && !o.is_current()) {
+        rgw_obj_key& obj_key = obj->get_key();
+        obj_key.instance = "null";
+      }
     }
 
   bool next_has_same_name(const std::string& key_name) {
@@ -1303,9 +1311,9 @@ public:
   int delete_tier_obj(lc_op_ctx& oc) {
     int ret = 0;
 
-    /* If bucket is versioned, create delete_marker for current version
+    /* If bucket has versioning enabled, create delete_marker for current version
      */
-    if (oc.bucket->versioned() && oc.o.is_current() && !oc.o.is_delete_marker()) {
+    if (oc.bucket->versioning_enabled() && oc.o.is_current() && !oc.o.is_delete_marker()) {
       ret = remove_expired_obj(oc.dpp, oc, false, rgw::notify::ObjectExpiration);
       ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") current & not delete_marker" << " versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
     } else {
@@ -1316,9 +1324,10 @@ public:
   }
 
   int transition_obj_to_cloud(lc_op_ctx& oc) {
-    /* If CurrentVersion object, remove it & create delete marker */
+    /* If CurrentVersion object & bucket has versioning enabled, remove it &
+     * create delete marker */
     bool delete_object = (!oc.tier->retain_head_object() ||
-                     (oc.o.is_current() && oc.bucket->versioned()));
+                     (oc.o.is_current() && oc.bucket->versioning_enabled()));
 
     int ret = oc.obj->transition_to_cloud(oc.bucket, oc.tier.get(), oc.o,
 					  oc.env.worker->get_cloud_targets(), oc.cct,
