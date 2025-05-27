@@ -15,6 +15,7 @@ import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { ToastrModule } from 'ngx-toastr';
 import { SharedModule } from '~/app/shared/shared.module';
 import { ActivatedRoute } from '@angular/router';
+import { VERSION_PREFIX } from '~/app/shared/constants/app.constants';
 
 describe('RgwOverviewDashboardComponent', () => {
   let component: RgwOverviewDashboardComponent;
@@ -35,7 +36,7 @@ describe('RgwOverviewDashboardComponent', () => {
   const daemon: RgwDaemon = {
     id: '8000',
     service_map_id: '4803',
-    version: 'ceph version',
+    version: VERSION_PREFIX,
     server_hostname: 'ceph',
     realm_name: 'realm1',
     zonegroup_name: 'zg1-realm1',
