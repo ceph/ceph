@@ -38,6 +38,11 @@ public:
   laddr_t get_end() const {
     return (get_laddr() + get_length()).checked_to_laddr();
   }
+
+  void replace_placeholder(LogicalChildNode &prior) {
+    assert(prior.get_type() == extent_types_t::REMAPPED_PLACEHOLDER);
+    _take_parent_tracker(*this, prior.parent_tracker);
+  }
 protected:
   void on_replace_prior() final {
     assert(is_seen_by_users());

@@ -247,7 +247,7 @@ TransactionManager::ref_iertr::future<LBAMapping> TransactionManager::remove(
   LOG_PREFIX(TransactionManager::remove);
   auto fut = base_iertr::make_ready_future<LogicalChildNodeRef>();
   if (!mapping.is_indirect() && mapping.get_val().is_real_location()) {
-    auto ret = get_extent_if_linked<LogicalChildNode>(t, mapping.duplicate());
+    auto ret = get_extent_if_linked<LogicalChildNode, true>(t, mapping.duplicate());
     if (ret.index() == 1) {
       fut = std::move(std::get<1>(ret));
     }
