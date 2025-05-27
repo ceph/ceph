@@ -10,6 +10,7 @@
 #include "common/io_exerciser/Model.h"
 #include "common/split.h"
 #include "erasure-code/ErasureCodePlugin.h"
+#include "erasure-code/consistency/ConsistencyChecker.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "include/random.h"
@@ -443,7 +444,8 @@ class TestObject {
              bool dryrun,
              bool verbose,
              std::optional<int> seqseed,
-             bool testRecovery);
+             bool testRecovery,
+             bool checkConsistency);
 
   int get_num_io();
   bool readyForIo();
@@ -466,6 +468,7 @@ class TestObject {
   std::optional<std::pair<std::string_view, std::string_view>>
       pool_mappinglayers;
   bool testrecovery;
+  bool checkconsistency;
 };
 
 class TestRunner {
@@ -504,6 +507,7 @@ class TestRunner {
   bool interactive;
 
   bool testrecovery;
+  bool checkconsistency;
 
   bool allow_pool_autoscaling;
   bool allow_pool_balancer;
