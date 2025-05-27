@@ -502,15 +502,21 @@ using JournalTrimmerImplRef = std::unique_ptr<JournalTrimmerImpl>;
 class JournalTrimmerImpl : public JournalTrimmer {
 public:
   struct config_t {
-    /// Number of minimum bytes to stop trimming dirty.
+    /// Number of minimum bytes to start trimming dirty,
+    //	this must be larger than or equal to min_journal_bytes,
+    //	otherwise trim_dirty may never happen.
     std::size_t target_journal_dirty_bytes = 0;
     /// Number of minimum bytes to stop trimming allocation
     /// (having the corresponding backrefs unmerged)
     std::size_t target_journal_alloc_bytes = 0;
+    /// Number of minimum dirty bytes of the journal.
+    std::size_t min_journal_bytes = 0;
     /// Number of maximum bytes to block user transactions.
     std::size_t max_journal_bytes = 0;
     /// Number of bytes to rewrite dirty per cycle
     std::size_t rewrite_dirty_bytes_per_cycle = 0;
+    /// Number of bytes to rewrite dirty per transaction
+    std::size_t rewrite_dirty_bytes_per_trans = 0;
     /// Number of bytes to rewrite backref per cycle
     std::size_t rewrite_backref_bytes_per_cycle = 0;
 
@@ -561,7 +567,7 @@ public:
 
   std::size_t get_trim_size_per_cycle() const final {
     return config.rewrite_backref_bytes_per_cycle +
-      config.rewrite_dirty_bytes_per_cycle;
+      get_dirty_bytes_to_trim();
   }
 
   backend_type_t get_backend_type() const {
@@ -584,7 +590,7 @@ public:
   }
 
   bool should_trim() const {
-    return should_trim_alloc() || should_trim_dirty();
+    return should_trim_alloc() || should_start_trim_dirty();
   }
 
   bool should_block_io_on_trim() const {
@@ -627,8 +633,12 @@ public:
   friend std::ostream &operator<<(std::ostream &, const stat_printer_t &);
 
 private:
-  bool should_trim_dirty() const {
+  bool should_start_trim_dirty() const {
     return get_dirty_tail_target() > journal_dirty_tail;
+  }
+
+  bool should_stop_trim_dirty(const journal_seq_t &target) const {
+    return target <= journal_dirty_tail;
   }
 
   bool should_trim_alloc() const {
@@ -642,10 +652,30 @@ private:
   trim_ertr::future<> trim_alloc();
 
   journal_seq_t get_tail_limit() const;
+  journal_seq_t get_dirty_tail_min_target() const;
   journal_seq_t get_dirty_tail_target() const;
+  journal_seq_t get_dirty_tail_target_per_cycle() const;
   journal_seq_t get_alloc_tail_target() const;
   std::size_t get_dirty_journal_size() const;
   std::size_t get_alloc_journal_size() const;
+  std::size_t get_journal_dirty_bytes() const {
+    return journal_head.relative_to(
+      backend_type,
+      journal_dirty_tail,
+      roll_start,
+      roll_size);
+  }
+  std::size_t get_max_dirty_bytes_to_trim() const {
+    auto journal_dirty_bytes = get_journal_dirty_bytes();
+    if (journal_dirty_bytes <= config.min_journal_bytes) {
+      return 0;
+    }
+    return journal_dirty_bytes - config.min_journal_bytes;
+  }
+  std::size_t get_dirty_bytes_to_trim() const {
+    return std::min(get_max_dirty_bytes_to_trim(),
+		    config.rewrite_dirty_bytes_per_cycle);
+  }
   void register_metrics();
 
   ExtentCallbackInterface *extent_callback = nullptr;
