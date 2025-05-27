@@ -467,6 +467,29 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
   if (is_replay_interrupted()) {
     return;
   }
+  if (!r) {
+    for (auto snap = m_remote_group_snaps.begin(); snap!= m_remote_group_snaps.end();) {
+      auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(&snap->snapshot_namespace);
+      if (ns == nullptr) {
+        ++snap;
+        continue;
+      }
+      if (ns->mirror_peer_uuids.count(m_local_mirror_uuid) == 0) {
+        dout(10) << "Skipping snapshot " << snap->id
+                << " with no matching mirror_peer_uuid in: "
+                << ns->mirror_peer_uuids << " (expected: " << m_local_mirror_uuid << ")"
+                << dendl;
+        snap = m_remote_group_snaps.erase(snap);
+      } else {
+        ++snap;
+      }
+    }
+    if (m_remote_group_snaps.empty()) {
+      derr << "No valid remote snapshots after filtering by mirror_peer_uuid" << dendl;
+      handle_replay_complete(-ENOENT, "no valid remote group snapshots");
+      return;
+    }
+  }
 
   auto last_remote_snap = m_remote_group_snaps.rbegin();
   if (r < 0) {  // may be remote group is deleted?
