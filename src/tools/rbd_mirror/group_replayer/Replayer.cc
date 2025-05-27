@@ -467,14 +467,32 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
   if (is_replay_interrupted()) {
     return;
   }
-
-  auto last_remote_snap = m_remote_group_snaps.rbegin();
   if (r < 0) {  // may be remote group is deleted?
     derr << "error listing remote mirror group snapshots: " << cpp_strerror(r)
          << dendl;
     handle_replay_complete(r, "failed to list remote group snapshots");
     return;
-  } else if (is_resync_requested()) {
+  }
+  for (auto remote_snap = m_remote_group_snaps.begin();
+       remote_snap != m_remote_group_snaps.end(); ) {
+    auto remote_snap_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+        &remote_snap->snapshot_namespace);
+    if (remote_snap_ns == nullptr) {
+      ++remote_snap;
+      continue;
+    }
+    if (remote_snap_ns->mirror_peer_uuids.count(m_remote_mirror_peer_uuid) == 0) {
+      dout(10) << "filtering out snapshot " << remote_snap->id
+               << " with no matching mirror_peer_uuid in: "
+               << remote_snap_ns->mirror_peer_uuids << " (expected: "
+               << m_remote_mirror_peer_uuid << ")" << dendl;
+      remote_snap = m_remote_group_snaps.erase(remote_snap);
+    } else {
+      ++remote_snap;
+    }
+  }
+  auto last_remote_snap = m_remote_group_snaps.rbegin();
+  if (is_resync_requested()) {
     dout(10) << "local group resync requested" << dendl;
     auto last_remote_snap_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
         &last_remote_snap->snapshot_namespace);
