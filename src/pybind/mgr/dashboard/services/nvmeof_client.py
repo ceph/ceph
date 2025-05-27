@@ -1,7 +1,7 @@
 import functools
 import logging
 from typing import Annotated, Any, Callable, Dict, Generator, List, \
-    NamedTuple, Optional, Type, get_args, get_origin
+    NamedTuple, Optional, Type, Union, get_args, get_origin
 
 from ..exceptions import DashboardException
 from .nvmeof_conf import NvmeofGatewaysConfig
@@ -89,9 +89,20 @@ else:
         -32603: 500,  # Internal Error
     }
 
-    def handle_nvmeof_error(func: Callable[..., Message]) -> Callable[..., Message]:
+    def _get_field(obj, field):
+        if isinstance(obj, dict):
+            return obj.get(field)
+        return getattr(obj, field, None)
+
+    def _get_status(resp):
+        return _get_field(resp, "status")
+    
+    def _get_error_message(resp):
+        return _get_field(resp, "error_message")
+
+    def handle_nvmeof_error(func: Callable[..., Union[Message, Dict]]) -> Callable[..., Union[Message, Dict]]:
         @functools.wraps(func)
-        def wrapper(*args, **kwargs) -> Message:
+        def wrapper(*args, **kwargs) -> Union[Message, Dict]:
             try:
                 response = func(*args, **kwargs)
             except grpc._channel._InactiveRpcError as e:  # pylint: disable=protected-access
@@ -101,12 +112,12 @@ else:
                     http_status_code=504,
                     component="nvmeof",
                 )
-
-            if response.status != 0:
+            status = _get_status(response)
+            if status != 0:
                 raise DashboardException(
-                    msg=response.error_message,
-                    code=response.status,
-                    http_status_code=NVMeoFError2HTTP.get(response.status, 400),
+                    msg=_get_error_message(response),
+                    code=status,
+                    http_status_code=NVMeoFError2HTTP.get(status, 400),
                     component="nvmeof",
                 )
             return response
@@ -218,14 +229,15 @@ else:
     def convert_to_model(model: Type[NamedTuple],
                          finalize: Optional[Callable[[Dict], Dict]] = None
                          ) -> Callable[..., Callable[..., Model]]:
-        def decorator(func: Callable[..., Message]) -> Callable[..., Model]:
+        def decorator(func: Callable[..., Union[Message, Dict]]) -> Callable[..., Model]:
             @functools.wraps(func)
             def wrapper(*args, **kwargs) -> Model:
                 message = func(*args, **kwargs)
-                msg_dict = MessageToDict(message, including_default_value_fields=True,
-                                         preserving_proto_field_name=True)
+                if isinstance(message, Message):
+                    message = MessageToDict(message, including_default_value_fields=True,
+                                            preserving_proto_field_name=True)
 
-                result = namedtuple_to_dict(obj_to_namedtuple(msg_dict, model))
+                result = namedtuple_to_dict(obj_to_namedtuple(message, model))
                 if finalize:
                     return finalize(result)
                 return result

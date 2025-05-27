@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
+import errno
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 import cherrypy
 from orchestrator import OrchestratorError
@@ -563,7 +564,6 @@ else:
             },
         )
         @empty_response
-        @NvmeofCLICommand("nvmeof host add", model.RequestStatus)
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def create(self, nqn: str, host_nqn: str, gw_group: Optional[str] = None,
@@ -571,7 +571,51 @@ else:
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.add_host(
                 NVMeoFClient.pb2.add_host_req(subsystem_nqn=nqn, host_nqn=host_nqn)
             )
+     
+        @Endpoint('POST', "/bulk")
+        @ReadPermission
+        @EndpointDoc(
+            "Allow hosts to access an NVMeoF subsystem",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "nosts": Param(List[str], 'List of NVMeoF host NQNs. Use "*" to allow any host.'),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+            },
+        )
+        @empty_response
+        @NvmeofCLICommand("nvmeof host add", model.RequestStatus))
+        @convert_to_model(model.RequestStatus)
+        @handle_nvmeof_error
+        def bulk_create(self, nqn: str, hosts: Optional[List[str]] = None, gw_group: Optional[str] = None,
+                   traddr: Optional[str] = None):
+            if not hosts:
+                return {
+                    'status': errno.EINVAL,
+                    'error_message': 'No hosts provided'
+                }
+        
+            success = True
+            failed_hosts = {}
+            for host in hosts:
+                try:
+                    resp = NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.add_host(
+                        NVMeoFClient.pb2.add_host_req(subsystem_nqn=nqn, host_nqn=host)
+                    )
+                    if resp.status != 0:
+                        success = False
+                        failed_hosts[host] = resp.error_message
+                except Exception as e:
+                    success = False
+                    failed_hosts[host] = str(e)
 
+            return {
+                'status': 0 if success else errno.EINVAL,
+                'error_message': '' if success else (
+                    f"Failure adding the following hosts to {nqn}:\n" +
+                    "\n".join(f"- {host}: {msg}" for host, msg in failed_hosts.items())
+                )
+            }
+                    
         @EndpointDoc(
             "Disallow hosts from accessing an NVMeoF subsystem",
             parameters={
