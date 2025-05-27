@@ -536,48 +536,123 @@ BtreeLBAManager::search_insert_position(
   op_context_t c,
   LBABtree &btree,
   laddr_hint_t hint,
-  extent_len_t length,
-  alloc_policy_t policy)
+  extent_len_t length)
 {
   LOG_PREFIX(BtreeLBAManager::search_insert_position);
-  auto lookup_attempts = stats.num_alloc_extents_iter_nexts;
-  using OptIter = std::optional<LBABtree::iterator>;
-  // TODO: handle conflict condition and policy
+  assert(hint != LADDR_HINT_NULL);
+  assert(hint.addr != L_ADDR_NULL);
+
+  struct state_t {
+    state_t(laddr_hint_t hint, extent_len_t length)
+	: orig_hint(hint), hint(hint), length(length),
+	  loop_threshold(32), next_warn(1) {}
+
+    const laddr_hint_t orig_hint;
+    laddr_hint_t hint;
+    extent_len_t length;
+    std::optional<LBABtree::iterator> iter;
+    int lookup_attempts;
+    int loop_threshold;
+    int next_warn;
+
+    bool check_conflict() const {
+      assert(iter);
+      assert(!iter->is_end());
+      auto &hint_begin = hint.addr;
+      auto hint_end = hint_begin + length;
+      auto mapping_begin = iter->get_key();
+      auto mapping_end = iter->get_key() + iter->get_val().len;
+      return ((hint_begin < mapping_end) && (hint_end > mapping_begin))
+	  || hint.conflict_with(mapping_begin);
+    }
+  };
+
   return seastar::do_with(
-    hint.addr, OptIter(std::nullopt),
-    [this, c, &btree, hint, length, lookup_attempts, policy, FNAME]
-    (laddr_t &last_end, OptIter &insert_iter)
+    state_t(hint, length), [c, &btree, FNAME, this](state_t &state)
   {
-    return LBABtree::iterate_repeat(
-      c,
-      btree.upper_bound_right(c, hint.addr),
-      [this, c, hint, length, lookup_attempts, policy,
-       &last_end, &insert_iter, FNAME](auto &iter)
-    {
-      ++stats.num_alloc_extents_iter_nexts;
-      if (iter.is_end() ||
-	  iter.get_key() >= (last_end + length)) {
-	if (policy == alloc_policy_t::deterministic) {
-	  ceph_assert(hint.addr == last_end);
+    TRACET("hint: {}~{}", c.trans, state.hint, state.length);
+    return btree.upper_bound_right(c, state.hint.lower_boundary()
+    ).si_then([c, &btree, &state, FNAME, this](auto iter) {
+      state.iter.emplace(std::move(iter));
+      return trans_intr::repeat([c, &btree, &state, FNAME, this] {
+	state.lookup_attempts++;
+	if (state.iter->is_end() || !state.check_conflict()) {
+	  DEBUGT("hint: {}~{}, allocated laddr: {}, insert position: {}"
+		 "done with {} attempts",
+		 c.trans, state.orig_hint, state.length,
+		 state.hint.addr, *state.iter, state.lookup_attempts);
+	  stats.num_alloc_extents_iter_nexts += state.lookup_attempts;
+	  return search_insert_position_iertr::make_ready_future<
+	    seastar::stop_iteration>(seastar::stop_iteration::yes);
 	}
-	DEBUGT("hint: {}~0x{:x}, allocated laddr: {}, insert position: {}, "
-	       "done with {} attempts",
-	       c.trans, hint, length, last_end, iter,
-	       stats.num_alloc_extents_iter_nexts - lookup_attempts);
-	insert_iter.emplace(iter);
-	return search_insert_position_iertr::make_ready_future<
-	  seastar::stop_iteration>(seastar::stop_iteration::yes);
-      }
-      ceph_assert(policy == alloc_policy_t::linear_search);
-      last_end = (iter.get_key() + iter.get_val().len).checked_to_laddr();
-      TRACET("hint: {}~0x{:x}, current iter: {}, repeat ...",
-	     c.trans, hint, length, iter);
-      return search_insert_position_iertr::make_ready_future<
-	seastar::stop_iteration>(seastar::stop_iteration::no);
-    }).si_then([&last_end, &insert_iter] {
-      ceph_assert(insert_iter);
-      return search_insert_position_iertr::make_ready_future<
-	insert_position_t>(last_end, *std::move(insert_iter));
+
+	ceph_assert(state.hint.condition !=
+		    laddr_conflict_condition_t::all_at_never);
+
+	TRACET("hint {}~{} conflict with {} {}",
+	       c.trans, state.hint, state.length,
+	       state.iter->get_key(), state.iter->get_val());
+
+	if (state.lookup_attempts / state.loop_threshold == state.next_warn) {
+	  state.next_warn++;
+	  WARNT("attempt searching LBABtree voer {} times -- "
+		"orig_hint: {}, cur_hint: {}, cur_iter: {}",
+		c.trans, state.lookup_attempts, state.orig_hint,
+		state.hint, *state.iter);
+	}
+
+	return seastar::futurize_invoke([c, &btree, &state, FNAME] {
+	  if (state.hint.policy == laddr_conflict_policy_t::gen_random) {
+	    state.hint.find_next_random();
+	    TRACET("re-search with random hint {}", c.trans, state.hint);
+	    return btree.upper_bound_right(c, state.hint.lower_boundary());
+	  }
+
+	  // linear search
+	  ceph_assert(
+	    state.hint.condition == laddr_conflict_condition_t::all_at_block_offset ||
+	    state.hint.condition == laddr_conflict_condition_t::all_at_object_content);
+	  state.hint.addr = (state.iter->get_key() + state.iter->get_val().len)
+	      .checked_to_laddr();
+	  bool loop_back = false;
+
+	  if (state.orig_hint.addr.is_global_address()) {
+	    if (state.orig_hint.addr.get_object_prefix() !=
+		state.hint.addr.get_object_prefix()) {
+	      state.hint.addr = L_ADDR_MIN;
+	      loop_back = true;
+	    }
+	  } else if (state.orig_hint.addr.is_onode_extent_address()) {
+	    if (state.hint.addr.get_local_object_id() != LOCAL_OBJECT_ID_ZERO) {
+	      state.hint.addr.set_local_object_id(LOCAL_OBJECT_ID_ZERO);
+	      state.hint.addr.set_object_content(0);
+	      loop_back = true;
+	    }
+	  } else {
+	    assert(state.orig_hint.addr.is_metadata());
+	    if (state.orig_hint.addr.get_clone_prefix() !=
+		state.hint.addr.get_clone_prefix()) {
+	      state.hint.addr = state.orig_hint.addr.with_offset_by_blocks(0);
+	      loop_back = true;
+	    }
+	  }
+
+	  TRACET("move to next hint: {} loop_back: {}",
+		 c.trans, state.hint, loop_back);
+
+	  if (loop_back) {
+	    return btree.lower_bound(c, state.hint.addr);
+	  } else {
+	    return state.iter->next(c);
+	  }
+	}).si_then([&state](LBABtree::iterator next_iter) {
+	  state.iter.emplace(std::move(next_iter));
+	  return search_insert_position_iertr::make_ready_future<
+	    seastar::stop_iteration>(seastar::stop_iteration::no);
+	});
+      });
+    }).si_then([&state] {
+      return insert_position_t{state.hint.addr, std::move(*state.iter)};
     });
   });
 }
@@ -586,8 +661,7 @@ BtreeLBAManager::alloc_mappings_ret
 BtreeLBAManager::alloc_contiguous_mappings(
   Transaction &t,
   laddr_hint_t hint,
-  std::vector<alloc_mapping_info_t> &alloc_infos,
-  alloc_policy_t policy)
+  std::vector<alloc_mapping_info_t> &alloc_infos)
 {
   ceph_assert(hint.addr != L_ADDR_NULL);
   extent_len_t total_len = 0;
@@ -600,9 +674,9 @@ BtreeLBAManager::alloc_contiguous_mappings(
   return with_btree<LBABtree>(
     cache,
     c,
-    [this, c, hint, &alloc_infos, total_len, policy](auto &btree)
+    [this, c, hint, &alloc_infos, total_len](auto &btree)
   {
-    return search_insert_position(c, btree, hint, total_len, policy
+    return search_insert_position(c, btree, hint, total_len
     ).si_then([this, c, &alloc_infos, &btree](insert_position_t res) {
       extent_len_t offset = 0;
       for (auto &info : alloc_infos) {
@@ -619,8 +693,7 @@ BtreeLBAManager::alloc_mappings_ret
 BtreeLBAManager::alloc_sparse_mappings(
   Transaction &t,
   laddr_hint_t hint,
-  std::vector<alloc_mapping_info_t> &alloc_infos,
-  alloc_policy_t policy)
+  std::vector<alloc_mapping_info_t> &alloc_infos)
 {
   ceph_assert(hint.addr != L_ADDR_NULL);
 #ifndef NDEBUG
@@ -638,11 +711,11 @@ BtreeLBAManager::alloc_sparse_mappings(
   return with_btree<LBABtree>(
     cache,
     c,
-    [this, c, hint, &alloc_infos, total_len, policy](auto &btree)
+    [this, c, hint, &alloc_infos, total_len](auto &btree)
   {
-    return search_insert_position(c, btree, hint, total_len, policy
-    ).si_then([this, c, hint, &alloc_infos, &btree, policy](auto res) {
-      if (policy != alloc_policy_t::deterministic) {
+    return search_insert_position(c, btree, hint, total_len
+    ).si_then([this, c, hint, &alloc_infos, &btree](auto res) {
+      if (hint.condition != laddr_conflict_condition_t::all_at_never) {
 	for (auto &info : alloc_infos) {
 	  auto offset = info.key.get_byte_distance<extent_len_t>(hint.addr);
 	  info.key = (res.laddr + offset).checked_to_laddr();
