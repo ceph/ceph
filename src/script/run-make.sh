@@ -57,7 +57,7 @@ function prepare() {
             if ! type clang-19 > /dev/null 2>&1 ; then
                 ci_debug "Removing existing llvm packages"
                 wrap_sudo
-                $DRY_RUN $SUDO apt-get purge --auto-remove llvm python3-lldb -y
+                $DRY_RUN $SUDO apt-get purge --auto-remove clang lldb lld clangd python3-lldb -y
                 ci_debug "Getting clang-19"
                 wget https://download.ceph.com/qa/llvm.sh
                 chmod +x llvm.sh
