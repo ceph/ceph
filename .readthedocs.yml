@@ -19,3 +19,5 @@ python:
 sphinx:
   builder: dirhtml
   configuration: doc/conf.py
+vcs:
+  shallow_clone: false
