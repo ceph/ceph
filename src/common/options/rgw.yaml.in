@@ -4167,6 +4167,19 @@ options:
   default: 3
   services:
   - rgw
+- name: rgw_posix_user_mapping_type
+  type: str
+  level: advanced
+  desc: enable POSIX users to perform as an RGW user within a standalone RGW env
+  long_desc: The `direct` option directly runs the operations as the POSIX user, 
+    while the `perm` option checks the permissions before each operation.
+  default: none
+  services:
+  - rgw
+  enum_values:
+  - none
+  - direct
+  with_legacy: true
 - name: rgw_luarocks_location
   type: str
   level: advanced

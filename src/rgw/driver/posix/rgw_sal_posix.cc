@@ -593,7 +593,6 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
     return ret;
   }
 
-
   ret = lseek(fd, ofs, SEEK_SET);
   if (ret < 0) {
     ret = errno;
@@ -1985,6 +1984,11 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       }
     }
   }
+
+  if ((ret = this->get_sys_mgr()->init(dpp)) < 0) {
+    return ret;
+  }
+
   ldpp_dout(dpp, 20) << "root_fd: " << root_dir->get_fd() << dendl;
 
   ldpp_dout(dpp, 20) << "SUCCESS" << dendl;
@@ -3497,6 +3501,38 @@ int POSIXObject::read(int64_t ofs, int64_t left, bufferlist& bl,
 int POSIXObject::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
 		       optional_yield y)
 {
+  if (dpp->get_cct()->_conf->rgw_posix_user_mapping_type == "direct") {
+    struct stat statbuf;
+    auto ruser = std::get<rgw_user>(this->get_bucket()->get_info().owner);
+    int ret = driver->get_sys_mgr()->populate_user_data(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+    ret = ::stat(ent.get()->get_name().c_str(), &statbuf);
+    if (ret < 0) {
+      ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: Could not retrieve stats for " << ent->get_name() << ": "
+        << cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+    
+    POSIXSystemUser posix_user;
+    ret = driver->get_sys_mgr()->find_posix_user(dpp, ruser, posix_user);
+    if (ret < 0) {
+      return ret;
+    }
+    int call_ret;
+    RUN_AS(dpp, posix_user.get_uid(), posix_user.get_gid(), statbuf.st_uid, statbuf.st_gid, ent->write(ofs, bl, dpp, y), ret, call_ret);
+    if (call_ret < 0) {
+      return call_ret;
+    }
+
+    return 0;
+
+out:
+    return ret;
+  }
+
   return ent->write(ofs, bl, dpp, y);
 }
 
@@ -3671,17 +3707,47 @@ std::string POSIXObject::gen_temp_fname()
 int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 					int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
+  struct stat statbuf;
   int64_t left;
   int64_t cur_ofs = ofs;
+  int ret;
+  rgw_user ruser;
+  POSIXSystemUser posix_user;
+  bool direct = (dpp->get_cct()->_conf->rgw_posix_user_mapping_type == "direct") ? true : false;
 
   if (end < 0)
     left = 0;
   else
     left = end - ofs + 1;
 
+  if (direct) {
+    ruser = std::get<rgw_user>(source->get_bucket()->get_info().owner);
+    ret = source->driver->get_sys_mgr()->populate_user_data(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+    ret = ::stat(source->ent.get()->get_name().c_str(), &statbuf);
+    if (ret < 0) {
+      ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: Could not retrieve stats for " << source->ent.get()->get_name() << ": "
+        << cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+    
+    ret = source->driver->get_sys_mgr()->find_posix_user(dpp, ruser, posix_user);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
   while (left > 0) {
     bufferlist bl;
-    int len = source->read(cur_ofs, left, bl, dpp, y);
+    int len;
+    if (direct) {
+      RUN_AS(dpp, posix_user.get_uid(), posix_user.get_gid(), statbuf.st_uid, statbuf.st_gid, source->read(cur_ofs, left, bl, dpp, y), ret, len);
+    } else {
+      len = source->read(cur_ofs, left, bl, dpp, y);
+    }
     if (len < 0) {
 	ldpp_dout(dpp, 0) << " ERROR: could not read " << source->get_name() <<
 	  " ofs: " << cur_ofs << " error: " << cpp_strerror(len) << dendl;
@@ -3692,7 +3758,7 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
     }
 
     /* Read some */
-    int ret = cb->handle_data(bl, 0, len);
+    ret = cb->handle_data(bl, 0, len);
     if (ret < 0) {
 	ldpp_dout(dpp, 0) << " ERROR: callback failed on " << source->get_name() << ": " << ret << dendl;
 	return ret;
@@ -3704,6 +3770,9 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
 
   /* Doesn't seem to be anything needed from params */
   return 0;
+
+out:
+  return ret;
 }
 
 int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y)
