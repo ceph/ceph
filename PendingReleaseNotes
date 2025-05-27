@@ -191,6 +191,18 @@
   confirmation flag when some MDSs exhibit health warning MDS_TRIM or
   MDS_CACHE_OVERSIZED. This is to prevent accidental MDS failover causing
   further delays in recovery.
+* RADOS: A POOL_APP_NOT_ENABLED health warning will now be reported if
+  the application is not enabled for the pool irrespective of whether
+  the pool is in use or not. Always tag a pool with an application
+  using ``ceph osd pool application enable`` command to avoid reporting
+  of POOL_APP_NOT_ENABLED health warning for that pool.
+  The user might temporarily mute this warning using
+  ``ceph health mute POOL_APP_NOT_ENABLED``.
+CephFS: Disallow delegating preallocated inode ranges to clients. Config
+  `mds_client_delegate_inos_pct` defaults to 0 which disables async dirops
+  in the kclient.
+* S3 Get/HeadObject now support query parameter `partNumber` to read a specific
+  part of a completed multipart upload.
 
 >=18.0.0
 
