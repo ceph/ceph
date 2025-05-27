@@ -280,6 +280,28 @@ class TestCharMapVxattr(CephFSTestCase, CharMapMixin):
             else:
                 self.fail("should fail")
 
+    def test_cs_no_parent_snaps_set_insensitive(self):
+        """
+        That setting a charmap succeeds for an empty directory with first beyond parent snaps.
+        """
+
+        attrs = {
+          "ceph.dir.casesensitive": False,
+          "ceph.dir.normalization": "nfc",
+          "ceph.dir.encoding": "utf8",
+        }
+
+        self.mount_a.run_shell_payload("mkdir -p foo/bar; mkdir foo/.snap/one; rmdir foo/bar; mkdir foo/bar")
+        for attr, v in attrs.items():
+            try:
+                self.mount_a.setfattr("foo/bar", attr, v, helpfulexception=True)
+            except DirectoryNotEmptyError:
+                self.fail("should not fail")
+        try:
+            self.check_cs("foo/bar", casesensitive=False, normalization="nfc")
+        except DirectoryNotEmptyError:
+            self.fail("should not fail")
+
     def test_cs_remount(self):
         """
         That a remount continues to see the charmap.
