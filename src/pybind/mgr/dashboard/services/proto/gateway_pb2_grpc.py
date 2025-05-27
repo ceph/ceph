@@ -69,6 +69,11 @@ class GatewayStub(object):
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_set_rbd_trash_image_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
                 )
+        self.namespace_set_auto_resize = channel.unary_unary(
+                '/Gateway/namespace_set_auto_resize',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_set_auto_resize_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
         self.namespace_delete = channel.unary_unary(
                 '/Gateway/namespace_delete',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_delete_req.SerializeToString,
@@ -251,6 +256,13 @@ class GatewayServicer(object):
 
     def namespace_set_rbd_trash_image(self, request, context):
         """Set namespace's RBD trash image flag
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def namespace_set_auto_resize(self, request, context):
+        """Set namespace's auto resize flag
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -459,6 +471,11 @@ def add_GatewayServicer_to_server(servicer, server):
             'namespace_set_rbd_trash_image': grpc.unary_unary_rpc_method_handler(
                     servicer.namespace_set_rbd_trash_image,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_set_rbd_trash_image_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+            ),
+            'namespace_set_auto_resize': grpc.unary_unary_rpc_method_handler(
+                    servicer.namespace_set_auto_resize,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_set_auto_resize_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
             ),
             'namespace_delete': grpc.unary_unary_rpc_method_handler(
@@ -759,6 +776,23 @@ class Gateway(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_set_rbd_trash_image',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_set_rbd_trash_image_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def namespace_set_auto_resize(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_set_auto_resize',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_set_auto_resize_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
