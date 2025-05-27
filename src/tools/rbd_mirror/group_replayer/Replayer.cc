@@ -1197,7 +1197,7 @@ void Replayer<I>::unlink_group_snapshots() {
     if (snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER) {
       bool unlink_user_snap = true;
       for (auto &remote_snap : m_remote_group_snaps) {
-        if (remote_snap.name == local_snap->name) {
+        if (remote_snap.id == local_snap->id) {
           unlink_user_snap = false;
           break;
         }
