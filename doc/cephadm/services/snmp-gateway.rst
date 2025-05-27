@@ -3,9 +3,9 @@ SNMP Gateway Service
 ====================
 
 SNMP_ is still a widely used protocol, to monitor distributed systems and devices across a variety of hardware
-and software platforms. Ceph's SNMP integration focuses on forwarding alerts from it's Prometheus Alertmanager
-cluster to a gateway daemon. The gateway daemon, transforms the alert into an SNMP Notification and sends
-it on to a designated SNMP management platform. The gateway daemon is from the snmp_notifier_ project,
+and software platforms. Ceph's SNMP integration focuses on forwarding alerts from its Prometheus Alertmanager
+cluster to a gateway daemon. The gateway daemon transforms the alert into an SNMP Notification and sends
+it on to a designated SNMP management platform. The gateway daemon is from the ``snmp_notifier``_ project,
 which provides SNMP V2c and V3 support (authentication and encryption).
 
 Ceph's SNMP gateway service deploys one instance of the gateway by default. You may increase this
@@ -22,7 +22,7 @@ The table below shows the SNMP versions that are supported by the gateway implem
 ================ =========== ===============================================
  SNMP Version     Supported  Notes
 ================ =========== ===============================================
- V1                  ❌      Not supported by snmp_notifier
+ V1                  ❌      Not supported by ``snmp_notifier``
  V2c                  ✔
  V3 authNoPriv        ✔      uses username/password authentication, without
                              encryption (NoPriv = no privacy)
@@ -35,8 +35,8 @@ Deploying an SNMP Gateway
 =========================
 Both SNMP V2c and V3 provide credentials support. In the case of V2c, this is just the community string - but for V3
 environments you must provide additional authentication information. These credentials are not supported on the command
-line when deploying the service. Instead, you must create the service using a credentials file (in yaml format), or
-specify the complete service definition in a yaml file.
+line when deploying the service. Instead, you must create the service using a credentials file (in YAML format), or
+specify the complete service definition in a YAML file.
 
 Command format
 --------------
@@ -99,13 +99,13 @@ with the file containing the following configuration
 
 SNMP V3 (authNoPriv)
 --------------------
-Deploying an snmp-gateway service supporting SNMP V3 with authentication only, would look like this;
+Deploying an snmp-gateway service supporting SNMP V3 with authentication only would look like this:
 
 .. prompt:: bash #
 
    ceph orch apply snmp-gateway --snmp-version=V3 --engine-id=800C53F000000 --destination=192.168.122.1:162 -i ./snmpv3_creds.yml
 
-with a credentials file as;
+with a credentials file of the following form:
 
 .. code-block:: yaml
 
@@ -113,7 +113,7 @@ with a credentials file as;
    snmp_v3_auth_username: myuser
    snmp_v3_auth_password: mypassword
 
-or as a service configuration file
+Alternately a ``ceph orch`` service configuration file of the following form:
 
 .. code-block:: yaml
 
@@ -134,13 +134,13 @@ or as a service configuration file
 SNMP V3 (authPriv)
 ------------------
 
-Defining an SNMP V3 gateway service that implements authentication and privacy (encryption), requires two additional values
+To define an SNMP V3 gateway service that implements authentication and privacy (encryption), supply two additional values:
 
 .. prompt:: bash #
 
    ceph orch apply snmp-gateway --snmp-version=V3 --engine-id=800C53F000000 --destination=192.168.122.1:162 --privacy-protocol=AES -i ./snmpv3_creds.yml
 
-with a credentials file as;
+with a credentials file of the following form:
 
 .. code-block:: yaml
 
@@ -152,7 +152,7 @@ with a credentials file as;
 
 .. note::
 
-   The credentials are stored on the host, restricted to the root user and passed to the snmp_notifier daemon as
+   The credentials are stored on the host, restricted to the ``root`` user and passed to the ``snmp_notifier`` daemon as
    an environment file (``--env-file``), to limit exposure.
 
 
@@ -165,7 +165,7 @@ alert that has an OID_ label to the SNMP gateway daemon for processing.
 
 Implementing the MIB
 ======================
-To make sense of the SNMP Notification/Trap, you'll need to apply the MIB to your SNMP management platform. The MIB (CEPH-MIB.txt) can
-downloaded from the main Ceph repo_
+To make sense of SNMP notifications and traps, you'll need to apply the MIB to your SNMP management platform. The MIB (``CEPH-MIB.txt``) can
+downloaded from the main Ceph GitHub repository_
 
-.. _repo: https://github.com/ceph/ceph/tree/master/monitoring/snmp
+.. _repository: https://github.com/ceph/ceph/tree/master/monitoring/snmp
