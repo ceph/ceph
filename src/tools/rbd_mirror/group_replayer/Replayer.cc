@@ -348,24 +348,8 @@ void Replayer<I>::load_local_group_snapshots() {
 
   //FIXME: This is not accessed under a lock
   if (!m_local_group_snaps.empty()) {
-    for (auto &local_snap : m_local_group_snaps) {
-      if (local_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
-        continue;
-      }
-      auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
-          &local_snap.snapshot_namespace);
-      if (ns != nullptr &&
-          ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
-        continue;
-      }
-      // do not forward until previous local mirror group snapshot is COMPLETE
-      validate_image_snaps_sync_complete(local_snap.id);
-      auto snap_type = cls::rbd::get_group_snap_namespace_type(
-          local_snap.snapshot_namespace);
-      if (snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR) {
-        m_retry_validate_snap = true;
-        break;
-      }
+    for (auto &create_snap : m_create_group_snaps) { // all snaps are incomplete
+      validate_image_snaps_sync_complete(create_snap.id);
     }
   }
 
@@ -402,6 +386,7 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
     return;
   }
 
+  bool is_restarted = false;
   for (auto it = m_local_group_snaps.rbegin();
        it != m_local_group_snaps.rend(); it++) {
     auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
@@ -415,11 +400,26 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
         locker.unlock();
         handle_replay_complete(0, "orphan (force promoting)");
         return;
-      } else if (m_retry_validate_snap) {
-        m_retry_validate_snap = false;
-        locker.unlock();
-        schedule_load_group_snapshots();
-        return; // previous snap is syncing, reload local snaps to confirm its completeness.
+      } else if (m_retry_validate_snap || !m_create_group_snaps.empty()) {
+        for (auto &create_snap : m_create_group_snaps) {
+          auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+             &create_snap.snapshot_namespace);
+          if (ns != nullptr) {
+            // Mirror snaps exists waiting for complete, not just user snaps,
+            // hence a reschedule is needed.
+            m_retry_validate_snap = true;
+          }
+        }
+        if (m_retry_validate_snap) {
+          m_retry_validate_snap = false;
+          locker.unlock();
+          schedule_load_group_snapshots();
+          return; // previous snap is syncing, reload local snaps to confirm its completeness.
+        }
+      } else {
+        if (it->state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+          is_restarted = true;
+        }
       }
       break;
     } else  { // primary
@@ -432,6 +432,26 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
       }
       locker.unlock();
       handle_replay_complete(0, "local group is primary");
+      return;
+    }
+  }
+
+  if (is_restarted) { // is rbd-mirror restarted?, try to populate m_create_group_snaps
+    for (auto it = m_local_group_snaps.begin();
+        it != m_local_group_snaps.end(); it++) {
+      auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+          &it->snapshot_namespace);
+      if (ns != nullptr &&
+          ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
+        continue;
+      }
+      if (it->state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+        m_create_group_snaps.push_back(*it);
+      }
+    }
+    if (!m_create_group_snaps.empty()) {
+      locker.unlock();
+      schedule_load_group_snapshots();
       return;
     }
   }
@@ -552,18 +572,18 @@ void Replayer<I>::validate_image_snaps_sync_complete(
     return;
   }
 
-  auto itl = std::find_if(
-      m_local_group_snaps.begin(), m_local_group_snaps.end(),
+  auto itc = std::find_if(
+      m_create_group_snaps.begin(), m_create_group_snaps.end(),
       [group_snap_id](const cls::rbd::GroupSnapshot &s) {
       return s.id == group_snap_id;
       });
-  if (itl == m_local_group_snaps.end()) {
+  if (itc == m_create_group_snaps.end()) {
     return;
   }
 
   int r;
   auto snap_type = cls::rbd::get_group_snap_namespace_type(
-      itl->snapshot_namespace);
+      itc->snapshot_namespace);
   if (snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER) {
     locker.unlock();
     C_SaferCond *ctx = new C_SaferCond;
@@ -637,11 +657,11 @@ void Replayer<I>::validate_image_snaps_sync_complete(
         snap_spec.image_id = image.spec.image_id;
         snap_spec.snap_id = snap_info.id;
         auto it = std::find_if(
-          itl->snaps.begin(), itl->snaps.end(),
+          itc->snaps.begin(), itc->snaps.end(),
           [&snap_spec](const cls::rbd::ImageSnapshotSpec &s) {
             return snap_spec.pool == s.pool && snap_spec.image_id == s.image_id;
           });
-        if (it == itl->snaps.end()) {
+        if (it == itc->snaps.end()) {
           image_snap_spec.push_back(snap_spec);
         }
         continue;
@@ -949,11 +969,11 @@ void Replayer<I>::create_mirror_snapshot(
     {}, cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   local_snap.name = prepare_non_primary_mirror_snap_name(m_global_group_id,
       group_snap_id);
-  m_local_group_snaps.push_back(local_snap);
+  m_create_group_snaps.push_back(local_snap);
 
   auto comp = create_rados_callback(
-      new LambdaContext([this, snap, on_finish](int r) {
-        handle_create_mirror_snapshot(r, snap, on_finish);
+      new LambdaContext([this, local_snap, on_finish](int r) {
+        handle_create_mirror_snapshot(r, local_snap, on_finish);
         }));
 
   librados::ObjectWriteOperation op;
@@ -967,17 +987,18 @@ void Replayer<I>::create_mirror_snapshot(
 
 template <typename I>
 void Replayer<I>::handle_create_mirror_snapshot(
-    int r, cls::rbd::GroupSnapshot *snap, Context *on_finish) {
-  dout(10) << snap->id << ", r=" << r << dendl;
+    int r, cls::rbd::GroupSnapshot local_snap, Context *on_finish) {
+  std::string group_snap_id = local_snap.id;
+  dout(10) << group_snap_id << ", r=" << r << dendl;
 
-  if (r < 0) { // clean the group snapshot here
-    dout(10) << "cleaning snapshot as failed group_snap_set previously with : "
-             << snap->id << ", this will be attempted to sync later" << dendl;
-    r = librbd::cls_client::group_snap_remove(&m_local_io_ctx,
-        librbd::util::group_header_name(m_local_group_id), snap->id);
-    if (r < 0) {
-      derr << "failed to remove group snapshot : "
-           << snap->id << " : " << cpp_strerror(r) << dendl;
+  if (r == 0) {
+    auto itc = std::find_if(
+        m_create_group_snaps.begin(), m_create_group_snaps.end(),
+        [group_snap_id](const cls::rbd::GroupSnapshot &s) {
+        return s.id == group_snap_id;
+        });
+    if (itc == m_create_group_snaps.end()) {
+      m_create_group_snaps.push_back(local_snap);
     }
   }
 
@@ -999,18 +1020,18 @@ void Replayer<I>::mirror_snapshot_complete(
       });
 
   ceph_assert(itr != m_remote_group_snaps.end());
-  auto itl = std::find_if(
-      m_local_group_snaps.begin(), m_local_group_snaps.end(),
+  auto itc = std::find_if(
+      m_create_group_snaps.begin(), m_create_group_snaps.end(),
       [group_snap_id](const cls::rbd::GroupSnapshot &s) {
       return s.id == group_snap_id;
       });
   if (itr->snaps.size() != 0) {
     // update the group snap with snap spec
-    itl->snaps.push_back(*spec);
+    itc->snaps.push_back(*spec);
   }
 
-  if (itr->snaps.size() == itl->snaps.size()) {
-    itl->state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+  if (itr->snaps.size() == itc->snaps.size()) {
+    itc->state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
 
     auto comp = create_rados_callback(
         new LambdaContext([this, group_snap_id, on_finish](int r) {
@@ -1018,7 +1039,7 @@ void Replayer<I>::mirror_snapshot_complete(
           }));
 
     librados::ObjectWriteOperation op;
-    librbd::cls_client::group_snap_set(&op, *itl);
+    librbd::cls_client::group_snap_set(&op, *itc);
     int r = m_local_io_ctx.aio_operate(
         librbd::util::group_header_name(m_local_group_id), comp, &op);
     ceph_assert(r == 0);
@@ -1028,10 +1049,10 @@ void Replayer<I>::mirror_snapshot_complete(
   }
 
   dout(10) << "local group snap info: "
-           << "id: " << itl->id
-           << ", name: " << itl->name
-           << ", state: " << itl->state
-           << ", snaps.size: " << itl->snaps.size()
+           << "id: " << itc->id
+           << ", name: " << itc->name
+           << ", state: " << itc->state
+           << ", snaps.size: " << itc->snaps.size()
            << dendl;
 
   return;
@@ -1045,6 +1066,15 @@ void Replayer<I>::handle_mirror_snapshot_complete(
   if (r < 0) {
     on_finish->complete(r);
     return;
+  } else {
+    auto itc = std::find_if(
+        m_create_group_snaps.begin(), m_create_group_snaps.end(),
+        [group_snap_id](const cls::rbd::GroupSnapshot &s) {
+        return s.id == group_snap_id;
+        });
+    if (itc != m_create_group_snaps.end()) {
+      m_create_group_snaps.erase(itc);
+    }
   }
 
   utime_t duration = ceph_clock_now() - m_snapshot_start;
@@ -1235,12 +1265,11 @@ void Replayer<I>::create_regular_snapshot(
     cls::rbd::GroupSnapshotNamespaceUser{},
       snap->name,
       cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  m_local_group_snaps.push_back(group_snap);
 
   librbd::cls_client::group_snap_set(&op, group_snap);
   auto comp = create_rados_callback(
-      new LambdaContext([this, group_snap_id, on_finish](int r) {
-        handle_create_regular_snapshot(r, group_snap_id, on_finish);
+      new LambdaContext([this, group_snap, on_finish](int r) {
+        handle_create_regular_snapshot(r, group_snap, on_finish);
       }));
   int r = m_local_io_ctx.aio_operate(
       librbd::util::group_header_name(m_local_group_id), comp, &op);
@@ -1251,27 +1280,20 @@ void Replayer<I>::create_regular_snapshot(
 
 template <typename I>
 void Replayer<I>::handle_create_regular_snapshot(
-    int r, const std::string &group_snap_id, Context *on_finish) {
+    int r, cls::rbd::GroupSnapshot local_snap, Context *on_finish) {
+  std::string group_snap_id = local_snap.id;
   dout(10) << group_snap_id << ", r=" << r << dendl;
 
-  if (r < 0) { // clean the group snapshot here
-    dout(10) << "cleaning snapshot as failed group_snap_set previously with : "
-             << group_snap_id << ", this will be attempted to sync later"
-             << dendl;
-    r = librbd::cls_client::group_snap_remove(&m_local_io_ctx,
-        librbd::util::group_header_name(m_local_group_id), group_snap_id);
-    if (r < 0) {
-      derr << "failed to remove group snapshot : "
-           << group_snap_id << " : " << cpp_strerror(r) << dendl;
+  if (r == 0) {
+    auto itc = std::find_if(
+        m_create_group_snaps.begin(), m_create_group_snaps.end(),
+        [group_snap_id](const cls::rbd::GroupSnapshot &s) {
+        return s.id == group_snap_id;
+        });
+    if (itc == m_create_group_snaps.end()) {
+      m_create_group_snaps.push_back(local_snap);
     }
-    for (auto local_snap = m_local_group_snaps.begin();
-        local_snap != m_local_group_snaps.end(); ++local_snap) {
-      if (local_snap->id != group_snap_id) {
-        continue;
-      }
-      m_local_group_snaps.erase(local_snap);
-    }
-  } // Note IR's don't need setting set_image_replayer_limits() for regular snaps.
+  }
 
   on_finish->complete(r);
 }
@@ -1339,12 +1361,12 @@ void Replayer<I>::regular_snapshot_complete(
     const std::string &group_snap_id,
     Context *on_finish) {
   std::unique_lock locker{m_lock};
-  auto itl = std::find_if(
-      m_local_group_snaps.begin(), m_local_group_snaps.end(),
+  auto itc = std::find_if(
+      m_create_group_snaps.begin(), m_create_group_snaps.end(),
       [group_snap_id](const cls::rbd::GroupSnapshot &s) {
       return s.id == group_snap_id;
       });
-  if (itl == m_local_group_snaps.end()) {
+  if (itc == m_create_group_snaps.end()) {
     on_finish->complete(0);
     return;
   }
@@ -1424,10 +1446,10 @@ void Replayer<I>::regular_snapshot_complete(
   }
   if (itr->snaps.size() == local_image_snap_specs.size()) {
     locker.lock();
-    itl->snaps = local_image_snap_specs;
-    itl->state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+    itc->snaps = local_image_snap_specs;
+    itc->state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
     librados::ObjectWriteOperation op;
-    librbd::cls_client::group_snap_set(&op, *itl);
+    librbd::cls_client::group_snap_set(&op, *itc);
 
     auto comp = create_rados_callback(
         new LambdaContext([this, group_snap_id, on_finish](int r) {
@@ -1440,10 +1462,10 @@ void Replayer<I>::regular_snapshot_complete(
     comp->release();
 
     dout(10) << "local group snap info: "
-      << "id: " << itl->id
-      << ", name: " << itl->name
-      << ", state: " << itl->state
-      << ", snaps.size: " << itl->snaps.size()
+      << "id: " << itc->id
+      << ", name: " << itc->name
+      << ", state: " << itc->state
+      << ", snaps.size: " << itc->snaps.size()
       << dendl;
   } else {
     on_finish->complete(0);
@@ -1454,6 +1476,18 @@ template <typename I>
 void Replayer<I>::handle_regular_snapshot_complete(
     int r, const std::string &group_snap_id, Context *on_finish) {
   dout(10) << group_snap_id << ", r=" << r << dendl;
+
+  if (r == 0) {
+    auto itc = std::find_if(
+        m_create_group_snaps.begin(), m_create_group_snaps.end(),
+        [group_snap_id](const cls::rbd::GroupSnapshot &s) {
+        return s.id == group_snap_id;
+        });
+    if (itc != m_create_group_snaps.end()) {
+      m_create_group_snaps.erase(itc);
+    }
+  }
+
   on_finish->complete(r);
 }
 
