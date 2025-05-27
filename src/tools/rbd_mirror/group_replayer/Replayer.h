@@ -161,7 +161,7 @@ private:
     std::unique_lock<ceph::mutex> &locker,
     Context *on_finish);
   void handle_create_mirror_snapshot(
-    int r, cls::rbd::GroupSnapshot *snap, Context *on_finish);
+    int r, const std::string &group_snap_id, Context *on_finish);
 
   std::string prepare_non_primary_mirror_snap_name(
     const std::string &global_group_id, const std::string &snap_id);
