@@ -265,7 +265,7 @@ class TestCharMapVxattr(CephFSTestCase, CharMapMixin):
           "ceph.dir.encoding": "utf8",
         }
 
-        self.mount_a.run_shell_payload("mkdir -p foo/{trash,bar}; mkdir foo/.snap/one; rmdir foo/trash;")
+        self.mount_a.run_shell_payload("mkdir -p foo/bar; mkdir foo/.snap/one;")
         for attr, v in attrs.items():
             try:
                 self.mount_a.setfattr("foo/bar", attr, v, helpfulexception=True)
