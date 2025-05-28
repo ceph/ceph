@@ -35,7 +35,13 @@ case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
         install_container_deps
         dnf_clean
     ;;
-    *~*centos*9|*~*centos*10*|*~fedora*)
+    *~*centos*9)
+        dnf install -y /usr/bin/{rpmbuild,wget}
+        dnf install -y {curl,libcurl} --allowerasing
+        install_container_deps
+        dnf_clean
+    ;;
+    *~*centos*10*|*~fedora*)
         dnf install -y /usr/bin/{rpmbuild,wget,curl}
         install_container_deps
         dnf_clean
