@@ -70,7 +70,8 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 32 20 * * 4        $CW $SS      4 --ceph main --suite powercycle -p 950
 40 20 * * 5        $CW $SS      1 --ceph main --suite        rgw -p 950
 48 20 * * 6        $CW $SS      4 --ceph main --suite       krbd -p 950 --kernel testing
-56 20 * * 2,6      $CW $SS      1 --ceph main --suite crimson-rados -p 101 --force-priority --flavor crimson
+56 20 * * 2,6      $CW $SS      1 --ceph main --suite crimson-rados -p 101 --force-priority --flavor crimson-debug
+04 21 * * 2,6      $CW $SS      1 --ceph main --suite crimson-rados -p 101 --force-priority --flavor crimson-release
 
 ## tentacle branch runs - weekly
 # rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
@@ -81,7 +82,7 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 32 22 * * 4        $CW $SS      4 --ceph tentacle --suite powercycle -p 830
 40 22 * * 5        $CW $SS      1 --ceph tentacle --suite        rgw -p 830
 48 22 * * 6        $CW $SS      4 --ceph tentacle --suite       krbd -p 830 --kernel testing
-56 22 * * 6        $CW $SS      1 --ceph tentacle --suite crimson-rados -p 830 --flavor crimson
+56 22 * * 6        $CW $SS      1 --ceph tentacle --suite crimson-rados -p 830 --flavor crimson-debug
 
 ## squid branch runs - weekly
 # rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
