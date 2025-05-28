@@ -101,27 +101,47 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
       ceph_le32(header.seq)
     };
 
-    char exp_buf[CryptoKey::get_max_outbuf_size(sizeof(sigblock))];
+    if (key.get_type() <= CEPH_CRYPTO_AES) {
+      char exp_buf[CryptoKey::get_max_outbuf_size(sizeof(sigblock))];
 
-    try {
-      const CryptoKey::in_slice_t in {
-	sizeof(sigblock),
-	reinterpret_cast<const unsigned char*>(&sigblock)
-      };
-      const CryptoKey::out_slice_t out {
-	sizeof(exp_buf),
-	reinterpret_cast<unsigned char*>(&exp_buf)
-      };
-      key.encrypt(cct, in, out);
-    } catch (std::exception& e) {
-      lderr(cct) << __func__ << " failed to encrypt signature block" << dendl;
-      return -1;
+      try {
+        const CryptoKey::in_slice_t in {
+          sizeof(sigblock),
+            reinterpret_cast<const unsigned char*>(&sigblock)
+        };
+        const CryptoKey::out_slice_t out {
+          sizeof(exp_buf),
+            reinterpret_cast<unsigned char*>(&exp_buf)
+        };
+        key.encrypt(cct, in, out);
+      } catch (std::exception& e) {
+        lderr(cct) << __func__ << " failed to encrypt signature block" << dendl;
+        return -1;
+      }
+
+      struct enc {
+        ceph_le64 a, b, c, d;
+      } *penc = reinterpret_cast<enc*>(exp_buf);
+      *psig = penc->a ^ penc->b ^ penc->c ^ penc->d;
+    } else {
+      sha256_digest_t exp_buf;
+
+      try {
+        const CryptoKey::in_slice_t in {
+          sizeof(sigblock),
+            reinterpret_cast<const unsigned char*>(&sigblock)
+        };
+        exp_buf = key.hmac_sha256(cct, in);
+      } catch (std::exception& e) {
+        lderr(cct) << __func__ << " failed to encrypt signature block" << dendl;
+        return -1;
+      }
+
+      struct enc {
+        ceph_le64 a, b, c, d;
+      } *penc = reinterpret_cast<enc*>(&exp_buf);
+      *psig = penc->a ^ penc->b ^ penc->c ^ penc->d;
     }
-
-    struct enc {
-      ceph_le64 a, b, c, d;
-    } *penc = reinterpret_cast<enc*>(exp_buf);
-    *psig = penc->a ^ penc->b ^ penc->c ^ penc->d;
   }
 
   ldout(cct, 10) << __func__ << " seq " << m->get_seq()
