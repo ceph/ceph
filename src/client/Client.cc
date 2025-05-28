@@ -8529,7 +8529,8 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     //and truncate size is non-zero.
     if (in->is_fscrypt_enabled() && stx_size < in->effective_size() &&
         stx_size % FSCRYPT_BLOCK_SIZE != 0 &&
-        (mask & CEPH_SETATTR_FSCRYPT_FILE) && stx_size != 0){
+        (mask & CEPH_SETATTR_FSCRYPT_FILE) && stx_size != 0 &&
+        cct->_conf.get_val<bool>("client_fscrypt_as")) {
       // steps:
       // 1. read last block
 
@@ -15278,7 +15279,7 @@ size_t Client::_vxattrcb_fscrypt_file(Inode *in, char *val, size_t size)
 int Client::_vxattrcb_fscrypt_file_set(Inode *in, const void *val, size_t size,
 				       const UserPerm& perms)
 {
-  struct ceph_statx stx = { 0 };
+  struct ceph_statx stx;
   std::vector<uint8_t>	aux;
 
   aux.resize(sizeof(uint64_t));
@@ -15286,6 +15287,7 @@ int Client::_vxattrcb_fscrypt_file_set(Inode *in, const void *val, size_t size,
 
   memcpy(&the_size, val, size);
   *(ceph_le64 *)aux.data() = the_size;
+  stx.stx_size = the_size;
 
   // TODO: rework _do_setattr to pass mask CEPH_SETATTR_FSCRYPT_FILE
   return _do_setattr(in, &stx, CEPH_SETATTR_SIZE, perms, nullptr, &aux);
