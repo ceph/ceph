@@ -45,10 +45,13 @@ inline int rgw_shards_max()
 // only called by rgw_shard_id and rgw_bucket_shard_index
 static inline int rgw_shards_mod(unsigned hval, int max_shards)
 {
-  if (max_shards <= RGW_SHARDS_PRIME_0) {
+  if (max_shards <= 0) {
+    return -1;
+  } else if (max_shards <= RGW_SHARDS_PRIME_0) {
     return hval % RGW_SHARDS_PRIME_0 % max_shards;
+  } else {
+    return hval % RGW_SHARDS_PRIME_1 % max_shards;
   }
-  return hval % RGW_SHARDS_PRIME_1 % max_shards;
 }
 
 // used for logging and tagging
