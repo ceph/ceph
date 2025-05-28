@@ -61,7 +61,7 @@ function prepare() {
             local remove_to=$(($v-1))
             ci_debug "Removing clang package versions from $remove_from-$remove_to"
             for i in $(seq $remove_from $remove_to); do
-                $DRY_RUN $SUDO apt-get purge --auto-remove clang-$i lldb-$i lld-$i clangd-$i python3-lldb-$i -y
+                $DRY_RUN $SUDO apt-get purge --auto-remove clang-$i lldb-$i lld-$i clangd-$i python3-lldb-$i -y || true
             done
 
             if ! type clang-$v > /dev/null 2>&1 ; then
