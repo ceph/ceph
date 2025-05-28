@@ -105,6 +105,7 @@ public:
                               const in_slice_t& in,
 			      const out_slice_t& out) const;
 
+  sha256_digest_t hmac_sha256(const in_slice_t& in) const;
   sha256_digest_t hmac_sha256(const ceph::bufferlist& in) const;
 };
 
@@ -207,6 +208,11 @@ public:
   }
 
   sha256_digest_t hmac_sha256(CephContext*, const ceph::buffer::list& in) const {
+    ceph_assert(ckh);
+    return ckh->hmac_sha256(in);
+  }
+
+  sha256_digest_t hmac_sha256(CephContext *cct, const in_slice_t& in) const {
     ceph_assert(ckh);
     return ckh->hmac_sha256(in);
   }
