@@ -101,6 +101,20 @@ void MgrStatMonitor::create_initial()
   encode(service_map, pending_service_map_bl, CEPH_FEATURES_ALL);
 }
 
+void MgrStatMonitor::clear_pool_availability(int64_t poolid)
+{
+  dout(20) << __func__ << dendl;
+  std::scoped_lock l(lock);
+  auto pool_itr = pending_pool_availability.find(poolid);
+  if (pool_itr != pending_pool_availability.end()) {
+    pool_itr->second = PoolAvailability();
+  } else {
+    dout(1) << "failed to clear a non-existing pool: " << poolid << dendl;
+    return; 
+  };
+  dout(20) << __func__ << " cleared availability score for pool: " << poolid << dendl;
+}
+
 void MgrStatMonitor::calc_pool_availability()
 {
   dout(20) << __func__ << dendl;
@@ -400,6 +414,7 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   dout(20) << "pool_availability:\n";
   JSONFormatter jf(true);
   jf.open_object_section("pool_availability");
+  std::scoped_lock l(lock);
   for (auto& i : pending_pool_availability) {
     jf.dump_object(std::to_string(i.first), i.second);
   }
