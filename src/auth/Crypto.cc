@@ -229,6 +229,19 @@ sha256_digest_t CryptoKeyHandler::hmac_sha256(
   return ret;
 }
 
+sha256_digest_t CryptoKeyHandler::hmac_sha256(
+  const in_slice_t& in) const
+{
+  TOPNSPC::crypto::HMACSHA256 hmac((const unsigned char*)secret.c_str(), secret.length());
+
+  hmac.Update(in.buf, in.length);
+
+  sha256_digest_t ret;
+  hmac.Final(ret.v);
+
+  return ret;
+}
+
 // ---------------------------------------------------
 
 class CryptoNoneKeyHandler : public CryptoKeyHandler {
