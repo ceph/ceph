@@ -54,14 +54,21 @@ function prepare() {
         which_pkg="debianutils"
 
         if in_jenkins; then
-            if ! type clang-19 > /dev/null 2>&1 ; then
-                ci_debug "Removing existing llvm packages"
-                wrap_sudo
-                $DRY_RUN $SUDO apt-get purge --auto-remove clang lldb lld clangd python3-lldb -y
-                ci_debug "Getting clang-19"
+            wrap_sudo
+            # require clang-19. uninstall previous versions to work around package conflicts
+            local v=19
+            local remove_from=13
+            local remove_to=$(($v-1))
+            ci_debug "Removing clang package versions from $remove_from-$remove_to"
+            for i in $(seq $remove_from $remove_to); do
+                $DRY_RUN $SUDO apt-get purge --auto-remove clang-$i lldb-$i lld-$i clangd-$i python3-lldb-$i -y
+            done
+
+            if ! type clang-$v > /dev/null 2>&1 ; then
+                ci_debug "Getting clang-$v"
                 wget https://download.ceph.com/qa/llvm.sh
                 chmod +x llvm.sh
-                $DRY_RUN $SUDO ./llvm.sh 19
+                $DRY_RUN $SUDO ./llvm.sh $v
                 rm llvm.sh
             fi
         fi
