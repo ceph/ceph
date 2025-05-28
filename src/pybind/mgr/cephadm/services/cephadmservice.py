@@ -1222,7 +1222,7 @@ class RgwService(CephService):
             san_list = spec.zonegroup_hostnames or []
             custom_sans = san_list + [f"*.{h}" for h in san_list] if spec.wildcard_enabled else san_list
             cert, key = self.get_certificates(daemon_spec, custom_sans)
-            pem = ''.join([key, cert])
+            pem = f'{key.rstrip()}\n{cert.lstrip()}'
             rgw_cert_name = daemon_spec.name() if spec.generate_cert else spec.service_name()
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
