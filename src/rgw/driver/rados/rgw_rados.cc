@@ -1864,11 +1864,58 @@ int RGWRados::Bucket::List::list_objects_ordered(
 	    ": finished due to getting past requested namespace \"" <<
 	    params.ns << "\"" << dendl;
           goto done;
-        }
+        } else if (!obj.ns.empty()) {
+	  // We're in the namespace range and we're enforcing an empty
+	  // namespace, therefore we can skip past a congtiguous chunk
+	  // of namespaced entries. Namespaces are demarcated in the
+	  // index key by underscores before and after the namespace
+	  // name (e.g., "_somenamespace_somekey"). Also, regular
+	  // entries might begin with an underscore, in which case
+	  // they're escaped with another underscore (e.g., "_foobar"
+	  // is encoded as "__foobar"). We also have to account for
+	  // the fact that in lexical ordering there are characters
+	  // both before underscore (e.g., uppercase letters) and
+	  // after (e.g., lowercase letters). So that means there can
+	  // be five distinct and meaningful regions in the lexical
+	  // ordering of entries, which we'll use examples to help
+	  // illustrate:
 
-        /* we're skipping past namespaced objects */
+	  // 1. FOOBAR (regular pre-underscore)
+	  // 2. _BAZ_foobar (namespaced, with namespace pre-underscore)
+	  // 3. __foobar (regular with escaped underscore)
+	  // 4. _baz_foobar (namespaced, with namespace post-underscore)
+	  // 5. foobar (regular, post-underscore)
+
+	  // So if we're skipping namespaces and recognize we're in
+	  // region 2, we must skip to region 3. And if we recognize
+	  // we're in region 4, we skip to region 5.
+	  rgw_obj_index_key potential_marker;
+	  if (obj.ns[0] < '_') {
+	    // We're in region 2, so need to skip to region 3. The
+	    // caret (^) is the ASCII character that preceeds
+	    // underscore, so we'll set the marker to the
+	    // caret/circumflex followed by 0xFF, so the key after can
+	    // be in the double underscore range.
+	    potential_marker = rgw_obj_index_key("_^\xFF");
+	  } else {
+	    // we're passed the escaped underscore region (i.e.,
+	    // starting with two underscores), so we can skip past the
+	    // underscore region
+	    potential_marker = rgw_obj_index_key("_\xFF");
+	  }
+
+	  if (cur_marker < potential_marker) {
+	    ldpp_dout(dpp, 20) << __func__ <<
+	      ": skipping past region of namespaced entries, starting with \"" <<
+	      entry.key << "\"" << dendl;
+	    cur_marker = potential_marker;
+	    break; // leave inner loop (for) and allow another cls call
+	  }
+	}
+
+        // we're skipping past namespaced objects
 	ldpp_dout(dpp, 20) << __func__ <<
-	  ": skipping past namespaced objects, including \"" << entry.key <<
+	  ": skipping past individual namespaced entry \"" << entry.key <<
 	  "\"" << dendl;
         continue;
       }
@@ -1889,7 +1936,7 @@ int RGWRados::Bucket::List::list_objects_ordered(
       if (params.access_list_filter &&
 	  ! params.access_list_filter->filter(obj.name, index_key.name)) {
 	ldpp_dout(dpp, 20) << __func__ <<
-	  ": skipping past namespaced objects, including \"" << entry.key <<
+	  ": skipping past filtered out entry \"" << entry.key <<
 	  "\"" << dendl;
         continue;
       }
