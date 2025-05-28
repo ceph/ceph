@@ -4,6 +4,7 @@
 #include "rgw_rados.h"
 #include "rgw_zone.h"
 #include "rgw_rest_conn.h"
+#include "rgw_http_errors.h"
 #include "common/ceph_json.h"
 #include "common/errno.h"
 
@@ -40,7 +41,11 @@ int pull_period(const DoutPrefixProvider *dpp, RGWRESTConn* conn, const std::str
 
   bufferlist data;
 #define MAX_REST_RESPONSE (128 * 1024)
-  int r = conn->forward(dpp, user, info, nullptr, MAX_REST_RESPONSE, nullptr, &data, y);
+  auto result = conn->forward(dpp, user, info, MAX_REST_RESPONSE, nullptr, &data, y);
+  if (!result) {
+    return result.error();
+  }
+  int r = rgw_http_error_to_errno(*result);
   if (r < 0) {
     return r;
   }

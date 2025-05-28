@@ -31,9 +31,9 @@ std::string iam_group_arn(const RGWGroupInfo& info);
 int forward_iam_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw::SiteConfig& site,
                                   const RGWUserInfo& user,
-                                  bufferlist& indata,
-                                  RGWXMLDecoder::XMLParser& parser,
-                                  req_info& req, optional_yield y);
+                                  bufferlist& indata, RGWXMLParser& parser,
+                                  const req_info& req, rgw_err& err,
+                                  optional_yield y);
 
 /// Perform an atomic read-modify-write operation on the given user metadata.
 /// Racing writes are detected here as ECANCELED errors, where we reload the
