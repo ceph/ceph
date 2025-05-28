@@ -237,43 +237,65 @@ distribution are detailed in the `Mirror Daemon Status` section.
 Bootstrap Peers
 ---------------
 
-Adding a peer (via `peer_add`) requires the peer cluster configuration and user keyring
-to be available in the primary cluster (manager host and hosts running the mirror daemon).
-This can be avoided by bootstrapping and importing a peer token. Peer bootstrap involves
-creating a bootstrap token on the peer cluster via::
+Adding a peer (via ``peer_add``) requires that the peer cluster configuration
+and the user keyring be available in the primary cluster (Manager host and
+hosts running the mirror daemon). This requirement can be avoided by
+bootstrapping and importing a peer token. Peer bootstraping involves creating a
+bootstrap token on the peer cluster by running a command of the following form:
 
-  $ ceph fs snapshot mirror peer_bootstrap create <fs_name> <client_entity> <site-name>
+.. prompt:: bash $
 
-e.g.::
+   ceph fs snapshot mirror peer_bootstrap create <fs_name> <client_entity> <site-name>
 
-  $ ceph fs snapshot mirror peer_bootstrap create backup_fs client.mirror_remote site-remote
+For example:
+
+.. prompt:: bash $
+
+   ceph fs snapshot mirror peer_bootstrap create backup_fs client.mirror_remote site-remote
+
+::
+
   {"token": "eyJmc2lkIjogIjBkZjE3MjE3LWRmY2QtNDAzMC05MDc5LTM2Nzk4NTVkNDJlZiIsICJmaWxlc3lzdGVtIjogImJhY2t1cF9mcyIsICJ1c2VyIjogImNsaWVudC5taXJyb3JfcGVlcl9ib290c3RyYXAiLCAic2l0ZV9uYW1lIjogInNpdGUtcmVtb3RlIiwgImtleSI6ICJBUUFhcDBCZ0xtRmpOeEFBVnNyZXozai9YYUV0T2UrbUJEZlJDZz09IiwgIm1vbl9ob3N0IjogIlt2MjoxOTIuMTY4LjAuNTo0MDkxOCx2MToxOTIuMTY4LjAuNTo0MDkxOV0ifQ=="}
 
-`site-name` refers to a user-defined string to identify the remote filesystem. In context
-of `peer_add` interface, `site-name` is the passed in `cluster` name from `remote_cluster_spec`.
+``site-name`` refers to a user-defined string to identify the remote
+filesystem. In the context of the ``peer_add`` interface, ``site-name`` is the
+passed in the ``cluster`` name from ``remote_cluster_spec``.
 
-Import the bootstrap token in the primary cluster via::
+Import the bootstrap token in the primary cluster by running a command of the
+following form:
 
-  $ ceph fs snapshot mirror peer_bootstrap import <fs_name> <token>
+.. prompt:: bash $
 
-e.g.::
+   ceph fs snapshot mirror peer_bootstrap import <fs_name> <token>
 
-  $ ceph fs snapshot mirror peer_bootstrap import cephfs eyJmc2lkIjogIjBkZjE3MjE3LWRmY2QtNDAzMC05MDc5LTM2Nzk4NTVkNDJlZiIsICJmaWxlc3lzdGVtIjogImJhY2t1cF9mcyIsICJ1c2VyIjogImNsaWVudC5taXJyb3JfcGVlcl9ib290c3RyYXAiLCAic2l0ZV9uYW1lIjogInNpdGUtcmVtb3RlIiwgImtleSI6ICJBUUFhcDBCZ0xtRmpOeEFBVnNyZXozai9YYUV0T2UrbUJEZlJDZz09IiwgIm1vbl9ob3N0IjogIlt2MjoxOTIuMTY4LjAuNTo0MDkxOCx2MToxOTIuMTY4LjAuNTo0MDkxOV0ifQ==
+For example:
+
+.. prompt:: bash $
+
+   ceph fs snapshot mirror peer_bootstrap import cephfs eyJmc2lkIjogIjBkZjE3MjE3LWRmY2QtNDAzMC05MDc5LTM2Nzk4NTVkNDJlZiIsICJmaWxlc3lzdGVtIjogImJhY2t1cF9mcyIsICJ1c2VyIjogImNsaWVudC5taXJyb3JfcGVlcl9ib290c3RyYXAiLCAic2l0ZV9uYW1lIjogInNpdGUtcmVtb3RlIiwgImtleSI6ICJBUUFhcDBCZ0xtRmpOeEFBVnNyZXozai9YYUV0T2UrbUJEZlJDZz09IiwgIm1vbl9ob3N0IjogIlt2MjoxOTIuMTY4LjAuNTo0MDkxOCx2MToxOTIuMTY4LjAuNTo0MDkxOV0ifQ==
 
 Mirror Daemon Status
 --------------------
 
-Mirror daemons get asynchronously notified about changes in file system mirroring status
-and/or peer updates.
+Mirror daemons are asynchronously notified about changes in
+file-system-mirroring status and peer updates.
 
-CephFS mirroring module provides `mirror daemon status` interface to check mirror daemon
-status::
+The CephFS mirroring module provides the ``mirror daemon status`` interface for 
+checking the status of the mirror daemon. Run the following command to check
+the status of the mirror daemon:
 
-  $ ceph fs snapshot mirror daemon status
+.. prompt:: bash $
 
-E.g::
+   ceph fs snapshot mirror daemon status
 
-  $ ceph fs snapshot mirror daemon status | jq
+For example:
+
+.. prompt:: bash $
+
+   ceph fs snapshot mirror daemon status | jq
+
+::
+
   [
     {
       "daemon_id": 284167,
@@ -301,14 +323,20 @@ E.g::
     }
   ]
 
-An entry per mirror daemon instance is displayed along with information such as configured
-peers and basic stats. For more detailed stats, use the admin socket interface as detailed
-below.
+One entry per mirror-daemon instance is displayed, along with information
+including configured peers and basic statistics. For more detailed statistics,
+use the admin socket interface as detailed below.
 
-CephFS mirror daemons provide admin socket commands for querying mirror status. To check
-available commands for mirror status use::
+CephFS mirror daemons provide admin socket commands for querying mirror status.
+To list the available commands for ``mirror status``, run the following
+command:
 
-  $ ceph --admin-daemon /path/to/mirror/daemon/admin/socket help
+.. prompt:: bash $
+
+   ceph --admin-daemon /path/to/mirror/daemon/admin/socket help
+
+::
+
   {
       ....
       ....
@@ -317,15 +345,21 @@ available commands for mirror status use::
       ....
   }
 
-Commands with `fs mirror status` prefix provide mirror status for mirror enabled
-file systems. Note that `cephfs@360` is of format `filesystem-name@filesystem-id`.
-This format is required since mirror daemons get asynchronously notified regarding
-file system mirror status (A file system can be deleted and recreated with the same
-name).
+Commands that have the ``fs mirror status`` prefix provide mirror status for
+mirror-enabled file systems. Note that ``cephfs@360`` has the format
+``filesystem-name@filesystem-id``. This format is required because mirror
+daemons are asynchronously notified of file-system mirror status (A file
+system can be deleted and recreated with the same name).
 
-Right now, the command provides minimal information regarding mirror status::
+Currently (May 2025), the command provides minimal information regarding mirror
+status:
 
-  $ ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror status cephfs@360
+.. prompt:: bash $
+
+   ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror status cephfs@360
+
+::
+
   {
     "rados_inst": "192.168.0.5:0/1476644347",
     "peers": {
