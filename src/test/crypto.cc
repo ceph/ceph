@@ -588,6 +588,58 @@ TEST(AES256KRB5, DecryptNoBl) {
   }
 }
 
+TEST(AES256KRB5, HMAC_SHA256) {
+  auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
+
+  unsigned char secret_s[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+                               0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
+  bufferptr secret((const char *)secret_s, sizeof(secret_s));
+  std::string plaintext = "blablabla";
+
+  std::string error;
+
+  std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler(secret, error));
+
+  bufferlist bl;
+  bl.append((const char *)plaintext.c_str(), plaintext.size());
+  auto hash = kh->hmac_sha256(bl);
+
+  dump_buf("HMAC_SHA256:", (const unsigned char *)&hash, sizeof(hash));
+
+  unsigned char expected_s[] = { 0x42, 0xc7, 0x02, 0x7e, 0x8b, 0xe0, 0x6d, 0xca,
+                                 0x2c, 0x0b, 0x44, 0x43, 0x73, 0xfe, 0xfd, 0xbe,
+                                 0xac, 0x5b, 0x40, 0x34, 0xec, 0xa4, 0x4a, 0x69,
+                                 0xde, 0x3a, 0x29, 0x16, 0x34, 0xed, 0x8d, 0xf9 };
+
+
+  ASSERT_EQ(0, memcmp(expected_s, (const char *)&hash, sizeof(hash)));
+}
+
+TEST(AES256KRB5, HMAC_SHA256_NoBl) {
+  auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
+
+  unsigned char secret_s[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+                               0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
+  bufferptr secret((const char *)secret_s, sizeof(secret_s));
+  std::string plaintext = "testing1234blablabla";
+
+  std::string error;
+
+  std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler(secret, error));
+
+  CryptoKey::in_slice_t plaintext_slice { plaintext.size(), (const unsigned char *)plaintext.c_str() };
+  auto hash = kh->hmac_sha256(plaintext_slice);
+
+  dump_buf("HMAC_SHA256:", (const unsigned char *)&hash, sizeof(hash));
+
+  unsigned char expected_s[] = { 0x4b, 0xd3, 0xac, 0x39, 0x4a, 0xcc, 0x97, 0x06,
+                                 0xdd, 0x09, 0xe6, 0x5c, 0x68, 0xad, 0xd4, 0xcf,
+                                 0x09, 0x2c, 0xcd, 0xa1, 0xe7, 0x99, 0xe3, 0x5c,
+                                 0x52, 0x73, 0x85, 0xbd, 0x79, 0x73, 0xc6, 0x98 };
+
+  ASSERT_EQ(0, memcmp(expected_s, (const char *)&hash, sizeof(hash)));
+}
+
 static void aes256krb5_loop(const std::size_t text_size) {
   cipher_loop(text_size, CEPH_CRYPTO_AES256KRB5, 32);
 }
