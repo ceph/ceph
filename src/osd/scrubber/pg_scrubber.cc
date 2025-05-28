@@ -2565,7 +2565,7 @@ std::chrono::milliseconds PgScrubber::get_scrub_sleep_time() const
 {
   return m_osds->get_scrub_services().scrub_sleep_time(
       ceph_clock_now(),
-      !ScrubJob::observes_allowed_hours(m_active_target->urgency()));
+      ScrubJob::observes_extended_sleep(m_active_target->urgency()));
 }
 
 void PgScrubber::queue_for_scrub_resched(Scrub::scrub_prio_t prio)
