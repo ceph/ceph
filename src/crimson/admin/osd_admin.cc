@@ -578,12 +578,15 @@ public:
     auto *f = fref.get();
     f->open_object_section("ops_in_flight");
     f->open_array_section("ops_in_flight");
-    return pg_shard_manager.invoke_on_each_shard_seq([f](const auto &shard_services) {
-      return shard_services.dump_ops_in_flight(f);
-    }).then([fref=std::move(fref)]() mutable {
-      fref->close_section();
-      fref->close_section();
-      return seastar::make_ready_future<tell_result_t>(std::move(fref));
+    return pg_shard_manager.when_active()
+    .then([this, f, fref=std::move(fref)]() mutable {
+      return pg_shard_manager.invoke_on_each_shard_seq([f](const auto &shard_services) {
+        return shard_services.dump_ops_in_flight(f);
+      }).then([fref=std::move(fref)]() mutable {
+        fref->close_section();
+        fref->close_section();
+        return seastar::make_ready_future<tell_result_t>(std::move(fref));
+      });
     });
   }
 private:

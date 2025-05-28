@@ -121,7 +121,7 @@ public:
   FORWARD(set_booting, set_booting, get_shard_services().local_state.osd_state)
   FORWARD(set_stopping, set_stopping, get_shard_services().local_state.osd_state)
   FORWARD(set_active, set_active, get_shard_services().local_state.osd_state)
-  FORWARD(when_active, when_active, get_shard_services().local_state.osd_state)
+  FORWARD_CONST(when_active, when_active, get_shard_services().local_state.osd_state)
   FORWARD_CONST(get_osd_state_string, to_string, get_shard_services().local_state.osd_state)
 
   FORWARD(got_map, got_map, get_shard_services().local_state.osdmap_gate)
