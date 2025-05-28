@@ -39,7 +39,7 @@ connect_all() {
     sudo nvme connect-all --traddr=$NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --transport=tcp -l 3600
     sleep 5
     expected_devices_count=$1
-    actual_devices=$(sudo nvme list --output-format=json | jq -r ".Devices[].Subsystems[] | select(.Controllers | all(.ModelNumber == \"$SPDK_CONTROLLER\")) | .Namespaces[].NameSpace" | wc -l)
+    actual_devices=$(sudo nvme list --output-format=json | grep -o "$SPDK_CONTROLLER" | wc -l)
     if [ "$actual_devices" -ne "$expected_devices_count" ]; then
         sudo nvme list --output-format=json
         return 1
