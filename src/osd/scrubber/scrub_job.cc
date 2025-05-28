@@ -374,6 +374,11 @@ bool ScrubJob::observes_allowed_hours(urgency_t urgency)
   return urgency < urgency_t::operator_requested;
 }
 
+bool ScrubJob::observes_extended_sleep(urgency_t urgency)
+{
+  return urgency == urgency_t::periodic_regular;
+}
+
 bool ScrubJob::observes_load_limit(urgency_t urgency)
 {
   return urgency < urgency_t::after_repair;
