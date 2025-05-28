@@ -58,6 +58,8 @@ public:
   bool enable_availability_tracking = g_conf().get_val<bool>("enable_availability_tracking"); ///< tracking availability score feature 
   std::optional<utime_t> reset_availability_last_uptime_downtime_val;
   
+  void clear_pool_availability(int64_t poolid);
+
   void check_sub(Subscription *sub);
   void check_subs();
   void send_digests();
