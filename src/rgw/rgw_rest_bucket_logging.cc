@@ -380,13 +380,13 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
     const auto& target_bucket_id = target_bucket->get_key();
     std::string obj_name;
     RGWObjVersionTracker objv_tracker;
-    op_ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, null_yield, this, &objv_tracker);
+    op_ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, y, this, &objv_tracker);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to get pending logging object name from target bucket '" << target_bucket_id << "'" << dendl;
       return;
     }
     const auto region = driver->get_zone()->get_zonegroup().get_api_name();
-    op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, region, source_bucket, null_yield, true, &objv_tracker, &old_obj);
+    op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, region, source_bucket, y, true, &objv_tracker, &old_obj);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         ldpp_dout(this, 5) << "WARNING: no pending logging object '" << obj_name << "'. nothing to flush"
