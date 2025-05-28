@@ -1,0 +1,10 @@
+overrides:
+  rgw:
+    inline data: false
+  ceph:
+    conf:
+      osd:
+        # causes all cls_rgw_gc_queue_enqueue() requests to fail with ENOSPC.
+        # this tests that error path, and effectively disables garbage
+        # collection which has masked some data loss bugs in the past
+        rgw gc max queue size: 0
