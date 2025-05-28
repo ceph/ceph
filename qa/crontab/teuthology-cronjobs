@@ -114,7 +114,7 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 ### upgrade runs for tentacle release
 ###### on smithi
 
-08 01 * * 3        $CW $SS      1 --ceph tentacle --suite upgrade -p 100
+08 01 * * 3        $CW $SS      1 --ceph tentacle --suite upgrade -p 150
 
 ### upgrade runs for squid release
 ###### on smithi
