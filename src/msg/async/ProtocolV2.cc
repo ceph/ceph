@@ -1894,7 +1894,7 @@ CtPtr ProtocolV2::handle_auth_done(ceph::bufferlist &payload)
 }
 
 CtPtr ProtocolV2::finish_client_auth() {
-  dout(cct, 20) << __func__ << dendl;
+  ldout(cct, 20) << __func__ << dendl;
   if (HAVE_MSGR2_FEATURE(peer_supported_features, COMPRESSION)) {
     return send_compression_request();
   }
@@ -1903,7 +1903,7 @@ CtPtr ProtocolV2::finish_client_auth() {
 }
 
 CtPtr ProtocolV2::finish_server_auth() {
-  dout(cct, 20) << __func__ << dendl;
+  ldout(cct, 20) << __func__ << dendl;
   // server had sent AuthDone and client responded with correct pre-auth
   // signature. 
   // We can start conditioanl msgr protocol
