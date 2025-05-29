@@ -534,7 +534,6 @@ def build_container(ctx):
         "-t",
         ctx.image_name,
         f"--label=io.ceph.build-with-container.src={_hash_sources()}",
-        f"--build-arg=JENKINS_HOME={ctx.cli.homedir}",
         f"--build-arg=CEPH_BASE_BRANCH={ctx.base_branch()}",
     ]
     if ctx.cli.distro:
