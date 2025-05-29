@@ -121,6 +121,7 @@ describe('NvmeofNamespacesFormComponent', () => {
         gw_group: MOCK_GROUP,
         rbd_image_name: `nvme_rbd_default_${MOCK_RANDOM_STRING}`,
         rbd_pool: 'rbd',
+        create_image: true,
         rbd_image_size: 1073741824
       });
     });

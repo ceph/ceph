@@ -177,7 +177,7 @@ else:
         )
         @empty_response
         @NvmeofCLICommand("nvmeof subsystem add", model.RequestStatus)
-        @convert_to_model(model.RequestStatus)
+        @convert_to_model(model.SubsystemStatus)
         @handle_nvmeof_error
         def create(self, nqn: str, enable_ha: bool = True, max_namespaces: int = 1024,
                    gw_group: Optional[str] = None, traddr: Optional[str] = None):
@@ -384,7 +384,7 @@ else:
             nqn: str,
             rbd_image_name: str,
             rbd_pool: str = "rbd",
-            create_image: Optional[bool] = True,
+            create_image: Optional[bool] = False,
             size: Optional[int] = 1024,
             rbd_image_size: Optional[int] = None,
             trash_image: Optional[bool] = False,
