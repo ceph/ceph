@@ -1286,6 +1286,7 @@ void Monitor::bootstrap()
 
   // probe monitors
   dout(10) << "probing other monitors" << dendl;
+  ++probe_epoch;
   for (unsigned i = 0; i < monmap->size(); i++) {
     if ((int)i != rank)
       send_mon_message(
@@ -6349,6 +6350,10 @@ int Monitor::handle_auth_bad_method(
 {
   derr << __func__ << " hmm, they didn't like " << old_auth_method
        << " result " << cpp_strerror(result) << dendl;
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+    /* this is hacky but the least invasive way to cycle secrets: */
+    cycle_mon_secret = probe_epoch;
+  }
   return -EACCES;
 }
 
@@ -6386,9 +6391,18 @@ bool Monitor::get_authorizer(int service_id, AuthAuthorizer **authorizer)
   if (service_id == CEPH_ENTITY_TYPE_MON) {
     // mon to mon authentication uses the private monitor shared key and not the
     // rotating key
-    CryptoKey secret;
-    if (!keyring.get_secret(name, secret) &&
-	!key_server.get_secret(name, secret)) {
+    CryptoKey key_server_secret;
+    CryptoKey keyring_secret;
+
+    bool ksb = key_server.get_secret(name, key_server_secret);
+    if (ksb) {
+      dout(30) << __func__ << ": keyserver found secret=" << key_server_secret << dendl;
+    }
+    bool krb = keyring.get_secret(name, keyring_secret);
+    if (krb) {
+      dout(30) << __func__ << ": keyring found secret=" << keyring_secret << dendl;
+    }
+    if (!ksb && !krb) {
       dout(0) << " couldn't get secret for mon service from keyring or keyserver"
 	      << dendl;
       stringstream ss, ds;
@@ -6399,6 +6413,19 @@ bool Monitor::get_authorizer(int service_id, AuthAuthorizer **authorizer)
 	ss << "installed auth entries:";
       dout(0) << ss.str() << "\n" << ds.str() << dendl;
       return false;
+    }
+
+    CryptoKey secret;
+    dout(30) << __func__ << ": cycle_mon_secret=" << cycle_mon_secret << dendl;
+    if ((((cycle_mon_secret & 1) == 0) && ksb) || !krb) {
+      /* Use KeyServer if present (it should be because Monitor::key_server's
+       * extra_secrets **is** the Monitor::keyring.
+       */
+      dout(15) << __func__ << ": using key_server secret" << dendl;
+      secret = key_server_secret;
+    } else {
+      dout(15) << __func__ << ": using keyring secret" << dendl;
+      secret = keyring_secret;
     }
 
     ret = key_server.build_session_auth_info(

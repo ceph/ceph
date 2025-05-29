@@ -1132,6 +1132,8 @@ public:
 
 private:
   ceph::coarse_mono_time const starttime = coarse_mono_clock::now();
+  epoch_t probe_epoch = 0;
+  epoch_t cycle_mon_secret = 0;
 };
 
 #define CEPH_MON_FEATURE_INCOMPAT_BASE CompatSet::Feature (1, "initial feature set (~v.18)")
