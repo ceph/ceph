@@ -371,6 +371,8 @@ class ScrubJob {
   static bool has_high_queue_priority(urgency_t urgency);
 
   static bool is_repair_implied(urgency_t urgency);
+
+  static bool is_autorepair_allowed(urgency_t urgency);
 };
 }  // namespace Scrub
 

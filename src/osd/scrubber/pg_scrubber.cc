@@ -1606,7 +1606,9 @@ void PgScrubber::set_op_parameters(ScrubPGPreconds pg_cond)
     state_set(PG_STATE_DEEP_SCRUB);
   }
 
-  m_flags.auto_repair = m_is_deep && pg_cond.can_autorepair;
+  m_flags.auto_repair =
+      m_is_deep && pg_cond.can_autorepair &&
+      ScrubJob::is_autorepair_allowed(m_active_target->urgency());
 
   // m_is_repair is set for all repair cases - for operator-requested
   // repairs, for deep-scrubs initiated automatically after a shallow scrub
@@ -1845,7 +1847,10 @@ void PgScrubber::scrub_finish()
 	static_cast<int>(m_pg->cct->_conf->osd_scrub_auto_repair_num_errors)) {
     ceph_assert(!m_is_deep);
     do_auto_scrub = true;
-    dout(15) << __func__ << " Try to auto repair after scrub errors" << dendl;
+    dout(10) << fmt::format("{}: will initiate a deep scrub to fix {} errors",
+                            __func__,
+                            m_be->authoritative_peers_count())
+             << dendl;
   }
 
   m_flags.deep_scrub_on_error = false;
