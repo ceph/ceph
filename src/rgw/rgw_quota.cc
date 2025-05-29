@@ -963,9 +963,18 @@ public:
   }
 
   void check_bucket_shards(const DoutPrefixProvider *dpp, uint64_t max_objs_per_shard,
-                           uint64_t num_shards, uint64_t num_objs, bool is_multisite,
-                           bool& need_resharding, uint32_t *suggested_num_shards) override
+			   uint64_t num_shards, uint64_t num_objs,
+			   bool is_multisite, bool is_versioned,
+			   bool& need_resharding, uint32_t *suggested_num_shards) override
   {
+    if (is_versioned) {
+      // since versioned buckets have multiple entries per version of
+      // an object, reduce maximum to try to account for this
+      constexpr uint64_t min_max_objs_per_shard = 1;
+      max_objs_per_shard = std::max(min_max_objs_per_shard,
+				    max_objs_per_shard / 3);
+    }
+
     if (num_objs > num_shards * max_objs_per_shard) {
       ldpp_dout(dpp, 0) << __func__ << ": resharding needed: stats.num_objects=" << num_objs
              << " shard max_objects=" <<  max_objs_per_shard * num_shards << dendl;
