@@ -189,7 +189,7 @@ struct OMapInnerNode
     omap_context_t oc, OMapNodeRef right) final;
 
   make_balanced_ret make_balanced(
-    omap_context_t oc, OMapNodeRef right) final;
+    omap_context_t oc, OMapNodeRef right, uint32_t pivot_idx) final;
 
   using make_split_insert_iertr = base_iertr; 
   using make_split_insert_ret = make_split_insert_iertr::future<mutation_result_t>;
@@ -436,7 +436,8 @@ struct OMapLeafNode
 
   make_balanced_ret make_balanced(
     omap_context_t oc,
-    OMapNodeRef _right) final;
+    OMapNodeRef _right,
+    uint32_t pivot_idx) final;
 
   static constexpr extent_types_t TYPE = extent_types_t::OMAP_LEAF;
   extent_types_t get_type() const final {
