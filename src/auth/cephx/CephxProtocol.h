@@ -248,6 +248,8 @@ struct CephXSessionAuthInfo {
   CryptoKey session_key;
   CryptoKey service_secret;
   utime_t validity;
+
+  void print(std::ostream& os) const;
 };
 
 
