@@ -1295,6 +1295,25 @@ void RGWPutObjTags::execute(optional_yield y)
     return;
   }
 
+  op_ret = s->object->get_obj_attrs(y, this);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << s->object
+                       << " ret=" << op_ret << dendl;
+    return;
+  }
+  const auto etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
+  op_ret = rgw::bucketlogging::log_record(driver,
+      rgw::bucketlogging::LoggingType::Journal,
+      s->object.get(),
+      s,
+      canonical_name(),
+      etag,
+      s->object->get_size(),
+      this, y, false, false);
+  if (op_ret < 0) {
+    return;
+  }
+
   s->object->set_atomic(true);
   op_ret = s->object->modify_obj_attrs(RGW_ATTR_TAGS, tags_bl, y, this);
   if (op_ret == -ECANCELED){
@@ -1328,6 +1347,25 @@ void RGWDeleteObjTags::execute(optional_yield y)
 {
   if (rgw::sal::Object::empty(s->object.get()))
     return;
+
+  op_ret = s->object->get_obj_attrs(y, this);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << s->object
+                       << " ret=" << op_ret << dendl;
+    return;
+  }
+  const auto etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
+  op_ret = rgw::bucketlogging::log_record(driver,
+      rgw::bucketlogging::LoggingType::Journal,
+      s->object.get(),
+      s,
+      canonical_name(),
+      etag,
+      s->object->get_size(),
+      this, y, false, false);
+  if (op_ret < 0) {
+    return;
+  }
 
   op_ret = s->object->delete_obj_attrs(this, RGW_ATTR_TAGS, y);
 }
@@ -6332,6 +6370,19 @@ void RGWPutACLs::execute(optional_yield y)
     return;
   }
 
+  const auto etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
+  op_ret = rgw::bucketlogging::log_record(driver,
+      rgw::bucketlogging::LoggingType::Journal,
+      s->object.get(),
+      s,
+      canonical_name(),
+      etag,
+      s->object->get_size(),
+      this, y, false, false);
+  if (op_ret < 0) {
+    return;
+  }
+
   bufferlist bl;
   new_policy.encode(bl);
   map<string, bufferlist> attrs;
@@ -9006,6 +9057,19 @@ void RGWPutObjRetention::execute(optional_yield y)
     }
   }
 
+  const auto etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
+  op_ret = rgw::bucketlogging::log_record(driver,
+      rgw::bucketlogging::LoggingType::Journal,
+      s->object.get(),
+      s,
+      canonical_name(),
+      etag,
+      s->object->get_size(),
+      this, y, false, false);
+  if (op_ret < 0) {
+    return;
+  }
+
   op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_RETENTION, bl, s->yield, this);
 
   return;
@@ -9108,6 +9172,26 @@ void RGWPutObjLegalHold::execute(optional_yield y) {
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
+
+  op_ret = s->object->get_obj_attrs(y, this);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << s->object
+                       << " ret=" << op_ret << dendl;
+    return;
+  }
+  const auto etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
+  op_ret = rgw::bucketlogging::log_record(driver,
+      rgw::bucketlogging::LoggingType::Journal,
+      s->object.get(),
+      s,
+      canonical_name(),
+      etag,
+      s->object->get_size(),
+      this, y, false, false);
+  if (op_ret < 0) {
+    return;
+  }
+
   bufferlist bl;
   obj_legal_hold.encode(bl);
   //if instance is empty, we should modify the latest object
