@@ -418,12 +418,35 @@ public:
   std::pair<ghobject_t, bool>
   do_delete_work(ceph::os::Transaction &t, ghobject_t _next) final;
 
-  // merge/split not ready
-  void clear_ready_to_merge() final {}
-  void set_not_ready_to_merge_target(pg_t pgid, pg_t src) final {}
-  void set_not_ready_to_merge_source(pg_t pgid) final {}
-  void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final {}
-  void set_ready_to_merge_source(eversion_t lu) final {}
+  seastar::future<> merge_from(std::map<spg_t,Ref<PG>>& sources, PeeringCtx &rctx,
+                  unsigned split_bits,
+                  const pg_merge_meta_t& last_pg_merge_meta);
+
+  void clear_ready_to_merge() final {
+    LOG_PREFIX(PG::clear_ready_to_merge);
+    SUBDEBUGDPP(osd, "", *this);
+    (void)shard_services.clear_ready_to_merge(pgid.pgid).discard_result();
+  }
+  void set_not_ready_to_merge_target(pg_t pgid, pg_t src) final {
+    LOG_PREFIX(PG::set_not_ready_to_merge_target);
+    SUBDEBUGDPP(osd, "", *this);
+    (void)shard_services.set_not_ready_to_merge_target(pgid, src).discard_result();
+  }
+  void set_not_ready_to_merge_source(pg_t pgid) final {
+    LOG_PREFIX(PG::set_not_ready_to_merge_source);
+    SUBDEBUGDPP(osd, "", *this);
+    (void)shard_services.set_not_ready_to_merge_source(pgid).discard_result();
+  }
+  void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final {
+    LOG_PREFIX(PG::set_ready_to_merge_target);
+    SUBDEBUGDPP(osd, "", *this);
+    (void)shard_services.set_ready_to_merge_target(pgid.pgid, lu, les, lec).discard_result();
+  }
+  void set_ready_to_merge_source(eversion_t lu) final {
+    LOG_PREFIX(PG::set_ready_to_merge_source);
+    SUBDEBUGDPP(osd, "", *this);
+    (void)shard_services.set_ready_to_merge_source(pgid.pgid, lu).discard_result();
+  }
 
   void on_active_actmap() final;
   void on_active_advmap(const OSDMapRef &osdmap) final;
@@ -597,6 +620,38 @@ public:
   void handle_advance_map(cached_map_t next_map, PeeringCtx &rctx);
   void handle_activate_map(PeeringCtx &rctx);
   void handle_initialize(PeeringCtx &rctx);
+
+  void start_split_stats(const std::set<spg_t>& childpgs, std::vector<object_stat_sum_t> *out) {
+    peering_state.start_split_stats(childpgs, out);
+  }
+
+  void finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction &t) {
+    peering_state.finish_split_stats(stats, t);
+  }
+
+  seastar::future<> split_colls(
+    spg_t child,
+    int split_bits,
+    int seed,
+    const pg_pool_t *pool,
+    ObjectStore::Transaction &t) {
+    coll_t target = coll_t(child);
+    create_pg_collection(t, child, split_bits);
+    coll_t parent_coll = coll_ref->get_cid();
+    t.split_collection(
+      parent_coll,
+      split_bits,
+      seed,
+      target);
+    init_pg_ondisk(t, child, pool);
+    return shard_services.get_store().do_transaction(
+      coll_ref, std::move(t));
+  }
+
+  void split_into(pg_t child_pgid, Ref<PG> child, unsigned split_bits) {
+    peering_state.split_into(child_pgid, &child->peering_state, split_bits);
+    child->snap_trimq = snap_trimq;
+  }
 
   static hobject_t get_oid(const hobject_t& hobj);
   static RWState::State get_lock_type(const OpInfo &op_info);
