@@ -6407,9 +6407,10 @@ int Monitor::handle_auth_request(
       return -EOPNOTSUPP;
     }
     bool was_challenge = (bool)auth_meta->authorizer_challenge;
+    dout(20) << __func__ << ": verify authorizer was_challenge=" << was_challenge << dendl;
     bool isvalid = ah->verify_authorizer(
       cct,
-      keyring,
+      key_server,
       payload,
       auth_meta->get_connection_secret_length(),
       reply,
@@ -6479,6 +6480,11 @@ int Monitor::handle_auth_request(
       dout(1) << __func__ << " failed to decode, " << e.what() << dendl;
       return -EACCES;
     }
+    dout(15) << __func__ << ": decoded"
+            << " mode=" << mode
+            << " entity_name=" << entity_name
+            << " con->peer_global_id=" << con->peer_global_id
+            << dendl;
 
     // supported method?
     if (entity_name.get_type() == CEPH_ENTITY_TYPE_MON ||
@@ -6518,6 +6524,8 @@ int Monitor::handle_auth_request(
     s = new MonSession(con);
     s->auth_handler = auth_handler.release();
     con->set_priv(RefCountedPtr{s, false});
+
+    dout(20) << __func__ << ": starting session: " << *s << dendl;
 
     r = s->auth_handler->start_session(
       entity_name,
