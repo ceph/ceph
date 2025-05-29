@@ -1,0 +1,13 @@
+tasks:
+- full_sequential_finally:
+  - exec:
+      mon.a:
+        - sleep 1m
+- exec:
+    mon.a:
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 tell mon.a config diff
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 tell mon.b config diff
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 tell mon.c config diff
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 config dump
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 auth ls
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 auth --format=json dump-keys

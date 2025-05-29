@@ -1,0 +1,6 @@
+tasks:
+- exec:
+    mon.a:
+      - ceph auth wipe-rotating-service-keys
+      - ceph auth --format=json-pretty dump-keys
+      - ceph auth --format=json dump-keys | jq '.data.rotating_secrets | all(  if .key == 32 then  (.val.secrets | all(.val.key.type == 1))  else  (.val.secrets | all(.val.key.type == 2))  end  )'

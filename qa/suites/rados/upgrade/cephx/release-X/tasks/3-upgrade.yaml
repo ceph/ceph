@@ -1,0 +1,32 @@
+tasks:
+- install.upgrade:
+    mon.a:
+    mon.b:
+    client.0:
+- ceph.restart:
+    daemons: [mgr.*]
+    mon-health-to-clog: false
+    wait-for-healthy: true
+- ceph.restart:
+    daemons: [mon.*]
+    mon-health-to-clog: false
+    wait-for-healthy: true
+- ceph.restart:
+    daemons: [osd.*]
+    mon-health-to-clog: false
+    wait-for-osds-up: true
+    wait-for-healthy: false
+- exec:
+    mon.a:
+      - ceph versions
+      - ceph osd dump -f json-pretty
+      - ceph osd require-osd-release tentacle
+      - for f in `ceph osd pool ls` ; do ceph osd pool set $f pg_autoscale_mode off ; done
+- ceph.restart:
+    daemons: [mds.*]
+    mon-health-to-clog: false
+    wait-for-healthy: true
+- exec:
+    mon.a:
+      - ceph versions
+      - ceph fs dump
