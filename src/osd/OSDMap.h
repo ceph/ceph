@@ -1358,6 +1358,9 @@ public:
     return false;
   }
 
+  bool has_pgtemp(const pg_t pg) const {
+    return (pg_temp->find(pg) != pg_temp->end());
+  }
   const std::vector<int> pgtemp_primaryfirst(const pg_pool_t& pool,
 			   const std::vector<int>& pg_temp) const;
   const std::vector<int> pgtemp_undo_primaryfirst(const pg_pool_t& pool,
