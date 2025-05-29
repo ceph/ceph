@@ -18,6 +18,7 @@
 
 #include <type_traits>
 
+#include "common/CanHasPrint.h"
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
 #if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
