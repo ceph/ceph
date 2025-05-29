@@ -259,6 +259,20 @@ struct OMapInnerNode
     }
   }
 private:
+  merge_entry_ret do_merge(
+    omap_context_t oc,
+    internal_const_iterator_t liter,
+    internal_const_iterator_t riter,
+    OMapNodeRef l,
+    OMapNodeRef r);
+
+  merge_entry_ret do_balance(
+    omap_context_t oc,
+    internal_const_iterator_t liter,
+    internal_const_iterator_t riter,
+    OMapNodeRef l,
+    OMapNodeRef r);
+
   using get_child_node_iertr = OMapNode::base_iertr;
   using get_child_node_ret = get_child_node_iertr::future<OMapNodeRef>;
   get_child_node_ret get_child_node(
