@@ -69,7 +69,7 @@ else(WITH_SYSTEM_NPM)
     # the current user. This can be an issue due to the node tarball using
     # uid 1000 and running the unpack in a id-mapped namespace (container)
     # that lets tar set the uid to a "bad" uid outside the namespace
-    COMMAND bash -c "chown -R $$(id -u):$$(id -g) ${mgr-dashboard-nodeenv-dir}/src"
+    COMMAND bash -c 'chown -R `id -u`:`id -g` ${mgr-dashboard-nodeenv-dir}/src'
     COMMAND mkdir ${mgr-dashboard-nodeenv-dir}/.npm
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "dashboard nodeenv is being installed")
