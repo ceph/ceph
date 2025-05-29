@@ -226,12 +226,6 @@ public:
 };
 WRITE_CLASS_ENCODER(CryptoKey)
 
-inline std::ostream& operator<<(std::ostream& out, const CryptoKey& k)
-{
-  k.print(out);
-  return out;
-}
-
 
 /*
  * Driver for a particular algorithm

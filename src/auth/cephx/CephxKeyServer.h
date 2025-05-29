@@ -77,8 +77,8 @@ struct KeyServerData {
 			  double& ttl) const;
   bool get_service_secret(CephContext *cct, uint32_t service_id,
 			  uint64_t secret_id, CryptoKey& secret) const;
-  bool get_auth(const EntityName& name, EntityAuth& auth) const;
-  bool get_secret(const EntityName& name, CryptoKey& secret) const;
+  bool get_auth(CephContext *cct, const EntityName& name, EntityAuth& auth) const;
+  bool get_secret(CephContext *cct, const EntityName& name, CryptoKey& secret) const;
   bool get_caps(CephContext *cct, const EntityName& name,
 		const std::string& type, AuthCapsInfo& caps) const;
 
