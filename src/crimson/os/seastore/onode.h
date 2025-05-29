@@ -36,6 +36,7 @@ struct onode_layout_t {
   omap_root_le_t log_root;
   omap_root_le_t xattr_root;
 
+  laddr_le_t shared_region_base;
   object_data_le_t object_data;
 
   char oi[MAX_OI_LENGTH] = {0};
@@ -81,10 +82,17 @@ public:
       hobj(hobj)
   {}
 
+  const hobject_t &get_hobj() const {
+    return hobj;
+  }
+  laddr_t get_shared_region_base() const {
+    return get_layout().shared_region_base;
+  }
   virtual bool is_alive() const = 0;
   virtual const onode_layout_t &get_layout() const = 0;
   virtual ~Onode() = default;
 
+  virtual void update_shared_region_base(Transaction&, laddr_t) = 0;
   virtual void update_onode_size(Transaction&, uint32_t) = 0;
   virtual void update_omap_root(Transaction&, omap_root_t&) = 0;
   virtual void update_log_root(Transaction&, omap_root_t&) = 0;
