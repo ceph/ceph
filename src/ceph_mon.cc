@@ -243,6 +243,7 @@ entity_addrvec_t make_mon_addrs(entity_addr_t a)
   } else {
     addrs.v.push_back(a);
   }
+  dout(5) << __func__ << ": " << addrs << dendl;
   return addrs;
 }
 
