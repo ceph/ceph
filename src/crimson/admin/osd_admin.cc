@@ -58,6 +58,8 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::OsdStatusHook);
+    DEBUG("");
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     f->open_object_section("status");
     osd.dump_status(f.get());
@@ -85,6 +87,8 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::SendBeaconHook);
+    DEBUG("");
     return osd.send_beacon().then([] {
       return seastar::make_ready_future<tell_result_t>();
     });
@@ -118,7 +122,8 @@ public:
               std::string_view format,
               ceph::bufferlist&& input) const final
   {
-    LOG_PREFIX(RunOSDBenchHook::call);
+    LOG_PREFIX(AdminSocketHook::RunOSDBenchHook::call);
+    DEBUG("");
     int64_t count = cmd_getval_or<int64_t>(cmdmap, "count", 1LL << 30);
     int64_t bsize = cmd_getval_or<int64_t>(cmdmap, "size", 4LL << 20);
     int64_t osize = cmd_getval_or<int64_t>(cmdmap, "object_size", 0);
@@ -209,6 +214,8 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::FlushPgStatsHook);
+    DEBUG("");
     uint64_t seq = osd.send_pg_stats();
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     f->dump_unsigned("stat_seq", seq);
@@ -233,6 +240,8 @@ public:
                                       std::string_view format,
                                       ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::DumpPGStateHistory);
+    DEBUG("");
     std::unique_ptr<Formatter> fref{
       Formatter::create(format, "json-pretty", "json-pretty")};
     Formatter *f = fref.get();
@@ -271,6 +280,8 @@ public:
                                       std::string_view format,
                                       ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::DumpPerfCountersHook);
+    DEBUG("");
     std::unique_ptr<Formatter> f{Formatter::create(format,
                                                    "json-pretty",
                                                    "json-pretty")};
@@ -303,6 +314,8 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::AssertAlwaysHook);
+    DEBUG("");
     if (local_conf().get_val<bool>("debug_asok_assert_abort")) {
       ceph_assert_always(0);
       return seastar::make_ready_future<tell_result_t>();
@@ -328,6 +341,8 @@ public:
                                       std::string_view format,
                                       ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::DumpMetricsHook);
+    DEBUG("");
     std::unique_ptr<Formatter> fref{Formatter::create(format, "json-pretty", "json-pretty")};
     auto *f = fref.get();
     std::string prefix;
@@ -493,6 +508,8 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::InjectDataErrorHook);
+    DEBUG("");
     ghobject_t obj;
     try {
       obj = test_ops_get_object_name(*shard_services.get_map(), cmdmap);
@@ -535,6 +552,8 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::InjectMDataErrorHook);
+    DEBUG("");
     ghobject_t obj;
     try {
       obj = test_ops_get_object_name(*shard_services.get_map(), cmdmap);
@@ -573,6 +592,8 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::DumpInFlightOpsHook);
+    DEBUG("");
     unique_ptr<Formatter> fref{
       Formatter::create(format, "json-pretty", "json-pretty")};
     auto *f = fref.get();
@@ -606,6 +627,8 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::DumpHistoricOpsHook);
+    DEBUG("");
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     f->open_object_section("historic_ops");
     op_registry.dump_historic_client_requests(f.get());
@@ -630,7 +653,8 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
-    logger().warn("{}", __func__);
+    LOG_PREFIX(AdminSocketHook::DumpSlowestHistoricOpsHook);
+    DEBUG("");
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     f->open_object_section("historic_slow_ops");
     op_registry.dump_slowest_historic_client_requests(f.get());
@@ -654,7 +678,8 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
-    logger().debug("{}", __func__);
+    LOG_PREFIX(AdminSocketHook::DumpRecoveryReservationsHook);
+    DEBUG("");
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     return seastar::do_with(std::move(f), [this](auto&& f) {
       f->open_object_section("reservations");
