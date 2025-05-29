@@ -1,0 +1,6 @@
+boto
+gevent
+httplib2
+pytest
+python-dateutil
+teuthology

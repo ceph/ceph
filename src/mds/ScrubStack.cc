@@ -1382,7 +1382,9 @@ void ScrubStack::uninline_data(CInode *in, Context *fin)
   mdr->snapid = CEPH_NOSNAP;
   mdr->no_early_reply = true;
   mdr->internal_op_finish = fin;
+  mdr->in[0] = in;
 
+  in->auth_pin(this);
   in->mdcache->dispatch_request(mdr);
 }
 

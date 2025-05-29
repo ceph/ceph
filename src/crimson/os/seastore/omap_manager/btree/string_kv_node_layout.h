@@ -738,21 +738,14 @@ public:
     set_meta(omap_node_meta_t::merge_from(left.get_meta(), right.get_meta()));
   }
 
-  /**
-   * balance_into_new_nodes
-   *
-   * Takes the contents of left and right and copies them into
-   * replacement_left and replacement_right such that
-   * the size of replacement_left just >= 1/2 of (left + right)
-   */
-  static std::string balance_into_new_nodes(
+  static std::optional<uint32_t> get_balance_pivot_idx(
     const StringKVInnerNodeLayout &left,
-    const StringKVInnerNodeLayout &right,
-    StringKVInnerNodeLayout &replacement_left,
-    StringKVInnerNodeLayout &replacement_right)
+    const StringKVInnerNodeLayout &right)
   {
-    uint32_t left_size = omap_inner_key_t(left.get_node_key_ptr()[left.get_size()-1]).key_off;
-    uint32_t right_size = omap_inner_key_t(right.get_node_key_ptr()[right.get_size()-1]).key_off;
+    uint32_t left_size = omap_inner_key_t(
+      left.get_node_key_ptr()[left.get_size()-1]).key_off;
+    uint32_t right_size = omap_inner_key_t(
+      right.get_node_key_ptr()[right.get_size()-1]).key_off;
     uint32_t total = left_size + right_size;
     uint32_t pivot_size = total / 2;
     uint32_t pivot_idx = 0;
@@ -778,6 +771,30 @@ public:
         }
       }
     }
+    return pivot_idx == left.get_size()
+      ? std::nullopt
+      : std::make_optional<uint32_t>(pivot_idx);
+  }
+
+  /**
+   * balance_into_new_nodes
+   *
+   * Takes the contents of left and right and copies them into
+   * replacement_left and replacement_right such that
+   * the size of replacement_left just >= 1/2 of (left + right)
+   */
+  static std::string balance_into_new_nodes(
+    const StringKVInnerNodeLayout &left,
+    const StringKVInnerNodeLayout &right,
+    uint32_t pivot_idx,
+    StringKVInnerNodeLayout &replacement_left,
+    StringKVInnerNodeLayout &replacement_right)
+  {
+    ceph_assert(!(left.below_min() && right.below_min()));
+    uint32_t left_size = omap_inner_key_t(left.get_node_key_ptr()[left.get_size()-1]).key_off;
+    uint32_t right_size = omap_inner_key_t(right.get_node_key_ptr()[right.get_size()-1]).key_off;
+    uint32_t total = left_size + right_size;
+    uint32_t pivot_size = total / 2;
 
     auto replacement_pivot = pivot_idx >= left.get_size() ?
       right.iter_idx(pivot_idx - left.get_size())->get_key() :

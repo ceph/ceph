@@ -1,6 +1,7 @@
 import functools
 import logging
-from typing import Any, Callable, Dict, Generator, List, NamedTuple, Optional, Type
+from typing import Annotated, Any, Callable, Dict, Generator, List, \
+    NamedTuple, Optional, Type, get_args, get_origin
 
 from ..exceptions import DashboardException
 from .nvmeof_conf import NvmeofGatewaysConfig
@@ -151,10 +152,13 @@ else:
 
     def _lazily_create_namedtuple(data: Any, target_type: Type[NamedTuple],
                                   depth: int, max_depth: int) -> Generator:
+        # pylint: disable=protected-access
         """ Lazily create NamedTuple from a dict """
         field_values = {}
         for field, field_type in zip(target_type._fields,
                                      target_type.__annotations__.values()):
+            if get_origin(field_type) == Annotated:
+                field_type = get_args(field_type)[0]
             # these conditions are complex since we need to navigate between dicts,
             # empty dicts and objects
             if isinstance(data, dict) and data.get(field) is not None:
@@ -170,8 +174,7 @@ else:
                 except StopIteration:
                     return
             else:
-                # If the field is missing assign None
-                field_values[field] = None
+                field_values[field] = target_type._field_defaults.get(field)
 
         namedtuple_instance = target_type(**field_values)  # type: ignore
         yield namedtuple_instance

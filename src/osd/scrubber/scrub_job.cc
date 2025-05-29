@@ -411,6 +411,12 @@ bool ScrubJob::has_high_queue_priority(urgency_t urgency)
 
 bool ScrubJob::is_repair_implied(urgency_t urgency)
 {
-  return urgency == urgency_t::after_repair ||
+  return urgency == urgency_t::repairing || urgency == urgency_t::must_repair;
+}
+
+bool ScrubJob::is_autorepair_allowed(urgency_t urgency)
+{
+  // note: 'after-repair' scrubs are not allowed to auto-repair
+  return urgency == urgency_t::periodic_regular ||
 	 urgency == urgency_t::repairing || urgency == urgency_t::must_repair;
 }

@@ -18,6 +18,9 @@ namespace rgw::auth {
 namespace rgw::lua {
   class Background;
 }
+namespace rgw::dedup {
+  class Background;
+}
 namespace rgw::sal {
   class ConfigStore;
   class Driver;

@@ -80,7 +80,9 @@
   <ng-template #cd_menu>
     <ng-container *ngIf="enabledFeature$ | async as enabledFeature">
       <cds-sidenav [expanded]="showMenuSidebar"
-                   class="mt-5">
+                   class="mt-5"
+                   (click)="onMenuClick($event)"
+                   #sidenavContainer>
         <!-- Dashboard -->
         <cds-sidenav-item route="/dashboard"
                           [useRouter]="true"

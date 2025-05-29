@@ -1293,8 +1293,8 @@ cdef class LibCephFS(object):
 
         cdef:
             char* _path = path
-            int _uid = uid
-            int _gid = gid
+            uid_t _uid = uid
+            gid_t _gid = gid
         if follow_symlink:
             with nogil:
                 ret = ceph_chown(self.cluster, _path, _uid, _gid)
@@ -1332,8 +1332,8 @@ cdef class LibCephFS(object):
 
         cdef:
             int _fd = fd
-            int _uid = uid
-            int _gid = gid
+            uid_t _uid = uid
+            gid_t _gid = gid
         with nogil:
             ret = ceph_fchown(self.cluster, _fd, _uid, _gid)
         if ret < 0:

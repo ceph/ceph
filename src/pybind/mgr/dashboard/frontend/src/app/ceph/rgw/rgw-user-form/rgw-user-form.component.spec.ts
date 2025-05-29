@@ -176,11 +176,36 @@ describe('RgwUserFormComponent', () => {
       formHelper.expectValid('user_id');
     }));
 
+    it('should validate that username can contain dot(.)', fakeAsync(() => {
+      spyOn(rgwUserService, 'get').and.returnValue(throwError('foo'));
+      formHelper.setValue('user_id', 'user.name', true);
+      tick(DUE_TIMER);
+      formHelper.expectValid('user_id');
+    }));
+
     it('should validate that username is invalid', fakeAsync(() => {
       spyOn(rgwUserService, 'get').and.returnValue(observableOf({}));
       formHelper.setValue('user_id', 'abc', true);
       tick(DUE_TIMER);
       formHelper.expectError('user_id', 'notUnique');
+    }));
+  });
+
+  describe('tenant validation', () => {
+    it('should validate that tenant is valid', fakeAsync(() => {
+      spyOn(rgwUserService, 'get').and.returnValue(throwError('foo'));
+      formHelper.setValue('show_tenant', true, true);
+      formHelper.setValue('tenant', 'new_tenant123', true);
+      tick(DUE_TIMER);
+      formHelper.expectValid('tenant');
+    }));
+
+    it('should validate that tenant is invalid', fakeAsync(() => {
+      spyOn(rgwUserService, 'get').and.returnValue(observableOf({}));
+      formHelper.setValue('show_tenant', true, true);
+      formHelper.setValue('tenant', 'new-tenant.dummy', true);
+      tick(DUE_TIMER);
+      formHelper.expectError('tenant', 'pattern');
     }));
   });
 

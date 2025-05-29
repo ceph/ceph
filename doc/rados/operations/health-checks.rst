@@ -164,10 +164,11 @@ the cluster is provisioned with at least three Ceph Monitors and are using the
 ``connectivity`` election strategy.
 
 Network partitions are reported in two ways:
+
 - As location-level netsplits (e.g., "Netsplit detected between dc1 and dc2") when
-  all monitors in one location cannot communicate with all monitors in another location
+  all monitors in one location cannot communicate with all monitors in another location.
 - As individual monitor netsplits (e.g., "Netsplit detected between mon.a and mon.d")
-  when only specific monitors are disconnected across locations
+  when only specific monitors are disconnected across locations.
 
 The system prioritizes reporting at the highest topology level (``datacenter``, ``rack``, etc.)
 when possible, to better help operators identify infrastructure-level network issues.

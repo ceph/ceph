@@ -59,7 +59,9 @@ HTTP Response
 ~~~~~~~~~~~~~
 
 If the bucket name is unique, within constraints and unused, the operation will succeed.
-If a bucket with the same name already exists and the user is the bucket owner, the operation will succeed.
+If a bucket with the same name already exists and the user is the
+bucket owner, the operation will succeed unless non-default option
+``rgw_bucket_eexist_override`` is `true`.
 If the bucket name is already in use, the operation will fail.
 
 +---------------+-----------------------+----------------------------------------------------------+
@@ -860,7 +862,8 @@ Syntax
 Response Entities
 ~~~~~~~~~~~~~~~~~
 
-Response is XML encoded in the body of the request, in the following format:
+Response header contains ``Last-Modified`` date/time of the logging configuration.
+Logging configuration is XML encoded in the body of the response, in the following format:
 
 ::
 

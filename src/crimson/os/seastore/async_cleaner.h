@@ -1487,7 +1487,7 @@ private:
   using do_reclaim_space_ret = do_reclaim_space_ertr::future<>;
   do_reclaim_space_ret do_reclaim_space(
     const std::vector<CachedExtentRef> &backref_extents,
-    const backref_pin_list_t &pin_list,
+    const backref_mapping_list_t &pin_list,
     std::size_t &reclaimed,
     std::size_t &runs);
 
@@ -1746,7 +1746,9 @@ public:
     // TODO: implement allocation strategy (dirty metadata and multiple devices)
     auto rbs = rb_group->get_rb_managers();
     auto paddr = rbs[0]->alloc_extent(length);
-    stats.used_bytes += length;
+    if (paddr != P_ADDR_NULL) {
+      stats.used_bytes += length;
+    }
     return paddr;
   }
 
@@ -1754,7 +1756,9 @@ public:
     // TODO: implement allocation strategy (dirty metadata and multiple devices)
     auto rbs = rb_group->get_rb_managers();
     auto ret = rbs[0]->alloc_extents(length);
-    stats.used_bytes += length;
+    if (!ret.empty()) {
+      stats.used_bytes += length;
+    }
     return ret;
   }
 

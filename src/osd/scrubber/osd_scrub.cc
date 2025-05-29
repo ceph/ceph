@@ -38,7 +38,6 @@ OsdScrub::OsdScrub(
     , m_resource_bookkeeper{[this](std::string msg) { log_fwd(msg); }, conf}
     , m_queue{cct, m_osd_svc}
     , m_log_prefix{fmt::format("osd.{} osd-scrub:", m_osd_svc.get_nodeid())}
-    , m_load_tracker{cct, conf, m_osd_svc.get_nodeid()}
 {
   create_scrub_perf_counters();
 }
@@ -211,7 +210,7 @@ Scrub::OSDRestrictions OsdScrub::restrictions_on_scrubbing(
   }
 
   env_conditions.restricted_time = !scrub_time_permit(scrub_clock_now);
-  env_conditions.cpu_overloaded = !m_load_tracker.scrub_load_below_threshold();
+  env_conditions.cpu_overloaded = !scrub_load_below_threshold();
 
   return env_conditions;
 }
@@ -263,93 +262,51 @@ void OsdScrub::on_config_change()
   }
 }
 
+
 // ////////////////////////////////////////////////////////////////////////// //
 // CPU load tracking and related
 
-OsdScrub::LoadTracker::LoadTracker(
-    CephContext* cct,
-    const ceph::common::ConfigProxy& config,
-    int node_id)
-    : cct{cct}
-    , conf{config}
-    , log_prefix{fmt::format("osd.{} scrub-queue::load-tracker::", node_id)}
+std::optional<double> OsdScrub::update_load_average()
 {
-  // initialize the daily loadavg with current 15min loadavg
-  if (double loadavgs[3]; getloadavg(loadavgs, 3) == 3) {
-    daily_loadavg = loadavgs[2];
-  } else {
-    derr << "OSD::init() : couldn't read loadavgs\n" << dendl;
-    daily_loadavg = 1.0;
-  }
-}
-
-///\todo replace with Knuth's algo (to reduce the numerical error)
-std::optional<double> OsdScrub::LoadTracker::update_load_average()
-{
-  auto hb_interval = conf->osd_heartbeat_interval;
-  int n_samples = std::chrono::duration_cast<seconds>(24h).count();
-  if (hb_interval > 1) {
-    n_samples = std::max(n_samples / hb_interval, 1L);
-  }
+  // cache the number of CPUs
+  loadavg_cpu_count = std::max(sysconf(_SC_NPROCESSORS_ONLN), 1L);
 
   double loadavg;
-  if (getloadavg(&loadavg, 1) == 1) {
-    daily_loadavg = (daily_loadavg * (n_samples - 1) + loadavg) / n_samples;
-    return 100 * loadavg;
+  if (getloadavg(&loadavg, 1) != 1) {
+    return std::nullopt;
   }
-
-  return std::nullopt;	// getloadavg() failed
+  return loadavg;
 }
 
-bool OsdScrub::LoadTracker::scrub_load_below_threshold() const
+
+bool OsdScrub::scrub_load_below_threshold() const
 {
-  double loadavgs[3];
-  if (getloadavg(loadavgs, 3) != 3) {
-    dout(10) << "couldn't read loadavgs" << dendl;
-    return false;
+  // fetch an up-to-date load average.
+  // For the number of CPUs - rely on the last known value, fetched in the
+  // 'heartbeat' thread.
+  double loadavg;
+  if (getloadavg(&loadavg, 1) != 1) {
+    loadavg = 0;
   }
 
-  // allow scrub if below configured threshold
-  long cpus = sysconf(_SC_NPROCESSORS_ONLN);
-  double loadavg_per_cpu = cpus > 0 ? loadavgs[0] / cpus : loadavgs[0];
+  const double loadavg_per_cpu = loadavg / loadavg_cpu_count;
   if (loadavg_per_cpu < conf->osd_scrub_load_threshold) {
     dout(20) << fmt::format(
-		    "loadavg per cpu {:.3f} < max {:.3f} = yes",
-		    loadavg_per_cpu, conf->osd_scrub_load_threshold)
+		    "loadavg per cpu {:.3f} < max {:.3f} (#CPUs:{}) = yes",
+		    loadavg_per_cpu, conf->osd_scrub_load_threshold,
+		    loadavg_cpu_count)
 	     << dendl;
     return true;
   }
 
-  // allow scrub if below daily avg and currently decreasing
-  if (loadavgs[0] < daily_loadavg && loadavgs[0] < loadavgs[2]) {
-    dout(20) << fmt::format(
-		    "loadavg {:.3f} < daily_loadavg {:.3f} and < 15m avg "
-		    "{:.3f} = yes",
-		    loadavgs[0], daily_loadavg, loadavgs[2])
-	     << dendl;
-    return true;
-  }
-
-  dout(10) << fmt::format(
-		  "loadavg {:.3f} >= max {:.3f} and ( >= daily_loadavg {:.3f} "
-		  "or >= 15m avg {:.3f} ) = no",
-		  loadavgs[0], conf->osd_scrub_load_threshold, daily_loadavg,
-		  loadavgs[2])
+  dout(5) << fmt::format(
+		  "loadavg {:.3f} >= max {:.3f} (#CPUs:{}) = no",
+		  loadavg_per_cpu, conf->osd_scrub_load_threshold,
+		  loadavg_cpu_count)
 	   << dendl;
   return false;
 }
 
-std::ostream& OsdScrub::LoadTracker::gen_prefix(
-    std::ostream& out,
-    std::string_view fn) const
-{
-  return out << log_prefix << fn << ": ";
-}
-
-std::optional<double> OsdScrub::update_load_average()
-{
-  return m_load_tracker.update_load_average();
-}
 
 // ////////////////////////////////////////////////////////////////////////// //
 

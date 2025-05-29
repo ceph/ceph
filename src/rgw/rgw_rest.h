@@ -248,7 +248,10 @@ public:
   int get_params(optional_yield y) override;
   int get_data(bufferlist& bl) override;
 
-  virtual std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT", s->info.method); }
+  virtual std::string canonical_name() const override {
+    const bool multipart = !multipart_upload_id.empty();
+    return fmt::format("REST.{}.{}", s->info.method, multipart ? "PART" : "OBJECT");
+  }
 };
 
 class RGWPostObj_ObjStore : public RGWPostObj
@@ -888,8 +891,7 @@ inline std::string compute_domain_uri(const req_state *s) {
   std::string uri = (!s->info.domain.empty()) ? s->info.domain :
     [&s]() -> std::string {
     RGWEnv const &env(*(s->info.env));
-    std::string uri =
-    env.get("SERVER_PORT_SECURE") ? "https://" : "http://";
+    std::string uri = rgw_transport_is_secure(s->cct, env) ? "https://" : "http://";
     if (env.exists("SERVER_NAME")) {
       uri.append(env.get("SERVER_NAME", "<SERVER_NAME>"));
     } else {

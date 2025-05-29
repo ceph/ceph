@@ -1,18 +1,42 @@
-from typing import List, NamedTuple, Optional
+from enum import Flag, auto
+from typing import Annotated, List, NamedTuple, Optional
+
+
+class CliFlags(Flag):
+    DROP = auto()
+    EXCLUSIVE_LIST = auto()
+    EXCLUSIVE_RESULT = auto()
+    SIZE = auto()
+
+
+class CliHeader:
+    def __init__(self, label: str):
+        self.label = label
 
 
 class GatewayInfo(NamedTuple):
-    cli_version: str
+    bool_status: bool
+    status: int
+    error_message: str
+    hostname: str
+    cli_version: Annotated[str, CliFlags.DROP]
     version: str
     name: str
     group: str
     addr: str
     port: int
-    load_balancing_group: int
+    load_balancing_group: Annotated[int, CliHeader('LB Group')]
+    max_hosts: int
+    max_hosts_per_subsystem: int
+    max_namespaces: int
+    max_namespaces_per_subsystem: int
+    max_subsystems: int
     spdk_version: Optional[str] = ""
 
 
 class GatewayVersion(NamedTuple):
+    status: int
+    error_message: str
     version: str
 
 
@@ -22,29 +46,38 @@ class GatewayLogLevelInfo(NamedTuple):
     log_level: str
 
 
+class NvmfLogFLag(NamedTuple):
+    name: str
+    enabled: bool
+
+
 class SpdkNvmfLogFlagsAndLevelInfo(NamedTuple):
     status: int
     error_message: str
     log_level: str
     log_print_level: str
+    nvmf_log_flags: List[NvmfLogFLag]
 
 
 class Subsystem(NamedTuple):
     nqn: str
-    enable_ha: bool
+    enable_ha: Annotated[bool, CliFlags.DROP]
     serial_number: str
     model_number: str
-    min_cntlid: int
-    max_cntlid: int
+    min_cntlid: Annotated[int, CliFlags.DROP]
+    max_cntlid: Annotated[int, CliFlags.DROP]
     namespace_count: int
     subtype: str
     max_namespaces: int
+    has_dhchap_key: bool
+    allow_any_host: bool
+    created_without_key: bool = False
 
 
 class SubsystemList(NamedTuple):
     status: int
     error_message: str
-    subsystems: List[Subsystem]
+    subsystems: Annotated[List[Subsystem], CliFlags.EXCLUSIVE_LIST]
 
 
 class Connection(NamedTuple):
@@ -61,51 +94,54 @@ class ConnectionList(NamedTuple):
     status: int
     error_message: str
     subsystem_nqn: str
-    connections: List[Connection]
+    connections: Annotated[List[Connection], CliFlags.EXCLUSIVE_LIST]
 
 
 class NamespaceCreation(NamedTuple):
-    status: int
+    status: Annotated[int, CliFlags.EXCLUSIVE_RESULT]
     error_message: str
     nsid: int
 
 
 class Namespace(NamedTuple):
+    bdev_name: str
+    rbd_image_name: Annotated[str, CliHeader("RBD Image")]
+    rbd_pool_name: Annotated[str, CliHeader("RBD Pool")]
+    load_balancing_group: Annotated[int, CliHeader('LB Group')]
+    rbd_image_size: Annotated[int, CliFlags.SIZE]
+    block_size: Annotated[int, CliFlags.SIZE]
+    rw_ios_per_second: Annotated[int, CliHeader('R/W IOs/sec')]
+    rw_mbytes_per_second: Annotated[int, CliHeader('R/W MBs/sec')]
+    r_mbytes_per_second: Annotated[int, CliHeader('Read MBs/sec')]
+    w_mbytes_per_second: Annotated[int, CliHeader('Write MBs/sec')]
+    auto_visible: bool
+    hosts: List[str]
     nsid: Optional[int]
     uuid: Optional[str]
-    bdev_name: str
-    rbd_image_name: str
-    rbd_pool_name: str
-    load_balancing_group: int
-    rbd_image_size: int
-    block_size: int
-    rw_ios_per_second: int
-    rw_mbytes_per_second: int
-    r_mbytes_per_second: int
-    w_mbytes_per_second: int
-    trash_image: bool
+    ns_subsystem_nqn: Optional[str]
+    trash_image: Optional[bool]
 
 
 class NamespaceList(NamedTuple):
     status: int
     error_message: str
-    namespaces: List[Namespace]
+    namespaces: Annotated[List[Namespace], CliFlags.EXCLUSIVE_LIST]
 
 
 class NamespaceIOStats(NamedTuple):
-    status: int
-    error_message: str
+    status: Annotated[int, CliFlags.DROP]
+    error_message: Annotated[str, CliFlags.DROP]
     subsystem_nqn: str
     nsid: int
     uuid: str
     bdev_name: str
     tick_rate: int
     ticks: int
-    bytes_read: int
+    bytes_read: Annotated[int, CliFlags.SIZE]
     num_read_ops: int
-    bytes_written: int
+    bytes_written: Annotated[int, CliFlags.SIZE]
     num_write_ops: int
-    bytes_unmapped: int
+    bytes_unmapped: Annotated[int, CliFlags.SIZE]
     num_unmap_ops: int
     read_latency_ticks: int
     max_read_latency_ticks: int
@@ -126,6 +162,7 @@ class Listener(NamedTuple):
     host_name: str
     trtype: str
     traddr: str
+    secure: bool
     adrfam: int = 0  # 0: IPv4, 1: IPv6
     trsvcid: int = 4420
 
@@ -133,11 +170,13 @@ class Listener(NamedTuple):
 class ListenerList(NamedTuple):
     status: int
     error_message: str
-    listeners: List[Listener]
+    listeners: Annotated[List[Listener], CliFlags.EXCLUSIVE_LIST]
 
 
 class Host(NamedTuple):
     nqn: str
+    use_psk: Optional[bool]
+    use_dhchap: Optional[bool]
 
 
 class HostsInfo(NamedTuple):
@@ -149,5 +188,5 @@ class HostsInfo(NamedTuple):
 
 
 class RequestStatus(NamedTuple):
-    status: int
+    status: Annotated[int, CliFlags.EXCLUSIVE_RESULT]
     error_message: str

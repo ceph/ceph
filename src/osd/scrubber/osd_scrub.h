@@ -118,13 +118,13 @@ class OsdScrub {
   [[nodiscard]] bool scrub_time_permit(utime_t t) const;
 
   /**
-   * An external interface into the LoadTracker object. Used by
-   * the OSD tick to update the load data in the logger.
+   * Fetch the 1-minute load average. Used by
+   * the OSD heartbeat handler to update a performance counter.
+   * Also updates the number of CPUs, required internally by the
+   * scrub queue.
    *
-   * \returns 100*(the decaying (running) average of the CPU load
-   *          over the last 24 hours) or nullopt if the load is not
-   *          available.
-   * Note that the multiplication by 100 is required by the logger interface
+   * \returns the 1-minute element of getloadavg() or nullopt
+   *          if the load is not available.
    */
   std::optional<double> update_load_average();
 
@@ -195,30 +195,22 @@ class OsdScrub {
    */
   bool scrub_random_backoff() const;
 
-  /**
-   * tracking the average load on the CPU. Used both by the
-   * OSD logger, and by the scrub queue (as no scrubbing is allowed if
-   * the load is too high).
+  // tracking the CPU load
+  // ---------------------------------------------------------------
+
+  /*
+   * tracking the average load on the CPU. Used both by the OSD performance
+   * counters logger, and by the scrub queue (as no periodic scrubbing is
+   * allowed if the load is too high).
    */
-  class LoadTracker {
-    CephContext* cct;
-    const ceph::common::ConfigProxy& conf;
-    const std::string log_prefix;
-    double daily_loadavg{0.0};
 
-   public:
-    explicit LoadTracker(
-	CephContext* cct,
-	const ceph::common::ConfigProxy& config,
-	int node_id);
+  /// the number of CPUs
+  long loadavg_cpu_count{1};
 
-    std::optional<double> update_load_average();
+  /// true if the load average (the 1-minute system average divided by
+  /// the number of CPUs) is below the configured threshold
+  bool scrub_load_below_threshold() const;
 
-    [[nodiscard]] bool scrub_load_below_threshold() const;
-
-    std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
-  };
-  LoadTracker m_load_tracker;
 
   // the scrub performance counters collections
   // ---------------------------------------------------------------
