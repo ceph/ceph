@@ -627,6 +627,7 @@ Miscellaneous
 .. confval:: mon_osd_cache_size_min
 .. confval:: mon_memory_target
 .. confval:: mon_memory_autotune
+.. confval:: enable_availability_tracking
 
 .. _Paxos: https://en.wikipedia.org/wiki/Paxos_(computer_science)
 .. _Monitor Keyrings: ../../../dev/mon-bootstrap#secret-keys
