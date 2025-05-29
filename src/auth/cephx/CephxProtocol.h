@@ -244,8 +244,8 @@ void cephx_calc_client_server_challenge(CephContext *cct,
 struct CephXSessionAuthInfo {
   uint32_t service_id;
   uint64_t secret_id;
-  AuthTicket ticket;
-  CryptoKey session_key;
+  AuthTicket ticket; /* TODO encapsulate in CephXServiceTicketInfo member */
+  CryptoKey session_key; /* ditto */
   CryptoKey service_secret;
   utime_t validity;
 
