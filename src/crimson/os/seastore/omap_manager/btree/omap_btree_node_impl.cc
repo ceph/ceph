@@ -396,29 +396,24 @@ OMapInnerNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
 }
 
 OMapInnerNode::make_balanced_ret
-OMapInnerNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
+OMapInnerNode::make_balanced(
+  omap_context_t oc, OMapNodeRef _right, uint32_t pivot_idx)
 {
   LOG_PREFIX(OMapInnerNode::make_balanced);
   DEBUGT("l: {}, r: {}", oc.t, *this, *_right);
   ceph_assert(_right->get_type() == TYPE);
   auto &right = *_right->cast<OMapInnerNode>();
-  auto pivot_idx = get_balance_pivot_idx(*this, right);
-  if (!pivot_idx) {
-    return make_balanced_ret(
-      interruptible::ready_future_marker{},
-      std::make_tuple(OMapNodeRef{}, OMapNodeRef{}, std::nullopt));
-  }
   return oc.tm.alloc_extents<OMapInnerNode>(oc.t, oc.hint,
     OMAP_INNER_BLOCK_SIZE, 2)
     .si_then([this, &right, pivot_idx, oc] (auto &&replacement_pair){
       auto replacement_left = replacement_pair.front();
       auto replacement_right = replacement_pair.back();
-      this->balance_child_ptrs(oc.t, *this, right, *pivot_idx,
+      this->balance_child_ptrs(oc.t, *this, right, pivot_idx,
 			       *replacement_left, *replacement_right);
       return make_balanced_ret(
              interruptible::ready_future_marker{},
              std::make_tuple(replacement_left, replacement_right,
-                             balance_into_new_nodes(*this, right, *pivot_idx,
+                             balance_into_new_nodes(*this, right, pivot_idx,
                                *replacement_left, *replacement_right)));
   }).handle_error_interruptible(
     crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
@@ -435,6 +430,12 @@ OMapInnerNode::do_merge(
   OMapNodeRef r)
 {
   LOG_PREFIX(OMapInnerNode::do_merge);
+  if (!is_mutable()) {
+    auto mut = oc.tm.get_mutable_extent(oc.t, this)->cast<OMapInnerNode>();
+    auto mut_liter = mut->iter_idx(liter->get_offset());
+    auto mut_riter = mut->iter_idx(riter->get_offset());
+    return mut->do_merge(oc, mut_liter, mut_riter, l, r);
+  }
   DEBUGT("make_full_merge l {} r {} liter {} riter {}",
     oc.t, *l, *r, liter->get_key(), riter->get_key());
   return l->make_full_merge(oc, r
@@ -490,19 +491,33 @@ OMapInnerNode::do_balance(
   OMapNodeRef r)
 {
   LOG_PREFIX(OMapInnerNode::do_balance);
+  std::optional<uint32_t> pivot_idx = 0;
+  if (get_meta().depth > 2) {
+    pivot_idx = OMapInnerNode::get_balance_pivot_idx(
+      static_cast<OMapInnerNode&>(*l), static_cast<OMapInnerNode&>(*r));
+  } else {
+    pivot_idx = OMapLeafNode::get_balance_pivot_idx(
+      static_cast<OMapLeafNode&>(*l), static_cast<OMapLeafNode&>(*r));
+  }
+  if (!pivot_idx) {
+    return merge_entry_ret(
+	   interruptible::ready_future_marker{},
+	   mutation_result_t(mutation_status_t::SUCCESS,
+	     std::nullopt, std::nullopt));
+  }
+  if (!is_mutable()) {
+    auto mut = oc.tm.get_mutable_extent(oc.t, this)->cast<OMapInnerNode>();
+    auto mut_liter = mut->iter_idx(liter->get_offset());
+    auto mut_riter = mut->iter_idx(riter->get_offset());
+    return mut->do_balance(oc, mut_liter, mut_riter, l, r);
+  }
   DEBUGT("balanced l {} r {} liter {} riter {}",
     oc.t, *l, *r, liter->get_key(), riter->get_key());
-  return l->make_balanced(oc, r
+  return l->make_balanced(oc, r, *pivot_idx
   ).si_then([FNAME, liter=liter, riter=riter, l=l, r=r, oc, this](auto tuple) {
     auto [replacement_l, replacement_r, replacement_pivot] = tuple;
-    if (!replacement_pivot) {
-      return merge_entry_ret(
-	     interruptible::ready_future_marker{},
-	     mutation_result_t(mutation_status_t::SUCCESS,
-	       std::nullopt, std::nullopt));
-    }
-    replacement_l->init_range(l->get_begin(), *replacement_pivot);
-    replacement_r->init_range(*replacement_pivot, r->get_end());
+    replacement_l->init_range(l->get_begin(), replacement_pivot);
+    replacement_r->init_range(replacement_pivot, r->get_end());
     DEBUGT("to update parent: {} {} {}",
       oc.t, *this, *replacement_l, *replacement_r);
     if (get_meta().depth > 2) { // l and r are inner nodes
@@ -522,7 +537,7 @@ OMapInnerNode::do_balance(
       liter,
       replacement_l->get_laddr(),
       maybe_get_delta_buffer());
-    bool overflow = extent_will_overflow(replacement_pivot->size(),
+    bool overflow = extent_will_overflow(replacement_pivot.size(),
       std::nullopt);
     if (!overflow) {
       this->update_child_ptr(
@@ -532,7 +547,7 @@ OMapInnerNode::do_balance(
       journal_inner_insert(
 	riter,
 	replacement_r->get_laddr(),
-	*replacement_pivot,
+	replacement_pivot,
 	maybe_get_delta_buffer());
       std::vector<laddr_t> dec_laddrs{l->get_laddr(), r->get_laddr()};
       return dec_ref(oc, dec_laddrs
@@ -550,7 +565,7 @@ OMapInnerNode::do_balance(
       this->remove_child_ptr(riter.get_offset());
       journal_inner_remove(riter, maybe_get_delta_buffer());
       return make_split_insert(
-	oc, riter, *replacement_pivot, replacement_r
+	oc, riter, replacement_pivot, replacement_r
       ).si_then([this, oc, l = l, r = r](auto mresult) {
 	std::vector<laddr_t> dec_laddrs{
 	  l->get_laddr(),
@@ -574,17 +589,11 @@ OMapInnerNode::merge_entry(
 {
   LOG_PREFIX(OMapInnerNode::merge_entry);
   DEBUGT("{}, parent: {}", oc.t, *entry, *this);
-  if (!is_mutable()) {
-    auto mut = oc.tm.get_mutable_extent(oc.t, this)->cast<OMapInnerNode>();
-    auto mut_iter = mut->iter_idx(iter->get_offset());
-    return mut->merge_entry(oc, mut_iter, entry);
-  }
   auto is_left = (iter + 1) == iter_cend();
   auto donor_iter = is_left ? iter - 1 : iter + 1;
   return get_child_node(oc, donor_iter
   ).si_then([=, this](auto &&donor) mutable {
     ceph_assert(!donor->is_btree_root());
-    LOG_PREFIX(OMapInnerNode::merge_entry);
     auto [l, r] = is_left ?
       std::make_pair(donor, entry) : std::make_pair(entry, donor);
     auto [liter, riter] = is_left ?
@@ -826,13 +835,14 @@ OMapLeafNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
 }
 
 OMapLeafNode::make_balanced_ret
-OMapLeafNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
+OMapLeafNode::make_balanced(
+  omap_context_t oc, OMapNodeRef _right, uint32_t pivot_idx)
 {
   ceph_assert(_right->get_type() == TYPE);
   LOG_PREFIX(OMapLeafNode::make_balanced);
   DEBUGT("this: {}",  oc.t, *this);
   return oc.tm.alloc_extents<OMapLeafNode>(oc.t, oc.hint, get_len(), 2)
-    .si_then([this, _right] (auto &&replacement_pair) {
+    .si_then([this, _right, pivot_idx] (auto &&replacement_pair) {
       auto replacement_left = replacement_pair.front();
       auto replacement_right = replacement_pair.back();
       auto &right = *_right->cast<OMapLeafNode>();
@@ -841,7 +851,7 @@ OMapLeafNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
              std::make_tuple(
                replacement_left, replacement_right,
                balance_into_new_nodes(
-                 *this, right,
+                 *this, right, pivot_idx,
                  *replacement_left, *replacement_right)));
   }).handle_error_interruptible(
     crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
