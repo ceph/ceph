@@ -102,10 +102,11 @@ struct OMapNode : LogicalChildNode {
 
   using make_balanced_iertr = base_iertr;
   using make_balanced_ret = make_balanced_iertr::future
-          <std::tuple<OMapNodeRef, OMapNodeRef, std::optional<std::string>>>;
+          <std::tuple<OMapNodeRef, OMapNodeRef, std::string>>;
   virtual make_balanced_ret make_balanced(
     omap_context_t oc,
-    OMapNodeRef _right) = 0;
+    OMapNodeRef _right,
+    uint32_t pivot_idx) = 0;
 
   virtual omap_node_meta_t get_node_meta() const = 0;
   virtual bool extent_will_overflow(
