@@ -63,6 +63,9 @@ test_run() {
         echo "[nvmeof] $1 test passed!"
     else
         echo "[nvmeof] $1 test failed!"
+        sudo nvme list-subsys
+        sudo nvme list
+        sudo dmesg -T > $TESTDIR/archive/dmesg.log
         exit 1
     fi
 }
