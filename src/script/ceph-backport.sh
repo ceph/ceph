@@ -1064,16 +1064,17 @@ function try_known_milestones {
         giant) eol "$mtt" ;;
         hammer) eol "$mtt" ;;
         infernalis) eol "$mtt" ;;
-        jewel) mn="8" ;;
+        jewel) eol "$mtt" ;;
         kraken) eol "$mtt" ;;
-        luminous) mn="10" ;;
-        mimic) mn="11" ;;
-        nautilus) mn="12" ;;
-        octopus) mn="13" ;;
-        pacific) mn="14" ;;
-        quincy) mn="15" ;;
+        luminous) eol "$mtt" ;;
+        mimic) eol "$mtt" ;;
+        nautilus) eol "$mtt" ;;
+        octopus) eol "$mtt" ;;
+        pacific) eol "$mtt" ;;
+        quincy) eol "$mtt" ;;
         reef) mn="16" ;;
-        squid) mn="17" ;;
+        squid) mn="20" ;;
+        tentacle) mn="31" ;;
     esac
     echo "$mn"
 }
