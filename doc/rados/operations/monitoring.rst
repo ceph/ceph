@@ -785,3 +785,13 @@ The score is updated every five seconds. This interval is currently
 not configurable. Any intermittent changes to the pools that 
 occur between this duration but are reset before we recheck the pool 
 status will not be captured by this feature. 
+
+This feature is on by default. To turn the feature off, e.g. - for an expected 
+downtime, the ``enable_availability_tracking`` config option can be set to ``false``. 
+
+.. prompt:: bash $
+
+   ceph config set mon enable_availability_tracking false
+
+While the feature is turned off, the last calculated score will be preserved. The 
+score will again start updating once the feature is turned on again. 

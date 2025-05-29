@@ -151,7 +151,8 @@
   users to view the availability score for each pool in a cluster. A pool is considered 
   unavailable if any PG in the pool is not in active state or if there are unfound 
   objects. Otherwise the pool is considered available. The score is updated every 
-  5 seconds. This feature is in tech preview. 
+  5 seconds. The feature is on by default. A new config option `enable_availability_tracking`
+  can be used to turn off the feature if required. This feature is in tech preview. 
   Related trackers:
    - https://tracker.ceph.com/issues/67777
 
