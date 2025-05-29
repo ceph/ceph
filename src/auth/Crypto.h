@@ -184,13 +184,13 @@ public:
   int encrypt(CephContext *cct, const ceph::buffer::list& in,
 	      ceph::buffer::list& out,
 	      std::string *error) const {
-    ceph_assert(ckh); // Bad key?
+    ceph_assert(!empty()); // Bad key?
     return ckh->encrypt(cct, in, out, error);
   }
   int decrypt(CephContext *cct, const ceph::buffer::list& in,
 	      ceph::buffer::list& out,
 	      std::string *error) const {
-    ceph_assert(ckh); // Bad key?
+    ceph_assert(!empty()); // Bad key?
     return ckh->decrypt(cct, in, out, error);
   }
 
@@ -199,17 +199,17 @@ public:
 
   std::size_t encrypt(CephContext *cct, const in_slice_t& in,
 		      const out_slice_t& out) {
-    ceph_assert(ckh);
+    ceph_assert(!empty()); // Bad key?
     return ckh->encrypt(cct, in, out);
   }
   std::size_t decrypt(CephContext *cct, const in_slice_t& in,
 		      const out_slice_t& out) {
-    ceph_assert(ckh);
+    ceph_assert(!empty()); // Bad key?
     return ckh->encrypt(cct, in, out);
   }
 
   sha256_digest_t hmac_sha256(CephContext*, const ceph::buffer::list& in) const {
-    ceph_assert(ckh);
+    ceph_assert(!empty()); // Bad key?
     return ckh->hmac_sha256(in);
   }
 
