@@ -199,6 +199,10 @@ int CephxSessionHandler::check_message_signature(Message *m)
     ldout(cct, 0) << "SIGN: MSG seq " << m->get_seq() << "          sig: " << m->get_footer().sig << dendl;
     ldout(cct, 0) << "SIGN: MSG seq " << m->get_seq() << " Locally calculated signature:" << dendl;
     ldout(cct, 0) << "SIGN: MSG seq " << m->get_seq() << "    sig_check: " << sig << dendl;
+    ldout(cct, 30) << "key: " << key << dendl;
+    ldout(cct, 30) << "protocol: " << protocol << dendl;
+    ldout(cct, 30) << "features: " << features << dendl;
+    ldout(cct, 30) << "message: " << *m << dendl;
 
     // For the moment, printing an error message to the log and
     // returning failure is sufficient.  In the long term, we should
