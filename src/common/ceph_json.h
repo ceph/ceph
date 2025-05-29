@@ -217,6 +217,9 @@ public:
          val.set(*vp, true);
 	else
 	 val.set(boost::json::serialize(data), false);
+
+//JFW: present in main br:
+	attr_map.insert({ name, val });
   }
 
   virtual ~JSONObj() = default;
@@ -292,7 +295,7 @@ public:
   JSONObjIter find_first(std::string_view name) { 
 std::cerr << "JFW: JSONObj::find_first(); looking for " << name << std::endl;
 
-for(const auto *c : children)
+for(const auto& c : children)
  {
   std::cerr << "JFW: ? " << c.first << " == " << (int)(name == c.first) << std::endl;
 

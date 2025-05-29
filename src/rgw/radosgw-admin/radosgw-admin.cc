@@ -1930,7 +1930,6 @@ static int send_to_remote_gateway(RGWRESTConn* conn, req_info& info,
 
 cerr << "JFW: RESPONSE was:\n" << response.c_str() << std::endl;
   ret = parser.parse(response);
-//JFW:  ret = parser.parse(response.c_str(), response.length());
   if (ret < 0) {
     cerr << "failed to parse response" << std::endl;
     return ret;
