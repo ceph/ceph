@@ -39,6 +39,12 @@ public:
   laddr_t get_hint() const final {return L_ADDR_MIN; }
   ~TestOnode() final = default;
 
+  void update_shared_region_base(Transaction &t, laddr_t laddr) final {
+    with_mutable_layout(t, [laddr](onode_layout_t &mlayout) {
+      mlayout.shared_region_base = laddr;
+    });
+  }
+
   void update_onode_size(Transaction &t, uint32_t size) final {
     with_mutable_layout(t, [size](onode_layout_t &mlayout) {
       mlayout.size = size;
