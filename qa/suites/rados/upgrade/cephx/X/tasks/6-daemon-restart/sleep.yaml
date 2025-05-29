@@ -1,0 +1,4 @@
+# Sleep for ticket refresh.
+tasks:
+- sleep:
+    duration: 500
