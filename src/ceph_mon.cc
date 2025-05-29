@@ -224,6 +224,8 @@ static void usage()
        << "        write the <filename> monmap to the local monitor store and exit\n"
        << "  --extract-monmap <filename>\n"
        << "        extract the monmap from the local monitor store and exit\n"
+       << "  --use-mon-keyring\n"
+       << "        use the mon keyring as authoritative for the mon. secret\n"
        << "  --mon-data <directory>\n"
        << "        where the mon store and keyring are located\n"
        << "  --set-crush-location <bucket>=<foo>\n"
@@ -273,6 +275,7 @@ int main(int argc, const char **argv)
   bool compact = false;
   bool force_sync = false;
   bool yes_really = false;
+  bool use_mon_keyring = false;
   std::string osdmapfn, inject_monmap, extract_monmap, crush_loc;
   std::string restore_backup_location, list_backup_location;
   std::optional<uint32_t> restore_backup_version;
@@ -340,6 +343,8 @@ int main(int argc, const char **argv)
       force_sync = true;
     } else if (ceph_argparse_flag(args, i, "--yes-i-really-mean-it", (char*)NULL)) {
       yes_really = true;
+    } else if (ceph_argparse_flag(args, i, "--use-mon-keyring", (char*)NULL)) {
+      use_mon_keyring = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--osdmap", (char*)NULL)) {
       osdmapfn = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--inject_monmap", (char*)NULL)) {
@@ -931,6 +936,10 @@ int main(int argc, const char **argv)
     derr << "out:\n";
     jf.flush(*_dout);
     *_dout << dendl;
+  }
+
+  if (use_mon_keyring) {
+    mon->use_keyring_as_authoritative();
   }
 
   err = mon->preinit();
