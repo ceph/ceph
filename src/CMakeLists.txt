@@ -688,12 +688,16 @@ if(NOT CEPH_BUILD_VIRTUALENV)
   set(CEPH_BUILD_VIRTUALENV ${CMAKE_BINARY_DIR})
 endif()
 
+option(WITH_CEPHADM "Flag to determine if cephadm should be built" ON)
+
 if(NOT WIN32)
 add_subdirectory(pybind)
 add_subdirectory(ceph-volume)
 add_subdirectory(ceph-node-proxy)
 add_subdirectory(python-common)
-add_subdirectory(cephadm)
+  if(WITH_CEPHADM)
+    add_subdirectory(cephadm)
+  endif()
 endif(NOT WIN32)
 
 # Monitor
