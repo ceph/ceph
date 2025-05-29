@@ -611,14 +611,10 @@ bool PeeringState::should_restart_peering(
   int newupprimary,
   int newactingprimary,
   const vector<int>& newup,
-  const vector<int>& _newacting,
+  const vector<int>& newacting,
   OSDMapRef lastmap,
   OSDMapRef osdmap)
 {
-  const vector<int> newacting = osdmap->pgtemp_undo_primaryfirst(
-					  pool.info,
-					  info.pgid.pgid,
-					  _newacting);
   if (PastIntervals::is_new_interval(
 	primary.osd,
 	newactingprimary,
@@ -898,9 +894,7 @@ void PeeringState::init_primary_up_acting(
   int new_acting_primary)
 {
   actingset.clear();
-  acting = get_osdmap()->pgtemp_undo_primaryfirst(pool.info,
-						  info.pgid.pgid,
-						  newacting);
+  acting = newacting;
   for (uint8_t i = 0; i < acting.size(); ++i) {
     if (acting[i] != CRUSH_ITEM_NONE)
       actingset.insert(
@@ -931,9 +925,26 @@ void PeeringState::init_primary_up_acting(
 	break;
       }
     }
+    // Calcuating the shard of the acting_primary is tricky because in
+    // error conditions the same osd can be in multiple positions in
+    // the acting_set. Use pgtemp ordering (which places shards which
+    // can become the primary first) to match the code in
+    // OSDMap::_get_temp_osds
+    const OSDMapRef osdmap = get_osdmap();
+    bool has_pgtemp = osdmap->has_pgtemp(spgid.pgid);
+    std::vector<int> pg_temp = acting;
+    if (has_pgtemp) {
+      pg_temp = osdmap->pgtemp_primaryfirst(pool.info, acting);
+    }
     for (uint8_t i = 0; i < acting.size(); ++i) {
-      if (acting[i] == new_acting_primary) {
-	primary = pg_shard_t(acting[i], shard_id_t(i));
+      if (pg_temp[i] == new_acting_primary) {
+	if (has_pgtemp) {
+	  primary = pg_shard_t(new_acting_primary,
+			       osdmap->pgtemp_undo_primaryfirst(
+				 pool.info, spgid.pgid, shard_id_t(i)));
+	} else {
+	  primary = pg_shard_t(new_acting_primary, shard_id_t(i));
+	}
 	break;
       }
     }
