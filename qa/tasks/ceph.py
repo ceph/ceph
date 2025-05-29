@@ -1623,6 +1623,98 @@ def suppress_mon_health_to_clog(ctx, config):
     else:
         yield
 
+def _wait_for_up_and_clean(ctx, manager):
+    manager.wait_for_all_osds_up(timeout=300)
+
+    try:
+        manager.flush_all_pg_stats()
+    except (run.CommandFailedError, Exception) as e:
+        log.info('ignoring flush pg stats error, probably testing upgrade: %s', e)
+    manager.wait_for_clean()
+
+@contextlib.contextmanager
+def key_rotate(ctx, config):
+    """
+   rotate keys on ceph daemons
+
+   For example::
+      tasks:
+      - ceph.key_rotate: [all]
+
+   For example::
+      tasks:
+      - ceph.key_rotate:
+          daemons: [mon.*, mds.*, osd.0]
+          key_type: recommended
+
+    :param ctx: Context
+    :param config: Configuration
+    """
+    if config is None:
+        config = {}
+    elif isinstance(config, list):
+        config = {'daemons': config}
+
+    testdir = teuthology.get_testdir(ctx)
+
+    key_type = config.setdefault('key_type', 'recommended')
+    coverage_dir = f'{testdir}/archive/coverage'
+
+    cluster_name = config.setdefault('cluster', 'ceph')
+    manager = ctx.managers[cluster_name]
+
+    authtool = [
+        'sudo',
+        'adjust-ulimits',
+        'ceph-coverage',
+        coverage_dir,
+        'ceph-authtool',
+    ]
+
+    daemons = ctx.daemons.resolve_role_list(config.get('daemons', None), CEPH_ROLE_TYPES, True)
+    clusters = set()
+
+    new_mon_key = None
+    for role in daemons:
+        cluster, type_, id_ = teuthology.split_role(role)
+        daemon = ctx.daemons.get_daemon(type_, id_, cluster)
+        daemon.stop()
+        if type_ == 'osd':
+            manager.mark_down_osd(id_)
+
+        if type_ == 'mon':
+            if new_mon_key is None:
+                # mons are special and have a shared auth key, use "mon."
+                p = manager.ceph(f"auth rotate --key-type={key_type} mon.")
+                new_key = p.stdout.getvalue()
+                new_mon_key = new_key
+            else:
+                new_key = new_mon_key
+        else:
+            p = manager.ceph(f"auth rotate --key-type={key_type} {type_}.{id_}")
+            new_key = p.stdout.getvalue()
+
+        importme = '/tmp/importme'
+        log.info("generated new key %s", new_key)
+        daemon.remote.write_file(importme, BytesIO(new_key.encode()))
+
+        daemon_dir = DATA_PATH.format(type_=type_, cluster=cluster_name, id_=id_)
+        authimport = [
+          *authtool,
+          '--import-keyring',
+          importme,
+          os.path.join(daemon_dir, 'keyring')
+        ]
+        daemon.remote.run(args=['sudo', 'cat', importme])
+        daemon.remote.run(args=['sudo', 'cat', os.path.join(daemon_dir, 'keyring')])
+        daemon.remote.run(args=authimport)
+        daemon.remote.run(args=['sudo', 'cat', os.path.join(daemon_dir, 'keyring')])
+
+        daemon.restart()
+
+    yield
+
+
 @contextlib.contextmanager
 def restart(ctx, config):
     """
