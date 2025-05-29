@@ -67,7 +67,7 @@ void cephx_calc_client_server_challenge(CephContext *cct, CryptoKey& secret, uin
  * Authentication
  */
 
-bool cephx_build_service_ticket_blob(CephContext *cct, CephXSessionAuthInfo& info,
+bool cephx_build_service_ticket_blob(CephContext *cct, const CephXSessionAuthInfo& info,
 				     CephXTicketBlob& blob)
 {
   CephXServiceTicketInfo ticket_info;
