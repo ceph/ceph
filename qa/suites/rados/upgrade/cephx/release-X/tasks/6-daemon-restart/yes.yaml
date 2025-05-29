@@ -1,0 +1,25 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - OSD_DOWN
+      - OSD_ROOT_DOWN
+tasks:
+- sleep:
+    duration: 10
+- ceph.restart:
+    daemons: [mon.*]
+    mon-health-to-clog: false
+    wait-for-healthy: true
+- ceph.restart:
+    daemons: [mgr.*]
+    mon-health-to-clog: false
+    wait-for-healthy: true
+- ceph.restart:
+    daemons: [osd.*]
+    mon-health-to-clog: false
+    wait-for-healthy: true
+    wait-for-osds-up: true
+- ceph.restart:
+    daemons: [mds.*]
+    mon-health-to-clog: false
+    wait-for-healthy: true
