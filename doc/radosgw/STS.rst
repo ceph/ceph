@@ -90,17 +90,13 @@ RGW now supports Session tags that can be passed in the web token to AssumeRoleW
 STS Configuration
 =================
 
-The following configurable options have to be added for STS integration::
+The following configurable options have to be added for STS integration:
 
-  [client.{your-rgw-name}]
-  rgw_sts_key = {sts key for encrypting the session token}
-  rgw_s3_auth_use_sts = true
+.. confval:: rgw_sts_key
+.. confval:: rgw_s3_auth_use_sts
 
-Notes: 
-
-* By default, STS and S3 APIs co-exist in the same namespace, and both S3
-  and STS APIs can be accessed via the same endpoint in Ceph Object Gateway.
-* The ``rgw_sts_key`` needs to be a hex-string consisting of exactly 16 characters.
+.. note:: The STS and S3 APIs co-exist in the same namespace, and both S3
+   and STS APIs can be accessed via the same endpoint.
 
 Examples
 ========

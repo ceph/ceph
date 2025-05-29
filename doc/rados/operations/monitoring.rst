@@ -738,3 +738,50 @@ Print active connections and their TCP round trip time and retransmission counte
 
 	248     89      1       mgr.0   863     1677    0
 	3       86      2       mon.0   230     278     0
+
+Tracking Data Availability Score of a Cluster
+=============================================
+
+Ceph internally tracks the data availability of each pool in a cluster.
+To check the data availability score of each pool in a cluster, 
+the following command can be invoked: 
+
+
+.. prompt:: bash $
+
+   ceph osd pool availability-status
+
+Example output:  
+
+.. prompt:: bash $
+
+   POOL       	UPTIME  DOWNTIME  NUMFAILURES  MTBF  MTTR  SCORE 	AVAILABLE
+   rbd             2m     21s        	1	     2m   21s  0.888889      	1
+   .mgr          	86s    	0s        	0	     0s	  0s     	1      	1
+   cephfs.a.meta 	77s    	0s        	0	     0s	  0s     	1      	1
+   cephfs.a.data 	76s    	0s        	0	     0s	  0s     	1      	1
+
+A pool is considered ``unavailable`` when at least one PG in the pool 
+becomes inactive or there is at least one unfound object in the pool. 
+Otherwise the pool is considered ``available``. Depending on the 
+current and previous state of the pool we update ``uptime`` and 
+``downtime`` values: 
+
+================ =============== =============== =================
+ Previous State   Current State   Uptime Update   Downtime Update 
+================ =============== =============== =================
+ Available        Available       +diff time      no update    
+ Available        Unavailable     +diff time      no update
+ Unavailable      Available       +diff time      no update 
+ Unavailable      Unavailable     no update       +diff time 
+================ =============== =============== =================
+
+From the updated ``uptime`` and ``downtime`` values, we calculate 
+the Mean Time Between Failures (MTBF) and Mean Time To Recover (MTTR)
+for each pool. The availability score is then calculated by finding 
+the ratio of MTBF to the total time.  
+
+The score is updated every five seconds. This interval is currently 
+not configurable. Any intermittent changes to the pools that 
+occur between this duration but are reset before we recheck the pool 
+status will not be captured by this feature. 

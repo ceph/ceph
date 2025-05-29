@@ -16,7 +16,7 @@
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
 
-#include "crimson/os/seastore/btree/btree_range_pin.h"
+#include "crimson/os/seastore/btree/btree_types.h"
 #include "crimson/os/seastore/btree/fixed_kv_btree.h"
 #include "crimson/os/seastore/btree/fixed_kv_node.h"
 
@@ -24,36 +24,12 @@ namespace crimson::os::seastore {
 class LogicalChildNode;
 }
 
-namespace crimson::os::seastore::lba_manager::btree {
+namespace crimson::os::seastore::lba {
 
 using base_iertr = Cache::base_iertr;
 using LBANode = FixedKVNode<laddr_t>;
 
 class BtreeLBAMapping;
-
-/**
- * lba_map_val_t
- *
- * struct representing a single lba mapping
- */
-struct lba_map_val_t {
-  extent_len_t len = 0;  ///< length of mapping
-  pladdr_t pladdr;         ///< physical addr of mapping or
-			   //	laddr of a physical lba mapping(see btree_lba_manager.h)
-  extent_ref_count_t refcount = 0; ///< refcount
-  uint32_t checksum = 0; ///< checksum of original block written at paddr (TODO)
-
-  lba_map_val_t() = default;
-  lba_map_val_t(
-    extent_len_t len,
-    pladdr_t pladdr,
-    extent_ref_count_t refcount,
-    uint32_t checksum)
-    : len(len), pladdr(pladdr), refcount(refcount), checksum(checksum) {}
-  bool operator==(const lba_map_val_t&) const = default;
-};
-
-std::ostream& operator<<(std::ostream& out, const lba_map_val_t&);
 
 constexpr size_t LBA_BLOCK_SIZE = 4096;
 
@@ -122,30 +98,6 @@ using LBAInternalNodeRef = LBAInternalNode::Ref;
  * TODO: the above alignment probably isn't portable without further work
  */
 constexpr size_t LEAF_NODE_CAPACITY = 140;
-
-/**
- * lba_map_val_le_t
- *
- * On disk layout for lba_map_val_t.
- */
-struct __attribute__((packed)) lba_map_val_le_t {
-  extent_len_le_t len = init_extent_len_le(0);
-  pladdr_le_t pladdr;
-  extent_ref_count_le_t refcount{0};
-  ceph_le32 checksum{0};
-
-  lba_map_val_le_t() = default;
-  lba_map_val_le_t(const lba_map_val_le_t &) = default;
-  explicit lba_map_val_le_t(const lba_map_val_t &val)
-    : len(init_extent_len_le(val.len)),
-      pladdr(pladdr_le_t(val.pladdr)),
-      refcount(val.refcount),
-      checksum(val.checksum) {}
-
-  operator lba_map_val_t() const {
-    return lba_map_val_t{ len, pladdr, refcount, checksum };
-  }
-};
 
 struct LBALeafNode
   : FixedKVLeafNode<
@@ -262,13 +214,13 @@ struct LBALeafNode
   }
 
   bool is_child_stable(
-    op_context_t<laddr_t> c,
+    op_context_t c,
     uint16_t pos,
     laddr_t key) const {
     return parent_node_t::_is_child_stable(c.trans, c.cache, pos, key);
   }
   bool is_child_data_stable(
-    op_context_t<laddr_t> c,
+    op_context_t c,
     uint16_t pos,
     laddr_t key) const {
     return parent_node_t::_is_child_stable(c.trans, c.cache, pos, key, true);
@@ -304,21 +256,21 @@ struct LBALeafNode
     Transaction &t,
     LBALeafNode &left,
     LBALeafNode &right,
-    bool prefer_left,
+    uint32_t pivot_idx,
     LBALeafNode &replacement_left,
     LBALeafNode &replacement_right) final {
     this->balance_child_ptrs(
-      t, left, right, prefer_left, replacement_left, replacement_right);
+      t, left, right, pivot_idx, replacement_left, replacement_right);
   }
   void adjust_copy_src_dest_on_balance(
     Transaction &t,
     LBALeafNode &left,
     LBALeafNode &right,
-    bool prefer_left,
+    uint32_t pivot_idx,
     LBALeafNode &replacement_left,
     LBALeafNode &replacement_right) final {
     this->parent_node_t::adjust_copy_src_dest_on_balance(
-      t, left, right, prefer_left, replacement_left, replacement_right);
+      t, left, right, pivot_idx, replacement_left, replacement_right);
   }
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
@@ -326,17 +278,14 @@ struct LBALeafNode
   }
 
   std::ostream &print_detail(std::ostream &out) const final;
-
-  void maybe_fix_mapping_pos(BtreeLBAMapping &mapping);
-  std::unique_ptr<BtreeLBAMapping> get_mapping(op_context_t<laddr_t> c, laddr_t laddr);
 };
 using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
 
 }
 
 #if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::lba_node_meta_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::lba_map_val_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::LBAInternalNode> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::LBALeafNode> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba::lba_node_meta_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba::lba_map_val_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba::LBAInternalNode> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba::LBALeafNode> : fmt::ostream_formatter {};
 #endif

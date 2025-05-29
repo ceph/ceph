@@ -513,6 +513,7 @@ local timeSeries = import 'timeseries_panel.libsonnet';
                 steps=[],
                 max=1,
                 min=0,
+                decimals=null,
                 maxDataPoints=100,
                 interval='1m')::
     g.gaugePanel.new(title=title,
@@ -523,7 +524,8 @@ local timeSeries = import 'timeseries_panel.libsonnet';
                      unit=unit,
                      reducerFunction=reducerFunction,
                      max=max,
-                     min=min) + {
+                     min=min,
+                     decimals=decimals) + {
       gridPos: gridPosition,
       maxDataPoints: maxDataPoints,
       interval: interval,

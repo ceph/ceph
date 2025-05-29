@@ -9,31 +9,11 @@
 
 namespace crimson::os::seastore::backref {
 
-class BtreeBackrefMapping : public BackrefMapping {
-public:
-  BtreeBackrefMapping(op_context_t<paddr_t> ctx)
-    : BackrefMapping(ctx) {}
-  BtreeBackrefMapping(
-    op_context_t<paddr_t> ctx,
-    BackrefLeafNodeRef parent,
-    uint16_t pos,
-    backref_map_val_t &val,
-    backref_node_meta_t &&meta)
-    : BackrefMapping(
-	val.type,
-	ctx,
-	parent,
-	pos,
-	val.laddr,
-	val.len,
-	std::forward<backref_node_meta_t>(meta)) {}
-};
-
 constexpr size_t BACKREF_BLOCK_SIZE = 4096;
 
 using BackrefBtree = FixedKVBtree<
   paddr_t, backref_map_val_t, BackrefInternalNode,
-  BackrefLeafNode, BtreeBackrefMapping, BACKREF_BLOCK_SIZE>;
+  BackrefLeafNode, BackrefCursor, BACKREF_BLOCK_SIZE>;
 
 class BtreeBackrefManager : public BackrefManager {
 public:
@@ -101,8 +81,8 @@ public:
 private:
   Cache &cache;
 
-  op_context_t<paddr_t> get_context(Transaction &t) {
-    return op_context_t<paddr_t>{cache, t};
+  op_context_t get_context(Transaction &t) {
+    return op_context_t{cache, t};
   }
 };
 
