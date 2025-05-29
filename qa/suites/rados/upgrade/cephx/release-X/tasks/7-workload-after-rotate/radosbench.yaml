@@ -1,0 +1,6 @@
+tasks:
+  - radosbench:
+      extra_args: --debug_ms=5 --debug_auth=30 --debug_monc=30 --mon_client_target_rank=0
+      clients: [client.0]
+      time: 10
+      unique_pool: true
