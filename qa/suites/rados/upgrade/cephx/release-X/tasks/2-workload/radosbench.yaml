@@ -1,0 +1,23 @@
+# We can't set auth_exit_on_failure here because squid/reef do not understand that switch.
+#teuthology:
+#  postmerge:
+#  - |
+#    if false and yaml.teuthology.variables.wipe_service_keys then
+#        yaml.radosbench.sequential_yield[0].radosbench.auth_exit_on_failure = 99
+#        yaml.radosbench.sequential_yield[0].radosbench.expected_rc = 99
+#    end
+
+# N.B. because `rados bench` has sessions open with the OSDs, we do not expect
+# it to fail any auth after upgrade / rotation / session key wipe. It will only
+# fail new connections with OSDs.
+radosbench:
+  sequential_yield:
+    - radosbench:
+        extra_args: --log-to-stderr=false --log-to-file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 --mon_client_target_rank=0
+        clients: [client.0]
+        time: 300
+        unique_pool: true
+
+tasks:
+  - sequential_yield:
+      - radosbench
