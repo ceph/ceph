@@ -917,7 +917,7 @@ function number_to_url {
 
 function populate_original_issue {
     if [ -z "$original_issue" ] ; then
-        original_issue=$(curl --silent "${redmine_url}.json?include=relations" |
+        original_issue=$(curl --silent "${redmine_url}.json?include=relations&key=$redmine_key" |
             jq '.issue.relations[] | select(.relation_type | contains("copied_to")) | .issue_id')
         original_issue_url="$(number_to_url "redmine" "${original_issue}")"
     fi
@@ -926,7 +926,7 @@ function populate_original_issue {
 function populate_original_pr {
     if [ "$original_issue" ] ; then
         if [ -z "$original_pr" ] ; then
-            original_pr=$(curl --silent "${original_issue_url}.json" |
+            original_pr=$(curl --silent "${original_issue_url}.json?key=$redmine_key" |
                           jq -r '.issue.custom_fields[] | select(.id | contains(21)) | .value')
             original_pr_url="$(number_to_url "github" "${original_pr}")"
         fi
@@ -1553,7 +1553,7 @@ fi
 redmine_url="$(number_to_url "redmine" "${issue}")"
 debug "Considering Redmine issue: $redmine_url - is it in the Backport tracker?"
 
-remote_api_output="$(curl --silent "${redmine_url}.json")"
+remote_api_output="$(curl --silent "${redmine_url}.json?key=$redmine_key")"
 debug $remote_api_output
 tracker="$(echo "$remote_api_output" | jq -r '.issue.tracker.name')"
 if [ "$tracker" = "Backport" ]; then
