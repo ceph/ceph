@@ -123,6 +123,25 @@ ObjectDataHandler::prepare_data_reservation(
   }
 }
 
+ObjectDataHandler::write_iertr::future<LBAMapping>
+ObjectDataHandler::prepare_shared_region(
+  context_t ctx,
+  Onode &onode,
+  laddr_t hint,
+  extent_len_t len)
+{
+  LOG_PREFIX(ObjectDataHandler::prepare_shared_region);
+  DEBUGT("{}~{}", ctx.t, hint, len);
+  return ctx.tm.reserve_region(ctx.t, hint, len
+  ).si_then([ctx, &onode](auto shared_region) {
+    onode.update_shared_region_base(ctx.t, shared_region.get_key());
+    return std::move(shared_region);
+  }).handle_error_interruptible(
+    write_iertr::pass_further{},
+    crimson::ct_error::assert_all{"unexpected error"}
+  );
+}
+
 ObjectDataHandler::read_iertr::future<std::optional<bufferlist>> read_mapping(
   ObjectDataHandler::context_t ctx,
   LBAMapping read_pos,
