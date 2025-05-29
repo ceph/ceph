@@ -6511,7 +6511,7 @@ int Monitor::handle_auth_request(
     dout(20) << __func__ << ": verify authorizer was_challenge=" << was_challenge << dendl;
     bool isvalid = ah->verify_authorizer(
       cct,
-      key_server,
+      use_mon_keyring ? static_cast<KeyStore&>(keyring) : static_cast<KeyStore&>(key_server),
       payload,
       auth_meta->get_connection_secret_length(),
       reply,

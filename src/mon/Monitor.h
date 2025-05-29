@@ -1131,6 +1131,13 @@ public:
   }
 
 private:
+  bool use_mon_keyring = false;
+public:
+  void use_keyring_as_authoritative() {
+    use_mon_keyring = true;
+  }
+
+private:
   ceph::coarse_mono_time const starttime = coarse_mono_clock::now();
   epoch_t probe_epoch = 0;
   epoch_t cycle_mon_secret = 0;
