@@ -80,6 +80,12 @@ class SubsystemList(NamedTuple):
     subsystems: Annotated[List[Subsystem], CliFlags.EXCLUSIVE_LIST]
 
 
+class SubsystemStatus(NamedTuple):
+    status: int
+    error_message: str
+    nqn: str
+
+
 class Connection(NamedTuple):
     traddr: str
     trsvcid: int
