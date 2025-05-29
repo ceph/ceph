@@ -583,8 +583,10 @@ void decode_decrypt_enc_bl(CephContext *cct, T& t, const CryptoKey& key,
   uint64_t magic;
   ceph::buffer::list bl;
 
-  if (key.decrypt(cct, bl_enc, bl, &error) < 0)
+  if (key.decrypt(cct, bl_enc, bl, &error) < 0) {
+    error = "decryption failed";
     return;
+  }
 
   auto iter2 = bl.cbegin();
   __u8 struct_v;
