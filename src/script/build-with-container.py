@@ -68,8 +68,12 @@ the executable build steps with short descriptions of what they do.
 
 import argparse
 import contextlib
+import datetime
 import enum
 import glob
+import hashlib
+import functools
+import json
 import logging
 import os
 import pathlib
@@ -78,6 +82,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 
 log = logging.getLogger()
 
@@ -149,6 +154,18 @@ class DidNotExecute(Exception):
     pass
 
 
+_CONTAINER_SOURCES = [
+    "Dockerfile.build",
+    "src/script/lib-build.sh",
+    "src/script/run-make.sh",
+    "ceph.spec.in",
+    "do_cmake.sh",
+    "install-deps.sh",
+    "run-make-check.sh",
+    "src/script/buildcontainer-setup.sh",
+]
+
+
 def _cmdstr(cmd):
     return " ".join(shlex.quote(c) for c in cmd)
 
@@ -218,6 +235,9 @@ def _git_command(ctx, args):
     return cmd
 
 
+# Assume that the git version will not be changing after the 1st time
+# the command is run.
+@functools.cache
 def _git_current_branch(ctx):
     cmd = _git_command(ctx, ["rev-parse", "--abbrev-ref", "HEAD"])
     res = _run(cmd, check=True, capture_output=True)
@@ -234,6 +254,20 @@ def _git_current_sha(ctx, short=True):
     return res.stdout.decode("utf8").strip()
 
 
+@functools.cache
+def _hash_sources(bsize=4096):
+    hh = hashlib.sha256()
+    buf = bytearray(bsize)
+    for path in sorted(_CONTAINER_SOURCES):
+        with open(path, "rb") as fh:
+            while True:
+                rlen = fh.readinto(buf)
+                hh.update(buf[:rlen])
+                if rlen < len(buf):
+                    break
+    return f"sha256:{hh.hexdigest()}"
+
+
 class Steps(StrEnum):
     DNF_CACHE = "dnfcache"
     BUILD_CONTAINER = "build-container"
@@ -248,6 +282,7 @@ class Steps(StrEnum):
     DEBS = "debs"
     PACKAGES = "packages"
     INTERACTIVE = "interactive"
+    PRUNE = "prune"
 
 
 class ImageSource(StrEnum):
@@ -295,9 +330,12 @@ class Context:
         return self._engine
 
     @property
+    def image_repo(self):
+        return self.cli.image_repo or "ceph-build"
+
+    @property
     def image_name(self):
-        base = self.cli.image_repo or "ceph-build"
-        return f"{base}:{self.target_tag()}"
+        return f"{self.image_repo}:{self.target_tag()}"
 
     def target_tag(self):
         suffix = ""
@@ -396,6 +434,7 @@ class Builder:
 
     def __init__(self):
         self._did_steps = set()
+        self._reported_failed = False
 
     def wants(self, step, ctx, *, force=False, top=False):
         log.info("want to execute build step: %s", step)
@@ -407,12 +446,33 @@ class Builder:
             return
         if not self._did_steps:
             prepare_env_once(ctx)
-        self._steps[step](ctx)
-        self._did_steps.add(step)
-        log.info("step done: %s", step)
+        with self._timer(step):
+            self._steps[step](ctx)
+            self._did_steps.add(step)
 
     def available_steps(self):
         return [str(k) for k in self._steps]
+
+    @contextlib.contextmanager
+    def _timer(self, step):
+        ns = argparse.Namespace(start=time.time())
+        try:
+            yield ns
+            status = "completed"
+        except Exception:
+            status = "failed"
+            raise
+        finally:
+            ns.end = time.time()
+            ns.duration = int(ns.end - ns.start)
+            hrs, _rest = map(int, divmod(ns.duration, 3600))
+            mins, secs = map(int, divmod(_rest, 60))
+            ns.duration_hms = f"{hrs:02}:{mins:02}:{secs:02}"
+            if not self._reported_failed:
+                log.info(
+                    "step done: %s %s in %s", step, status, ns.duration_hms
+                )
+            self._reported_failed = status == "failed"
 
     @classmethod
     def set(self, step):
@@ -462,7 +522,7 @@ def build_container(ctx):
         "--pull",
         "-t",
         ctx.image_name,
-        f"--build-arg=JENKINS_HOME={ctx.cli.homedir}",
+        f"--label=io.ceph.build-with-container.src={_hash_sources()}",
         f"--build-arg=CEPH_BASE_BRANCH={ctx.base_branch()}",
     ]
     if ctx.cli.distro:
@@ -482,15 +542,65 @@ def build_container(ctx):
         _run(cmd, check=True, ctx=ctx)
 
 
-@Builder.set(Steps.CONTAINER)
-def get_container(ctx):
-    """Build or fetch a container image that we will build in."""
+def _check_cached_image(ctx):
     inspect_cmd = [
         ctx.container_engine,
         "image",
         "inspect",
         ctx.image_name,
     ]
+    res = _run(inspect_cmd, check=False, capture_output=True)
+    if res.returncode != 0:
+        log.info("Container image %s not present", ctx.image_name)
+        return False, False
+
+    log.info("Container image %s present", ctx.image_name)
+    ctr_info = json.loads(res.stdout)[0]
+    labels = {}
+    if "Labels" in ctr_info:
+        labels = ctr_info["Labels"]
+    elif "Labels" in ctr_info.get("ContainerConfig", {}):
+        labels = ctr_info["ContainerConfig"]["Labels"]
+    elif "Labels" in ctr_info.get("Config", {}):
+        labels = ctr_info["Config"]["Labels"]
+    saved_hash = labels.get("io.ceph.build-with-container.src", "")
+    curr_hash = _hash_sources()
+    if saved_hash == curr_hash:
+        log.info("Container passes source check")
+        return True, True
+    log.info("Container sources do not match: %s", curr_hash)
+    return True, False
+
+
+def _image_match(ctx, *filter_args):
+    list_cmd = [
+        ctx.container_engine,
+        "images",
+        "--format={{.Id}}|{{.CreatedAt}}",
+    ]
+    for keyword, value in filter_args:
+        list_cmd.append(f"--filter={keyword}={value}")
+    res = _run(list_cmd, check=False, capture_output=True)
+    if res.returncode != 0:
+        return []
+    values = (
+        line.strip().split("|", 1)
+        for line in res.stdout.decode("utf8").splitlines()
+    )
+    return [
+        (img, datetime.datetime.strptime(cdate, "%Y-%m-%d %H:%M:%S %z %Z"))
+        for img, cdate in values
+    ]
+
+
+def _image_rm(ctx, image):
+    cmd = [ctx.container_engine, "rmi", image]
+    _run(cmd, check=True)
+
+
+@Builder.set(Steps.CONTAINER)
+def get_container(ctx):
+    """Build or fetch a container image that we will build in."""
     pull_cmd = [
         ctx.container_engine,
         "pull",
@@ -498,16 +608,18 @@ def get_container(ctx):
     ]
     allowed = ctx.cli.image_sources or ImageSource
     if ImageSource.CACHE in allowed:
-        res = _run(inspect_cmd, check=False, capture_output=True)
-        if res.returncode == 0:
-            log.info("Container image %s present", ctx.image_name)
+        log.info("Checking for cached image")
+        present, hash_ok = _check_cached_image(ctx)
+        if present and hash_ok or len(allowed) == 1:
             return
-        log.info("Container image %s not present", ctx.image_name)
     if ImageSource.PULL in allowed:
+        log.info("Checking for image in remote repository")
         res = _run(pull_cmd, check=False, capture_output=True)
         if res.returncode == 0:
             log.info("Container image %s pulled successfully", ctx.image_name)
-            return
+            present, hash_ok = _check_cached_image(ctx)
+            if present and hash_ok:
+                return
     log.info("Container image %s needed", ctx.image_name)
     if ImageSource.BUILD in allowed:
         ctx.build.wants(Steps.BUILD_CONTAINER, ctx)
@@ -598,6 +710,11 @@ def bc_make_source_rpm(ctx):
         _run(cmd, check=True, ctx=ctx)
 
 
+def _glob_search(ctx, pattern, *, overlay=None):
+    overlay = overlay if overlay else ctx.overlay()
+    return glob.glob(pattern, root_dir=overlay.upper if overlay else None)
+
+
 @Builder.set(Steps.RPM)
 def bc_build_rpm(ctx):
     """Build RPMs from SRPM."""
@@ -618,7 +735,7 @@ def bc_build_rpm(ctx):
                 ctx.cli.ceph_version
             )
             srpm_glob = f"ceph-{srpm_version}.*.src.rpm"
-    paths = glob.glob(srpm_glob)
+    paths = _glob_search(ctx, srpm_glob)
     if len(paths) > 1:
         raise RuntimeError(
             "too many matching source rpms"
@@ -628,8 +745,11 @@ def bc_build_rpm(ctx):
     if not paths:
         # no matches. build a new srpm
         ctx.build.wants(Steps.SOURCE_RPM, ctx)
-        paths = glob.glob(srpm_glob)
-        assert paths
+        paths = _glob_search(ctx, srpm_glob)
+        if not paths:
+            raise RuntimeError(
+                f"unable to find source rpm(s) matching {srpm_glob}"
+            )
     srpm_path = pathlib.Path(ctx.cli.homedir) / paths[0]
     topdir = pathlib.Path(ctx.cli.homedir) / "rpmbuild"
     if ctx.cli.build_dir:
@@ -640,7 +760,7 @@ def bc_build_rpm(ctx):
         'rpmbuild',
         '--rebuild',
         f'-D_topdir {topdir}',
-    ] + list(ctx.cli.rpmbuild_arg) + [str(srpm_path)]
+    ] + list(ctx.cli.rpmbuild_arg or []) + [str(srpm_path)]
     rpmbuild_cmd = ' '.join(shlex.quote(cmd) for cmd in rpmbuild_args)
     cmd = _container_cmd(
         ctx,
@@ -721,6 +841,24 @@ def bc_interactive(ctx):
     )
     with ctx.user_command():
         _run(cmd, check=False, ctx=ctx)
+
+
+@Builder.set(Steps.PRUNE)
+def bc_prune(ctx):
+    """Prune old container images from local host."""
+    # podman images --format='{{.Id}}|{{.CreatedAt}}' --filter=reference=ceph-build
+    # d2 = datetime.datetime.strptime(t2, "%Y-%m-%d %H:%M:%S %z %Z")
+    # datetime.datetime.now(datetime.UTC) - d2
+    images = _image_match(ctx, ("reference", ctx.image_repo))
+    now = datetime.datetime.now(datetime.UTC)
+    age = datetime.timedelta(days=ctx.cli.prune_days)
+    old_images = [img for img, cdate in images if now - cdate > age]
+    for image_id in old_images:
+        log.info("image %s is older than %s days", image_id, ctx.cli.prune_days)
+    if ctx.cli.dry_run:
+        return
+    for image_id in old_images:
+        _image_rm(ctx, image_id)
 
 
 class ArgumentParser(argparse.ArgumentParser):
@@ -886,6 +1024,12 @@ def parse_cli(build_step_names):
         "--env-file",
         type=pathlib.Path,
         help="Use this environment file when building",
+    )
+    parser.add_argument(
+        "--prune-days",
+        type=int,
+        default=15,
+        help="Number of days old an image needs to be for it to be pruned",
     )
     parser.add_argument(
         "--dry-run",
