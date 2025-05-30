@@ -105,10 +105,21 @@ public:
   using get_pin_ret = LBAManager::get_mapping_iertr::future<LBAMapping>;
   get_pin_ret get_pin(
     Transaction &t,
-    laddr_t offset) {
+    laddr_t offset,
+    bool dim_search = false) {
     LOG_PREFIX(TransactionManager::get_pin);
     SUBDEBUGT(seastore_tm, "{} ...", t, offset);
-    return lba_manager->get_mapping(t, offset
+    return lba_manager->get_mapping(t, offset, dim_search
+    ).si_then([FNAME, &t](LBAMapping pin) {
+      SUBDEBUGT(seastore_tm, "got {}", t, pin);
+      return pin;
+    });
+  }
+
+  get_pin_ret get_pin(Transaction &t, LogicalChildNode &extent) {
+    LOG_PREFIX(TransactionManager::get_pin);
+    SUBDEBUGT(seastore_tm, "{} ...", t, extent);
+    return lba_manager->get_mapping(t, extent
     ).si_then([FNAME, &t](LBAMapping pin) {
       SUBDEBUGT(seastore_tm, "got {}", t, pin);
       return pin;
@@ -249,10 +260,18 @@ public:
     });
   }
 
+  using refresh_lba_mapping_iertr = LBAManager::refresh_lba_mapping_iertr;
+  using refresh_lba_mapping_ret = LBAManager::refresh_lba_mapping_ret;
+  refresh_lba_mapping_ret refresh_lba_mapping(
+    Transaction &t,
+    LBAMapping mapping) {
+    return lba_manager->refresh_lba_mapping(t, std::move(mapping));
+  }
+
   template <typename T>
   base_iertr::future<maybe_indirect_extent_t<T>> read_pin(
     Transaction &t,
-    LBAMapping pin,
+    const LBAMapping pin,
     extent_len_t partial_off,
     extent_len_t partial_len,
     lextent_init_func_t<T> maybe_init = [](T&) {})
@@ -277,7 +296,8 @@ public:
     SUBDEBUGT(seastore_tm, "{} {} 0x{:x}~0x{:x} direct_off=0x{:x} ...",
               t, T::TYPE, pin, partial_off, partial_len, direct_partial_off);
 
-    return lba_manager->refresh_lba_mapping(t, std::move(pin)
+    return lba_manager->refresh_lba_mapping(
+      t, std::move(const_cast<LBAMapping&>(pin))
     ).si_then([&t, this, direct_partial_off, partial_len,
 	       maybe_init=std::move(maybe_init)](auto npin) mutable {
       // checking the lba child must be atomic with creating
@@ -315,6 +335,12 @@ public:
     });
   }
 
+  base_iertr::future<LBAMapping> next_mapping(
+    Transaction &t,
+    const LBAMapping mapping) {
+    return lba_manager->next_mapping(t, mapping.duplicate());
+  }
+
   template <typename T>
   base_iertr::future<maybe_indirect_extent_t<T>> read_pin(
     Transaction &t,
@@ -348,6 +374,10 @@ public:
   ref_ret remove(
     Transaction &t,
     laddr_t offset);
+
+  ref_iertr::future<LBAMapping> remove(
+    Transaction &t,
+    LBAMapping mapping);
 
   /// remove refcount for list of offset
   using refs_ret = ref_iertr::future<std::vector<unsigned>>;
@@ -410,6 +440,7 @@ public:
     Transaction &t,
     laddr_t laddr_hint,
     extent_len_t len,
+    std::optional<LBAMapping> mapping = std::nullopt,
     placement_hint_t placement_hint = placement_hint_t::HOT) {
     static_assert(is_data_type(T::TYPE));
     LOG_PREFIX(TransactionManager::alloc_data_extents);
@@ -425,13 +456,31 @@ public:
     for (auto& ext : exts) {
       ext->set_seen_by_users();
     }
-    return lba_manager->alloc_extents(
-      t,
-      laddr_hint,
-      std::vector<LogicalChildNodeRef>(
-	exts.begin(), exts.end()),
-      EXTENT_DEFAULT_REF_COUNT
-    ).si_then([exts=std::move(exts), &t, FNAME](auto &&) mutable {
+    if (mapping) {
+      // laddr_hint is determined
+      auto off = laddr_hint;
+      for (auto &extent : exts) {
+	extent->set_laddr(off);
+	off = (off + extent->get_length()).checked_to_laddr();
+      }
+    }
+    auto fut = alloc_extents_iertr::make_ready_future<
+      std::vector<LBAMapping>>();
+    if (mapping) {
+      fut = lba_manager->alloc_extents(
+	t,
+	std::move(*mapping),
+	std::vector<LogicalChildNodeRef>(
+	  exts.begin(), exts.end()));
+    } else {
+      fut = lba_manager->alloc_extents(
+	t,
+	laddr_hint,
+	std::vector<LogicalChildNodeRef>(
+	  exts.begin(), exts.end()),
+	EXTENT_DEFAULT_REF_COUNT);
+    }
+    return fut.si_then([exts=std::move(exts), &t, FNAME](auto &&) mutable {
       for (auto &ext : exts) {
 	SUBDEBUGT(seastore_tm, "allocated {}", t, *ext);
       }
@@ -485,6 +534,7 @@ public:
     // must be user-oriented required by (the potential) maybe_init
     assert(is_user_transaction(t.get_src()));
 
+    LOG_PREFIX(TransactionManager::remap_pin);
 #ifndef NDEBUG
     std::sort(remaps.begin(), remaps.end(),
       [](remap_entry_t x, remap_entry_t y) {
@@ -512,23 +562,28 @@ public:
 #endif
 
     return seastar::do_with(
-      std::vector<LogicalChildNodeRef>(),
       std::move(pin),
       std::move(remaps),
-      [&t, this](auto &extents, auto &pin, auto &remaps) {
-      laddr_t original_laddr = pin.get_key();
-      extent_len_t original_len = pin.get_length();
-      paddr_t original_paddr = pin.get_val();
-      LOG_PREFIX(TransactionManager::remap_pin);
-      SUBDEBUGT(seastore_tm, "{}~0x{:x} {} into {} remaps ... {}",
-                t, original_laddr, original_len, original_paddr, remaps.size(), pin);
+      [FNAME, &t, this](auto &pin, auto &remaps) {
       // The according extent might be stable or pending.
       auto fut = base_iertr::now();
-      if (!pin.is_indirect()) {
+      if (pin.is_indirect()) {
+	SUBDEBUGT(seastore_tm, "{} into {} remaps ...",
+	  t, pin, remaps.size());
+	fut = lba_manager->complete_indirect_lba_mapping(t, std::move(pin)
+	).si_then([&pin](auto mapping) {
+	  pin = std::move(mapping);
+	});
+      } else if (!pin.is_indirect()) {
+	laddr_t original_laddr = pin.get_key();
+	extent_len_t original_len = pin.get_length();
+	paddr_t original_paddr = pin.get_val();
+	SUBDEBUGT(seastore_tm, "{}~0x{:x} {} into {} remaps ... {}",
+	  t, original_laddr, original_len, original_paddr, remaps.size(), pin);
         ceph_assert(!pin.is_clone());
 	fut = fut.si_then([this, &t, &pin]() mutable {
 	  return lba_manager->refresh_lba_mapping(t, std::move(pin));
-	}).si_then([this, &t, &pin](auto newpin) {
+	}).si_then([this, &t, &pin, original_paddr, original_len](auto newpin) {
 	  pin = std::move(newpin);
 	  if (full_extent_integrity_check) {
 	    return read_pin<T>(t, pin.duplicate()
@@ -550,12 +605,12 @@ public:
 	      });
 	    } else {
 	      // absent
+	      cache->retire_absent_extent_addr(t, original_paddr, original_len);
 	      return base_iertr::make_ready_future<TCachedExtentRef<T>>();
 	    }
 	  }
 	}).si_then([this, &t, &remaps, original_paddr,
-			    original_laddr, original_len,
-			    &extents, FNAME](auto ext) mutable {
+		    original_laddr, original_len, FNAME](auto ext) mutable {
 	  ceph_assert(full_extent_integrity_check
 	      ? (ext && ext->is_fully_loaded())
 	      : true);
@@ -570,8 +625,6 @@ public:
 	  if (ext) {
 	    assert(ext->is_seen_by_users());
 	    cache->retire_extent(t, ext);
-	  } else {
-	    cache->retire_absent_extent_addr(t, original_paddr, original_len);
 	  }
 	  for (auto &remap : remaps) {
 	    auto remap_offset = remap.offset;
@@ -589,21 +642,20 @@ public:
 	      t,
 	      remap_laddr,
 	      remap_paddr,
+	      remap_offset,
 	      remap_len,
-	      original_laddr,
 	      original_bptr);
 	    // user must initialize the logical extent themselves.
 	    extent->set_seen_by_users();
-	    extents.emplace_back(std::move(extent));
+	    remap.extent = extent.get();
 	  }
 	});
       }
-      return fut.si_then([this, &t, &pin, &remaps, &extents, FNAME] {
+      return fut.si_then([this, &t, &pin, &remaps, FNAME] {
 	return lba_manager->remap_mappings(
 	  t,
 	  std::move(pin),
-	  std::vector<remap_entry_t>(remaps.begin(), remaps.end()),
-	  std::move(extents)
+	  std::vector<remap_entry_t>(remaps.begin(), remaps.end())
 	).si_then([FNAME, &t](auto ret) {
 	  SUBDEBUGT(seastore_tm, "remapped {} pins", t, ret.size());
 	  return Cache::retire_extent_iertr::make_ready_future<
@@ -636,6 +688,24 @@ public:
     });
   }
 
+  reserve_extent_ret reserve_region(
+    Transaction &t,
+    LBAMapping mapping,
+    laddr_t hint,
+    extent_len_t len) {
+    LOG_PREFIX(TransactionManager::reserve_region);
+    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
+    return lba_manager->reserve_region(
+      t,
+      std::move(mapping),
+      hint,
+      len
+    ).si_then([FNAME, &t](auto pin) {
+      SUBDEBUGT(seastore_tm, "reserved {}", t, pin);
+      return pin;
+    });
+  }
+
   /*
    * clone_mapping
    *
@@ -644,32 +714,91 @@ public:
    * for the definition of "indirect lba mapping" and "direct lba mapping".
    * Note that the cloned extent must be stable
    */
-  using clone_extent_iertr = alloc_extent_iertr;
-  using clone_extent_ret = clone_extent_iertr::future<LBAMapping>;
+  using clone_extent_iertr = LBAManager::clone_mapping_iertr;
+  using clone_extent_ret = LBAManager::clone_mapping_ret;
   clone_extent_ret clone_pin(
     Transaction &t,
+    LBAMapping pos,
+    LBAMapping mapping,
     laddr_t hint,
-    const LBAMapping &mapping) {
-    auto intermediate_key =
-      mapping.is_indirect()
-	? mapping.get_intermediate_key()
-	: mapping.get_key();
-    auto intermediate_base =
-      mapping.is_indirect()
-        ? mapping.get_intermediate_base()
-        : mapping.get_key();
-
+    extent_len_t offset,
+    extent_len_t len,
+    bool updateref) {
     LOG_PREFIX(TransactionManager::clone_pin);
-    SUBDEBUGT(seastore_tm, "{} clone to hint {} ...", t, mapping, hint);
+    SUBDEBUGT(seastore_tm, "{} clone to hint {} ... pos={}, updateref={}",
+      t, mapping, hint, pos, updateref);
     return lba_manager->clone_mapping(
       t,
+      std::move(pos),
+      std::move(mapping),
       hint,
-      mapping.get_length(),
-      intermediate_key,
-      intermediate_base
-    ).si_then([FNAME, &t](auto pin) {
-      SUBDEBUGT(seastore_tm, "cloned as {}", t, pin);
-      return pin;
+      offset,
+      len,
+      updateref
+    ).si_then([FNAME, &t](auto ret) {
+      SUBDEBUGT(seastore_tm, "cloned as {}", t, ret.cloned_mapping);
+      return ret;
+    });
+  }
+
+  using move_mapping_iertr = LBAManager::move_mapping_iertr;
+  using move_mapping_ret = LBAManager::move_mapping_ret;
+  template <typename T>
+  move_mapping_ret move_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest)
+  {
+    LOG_PREFIX(TransactionManager::move_mapping);
+    SUBDEBUGT(seastore_tm, "src={}, dest={}", t, src, dest);
+    assert(src.is_viewable());
+    assert(!src.is_indirect());
+    assert(!src.is_end());
+    assert(dest.is_viewable());
+    auto fut = base_iertr::make_ready_future<TCachedExtentRef<T>>();
+    if (full_extent_integrity_check) {
+      fut = read_pin<T>(t, src.duplicate()
+      ).si_then([](auto maybe_indirect_extent) {
+	assert(!maybe_indirect_extent.is_indirect());
+	assert(!maybe_indirect_extent.is_clone);
+	return maybe_indirect_extent.extent;
+      });
+    } else {
+      auto ret = get_extent_if_linked<T>(t, src.duplicate());
+      if (ret.index() == 1) {
+	fut = std::move(std::get<1>(ret));
+      } else {
+	// absent
+	cache->retire_absent_extent_addr(t, src.get_val(), src.get_length());
+	fut = base_iertr::make_ready_future<TCachedExtentRef<T>>();
+      }
+    }
+    return fut.si_then([&t, src=std::move(src), dest_laddr, this,
+			dest=std::move(dest)](auto ext) mutable {
+      if (full_extent_integrity_check) {
+	assert(ext && ext->is_fully_loaded());
+      }
+      std::optional<ceph::bufferptr> original_bptr;
+      // TODO: preserve the bufferspace if partially loaded
+      if (ext && ext->is_fully_loaded()) {
+	ceph_assert(!ext->is_mutable());
+	original_bptr = ext->get_bptr();
+      }
+      T* extent = nullptr;
+      if (ext) {
+	cache->retire_extent(t, ext);
+      }
+      extent = cache->alloc_remapped_extent<T>(
+	t,
+	dest_laddr,
+	src.get_val(),
+	0,
+	src.get_length(),
+	original_bptr).get();
+      return lba_manager->move_mapping(
+	t, std::move(src), dest_laddr,
+	std::move(dest), *extent);
     });
   }
 
@@ -960,7 +1089,7 @@ private:
   std::variant<unlinked_child_t, get_child_ifut<T>>
   get_extent_if_linked(
     Transaction &t,
-    LBAMapping pin)
+    const LBAMapping pin)
   {
     ceph_assert(pin.is_viewable());
     // checking the lba child must be atomic with creating
@@ -968,7 +1097,7 @@ private:
     auto v = pin.get_logical_extent(t);
     if (v.has_child()) {
       return v.get_child_fut(
-      ).si_then([pin=std::move(pin)](auto extent) {
+      ).si_then([pin=pin.duplicate()](auto extent) {
 #ifndef NDEBUG
         auto lextent = extent->template cast<LogicalChildNode>();
         auto pin_laddr = pin.get_intermediate_base();
@@ -978,14 +1107,14 @@ private:
       });
     } else {
       return unlinked_child_t{
-	std::move(pin),
+	std::move(const_cast<LBAMapping&>(pin)),
 	v.get_child_pos()};
     }
   }
 
   base_iertr::future<LogicalChildNodeRef> read_pin_by_type(
     Transaction &t,
-    LBAMapping pin,
+    const LBAMapping pin,
     extent_types_t type)
   {
     ceph_assert(pin.is_viewable());
@@ -1001,7 +1130,7 @@ private:
         return ext;
       });
     } else {
-      return pin_to_extent_by_type(t, std::move(pin), v.get_child_pos(), type);
+      return pin_to_extent_by_type(t, pin.duplicate(), v.get_child_pos(), type);
     }
   }
 
@@ -1032,7 +1161,7 @@ private:
   template <typename T>
   pin_to_extent_ret<T> pin_to_extent(
     Transaction &t,
-    LBAMapping pin,
+    const LBAMapping pin,
     child_pos_t<LBALeafNode> child_pos,
     extent_len_t direct_partial_off,
     extent_len_t partial_len,
@@ -1067,7 +1196,7 @@ private:
 	maybe_init(extent);
 	extent.set_seen_by_users();
       }
-    ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) mutable -> ret {
+    ).si_then([FNAME, &t, pin=pin.duplicate(), this](auto ref) mutable -> ret {
       if (ref->is_fully_loaded()) {
         auto crc = ref->calc_crc32c();
         SUBTRACET(
@@ -1111,7 +1240,7 @@ private:
     LogicalChildNodeRef>;
   pin_to_extent_by_type_ret pin_to_extent_by_type(
       Transaction &t,
-      LBAMapping pin,
+      const LBAMapping pin,
       child_pos_t<LBALeafNode> child_pos,
       extent_types_t type)
   {
@@ -1138,7 +1267,7 @@ private:
         // No change to extent::seen_by_user because this path is only
         // for background cleaning.
       }
-    ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) {
+    ).si_then([FNAME, &t, pin=pin.duplicate(), this](auto ref) {
       auto crc = ref->calc_crc32c();
       SUBTRACET(
 	seastore_tm,

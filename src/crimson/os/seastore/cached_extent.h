@@ -67,11 +67,16 @@ class read_set_item_t {
   using set_hook_t = boost::intrusive::set_member_hook<
     boost::intrusive::link_mode<
       boost::intrusive::auto_unlink>>;
-  set_hook_t trans_hook;
-  using set_hook_options = boost::intrusive::member_hook<
+  set_hook_t trans_hook; // used to attach transactions to extents
+  set_hook_t extent_hook; // used to attach extents to transactions
+  using trans_hook_options = boost::intrusive::member_hook<
     read_set_item_t,
     set_hook_t,
     &read_set_item_t::trans_hook>;
+  using extent_hook_options = boost::intrusive::member_hook<
+    read_set_item_t,
+    set_hook_t,
+    &read_set_item_t::extent_hook>;
 
 public:
   struct extent_cmp_t {
@@ -101,12 +106,25 @@ public:
 
   using trans_set_t =  boost::intrusive::set<
     read_set_item_t,
-    set_hook_options,
+    trans_hook_options,
     boost::intrusive::constant_time_size<false>,
     boost::intrusive::compare<trans_cmp_t>>;
+  using extent_set_t =  boost::intrusive::set<
+    read_set_item_t,
+    extent_hook_options,
+    boost::intrusive::constant_time_size<false>,
+    boost::intrusive::compare<extent_cmp_t>>;
 
   T *t = nullptr;
   CachedExtentRef ref;
+
+  bool is_extent_attached_to_trans() const {
+    return extent_hook.is_linked();
+  }
+
+  bool is_trans_attached_to_extent() const {
+    return trans_hook.is_linked();
+  }
 
   read_set_item_t(T *t, CachedExtentRef ref);
   read_set_item_t(const read_set_item_t &) = delete;
@@ -115,9 +133,7 @@ public:
 };
 
 template <typename T>
-using read_extent_set_t = std::set<
-  read_set_item_t<T>,
-  typename read_set_item_t<T>::extent_cmp_t>;
+using read_extent_set_t = typename read_set_item_t<T>::extent_set_t;
 
 template <typename T>
 using read_trans_set_t = typename read_set_item_t<T>::trans_set_t;
@@ -549,12 +565,12 @@ public:
   }
 
   bool is_stable_writting() const {
-    // MUTATION_PENDING and under-io extents are already stable and visible,
-    // see prepare_record().
+    // MUTATION_PENDING/INITIAL_WRITE_PENDING and under-io extents are already
+    // stable and visible, see prepare_record().
     //
-    // XXX: It might be good to mark this case as DIRTY from the definition,
+    // XXX: It might be good to mark this case as DIRTY/CLEAN from the definition,
     // which probably can make things simpler.
-    return is_mutation_pending() && is_pending_io();
+    return (is_mutation_pending() || is_initial_pending()) && is_pending_io();
   }
 
   /// Returns true if extent is stable and shared among transactions
