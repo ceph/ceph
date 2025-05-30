@@ -197,11 +197,8 @@ class SSLCerts:
         public_key = private_key.public_key()
 
         builder = x509.CertificateBuilder()
-        root_ca_name = x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, f'cephadm-root-{self.cluster_fsid}'),
-        ])
         builder = builder.subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, addrs[0]), ]))
-        builder = builder.issuer_name(root_ca_name)
+        builder = builder.issuer_name(self.get_root_issuer_name())
         builder = builder.not_valid_before(datetime.now())
         builder = builder.not_valid_after(datetime.now() + timedelta(days=self.certificate_duration_days))
         builder = builder.serial_number(x509.random_serial_number())
@@ -297,6 +294,11 @@ class SSLCerts:
             return self.root_cert.public_bytes(encoding=serialization.Encoding.PEM).decode('utf-8')
         except AttributeError:
             return ''
+
+    def get_root_issuer_name(self) -> x509.Name:
+        if not self.root_cert:
+            raise SSLConfigException("Root certificate not initialized.")
+        return self.root_cert.subject
 
     def get_root_key(self) -> str:
         try:
