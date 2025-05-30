@@ -899,6 +899,10 @@ int Directory::for_each(const DoutPrefixProvider* dpp, const F& func)
     /* Limit reached */
     ret = 0;
   }
+
+  closedir(dir);
+  // closedir() closes the fd, so we need to invalidate it
+  fd = -1;
   return ret;
 }
 
