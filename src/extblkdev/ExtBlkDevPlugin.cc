@@ -220,7 +220,8 @@ namespace ceph {
 
     // scan extblkdev plugins for support of this device
     int detect_device(CephContext *cct,
-		      const std::string &logdevname,
+		      const std::string& logdevname,
+		      const std::string& device,
 		      ExtBlkDevInterfaceRef& ebd_impl)
     {
       int rc = -ENOENT;
@@ -229,7 +230,7 @@ namespace ceph {
       std::lock_guard l(registry->lock);
       auto ptype = registry->plugins.find("extblkdev");
       if (ptype == registry->plugins.end()) {
-	return -ENOENT;
+	return rc;
       }
 
       for (auto& it : ptype->second) {
@@ -241,7 +242,7 @@ namespace ceph {
 	  derr << __func__ << " Is not an extblkdev plugin: " << it.first << dendl;
 	  return -ENOENT;
 	}
-	rc = ebdplugin->factory(logdevname, ebd_impl);
+	rc = ebdplugin->factory(logdevname, device, ebd_impl);
 	if (rc == 0) {
 	  plg_name = it.first;
 	  break;

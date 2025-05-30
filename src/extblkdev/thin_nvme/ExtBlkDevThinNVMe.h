@@ -32,7 +32,7 @@ public:
     if (fd >= 0)
       VOID_TEMP_FAILURE_RETRY(::close(fd));
   }
-  int init(const std::string& logdevname) override;
+  int init(const std::string& logdevname, const std::string& device) override;
   const std::string& get_devname() const override {return name;}
   int get_statfs(store_statfs_t& statfs) override;
   int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) override;

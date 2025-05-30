@@ -20,15 +20,24 @@
 // This plugin does not require any capabilities to be set
 int ExtBlkDevPluginThinNVMe::get_required_cap_set(cap_t caps)
 {
+  cap_value_t arr[1];
+  arr[0] = CAP_SYS_ADMIN;
+  if (cap_set_flag(caps, CAP_PERMITTED, 1, arr, CAP_SET) < 0) {
+    return -errno;
+  }
+  if (cap_set_flag(caps, CAP_EFFECTIVE, 1, arr, CAP_SET) < 0) {
+    return -errno;
+  }
   return 0;
 }
 
 
 int ExtBlkDevPluginThinNVMe::factory(const std::string& logdevname,
+                                const std::string& device,
 				ceph::ExtBlkDevInterfaceRef& ext_blk_dev)
 {
   auto dev = new ExtBlkDevThinNVMe(cct);
-  int r = dev->init(logdevname);
+  int r = dev->init(logdevname, device);
   if (r != 0) {
     delete dev;
     return r;

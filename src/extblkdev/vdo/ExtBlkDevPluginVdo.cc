@@ -32,10 +32,11 @@ int ExtBlkDevPluginVdo::get_required_cap_set(cap_t caps)
 
 
 int ExtBlkDevPluginVdo::factory(const std::string& logdevname,
+                                const std::string& device,
 				ceph::ExtBlkDevInterfaceRef& ext_blk_dev)
 {
   auto vdo = new ExtBlkDevVdo(cct);
-  int r = vdo->init(logdevname);
+  int r = vdo->init(logdevname, device);
   if (r != 0) {
     delete vdo;
     return r;
