@@ -133,10 +133,11 @@ ObjectDataHandler::prepare_shared_region(
 {
   LOG_PREFIX(ObjectDataHandler::prepare_shared_region);
   DEBUGT("{}~{}", ctx.t, hint, len);
-  assert(onode.get_shared_region_base() == L_ADDR_NULL);
+  assert(!onode.get_shared_clone_id());
   return ctx.tm.reserve_region(ctx.t, hint, len
   ).si_then([ctx, &onode](auto shared_region) {
-    onode.update_shared_region_base(ctx.t, shared_region.get_key());
+    onode.update_shared_clone_id(
+      ctx.t, shared_region.get_key().get_local_clone_id());
     return std::move(shared_region);
   }).handle_error_interruptible(
     write_iertr::pass_further{},
@@ -1672,7 +1673,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_range(
     return prepare_data_reservation(
       ctx, d_object_data, object_data.get_reserved_data_len()
     ).si_then([this, ctx, &object_data](auto) {
-      if (ctx.onode.get_shared_region_base() != L_ADDR_NULL) {
+      if (ctx.onode.get_shared_clone_id()) {
 	return write_iertr::make_ready_future<LBAMapping>();
       }
       return prepare_shared_region(
@@ -1680,14 +1681,15 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_range(
 	ctx.onode.get_data_clone_hint(),
 	object_data.get_reserved_data_len());
     }).si_then([ctx, &object_data, &d_object_data, srcoff, len](auto) {
+      auto base = object_data.get_reserved_data_base();
       return seastar::do_with(
 	state_t {
 	  LBAMapping{},
 	  LBAMapping{},
 	  LBAMapping{},
-	  object_data.get_reserved_data_base(),
+	  base,
 	  d_object_data.get_reserved_data_base(),
-	  ctx.onode.get_shared_region_base()},
+	  base.with_local_clone_id(*ctx.onode.get_shared_clone_id())},
 	[ctx, srcoff, len](auto &state) {
 	auto laddr = (state.src_base + srcoff).get_aligned_laddr();
 	return ctx.tm.get_pin(ctx.t, laddr, true

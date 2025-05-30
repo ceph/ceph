@@ -104,6 +104,14 @@ public:
     });
   }
 
+  void update_shared_clone_id(Transaction &t, local_clone_id_t id) final {
+    assert(id != LOCAL_CLONE_ID_NULL);
+    with_mutable_layout(t, [id](onode_layout_t &mlayout) {
+      assert(local_clone_id_t(mlayout.shared_clone_id) != LOCAL_CLONE_ID_NULL);
+      mlayout.shared_clone_id = id;
+    });
+  }
+
   void clear_object_info(Transaction &t) final {
     with_mutable_layout(t, [](onode_layout_t &mlayout) {
       memset(&mlayout.oi[0], 0, mlayout.oi_size);

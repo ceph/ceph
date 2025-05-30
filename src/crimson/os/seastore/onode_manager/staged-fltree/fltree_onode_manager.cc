@@ -50,6 +50,10 @@ void FLTreeOnode::Recorder::apply_value_delta(
       bliter.copy(onode_layout_t::MAX_SS_LENGTH, (char *)&mlayout.ss[0]);
       ceph::decode(mlayout.ss_size, bliter);
       break;
+    case delta_op_t::UPDATE_SHARED_CLONE_ID:
+      DEBUG("update snapset");
+      bliter.copy(sizeof(mlayout.shared_clone_id), (char *)&mlayout.shared_clone_id);
+      break;
     case delta_op_t::CLEAR_OBJECT_INFO:
       DEBUG("clear object info");
       memset(&mlayout.oi[0], 0, mlayout.oi_size);
@@ -123,6 +127,12 @@ void FLTreeOnode::Recorder::encode_update(
       (const char *)&layout.ss[0],
       onode_layout_t::MAX_SS_LENGTH);
     ceph::encode(layout.ss_size, encoded);
+    break;
+  case delta_op_t::UPDATE_SHARED_CLONE_ID:
+    DEBUG("update omap root");
+    encoded.append(
+      (const char *)&layout.shared_clone_id,
+      sizeof(layout.shared_clone_id));
     break;
   case delta_op_t::CREATE_DEFAULT:
     DEBUG("create default layout");
