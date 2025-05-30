@@ -6,9 +6,9 @@
   <div class="row h-100 justify-content-center align-items-center">
     <div class="blank-page">
       <div *ngIf="header && message; else elseBlock">
-        <i [ngClass]="icon"
-           class="mx-auto d-block"></i>
-
+        <svg [cdsIcon]="icon"
+             [size]="icons.size32"
+             class="cds-info-color cds--btn__icon icon-size"></svg>
         <div class="mt-4 text-center">
           <h3><b>{{ header }}</b></h3>
           <h4 class="mt-3"
@@ -47,8 +47,9 @@
 
 
 <ng-template #elseBlock>
-  <i class="fa fa-exclamation-triangle mx-auto d-block text-danger"></i>
-
+  <svg [cdsIcon]="icons.danger"
+       [size]="icons.size32"
+       class="cds--btn__icon cds-danger-color icon-size"></svg>
   <div class="mt-4 text-center">
     <h3 i18n><b>Page not Found</b></h3>
 

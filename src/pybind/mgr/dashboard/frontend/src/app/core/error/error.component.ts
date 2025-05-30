@@ -9,6 +9,7 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { DocService } from '~/app/shared/services/doc.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
 
 @Component({
   selector: 'cd-error',
@@ -35,6 +36,7 @@ export class ErrorComponent implements OnDestroy, OnInit {
   buttonToEnableModule: string;
   navigateTo: string;
   component: string;
+  icons = Icons;
 
   constructor(
     private router: Router,
