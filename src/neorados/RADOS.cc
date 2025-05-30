@@ -867,9 +867,10 @@ void RADOS::make_with_cct_(CephContext* cct,
 			   asio::io_context& ioctx,
 			   BuildComp c) {
   try {
-    auto r = new detail::NeoClient{std::make_unique<detail::RADOS>(ioctx, cct)};
+    auto r = std::make_shared<detail::NeoClient>(
+      std::make_unique<detail::RADOS>(ioctx, cct));
     r->objecter->wait_for_osd_map(
-      [c = std::move(c), r = std::unique_ptr<detail::Client>(r)]() mutable {
+      [c = std::move(c), r = std::move(r)]() mutable {
 	asio::dispatch(asio::append(std::move(c), bs::error_code{},
 				    RADOS{std::move(r)}));
       });
@@ -880,13 +881,16 @@ void RADOS::make_with_cct_(CephContext* cct,
 }
 
 RADOS RADOS::make_with_librados(librados::Rados& rados) {
-  return RADOS{std::make_unique<detail::RadosClient>(rados.client)};
+  return RADOS{std::make_shared<detail::RadosClient>(rados.client)};
 }
 
 RADOS::RADOS() = default;
 
-RADOS::RADOS(std::unique_ptr<detail::Client> impl)
+RADOS::RADOS(std::shared_ptr<detail::Client> impl)
   : impl(std::move(impl)) {}
+
+RADOS::RADOS(const RADOS&) = default;
+RADOS& RADOS::operator =(const RADOS&) = default;
 
 RADOS::RADOS(RADOS&&) = default;
 RADOS& RADOS::operator =(RADOS&&) = default;
