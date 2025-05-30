@@ -11516,17 +11516,17 @@ void Server::handle_client_readdir_snapdiff(MDRequestRef& mdr)
   mdr->set_mds_stamp(now);
 
   mdr->snapid_diff_other = (uint64_t)req->head.args.snapdiff.snap_other;
+  dout(10) << __func__
+    << " snap " << mdr->snapid
+    << " vs. snap " << mdr->snapid_diff_other
+    << dendl;
+
   if (mdr->snapid_diff_other == mdr->snapid ||
       mdr->snapid == CEPH_NOSNAP ||
       mdr->snapid_diff_other == CEPH_NOSNAP) {
     dout(10) << "reply to " << *req << " snapdiff -CEPHFS_EINVAL" << dendl;
     respond_to_request(mdr, -CEPHFS_EINVAL);
   }
-
-  dout(10) << __func__
-    << " snap " << mdr->snapid
-    << " vs. snap " << mdr->snapid_diff_other
-    << dendl;
 
   SnapRealm* realm = diri->find_snaprealm();
 
