@@ -13,6 +13,7 @@
  */
 
 #include "LogEvent.h"
+#include "LogSegment.h"
 #include "common/config.h"
 #include "common/debug.h"
 
@@ -45,6 +46,20 @@
 
 #define dout_context g_ceph_context
 
+
+LogEvent::LogEvent(int t) : _type(t) {}
+
+LogEvent::~LogEvent() {}
+
+LogEvent::LogSegmentRef LogEvent::get_segment()
+{
+  return _segment;
+}
+
+LogEvent::LogSegmentRef const LogEvent::get_segment() const
+{
+  return _segment;
+}
 
 std::unique_ptr<LogEvent> LogEvent::decode_event(bufferlist::const_iterator p)
 {
