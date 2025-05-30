@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { SmbShareFormComponent } from './smb-share-form.component';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -15,10 +15,15 @@ import {
 } from 'carbon-components-angular';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { of } from 'rxjs';
+import { DUE_TIMER } from '~/app/shared/forms/cd-validators';
+import { FormHelper } from '~/testing/unit-test-helper';
 
 describe('SmbShareFormComponent', () => {
   let component: SmbShareFormComponent;
   let fixture: ComponentFixture<SmbShareFormComponent>;
+  let smbService: SmbService;
+  let formHelper: FormHelper;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -41,6 +46,9 @@ describe('SmbShareFormComponent', () => {
 
     fixture = TestBed.createComponent(SmbShareFormComponent);
     component = fixture.componentInstance;
+    component.ngOnInit();
+    smbService = TestBed.inject(SmbService);
+    formHelper = new FormHelper(component.smbShareForm);
     fixture.detectChanges();
   });
 
@@ -92,5 +100,18 @@ describe('SmbShareFormComponent', () => {
     });
     component.submitAction();
     expect(component).toBeTruthy();
+  });
+
+  describe('Share id validation', () => {
+    it('should validate that share_id is required', () => {
+      formHelper.expectErrorChange('share_id', '', 'required', true);
+    });
+
+    it('should validate that share_id is invalid', fakeAsync(() => {
+      spyOn(smbService, 'getShare').and.returnValue(of('foo'));
+      formHelper.setValue('share_id', 'foo', true);
+      tick(DUE_TIMER);
+      formHelper.expectError('share_id', 'notUnique');
+    }));
   });
 });

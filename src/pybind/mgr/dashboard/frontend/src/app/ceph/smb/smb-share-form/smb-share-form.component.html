@@ -36,6 +36,12 @@
             i18n
             >This field is required.</span
           >
+          <span
+            class="invalid-feedback"
+            *ngIf="smbShareForm.showError('share_id', formDir, 'notUnique')"
+            i18n
+          >The chosen share name is already in use.
+          </span>
         </ng-template>
       </div>
 
