@@ -948,6 +948,7 @@ private:
   WritePipeline write_pipeline;
 
   bool full_extent_integrity_check = true;
+  bool stop_clean_lba = false;
 
   shard_stats_t& shard_stats;
 
@@ -1197,6 +1198,9 @@ public:
   auto get_journal() {
     return journal.get();
   }
+  void do_stop_clean_lba();
+  seastar::future<> clean_lba();
+  std::optional<seastar::future<>> clean_lba_fut;
 };
 using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 

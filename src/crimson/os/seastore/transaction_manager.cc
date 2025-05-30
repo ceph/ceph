@@ -174,6 +174,7 @@ TransactionManager::mount()
     return epm->open_for_write();
   }).safe_then([FNAME, this] {
     epm->start_background();
+    clean_lba_fut = clean_lba();
     INFO("done");
   }).handle_error(
     mount_ertr::pass_further{},
@@ -185,8 +186,10 @@ TransactionManager::close_ertr::future<>
 TransactionManager::close() {
   LOG_PREFIX(TransactionManager::close);
   INFO("...");
-  return epm->stop_background(
-  ).then([this] {
+  do_stop_clean_lba();
+  return std::move(clean_lba_fut).value_or(seastar::now()).then([this] {
+    return epm->stop_background();
+  }).then([this] {
     return cache->close();
   }).safe_then([this] {
     cache->dump_contents();
@@ -944,4 +947,55 @@ TransactionManagerRef make_transaction_manager(
     shard_stats);
 }
 
+void TransactionManager::do_stop_clean_lba() {
+  using crimson::os::seastore::lba::BtreeLBAManager;
+  stop_clean_lba = true;
+  if (auto& activator = lba_manager->get_trim_activator()) {
+    activator->set_value();
+    activator = std::nullopt;
+  }
+}
+
+seastar::future<> TransactionManager::clean_lba() {
+  using lba_iertr = crimson::os::seastore::LBAManager::get_mappings_iertr;
+  lba_manager->get_trim_activator() = seastar::promise<>();
+  return seastar::repeat([this] {
+    if (stop_clean_lba) {
+      return seastar::make_ready_future<seastar::stop_iteration>(
+          seastar::stop_iteration::yes);
+    }
+    auto wait_task = seastar::now();
+    if (auto &activator = lba_manager->get_trim_activator()) {
+      wait_task = activator->get_future();
+    } else {
+      return seastar::make_ready_future<seastar::stop_iteration>(
+          seastar::stop_iteration::yes);
+    }
+    return std::move(wait_task).then([this]() -> seastar::future<> {
+      if (!stop_clean_lba) {
+        lba_manager->get_trim_activator() = seastar::promise<>();
+      }
+      std::list<LBAManager::trim_action_t> todo;
+      todo.swap(lba_manager->get_trim_actions());
+      return with_transaction_intr(
+        Transaction::src_t::MUTATE, "lba_clean", CACHE_HINT_TOUCH,
+        [this, todo = std::move(todo)](Transaction &t) mutable {
+          return seastar::do_with(std::move(todo), [this,&t](auto& todo) {
+          auto steps =  trans_intr::do_for_each(todo, [this, &t](auto& arg) {
+                                return lba_iertr::make_ready_future<Transaction &>(t) .si_then([this, &arg] (Transaction& t) {
+                                    return lba_manager->try_trim_indirect_pin(t, arg);
+                                 });
+                        });
+          return std::move(steps).si_then([this, &t] {
+                  return submit_transaction(t);
+              });
+          });
+        }).handle_error(crimson::ct_error::all_same_way(
+          [](auto e) {return seastar::now();}));
+    }).then([] {
+      return seastar::make_ready_future<seastar::stop_iteration>(
+          seastar::stop_iteration::no);
+    });
+  });
+}
 }
