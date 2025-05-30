@@ -8563,27 +8563,47 @@ void PrimaryLogPG::_do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
   t->clone(soid, rollback_to_sobject);
   t->add_obc(rollback_to);
 
-  map<snapid_t, interval_set<uint64_t> >::iterator iter =
+  map<snapid_t, interval_set<uint64_t> >::iterator rollback_target_iter =
     snapset.clone_overlap.lower_bound(snapid);
-  ceph_assert(iter != snapset.clone_overlap.end());
-  interval_set<uint64_t> overlaps = iter->second;
-  for ( ;
-	iter != snapset.clone_overlap.end();
-	++iter)
-    overlaps.intersection_of(iter->second);
+  ceph_assert(rollback_target_iter != snapset.clone_overlap.end());
 
-  if (obs.oi.size > 0) {
+  // Let's reuse what we already have, bring forward the overlaps
+  // between the rollback target to the newest clone we have
+  auto last_clone_overlap_iter = --snapset.clone_overlap.end();
+
+  // Forget last_clone overlap with head as we are about to overwrite it
+  // Calculate the new last clone overlap with the rollback taret and
+  // adjust it directly.
+  {
+    interval_set<uint64_t> new_last_clone_overlap;
+    new_last_clone_overlap.insert(0, rollback_to->obs.oi.size);
+    for (auto iter = rollback_target_iter;
+         iter != last_clone_overlap_iter;
+         ++iter) {
+      new_last_clone_overlap.intersection_of(iter->second);
+    }
+
+    // before overwriting the current head, omit its actual size
+    ctx->delta_stats.num_bytes -=
+      (obs.oi.size - last_clone_overlap_iter->second.size());
+
+    last_clone_overlap_iter->second = new_last_clone_overlap;
+  }
+
+  // Calculate what is modified (not used by the last clone overlap)
+  // between the rollback target and the last clone overlap
+  if (rollback_to->obs.oi.size > 0) {
     interval_set<uint64_t> modified;
-    modified.insert(0, obs.oi.size);
-    overlaps.intersection_of(modified);
-    modified.subtract(overlaps);
+    modified.insert(0, rollback_to->obs.oi.size);
+    modified.subtract(last_clone_overlap_iter->second);
     ctx->modified_ranges.union_of(modified);
   }
 
   // Adjust the cached objectcontext
   maybe_create_new_object(ctx, true);
-  ctx->delta_stats.num_bytes -= obs.oi.size;
-  ctx->delta_stats.num_bytes += rollback_to->obs.oi.size;
+  // add the actual size of the new head (after rollbacking)
+  ctx->delta_stats.num_bytes +=
+    (rollback_to->obs.oi.size - last_clone_overlap_iter->second.size());
   ctx->clean_regions.mark_data_region_dirty(0, std::max(obs.oi.size, rollback_to->obs.oi.size));
   ctx->clean_regions.mark_omap_dirty();
   obs.oi.size = rollback_to->obs.oi.size;
