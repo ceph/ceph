@@ -11,7 +11,7 @@ depsToolsetDir="$DEPS_DIR/mingw"
 lz4SrcDir="${depsSrcDir}/lz4"
 lz4Dir="${depsToolsetDir}/lz4"
 lz4Tag="v1.9.2"
-sslTag="OpenSSL_1_1_1c"
+sslTag="openssl-3.0.16"
 sslDir="${depsToolsetDir}/openssl"
 sslSrcDir="${depsSrcDir}/openssl"
 
