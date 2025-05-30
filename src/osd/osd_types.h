@@ -5672,34 +5672,122 @@ inline std::ostream& operator<<(std::ostream& out, const ObjectExtent &ex)
 
 // ---------------------------------------
 
-class OSDSuperblock {
-public:
-  uuid_d cluster_fsid, osd_fsid;
-  int32_t whoami = -1;    // my role in this fs.
-  epoch_t current_epoch = 0;             // most recent epoch
-  interval_set<epoch_t> maps; // oldest/newest maps we have.
+class MapContainer {
+private:
+  mutable ceph::mutex map_lock = ceph::make_mutex("map_lock");
+  interval_set<epoch_t> maps;
 
-  epoch_t get_oldest_map() const {
-    if (!maps.empty()) {
-      return maps.range_start();
-    }
-    return 0;
-  }
-
-  epoch_t get_newest_map() const {
+  epoch_t _get_newest_map() const {
     if (!maps.empty()) {
       // maps stores [oldest_map, newest_map) (exclusive)
       return maps.range_end() - 1;
     }
     return 0;
   }
+  epoch_t _get_oldest_map() const {
+    if (!maps.empty()) {
+      return maps.range_start();
+    }
+    return 0;
+  }
+public:
+  MapContainer() = default;
+  MapContainer(const MapContainer& other)
+    : map_lock(ceph::make_mutex("map_lock"))
+  {
+    std::lock_guard l(other.map_lock);  // Lock before copying shared state
+    maps = other.maps;
+  }
+  MapContainer& operator=(const MapContainer& other) {
+    if (this != &other) {
+      std::lock_guard l1(map_lock);
+      std::lock_guard l2(other.map_lock);
+      maps = other.maps;
+    }
+    return *this;
+  }
+
+  bool is_maps_empty() const {
+    std::lock_guard lock(map_lock);
+    return maps.empty();
+  }
+
+  void erase_oldest_maps() {
+    std::lock_guard lock(map_lock);
+    maps.erase(_get_oldest_map());
+  }
+
+  interval_set<epoch_t>::size_type get_maps_num_intervals() const {
+    std::lock_guard lock(map_lock);
+    return maps.num_intervals();
+  }
+
+  interval_set<epoch_t> get_maps() const {
+    std::lock_guard lock(map_lock);
+    return maps;
+  }
+
+  epoch_t get_oldest_map() const {
+    std::lock_guard lock(map_lock);
+    return _get_oldest_map();
+  }
+
+  epoch_t get_newest_map() const {
+    std::lock_guard lock(map_lock);
+    return _get_newest_map();
+  }
 
   void insert_osdmap_epochs(epoch_t first, epoch_t last) {
     ceph_assert(std::cmp_less_equal(first, last));
     interval_set<epoch_t> message_epochs;
     message_epochs.insert(first, last - first + 1);
+    std::lock_guard lock(map_lock);
     maps.union_of(message_epochs);
-    ceph_assert(last == get_newest_map());
+    ceph_assert(last == _get_newest_map());
+  }
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
+
+};
+WRITE_CLASS_ENCODER(MapContainer)
+
+// ---------------------------------------
+
+class OSDSuperblock {
+private:
+  MapContainer mapc;
+public:
+  uuid_d cluster_fsid, osd_fsid;
+  int32_t whoami = -1;    // my role in this fs.
+  epoch_t current_epoch = 0;             // most recent epoch
+
+  bool is_maps_empty() const {
+    return mapc.is_maps_empty();
+  }
+
+  void erase_oldest_maps() {
+    mapc.erase_oldest_maps();
+  }
+
+  interval_set<epoch_t>::size_type get_maps_num_intervals() const {
+    return mapc.get_maps_num_intervals();
+  }
+
+  interval_set<epoch_t> get_maps() const {
+    return mapc.get_maps();
+  }
+
+  epoch_t get_oldest_map() const {
+    return mapc.get_oldest_map();
+  }
+
+  epoch_t get_newest_map() const {
+    return mapc.get_newest_map();
+  }
+
+  void insert_osdmap_epochs(epoch_t first, epoch_t last) {
+    mapc.insert_osdmap_epochs(first, last);
   }
 
   double weight = 0.0;
@@ -5728,7 +5816,7 @@ inline std::ostream& operator<<(std::ostream& out, const OSDSuperblock& sb)
              << " osd." << sb.whoami
 	     << " " << sb.osd_fsid
              << " e" << sb.current_epoch
-             << " maps " << sb.maps
+             << " maps " << sb.get_maps()
 	     << " lci=[" << sb.mounted << "," << sb.clean_thru << "]"
              << " tlb=" << sb.cluster_osdmap_trim_lower_bound
              << ")";
