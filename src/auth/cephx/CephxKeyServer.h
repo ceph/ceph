@@ -82,6 +82,7 @@ struct KeyServerData {
   bool get_caps(CephContext *cct, const EntityName& name,
 		const std::string& type, AuthCapsInfo& caps) const;
 
+  auto const& get_secrets() const { return secrets; }
   std::map<EntityName, EntityAuth>::iterator secrets_begin()
   { return secrets.begin(); }
   std::map<EntityName, EntityAuth>::const_iterator secrets_begin() const 
