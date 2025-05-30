@@ -91,6 +91,7 @@ admin_token_retry:
   ret = validate.process(dpp, y);
 
   /* NULL terminate for debug output. */
+ldpp_dout(dpp, 0) << "JFW: keystone: adding NULL character" << dendl; // JFW: why does the comment say for debug outpuut, but there is none for... ages?
   token_body_bl.append(static_cast<char>(0));
 
   /* Detect Keystone rejection earlier than during the token parsing.
@@ -552,7 +553,7 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
   /* now parse response */
 
   JSONParser parser;
-  if (! parser.parse(token_body_bl.c_str(), token_body_bl.length())) {
+  if (! parser.parse(token_body_bl)) {
     ldpp_dout(dpp, 0) << "Keystone credential parse error: malformed json" << dendl;
     return make_pair(boost::none, -EINVAL);
   }

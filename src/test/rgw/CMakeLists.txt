@@ -405,4 +405,21 @@ if(WITH_CATCH2)
 
  add_ceph_unittest(unittest_rgw_hex)
 
+ add_executable(unittest_rgw_rgwperiod
+   test_rgw_rgwperiod.cc)
+
+ target_include_directories(unittest_rgw_rgwperiod
+   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+
+ target_link_libraries(unittest_rgw_rgwperiod 
+  rgw_common
+  librados
+  ceph-common
+  ${rgw_libs}
+  ${EXTRALIBS}
+  Catch2WithMain)
+
+ add_ceph_unittest(unittest_rgw_rgwperiod)
+
+
 endif(WITH_CATCH2)
