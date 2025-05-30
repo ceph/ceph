@@ -475,15 +475,13 @@ void AuthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // health
   auto& next = get_health_checks_pending_writeable();
   map<string,list<string>> bad_detail;  // entity -> details
-  for (auto i = mon.key_server.secrets_begin();
-       i != mon.key_server.secrets_end();
-       ++i) {
-    for (auto& p : i->second.caps) {
+  for (auto const& [entity, auth] : mon.key_server.get_secrets()) {
+    for (auto& p : auth.caps) {
       ostringstream ss;
       if (!valid_caps(p.first, p.second, &ss)) {
 	ostringstream ss2;
-	ss2 << i->first << " " << ss.str();
-	bad_detail[i->first.to_str()].push_back(ss2.str());
+	ss2 << entity << " " << ss.str();
+	bad_detail[entity.to_str()].push_back(ss2.str());
       }
     }
   }
