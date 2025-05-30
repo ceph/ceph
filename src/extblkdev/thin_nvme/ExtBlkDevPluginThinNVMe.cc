@@ -25,10 +25,11 @@ int ExtBlkDevPluginThinNVMe::get_required_cap_set(cap_t caps)
 
 
 int ExtBlkDevPluginThinNVMe::factory(const std::string& logdevname,
+                                const std::set<std::string>& devices,
 				ceph::ExtBlkDevInterfaceRef& ext_blk_dev)
 {
   auto dev = new ExtBlkDevThinNVMe(cct);
-  int r = dev->init(logdevname);
+  int r = dev->init(logdevname, devices);
   if (r != 0) {
     delete dev;
     return r;

@@ -32,6 +32,7 @@
 
 #include <string>
 #include <map>
+#include <set>
 #include <ostream>
 #include <memory>
 #ifdef __linux__
@@ -55,9 +56,11 @@ namespace ceph {
      * Return 0 on success or a negative errno on error
      *
      * @param [in] logdevname name of device to check for support by this plugin
+     * @param [in] devices names of physical devices to check for support by this plugin
      * @return 0 on success or a negative errno on error.
      */
-    virtual int init(const std::string& logdevname) = 0;
+    virtual int init(const std::string& logdevname,
+                     const std::set<std::string>& devices) = 0;
 
     /**
      * Return the name of the underlying device detected by **init** method
@@ -115,10 +118,12 @@ namespace ceph {
      * Factory method, creating ExtBlkDev instances
      *
      * @param [in] logdevname name of logic device, may be composed of physical devices
+     * @param [in] devices list of physical device names
      * @param [out] ext_blk_dev object created on successful device support detection
      * @return 0 on success or a negative errno on error.
      */
     virtual int factory(const std::string& logdevname,
+                        const std::set<std::string>& devices,
                         ExtBlkDevInterfaceRef& ext_blk_dev) = 0;
   };
 
