@@ -4,7 +4,6 @@ import logging
 import mgr_util
 import inspect
 import functools
-from time import sleep
 from os.path import join
 from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple
 from urllib.parse import urlsplit, urlunsplit
@@ -34,7 +33,7 @@ from .async_cloner import Cloner
 from .purge_queue import ThreadPoolPurgeQueueMixin
 from .operations.template import SubvolumeOpType
 from .stats_util import get_clone_stats, CloneProgressBar, PurgeProgressBar, \
-    get_num_ratio_str, get_size_ratio_str
+    get_trash_stats_for_all_vols, get_num_ratio_str, get_size_ratio_str
 
 if TYPE_CHECKING:
     from volumes import Module
@@ -79,7 +78,8 @@ class VolumeClient(CephfsClient["Module"]):
         #
         # following is how this dictionary will look -
         # {'volname': {'total_files': x, 'total_subvols': y}}
-        self.pre_rm_subvol_stats = {}
+        self.baseline_purge_stats = {}
+        self._init_baseline_purge_stats()
         self.prev_purge_status = {}
 
         # on startup, queue purge job for available volumes to kickstart
@@ -371,8 +371,6 @@ class VolumeClient(CephfsClient["Module"]):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    self._set_pre_rm_subvol_stats(fs_handle, volname, group,
-                                                     subvolname)
                     remove_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, force, retainsnaps)
                     # kick the purge threads for async removal -- note that this
                     # assumes that the subvolume is moved to trash can.
@@ -380,6 +378,7 @@ class VolumeClient(CephfsClient["Module"]):
                     # the purge threads on dump.
                     self.purge_queue.queue_job(volname)
                     self.purge_progress_bar.initiate()
+                    self._init_baseline_purge_stats()
         except VolumeException as ve:
             if ve.errno == -errno.EAGAIN and not force:
                 ve = VolumeException(ve.errno, ve.error_str + " (use --force to override)")
@@ -1160,11 +1159,21 @@ class VolumeClient(CephfsClient["Module"]):
             'total_files': files_left,
             'total_size': size_left}
 
-    def _get_pre_rm_subvol_stats(self, volname):
-        total_subvols = self.pre_rm_subvol_stats[volname]['total_subvols']
-        total_files = self.pre_rm_subvol_stats[volname]['total_files']
-        total_size = self.pre_rm_subvol_stats[volname]['total_size']
+    def _get_baseline_purge_stats(self, volname):
+        total_subvols = self.baseline_purge_stats[volname]['total_subvols']
+        total_files = self.baseline_purge_stats[volname]['total_files']
+        total_size = self.baseline_purge_stats[volname]['total_size']
         return total_subvols, total_files, total_size
+
+    def _init_baseline_purge_stats(self):
+        try:
+            self.baseline_purge_stats = \
+                get_trash_stats_for_all_vols(self, return_dict=True)
+        except VolumeException as ve:
+            if ve.errno == -errno.ENOENT:
+                pass
+            else:
+                raise
 
     def _create_purge_status_report(self, volname):
         '''
@@ -1173,22 +1182,7 @@ class VolumeClient(CephfsClient["Module"]):
         of data purged.
         '''
         subvols_left, files_left, size_left = get_trashcan_stats(self, volname)
-
-        try:
-            total_subvols, total_files, total_size = self._get_pre_rm_subvol_stats(volname)
-        # If volumes plugin or MGR is restarted, all stats stored in
-        # self.pre_rm_subvol_stats will be lost leading to KeyError.
-        # In such a case, repopulate self.pre_rm_subvol_stats with latest
-        # stats, sleep for a second and then re-fetch latest stats. Now, stats
-        # in self.pre_rm_subvol_stats as well as latest stats are present
-        # and therefore we can proceed as usual.
-        except KeyError:
-            self._update_pre_rm_subvol_stats(volname, subvols_left, files_left,
-                                             size_left)
-            sleep(1)
-            subvols_left, files_left, size_left = get_trashcan_stats(self,
-                                                                    volname)
-            total_subvols, total_files, total_size = self._get_pre_rm_subvol_stats(volname)
+        total_subvols, total_files, total_size = self._get_baseline_purge_stats(volname)
 
         # trashcan is empty, reset related DSs and return status as complete.
         if subvols_left == files_left == size_left == 0:

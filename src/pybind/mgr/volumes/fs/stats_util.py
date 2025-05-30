@@ -430,6 +430,39 @@ class CloneProgressBar(VolumesProgressBar):
 # statistics for the progress made by asynchronous purge threads
 
 
+def get_trash_stats_for_all_vols(volclient, return_dict=False):
+    if return_dict:
+        purge_stats = {}
+    else:
+        total_subvol_count = 0
+        total_file_count = 0
+
+    volnames = list_volumes(volclient.mgr)
+    for volname in volnames:
+        subvols, files, size = get_trashcan_stats(volclient, volname)
+
+        if return_dict:
+            purge_stats[volname]: {
+                'total_subvols': subvols,
+                'total_files': files,
+                'total_size': size
+            }
+        else:
+            log.debug(f'In trash directory of volume "{volname}", '
+                      f'{subvol_count} subvolumes containing {file_count} '
+                       'files were found')
+            total_subvol_count += subvols
+            total_file_count += files
+
+    if return_dict:
+        return purge_stats
+    else:
+        log.debug(f'In trash directory of {len(volnames)} volumes, '
+                  f'{total_subvol_count} subvolumes containing total '
+                  f'{total_file_count} files were found')
+        return total_subvol_count, total_file_count
+
+
 class PurgeProgressBar(VolumesProgressBar):
     '''
     Report progress made by asynchronous purge threads.
@@ -463,36 +496,17 @@ class PurgeProgressBar(VolumesProgressBar):
         self.init_file_count = 0
 
         self.init_subvol_count, self.init_file_count = \
-            self._get_trash_stats_for_all_vols()
+            get_trash_stats_for_all_vols(self.volclient)
         log.debug('fetching rstats for trash dir for the first time, setting '
                   f'initial stats: {self.init_subvol_count} subvols containing '
                   f'{self.init_file_count} files')
-
-    def _get_trash_stats_for_all_vols(self):
-        total_subvol_count = 0
-        total_file_count = 0
-
-        volnames = list_volumes(self.volclient.mgr)
-        for volname in volnames:
-            subvol_count, file_count, _ = get_trashcan_stats(self.volclient,
-                                                             volname)
-            log.debug(f'In trash directory of volume "{volname}", '
-                      f'{subvol_count} subvolumes containing {file_count} '
-                       'files were found')
-            total_subvol_count += subvol_count
-            total_file_count += file_count
-
-        log.debug(f'In trash directory of {len(volnames)} volumes, '
-                  f'{total_subvol_count} subvolumes containing total '
-                  f'{total_file_count} files were found')
-        return total_subvol_count, total_file_count
 
     def _update_progress_bars(self):
         if self.volclient.purge_queue.disable_purge_progress_bars:
             return
 
         latest_subvol_count, latest_file_count = \
-            self._get_trash_stats_for_all_vols()
+            get_trash_stats_for_all_vols(self.volclient)
 
         if latest_file_count == 0:
             self.finish()
