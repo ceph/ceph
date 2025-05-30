@@ -233,8 +233,8 @@ if [[ -z $SKIP_DLL_COPY ]]; then
     required_dlls=(
         $zlibDir/zlib1.dll
         $lz4Dir/lib/dll/liblz4-1.dll
-        $sslDir/bin/libcrypto-1_1-x64.dll
-        $sslDir/bin/libssl-1_1-x64.dll
+        $sslDir/bin/libcrypto-3-x64.dll
+        $sslDir/bin/libssl-3-x64.dll
         $mingwLibpthreadDir/libwinpthread-1.dll)
     if [[ $ENABLE_SHARED == "ON" ]]; then
         required_dlls+=(
