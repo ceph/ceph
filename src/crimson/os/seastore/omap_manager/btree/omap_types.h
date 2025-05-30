@@ -46,23 +46,23 @@ struct omap_node_meta_le_t {
 struct omap_inner_key_t {
   uint16_t key_off = 0;
   uint16_t key_len = 0;
-  laddr_t laddr = L_ADDR_MIN;
+  laddr_block_offset_t block_offset = 0;
 
   omap_inner_key_t() = default;
-  omap_inner_key_t(uint16_t off, uint16_t len, laddr_t addr)
-  : key_off(off), key_len(len), laddr(addr) {}
+  omap_inner_key_t(uint16_t off, uint16_t len, laddr_block_offset_t offset)
+  : key_off(off), key_len(len), block_offset(offset) {}
 
   inline bool operator==(const omap_inner_key_t b) const {
-    return key_off == b.key_off && key_len == b.key_len && laddr == b.laddr;
+    return key_off == b.key_off && key_len == b.key_len && block_offset == b.block_offset;
   }
   inline bool operator!=(const omap_inner_key_t b) const {
-    return key_off != b.key_off || key_len != b.key_len || laddr != b.laddr;
+    return key_off != b.key_off || key_len != b.key_len || block_offset != b.block_offset;
   }
   DENC(omap_inner_key_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.key_off, p);
     denc(v.key_len, p);
-    denc(v.laddr, p);
+    denc(v.block_offset, p);
     DENC_FINISH(p);
   }
 };
@@ -70,28 +70,28 @@ struct omap_inner_key_t {
 struct omap_inner_key_le_t {
   ceph_le16 key_off{0};
   ceph_le16 key_len{0};
-  laddr_le_t laddr{L_ADDR_MIN};
+  laddr_block_offset_le_t block_offset{0};
 
   omap_inner_key_le_t() = default;
   omap_inner_key_le_t(const omap_inner_key_le_t &) = default;
   explicit omap_inner_key_le_t(const omap_inner_key_t &key)
     : key_off(key.key_off),
       key_len(key.key_len),
-      laddr(key.laddr) {}
+      block_offset(key.block_offset) {}
 
   operator omap_inner_key_t() const {
-    return omap_inner_key_t{uint16_t(key_off), uint16_t(key_len), laddr_t(laddr)};
+    return omap_inner_key_t{uint16_t(key_off), uint16_t(key_len), laddr_block_offset_t(block_offset)};
   }
 
   omap_inner_key_le_t& operator=(omap_inner_key_t key) {
     key_off = key.key_off;
     key_len = key.key_len;
-    laddr = laddr_le_t(key.laddr);
+    block_offset = laddr_block_offset_le_t(key.block_offset);
     return *this;
   }
 
   inline bool operator==(const omap_inner_key_le_t b) const {
-    return key_off == b.key_off && key_len == b.key_len && laddr == b.laddr;
+    return key_off == b.key_off && key_len == b.key_len && block_offset == b.block_offset;
   }
 };
 
