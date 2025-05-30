@@ -1032,3 +1032,63 @@ TEST(ECUtil, slice)
     ASSERT_EQ(slice_map, sem);
   }
 }
+
+TEST(ECUtil, get_zeros_extent_set) {
+  int k=2;
+  int m=2;
+  int chunk_size = 4096;
+  stripe_info_t sinfo(k, m, k*chunk_size);
+  shard_id_t s0(0);
+  shard_id_t s1(1);
+  shard_id_t s2(2);
+  shard_id_t s3(3);
+
+  buffer::list bl4k_zero;
+  buffer::list bl8k_zero;
+
+  buffer::list bl4k_one;
+  buffer::list bl4k_one_end;
+  buffer::list bl8k_one_at_4k;
+
+  bl4k_zero.append_zero(4096);
+  bl8k_zero.append_zero(4096 * 2);
+
+  bl4k_one.append_zero(4096);
+  bl4k_one_end.append_zero(4096);
+  bl8k_one_at_4k.append_zero(4096 * 2);
+
+  bl4k_one.c_str()[0] = 1;
+  bl4k_one_end.c_str()[4096 - 1] = 1;
+  bl8k_one_at_4k.c_str()[4096] = 1;
+
+  {
+    shard_extent_map_t sem(&sinfo);
+    shard_extent_set_t ref(sinfo.get_k_plus_m());
+    // Test zero at start
+    sem.insert_in_shard(s0, 0, bl4k_zero);
+    ref[s0].insert(0, 4096);
+
+    // Followed by a non-zero buffer, then a zero one.
+    sem.insert_in_shard(s0, 4096, bl4k_one);
+    sem.insert_in_shard(s0, 4096 * 2, bl4k_zero);
+    ref[s0].insert(4096 * 2, 4096);
+
+    // THen after a gap..
+    sem.insert_in_shard(s0, 4096*10, bl4k_zero);
+    ref[s0].insert(4096 * 10, 4096);
+
+    // Shard 1 has an 8k buffer and nothing else.
+    sem.insert_in_shard(s1, 0, bl8k_zero);
+    ref[s1].insert(0, 4096 * 2);
+
+    // Shard 2 has an 8k buffer but with a 1 part way through.
+    sem.insert_in_shard(s2, 0, bl8k_one_at_4k);
+    ref[s2].insert(0, 4096);
+
+    // Shard 3 as a 4k with a one at the end.
+    sem.insert_in_shard(s3, 0, bl4k_one_end);
+
+    ASSERT_EQ(ref, sem.get_zeros_extent_set());
+  }
+
+}
