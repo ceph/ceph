@@ -30,24 +30,38 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "ThinNVMe(" << this << ") "
 
-int ExtBlkDevThinNVMe::init(const std::string& alogdevname)
+int ExtBlkDevThinNVMe::init(const std::string& alogdevname,
+                            const std::string& device)
 {
-  dout(3) << __func__ << " devname:" << alogdevname << dendl;
+  int r;
+  dout(3) << __func__
+          << " devname:" << alogdevname
+          << " device:" << device
+          << dendl;
+  if (device.empty()) {
+    dout(5) << __func__ << " empty physical device name, skipping."
+            << dendl;
+    r = -EINVAL;
+    return r;
+  }
   logdevname = alogdevname;
   int _dev = -1;
   int _ns = -1;
   int n = -1;
-  int r = sscanf(alogdevname.c_str(), "nvme%dn%d%n", &_dev, &_ns, &n);
-  if (r == 2 && n == int(alogdevname.length())) {
-    // FIXME: make additional checking for vendor/model or something
+  r = sscanf(device.c_str(), "nvme%dn%d%n", &_dev, &_ns, &n);
+  if (r == 2 && n == int(device.length())) {
     ceph_assert(_dev >= 0);
     ceph_assert(_ns >= 0);
     std::string dev_name("/dev/nvme");
     dev_name += stringify(_dev);
+    dev_name += 'n';
+    dev_name += stringify(_ns);
     int _fd = open(dev_name.c_str(), O_RDONLY);
     if (_fd < 0) {
       r = -errno;
-      derr << __func__ << " failed to open " << dev_name.c_str() << ": " << cpp_strerror(-r) << dendl;
+      derr << __func__
+           << " failed to open " << dev_name.c_str() << ": " << cpp_strerror(-r)
+           << dendl;
       return r;
     }
 
@@ -76,7 +90,6 @@ int ExtBlkDevThinNVMe::get_statfs(store_statfs_t& buf)
   cmd.data_len = sizeof(ns_data);
   cmd.cdw10 = 0; // CNS value for Identify Namespace (0x00)
 
-
   int r = ioctl(fd, NVME_IOCTL_ADMIN_CMD, &cmd);
   if (r < 0) {
     r = -errno;
@@ -104,5 +117,10 @@ int ExtBlkDevThinNVMe::get_statfs(store_statfs_t& buf)
 int ExtBlkDevThinNVMe::collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm)
 {
   (*pm)[prefix + "thin_nvme"] = "1";
+  std::string id = "nvme";
+  id += stringify(dev);
+  id += 'n';
+  id += stringify(ns);
+  (*pm)[prefix + "thin_nvme_id"] = id;
   return 0;
 }

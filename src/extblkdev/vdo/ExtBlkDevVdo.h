@@ -43,7 +43,7 @@ public:
   int _get_vdo_stats_handle(const std::string& devname);
   int get_vdo_stats_handle();
   int64_t get_vdo_stat(const char *property);
-  virtual int init(const std::string& logdevname);
+  virtual int init(const std::string& logdevname, const std::string& device);
   virtual const std::string& get_devname() const {return name;}
   virtual int get_statfs(store_statfs_t& statfs);
   virtual int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm);

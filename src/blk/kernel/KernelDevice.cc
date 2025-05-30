@@ -281,23 +281,36 @@ int KernelDevice::open(const string& p)
       size = st.st_size;
     }
 
-    char partition[PATH_MAX], devname[PATH_MAX];
+    char partition[PATH_MAX], _devname[PATH_MAX];
     if ((r = blkdev_buffered.partition(partition, PATH_MAX)) ||
-	(r = blkdev_buffered.wholedisk(devname, PATH_MAX))) {
+	(r = blkdev_buffered.wholedisk(_devname, PATH_MAX))) {
       derr << "unable to get device name for " << path << ": "
 	<< cpp_strerror(r) << dendl;
       rotational = true;
     } else {
-      dout(20) << __func__ << " devname " << devname << dendl;
+      std::set<std::string> devices;
+      this->devname = _devname;
+      dout(10) << __func__ << " devname: " << _devname << dendl;
+      get_devices(&devices);
       rotational = blkdev_buffered.is_rotational();
       support_discard = blkdev_buffered.support_discard();
       optimal_io_size = blkdev_buffered.get_optimal_io_size();
-      this->devname = devname;
-      // check if any extended block device plugin recognizes this device
-      // detect_vdo has moved into the VDO plugin
-      int rc = extblkdev::detect_device(cct, devname, ebd_impl);
-      if (rc != 0) {
-	dout(20) << __func__ << " no plugin volume maps to " << devname << dendl;
+      dout(10) << __func__
+               << " devices: " << devices
+               << " rotational: " << rotational
+               << " support_discard: " << support_discard
+               << " optimal_io_size: " << optimal_io_size
+               << dendl;
+      if (devices.size() == 1) {
+        // check if any extended block device plugin recognizes this device
+        // detect_vdo has moved into the VDO plugin
+        int rc = extblkdev::detect_device(cct, _devname, *(devices.begin()), ebd_impl);
+        if (rc != 0) {
+	  dout(0) << __func__ << " no plugin volume maps to " << _devname << dendl;
+        }
+      } else {
+        derr << __func__ << " device consists of zero or multiple underlying devices:"
+             << _devname << dendl;
       }
     }
   }

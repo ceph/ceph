@@ -20,6 +20,7 @@ public:
   explicit ExtBlkDevPluginThinNVMe(CephContext *cct) : ExtBlkDevPlugin(cct) {}
   int get_required_cap_set(cap_t caps) override;
   int factory(const std::string& logdevname,
+              const std::string& device,
 	      ceph::ExtBlkDevInterfaceRef& ext_blk_dev) override;
 };
 

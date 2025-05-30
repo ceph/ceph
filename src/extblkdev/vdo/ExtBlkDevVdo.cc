@@ -105,7 +105,8 @@ int64_t ExtBlkDevVdo::get_vdo_stat(const char *property)
 }
 
 
-int ExtBlkDevVdo::init(const std::string& alogdevname)
+int ExtBlkDevVdo::init(const std::string& alogdevname,
+                       const std::string& /*device*/)
 {
   logdevname = alogdevname;
   // get directory handle for VDO metadata
