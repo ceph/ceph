@@ -942,7 +942,6 @@ bufferlist shard_extent_map_t::get_ro_buffer(
 
   pair read_pair(ro_offset, ro_length);
   auto chunk_aligned_read = sinfo->ro_range_to_chunk_ro_range(read_pair);
-
   raw_shard_id_t raw_shard((ro_offset / chunk_size) % data_chunk_count);
 
   for (uint64_t chunk_offset = chunk_aligned_read.first;
