@@ -23,6 +23,7 @@ struct omap_context_t {
   Transaction &t;
   laddr_hint_t hint;
   omap_type_t type;
+  laddr_t root;
 };
 
 enum class mutation_status_t : uint8_t {

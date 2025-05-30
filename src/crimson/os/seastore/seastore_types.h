@@ -1108,6 +1108,11 @@ using laddr_pool_t = int64_t;
 // Note: this is the reversed version of the object hash
 using laddr_crush_hash_t = uint32_t;
 
+using laddr_block_offset_t = uint32_t;
+constexpr laddr_block_offset_t LADDR_BLOCK_OFFSET_NULL =
+    std::numeric_limits<uint32_t>::max();
+using laddr_block_offset_le_t = ceph_le32;
+
 /**
  * laddr_t
  *
@@ -1427,15 +1432,15 @@ public:
   loffset_t get_offset_bytes() const {
     return layout::BlockOffsetSpec::get<loffset_t>(value) << UNIT_SHIFT;
   }
-  loffset_t get_offset_blocks() const {
-    return layout::BlockOffsetSpec::get<loffset_t>(value);
+  laddr_block_offset_t get_offset_blocks() const {
+    return layout::BlockOffsetSpec::get<laddr_block_offset_t>(value);
   }
   void set_offset_by_bytes(loffset_t offset) {
     assert(p2align(uint64_t(offset), uint64_t(UNIT_SIZE)) == offset);
     offset >>= UNIT_SHIFT;
     layout::BlockOffsetSpec::set(value, offset);
   }
-  void set_offset_by_blocks(loffset_t offset) {
+  void set_offset_by_blocks(laddr_block_offset_t offset) {
     layout::BlockOffsetSpec::set(value, offset);
   }
   laddr_t with_offset_by_bytes(loffset_t offset) const {
@@ -1443,7 +1448,7 @@ public:
     ret.set_offset_by_bytes(offset);
     return ret;
   }
-  laddr_t with_offset_by_blocks(loffset_t offset) const {
+  laddr_t with_offset_by_blocks(laddr_block_offset_t offset) const {
     auto ret = *this;
     ret.set_offset_by_blocks(offset);
     return ret;
