@@ -36,14 +36,14 @@ struct onode_layout_t {
   omap_root_le_t log_root;
   omap_root_le_t xattr_root;
 
-  laddr_le_t shared_region_base;
   object_data_le_t object_data;
+  local_clone_id_le_t shared_clone_id;
 
   char oi[MAX_OI_LENGTH] = {0};
   char ss[MAX_SS_LENGTH] = {0};
 
   onode_layout_t() : omap_root(omap_type_t::OMAP), log_root(omap_type_t::LOG),
-    xattr_root(omap_type_t::XATTR) {}
+    xattr_root(omap_type_t::XATTR), shared_clone_id(LOCAL_CLONE_ID_NULL) {}
 
   const omap_root_le_t& get_root(omap_type_t type) const {
     if (type == omap_type_t::XATTR) {
@@ -54,6 +54,14 @@ struct onode_layout_t {
       assert(type == omap_type_t::LOG);
       return log_root;
     }
+  }
+
+  std::optional<local_clone_id_t> get_shared_clone_id() const {
+    local_clone_id_t shared_id = shared_clone_id;
+    if (shared_id == LOCAL_CLONE_ID_NULL) {
+      return std::nullopt;
+    }
+    return shared_id;
   }
 } __attribute__((packed));
 
@@ -107,9 +115,6 @@ public:
   const hobject_t &get_hobj() const {
     return hobj;
   }
-  laddr_t get_shared_region_base() const {
-    return get_layout().shared_region_base;
-  }
   bool is_head() const {
     return hobj.is_head();
   }
@@ -120,7 +125,6 @@ public:
   virtual const onode_layout_t &get_layout() const = 0;
   virtual ~Onode() = default;
 
-  virtual void update_shared_region_base(Transaction&, laddr_t) = 0;
   virtual void update_onode_size(Transaction&, uint32_t) = 0;
   virtual void update_omap_root(Transaction&, omap_root_t&) = 0;
   virtual void update_log_root(Transaction&, omap_root_t&) = 0;
@@ -128,9 +132,13 @@ public:
   virtual void update_object_data(Transaction&, object_data_t&) = 0;
   virtual void update_object_info(Transaction&, ceph::bufferlist&) = 0;
   virtual void update_snapset(Transaction&, ceph::bufferlist&) = 0;
+  virtual void update_shared_clone_id(Transaction&, local_clone_id_t) = 0;
   virtual void clear_object_info(Transaction&) = 0;
   virtual void clear_snapset(Transaction&) = 0;
 
+  std::optional<local_clone_id_t> get_shared_clone_id() const {
+    return get_layout().get_shared_clone_id();
+  }
   laddr_hint_t get_metadata_hint(uint64_t block_size = laddr_t::UNIT_SIZE) const {
     return get_hint(block_size, /*is_metadata*/true);
   }

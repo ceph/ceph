@@ -55,12 +55,6 @@ public:
   }
   ~TestOnode() final = default;
 
-  void update_shared_region_base(Transaction &t, laddr_t laddr) final {
-    with_mutable_layout(t, [laddr](onode_layout_t &mlayout) {
-      mlayout.shared_region_base = laddr;
-    });
-  }
-
   void update_onode_size(Transaction &t, uint32_t size) final {
     with_mutable_layout(t, [size](onode_layout_t &mlayout) {
       mlayout.size = size;
@@ -99,6 +93,14 @@ public:
 	oi_bl.length(),
 	onode_layout_t::MAX_OI_LENGTH);
       mlayout.oi_size = oi_bl.length();
+    });
+  }
+
+  void update_shared_clone_id(Transaction &t, local_clone_id_t id) final {
+    assert(id != LOCAL_CLONE_ID_NULL);
+    with_mutable_layout(t, [id](onode_layout_t &mlayout) {
+      assert(local_clone_id_t(mlayout.shared_clone_id) != LOCAL_CLONE_ID_NULL);
+      mlayout.shared_clone_id = id;
     });
   }
 
