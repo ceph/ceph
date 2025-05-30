@@ -2671,6 +2671,19 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
     return WRITE(wait, "wait", read_frame);
   }
 
+  if (exproto->server_cookie && exproto->client_cookie &&
+      exproto->client_cookie != client_cookie) {
+    // Found previous session
+    // peer has reseted and we're going to reuse the existing connection
+    // by replacing the communication socket
+    ldout(cct, 1) << __func__ << " found previous session existing=" << existing
+                  << ", peer must have reseted." << dendl;
+    if (connection->policy.resetcheck) {
+      exproto->reset_session();
+    }
+    return reuse_connection(existing, exproto);
+  }
+
   if (exproto->peer_global_seq > peer_global_seq) {
     ldout(cct, 1) << __func__ << " this is a stale connection, peer_global_seq="
                   << peer_global_seq
@@ -2691,19 +2704,6 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
     existing->dispatch_queue->queue_reset(existing.get());
     l.unlock();
     return send_server_ident();
-  }
-
-  if (exproto->server_cookie && exproto->client_cookie &&
-      exproto->client_cookie != client_cookie) {
-    // Found previous session
-    // peer has reseted and we're going to reuse the existing connection
-    // by replacing the communication socket
-    ldout(cct, 1) << __func__ << " found previous session existing=" << existing
-                  << ", peer must have reseted." << dendl;
-    if (connection->policy.resetcheck) {
-      exproto->reset_session();
-    }
-    return reuse_connection(existing, exproto);
   }
 
   if (exproto->client_cookie == client_cookie) {
