@@ -42,7 +42,7 @@ struct FLTreeOnode final : Onode, Value {
 
   struct Recorder : public ValueDeltaRecorder {
     enum class delta_op_t : uint8_t {
-      UPDATE_SHARED_REGION_BASE,
+      UPDATE_SHARED_CLONE_ID,
       UPDATE_ONODE_SIZE,
       UPDATE_OMAP_ROOT,
       UPDATE_LOG_ROOT,
@@ -101,16 +101,20 @@ struct FLTreeOnode final : Onode, Value {
     });
   }
 
-  void update_shared_region_base(Transaction &t, laddr_t laddr) final {
+  void update_shared_clone_id(Transaction &t, local_clone_id_t id) final {
+    ceph_assert(id != LOCAL_CLONE_ID_NULL);
     with_mutable_layout(
       t,
-      [laddr](NodeExtentMutable &payload_mut, Recorder *recorder) {
+      [id](NodeExtentMutable &payload_mut, Recorder *recorder)
+    {
       auto &mlayout = *reinterpret_cast<onode_layout_t*>(
-	payload_mut.get_write());
-      mlayout.shared_region_base = laddr;
+        payload_mut.get_write());
+      ceph_assert(local_clone_id_t(mlayout.shared_clone_id)
+                  == LOCAL_CLONE_ID_NULL);
+      mlayout.shared_clone_id = id;
       if (recorder) {
-	recorder->encode_update(
-	  payload_mut, Recorder::delta_op_t::UPDATE_SHARED_REGION_BASE);
+        recorder->encode_update(
+          payload_mut, Recorder::delta_op_t::UPDATE_SHARED_CLONE_ID);
       }
     });
   }
