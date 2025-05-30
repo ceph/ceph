@@ -388,21 +388,19 @@ target_link_libraries(ceph_test_datalog
   ${rgw_libs})
 install(TARGETS ceph_test_datalog DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-if(WITH_CATCH2)
- add_executable(unittest_rgw_hex
-  test_rgw_hex.cc)
+#
+# Helper for adding RGW tests built with Catch2:
+# Note: to define a test that does not use Catch2::main(), use:
+#   add_catch2_test_rgw(my_test_name NO_CATCH2_MAIN)
+# ...your test should be in a file called "test_<my_test_name>.cc (ex. "test_foo.cc")
+# and the output will be called "unittest_my_test_name".
+#
+function(add_catch2_test_rgw test_name)
+add_catch2_test(${test_name}
+ ${ARGV1}
+ EXTRA_LIBS rgw_common ${rgw_libs}
+ EXTRA_INCS "SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/src/rgw")
+endfunction()
 
- target_include_directories(unittest_rgw_hex
-  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+add_catch2_test_rgw(rgw_hex)
 
- target_link_libraries(unittest_rgw_hex 
-  rgw_common
-  librados
-  ceph-common
-  ${rgw_libs}
-  ${EXTRALIBS}
-  Catch2WithMain)
-
- add_ceph_unittest(unittest_rgw_hex)
-
-endif(WITH_CATCH2)
