@@ -348,13 +348,13 @@ bool OsdScrub::scrub_time_permit(utime_t now) const
 
 
 std::chrono::milliseconds OsdScrub::scrub_sleep_time(
-    utime_t t,
-    bool high_priority_scrub) const
+    utime_t t_now,
+    bool scrub_respects_ext_sleep) const
 {
   const milliseconds regular_sleep_period =
       milliseconds{int64_t(std::max(0.0, 1'000 * conf->osd_scrub_sleep))};
 
-  if (high_priority_scrub || scrub_time_permit(t)) {
+  if (!scrub_respects_ext_sleep || scrub_time_permit(t_now)) {
     return regular_sleep_period;
   }
 
