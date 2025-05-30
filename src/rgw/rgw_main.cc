@@ -15,7 +15,6 @@
 #include "rgw_lib.h"
 #include "rgw_log.h"
 #include "rgw_exporter.h"
-#include "rgw_usage_updater.h"
 
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
@@ -143,8 +142,6 @@ int main(int argc, char *argv[])
   main.init_frontends1(false /* nfs */);
   main.init_numa();
 
-  std::unique_ptr<RGWUsageUpdater> usage_updater;
-
   if (g_conf()->daemonize) {
     global_init_daemonize(g_ceph_context);
   }
@@ -175,14 +172,6 @@ int main(int argc, char *argv[])
   main.init_perfcounters();
   main.init_http_clients();
 
-  bool enable_user_metrics = cct->_conf->rgw_user_counters_cache;
-  bool enable_bucket_metrics = cct->_conf->rgw_bucket_counters_cache;
-  if (enable_user_metrics || enable_bucket_metrics) {
-    // Create the global exporter
-    g_rgw_exporter = new RGWExporter(cct, store->getRados());
-    g_rgw_exporter->start();
-  }
-
   r = main.init_storage();
   if (r < 0) {
     mutex.lock();
@@ -195,10 +184,10 @@ int main(int argc, char *argv[])
   }
 
   if (cct->_conf->rgw_enable_usage_perf_counters) {
-    usage_updater = std::make_unique<RGWUsageUpdater>(main.store.get(), cct.get());
-    usage_updater->start();
-  }  
-
+    dout(1) << "Starting RGW usage exporter with LMDB backing" << dendl;
+    g_rgw_exporter = new RGWExporter(cct.get(), main.store.get());
+  }
+  
   main.cond_init_apis();
 
   mutex.lock();
@@ -233,10 +222,11 @@ int main(int argc, char *argv[])
     g_rgw_exporter = nullptr;
   }
   
-  if (usage_updater) {
-    usage_updater->stop();
-    usage_updater.reset();
-  }
+  if (g_rgw_exporter) {
+    g_rgw_exporter->shutdown();
+    delete g_rgw_exporter;
+    g_rgw_exporter = nullptr;
+  }  
   
   const auto finalize_async_signals = []() {
     unregister_async_signal_handler(SIGHUP, rgw::signal::sighup_handler);
@@ -247,6 +237,12 @@ int main(int argc, char *argv[])
     shutdown_async_signal_handler();
   };
 
+  if (g_rgw_exporter) {
+    g_rgw_exporter->shutdown();
+    delete g_rgw_exporter;
+    g_rgw_exporter = nullptr;
+  }
+  
   main.shutdown(finalize_async_signals);
 
   dout(1) << "final shutdown" << dendl;

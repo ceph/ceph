@@ -4264,3 +4264,6 @@ options:
   type: bool
   default: false
   desc: Enable periodic updating of usage perf counters for buckets and users
+  -rgw
+  flags:
+  -startup

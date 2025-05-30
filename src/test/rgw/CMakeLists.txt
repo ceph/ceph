@@ -213,6 +213,21 @@ add_executable(unittest_rgw_throttle test_rgw_throttle.cc)
 add_ceph_unittest(unittest_rgw_throttle)
 target_link_libraries(unittest_rgw_throttle ${rgw_libs} ${UNITTEST_LIBS})
 
+# === Unit Tests for RGW Usage Metrics ===
+add_executable(unittest_rgw_usage_cache test_usage_cache.cc)
+add_ceph_unittest(unittest_rgw_usage_cache)
+target_include_directories(unittest_rgw_usage_cache
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_usage_cache
+  ${rgw_libs} ${UNITTEST_LIBS} ${LMDB_LIBRARIES})
+
+add_executable(unittest_rgw_usage_manager test_usage_manager.cc)
+add_ceph_unittest(unittest_rgw_usage_manager)
+target_include_directories(unittest_rgw_usage_manager
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_usage_manager
+  ${rgw_libs} ${UNITTEST_LIBS} ${LMDB_LIBRARIES})
+
 add_executable(unittest_rgw_iam_policy test_rgw_iam_policy.cc)
 add_ceph_unittest(unittest_rgw_iam_policy)
 target_link_libraries(unittest_rgw_iam_policy

@@ -115,27 +115,17 @@ void rgw_get_anon_user(RGWUserInfo& info)
 }
 
 int RGWUser::get_usage_stats(uint64_t *num_objs, uint64_t *total_bytes) {
-  if (!store) {
+  if (!store || !g_rgw_exporter) {
     return -EINVAL;
   }
-  // List all buckets owned by this user
-  std::list<rgw_bucket> buckets;
-  int ret = store->list_buckets(this->user, buckets);
+
+  RGWUsageStats stats;
+  int ret = g_rgw_exporter->get_user_usage(this->user, &stats);
   if (ret < 0) {
     return ret;
   }
-  uint64_t total_obj_count = 0;
-  uint64_t total_size = 0;
-  // Sum up usage from each bucket
-  for (auto& b : buckets) {
-    RGWBucketStats stats;
-    int r = store->get_bucket_stats(b, &stats);
-    if (r == 0) {
-      total_obj_count += stats.num_objects;
-      total_size += stats.num_bytes;
-    }
-  }
-  *num_objs = total_obj_count;
-  *total_bytes = total_size;
+
+  *num_objs = stats.num_objects;
+  *total_bytes = stats.used_bytes;
   return 0;
 }
