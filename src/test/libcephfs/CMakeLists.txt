@@ -11,6 +11,7 @@ if(WITH_LIBCEPHFS)
     deleg.cc
     monconfig.cc
     snapdiff.cc
+    client_cache.cc
   )
   target_link_libraries(ceph_test_libcephfs
     ceph-common
