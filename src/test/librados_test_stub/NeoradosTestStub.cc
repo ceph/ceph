@@ -558,7 +558,7 @@ RADOS::RADOS() = default;
 
 RADOS::RADOS(RADOS&&) = default;
 
-RADOS::RADOS(std::unique_ptr<detail::Client> impl)
+RADOS::RADOS(std::shared_ptr<detail::Client> impl)
   : impl(std::move(impl)) {
 }
 
