@@ -220,6 +220,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             return {op_type for op_type in SubvolumeOpType}
 
         return {SubvolumeOpType.REMOVE_FORCE,
+                SubvolumeOpType.PURGE_STATS,
                 SubvolumeOpType.CLONE_CREATE,
                 SubvolumeOpType.CLONE_STATUS,
                 SubvolumeOpType.CLONE_CANCEL,
