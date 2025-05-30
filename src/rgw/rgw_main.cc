@@ -62,6 +62,8 @@ int main(int argc, char *argv[])
 { 
   int r{0};
 
+  ceph_pthread_setname("ceph-rgw");
+
   // dout() messages will be sent to stderr, but FCGX wants messages on stdout
   // Redirect stderr to stdout.
   TEMP_FAILURE_RETRY(close(STDERR_FILENO));
