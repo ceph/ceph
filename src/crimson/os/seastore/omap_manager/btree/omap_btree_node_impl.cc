@@ -18,7 +18,7 @@ namespace crimson::os::seastore::omap_manager {
 std::ostream &operator<<(std::ostream &out, const omap_inner_key_t &rhs)
 {
   return out << "omap_inner_key (" << rhs.key_off<< " - " << rhs.key_len
-             << " - " << rhs.laddr << ")";
+             << " - " << rhs.block_offset << ")";
 }
 
 std::ostream &operator<<(std::ostream &out, const omap_leaf_key_t &rhs)
@@ -78,14 +78,14 @@ OMapInnerNode::make_split_insert(
       left->insert_child_ptr(
 	liter.get_offset(),
 	dynamic_cast<base_child_t*>(node.get()));
-      left->journal_inner_insert(liter, node->get_laddr(), key,
+      left->journal_inner_insert(liter, node->get_laddr().get_offset_blocks(), key,
                                  left->maybe_get_delta_buffer());
     } else {  //right
       auto riter = right->iter_idx(iter.get_offset() - left->get_node_size());
       right->insert_child_ptr(
 	riter.get_offset(),
 	dynamic_cast<base_child_t*>(node.get()));
-      right->journal_inner_insert(riter, node->get_laddr(), key,
+      right->journal_inner_insert(riter, node->get_laddr().get_offset_blocks(), key,
                                   right->maybe_get_delta_buffer());
     }
     this->adjust_copy_src_dest_on_split(oc.t, *left, *right);
@@ -117,14 +117,14 @@ OMapInnerNode::handle_split(
   this->update_child_ptr(
     iter.get_offset(),
     dynamic_cast<base_child_t*>(left.get()));
-  journal_inner_update(iter, left->get_laddr(), maybe_get_delta_buffer());
+  journal_inner_update(iter, left->get_laddr().get_offset_blocks(), maybe_get_delta_buffer());
   bool overflow = extent_will_overflow(pivot.size(), std::nullopt);
   auto right_iter = iter + 1;
   if (!overflow) {
     this->insert_child_ptr(
       right_iter.get_offset(),
       dynamic_cast<base_child_t*>(right.get()));
-    journal_inner_insert(right_iter, right->get_laddr(), pivot,
+    journal_inner_insert(right_iter, right->get_laddr().get_offset_blocks(), pivot,
                          maybe_get_delta_buffer());
     return insert_ret(
            interruptible::ready_future_marker{},
@@ -376,7 +376,7 @@ OMapInnerNode::clear(omap_context_t oc)
   DEBUGT("this: {}", oc.t, *this);
   return trans_intr::do_for_each(iter_begin(), iter_end(),
     [oc, this](auto iter) {
-    auto laddr = iter->get_val();
+    auto laddr = oc.root.with_offset_by_blocks(iter->get_val());
     auto ndepth = get_meta().depth - 1;
     if (ndepth > 1) {
       return get_child_node(oc, iter
@@ -492,7 +492,7 @@ OMapInnerNode::do_merge(
       dynamic_cast<base_child_t*>(replacement.get()));
     journal_inner_update(
       liter,
-      replacement->get_laddr(),
+      replacement->get_laddr().get_offset_blocks(),
       maybe_get_delta_buffer());
     this->remove_child_ptr(riter.get_offset());
     journal_inner_remove(riter, maybe_get_delta_buffer());
@@ -580,7 +580,7 @@ OMapInnerNode::do_balance(
       dynamic_cast<base_child_t*>(replacement_l.get()));
     journal_inner_update(
       liter,
-      replacement_l->get_laddr(),
+      replacement_l->get_laddr().get_offset_blocks(),
       maybe_get_delta_buffer());
     bool overflow = extent_will_overflow(replacement_pivot.size(),
       std::nullopt);
@@ -591,7 +591,7 @@ OMapInnerNode::do_balance(
       journal_inner_remove(riter, maybe_get_delta_buffer());
       journal_inner_insert(
 	riter,
-	replacement_r->get_laddr(),
+	replacement_r->get_laddr().get_offset_blocks(),
 	replacement_pivot,
 	maybe_get_delta_buffer());
       std::vector<laddr_t> dec_laddrs{l->get_laddr(), r->get_laddr()};
@@ -945,7 +945,7 @@ OMapInnerNode::get_child_node(
 {
   assert(get_meta().depth > 1);
   child_pos_t<OMapInnerNode> child_pos(nullptr, 0);
-  auto laddr = child_pt->get_val();
+  auto laddr = oc.root.with_offset_by_blocks(child_pt->get_val());
   auto next = child_pt + 1;
   if (get_meta().depth == 2) {
     auto ret = this->get_child<OMapLeafNode>(
