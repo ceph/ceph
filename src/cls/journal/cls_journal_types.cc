@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "cls/journal/cls_journal_types.h"
+#include "include/encoding_string.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
 

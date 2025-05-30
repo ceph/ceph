@@ -15,7 +15,10 @@
 #ifndef CEPH_MPGSTATSACK_H
 #define CEPH_MPGSTATSACK_H
 
-#include "osd/osd_types.h"
+#include "include/encoding_vector.h"
+#include "include/types.h" // for epoch_t, version_t
+#include "msg/Message.h"
+#include "osd/osd_types.h" // for pg_t
 
 class MPGStatsAck final : public Message {
 public:

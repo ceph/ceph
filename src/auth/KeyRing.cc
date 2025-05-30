@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <boost/algorithm/string/replace.hpp>
 #include "auth/KeyRing.h"
+#include "include/encoding_string.h"
 #include "include/stringify.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
@@ -136,6 +137,8 @@ void KeyRing::encode_plaintext(bufferlist& bl)
 
 void KeyRing::encode_formatted(string label, Formatter *f, bufferlist& bl)
 {
+  using ceph::decode;
+
   f->open_array_section(label.c_str());
   for (const auto &[ename, eauth] : keys) {
     f->open_object_section("auth_entities");
@@ -148,7 +151,7 @@ void KeyRing::encode_formatted(string label, Formatter *f, bufferlist& bl)
     for (auto& [sys, capsbl] : eauth.caps) {
       auto dataiter = capsbl.cbegin();
       string caps;
-      ceph::decode(caps, dataiter);
+      decode(caps, dataiter);
       f->dump_string(sys.c_str(), caps);
     }
     f->close_section();	/* caps */
@@ -225,6 +228,8 @@ int KeyRing::load(CephContext *cct, const std::string &filename)
 
 void KeyRing::print(ostream& out)
 {
+  using ceph::decode;
+
   for (auto& [ename, eauth] : keys) {
     out << "[" << ename << "]" << std::endl;
     out << "\tkey = " << eauth.key << std::endl;
@@ -235,7 +240,7 @@ void KeyRing::print(ostream& out)
     for (auto& [sys, capbl] : eauth.caps) {
       auto dataiter = capbl.cbegin();
       string caps;
-      ceph::decode(caps, dataiter);
+      decode(caps, dataiter);
       boost::replace_all(caps, "\"", "\\\"");
       out << "\tcaps " << sys << " = \"" << caps << '"' << std::endl;
     }
