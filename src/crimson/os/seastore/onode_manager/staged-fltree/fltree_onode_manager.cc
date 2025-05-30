@@ -22,10 +22,9 @@ void FLTreeOnode::Recorder::apply_value_delta(
     ceph::decode(op, bliter);
     auto &mlayout = *reinterpret_cast<onode_layout_t*>(value.get_write());
     switch (op) {
-    case delta_op_t::UPDATE_SHARED_REGION_BASE:
-      DEBUG("update shared region base");
-      bliter.copy(sizeof(mlayout.shared_region_base),
-		  (char *)&mlayout.shared_region_base);
+    case delta_op_t::UPDATE_SHARED_CLONE_ID:
+      DEBUG("update shared clone id");
+      bliter.copy(sizeof(mlayout.shared_clone_id), (char *)&mlayout.shared_clone_id);
       break;
     case delta_op_t::UPDATE_ONODE_SIZE:
       DEBUG("update onode size");
@@ -87,11 +86,11 @@ void FLTreeOnode::Recorder::encode_update(
   auto &encoded = get_encoded(payload_mut);
   ceph::encode(op, encoded);
   switch(op) {
-  case delta_op_t::UPDATE_SHARED_REGION_BASE:
-    DEBUG("update shared region base");
+  case delta_op_t::UPDATE_SHARED_CLONE_ID:
+    DEBUG("update shared clone id");
     encoded.append(
-      (const char *)&layout.shared_region_base,
-      sizeof(layout.shared_region_base));
+      (const char *)&layout.shared_clone_id,
+      sizeof(layout.shared_clone_id));
     break;
   case delta_op_t::UPDATE_ONODE_SIZE:
     DEBUG("update onode size");
