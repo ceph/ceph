@@ -12133,6 +12133,7 @@ void Client::C_nonblocking_fsync_state::advance()
 
     if (waitfor_safe) {
       clnt->put_request(req);
+      waitfor_safe = false;
     }
 
     if (flush_wait && !flush_completed) {
