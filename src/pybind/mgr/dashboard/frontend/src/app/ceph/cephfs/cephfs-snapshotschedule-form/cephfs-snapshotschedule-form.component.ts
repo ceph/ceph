@@ -23,7 +23,7 @@ import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant'
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { RepeatFrequency } from '~/app/shared/enum/repeat-frequency.enum';
 import { RetentionFrequency } from '~/app/shared/enum/retention-frequency.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -42,7 +42,7 @@ const DEBOUNCE_TIMER = 300;
   templateUrl: './cephfs-snapshotschedule-form.component.html',
   styleUrls: ['./cephfs-snapshotschedule-form.component.scss']
 })
-export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnInit {
+export class CephfsSnapshotscheduleFormComponent extends CdFormCanDeactivate implements OnInit {
   subvol!: string;
   group!: string;
   icons = Icons;
@@ -147,6 +147,10 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
 
   get retentionPolicies() {
     return this.snapScheduleForm.get('retentionPolicies') as FormArray;
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.snapScheduleForm;
   }
 
   search: OperatorFunction<string, readonly string[]> = (input: Observable<string>) =>
