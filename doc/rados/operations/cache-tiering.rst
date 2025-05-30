@@ -2,10 +2,13 @@
  Cache Tiering
 ===============
 
-.. warning:: Cache tiering has been deprecated in the Reef release as it
-             has lacked a maintainer for a very long time. This does not mean
-             it will be certainly removed, but we may choose to remove it
-             without much further notice.
+.. warning:: Cache tiering has been deprecated in the Reef release. Cache
+   tiering has lacked a maintainer for a long time. This does not mean that
+   it will certainly be removed, but it might be removed without much
+   notice.
+
+   The upstream Ceph community strongly advises against deploying new cache
+   tiers to releases after the Reef release.
 
 A cache tier provides Ceph Clients with better I/O performance for a subset of
 the data stored in a backing storage tier. Cache tiering involves creating a
