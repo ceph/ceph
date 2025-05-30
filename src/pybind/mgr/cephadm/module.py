@@ -2825,6 +2825,15 @@ Then run the following:
                     msg += f'\thost {h}: {" ".join([f"osd.{id}" for id in ls])}'
                 raise OrchestratorError(
                     f'If {service_name} is removed then the following OSDs will remain, --force to proceed anyway\n{msg}')
+        elif service_name.startswith('nfs.'):
+            # check if its using old node id style and remove from mon store
+            nfs_services = self.get_store('nfs_services_with_old_nodeid')
+            if nfs_services:
+                nfs_services = nfs_services.split(',')
+                if service_name in nfs_services:
+                    nfs_services.remove(service_name)
+                    val = ','.join(nfs_services) if nfs_services else None
+                    self.set_store('nfs_services_with_old_nodeid', val)
 
         found = self.spec_store.rm(service_name)
         if found and service_name.startswith('osd.'):

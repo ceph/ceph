@@ -1,11 +1,13 @@
 import json
 import re
 import logging
-from typing import TYPE_CHECKING, Iterator, Optional, Dict, Any, List
+from typing import TYPE_CHECKING, Iterator, Optional, Dict, Any, List, cast
 
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec, RGWSpec, CertificateSource
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec, RGWSpec, CertificateSource, NFSServiceSpec
 from cephadm.schedule import HostAssignment
 from cephadm.utils import SpecialHostLabels
+from cephadm.services.nfs import NFSService
+from cephadm.services.service_registry import service_registry
 import rados
 from mgr_util import get_cert_issuer_info
 
@@ -15,7 +17,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 8
+LAST_MIGRATION = 9
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +123,11 @@ class Migrations:
             logger.info('Running migration 7 -> 8')
             if self.migrate_7_8():
                 self.set(8)
+
+        if self.mgr.migration_current == 8 and not startup:
+            logger.info('Running migration 8 -> 9')
+            if self.migrate_8_9():
+                self.set(9)
 
     def migrate_0_1(self) -> bool:
         """
@@ -529,6 +536,30 @@ class Migrations:
         except Exception as e:
             logger.error(f"Promtail -> Alloy migration failed: {e}")
             return False
+
+    def migrate_8_9(self) -> bool:
+        # For NFS, check if nfs cluster is using old types of node ids (service_name.0)
+        # if yes, then store those daemons in mon store, to continue using old node ids for those daemons
+        nfs_services = []
+        service_specs = self.mgr.spec_store.get_specs_by_type('nfs')
+        nfs_service = cast(NFSService, service_registry.get_service('nfs'))
+        try:
+            for service_name, spec in service_specs.items():
+                # get grace tool dump
+                out = nfs_service.run_grace_tool(cast(NFSServiceSpec, spec), 'dump')
+                if service_name in out:
+                    nfs_services.append(service_name)
+                    logger.info(f'NFS service {nfs_service} needs to maintain old node ids after upgrade')
+        except Exception as e:
+            logger.exception(f'Got error while executing grace tool: {e}')
+            self.mgr.set_health_warning('CEPHADM_MIGRATION_FAILURE',
+                                        f'Cephadm migration failed: {e}',
+                                        1, [str(e)])
+            return False
+        if nfs_services:
+            self.mgr.set_store('nfs_services_with_old_nodeid', ','.join(nfs_services))
+        self.mgr.remove_health_warning('CEPHADM_MIGRATION_FAILURE')
+        return True
 
 
 def queue_migrate_rgw_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, Any]) -> None:
