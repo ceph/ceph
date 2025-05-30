@@ -22,3 +22,4 @@ tasks:
         - rgw/test_rgw_datalog.sh
         - rgw/test_librgw_file.sh
         - rgw/test_awssdkv4_sig.sh
+        - rgw/test_gosdk2.sh
