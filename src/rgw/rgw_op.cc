@@ -2238,11 +2238,15 @@ void RGWGetObj::execute(optional_yield y)
   read_op->params.if_match = if_match;
   read_op->params.if_nomatch = if_nomatch;
   read_op->params.lastmod = &lastmod;
+  if (multipart_part_num) {
+    read_op->params.part_num = &*multipart_part_num;
+  }
 
   op_ret = read_op->prepare(s->yield, this);
   version_id = s->object->get_instance();
   s->obj_size = s->object->get_obj_size();
   attrs = s->object->get_attrs();
+  multipart_parts_count = read_op->params.parts_count;
   if (op_ret < 0)
     goto done_err;
 
@@ -8381,8 +8385,9 @@ int RGWPutBucketObjectLock::verify_permission(optional_yield y)
 
 void RGWPutBucketObjectLock::execute(optional_yield y)
 {
-  if (!s->bucket->get_info().obj_lock_enabled()) {
-    s->err.message = "object lock configuration can't be set if bucket object lock not enabled";
+  if (!s->bucket->get_info().versioning_enabled()) {
+    s->err.message = "Object lock cannot be enabled unless the "
+        "bucket has versioning enabled";
     ldpp_dout(this, 4) << "ERROR: " << s->err.message << dendl;
     op_ret = -ERR_INVALID_BUCKET_STATE;
     return;
@@ -8424,6 +8429,17 @@ void RGWPutBucketObjectLock::execute(optional_yield y)
   }
 
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
+    if (!s->bucket->get_info().obj_lock_enabled()) {
+      // automatically enable object lock if the bucket is versioning-enabled
+      if (!s->bucket->get_info().versioning_enabled()) {
+        s->err.message = "Object lock cannot be enabled unless the "
+            "bucket has versioning enabled";
+        ldpp_dout(this, 4) << "ERROR: " << s->err.message << dendl;
+        return -ERR_INVALID_BUCKET_STATE;
+      }
+      s->bucket->get_info().flags |= BUCKET_OBJ_LOCK_ENABLED;
+    }
+
     s->bucket->get_info().obj_lock = obj_lock;
     op_ret = s->bucket->put_info(this, false, real_time());
     return op_ret;

@@ -459,17 +459,21 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
                              bluefs_shared_alloc_context_t* _shared_alloc)
 {
   uint64_t reserved;
+  string dev_name;
   switch(id) {
     case BDEV_WAL:
     case BDEV_NEWWAL:
       reserved = BDEV_LABEL_BLOCK_SIZE;
+      dev_name = "wal";
       break;
     case BDEV_DB:
     case BDEV_NEWDB:
       reserved = DB_SUPER_RESERVED;
+      dev_name = "db";
       break;
     case BDEV_SLOW:
       reserved = 0;
+      dev_name = "slow";
       break;
     default:
       ceph_assert(false);
@@ -479,7 +483,7 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
   ceph_assert(id < bdev.size());
   ceph_assert(bdev[id] == NULL);
   BlockDevice *b = BlockDevice::create(cct, path, NULL, NULL,
-				       discard_cb[id], static_cast<void*>(this));
+				       discard_cb[id], static_cast<void*>(this), dev_name.c_str());
   block_reserved[id] = reserved;
   if (_shared_alloc) {
     b->set_no_exclusive_lock();
@@ -3924,8 +3928,9 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   }
   if (alloc_len < 0 || alloc_len < need) {
     if (alloc[id]) {
-      if (alloc_len > 0) {
+      if (extents.size()) {
         alloc[id]->release(extents);
+	extents.clear();
       }
       if (!was_cooldown && shared) {
         auto delay_s = cct->_conf->bluefs_failed_shared_alloc_cooldown;

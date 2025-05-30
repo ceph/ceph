@@ -297,6 +297,27 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
       });
     });
 
+    describe('should test service nvmeof', () => {
+      beforeEach(() => {
+        formHelper.setValue('service_type', 'nvmeof');
+        formHelper.setValue('pool', 'xyz');
+      });
+
+      it('should submit iscsi', () => {
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'nvmeof',
+          placement: {},
+          unmanaged: false,
+          pool: 'xyz'
+        });
+      });
+
+      it('should throw error when there is no pool', () => {
+        formHelper.expectErrorChange('pool', '', 'required');
+      });
+    });
+
     describe('should test service iscsi', () => {
       beforeEach(() => {
         formHelper.setValue('service_type', 'iscsi');

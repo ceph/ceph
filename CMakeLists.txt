@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(ceph
-  VERSION 18.2.6
+  VERSION 18.2.7
   LANGUAGES CXX C ASM)
 
 cmake_policy(SET CMP0028 NEW)

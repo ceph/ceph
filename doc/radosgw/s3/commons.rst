@@ -24,8 +24,8 @@ Plan`_ for more information.
 
 To configure virtual hosted buckets, you can either set ``rgw_dns_name =
 cname.domain.com`` in ``ceph.conf`` or add ``cname.domain.com`` to the list of
-``hostnames`` in your zonegroup configuration. See `Ceph Object Gateway -
-Multisite Configuration`_ for more on zonegroups.
+``hostnames`` in your zonegroup configuration. See :ref:`Ceph Object Gateway -
+Multisite Configuration <multisite>` for more on zonegroups.
 
 Here is an example of a ``ceph config set`` comamnd that sets ``rgw_dns_name``
 to ``cname.domain.com``:
@@ -135,5 +135,4 @@ Common Response Status
 | ``500``       | InternalError                     |
 +---------------+-----------------------------------+
 
-.. _`Ceph Object Gateway - Multisite Configuration`: ../../multisite
 .. _`Amazon S3 Path Deprecation Plan`: https://aws.amazon.com/blogs/aws/amazon-s3-path-deprecation-plan-the-rest-of-the-story/

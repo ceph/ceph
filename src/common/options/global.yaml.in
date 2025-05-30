@@ -1745,7 +1745,7 @@ options:
 - name: mon_warn_pg_not_scrubbed_ratio
   type: float
   level: advanced
-  desc: Percentage of the scrub max interval past the scrub max interval to warn
+  desc: Raise a health warning when shallow scrubs are delayed by this percentage of the shallow scrub interval. Note that this must be set at mgr or with global scope. Set this configurable with the command "ceph config set mgr mon_warn_pg_not_scrubbed_ratio <ratio_value>".
   default: 0.5
   see_also:
   - osd_scrub_max_interval
@@ -4083,6 +4083,22 @@ options:
   flags:
   - runtime
   see_also:
+  - bdev_enable_discard
+- name: bdev_async_discard
+  long_desc: When set this works like an alias for 'bdev_async_discard_threads = 1"
+    mode to avoid implicit async discard mode disablement after upgrade.
+    Ignored if 'dev_asunc_discard_threads' is greater than zero.
+    This parameter is DEPRECATED and provided for backward compatibility for
+    Squid minor releases only.
+    PLEASE SWITCH TO 'bdev_async_discard_threads' USE.
+  type: bool
+  level: advanced
+  default: false
+  with_legacy: false
+  flags:
+  - runtime
+  see_also:
+  - bdev_enable_discard
   - bdev_async_discard_threads
 - name: bdev_flock_retry_interval
   type: float
@@ -4193,6 +4209,7 @@ options:
   - avl
   - btree
   - hybrid
+  - hybrid_btree2
   with_legacy: true
 - name: bluefs_log_replay_check_allocations
   type: bool
@@ -4974,6 +4991,7 @@ options:
   - btree
   - hybrid
   - zoned
+  - hybrid_btree2
   with_legacy: true
 - name: bluestore_freelist_blocks_per_key
   type: size
@@ -5499,6 +5517,11 @@ options:
   level: dev
   desc: Maximum RAM hybrid allocator should use before enabling bitmap supplement
   default: 64_M
+- name: bluestore_btree2_alloc_weight_factor
+  type: float
+  level: dev
+  desc: Large continuous extents weight factor
+  default: 2
 - name: bluestore_volume_selection_policy
   type: str
   level: dev

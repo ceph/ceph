@@ -1577,7 +1577,7 @@ TEST(BlueFS, test_log_runway_advance_seq) {
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   BlueFS fs(g_ceph_context);
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false, 0));
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());

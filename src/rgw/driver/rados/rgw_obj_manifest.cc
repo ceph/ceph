@@ -197,6 +197,27 @@ bool RGWObjManifest::get_rule(uint64_t ofs, RGWObjManifestRule *rule)
   return true;
 }
 
+auto RGWObjManifest::obj_find_part(const DoutPrefixProvider *dpp,
+                                   int part_num) const
+    -> obj_iterator
+{
+  const obj_iterator end = obj_end(dpp);
+  if (end.get_cur_part_id() == 0) { // not mulitipart
+    return end;
+  }
+
+  // linear search over parts/stripes
+  for (obj_iterator i = obj_begin(dpp); i != end; ++i) {
+    if (i.get_cur_part_id() == part_num) {
+      return i;
+    }
+    if (i.get_cur_part_id() > part_num) {
+      return end;
+    }
+  }
+  return end;
+}
+
 int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m,
                                             const rgw_placement_rule& head_placement_rule,
                                             const rgw_placement_rule *tail_placement_rule,

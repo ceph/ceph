@@ -12,8 +12,6 @@
 
 #include "rgw_common.h"
 
-using ceph::crypto::SHA1;
-
 struct req_state;
 
 #define RGW_OBJ_TORRENT    "rgw.torrent"
@@ -107,7 +105,7 @@ private:
 
   req_state *s{nullptr};
   rgw::sal::Driver* driver{nullptr};
-  SHA1 h;
+  ceph::crypto::SHA1 h;
 
   TorrentBencode dencode;
 public:
@@ -134,6 +132,6 @@ private:
   void set_announce();
   void set_exist(bool exist);
   void set_info_pieces(char *buff);
-  void sha1(SHA1 *h, bufferlist &bl, off_t bl_len);
+  void sha1(ceph::crypto::SHA1 *h, bufferlist &bl, off_t bl_len);
   int save_torrent_file(optional_yield y);
 };

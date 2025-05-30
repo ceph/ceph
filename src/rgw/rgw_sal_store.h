@@ -88,6 +88,7 @@ class StoreBucket : public Bucket {
       info.bucket = ent.bucket;
       info.placement_rule = ent.placement_rule;
       info.creation_time = ent.creation_time;
+      mtime = ent.modification_time;
     }
     StoreBucket(const RGWBucketInfo& _i) : info(_i) {
       ent.bucket = info.bucket;
@@ -100,6 +101,7 @@ class StoreBucket : public Bucket {
       info.bucket = ent.bucket;
       info.placement_rule = ent.placement_rule;
       info.creation_time = ent.creation_time;
+      mtime = ent.modification_time;
     }
     StoreBucket(const RGWBucketInfo& _i, User* _u) : info(_i), owner(_u) {
       ent.bucket = info.bucket;

@@ -405,10 +405,12 @@ class RGWRados
 
   int get_olh_target_state(const DoutPrefixProvider *dpp, RGWObjectCtx& rctx,
 			   RGWBucketInfo& bucket_info, const rgw_obj& obj,
-			   RGWObjState *olh_state, RGWObjState **target_state,
-			   RGWObjManifest **target_manifest, optional_yield y);
-  int get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state, RGWObjManifest** manifest,
-                         bool follow_olh, optional_yield y, bool assume_noent = false);
+			   RGWObjState *olh_state, RGWObjStateManifest **psm,
+			   optional_yield y);
+  int get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
+                         RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                         RGWObjStateManifest** psm, bool follow_olh,
+                         optional_yield y, bool assume_noent = false);
   int append_atomic_test(const DoutPrefixProvider *dpp, RGWObjectCtx* rctx, RGWBucketInfo& bucket_info, const rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state,
 			 RGWObjManifest** pmanifest, optional_yield y);
@@ -761,6 +763,8 @@ public:
         uint64_t *obj_size;
         std::map<std::string, bufferlist> *attrs;
         rgw_obj *target_obj;
+        int* part_num = nullptr;
+        std::optional<int> parts_count;
 
         Params() : lastmod(nullptr), obj_size(nullptr), attrs(nullptr),
 		 target_obj(nullptr) {}
@@ -1207,7 +1211,7 @@ public:
 
   int transition_obj(RGWObjectCtx& obj_ctx,
                      RGWBucketInfo& bucket_info,
-                     const rgw_obj& obj,
+                     rgw_obj obj,
                      const rgw_placement_rule& placement_rule,
                      const real_time& mtime,
                      uint64_t olh_epoch,
@@ -1268,11 +1272,16 @@ public:
                         optional_yield y,
                         ceph::real_time set_mtime = ceph::real_clock::zero());
 
-  int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state, RGWObjManifest** manifest,
-                    bool follow_olh, optional_yield y, bool assume_noent = false);
-  int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state, RGWObjManifest** manifest, optional_yield y) {
-    return get_obj_state(dpp, rctx, bucket_info, obj, state, manifest, true, y);
-  }
+  int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
+                    RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                    RGWObjStateManifest** psm, bool follow_olh,
+                    optional_yield y, bool assume_noent = false);
+
+  int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
+                    RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                    RGWObjState** pstate, RGWObjManifest** pmanifest,
+                    bool follow_olh, optional_yield y,
+                    bool assume_noent = false);
 
   using iterate_obj_cb = int (*)(const DoutPrefixProvider*, const rgw_raw_obj&, off_t, off_t,
                                  off_t, bool, RGWObjState*, void*);

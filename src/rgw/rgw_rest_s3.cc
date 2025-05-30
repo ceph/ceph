@@ -305,6 +305,18 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
 
   dst_zone_trace = s->info.args.get(RGW_SYS_PARAM_PREFIX "if-not-replicated-to");
 
+  // optional part number
+  auto optstr = s->info.args.get_optional("partNumber");
+  if (optstr) {
+    string err;
+    multipart_part_num = strict_strtol(optstr->c_str(), 10, &err);
+    if (!err.empty()) {
+      s->err.message = "Invalid partNumber: " + err;
+      ldpp_dout(s, 10) << "bad part number " << *optstr << ": " << err << dendl;
+      return -ERR_INVALID_PART;
+    }
+  }
+
   return RGWGetObj_ObjStore::get_params(y);
 }
 
@@ -450,6 +462,9 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
         dump_header(s, "x-rgw-replicated-from", zone.to_str());
       }
     } catch (const buffer::error&) {} // omit x-rgw-replicated-from headers
+  }
+  if (multipart_parts_count) {
+    dump_header(s, "x-amz-mp-parts-count", *multipart_parts_count);
   }
 
   if (! op_ret) {
@@ -2753,7 +2768,7 @@ void RGWPutObj_ObjStore_S3::send_response()
       if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", &tmp) > 0) {
         s->formatter->dump_string("LastModified", buf);
       }
-      s->formatter->dump_string("ETag", etag);
+      s->formatter->dump_format("ETag", "\"%s\"", etag.c_str());
       s->formatter->close_section();
       rgw_flush_formatter_and_reset(s, s->formatter);
       return;
@@ -3381,7 +3396,7 @@ done:
     }
     s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object->get_name());
-    s->formatter->dump_string("ETag", etag);
+    s->formatter->dump_format("ETag", "\"%s\"", etag.c_str());
     s->formatter->close_section();
   }
   s->err.message = err_msg;
@@ -4065,7 +4080,7 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
     }
     s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object->get_name());
-    s->formatter->dump_string("ETag", etag);
+    s->formatter->dump_format("ETag", "\"%s\"", etag.c_str());
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
