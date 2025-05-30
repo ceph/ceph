@@ -28,8 +28,6 @@ public:
   MgrStatMonitor(Monitor &mn, Paxos &p, const std::string& service_name);
   ~MgrStatMonitor() override;
 
-  ceph::mutex lock = ceph::make_mutex("MgrStatMonitor::lock");
-
   void init() override {}
   void on_shutdown() override {}
 
@@ -55,7 +53,7 @@ public:
   bool preprocess_statfs(MonOpRequestRef op);
 
   void calc_pool_availability();
-  bool enable_availability_tracking = true; ///< tracking availability score feature 
+  bool enable_availability_tracking = g_conf().get_val<bool>("enable_availability_tracking"); ///< tracking availability score feature 
   utime_t reset_availability_last_uptime_downtime_val = utime_t(1, 2);
 
   void check_sub(Subscription *sub);
