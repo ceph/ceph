@@ -635,10 +635,8 @@ endif(${WITH_LTTNG})
 
 add_subdirectory(global)
 
-# RGW also support Lua scripting
-if(WITH_CEPHFS OR WITH_RADOSGW)
-  find_package(Lua 5.3 REQUIRED)
-endif()
+# cephfs, rgw, and the osd all require lua
+find_package(Lua 5.3 REQUIRED)
 
 # rados object classes
 add_subdirectory(cls)
