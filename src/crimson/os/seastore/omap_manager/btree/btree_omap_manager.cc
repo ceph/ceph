@@ -84,12 +84,12 @@ BtreeOMapManager::handle_root_split(
     nroot->insert_child_ptr(
       nroot->iter_begin().get_offset(),
       dynamic_cast<BaseChildNode<OMapInnerNode, std::string>*>(left.get()));
-    nroot->journal_inner_insert(nroot->iter_begin(), left->get_laddr(),
+    nroot->journal_inner_insert(nroot->iter_begin(), left->get_laddr().get_offset_blocks(),
                                 BEGIN_KEY, nroot->maybe_get_delta_buffer());
     nroot->insert_child_ptr(
       (nroot->iter_begin() + 1).get_offset(),
       dynamic_cast<BaseChildNode<OMapInnerNode, std::string>*>(right.get()));
-    nroot->journal_inner_insert(nroot->iter_begin() + 1, right->get_laddr(),
+    nroot->journal_inner_insert(nroot->iter_begin() + 1, right->get_laddr().get_offset_blocks(),
                                 pivot, nroot->maybe_get_delta_buffer());
     omap_root.update(nroot->get_laddr(), omap_root.get_depth() + 1, omap_root.hint,
       omap_root.get_type());
@@ -114,7 +114,7 @@ BtreeOMapManager::handle_root_merge(
   auto old_root = *(mresult.need_merge);
   auto iter = old_root->cast<OMapInnerNode>()->iter_begin();
   omap_root.update(
-    iter->get_val(),
+    omap_root.addr.with_offset_by_blocks(iter->get_val()),
     omap_root.depth -= 1,
     omap_root.hint,
     omap_root.get_type());
