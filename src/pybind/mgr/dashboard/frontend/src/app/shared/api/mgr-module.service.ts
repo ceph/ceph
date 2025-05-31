@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { BlockUIService } from 'ng-block-ui';
 
-import { Observable, timer as observableTimer } from 'rxjs';
+import { Observable, timer as observableTimer, Subject } from 'rxjs';
 import { NotificationService } from '../services/notification.service';
 import { TableComponent } from '../datatable/table/table.component';
 import { Router } from '@angular/router';
@@ -14,6 +14,7 @@ import { NotificationType } from '../enum/notification-type.enum';
 })
 export class MgrModuleService {
   private url = 'api/mgr/module';
+  updateCompleted$ = new Subject<void>();
 
   readonly REFRESH_INTERVAL = 2000;
 
@@ -85,9 +86,11 @@ export class MgrModuleService {
     table: TableComponent = null,
     navigateTo: string = '',
     notificationText?: string,
-    navigateByUrl?: boolean
+    navigateByUrl?: boolean,
+    reconnectingMessage: string = $localize`Reconnecting, please wait ...`
   ): void {
     let $obs;
+
     const fnWaitUntilReconnected = () => {
       observableTimer(this.REFRESH_INTERVAL).subscribe(() => {
         // Trigger an API request to check if the connection is
@@ -110,15 +113,16 @@ export class MgrModuleService {
               );
             }
 
-            if (!navigateTo) return;
-
-            const navigate = () => this.router.navigate([navigateTo]);
-
-            if (navigateByUrl) {
-              this.router.navigateByUrl('/', { skipLocationChange: true }).then(navigate);
-            } else {
-              navigate();
+            if (navigateTo) {
+              const navigate = () => this.router.navigate([navigateTo]);
+              if (navigateByUrl) {
+                this.router.navigateByUrl('/', { skipLocationChange: true }).then(navigate);
+              } else {
+                navigate();
+              }
             }
+            // Notify the subscribers that the update is completed.
+            this.updateCompleted$.next();
           },
           () => {
             fnWaitUntilReconnected();
@@ -134,14 +138,17 @@ export class MgrModuleService {
     } else {
       $obs = this.enable(module);
     }
+
     $obs.subscribe(
-      () => undefined,
+      () => {
+        this.updateCompleted$.next();
+      },
       () => {
         // Suspend showing the notification toasties.
         this.notificationService.suspendToasties(true);
         // Block the whole UI to prevent user interactions until
         // the connection to the backend is reestablished
-        this.blockUI.start('global', $localize`Reconnecting, please wait ...`);
+        this.blockUI.start('global', reconnectingMessage);
         fnWaitUntilReconnected();
       }
     );
