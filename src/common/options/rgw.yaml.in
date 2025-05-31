@@ -1166,6 +1166,19 @@ options:
   see_also:
   - rgw_keystone_verify_ssl
   with_legacy: true
+- name: rgw_verify_oidc_thumbprint
+  type: bool
+  level: advanced
+  desc: Should RGW verify OIDC thumbprint for STS
+  long_desc: When a user adds a OIDC (e.g., create_open_id_connect_provider), a list
+    of thumbprints is provided in order to verify the security of the endpoint. For
+    IAM operations where STS is used to assume a role, the OIDC endpoint should be
+    verified using the provided thumbprints. This configuration is used to determine
+    whether that endpoint should be verified using the provided thumbprints
+    in create_open_id_connect_provider.
+  default: false
+  services:
+  - rgw
 # The following are tunables for caches of RGW NFS (and other file
 # client) objects.
 #
