@@ -39,6 +39,8 @@
 #include "PyModuleRegistry.h"
 #include "PyUtil.h"
 
+#include "json_spirit/json_spirit.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
