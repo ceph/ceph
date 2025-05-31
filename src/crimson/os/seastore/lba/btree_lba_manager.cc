@@ -1091,7 +1091,7 @@ BtreeLBAManager::_update_mapping(
 	    }
 	    assert(!nextent || 
 	           (nextent->has_parent_tracker() &&
-		    nextent->get_parent_node().get() == iter.get_leaf_node().get()));
+		    nextent->peek_parent_node().get() == iter.get_leaf_node().get()));
 	    return update_mapping_ret_bare_t(iter.get_cursor(c));
 	  });
 	}

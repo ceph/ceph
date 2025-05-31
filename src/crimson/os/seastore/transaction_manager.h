@@ -528,7 +528,7 @@ public:
         ceph_assert(!pin.is_clone());
 	fut = fut.si_then([this, &t, &pin]() mutable {
 	  return lba_manager->refresh_lba_mapping(t, std::move(pin));
-	}).si_then([this, &t, &pin](auto newpin) {
+	}).si_then([this, &t, &pin, original_paddr, original_len](auto newpin) {
 	  pin = std::move(newpin);
 	  if (full_extent_integrity_check) {
 	    return read_pin<T>(t, pin.duplicate()
@@ -550,6 +550,7 @@ public:
 	      });
 	    } else {
 	      // absent
+	      cache->retire_absent_extent_addr(t, original_paddr, original_len);
 	      return base_iertr::make_ready_future<TCachedExtentRef<T>>();
 	    }
 	  }
@@ -570,8 +571,6 @@ public:
 	  if (ext) {
 	    assert(ext->is_seen_by_users());
 	    cache->retire_extent(t, ext);
-	  } else {
-	    cache->retire_absent_extent_addr(t, original_paddr, original_len);
 	  }
 	  for (auto &remap : remaps) {
 	    auto remap_offset = remap.offset;
