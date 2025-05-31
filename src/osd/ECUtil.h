@@ -544,7 +544,7 @@ public:
       ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS) != 0;
   }
 
-  bool require_hinfo() const {
+  bool get_is_hinfo_required() const {
     return !supports_ec_overwrites();
   }
 
