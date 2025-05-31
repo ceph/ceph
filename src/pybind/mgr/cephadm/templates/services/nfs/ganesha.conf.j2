@@ -24,6 +24,7 @@ NFSv4 {
 {% if nfs_idmap_conf %}
         IdmapConf = "{{ nfs_idmap_conf }}";
 {% endif %}
+        Virtual_Server = {{ enable_virtual_server }};
 }
 
 RADOS_KV {
