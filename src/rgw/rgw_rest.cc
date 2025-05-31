@@ -842,7 +842,7 @@ int RGWGetObj_ObjStore::get_params(optional_yield y)
 {
   range_str = s->info.env->get("HTTP_RANGE");
   if_mod = s->info.env->get("HTTP_IF_MODIFIED_SINCE");
-  if_unmod = s->info.env->get("HTTP_IF_UNMODIFIED_SINCE");
+  if_unmod = s->info.env->get("HTTP_IF_MATCH_LAST_MODIFIED_TIME");
   if_match = s->info.env->get("HTTP_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
 
