@@ -3,7 +3,7 @@ HashiCorp Vault Integration
 ===========================
 
 HashiCorp `Vault`_ can be used as a secure key management service for
-`Server-Side Encryption`_ (SSE-KMS).
+:ref:`Server-Side Encryption <radosgw-encryption>` (SSE-KMS).
 
 .. ditaa::
 
@@ -430,7 +430,6 @@ In the transit engine example above, the Object Gateway would encrypt the secret
 
   http://vaultserver:8200/v1/transit/mybucketkey
 
-.. _Server-Side Encryption: ../encryption
 .. _Vault: https://www.vaultproject.io/docs/
 .. _Token authentication method: https://www.vaultproject.io/docs/auth/token.html
 .. _Vault agent: https://www.vaultproject.io/docs/agent/index.html
