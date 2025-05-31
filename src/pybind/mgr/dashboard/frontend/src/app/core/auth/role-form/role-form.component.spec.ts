@@ -16,6 +16,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { RoleFormComponent } from './role-form.component';
 import { RoleFormModel } from './role-form.model';
+import { USER } from '~/app/shared/constants/app.constants';
 
 describe('RoleFormComponent', () => {
   let component: RoleFormComponent;
@@ -107,7 +108,7 @@ describe('RoleFormComponent', () => {
       description: 'Role 1',
       scopes_permissions: { osd: ['read', 'create'] }
     };
-    const scopes = ['osd', 'user'];
+    const scopes = ['osd', USER];
     beforeEach(() => {
       formHelper = new FormHelper(form);
       spyOn(roleService, 'get').and.callFake(() => of(role));
