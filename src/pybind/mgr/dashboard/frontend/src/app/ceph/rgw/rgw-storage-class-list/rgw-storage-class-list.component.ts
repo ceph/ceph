@@ -56,6 +56,11 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         flexGrow: 2
       },
       {
+        name: $localize`Type`,
+        prop: 'tier_type',
+        flexGrow: 2
+      },
+      {
         name: $localize`Zone Group`,
         prop: 'zonegroup_name',
         flexGrow: 2
@@ -111,6 +116,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
           this.storageClassList = [];
           const tierObj = BucketTieringUtils.filterAndMapTierTargets(data);
           this.storageClassList.push(...tierObj);
+          console.log(this.storageClassList, "list");
           resolve();
         },
         (error) => {
