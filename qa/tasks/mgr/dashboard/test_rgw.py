@@ -67,7 +67,6 @@ class RgwTestCase(DashboardTestCase):
         return self._get('/api/rgw/user/{}?stats={}'.format(uid, stats))
 
 
-@skip_unless_dashboard_pr
 class RgwSiteTest(RgwTestCase):
 
     AUTH_ROLES = ['rgw-manager']
