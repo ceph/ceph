@@ -22,7 +22,7 @@ from .operations.volume import create_volume, delete_volume, rename_volume, \
     list_volumes, open_volume, get_pool_names, get_pool_ids, \
     get_pending_subvol_deletions_count, get_all_pending_clones_count
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
-    create_clone, open_subvol_in_group, open_subvol_in_vol
+    create_clone, open_subvol_in_group, open_subvol_in_vol, get_subvol_state
 
 from .vol_spec import VolSpec
 from .exception import VolumeException, ClusterError, ClusterTimeout, \
@@ -516,7 +516,18 @@ class VolumeClient(CephfsClient["Module"]):
                         subvol_info_dict = subvolume.info()
                         subvol_info_dict["mon_addrs"] = mon_addr_lst
                         subvol_info_dict["flavor"] = subvolume.VERSION
-                        ret = 0, json.dumps(subvol_info_dict, indent=4, sort_keys=True), ""
+
+            if subvol_info_dict['source']['volume'] == 'N/A':
+                subvol_info_dict['source']['subvolume_state'] = 'N/A'
+            else:
+                state = get_subvol_state(self, self.volspec,
+                    subvol_info_dict['source']['volume'],
+                    subvol_info_dict['source']['group'],
+                    subvol_info_dict['source']['subvolume'],
+                    SubvolumeOpType.INFO)
+                subvol_info_dict['source']['subvolume_state'] = state.value
+
+            ret = 0, json.dumps(subvol_info_dict, indent=4, sort_keys=True), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret

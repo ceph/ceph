@@ -16,7 +16,7 @@ from .operations.template import SubvolumeOpType
 from .operations.clone_index import open_clone_index, PATH_MAX
 from .operations.resolver import resolve_group_and_subvolume_name
 from .exception import VolumeException
-from .async_cloner import get_clone_state
+from .operations.subvolume import get_subvol_state
 from .operations.versions.subvolume_attrs import SubvolumeStates
 
 from mgr_util import RTimer, format_bytes, format_dimless
@@ -177,8 +177,9 @@ class CloneProgressReporter:
             ci.dst_path = dst_subvol.path
             log.debug(f'destination subvolume path for clone - {ci.dst_path}')
 
-        clone_state = get_clone_state(self.volclient, self.vol_spec, ci.volname,
-                                      ci.dst_group_name, ci.dst_subvol_name)
+        clone_state = get_subvol_state(self.volclient, self.vol_spec, ci.volname,
+                                       ci.dst_group_name, ci.dst_subvol_name,
+                                       SubvolumeOpType.CLONE_INTERNAL)
         if clone_state == SubvolumeStates.STATE_INPROGRESS:
             self.ongoing_clones_count += 1
 
