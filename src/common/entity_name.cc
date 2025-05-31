@@ -16,35 +16,44 @@
 #include "common/entity_name.h"
 #include "common/ceph_strings.h"
 #include "common/Formatter.h"
-#include "msg/msg_types.h"
 
 #include <sstream>
+#include <string>
+#include <string_view>
+#include <vector>
 
 using std::string;
+using namespace std::literals::string_view_literals;
 
-void EntityName::encode(ceph::buffer::list& bl) const {
+void EntityName::encode(ceph::buffer::list& bl) const
+{
   using ceph::encode;
-  encode(type, bl);
+  {
+    uint32_t _type = type;
+    encode(_type, bl);
+  }
   encode(id, bl);
 }
 
-void EntityName::decode(ceph::buffer::list::const_iterator& bl) {
+void EntityName::decode(ceph::buffer::list::const_iterator& bl)
+{
   using ceph::decode;
-  uint32_t type_;
   std::string id_;
-  decode(type_, bl);
+  uint32_t _type;
+  decode(_type, bl);
   decode(id_, bl);
-  set(type_, id_);
+  set(static_cast<entity_type_t>(_type), id_);
 }
 
-const std::array<EntityName::str_to_entity_type_t, 6> EntityName::STR_TO_ENTITY_TYPE = {{
-  { CEPH_ENTITY_TYPE_AUTH, "auth" },
-  { CEPH_ENTITY_TYPE_MON, "mon" },
-  { CEPH_ENTITY_TYPE_OSD, "osd" },
-  { CEPH_ENTITY_TYPE_MDS, "mds" },
-  { CEPH_ENTITY_TYPE_MGR, "mgr" },
-  { CEPH_ENTITY_TYPE_CLIENT, "client" },
-}};
+using namespace std::string_literals;
+static const std::vector<std::pair<entity_type_t, std::string>> STR_TO_ENTITY_TYPE = {
+  { CEPH_ENTITY_TYPE_AUTH, "auth"s },
+  { CEPH_ENTITY_TYPE_MON, "mon"s },
+  { CEPH_ENTITY_TYPE_OSD, "osd"s },
+  { CEPH_ENTITY_TYPE_MDS, "mds"s },
+  { CEPH_ENTITY_TYPE_MGR, "mgr"s },
+  { CEPH_ENTITY_TYPE_CLIENT, "client"s },
+};
 
 void EntityName::dump(ceph::Formatter *f) const {
   f->dump_int("type", type);
@@ -84,7 +93,7 @@ bool EntityName::from_str(std::string_view s) {
   return true;
 }
 
-void EntityName::set(uint32_t type_, std::string_view id_) {
+void EntityName::set(entity_type_t type_, std::string_view id_) {
   type = type_;
   id = id_;
 
@@ -98,14 +107,14 @@ void EntityName::set(uint32_t type_, std::string_view id_) {
 }
 
 int EntityName::set(std::string_view type_, std::string_view id_) {
-  uint32_t t = str_to_ceph_entity_type(type_);
+  auto t = str_to_ceph_entity_type(type_);
   if (t == CEPH_ENTITY_TYPE_ANY)
     return -EINVAL;
   set(t, id_);
   return 0;
 }
 
-void EntityName::set_type(uint32_t type_) {
+void EntityName::set_type(entity_type_t type_) {
   set(type_, id);
 }
 
@@ -149,19 +158,35 @@ std::string EntityName::get_valid_types_as_str() {
     if (i > 0) {
       out << ", ";
     }
-    out << STR_TO_ENTITY_TYPE[i].str;
+    out << STR_TO_ENTITY_TYPE[i].first;
   }
   return out.str();
 }
 
-uint32_t EntityName::str_to_ceph_entity_type(std::string_view s)
+entity_type_t EntityName::str_to_ceph_entity_type(std::string_view s)
 {
-  size_t i;
-  for (i = 0; i < STR_TO_ENTITY_TYPE.size(); ++i) {
-    if (s == STR_TO_ENTITY_TYPE[i].str)
-      return STR_TO_ENTITY_TYPE[i].type;
+  auto l = [s](const auto& p) {
+    return s == p.second;
+  };
+  auto it = std::find_if(STR_TO_ENTITY_TYPE.begin(), STR_TO_ENTITY_TYPE.end(), std::move(l));
+  if (it == STR_TO_ENTITY_TYPE.end()) {
+    return CEPH_ENTITY_TYPE_ANY;
+  } else {
+    return it->first;
   }
-  return CEPH_ENTITY_TYPE_ANY;
+}
+
+std::string_view EntityName::ceph_entity_type_to_str(entity_type_t type)
+{
+  auto l = [type](const auto& p) {
+    return type == p.first;
+  };
+  auto it = std::find_if(STR_TO_ENTITY_TYPE.begin(), STR_TO_ENTITY_TYPE.end(), std::move(l));
+  if (it == STR_TO_ENTITY_TYPE.end()) {
+    return "???"sv;
+  } else {
+    return it->second;
+  }
 }
 
 bool operator<(const EntityName& a, const EntityName& b)
