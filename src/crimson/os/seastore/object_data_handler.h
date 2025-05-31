@@ -88,6 +88,8 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
   // to provide the local modified view during transaction
   overwrite_buf_t cached_overwrites;
 
+  bool physical_reserved = false;
+
   explicit ObjectDataBlock(ceph::bufferptr &&ptr)
     : LogicalChildNode(std::move(ptr)) {}
   explicit ObjectDataBlock(const ObjectDataBlock &other, share_buffer_t s)
@@ -109,6 +111,15 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
     cached_overwrites.add(b);
     delta.push_back(b);
     modified_region.union_insert(offset, bl.length());
+  }
+
+  void mark_physical_reserved() {
+    // this is to reserve pyhsical region
+    physical_reserved = true;
+  }
+
+  bool is_physical_reserved() final {
+    return physical_reserved;
   }
 
   ceph::bufferlist get_delta() final;
@@ -225,6 +236,11 @@ public:
   using clone_iertr = base_iertr;
   using clone_ret = clone_iertr::future<>;
   clone_ret clone(context_t ctx);
+
+  using allocate_iertr = base_iertr;
+  using allocate_ret = allocate_iertr::future<>;
+  allocate_ret allocate_physical_region(
+    context_t ctx, extent_len_t len);
 
 private:
   /// Updates region [_offset, _offset + bl.length) to bl
