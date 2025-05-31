@@ -92,7 +92,11 @@ void ListSnapshotsRequest<I>::handle_list_snap_orders(int r) {
 
   m_snap_orders.insert(snap_orders.begin(), snap_orders.end());
   if (snap_orders.size() < MAX_RETURN) {
-    list_snaps();
+    if (m_retried_snap_orders) {
+      sort_snaps();
+    } else {
+      list_snaps();
+    }
     return;
   }
 
@@ -158,7 +162,18 @@ void ListSnapshotsRequest<I>::sort_snaps() {
   for (const auto& snap : *m_snaps) {
     if (m_snap_orders.find(snap.id) == m_snap_orders.end()) {
       ldout(cct, 10) << "Missing order for snap_id=" << snap.id << dendl;
-      finish(m_fail_if_not_sorted ? -EINVAL : 0);
+      if (m_fail_if_not_sorted) {
+        if (!m_retried_snap_orders) {
+          ldout(cct, 10) << "Retrying to fetch missing snap orders..." << dendl;
+          m_retried_snap_orders = true;
+          m_start_after_order = "";
+          list_snap_orders();
+        } else {
+          finish(-EINVAL);
+        }
+      } else {
+        finish(0);
+      }
       return;
     }
   }
