@@ -7184,6 +7184,12 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
+  // size is logged in stadared mode
+  int ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Standard, s->object.get(), s, canonical_name(), "", ofs, this, y, true, false);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << "WARNING: in Standard mode, complete MPU operation ignores bucket logging failure: " << ret << dendl;
+  }
+
   remove_objs.clear();
 
   // use cls_version_check() when deleting the meta object to detect part uploads that raced
@@ -7229,7 +7235,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
 
   // send request to notification manager
-  int ret = res->publish_commit(this, ofs, upload_time, etag, s->object->get_instance());
+  ret = res->publish_commit(this, ofs, upload_time, etag, s->object->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
