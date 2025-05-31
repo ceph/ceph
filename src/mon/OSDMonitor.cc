@@ -14407,6 +14407,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 						   get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool availability-status") {
+    if (!g_conf().get_val<bool>("enable_availability_tracking")) {
+      ss << "availability tracking is disabled; you can enable it by setting the config option enable_availability_tracking";
+      err = -EOPNOTSUPP;
+      goto reply_no_propose;
+    }
     TextTable tbl;
     tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("UPTIME", TextTable::LEFT, TextTable::RIGHT);

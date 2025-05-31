@@ -8,7 +8,8 @@
 #include "mon/PGMap.h"
 #include "mgr/ServiceMap.h"
 
-class MgrStatMonitor : public PaxosService {
+ class MgrStatMonitor : public PaxosService, 
+                        public md_config_obs_t {
   // live version
   version_t version = 0;
   PGMapDigest digest;
@@ -52,6 +53,8 @@ public:
   bool preprocess_statfs(MonOpRequestRef op);
 
   void calc_pool_availability();
+  bool enable_availability_tracking = g_conf().get_val<bool>("enable_availability_tracking"); ///< tracking availability score feature 
+  utime_t reset_availability_last_uptime_downtime_val = utime_t(1, 2);
 
   void check_sub(Subscription *sub);
   void check_subs();
@@ -114,4 +117,9 @@ public:
 		       bool verbose) const {
     digest.dump_pool_stats_full(osdm, ss, f, verbose);
   }
+
+  // config observer 
+  std::vector<std::string> get_tracked_keys() const noexcept override;
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set <std::string> &changed) override;
 };
