@@ -336,14 +336,14 @@ class ScrubJob {
  *  | limitation |  must-  | after-repair |repairing| operator | must-repair |
  *  |            |  scrub  |(aft recovery)|(errors) | request  |             |
  *  +------------+---------+--------------+---------+----------+-------------+
- *  | reservation|    yes! |      no      |    no?  +     no   |      no     |
- *  | dow/time   |    yes  |     yes      |    no   +     no   |      no     |
- *  | ext-sleep  |    no   |      no      |    no   +     no   |      no     |
- *  | load       |    yes  |      no      |    no   +     no   |      no     |
- *  | noscrub    |    yes  |      no?     |    Yes  +     no   |      no     |
- *  | max-scrubs |    yes  |      yes     |    Yes  +     no   |      no     |
- *  | backoff    |    yes  |      no      |    no   +     no   |      no     |
- *  | recovery   |    yes  |      yes     |    Yes  +     no   |      no     |
+ *  | reservation|    yes! |      no      |    no?  |     no   |      no     |
+ *  | dow/time   |    yes  |     yes      |    no   |     no   |      no     |
+ *  | ext-sleep  |    no   |      no      |    no   |     no   |      no     |
+ *  | load       |    yes  |      no      |    no   |     no   |      no     |
+ *  | noscrub    |    yes  |      no      |    Yes  |     no   |      no     |
+ *  | max-scrubs |    yes  |      yes     |    Yes  |     no   |      no     |
+ *  | backoff    |    yes  |      no      |    no   |     no   |      no     |
+ *  | recovery   |    yes  |      yes     |    Yes  |     no   |      no     |
  *  +------------+---------+--------------+---------+----------+-------------+
  */
 
@@ -353,6 +353,8 @@ class ScrubJob {
   static bool observes_noscrub_flags(urgency_t urgency);
 
   static bool observes_allowed_hours(urgency_t urgency);
+
+  static bool observes_extended_sleep(urgency_t urgency);
 
   static bool observes_load_limit(urgency_t urgency);
 
