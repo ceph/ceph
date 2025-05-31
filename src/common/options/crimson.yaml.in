@@ -85,6 +85,17 @@ options:
   level: advanced
   default: 0
   desc: Report OSD status periodically in seconds, 0 to disable
+
+- name: crimson_poll_mode
+  type: bool
+  level: advanced
+  default: false
+  desc: Let the seastar reactor poll continuously without sleeping at the expense of 100% cpu usage.
+  flags:
+  - startup
+
+# Seastore options
+
 - name: seastore_segment_size
   type: size
   desc: Segment size to use for SegmentManager
