@@ -227,6 +227,8 @@ struct StateBuilder<librbd::MockTestImageCtx> {
   std::string remote_mirror_uuid = "remote mirror uuid";
   ::journal::MockJournaler* remote_journaler = nullptr;
   librbd::journal::MirrorPeerClientMeta remote_client_meta;
+
+  MOCK_METHOD0(is_remote_primary, bool());
 };
 
 EventPreprocessor<librbd::MockTestImageCtx>* EventPreprocessor<librbd::MockTestImageCtx>::s_instance = nullptr;
@@ -806,6 +808,7 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitDisconnectedResync) {
                             cls::journal::CLIENT_STATE_DISCONNECTED},
                            {librbd::journal::MirrorPeerClientMeta{
                               mock_local_image_ctx.id}}, 0);
+  EXPECT_CALL(mock_state_builder, is_remote_primary()).WillOnce(Return(true));
   MockCloseImageRequest mock_close_image_request;
   expect_send(mock_close_image_request, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
@@ -844,6 +847,7 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitResyncRequested) {
   EXPECT_CALL(mock_local_journal, add_listener(_));
   expect_is_tag_owner(mock_local_journal, false);
   expect_is_resync_requested(mock_local_journal, 0, true);
+  EXPECT_CALL(mock_state_builder, is_remote_primary()).WillOnce(Return(true));
   expect_notification(mock_threads, mock_replayer_listener);
 
   C_SaferCond init_ctx;
@@ -1435,7 +1439,7 @@ TEST_F(TestMockImageReplayerJournalReplayer, LocalJournalResyncRequested) {
                                    &local_journal_listener,
                                    &remote_replay_handler,
                                    &remote_journaler_listener));
-
+  EXPECT_CALL(mock_state_builder, is_remote_primary()).WillOnce(Return(true));
   expect_notification(mock_threads, mock_replayer_listener);
   local_journal_listener->handle_resync();
   wait_for_notification();
@@ -1488,6 +1492,7 @@ TEST_F(TestMockImageReplayerJournalReplayer, RemoteJournalDisconnected) {
                             cls::journal::CLIENT_STATE_DISCONNECTED},
                            {librbd::journal::MirrorPeerClientMeta{
                               mock_local_image_ctx.id}}, 0);
+  EXPECT_CALL(mock_state_builder, is_remote_primary()).WillOnce(Return(true));
   expect_notification(mock_threads, mock_replayer_listener);
 
   remote_journaler_listener->handle_update(nullptr);

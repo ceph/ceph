@@ -363,6 +363,8 @@ struct StateBuilder<librbd::MockTestImageCtx> {
 
   librbd::mirror::snapshot::ImageMeta<librbd::MockTestImageCtx>*
     local_image_meta = nullptr;
+
+  MOCK_METHOD0(is_remote_primary, bool());
 };
 
 ApplyImageStateRequest<librbd::MockTestImageCtx>* ApplyImageStateRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
@@ -1790,6 +1792,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ResyncRequested) {
 
   // idle
   expect_load_image_meta(mock_image_meta, true, 0);
+  EXPECT_CALL(mock_state_builder, is_remote_primary()).WillOnce(Return(true));
 
   // wake-up replayer
   update_watch_ctx->handle_notify();
@@ -3137,6 +3140,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ImageNameUpdated) {
 
   // idle
   expect_load_image_meta(mock_image_meta, true, 0);
+  EXPECT_CALL(mock_state_builder, is_remote_primary()).WillOnce(Return(true));
 
   // wake-up replayer
   update_watch_ctx->handle_notify();

@@ -55,6 +55,8 @@ struct StateBuilder<librbd::MockTestImageCtx> {
   std::string remote_mirror_uuid = "remote mirror uuid";
   ::journal::MockJournaler* remote_journaler = nullptr;
   librbd::journal::MirrorPeerClientMeta remote_client_meta;
+
+  MOCK_METHOD0(is_remote_primary, bool());
 };
 
 } // namespace journal
@@ -256,6 +258,7 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, ResyncRequested) {
   bool syncing;
   auto request = create_request(mock_state_builder, "local mirror uuid",
                                 &resync_requested, &syncing, &ctx);
+  EXPECT_CALL(mock_state_builder, is_remote_primary()).WillOnce(Return(true));
   request->send();
   ASSERT_EQ(0, ctx.wait());
   ASSERT_TRUE(resync_requested);
