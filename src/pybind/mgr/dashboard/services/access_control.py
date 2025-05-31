@@ -246,6 +246,7 @@ CLUSTER_MGR_ROLE = Role(
         Scope.CONFIG_OPT: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.LOG: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.GRAFANA: [_P.READ],
+        Scope.PROMETHEUS: [_P.READ]
     })
 
 
