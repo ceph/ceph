@@ -1,5 +1,7 @@
 @use './src/styles/vendor/variables' as vv;
+@use 'sass:math';
 
+// Modern Ceph Toast Notification Design
 #toast-container {
   margin-top: 2vw;
 
@@ -22,9 +24,189 @@
   @media (max-width: 260px) {
     margin-top: 14vw;
   }
+  
+  // Ensure proper stacking when multiple toasts appear
+  & > div {
+    opacity: 1;
+  }
+  
+  .toast + .toast {
+    margin-top: 8px; // Add spacing between stacked toasts
+  }
+
+  .toast {
+    max-width: 350px;
+    overflow: hidden;
+    font-size: 0.875rem;
+    background-clip: padding-box;
+    border: 0;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(4px);
+    opacity: 0.95;
+    transition: all 0.3s ease;
+
+    &:hover {
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+      opacity: 1;
+    }
+
+    .toast-close-button {
+      font-size: 18px;
+      color: rgba(255, 255, 255, 0.6);
+      opacity: 0.7;
+      transition: all 0.2s ease;
+      position: absolute;
+      right: 10px;
+      top: 10px;
+
+      &:hover {
+        color: rgba(255, 255, 255, 0.9);
+        opacity: 1;
+      }
+    }
+  }
+
+  .ngx-toastr {
+    position: relative;
+    overflow: hidden;
+    margin: 0 0 10px;
+    padding: 15px 15px 15px 15px;
+    width: 320px;
+    border-radius: 4px;
+    color: #fff;
+    pointer-events: auto;
+    background-color: #000000;
+    
+    // Color-coded horizontal line at the top
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      height: 4px;
+      background-color: #25828e; // Default color (info)
+    }
+    
+    // Removing duplicate Ceph logo in bottom right
+    // Added text branding option
+    &.text-branded {
+      &::after {
+        content: 'Ceph';
+        position: absolute;
+        right: 10px;
+        bottom: 10px;
+        font-size: 12px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.5);
+        opacity: 0.5;
+      }
+    }
+
+    // Title styling
+    .toast-title {
+      font-weight: 600;
+      font-size: 1rem;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      padding-right: 15px;
+    }
+
+    // Info icon styling
+    .toast-message {
+      word-wrap: break-word;
+      font-size: 0.875rem;
+      opacity: 0.9;
+      
+      // Container for timestamp and icon
+      .toast-metadata {
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        margin-top: 6px;
+      }
+      
+      small.date {
+        display: inline-block;
+        font-size: 0.75rem;
+        opacity: 0.7;
+      }
+      
+      .custom-icon {
+        margin-left: 8px;
+        opacity: 0.8;
+        
+        &[class*="ceph"] {
+          // Hide Ceph-specific icons in the application icon slot
+          // when text branding is enabled
+          .text-branded & {
+            display: none;
+          }
+        }
+      }
+    }
+
+    // Progress bar for timeouts
+    &.has-progress-bar {
+      position: relative;
+      
+      .toast-progress {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        height: 3px;
+        opacity: 0.7;
+        background-color: rgba(255, 255, 255, 0.5);
+      }
+    }
+
+    // Notification types with color-coded horizontal line at top
+    &.toast-success {
+      background-color: #000000;
+      background-image: none;
+      
+      &::before {
+        background-color: #008a00; // Success green
+      }
+    }
+
+    &.toast-error {
+      background-color: #000000;
+      background-image: none;
+      
+      &::before {
+        background-color: #dc3545; // Error red
+      }
+    }
+
+    &.toast-info {
+      background-color: #000000;
+      background-image: none;
+      
+      &::before {
+        background-color: #25828e; // Info blue
+      }
+    }
+
+    &.toast-warning {
+      background-color: #000000;
+      background-image: none;
+      
+      &::before {
+        background-color: #d48200; // Warning orange
+      }
+    }
+  }
 }
 
-.toast-message > ul {
-  margin: 0;
-  padding-left: 1rem;
+// Keyframe animation for progress bar
+@keyframes progress-bar {
+  0% {
+    width: 100%;
+  }
+  100% {
+    width: 0;
+  }
 }

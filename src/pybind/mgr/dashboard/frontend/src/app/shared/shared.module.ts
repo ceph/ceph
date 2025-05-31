@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
-import { ReactiveFormsModule } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { FormlyModule } from '@ngx-formly/core';
 import { FormlyBootstrapModule } from '@ngx-formly/bootstrap';
 
@@ -25,7 +25,7 @@ import { BlockUIModule, BlockUIService } from 'ng-block-ui';
     ComponentsModule,
     DataTableModule,
     DirectivesModule,
-
+    FormsModule,
     ReactiveFormsModule,
     FormlyModule.forRoot({
       types: [
@@ -39,7 +39,7 @@ import { BlockUIModule, BlockUIService } from 'ng-block-ui';
     BlockUIModule.forRoot()
   ],
   declarations: [FormlyTextareaTypeComponent],
-  exports: [ComponentsModule, PipesModule, DataTableModule, DirectivesModule],
+  exports: [ComponentsModule, PipesModule, DataTableModule, DirectivesModule, FormsModule],
   providers: [AuthStorageService, AuthGuardService, FormatterService, CssHelper, BlockUIService]
 })
 export class SharedModule {}
