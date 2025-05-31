@@ -135,6 +135,9 @@ struct denc_counter_t {
     p += 1;
     ++counts.num_decode;
   }
+  bool operator <(const denc_counter_t& other) const {
+    return this < &other;
+  }
 };
 WRITE_CLASS_DENC(denc_counter_t)
 
@@ -272,6 +275,81 @@ TEST(denc, vector)
     ASSERT_EQ(counts.num_bound_encode, 1);
     ASSERT_EQ(counts.num_encode, 100);
     ASSERT_EQ(counts.num_decode, 100);
+  }
+}
+
+TEST(denc, vector_as_set)
+{
+  {
+    counts.reset();
+    vector<denc_counter_t> v;
+    set<denc_counter_t> s;
+    v.resize(100);
+    {
+      bufferlist bl;
+      encode(v, bl);
+      decode(s, bl);
+    }
+    ASSERT_EQ(counts.num_bound_encode, 100);
+    ASSERT_EQ(counts.num_encode, 100);
+    ASSERT_EQ(counts.num_decode, 100);
+  }
+  {
+    counts.reset();
+    vector<denc_counter_t> v;
+    set<denc_counter_t> s;
+    std::array<denc_counter_t, 100> cnts;
+    for( auto& c : cnts) {
+      s.insert(c);
+    }
+    {
+      bufferlist bl;
+      encode(s, bl);
+      decode(v, bl);
+    }
+    ASSERT_EQ(counts.num_bound_encode, 100);
+    ASSERT_EQ(counts.num_encode, 100);
+    ASSERT_EQ(counts.num_decode, 100);
+  }
+}
+
+TEST(denc, vector_as_map)
+{
+  {
+    counts.reset();
+    vector<pair<denc_counter_t, denc_counter_t>> v;
+    map<denc_counter_t, denc_counter_t> m;
+    v.resize(100);
+    {
+      bufferlist bl;
+      encode(v, bl);
+      decode(m, bl);
+    }
+    ASSERT_EQ(counts.num_bound_encode, 200);
+    ASSERT_EQ(counts.num_encode, 200);
+    ASSERT_EQ(counts.num_decode, 200);
+  }
+  {
+    counts.reset();
+    vector<pair<size_t, denc_counter_t>> v;
+    map<size_t, denc_counter_t> m;
+    std::array<denc_counter_t, 100> cnts;
+    size_t i = 0;
+    for( auto& c : cnts) {
+      m.emplace(i++, c);
+    }
+    {
+      bufferlist bl;
+      encode(m, bl);
+      decode(v, bl);
+    }
+    ASSERT_EQ(counts.num_bound_encode, 100);
+    ASSERT_EQ(counts.num_encode, 100);
+    ASSERT_EQ(counts.num_decode, 100);
+    i = 0;
+    for (auto p : v) {
+      ASSERT_EQ(p.first, i++);
+    }
   }
 }
 
