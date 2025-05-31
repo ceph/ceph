@@ -43,4 +43,17 @@ RGW {
         name = "client.{{ rgw_user }}";
 }
 
+{% if kmip_addrs %}
+KMIP {
+            HOST {
+{% for kmip_addr in kmip_addrs %}
+                     addr = {{ kmip_addr }};
+{% endfor %}
+            }
+            cert = /etc/ganesha/kmip/kmip_cert.pem;
+            key = /etc/ganesha/kmip/kmip_key.pem;
+            ca = /etc/ganesha/kmip/kmip_ca_cert.pem;
+}
+{% endif %}
+
 %url    {{ url }}

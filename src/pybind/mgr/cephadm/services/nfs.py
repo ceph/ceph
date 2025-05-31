@@ -112,6 +112,8 @@ class NFSService(CephService):
         else:
             logger.debug("using haproxy bind address: %r", bind_addr)
 
+        add_kmip_block = (spec.kmip_cert and spec.kmip_key and spec.kmip_ca_cert and spec.kmip_host_list)
+
         # generate the ganesha config
         def get_ganesha_conf() -> str:
             context: Dict[str, Any] = {
@@ -129,6 +131,7 @@ class NFSService(CephService):
                 "nfs_idmap_conf": nfs_idmap_conf,
                 "enable_nlm": str(spec.enable_nlm).lower(),
                 "cluster_id": self.mgr._cluster_fsid,
+                "kmip_addrs": spec.kmip_host_list if add_kmip_block else None,
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
@@ -162,6 +165,13 @@ class NFSService(CephService):
                 'ganesha.conf': get_ganesha_conf(),
                 'idmap.conf': get_idmap_conf()
             }
+            if add_kmip_block:
+                for kmip_cert_key_field in [
+                    'kmip_cert',
+                    'kmip_key',
+                    'kmip_ca_cert',
+                ]:
+                    config['files'][f'{kmip_cert_key_field}.pem'] = getattr(spec, kmip_cert_key_field)
             config.update(
                 self.get_config_and_keyring(
                     daemon_type, daemon_id,
