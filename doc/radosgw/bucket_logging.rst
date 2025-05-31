@@ -26,6 +26,8 @@ in different objects in the log bucket.
     - Source and log bucket must be in the same zonegroup
     - Source and log buckets may belong to different accounts (with proper bucket policy set)
     - The log bucket may have object lock enabled with default retention period
+    - The 16 bit unique ID part of the log object name is an incrementing counter, or a random,
+      alphanumeric string if the counter is not available
 
 
 .. toctree::
@@ -157,7 +159,7 @@ For example:
 
 ::
 
-  fish/testid//all-log/2024/08/06/2024-08-06-10-11-18-1HMU3UMWOJKNQJ0X
+  fish/testid//all-log/2024/08/06/2024-08-06-10-11-18-0000000000000002
 
 Log Records
 ~~~~~~~~~~~
