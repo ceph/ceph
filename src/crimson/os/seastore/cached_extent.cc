@@ -47,8 +47,6 @@ std::ostream &operator<<(std::ostream &out, CachedExtent::extent_state_t state)
     return out << "INITIAL_WRITE_PENDING";
   case CachedExtent::extent_state_t::MUTATION_PENDING:
     return out << "MUTATION_PENDING";
-  case CachedExtent::extent_state_t::CLEAN_PENDING:
-    return out << "CLEAN_PENDING";
   case CachedExtent::extent_state_t::CLEAN:
     return out << "CLEAN";
   case CachedExtent::extent_state_t::DIRTY:
