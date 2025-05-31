@@ -58,9 +58,9 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
   imagesSettings: any = {};
   messages = {
     portals: new SelectMessages({ noOptions: $localize`There are no portals available.` }),
-    images: new SelectMessages({ noOptions: $localize`There are no images available.` }),
+    images: new SelectMessages({ noOptions: $localize`There are no volume available.` }),
     initiatorImage: new SelectMessages({
-      noOptions: $localize`There are no images available. Please make sure you add an image to the target.`
+      noOptions: $localize`There are no volumes available. Please make sure you add an volume to the target.`
     }),
     groupInitiator: new SelectMessages({
       noOptions: $localize`There are no initiators available. Please make sure you add an initiator to the target.`
