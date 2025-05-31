@@ -194,6 +194,11 @@ erasure-coded pool as the ``--data-pool`` during image creation:
 For CephFS, an erasure-coded pool can be set as the default data pool during
 file system creation or via `file layouts <../../../cephfs/file-layouts>`_.
 
+For RBD, a default data pool can be set at the pool level by:
+
+.. prompt:: bash $
+    rbd config pool set replicated_pool rbd_default_data_pool ec_pool 
+
 Erasure-coded pool overhead
 ---------------------------
 
