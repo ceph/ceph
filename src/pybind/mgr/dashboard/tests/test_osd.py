@@ -78,7 +78,7 @@ class OsdHelper(object):
                 'total': 10804518912,
                 'available': 9657909248,
                 'internally_reserved': 1073741824,
-                'allocated': 5636096,
+                'data_allocated': 5636096,
                 'data_stored': 102508,
                 'data_compressed': 0,
                 'data_compressed_allocated': 0,

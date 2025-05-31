@@ -69,7 +69,7 @@ TEST(pgmap, dump_object_stat_sum_0)
   pool_stat.num_store_stats = 3;
   store_statfs_t &statfs = pool_stat.store_stats;
   statfs.data_stored = 40 * 1024 * 1024;
-  statfs.allocated = 41 * 1024 * 1024 * 2;
+  statfs.data_allocated = 41 * 1024 * 1024 * 2;
   statfs.data_compressed_allocated = 4334;
   statfs.data_compressed_original = 1213;
 
@@ -85,16 +85,16 @@ TEST(pgmap, dump_object_stat_sum_0)
   PGMap::dump_object_stat_sum(tbl, nullptr, pool_stat, avail,
 			      pool.get_size(), verbose, true, true, &pool);
 
-  float used_percent = (float)statfs.allocated /
-    (statfs.allocated + avail) * 100;
+  float used_percent = (float)statfs.data_allocated /
+    (statfs.data_allocated + avail) * 100;
 
   unsigned col = 0;
   ASSERT_EQ(stringify(byte_u_t(statfs.data_stored/pool.get_size())), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(statfs.data_stored/pool.get_size())), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_u_t(sum.num_objects)), tbl.get(0, col++));
-  ASSERT_EQ(stringify(byte_u_t(statfs.allocated)), tbl.get(0, col++));
-  ASSERT_EQ(stringify(byte_u_t(statfs.allocated)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(statfs.data_allocated)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(statfs.data_allocated)), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(percentify(used_percent), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(avail/pool.get_size())), tbl.get(0, col++));
