@@ -9,10 +9,6 @@
 
 namespace crimson::os::seastore {
 
-// XXX: It happens to be true that the width of node
-// 	index in lba and omap tree are the same.
-using btreenode_pos_t = uint16_t;
-
 template <typename ParentT>
 class child_pos_t {
 public:
