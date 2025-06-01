@@ -98,7 +98,6 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version = get_last_committed();
   dout(10) << __func__ << dendl;
-  load_health();
 
   bufferlist qbl;
   mon.store->get(service_name, "quorum", qbl);
@@ -168,7 +167,7 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     t->put(service_name, "mutes", bl);
   }
 
-  health_check_map_t pending_health;
+  auto& pending_health = get_health_checks_pending_writeable();
 
   // combine per-mon details carefully...
   map<string,set<string>> names; // code -> <mon names>
@@ -197,7 +196,6 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   }
 
   pending_health.merge(leader_checks);
-  encode_health(pending_health, t);
 }
 
 version_t HealthMonitor::get_trim_to() const
