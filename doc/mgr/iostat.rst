@@ -3,8 +3,7 @@
 iostat
 ======
 
-The ``iostat`` module shows the current throughput and IOPS done on the Ceph
-cluster.
+The ``iostat`` module reports metrics for cluster throughpout and IOPS. 
 
 Enabling
 --------
