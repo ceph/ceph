@@ -168,6 +168,8 @@ public:
 private:
   bool prepare_used_pending_keys(MonOpRequestRef op);
 
+  bool check_health();
+
   // propose pending update to peers
   void encode_pending(MonitorDBStore::TransactionRef t) override;
   void encode_full(MonitorDBStore::TransactionRef t) override;
