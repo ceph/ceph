@@ -178,18 +178,20 @@ orchestration, these commands check service status:
 Updating an NFS Cluster
 -----------------------
 
-In order to modify cluster parameters (like the port or placement), you need
-to use the orchestrator interface to update the NFS service spec.  The safest
-way to do that is to export the current spec, modify it, and then re-apply it.
-For example, to modify the ``nfs.foo`` service,
+In order to modify cluster parameters (for example, the port or the placement),
+use the orchestrator interface to update the NFS service spec. The safest way
+to do that is to export the current spec, modify it, and then re-apply it. For
+example, to modify the ``nfs.foo`` service, run commands of the following
+forms: 
 
 .. prompt:: bash #
 
    ceph orch ls --service-name nfs.foo --export > nfs.foo.yaml
-   vi nfs.foo.yaml
+   emacs nfs.foo.yaml
    ceph orch apply -i nfs.foo.yaml
 
-For more information about the NFS service spec, see :ref:`deploy-cephadm-nfs-ganesha`.
+For more information about the NFS service spec, see
+:ref:`deploy-cephadm-nfs-ganesha`.
 
 List NFS Ganesha Clusters
 -------------------------
