@@ -54,6 +54,8 @@
 using std::ostringstream;
 using std::string;
 
+using namespace std::literals::string_view_literals;
+
 using ceph::bufferlist;
 using ceph::bufferptr;
 using ceph::Formatter;
@@ -1159,6 +1161,20 @@ int CryptoManager::get_key_type(const std::string& s)
     return CEPH_CRYPTO_NONE;
   }
   return -ENOENT;
+}
+
+std::string_view CryptoManager::get_key_type_name(int type)
+{
+  switch (type) {
+    case CEPH_CRYPTO_NONE:
+      return "none"sv;
+    case CEPH_CRYPTO_AES256KRB5:
+      return "aes256k"sv;
+    case CEPH_CRYPTO_AES:
+      return "aes"sv;
+    default:
+      return "???"sv;
+  }
 }
 
 const std::set<int>& CryptoManager::get_secure_key_types()

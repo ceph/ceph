@@ -184,6 +184,10 @@ public:
   KeyServer& operator=(const KeyServer&) = delete;
   bool generate_secret(CryptoKey& secret, std::optional<int> type = std::nullopt);
 
+  auto const& get_rotating_secrets() const {
+    return data.rotating_secrets;
+  }
+
   bool get_secret(const EntityName& name, CryptoKey& secret) const override;
   bool get_auth(const EntityName& name, EntityAuth& auth) const;
   bool get_caps(const EntityName& name, const std::string& type, AuthCapsInfo& caps) const;
@@ -284,6 +288,7 @@ public:
   bool get_service_caps(const EntityName& name, uint32_t service_id,
 			AuthCapsInfo& caps) const;
 
+  auto const& get_secrets() const { return data.get_secrets(); }
   std::map<EntityName, EntityAuth>::iterator secrets_begin()
   { return data.secrets_begin(); }
   std::map<EntityName, EntityAuth>::iterator secrets_end()
