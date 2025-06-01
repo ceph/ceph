@@ -137,7 +137,6 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
   ceph_assert(version > get_fsmap().epoch);
 
   load_metadata(pending_metadata);
-  load_health();
 
   // read and decode
   bufferlist fsmap_bl;
@@ -226,7 +225,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   remove_from_metadata(pending, t);
 
   // health
-  health_check_map_t new_checks;
+  auto& new_checks = get_health_checks_pending_writeable();
   const auto &info_map = pending.get_mds_info();
   for (const auto &i : info_map) {
     const auto &gid = i.first;
@@ -293,7 +292,6 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       std::regex("%hasorhave%"),
       p.second.detail.size() > 1 ? "have" : "has");
   }
-  encode_health(new_checks, t);
 }
 
 version_t MDSMonitor::get_trim_to() const

@@ -70,7 +70,6 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version = get_last_committed();
   dout(10) << " " << version << dendl;
-  load_health();
   bufferlist bl;
   get_version(version, bl);
   if (version) {
@@ -142,7 +141,6 @@ void MgrStatMonitor::create_pending()
 {
   dout(10) << " " << version << dendl;
   pending_digest = digest;
-  pending_health_checks = get_health_checks();
   pending_service_map_bl.clear();
   encode(service_map, pending_service_map_bl, mon.get_quorum_con_features());
 }
@@ -158,8 +156,6 @@ void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   encode(pending_progress_events, bl);
   put_version(t, version, bl);
   put_last_committed(t, version);
-
-  encode_health(pending_health_checks, t);
 }
 
 version_t MgrStatMonitor::get_trim_to() const
@@ -229,7 +225,7 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   bufferlist bl = m->get_data();
   auto p = bl.cbegin();
   decode(pending_digest, p);
-  pending_health_checks.swap(m->health_checks);
+  auto& pending_health_checks = get_health_checks_pending_writeable();
   if (m->service_map_bl.length()) {
     pending_service_map_bl.swap(m->service_map_bl);
   }
