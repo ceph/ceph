@@ -11,9 +11,9 @@ ceph-mgr module developer's guide
 Creating a module
 -----------------
 
-In ``pybind/mgr/``, create a python module.  Within your module, create a class
+In ``pybind/mgr/``, create a python module. Within your module, create a class
 that inherits from ``MgrModule``.  For ceph-mgr to detect your module, your
-directory must contain a file called ``module.py``.
+directory must contain a file named ``module.py``.
 
 The most important methods to override are:
 
