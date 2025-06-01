@@ -22,6 +22,7 @@
 #include "include/Context.h"
 #include "health_check.h"
 #include "MonitorDBStore.h"
+#include "PaxosMap.h"
 #include "MonOpRequest.h"
 
 class Monitor;
@@ -55,7 +56,7 @@ class PaxosService {
    * If we are or have queued anything for proposal, this variable will be true
    * until our proposal has been finished.
    */
-  bool proposing;
+  bool proposing = false;
 
   bool need_immediate_propose = false;
 
@@ -67,35 +68,44 @@ protected:
    * must keep its own version, if so they wish. This variable should be used
    * for that purpose.
    */
-  version_t service_version;
+  version_t service_version = 0;
 
- private:
+private:
   /**
    * Event callback responsible for proposing our pending value once a timer 
    * runs out and fires.
    */
-  Context *proposal_timer;
+  Context *proposal_timer = nullptr;
   /**
    * If the implementation class has anything pending to be proposed to Paxos,
    * then have_pending should be true; otherwise, false.
    */
-  bool have_pending; 
+  bool have_pending = false;
 
-  /**
-   * health checks for this service
-   *
-   * Child must populate this during encode_pending() by calling encode_health().
-   */
-  health_check_map_t health_checks;
 protected:
   /**
    * format of our state in RocksDB, 0 for default
    */
-  version_t format_version;
+  version_t format_version = 0;
+
+  /**
+   * health checks for this service
+   */
+  PaxosMap<Monitor, PaxosService, health_check_map_t> health_checks;
+
+  /**
+   * The pending health check map. Only callable by the service itself.
+   */
+  health_check_map_t& get_health_checks_pending_writeable() {
+    return health_checks.get_pending_map_writeable();
+  }
 
 public:
-  const health_check_map_t& get_health_checks() const {
-    return health_checks;
+  /**
+   * The current (i.e. not pending) health check map.
+   */
+  health_check_map_t const& get_health_checks() const {
+    return health_checks.get_map();
   }
 
   /**
@@ -148,14 +158,7 @@ public:
    * @param name Our service's name.
    */
   PaxosService(Monitor &mn, Paxos &p, std::string name) 
-    : mon(mn), paxos(p), service_name(name),
-      proposing(false),
-      service_version(0), proposal_timer(0), have_pending(false),
-      format_version(0),
-      last_committed_name("last_committed"),
-      first_committed_name("first_committed"),
-      full_prefix_name("full"), full_latest_name("latest"),
-      cached_first_committed(0), cached_last_committed(0)
+    : mon(mn), paxos(p), service_name(std::move(name)), health_checks(mn, *this)
   {
   }
 
@@ -214,6 +217,12 @@ private:
    *	   active
    */
   void _active();
+
+  void _create_pending();
+
+  void _encode_pending(MonitorDBStore::TransactionRef t);
+
+  void _update_from_paxos(bool* need_bootstrap);
 
 public:
   /**
@@ -438,10 +447,6 @@ public:
    */
   virtual void tick() {}
 
-  void encode_health(const health_check_map_t& next,
-		     MonitorDBStore::TransactionRef t);
-  void load_health();
-
   /**
    * @defgroup PaxosService_h_store_keys Set of keys that are usually used on
    *					 all the services implementing this
@@ -450,10 +455,10 @@ public:
    *					 mistakes.
    * @{
    */
-  const std::string last_committed_name;
-  const std::string first_committed_name;
-  const std::string full_prefix_name;
-  const std::string full_latest_name;
+  const std::string last_committed_name{"last_committed"};
+  const std::string first_committed_name{"first_committed"};
+  const std::string full_prefix_name{"full"};
+  const std::string full_latest_name{"latest"};
   /**
    * @}
    */
@@ -469,8 +474,8 @@ public:
    *                                        and avoid the overhead.
    * @{
    */
-  version_t cached_first_committed;
-  version_t cached_last_committed;
+  version_t cached_first_committed = 0;
+  version_t cached_last_committed = 0;
   /**
    * @}
    */
