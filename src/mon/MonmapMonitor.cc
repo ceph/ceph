@@ -157,9 +157,8 @@ void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   }
 
   //health
-  health_check_map_t next;
+  auto& next = get_health_checks_pending_writeable();
   pending_map.check_health(&next);
-  encode_health(next, t);
 }
 
 class C_ApplyFeatures : public Context {
