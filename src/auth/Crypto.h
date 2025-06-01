@@ -269,6 +269,7 @@ public:
   }
 
   static int get_key_type(const std::string& s);
+  static std::string_view get_key_type_name(int type);
   static const std::set<int>& get_secure_key_types();
   bool crypto_type_supported(int type) const;
 
