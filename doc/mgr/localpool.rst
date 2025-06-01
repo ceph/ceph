@@ -34,8 +34,8 @@ The ``localpool`` module understands the following options:
 
 The default is ``by-$subtreetype-``.
 
-These options are set via the ``config-key`` interface. For example, to
-change the replication level to 2x with only 64 PGs, run the following two commands:
+These options are set via the ``config-key`` interface. For example, to change
+the replication level to 2x with 64 PGs, run the following two commands:
 
 .. prompt:: bash #
 
