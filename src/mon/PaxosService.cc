@@ -172,7 +172,7 @@ void PaxosService::refresh(bool *need_bootstrap)
   format_version = new_format;
 
 
-  update_from_paxos(need_bootstrap);
+  _update_from_paxos(need_bootstrap);
 }
 
 void PaxosService::post_refresh()
@@ -232,7 +232,7 @@ void PaxosService::propose_pending()
   if (should_stash_full())
     encode_full(t);
 
-  encode_pending(t);
+  _encode_pending(t);
   have_pending = false;
 
   if (format_version > 0) {
@@ -382,7 +382,7 @@ void PaxosService::_active()
   if (mon.is_leader()) {
     dout(7) << __func__ << " creating new pending" << dendl;
     if (!have_pending) {
-      create_pending();
+      _create_pending();
       have_pending = true;
     }
 
@@ -508,24 +508,36 @@ void PaxosService::trim(MonitorDBStore::TransactionRef t,
   }
 }
 
-void PaxosService::encode_health(const health_check_map_t& next,
-				 MonitorDBStore::TransactionRef t) {
-  using ceph::encode;
-  ceph::buffer::list bl;
-  encode(next, bl);
-  t->put("health", service_name, bl);
-  mon.log_health(next, health_checks, t);
+void PaxosService::_create_pending() {
+  dout(10) << __func__ << dendl;
+  health_checks.create_pending();
+  dout(30) << __func__ << ": health_checks pending: " << health_checks << dendl;
+  create_pending();
 }
 
-void PaxosService::load_health()
+void PaxosService::_encode_pending(MonitorDBStore::TransactionRef t) {
+  dout(10) << __func__ << dendl;
+  using ceph::encode;
+  encode_pending(t);
+  dout(30) << __func__ << ": health_checks encoding: " << health_checks << dendl;
+  auto const& pending = health_checks.get_pending_map();
+  ceph::buffer::list bl;
+  encode(pending, bl);
+  t->put("health", service_name, bl);
+  mon.log_health(pending, health_checks.get_map(), t);
+}
+
+void PaxosService::_update_from_paxos(bool* need_bootstrap)
 {
+  dout(10) << __func__ << dendl;
   bufferlist bl;
   mon.store->get("health", service_name, bl);
   if (bl.length()) {
     auto p = bl.cbegin();
-    using ceph::decode;
-    decode(health_checks, p);
+    health_checks.decode(p);
+    dout(30) << __func__ << ":  health_checks decoded: " << health_checks << dendl;
   }
+  update_from_paxos(need_bootstrap);
 }
 
 bool PaxosService::is_active() const {
