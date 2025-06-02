@@ -2908,6 +2908,8 @@ def get_deployment_type(
 @deprecated_command
 def command_deploy(ctx):
     # type: (CephadmContext) -> None
+    lock = FileLock(ctx, ctx.fsid)
+    lock.acquire()
     try:
         _common_deploy(ctx)
     except DaemonStartException:
@@ -2954,6 +2956,8 @@ def command_deploy_from(base_ctx: CephadmContext) -> None:
     config_data = read_configuration_source(base_ctx)
     logger.debug('Loaded deploy configuration: %r', config_data)
     results: Dict[str, int] = {}  # individual rc for each daemon deployment
+    lock = FileLock(base_ctx, base_ctx.fsid)
+    lock.acquire()
     for config in config_data:
         logger.warning(config)
         ctx = CephadmContext()
@@ -2976,9 +2980,6 @@ def _common_deploy(ctx: CephadmContext) -> None:
     ident = DaemonIdentity.from_context(ctx)
     if ident.daemon_type not in get_supported_daemons():
         raise Error('daemon type %s not recognized' % ident.daemon_type)
-
-    lock = FileLock(ctx, ctx.fsid)
-    lock.acquire()
 
     deployment_type = get_deployment_type(ctx, ident)
 
