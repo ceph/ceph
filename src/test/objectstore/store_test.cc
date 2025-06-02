@@ -41,6 +41,7 @@
 #include "common/Cond.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/JSONFormatter.h"
 #include "common/options.h" // for the size literals
 #include "common/pretty_binary.h"
 #include "include/stringify.h"
@@ -217,6 +218,7 @@ class MultiLabelTest : public StoreTestDeferredSetup {
     store->umount();
     mounted = false;
   }
+#ifdef WITH_BLUESTORE
   bool bdev_supports_label() {
     BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
     if (!bstore) return false;
@@ -224,6 +226,7 @@ class MultiLabelTest : public StoreTestDeferredSetup {
     if (!bdev) return false;
     return bdev->supported_bdev_label();
   }
+#endif // WITH_BLUESTORE
   bool corrupt_disk_at(uint64_t position) {
     int fd = -1;
     auto close_fd = make_scope_guard([&] {
@@ -238,6 +241,7 @@ class MultiLabelTest : public StoreTestDeferredSetup {
     if (r != 0) return false;
     return true;
   }
+#ifdef WITH_BLUESTORE
   bool read_bdev_label(bluestore_bdev_label_t* label, uint64_t position) {
     string bdev_path = get_data_dir() + "/block";
     int r = BlueStore::read_bdev_label_at_pos(g_ceph_context, bdev_path, position, label);
@@ -254,6 +258,7 @@ class MultiLabelTest : public StoreTestDeferredSetup {
     bdev->close();
     return r;
   }
+#endif // WITH_BLUESTORE
   protected:
   void DeferredSetup() {
     StoreTest::SetUp();

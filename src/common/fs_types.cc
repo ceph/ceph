@@ -4,8 +4,21 @@
 #include "include/fs_types.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
+#include "include/ceph_fs_encoder.h"
 #include "common/ceph_json.h"
+#include "include/encoding_string.h"
 #include "include/denc.h"
+#include "include/denc_tuple.h"
+
+#include <iostream>
+
+void inodeno_t::dump(ceph::Formatter *f) const {
+  f->dump_unsigned("val", val);
+}
+
+std::ostream& operator<<(std::ostream& out, const inodeno_t& ino) {
+  return out << std::hex << "0x" << ino.val << std::dec;
+}
 
 void dump(const ceph_file_layout& l, ceph::Formatter *f)
 {

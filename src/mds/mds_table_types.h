@@ -19,6 +19,8 @@
 
 #include <string_view>
 
+#include "include/ceph_assert.h" // for ceph_abort()
+
 enum {
   TABLE_ANCHOR,
   TABLE_SNAP,

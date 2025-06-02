@@ -18,12 +18,12 @@
 #include <atomic>
 #include <map>
 #include <memory>
-#include <mutex>
 #include <set>
 #include <string>
 #include <string_view>
 #include <typeinfo>
 #include <typeindex>
+#include <vector>
 
 #include <boost/intrusive_ptr.hpp>
 
@@ -36,11 +36,9 @@
 #include "msg/msg_types.h"
 #ifdef WITH_CRIMSON
 #include "crimson/common/config_proxy.h"
-#include "crimson/common/perf_counters_collection.h"
 #else
 #include "common/config_proxy.h"
 #include "include/spinlock.h"
-#include "common/perf_counters_collection.h"
 #endif
 
 

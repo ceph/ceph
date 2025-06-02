@@ -16,6 +16,9 @@
 #ifndef CEPH_MWATCHNOTIFY_H
 #define CEPH_MWATCHNOTIFY_H
 
+#include <ostream>
+
+#include "include/errorcode32.h"
 #include "msg/Message.h"
 
 

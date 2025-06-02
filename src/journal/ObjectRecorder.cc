@@ -6,6 +6,7 @@
 #include "journal/Utils.h"
 #include "include/ceph_assert.h"
 #include "common/Clock.h" // for ceph_clock_now()
+#include "include/container_ios.h"
 #include "common/Timer.h"
 #include "common/errno.h"
 #include "cls/journal/cls_journal_client.h"

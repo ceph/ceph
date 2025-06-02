@@ -10,6 +10,7 @@
 #include "gtest/gtest.h"
 
 #include "common/errno.h"
+#include "include/encoding.h"
 #include "include/err.h"
 #include "include/rados/librados.hpp"
 #include "include/types.h"
