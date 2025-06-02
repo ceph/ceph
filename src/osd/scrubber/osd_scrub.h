@@ -104,12 +104,16 @@ class OsdScrub {
    * chunks.
    *
    * Implementation Note: Returned value is either osd_scrub_sleep or
-   * osd_scrub_extended_sleep, depending on must_scrub_param and time
-   * of day (see configs osd_scrub_begin*)
+   * osd_scrub_extended_sleep:
+   * - if scrubs are allowed at this point in time - osd_scrub_sleep; otherwise
+   *   (i.e. - the current time is outside of the allowed scrubbing hours/days,
+   *   but the scrub started earlier):
+   * - if the scrub observes "extended sleep" (i.e. - it's a low urgency
+   *   scrub) - osd_scrub_extended_sleep.
    */
   std::chrono::milliseconds scrub_sleep_time(
-      utime_t t,
-      bool high_priority_scrub) const;
+      utime_t t_now,
+      bool scrub_respects_ext_sleep) const;
 
 
   /**
