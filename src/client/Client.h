@@ -685,6 +685,7 @@ public:
                             Context *onfinish = nullptr,
                             bufferlist *blp = nullptr,
                             bool do_fsync = false, bool syncdataonly = false);
+  int64_t nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinish);
   loff_t ll_lseek(Fh *fh, loff_t offset, int whence);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
@@ -1775,7 +1776,7 @@ private:
                       int64_t offset, bool write, Context *onfinish = nullptr,
                       bufferlist *blp = nullptr);
   int _flush(Fh *fh);
-  void nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinish);
+
   int _fsync(Fh *fh, bool syncdataonly);
   int _fsync(Inode *in, bool syncdataonly);
   int _sync_fs();
