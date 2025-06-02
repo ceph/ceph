@@ -891,6 +891,51 @@ class CephadmServe:
                     break
         return (r, hosts_altered)
 
+    def handle_slot_names_and_rank_map_for_service(self, spec: ServiceSpec) -> List[DaemonPlacement]:
+        service_type = spec.service_type
+        service_name = spec.service_name()
+        slots_to_add = self.mgr.daemon_deploy_queue.get_queued_daemon_placements_by_service(spec.service_name())
+        daemons_to_remove = self.mgr.daemon_removal_queue.get_queued_daemon_descriptions_by_service(spec.service_name())
+        svc = service_registry.get_service(service_type)
+        daemons = self.mgr.cache.get_daemons_by_service(service_name)
+        rank_map = None
+        if svc.ranked(spec):
+            rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
+        # assign names
+        for i in range(len(slots_to_add)):
+            slot = slots_to_add[i]
+            slot = slot.assign_name(self.mgr.get_unique_name(
+                slot.daemon_type,
+                slot.hostname,
+                [d for d in daemons if d not in daemons_to_remove],
+                prefix=spec.service_id,
+                forcename=slot.name,
+                rank=slot.rank,
+                rank_generation=slot.rank_generation,
+            ))
+            slots_to_add[i] = slot
+            if rank_map is not None:
+                assert slot.rank is not None
+                assert slot.rank_generation is not None
+                assert rank_map[slot.rank][slot.rank_generation] is None
+                rank_map[slot.rank][slot.rank_generation] = slot.name
+
+        if rank_map:
+            # record the rank_map before we make changes so that if we fail the
+            # next mgr will clean up.
+            self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
+
+            # remove daemons now, since we are going to fence them anyway
+            for d in daemons_to_remove:
+                assert d.hostname is not None
+                self._remove_daemon(d.name(), d.hostname)
+            daemons_to_remove = []
+
+            # fence them
+            svc.fence_old_ranks(spec, rank_map, len(slots_to_add) + len(daemons))
+
+        return slots_to_add
+
     def deploy_and_remove_daemons_by_service(self, spec: ServiceSpec) -> bool:
         service_type = spec.service_type
         service_name = spec.service_name()
@@ -898,9 +943,6 @@ class CephadmServe:
         daemons = self.mgr.cache.get_daemons_by_service(service_name)
         slots_to_add = self.mgr.daemon_deploy_queue.get_queued_daemon_placements_by_service(spec.service_name())
         daemons_to_remove = self.mgr.daemon_removal_queue.get_queued_daemon_descriptions_by_service(spec.service_name())
-        rank_map = None
-        if svc.ranked(spec):
-            rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
         r = None
 
         # sanity check
@@ -916,37 +958,7 @@ class CephadmServe:
 
         try:
             # assign names
-            for i in range(len(slots_to_add)):
-                slot = slots_to_add[i]
-                slot = slot.assign_name(self.mgr.get_unique_name(
-                    slot.daemon_type,
-                    slot.hostname,
-                    [d for d in daemons if d not in daemons_to_remove],
-                    prefix=spec.service_id,
-                    forcename=slot.name,
-                    rank=slot.rank,
-                    rank_generation=slot.rank_generation,
-                ))
-                slots_to_add[i] = slot
-                if rank_map is not None:
-                    assert slot.rank is not None
-                    assert slot.rank_generation is not None
-                    assert rank_map[slot.rank][slot.rank_generation] is None
-                    rank_map[slot.rank][slot.rank_generation] = slot.name
-
-            if rank_map:
-                # record the rank_map before we make changes so that if we fail the
-                # next mgr will clean up.
-                self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
-
-                # remove daemons now, since we are going to fence them anyway
-                for d in daemons_to_remove:
-                    assert d.hostname is not None
-                    self._remove_daemon(d.name(), d.hostname)
-                daemons_to_remove = []
-
-                # fence them
-                svc.fence_old_ranks(spec, rank_map, len(slots_to_add) + len(daemons))
+            slots_to_add = self.handle_slot_names_and_rank_map_for_service(spec)
 
             # create daemons
             daemon_place_fails = []
