@@ -310,6 +310,18 @@ local g = import 'grafonnet/grafana.libsonnet';
         ''
       )
     )
+    .addTemplate(
+      $.addTemplateSchema(
+        'topic',
+        '$datasource',
+        'label_values(ceph_rgw_topic_persistent_topic_len,topic)',
+        1,
+        true,
+        1,
+        'Topic',
+        ''
+      )
+    )
     .addPanels([
       $.addRowSchema(false,
                      true,
@@ -701,6 +713,44 @@ local g = import 'grafonnet/grafana.libsonnet';
           transform: 'negative-Y',
         },
       ]),
+      $.addRowSchema(false,
+                     true,
+                     'RGW Overview - Bucket Notification') +
+      {
+        gridPos: { x: 0, y: 27, w: 24, h: 1 },
+      },
+       RgwOverviewPanel(
+        'Persistent Topic Length',
+        '',
+        '',
+        'short',
+        |||
+          (
+           ceph_rgw_topic_persistent_topic_len{topic=~"$topic"}
+          )
+        |||,
+        '{{topic}}',
+        0,
+        28,
+        24,
+        7
+      ),
+       RgwOverviewPanel(
+        'Persistent Topic Size',
+        '',
+        'bytes',
+        'short',
+        |||
+          (
+           ceph_rgw_topic_persistent_topic_size{topic=~"$topic"}
+          )
+        |||,
+        '{{topic}}',
+        0,
+        35,
+        24,
+        7
+      ),
     ]),
   'radosgw-detail.json':
     local RgwDetailsPanel(aliasColors,
