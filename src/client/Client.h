@@ -1346,6 +1346,10 @@ protected:
   struct mount_state_t mount_state;
   struct initialize_state_t initialize_state;
 
+  int get_injected_write_delay_secs() const {
+    return injected_write_delay_secs;
+  }
+
 private:
   class C_Read_Finisher : public Context {
   public:
@@ -1964,6 +1968,7 @@ private:
 
   ceph::coarse_mono_time last_auto_reconnect;
   std::chrono::seconds caps_release_delay, mount_timeout;
+  int injected_write_delay_secs;
   // trace generation
   std::ofstream traceout;
 

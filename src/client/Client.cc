@@ -424,6 +424,9 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   caps_release_delay = cct->_conf.get_val<std::chrono::seconds>(
     "client_caps_release_delay");
 
+  injected_write_delay_secs = std::chrono::duration<int>(
+    cct->_conf.get_val<std::chrono::seconds>("client_inject_write_delay_secs")).count();
+
   if (cct->_conf->client_acl_type == "posix_acl")
     acl_type = POSIX_ACL;
 
@@ -11933,6 +11936,13 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
+    auto delay = get_injected_write_delay_secs();
+    if (unlikely(delay > 0)) {
+      ldout(cct, 20) << __func__ << ": delaying write for " << delay << " seconds" << dendl;
+      client_lock.unlock();
+      sleep(delay);
+      client_lock.lock();
+    }
     filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 		       offset, size, bl, ceph::real_clock::now(), 0,
 		       in->truncate_size, in->truncate_seq,
@@ -17525,6 +17535,7 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
     "client_caps_release_delay",
     "client_deleg_break_on_open",
     "client_deleg_timeout",
+    "client_inject_write_delay",
     "client_mount_timeout",
     "client_oc_max_dirty",
     "client_oc_max_dirty_age",
@@ -17585,6 +17596,10 @@ void Client::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("client_mount_timeout")) {
     mount_timeout = cct->_conf.get_val<std::chrono::seconds>(
       "client_mount_timeout");
+  }
+  if (changed.count("client_inject_write_delay_secs")) {
+    injected_write_delay_secs = std::chrono::duration<int>(
+      cct->_conf.get_val<std::chrono::seconds>("client_inject_write_delay_secs")).count();
   }
 }
 
