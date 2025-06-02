@@ -1323,7 +1323,6 @@ class CephadmServe:
                     if send_signal_to_daemon:
                         reconfig_extras['send_signal_to_daemon'] = send_signal_to_daemon
                     self.mgr._daemon_action(daemon_spec, action=action, **reconfig_extras)
-
                     if self.mgr.cache.rm_scheduled_daemon_action(dd.hostname, dd.name()):
                         self.mgr.cache.save_host(dd.hostname)
                 except OrchestratorError as e:

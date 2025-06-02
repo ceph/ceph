@@ -663,4 +663,10 @@ class NFSService(CephService):
         only_kmip_updated = all(s.startswith('kmip') for s in sym_diff)
         if not only_kmip_updated:
             action = utils.Action.REDEPLOY
+        else:
+            return utils.NextDaemonStep(
+                utils.Action.RECONFIG,
+                skip_restart_for_reconfig=True,
+                send_signal_to_daemon='SIGHUP',
+            )
         return utils.NextDaemonStep(action)
