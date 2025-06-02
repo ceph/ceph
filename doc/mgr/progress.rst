@@ -5,9 +5,9 @@ The progress module is used to inform users about the recovery progress of PGs
 (Placement Groups) that are affected by events such as (1) OSDs being marked
 in or out and (2) ``pg_autoscaler`` trying to match the target PG number.
 
-The ``ceph -s`` command returns something called "Global Recovery Progress",
-which reports the overall recovery progress of PGs and is based on the number
-of PGs that are in the ``active+clean`` state.
+The ``ceph -status`` (or ``ceph -s``) command returns "Global Recovery
+Progress", which reports the overall recovery progress of PGs and is based on
+the number of PGs that are in the ``active+clean`` state.
 
 Enabling
 --------
@@ -49,9 +49,9 @@ Clear all ongoing and completed events:
 PG Recovery Event
 -----------------
 
-An event for each PG affected by recovery event can be shown in ``ceph
-progress``. This is completely optional, and disabled by default due to CPU
-overhead:
+An event for each PG affected by recovery can be shown in ``ceph progress``.
+This is optional, and is disabled by default due to CPU overhead that may
+adversely affect the Monitors:
 
 .. prompt:: bash #
 
