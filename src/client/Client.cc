@@ -12268,12 +12268,16 @@ void Client::C_nonblocking_fsync_state_advancer::finish(int r)
   state->advance();
 }
 
-void Client::nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinish)
+int64_t Client::nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinish)
 {
   C_nonblocking_fsync_state *state = new C_nonblocking_fsync_state(this, in, syncdataonly, onfinish);
 
+  ldout(cct, 10) << __func__ << dendl;
+
+  std::unique_lock cl(client_lock);
   // Kick fsync off...
   state->advance();
+  return 0;
 }
 
 int Client::_fsync(Inode *in, bool syncdataonly)
