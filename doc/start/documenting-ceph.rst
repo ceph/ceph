@@ -253,31 +253,31 @@ To scan for the reachability of external links, execute:
 
 	admin/build-doc linkcheck
 
-Executing ``admin/build-doc`` will create a ``build-doc`` directory under
+Running ``admin/build-doc`` creates a ``build-doc`` directory under
 ``ceph``.  You may need to create a directory under ``ceph/build-doc`` for
-output of Javadoc files:
+Javadoc file output:
 
 .. prompt:: bash $
 
 	mkdir -p output/html/api/libcephfs-java/javadoc
 
-The build script ``build-doc`` will produce an output of errors and warnings.
-You MUST fix errors in documents you modified before committing a change, and
-you SHOULD fix warnings that are related to syntax you modified.
+The build script ``build-doc`` produces output partially consisting of errors
+and warnings.  You MUST fix errors in documents you modified before committing
+a change, and you SHOULD fix warnings that are related to syntax you modified.
 
 .. important:: You must validate ALL HYPERLINKS. If a hyperlink is broken,
    it automatically breaks the build!
 
-Once you build the documentation set, you may start an HTTP server at
-``http://localhost:8080/`` to view it:
+After you have built the documentation set, you may start an HTTP server at
+``http://localhost:8080/`` to view it by running the following command:
 
 .. prompt:: bash $
 
 	admin/serve-doc
 
 You can also navigate to ``build-doc/output`` to inspect the built documents.
-There should be an ``html`` directory and a ``man`` directory containing
-documentation in HTML and manpage formats respectively.
+Within ``build-doc/output`` is an ``html`` directory and a ``man`` directory
+containing documentation in HTML and manpage formats respectively.
 
 Build the Source (First Time)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -397,8 +397,8 @@ the packages. Then, download them from a mirror and install them. For example:
 	wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/python-sphinx-1.1.3-11.el7.noarch.rpm
 	sudo yum install python-sphinx-1.1.3-11.el7.noarch.rpm
 
-Ceph documentation makes extensive use of `ditaa`_, which is not presently built
-for CentOS/RHEL7. You must install ``ditaa`` if you are making changes to
+Ceph documentation makes extensive use of `ditaa`_, which is not currently
+built for CentOS/RHEL7. You must install ``ditaa`` if you are making changes to
 ``ditaa`` diagrams so that you can verify that they render properly before you
 commit new or modified ``ditaa`` diagrams. You may retrieve compatible required
 packages for CentOS/RHEL distributions and install them manually. To run
