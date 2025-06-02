@@ -936,6 +936,35 @@ class CephadmServe:
 
         return slots_to_add
 
+    def build_ok_for_removal_list_by_service(self, spec: ServiceSpec) -> List[orchestrator.DaemonDescription]:
+        service_type = spec.service_type
+        svc = service_registry.get_service(service_type)
+        daemons_to_remove = self.mgr.daemon_removal_queue.get_queued_daemon_descriptions_by_service(spec.service_name())
+
+        # remove any?
+        def _ok_to_stop(remove_daemons: List[orchestrator.DaemonDescription]) -> bool:
+            daemon_ids = [d.daemon_id for d in remove_daemons]
+            assert None not in daemon_ids
+            # setting force flag retains previous behavior
+            r = svc.ok_to_stop(cast(List[str], daemon_ids), force=True)
+            return not r.retval
+
+        while daemons_to_remove and not _ok_to_stop(daemons_to_remove):
+            # let's find a subset that is ok-to-stop
+            non_error_daemon_index = -1
+            # prioritize removing daemons in error state
+            for i, dmon in enumerate(daemons_to_remove):
+                if dmon.status != DaemonDescriptionStatus.error:
+                    non_error_daemon_index = i
+                    break
+            if non_error_daemon_index != -1:
+                daemons_to_remove.pop(non_error_daemon_index)
+            else:
+                # all daemons in list are in error state
+                # we should be able to remove all of them
+                break
+        return daemons_to_remove
+
     def deploy_and_remove_daemons_by_service(self, spec: ServiceSpec) -> bool:
         service_type = spec.service_type
         service_name = spec.service_name()
@@ -1036,28 +1065,7 @@ class CephadmServe:
             if service_type == 'rgw':
                 self._update_rgw_endpoints(cast(RGWSpec, spec))
 
-            # remove any?
-            def _ok_to_stop(remove_daemons: List[orchestrator.DaemonDescription]) -> bool:
-                daemon_ids = [d.daemon_id for d in remove_daemons]
-                assert None not in daemon_ids
-                # setting force flag retains previous behavior
-                r = svc.ok_to_stop(cast(List[str], daemon_ids), force=True)
-                return not r.retval
-
-            while daemons_to_remove and not _ok_to_stop(daemons_to_remove):
-                # let's find a subset that is ok-to-stop
-                non_error_daemon_index = -1
-                # prioritize removing daemons in error state
-                for i, dmon in enumerate(daemons_to_remove):
-                    if dmon.status != DaemonDescriptionStatus.error:
-                        non_error_daemon_index = i
-                        break
-                if non_error_daemon_index != -1:
-                    daemons_to_remove.pop(non_error_daemon_index)
-                else:
-                    # all daemons in list are in error state
-                    # we should be able to remove all of them
-                    break
+            daemons_to_remove = self.build_ok_for_removal_list_by_service(spec)
             for d in daemons_to_remove:
                 r = True
                 assert d.hostname is not None
