@@ -12,7 +12,7 @@ import orchestrator  # noqa
 from mgr_module import ServiceInfoT
 from mgr_util import build_url
 from typing import Dict, List, TYPE_CHECKING, cast, Collection, Callable, NamedTuple, Optional, IO
-from cephadm.services.nfs import NFSService
+
 from cephadm.services.smb import SMBService
 from cephadm.services.monitoring import AlertmanagerService, NodeExporterService, PrometheusService
 import secrets
@@ -261,6 +261,7 @@ class Root(Server):
     def nfs_sd_config(self) -> List[Dict[str, Collection[str]]]:
         """Return <http_sd_config> compatible prometheus config for nfs service."""
         srv_entries = []
+        from cephadm.services.nfs import NFSService
         for dd in self.mgr.cache.get_daemons_by_type('nfs'):
             assert dd.hostname is not None
             addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
