@@ -1412,9 +1412,9 @@ test_group_with_clone_image()
   group_image_add "${primary_cluster}" "${pool}/${group}" "${pool}/child_image"
 
   # command fails with the following message now
-  #  2025-01-30T16:34:25.359+0000 7fc1a79bfb40 -1 librbd::api::Mirror: image_enable: mirroring is not enabled for the parent
-  #  2025-01-30T16:34:25.359+0000 7fc1a79bfb40 -1 librbd::api::Mirror: group_enable: failed enabling image: child_image: (22) Invalid argument
-  expect_failure "failed enabling image" rbd --cluster=${primary_cluster} mirror group enable ${pool}/${group}
+  #  2025-07-29T11:09:54.666-0400 7f06696006c0 -1 librbd::mirror::GroupEnableRequest: 0x5622625a6240 validate_images: cannot enable mirroring: cloned images are not supported
+  #  2025-07-29T11:09:54.673-0400 7f0671958d00 -1 librbd::api::Mirror: group_enable: failed to mirror enable group: (22) Invalid argument
+  expect_failure "cloned images are not supported" rbd --cluster=${primary_cluster} mirror group enable ${pool}/${group}
 
   # tidy up
   group_remove "${primary_cluster}" "${pool}/${group}"
@@ -1542,8 +1542,9 @@ test_images_different_pools()
   group_image_add "${primary_cluster}" "${pool0}/${group}" "${pool1}/${image_prefix}1"
 
   # command fails with the following message now
-  #  2025-06-12T17:33:25.241+0530 7fe40ccfbd00 -1 librbd::api::Mirror: prepare_group_images: cannot enable mirroring: image is in a different pool
-  expect_failure "cannot enable mirroring: image is in a different pool" rbd --cluster=${primary_cluster} mirror group enable ${pool0}/${group}
+  # 2025-07-29T11:16:24.690-0400 7ff66b4006c0 -1 librbd::mirror::GroupEnableRequest: 0x55c172e13ec0 validate_images: cannot enable mirroring: image in a different pool
+  # 2025-07-29T11:16:24.693-0400 7ff6778b3d00 -1 librbd::api::Mirror: group_enable: failed to mirror enable group: (22) Invalid argument
+  expect_failure "image in a different pool" rbd --cluster=${primary_cluster} mirror group enable ${pool0}/${group}
 
   # tidy up
   group_remove "${primary_cluster}" "${pool0}/${group}"
