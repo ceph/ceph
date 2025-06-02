@@ -1,5 +1,3 @@
-
-
 import fnmatch
 import os
 import re
