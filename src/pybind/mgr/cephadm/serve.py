@@ -862,6 +862,35 @@ class CephadmServe:
 
         return slots_to_add, daemons_to_remove
 
+    def remove_conflicting_daemons_for_service(self, spec: ServiceSpec) -> Tuple[bool, Set[str]]:
+        r = False
+        hosts_altered: Set[str] = set()
+        slots_to_add = self.mgr.daemon_deploy_queue.get_queued_daemon_placements_by_service(spec.service_name())
+        daemons_to_remove = self.mgr.daemon_removal_queue.get_queued_daemon_descriptions_by_service(spec.service_name())
+        for slot in slots_to_add:
+            # first remove daemon with conflicting port or name?
+            if slot.ports or slot.name in [d.name() for d in daemons_to_remove]:
+                for d in daemons_to_remove:
+                    if (
+                        d.hostname != slot.hostname
+                        or not (set(d.ports or []) & set(slot.ports))
+                        or (d.ip and slot.ip and d.ip != slot.ip)
+                        and d.name() != slot.name
+                    ):
+                        continue
+                    if d.name() != slot.name:
+                        self.log.info(
+                            f'Removing {d.name()} before deploying to {slot} to avoid a port or conflict'
+                        )
+                    # NOTE: we don't check ok-to-stop here to avoid starvation if
+                    # there is only 1 gateway.
+                    self._remove_daemon(d.name(), d.hostname)
+                    daemons_to_remove.remove(d)
+                    r = True
+                    hosts_altered.add(d.hostname)
+                    break
+        return (r, hosts_altered)
+
     def deploy_and_remove_daemons_by_service(self, spec: ServiceSpec) -> bool:
         service_type = spec.service_type
         service_name = spec.service_name()
@@ -921,28 +950,11 @@ class CephadmServe:
 
             # create daemons
             daemon_place_fails = []
+            removed_conflicts, conflict_hosts_altered = self.remove_conflicting_daemons_for_service(spec)
+            if removed_conflicts:
+                r = True
+            hosts_altered.update(conflict_hosts_altered)
             for slot in slots_to_add:
-                # first remove daemon with conflicting port or name?
-                if slot.ports or slot.name in [d.name() for d in daemons_to_remove]:
-                    for d in daemons_to_remove:
-                        if (
-                            d.hostname != slot.hostname
-                            or not (set(d.ports or []) & set(slot.ports))
-                            or (d.ip and slot.ip and d.ip != slot.ip)
-                            and d.name() != slot.name
-                        ):
-                            continue
-                        if d.name() != slot.name:
-                            self.log.info(
-                                f'Removing {d.name()} before deploying to {slot} to avoid a port or conflict'
-                            )
-                        # NOTE: we don't check ok-to-stop here to avoid starvation if
-                        # there is only 1 gateway.
-                        self._remove_daemon(d.name(), d.hostname)
-                        daemons_to_remove.remove(d)
-                        hosts_altered.add(d.hostname)
-                        break
-
                 # do not attempt to deploy node-proxy agent when oob details are not provided.
                 if slot.daemon_type == 'node-proxy' and slot.hostname not in self.mgr.node_proxy_cache.oob.keys():
                     self.log.debug(
