@@ -975,6 +975,74 @@ class CephadmServe:
             hosts_altered.add(d.hostname)
         return r, hosts_altered
 
+    def prep_daemon_specs_for_creation_by_service(self, spec: ServiceSpec, slots_to_add: List[DaemonPlacement]) -> Tuple[List[CephadmDaemonDeploySpec], List[str]]:
+        service_type = spec.service_type
+        svc = service_registry.get_service(service_type)
+        prepare_create_fails: List[str] = []
+        daemon_specs: List[CephadmDaemonDeploySpec] = []
+        for slot in slots_to_add:
+            # do not attempt to deploy node-proxy agent when oob details are not provided.
+            if slot.daemon_type == 'node-proxy' and slot.hostname not in self.mgr.node_proxy_cache.oob.keys():
+                self.log.debug(
+                    f'Not deploying node-proxy agent on {slot.hostname} as oob details are not present.'
+                )
+                continue
+
+            # set multisite config before deploying the rgw daemon
+            if service_type == 'rgw':
+                self.mgr.rgw_service.set_realm_zg_zone(cast(RGWSpec, spec))
+
+            # deploy new daemon
+            daemon_id = slot.name
+
+            daemon_spec = svc.make_daemon_spec(
+                slot.hostname, daemon_id, slot.network, spec,
+                daemon_type=slot.daemon_type,
+                ports=slot.ports,
+                ip=slot.ip,
+                rank=slot.rank,
+                rank_generation=slot.rank_generation,
+            )
+            try:
+                daemon_spec = svc.prepare_create(daemon_spec)
+                daemon_specs.append(daemon_spec)
+            except (RuntimeError, OrchestratorError) as e:
+                msg = (f"Failed to prepare for creation of {slot.daemon_type}.{daemon_id} "
+                       f"on {slot.hostname}: {e}")
+                self.mgr.events.for_service(spec, 'ERROR', msg)
+                self.mgr.log.error(msg)
+                prepare_create_fails.append(msg)
+                continue
+
+            # add to daemon list so next name(s) will also be unique
+            sd = orchestrator.DaemonDescription(
+                hostname=slot.hostname,
+                daemon_type=slot.daemon_type,
+                daemon_id=daemon_id,
+                service_name=spec.service_name()
+            )
+            self.mgr.cache.append_tmp_daemon(slot.hostname, sd)
+        return daemon_specs, prepare_create_fails
+
+    def deploy_given_daemons(self, to_deploy: List[CephadmDaemonDeploySpec]) -> Tuple[bool, Set[str], List[str]]:
+        r = False
+        hosts_altered: Set[str] = set()
+        daemon_place_fails: List[str] = []
+        for daemon_spec in to_deploy:
+            try:
+                with self.mgr.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} type dameon)'):
+                    self.mgr.wait_async(self._create_daemon(daemon_spec))
+                r = True
+                hosts_altered.add(daemon_spec.host)
+            except (RuntimeError, OrchestratorError) as e:
+                msg = (f"Failed while placing {daemon_spec.daemon_type}.{daemon_spec.daemon_id} "
+                       f"on {daemon_spec.host}: {e}")
+                spec = self.mgr.spec_store[daemon_spec.service_name].spec
+                self.mgr.events.for_service(spec, 'ERROR', msg)
+                self.mgr.log.error(msg)
+                daemon_place_fails.append(msg)
+        return r, hosts_altered, daemon_place_fails
+
     def deploy_and_remove_daemons_by_service(self, spec: ServiceSpec) -> bool:
         service_type = spec.service_type
         service_name = spec.service_name()
@@ -1000,65 +1068,17 @@ class CephadmServe:
             slots_to_add = self.handle_slot_names_and_rank_map_for_service(spec)
 
             # create daemons
-            daemon_place_fails = []
             removed_conflicts, conflict_hosts_altered = self.remove_conflicting_daemons_for_service(spec)
             if removed_conflicts:
                 r = True
             hosts_altered.update(conflict_hosts_altered)
-            for slot in slots_to_add:
-                # do not attempt to deploy node-proxy agent when oob details are not provided.
-                if slot.daemon_type == 'node-proxy' and slot.hostname not in self.mgr.node_proxy_cache.oob.keys():
-                    self.log.debug(
-                        f'Not deploying node-proxy agent on {slot.hostname} as oob details are not present.'
-                    )
-                    continue
+            daemon_specs_to_deploy, prepare_create_fails = self.prep_daemon_specs_for_creation_by_service(spec, slots_to_add)
+            daemons_placed, daemon_deployed_hosts, daemon_place_fails = self.deploy_given_daemons(daemon_specs_to_deploy)
+            hosts_altered.update(daemon_deployed_hosts)
 
-                # set multisite config before deploying the rgw daemon
-                if service_type == 'rgw':
-                    self.mgr.rgw_service.set_realm_zg_zone(cast(RGWSpec, spec))
-
-                # deploy new daemon
-                daemon_id = slot.name
-
-                daemon_spec = svc.make_daemon_spec(
-                    slot.hostname, daemon_id, slot.network, spec,
-                    daemon_type=slot.daemon_type,
-                    ports=slot.ports,
-                    ip=slot.ip,
-                    rank=slot.rank,
-                    rank_generation=slot.rank_generation,
-                )
-                self.log.debug('Placing %s.%s on host %s' % (
-                    slot.daemon_type, daemon_id, slot.hostname))
-
-                try:
-                    daemon_spec = svc.prepare_create(daemon_spec)
-                    with self.mgr.async_timeout_handler(slot.hostname, f'cephadm deploy ({daemon_spec.daemon_type} type dameon)'):
-                        self.mgr.wait_async(self._create_daemon(daemon_spec))
-                    r = True
-                    hosts_altered.add(daemon_spec.host)
-                    self.mgr.spec_store.mark_needs_configuration(spec.service_name())
-                except (RuntimeError, OrchestratorError) as e:
-                    msg = (f"Failed while placing {slot.daemon_type}.{daemon_id} "
-                           f"on {slot.hostname}: {e}")
-                    self.mgr.events.for_service(spec, 'ERROR', msg)
-                    self.mgr.log.error(msg)
-                    daemon_place_fails.append(msg)
-                    # only return "no change" if no one else has already succeeded.
-                    # later successes will also change to True
-                    if r is None:
-                        r = False
-                    continue
-
-                # add to daemon list so next name(s) will also be unique
-                sd = orchestrator.DaemonDescription(
-                    hostname=slot.hostname,
-                    daemon_type=slot.daemon_type,
-                    daemon_id=daemon_id,
-                    service_name=spec.service_name()
-                )
-                daemons.append(sd)
-                self.mgr.cache.append_tmp_daemon(slot.hostname, sd)
+            if prepare_create_fails:
+                self.mgr.set_health_warning('CEPHADM_DAEMON_PREPARE_CREATE_FAIL', f'Failed to place {len(prepare_create_fails)} daemon(s)', len(
+                    prepare_create_fails), prepare_create_fails)
 
             if daemon_place_fails:
                 self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s)', len(
