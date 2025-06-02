@@ -376,14 +376,19 @@ status:
     }
   }
 
-`Peers` section in the command output above shows the peer information such as unique
-peer-id (UUID) and specification. The peer-id is required to remove an existing peer
-as mentioned in the `Mirror Module and Interface` section.
+The ``Peers`` section in the command output above shows the peer information
+such as unique peer-id (UUID) and specification. The peer-id is required to
+remove an existing peer as mentioned in the `Mirror Module and Interface`
+section.
 
-Command with `fs mirror peer status` prefix provide peer synchronization status. This
-command is of format `filesystem-name@filesystem-id peer-uuid`::
+Commands with the ``fs mirror peer status`` prefix return peer synchronization
+status. Commands of this kind take the form ``filesystem-name@filesystem-id peer-uuid``, as in the following example:
 
-  $ ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
+.. prompt:: bash $
+
+   ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
+::
+
   {
     "/d0": {
         "state": "idle",
@@ -399,9 +404,11 @@ command is of format `filesystem-name@filesystem-id peer-uuid`::
     }
   }
 
-Synchronization stats such as `snaps_synced`, `snaps_deleted` and `snaps_renamed` are reset
-on daemon restart and/or when a directory is reassigned to another mirror daemon (when
-multiple mirror daemons are deployed).
+Synchronization stats such as ``snaps_synced``, ``snaps_deleted`` and
+``snaps_renamed`` are reset when the daemon is restarted or (when multiple
+mirror daemons are deployed), when a directory is reassigned to another mirror
+daemon.
+
 
 A directory can be in one of the following states::
 
@@ -409,17 +416,24 @@ A directory can be in one of the following states::
   - `syncing`: The directory is currently being synchronized
   - `failed`: The directory has hit upper limit of consecutive failures
 
-When a directory hits a configured number of consecutive synchronization failures, the
-mirror daemon marks it as `failed`. Synchronization for these directories are retried.
-By default, the number of consecutive failures before a directory is marked as failed
-is controlled by `cephfs_mirror_max_consecutive_failures_per_directory` configuration
-option (default: 10) and the retry interval for failed directories is controlled via
-`cephfs_mirror_retry_failed_directories_interval` configuration option (default: 60s).
+When a directory hits a configured number of consecutive synchronization
+failures, the mirror daemon marks it as ``failed``. Synchronization for these
+directories is retried. By default, the number of consecutive failures before a
+directory is marked as failed is controlled by the
+``cephfs_mirror_max_consecutive_failures_per_directory`` configuration option
+(default: ``10``). The retry interval for failed directories is controlled by
+the ``cephfs_mirror_retry_failed_directories_interval`` configuration option
+(default: ``60s``).
 
-E.g., adding a regular file for synchronization would result in failed status::
+For example, adding a regular file for synchronization results in a ``failed``
+status:
 
-  $ ceph fs snapshot mirror add cephfs /f0
-  $ ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
+.. prompt:: bash $
+
+   ceph fs snapshot mirror add cephfs /f0
+   ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
+::
+
   {
     "/d0": {
         "state": "idle",
@@ -441,53 +455,66 @@ E.g., adding a regular file for synchronization would result in failed status::
     }
   }
 
-This allows a user to add a non-existent directory for synchronization. The mirror daemon
-would mark the directory as failed and retry (less frequently). When the directory comes
-to existence, the mirror daemons would unmark the failed state upon successful snapshot
-synchronization.
+This allows a user to add a non-existent directory for synchronization. The
+mirror daemon marks the directory as failed and retries (less frequently).
+When the directory comes into existence, the mirror daemons notice the
+successful snapshot synchronization and unmark the failed state. 
 
-When mirroring is disabled, the respective `fs mirror status` command for the file system
-will not show up in command help.
+When mirroring is disabled, the ``fs mirror status`` command for the file
+system will not show up in command help.
 
-Mirroring module provides a couple of commands to display directory mapping and distribution
-information. To check which mirror daemon a directory has been mapped to use::
+The mirroring module provides a couple of commands to display directory mapping
+and distribution information. To check which mirror daemon a directory has been
+mapped to use, run a command of the following form:
 
-  $ ceph fs snapshot mirror dirmap cephfs /d0/d1/d2
+.. prompt:: bash $
+
+   ceph fs snapshot mirror dirmap cephfs /d0/d1/d2
+::
+
   {
     "instance_id": "404148",
     "last_shuffled": 1601284516.10986,
     "state": "mapped"
   }
 
-.. note:: `instance_id` is the RADOS instance-id associated with a mirror daemon.
+.. note:: ``instance_id`` is the RADOS instance-id associated with a mirror
+   daemon.
 
-Other information such as `state` and `last_shuffled` are interesting when running
-multiple mirror daemons.
+Other information such as ``state`` and ``last_shuffled`` are interesting when
+running multiple mirror daemons.
 
-When no mirror daemons are running the above command shows::
+If no mirror daemons are running, the same command shows the following:
 
-  $ ceph fs snapshot mirror dirmap cephfs /d0/d1/d2
+.. prompt:: bash $
+
+   ceph fs snapshot mirror dirmap cephfs /d0/d1/d2
+::
+
   {
     "reason": "no mirror daemons running",
     "state": "stalled"
   }
 
-Signifying that no mirror daemons are running and mirroring is stalled.
+This signifies that no mirror daemons are running and that mirroring is
+stalled.
 
 Re-adding Peers
 ---------------
 
-When re-adding (reassigning) a peer to a file system in another cluster, ensure that
-all mirror daemons have stopped synchronization to the peer. This can be checked
-via `fs mirror status` admin socket command (the `Peer UUID` should not show up
-in the command output). Also, it is recommended to purge synchronized directories
-from the peer  before re-adding it to another file system (especially those directories
-which might exist in the new primary file system). This is not required if re-adding
-a peer to the same primary file system it was earlier synchronized from.
+When re-adding (reassigning) a peer to a file system in another cluster, ensure
+that all mirror daemons have stopped synchronizing with the peer. This can be
+checked via the  ``fs mirror status`` admin socket command (the ``Peer UUID``
+should not show up in the command output). We recommend purging 
+synchronized directories from the peer before re-adding them to another file
+system (especially those directories which might exist in the new primary file
+system). This is not required if you re-add a peer to the same primary file
+system it was synchronized from before.
 
 Feature Status
 --------------
 
-`cephfs-mirror` daemon is built by default (follows `WITH_CEPHFS` CMake rule).
+The ``cephfs-mirror`` daemon is built by default. It follows the
+``WITH_CEPHFS`` CMake rule).
 
 .. _CephFS Snapdiff Feature: https://croit.io/blog/cephfs-snapdiff-feature
