@@ -3856,6 +3856,10 @@ def command_rm_daemon(ctx):
     lock = FileLock(ctx, ctx.fsid)
     lock.acquire()
 
+    _rm_daemon(ctx)
+
+
+def _rm_daemon(ctx: CephadmContext) -> None:
     ident = DaemonIdentity.from_context(ctx)
     try:
         # attempt a fast-path conversion that maps the fsid+name to
