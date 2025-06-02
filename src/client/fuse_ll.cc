@@ -1121,20 +1121,6 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
       fuse_reply_ioctl(req, 0, arg, sizeof(*arg));
     }
     break;
-    case FS_IOC_GETFLAGS: {
-      generic_dout(10) << __FILE__ << ":" << __LINE__ << ": FS_IOC_GETFLAGS ioctl" << dendl;
-
-      int file_attr = 0;
-      if (out_bufsz < sizeof(file_attr)) {
-          fuse_reply_err(req, ERANGE);
-          break;
-      }
-
-      Fh *fh = (Fh*)fi->fh;
-      cfuse->client->get_inode_flags(fh->inode.get(), &file_attr);
-      fuse_reply_ioctl(req, 0, &file_attr, sizeof(file_attr));
-}
-break;
     default:
       fuse_reply_err(req, EINVAL);
   }

@@ -853,11 +853,7 @@ void Inode::mark_caps_clean()
 
 FSCryptContextRef Inode::init_fscrypt_ctx(FSCrypt *fscrypt)
 {
-  auto res = fscrypt->init_ctx(fscrypt_auth);
-  // at this point, if fscrypt is enabled, the fscrypt_auth is not empty
-  // and we can set the S_ENCRYPTED flag
-  set_is_encrypted_flag();
-  return res;
+  return fscrypt->init_ctx(fscrypt_auth);
 }
 
 void Inode::gen_inherited_fscrypt_auth(std::vector<uint8_t> *fsa)

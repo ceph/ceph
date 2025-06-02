@@ -9139,10 +9139,6 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
     stx->stx_mask |= (CEPH_STATX_CTIME|CEPH_STATX_VERSION);
   }
 
-  // Check that the flag has no garbage, if is_encrypted() is false
-  bool en = in->is_encrypted();
-  ceph_assert(en || !(stx->stx_attributes & STATX_ATTR_ENCRYPTED));
-  stx->stx_attributes |= en ? STATX_ATTR_ENCRYPTED : 0;
 }
 
 void Client::touch_dn(Dentry *dn)
@@ -18801,32 +18797,6 @@ SubvolumeMetricTracker::aggregate(bool clean) {
   return res; // return value optimization
 }
 // --- subvolume metrics tracking --- //
-
-int  Client::get_inode_flags(const Inode* in, int* file_attr_out) {
-  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
-
-  if (!file_attr_out)
-    return -EINVAL;
-
-  *file_attr_out = 0;
-    // set or clear the encryption flag depending on the inode status
-  if (in->is_encrypted()) {
-    *file_attr_out |= FS_ENCRYPT_FL;
-  } else {
-    *file_attr_out &= ~FS_ENCRYPT_FL;
-  }
-  return 0;
-}
-
-int Client::get_inode_flags(int fd, int* file_attr_out) {
-  std::scoped_lock l{client_lock};
-
-  Fh *fh = get_filehandle(fd);
-  if (!fh) {
-    return -EBADF;
-  }
-  return get_inode_flags(fh->inode.get(), file_attr_out);
-}
 
 int Client::fcopyfile(const char *spath, const char *dpath, UserPerm& perms, mode_t mode) {
   ldout(cct, 10) << "fcopyfile spath=" << spath << " dpath=" << dpath << " mode=" << mode << dendl;

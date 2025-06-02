@@ -2633,13 +2633,6 @@ extern "C" int ceph_get_perf_counters(struct ceph_mount_info *cmount, char **per
   return outbl.length();
 }
 
-extern "C" int get_inode_flags(struct ceph_mount_info *cmount, int fd, int* file_attr_out) {
-  if (!cmount->is_mounted())
-    return -ENOTCONN;
-
-  return cmount->get_client()->get_inode_flags(fd, file_attr_out);
-}
-
 extern "C" int ceph_fcopyfile(struct ceph_mount_info *cmount, const char *spath, const char *dpath, mode_t mode)
 {
   if (!cmount->is_mounted())
