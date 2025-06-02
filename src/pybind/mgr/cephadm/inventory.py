@@ -122,6 +122,60 @@ class DaemonDeployQueue:
         self._daemons = {}
 
 
+class DaemonRemovalQueue:
+    """
+    Queue of daemons cephadm thinks it should remove
+    """
+
+    def __init__(self) -> None:
+        # mapping of hosts to DaemonDescription objects that are meant
+        # to be deployed on that host
+        self._daemons: Dict[str, List[Tuple[orchestrator.DaemonDescription, ServiceSpec]]] = {}
+
+    def add_to_queue(self, slots: List[Tuple[orchestrator.DaemonDescription, ServiceSpec]]) -> None:
+        for dd, spec in slots:
+            if not dd.daemon_type:
+                raise OrchestratorError('Daemon Deploy Queue got DaemonDescription with no daemon type')
+            if not dd.hostname:
+                raise OrchestratorError('Daemon Deploy Queue got DaemonDescription with no hostname')
+            if dd.hostname not in self._daemons:
+                self._daemons[dd.hostname] = []
+            self._daemons[dd.hostname].append((dd, spec))
+
+    def remove_from_queue(self, daemon_name: str, hostname: str) -> None:
+        if hostname not in self._daemons:
+            raise OrchestratorError(
+                f'Daemon Deploy Queue got request to remove {daemon_name} from queue host {hostname} with no daemons queued'
+            )
+        self._daemons[hostname] = [(dd, spec) for (dd, spec) in self._daemons[hostname] if dd.name != daemon_name]
+        if not self._daemons[hostname]:
+            self._daemons.pop(hostname, None)
+
+    def get_all_queued_daemons(self) -> List[Tuple[orchestrator.DaemonDescription, ServiceSpec]]:
+        # Turns
+        # {
+        #   'HostA': [('daemon1', 'spec1)', ('daemon2', 'spec2')],
+        #   'HostB': [('daemon3', 'spec3'), ('daemon4', 'spec4')]
+        # }
+        # Into
+        # [('daemon1', 'spec1'), ('daemon2', 'spec2'), ('daemon3', 'spec3'), ('daemon4', 'spec4')]
+        return [(dd, spec) for host_daemons in self._daemons.values() for (dd, spec) in host_daemons]
+
+    def get_queued_daemons_for_host(self, hostname: str) -> List[Tuple[orchestrator.DaemonDescription, ServiceSpec]]:
+        if hostname not in self._daemons:
+            return []
+        return self._daemons[hostname]
+
+    def get_queued_daemons_for_service(self, service_name: str) -> List[Tuple[orchestrator.DaemonDescription, ServiceSpec]]:
+        return [(dd, spec) for (dd, spec) in self.get_all_queued_daemons() if spec.service_name() == service_name]
+
+    def get_queued_daemon_descriptions_by_service(self, service_name: str) -> List[orchestrator.DaemonDescription]:
+        return [dd for (dd, spec) in self.get_queued_daemons_for_service(service_name)]
+
+    def clear_queued_daemons(self) -> None:
+        self._daemons = {}
+
+
 class Inventory:
     """
     The inventory stores a HostSpec for all hosts persistently.
