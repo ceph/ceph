@@ -12115,6 +12115,8 @@ void Client::C_nonblocking_fsync_state::advance()
       ldout(clnt->cct, 10) << "no metadata needs to commit" << dendl;
     }
 
+    ldout(clnt->cct, 10) << __func__ <<": in->unsafe_ops=" << in->unsafe_ops.size() << dendl;
+
     if (!syncdataonly && !in->unsafe_ops.empty()) {
       waitfor_safe = true;
       clnt->flush_mdlog_sync(in);
