@@ -30,6 +30,7 @@ from io import StringIO
 from threading import Thread, Event
 from pathlib import Path
 from configparser import ConfigParser
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from cephadmlib.constants import (
     # default images
@@ -2958,21 +2959,32 @@ def command_deploy_from(base_ctx: CephadmContext) -> None:
     results: Dict[str, int] = {}  # individual rc for each daemon deployment
     lock = FileLock(base_ctx, base_ctx.fsid)
     lock.acquire()
+
+    def _deploy_daemon(ctx: CephadmContext) -> Tuple[str, int]:
+        rc: int = 0
+        try:
+            _common_deploy(ctx)
+        except DaemonStartException:
+            rc = DAEMON_FAILED_ERROR
+        except Exception:
+            # TODO: better rc based on exception?
+            rc = -1
+        return (ctx.name, rc)
+
+    daemon_ctxs: List[CephadmContext] = []
     for config in config_data:
-        logger.warning(config)
         ctx = CephadmContext()
         ctx._conf = base_ctx._conf
         ctx._args = base_ctx._args
         apply_deploy_config_to_ctx(config, ctx)
-        try:
-            _common_deploy(ctx)
-        except DaemonStartException:
-            results[ctx.name] = DAEMON_FAILED_ERROR
-        except Exception:
-            # TODO: better rc based on exception?
-            results[ctx.name] = -1
-        else:
-            results[ctx.name] = 0
+        daemon_ctxs.append(ctx)
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        deploy_futures = {executor.submit(_deploy_daemon, daemon_ctx): daemon_ctx for daemon_ctx in daemon_ctxs}
+        for future in as_completed(deploy_futures):
+            daemon_name, rc = future.result()
+            results[daemon_name] = rc
+
     print(json.dumps(results))
 
 
