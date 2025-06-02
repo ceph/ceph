@@ -185,7 +185,7 @@ def get_config_and_keyring(ctx):
     return config, keyring
 
 
-def read_configuration_source(ctx: CephadmContext) -> Dict[str, Any]:
+def read_configuration_source(ctx: CephadmContext) -> List[Dict[str, Any]]:
     """Read a JSON configuration based on the `ctx.source` value."""
     source = '-'
     if 'source' in ctx and ctx.source:
@@ -195,6 +195,8 @@ def read_configuration_source(ctx: CephadmContext) -> Dict[str, Any]:
     else:
         with open(source, 'rb') as fh:
             config_data = json.load(fh)
+    # to handle lists of individual json strings
+    config_data = [json.loads(config) if isinstance(config, str) else config for config in config_data]
     return config_data
 
 

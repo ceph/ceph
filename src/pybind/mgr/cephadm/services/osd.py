@@ -153,7 +153,7 @@ class OSDService(CephService):
                 )
                 daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
                 await CephadmServe(self.mgr)._create_daemon(
-                    daemon_spec,
+                    [daemon_spec],
                     osd_uuid_map=osd_uuid_map)
 
         # check result: raw
@@ -195,7 +195,7 @@ class OSDService(CephService):
             )
             daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
             await CephadmServe(self.mgr)._create_daemon(
-                daemon_spec,
+                [daemon_spec],
                 osd_uuid_map=osd_uuid_map)
 
         if created:

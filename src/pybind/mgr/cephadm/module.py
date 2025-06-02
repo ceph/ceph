@@ -2565,7 +2565,7 @@ Then run the following:
             daemon_spec = service_registry.get_service(daemon_type_to_service(
                 daemon_spec.daemon_type)).prepare_create(daemon_spec)
         with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
-            self.wait_async(CephadmServe(self)._create_daemon(daemon_spec, reconfig=True))
+            self.wait_async(CephadmServe(self)._create_daemon([daemon_spec], reconfig=True))
 
         # try to be clever, or fall back to restarting the daemon
         rc = -1
@@ -2622,8 +2622,13 @@ Then run the following:
                 daemon_spec.final_config, daemon_spec.deps = self.osd_service.generate_config(
                     daemon_spec)
             with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
-                return self.wait_async(
-                    CephadmServe(self)._create_daemon(daemon_spec, reconfig=(action == 'reconfig')))
+                successes, failures = self.wait_async(
+                    CephadmServe(self)._create_daemon([daemon_spec], reconfig=(action == 'reconfig')))
+                # we're only deploying one daemon here, so we expect successes or failures to container one entry
+                for res in [successes, failures]:
+                    if daemon_spec.name() in res:
+                        return res[daemon_spec.name()]
+                raise OrchestratorError(f'Expected results for {daemon_spec.name()} but got {successes} and {failures}')
 
         actions = {
             'start': ['reset-failed', 'start'],
@@ -3161,11 +3166,19 @@ Then run the following:
             )
             daemons.append(sd)
 
+        # TODO: make this one able to pass multiple daemon specs to _create_daemon
+        # as well. Currently it just ends up looping through and passing a length
+        # one list of daemon specs. I'm ignoring it for now as we only use this
+        # for manually adding daemons to unmanaged services
         @forall_hosts
         def create_func_map(*args: Any) -> str:
             daemon_spec = service_registry.get_service(daemon_type).prepare_create(*args)
             with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
-                return self.wait_async(CephadmServe(self)._create_daemon(daemon_spec))
+                successes, failures = self.wait_async(CephadmServe(self)._create_daemon([daemon_spec]))
+                for res in [successes, failures]:
+                    if daemon_spec.name() in res:
+                        return res[daemon_spec.name()]
+                raise OrchestratorError(f'Expected results for {daemon_spec.name()} but got {successes} and {failures}')
 
         return create_func_map(args)
 

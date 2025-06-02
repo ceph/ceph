@@ -2947,17 +2947,29 @@ def apply_deploy_config_to_ctx(
     logger.debug('Determined image: %r', ctx.image)
 
 
-def command_deploy_from(ctx: CephadmContext) -> None:
+def command_deploy_from(base_ctx: CephadmContext) -> None:
     """The deploy-from command is similar to deploy but sources nearly all
     configuration parameters from an input JSON configuration file.
     """
-    config_data = read_configuration_source(ctx)
+    config_data = read_configuration_source(base_ctx)
     logger.debug('Loaded deploy configuration: %r', config_data)
-    apply_deploy_config_to_ctx(config_data, ctx)
-    try:
-        _common_deploy(ctx)
-    except DaemonStartException:
-        sys.exit(DAEMON_FAILED_ERROR)
+    results: Dict[str, int] = {}  # individual rc for each daemon deployment
+    for config in config_data:
+        logger.warning(config)
+        ctx = CephadmContext()
+        ctx._conf = base_ctx._conf
+        ctx._args = base_ctx._args
+        apply_deploy_config_to_ctx(config, ctx)
+        try:
+            _common_deploy(ctx)
+        except DaemonStartException:
+            results[ctx.name] = DAEMON_FAILED_ERROR
+        except Exception:
+            # TODO: better rc based on exception?
+            results[ctx.name] = -1
+        else:
+            results[ctx.name] = 0
+    print(json.dumps(results))
 
 
 def _common_deploy(ctx: CephadmContext) -> None:
