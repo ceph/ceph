@@ -862,11 +862,10 @@ class CephadmServe:
 
         return slots_to_add, daemons_to_remove
 
-    def remove_conflicting_daemons_for_service(self, spec: ServiceSpec) -> Tuple[bool, Set[str]]:
-        r = False
-        hosts_altered: Set[str] = set()
+    def gather_conflicting_daemons_for_service(self, spec: ServiceSpec) -> List[orchestrator.DaemonDescription]:
         slots_to_add = self.mgr.daemon_deploy_queue.get_queued_daemon_placements_by_service(spec.service_name())
         daemons_to_remove = self.mgr.daemon_removal_queue.get_queued_daemon_descriptions_by_service(spec.service_name())
+        conflict_daemons: List[orchestrator.DaemonDescription] = []
         for slot in slots_to_add:
             # first remove daemon with conflicting port or name?
             if slot.ports or slot.name in [d.name() for d in daemons_to_remove]:
@@ -882,14 +881,10 @@ class CephadmServe:
                         self.log.info(
                             f'Removing {d.name()} before deploying to {slot} to avoid a port or conflict'
                         )
-                    # NOTE: we don't check ok-to-stop here to avoid starvation if
-                    # there is only 1 gateway.
-                    self._remove_daemon(d.name(), d.hostname)
+                    conflict_daemons.append(d)
                     daemons_to_remove.remove(d)
-                    r = True
-                    hosts_altered.add(d.hostname)
                     break
-        return (r, hosts_altered)
+        return conflict_daemons
 
     def handle_slot_names_and_rank_map_for_service(self, spec: ServiceSpec) -> List[DaemonPlacement]:
         service_type = spec.service_type
@@ -1068,9 +1063,11 @@ class CephadmServe:
             slots_to_add = self.handle_slot_names_and_rank_map_for_service(spec)
 
             # create daemons
-            removed_conflicts, conflict_hosts_altered = self.remove_conflicting_daemons_for_service(spec)
-            if removed_conflicts:
+            conflicting_daemons = self.gather_conflicting_daemons_for_service(spec)
+            removed_conflict_daemons, conflict_hosts_altered = self.remove_given_daemons(conflicting_daemons)
+            if removed_conflict_daemons:
                 r = True
+                self.mgr.spec_store.mark_needs_configuration(spec.service_name())
             hosts_altered.update(conflict_hosts_altered)
             daemon_specs_to_deploy, prepare_create_fails = self.prep_daemon_specs_for_creation_by_service(spec, slots_to_add)
             daemons_placed, daemon_deployed_hosts, daemon_place_fails = self.deploy_given_daemons(daemon_specs_to_deploy)
