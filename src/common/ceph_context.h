@@ -34,6 +34,9 @@
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
 #include "msg/msg_types.h"
+#ifdef HAVE_BREAKPAD
+#include "breakpad/src/client/linux/handler/exception_handler.h"
+#endif
 #ifdef WITH_CRIMSON
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/perf_counters_collection.h"
@@ -143,6 +146,9 @@ public:
 
   ConfigProxy _conf;
   ceph::logging::Log *_log;
+#ifdef HAVE_BREAKPAD
+  std::unique_ptr<google_breakpad::ExceptionHandler> _ex_handler;
+#endif
 
   /* init ceph::crypto */
   void init_crypto();
