@@ -28,12 +28,13 @@
 #include "librbd/mirror/GetInfoRequest.h"
 #include "librbd/mirror/GetStatusRequest.h"
 #include "librbd/mirror/GetUuidRequest.h"
+#include "librbd/mirror/GroupEnableRequest.h"
 #include "librbd/mirror/GroupGetInfoRequest.h"
 #include "librbd/mirror/PromoteRequest.h"
 #include "librbd/mirror/Types.h"
 #include "librbd/MirroringWatcher.h"
 #include "librbd/mirror/snapshot/CreatePrimaryRequest.h"
-#include "librbd/mirror/snapshot/GroupCreatePrimaryRequest.h"
+#include "librbd/mirror/snapshot/GroupCreatePrimaryRequest2.h"
 #include "librbd/mirror/snapshot/ImageMeta.h"
 #include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
 #include "librbd/mirror/snapshot/GroupUnlinkPeerRequest.h"
@@ -609,8 +610,9 @@ struct C_GroupSnapshotCreate : public Context {
       return;
     }
 
-    auto req = mirror::snapshot::GroupCreatePrimaryRequest<I>::create(
-        group_ioctx, group_name, flags, group_snap_id, on_finish);
+    auto req = mirror::snapshot::GroupCreatePrimaryRequest2<I>::create(
+        group_ioctx, group_name, mirror_group.global_group_id, flags,
+        group_snap_id, on_finish);
     req->send();
   }
 };
@@ -2746,6 +2748,21 @@ int Mirror<I>::group_enable(IoCtx& group_ioctx, const char *group_name,
     return -EINVAL;
   }
 
+  C_SaferCond cond;
+  auto req = mirror::GroupEnableRequest<>::create(group_ioctx, group_id,
+                                                  static_cast<cls::rbd::MirrorImageMode>(mirror_image_mode),
+                                                  &cond);
+  req->send();
+  r = cond.wait();
+  if (r < 0) {
+    lderr(cct) << "failed to mirror enable group: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+  return 0;
+
+/*
+
   cls::rbd::MirrorGroup mirror_group;
   r = cls_client::mirror_group_get(&group_ioctx, group_id, &mirror_group);
   if (r == -EOPNOTSUPP) {
@@ -2883,8 +2900,7 @@ cleanup:
       // not fatal
     }
   }
-
-  return ret_code;
+*/
 }
 
 template <typename I>
@@ -3767,9 +3783,6 @@ template <typename I>
 int Mirror<I>::group_get_info(librados::IoCtx& io_ctx,
                               const std::string &group_name,
                               mirror_group_info_t *mirror_group_info) {
-  CephContext *cct((CephContext *)io_ctx.cct());
-  ldout(cct, 20) << "group_name=" << group_name << dendl;
-
   C_SaferCond ctx;
   group_get_info(io_ctx, group_name, mirror_group_info, &ctx);
   int r = ctx.wait();
