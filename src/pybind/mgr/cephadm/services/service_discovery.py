@@ -263,6 +263,7 @@ class Root(Server):
     def nfs_sd_config(self) -> List[Dict[str, Collection[str]]]:
         """Return <http_sd_config> compatible prometheus config for nfs service."""
         srv_entries = []
+        from cephadm.services.nfs import NFSService
         for dd in self.mgr.cache.get_daemons_by_type('nfs'):
             assert dd.hostname is not None
             nfs = cast(NFSService, service_registry.get_service('nfs'))

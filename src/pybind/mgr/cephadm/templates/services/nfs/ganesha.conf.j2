@@ -45,8 +45,8 @@ RGW {
         cluster = "ceph";
         name = "client.{{ rgw_user }}";
 }
-
 {% if kmip_addrs %}
+
 KMIP {
             HOST {
 {% for kmip_addr in kmip_addrs %}
