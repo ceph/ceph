@@ -333,6 +333,7 @@ if(WITH_BREAKPAD)
   add_custom_target(breakpad_lss_symlink)
   add_custom_command(
     TARGET breakpad_lss_symlink
+    PRE_BUILD
     COMMAND ${CMAKE_COMMAND} -E create_symlink ${lss_SOURCE_DIR} ${breakpad_SOURCE_DIR}/src/third_party/lss
     COMMENT "Creating symbolic link lss -> breakpad third party"
   )
