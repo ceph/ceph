@@ -27,6 +27,7 @@ from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 
 from .utils import resolve_ip, SpecialHostLabels
 from .migrations import queue_migrate_nfs_spec, queue_migrate_rgw_spec
+from .schedule import DaemonPlacement
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
@@ -64,6 +65,61 @@ class OrchSecretNotFound(OrchestratorError):
         self.entity = entity
         self.service_name = service_name
         self.hostname = hostname
+
+
+class DaemonDeployQueue:
+    """
+    Queue of daemons cephadm thinks it should deploy
+    Note this only covers fresh deployments, not redeploy/reconfig/restart
+    """
+
+    def __init__(self) -> None:
+        # mapping of hosts to DaemonPlacement objects that are meant
+        # to be deployed on that host
+        self._daemons: Dict[str, List[Tuple[DaemonPlacement, ServiceSpec]]] = {}
+
+    def add_to_queue(self, slots: List[Tuple[DaemonPlacement, ServiceSpec]]) -> None:
+        for dp, spec in slots:
+            if not dp.daemon_type:
+                raise OrchestratorError('Daemon Deploy Queue got DaemonPlacement with no daemon type')
+            if not dp.hostname:
+                raise OrchestratorError('Daemon Deploy Queue got DaemonPlacement with no hostname')
+            if dp.hostname not in self._daemons:
+                self._daemons[dp.hostname] = []
+            self._daemons[dp.hostname].append((dp, spec))
+
+    def remove_from_queue(self, daemon_name: str, hostname: str) -> None:
+        if hostname not in self._daemons:
+            raise OrchestratorError(
+                f'Daemon Deploy Queue got request to remove {daemon_name} from queue host {hostname} with no daemons queued'
+            )
+        self._daemons[hostname] = [(dp, spec) for (dp, spec) in self._daemons[hostname] if dp.name != daemon_name]
+        if not self._daemons[hostname]:
+            self._daemons.pop(hostname, None)
+
+    def get_all_queued_daemons(self) -> List[Tuple[DaemonPlacement, ServiceSpec]]:
+        # Turns
+        # {
+        #   'HostA': [('daemon1', 'spec1)', ('daemon2', 'spec2')],
+        #   'HostB': [('daemon3', 'spec3'), ('daemon4', 'spec4')]
+        # }
+        # Into
+        # [('daemon1', 'spec1'), ('daemon2', 'spec2'), ('daemon3', 'spec3'), ('daemon4', 'spec4')]
+        return [(dp, spec) for host_daemons in self._daemons.values() for (dp, spec) in host_daemons]
+
+    def get_queued_daemons_for_host(self, hostname: str) -> List[Tuple[DaemonPlacement, ServiceSpec]]:
+        if hostname not in self._daemons:
+            return []
+        return self._daemons[hostname]
+
+    def get_queued_daemons_for_service(self, service_name: str) -> List[Tuple[DaemonPlacement, ServiceSpec]]:
+        return [(dp, spec) for (dp, spec) in self.get_all_queued_daemons() if spec.service_name() == service_name]
+
+    def get_queued_daemon_placements_by_service(self, service_name: str) -> List[DaemonPlacement]:
+        return [dp for (dp, spec) in self.get_queued_daemons_for_service(service_name)]
+
+    def clear_queued_daemons(self) -> None:
+        self._daemons = {}
 
 
 class Inventory:
