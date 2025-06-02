@@ -965,6 +965,16 @@ class CephadmServe:
                 break
         return daemons_to_remove
 
+    def remove_given_daemons(self, daemons_to_remove: List[orchestrator.DaemonDescription]) -> Tuple[bool, Set[str]]:
+        r = False
+        hosts_altered: Set[str] = set()
+        for d in daemons_to_remove:
+            r = True
+            assert d.hostname is not None
+            self._remove_daemon(d.name(), d.hostname)
+            hosts_altered.add(d.hostname)
+        return r, hosts_altered
+
     def deploy_and_remove_daemons_by_service(self, spec: ServiceSpec) -> bool:
         service_type = spec.service_type
         service_name = spec.service_name()
@@ -1066,13 +1076,11 @@ class CephadmServe:
                 self._update_rgw_endpoints(cast(RGWSpec, spec))
 
             daemons_to_remove = self.build_ok_for_removal_list_by_service(spec)
-            for d in daemons_to_remove:
+            removed_daemons, removed_daemon_hosts = self.remove_given_daemons(daemons_to_remove)
+            if removed_daemons:
                 r = True
-                assert d.hostname is not None
-                self._remove_daemon(d.name(), d.hostname)
-
-                hosts_altered.add(d.hostname)
                 self.mgr.spec_store.mark_needs_configuration(spec.service_name())
+            hosts_altered.update(conflict_hosts_altered)
 
         except Exception as e:
             self.mgr.log.error(f'Hit an exception deploying/removing daemons: {str(e)}')
