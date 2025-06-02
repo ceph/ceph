@@ -616,12 +616,37 @@ class CephadmServe:
         for name in ['CEPHADM_APPLY_SPEC_FAIL', 'CEPHADM_DAEMON_PLACE_FAIL']:
             self.mgr.remove_health_warning(name)
         self.mgr.apply_spec_fails = []
+        hosts_altered: Set[str] = set()
         for spec in specs:
             try:
                 # this will populate daemon deploy/removal queue for this service spec
                 self._apply_service(spec)
-                if self.deploy_and_remove_daemons_by_service(spec):
+                conflicting_daemons, daemons_to_deploy, daemons_to_remove = self.prepare_daemons_to_add_and_remove_by_service(spec)
+                removed_conflict_daemons, conflict_hosts_altered = self.remove_given_daemons(conflicting_daemons)
+                if removed_conflict_daemons:
                     r = True
+                    self.mgr.spec_store.mark_needs_configuration(spec.service_name())
+                    hosts_altered.update(conflict_hosts_altered)
+                daemons_placed, daemon_deployed_hosts, daemon_place_fails = self.deploy_given_daemons(daemons_to_deploy)
+                if daemons_placed:
+                    r = True
+                    hosts_altered.update(daemon_deployed_hosts)
+                if daemon_place_fails:
+                    self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s)', len(
+                        daemon_place_fails), daemon_place_fails)
+                removed_daemons, removed_daemon_hosts = self.remove_given_daemons(daemons_to_remove)
+                if removed_daemons:
+                    r = True
+                    self.mgr.spec_store.mark_needs_configuration(spec.service_name())
+                    hosts_altered.update(conflict_hosts_altered)
+                if self.mgr.spec_store.needs_configuration(spec.service_name()):
+                    svc = service_registry.get_service(spec.service_type)
+                    svc.config(spec)
+                    self.mgr.spec_store.mark_configured(spec.service_name())
+                if self.mgr.use_agent:
+                    # can only send ack to agents if we know for sure port they bound to
+                    hosts_altered = set([h for h in hosts_altered if (h in self.mgr.agent_cache.agent_ports and not self.mgr.cache.is_host_draining(h))])
+                    self.mgr.agent_helpers._request_agent_acks(hosts_altered, increment=True)
             except Exception as e:
                 msg = f'Failed to apply {spec.service_name()} spec {spec}: {str(e)}'
                 self.log.exception(msg)
@@ -1038,25 +1063,19 @@ class CephadmServe:
                 daemon_place_fails.append(msg)
         return r, hosts_altered, daemon_place_fails
 
-    def deploy_and_remove_daemons_by_service(self, spec: ServiceSpec) -> bool:
+    def prepare_daemons_to_add_and_remove_by_service(self, spec: ServiceSpec) -> Tuple[List[orchestrator.DaemonDescription], List[CephadmDaemonDeploySpec], List[orchestrator.DaemonDescription]]:
         service_type = spec.service_type
         service_name = spec.service_name()
         svc = service_registry.get_service(service_type)
         daemons = self.mgr.cache.get_daemons_by_service(service_name)
         slots_to_add = self.mgr.daemon_deploy_queue.get_queued_daemon_placements_by_service(spec.service_name())
         daemons_to_remove = self.mgr.daemon_removal_queue.get_queued_daemon_descriptions_by_service(spec.service_name())
-        r = None
 
         # sanity check
         final_count = len(daemons) + len(slots_to_add) - len(daemons_to_remove)
         if service_type in ['mon', 'mgr'] and final_count < 1:
             self.log.debug('cannot scale mon|mgr below 1)')
-            return False
-
-        self.log.debug('Hosts that will receive new daemons: %s' % slots_to_add)
-        self.log.debug('Daemons that will be removed: %s' % daemons_to_remove)
-
-        hosts_altered: Set[str] = set()
+            return ([], [], [])
 
         try:
             # assign names
@@ -1064,22 +1083,11 @@ class CephadmServe:
 
             # create daemons
             conflicting_daemons = self.gather_conflicting_daemons_for_service(spec)
-            removed_conflict_daemons, conflict_hosts_altered = self.remove_given_daemons(conflicting_daemons)
-            if removed_conflict_daemons:
-                r = True
-                self.mgr.spec_store.mark_needs_configuration(spec.service_name())
-            hosts_altered.update(conflict_hosts_altered)
             daemon_specs_to_deploy, prepare_create_fails = self.prep_daemon_specs_for_creation_by_service(spec, slots_to_add)
-            daemons_placed, daemon_deployed_hosts, daemon_place_fails = self.deploy_given_daemons(daemon_specs_to_deploy)
-            hosts_altered.update(daemon_deployed_hosts)
 
             if prepare_create_fails:
                 self.mgr.set_health_warning('CEPHADM_DAEMON_PREPARE_CREATE_FAIL', f'Failed to place {len(prepare_create_fails)} daemon(s)', len(
                     prepare_create_fails), prepare_create_fails)
-
-            if daemon_place_fails:
-                self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s)', len(
-                    daemon_place_fails), daemon_place_fails)
 
             if service_type == 'mgr':
                 active_mgr = svc.get_active_daemon(self.mgr.cache.get_daemons_by_type('mgr'))
@@ -1093,27 +1101,12 @@ class CephadmServe:
                 self._update_rgw_endpoints(cast(RGWSpec, spec))
 
             daemons_to_remove = self.build_ok_for_removal_list_by_service(spec)
-            removed_daemons, removed_daemon_hosts = self.remove_given_daemons(daemons_to_remove)
-            if removed_daemons:
-                r = True
-                self.mgr.spec_store.mark_needs_configuration(spec.service_name())
-            hosts_altered.update(conflict_hosts_altered)
 
         except Exception as e:
-            self.mgr.log.error(f'Hit an exception deploying/removing daemons: {str(e)}')
+            self.mgr.log.error(f'Hit an exception preparing daemons for creation/removal: {str(e)}')
             raise
-        finally:
-            if self.mgr.spec_store.needs_configuration(spec.service_name()):
-                svc.config(spec)
-                self.mgr.spec_store.mark_configured(spec.service_name())
-            if self.mgr.use_agent:
-                # can only send ack to agents if we know for sure port they bound to
-                hosts_altered = set([h for h in hosts_altered if (h in self.mgr.agent_cache.agent_ports and not self.mgr.cache.is_host_draining(h))])
-                self.mgr.agent_helpers._request_agent_acks(hosts_altered, increment=True)
 
-        if r is None:
-            r = False
-        return r
+        return conflicting_daemons, daemon_specs_to_deploy, daemons_to_remove
 
     def _check_daemons(self) -> None:
         self.log.debug('_check_daemons')
