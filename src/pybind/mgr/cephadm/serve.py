@@ -617,36 +617,19 @@ class CephadmServe:
             self.mgr.remove_health_warning(name)
         self.mgr.apply_spec_fails = []
         hosts_altered: Set[str] = set()
+        all_conflicting_daemons: List[orchestrator.DaemonDescription] = []
+        all_daemons_to_deploy: List[CephadmDaemonDeploySpec] = []
+        all_daemons_to_remove: List[orchestrator.DaemonDescription] = []
         for spec in specs:
             try:
                 # this will populate daemon deploy/removal queue for this service spec
                 self._apply_service(spec)
+                # this finalizes what to deploy for this service
                 conflicting_daemons, daemons_to_deploy, daemons_to_remove = self.prepare_daemons_to_add_and_remove_by_service(spec)
-                removed_conflict_daemons, conflict_hosts_altered = self.remove_given_daemons(conflicting_daemons)
-                if removed_conflict_daemons:
-                    r = True
-                    self.mgr.spec_store.mark_needs_configuration(spec.service_name())
-                    hosts_altered.update(conflict_hosts_altered)
-                daemons_placed, daemon_deployed_hosts, daemon_place_fails = self.deploy_given_daemons(daemons_to_deploy)
-                if daemons_placed:
-                    r = True
-                    hosts_altered.update(daemon_deployed_hosts)
-                if daemon_place_fails:
-                    self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s)', len(
-                        daemon_place_fails), daemon_place_fails)
-                removed_daemons, removed_daemon_hosts = self.remove_given_daemons(daemons_to_remove)
-                if removed_daemons:
-                    r = True
-                    self.mgr.spec_store.mark_needs_configuration(spec.service_name())
-                    hosts_altered.update(conflict_hosts_altered)
-                if self.mgr.spec_store.needs_configuration(spec.service_name()):
-                    svc = service_registry.get_service(spec.service_type)
-                    svc.config(spec)
-                    self.mgr.spec_store.mark_configured(spec.service_name())
-                if self.mgr.use_agent:
-                    # can only send ack to agents if we know for sure port they bound to
-                    hosts_altered = set([h for h in hosts_altered if (h in self.mgr.agent_cache.agent_ports and not self.mgr.cache.is_host_draining(h))])
-                    self.mgr.agent_helpers._request_agent_acks(hosts_altered, increment=True)
+                # compiles all these lists so we can split on host instead of service
+                all_conflicting_daemons.extend(conflicting_daemons)
+                all_daemons_to_deploy.extend(daemons_to_deploy)
+                all_daemons_to_remove.extend(all_daemons_to_remove)
             except Exception as e:
                 msg = f'Failed to apply {spec.service_name()} spec {spec}: {str(e)}'
                 self.log.exception(msg)
@@ -659,6 +642,37 @@ class CephadmServe:
                                             f"Failed to apply {len(self.mgr.apply_spec_fails)} service(s): {','.join(x[0] for x in self.mgr.apply_spec_fails)}",
                                             len(self.mgr.apply_spec_fails),
                                             warnings)
+
+        for host in self.mgr.cache.get_hosts():
+            conflicting_daemons = [dd for dd in all_conflicting_daemons if dd.hostname == host]
+            daemons_to_deploy = [dd for dd in all_daemons_to_deploy if dd.host == host]
+            daemons_to_remove = [dd for dd in all_daemons_to_remove if dd.hostname == host]
+            removed_conflict_daemons, conflict_hosts_altered = self.remove_given_daemons(conflicting_daemons)
+            if removed_conflict_daemons:
+                r = True
+                self.mgr.spec_store.mark_needs_configuration(spec.service_name())
+                hosts_altered.update(conflict_hosts_altered)
+            daemons_placed, daemon_deployed_hosts, daemon_place_fails = self.deploy_given_daemons(daemons_to_deploy)
+            if daemons_placed:
+                r = True
+                hosts_altered.update(daemon_deployed_hosts)
+            if daemon_place_fails:
+                self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s)', len(
+                    daemon_place_fails), daemon_place_fails)
+            removed_daemons, removed_daemon_hosts = self.remove_given_daemons(daemons_to_remove)
+            if removed_daemons:
+                r = True
+                self.mgr.spec_store.mark_needs_configuration(spec.service_name())
+                hosts_altered.update(conflict_hosts_altered)
+            if self.mgr.spec_store.needs_configuration(spec.service_name()):
+                svc = service_registry.get_service(spec.service_type)
+                svc.config(spec)
+                self.mgr.spec_store.mark_configured(spec.service_name())
+            if self.mgr.use_agent:
+                # can only send ack to agents if we know for sure port they bound to
+                hosts_altered = set([h for h in hosts_altered if (h in self.mgr.agent_cache.agent_ports and not self.mgr.cache.is_host_draining(h))])
+                self.mgr.agent_helpers._request_agent_acks(hosts_altered, increment=True)
+
         self.mgr.daemon_deploy_queue.clear_queued_daemons()
         self.mgr.daemon_removal_queue.clear_queued_daemons()
         self.mgr.update_watched_hosts()
@@ -1045,22 +1059,34 @@ class CephadmServe:
         return daemon_specs, prepare_create_fails
 
     def deploy_given_daemons(self, to_deploy: List[CephadmDaemonDeploySpec]) -> Tuple[bool, Set[str], List[str]]:
+        if not to_deploy:
+            return (False, set(), [])
         r = False
         hosts_altered: Set[str] = set()
         daemon_place_fails: List[str] = []
-        for daemon_spec in to_deploy:
-            try:
-                with self.mgr.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} type dameon)'):
-                    self.mgr.wait_async(self._create_daemon(daemon_spec))
+        # for daemon_spec in to_deploy:
+        daemon_names = [d.name() for d in to_deploy]
+        hostname = to_deploy[0].host
+        if any(d.host != hostname for d in to_deploy):
+            raise OrchestratorError(f'Got deploy request with multiple different hosts {set([d.host for d in to_deploy])}')
+        try:
+            with self.mgr.async_timeout_handler(hostname, f'cephadm deploy ({daemon_names} daemons)'):
+                successes, failures = self.mgr.wait_async(self._create_daemon(to_deploy))
+            if successes:
                 r = True
-                hosts_altered.add(daemon_spec.host)
-            except (RuntimeError, OrchestratorError) as e:
-                msg = (f"Failed while placing {daemon_spec.daemon_type}.{daemon_spec.daemon_id} "
-                       f"on {daemon_spec.host}: {e}")
-                spec = self.mgr.spec_store[daemon_spec.service_name].spec
-                self.mgr.events.for_service(spec, 'ERROR', msg)
-                self.mgr.log.error(msg)
-                daemon_place_fails.append(msg)
+                hosts_altered.add(hostname)
+        except (RuntimeError, OrchestratorError) as e:
+            # this is for general failures not necessarily tied to the
+            # deployment of an individual daemon
+            msg = (f"Failed while placing {daemon_names} "
+                   f"on {hostname}: {e}")
+        for daemon_name, msg in failures.items():
+            # these are failures specific to a particular daemon
+            daemon_spec = [d for d in to_deploy if d.name() == daemon_name][0]
+            spec = self.mgr.spec_store[daemon_spec.service_name].spec
+            self.mgr.events.for_service(spec, 'ERROR', msg)
+            self.mgr.log.error(msg)
+            daemon_place_fails.append(msg)
         return r, hosts_altered, daemon_place_fails
 
     def prepare_daemons_to_add_and_remove_by_service(self, spec: ServiceSpec) -> Tuple[List[orchestrator.DaemonDescription], List[CephadmDaemonDeploySpec], List[orchestrator.DaemonDescription]]:
@@ -1387,157 +1413,183 @@ class CephadmServe:
             self.mgr.cache.save_host(host)
 
     async def _create_daemon(self,
-                             daemon_spec: CephadmDaemonDeploySpec,
+                             daemon_specs: List[CephadmDaemonDeploySpec],
                              reconfig: bool = False,
                              osd_uuid_map: Optional[Dict[str, Any]] = None,
-                             ) -> str:
+                             ) -> Tuple[Dict[str, str], Dict[str, str]]:
 
-        daemon_params: Dict[str, Any] = {}
-        with set_exception_subject('service', orchestrator.DaemonDescription(
-                daemon_type=daemon_spec.daemon_type,
-                daemon_id=daemon_spec.daemon_id,
-                hostname=daemon_spec.host,
-        ).service_id(), overwrite=True):
+        exchanges: List[exchange.Deploy] = []
+        # build exchange.deploy for each daemon we are going to deploy
+        for daemon_spec in daemon_specs:
+            image = ''
+            daemon_params: Dict[str, Any] = {}
+            start_time = datetime_now()
+            ports: List[int] = daemon_spec.ports if daemon_spec.ports else []
+            port_ips: Dict[str, str] = daemon_spec.port_ips if daemon_spec.port_ips else {}
 
-            try:
-                image = ''
-                start_time = datetime_now()
-                ports: List[int] = daemon_spec.ports if daemon_spec.ports else []
-                port_ips: Dict[str, str] = daemon_spec.port_ips if daemon_spec.port_ips else {}
+            if daemon_spec.daemon_type == 'container':
+                spec = cast(CustomContainerSpec,
+                            self.mgr.spec_store[daemon_spec.service_name].spec)
+                image = spec.image
+                if spec.ports:
+                    ports.extend(spec.ports)
 
-                if daemon_spec.daemon_type == 'container':
-                    spec = cast(CustomContainerSpec,
-                                self.mgr.spec_store[daemon_spec.service_name].spec)
-                    image = spec.image
-                    if spec.ports:
-                        ports.extend(spec.ports)
+            # TCP port to open in the host firewall
+            if len(ports) > 0:
+                daemon_params['tcp_ports'] = list(ports)
 
-                # TCP port to open in the host firewall
-                if len(ports) > 0:
-                    daemon_params['tcp_ports'] = list(ports)
+            if port_ips:
+                daemon_params['port_ips'] = port_ips
 
-                if port_ips:
-                    daemon_params['port_ips'] = port_ips
+            # osd deployments needs an --osd-uuid arg
+            if daemon_spec.daemon_type == 'osd':
+                if not osd_uuid_map:
+                    osd_uuid_map = self.mgr.get_osd_uuid_map()
+                osd_uuid = osd_uuid_map.get(daemon_spec.daemon_id)
+                if not osd_uuid:
+                    raise OrchestratorError('osd.%s not in osdmap' % daemon_spec.daemon_id)
+                daemon_params['osd_fsid'] = osd_uuid
 
-                # osd deployments needs an --osd-uuid arg
-                if daemon_spec.daemon_type == 'osd':
-                    if not osd_uuid_map:
-                        osd_uuid_map = self.mgr.get_osd_uuid_map()
-                    osd_uuid = osd_uuid_map.get(daemon_spec.daemon_id)
-                    if not osd_uuid:
-                        raise OrchestratorError('osd.%s not in osdmap' % daemon_spec.daemon_id)
-                    daemon_params['osd_fsid'] = osd_uuid
+            if reconfig:
+                daemon_params['reconfig'] = True
+            if self.mgr.allow_ptrace:
+                daemon_params['allow_ptrace'] = True
 
-                if reconfig:
-                    daemon_params['reconfig'] = True
-                if self.mgr.allow_ptrace:
-                    daemon_params['allow_ptrace'] = True
+            daemon_spec, extra_container_args, extra_entrypoint_args = self._setup_extra_deployment_args(daemon_spec, daemon_params)
+            init_containers = self._setup_init_containers(daemon_spec, daemon_params)
 
-                daemon_spec, extra_container_args, extra_entrypoint_args = self._setup_extra_deployment_args(daemon_spec, daemon_params)
-                init_containers = self._setup_init_containers(daemon_spec, daemon_params)
+            if daemon_spec.service_name in self.mgr.spec_store:
+                configs = self.mgr.spec_store[daemon_spec.service_name].spec.custom_configs
+                if configs is not None:
+                    daemon_spec.final_config.update(
+                        {'custom_config_files': [c.to_json() for c in configs]})
 
-                if daemon_spec.service_name in self.mgr.spec_store:
-                    configs = self.mgr.spec_store[daemon_spec.service_name].spec.custom_configs
-                    if configs is not None:
-                        daemon_spec.final_config.update(
-                            {'custom_config_files': [c.to_json() for c in configs]})
+            if self.mgr.cache.host_needs_registry_login(daemon_spec.host) and self.mgr.registry_url:
+                await self._registry_login(daemon_spec.host, json.loads(str(self.mgr.get_store('registry_credentials'))))
 
-                if self.mgr.cache.host_needs_registry_login(daemon_spec.host) and self.mgr.registry_url:
-                    await self._registry_login(daemon_spec.host, json.loads(str(self.mgr.get_store('registry_credentials'))))
+            self.log.info('%s daemon %s on %s' % (
+                'Reconfiguring' if reconfig else 'Deploying',
+                daemon_spec.name(), daemon_spec.host))
 
-                self.log.info('%s daemon %s on %s' % (
-                    'Reconfiguring' if reconfig else 'Deploying',
-                    daemon_spec.name(), daemon_spec.host))
-
-                out, err, code = await self._run_cephadm(
-                    daemon_spec.host,
-                    daemon_spec.name(),
-                    ['_orch', 'deploy'],
-                    [],
-                    stdin=exchange.Deploy(
-                        fsid=self.mgr._cluster_fsid,
-                        name=daemon_spec.name(),
-                        image=image,
-                        params=daemon_params,
-                        meta=exchange.DeployMeta(
-                            service_name=daemon_spec.service_name,
-                            ports=daemon_spec.ports,
-                            ip=daemon_spec.ip,
-                            deployed_by=self.mgr.get_active_mgr_digests(),
-                            rank=daemon_spec.rank,
-                            rank_generation=daemon_spec.rank_generation,
-                            extra_container_args=ArgumentSpec.map_json(
-                                extra_container_args,
-                            ),
-                            extra_entrypoint_args=ArgumentSpec.map_json(
-                                extra_entrypoint_args,
-                            ),
-                            init_containers=init_containers,
+            exchanges.append(
+                exchange.Deploy(
+                    fsid=self.mgr._cluster_fsid,
+                    name=daemon_spec.name(),
+                    image=image,
+                    params=daemon_params,
+                    meta=exchange.DeployMeta(
+                        service_name=daemon_spec.service_name,
+                        ports=daemon_spec.ports,
+                        ip=daemon_spec.ip,
+                        deployed_by=self.mgr.get_active_mgr_digests(),
+                        rank=daemon_spec.rank,
+                        rank_generation=daemon_spec.rank_generation,
+                        extra_container_args=ArgumentSpec.map_json(
+                            extra_container_args,
                         ),
-                        config_blobs=daemon_spec.final_config,
-                    ).dump_json_str(),
-                    use_current_daemon_image=reconfig,
-                    error_ok=True
+                        extra_entrypoint_args=ArgumentSpec.map_json(
+                            extra_entrypoint_args,
+                        ),
+                        init_containers=init_containers,
+                    ),
+                    config_blobs=daemon_spec.final_config,
                 )
+            )
 
-                # return number corresponding to DAEMON_FAILED_ERROR
-                # in src/cephadm/cephadmlib/constants.
-                # TODO: link these together so one cannot be changed without the other
-                if code == 17:
-                    # daemon failed on systemctl start command, meaning while
-                    # deployment failed the daemon is present and we should handle
-                    # this as if the deploy command "succeeded" and mark the daemon
-                    # as failed later when we fetch its status
-                    self.mgr.log.error(f'Deployment of {daemon_spec.name()} failed during "systemctl start" command')
-                elif code:
-                    # some other failure earlier in the deploy process. Just raise an exception
-                    # the same as we would in _run_cephadm on a nonzero rc
-                    raise OrchestratorError(
-                        f'cephadm exited with an error code: {code}, stderr: {err}')
+        all_exchanges = json.dumps([e.dump_json_str() for e in exchanges])
 
-                if daemon_spec.daemon_type == 'agent':
-                    self.mgr.agent_cache.agent_timestamp[daemon_spec.host] = datetime_now()
-                    self.mgr.agent_cache.agent_counter[daemon_spec.host] = 1
+        # pass all exchange.deploys to deploy command at once
+        out, err, code = await self._run_cephadm(
+            daemon_spec.host,
+            daemon_spec.name(),
+            ['_orch', 'deploy'],
+            [],
+            stdin=all_exchanges,
+            use_current_daemon_image=reconfig,
+            error_ok=True
+        )
 
-                # refresh daemon state?  (ceph daemon reconfig does not need it)
-                if not reconfig or daemon_spec.daemon_type not in CEPH_TYPES:
-                    if not code and daemon_spec.host in self.mgr.cache.daemons:
-                        # prime cached service state with what we (should have)
-                        # just created
-                        sd = daemon_spec.to_daemon_description(
-                            DaemonDescriptionStatus.starting, 'starting')
-                        # If daemon requires post action, then mark pending_daemon_config as true
-                        if daemon_spec.daemon_type in REQUIRES_POST_ACTIONS:
-                            sd.update_pending_daemon_config(True)
-                        self.mgr.cache.add_daemon(daemon_spec.host, sd)
-                    self.mgr.cache.invalidate_host_daemons(daemon_spec.host)
+        if code:
+            # we expect this to give us back a dict mapping daemon names
+            # to what would have been the rc back when we only deployed daemons serially.
+            # If it actually fully returns a non-zero rc, something went wrong outside
+            # of the deployment of an inidividual daemon
+            raise OrchestratorError(
+                f'cephadm exited with an error code: {code}, stderr: {err}')
 
-                if daemon_spec.daemon_type != 'agent':
-                    self.mgr.cache.update_daemon_config_deps(
-                        daemon_spec.host, daemon_spec.name(), daemon_spec.deps, start_time)
-                    self.mgr.cache.save_host(daemon_spec.host)
-                else:
-                    self.mgr.agent_cache.update_agent_config_deps(
-                        daemon_spec.host, daemon_spec.deps, start_time)
-                    self.mgr.agent_cache.save_agent(daemon_spec.host)
-                msg = "{} {} on host '{}'".format(
-                    'Reconfigured' if reconfig else 'Deployed', daemon_spec.name(), daemon_spec.host)
-                if not code:
-                    self.mgr.events.for_daemon(daemon_spec.name(), OrchestratorEvent.INFO, msg)
-                else:
-                    what = 'reconfigure' if reconfig else 'deploy'
-                    self.mgr.events.for_daemon(
-                        daemon_spec.name(), OrchestratorEvent.ERROR, f'Failed to {what}: {err}')
-                self.mgr.recently_altered_daemons[daemon_spec.name()] = datetime_now()
-                return msg
-            except OrchestratorError:
-                redeploy = daemon_spec.name() in self.mgr.cache.get_daemon_names()
-                if not reconfig and not redeploy:
-                    # we have to clean up the daemon. E.g. keyrings.
-                    servict_type = daemon_type_to_service(daemon_spec.daemon_type)
-                    dd = daemon_spec.to_daemon_description(DaemonDescriptionStatus.error, 'failed')
-                    service_registry.get_service(servict_type).post_remove(dd, is_failed_deploy=True)
-                raise
+        # handle post-deployment steps and error handling for each daemon we deployed
+        if len(out) != 1:  # _run_cephadm puts the output into a list, we should only get one thing here
+            raise OrchestratorError(f'Got unexpected non-length 1 list of output in _create_daemon: {out}')
+        results: Dict[str, int] = json.loads(out[0])
+        successes: Dict[str, str] = {}
+        failures: Dict[str, str] = {}
+        for daemon_name, rc in results.items():
+            daemon_spec = [d for d in daemon_specs if d.name() == daemon_name][0]
+            with set_exception_subject('service', orchestrator.DaemonDescription(
+                    daemon_type=daemon_spec.daemon_type,
+                    daemon_id=daemon_spec.daemon_id,
+                    hostname=daemon_spec.host,
+            ).service_id(), overwrite=True):
+                try:
+                    # return number corresponding to DAEMON_FAILED_ERROR
+                    # in src/cephadm/cephadmlib/constants.
+                    # TODO: link these together so one cannot be changed without the other
+                    if rc == 17:
+                        # daemon failed on systemctl start command, meaning while
+                        # deployment failed the daemon is present and we should handle
+                        # this as if the deploy command "succeeded" and mark the daemon
+                        # as failed later when we fetch its status
+                        self.mgr.log.error(f'Deployment of {daemon_spec.name()} failed during "systemctl start" command')
+                    elif rc:
+                        # some other failure earlier in the deploy process. Just raise an exception
+                        # the same as we would in _run_cephadm on a nonzero rc
+                        raise OrchestratorError(
+                            f'cephadm exited with an error code: {rc}, stderr: {err}')
+
+                    if daemon_spec.daemon_type == 'agent':
+                        self.mgr.agent_cache.agent_timestamp[daemon_spec.host] = datetime_now()
+                        self.mgr.agent_cache.agent_counter[daemon_spec.host] = 1
+
+                    # refresh daemon state?  (ceph daemon reconfig does not need it)
+                    if not reconfig or daemon_spec.daemon_type not in CEPH_TYPES:
+                        if not rc and daemon_spec.host in self.mgr.cache.daemons:
+                            # prime cached service state with what we (should have)
+                            # just created
+                            sd = daemon_spec.to_daemon_description(
+                                DaemonDescriptionStatus.starting, 'starting')
+                            # If daemon requires post action, then mark pending_daemon_config as true
+                            if daemon_spec.daemon_type in REQUIRES_POST_ACTIONS:
+                                sd.update_pending_daemon_config(True)
+                            self.mgr.cache.add_daemon(daemon_spec.host, sd)
+                        self.mgr.cache.invalidate_host_daemons(daemon_spec.host)
+
+                    if daemon_spec.daemon_type != 'agent':
+                        self.mgr.cache.update_daemon_config_deps(
+                            daemon_spec.host, daemon_spec.name(), daemon_spec.deps, start_time)
+                        self.mgr.cache.save_host(daemon_spec.host)
+                    else:
+                        self.mgr.agent_cache.update_agent_config_deps(
+                            daemon_spec.host, daemon_spec.deps, start_time)
+                        self.mgr.agent_cache.save_agent(daemon_spec.host)
+                    msg = "{} {} on host '{}'".format(
+                        'Reconfigured' if reconfig else 'Deployed', daemon_spec.name(), daemon_spec.host)
+                    if not rc:
+                        self.mgr.events.for_daemon(daemon_spec.name(), OrchestratorEvent.INFO, msg)
+                    else:
+                        what = 'reconfigure' if reconfig else 'deploy'
+                        self.mgr.events.for_daemon(
+                            daemon_spec.name(), OrchestratorEvent.ERROR, f'Failed to {what}: {err}')
+                    self.mgr.recently_altered_daemons[daemon_spec.name()] = datetime_now()
+                    successes[daemon_spec.name()] = msg
+                except OrchestratorError as e:
+                    redeploy = daemon_spec.name() in self.mgr.cache.get_daemon_names()
+                    if not reconfig and not redeploy:
+                        # we have to clean up the daemon. E.g. keyrings.
+                        servict_type = daemon_type_to_service(daemon_spec.daemon_type)
+                        dd = daemon_spec.to_daemon_description(DaemonDescriptionStatus.error, 'failed')
+                        service_registry.get_service(servict_type).post_remove(dd, is_failed_deploy=True)
+                    failures[daemon_spec.name()] = str(e)
+        return successes, failures
 
     def _setup_extra_deployment_args(
         self,
