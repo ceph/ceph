@@ -505,7 +505,7 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
   }
 
   if (!m_local_group_snaps.empty()) {
-    unlink_group_snapshots();
+    prune_group_snapshots();
     auto last_local_snap = m_local_group_snaps.rbegin();
     auto last_local_snap_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
         &last_local_snap->snapshot_namespace);
@@ -1139,7 +1139,7 @@ bool Replayer<I>::prune_all_image_snapshots(cls::rbd::GroupSnapshot *local_snap)
     return retain;
   }
 
-  dout(10) << "attempting to unlink image snaps from group snap: "
+  dout(10) << "attempting to prune image snaps from group snap: "
     << local_snap->id << dendl;
 
   for (auto &spec : local_snap->snaps) {
@@ -1180,37 +1180,96 @@ bool Replayer<I>::prune_all_image_snapshots(cls::rbd::GroupSnapshot *local_snap)
 }
 
 template <typename I>
-void Replayer<I>::unlink_group_snapshots() {
-  if (m_local_group_snaps.empty()) {
-    return;
-  }
+void Replayer<I>::prune_user_group_snapshots() {
   int r;
-  auto last_local_snap_id = m_local_group_snaps.rbegin()->id;
   for (auto local_snap = m_local_group_snaps.begin();
       local_snap != m_local_group_snaps.end(); ++local_snap) {
-    if (local_snap->id == last_local_snap_id) {
+    std::unique_lock locker{m_lock};
+    if (local_snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
       break;
     }
-    std::unique_lock locker{m_lock};
     auto snap_type = cls::rbd::get_group_snap_namespace_type(
         local_snap->snapshot_namespace);
     if (snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER) {
-      bool unlink_user_snap = true;
+      bool prune_user_snap = true;
       for (auto &remote_snap : m_remote_group_snaps) {
         if (remote_snap.name == local_snap->name) {
-          unlink_user_snap = false;
+          prune_user_snap = false;
           break;
         }
       }
-      if (!unlink_user_snap) {
+      if (!prune_user_snap) {
         locker.unlock();
         continue;
       }
-      dout(10) << "unlinking regular group snap in-progress: "
+      dout(10) << "pruning regular group snap in-progress: "
                << local_snap->name << ", with id: " << local_snap->id << dendl;
-    } else {
-      // remove mirror peer uuid of the remote snap
+      // prune all the image snaps of the group snap locally
+     locker.unlock();
+      if (prune_all_image_snapshots(&(*local_snap))) {
+        continue;
+      }
+      dout(10) << "all image snaps are pruned, finally pruning regular group snap: "
+               << local_snap->id << dendl;
+      locker.lock();
+      r = librbd::cls_client::group_snap_remove(&m_local_io_ctx,
+             librbd::util::group_header_name(m_local_group_id), local_snap->id);
+      if (r < 0) {
+        derr << "failed to remove group snapshot : "
+             << local_snap->id << " : " << cpp_strerror(r) << dendl;
+      }
+      locker.unlock();
+    }
+  }
+}
 
+template <typename I>
+void Replayer<I>::prune_mirror_group_snapshots() {
+  int r;
+  bool is_prior_snap_user = false;
+  bool skip_next_snap_check = false;
+  cls::rbd::GroupSnapshot *prune_snap = nullptr;
+  auto last_local_snap_id = m_local_group_snaps.rbegin()->id;
+  for (auto local_snap = m_local_group_snaps.begin();
+      local_snap != m_local_group_snaps.end(); ++local_snap) {
+    if (local_snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+      break;
+    }
+
+    std::unique_lock locker{m_lock};
+    auto snap_type = cls::rbd::get_group_snap_namespace_type(
+        local_snap->snapshot_namespace);
+    if (snap_type != cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR) {
+      is_prior_snap_user = true;
+      if (prune_snap) { // snapshot before user snap exists ?
+        // delete snap before user snap, only if the user snap has next complete mirror snap
+        auto next_local_snap = std::next(local_snap);
+        if (next_local_snap == m_local_group_snaps.end()) {
+          break; // no next snap.
+        }
+        auto next_snap_type = cls::rbd::get_group_snap_namespace_type(
+            next_local_snap->snapshot_namespace);
+        if (next_snap_type != cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR) {
+          continue; // next snap is user snap again.
+        } else if (next_local_snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+          break; // next snap is not complete yet.
+        }
+      }
+      locker.unlock();
+      continue;
+    }
+    if (!prune_snap) {
+      prune_snap = &(*local_snap);
+    }
+
+    if (is_prior_snap_user) {
+      is_prior_snap_user = false; // free to continue prune on next iteratation
+      skip_next_snap_check = true; // as we are pruning mirror snap before user snap
+      locker.unlock();
+      continue;
+    }
+
+    if (!skip_next_snap_check) {
       auto next_local_snap = std::next(local_snap);
       // If next local snap is end, or if it is the syncing in-progress snap,
       // then we still need this group snapshot.
@@ -1218,25 +1277,45 @@ void Replayer<I>::unlink_group_snapshots() {
           (next_local_snap->id == last_local_snap_id &&
            next_local_snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE)) {
         break;
+      } else {
+        auto next_snap_type = cls::rbd::get_group_snap_namespace_type(
+            next_local_snap->snapshot_namespace);
+        if (next_snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER) {
+          locker.unlock();
+          continue;
+        }
       }
-      remove_mirror_peer_uuid(local_snap->id);
     }
+    remove_mirror_peer_uuid(prune_snap->id);
     locker.unlock();
     // prune all the image snaps of the group snap locally
-    if (prune_all_image_snapshots(&(*local_snap))) {
+    if (prune_all_image_snapshots(prune_snap)) {
+      prune_snap = nullptr;
+      skip_next_snap_check = false;
       continue;
     }
-    dout(10) << "all image snaps are pruned, finally unlinking group snap: "
-             << local_snap->id << dendl;
+    dout(10) << "all image snaps are pruned, finally pruning mirror group snap: "
+             << prune_snap->id << dendl;
     locker.lock();
     r = librbd::cls_client::group_snap_remove(&m_local_io_ctx,
-        librbd::util::group_header_name(m_local_group_id), local_snap->id);
+        librbd::util::group_header_name(m_local_group_id), prune_snap->id);
     if (r < 0) {
       derr << "failed to remove group snapshot : "
-           << local_snap->id << " : " << cpp_strerror(r) << dendl;
+           << prune_snap->id << " : " << cpp_strerror(r) << dendl;
     }
+    prune_snap = nullptr;
+    skip_next_snap_check = false;
     locker.unlock();
   }
+}
+
+template <typename I>
+void Replayer<I>::prune_group_snapshots() {
+  if (m_local_group_snaps.empty()) {
+    return;
+  }
+  prune_user_group_snapshots();
+  prune_mirror_group_snapshots();
 }
 
 template <typename I>
