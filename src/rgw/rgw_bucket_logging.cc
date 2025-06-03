@@ -242,6 +242,8 @@ int new_logging_object(const configuration& conf,
     const std::unique_ptr<rgw::sal::Bucket>& target_bucket,
     std::string& obj_name,
     const DoutPrefixProvider *dpp,
+    const std::string& region,
+    const std::unique_ptr<rgw::sal::Bucket>& source_bucket,
     optional_yield y,
     std::optional<std::string> old_name,
     RGWObjVersionTracker* objv_tracker) {
@@ -253,6 +255,7 @@ int new_logging_object(const configuration& conf,
 
   switch (conf.obj_key_format) {
     case KeyFormat::Simple:
+      // [DestinationPrefix][YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]
       obj_name = fmt::format("{}{:%Y-%m-%d-%H-%M-%S}-{}",
         conf.target_prefix,
         t,
@@ -260,13 +263,13 @@ int new_logging_object(const configuration& conf,
       break;
     case KeyFormat::Partitioned:
       {
-        // TODO: use date_source
-        const auto source_region = ""; // TODO
+        // TODO: support both EventTime and DeliveryTime
+        // [DestinationPrefix][SourceAccountId]/[SourceRegion]/[SourceBucket]/[YYYY]/[MM]/[DD]/[YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]
         obj_name = fmt::format("{}{}/{}/{}/{:%Y/%m/%d}/{:%Y-%m-%d-%H-%M-%S}-{}",
           conf.target_prefix,
-          to_string(target_bucket->get_owner()),
-          source_region,
-          full_bucket_name(target_bucket),
+          to_string(source_bucket->get_owner()),
+          region,
+          full_bucket_name(source_bucket),
           t,
           t,
           unique);
@@ -341,6 +344,8 @@ int rollover_logging_object(const configuration& conf,
     const std::unique_ptr<rgw::sal::Bucket>& target_bucket,
     std::string& obj_name,
     const DoutPrefixProvider *dpp,
+    const std::string& region,
+    const std::unique_ptr<rgw::sal::Bucket>& source_bucket,
     optional_yield y,
     bool must_commit,
     RGWObjVersionTracker* objv_tracker) {
@@ -353,7 +358,7 @@ int rollover_logging_object(const configuration& conf,
     return -EINVAL;
   }
   const auto old_obj = obj_name;
-  const int ret = new_logging_object(conf, target_bucket, obj_name, dpp, y, old_obj, objv_tracker);
+  const int ret = new_logging_object(conf, target_bucket, obj_name, dpp, region, source_bucket, y, old_obj, objv_tracker);
   if (ret == -ECANCELED) {
     ldpp_dout(dpp, 20) << "INFO: rollover already performed for object '" << old_obj <<  "' to logging bucket '" <<
       target_bucket->get_key() << "'. ret = " << ret << dendl;
@@ -462,6 +467,7 @@ int log_record(rgw::sal::Driver* driver,
     return ret;
   }
 
+  const auto region = driver->get_zone()->get_zonegroup().get_api_name();
   std::string obj_name;
   RGWObjVersionTracker objv_tracker;
   ret = target_bucket->get_logging_object_name(obj_name, conf.target_prefix, y, dpp, &objv_tracker);
@@ -470,7 +476,7 @@ int log_record(rgw::sal::Driver* driver,
     if (ceph::coarse_real_time::clock::now() > time_to_commit) {
       ldpp_dout(dpp, 20) << "INFO: logging object '" << obj_name << "' exceeded its time, will be committed to bucket '" <<
         target_bucket_id << "'" << dendl;
-      if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, y, false, &objv_tracker); ret < 0) {
+      if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, false, &objv_tracker); ret < 0) {
         return ret;
       }
     } else {
@@ -478,7 +484,7 @@ int log_record(rgw::sal::Driver* driver,
     }
   } else if (ret == -ENOENT) {
     // try to create the temporary log object for the first time
-    ret = new_logging_object(conf, target_bucket, obj_name, dpp, y, std::nullopt, nullptr);
+    ret = new_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, std::nullopt, nullptr);
     if (ret == 0) {
       ldpp_dout(dpp, 20) << "INFO: first time logging for bucket '" << target_bucket_id << "' and prefix '" <<
         conf.target_prefix << "'" << dendl;
@@ -509,9 +515,13 @@ int log_record(rgw::sal::Driver* driver,
     fqdn.append(".").append(s->info.domain);
   }
 
+  std::string aws_version("-");
+  std::string auth_type("-");
+  rgw::auth::s3::get_aws_version_and_auth_type(s, aws_version, auth_type);
   std::string bucket_owner;
   std::string bucket_name;
-  if (log_source_bucket) {
+  if (log_source_bucket && conf.logging_type == LoggingType::Standard) {
+    // log source bucket for COPY operations only in standard mode
     if (!s->src_object || !s->src_object->get_bucket()) {
       ldpp_dout(dpp, 1) << "ERROR: source object or bucket is missing when logging source bucket" << dendl;
       return -EINVAL;
@@ -523,9 +533,6 @@ int log_record(rgw::sal::Driver* driver,
     bucket_name = full_bucket_name(s->bucket);
   }
 
-  std::string aws_version("-");
-  std::string auth_type("-");
-  rgw::auth::s3::get_aws_version_and_auth_type(s, aws_version, auth_type);
 
   switch (conf.logging_type) {
     case LoggingType::Standard:
@@ -562,8 +569,8 @@ int log_record(rgw::sal::Driver* driver,
       break;
     case LoggingType::Journal:
       record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} {} {} {} {}",
-        dash_if_empty(to_string(s->bucket->get_owner())),
-        dash_if_empty(full_bucket_name(s->bucket)),
+        dash_if_empty(bucket_owner),
+        dash_if_empty(bucket_name),
         t,
         op_name,
         dash_if_empty_or_null(obj, obj->get_name()),
@@ -615,7 +622,7 @@ int log_record(rgw::sal::Driver* driver,
   if (ret == -EFBIG) {
     ldpp_dout(dpp, 5) << "WARNING: logging object '" << obj_name << "' is full, will be committed to bucket '" <<
       target_bucket->get_key() << "'" << dendl;
-    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, y, true, nullptr); ret < 0 ) {
+    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, true, nullptr); ret < 0 ) {
       return ret;
     }
     if (ret = target_bucket->write_logging_object(obj_name,

@@ -7833,7 +7833,8 @@ int main(int argc, const char **argv)
       return -ret;
     }
     const auto old_obj = obj_name;
-    ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), null_yield, true, &objv_tracker);
+    const auto region = driver->get_zone()->get_zonegroup().get_api_name();
+    ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), region, bucket, null_yield, true, &objv_tracker);
     if (ret < 0) {
       cerr << "ERROR: failed to flush pending logging object '" << old_obj
         << "' to target bucket '" << configuration.target_bucket << "'" << std::endl;
