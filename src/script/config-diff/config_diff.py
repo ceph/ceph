@@ -91,9 +91,12 @@ def sparse_branch_checkout_skip_clone(ref_sha) -> Repo:
     local_branches = [
         branch.strip().lstrip("*").strip() for branch in git_cmd.branch("--list").splitlines()
     ]
+    print("sparse_branch_checkout_skip_clone")
+    print(local_branches)
     # branch_name = ref_sha.split(":")[0]
     branch_name = ref_sha
     branch_present = any(branch_name in branch for branch in local_branches)
+    print(branch_present)
     if not branch_present:
         git_cmd.fetch(
             "origin",
@@ -102,8 +105,11 @@ def sparse_branch_checkout_skip_clone(ref_sha) -> Repo:
         )
  
     if not folder_exists_in_branch(branch_name, git_cmd, CEPH_CONFIG_OPTIONS_FOLDER_PATH):
+        print("folder_exists_in_branch: ", folder_exists_in_branch)
         git_cmd.sparse_checkout("add", CEPH_CONFIG_OPTIONS_FOLDER_PATH)
         git_cmd.checkout()
+    
+    print(repo.branches)
 
     return repo
 
