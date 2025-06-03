@@ -6,7 +6,7 @@ import sys
 import json
 import re
 
-from git import Repo, Git
+from git import Repo
 import tempfile
 from pathlib import Path
 
@@ -89,13 +89,13 @@ def sparse_branch_checkout_skip_clone(ref_sha) -> Repo:
     repo = Repo(".", search_parent_directories=True)
     git_cmd = repo.git
 
-    # Fetch the branch only if they are not present locally
     local_branches = [
         branch.strip().lstrip("*").strip() for branch in git_cmd.branch("--list").splitlines()
     ]
 
     branch_name = ref_sha.split(":")[0]
     branch_present = any(branch_name in branch for branch in local_branches)
+
     if not branch_present:
         git_cmd.fetch(
             "origin",
@@ -361,7 +361,9 @@ def diff_config(ref_config_dict, config_dict):
     return final_result
 
 
-def diff_branch(ref_repo: str, ref_branch: str, cmp_branch: str, format_type: str):
+def diff_branch(
+    ref_repo: str, ref_branch: str, cmp_branch: str, skip_clone: bool, format_type: str
+):
     """
     Perform a diff between two branches in the same repository.
 
@@ -369,17 +371,31 @@ def diff_branch(ref_repo: str, ref_branch: str, cmp_branch: str, format_type: st
         ref_repo (str): The reference repository URL.
         ref_branch (str): The reference branch name.
         cmp_branch (str): The branch to compare against.
+        skip_clone (str): Should the diff happen using the current git repository.
+        format_type (str): How should the results be printed.
     """
     final_result = {}
 
-    ref_repo_tmp_dir = sparse_branch_checkout(ref_repo, ref_branch)
-    cmp_repo_tmp_dir = sparse_branch_checkout(ref_repo, cmp_branch)
-    ref_config_dict = load_config_yaml_files(Path(ref_repo_tmp_dir.name))
-    config_dict = load_config_yaml_files(Path(cmp_repo_tmp_dir.name))
-    final_result = diff_config(ref_config_dict, config_dict)
+    if skip_clone:
+        ref_sha = ref_branch + ":" + ref_branch
+        cmp_sha = cmp_branch + ":" + cmp_branch
+        ref_git_repo = sparse_branch_checkout_skip_clone(ref_sha)
+        cmp_git_repo = sparse_branch_checkout_skip_clone(cmp_sha)
+        ref_config_dict = git_show_yaml_files(ref_branch, ref_git_repo)
+        config_dict = git_show_yaml_files(cmp_branch, cmp_git_repo)
+        final_result = diff_config(ref_config_dict, config_dict)
 
-    ref_repo_tmp_dir.cleanup()
-    cmp_repo_tmp_dir.cleanup()
+        ref_git_repo.close()
+        cmp_git_repo.close()
+    else:
+        ref_repo_tmp_dir = sparse_branch_checkout(ref_repo, ref_branch)
+        cmp_repo_tmp_dir = sparse_branch_checkout(ref_repo, cmp_branch)
+        ref_config_dict = load_config_yaml_files(Path(ref_repo_tmp_dir.name))
+        config_dict = load_config_yaml_files(Path(cmp_repo_tmp_dir.name))
+        final_result = diff_config(ref_config_dict, config_dict)
+
+        ref_repo_tmp_dir.cleanup()
+        cmp_repo_tmp_dir.cleanup()
 
     if format_type == "posix-diff":
         # Print the diff in POSIX format
@@ -389,7 +405,13 @@ def diff_branch(ref_repo: str, ref_branch: str, cmp_branch: str, format_type: st
         print()
 
 
-def diff_tags(ref_repo: str, ref_tag: str, cmp_tag: str, format_type: str):
+"""
+ref_sha = "'refs/tags/" + ref_tag +  ":" + "refs/tags/" + ref_tag + "'"
+        cmp_sha = "'refs/tags/" + cmp_tag + ":" + "refs/tags/" + cmp_tag + "'"
+"""
+
+
+def diff_tags(ref_repo: str, ref_tag: str, cmp_tag: str, skip_clone: bool, format_type: str):
     """
     Perform a diff between two tags in the same repository.
 
@@ -397,17 +419,34 @@ def diff_tags(ref_repo: str, ref_tag: str, cmp_tag: str, format_type: str):
         ref_repo (str): The reference repository URL.
         ref_tag (str): The reference tag name.
         cmp_tag (str): The tag to compare against.
+        skip_clone (str): Should the diff happen using the current git repository.
+        format_type (str): How should the results be printed.
     """
     final_result = {}
 
-    ref_repo_tmp_dir = sparse_branch_checkout(ref_repo, ref_tag)
-    cmp_repo_tmp_dir = sparse_branch_checkout(ref_repo, cmp_tag)
-    ref_config_dict = load_config_yaml_files(Path(ref_repo_tmp_dir.name))
-    config_dict = load_config_yaml_files(Path(cmp_repo_tmp_dir.name))
-    final_result = diff_config(ref_config_dict, config_dict)
+    if skip_clone:
+        ref_sha_local_repo_name = "refs/tags/" + ref_tag + "'"
+        cmp_sha_local_repo_name = "refs/tags/" + cmp_tag + "'"
+        ref_sha = "'refs/tags/" + ref_tag + ":" + ref_sha_local_repo_name
+        cmp_sha = "'refs/tags/" + cmp_tag + ":" + cmp_sha_local_repo_name
 
-    ref_repo_tmp_dir.cleanup()
-    cmp_repo_tmp_dir.cleanup()
+        ref_git_repo = sparse_branch_checkout_skip_clone(ref_sha)
+        cmp_git_repo = sparse_branch_checkout_skip_clone(cmp_sha)
+        ref_config_dict = git_show_yaml_files(ref_sha_local_repo_name, ref_git_repo)
+        config_dict = git_show_yaml_files(cmp_sha_local_repo_name, cmp_git_repo)
+        final_result = diff_config(ref_config_dict, config_dict)
+
+        ref_git_repo.close()
+        cmp_git_repo.close()
+    else:
+        ref_repo_tmp_dir = sparse_branch_checkout(ref_repo, ref_tag)
+        cmp_repo_tmp_dir = sparse_branch_checkout(ref_repo, cmp_tag)
+        ref_config_dict = load_config_yaml_files(Path(ref_repo_tmp_dir.name))
+        config_dict = load_config_yaml_files(Path(cmp_repo_tmp_dir.name))
+        final_result = diff_config(ref_config_dict, config_dict)
+
+        ref_repo_tmp_dir.cleanup()
+        cmp_repo_tmp_dir.cleanup()
 
     if format_type == "posix-diff":
         # Print the diff in POSIX format
@@ -433,6 +472,8 @@ def diff_branch_remote_repo(
         ref_branch (str): The reference branch name.
         remote_repo (str): The remote repository URL.
         cmp_branch (str): The branch to compare against.
+        skip_clone (str): Should the diff happen using the current git repository.
+        format_type (str): How should the results be printed.
     """
     final_result = {}
     if skip_clone:
@@ -489,6 +530,11 @@ def main():
         "--cmp-branch", required=True, help="the branch to compare against reference"
     )
     parser_diff_branch.add_argument(
+        "--skip-clone",
+        action="store_true",
+        help="skips cloning repositories for diff, assumes the script runs from a valid ceph git directory",
+    )
+    parser_diff_branch.add_argument(
         "--format",
         choices=["json", "posix-diff"],
         default="json",
@@ -506,6 +552,11 @@ def main():
     parser_diff_tag.add_argument("--ref-tag", required=True, help="the reference tag version")
     parser_diff_tag.add_argument(
         "--cmp-tag", required=True, help="the tag version to compare against reference"
+    )
+    parser_diff_tag.add_argument(
+        "--skip-clone",
+        action="store_true",
+        help="skips cloning repositories for diff, assumes the script runs from a valid ceph git directory",
     )
     parser_diff_tag.add_argument(
         "--format",
@@ -551,10 +602,10 @@ def main():
         parser.error("--ref-repo cannot be set if --skip-clone is used.")
 
     if args.mode == "diff-branch":
-        diff_branch(args.ref_repo, args.ref_branch, args.cmp_branch, args.format)
+        diff_branch(args.ref_repo, args.ref_branch, args.cmp_branch, args.skip_clone, args.format)
 
     elif args.mode == "diff-tag":
-        diff_tags(args.ref_repo, args.ref_tag, args.cmp_tag, args.format)
+        diff_tags(args.ref_repo, args.ref_tag, args.cmp_tag, args.skip_clone, args.format)
 
     elif args.mode == "diff-branch-remote-repo":
         diff_branch_remote_repo(
