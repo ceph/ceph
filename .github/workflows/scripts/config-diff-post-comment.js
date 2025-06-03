@@ -18,6 +18,10 @@ ${configDiff}
    
 The above configuration changes are found in the PR. Please update the relevant release documentation if necessary.
     `;
+        
+        core.summary.addRaw(commentBody);
+        await core.summary.write()
+        
         const { owner, repo } = context.repo;
         const issueNumber = context.payload.pull_request.number;
 
@@ -78,8 +82,6 @@ The above configuration changes are found in the PR. Please update the relevant 
     
         // Set the status as FAILED if any configuration changes are detected
         core.setFailed("Configuration Changes Detected, Update release documents - if necessary");
-        core.summary.addRaw(commentBody);
-        await core.summary.write()
       } catch (error) {
         core.setFailed(error.message);
       }
