@@ -6816,5 +6816,5 @@ options:
 - name: ec_pdw_write_mode
   type: uint
   level: dev
-  default: 0
+  default: 1
   desc: When EC writes should generate PDWs (development only) 0=optimal 1=never 2=when possible

@@ -68,11 +68,13 @@ def sparse_branch_checkout_remote_repo_skip_clone(remote_repo, ref_sha) -> Repo:
         branch.strip().lstrip("*").strip() for branch in git_cmd.branch("--list", "-r").splitlines()
     ]
 
-    print("sparse_branch_checkout_remote_repo_skip_clone")
+    print("----- sparse_branch_checkout_remote_repo_skip_clone ------")
     print(local_branches)
 
     branch_name = ref_sha.split(":")[1]
+    print(branch_name)
     branch_present = any(branch_name in branch for branch in local_branches)
+    print(branch_present)
     if not branch_present:
         git_cmd.remote("add", REMOTE_REPO_GIT_REMOTE_NAME, remote_repo)
         git_cmd.fetch(
@@ -85,6 +87,10 @@ def sparse_branch_checkout_remote_repo_skip_clone(remote_repo, ref_sha) -> Repo:
         git_cmd.sparse_checkout("add", CEPH_CONFIG_OPTIONS_FOLDER_PATH)
         git_cmd.checkout()
         print("sparse checkout done")
+    
+    print(repo.branches)
+    print(git_cmd.remote("-v"))
+    
     return repo
 
 
