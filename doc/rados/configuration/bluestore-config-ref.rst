@@ -507,7 +507,7 @@ examine the presence and value of ``/sys/block/<drive>/queue/optimal_io_size``.
 .. note:: When running Reef or a later Ceph release, the ``min_alloc_size``
    baked into each OSD is conveniently reported by ``ceph osd metadata``.
 
-To inspect a specific OSD, run the following command:
+To inspect a specific OSD, run a command of the following form:
 
 .. prompt:: bash #
 
