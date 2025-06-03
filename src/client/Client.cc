@@ -436,6 +436,9 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   respect_subvolume_snapshot_visibility = cct->_conf.get_val<bool>(
     "client_respect_subvolume_snapshot_visibility");
 
+  fscrypt_as = cct->_conf.get_val<bool>(
+    "client_fscrypt_as");
+
   if (cct->_conf->client_acl_type == "posix_acl")
     acl_type = POSIX_ACL;
 
@@ -3980,7 +3983,7 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
     if ((need & CEPH_CAP_FILE_WR) &&
         ((in->auth_cap && in->auth_cap->session->readonly) ||
         // (is locked)
-        (in->is_fscrypt_enabled() && is_inode_locked(in) && cct->_conf.get_val<bool>("client_fscrypt_as"))))
+        (in->is_fscrypt_enabled() && is_inode_locked(in) && fscrypt_as)))
       return -EROFS;
 
     if (in->flags & I_CAP_DROPPED) {
@@ -6367,7 +6370,7 @@ int Client::may_open(const InodeRef& in, int flags, const UserPerm& perms)
   ldout(cct, 20) << __func__ << " " << *in << "; " << perms << dendl;
   unsigned want = 0;
 
-  if (!in->is_dir() && is_inode_locked(in) && cct->_conf.get_val<bool>("client_fscrypt_as"))
+  if (!in->is_dir() && is_inode_locked(in) && fscrypt_as)
     return -ENOKEY;
 
   if ((flags & O_ACCMODE) == O_WRONLY)
@@ -6423,7 +6426,7 @@ out:
 int Client::may_create(const InodeRef& dir, const UserPerm& perms)
 {
   ldout(cct, 20) << __func__ << " " << *dir << "; " << perms << dendl;
-  if (dir->is_dir() && is_inode_locked(dir) && cct->_conf.get_val<bool>("client_fscrypt_as"))
+  if (dir->is_dir() && is_inode_locked(dir) && fscrypt_as)
     return -ENOKEY;
 
   int r = _getattr_for_perm(dir, perms);
@@ -8530,7 +8533,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     if (in->is_fscrypt_enabled() && stx_size < in->effective_size() &&
         stx_size % FSCRYPT_BLOCK_SIZE != 0 &&
         (mask & CEPH_SETATTR_FSCRYPT_FILE) && stx_size != 0 &&
-        cct->_conf.get_val<bool>("client_fscrypt_as")) {
+        fscrypt_as) {
       // steps:
       // 1. read last block
 
@@ -16086,7 +16089,7 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
     req->fscrypt_file = fscrypt_options.fscrypt_file;
 
   auto fscrypt_ctx = fscrypt->init_ctx(req->fscrypt_auth);
-  if (fscrypt_ctx && cct->_conf.get_val<bool>("client_fscrypt_as")) {
+  if (fscrypt_ctx && fscrypt_as) {
     auto fscrypt_denc = fscrypt->get_fname_denc(fscrypt_ctx, nullptr, true);
 
     string enc_target;
@@ -18593,6 +18596,7 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
     "client_caps_release_delay",
     "client_deleg_break_on_open",
     "client_deleg_timeout",
+    "client_fscrypt_as",
     "client_inject_write_delay_secs",
     "client_mount_timeout",
     "client_oc_max_dirty",
@@ -18663,6 +18667,10 @@ void Client::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("client_respect_subvolume_snapshot_visibility")) {
     respect_subvolume_snapshot_visibility = cct->_conf.get_val<bool>(
       "client_respect_subvolume_snapshot_visibility");
+  }
+  if (changed.count("client_fscrypt_as")) {
+    fscrypt_as = cct->_conf.get_val<bool>(
+      "client_fscrypt_as");
   }
 }
 

@@ -1013,6 +1013,10 @@ public:
     return fuse_default_permissions;
   }
 
+  bool get_fscrypt_as() const {
+    return fscrypt_as;
+  }
+
   /* timer_lock for 'timer' */
   ceph::mutex timer_lock = ceph::make_mutex("Client::timer_lock");
   SafeTimer timer;
@@ -2320,6 +2324,8 @@ private:
   int injected_write_delay_secs;
   // trace generation
   std::ofstream traceout;
+
+  bool fscrypt_as;
 
   ceph::condition_variable mount_cond, sync_cond;
 

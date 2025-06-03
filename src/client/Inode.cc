@@ -876,7 +876,7 @@ void Inode::gen_inherited_fscrypt_auth(std::vector<uint8_t> *fsa)
 
 uint64_t Inode::effective_size() const
 {
-  if (fscrypt_file.size() < sizeof(uint64_t) || !client->cct->_conf.get_val<bool>("client_fscrypt_as")) {
+  if (fscrypt_file.size() < sizeof(uint64_t) || !client->get_fscrypt_as()) {
     return size;
   }
 
