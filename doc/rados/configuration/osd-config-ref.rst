@@ -50,7 +50,9 @@ automatically.
 When using Filestore, the journal size should be at least twice the product of the expected drive
 speed multiplied by ``filestore_max_sync_interval``. However, the most common
 practice is to partition the journal drive (often an SSD), and mount it such
-that Ceph uses the entire partition for the journal.
+that Ceph uses the entire partition for the journal. Note that Filestore has been
+deprecated for several releases and any legacy Filestore OSDs should be migrated
+to BlueStore.
 
 .. confval:: osd_uuid
 .. confval:: osd_data
