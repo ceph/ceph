@@ -137,10 +137,6 @@ if(WITH_JAEGER)
   list(APPEND crimson_common_public_deps jaeger_base)
 endif()
 
-if(WITH_BREAKPAD)
-  list(APPEND crimson_common_public_deps breakpad)
-endif()
-
 if(NOT WITH_SYSTEM_BOOST)
   list(APPEND crimson_common_deps ${ZLIB_LIBRARIES})
 endif()
