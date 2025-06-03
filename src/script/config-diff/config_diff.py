@@ -6,7 +6,7 @@ import sys
 import json
 import re
 
-from git import Repo
+from git import Repo, Git
 import tempfile
 from pathlib import Path
 
@@ -15,6 +15,97 @@ from collections import defaultdict
 # Constants for Ceph repository and folder paths
 CEPH_UPSTREAM_REMOTE_URL = "https://github.com/ceph/ceph.git"
 CEPH_CONFIG_OPTIONS_FOLDER_PATH = "src/common/options"
+REMOTE_REPO_GIT_REMOTE_NAME = "config-diff-remote-repo"
+
+
+# Check if the folder exists in the specified branches
+def folder_exists_in_branch(branch_sha, git_cmd, folder_path):
+    try:
+        git_cmd.ls_tree(branch_sha, folder_path)
+        return True
+    except Exception:
+        return False
+
+
+def preprocess_config_yaml_files(yaml_content: str) -> str:
+    """
+    Preprocess the file to enclose template value in double quotes
+    eg: @CEPH_INSTALL_FULL_PKGLIBDIR@/erasure-code -> "@CEPH_INSTALL_FULL_PKGLIBDIR@/erasure-code"
+    This pre-process is okay since these values are dependent on the build
+    system and as such cannot be found out until the entire ceph is built -
+    which is a cumbersome process
+    """
+
+    # Enclose @key@somemoretext in double quotes "@key@somemoretext"
+    return re.sub(r"@.*@.*", r'"\g<0>"', yaml_content)
+
+
+def git_show_yaml_files(hexsha: str, repo: Repo):
+    file_path = CEPH_CONFIG_OPTIONS_FOLDER_PATH
+    git_cmd = repo.git
+    res = git_cmd.show("%s:%s" % (hexsha, file_path))
+    yaml_files = [line.strip() for line in res.splitlines() if line.endswith(".yaml.in")]
+
+    config_options = {}
+    for file in yaml_files:
+        yaml_file_path = file_path + "/" + file
+        yaml_file_content = res = git_cmd.show("%s:%s" % (hexsha, yaml_file_path))
+        try:
+            # Enclose @key@somemoretext in double quotes "@key@somemoretext"
+            file_content = preprocess_config_yaml_files(yaml_file_content)
+            config_options[file] = yaml.safe_load(file_content)
+        except yaml.YAMLError as excep:
+            print(excep)
+
+    return config_options
+
+
+def sparse_branch_checkout_remote_repo_skip_clone(remote_repo, ref_sha) -> Repo:
+    repo = Repo(".", search_parent_directories=True)
+    git_cmd = repo.git
+
+    local_branches = [
+        branch.strip().lstrip("*").strip() for branch in git_cmd.branch("--list", "-r").splitlines()
+    ]
+    branch_name = ref_sha.split(":")[1]
+    branch_present = any(branch_name in branch for branch in local_branches)
+    if not branch_present:
+        git_cmd.remote("add", REMOTE_REPO_GIT_REMOTE_NAME, remote_repo)
+        git_cmd.fetch(
+            REMOTE_REPO_GIT_REMOTE_NAME,
+            ref_sha,
+            "--depth=1",
+        )
+
+    if not folder_exists_in_branch(branch_name, git_cmd, CEPH_CONFIG_OPTIONS_FOLDER_PATH):
+        git_cmd.sparse_checkout("add", CEPH_CONFIG_OPTIONS_FOLDER_PATH)
+        git_cmd.checkout()
+    return repo
+
+
+def sparse_branch_checkout_skip_clone(ref_sha) -> Repo:
+    repo = Repo(".", search_parent_directories=True)
+    git_cmd = repo.git
+
+    # Fetch the branch only if they are not present locally
+    local_branches = [
+        branch.strip().lstrip("*").strip() for branch in git_cmd.branch("--list").splitlines()
+    ]
+    # branch_name = ref_sha.split(":")[0]
+    branch_name = ref_sha
+    branch_present = any(branch_name in branch for branch in local_branches)
+    if not branch_present:
+        git_cmd.fetch(
+            "origin",
+            ref_sha,
+            "--depth=1",
+        )
+ 
+    if not folder_exists_in_branch(branch_name, git_cmd, CEPH_CONFIG_OPTIONS_FOLDER_PATH):
+        git_cmd.sparse_checkout("add", CEPH_CONFIG_OPTIONS_FOLDER_PATH)
+        git_cmd.checkout()
+
+    return repo
 
 
 def sparse_branch_checkout(repo_url: str, branch_name: str) -> tempfile.TemporaryDirectory[str]:
@@ -25,7 +116,7 @@ def sparse_branch_checkout(repo_url: str, branch_name: str) -> tempfile.Temporar
         repo_url (str): The repository URL to clone.
         branch_name (str): The branch name to checkout.
     """
-
+    repo = Repo(".", search_parent_directories=True)
     config_tmp_dir = tempfile.TemporaryDirectory()
     branch_name_str = "--branch=" + branch_name
     repo = Repo.clone_from(
@@ -70,15 +161,9 @@ def load_config_yaml_files(path: Path):
 
     for path in config_paths:
         try:
-            # Preprocess the file to enclose template value in double quotes
-            # eg: @CEPH_INSTALL_FULL_PKGLIBDIR@/erasure-code -> "@CEPH_INSTALL_FULL_PKGLIBDIR@/erasure-code"
-            # This pre-process is okay since these values are dependent on
-            # the build system and as such cannot be found out until the
-            # entire ceph is built - which is a cumbersome process
-
             file_content = path.read_text()
             # Enclose @key@somemoretext in double quotes "@key@somemoretext"
-            file_content = re.sub(r"@.*@.*", r'"\g<0>"', file_content)
+            file_content = preprocess_config_yaml_files(file_content)
             config_options[path.name] = yaml.safe_load(file_content)
         except yaml.YAMLError as excep:
             print(excep)
@@ -207,7 +292,7 @@ def get_shared_config_daemon(shared_config_names, ref_daemon_configs, cmp_daemon
     return modified_config
 
 
-def diff_config(ref_repo_path: Path, cmp_repo_path: Path):
+def diff_config(ref_config_dict, config_dict):
     """
     Perform the configuration diff between reference and comparing versions.
 
@@ -219,11 +304,9 @@ def diff_config(ref_repo_path: Path, cmp_repo_path: Path):
     modified_config = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
 
     # Get the configurations options present for all daemons in the "reference" version
-    ref_config_dict = load_config_yaml_files(ref_repo_path)
     ref_file_names = set(ref_config_dict.keys())
 
     # Get the configurations options present for all daemons in the "comparing" version
-    config_dict = load_config_yaml_files(cmp_repo_path)
     cmp_file_names = set(config_dict.keys())
 
     # Case 1: A deamon is present in "reference" version but has been deleted
@@ -276,7 +359,7 @@ def diff_config(ref_repo_path: Path, cmp_repo_path: Path):
     return final_result
 
 
-def diff_branch(ref_repo: str, ref_branch: str, cmp_branch: str, is_posix_diff: bool):
+def diff_branch(ref_repo: str, ref_branch: str, cmp_branch: str, format_type: str):
     """
     Perform a diff between two branches in the same repository.
 
@@ -285,23 +368,26 @@ def diff_branch(ref_repo: str, ref_branch: str, cmp_branch: str, is_posix_diff: 
         ref_branch (str): The reference branch name.
         cmp_branch (str): The branch to compare against.
     """
+    final_result = {}
+
     ref_repo_tmp_dir = sparse_branch_checkout(ref_repo, ref_branch)
     cmp_repo_tmp_dir = sparse_branch_checkout(ref_repo, cmp_branch)
-
-    final_result = diff_config(Path(ref_repo_tmp_dir.name), Path(cmp_repo_tmp_dir.name))
-
-    if is_posix_diff:
-        # Print the diff in POSIX format
-        print_diff_posix_format(final_result)
-    else:
-        json.dump(final_result, sys.stdout, indent=4)
-        print()
+    ref_config_dict = load_config_yaml_files(Path(ref_repo_tmp_dir.name))
+    config_dict = load_config_yaml_files(Path(cmp_repo_tmp_dir.name))
+    final_result = diff_config(ref_config_dict, config_dict)
 
     ref_repo_tmp_dir.cleanup()
     cmp_repo_tmp_dir.cleanup()
 
+    if format_type == "posix-diff":
+        # Print the diff in POSIX format
+        print_diff_posix_format(final_result)
+    elif format_type == "json":
+        json.dump(final_result, sys.stdout, indent=4)
+        print()
 
-def diff_tags(ref_repo: str, ref_tag: str, cmp_tag: str, is_posix_diff: bool):
+
+def diff_tags(ref_repo: str, ref_tag: str, cmp_tag: str, format_type: str):
     """
     Perform a diff between two tags in the same repository.
 
@@ -310,25 +396,32 @@ def diff_tags(ref_repo: str, ref_tag: str, cmp_tag: str, is_posix_diff: bool):
         ref_tag (str): The reference tag name.
         cmp_tag (str): The tag to compare against.
     """
+    final_result = {}
 
     ref_repo_tmp_dir = sparse_branch_checkout(ref_repo, ref_tag)
     cmp_repo_tmp_dir = sparse_branch_checkout(ref_repo, cmp_tag)
-
-    final_result = diff_config(Path(ref_repo_tmp_dir.name), Path(cmp_repo_tmp_dir.name))
-
-    if is_posix_diff:
-        # Print the diff in POSIX format
-        print_diff_posix_format(final_result)
-    else:
-        json.dump(final_result, sys.stdout, indent=4)
-        print()
+    ref_config_dict = load_config_yaml_files(Path(ref_repo_tmp_dir.name))
+    config_dict = load_config_yaml_files(Path(cmp_repo_tmp_dir.name))
+    final_result = diff_config(ref_config_dict, config_dict)
 
     ref_repo_tmp_dir.cleanup()
     cmp_repo_tmp_dir.cleanup()
 
+    if format_type == "posix-diff":
+        # Print the diff in POSIX format
+        print_diff_posix_format(final_result)
+    elif format_type == "json":
+        json.dump(final_result, sys.stdout, indent=4)
+        print()
+
 
 def diff_branch_remote_repo(
-    ref_repo: str, ref_branch: str, remote_repo: str, cmp_branch: str, is_posix_diff: bool
+    ref_repo: str,
+    ref_branch: str,
+    remote_repo: str,
+    cmp_branch: str,
+    skip_clone: bool,
+    format_type: str,
 ):
     """
     Perform a diff between branches in different repositories.
@@ -339,20 +432,39 @@ def diff_branch_remote_repo(
         remote_repo (str): The remote repository URL.
         cmp_branch (str): The branch to compare against.
     """
-    ref_repo_tmp_dir = sparse_branch_checkout(ref_repo, ref_branch)
-    cmp_repo_tmp_dir = sparse_branch_checkout(remote_repo, cmp_branch)
+    final_result = {}
+    if skip_clone:
+        cmp_sha_local_branch_name = REMOTE_REPO_GIT_REMOTE_NAME + "/" + cmp_branch
+        cmp_sha = cmp_branch + ":" + cmp_sha_local_branch_name
+        ref_git_repo = sparse_branch_checkout_skip_clone(ref_branch)
+        remote_git_repo = sparse_branch_checkout_remote_repo_skip_clone(remote_repo, cmp_sha)
+        ref_config_dict = git_show_yaml_files(ref_branch, ref_git_repo)
 
-    final_result = diff_config(Path(ref_repo_tmp_dir.name), Path(cmp_repo_tmp_dir.name))
+        # To show the files from remote repo, you need to append the remote name
+        # before the branch
+        config_dict = git_show_yaml_files(cmp_sha_local_branch_name, remote_git_repo)
 
-    if is_posix_diff:
+        final_result = diff_config(ref_config_dict, config_dict)
+
+        ref_git_repo.delete_remote(REMOTE_REPO_GIT_REMOTE_NAME)
+        ref_git_repo.close()
+        remote_git_repo.close()
+    else:
+        ref_repo_tmp_dir = sparse_branch_checkout(ref_repo, ref_branch)
+        cmp_repo_tmp_dir = sparse_branch_checkout(remote_repo, cmp_branch)
+        ref_config_dict = load_config_yaml_files(Path(ref_repo_tmp_dir.name))
+        config_dict = load_config_yaml_files(Path(cmp_repo_tmp_dir.name))
+        final_result = diff_config(ref_config_dict, config_dict)
+
+        ref_repo_tmp_dir.cleanup()
+        cmp_repo_tmp_dir.cleanup()
+
+    if format_type == "posix-diff":
         # Print the diff in POSIX format
         print_diff_posix_format(final_result)
-    else:
+    elif format_type == "json":
         json.dump(final_result, sys.stdout, indent=4)
         print()
-
-    ref_repo_tmp_dir.cleanup()
-    cmp_repo_tmp_dir.cleanup()
 
 
 def main():
@@ -374,9 +486,10 @@ def main():
         "--cmp-branch", required=True, help="the branch to compare against reference"
     )
     parser_diff_branch.add_argument(
-        "--posix-diff",
-        action="store_true",
-        help="output the configuration diff in POSIX diff like format",
+        "--format",
+        choices=["json", "posix-diff"],
+        default="json",
+        help="Specify the output format for the configuration diff (json, posix-diff). Default is JSON.",
     )
 
     # diff-tag mode
@@ -392,9 +505,10 @@ def main():
         "--cmp-tag", required=True, help="the tag version to compare against reference"
     )
     parser_diff_tag.add_argument(
-        "--posix-diff",
-        action="store_true",
-        help="output the configuration diff in POSIX diff like format",
+        "--format",
+        choices=["json", "posix-diff"],
+        default="json",
+        help="Specify the output format for the configuration diff (json, posix-diff). Default is JSON.",
     )
 
     # diff-branch-remote-repo mode
@@ -405,7 +519,7 @@ def main():
         "--ref-repo",
         nargs="?",
         default=CEPH_UPSTREAM_REMOTE_URL,
-        help="the repository URL from where the reference config files will be fetched",
+        help="the repository URL from where the reference config files will be fetched. Cannot be set if --skip-clone is used.",
     )
     parser_diff_branch_remote_repo.add_argument(
         "--remote-repo", required=True, help="the remote repository URL"
@@ -417,22 +531,37 @@ def main():
         "--cmp-branch", required=True, help="the branch to compare against"
     )
     parser_diff_branch_remote_repo.add_argument(
-        "--posix-diff",
+        "--skip-clone",
         action="store_true",
-        help="output the configuration diff in POSIX diff like format",
+        help="skips cloning repositories for diff, assumes the script runs from a valid ceph git directory",
+    )
+    parser_diff_branch_remote_repo.add_argument(
+        "--format",
+        choices=["json", "posix-diff"],
+        default="json",
+        help="Specify the output format for the configuration diff (json, posix-diff). Default is JSON.",
     )
 
     args = parser.parse_args()
 
+    if args.skip_clone and args.ref_repo != CEPH_UPSTREAM_REMOTE_URL:
+        parser.error("--ref-repo cannot be set if --skip-clone is used.")
+
     if args.mode == "diff-branch":
-        diff_branch(args.ref_repo, args.ref_branch, args.cmp_branch, args.posix_diff)
+        diff_branch(args.ref_repo, args.ref_branch, args.cmp_branch, args.format)
 
     elif args.mode == "diff-tag":
-        diff_tags(args.ref_repo, args.ref_tag, args.cmp_tag, args.posix_diff)
+        diff_tags(args.ref_repo, args.ref_tag, args.cmp_tag, args.format)
 
     elif args.mode == "diff-branch-remote-repo":
         diff_branch_remote_repo(
-            args.ref_repo, args.ref_branch, args.remote_repo, args.cmp_branch, args.posix_diff)
+            args.ref_repo,
+            args.ref_branch,
+            args.remote_repo,
+            args.cmp_branch,
+            args.skip_clone,
+            args.format,
+        )
     else:
         parser.print_help()
 
