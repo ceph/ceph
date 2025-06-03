@@ -175,8 +175,11 @@ private:
 
   void remove_mirror_peer_uuid(const std::string &snap_id);
   void handle_remove_mirror_peer_uuid(int r, const std::string &snap_id);
+
   bool prune_all_image_snapshots(cls::rbd::GroupSnapshot *local_snap);
-  void unlink_group_snapshots();
+  void prune_user_group_snapshots();
+  void prune_mirror_group_snapshots();
+  void prune_group_snapshots();
 
   void create_regular_snapshot(
     cls::rbd::GroupSnapshot *snap,
