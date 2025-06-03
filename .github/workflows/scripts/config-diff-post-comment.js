@@ -1,5 +1,7 @@
 module.exports = async ({ github, context, core, configDiff }) => {
     try {
+        core.info("Configuration changes detected: ",  configDiff);
+
         // Do not create comment if there are no configuration changes
         if (!configDiff) {
           console.log("No changes detected. Skipping comment creation.");
@@ -23,7 +25,7 @@ The above configuration changes are found in the PR. Please update the relevant 
         const issueNumber = context.payload.pull_request.number;
 
         // List all files in the pull request
-        console.log("Fetching list of files changed in the pull request...");
+        core.info("Fetching list of files changed in the pull request...");
         const files = await github.paginate(
             github.rest.pulls.listFiles,
             {
@@ -34,10 +36,22 @@ The above configuration changes are found in the PR. Please update the relevant 
             }
         );
 
-        console.log("Files changed in the pull request:");
+        // Annotate YAML files
         files.forEach(file => {
-            console.log(`- ${file.filename}`);
-        });
+          if (file.filename.endsWith(".yaml.in")) {
+              core.info(`Annotating file: ${file.filename}`);
+              core.warning(
+                  `Configuration changes detected in ${file.filename}. Please update the relevant release documentation if necessary.`,
+                  {
+                      title: "Configuration Change Detected",
+                      file: file.filename,
+                      startLine: 1,
+                      endLine: 1,
+                  }
+              );
+          }
+      });
+
         
         // List all the comments
         const comments = await github.paginate(
@@ -52,26 +66,20 @@ The above configuration changes are found in the PR. Please update the relevant 
         const existingComment = comments.find(comment => comment.body.includes("### Config Diff Tool Output"));
     
         if (existingComment) {
-          console.log("A config diff comment already exists, deleting it...");
-          // Update the existing comment
-          await github.rest.issues.deleteComment({
-            comment_id: existingComment.id,
+          core.info("A config diff comment already exists, deleting it...");
+        } else {
+          core.info("Creating a new config diff comment...");
+          // Create a new comment
+          await github.rest.issues.createComment({
+            issue_number: issueNumber,
             owner,
             repo,
+            body: commentBody,
           });
+
         }
     
-        console.log("Creating a new config diff comment...");
-        // Create a new comment
-        await github.rest.issues.createComment({
-          issue_number: issueNumber,
-          owner,
-          repo,
-          body: commentBody,
-        });
-    
         // Set the status as FAILED if any configuration changes are detected
-        console.log("Configuration changes detected: ",  configDiff);
         core.setFailed("Configuration Changes Detected, Update release documents - if necessary");
       } catch (error) {
         core.setFailed(error.message);
