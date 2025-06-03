@@ -21,8 +21,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: ceph
-          sparse-checkout: src/script
-          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            src/script
+            src/common/options
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -33,6 +34,14 @@ jobs:
         run: |
           pip3 install -r ./src/script/config-diff/requirements.txt
         working-directory: ceph
+      
+      - name: List all files and show git info
+        working-directory: ceph
+        run: |
+          tree 
+          git status
+          git branch --list
+          git remote -v
 
       - name: execute config diff tool
         id: diff_tool
