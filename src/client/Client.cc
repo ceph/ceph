@@ -2288,6 +2288,7 @@ void Client::unregister_request(MetaRequest *req)
 
 void Client::put_request(MetaRequest *request)
 {
+  ceph_assert(request->ref >= 1);
   if (request->_put()) {
     int op = -1;
     if (request->success)
