@@ -42,12 +42,13 @@ using ceph::crypto::HMACSHA512;
 
 
 
-/* FIXME: this was copy pasted from common/armor.c with slight modification
+/* FIXME: Use boost or similar library to roll your own
+ * FIXME: this was copy pasted from common/armor.c with slight modification
  * as needed to use alternative translation table. Code can and should be
  * combined, but need to make sure we do it in a way that doesn't hurt
  * compiler optimizations in the general case.
  * Also relaxed decoding to make it compatible with the kernel client */
-static const char *pem_key = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+,";
+static const char pem_key[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+,";
 
 static int encode_bits(int c)
 {
