@@ -1071,6 +1071,56 @@ int RadosBucket::remove_topics(RGWObjVersionTracker* objv_tracker,
       objv_tracker, y);
 }
 
+
+#define RGW_ATTR_COMMITTED_LOGGING_OBJ RGW_ATTR_PREFIX "committed-logging-obj"
+
+int get_committed_logging_object(RadosStore* store,
+    const std::string& obj_name_oid,
+    const rgw_pool& data_pool,
+    optional_yield y,
+    const DoutPrefixProvider *dpp,
+    std::string& last_committed) {
+  librados::IoCtx io_ctx;
+  if (const int ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), data_pool, io_ctx); ret < 0) {
+    return -EIO;
+  }
+  if (!io_ctx.is_valid()) {
+    return -EIO;
+  }
+  bufferlist bl;
+  librados::ObjectReadOperation op;
+  int rval;
+  op.getxattr(RGW_ATTR_COMMITTED_LOGGING_OBJ, &bl, &rval);
+  if (const int ret = rgw_rados_operate(dpp, io_ctx, obj_name_oid, std::move(op), nullptr, y); ret < 0) {
+    return ret;
+  }
+  last_committed = bl.to_str();
+  return 0;
+}
+
+int set_committed_logging_object(RadosStore* store,
+    const std::string& obj_name_oid,
+    const rgw_pool& data_pool,
+    optional_yield y,
+    const DoutPrefixProvider *dpp,
+    const std::string& last_committed) {
+  librados::IoCtx io_ctx;
+  if (const int ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), data_pool, io_ctx); ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to get IO context when setting last committed logging object name from data pool:" << data_pool.to_str() << dendl;
+    return -EIO;
+  }
+  if (!io_ctx.is_valid()) {
+    ldpp_dout(dpp, 1) << "ERROR: invalid IO context when setting last committed logging object name" << dendl;
+    return -EIO;
+  }
+
+  bufferlist bl;
+  bl.append(last_committed);
+  librados::ObjectWriteOperation op;
+  op.setxattr(RGW_ATTR_COMMITTED_LOGGING_OBJ, std::move(bl));
+  return rgw_rados_operate(dpp, io_ctx, obj_name_oid, std::move(op), y);
+}
+
 int RadosBucket::get_logging_object_name(std::string& obj_name,
     const std::string& prefix,
     optional_yield y,
@@ -1129,7 +1179,7 @@ int RadosBucket::set_logging_object_name(const std::string& obj_name,
                                objv_tracker,
                                ceph::real_time::clock::now(),
                                y,
-                               nullptr);
+                               no_change_attrs());
   if (ret == -EEXIST) {
     ldpp_dout(dpp, 20) << "INFO: race detected in initializing '" << obj_name_oid << "' with logging object name:'" << obj_name  << "'. ret = " << ret << dendl;
   } else if (ret == -ECANCELED) {
@@ -1183,7 +1233,11 @@ int RadosBucket::remove_logging_object(const std::string& obj_name, optional_yie
       y);
 }
 
-int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) {
+int RadosBucket::commit_logging_object(const std::string& obj_name,
+    optional_yield y,
+    const DoutPrefixProvider *dpp,
+    const std::string& prefix,
+    std::string* last_committed) {
   rgw_pool data_pool;
   const rgw_obj head_obj{get_key(), obj_name};
   const auto placement_rule = get_placement_rule();
@@ -1192,6 +1246,24 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
     ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_key() <<
       "' when committing logging object"  << dendl;
     return -EIO;
+  }
+  const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
+  if (last_committed) {
+    if (const int ret = get_committed_logging_object(store,
+          obj_name_oid,
+          data_pool,
+          y,
+          dpp,
+          *last_committed); ret < 0) {
+      if (ret != -ENODATA) {
+        ldpp_dout(dpp, 1) << "ERROR: failed to get last committed logging object name from bucket '" << get_key() <<
+          "' when committing logging object. ret = " << ret << dendl;
+        return ret;
+      }
+      ldpp_dout(dpp, 5) << "WARNING: no last committed logging object name found for bucket '" << get_key() <<
+          "' when committing logging object" << dendl;
+      last_committed->clear();
+    }
   }
 
   const auto temp_obj_name = to_temp_object_name(this, obj_name);
@@ -1207,13 +1279,14 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
                      y,
                      dpp,
                      &obj_attrs,
-                     nullptr); ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to read logging data when committing object '" << temp_obj_name
-      << ". error: " << ret << dendl;
+                     nullptr); ret < 0) {
+    if (ret == -ENOENT) {
+      ldpp_dout(dpp, 5) << "WARNING: temporary logging object '" << temp_obj_name << "' does not exists" << dendl;
+    } else {
+      ldpp_dout(dpp, 1) << "ERROR: failed to read logging data when committing object '" << temp_obj_name
+        << ". error: " << ret << dendl;
+    }
     return ret;
-  } else if (ret == -ENOENT) {
-    ldpp_dout(dpp, 1) << "WARNING: temporary logging object '" << temp_obj_name << "' does not exists" << dendl;
-    return 0;
   }
 
   uint64_t size = bl_data.length();
@@ -1279,9 +1352,24 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
     "' to bucket '" << get_key() <<"'. error: " << ret << dendl;
     return ret;
   }
+
   ldpp_dout(dpp, 20) << "INFO: committed logging object '" << temp_obj_name <<
     "' with size of " << size << " bytes, to bucket '" << get_key() << "' as '" <<
     obj_name << "'" << dendl;
+
+  if (const int ret = set_committed_logging_object(store,
+        obj_name_oid,
+        data_pool,
+        y,
+        dpp,
+        obj_name); ret < 0) {
+    ldpp_dout(dpp, 5) << "WARNING: object was committed, but we failed to set last committed logging object name. ret = " << ret << dendl;
+  } else {
+    ldpp_dout(dpp, 20) << "INFO: last committed logging object name was set to '" << obj_name << "'" << dendl;
+  }
+  if (last_committed) {
+    *last_committed = obj_name;
+  }
   return 0;
 }
 

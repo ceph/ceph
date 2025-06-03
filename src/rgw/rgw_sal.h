@@ -1038,8 +1038,10 @@ class Bucket {
         optional_yield y,
         const DoutPrefixProvider *dpp,
         RGWObjVersionTracker* objv_tracker) = 0;
-    /** Move the pending bucket logging object into the bucket */
-    virtual int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    /** Move the pending bucket logging object into the bucket
+     if "last_committed" is not null, it will be set to the name of the last committed object
+     * */
+    virtual int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp, const std::string& prefix, std::string* last_committed) = 0;
     //** Remove the pending bucket logging object */
     virtual int remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) = 0;
     /** Write a record to the pending bucket logging object */

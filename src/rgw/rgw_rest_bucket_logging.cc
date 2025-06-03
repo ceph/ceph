@@ -304,7 +304,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       }
     } else if (*old_conf != configuration) {
       // conf changed - do cleanup
-      if (const auto ret = commit_logging_object(*old_conf, target_bucket, this, y); ret < 0) {
+      if (const auto ret = commit_logging_object(*old_conf, target_bucket, this, y, nullptr); ret < 0) {
         ldpp_dout(this, 1) << "WARNING: could not commit pending logging object when updating logging configuration of bucket '" <<
           src_bucket->get_key() << "', ret = " << ret << dendl;
       } else {
@@ -385,12 +385,19 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
       ldpp_dout(this, 1) << "ERROR: failed to get pending logging object name from target bucket '" << target_bucket_id << "'" << dendl;
       return;
     }
-    old_obj = obj_name;
     const auto region = driver->get_zone()->get_zonegroup().get_api_name();
-    op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, region, source_bucket, null_yield, true, &objv_tracker);
+    op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, region, source_bucket, null_yield, true, &objv_tracker, &old_obj);
     if (op_ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to flush pending logging object '" << old_obj
-               << "' to target bucket '" << target_bucket_id << "'" << dendl;
+      if (op_ret == -ENOENT) {
+        ldpp_dout(this, 5) << "WARNING: no pending logging object '" << obj_name << "'. nothing to flush"
+            << " to target bucket '" << target_bucket_id << "'. "
+            << " last committed object is '" << old_obj << "'" << dendl;
+        op_ret = 0;
+      } else {
+        ldpp_dout(this, 1) << "ERROR: failed flush pending logging object '" << obj_name << "'"
+            << " to target bucket '" << target_bucket_id << "'. "
+            << " last committed object is '" << old_obj << "'" << dendl;
+      }
       return;
     }
     ldpp_dout(this, 20) << "INFO: flushed pending logging object '" << old_obj
