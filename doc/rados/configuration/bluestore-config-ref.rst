@@ -358,7 +358,7 @@ OSD and run the following command:
 
        ceph-bluestore-tool \
         --path <data path> \
-        --sharding="m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} l p" \
+        --sharding="m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P" \
         reshard
 
 .. confval:: bluestore_rocksdb_cf
@@ -507,7 +507,7 @@ examine the presence and value of ``/sys/block/<drive>/queue/optimal_io_size``.
 .. note:: When running Reef or a later Ceph release, the ``min_alloc_size``
    baked into each OSD is conveniently reported by ``ceph osd metadata``.
 
-To inspect a specific OSD, run the following command:
+To inspect a specific OSD, run a command of the following form:
 
 .. prompt:: bash #
 
