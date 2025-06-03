@@ -114,6 +114,8 @@ TEST(pg_pool_t, encodeDecode)
       pg_pool_t p2;
       p2.decode(pbl);
       compare_pg_pool_t(*p1, p2);
+
+      delete p1;
     }
   }
 
@@ -130,6 +132,8 @@ TEST(pg_pool_t, encodeDecode)
       pg_pool_t p2;
       p2.decode(pbl);
       compare_pg_pool_t(*p1, p2);
+
+      delete p1;
     }
   }
 }
