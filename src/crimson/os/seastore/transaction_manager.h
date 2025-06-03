@@ -1035,6 +1035,14 @@ public:
     });
   }
 
+  using move_region_iertr = base_iertr;
+  using move_region_ret = move_region_iertr::future<>;
+  move_region_ret move_region(
+    Transaction &t,
+    LBAMapping src,
+    LBAMapping dst,
+    laddr_t dst_prefix);
+
   /* alloc_extents
    *
    * allocates more than one new blocks of type T.
