@@ -44,7 +44,7 @@ jobs:
         run:  |
           {
             echo 'DIFF_JSON<<EOF'
-            python3 ./src/script/config-diff/config_diff.py diff-branch-remote-repo --ref-repo $REF_REPO --ref-branch $REF_BRANCH  --remote-repo $REMOTE_REPO --cmp-branch $REMOTE_BRANCH --posix-diff
+            python3 ./src/script/config-diff/config_diff.py diff-branch-remote-repo --ref-branch $REF_BRANCH  --remote-repo $REMOTE_REPO --cmp-branch $REMOTE_BRANCH --format=posix-diff --skip-clone
             echo EOF
           } >> "$GITHUB_OUTPUT"
         working-directory: ceph
