@@ -1,6 +1,7 @@
 module.exports = async ({ github, context, core, configDiff }) => {
     try {
-        core.info(`Configuration changes detected: ${configDiff}`);
+        core.summary.addRaw(`Configuration changes detected: ${configDiff}`);
+        await core.summary.write()
 
         // Do not create comment if there are no configuration changes
         if (!configDiff) {
