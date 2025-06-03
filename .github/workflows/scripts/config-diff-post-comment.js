@@ -1,6 +1,6 @@
 module.exports = async ({ github, context, core, configDiff }) => {
     try {
-        core.info("Configuration changes detected: ",  configDiff);
+        core.info(`Configuration changes detected: ${configDiff}`);
 
         // Do not create comment if there are no configuration changes
         if (!configDiff) {
@@ -40,7 +40,7 @@ The above configuration changes are found in the PR. Please update the relevant 
         files.forEach(file => {
           if (file.filename.endsWith(".yaml.in")) {
               core.info(`Annotating file: ${file.filename}`);
-              core.warning(
+              core.notice(
                   `Configuration changes detected in ${file.filename}. Please update the relevant release documentation if necessary.`,
                   {
                       title: "Configuration Change Detected",
