@@ -5,6 +5,7 @@ import (
   "testing"
   "fmt"
   "context"
+  "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 /* tests */
@@ -16,15 +17,100 @@ func TestPut1(t *testing.T) {
   }
 }
 
-func TestChunkedUpload(t *testing.T) {
-  err := demonstrateChunkedUpload(ctx, s3Client, bucketName)
+func TestPutCksums(t *testing.T) {
+  var err error
+  err = putObjectCksum(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmCrc32)
+  if (err != nil) {
+    t.Errorf("Failed: %v", err)
+  }
+
+  err = putObjectCksum(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmCrc32c)
+  if (err != nil) {
+    t.Errorf("Failed: %v", err)
+  }
+
+  err = putObjectCksum(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmSha1)
+  if (err != nil) {
+    t.Errorf("Failed: %v", err)
+  }
+
+  err = putObjectCksum(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmSha256)
+  if (err != nil) {
+    t.Errorf("Failed: %v", err)
+  }
+
+  err = putObjectCksum(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmCrc64nvme)
   if (err != nil) {
     t.Errorf("Failed: %v", err)
   }
 }
 
-func TestFixedLengthUpload(t *testing.T) {
-  err := demonstrateFixedLengthUpload(ctx, s3Client, bucketName)
+func TestChunkedUploadCrc32(t *testing.T) {
+  var err error
+  err = demonstrateChunkedUpload2(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmCrc32)
+  if (err != nil) {
+    t.Errorf("Failed: %v", err)
+  }
+
+  err = demonstrateChunkedUpload2(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmCrc32c)
+  if (err != nil) {
+    t.Errorf("Failed: %v", err)
+  }
+
+  err = demonstrateChunkedUpload2(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmSha1)
+  if (err != nil) {
+    t.Errorf("Failed: %v", err)
+  }
+
+  err = demonstrateChunkedUpload2(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmSha256)
+  if (err != nil) {
+    t.Errorf("Failed: %v", err)
+  }
+
+  err = demonstrateChunkedUpload2(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmCrc64nvme)
+  if (err != nil) {
+    t.Errorf("Failed: %v", err)
+  }
+}
+
+func TestFixedLengthUploadCrc32(t *testing.T) {
+  var err error
+  err = demonstrateFixedLengthUpload2(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmCrc32)
+  if (err != nil) {
+    t.Errorf("Failed: %v", err)
+  }
+
+  err = demonstrateFixedLengthUpload2(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmCrc32c)
+  if (err != nil) {
+    t.Errorf("Failed: %v", err)
+  }
+
+  err = demonstrateFixedLengthUpload2(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmSha1)
+  if (err != nil) {
+    t.Errorf("Failed: %v", err)
+  }
+
+  err = demonstrateFixedLengthUpload2(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmSha256)
+  if (err != nil) {
+    t.Errorf("Failed: %v", err)
+  }
+
+  err = demonstrateFixedLengthUpload2(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmCrc64nvme)
   if (err != nil) {
     t.Errorf("Failed: %v", err)
   }
