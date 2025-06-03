@@ -176,6 +176,8 @@ int rollover_logging_object(const configuration& conf,
     const std::unique_ptr<rgw::sal::Bucket>& bucket,
     std::string& obj_name,
     const DoutPrefixProvider *dpp,
+    const std::string& region,
+    const std::unique_ptr<rgw::sal::Bucket>& source_bucket,
     optional_yield y,
     bool must_commit,
     RGWObjVersionTracker* objv_tracker);
