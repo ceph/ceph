@@ -1,3 +1,4 @@
+from asyncio import gather
 from datetime import datetime
 import ipaddress
 import hashlib
@@ -591,7 +592,7 @@ class CephadmServe:
 
     def _apply_all_services(self) -> bool:
         self.log.debug('_apply_all_services')
-        r = False
+        changed = False
         specs = []  # type: List[ServiceSpec]
         # if metadata is not up to date, we still need to apply spec for agent
         # since the agent is the one who gather the metadata. If we don't we
@@ -604,7 +605,7 @@ class CephadmServe:
             except Exception as e:
                 self.log.debug(f'Failed to find agent spec: {e}')
                 self.mgr.agent_helpers._apply_agent()
-                return r
+                return changed
         else:
             _specs: List[ServiceSpec] = []
             for sn, spec in self.mgr.spec_store.active_specs.items():
@@ -643,24 +644,23 @@ class CephadmServe:
                                             len(self.mgr.apply_spec_fails),
                                             warnings)
 
-        for host in self.mgr.cache.get_hosts():
-            conflicting_daemons = [dd for dd in all_conflicting_daemons if dd.hostname == host]
-            daemons_to_deploy = [dd for dd in all_daemons_to_deploy if dd.host == host]
-            daemons_to_remove = [dd for dd in all_daemons_to_remove if dd.hostname == host]
-            removed_conflict_daemons, conflict_hosts_altered = self.remove_given_daemons(conflicting_daemons)
+        async def _parallel_deploy_and_remove(
+            hostname: str,
+            conflicts: List[orchestrator.DaemonDescription],
+            to_deploy: List[CephadmDaemonDeploySpec],
+            to_remove: List[orchestrator.DaemonDescription]
+        ) -> Tuple[bool, Set[str], List[str]]:
+            r: bool = False
+            removed_conflict_daemons, conflict_hosts_altered = self.remove_given_daemons(conflicts)
             if removed_conflict_daemons:
                 r = True
                 self.mgr.spec_store.mark_needs_configuration(spec.service_name())
                 hosts_altered.update(conflict_hosts_altered)
-            with self.mgr.async_timeout_handler(host, f'cephadm deploy ({[d.name() for d in daemons_to_deploy]} daemons)'):
-                daemons_placed, daemon_deployed_hosts, daemon_place_fails = self.mgr.wait_async(self.deploy_given_daemons(daemons_to_deploy))
+            daemons_placed, daemon_deployed_hosts, daemon_place_fails = await self.deploy_given_daemons(to_deploy)
             if daemons_placed:
                 r = True
                 hosts_altered.update(daemon_deployed_hosts)
-            if daemon_place_fails:
-                self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s)', len(
-                    daemon_place_fails), daemon_place_fails)
-            removed_daemons, removed_daemon_hosts = self.remove_given_daemons(daemons_to_remove)
+            removed_daemons, removed_daemon_hosts = self.remove_given_daemons(to_remove)
             if removed_daemons:
                 r = True
                 self.mgr.spec_store.mark_needs_configuration(spec.service_name())
@@ -669,16 +669,52 @@ class CephadmServe:
                 svc = service_registry.get_service(spec.service_type)
                 svc.config(spec)
                 self.mgr.spec_store.mark_configured(spec.service_name())
-            if self.mgr.use_agent:
-                # can only send ack to agents if we know for sure port they bound to
-                hosts_altered = set([h for h in hosts_altered if (h in self.mgr.agent_cache.agent_ports and not self.mgr.cache.is_host_draining(h))])
-                self.mgr.agent_helpers._request_agent_acks(hosts_altered, increment=True)
+            return (r, hosts_altered, daemon_place_fails)
+
+        async def _deploy_and_remove_all(
+            all_conflicts: List[orchestrator.DaemonDescription],
+            all_to_deploy: List[CephadmDaemonDeploySpec],
+            all_to_remove: List[orchestrator.DaemonDescription]
+        ) -> List[Tuple[bool, Set[str], List[str]]]:
+            futures = []
+
+            for host in self.mgr.cache.get_hosts():
+                conflicting_daemons = [dd for dd in all_conflicts if dd.hostname == host]
+                daemons_to_deploy = [dd for dd in all_to_deploy if dd.host == host]
+                daemons_to_remove = [dd for dd in all_to_remove if dd.hostname == host]
+                futures.append(_parallel_deploy_and_remove(host, conflicting_daemons, daemons_to_deploy, daemons_to_remove))
+
+            return await gather(*futures)
+
+        deploy_names = [d.name for d in all_daemons_to_deploy]
+        rm_names = [d.name() for d in all_conflicting_daemons] + [d.name() for d in all_daemons_to_remove]
+        with self.mgr.async_timeout_handler(cmd=f'cephadm deploying ({deploy_names} and removing {rm_names} daemons)'):
+            results = self.mgr.wait_async(_deploy_and_remove_all(all_conflicting_daemons, all_daemons_to_deploy, all_daemons_to_remove))
+
+        if any(res[0] for res in results):
+            changed = True
+
+        altered_hosts: Set[str] = set()
+        for altered_host in [res[1] for res in results]:
+            altered_hosts.update(altered_host)
+
+        placement_failures: List[str] = []
+        for place_failures in [res[2] for res in results]:
+            placement_failures.extend(place_failures)
+
+        if placement_failures:
+            self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(placement_failures)} daemon(s)', len(
+                placement_failures), placement_failures)
+        if self.mgr.use_agent:
+            # can only send ack to agents if we know for sure port they bound to
+            altered_hosts = set([h for h in altered_hosts if (h in self.mgr.agent_cache.agent_ports and not self.mgr.cache.is_host_draining(h))])
+            self.mgr.agent_helpers._request_agent_acks(altered_hosts, increment=True)
 
         self.mgr.daemon_deploy_queue.clear_queued_daemons()
         self.mgr.daemon_removal_queue.clear_queued_daemons()
         self.mgr.update_watched_hosts()
         self.mgr.tuned_profile_utils._write_all_tuned_profiles()
-        return r
+        return changed
 
     def _apply_service_config(self, spec: ServiceSpec) -> None:
         if spec.config:
