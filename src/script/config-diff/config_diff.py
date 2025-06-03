@@ -68,13 +68,8 @@ def sparse_branch_checkout_remote_repo_skip_clone(remote_repo, ref_sha) -> Repo:
         branch.strip().lstrip("*").strip() for branch in git_cmd.branch("--list", "-r").splitlines()
     ]
 
-    print("----- sparse_branch_checkout_remote_repo_skip_clone ------")
-    print(local_branches)
-
     branch_name = ref_sha.split(":")[1]
-    print(branch_name)
     branch_present = any(branch_name in branch for branch in local_branches)
-    print(branch_present)
     if not branch_present:
         git_cmd.remote("add", REMOTE_REPO_GIT_REMOTE_NAME, remote_repo)
         git_cmd.fetch(
@@ -86,11 +81,7 @@ def sparse_branch_checkout_remote_repo_skip_clone(remote_repo, ref_sha) -> Repo:
     if not folder_exists_in_branch(branch_name, git_cmd, CEPH_CONFIG_OPTIONS_FOLDER_PATH):
         git_cmd.sparse_checkout("add", CEPH_CONFIG_OPTIONS_FOLDER_PATH)
         git_cmd.checkout()
-        print("sparse checkout done")
-    
-    print(repo.branches)
-    print(git_cmd.remote("-v"))
-    
+
     return repo
 
 
@@ -102,11 +93,9 @@ def sparse_branch_checkout_skip_clone(ref_sha) -> Repo:
     local_branches = [
         branch.strip().lstrip("*").strip() for branch in git_cmd.branch("--list").splitlines()
     ]
-    print("sparse_branch_checkout_skip_clone")
-    print(local_branches)
+
     branch_name = ref_sha.split(":")[0]
     branch_present = any(branch_name in branch for branch in local_branches)
-    print(branch_present)
     if not branch_present:
         git_cmd.fetch(
             "origin",
@@ -114,13 +103,9 @@ def sparse_branch_checkout_skip_clone(ref_sha) -> Repo:
             "--depth=1",
         )
 
-    print("folder_exists_in_branch: ", folder_exists_in_branch(branch_name, git_cmd, CEPH_CONFIG_OPTIONS_FOLDER_PATH))
     if not folder_exists_in_branch(branch_name, git_cmd, CEPH_CONFIG_OPTIONS_FOLDER_PATH):
         git_cmd.sparse_checkout("add", CEPH_CONFIG_OPTIONS_FOLDER_PATH)
         git_cmd.checkout()
-        print("sparse checkout done")
-
-    print(repo.branches)
 
     return repo
 
@@ -451,7 +436,7 @@ def diff_branch_remote_repo(
     """
     final_result = {}
     if skip_clone:
-        ref_sha = ref_branch + ":" +  ref_branch
+        ref_sha = ref_branch + ":" + ref_branch
         cmp_sha_local_branch_name = REMOTE_REPO_GIT_REMOTE_NAME + "/" + cmp_branch
         cmp_sha = cmp_branch + ":" + cmp_sha_local_branch_name
         ref_git_repo = sparse_branch_checkout_skip_clone(ref_sha)
