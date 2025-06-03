@@ -1781,9 +1781,9 @@ void RGWGetUsage_ObjStore_S3::send_response()
      encode_json("QuotaMaxBytesPerBucket", user_info.quota.bucket_quota.max_objects, formatter);
      encode_json("QuotaMaxObjCountPerBucket", user_info.quota.bucket_quota.max_size, formatter);
      // send info about user's capacity utilization
-     encode_json("TotalBytes", stats.size, formatter);
-     encode_json("TotalBytesRounded", stats.size_rounded, formatter);
-     encode_json("TotalEntries", stats.num_objects, formatter);
+     encode_json("TotalBytes", stats.raw.size, formatter);
+     encode_json("TotalBytesRounded", stats.raw.size_rounded, formatter);
+     encode_json("TotalEntries", stats.raw.num_objects, formatter);
 
      if (s->cct->_conf->rgw_rest_getusage_op_compat) {
        formatter->close_section(); //Stats
@@ -2595,8 +2595,12 @@ void RGWGetBucketWebsite_ObjStore_S3::send_response()
 static void dump_bucket_metadata(req_state *s,
                                  RGWStorageStats& stats)
 {
-  dump_header(s, "X-RGW-Object-Count", static_cast<long long>(stats.num_objects));
-  dump_header(s, "X-RGW-Bytes-Used", static_cast<long long>(stats.size));
+  dump_header(s, "X-RGW-Object-Count", static_cast<long long>(stats.raw.num_objects));
+  dump_header(s, "X-RGW-Bytes-Used", static_cast<long long>(stats.raw.size));
+  if (stats.effective) {
+    dump_header(s, "X-RGW-Effective-Object-Count", static_cast<long long>(stats.effective->num_objects));
+    dump_header(s, "X-RGW-Effective-Bytes-Used", static_cast<long long>(stats.effective->size));
+  }
 }
 
 int RGWStatBucket_ObjStore_S3::get_params(optional_yield y)

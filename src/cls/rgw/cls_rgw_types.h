@@ -976,6 +976,7 @@ struct rgw_bucket_dir_header {
   bool syncstopped;
   uint32_t reshardlog_entries;
   rgw_bucket_snap_id max_snap_id;
+  std::optional<rgw_bucket_dir_stats> eff_stats;
   std::optional<rgw_bucket_dir_stats> max_snap_stats;
 
   rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0), syncstopped(false),
@@ -992,7 +993,12 @@ struct rgw_bucket_dir_header {
     encode(syncstopped,bl);
     encode(reshardlog_entries, bl);
     encode(max_snap_id, bl);
-    encode(max_snap_stats, bl);
+    encode(eff_stats, bl);
+    if (eff_stats) {
+      /* they're correlated. Avoiding extra encoding and backward compatibility
+       * issues */
+      encode(max_snap_stats, bl);
+    }
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
@@ -1027,7 +1033,10 @@ struct rgw_bucket_dir_header {
     }
     if (struct_v >= 9) {
       decode(max_snap_id, bl);
-      decode(max_snap_stats, bl);
+      decode(eff_stats, bl);
+      if (eff_stats) {
+        decode(max_snap_stats, bl);
+      }
     }
     DECODE_FINISH(bl);
   }
@@ -1052,6 +1061,7 @@ WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
 struct rgw_bucket_dir_snap_stats {
   rgw_bucket_snap_id snap_id;
   rgw_bucket_dir_stats total_stats;  /* the aggregated total storage when the snapshot was taken */
+  rgw_bucket_dir_stats eff_stats;    /* effective stats of (not counting objects only in snapshots */
   rgw_bucket_dir_stats snap_stats;   /* total storage used by the specific snapshot */
 
   rgw_bucket_dir_snap_stats() {}
@@ -1060,13 +1070,14 @@ struct rgw_bucket_dir_snap_stats {
     ENCODE_START(1, 1, bl);
     encode(snap_id, bl);
     encode(total_stats, bl);
+    encode(eff_stats, bl);
     encode(snap_stats, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(snap_id, bl);
-    decode(total_stats, bl);
+    decode(eff_stats, bl);
     decode(snap_stats, bl);
     DECODE_FINISH(bl);
   }

@@ -2504,10 +2504,10 @@ int POSIXBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
     struct statx& lstx = dent->get_stx();
 
     if (S_ISREG(lstx.stx_mode) || S_ISDIR(lstx.stx_mode)) {
-      main.num_objects++;
-      main.size += lstx.stx_size;
-      main.size_rounded += lstx.stx_size;
-      main.size_utilized += lstx.stx_size;
+      main.raw.num_objects++;
+      main.raw.size += lstx.stx_size;
+      main.raw.size_rounded += lstx.stx_size;
+      main.raw.size_utilized += lstx.stx_size;
     }
 
     return 0;

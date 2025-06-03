@@ -2354,10 +2354,10 @@ public:
   }
 
   void send_response() override {
-    bs.size = stats.size;
-    bs.size_rounded = stats.size_rounded;
+    bs.size = stats.raw.size;
+    bs.size_rounded = stats.raw.size_rounded;
     bs.creation_time = get_state()->bucket->get_info().creation_time;
-    bs.num_entries = stats.num_objects;
+    bs.num_entries = stats.raw.num_objects;
     std::swap(attrs, get_state()->bucket_attrs);
   }
 

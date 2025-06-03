@@ -566,9 +566,9 @@ static void dump_container_metadata(req_state *s,
   dump_header(s, "X-Timestamp", utime_t(s->bucket->get_info().creation_time));
 
   if (stats) {
-    dump_header(s, "X-Container-Object-Count", stats->num_objects);
-    dump_header(s, "X-Container-Bytes-Used", stats->size);
-    dump_header(s, "X-Container-Bytes-Used-Actual", stats->size_rounded);
+    dump_header(s, "X-Container-Object-Count", stats->raw.num_objects);
+    dump_header(s, "X-Container-Bytes-Used", stats->raw.size);
+    dump_header(s, "X-Container-Bytes-Used-Actual", stats->raw.size_rounded);
   }
 
   if (rgw::sal::Object::empty(s->object.get())) {

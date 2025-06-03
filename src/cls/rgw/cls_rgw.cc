@@ -824,9 +824,11 @@ static int read_snap_stats(ClsOmapAccess *omap,
     snap_stats->snap_id = snap_id;
     CLS_LOG(20, "%s(): snap_id=%d", __func__, (int)snap_id.snap_id);
     snap_stats->total_stats = header.stats;
-    if (!header.max_snap_stats) {
+    if (!header.eff_stats) {
+      snap_stats->eff_stats = header.stats;
       snap_stats->snap_stats = header.stats;
     } else {
+      snap_stats->eff_stats = *header.eff_stats;
       snap_stats->snap_stats = *header.max_snap_stats;
     }
     CLS_LOG(20, "%s(): snap_header.stats (from header stats): snap_stats=%s", __func__, to_json("snap_stats", *snap_stats).c_str());
@@ -1154,6 +1156,7 @@ int rgw_bucket_get_stats(cls_method_context_t hctx, bufferlist *in, bufferlist *
 
   if (!op.snap_id.is_set()) {
     ret.stats = header.stats;
+    ret.eff_stats = header.eff_stats;
   } else {
     rgw_bucket_dir_snap_stats snap_stats;
     int r = read_snap_stats(&omap, header,
@@ -1166,9 +1169,11 @@ int rgw_bucket_get_stats(cls_method_context_t hctx, bufferlist *in, bufferlist *
     if (!op.aggregate) {
       CLS_LOG(20, "%s(): returning per-snap stats", __func__);
       ret.stats = snap_stats.snap_stats;
+      ret.eff_stats = snap_stats.snap_stats; /* same */
     } else {
       CLS_LOG(20, "%s(): returning snap aggregated stats", __func__);
       ret.stats = snap_stats.total_stats;
+      ret.eff_stats = snap_stats.eff_stats;
     }
   }
 
@@ -1364,7 +1369,7 @@ static std::string modify_op_str(uint8_t op) {
 
 static int write_header_while_logrecord(ClsOmapAccess *omap,
                                         rgw_bucket_dir_header& header,
-                                        bool write_anyway) {
+                                        bool write_anyway = false) {
   if (header.resharding_in_logrecord() || write_anyway)
     return write_bucket_header(omap, &header);
   return 0;
@@ -1503,27 +1508,55 @@ static void _unaccount_entry(rgw_bucket_category_stats& stats,
   stats.actual_size -= meta.size;
 }
 
+enum StatsAccountFlags {
+  STATS_NONE      = 0,
+  STATS_TOTAL     = 0x1,
+  STATS_EFFECTIVE = 0x2,
+  STATS_SNAP      = 0x4,
+};
+
+static constexpr int  STATS_ALL = StatsAccountFlags::STATS_TOTAL | StatsAccountFlags::STATS_EFFECTIVE | StatsAccountFlags::STATS_SNAP;
+static constexpr int  STATS_NO_EFFECTIVE = StatsAccountFlags::STATS_TOTAL | StatsAccountFlags::STATS_SNAP;
+static constexpr int  STATS_EFFECTIVE_ONLY = StatsAccountFlags::STATS_EFFECTIVE;
+
+static void _account_total_and_eff(rgw_bucket_category_stats& total_stats,
+                           rgw_bucket_category_stats *peff_stats,
+                           const rgw_bucket_dir_entry_meta& meta,
+                           void (*account_func)(rgw_bucket_category_stats&, const rgw_bucket_dir_entry_meta&),
+                           int flags)
+{
+  if (flags & STATS_TOTAL) {
+    account_func(total_stats, meta);
+  }
+  if (peff_stats && flags & STATS_EFFECTIVE) {
+    account_func(*peff_stats, meta);
+  }
+}
+
 static int _xaccount_entry(ClsOmapAccess *omap,
                            rgw_bucket_dir_header& header,
                            const rgw_bucket_dir_entry& entry,
                            void (*account_func)(rgw_bucket_category_stats&, const rgw_bucket_dir_entry_meta&),
-                           bool no_snap)
+                           int flags)
 {
   auto& meta = entry.meta;
   rgw_bucket_category_stats& stats = header.stats[meta.category];
+  rgw_bucket_category_stats *peff_stats = (header.eff_stats ?  &((*header.eff_stats)[meta.category]) : nullptr);
   CLS_LOG(20, "%s(): header.max_snap_id=%d meta.snap_id=%d", __func__, (int)header.max_snap_id.snap_id, (int)meta.snap_id.snap_id);
 
-  if (no_snap ||
-      (meta.snap_id.snap_id == rgw_bucket_snap_id::SNAP_MIN &&
+  if (!(flags & STATS_SNAP) ||
+      (meta.snap_id.get_or(rgw_bucket_snap_id::SNAP_MIN).snap_id == rgw_bucket_snap_id::SNAP_MIN &&
       !header.max_snap_id.is_set())) {
     CLS_LOG(20, "%s(): write to base snap, done", __func__);
-    account_func(stats, meta);
+    _account_total_and_eff(stats, peff_stats, meta, account_func, flags);
     /* write to base snap, not updating any other stats */
     return 0;
   }
 
   if (!header.max_snap_id.is_set()) {
     CLS_LOG(20, "%s(): first time new snapshot", __func__);
+    header.eff_stats = header.stats;
+    peff_stats = &((*header.eff_stats)[meta.category]);
     header.max_snap_id = rgw_bucket_snap_id::SNAP_MIN;
     header.max_snap_stats = header.stats;
   }
@@ -1537,6 +1570,7 @@ static int _xaccount_entry(ClsOmapAccess *omap,
     rgw_bucket_dir_snap_header snap_header;
     snap_header.stats.snap_id = header.max_snap_id;
     snap_header.stats.total_stats = header.stats;
+    snap_header.stats.eff_stats = *header.eff_stats;
     snap_header.stats.snap_stats = *header.max_snap_stats;
 
     string index_key;
@@ -1565,6 +1599,12 @@ static int _xaccount_entry(ClsOmapAccess *omap,
       return r;
     }
 
+    /* we only update effective stats on the latest snap, any changes on snap after a newer
+     * snapshot is created we don't update the effective stats because that is either due
+     * to out-of-order operations (which means that we'd need to do a much larger work
+     * to keep everything correcet, so we don't bother), or during snapshot teardown,
+     * in which case we don't care about the effective stats
+     */
     auto& total_stats = snap_header.stats.total_stats[meta.category];
     account_func(total_stats, meta);
     auto& snap_stats = snap_header.stats.snap_stats[meta.category];
@@ -1576,16 +1616,15 @@ static int _xaccount_entry(ClsOmapAccess *omap,
       return r;
     }
 
-    /* if this object is makred with removed_at at a specific snapshot, it was already
-     * unaccounted from the main stats, don't unaccount again */
-    if (!entry.removed_at_snap().is_set()) {
-      account_func(stats, meta);
-    }
+    /* we call account_func directly here because we don't want effective stats to
+     * be updated.
+     */
+    account_func(stats, meta);
 
     return 0;
   }
 
-  account_func(stats, meta);
+  _account_total_and_eff(stats, peff_stats, meta, account_func, flags);
 
   /* meta.snap_id == header.max_snap_id */
 
@@ -1603,21 +1642,21 @@ static int _xaccount_entry(ClsOmapAccess *omap,
 static int account_entry(ClsOmapAccess *omap,
                          rgw_bucket_dir_header& header,
                          const rgw_bucket_dir_entry& entry,
-                         bool no_snap = false)
+                         int flags = STATS_ALL)
 {
-  return _xaccount_entry(omap, header, entry, _account_entry, no_snap);
+  return _xaccount_entry(omap, header, entry, _account_entry, flags);
 }
 
 static int unaccount_entry(ClsOmapAccess *omap,
                            rgw_bucket_dir_header& header,
                            const rgw_bucket_dir_entry& entry,
-                           bool no_snap = false)
+                           int flags = STATS_ALL)
 {
   if (!entry.exists) {
     return 0;
   }
 
-  return _xaccount_entry(omap, header, entry, _unaccount_entry, no_snap);
+  return _xaccount_entry(omap, header, entry, _unaccount_entry, flags);
 }
 
 static void log_entry(const char *func, const char *str, rgw_bucket_dir_entry *entry)
@@ -1921,9 +1960,13 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 		 "INFO: %s: add op, key=%s",
 		 __func__, escape_str(idx).c_str());
     // unaccount overwritten entry if the old entry belongs to the same snapshot
-    if (entry.meta.snap_id.get_or(rgw_bucket_snap_id::SNAP_MIN) == op.meta.snap_id) {
-      unaccount_entry(&omap, header, entry);
+    int stats_flags = STATS_ALL;
+#if 0
+    if (entry.meta.snap_id.get_or(rgw_bucket_snap_id::SNAP_MIN) != op.meta.snap_id) {
+      stats_flags &= ~StatsAccountFlags::STATS_SNAP;
     }
+#endif
+    unaccount_entry(&omap, header, entry, stats_flags);
 
     rgw_bucket_dir_entry_meta& meta = op.meta;
     entry.meta = meta;
@@ -2795,7 +2838,7 @@ static int _rgw_bucket_link_olh(ClsOmapAccess *omap, bufferlist *in, bufferlist 
        * this would have been an object overwrite if snapshots weren't involved
        * so we need to treat it as such
        */
-      unaccount_entry(omap, header, prev_null_obj.get_dir_entry(), true /* only unaccount current stats not the snap stats */);
+      unaccount_entry(omap, header, prev_null_obj.get_dir_entry(), STATS_EFFECTIVE_ONLY);
       need_flush_header = true;
     }
   }

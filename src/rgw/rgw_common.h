@@ -1229,7 +1229,7 @@ struct RGWBucketEntryPoint
 };
 WRITE_CLASS_ENCODER(RGWBucketEntryPoint)
 
-struct RGWStorageStats
+struct RGWStorageCategoryStats
 {
   RGWObjCategory category;
   uint64_t size;
@@ -1238,13 +1238,27 @@ struct RGWStorageStats
   uint64_t size_utilized{0}; //< size after compression, encryption
   bool dump_utilized;        // whether dump should include utilized values
 
-  RGWStorageStats(bool _dump_utilized=true)
+  RGWStorageCategoryStats(bool _dump_utilized=true)
     : category(RGWObjCategory::None),
       size(0),
       size_rounded(0),
       num_objects(0),
       dump_utilized(_dump_utilized)
   {}
+
+  void dump(Formatter *f) const;
+}; // RGWStorageCategoryStats
+
+struct RGWStorageStats
+{
+  RGWObjCategory category;
+  RGWStorageCategoryStats raw;
+  std::optional<RGWStorageCategoryStats> effective;
+
+  RGWStorageStats(bool _dump_utilized=true)
+    : category(RGWObjCategory::None),
+      raw(_dump_utilized),
+      effective(_dump_utilized) {}
 
   void dump(Formatter *f) const;
 }; // RGWStorageStats

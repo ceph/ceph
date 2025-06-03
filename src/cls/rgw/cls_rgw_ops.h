@@ -514,6 +514,7 @@ WRITE_CLASS_ENCODER(rgw_cls_get_bucket_stats_op)
 struct rgw_cls_get_bucket_stats_ret
 {
   rgw_bucket_dir_stats stats;
+  std::optional<rgw_bucket_dir_stats> eff_stats;
   uint64_t ver{0};
   uint64_t master_ver{0};
   std::string max_marker;
@@ -522,13 +523,15 @@ struct rgw_cls_get_bucket_stats_ret
   rgw_cls_get_bucket_stats_ret() {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(stats, bl);
+    encode(eff_stats, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(stats, bl);
+    decode(eff_stats, bl);
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;

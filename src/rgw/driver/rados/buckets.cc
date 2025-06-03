@@ -171,9 +171,9 @@ int read_stats(const DoutPrefixProvider* dpp, optional_yield y,
     return r;
   }
 
-  stats.size = header.stats.total_bytes;
-  stats.size_rounded = header.stats.total_bytes_rounded;
-  stats.num_objects = header.stats.total_entries;
+  stats.raw.size = header.stats.total_bytes;
+  stats.raw.size_rounded = header.stats.total_bytes_rounded;
+  stats.raw.num_objects = header.stats.total_entries;
   if (last_synced) {
     *last_synced = header.last_stats_sync;
   }
@@ -193,9 +193,9 @@ class AsyncHeaderCB : public RGWGetUserHeader_CB {
   void handle_response(int r, cls_user_header& header) override {
     const cls_user_stats& hs = header.stats;
     RGWStorageStats stats;
-    stats.size = hs.total_bytes;
-    stats.size_rounded = hs.total_bytes_rounded;
-    stats.num_objects = hs.total_entries;
+    stats.raw.size = hs.total_bytes;
+    stats.raw.size_rounded = hs.total_bytes_rounded;
+    stats.raw.num_objects = hs.total_entries;
     cb->handle_response(r, stats);
     cb.reset();
   }

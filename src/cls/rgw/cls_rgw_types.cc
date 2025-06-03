@@ -736,6 +736,9 @@ void rgw_bucket_dir_header::dump(Formatter *f) const
   ::encode_json("new_instance", new_instance, f);
   f->dump_int("reshardlog_entries", reshardlog_entries);
   ::encode_json("max_snap_id", max_snap_id, f);
+  if (eff_stats) {
+    encode_json("eff_stats", *eff_stats, f);
+  }
   if (max_snap_stats) {
     encode_json("max_snap_stats", *max_snap_stats, f);
   }
@@ -766,6 +769,7 @@ void rgw_bucket_dir_snap_stats::dump(Formatter *f) const
 {
   encode_json("snap_id", snap_id, f);
   encode_json("total_stats", total_stats, f);
+  encode_json("eff_stats", total_stats, f);
   encode_json("snap_stats", snap_stats, f);
 }
 

@@ -3168,7 +3168,7 @@ void RGWGroupInfo::generate_test_instances(std::list<RGWGroupInfo*>& o)
   o.push_back(p);
 }
 
-void RGWStorageStats::dump(Formatter *f) const
+void RGWStorageCategoryStats::dump(Formatter *f) const
 {
   encode_json("size", size, f);
   encode_json("size_actual", size_rounded, f);
@@ -3181,6 +3181,14 @@ void RGWStorageStats::dump(Formatter *f) const
     encode_json("size_kb_utilized", rgw_rounded_kb(size_utilized), f);
   }
   encode_json("num_objects", num_objects, f);
+}
+
+void RGWStorageStats::dump(Formatter *f) const
+{
+  raw.dump(f);
+  if (effective) {
+    encode_json("effective", *effective, f);
+  }
 }
 
 void rgw_obj_key::dump(Formatter *f) const

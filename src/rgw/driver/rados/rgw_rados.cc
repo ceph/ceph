@@ -6103,6 +6103,7 @@ void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_cha
 }
 
 static void accumulate_raw_stats(const rgw_bucket_dir_stats& header_stats,
+                                 const std::optional<rgw_bucket_dir_stats>& eff_stats,
                                  map<RGWObjCategory, RGWStorageStats>& stats)
 {
   for (const auto& pair : header_stats) {
@@ -6112,17 +6113,30 @@ static void accumulate_raw_stats(const rgw_bucket_dir_stats& header_stats,
     RGWStorageStats& s = stats[category];
 
     s.category = category;
-    s.size += header_stats.total_size;
-    s.size_rounded += header_stats.total_size_rounded;
-    s.size_utilized += header_stats.actual_size;
-    s.num_objects += header_stats.num_entries;
+    s.raw.size += header_stats.total_size;
+    s.raw.size_rounded += header_stats.total_size_rounded;
+    s.raw.size_utilized += header_stats.actual_size;
+    s.raw.num_objects += header_stats.num_entries;
+
+    if (eff_stats) {
+      auto iter = eff_stats->find(category);
+      if (iter != eff_stats->end()) {
+        const auto& eff_category = iter->second;
+
+        s.effective = RGWStorageCategoryStats();
+        s.effective->size += eff_category.total_size;
+        s.effective->size_rounded += eff_category.total_size_rounded;
+        s.effective->size_utilized += eff_category.actual_size;
+        s.effective->num_objects += eff_category.num_entries;
+      }
+    }
   }
 }
 
 static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
                                  map<RGWObjCategory, RGWStorageStats>& stats)
 {
-  return accumulate_raw_stats(header.stats, stats);
+  return accumulate_raw_stats(header.stats, header.eff_stats, stats);
 }
 
 int RGWRados::bucket_check_index(const DoutPrefixProvider *dpp, optional_yield y,
@@ -9797,7 +9811,7 @@ int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
   BucketIndexShardsManager marker_mgr;
   char buf[64];
   for(; iter != per_shard_stats.end(); ++iter, ++viter) {
-    accumulate_raw_stats(iter->stats, stats);
+    accumulate_raw_stats(iter->stats, iter->eff_stats, stats);
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->ver);
     ver_mgr.add(viter->first, string(buf));
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->master_ver);
@@ -9836,10 +9850,20 @@ public:
     if (should_cb) {
       if (r >= 0) {
         for (const auto& [c, s] : header.stats) {
-          stats.size += s.total_size;
-          stats.size_rounded += s.total_size_rounded;
-          stats.size_utilized += s.actual_size;
-          stats.num_objects += s.num_entries;
+          stats.raw.size += s.total_size;
+          stats.raw.size_rounded += s.total_size_rounded;
+          stats.raw.size_utilized += s.actual_size;
+          stats.raw.num_objects += s.num_entries;
+        }
+        if (header.eff_stats) {
+          stats.effective = RGWStorageCategoryStats();
+          auto& stats_effective = *stats.effective;
+          for (const auto& [c, s] : *header.eff_stats) {
+            stats_effective.size += s.total_size;
+            stats_effective.size_rounded += s.total_size_rounded;
+            stats_effective.size_utilized += s.actual_size;
+            stats_effective.num_objects += s.num_entries;
+          }
         }
       } else {
         ret_code = r;

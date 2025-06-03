@@ -1612,7 +1612,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
     // determine current number of bucket entries across shards
     uint64_t num_entries = 0;
     for (const auto& s : stats) {
-      num_entries += s.second.num_objects;
+      num_entries += s.second.raw.num_objects;
     }
 
     const bool is_versioned = bucket_info.versioned();

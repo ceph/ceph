@@ -189,22 +189,24 @@ public:
     const uint64_t rounded_added = rgw_rounded_objsize(added_bytes);
     const uint64_t rounded_removed = rgw_rounded_objsize(removed_bytes);
 
-    if (((int64_t)(entry->stats.size + added_bytes - removed_bytes)) >= 0) {
-      entry->stats.size += added_bytes - removed_bytes;
+    auto& stats = entry->stats.raw;
+
+    if (((int64_t)(stats.size + added_bytes - removed_bytes)) >= 0) {
+      stats.size += added_bytes - removed_bytes;
     } else {
-      entry->stats.size = 0;
+      stats.size = 0;
     }
 
-    if (((int64_t)(entry->stats.size_rounded + rounded_added - rounded_removed)) >= 0) {
-      entry->stats.size_rounded += rounded_added - rounded_removed;
+    if (((int64_t)(stats.size_rounded + rounded_added - rounded_removed)) >= 0) {
+      stats.size_rounded += rounded_added - rounded_removed;
     } else {
-      entry->stats.size_rounded = 0;
+      stats.size_rounded = 0;
     }
 
-    if (((int64_t)(entry->stats.num_objects + objs_delta)) >= 0) {
-      entry->stats.num_objects += objs_delta;
+    if (((int64_t)(stats.num_objects + objs_delta)) >= 0) {
+      stats.num_objects += objs_delta;
     } else {
-      entry->stats.num_objects = 0;
+      stats.num_objects = 0;
     }
 
     return true;
@@ -279,9 +281,18 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_owner& owner, const 
   for (const auto& pair : bucket_stats) {
     const RGWStorageStats& s = pair.second;
 
-    stats.size += s.size;
-    stats.size_rounded += s.size_rounded;
-    stats.num_objects += s.num_objects;
+    stats.raw.size += s.raw.size;
+    stats.raw.size_rounded += s.raw.size_rounded;
+    stats.raw.num_objects += s.raw.num_objects;
+
+    if (s.effective) {
+      if (!stats.effective) {
+        stats.effective = RGWStorageCategoryStats();
+      }
+      stats.effective->size += s.effective->size;
+      stats.effective->size_rounded += s.effective->size_rounded;
+      stats.effective->num_objects += s.effective->num_objects;
+    }
   }
 
   return 0;
@@ -799,11 +810,11 @@ bool RGWQuotaInfoDefApplier::is_size_exceeded(const DoutPrefixProvider *dpp,
     return false;
   }
 
-  const uint64_t cur_size = stats.size_rounded;
+  const uint64_t cur_size = stats.raw.size_rounded;
   const uint64_t new_size = rgw_rounded_objsize(size);
 
   if (std::cmp_greater(cur_size + new_size, qinfo.max_size)) {
-    ldpp_dout(dpp, 10) << "quota exceeded: stats.size_rounded=" << stats.size_rounded
+    ldpp_dout(dpp, 10) << "quota exceeded: stats.size_rounded=" << stats.raw.size_rounded
              << " size=" << new_size << " "
              << entity << "_quota.max_size=" << qinfo.max_size << dendl;
     return true;
@@ -823,8 +834,8 @@ bool RGWQuotaInfoDefApplier::is_num_objs_exceeded(const DoutPrefixProvider *dpp,
     return false;
   }
 
-  if (std::cmp_greater(stats.num_objects + num_objs, qinfo.max_objects)) {
-    ldpp_dout(dpp, 10) << "quota exceeded: stats.num_objects=" << stats.num_objects
+  if (std::cmp_greater(stats.raw.num_objects + num_objs, qinfo.max_objects)) {
+    ldpp_dout(dpp, 10) << "quota exceeded: stats.num_objects=" << stats.raw.num_objects
              << " " << entity << "_quota.max_objects=" << qinfo.max_objects
              << dendl;
     return true;
@@ -844,10 +855,10 @@ bool RGWQuotaInfoRawApplier::is_size_exceeded(const DoutPrefixProvider *dpp,
     return false;
   }
 
-  const uint64_t cur_size = stats.size;
+  const uint64_t cur_size = stats.raw.size;
 
   if (std::cmp_greater(cur_size + size, qinfo.max_size)) {
-    ldpp_dout(dpp, 10) << "quota exceeded: stats.size=" << stats.size
+    ldpp_dout(dpp, 10) << "quota exceeded: stats.size=" << stats.raw.size
              << " size=" << size << " "
              << entity << "_quota.max_size=" << qinfo.max_size << dendl;
     return true;
@@ -867,8 +878,8 @@ bool RGWQuotaInfoRawApplier::is_num_objs_exceeded(const DoutPrefixProvider *dpp,
     return false;
   }
 
-  if (std::cmp_greater(stats.num_objects + num_objs, qinfo.max_objects)) {
-    ldpp_dout(dpp, 10) << "quota exceeded: stats.num_objects=" << stats.num_objects
+  if (std::cmp_greater(stats.raw.num_objects + num_objs, qinfo.max_objects)) {
+    ldpp_dout(dpp, 10) << "quota exceeded: stats.num_objects=" << stats.raw.num_objects
              << " " << entity << "_quota.max_objects=" << qinfo.max_objects
              << dendl;
     return true;
@@ -922,8 +933,8 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
     }
 
     ldpp_dout(dpp, 20) << entity << " quota OK:"
-                            << " stats.num_objects=" << stats.num_objects
-                            << " stats.size=" << stats.size << dendl;
+                            << " stats.num_objects=" << stats.raw.num_objects
+                            << " stats.size=" << stats.raw.size << dendl;
     return 0;
   }
 public:

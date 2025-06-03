@@ -1723,7 +1723,7 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 	  continue;
 
 	for (const auto& s : stats) {
-	  num_objects += s.second.num_objects;
+	  num_objects += s.second.raw.num_objects;
 	}
 
 	const uint32_t num_shards = rgw::num_shards(index.layout.normal);
