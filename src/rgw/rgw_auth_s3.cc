@@ -1074,7 +1074,7 @@ AWSv4ComplMulti::ChunkMeta::create_next(CephContext* const cct,
   if (data_length == 0 && data_field_end == metabuf) {
     ldout(cct, 20) << "AWSv4ComplMulti: cannot parse the data size"
                    << dendl;
-    throw rgw::io::Exception(EINVAL, std::system_category());
+    /* this case is no longer treated as an exception */
   }
 
   if (expect_chunk_signature) {
