@@ -38,7 +38,7 @@ The above configuration changes are found in the PR. Please update the relevant 
 
         // Annotate YAML files
         files.forEach(file => {
-          if (file.filename.endsWith(".yaml.in")) {
+          if (file.filename.endsWith(".yaml.in") && file.filename.startsWith("src/common/options/")) {
               core.info(`Annotating file: ${file.filename}`);
               core.notice(
                   `Configuration changes detected in ${file.filename}. Please update the relevant release documentation if necessary.`,
