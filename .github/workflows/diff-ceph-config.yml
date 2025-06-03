@@ -24,6 +24,7 @@ jobs:
           sparse-checkout: |
             src/script
             src/common/options
+            .github/workflows
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -34,14 +35,6 @@ jobs:
         run: |
           pip3 install -r ./src/script/config-diff/requirements.txt
         working-directory: ceph
-      
-      - name: List all files and show git info
-        working-directory: ceph
-        run: |
-          tree 
-          git status
-          git branch --list
-          git remote -v
 
       - name: execute config diff tool
         id: diff_tool
@@ -50,13 +43,13 @@ jobs:
           REF_BRANCH: ${{ github.event.pull_request.base.ref }}
           REMOTE_REPO: ${{ github.event.pull_request.head.repo.clone_url }}
           REMOTE_BRANCH: ${{ github.event.pull_request.head.ref }}
-        run: python3 ./src/script/config-diff/config_diff.py diff-branch-remote-repo --ref-branch $REF_BRANCH  --remote-repo $REMOTE_REPO --cmp-branch $REMOTE_BRANCH --format=posix-diff --skip-clone
-        # run:  |
-        #   {
-        #     echo 'DIFF_JSON<<EOF'
-        #     python3 ./src/script/config-diff/config_diff.py diff-branch-remote-repo --ref-branch $REF_BRANCH  --remote-repo $REMOTE_REPO --cmp-branch $REMOTE_BRANCH --format=posix-diff --skip-clone
-        #     echo EOF
-        #   } >> "$GITHUB_OUTPUT"
+        # run: python3 ./src/script/config-diff/config_diff.py diff-branch-remote-repo --ref-branch $REF_BRANCH  --remote-repo $REMOTE_REPO --cmp-branch $REMOTE_BRANCH --format=posix-diff --skip-clone
+        run:  |
+          {
+            echo 'DIFF_JSON<<EOF'
+            python3 ./src/script/config-diff/config_diff.py diff-branch-remote-repo --ref-branch $REF_BRANCH  --remote-repo $REMOTE_REPO --cmp-branch $REMOTE_BRANCH --format=posix-diff --skip-clone
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
         working-directory: ceph
 
       - name: Post output as a comment
