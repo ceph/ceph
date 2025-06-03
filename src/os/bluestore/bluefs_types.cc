@@ -261,7 +261,7 @@ mempool::bluefs::vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
   }
 
   while (p != extents.end()) {
-    if ((int64_t) offset >= p->length) {
+    if (offset >= p->length) {
       offset -= p->length;
       ++p;
     } else {
