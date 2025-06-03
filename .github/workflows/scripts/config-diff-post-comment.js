@@ -21,7 +21,25 @@ The above configuration changes are found in the PR. Please update the relevant 
     
         const { owner, repo } = context.repo;
         const issueNumber = context.payload.pull_request.number;
-    
+
+        // List all files in the pull request
+        console.log("Fetching list of files changed in the pull request...");
+        const files = await github.paginate(
+            github.rest.pulls.listFiles,
+            {
+                owner,
+                repo,
+                pull_number: issueNumber,
+                per_page: 100,
+            }
+        );
+
+        console.log("Files changed in the pull request:");
+        files.forEach(file => {
+            console.log(`- ${file.filename}`);
+        });
+        
+        // List all the comments
         const comments = await github.paginate(
           github.rest.issues.listComments, {
             owner,
