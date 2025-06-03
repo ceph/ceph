@@ -301,7 +301,8 @@ int commit_logging_object(const configuration& conf,
     const DoutPrefixProvider *dpp,
     rgw::sal::Driver* driver,
     const std::string& tenant_name,
-    optional_yield y) {
+    optional_yield y,
+    std::string* last_committed) {
   std::string target_bucket_name;
   std::string target_tenant_name;
   int ret = rgw_parse_url_bucket(conf.target_bucket, tenant_name, target_tenant_name, target_bucket_name);
@@ -319,20 +320,21 @@ int commit_logging_object(const configuration& conf,
       << ret << dendl;
     return ret;
   }
-  return commit_logging_object(conf, target_bucket, dpp, y);
+  return commit_logging_object(conf, target_bucket, dpp, y, last_committed);
 }
 
 int commit_logging_object(const configuration& conf,
     const std::unique_ptr<rgw::sal::Bucket>& target_bucket,
     const DoutPrefixProvider *dpp,
-    optional_yield y) {
+    optional_yield y,
+    std::string* last_committed) {
   std::string obj_name;
   if (const int ret = target_bucket->get_logging_object_name(obj_name, conf.target_prefix, y, dpp, nullptr); ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get name of logging object of bucket '" <<
       target_bucket->get_key() << "'. ret = " << ret << dendl;
     return ret;
   }
-  if (const int ret = target_bucket->commit_logging_object(obj_name, y, dpp); ret <0 ) {
+  if (const int ret = target_bucket->commit_logging_object(obj_name, y, dpp, conf.target_prefix, last_committed); ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to commit logging object '" << obj_name << "' of bucket '" <<
       target_bucket->get_key() << "'. ret = " << ret << dendl;
     return ret;
@@ -348,7 +350,8 @@ int rollover_logging_object(const configuration& conf,
     const std::unique_ptr<rgw::sal::Bucket>& source_bucket,
     optional_yield y,
     bool must_commit,
-    RGWObjVersionTracker* objv_tracker) {
+    RGWObjVersionTracker* objv_tracker,
+    std::string* last_committed) {
   std::string target_bucket_name;
   std::string target_tenant_name;
   std::ignore = rgw_parse_url_bucket(conf.target_bucket, target_bucket->get_tenant(), target_tenant_name, target_bucket_name);
@@ -368,7 +371,7 @@ int rollover_logging_object(const configuration& conf,
       target_bucket->get_key() << "'. ret = " << ret << dendl;
     return ret;
   }
-  if (const int ret = target_bucket->commit_logging_object(old_obj, y, dpp); ret < 0) {
+  if (const int ret = target_bucket->commit_logging_object(old_obj, y, dpp, conf.target_prefix, last_committed); ret < 0) {
     if (must_commit) {
       return ret;
     }
@@ -476,7 +479,7 @@ int log_record(rgw::sal::Driver* driver,
     if (ceph::coarse_real_time::clock::now() > time_to_commit) {
       ldpp_dout(dpp, 20) << "INFO: logging object '" << obj_name << "' exceeded its time, will be committed to bucket '" <<
         target_bucket_id << "'" << dendl;
-      if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, false, &objv_tracker); ret < 0) {
+      if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, false, &objv_tracker, nullptr); ret < 0) {
         return ret;
       }
     } else {
@@ -622,7 +625,7 @@ int log_record(rgw::sal::Driver* driver,
   if (ret == -EFBIG) {
     ldpp_dout(dpp, 5) << "WARNING: logging object '" << obj_name << "' is full, will be committed to bucket '" <<
       target_bucket->get_key() << "'" << dendl;
-    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, true, nullptr); ret < 0 ) {
+    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, true, nullptr, nullptr); ret < 0 ) {
       return ret;
     }
     if (ret = target_bucket->write_logging_object(obj_name,
@@ -853,7 +856,7 @@ int source_bucket_cleanup(const DoutPrefixProvider* dpp,
     return 0;
   }
   const auto& info = bucket->get_info();
-  if (const int ret = commit_logging_object(*conf, dpp, driver, info.bucket.tenant, y); ret < 0) {
+  if (const int ret = commit_logging_object(*conf, dpp, driver, info.bucket.tenant, y, nullptr); ret < 0) {
     ldpp_dout(dpp, 5) << "WARNING: could not commit pending logging object of bucket '" <<
       bucket->get_key() << "' during cleanup. ret = " << ret << dendl;
   } else {
