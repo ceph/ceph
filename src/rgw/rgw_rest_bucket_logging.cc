@@ -340,22 +340,22 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
   // and usd in execute()
   rgw::bucketlogging::configuration configuration;
   std::unique_ptr<rgw::sal::Bucket> target_bucket;
+  std::unique_ptr<rgw::sal::Bucket> source_bucket;
 
   int init_processing(optional_yield y) override {
     if (const auto ret = verify_bucket_logging_params(this, s); ret < 0) {
       return ret;
     }
 
-    std::unique_ptr<rgw::sal::Bucket> src_bucket;
     {
       const rgw_bucket src_bucket_id{s->bucket_tenant, s->bucket_name};
       if (const auto ret = driver->load_bucket(this, src_bucket_id,
-                                 &src_bucket, y); ret < 0) {
+                                 &source_bucket, y); ret < 0) {
         ldpp_dout(this, 1) << "ERROR: failed to get bucket '" << src_bucket_id << "', ret = " << ret << dendl;
         return ret;
       }
     }
-    return rgw::bucketlogging::get_target_and_conf_from_source(this, driver, src_bucket.get(), s->bucket_tenant, configuration, target_bucket, y);
+    return rgw::bucketlogging::get_target_and_conf_from_source(this, driver, source_bucket.get(), s->bucket_tenant, configuration, target_bucket, y);
   }
 
   int verify_permission(optional_yield y) override {
@@ -385,7 +385,8 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
       return;
     }
     const auto old_obj = obj_name;
-    op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, null_yield, true, &objv_tracker);
+    const auto region = driver->get_zone()->get_zonegroup().get_api_name();
+    op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, region, source_bucket, null_yield, true, &objv_tracker);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to flush pending logging object '" << old_obj
                << "' to target bucket '" << target_bucket_id << "'" << dendl;
