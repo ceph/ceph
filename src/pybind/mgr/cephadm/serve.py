@@ -652,7 +652,8 @@ class CephadmServe:
                 r = True
                 self.mgr.spec_store.mark_needs_configuration(spec.service_name())
                 hosts_altered.update(conflict_hosts_altered)
-            daemons_placed, daemon_deployed_hosts, daemon_place_fails = self.deploy_given_daemons(daemons_to_deploy)
+            with self.mgr.async_timeout_handler(host, f'cephadm deploy ({[d.name() for d in daemons_to_deploy]} daemons)'):
+                daemons_placed, daemon_deployed_hosts, daemon_place_fails = self.mgr.wait_async(self.deploy_given_daemons(daemons_to_deploy))
             if daemons_placed:
                 r = True
                 hosts_altered.update(daemon_deployed_hosts)
@@ -1058,7 +1059,7 @@ class CephadmServe:
             self.mgr.cache.append_tmp_daemon(slot.hostname, sd)
         return daemon_specs, prepare_create_fails
 
-    def deploy_given_daemons(self, to_deploy: List[CephadmDaemonDeploySpec]) -> Tuple[bool, Set[str], List[str]]:
+    async def deploy_given_daemons(self, to_deploy: List[CephadmDaemonDeploySpec]) -> Tuple[bool, Set[str], List[str]]:
         if not to_deploy:
             return (False, set(), [])
         r = False
@@ -1070,8 +1071,7 @@ class CephadmServe:
         if any(d.host != hostname for d in to_deploy):
             raise OrchestratorError(f'Got deploy request with multiple different hosts {set([d.host for d in to_deploy])}')
         try:
-            with self.mgr.async_timeout_handler(hostname, f'cephadm deploy ({daemon_names} daemons)'):
-                successes, failures = self.mgr.wait_async(self._create_daemon(to_deploy))
+            successes, failures = await self._create_daemon(to_deploy)
             if successes:
                 r = True
                 hosts_altered.add(hostname)
