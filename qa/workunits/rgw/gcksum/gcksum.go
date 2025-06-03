@@ -45,16 +45,153 @@ func main() {
   wg.Wait()
 
 	// Tests
-  putObject(ctx, s3Client, bucketName);
+  var err error
+  err = putObject(ctx, s3Client, bucketName);
+  if (err != nil) {
+    fmt.Printf("Failed: %v\n", err)
+		os.Exit(1)
+  }
+
   fmt.Println()
   fmt.Println()
   fmt.Println()
 
-  demonstrateChunkedUpload(ctx, s3Client, bucketName)
+  err = putObjectCksum(ctx, s3Client, bucketName, types.ChecksumAlgorithmCrc32);
+  if (err != nil) {
+    fmt.Printf("Failed: %v\n", err)
+		os.Exit(1)
+  }
+  fmt.Println()
 	fmt.Println()
 	fmt.Println()
+
+  err = putObjectCksum(ctx, s3Client, bucketName, types.ChecksumAlgorithmCrc32c);
+  if (err != nil) {
+    fmt.Printf("Failed: %v\n", err)
+		os.Exit(1)
+  }
+  fmt.Println()
 	fmt.Println()
-	demonstrateFixedLengthUpload(ctx, s3Client, bucketName)
+	fmt.Println()
+
+  err = putObjectCksum(ctx, s3Client, bucketName, types.ChecksumAlgorithmSha1);
+  if (err != nil) {
+    fmt.Printf("Failed: %v\n", err)
+		os.Exit(1)
+  }
+  fmt.Println()
+	fmt.Println()
+	fmt.Println()
+
+  err = putObjectCksum(ctx, s3Client, bucketName, types.ChecksumAlgorithmSha256);
+  if (err != nil) {
+    fmt.Printf("Failed: %v\n", err)
+		os.Exit(1)
+  }
+  fmt.Println()
+	fmt.Println()
+	fmt.Println()
+
+  err = putObjectCksum(ctx, s3Client, bucketName, types.ChecksumAlgorithmCrc64nvme);
+  if (err != nil) {
+    fmt.Printf("Failed: %v\n", err)
+		os.Exit(1)
+  }
+  fmt.Println()
+	fmt.Println()
+	fmt.Println()
+
+  err = demonstrateChunkedUpload2(ctx, s3Client, bucketName, types.ChecksumAlgorithmCrc32)
+  if (err != nil) {
+    fmt.Printf("Failed: %v\n", err)
+		os.Exit(1)
+  }
+  fmt.Println()
+	fmt.Println()
+	fmt.Println()
+
+  err = demonstrateChunkedUpload2(ctx, s3Client, bucketName, types.ChecksumAlgorithmCrc32c)
+  if (err != nil) {
+    fmt.Printf("Failed: %v\n", err)
+		os.Exit(1)
+  }
+  fmt.Println()
+	fmt.Println()
+	fmt.Println()
+
+  err = demonstrateChunkedUpload2(ctx, s3Client, bucketName, types.ChecksumAlgorithmSha1)
+  if (err != nil) {
+    fmt.Printf("Failed: %v\n", err)
+		os.Exit(1)
+  }
+  fmt.Println()
+	fmt.Println()
+	fmt.Println()
+
+  err = demonstrateChunkedUpload2(ctx, s3Client, bucketName, types.ChecksumAlgorithmSha256)
+  if (err != nil) {
+    fmt.Printf("Failed: %v\n", err)
+		os.Exit(1)
+  }
+  fmt.Println()
+	fmt.Println()
+	fmt.Println()
+
+  err = demonstrateChunkedUpload2(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmCrc64nvme)
+  if (err != nil) {
+    fmt.Printf("Failed: %v\n", err)
+		os.Exit(1)
+  }
+  fmt.Println()
+	fmt.Println()
+	fmt.Println()
+
+  err = demonstrateFixedLengthUpload2(ctx, s3Client, bucketName, types.ChecksumAlgorithmCrc32)
+  if (err != nil) {
+    fmt.Printf("Failed: %v\n", err)
+		os.Exit(1)
+  }
+  fmt.Println()
+	fmt.Println()
+	fmt.Println()
+
+  err = demonstrateFixedLengthUpload2(ctx, s3Client, bucketName, types.ChecksumAlgorithmCrc32c)
+  if (err != nil) {
+    fmt.Printf("Failed: %v\n", err)
+		os.Exit(1)
+  }
+  fmt.Println()
+	fmt.Println()
+	fmt.Println()
+
+  err = demonstrateFixedLengthUpload2(ctx, s3Client, bucketName, types.ChecksumAlgorithmSha1)
+  if (err != nil) {
+    fmt.Printf("Failed: %v\n", err)
+		os.Exit(1)
+  }
+  fmt.Println()
+	fmt.Println()
+	fmt.Println()
+
+  err = demonstrateFixedLengthUpload2(ctx, s3Client, bucketName, types.ChecksumAlgorithmSha256)
+  if (err != nil) {
+    fmt.Printf("Failed: %v\n", err)
+		os.Exit(1)
+  }
+  fmt.Println()
+	fmt.Println()
+	fmt.Println()
+
+  err = demonstrateFixedLengthUpload2(ctx, s3Client, bucketName,
+    types.ChecksumAlgorithmCrc64nvme)
+  if (err != nil) {
+    fmt.Printf("Failed: %v\n", err)
+		os.Exit(1)
+  }
+  fmt.Println()
+	fmt.Println()
+	fmt.Println()
 }
 
 func setupS3Client(ctx context.Context) *s3.Client {
@@ -125,8 +262,23 @@ func putObject(ctx context.Context, client *s3.Client,
   return err
 }
 
-func demonstrateChunkedUpload(ctx context.Context, s3Client *s3.Client,
-  bucketName string) error {
+func putObjectCksum(ctx context.Context, client *s3.Client,
+  bucketName string, ckAlgo types.ChecksumAlgorithm) error {
+
+  key := fmt.Sprintf("obj_for_%s", ckAlgo)
+  body := fmt.Sprintf("body for %s/%s", bucketName, key)
+	poinput := &s3.PutObjectInput{
+		Body:   strings.NewReader(body),
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(key),
+    ChecksumAlgorithm: ckAlgo,
+	}
+	_, err := client.PutObject(context.TODO(), poinput)
+  return err
+}
+
+func demonstrateChunkedUpload2(ctx context.Context, s3Client *s3.Client,
+  bucketName string, ckAlgo types.ChecksumAlgorithm) error {
 	// Create an IO pipe. The total amount of data read isn't known to the
 	// reader (S3 PutObject), so the PutObject call will use a chunked upload.
 	pipeReader, pipeWriter := io.Pipe()
@@ -145,6 +297,7 @@ func demonstrateChunkedUpload(ctx context.Context, s3Client *s3.Client,
 		Bucket: &bucketName,
 		Key:    &key,
 		Body:   pipeReader,
+    ChecksumAlgorithm: ckAlgo,
 	})
 
 	fmt.Printf("Uploaded chunked data to S3 bucket %s with key %s\n", bucketName, key)
@@ -152,8 +305,8 @@ func demonstrateChunkedUpload(ctx context.Context, s3Client *s3.Client,
   return err
 }
 
-func demonstrateFixedLengthUpload(ctx context.Context, s3Client *s3.Client,
-  bucketName string) error {
+func demonstrateFixedLengthUpload2(ctx context.Context, s3Client *s3.Client,
+  bucketName string, ckAlgo types.ChecksumAlgorithm) error {
 	// Create a fixed-length byte slice to upload
 	dataToUpload := []byte("This is some example fixed-length data to upload to S3.")
 	key := "fixed-length-upload-example"
@@ -167,6 +320,7 @@ func demonstrateFixedLengthUpload(ctx context.Context, s3Client *s3.Client,
 		Bucket: &bucketName,
 		Key:    &key,
 		Body:   readerSeeker,
+    ChecksumAlgorithm: ckAlgo,
 	})
 
 	fmt.Printf("Uploaded fixed-length data to S3 bucket %s with key %s\n", bucketName, key)
