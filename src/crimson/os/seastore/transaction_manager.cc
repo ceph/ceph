@@ -300,6 +300,104 @@ TransactionManager::refs_ret TransactionManager::remove(
   });
 }
 
+TransactionManager::move_region_ret
+TransactionManager::move_region(
+  Transaction &t,
+  LBAMapping src,
+  LBAMapping dst,
+  laddr_t dst_prefix)
+{
+  struct state_t {
+    LBAMapping cur;
+    LBAMapping insert_pos;
+    laddr_t src_prefix;
+    laddr_t dst_prefix;
+
+    laddr_t calc_dst_key() const {
+      auto key = cur.get_key();
+      auto offset = key.get_byte_distance<loffset_t>(key.get_clone_prefix());
+      return (dst_prefix + offset).checked_to_laddr();
+    }
+  };
+  auto src_prefix = src.get_key().get_clone_prefix();
+  return seastar::do_with(
+    state_t{std::move(src), std::move(dst), src_prefix, dst_prefix},
+    [&t, this](state_t &state)
+  {
+    return trans_intr::repeat([&t, &state, this] {
+      if (state.cur.get_key().get_clone_prefix() != state.src_prefix) {
+	return base_iertr::make_ready_future<
+	  seastar::stop_iteration>(seastar::stop_iteration::yes);
+      }
+      return seastar::futurize_invoke([&t, &state, this] {
+	if (!state.cur.is_indirect() && !state.cur.is_zero_reserved()) {
+	  return relocate_logical_extent(t, state.cur.duplicate());
+	}
+	return base_iertr::make_ready_future<LogicalChildNodeRef>();
+      }).si_then([&t, &state, this](LogicalChildNodeRef extent)
+		 -> move_mapping_ret {
+	if (state.cur.is_zero_reserved()) {
+	  return next_mapping(t, state.cur.duplicate()
+	  ).si_then([&t, &state, this](auto next) {
+	    auto len = state.cur.get_length();
+	    auto dst_key = state.calc_dst_key();
+	    return remove(t, std::move(state.cur)
+	    ).handle_error_interruptible(
+	      move_region_iertr::pass_further(),
+	      crimson::ct_error::assert_all("invalid error")
+	    ).si_then([&t, next=std::move(next), this](auto) mutable {
+	      return refresh_lba_mapping(t, std::move(next));
+	    }).si_then([&t, &state, len, dst_key, this](LBAMapping next) {
+	      return refresh_lba_mapping(t, std::move(state.insert_pos)
+	      ).si_then([&t, len, next=std::move(next), dst_key, this]
+			(LBAMapping insert_pos) mutable {
+		return reserve_region(
+		  t, std::move(insert_pos), dst_key, len
+		).handle_error_interruptible(
+		  move_region_iertr::pass_further(),
+		  crimson::ct_error::assert_all("invalid error")
+		).si_then([&t, next=std::move(next), this]
+			  (LBAMapping insert) mutable {
+		  return refresh_lba_mapping(t, std::move(next)
+		  ).si_then([&t, insert=std::move(insert), this]
+			    (LBAMapping next) mutable {
+		    return next_mapping(t, std::move(insert)
+		    ).si_then([next=std::move(next)](LBAMapping insert) mutable {
+		      return move_region_iertr::make_ready_future<
+			LBAManager::move_mapping_ret_t>(
+			  std::move(next), std::move(insert));
+		    });
+		  });
+		});
+	      });
+	    });
+	  });
+	} else if (extent) {
+	  auto laddr = state.calc_dst_key();
+	  extent->set_laddr(laddr);
+	  return lba_manager->move_direct_mapping(
+	    t,
+	    state.cur.duplicate(),
+	    laddr,
+	    state.insert_pos.duplicate(),
+	    *extent);
+	} else {
+	  return lba_manager->move_indirect_mapping(
+	    t,
+	    state.cur.duplicate(),
+	    state.calc_dst_key(),
+	    state.insert_pos.duplicate());
+	}
+      }).si_then([&state](LBAManager::move_mapping_ret_t ret) {
+	state.cur = std::move(ret.src);
+	state.insert_pos = std::move(ret.dest);
+	return base_iertr::make_ready_future<
+	  seastar::stop_iteration>(seastar::stop_iteration::no);
+      });
+    });
+  });
+}
+
 TransactionManager::submit_transaction_iertr::future<>
 TransactionManager::submit_transaction(
   Transaction &t)
