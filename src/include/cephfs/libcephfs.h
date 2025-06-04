@@ -39,9 +39,9 @@ using CephContext = ceph::common::CephContext;
 extern "C" {
 #endif
 
-#define LIBCEPHFS_VER_MAJOR 10
-#define LIBCEPHFS_VER_MINOR 1
-#define LIBCEPHFS_VER_EXTRA 3
+#define LIBCEPHFS_VER_MAJOR 11
+#define LIBCEPHFS_VER_MINOR 0
+#define LIBCEPHFS_VER_EXTRA 0
 
 #define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
