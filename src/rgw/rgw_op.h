@@ -1494,6 +1494,7 @@ protected:
   bool multipart_delete;
   std::string version_id;
   ceph::real_time unmod_since; /* if unmodified since */
+  ceph::real_time last_mod_time_match; /* if modified time match */
   bool no_precondition_error;
   std::unique_ptr<RGWBulkDelete::Deleter> deleter;
   bool bypass_perm;

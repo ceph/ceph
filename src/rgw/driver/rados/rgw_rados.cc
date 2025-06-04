@@ -6418,6 +6418,23 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     /* only delete object if mtime is less than or equal to params.unmod_since */
     store->cls_obj_check_mtime(op, params.unmod_since, params.high_precision_time, CLS_RGW_CHECK_TIME_MTIME_LE);
   }
+
+  if (!real_clock::is_zero(params.last_mod_time_match)) {
+    struct timespec ctime = ceph::real_clock::to_timespec(state->mtime);
+    struct timespec last_mod_time = ceph::real_clock::to_timespec(params.last_mod_time_match);
+    if (!params.high_precision_time) {
+      ctime.tv_nsec = 0;
+      last_mod_time.tv_nsec = 0;
+    }
+
+    ldpp_dout(dpp, 10) << "If-Match-Last-Modified-Time: " << params.last_mod_time_match << " Last-Modified: " << ctime << dendl;
+    if (ctime != last_mod_time) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+
+    /* only delete object if mtime is equal to params.last_mod_time_match */
+    store->cls_obj_check_mtime(op, params.last_mod_time_match, params.high_precision_time, CLS_RGW_CHECK_TIME_MTIME_EQ);
+  }
   uint64_t obj_accounted_size = state->accounted_size;
 
   if (params.abortmp) {
@@ -7064,8 +7081,13 @@ int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
         }
       } else {
         bufferlist bl;
-        if (!state->get_attr(RGW_ATTR_ETAG, bl) ||
-            strncmp(if_match, bl.c_str(), bl.length()) != 0) {
+        if (state->get_attr(RGW_ATTR_ETAG, bl)) {
+          string if_match_str = rgw_string_unquote(if_match);
+          string etag = string(bl.c_str(), bl.length());
+          if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
+            return -ERR_PRECONDITION_FAILED;
+          }
+        } else {
           return -ERR_PRECONDITION_FAILED;
         }
       }
@@ -7079,8 +7101,13 @@ int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
         }
       } else {
         bufferlist bl;
-        if (!state->get_attr(RGW_ATTR_ETAG, bl) ||
-            strncmp(if_nomatch, bl.c_str(), bl.length()) == 0) {
+        if (state->get_attr(RGW_ATTR_ETAG, bl)) {
+          string if_match_str = rgw_string_unquote(if_nomatch);
+          string etag = string(bl.c_str(), bl.length());
+          if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
+            return -ERR_PRECONDITION_FAILED;
+          }
+        } else {
           return -ERR_PRECONDITION_FAILED;
         }
       }

@@ -709,6 +709,7 @@ namespace rgw::sal {
     parent_op.params.remove_objs = params.remove_objs;
     parent_op.params.expiration_time = params.expiration_time;
     parent_op.params.unmod_since = params.unmod_since;
+    parent_op.params.last_mod_time_match = params.last_mod_time_match;
     parent_op.params.mtime = params.mtime;
     parent_op.params.high_precision_time = params.high_precision_time;
     parent_op.params.zones_trace = params.zones_trace;
