@@ -2,7 +2,7 @@ module.exports = async ({ github, context, core, configDiff }) => {
   try {
       // Do not create comment if there are no configuration changes
       if (!configDiff) {
-        console.log("No changes detected. Skipping comment creation.");
+        core.info("No changes detected. Skipping comment creation.");
         return;
       }
 
@@ -19,9 +19,6 @@ ${configDiff}
 The above configuration changes are found in the PR. Please update the relevant release documentation if necessary.
   `;
 
-      core.summary.addRaw(commentBody);
-      await core.summary.write()
-
       const { owner, repo } = context.repo;
       const issueNumber = context.payload.pull_request.number;
 
@@ -37,24 +34,48 @@ The above configuration changes are found in the PR. Please update the relevant 
           }
       );
 
-      // Annotate YAML files
-      files.forEach(file => {
-        // Only annotate the `yaml.in` files present in `src/common/options` folder
-        if (file.filename.endsWith(".yaml.in") && file.filename.startsWith("src/common/options/")) {
-            core.info(`Annotating file: ${file.filename}`);
-            core.notice(
-                `Configuration changes detected in ${file.filename}. Please update the relevant release documentation if necessary.`,
-                {
-                    title: "Configuration Change Detected",
-                    file: file.filename,
-                    startLine: 1,
-                    endLine: 1,
-                }
-            );
-        }
-    });
+      // Filter for `.yaml.in` files in `src/common/options` directory
+      const yamlInFiles = files.filter(file =>
+        file.filename.startsWith("src/common/options/") && file.filename.endsWith(".yaml.in")
+      );
 
-      
+      if (yamlInFiles.length === 0) {
+        // The pull request branch might be behind the upstream `main` branch.
+        // Some configuration changes in `configDiff` might not correspond to files in the PR.
+        // If no `.yaml.in` files from `src/common/options` are part of the PR, skip further checks.
+        core.info("No `.yaml.in` files found in `src/common/options`. Exiting...");
+        return;
+      }
+
+      // Annotate YAML files
+      yamlInFiles.forEach(file => {
+        // Only annotate the `yaml.in` files present in `src/common/options` folder
+        core.info(`Annotating file: ${file.filename}`);
+
+        if (file.patch) {
+            // A sample file.patch value looks like: "@@ -132,7 +132,7 @@ module Test @@ -1000,7 +1000,7 @@ module Test"
+            // Extract all line numbers from the patch using regex
+            const matches = [...file.patch.matchAll(/@@ -\d+,\d+ \+(\d+)(?:,(\d+))? @@/g)];
+            matches.forEach(match => {
+                const startLine = parseInt(match[1], 10); // Extracted start line
+                const lineCount = match[2] ? parseInt(match[2], 10) : 1; // Number of lines changed
+                const endLine = startLine + lineCount - 1; // Calculate the end line
+
+                core.notice(
+                    `Configuration changes detected. Please update the release documentation if necessary.`,
+                    {
+                        title: "Configuration Change Detected",
+                        file: file.filename,
+                        startLine: startLine,
+                        endLine: endLine,
+                    }
+                );
+            });
+        } else {
+            core.info(`No patch data available for file: ${file.filename}`);
+        }
+      });
+
       // List all the comments
       const comments = await github.paginate(
         github.rest.issues.listComments, {
@@ -64,11 +85,26 @@ The above configuration changes are found in the PR. Please update the relevant 
           per_page: 100,
         }
       );
+
+      // Set action summary
+      core.summary.addRaw(commentBody);
+      await core.summary.write()
   
       const existingComment = comments.find(comment => comment.body.includes("### Config Diff Tool Output"));
   
       if (existingComment) {
-        core.info("A config diff comment already exists, deleting it...");
+        // There might have been new configuration changes made after posting
+        // the first comment. Hence replace the old comment with the new updated
+        // changes
+        core.info("A config diff comment already exists, updating it...");
+
+        // Update the existing comment
+        await github.rest.issues.updateComment ({
+          comment_id: existingComment.id,
+          owner,
+          repo,
+          body: commentBody,
+        });
       } else {
         core.info("Creating a new config diff comment...");
         // Create a new comment
