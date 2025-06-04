@@ -7,12 +7,22 @@
 #include <iostream>
 #include <string_view>
 
+// boost is able to translate addresses
+// to lines with the following definition.
+// Similar to Seastar's seastar-addr2line
 #define BOOST_STACKTRACE_USE_ADDR2LINE
+
+// Consider std once C++23 is available
 #include <boost/stacktrace.hpp>
+
 #include <seastar/core/reactor.hh>
+
+#include "crimson/common/log.h"
 
 #include "common/safe_io.h"
 #include "include/scope_guard.h"
+
+SET_SUBSYS(osd);
 
 FatalSignal::FatalSignal()
 {
@@ -78,22 +88,24 @@ void FatalSignal::install_oneshot_signal_handler()
   assert(r == 0);
 }
 
-
 [[gnu::noinline]] static void print_backtrace(std::string_view cause) {
-  std::cerr << cause;
-  if (seastar::engine_is_ready()) {
-    std::cerr << " on shard " << seastar::this_shard_id();
-  }
   // nobody wants to see things like `FatalSignal::signaled()` or
   // `print_backtrace()` in our backtraces. `+ 1` is for the extra
   // frame created by kernel (signal trampoline, it will take care
   // about e.g. sigreturn(2) calling; see the man page).
   constexpr std::size_t FRAMES_TO_SKIP = 3 + 1;
-  std::cerr << ".\nBacktrace:\n";
-  std::cerr << boost::stacktrace::stacktrace(
+
+  std::string backtrace = fmt::format("{} on shard {}  \nBacktrace:\n {}",
+    cause,
+    seastar::engine_is_ready() ? std::to_string(seastar::this_shard_id()) : "no shard",
+    boost::stacktrace::to_string(boost::stacktrace::stacktrace(
     FRAMES_TO_SKIP,
-    static_cast<std::size_t>(-1)/* max depth same as the default one */);
-  std::cerr << std::flush;
+    static_cast<std::size_t>(-1)/* max depth same as the default one */)));
+
+  // Print backtrace in log and in std out
+  GENERIC_ERROR("{}", backtrace);
+  std::cerr << backtrace <<std::flush;
+
   // TODO: dump crash related meta data to $crash_dir
   //       see handle_fatal_signal()
 }
