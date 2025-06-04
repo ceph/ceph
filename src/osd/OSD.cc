@@ -8262,6 +8262,18 @@ void OSD::handle_osd_map(MOSDMap *m)
 	  << dendl;
 
   logger->inc(l_osd_map);
+  if (!m->maps.empty()) {
+    logger->inc(l_osd_full_map_received, m->maps.size());
+  }
+  if (!m->incremental_maps.empty()) {
+    logger->inc(l_osd_inc_map_received, m->incremental_maps.size());
+  }
+  dout(10) << __func__
+           << ": received " << m->maps.size() << " full maps "
+           << "and " << m->incremental_maps.size()
+           << " incremental maps"
+           << dendl;
+
   logger->inc(l_osd_mape, last - first + 1);
   if (first <= superblock.get_newest_map())
     logger->inc(l_osd_mape_dup, superblock.get_newest_map() - first + 1);
