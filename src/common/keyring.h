@@ -31,9 +31,8 @@ class LinuxKeyringSecret {
   int _serial;
 
   explicit LinuxKeyringSecret(int serial, size_t len) noexcept;
-
  public:
-  LinuxKeyringSecret() = default;
+  LinuxKeyringSecret() = delete;
   LinuxKeyringSecret(const LinuxKeyringSecret&) = delete;
   LinuxKeyringSecret& operator=(const LinuxKeyringSecret&) = delete;
   LinuxKeyringSecret(LinuxKeyringSecret&& other) noexcept
@@ -41,6 +40,9 @@ class LinuxKeyringSecret {
         _serial(std::exchange(other._serial, -1)) {};
   LinuxKeyringSecret& operator=(LinuxKeyringSecret&& other) noexcept {
     if (this != &other) {
+      if (this->initialized()) {
+	this->reset();
+      }
       _len = std::exchange(other._len, 0);
       _serial = std::exchange(other._serial, -1);
     }
@@ -54,7 +56,7 @@ class LinuxKeyringSecret {
   static bool supported() noexcept;
   [[nodiscard]] std::error_code read(std::string& out) const;
   [[nodiscard]] std::error_code remove() const;
-
+  [[nodiscard]] bool initialized() const;
  private:
   std::error_code reset();
 
@@ -65,6 +67,7 @@ class LinuxKeyringSecret {
     }
     return os << "LinuxKeyringSecret{" << secret._serial << "}";
   }
+  friend class LinuxKeyringTest_LifecycleMoveAssignResetsDestination_Test;
 };
 }  // namespace ceph
 

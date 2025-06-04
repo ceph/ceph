@@ -114,6 +114,10 @@ bool LinuxKeyringSecret::supported() noexcept {
   return {};
 }
 
+[[nodiscard]] bool LinuxKeyringSecret::initialized() const {
+  return _len > 0 && _serial != -1;
+}
+
 #endif
 
 }  // namespace ceph
