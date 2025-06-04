@@ -644,6 +644,13 @@ class CephadmServe:
                                             len(self.mgr.apply_spec_fails),
                                             warnings)
 
+        # also add orphan daemons to daemons to remove
+        orphan_daemons = self._find_orphans_to_remove()
+        remove_daemon_names = [dd.name() for dd in all_daemons_to_remove]
+        for dd in orphan_daemons:
+            if dd.name() not in remove_daemon_names:
+                all_daemons_to_remove.append(dd)
+
         async def _parallel_deploy_and_remove(
             hostname: str,
             conflicts: List[orchestrator.DaemonDescription],
@@ -1180,7 +1187,8 @@ class CephadmServe:
 
         return conflicting_daemons, daemon_specs_to_deploy, daemons_to_remove
 
-    def _find_orphans_to_remove(self, daemons: List[orchestrator.DaemonDescription]) -> List[orchestrator.DaemonDescription]:
+    def _find_orphans_to_remove(self) -> List[orchestrator.DaemonDescription]:
+        daemons = self.mgr.cache.get_daemons()
         discovered_orphans: List[orchestrator.DaemonDescription] = []
         for dd in daemons:
             # orphan?
@@ -1197,17 +1205,10 @@ class CephadmServe:
                 discovered_orphans.append(dd)
         return discovered_orphans
 
-    def _remove_orphans(self, daemons: List[orchestrator.DaemonDescription]) -> None:
-        orphan_dds = self._find_orphans_to_remove(daemons)
-        for dd in orphan_dds:
-            assert dd.hostname is not None
-            self.mgr.wait_async(self._remove_daemon([dd.name()], dd.hostname))
-
     def _check_daemons(self) -> None:
         self.log.debug('_check_daemons')
         daemons = self.mgr.cache.get_daemons()
         daemons_post: Dict[str, List[orchestrator.DaemonDescription]] = defaultdict(list)
-        self._remove_orphans(daemons)
         for dd in daemons:
             spec = self.mgr.spec_store.active_specs.get(dd.service_name(), None)
             assert dd.hostname is not None
