@@ -222,7 +222,7 @@ public:
       ceph_assert(ret->get_type() == type);
 
       if (ret->is_stable()) {
-        if (ret->is_dirty()) {
+        if (ret->has_delta()) {
           ++access_stats.trans_dirty;
           ++stats.access.trans_dirty;
         } else {
@@ -278,7 +278,7 @@ public:
 
     ceph_assert(ret->get_type() == type);
 
-    if (ret->is_dirty()) {
+    if (ret->has_delta()) {
       ++access_stats.cache_dirty;
       ++stats.access.cache_dirty;
     } else {
@@ -505,7 +505,7 @@ public:
         assert(!p_extent->is_pending_in_trans(t.get_trans_id()));
         auto ret = t.maybe_add_to_read_set(p_extent);
         if (ret.added) {
-          if (p_extent->is_dirty()) {
+          if (p_extent->has_delta()) {
             ++access_stats.cache_dirty;
             ++stats.access.cache_dirty;
           } else {
@@ -519,7 +519,7 @@ public:
           }
         } else {
           // already exists
-          if (p_extent->is_dirty()) {
+          if (p_extent->has_delta()) {
             ++access_stats.trans_dirty;
             ++stats.access.trans_dirty;
           } else {
@@ -633,7 +633,7 @@ private:
     //
     // TODO(implement fine-grained-wait)
     assert(!extent->is_range_loaded(partial_off, partial_len));
-    assert(!extent->is_mutable());
+    assert(extent->is_data_stable());
     if (extent->is_pending_io()) {
       std::optional<Transaction::src_t> src;
       if (p_src) {
@@ -703,7 +703,7 @@ private:
     if (!cached) {
       // partial read
       TCachedExtentRef<T> ret = CachedExtent::make_cached_extent_ref<T>(length);
-      ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
+      ret->init(CachedExtent::extent_state_t::CLEAN,
                 offset,
                 PLACEMENT_HINT_NULL,
                 NULL_GENERATION,
@@ -724,7 +724,7 @@ private:
     if (is_retired_placeholder_type(cached->get_type())) {
       // partial read
       TCachedExtentRef<T> ret = CachedExtent::make_cached_extent_ref<T>(length);
-      ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
+      ret->init(CachedExtent::extent_state_t::CLEAN,
                 offset,
                 PLACEMENT_HINT_NULL,
                 NULL_GENERATION,
@@ -1295,7 +1295,7 @@ public:
 
     // journal replay should has been finished at this point,
     // Cache::root should have been inserted to the dirty list
-    assert(root->is_dirty());
+    assert(root->has_delta());
     std::vector<CachedExtentRef> _dirty;
     for (auto &e : extents_index) {
       _dirty.push_back(CachedExtentRef(&e));
@@ -1685,7 +1685,7 @@ private:
       CachedExtent &extent,
       extent_len_t increased_length,
       const Transaction::src_t* p_src) {
-      assert(!extent.is_mutable());
+      assert(extent.is_data_stable());
 
       if (extent.primary_ref_list_hook.is_linked()) {
         assert(extent.is_stable_clean() && !extent.is_placeholder());
@@ -1935,8 +1935,7 @@ private:
     const Transaction::src_t* p_src
   ) {
     LOG_PREFIX(Cache::read_extent);
-    assert(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING ||
-           extent->state == CachedExtent::extent_state_t::EXIST_CLEAN ||
+    assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN ||
            extent->state == CachedExtent::extent_state_t::CLEAN);
     assert(!extent->is_range_loaded(offset, length));
     assert(is_aligned(offset, get_block_size()));
@@ -1962,9 +1961,6 @@ private:
       });
     }).safe_then(
       [this, FNAME, extent=std::move(extent), offset, length]() mutable {
-        if (likely(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING)) {
-          extent->state = CachedExtent::extent_state_t::CLEAN;
-        }
         ceph_assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN
           || extent->state == CachedExtent::extent_state_t::CLEAN
           || !extent->is_valid());

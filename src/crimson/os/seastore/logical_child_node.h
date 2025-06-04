@@ -21,8 +21,7 @@ public:
   LogicalChildNode(T&&... t) : LogicalCachedExtent(std::forward<T>(t)...) {}
 
   virtual ~LogicalChildNode() {
-    if (this->is_valid() &&
-	!this->is_pending()) {
+    if (this->is_stable()) {
       lba_child_node_t::destroy();
     }
   }
