@@ -348,7 +348,7 @@ void JournalTrimmerImpl::config_t::validate() const
   ceph_assert(rewrite_dirty_bytes_per_trans > 0);
   ceph_assert(rewrite_dirty_bytes_per_cycle >=
     rewrite_dirty_bytes_per_trans);
-  ceph_assert(rewrite_backref_bytes_per_cycle > 0);
+  ceph_assert(max_backref_bytes_per_cycle > 0);
 }
 
 JournalTrimmerImpl::config_t
@@ -379,7 +379,7 @@ JournalTrimmerImpl::config_t::get_default(
     max_journal_bytes,
     1<<26,// rewrite_dirty_bytes_per_cycle
     1<<17,// rewrite_dirty_bytes_per_trans
-    1<<24 // rewrite_backref_bytes_per_cycle
+    1<<24 // max_backref_bytes_per_cycle
   };
 }
 
@@ -413,7 +413,7 @@ JournalTrimmerImpl::config_t::get_test(
       ? 1<<25
       : target_dirty_bytes / 2,// rewrite_dirty_bytes_per_cycle
     1<<17,// rewrite_dirty_bytes_per_trans
-    1<<24 // rewrite_backref_bytes_per_cycle
+    1<<24 // max_backref_bytes_per_cycle
   };
 }
 
@@ -659,7 +659,7 @@ JournalTrimmerImpl::trim_alloc()
       return backref_manager.merge_cached_backrefs(
         t,
         target,
-        config.rewrite_backref_bytes_per_cycle
+        config.max_backref_bytes_per_cycle
       ).si_then([this, FNAME, &t](auto trim_alloc_to)
         -> ExtentCallbackInterface::submit_transaction_direct_iertr::future<>
       {
