@@ -70,6 +70,7 @@ class SubvolumeV3(SubvolumeV2):
             self.uuid = uuid
         else:
             self.uuid = uuid4()
+
         self.meta = f'{self.subvol_dir}/.meta.{self.uuid}'
 
         # encode these variables since they'll be used in __init__() below and
@@ -150,6 +151,12 @@ class SubvolumeV3(SubvolumeV2):
 
     def create_or_update_meta_file(self, subvol_type):
         super(SubvolumeV3, self).create_or_update_meta_file(subvol_type)
+
+        try:
+            self.fs.stat(self.current_meta)
+            self.fs.unlink(self.current_meta)
+        except cephfs.ObjectNotFound:
+            pass
 
         self.fs.symlink(basename(self.meta), self.current_meta)
 
@@ -332,7 +339,7 @@ class SubvolumeV3(SubvolumeV2):
         # adding a delay using mgr/volumes/snapshot_clone_delay config option.
         try:
             self.fs.stat(snap_path)
-        except cephfs.Error as e:
+        except cephfs.ObjectNotFound as e:
             if e.errno == errno.ENOENT:
                 raise VolumeException(-errno.ENOENT,
                                       f'snapshot \'{snap_name}\' does not exist')
