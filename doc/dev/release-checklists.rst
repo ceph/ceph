@@ -132,7 +132,7 @@ After dev freeze
 - [ ] cherry-pick 8cf9ad62949516666ad0f2c0bb7726ef68e4d666 ("doc: add releases links to toc"). There will be trivial conflicts.
 - [ ] add redirect for new major release at `RTD <https://readthedocs.org/dashboard/ceph/redirects/>`_.
 - [x] add release name to redmine (using https://tracker.ceph.com/custom_fields/16/edit)
-- [ ] add release name to .github/milestone.yml for github actions to automatically add milestone to backports (this commit must be backported to the release branch)
+- [x] add release name to .github/milestone.yml for github actions to automatically add milestone to backports (this commit must be backported to the release branch)
 - [ ] add release branch to nightlies: qa/crontab/teuthology-cronjobs
 
 First release candidate
