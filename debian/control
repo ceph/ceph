@@ -1044,7 +1044,7 @@ Package: radosgw
 Architecture: linux-any
 Depends: ceph-common (= ${binary:Version}),
          librgw2 (= ${binary:Version}),
-         mime-support,
+         media-types | mime-support,
          ${misc:Depends},
          ${shlibs:Depends},
 Suggests: gawk,
