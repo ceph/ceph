@@ -110,7 +110,7 @@ void FatalSignal::install_oneshot_signal_handler()
   //       see handle_fatal_signal()
 }
 
-static void print_segv_info(const siginfo_t& siginfo)
+[[maybe_unused]] static void print_segv_info(const siginfo_t& siginfo)
 {
   std::cerr \
      << "Dump of siginfo:" << std::endl
@@ -139,7 +139,7 @@ static void print_segv_info(const siginfo_t& siginfo)
   std::cerr << std::flush;
 }
 
-static void print_proc_maps()
+[[maybe_unused]] static void print_proc_maps()
 {
   const int fd = ::open("/proc/self/maps", O_RDONLY);
   if (fd < 0) {
@@ -168,17 +168,20 @@ static void print_proc_maps()
 [[gnu::noinline]] void FatalSignal::signaled(const int signum,
                                              const siginfo_t& siginfo)
 {
+  // Commented out for clean backtrace logs,
+  // can be used if needed:
+  // print_proc_maps();
+  // print_segv_info(siginfo);
+
   switch (signum) {
   case SIGSEGV:
-    print_backtrace("Segmentation fault");
-    print_segv_info(siginfo);
+    print_backtrace("Got SIGSEGV");
     break;
   case SIGABRT:
-    print_backtrace("Aborting");
+    print_backtrace("Got SIGABRT");
     break;
   default:
-    print_backtrace(fmt::format("Signal {}", signum));
+    print_backtrace(fmt::format("Got signal {}", signum));
     break;
   }
-  print_proc_maps();
 }
