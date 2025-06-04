@@ -8,7 +8,8 @@ else()
 endif()
 
 add_library(libglobal_objs OBJECT ${libglobal_srcs})
-target_link_libraries(libglobal_objs legacy-option-headers)
+target_link_libraries(libglobal_objs legacy-option-headers
+  Breakpad::client)
 
 add_library(global-static STATIC
   $<TARGET_OBJECTS:libglobal_objs>)

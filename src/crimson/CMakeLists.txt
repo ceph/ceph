@@ -138,7 +138,7 @@ if(WITH_JAEGER)
 endif()
 
 if(WITH_BREAKPAD)
-  list(APPEND crimson_common_public_deps breakpad)
+  list(APPEND crimson_common_deps Breakpad::client)
 endif()
 
 if(NOT WITH_SYSTEM_BOOST)
