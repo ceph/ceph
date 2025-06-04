@@ -1,7 +1,9 @@
 #include <common/keyring.h>
 #include <gmock/gmock-matchers.h>
 #include <gtest/gtest.h>
+extern "C" {
 #include <keyutils.h>
+}
 
 namespace ceph {
 

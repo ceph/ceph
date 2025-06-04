@@ -258,5 +258,6 @@ if(HAVE_KEYUTILS)
 
   set(keyring_srcs
     keyring.cc)
-  add_library(keyring OBJECT ${keyring_srcs})
+  add_library(keyring STATIC ${keyring_srcs})
+  target_link_libraries(keyring keyutils::keyutils)
 endif()
