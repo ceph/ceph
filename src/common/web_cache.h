@@ -18,8 +18,6 @@
 #include <fmt/ostream.h>
 
 #include <atomic>
-#include <boost/asio/spawn.hpp>
-#include <boost/asio/ts/netfwd.hpp>
 #include <chrono>
 #include <iterator>
 #include <list>
