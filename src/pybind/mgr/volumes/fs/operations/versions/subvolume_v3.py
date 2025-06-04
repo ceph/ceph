@@ -73,6 +73,7 @@ class SubvolumeV3(SubvolumeV2):
             self.uuid = uuid
         else:
             self.uuid = uuid4()
+
         self.meta = f'{self.subvol_dir}/.meta.{self.uuid}'
 
         # encode these variables since they'll be used in __init__() below and
@@ -154,6 +155,12 @@ class SubvolumeV3(SubvolumeV2):
     def create_or_update_meta_file(self, subvol_type):
         super(SubvolumeV3, self).create_or_update_meta_file(subvol_type)
 
+        try:
+            self.fs.stat(self.current_meta)
+            self.fs.unlink(self.current_meta)
+        except cephfs.ObjectNotFound:
+            pass
+
         self.fs.symlink(basename(self.meta), self.current_meta)
 
     def _create(self, mode, attrs, subvol_type, auth=True):
@@ -216,15 +223,17 @@ class SubvolumeV3(SubvolumeV2):
         super(SubvolumeV3, self).remove(retainsnaps, internal_cleanup)
 
         # if entire subvol dir was deleted, and not just incarnation dir, then
-        # .meta file was also deleted along and therefore skipping unlinking/
+        # .meta file was also deleted along and therefore skip unlinking/
         # re-linking it and return.
         try:
             self.fs.stat(self.subvol_dir)
         except cephfs.ObjectNotFound:
             return
 
-        self.fs.unlink(self.current_meta)
-        self.fs.symlink('dummy', self.current_meta)
+        #self.fs.unlink(self.current_meta)
+        #self.fs.symlink('dummy', self.current_meta)
+        #self.uuid = None
+        #self.meta = self.current_meta
 
     # TODO: base dir should be deleted in subvol v3 too when no snaps are
     # retained on any incarnation, right?
@@ -337,7 +346,7 @@ class SubvolumeV3(SubvolumeV2):
         # adding a delay using mgr/volumes/snapshot_clone_delay config option.
         try:
             self.fs.stat(snap_path)
-        except cephfs.Error as e:
+        except cephfs.ObjectNotFound as e:
             if e.errno == errno.ENOENT:
                 raise VolumeException(-errno.ENOENT,
                                       f'snapshot \'{snap_name}\' does not exist')

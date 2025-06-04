@@ -21,6 +21,7 @@ class MetadataMgrException(Exception):
     def __init__(self, error_code, error_message):
         self.errno = error_code
         self.error_str = error_message
+        log.info(f'{self.__class__.__name__}: {str(self)}')
 
     def __str__(self):
         return "{0} ({1})".format(self.errno, self.error_str)
