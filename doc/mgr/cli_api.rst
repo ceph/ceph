@@ -1,20 +1,19 @@
 CLI API Commands Module
 =======================
 
-The CLI API module exposes most of the ceph-mgr Python API via CLI.  This API
-can be benchmarked for further testing.
+The CLI API module exposes most of the ceph-mgr Python API via CLI commands.
+This API can be benchmarked.
 
 Enabling
 --------
 
-Enable the ``cli api commands`` module by running the following command:
+Enable the ``cli api`` module by running the following command:
 
 .. prompt:: bash #
 
    ceph mgr module enable cli_api
 
-Ensure that the ``cli api commands`` module is enabled by running the following
-command:
+Ensure that the ``cli api`` module is enabled by running the following command:
 
 .. prompt:: bash #
 
@@ -23,7 +22,7 @@ command:
 Usage
 --------
 
-This the the general form of Manager module commands: 
+This the the general form of Manager CLI commands: 
 
 .. prompt:: bash #
 
@@ -35,7 +34,7 @@ Print the list of servers by running the following command:
 
    ceph mgr cli list_servers
 
-List all available mgr module commands by running the following command:
+List all available Manager module commands by running the following command:
 
 .. prompt:: bash #
 
