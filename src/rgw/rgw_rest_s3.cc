@@ -3711,6 +3711,7 @@ void RGWRestoreObj_ObjStore_S3::send_response()
 int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y)
 {
   const char *if_unmod = s->info.env->get("HTTP_X_AMZ_DELETE_IF_UNMODIFIED_SINCE");
+  const char *if_last_mod_time_match = s->info.env->get("HTTP_X_AMZ_IF_MATCH_LAST_MODIFIED_TIME");
 
   if (s->system_request) {
     s->info.args.get_bool(RGW_SYS_PARAM_PREFIX "no-precondition-error", &no_precondition_error, false);
@@ -3725,6 +3726,15 @@ int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y)
       return -EINVAL;
     }
     unmod_since = utime_t(epoch, nsec).to_real_time();
+  }
+
+  if (if_last_mod_time_match) {
+    std::string if_last_mod_match_decoded = url_decode(if_last_mod_time_match);
+    int r = parse_time(if_last_mod_match_decoded.c_str(), &last_mod_time_match);
+    if (r < 0) {
+      ldpp_dout(this, 10) << "failed to parse time: " << if_last_mod_match_decoded << dendl;
+      return r;
+    }
   }
 
   const char *bypass_gov_header = s->info.env->get("HTTP_X_AMZ_BYPASS_GOVERNANCE_RETENTION");
