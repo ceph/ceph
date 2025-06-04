@@ -624,9 +624,9 @@ class CephadmServe:
         for spec in specs:
             try:
                 # this will populate daemon deploy/removal queue for this service spec
-                self._apply_service(spec)
+                rank_map = self._apply_service(spec)
                 # this finalizes what to deploy for this service
-                conflicting_daemons, daemons_to_deploy, daemons_to_remove = self.prepare_daemons_to_add_and_remove_by_service(spec)
+                conflicting_daemons, daemons_to_deploy, daemons_to_remove = self.prepare_daemons_to_add_and_remove_by_service(spec, rank_map)
                 # compiles all these lists so we can split on host instead of service
                 all_conflicting_daemons.extend(conflicting_daemons)
                 all_daemons_to_deploy.extend(daemons_to_deploy)
@@ -795,7 +795,7 @@ class CephadmServe:
         else:
             self.mgr.remove_health_warning('CEPHADM_RGW')
 
-    def _apply_service(self, spec: ServiceSpec) -> None:
+    def _apply_service(self, spec: ServiceSpec) -> Optional[Dict[int, Dict[int, Optional[str]]]]:
         """
         Schedule a service.  Deploy new daemons or remove old ones, depending
         on the target label and count specified in the placement.
@@ -806,10 +806,10 @@ class CephadmServe:
         service_name = spec.service_name()
         if spec.unmanaged:
             self.log.debug('Skipping unmanaged service %s' % service_name)
-            return
+            return None
         if spec.preview_only:
             self.log.debug('Skipping preview_only service %s' % service_name)
-            return
+            return None
         self.log.debug('Applying service %s spec' % service_name)
 
         if service_type == 'agent':
@@ -819,7 +819,7 @@ class CephadmServe:
             except Exception:
                 self.log.info(
                     'Delaying applying agent spec until cephadm endpoint root cert created')
-                return
+                return None
 
         self._apply_service_config(spec)
 
@@ -828,16 +828,17 @@ class CephadmServe:
             # TODO: return True would result in a busy loop
             # can't know if daemon count changed; create_from_spec doesn't
             # return a solid indication
-            return
+            return None
 
         try:
-            slots_to_add, daemons_to_remove = self.discover_daemons_to_add_and_remove_by_service(spec)
+            slots_to_add, daemons_to_remove, rank_map = self.discover_daemons_to_add_and_remove_by_service(spec)
             self.mgr.daemon_deploy_queue.add_to_queue([(daemon_to_add, spec) for daemon_to_add in slots_to_add])
             self.mgr.daemon_removal_queue.add_to_queue([(daemon_to_remove, spec) for daemon_to_remove in daemons_to_remove])
+            return rank_map
         except OrchestratorError:
-            return
+            return None
 
-    def discover_daemons_to_add_and_remove_by_service(self, spec: ServiceSpec) -> Tuple[List[DaemonPlacement], List[orchestrator.DaemonDescription]]:
+    def discover_daemons_to_add_and_remove_by_service(self, spec: ServiceSpec) -> Tuple[List[DaemonPlacement], List[orchestrator.DaemonDescription], Optional[Dict[int, Dict[int, Optional[str]]]]]:
         service_type = spec.service_type
         service_name = spec.service_name()
         svc = service_registry.get_service(service_type)
@@ -943,7 +944,7 @@ class CephadmServe:
                                         warnings)
             raise OrchestratorError(msg)
 
-        return slots_to_add, daemons_to_remove
+        return slots_to_add, daemons_to_remove, rank_map
 
     def gather_conflicting_daemons_for_service(self, spec: ServiceSpec) -> List[orchestrator.DaemonDescription]:
         slots_to_add = self.mgr.daemon_deploy_queue.get_queued_daemon_placements_by_service(spec.service_name())
@@ -969,16 +970,13 @@ class CephadmServe:
                     break
         return conflict_daemons
 
-    def handle_slot_names_and_rank_map_for_service(self, spec: ServiceSpec) -> List[DaemonPlacement]:
+    def handle_slot_names_and_rank_map_for_service(self, spec: ServiceSpec, rank_map: Optional[Dict[int, Dict[int, Optional[str]]]]) -> List[DaemonPlacement]:
         service_type = spec.service_type
         service_name = spec.service_name()
         slots_to_add = self.mgr.daemon_deploy_queue.get_queued_daemon_placements_by_service(spec.service_name())
         daemons_to_remove = self.mgr.daemon_removal_queue.get_queued_daemon_descriptions_by_service(spec.service_name())
         svc = service_registry.get_service(service_type)
         daemons = self.mgr.cache.get_daemons_by_service(service_name)
-        rank_map = None
-        if svc.ranked(spec):
-            rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
         # assign names
         for i in range(len(slots_to_add)):
             slot = slots_to_add[i]
@@ -1142,7 +1140,11 @@ class CephadmServe:
             daemon_place_fails.append(msg)
         return r, hosts_altered, daemon_place_fails
 
-    def prepare_daemons_to_add_and_remove_by_service(self, spec: ServiceSpec) -> Tuple[List[orchestrator.DaemonDescription], List[CephadmDaemonDeploySpec], List[orchestrator.DaemonDescription]]:
+    def prepare_daemons_to_add_and_remove_by_service(
+        self,
+        spec: ServiceSpec,
+        rank_map: Optional[Dict[int, Dict[int, Optional[str]]]]
+    ) -> Tuple[List[orchestrator.DaemonDescription], List[CephadmDaemonDeploySpec], List[orchestrator.DaemonDescription]]:
         service_type = spec.service_type
         service_name = spec.service_name()
         svc = service_registry.get_service(service_type)
@@ -1158,7 +1160,7 @@ class CephadmServe:
 
         try:
             # assign names
-            slots_to_add = self.handle_slot_names_and_rank_map_for_service(spec)
+            slots_to_add = self.handle_slot_names_and_rank_map_for_service(spec, rank_map)
 
             # create daemons
             conflicting_daemons = self.gather_conflicting_daemons_for_service(spec)
