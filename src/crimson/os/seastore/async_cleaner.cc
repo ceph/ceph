@@ -377,9 +377,9 @@ JournalTrimmerImpl::config_t::get_default(
     target_alloc_bytes,
     min_journal_bytes,
     max_journal_bytes,
-    1<<26,// rewrite_dirty_bytes_per_cycle
-    1<<17,// rewrite_dirty_bytes_per_trans
-    1<<24 // max_backref_bytes_per_cycle
+    1<<26,// rewrite_dirty_bytes_per_cycle, 64MB
+    1<<17,// rewrite_dirty_bytes_per_trans, 128KB
+    1<<24 // max_backref_bytes_per_cycle, 16MB
   };
 }
 
@@ -411,9 +411,9 @@ JournalTrimmerImpl::config_t::get_test(
     max_journal_bytes,
     (target_dirty_bytes > 1<<26)
       ? 1<<25
-      : target_dirty_bytes / 2,// rewrite_dirty_bytes_per_cycle
-    1<<17,// rewrite_dirty_bytes_per_trans
-    1<<24 // max_backref_bytes_per_cycle
+      : target_dirty_bytes / 2, // rewrite_dirty_bytes_per_cycle
+    1<<17,// rewrite_dirty_bytes_per_trans, 128KB
+    1<<24 // max_backref_bytes_per_cycle, 16MB
   };
 }
 
