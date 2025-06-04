@@ -545,7 +545,7 @@ endif()
 if(WIN32)
     set(WITH_BREAKPAD_DEFAULT OFF)
 else()
-    set(WITH_BREAKPAD_DEFAULT ON)
+    set(WITH_BREAKPAD_DEFAULT OFF)
 endif()
 
 option(WITH_BREAKPAD "Build with Google Breakpad crash reporter"  ${WITH_BREAKPAD_DEFAULT})
