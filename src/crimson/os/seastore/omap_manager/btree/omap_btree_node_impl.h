@@ -250,8 +250,7 @@ struct OMapInnerNode
   }
 
   ~OMapInnerNode() {
-    if (this->is_valid()
-	&& !this->is_pending()
+    if (this->is_stable()
 	&& !this->is_btree_root()
 	// dirty omap extent may not be accessed/linked yet
 	&& this->base_child_t::has_parent_tracker()) {
@@ -352,8 +351,7 @@ struct OMapLeafNode
   }
 
   ~OMapLeafNode() {
-    if (this->is_valid()
-	&& !this->is_pending()
+    if (this->is_stable()
 	&& !this->is_btree_root()
 	// dirty omap extent may not be accessed/linked yet
 	&& this->base_child_t::has_parent_tracker()) {

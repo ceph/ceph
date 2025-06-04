@@ -305,7 +305,7 @@ class NodeExtentAccessorT {
       assert(p_recorder->node_type() == NODE_TYPE);
       assert(p_recorder->field_type() == FIELD_TYPE);
       recorder = static_cast<recorder_t*>(p_recorder);
-    } else if (!extent->is_mutable() && extent->is_valid()) {
+    } else if (extent->is_stable()) {
       state = nextent_state_t::READ_ONLY;
       // mut is empty
       assert(extent->get_recorder() == nullptr ||
@@ -355,7 +355,7 @@ class NodeExtentAccessorT {
   void prepare_mutate(context_t c) {
     assert(!is_retired());
     if (state == nextent_state_t::READ_ONLY) {
-      assert(!extent->is_mutable());
+      assert(extent->is_stable());
       auto ref_recorder = recorder_t::create_for_encode(c.vb);
       recorder = static_cast<recorder_t*>(ref_recorder.get());
       extent = extent->mutate(c, std::move(ref_recorder));

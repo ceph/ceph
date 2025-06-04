@@ -128,7 +128,7 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
   }
 
   void prepare_commit() final {
-    if (is_mutation_pending() || is_exist_mutation_pending()) {
+    if (has_mutation()) {
       ceph_assert(!cached_overwrites.is_empty());
       if (cached_overwrites.has_cached_bptr()) {
         set_bptr(cached_overwrites.move_cached_bptr());

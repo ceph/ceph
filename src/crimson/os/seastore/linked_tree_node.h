@@ -206,8 +206,8 @@ public:
   virtual key_t node_begin() const = 0;
 protected:
   parent_tracker_ref<ParentT> parent_tracker;
-  virtual bool valid() const = 0;
-  virtual bool pending() const = 0;
+  virtual bool _is_valid() const = 0;
+  virtual bool _is_stable() const = 0;
   template <typename, typename, typename>
   friend class ParentNode;
 };
@@ -360,8 +360,8 @@ public:
     assert(pos < me.get_size());
     assert(pos < children.capacity());
     assert(child);
-    ceph_assert(!me.is_pending());
-    assert(child->valid() && !child->pending());
+    ceph_assert(me.is_stable());
+    assert(child->_is_stable());
     assert(!children[pos]);
     ceph_assert(is_valid_child_ptr(child));
     update_child_ptr(pos, child);
@@ -460,7 +460,7 @@ protected:
 
   void on_rewrite(Transaction &t, T &foreign_extent) {
     auto &me = down_cast();
-    if (!foreign_extent.is_pending()) {
+    if (foreign_extent.is_stable()) {
       foreign_extent.add_copy_dest(t, &me);
       copy_sources.emplace(&foreign_extent);
     } else {
@@ -508,7 +508,7 @@ protected:
     T &src)
   {
     ceph_assert(dest.is_initial_pending());
-    if (!src.is_pending()) {
+    if (src.is_stable()) {
       src.add_copy_dest(t, &dest);
       dest.copy_sources.emplace(&src);
     } else if (src.is_mutation_pending()) {
@@ -713,7 +713,7 @@ protected:
     for (auto it = children.begin();
 	it != children.begin() + down_cast().get_size();
 	it++) {
-      if (is_valid_child_ptr(*it) && (*it)->valid()) {
+      if (is_valid_child_ptr(*it) && (*it)->_is_valid()) {
 	return false;
       }
     }
@@ -1041,11 +1041,11 @@ private:
     assert(iter.get_key() == me.get_begin());
     return iter.get_offset();
   }
-  bool valid() const final {
+  bool _is_valid() const final {
     return down_cast().is_valid();
   }
-  bool pending() const final {
-    return down_cast().is_pending();
+  bool _is_stable() const final {
+    return down_cast().is_stable();
   }
   key_t node_begin() const final {
     return down_cast().get_begin();

@@ -563,7 +563,7 @@ public:
 	  std::optional<ceph::bufferptr> original_bptr;
 	  // TODO: preserve the bufferspace if partially loaded
 	  if (ext && ext->is_fully_loaded()) {
-	    ceph_assert(!ext->is_mutable());
+	    ceph_assert(ext->is_data_stable());
 	    ceph_assert(ext->get_length() >= original_len);
 	    ceph_assert(ext->get_paddr() == original_paddr);
 	    original_bptr = ext->get_bptr();
