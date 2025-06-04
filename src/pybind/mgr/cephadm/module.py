@@ -2732,7 +2732,7 @@ Then run the following:
         if not args:
             raise OrchestratorError('Unable to find daemon(s) %s' % (names))
         self.log.info('Remove daemons %s' % ' '.join([a[0] for a in args]))
-        return self._remove_daemons(args)
+        return [msg for msgs in self._remove_daemons(args) for msg in msgs]
 
     @handle_orch_error
     def remove_service(self, service_name: str, force: bool = False) -> str:
@@ -3098,8 +3098,8 @@ Then run the following:
         return sorted(deps)
 
     @forall_hosts
-    def _remove_daemons(self, name: str, host: str) -> str:
-        return CephadmServe(self)._remove_daemon(name, host)
+    def _remove_daemons(self, name: str, host: str) -> List[str]:
+        return self.wait_async(CephadmServe(self)._remove_daemon([name], host))
 
     def _check_pool_exists(self, pool: str, service_name: str) -> None:
         logger.info(f'Checking pool "{pool}" exists for service {service_name}')

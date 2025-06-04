@@ -892,7 +892,7 @@ class OSDRemovalQueue(object):
             assert osd.hostname is not None
 
             if self.mgr.cache.has_daemon(f'osd.{osd.osd_id}'):
-                CephadmServe(self.mgr)._remove_daemon(f'osd.{osd.osd_id}', osd.hostname)
+                self.mgr.wait_async(CephadmServe(self.mgr)._remove_daemon([f'osd.{osd.osd_id}'], osd.hostname))
                 logger.info(f"Successfully removed {osd} on {osd.hostname}")
                 result = True
             else:
