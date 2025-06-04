@@ -34,9 +34,6 @@
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
 #include "msg/msg_types.h"
-#ifdef HAVE_BREAKPAD
-#include "breakpad/src/client/linux/handler/exception_handler.h"
-#endif
 #ifdef WITH_CRIMSON
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/perf_counters_collection.h"
@@ -48,6 +45,12 @@
 
 
 #include "crush/CrushLocation.h"
+
+#ifdef HAVE_BREAKPAD
+namespace google_breakpad {
+  class ExceptionHandler;
+}
+#endif
 
 class AdminSocket;
 class AdminSocketHook;

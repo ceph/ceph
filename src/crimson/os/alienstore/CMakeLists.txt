@@ -32,6 +32,9 @@ if(WITH_CEPH_DEBUG_MUTEX)
 endif()
 add_library(crimson-alien-common STATIC
   ${crimson_alien_common_srcs})
+if(WITH_BREAKPAD)
+  target_link_libraries(crimson-alien-common Breakpad::client)
+endif()
 
 add_library(alien::cflags INTERFACE IMPORTED)
 set_target_properties(alien::cflags PROPERTIES
