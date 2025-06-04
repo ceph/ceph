@@ -34,6 +34,15 @@ The above configuration changes are found in the PR. Please update the relevant 
           }
       );
 
+      // Print all the lines that were changed in the files
+      core.info("Printing all changed lines in the pull request files...");
+      files.forEach(file => {
+        if (file.patch) {
+          core.info(`Changes in file: ${file.filename}`);
+          core.info(file.patch);
+        }
+      });
+
       // Filter for `.yaml.in` files in `src/common/options` directory
       const yamlInFiles = files.filter(file =>
         file.filename.startsWith("src/common/options/") && file.filename.endsWith(".yaml.in")

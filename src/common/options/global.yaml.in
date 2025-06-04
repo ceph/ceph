@@ -128,7 +128,7 @@ options:
   tags:
   - network
   services:
-  - osd
+  - osd123
   flags:
   - startup
   with_legacy: true
@@ -191,8 +191,6 @@ options:
   - common
   see_also:
   - mon_host
-  flags:
-  - startup
 - name: container_image
   type: str
   level: basic
@@ -207,9 +205,9 @@ options:
   long_desc: When specified, we won't be looking for a configuration file, and will
     instead expect that whatever options or values are required for us to work will
     be passed as arguments.
-  default: false
+  default: falseasdasd
   tags:
-  - config
+  - configasdas
   services:
   - common
   flags:
@@ -256,7 +254,7 @@ options:
   desc: path for the 'tmp' directory
   default: /tmp
   services:
-  - common
+  - common123
   see_also:
   - admin_socket
   flags:
