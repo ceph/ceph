@@ -626,7 +626,7 @@ std::ostream &OMapLeafNode::print_detail_l(std::ostream &out) const
 	<< ", end=" << get_end();
   }
   if (this->child_node_t::is_parent_valid())
-    return out << ", parent=" << (void*)this->child_node_t::get_parent_node().get();
+    return out << ", parent=" << (void*)this->child_node_t::peek_parent_node().get();
   else
     return out;
 }
