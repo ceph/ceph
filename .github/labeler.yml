@@ -297,6 +297,7 @@ rgw:
   - src/test/librgw_*
   - src/test/rgw/**
   - src/test/test_rgw*
+  - doc/radosgw
 
 ceph-volume:
   - src/ceph-volume/**
