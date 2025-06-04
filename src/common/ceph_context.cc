@@ -22,6 +22,10 @@
 
 #include <boost/algorithm/string.hpp>
 
+#ifdef HAVE_BREAKPAD
+#include <breakpad/client/linux/handler/exception_handler.h>
+#endif
+
 #include "include/common_fwd.h"
 #include "include/mempool.h"
 #include "include/stringify.h"

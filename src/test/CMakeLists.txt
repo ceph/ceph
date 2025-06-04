@@ -1032,7 +1032,7 @@ if(WITH_BREAKPAD)
 add_executable(unittest_ceph_breakpad
   ceph_breakpad.cc)
 add_ceph_unittest(unittest_ceph_breakpad)
-target_link_libraries(unittest_ceph_breakpad ceph-common global)
+target_link_libraries(unittest_ceph_breakpad ceph-common global Breakpad::breakpad)
 endif()
 
 if(NOT WIN32)

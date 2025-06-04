@@ -327,46 +327,62 @@ endif(WITH_BLKIN)
 
 ## breakpad
 if(WITH_BREAKPAD)
+  include(FindMake)
+  find_make("MAKE_EXECUTABLE" "make_cmd")
+
   set(breakpad_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/breakpad)
   set(lss_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/lss)
 
-  add_custom_target(breakpad_lss_symlink)
-  add_custom_command(
-    TARGET breakpad_lss_symlink
-    PRE_BUILD
-    COMMAND ${CMAKE_COMMAND} -E create_symlink ${lss_SOURCE_DIR} ${breakpad_SOURCE_DIR}/src/third_party/lss
-    COMMENT "Creating symbolic link lss -> breakpad third party"
-  )
   ExternalProject_Add(
     breakpad_project
     SOURCE_DIR "${breakpad_SOURCE_DIR}"
-    CONFIGURE_COMMAND cd "${breakpad_SOURCE_DIR}"
-        COMMAND "${breakpad_SOURCE_DIR}/configure"
-	    "CC=${CMAKE_C_COMPILER}"
-	    "CXX=${CMAKE_CXX_COMPILER}"
-	    "CFLAGS=${CMAKE_C_FLAGS} -fPIC -Wno-unknown-warning-option -Wno-array-bounds  -Wno-maybe-uninitialized"
-	    "CXXFLAGS=${CMAKE_CXX_FLAGS} -fPIC -Wno-unknown-warning-option -Wno-ignored-qualifiers  -Wno-array-bounds  -Wno-maybe-uninitialized"
-            "LDFLAGS=${CMAKE_EXE_LINKER_FLAGS} -fPIC -Wno-unknown-warning-option -Wno-array-bounds  -Wno-maybe-uninitialized"
-    BUILD_COMMAND
-    /bin/sh -cx "cd ${breakpad_SOURCE_DIR} && make"
-    INSTALL_COMMAND ""
+    PATCH_COMMAND ${CMAKE_COMMAND} -E create_symlink ${lss_SOURCE_DIR} ${breakpad_SOURCE_DIR}/src/third_party/lss
+    # the minidump processor is used when processing the minidump, we only
+    # use the breakpad's client for generating the minidump at this moment.
+    #
+    # also cancel the -Werror used by breakpad, as new compilers are more
+    # picky, and might fail the build because of warnings.
+    CONFIGURE_COMMAND ${breakpad_SOURCE_DIR}/configure --disable-processor --disable-tools --prefix=<INSTALL_DIR>
+            "CC=${CMAKE_C_COMPILER}"
+            "CFLAGS=${CMAKE_C_FLAGS} -fPIC"
+            "CXX=${CMAKE_CXX_COMPILER}"
+            "CXXFLAGS=${CMAKE_CXX_FLAGS} -fPIC -Wno-error"
+    BUILD_COMMAND ${make_cmd}
+    # Install this library to ensure headers are included with proper prefixed paths
+    # (e.g., "breakpad/client/linux/handler/minidump_descriptor.h") rather than
+    # unprefixed paths (e.g., "client/linux/handler/minidump_descriptor.h").
+    # Prefixed paths make the library dependency explicit and avoid ambiguity.
+    #
+    # Note: DESTDIR is unset to prevent Debian packaging from overriding install
+    # paths, which would break header/library discovery during build. This is safe
+    # since breakpad artifacts are not redistributed in the final package.
+    INSTALL_COMMAND ${CMAKE_COMMAND} -E env --unset=DESTDIR ${make_cmd} install
     UPDATE_DISCONNECTED ON
-    BUILD_IN_SOURCE ON
-    DEPENDS breakpad_lss_symlink
-    BUILD_BYPRODUCTS "${breakpad_SOURCE_DIR}/src/libbreakpad.a;${breakpad_SOURCE_DIR}/src/client/linux/libbreakpad_client.a"
-  )
+    BUILD_BYPRODUCTS "<INSTALL_DIR>/lib/libbreakpad_client.a")
 
-  add_library(libbreakpad STATIC IMPORTED GLOBAL)
-  set_property(TARGET libbreakpad PROPERTY IMPORTED_LOCATION ${breakpad_SOURCE_DIR}/src/libbreakpad.a)
-  add_library(libbreakpad_client STATIC IMPORTED GLOBAL)
-  set_property(TARGET libbreakpad_client PROPERTY IMPORTED_LOCATION ${breakpad_SOURCE_DIR}/src/client/linux/libbreakpad_client.a)
+  ExternalProject_Get_Property(breakpad_project INSTALL_DIR)
+  # create the directory so cmake won't complain when looking at the imported
+  # target
+  file(MAKE_DIRECTORY ${INSTALL_DIR}/include/breakpad)
 
-  include_directories(SYSTEM "${breakpad_SOURCE_DIR}/src")
-  add_dependencies(libbreakpad breakpad_project)
-  add_dependencies(libbreakpad_client breakpad_project)
+  add_library(Breakpad::client STATIC IMPORTED GLOBAL)
+  add_dependencies(Breakpad::client breakpad_project)
+  set_target_properties(Breakpad::client PROPERTIES
+    # unfortunately, breakpad's public headers use internal include paths
+    # (e.g., "client/linux/..." rather than the installed include path
+    # (e.g., "breakpad/client/linux/..."), because the library's source
+    # structure differs between build time and install time. so we have to
+    # add ${INSTALL_DIR}/include/breakpad as well.
+    INTERFACE_INCLUDE_DIRECTORIES "${INSTALL_DIR}/include;${INSTALL_DIR}/include/breakpad"
+    IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
+    IMPORTED_LOCATION "${INSTALL_DIR}/lib/libbreakpad_client.a")
 
-  add_library(breakpad INTERFACE)
-  target_link_libraries(breakpad INTERFACE libbreakpad libbreakpad_client)
+  # for header-only library
+  add_library(Breakpad::breakpad INTERFACE IMPORTED GLOBAL)
+  add_dependencies(Breakpad::breakpad breakpad_project)
+  set_target_properties(Breakpad::breakpad PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${INSTALL_DIR}/include"
+    IMPORTED_LINK_INTERFACE_LANGUAGES "CXX")
 endif(WITH_BREAKPAD)
 
 if(WITH_JAEGER)
@@ -525,11 +541,6 @@ if(WITH_JAEGER)
   target_link_libraries(common-objs jaeger_base)
 endif()
 
-if(WITH_BREAKPAD)
-  add_dependencies(common-objs breakpad_project)
-  target_link_libraries(common-objs breakpad)
-endif()
-
 CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
 add_subdirectory(auth)
 add_subdirectory(common)
@@ -591,10 +602,6 @@ if(WITH_JAEGER)
   list(APPEND ceph_common_deps jaeger_base)
 endif()
 
-if(WITH_BREAKPAD)
-  list(APPEND ceph_common_deps breakpad)
-endif()
-
 if(WIN32)
   list(APPEND ceph_common_deps ws2_32 mswsock iphlpapi bcrypt)
   list(APPEND ceph_common_deps dlfcn_win32)
@@ -623,16 +630,16 @@ if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
   endif()
 endif()
 
+if(WITH_BREAKPAD)
+  list(APPEND ceph_common_deps Breakpad::client)
+endif()
+
 add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common
   ${ceph_common_deps}
   legacy-option-headers)
 if(WITH_JAEGER)
 add_dependencies(common jaeger_base)
-endif()
-
-if(WITH_BREAKPAD)
-add_dependencies(common breakpad_project)
 endif()
 
 if (WIN32)
