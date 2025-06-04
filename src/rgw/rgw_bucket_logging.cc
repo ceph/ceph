@@ -9,6 +9,7 @@
 #include "rgw_sal.h"
 #include "rgw_op.h"
 #include "rgw_auth_s3.h"
+#include <boost/lexical_cast.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -171,6 +172,7 @@ std::string configuration::to_json_str() const {
   return ss.str();
 }
 
+// create a random string of N characters
 template<size_t N>
 std::string unique_string() {
   static const std::string possible_characters{"0123456789ABCDEFGHIJKLMNOPQRSTUVWXY"};
@@ -181,6 +183,27 @@ std::string unique_string() {
   std::string str(N, '\0');
   std::generate_n(str.begin(), N, [&](){return possible_characters[dist(engine)];});
   return str;
+}
+
+// create an incremental string of N characters if possible
+// fallback to a random string of N characters if not
+template<size_t N>
+std::string incremental_string(const DoutPrefixProvider *dpp, std::optional<std::string> old_name) {
+  // for the fist time we create a string of zeros
+  if (!old_name) {
+    return std::string(N, '0');
+  }
+  const auto str_counter = old_name->substr(old_name->length() - N+1, N);
+  try {
+    auto counter = boost::lexical_cast<unsigned long>(str_counter);
+    ++counter;
+    static const auto format = fmt::format("{{:0>{}}}", N);
+    return fmt::vformat(format, fmt::make_format_args(counter));
+  } catch (const boost::bad_lexical_cast& e) {
+    ldpp_dout(dpp, 5) << "WARNING: failed to convert string '" << str_counter <<
+      "' to counter. " <<e.what() << ". will create random temporary logging file name" << dendl;
+    return unique_string<N>();
+  }
 }
 
 constexpr size_t UniqueStringLength = 16;
@@ -220,13 +243,13 @@ int new_logging_object(const configuration& conf,
     std::string& obj_name,
     const DoutPrefixProvider *dpp,
     optional_yield y,
-    bool init_obj,
+    std::optional<std::string> old_name,
     RGWObjVersionTracker* objv_tracker) {
   const auto tt = ceph::coarse_real_time::clock::to_time_t(ceph::coarse_real_time::clock::now());
   std::tm t{};
   localtime_r(&tt, &t);
 
-  const auto unique = unique_string<UniqueStringLength>();
+  const auto unique = incremental_string<UniqueStringLength>(dpp, old_name);
 
   switch (conf.obj_key_format) {
     case KeyFormat::Simple:
@@ -251,7 +274,7 @@ int new_logging_object(const configuration& conf,
       break;
   }
   const auto& target_bucket_id = target_bucket->get_key();
-  int ret = target_bucket->set_logging_object_name(obj_name, conf.target_prefix, y, dpp, init_obj, objv_tracker);
+  int ret = target_bucket->set_logging_object_name(obj_name, conf.target_prefix, y, dpp, (old_name == std::nullopt), objv_tracker);
   if (ret == -EEXIST || ret == -ECANCELED) {
    if (ret = target_bucket->get_logging_object_name(obj_name, conf.target_prefix, y, dpp, nullptr); ret < 0) {
       ldpp_dout(dpp, 1) << "ERROR: failed to get name of logging object of bucket '" <<
@@ -330,7 +353,7 @@ int rollover_logging_object(const configuration& conf,
     return -EINVAL;
   }
   const auto old_obj = obj_name;
-  const int ret = new_logging_object(conf, target_bucket, obj_name, dpp, y, false, objv_tracker);
+  const int ret = new_logging_object(conf, target_bucket, obj_name, dpp, y, old_obj, objv_tracker);
   if (ret == -ECANCELED) {
     ldpp_dout(dpp, 20) << "INFO: rollover already performed for object '" << old_obj <<  "' to logging bucket '" <<
       target_bucket->get_key() << "'. ret = " << ret << dendl;
@@ -455,7 +478,7 @@ int log_record(rgw::sal::Driver* driver,
     }
   } else if (ret == -ENOENT) {
     // try to create the temporary log object for the first time
-    ret = new_logging_object(conf, target_bucket, obj_name, dpp, y, true, nullptr);
+    ret = new_logging_object(conf, target_bucket, obj_name, dpp, y, std::nullopt, nullptr);
     if (ret == 0) {
       ldpp_dout(dpp, 20) << "INFO: first time logging for bucket '" << target_bucket_id << "' and prefix '" <<
         conf.target_prefix << "'" << dendl;
