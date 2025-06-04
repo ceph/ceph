@@ -1037,13 +1037,23 @@ class CephadmServe:
         return daemons_to_remove
 
     async def remove_given_daemons(self, daemons_to_remove: List[orchestrator.DaemonDescription]) -> Tuple[bool, Set[str]]:
+        if not daemons_to_remove:
+            return (False, set())
         r = False
         hosts_altered: Set[str] = set()
-        for d in daemons_to_remove:
+        daemon_names = [d.name() for d in daemons_to_remove]
+        hostname = daemons_to_remove[0].hostname
+        assert hostname is not None  # for mypy
+        if any(d.hostname != hostname for d in daemons_to_remove):
+            raise OrchestratorError(
+                f'Got daemon removal request with multiple different hosts {set([d.hostname for d in daemons_to_remove])}'
+            )
+        try:
+            await self._remove_daemon(daemon_names, hostname)
             r = True
-            assert d.hostname is not None
-            await self._remove_daemon([d.name()], d.hostname)
-            hosts_altered.add(d.hostname)
+            hosts_altered.add(hostname)
+        except Exception as e:
+            self.mgr.log.error(f"Got exception removing {daemon_names} on {hostname}: {str(e)}")
         return r, hosts_altered
 
     def prep_daemon_specs_for_creation_by_service(self, spec: ServiceSpec, slots_to_add: List[DaemonPlacement]) -> Tuple[List[CephadmDaemonDeploySpec], List[str]]:
