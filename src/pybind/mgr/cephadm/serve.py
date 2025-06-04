@@ -583,7 +583,7 @@ class CephadmServe:
             for e in error:
                 assert e.hostname
                 try:
-                    self._remove_daemon(e.name(), e.hostname, no_post_remove=True)
+                    self.mgr.wait_async(self._remove_daemon([e.name()], e.hostname, no_post_removals={e.name(): True}))
                     self.mgr.events.for_daemon(
                         e.name(), 'INFO', f"Removed duplicated daemon on host '{e.hostname}'")
                 except OrchestratorError as ex:
@@ -630,7 +630,7 @@ class CephadmServe:
                 # compiles all these lists so we can split on host instead of service
                 all_conflicting_daemons.extend(conflicting_daemons)
                 all_daemons_to_deploy.extend(daemons_to_deploy)
-                all_daemons_to_remove.extend(all_daemons_to_remove)
+                all_daemons_to_remove.extend(daemons_to_remove)
             except Exception as e:
                 msg = f'Failed to apply {spec.service_name()} spec {spec}: {str(e)}'
                 self.log.exception(msg)
@@ -651,7 +651,7 @@ class CephadmServe:
             to_remove: List[orchestrator.DaemonDescription]
         ) -> Tuple[bool, Set[str], List[str]]:
             r: bool = False
-            removed_conflict_daemons, conflict_hosts_altered = self.remove_given_daemons(conflicts)
+            removed_conflict_daemons, conflict_hosts_altered = await self.remove_given_daemons(conflicts)
             if removed_conflict_daemons:
                 r = True
                 self.mgr.spec_store.mark_needs_configuration(spec.service_name())
@@ -660,7 +660,7 @@ class CephadmServe:
             if daemons_placed:
                 r = True
                 hosts_altered.update(daemon_deployed_hosts)
-            removed_daemons, removed_daemon_hosts = self.remove_given_daemons(to_remove)
+            removed_daemons, removed_daemon_hosts = await self.remove_given_daemons(to_remove)
             if removed_daemons:
                 r = True
                 self.mgr.spec_store.mark_needs_configuration(spec.service_name())
@@ -686,7 +686,7 @@ class CephadmServe:
 
             return await gather(*futures)
 
-        deploy_names = [d.name for d in all_daemons_to_deploy]
+        deploy_names = [d.name() for d in all_daemons_to_deploy]
         rm_names = [d.name() for d in all_conflicting_daemons] + [d.name() for d in all_daemons_to_remove]
         with self.mgr.async_timeout_handler(cmd=f'cephadm deploying ({deploy_names} and removing {rm_names} daemons)'):
             results = self.mgr.wait_async(_deploy_and_remove_all(all_conflicting_daemons, all_daemons_to_deploy, all_daemons_to_remove))
@@ -999,7 +999,7 @@ class CephadmServe:
             # remove daemons now, since we are going to fence them anyway
             for d in daemons_to_remove:
                 assert d.hostname is not None
-                self._remove_daemon(d.name(), d.hostname)
+                self.mgr.wait_async(self._remove_daemon([d.name()], d.hostname))
             daemons_to_remove = []
 
             # fence them
@@ -1036,13 +1036,13 @@ class CephadmServe:
                 break
         return daemons_to_remove
 
-    def remove_given_daemons(self, daemons_to_remove: List[orchestrator.DaemonDescription]) -> Tuple[bool, Set[str]]:
+    async def remove_given_daemons(self, daemons_to_remove: List[orchestrator.DaemonDescription]) -> Tuple[bool, Set[str]]:
         r = False
         hosts_altered: Set[str] = set()
         for d in daemons_to_remove:
             r = True
             assert d.hostname is not None
-            self._remove_daemon(d.name(), d.hostname)
+            await self._remove_daemon([d.name()], d.hostname)
             hosts_altered.add(d.hostname)
         return r, hosts_altered
 
@@ -1190,7 +1190,7 @@ class CephadmServe:
                 # (mon and mgr specs should always exist; osds aren't matched
                 # to a service spec)
                 self.log.info('Removing orphan daemon %s...' % dd.name())
-                self._remove_daemon(dd.name(), dd.hostname)
+                self.mgr.wait_async(self._remove_daemon([dd.name()], dd.hostname))
 
             # ignore unmanaged services
             if spec and spec.unmanaged:
@@ -1677,40 +1677,65 @@ class CephadmServe:
             ic_params.append(ic.to_json(flatten_args=True))
         return ic_meta
 
-    def _remove_daemon(self, name: str, host: str, no_post_remove: bool = False) -> str:
+    async def _remove_daemon(
+        self,
+        names: List[str],
+        host: str,
+        no_post_removals: Optional[Dict[str, bool]] = None
+    ) -> List[str]:
         """
-        Remove a daemon
+        Remove daemons
         """
-        dd = self.mgr.cache.get_daemon(name)
-        daemon_type = dd.daemon_type
-        daemon_id = dd.daemon_id
-        assert (daemon_type is not None and daemon_id is not None)
-        daemon = orchestrator.DaemonDescription(
-            daemon_type=daemon_type,
-            daemon_id=daemon_id,
-            service_name=dd.service_name(),
-            hostname=host)
-
-        with set_exception_subject('service', daemon.service_id(), overwrite=True):
-
-            service_registry.get_service(daemon_type_to_service(daemon_type)).pre_remove(daemon)
-            # NOTE: we are passing the 'force' flag here, which means
-            # we can delete a mon instances data.
-            if dd.ports:
-                args = ['--name', name, '--force', '--tcp-ports', ' '.join(map(str, dd.ports))]
-            else:
-                args = ['--name', name, '--force']
-
+        if not no_post_removals:
+            no_post_removals = {}
+        # Json blob specifying the removal info for each daemon.
+        # Currently that just consists of a name and list of ports.
+        # If it gets more complex we should add a class to
+        # exchange.Deploy to encapsulate it
+        daemon_rm_info: List[Dict[str, Union[str, List[str]]]] = []
+        for name in names:
+            dd = self.mgr.cache.get_daemon(name)
+            daemon_type = dd.daemon_type
+            daemon_id = dd.daemon_id
+            assert (daemon_type is not None and daemon_id is not None)
+            daemon = orchestrator.DaemonDescription(
+                daemon_type=daemon_type,
+                daemon_id=daemon_id,
+                service_name=dd.service_name(),
+                hostname=host)
+            with set_exception_subject('service', daemon.service_id(), overwrite=True):
+                service_registry.get_service(daemon_type_to_service(daemon_type)).pre_remove(daemon)
+            daemon_rm_info.append({'name': name, 'tcp_ports': [str(port) for port in (dd.ports or [])]})
             self.log.info('Removing daemon %s from %s -- ports %s' % (name, host, dd.ports))
-            with self.mgr.async_timeout_handler(host, f'cephadm rm-daemon (daemon {name})'):
-                out, err, code = self.mgr.wait_async(self._run_cephadm(
-                    host, name, 'rm-daemon', args))
-            if not code:
+
+        out, err, code = await self._run_cephadm(
+            host,
+            name,
+            ['_orch', 'rm-daemons'],
+            [],
+            stdin=json.dumps(daemon_rm_info),
+            error_ok=True
+        )
+
+        if len(out) != 1:  # _run_cephadm puts the output into a list, we should only get one thing here
+            raise OrchestratorError(f'Got unexpected non-length 1 list of output in _remove_daemon: {out}')
+        results: Dict[str, int] = json.loads(out[0])
+        msgs: List[str] = []
+        for name in names:
+            dd = self.mgr.cache.get_daemon(name)
+            daemon_type = dd.daemon_type
+            daemon_id = dd.daemon_id
+            assert (daemon_type is not None and daemon_id is not None)
+            daemon = orchestrator.DaemonDescription(
+                daemon_type=daemon_type,
+                daemon_id=daemon_id,
+                service_name=dd.service_name(),
+                hostname=host)
+            if results[name] == 0:
                 # remove item from cache
                 self.mgr.cache.rm_daemon(host, name)
-            self.mgr.cache.invalidate_host_daemons(host)
 
-            if not no_post_remove:
+            if name not in no_post_removals or not no_post_removals[name]:
                 if daemon_type not in ['iscsi']:
                     service_registry.get_service(daemon_type_to_service(
                         daemon_type)).post_remove(daemon, is_failed_deploy=False)
@@ -1718,9 +1743,14 @@ class CephadmServe:
                     self.mgr.scheduled_async_actions.append(lambda: service_registry.get_service(daemon_type_to_service(
                                                             daemon_type)).post_remove(daemon, is_failed_deploy=False))
                     self.mgr._kick_serve_loop()
-
             self.mgr.recently_altered_daemons[name] = datetime_now()
-            return "Removed {} from host '{}'".format(name, host)
+            msg = "Removed {} from host '{}'".format(name, host)
+            self.mgr.log.info(msg)
+            msgs.append(msg)
+
+        self.mgr.cache.invalidate_host_daemons(host)
+
+        return msgs
 
     async def _run_cephadm_json(self,
                                 host: str,
