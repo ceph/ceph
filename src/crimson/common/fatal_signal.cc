@@ -184,4 +184,8 @@ void FatalSignal::install_oneshot_signal_handler()
     print_backtrace(fmt::format("Got signal {}", signum));
     break;
   }
+
+  // Stop all other shards as well
+  GENERIC_ERROR("Stopping all shards");
+  seastar::engine().exit(signum);
 }
