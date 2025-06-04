@@ -15,6 +15,12 @@
 
 #include "keyring.h"
 
+#ifndef _WIN32
+extern "C" {
+#include <keyutils.h>
+}
+#endif
+
 namespace ceph {
 
 #ifdef _WIN32
@@ -46,8 +52,6 @@ bool LinuxKeyringSecret::supported() noexcept {
 }
 
 #else
-
-#include <keyutils.h>
 
 LinuxKeyringSecret::LinuxKeyringSecret(key_serial_t serial, size_t len) noexcept
     : _len(len), _serial(serial) {}
