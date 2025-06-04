@@ -517,8 +517,8 @@ public:
     std::size_t rewrite_dirty_bytes_per_cycle = 0;
     /// Number of bytes to rewrite dirty per transaction
     std::size_t rewrite_dirty_bytes_per_trans = 0;
-    /// Number of bytes to rewrite backref per cycle
-    std::size_t rewrite_backref_bytes_per_cycle = 0;
+    /// Maximum number of bytes of new backref extents per cycle
+    std::size_t max_backref_bytes_per_cycle = 0;
 
     void validate() const;
 
@@ -566,7 +566,7 @@ public:
       journal_seq_t dirty_tail, journal_seq_t alloc_tail) final;
 
   std::size_t get_trim_size_per_cycle() const final {
-    return config.rewrite_backref_bytes_per_cycle +
+    return config.max_backref_bytes_per_cycle +
       get_dirty_bytes_to_trim();
   }
 
