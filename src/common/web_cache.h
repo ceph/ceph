@@ -334,6 +334,10 @@ size_t WebCache<Key, Value>::clear() {
   const size_t size_before = _sieve_queue.size();
   _sieve_queue.clear();
   _lookup.clear();
+  perf_set(Metric::size, 0);
+  perf_set(Metric::hit, 0);
+  perf_set(Metric::miss, 0);
+  perf_set(Metric::expired, 0);
   return size_before;
 }
 
