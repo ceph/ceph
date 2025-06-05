@@ -11,12 +11,12 @@ class LinuxKeyringTest : public ::testing::Test {
  protected:
   void SetUp() override {
     if (!LinuxKeyringSecret::supported()) {
-      GTEST_SKIP();
+      GTEST_SKIP() << "Linux Keyring is unsupported. Skipping test";
     }
   }
 };
 
-TEST(LinuxKeyringTest, Basics) {
+TEST_F(LinuxKeyringTest, Basics) {
   std::string secret("secret");
   auto maybe_keyring_secret = LinuxKeyringSecret::add("testkey", secret);
 
@@ -31,20 +31,22 @@ TEST(LinuxKeyringTest, Basics) {
   ASSERT_TRUE(keyring_secret.read(out));
 }
 
-TEST(LinuxKeyringTest, Lifecycle) {
+TEST_F(LinuxKeyringTest, Lifecycle) {
   std::string secret("secret");
   auto uut = LinuxKeyringSecret::add("testkey", secret);
-
+  ASSERT_TRUE(uut.has_value());
   ASSERT_TRUE(uut->initialized());
   auto next = std::move(uut);
   ASSERT_FALSE(uut->initialized());
   ASSERT_TRUE(next->initialized());
 }
 
-TEST(LinuxKeyringTest, LifecycleMoveAssignResetsDestination) {
+TEST_F(LinuxKeyringTest, LifecycleMoveAssignResetsDestination) {
   std::string secret("secret");
   auto dest = LinuxKeyringSecret::add("testkey", secret);
   auto source = LinuxKeyringSecret::add("testkey2", secret);
+  ASSERT_TRUE(dest.has_value());
+  ASSERT_TRUE(source.has_value());
 
   auto dest_serial = dest->_serial;
   ASSERT_NE(-1, dest_serial);
@@ -57,6 +59,5 @@ TEST(LinuxKeyringTest, LifecycleMoveAssignResetsDestination) {
   EXPECT_EQ(-1, ret) << buf.data();
   ASSERT_EQ(ENOKEY, errno);
 }
-
 
 }  // namespace ceph
