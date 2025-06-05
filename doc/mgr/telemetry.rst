@@ -324,8 +324,9 @@ running a command of the following form:
 Contact and Description
 -----------------------
 
-A contact and description can be added to the report.  This is
-completely optional, and disabled by default:
+A contact and description can be added to the report. This is optional and is
+disabled by default. Run commands of the following forms to add contacts and
+descriptions:
 
 .. prompt:: bash #
 
@@ -344,8 +345,9 @@ To participate in a leaderboard in the `public dashboards
    ceph config set mgr mgr/telemetry/leaderboard true
 
 The leaderboard displays basic information about the cluster. This includes the
-total storage capacity and the number of OSDs. To add a description of the
-cluster, run a command of the following form: 
+cluster's total storage capacity and the number of OSDs. To add a description
+of the cluster so that it can more easily be identified on the leaderboard, run
+a command of the following form: 
 
 .. prompt:: bash #
 
@@ -353,4 +355,3 @@ cluster, run a command of the following form:
 
 If the ``ident`` channel is enabled, its details will not be displayed in the
 leaderboard.
-
