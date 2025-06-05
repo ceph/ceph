@@ -408,12 +408,12 @@ auto DriverManager::create_config_store(const DoutPrefixProvider* dpp,
     if (type == "dbstore") {
       const auto uri = g_conf().get_val<std::string>("dbstore_config_uri");
       return rgw::dbstore::create_config_store(dpp, uri);
-    }
 #endif
 #ifdef WITH_RADOSGW_POSIX
     } else if (type == "posix") {
       const auto uri = g_conf().get_val<std::string>("dbstore_config_uri");
       return rgw::dbstore::create_config_store(dpp, uri);
+    }
 #endif
     if (type == "json") {
       auto filename = g_conf().get_val<std::string>("rgw_json_config");
