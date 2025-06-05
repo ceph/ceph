@@ -7,7 +7,7 @@
 
 #include "include/cephfs/libcephfs.h"
 
-typedef struct _proxy_instance {
+struct _proxy_instance {
 	uint8_t hash[32];
 	list_t list;
 	list_t siblings;
@@ -16,9 +16,9 @@ typedef struct _proxy_instance {
 	struct Inode *root;
 	bool inited;
 	bool mounted;
-} proxy_instance_t;
+};
 
-typedef struct _proxy_mount {
+struct _proxy_mount {
 	proxy_instance_t *instance;
 	UserPerm *perms;
 	struct Inode *root;
@@ -27,7 +27,7 @@ typedef struct _proxy_mount {
 	uint64_t root_ino;
 	uint64_t cwd_ino;
 	uint32_t cwd_path_len;
-} proxy_mount_t;
+};
 
 static inline struct ceph_mount_info *proxy_cmount(proxy_mount_t *mount)
 {
