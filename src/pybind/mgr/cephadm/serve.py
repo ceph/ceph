@@ -1499,6 +1499,11 @@ class CephadmServe:
                 image = spec.image
                 if spec.ports:
                     ports.extend(spec.ports)
+            elif daemon_spec.daemon_type != 'agent':
+                image = self.mgr.get_container_image(
+                    daemon_name=daemon_spec.name(),
+                    use_current_daemon_image=reconfig
+                ) or ''  # mostly for mypy, only custom container should ever return None
 
             # TCP port to open in the host firewall
             if len(ports) > 0:
