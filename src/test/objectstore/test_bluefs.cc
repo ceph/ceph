@@ -1663,7 +1663,7 @@ TEST(BlueFS, test_shared_alloc) {
                       size, shared_alloc_unit, "test shared allocator"),
     shared_alloc_unit);
   shared_alloc.a->init_add_free(0, size);
-
+  auto sg = make_scope_guard([&shared_alloc] { delete shared_alloc.a; });
   BlueFS fs(g_ceph_context);
   // DB device is fully utilized
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_db.path, false));
@@ -1747,6 +1747,7 @@ TEST(BlueFS, test_shared_alloc_sparse) {
   for(uint64_t i = 5 * bluefs_alloc_unit; i < size; i += 2 * main_unit) {
     shared_alloc.a->init_add_free(i, main_unit);
   }
+  auto sg = make_scope_guard([&shared_alloc] { delete shared_alloc.a; });
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_slow.path, false,
@@ -1823,6 +1824,7 @@ TEST(BlueFS, test_4k_shared_alloc) {
                       size, main_unit, "test shared allocator"),
     main_unit);
   shared_alloc.a->init_add_free(bluefs_alloc_unit, size - bluefs_alloc_unit);
+  auto sg = make_scope_guard([&shared_alloc] { delete shared_alloc.a; });
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_slow.path, false,
