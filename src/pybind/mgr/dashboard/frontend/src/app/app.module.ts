@@ -16,19 +16,18 @@ import { SharedModule } from './shared/shared.module';
 
 @NgModule({
   declarations: [AppComponent],
-  exports: [SharedModule],
   bootstrap: [AppComponent],
   imports: [
     BrowserModule,
     BrowserAnimationsModule,
+    SharedModule,
+    CoreModule,
     ToastrModule.forRoot({
       positionClass: 'toast-top-right',
       preventDuplicates: true,
       enableHtml: true
     }),
     AppRoutingModule,
-    CoreModule,
-    SharedModule,
     CephModule
   ],
   providers: [

@@ -23,6 +23,11 @@ export class NotificationService {
   // Sidebar observable
   sidebarSubject = new Subject();
 
+  // Carbon notification panel properties
+  useCarbonNotificationPanel = true;
+  showCarbonPanel = false;
+  doNotDisturb = false;
+
   private queued: CdNotificationConfig[] = [];
   private queuedTimeoutId: number;
   KEY = 'cdNotifications';
@@ -171,7 +176,8 @@ export class NotificationService {
     if (this.hideToasties) {
       return;
     }
-    this.toastr[['error', 'info', 'success'][notification.type]](
+    const toastrMethod = ['error', 'info', 'success'][notification.type] as keyof Pick<ToastrService, 'error' | 'info' | 'success'>;
+    this.toastr[toastrMethod](
       (notification.message ? notification.message + '<br>' : '') +
         this.renderTimeAndApplicationHtml(notification),
       notification.title,
@@ -233,5 +239,60 @@ export class NotificationService {
 
   toggleSidebar(forceClose = false) {
     this.sidebarSubject.next(forceClose);
+  }
+
+  // New methods for Carbon notification panel
+  setDoNotDisturb(value: boolean) {
+    this.doNotDisturb = value;
+    this.hideToasties = value;
+  }
+
+  retryNotification(notification: CdNotification) {
+    // Implement retry logic here
+    console.log('Retrying notification:', notification);
+  }
+
+  viewAllNotifications() {
+    // Implement view all logic here
+    console.log('View all notifications');
+  }
+
+  openSettings() {
+    // Implement settings logic here
+    console.log('Open notification settings');
+  }
+
+  toggleCarbonPanel() {
+    if (this.useCarbonNotificationPanel) {
+      this.showCarbonPanel = !this.showCarbonPanel;
+      // Close the old sidebar if it's open when toggling Carbon panel
+      if (this.showCarbonPanel) {
+        this.toggleSidebar(true);
+      }
+    }
+  }
+
+  // Method to switch notification systems
+  toggleNotificationSystem() {
+    this.useCarbonNotificationPanel = !this.useCarbonNotificationPanel;
+    // Close any open panels when switching
+    if (this.useCarbonNotificationPanel) {
+      this.toggleSidebar(true);
+      this.showCarbonPanel = false;
+    } else {
+      this.showCarbonPanel = false;
+    }
+  }
+
+  // Method to explicitly set which system to use
+  setNotificationSystem(useCarbon: boolean) {
+    this.useCarbonNotificationPanel = useCarbon;
+    // Close any open panels when switching
+    if (useCarbon) {
+      this.toggleSidebar(true);
+      this.showCarbonPanel = false;
+    } else {
+      this.showCarbonPanel = false;
+    }
   }
 }

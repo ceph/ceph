@@ -2,7 +2,22 @@
   <!-- ************************ -->
   <!-- NOTIFICATIONS     -->
   <!-- ************************ -->
-  <cd-notifications-sidebar></cd-notifications-sidebar>
+  <cd-notifications-sidebar *ngIf="!notificationService.useCarbonNotificationPanel"></cd-notifications-sidebar>
+
+  <!-- Add the new Carbon notification panel -->
+  <cd-carbon-notification-panel
+    *ngIf="notificationService.useCarbonNotificationPanel"
+    [notifications]="notificationService.data$ | async"
+    [unreadCount]="(notificationService.data$ | async)?.length || 0"
+    [doNotDisturb]="notificationService.doNotDisturb"
+    [showCarbonPanel]="notificationService.showCarbonPanel"
+    (doNotDisturbChange)="notificationService.setDoNotDisturb($event)"
+    (dismissNotification)="notificationService.remove($event)"
+    (retryNotification)="notificationService.retryNotification($event)"
+    (viewAllNotifications)="notificationService.viewAllNotifications()"
+    (openSettings)="notificationService.openSettings()">
+  </cd-carbon-notification-panel>
+
   <!-- ************************ -->
   <!-- HEADER                   -->
   <!-- ************************ -->
@@ -33,17 +48,21 @@
       <cds-header-navigation>
         <cd-language-selector class="d-flex"></cd-language-selector>
       </cds-header-navigation>
+      <!-- Notifications -->
       <div class="cds--btn cds--btn--icon-only cds--header__action"
-           (click)="toggleSidebar()">
+           (click)="notificationService.useCarbonNotificationPanel ? notificationService.toggleCarbonPanel() : notificationService.toggleSidebar()">
         <cd-notifications></cd-notifications>
       </div>
+      <!-- Help icon -->
       <div class="cds--btn cds--btn--icon-only cds--header__action">
         <cd-dashboard-help></cd-dashboard-help>
       </div>
+      <!-- Administration -->
       <div class="cds--btn cds--btn--icon-only cds--header__action"
            *ngIf="permissions.user.read">
         <cd-administration></cd-administration>
       </div>
+      <!-- Identity -->
       <div class="cds--btn cds--btn--icon-only cds--header__action">
         <cd-identity></cd-identity>
       </div>

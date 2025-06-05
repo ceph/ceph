@@ -11,7 +11,10 @@ import {
   ThemeModule,
   DialogModule,
   GridModule,
-  BreadcrumbModule
+  BreadcrumbModule,
+  ButtonModule,
+  HeaderModule,
+  SideNavModule
 } from 'carbon-components-angular';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
@@ -25,12 +28,14 @@ import { DashboardHelpComponent } from './dashboard-help/dashboard-help.componen
 import { IdentityComponent } from './identity/identity.component';
 import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
+import { CarbonNotificationModule } from '~/app/shared/components/carbon-notification/carbon-notification.module';
 
 // Icons
 import UserFilledIcon from '@carbon/icons/es/user--filled/20';
 import SettingsIcon from '@carbon/icons/es/settings/20';
 import HelpIcon from '@carbon/icons/es/help/20';
 import NotificationIcon from '@carbon/icons/es/notification/20';
+import NotificationFilledIcon from '@carbon/icons/es/notification--filled/20';
 import LaunchIcon from '@carbon/icons/es/launch/16';
 import DashboardIcon from '@carbon/icons/es/template/20';
 import ClusterIcon from '@carbon/icons/es/web-services--cluster/20';
@@ -42,6 +47,11 @@ import ObservabilityIcon from '@carbon/icons/es/observed--hail/20';
 import AdminIcon from '@carbon/icons/es/network--admin-control/20';
 import LockedIcon from '@carbon/icons/es/locked/16';
 import LogoutIcon from '@carbon/icons/es/logout/16';
+import ErrorFilledIcon from '@carbon/icons/es/error--filled/16';
+import SuccessFilledIcon from '@carbon/icons/es/checkmark--filled/16';
+import WarningFilledIcon from '@carbon/icons/es/warning--filled/16';
+import InformationFilledIcon from '@carbon/icons/es/information--filled/16';
+import CloseIcon from '@carbon/icons/es/close/16';
 
 @NgModule({
   imports: [
@@ -58,7 +68,11 @@ import LogoutIcon from '@carbon/icons/es/logout/16';
     ThemeModule,
     DialogModule,
     GridModule,
-    BreadcrumbModule
+    BreadcrumbModule,
+    ButtonModule,
+    HeaderModule,
+    SideNavModule,
+    CarbonNotificationModule
   ],
   declarations: [
     AboutComponent,
@@ -79,6 +93,7 @@ export class NavigationModule {
       SettingsIcon,
       HelpIcon,
       NotificationIcon,
+      NotificationFilledIcon,
       LaunchIcon,
       DashboardIcon,
       ClusterIcon,
@@ -89,7 +104,12 @@ export class NavigationModule {
       ObservabilityIcon,
       AdminIcon,
       LockedIcon,
-      LogoutIcon
+      LogoutIcon,
+      ErrorFilledIcon,
+      SuccessFilledIcon,
+      WarningFilledIcon,
+      InformationFilledIcon,
+      CloseIcon
     ]);
   }
 }
