@@ -34,7 +34,7 @@ struct _proxy_linked_str {
  * inode. */
 typedef struct _proxy_path_iterator {
 	struct ceph_statx stx;
-	struct ceph_mount_info *cmount;
+	proxy_instance_t *instance;
 	proxy_linked_str_t *lstr;
 	UserPerm *perms;
 	struct Inode *root;
@@ -192,7 +192,7 @@ static char *proxy_linked_str_scan(proxy_linked_str_t *lstr, char ch)
 	return current;
 }
 
-static int32_t 	proxy_path_iterator_init(proxy_path_iterator_t *iter,
+static int32_t proxy_path_iterator_init(proxy_path_iterator_t *iter,
 					proxy_mount_t *mount, const char *path,
 					UserPerm *perms, bool realpath,
 					bool follow)
@@ -205,7 +205,7 @@ static int32_t 	proxy_path_iterator_init(proxy_path_iterator_t *iter,
 	}
 
 	memset(&iter->stx, 0, sizeof(iter->stx));
-	iter->cmount = proxy_cmount(mount);
+	iter->instance = mount->instance;
 	iter->perms = perms;
 	iter->root = mount->root;
 	iter->root_ino = mount->root_ino;
@@ -289,7 +289,7 @@ static bool proxy_path_iterator_is_last(proxy_path_iterator_t *iter)
 static void proxy_path_iterator_destroy(proxy_path_iterator_t *iter)
 {
 	if (iter->release) {
-		ceph_ll_put(iter->cmount, iter->base);
+		ceph_ll_put(iter->instance->cmount, iter->base);
 	}
 
 	proxy_free(iter->realpath);
@@ -307,8 +307,8 @@ static int32_t proxy_path_iterator_resolve(proxy_path_iterator_t *iter)
 		return proxy_log(LOG_ERR, ELOOP, "Too many symbolic links");
 	}
 
-	err = ceph_ll_readlink(iter->cmount, iter->base, path, sizeof(path),
-			       iter->perms);
+	err = ceph_ll_readlink(iter->instance->cmount, iter->base, path,
+			       sizeof(path), iter->perms);
 	if (err < 0) {
 		return proxy_log(LOG_ERR, -err, "ceph_ll_readlink() failed");
 	}
@@ -316,7 +316,7 @@ static int32_t proxy_path_iterator_resolve(proxy_path_iterator_t *iter)
 	ptr = path;
 	if (*ptr == '/') {
 		if (iter->release) {
-			ceph_ll_put(iter->cmount, iter->base);
+			ceph_ll_put(iter->instance->cmount, iter->base);
 		}
 		iter->base = iter->root;
 		iter->base_ino = iter->root_ino;
@@ -399,8 +399,9 @@ static int32_t proxy_path_iterator_lookup(proxy_path_iterator_t *iter,
 		return proxy_path_iterator_resolve(iter);
 	}
 
-	err = proxy_path_lookup(iter->cmount, iter->base, name, &inode,
-				&iter->stx, CEPH_STATX_INO | CEPH_STATX_MODE,
+	err = proxy_path_lookup(iter->instance->cmount, iter->base, name,
+				&inode, &iter->stx,
+				CEPH_STATX_INO | CEPH_STATX_MODE,
 				AT_SYMLINK_NOFOLLOW, iter->perms);
 	if (err < 0) {
 		return err;
@@ -412,14 +413,14 @@ static int32_t proxy_path_iterator_lookup(proxy_path_iterator_t *iter,
 		} else {
 			err = proxy_path_iterator_append(iter, name);
 			if (err < 0) {
-				ceph_ll_put(iter->cmount, inode);
+				ceph_ll_put(iter->instance->cmount, inode);
 				return err;
 			}
 		}
 	}
 
 	if (iter->release) {
-		ceph_ll_put(iter->cmount, iter->base);
+		ceph_ll_put(iter->instance->cmount, iter->base);
 	}
 	iter->base = inode;
 	iter->base_ino = iter->stx.stx_ino;
