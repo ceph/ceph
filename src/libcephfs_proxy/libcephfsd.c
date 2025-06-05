@@ -17,6 +17,7 @@
 #include "proxy_requests.h"
 #include "proxy_mount.h"
 #include "proxy_async.h"
+#include "proxy_inode.h"
 
 typedef struct _proxy_server {
 	proxy_link_t link;
@@ -330,7 +331,7 @@ static int32_t libcephfsd_ll_statfs(proxy_client_t *client, proxy_req_t *req,
 	CEPH_DATA(ceph_ll_statfs, ans, 1);
 	struct statvfs st;
 	proxy_mount_t *mount;
-	struct Inode *inode;
+	proxy_inode_t *inode;
 	int32_t err;
 
 	err = ptr_check(&client->random, req->ll_statfs.cmount,
@@ -343,7 +344,7 @@ static int32_t libcephfsd_ll_statfs(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		CEPH_BUFF_ADD(ans, &st, sizeof(st));
 
-		err = ceph_ll_statfs(proxy_cmount(mount), inode, &st);
+		err = ceph_ll_statfs(proxy_cmount(mount), inode->in, &st);
 		TRACE("ceph_ll_statfs(%p, %p) -> %d", mount, inode, err);
 	}
 
@@ -356,7 +357,7 @@ static int32_t libcephfsd_ll_lookup(proxy_client_t *client, proxy_req_t *req,
 	CEPH_DATA(ceph_ll_lookup, ans, 1);
 	struct ceph_statx stx;
 	proxy_mount_t *mount;
-	struct Inode *parent, *out;
+	proxy_inode_t *parent, *out;
 	const char *name;
 	UserPerm *perms;
 	uint32_t want, flags;
@@ -389,8 +390,9 @@ static int32_t libcephfsd_ll_lookup(proxy_client_t *client, proxy_req_t *req,
 				name = ".";
 			}
 
-			err = ceph_ll_lookup(proxy_cmount(mount), parent, name,
-					     &out, &stx, want, flags, perms);
+			err = proxy_inode_lookup(mount->instance, parent, name,
+						 &out, &stx, want, flags,
+						 perms);
 		}
 
 		TRACE("ceph_ll_lookup(%p, %p, '%s', %p, %x, %x, %p) -> %d",
@@ -410,7 +412,7 @@ static int32_t libcephfsd_ll_lookup_inode(proxy_client_t *client,
 {
 	CEPH_DATA(ceph_ll_lookup_inode, ans, 0);
 	proxy_mount_t *mount;
-	struct Inode *inode;
+	proxy_inode_t *inode;
 	struct inodeno_t ino;
 	int32_t err;
 
@@ -419,7 +421,7 @@ static int32_t libcephfsd_ll_lookup_inode(proxy_client_t *client,
 	if (err >= 0) {
 		ino = req->ll_lookup_inode.ino;
 
-		err = ceph_ll_lookup_inode(proxy_cmount(mount), ino, &inode);
+		err = proxy_inode_lookup_inode(mount->instance, ino, &inode);
 		TRACE("ceph_ll_lookup_inode(%p, %lu, %p) -> %d", mount, ino.val,
 		      inode, err);
 
@@ -446,13 +448,11 @@ static int32_t libcephfsd_ll_lookup_root(proxy_client_t *client,
 		 * different than ours, so we can't rely on
 		 * ceph_ll_lookup_root(). We fake it by returning the cached
 		 * root inode at the time of mount. */
-		err = proxy_inode_ref(mount, mount->root_ino);
-		TRACE("ceph_ll_lookup_root(%p, %p) -> %d", mount, mount->root,
-		      err);
+		proxy_inode_get(mount->root);
 
-		if (err >= 0) {
-			ans.inode = ptr_checksum(&client->random, mount->root);
-		}
+		TRACE("ceph_ll_lookup_root(%p) -> %p", mount, mount->root);
+
+		ans.inode = ptr_checksum(&client->random, mount->root);
 	}
 
 	return CEPH_COMPLETE(client, err, ans);
@@ -463,7 +463,7 @@ static int32_t libcephfsd_ll_put(proxy_client_t *client, proxy_req_t *req,
 {
 	CEPH_DATA(ceph_ll_put, ans, 0);
 	proxy_mount_t *mount;
-	struct Inode *inode;
+	proxy_inode_t *inode;
 	int32_t err;
 
 	err = ptr_check(&client->random, req->ll_put.cmount, (void **)&mount);
@@ -473,8 +473,8 @@ static int32_t libcephfsd_ll_put(proxy_client_t *client, proxy_req_t *req,
 	}
 
 	if (err >= 0) {
-		err = ceph_ll_put(proxy_cmount(mount), inode);
-		TRACE("ceph_ll_put(%p, %p) -> %d", mount, inode, err);
+		proxy_inode_put(mount->instance, inode);
+		TRACE("ceph_ll_put(%p, %p)", mount, inode);
 	}
 
 	return CEPH_COMPLETE(client, err, ans);
@@ -486,7 +486,7 @@ static int32_t libcephfsd_ll_walk(proxy_client_t *client, proxy_req_t *req,
 	CEPH_DATA(ceph_ll_walk, ans, 1);
 	struct ceph_statx stx;
 	proxy_mount_t *mount;
-	struct Inode *inode;
+	proxy_inode_t *inode;
 	const char *path;
 	UserPerm *perms;
 	uint32_t want, flags;
@@ -523,7 +523,7 @@ static int32_t libcephfsd_chdir(proxy_client_t *client, proxy_req_t *req,
 	CEPH_DATA(ceph_chdir, ans, 0);
 	struct ceph_statx stx;
 	proxy_mount_t *mount;
-	struct Inode *inode;
+	proxy_inode_t *inode;
 	const char *path;
 	char *realpath;
 	int32_t err;
@@ -541,9 +541,8 @@ static int32_t libcephfsd_chdir(proxy_client_t *client, proxy_req_t *req,
 					 &realpath);
 		TRACE("ceph_chdir(%p, '%s') -> %d", mount, path, err);
 		if (err >= 0) {
-			ceph_ll_put(proxy_cmount(mount), mount->cwd);
+			proxy_inode_put(mount->instance, mount->cwd);
 			mount->cwd = inode;
-			mount->cwd_ino = stx.stx_ino;
 
 			/* TODO: This path may become outdated if the parent
 			 *       directories are moved, however this seems the
@@ -637,7 +636,7 @@ static int32_t libcephfsd_ll_open(proxy_client_t *client, proxy_req_t *req,
 {
 	CEPH_DATA(ceph_ll_open, ans, 0);
 	proxy_mount_t *mount;
-	struct Inode *inode;
+	proxy_inode_t *inode;
 	UserPerm *perms;
 	struct Fh *fh;
 	int32_t flags, err;
@@ -654,7 +653,7 @@ static int32_t libcephfsd_ll_open(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		flags = req->ll_open.flags;
 
-		err = ceph_ll_open(proxy_cmount(mount), inode, flags, &fh,
+		err = ceph_ll_open(proxy_cmount(mount), inode->in, flags, &fh,
 				   perms);
 		TRACE("ceph_ll_open(%p, %p, %x, %p, %p) -> %d", mount, inode,
 		      flags, fh, perms, err);
@@ -673,7 +672,7 @@ static int32_t libcephfsd_ll_create(proxy_client_t *client, proxy_req_t *req,
 	CEPH_DATA(ceph_ll_create, ans, 1);
 	struct ceph_statx stx;
 	proxy_mount_t *mount;
-	struct Inode *parent, *inode;
+	proxy_inode_t *parent, *inode;
 	struct Fh *fh;
 	const char *name;
 	UserPerm *perms;
@@ -700,9 +699,9 @@ static int32_t libcephfsd_ll_create(proxy_client_t *client, proxy_req_t *req,
 
 		CEPH_BUFF_ADD(ans, &stx, sizeof(stx));
 
-		err = ceph_ll_create(proxy_cmount(mount), parent, name, mode,
-				     oflags, &inode, &fh, &stx, want, flags,
-				     perms);
+		err = proxy_inode_create(mount->instance, parent, name, mode,
+					 oflags, &inode, &fh, &stx, want, flags,
+					 perms);
 		TRACE("ceph_ll_create(%p, %p, '%s', %o, %x, %p, %p, %x, %x, "
 		      "%p) -> %d",
 		      mount, parent, name, mode, oflags, inode, fh, want, flags,
@@ -723,7 +722,7 @@ static int32_t libcephfsd_ll_mknod(proxy_client_t *client, proxy_req_t *req,
 	CEPH_DATA(ceph_ll_mknod, ans, 1);
 	struct ceph_statx stx;
 	proxy_mount_t *mount;
-	struct Inode *parent, *inode;
+	proxy_inode_t *parent, *inode;
 	const char *name;
 	UserPerm *perms;
 	dev_t rdev;
@@ -749,8 +748,8 @@ static int32_t libcephfsd_ll_mknod(proxy_client_t *client, proxy_req_t *req,
 
 		CEPH_BUFF_ADD(ans, &stx, sizeof(stx));
 
-		err = ceph_ll_mknod(proxy_cmount(mount), parent, name, mode,
-				    rdev, &inode, &stx, want, flags, perms);
+		err = proxy_inode_mknod(mount->instance, parent, name, mode,
+					rdev, &inode, &stx, want, flags, perms);
 		TRACE("ceph_ll_mknod(%p, %p, '%s', %o, %lx, %p, %x, %x, %p) -> "
 		      "%d",
 		      mount, parent, name, mode, rdev, inode, want, flags,
@@ -791,7 +790,7 @@ static int32_t libcephfsd_ll_rename(proxy_client_t *client, proxy_req_t *req,
 {
 	CEPH_DATA(ceph_ll_rename, ans, 0);
 	proxy_mount_t *mount;
-	struct Inode *old_parent, *new_parent;
+	proxy_inode_t *old_parent, *new_parent;
 	const char *old_name, *new_name;
 	UserPerm *perms;
 	int32_t err;
@@ -815,8 +814,8 @@ static int32_t libcephfsd_ll_rename(proxy_client_t *client, proxy_req_t *req,
 		new_name = CEPH_STR_GET(req->ll_rename, new_name,
 					(const char *)data + req->ll_rename.old_name);
 
-		err = ceph_ll_rename(proxy_cmount(mount), old_parent, old_name,
-				     new_parent, new_name, perms);
+		err = ceph_ll_rename(proxy_cmount(mount), old_parent->in,
+				     old_name, new_parent->in, new_name, perms);
 		TRACE("ceph_ll_rename(%p, %p, '%s', %p, '%s', %p) -> %d", mount,
 		      old_parent, old_name, new_parent, new_name, perms, err);
 	}
@@ -938,7 +937,7 @@ static int32_t libcephfsd_ll_link(proxy_client_t *client, proxy_req_t *req,
 {
 	CEPH_DATA(ceph_ll_link, ans, 0);
 	proxy_mount_t *mount;
-	struct Inode *parent, *inode;
+	proxy_inode_t *parent, *inode;
 	const char *name;
 	UserPerm *perms;
 	int32_t err;
@@ -959,8 +958,8 @@ static int32_t libcephfsd_ll_link(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		name = CEPH_STR_GET(req->ll_link, name, data);
 
-		err = ceph_ll_link(proxy_cmount(mount), inode, parent, name,
-				   perms);
+		err = ceph_ll_link(proxy_cmount(mount), inode->in, parent->in,
+				   name, perms);
 		TRACE("ceph_ll_link(%p, %p, %p, '%s', %p) -> %d", mount, inode,
 		      parent, name, perms, err);
 	}
@@ -973,7 +972,7 @@ static int32_t libcephfsd_ll_unlink(proxy_client_t *client, proxy_req_t *req,
 {
 	CEPH_DATA(ceph_ll_unlink, ans, 0);
 	proxy_mount_t *mount;
-	struct Inode *parent;
+	proxy_inode_t *parent;
 	const char *name;
 	UserPerm *perms;
 	int32_t err;
@@ -991,7 +990,8 @@ static int32_t libcephfsd_ll_unlink(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		name = CEPH_STR_GET(req->ll_unlink, name, data);
 
-		err = ceph_ll_unlink(proxy_cmount(mount), parent, name, perms);
+		err = ceph_ll_unlink(proxy_cmount(mount), parent->in, name,
+				     perms);
 		TRACE("ceph_ll_unlink(%p, %p, '%s', %p) -> %d", mount, parent,
 		      name, perms, err);
 	}
@@ -1005,7 +1005,7 @@ static int32_t libcephfsd_ll_getattr(proxy_client_t *client, proxy_req_t *req,
 	CEPH_DATA(ceph_ll_getattr, ans, 1);
 	struct ceph_statx stx;
 	proxy_mount_t *mount;
-	struct Inode *inode;
+	proxy_inode_t *inode;
 	UserPerm *perms;
 	uint32_t want, flags;
 	int32_t err;
@@ -1026,8 +1026,8 @@ static int32_t libcephfsd_ll_getattr(proxy_client_t *client, proxy_req_t *req,
 
 		CEPH_BUFF_ADD(ans, &stx, sizeof(stx));
 
-		err = ceph_ll_getattr(proxy_cmount(mount), inode, &stx, want,
-				      flags, perms);
+		err = ceph_ll_getattr(proxy_cmount(mount), inode->in, &stx,
+				      want, flags, perms);
 		TRACE("ceph_ll_getattr(%p, %p, %x, %x, %p) -> %d", mount, inode,
 		      want, flags, perms, err);
 	}
@@ -1040,7 +1040,7 @@ static int32_t libcephfsd_ll_setattr(proxy_client_t *client, proxy_req_t *req,
 {
 	CEPH_DATA(ceph_ll_setattr, ans, 0);
 	proxy_mount_t *mount;
-	struct Inode *inode;
+	proxy_inode_t *inode;
 	UserPerm *perms;
 	int32_t mask, err;
 
@@ -1057,8 +1057,8 @@ static int32_t libcephfsd_ll_setattr(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		mask = req->ll_setattr.mask;
 
-		err = ceph_ll_setattr(proxy_cmount(mount), inode, (void *)data,
-				      mask, perms);
+		err = ceph_ll_setattr(proxy_cmount(mount), inode->in,
+				      (void *)data, mask, perms);
 		TRACE("ceph_ll_setattr(%p, %p, %x, %p) -> %d", mount, inode,
 		      mask, perms, err);
 	}
@@ -1125,7 +1125,7 @@ static int32_t libcephfsd_ll_listxattr(proxy_client_t *client, proxy_req_t *req,
 {
 	CEPH_DATA(ceph_ll_listxattr, ans, 1);
 	proxy_mount_t *mount;
-	struct Inode *inode;
+	proxy_inode_t *inode;
 	UserPerm *perms;
 	size_t size;
 	int32_t err;
@@ -1145,7 +1145,7 @@ static int32_t libcephfsd_ll_listxattr(proxy_client_t *client, proxy_req_t *req,
 		if (size > client->buffer_size) {
 			size = client->buffer_size;
 		}
-		err = ceph_ll_listxattr(proxy_cmount(mount), inode,
+		err = ceph_ll_listxattr(proxy_cmount(mount), inode->in,
 					client->buffer, size, &size, perms);
 		TRACE("ceph_ll_listxattr(%p, %p, %lu, %p) -> %d", mount, inode,
 		      size, perms, err);
@@ -1164,7 +1164,7 @@ static int32_t libcephfsd_ll_getxattr(proxy_client_t *client, proxy_req_t *req,
 {
 	CEPH_DATA(ceph_ll_getxattr, ans, 1);
 	proxy_mount_t *mount;
-	struct Inode *inode;
+	proxy_inode_t *inode;
 	const char *name;
 	UserPerm *perms;
 	size_t size;
@@ -1187,7 +1187,7 @@ static int32_t libcephfsd_ll_getxattr(proxy_client_t *client, proxy_req_t *req,
 		if (size > client->buffer_size) {
 			size = client->buffer_size;
 		}
-		err = ceph_ll_getxattr(proxy_cmount(mount), inode, name,
+		err = ceph_ll_getxattr(proxy_cmount(mount), inode->in, name,
 				       client->buffer, size, perms);
 		TRACE("ceph_ll_getxattr(%p, %p, '%s', %p) -> %d", mount, inode,
 		      name, perms, err);
@@ -1205,7 +1205,7 @@ static int32_t libcephfsd_ll_setxattr(proxy_client_t *client, proxy_req_t *req,
 {
 	CEPH_DATA(ceph_ll_setxattr, ans, 0);
 	proxy_mount_t *mount;
-	struct Inode *inode;
+	proxy_inode_t *inode;
 	const char *name, *value;
 	UserPerm *perms;
 	size_t size;
@@ -1227,8 +1227,8 @@ static int32_t libcephfsd_ll_setxattr(proxy_client_t *client, proxy_req_t *req,
 		size = req->ll_setxattr.size;
 		flags = req->ll_setxattr.flags;
 
-		err = ceph_ll_setxattr(proxy_cmount(mount), inode, name, value,
-				       size, flags, perms);
+		err = ceph_ll_setxattr(proxy_cmount(mount), inode->in, name,
+				       value, size, flags, perms);
 		TRACE("ceph_ll_setxattr(%p, %p, '%s', %p, %x, %p) -> %d", mount,
 		      inode, name, value, flags, perms, err);
 	}
@@ -1242,7 +1242,7 @@ static int32_t libcephfsd_ll_removexattr(proxy_client_t *client,
 {
 	CEPH_DATA(ceph_ll_removexattr, ans, 0);
 	proxy_mount_t *mount;
-	struct Inode *inode;
+	proxy_inode_t *inode;
 	const char *name;
 	UserPerm *perms;
 	int32_t err;
@@ -1260,7 +1260,7 @@ static int32_t libcephfsd_ll_removexattr(proxy_client_t *client,
 	if (err >= 0) {
 		name = CEPH_STR_GET(req->ll_removexattr, name, data);
 
-		err = ceph_ll_removexattr(proxy_cmount(mount), inode, name,
+		err = ceph_ll_removexattr(proxy_cmount(mount), inode->in, name,
 					  perms);
 		TRACE("ceph_ll_removexattr(%p, %p, '%s', %p) -> %d", mount,
 		      inode, name, perms, err);
@@ -1274,7 +1274,7 @@ static int32_t libcephfsd_ll_readlink(proxy_client_t *client, proxy_req_t *req,
 {
 	CEPH_DATA(ceph_ll_readlink, ans, 0);
 	proxy_mount_t *mount;
-	struct Inode *inode;
+	proxy_inode_t *inode;
 	UserPerm *perms;
 	size_t size;
 	int32_t err;
@@ -1295,7 +1295,7 @@ static int32_t libcephfsd_ll_readlink(proxy_client_t *client, proxy_req_t *req,
 		if (size > client->buffer_size) {
 			size = client->buffer_size;
 		}
-		err = ceph_ll_readlink(proxy_cmount(mount), inode,
+		err = ceph_ll_readlink(proxy_cmount(mount), inode->in,
 				       client->buffer, size, perms);
 		TRACE("ceph_ll_readlink(%p, %p, %p) -> %d", mount, inode, perms,
 		      err);
@@ -1310,7 +1310,7 @@ static int32_t libcephfsd_ll_symlink(proxy_client_t *client, proxy_req_t *req,
 	CEPH_DATA(ceph_ll_symlink, ans, 1);
 	struct ceph_statx stx;
 	proxy_mount_t *mount;
-	struct Inode *parent, *inode;
+	proxy_inode_t *parent, *inode;
 	UserPerm *perms;
 	const char *name, *value;
 	uint32_t want, flags;
@@ -1335,8 +1335,8 @@ static int32_t libcephfsd_ll_symlink(proxy_client_t *client, proxy_req_t *req,
 
 		CEPH_BUFF_ADD(ans, &stx, sizeof(stx));
 
-		err = ceph_ll_symlink(proxy_cmount(mount), parent, name, value,
-				      &inode, &stx, want, flags, perms);
+		err = proxy_inode_symlink(mount->instance, parent, name, value,
+					  &inode, &stx, want, flags, perms);
 		TRACE("ceph_ll_symlink(%p, %p, '%s', '%s', %p, %x, %x, %p) -> "
 		      "%d",
 		      mount, parent, name, value, inode, want, flags, perms,
@@ -1355,7 +1355,7 @@ static int32_t libcephfsd_ll_opendir(proxy_client_t *client, proxy_req_t *req,
 {
 	CEPH_DATA(ceph_ll_opendir, ans, 0);
 	proxy_mount_t *mount;
-	struct Inode *inode;
+	proxy_inode_t *inode;
 	struct ceph_dir_result *dirp;
 	UserPerm *perms;
 	int32_t err;
@@ -1372,7 +1372,8 @@ static int32_t libcephfsd_ll_opendir(proxy_client_t *client, proxy_req_t *req,
 	}
 
 	if (err >= 0) {
-		err = ceph_ll_opendir(proxy_cmount(mount), inode, &dirp, perms);
+		err = ceph_ll_opendir(proxy_cmount(mount), inode->in, &dirp,
+				      perms);
 		TRACE("ceph_ll_opendir(%p, %p, %p, %p) -> %d", mount, inode,
 		      dirp, perms, err);
 
@@ -1390,7 +1391,7 @@ static int32_t libcephfsd_ll_mkdir(proxy_client_t *client, proxy_req_t *req,
 	CEPH_DATA(ceph_ll_mkdir, ans, 1);
 	struct ceph_statx stx;
 	proxy_mount_t *mount;
-	struct Inode *parent, *inode;
+	proxy_inode_t *parent, *inode;
 	const char *name;
 	UserPerm *perms;
 	mode_t mode;
@@ -1414,8 +1415,8 @@ static int32_t libcephfsd_ll_mkdir(proxy_client_t *client, proxy_req_t *req,
 
 		CEPH_BUFF_ADD(ans, &stx, sizeof(stx));
 
-		err = ceph_ll_mkdir(proxy_cmount(mount), parent, name, mode,
-				    &inode, &stx, want, flags, perms);
+		err = proxy_inode_mkdir(mount->instance, parent, name, mode,
+					&inode, &stx, want, flags, perms);
 		TRACE("ceph_ll_mkdir(%p, %p, '%s', %o, %p, %x, %x, %p) -> %d",
 		      mount, parent, name, mode, inode, want, flags, perms,
 		      err);
@@ -1433,7 +1434,7 @@ static int32_t libcephfsd_ll_rmdir(proxy_client_t *client, proxy_req_t *req,
 {
 	CEPH_DATA(ceph_ll_rmdir, ans, 0);
 	proxy_mount_t *mount;
-	struct Inode *parent;
+	proxy_inode_t *parent;
 	const char *name;
 	UserPerm *perms;
 	int32_t err;
@@ -1450,7 +1451,8 @@ static int32_t libcephfsd_ll_rmdir(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		name = CEPH_STR_GET(req->ll_rmdir, name, data);
 
-		err = ceph_ll_rmdir(proxy_cmount(mount), parent, name, perms);
+		err = ceph_ll_rmdir(proxy_cmount(mount), parent->in, name,
+				    perms);
 		TRACE("ceph_ll_rmdir(%p, %p, '%s', %p) -> %d", mount, parent,
 		      name, perms, err);
 	}
