@@ -972,15 +972,14 @@ static int32_t proxy_instance_hash(void **ptr, void *data, int32_t idx)
 
 /* Check if an existing instance matches the configuration used for the current
  * one. If so, share the mount. Otherwise, create a new mount. */
-static int32_t proxy_instance_mount(proxy_instance_t **pinstance)
+static int32_t proxy_instance_mount(proxy_mount_t *mount)
 {
 	proxy_instance_t *instance, *existing;
 	proxy_iter_t iter;
 	list_t *list;
 	int32_t err;
 
-	instance = *pinstance;
-
+	instance = mount->instance;
 	if (instance->mounted) {
 		return proxy_log(LOG_ERR, EISCONN,
 				 "Cannot mount and already mounted instance");
@@ -1043,7 +1042,7 @@ found:
 	if (existing != NULL) {
 		proxy_log(LOG_INFO, 0, "Shared a client instance (%p)",
 			  existing);
-		*pinstance = existing;
+		mount->instance = existing;
 	} else {
 		proxy_log(LOG_INFO, 0, "Created a new client instance (%p)",
 			  instance);
@@ -1052,13 +1051,12 @@ found:
 	return 0;
 }
 
-static int32_t proxy_instance_unmount(proxy_instance_t **pinstance)
+static int32_t proxy_instance_unmount(proxy_mount_t *mount)
 {
 	proxy_instance_t *instance, *sibling;
 	int32_t err;
 
-	instance = *pinstance;
-
+	instance = mount->instance;
 	if (!instance->mounted) {
 		return proxy_log(LOG_ERR, ENOTCONN,
 				 "Cannot unmount an already unmount instance");
@@ -1092,7 +1090,7 @@ static int32_t proxy_instance_unmount(proxy_instance_t **pinstance)
 					 "ceph_unmount() failed");
 		}
 	} else {
-		*pinstance = sibling;
+		mount->instance = sibling;
 	}
 
 	return 0;
@@ -1126,7 +1124,7 @@ int32_t proxy_mount_mount(proxy_mount_t *mount, const char *root)
 	struct ceph_mount_info *cmount;
 	int32_t err;
 
-	err = proxy_instance_mount(&mount->instance);
+	err = proxy_instance_mount(mount);
 	if (err < 0) {
 		return err;
 	}
@@ -1185,7 +1183,7 @@ failed_root:
 	ceph_ll_put(proxy_cmount(mount), mount->root);
 
 failed:
-	proxy_instance_unmount(&mount->instance);
+	proxy_instance_unmount(mount);
 
 	return err;
 }
@@ -1202,7 +1200,7 @@ int32_t proxy_mount_unmount(proxy_mount_t *mount)
 
 	proxy_free(mount->cwd_path);
 
-	return proxy_instance_unmount(&mount->instance);
+	return proxy_instance_unmount(mount);
 }
 
 int32_t proxy_mount_release(proxy_mount_t *mount)
