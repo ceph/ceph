@@ -1898,6 +1898,7 @@ CtPtr ProtocolV2::handle_auth_done(ceph::bufferlist &payload)
 }
 
 CtPtr ProtocolV2::finish_client_auth() {
+  ldout(cct, 20) << __func__ << dendl;
   if (HAVE_MSGR2_FEATURE(peer_supported_features, COMPRESSION)) {
     return send_compression_request();
   }
@@ -1906,6 +1907,7 @@ CtPtr ProtocolV2::finish_client_auth() {
 }
 
 CtPtr ProtocolV2::finish_server_auth() {
+  ldout(cct, 20) << __func__ << dendl;
   // server had sent AuthDone and client responded with correct pre-auth
   // signature. 
   // We can start conditioanl msgr protocol
@@ -1922,10 +1924,12 @@ CtPtr ProtocolV2::finish_server_auth() {
 
 CtPtr ProtocolV2::start_session_connect() {
   if (!server_cookie) {
+    ldout(cct, 20) << __func__ << " starting a new session" << dendl;
     ceph_assert(connect_seq == 0);
     state = SESSION_CONNECTING;
     return send_client_ident();
   } else {  // reconnecting to previous session
+    ldout(cct, 20) << __func__ << " reconnecting to session" << dendl;
     state = SESSION_RECONNECTING;
     ceph_assert(connect_seq > 0);
     return send_reconnect();
