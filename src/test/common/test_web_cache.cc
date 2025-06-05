@@ -210,6 +210,25 @@ TEST_F(WebCacheTest, ExpireEraseAll) {
       expired, ::testing::ElementsAre(&expired_node_1, &expired_node_2));
 }
 
+TEST_F(WebCacheTest, ExpireEraseUpdatedTTLs) {
+  _uut->add("a", a_valptr);  // oldest
+  _uut->add("b", a_valptr);
+  _uut->add("c", a_valptr);
+  _uut->add("d", a_valptr);
+  _uut->add("e", a_valptr);  // newest
+
+  _uut->update_ttl_if("a", a_valptr, std::chrono::seconds(0));  // expired
+  _uut->update_ttl_if(
+      "b", a_valptr, std::chrono::seconds(100000));  // not expired
+  _uut->update_ttl_if("c", a_valptr, std::chrono::seconds(0));
+  _uut->update_ttl_if("d", a_valptr, std::chrono::seconds(100000));
+  _uut->update_ttl_if("e", a_valptr, std::chrono::seconds(0));
+
+  EXPECT_EQ(5, _uut->size()) << *_uut;
+  _uut->expire_erase();
+  EXPECT_EQ(2, _uut->size()) << *_uut;
+}
+
 TEST_F(WebCacheTest, ExpireEraseEmpty) {
   std::list<WebCache<std::string, std::string>::Node*> nodes = {};
   const auto expiration_cutoff = ceph::real_clock::from_time_t(42);

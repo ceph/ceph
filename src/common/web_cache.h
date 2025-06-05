@@ -216,6 +216,7 @@ class WebCache {
   friend class WebCacheTest_ExpireEraseOne_Test;
   friend class WebCacheTest_ExpireEraseAll_Test;
   friend class WebCacheTest_ExpireEraseEmpty_Test;
+  friend class WebCacheTest_ExpireEraseUpdatedTTLs_Test;
 };
 
 template <typename Key, typename Value>
@@ -456,25 +457,19 @@ template <typename Key, typename Value>
 void WebCache<Key, Value>::sieve_expire_erase_unmutexed(
     std::list<Node*>& sieve_queue, ceph::real_time eviction_cutoff,
     std::vector<Node*>& out_expired) {
-  // The sieve queue is ordered by ascending insertion time.
-  // Find first not expired element from the back and erase from there
-  // TODO(irq0) Fix BUG: This is no longer true if a node was updated with update_ttl_if
-  auto expired_begin = sieve_queue.rend();
-  for (auto it = sieve_queue.rbegin(); it != sieve_queue.rend(); ++it) {
+  // The sieve queue is ordered by ascending insertion time which
+  // would allow for efficient epiration by finding the first not
+  // expired element. BUT, since we allow updating TTLs this property
+  // no longer holds and we have do a full sieve queue sweep.
+  for (auto it = sieve_queue.begin(); it != sieve_queue.end();) {
     Node* node = (*it);
     const bool expired = node->expires_at <= eviction_cutoff;
     if (expired) {
-      expired_begin = it;
+      out_expired.emplace_back(node);
+      it = sieve_queue.erase(it);
     } else {
-      break;
+      ++it;
     }
-  }
-
-  if (expired_begin != sieve_queue.rend()) {
-    out_expired.insert(
-        out_expired.begin(), std::prev(expired_begin.base()),
-        sieve_queue.end());
-    sieve_queue.erase(std::prev(expired_begin.base()), sieve_queue.end());
   }
 }
 
