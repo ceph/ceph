@@ -38,14 +38,12 @@ def teardown_module():
     cephfs.shutdown()
 
 def purge_dir(path, is_snap = False):
-    print(b"Purge " + path)
     d = cephfs.opendir(path)
     if (not path.endswith(b"/")):
         path = path + b"/"
     dent = cephfs.readdir(d)
     while dent:
         if (dent.d_name not in [b".", b".."]):
-            print(path + dent.d_name)
             if dent.is_dir():
                 if (not is_snap):
                     try:
@@ -57,7 +55,6 @@ def purge_dir(path, is_snap = False):
                     purge_dir(path + dent.d_name, False)
                     cephfs.rmdir(path + dent.d_name)
                 else:
-                    print("rmsnap on {} snap {}".format(path, dent.d_name))
                     cephfs.rmsnap(path, dent.d_name);
             else:
                 cephfs.unlink(path + dent.d_name)
@@ -70,7 +67,6 @@ def testdir():
 
     cephfs.chdir(b"/")
     _, ret_buf = cephfs.listxattr("/")
-    print(f'ret_buf={ret_buf}')
     xattrs = ret_buf.decode('utf-8').split('\x00')
     for xattr in xattrs[:-1]:
         cephfs.removexattr("/", xattr)
@@ -870,9 +866,7 @@ def test_multi_target_command():
     mds_get_command = {'prefix': 'status', 'format': 'json'}
     inbuf = b''
     ret, outbl, outs = cephfs.mds_command('*', json.dumps(mds_get_command), inbuf)
-    print(outbl)
     mds_status = json.loads(outbl)
-    print(mds_status)
 
     command = {'prefix': u'session ls', 'format': 'json'}
     mds_spec  = "*"
@@ -881,7 +875,6 @@ def test_multi_target_command():
     ret, outbl, outs = cephfs.mds_command(mds_spec, json.dumps(command), inbuf)
     # Standby MDSs will return -38
     assert(ret == 0 or ret == -38)
-    print(outbl)
     session_map = json.loads(outbl)
 
     if isinstance(mds_status, list): # if multi target command result
