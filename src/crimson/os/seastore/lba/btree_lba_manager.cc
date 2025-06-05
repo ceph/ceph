@@ -1430,7 +1430,7 @@ BtreeLBAManager::_copy_mapping(
   DEBUGT("src={} dest={}", c.trans, src, dest);
   return seastar::do_with(
     move_mapping_ret_t{std::move(src), std::move(dest)},
-    [c, extent, this, dest_laddr, &btree](auto &state) {
+    [c, extent, dest_laddr, &btree](auto &state) {
     auto &cursor = state.dest.get_effective_cursor();
     auto iter = btree.make_partial_iter(c, cursor);
     if (!iter.is_end()) {
@@ -1509,8 +1509,8 @@ BtreeLBAManager::_move_mapping(
 	  state.src = LBAMapping::create_direct(std::move(cursor));
 	}
 	return state.dest.refresh();
-      }).si_then([this, c](auto m) {
-	return next_mapping(c.trans, std::move(m));
+      }).si_then([](auto m) {
+	return m.next();
       }).si_then([&state](auto m) {
 	state.dest = std::move(m);
       });
