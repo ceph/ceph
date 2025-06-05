@@ -823,8 +823,7 @@ static int32_t proxy_instance_release(proxy_instance_t *instance)
 }
 
 /* Assign a configuration file to the instance. */
-static int32_t proxy_instance_config(proxy_instance_t *instance,
-				     const char *config)
+int32_t proxy_instance_config(proxy_instance_t *instance, const char *config)
 {
 	char path[128], *ppath;
 	int32_t err;
@@ -856,9 +855,8 @@ static int32_t proxy_instance_config(proxy_instance_t *instance,
 	return err;
 }
 
-static int32_t proxy_instance_option_get(proxy_instance_t *instance,
-					 const char *name, char *value,
-					 size_t size)
+int32_t proxy_instance_get(proxy_instance_t *instance, const char *name,
+			   char *value, size_t size)
 {
 	int32_t err, res;
 
@@ -881,8 +879,8 @@ static int32_t proxy_instance_option_get(proxy_instance_t *instance,
 	return res;
 }
 
-static int32_t proxy_instance_option_set(proxy_instance_t *instance,
-					 const char *name, const char *value)
+int32_t proxy_instance_set(proxy_instance_t *instance, const char *name,
+			   const char *value)
 {
 	int32_t err;
 
@@ -910,7 +908,7 @@ static int32_t proxy_instance_option_set(proxy_instance_t *instance,
 	return err;
 }
 
-static int32_t proxy_instance_select(proxy_instance_t *instance, const char *fs)
+int32_t proxy_instance_select(proxy_instance_t *instance, const char *fs)
 {
 	int32_t err;
 
@@ -935,7 +933,7 @@ static int32_t proxy_instance_select(proxy_instance_t *instance, const char *fs)
 	return err;
 }
 
-static int32_t proxy_instance_init(proxy_instance_t *instance)
+int32_t proxy_instance_init(proxy_instance_t *instance)
 {
 	if (instance->mounted || instance->inited) {
 		return 0;
@@ -1119,33 +1117,6 @@ int32_t proxy_mount_create(proxy_mount_t **pmount, const char *id)
 	*pmount = mount;
 
 	return 0;
-}
-
-int32_t proxy_mount_config(proxy_mount_t *mount, const char *config)
-{
-	return proxy_instance_config(mount->instance, config);
-}
-
-int32_t proxy_mount_set(proxy_mount_t *mount, const char *name,
-			const char *value)
-{
-	return proxy_instance_option_set(mount->instance, name, value);
-}
-
-int32_t proxy_mount_get(proxy_mount_t *mount, const char *name, char *value,
-			size_t size)
-{
-	return proxy_instance_option_get(mount->instance, name, value, size);
-}
-
-int32_t proxy_mount_select(proxy_mount_t *mount, const char *fs)
-{
-	return proxy_instance_select(mount->instance, fs);
-}
-
-int32_t proxy_mount_init(proxy_mount_t *mount)
-{
-	return proxy_instance_init(mount->instance);
 }
 
 int32_t proxy_mount_mount(proxy_mount_t *mount, const char *root)

@@ -38,23 +38,23 @@ int32_t proxy_inode_ref(proxy_mount_t *mount, uint64_t inode);
 
 int32_t proxy_mount_create(proxy_mount_t **pmount, const char *id);
 
-int32_t proxy_mount_config(proxy_mount_t *mount, const char *config);
-
-int32_t proxy_mount_set(proxy_mount_t *mount, const char *name,
-			const char *value);
-
-int32_t proxy_mount_get(proxy_mount_t *mount, const char *name, char *value,
-			size_t size);
-
-int32_t proxy_mount_select(proxy_mount_t *mount, const char *fs);
-
-int32_t proxy_mount_init(proxy_mount_t *mount);
-
 int32_t proxy_mount_mount(proxy_mount_t *mount, const char *root);
 
 int32_t proxy_mount_unmount(proxy_mount_t *mount);
 
 int32_t proxy_mount_release(proxy_mount_t *mount);
+
+int32_t proxy_instance_config(proxy_instance_t *mount, const char *config);
+
+int32_t proxy_instance_set(proxy_instance_t *mount, const char *name,
+			   const char *value);
+
+int32_t proxy_instance_get(proxy_instance_t *mount, const char *name, char *value,
+			   size_t size);
+
+int32_t proxy_instance_select(proxy_instance_t *mount, const char *fs);
+
+int32_t proxy_instance_init(proxy_instance_t *mount);
 
 int32_t proxy_path_resolve(proxy_mount_t *mount, const char *path,
 			   struct Inode **inode, struct ceph_statx *stx,

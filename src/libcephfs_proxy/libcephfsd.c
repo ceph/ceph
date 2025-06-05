@@ -191,7 +191,7 @@ static int32_t libcephfsd_conf_read_file(proxy_client_t *client,
 	if (err >= 0) {
 		path = CEPH_STR_GET(req->conf_read_file, path, data);
 
-		err = proxy_mount_config(mount, path);
+		err = proxy_instance_config(mount->instance, path);
 		TRACE("ceph_conf_read_file(%p, '%s') ->%d", mount, path, err);
 	}
 
@@ -217,7 +217,7 @@ static int32_t libcephfsd_conf_get(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		option = CEPH_STR_GET(req->conf_get, option, data);
 
-		err = proxy_mount_get(mount, option, buffer, size);
+		err = proxy_instance_get(mount->instance, option, buffer, size);
 		TRACE("ceph_conf_get(%p, '%s', '%s') -> %d", mount, option,
 		      (char *)buffer, err);
 
@@ -243,7 +243,7 @@ static int32_t libcephfsd_conf_set(proxy_client_t *client, proxy_req_t *req,
 		value = CEPH_STR_GET(req->conf_set, value,
 				     (const char *)(data) + req->conf_set.option);
 
-		err = proxy_mount_set(mount, option, value);
+		err = proxy_instance_set(mount->instance, option, value);
 		TRACE("ceph_conf_set(%p, '%s', '%s') -> %d", mount, option,
 		      value, err);
 	}
@@ -260,7 +260,7 @@ static int32_t libcephfsd_init(proxy_client_t *client, proxy_req_t *req,
 
 	err = ptr_check(&client->random, req->init.cmount, (void **)&mount);
 	if (err >= 0) {
-		err = proxy_mount_init(mount);
+		err = proxy_instance_init(mount->instance);
 		TRACE("ceph_init(%p) -> %d", mount, err);
 	}
 
@@ -281,7 +281,7 @@ static int32_t libcephfsd_select_filesystem(proxy_client_t *client,
 	if (err >= 0) {
 		fs = CEPH_STR_GET(req->select_filesystem, fs, data);
 
-		err = proxy_mount_select(mount, fs);
+		err = proxy_instance_select(mount->instance, fs);
 		TRACE("ceph_select_filesystem(%p, '%s') -> %d", mount, fs, err);
 	}
 
