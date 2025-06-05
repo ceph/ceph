@@ -344,13 +344,13 @@
 	Object Storage Device
                 See :term:`OSD`.
 
-        OMAP
+        omap 
                 "object map". A key-value store (a database) that is used to
                 reduce the time it takes to read data from and to write to the
-                Ceph cluster. RGW bucket indexes are stored as OMAPs.
-                Erasure-coded pools cannot store RADOS OMAP data structures.
+                Ceph cluster. RGW bucket indexes are stored as omaps.
+                Erasure-coded pools cannot store RADOS omap data structures.
                
-                Run the command ``ceph osd df`` to see your OMAPs.
+                Run the command ``ceph osd df`` to see your omap.
 
                 See Eleanor Cawthon's 2012 paper `A Distributed Key-Value Store
                 using Ceph
