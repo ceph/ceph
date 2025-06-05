@@ -132,6 +132,7 @@ ObjectDataHandler::prepare_shared_region(
 {
   LOG_PREFIX(ObjectDataHandler::prepare_shared_region);
   DEBUGT("{}~{}", ctx.t, hint, len);
+  assert(onode.get_shared_region_base() == L_ADDR_NULL);
   return ctx.tm.reserve_region(ctx.t, hint, len
   ).si_then([ctx, &onode](auto shared_region) {
     onode.update_shared_region_base(ctx.t, shared_region.get_key());
@@ -881,6 +882,40 @@ ObjectDataHandler::punch_multi_mapping_hole(
   });
 }
 
+base_iertr::future<LBAMapping>
+ObjectDataHandler::punch_single_mapping_hole(
+  context_t ctx,
+  overwrite_range_t &overwrite_range,
+  data_t &data,
+  LBAMapping left_mapping,
+  op_type_t op_type)
+{
+  // since we are punching in-mapping hole, the edge policy must be
+  // REMAP; otherwise, we shouldn't be calling this method.
+  assert(get_edge_handle_policy(
+    left_mapping,
+    overwrite_range.aligned_begin,
+    overwrite_range.aligned_len,
+    op_type) == edge_handle_policy_t::REMAP);
+  auto fut = base_iertr::now();
+  edge_t edge =  edge_t::NONE;
+  if (!overwrite_range.is_begin_aligned(ctx.tm.get_block_size())) {
+    edge = static_cast<edge_t>(edge | edge_t::LEFT);
+  }
+  if (!overwrite_range.is_end_aligned(ctx.tm.get_block_size())) {
+    edge = static_cast<edge_t>(edge | edge_t::RIGHT);
+  }
+  if (edge != edge_t::NONE) {
+    fut = read_unaligned_edge_data(
+      ctx, overwrite_range, data, left_mapping, edge);
+  }
+  return fut.si_then([ctx, &overwrite_range, left_mapping] {
+    return ctx.tm.punch_hole_in_mapping<ObjectDataBlock>(
+      ctx.t, overwrite_range.aligned_begin,
+      overwrite_range.aligned_len, std::move(left_mapping));
+  });
+}
+
 ObjectDataHandler::write_ret
 ObjectDataHandler::handle_single_mapping_overwrite(
   context_t ctx,
@@ -1402,9 +1437,527 @@ ObjectDataHandler::clear_ret ObjectDataHandler::clear(
     });
 }
 
-ObjectDataHandler::clone_ret ObjectDataHandler::clone(
-  context_t ctx)
+ObjectDataHandler::clone_ret
+ObjectDataHandler::do_clone_range(
+  context_t ctx,
+  const laddr_t &src_base,
+  const laddr_t &dest_base,
+  extent_len_t offset,
+  extent_len_t len,
+  LBAMapping &src_first_mapping,
+  LBAMapping &dest_first_mapping,
+  bufferlist &head_padding,
+  bufferlist &tail_padding)
 {
+  LOG_PREFIX(ObjectDataHandler::do_clone_range);
+  DEBUGT(
+    "src_base: {}, dest_base: {}, {}~{}, "
+    "src mapping: {}, dest mapping: {}",
+    ctx.t, src_base, dest_base, offset, len,
+    src_first_mapping, dest_first_mapping);
+  auto raw_begin = dest_base + offset;
+  auto raw_end = raw_begin + len;
+  return seastar::do_with(
+    data_t{},
+    overwrite_range_t{
+      len,
+      raw_begin,
+      raw_end,
+      ctx.tm.get_block_size()},
+    [this, &head_padding, &tail_padding, ctx,
+    &src_first_mapping, dest_base, offset,
+    len, &dest_first_mapping, src_base](auto &data, auto &overwrite_range) {
+    return punch_hole(
+      ctx, overwrite_range, data,
+      std::move(dest_first_mapping),
+      op_type_t::CLONE_RANGE
+    ).si_then([&overwrite_range, ctx, &data, &head_padding, src_base, dest_base,
+	      &tail_padding, &src_first_mapping, offset, len](auto mapping) {
+      assert(mapping.is_end() ||
+	mapping.get_key() >= overwrite_range.aligned_end);
+      auto fut = TransactionManager::get_pin_iertr::make_ready_future<
+	std::optional<LBAMapping>>(mapping);
+      if (head_padding.length() != 0) {
+	// write the unaligned data at the left boundary of the src range
+	// into the dest range
+	assert(head_padding.length() < ctx.tm.get_block_size());
+	if (data.headbl) {
+	  data.headbl->append(head_padding);
+	} else {
+	  data.headbl = bufferlist{};
+	  data.headbl->append_zero(
+	    ctx.tm.get_block_size() - head_padding.length());
+	  data.headbl->append(head_padding);
+	}
+	fut = ctx.tm.alloc_data_extents<ObjectDataBlock>(
+	  ctx.t,
+	  overwrite_range.aligned_begin,
+	  ctx.tm.get_block_size(),
+	  std::move(mapping)
+	).si_then([ctx, &data, &overwrite_range](auto extents) {
+	  assert(extents.size() == 1);
+	  auto &extent = extents.back();
+	  assert(overwrite_range.aligned_begin == extent->get_laddr());
+	  auto iter = data.headbl->cbegin();
+	  iter.copy(extent->get_length(), extent->get_bptr().c_str());
+	  return ctx.tm.get_pin(ctx.t, *extent
+	  ).si_then([](auto mapping) {
+	    return mapping.next();
+	  }).si_then([](auto mapping) {
+	    return std::make_optional<LBAMapping>(std::move(mapping));
+	  });
+	}).handle_error_interruptible(
+	  crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+	  TransactionManager::get_pin_iertr::pass_further{}
+	);
+      }
+      fut = fut.si_then([ctx, src_base, dest_base,
+			&src_first_mapping, offset, len](auto pos) {
+	// clone the src mappings
+	auto aligned_off = p2roundup(offset, ctx.tm.get_block_size());
+	auto aligned_len =
+	  p2align(offset + len, ctx.tm.get_block_size()) - aligned_off;
+	return ctx.tm.clone_range(
+	  ctx.t, src_base, dest_base, aligned_off, aligned_len,
+	  std::move(*pos), std::move(src_first_mapping), true
+	).si_then([](auto mapping) {
+	  return std::make_optional<LBAMapping>(std::move(mapping));
+	});
+      });
+      if (tail_padding.length() != 0) {
+	// write the unaligned data at the right boundary of the src range
+	// into the dest range
+	assert(tail_padding.length() < ctx.tm.get_block_size());
+	if (data.tailbl) {
+	  tail_padding.append(*data.tailbl);
+	} else {
+	  tail_padding.append_zero(
+	    ctx.tm.get_block_size() - tail_padding.length());
+	}
+	data.tailbl = std::move(tail_padding);
+	fut = fut.si_then([ctx, &overwrite_range](auto pos) {
+	  return ctx.tm.alloc_data_extents<ObjectDataBlock>(
+	    ctx.t,
+	    (overwrite_range.aligned_end - ctx.tm.get_block_size()
+	     ).checked_to_laddr(),
+	    ctx.tm.get_block_size(),
+	    std::move(pos));
+	}).si_then([&data, &overwrite_range, ctx](auto extents) {
+	  assert(extents.size() == 1);
+	  auto &extent = extents.back();
+	  assert((overwrite_range.aligned_end - ctx.tm.get_block_size()
+	    ).checked_to_laddr() == extent->get_laddr());
+	  auto iter = data.tailbl->cbegin();
+	  iter.copy(extent->get_length(), extent->get_bptr().c_str());
+	  return std::optional<LBAMapping>();
+	}).handle_error_interruptible(
+	  crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+	  TransactionManager::get_pin_iertr::pass_further{}
+	);
+      }
+      return fut.discard_result().handle_error_interruptible(
+	ObjectDataHandler::write_iertr::pass_further{},
+	crimson::ct_error::assert_all{"unexpected error"}
+      );
+    });
+  });
+}
+
+ObjectDataHandler::move_mappings_ret
+ObjectDataHandler::move_and_clone_direct_mappings(
+  context_t ctx,
+  move_mapping_params_t src_params,
+  move_mapping_params_t dest_params,
+  LBAMapping src,
+  LBAMapping dest)
+{
+  // Note that the destination of the moving of direct mappings must be
+  // a zero mapping
+  LOG_PREFIX(ObjectDataHandler::move_and_clone_direct_mappings);
+  DEBUGT("src range:{}-{}, dest range: {}-{}, src: {}, dest: {}",
+    ctx.t, src_params.begin, src_params.end,
+    dest_params.begin, dest_params.end,
+    src, dest);
+  assert(src_params.begin >= src.get_key());
+  assert(src_params.begin <
+    (src.get_key() + src.get_length()).checked_to_laddr());
+  assert(dest_params.begin >= dest.get_key());
+  assert(dest_params.begin <
+    (dest.get_key() + dest.get_length()).checked_to_laddr());
+  // split the mapping at the left boundary of the src range if
+  // it represents an extent and crosses the left boundary.
+  //
+  // Returns the right part of the mapping if splitting happened,
+  // otherwise the mapping itself
+  auto maybe_split_left_src = [ctx](LBAMapping &src,
+				    const move_mapping_params_t &src_params) {
+    if (src.is_real() && src_params.begin > src.get_key()) {
+      return ctx.tm.split_mapping<ObjectDataBlock>(
+	ctx.t, src_params.begin, std::move(src)
+      ).si_then([](auto ret) {
+	assert(ret.size() == 2);
+	return std::move(ret.back());
+      });
+    } else {
+      return move_mappings_iertr::make_ready_future<LBAMapping>(
+	std::move(src));
+    }
+  };
+  // split the mapping if it fits the following conditions:
+  // 1. it's at the right boundary of the src range
+  // 2. it represents an extent
+  // 3. it crosses the right boundary of the src range
+  //
+  // return the left part of the mapping if splitting happened,
+  // otherwise the mapping itself
+  auto maybe_split_right_src = [ctx](LBAMapping &src,
+				     const move_mapping_params_t &src_params) {
+    if (src.is_real() &&
+	src_params.end > src.get_key() &&
+	src_params.end < src.get_key() + src.get_length()) {
+      return ctx.tm.split_mapping<ObjectDataBlock>(
+	ctx.t, src_params.end, std::move(src)
+      ).si_then([](auto ret) {
+	assert(ret.size() == 2);
+	return std::move(ret.front());
+      });
+    } else {
+      return move_mappings_iertr::make_ready_future<LBAMapping>(std::move(src));
+    }
+  };
+  // push the lagged behind dest to the corresponding position to the src
+  auto push_dest_to_src = [](LBAMapping &src,
+			     LBAMapping &dest,
+			     const move_mapping_params_t &src_params,
+			     const move_mapping_params_t &dest_params) {
+    return trans_intr::repeat([&dest, &src, &src_params, &dest_params] {
+      auto src_off = src.get_key().template get_byte_distance<
+	extent_len_t>(src_params.begin);
+      auto dest_end = (dest.get_key() + dest.get_length()
+	).template get_byte_distance<extent_len_t>(dest_params.begin);
+      if (src_off < dest_end) {
+	// dest has reached src, go on.
+	return move_mappings_iertr::make_ready_future<
+	  seastar::stop_iteration>(seastar::stop_iteration::yes);
+      }
+      return dest.next().si_then([&dest](auto d) {
+	dest = std::move(d);
+	return move_mappings_iertr::make_ready_future<
+	  seastar::stop_iteration>(seastar::stop_iteration::no);
+      });
+    });
+  };
+  // move the src mapping into the dest, and add a clone
+  // mapping at the src's position.
+  auto move_src_into_dest = [this, ctx](LBAMapping &src,
+					LBAMapping &dest,
+					const move_mapping_params_t &src_params,
+					const move_mapping_params_t &dest_params) {
+    auto src_off = src.get_key().template get_byte_distance<
+      extent_len_t>(src_params.begin);
+    auto aligned_begin = (dest_params.begin + src_off).checked_to_laddr();
+    assert(aligned_begin.is_aligned(ctx.tm.get_block_size()));
+    auto aligned_end = std::min(
+      (aligned_begin + src.get_length()).checked_to_laddr(),
+      dest_params.end);
+    assert(aligned_end.is_aligned(ctx.tm.get_block_size()));
+    assert(dest.is_zero_reserved());
+    return seastar::do_with(
+      data_t{},
+      overwrite_range_t{
+	src.get_length(),
+	laddr_offset_t{aligned_begin},
+	laddr_offset_t{aligned_end},
+	ctx.tm.get_block_size()},
+      [ctx, &dest, &src, this, &src_params, &dest_params]
+      (auto &data, auto &overwrite_range) {
+      return punch_hole(
+	ctx, overwrite_range, data,
+	std::move(dest), op_type_t::CLONE_RANGE
+      ).si_then([&src, &src_params, &dest_params, ctx](auto next_d) {
+	auto offset = src.get_key().template get_byte_distance<
+	  extent_len_t>(src_params.begin);
+	auto dest_laddr = (dest_params.begin + offset).checked_to_laddr();
+	return ctx.tm.move_and_clone_direct_mapping<ObjectDataBlock>(
+	  ctx.t, std::move(src), dest_laddr, std::move(next_d));
+      }).si_then([&src, &dest](auto ret) {
+	src = std::move(ret.src);
+	dest = std::move(ret.dest);
+	return src.next();
+      }).si_then([&src, &dest](auto s) {
+	src = std::move(s);
+	return dest.next();
+      }).si_then([&dest](auto d) {
+	dest = std::move(d);
+	return seastar::stop_iteration::no;
+      });
+    });
+  };
+
+  return seastar::do_with(
+    std::move(src),
+    std::move(dest),
+    src_params,
+    dest_params,
+    std::move(maybe_split_left_src),
+    std::move(maybe_split_right_src),
+    std::move(push_dest_to_src),
+    std::move(move_src_into_dest),
+    [this, ctx](auto &src, auto &dest,
+		const auto &src_params,
+		const auto &dest_params,
+		auto &maybe_split_left_src,
+		auto &maybe_split_right_src,
+		auto &push_dest_to_src,
+		auto &move_src_into_dest) {
+    return src.refresh(
+    ).si_then([&src_params, this, &maybe_split_left_src](auto left_mapping) {
+      assert(!left_mapping.is_pending());
+      // remap src if it represents an extent and crosses src_params' begin
+      return maybe_split_left_src(left_mapping, src_params);
+    }).si_then([&dest, &src](auto s) {
+      src = std::move(s);
+      return dest.refresh();
+    }).si_then([&dest, ctx, this, &src, &src_params, &move_src_into_dest,
+		&dest_params, &push_dest_to_src, &maybe_split_right_src](auto d) {
+      dest = std::move(d);
+      // move direct mappings in range [src_params.begin, src_params.end)
+      // to the same position in range [dest_params.begin, dest_params.end)
+      return trans_intr::repeat([&src, &dest, &src_params, &push_dest_to_src,
+				&dest_params, this, ctx, &maybe_split_right_src,
+				&move_src_into_dest] {
+	if (src_params.end <= src.get_key()) {
+	  // src has stepped out of the range, leave here
+	  return move_mappings_iertr::make_ready_future<
+	    seastar::stop_iteration>(seastar::stop_iteration::yes);
+	}
+	if (!src.is_real()) {
+	  if (auto src_end = src.get_key() + src.get_length();
+	      src_end > src_params.end) {
+	    return move_mappings_iertr::make_ready_future<
+	      seastar::stop_iteration>(seastar::stop_iteration::yes);
+	  } else {
+	    return src.next().si_then([&src](auto next_src) {
+	      src = std::move(next_src);
+	      return move_mappings_iertr::make_ready_future<
+		seastar::stop_iteration>(seastar::stop_iteration::no);
+	    });
+	  }
+	}
+	// the dest may be still at an earlier position, push it onto src
+	return push_dest_to_src(src, dest, src_params, dest_params
+	).si_then([&src, &src_params, &maybe_split_right_src] {
+	  assert(!src.is_pending());
+	  // remap src if it represents an extent and crosses src_params' end
+	  return maybe_split_right_src(src, src_params);
+	}).si_then([&dest, &src](auto s) {
+	  src = std::move(s);
+	  return dest.refresh();
+	}).si_then([&dest, &src, ctx, this, &src_params,
+		    &dest_params, &move_src_into_dest](auto d) {
+	  dest = std::move(d);
+	  // move src into dest
+	  return move_src_into_dest(src, dest, src_params, dest_params);
+	});
+      });
+    }).si_then([&src] {
+      return std::move(src);
+    });
+  });
+}
+
+ObjectDataHandler::clone_ret
+ObjectDataHandler::_clone_range(
+  context_t ctx,
+  laddr_t &src_base,
+  laddr_t &dest_base,
+  laddr_t &direct_base,
+  extent_len_t offset,
+  extent_len_t len,
+  LBAMapping src_first_mapping,
+  LBAMapping dest_first_mapping,
+  LBAMapping first_direct_mapping)
+{
+  LOG_PREFIX(ObjectDataHandler::_clone_range);
+  DEBUGT(
+    "src_base={}, dest_base={}, direct_base={}, "
+    "{}~{}, sfmapping={}, dfmapping={}, fdmapping={}",
+    ctx.t, src_base, dest_base, direct_base,
+    offset, len, src_first_mapping, dest_first_mapping,
+    first_direct_mapping);
+  struct cr_state_t {
+    LBAMapping sfmapping;
+    LBAMapping dfmapping;
+    LBAMapping fdmapping;
+    bufferlist head_padding;
+    bufferlist tail_padding;
+  };
+  return seastar::do_with(
+    cr_state_t{
+      std::move(src_first_mapping),
+      std::move(dest_first_mapping),
+      std::move(first_direct_mapping),
+      bufferlist{},
+      bufferlist{}},
+    [this, ctx, src_base, dest_base, direct_base, offset, len](auto &state) {
+    auto fut = read_iertr::now();
+    auto unaligned_len = p2roundup(offset, ctx.tm.get_block_size()) - offset;
+    if (unaligned_len) {
+      // load the unaligned head padding if offset is not 4K aligned, this is
+      // different from "read_unaligned_edge_data" in that: read_unaligned_edge_data
+      // reads the unaligned content outside the overwrite range, while here we read
+      // the unaligned content inside the range. This is because the content is
+      // supposed to write into the dest region.
+      fut = read_mapping(
+	ctx,
+	state.sfmapping,
+	(src_base + offset).get_byte_distance<
+	  extent_len_t>(state.sfmapping.get_key()),
+	unaligned_len,
+	false
+      ).si_then([&state](auto bl) {
+	state.head_padding = std::move(*bl);
+      });
+    }
+    return fut.si_then([this, ctx, src_base, offset, len, &state, direct_base] {
+      auto src_key = state.sfmapping.get_key();
+      auto src_physical = !state.sfmapping.is_indirect()
+	&& !state.sfmapping.is_zero_reserved();
+      return move_and_clone_direct_mappings(
+	ctx,
+	{(src_base + offset).get_roundup_laddr(ctx.tm.get_block_size()),
+	 (src_base + offset + len).get_aligned_laddr(ctx.tm.get_block_size())},
+	{(direct_base + offset).get_roundup_laddr(ctx.tm.get_block_size()),
+	 (direct_base + offset + len).get_aligned_laddr(ctx.tm.get_block_size())},
+	state.sfmapping,
+	state.fdmapping
+      ).si_then([offset, len, ctx, &state](auto last_mapping) {
+	if (auto padding_len = offset + len - p2align(
+	      offset + len, ctx.tm.get_block_size());
+	    padding_len > 0) {
+	  // load the unaligned tail padding if offset + len is not 4K aligned,
+	  // like the unaligned head padding loadding, this also reads the
+	  // unaligned content inside the range.
+	  return read_mapping(ctx, std::move(last_mapping), 0, padding_len, false
+	  ).si_then([&state](auto bl) {
+	    if (bl) {
+	      state.tail_padding = std::move(*bl);
+	    }
+	  });
+	}
+	return ObjectDataHandler::read_iertr::now();
+      }).si_then([src_base, offset, src_key, &state, src_physical] {
+	if (src_base + offset > src_key && src_physical) {
+	  // sfmapping must have been remapped and the current sfmapping must
+	  // be out of the moved range, push sfmapping one step further. The
+	  // next mapping must be the first mapping of the moved range.
+	  return state.sfmapping.next().si_then([&state](auto mapping) {
+	    state.sfmapping = std::move(mapping);
+	  });
+	}
+	return base_iertr::now();
+      });
+    }).si_then([&state] {
+      return state.dfmapping.refresh();
+    }).si_then([ctx, src_base, dest_base, offset, len, &state, this](auto dfmapping) {
+      state.dfmapping = std::move(dfmapping);
+      return do_clone_range(
+	ctx, src_base, dest_base, offset, len, state.sfmapping,
+	state.dfmapping, state.head_padding, state.tail_padding);
+    });
+  });
+}
+
+ObjectDataHandler::clone_ret ObjectDataHandler::do_rollback(
+  context_t ctx,
+  object_data_t &object_data,
+  object_data_t &d_object_data)
+{
+  assert(ctx.onode.is_clone());
+  return prepare_data_reservation(
+    ctx, d_object_data,
+    object_data.get_reserved_data_len()
+  ).si_then([ctx, &object_data, &d_object_data](auto d_mapping) {
+    return ctx.tm.remove(ctx.t, std::move(*d_mapping)
+    ).si_then([ctx, &object_data, &d_object_data](auto pos) {
+      return ctx.tm.get_pin(ctx.t, object_data.get_reserved_data_base()
+      ).si_then([ctx, pos=std::move(pos), &object_data,
+		&d_object_data](auto mapping) mutable {
+	auto len = d_object_data.get_reserved_data_len();
+	auto src_base = object_data.get_reserved_data_base();
+	auto dst_base = d_object_data.get_reserved_data_base();
+	return ctx.tm.clone_range(
+	  ctx.t, src_base, dst_base, 0, len, std::move(pos),
+	  std::move(mapping), false);
+      }).discard_result();
+    }).handle_error_interruptible(
+      clone_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected enoent"}
+    );
+  });
+}
+
+ObjectDataHandler::clone_ret ObjectDataHandler::do_clone(
+  context_t ctx,
+  object_data_t &object_data,
+  object_data_t &d_object_data)
+{
+  struct state_t {
+    std::optional<LBAMapping> src_first_mapping;
+    std::optional<LBAMapping> dest_first_mapping;
+    std::optional<LBAMapping> first_direct_mapping;
+    laddr_t src_base = L_ADDR_NULL;
+    laddr_t dest_base = L_ADDR_NULL;
+    laddr_t direct_base = L_ADDR_NULL;
+  };
+  return prepare_data_reservation(
+    ctx, d_object_data, object_data.get_reserved_data_len()
+  ).si_then([ctx, &object_data](auto) {
+    return ctx.tm.reserve_region(
+      ctx.t,
+      object_data.get_reserved_data_base(),
+      object_data.get_reserved_data_len()
+    ).handle_error_interruptible(
+      write_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected error"}
+    );
+  }).si_then([ctx, &object_data, &d_object_data,
+	      this](auto shared_region) {
+    return seastar::do_with(
+      state_t{
+	std::nullopt, std::nullopt, std::nullopt,
+	object_data.get_reserved_data_base(),
+	d_object_data.get_reserved_data_base(),
+	shared_region.get_key()},
+      [ctx, &object_data, this](auto &state) {
+      return ctx.tm.get_pin(ctx.t, state.src_base
+      ).si_then([&state, ctx](auto mapping) {
+	state.src_first_mapping = std::move(mapping);
+	return ctx.tm.get_pin(ctx.t, state.dest_base);
+      }).si_then([&state, ctx](auto mapping) {
+	state.dest_first_mapping = std::move(mapping);
+	return ctx.tm.get_pin(ctx.t, state.direct_base);
+      }).si_then([&state, ctx, &object_data, this](auto mapping) {
+	state.first_direct_mapping = std::move(mapping);
+	return _clone_range(
+	  ctx, state.src_base, state.dest_base, state.direct_base,
+	  0, object_data.get_reserved_data_len(),
+	  std::move(*state.src_first_mapping),
+	  std::move(*state.dest_first_mapping),
+	  std::move(*state.first_direct_mapping));
+      });
+    }).handle_error_interruptible(
+      clone_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected enoent"}
+    );
+  });
+}
+
+ObjectDataHandler::clone_ret ObjectDataHandler::clone(context_t ctx)
+{
+  assert(ctx.d_onode);
+  LOG_PREFIX(ObjectDataHandler::clone);
+  DEBUGT("{}=>{}", ctx.t, ctx.onode.get_hobj(), ctx.d_onode->get_hobj());
   // the whole clone procedure can be seperated into the following steps:
   // 	1. let clone onode(d_object_data) take the head onode's
   // 	   object data base;
@@ -1416,55 +1969,16 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
   return with_objects_data(
     ctx,
     [ctx, this](auto &object_data, auto &d_object_data) {
-    ceph_assert(d_object_data.is_null());
     if (object_data.is_null()) {
       return clone_iertr::now();
     }
-    return ctx.tm.get_pin(ctx.t, object_data.get_reserved_data_base()
-    ).si_then([this, &object_data, &d_object_data, ctx](auto mapping) {
-      return prepare_data_reservation(
-	ctx,
-	d_object_data,
-	object_data.get_reserved_data_len()
-      ).si_then([&object_data, &d_object_data, ctx](auto mapping) {
-	assert(!object_data.is_null());
-	assert(mapping);
-	LOG_PREFIX(ObjectDataHandler::clone);
-	DEBUGT("cloned obj reserve_data_base: {}, len 0x{:x}",
-	  ctx.t,
-	  d_object_data.get_reserved_data_base(),
-	  d_object_data.get_reserved_data_len());
-	return ctx.tm.remove(ctx.t, std::move(*mapping));
-      }).si_then([mapping, &d_object_data, ctx](auto pos) mutable {
-	auto base = d_object_data.get_reserved_data_base();
-	auto len = d_object_data.get_reserved_data_len();
-	return ctx.tm.clone_range(
-	  ctx.t, base, len, std::move(pos), std::move(mapping), true);
-      }).si_then([ctx, &object_data, &d_object_data, this] {
-	object_data.clear();
-	return prepare_data_reservation(
-	  ctx,
-	  object_data,
-	  d_object_data.get_reserved_data_len()
-	).si_then([ctx, &object_data](auto mapping) {
-	  LOG_PREFIX("ObjectDataHandler::clone");
-	  DEBUGT("head obj reserve_data_base: {}, len 0x{:x}",
-	    ctx.t,
-	    object_data.get_reserved_data_base(),
-	    object_data.get_reserved_data_len());
-	  return ctx.tm.remove(ctx.t, std::move(*mapping));
-	});
-      }).si_then([ctx, &object_data,
-		  mapping=std::move(mapping)](auto pos) mutable {
-	auto base = object_data.get_reserved_data_base();
-	auto len = object_data.get_reserved_data_len();
-	return ctx.tm.clone_range(
-	  ctx.t, base, len, std::move(pos), std::move(mapping), false);
-      });
-    }).handle_error_interruptible(
-      clone_iertr::pass_further{},
-      crimson::ct_error::assert_all{"unexpected enoent"}
-    );
+    ceph_assert(d_object_data.is_null());
+    if (ctx.d_onode->is_head()) {
+      // this is a rollback
+      return do_rollback(ctx, object_data, d_object_data);
+    } else {
+      return do_clone(ctx, object_data, d_object_data);
+    }
   });
 }
 
