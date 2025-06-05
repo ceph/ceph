@@ -6370,17 +6370,20 @@ void RGWPutACLs::execute(optional_yield y)
     return;
   }
 
-  const auto etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
-  op_ret = rgw::bucketlogging::log_record(driver,
-      rgw::bucketlogging::LoggingType::Journal,
-      s->object.get(),
-      s,
-      canonical_name(),
-      etag,
-      s->object->get_size(),
-      this, y, false, false);
-  if (op_ret < 0) {
-    return;
+  if (!rgw::sal::Object::empty(s->object)) {
+    // in journal mode we log only object ACLs
+    const auto etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
+    op_ret = rgw::bucketlogging::log_record(driver,
+        rgw::bucketlogging::LoggingType::Journal,
+        s->object.get(),
+        s,
+        canonical_name(),
+        etag,
+        s->object->get_size(),
+        this, y, false, false);
+    if (op_ret < 0) {
+      return;
+    }
   }
 
   bufferlist bl;
