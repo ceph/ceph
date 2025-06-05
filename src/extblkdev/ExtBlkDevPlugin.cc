@@ -92,6 +92,17 @@ namespace ceph {
 		return -errno;
 	      }
 	    }
+	    if (cap_get_flag(plugin_caps, i, CAP_EFFECTIVE, &val) < 0) {
+	      return -errno;
+	    }
+	    if (val != CAP_CLEAR) {
+	      cap_value_t arr[1];
+	      arr[0] = i;
+	      // set capability in merged set
+	      if (cap_set_flag(merge_caps, CAP_EFFECTIVE, 1, arr, CAP_SET) < 0) {
+		return -errno;
+	      }
+	    }
 	  }
 	}
       }
@@ -102,16 +113,20 @@ namespace ceph {
     int trim_caps(CephContext *cct, cap_t &merge_caps)
     {
       cap_t proc_caps = nullptr;
+      cap_t proc_caps2 = nullptr;
       auto close_caps_on_return = make_scope_guard([&] {
 	if (proc_caps != nullptr) {
 	  cap_free(proc_caps);
+	}
+	if (proc_caps2 != nullptr) {
+	  cap_free(proc_caps2);
 	}
       });
       bool changed = false;
       // get process capability set
       proc_caps = cap_get_proc(); 
       if (proc_caps == nullptr) {
-	dout(1) << " cap_get_proc failed with errno: " << errno << dendl;
+	derr << " cap_get_proc failed with errno: " << errno << dendl;
 	return -errno;
       }
       {
@@ -121,17 +136,27 @@ namespace ceph {
 	  cap_free(cap_str);
 	}
       }
+      {
+	char *cap_str = cap_to_text(merge_caps, 0);
+	if (cap_str != nullptr){
+	  dout(10) << " merge caps: " << cap_str << dendl;
+	  cap_free(cap_str);
+	}
+      }
       // iterate over capabilities
       for (int i = 0; i <= CAP_LAST_CAP; ++i) {
 	cap_flag_value_t val;
+	cap_flag_value_t val_proc;
 	if (cap_get_flag(merge_caps, i, CAP_PERMITTED, &val) < 0) {
 	  return -errno;
 	}
 	if (val == CAP_CLEAR) {
-	  if (cap_get_flag(proc_caps, i, CAP_PERMITTED, &val) < 0) {
+	  // if permitted cap isn't requested by plugins
+	  //   clear both effective and permitted cqp
+	  if (cap_get_flag(proc_caps, i, CAP_PERMITTED, &val_proc) < 0) {
 	    return -errno;
 	  }
-	  if (val != CAP_CLEAR) {
+	  if (val_proc != CAP_CLEAR) {
 	    // if bit clear in merged set, but set in process set, clear in process set
 	    changed = true;
 	    cap_value_t arr[1];
@@ -140,6 +165,23 @@ namespace ceph {
 	      return -errno;
 	    }
 	    if (cap_set_flag(proc_caps, CAP_EFFECTIVE, 1, arr, CAP_CLEAR) < 0) {
+	      return -errno;
+	    }
+	  }
+	} else {
+	  // set effective cap if both effective and permitted modes are requested
+	  // by a plugin
+	  if (cap_get_flag(merge_caps, i, CAP_EFFECTIVE, &val) < 0) {
+	    return -errno;
+	  }
+          if (cap_get_flag(proc_caps, i, CAP_EFFECTIVE, &val_proc) < 0) {
+	    return -errno;
+	  }
+	  if (val != val_proc) {
+	    changed = true;
+	    cap_value_t arr[1];
+	    arr[0] = i;
+	    if (cap_set_flag(proc_caps, CAP_EFFECTIVE, 1, arr, val) < 0) {
 	      return -errno;
 	    }
 	  }
@@ -153,8 +195,20 @@ namespace ceph {
 	  cap_free(cap_str);
 	}
 	if (cap_set_proc(proc_caps) < 0) {
-	  dout(1) << " cap_set_proc failed with errno: " << errno << dendl;
+	  derr << " cap_set_proc failed with errno: " << errno << dendl;
 	  return -errno;
+	}
+      }
+      {
+        proc_caps2 = cap_get_proc();
+        if (proc_caps2 == nullptr) {
+	  derr << " cap_get_proc failed with errno: " << errno << dendl;
+	  return -errno;
+        }
+	char *cap_str = cap_to_text(proc_caps2, 0);
+	if (cap_str != nullptr){
+	  dout(10) << " cap_get_proc final: " << cap_str << dendl;
+	  cap_free(cap_str);
 	}
       }
       return 0;
