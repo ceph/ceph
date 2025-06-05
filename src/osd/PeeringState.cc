@@ -3603,7 +3603,10 @@ void PeeringState::split_into(
 
   child->info.last_user_version = info.last_user_version;
 
+  // fix up pwlc - it may refer to log entries that are no longer in the log
   child->info.partial_writes_last_complete = info.partial_writes_last_complete;
+  pg_log.split_pwlc(info);
+  child->pg_log.split_pwlc(child->info);
 
   info.log_tail = pg_log.get_tail();
   child->info.log_tail = child->pg_log.get_tail();
