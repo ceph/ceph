@@ -1,0 +1,35 @@
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, osd.3, client.0]
+openstack:
+- volumes: # attached to each instance
+    count: 4
+    size: 10 # GB
+tasks:
+- install:
+    ceph:
+      flavor: crimson
+- ceph:
+    flavor: crimson
+    conf:
+      global:
+        enable experimental unrecoverable data corrupting features: crimson
+        osd pool default size: 2
+        osd pool default min size: 1
+        osd pool default pg num: 8
+        osd pool default pgp num: 8
+      mon:
+        osd pool default crimson: true
+        mon allow pool delete: true
+        mon warn on pool no app: false
+      osd:
+        crimson osd objectstore: seastore
+        crimson osd obc lru size: 10
+        seastore cache lru size: 64M
+        seastore max concurrent transactions: 8
+    log-ignorelist:
+      - overall HEALTH_
+      - \(POOL_APP_NOT_ENABLED\)
+      - \(PG_
+- crimson_objectstore_tool:
+    objects: 5
+    pgnum: 8
