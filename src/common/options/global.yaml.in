@@ -5544,7 +5544,7 @@ options:
   type: bool
   level: advanced
   desc: Enable health indication on bluefs slow device usage
-  default: true
+  default: false
   with_legacy: true
 - name: bluestore_warn_on_legacy_statfs
   type: bool
@@ -5575,7 +5575,7 @@ options:
   desc: The period to perform bluestore free fragmentation check.
     Checking fragmentation is usually almost immediate. For highly fragmented storage,
     it can take several miliseconds. It can cause a stall to a write operation.
-  default: 3600
+  default: 2500
   with_legacy: false
   flags:
   - runtime

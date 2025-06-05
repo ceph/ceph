@@ -1351,16 +1351,6 @@ options:
   services:
   - mon
   with_legacy: true
-- name: mon_session_timeout
-  type: int
-  level: advanced
-  desc: close inactive mon client connections after this many seconds
-  fmt_desc: Monitor will terminate inactive sessions stay idle over this
-    time limit.
-  default: 5_min
-  services:
-  - mon
-  with_legacy: true
 - name: mon_subscribe_interval
   type: float
   level: dev
