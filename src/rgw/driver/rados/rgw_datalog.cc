@@ -1464,7 +1464,10 @@ asio::awaitable<void> RGWDataChangesLog::renew_run(decltype(renew_signal)) {
 	++run;
       }
 
-      if (ceph::mono_clock::now() - last_recovery < 6h)  {
+      auto recovery_interval = cct->_conf->rgw_data_log_recovery_interval * 1s;
+
+      if (recovery_interval > 0s &&
+	  ceph::mono_clock::now() - last_recovery < recovery_interval) {
 	co_await recover(&dp, recovery_signal);
       };
 
