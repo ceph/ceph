@@ -335,6 +335,30 @@ public:
       unsigned split_bits,
       IndexedLog *target);
 
+    void split_pwlc(pg_info_t &info) {
+      eversion_t previous_version;
+      if (rollback_info_trimmed_to_riter == log.rend()) {
+	previous_version = tail;
+      } else {
+	previous_version = rollback_info_trimmed_to_riter->version;
+      }
+      // When a split occurs log entries are divided between the two PGs,
+      // this can leave pwlc refering to entries that are no longer in this
+      // PG log. Update pwlc so it is not beyond the last entry in the log.
+      // Non-primary shards which don't have a full log may rollback pwlc
+      // too far, but this will get corrected by the primary shard when
+      // activating shards later in peering.
+      for (auto & [shard, versionrange] : info.partial_writes_last_complete) {
+	auto &&[old_v,  new_v] = versionrange;
+	if (new_v > previous_version) {
+	  new_v = previous_version;
+	  if (old_v > new_v) {
+	    old_v = new_v;
+	  }
+	}
+      }
+    }
+
     void zero() {
       // we must have already trimmed the old entries
       ceph_assert(rollback_info_trimmed_to == head);
@@ -916,6 +940,10 @@ public:
     if (missing.may_include_deletes) {
       opg_log->set_missing_may_contain_deletes();
     }
+  }
+
+  void split_pwlc(pg_info_t &info) {
+    log.split_pwlc(info);
   }
 
   void merge_from(
