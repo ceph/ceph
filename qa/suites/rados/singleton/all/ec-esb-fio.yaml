@@ -27,6 +27,7 @@ overrides:
         bluestore_elastic_shared_blobs: true
         osd memory target: 939524096
         bluestore onode segment size: 0
+        bluestore debug extent map encode check: true
 
 tasks:
 - install:
