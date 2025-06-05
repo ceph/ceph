@@ -817,6 +817,11 @@ class FilesystemBase(MDSClusterBase):
             standby_replay = self.fs_config.get('standby_replay', False)
             self.set_allow_standby_replay(standby_replay)
 
+            allow_referent_inodes = self.fs_config.get('allow_referent_inodes', False)
+            self.set_allow_referent_inodes(allow_referent_inodes)
+            log.debug(f"allow_referent_inodes is set to {allow_referent_inodes} "
+                      f"for filesystem '{self.name}'")
+
             # If absent will use the default value (60 seconds)
             session_timeout = self.fs_config.get('session_timeout', 60)
             if session_timeout != 60:
