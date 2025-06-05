@@ -441,12 +441,12 @@ options:
 - name: rgw_lc_max_wp_worker
   type: int
   level: advanced
-  desc: Number of workpool threads per LCWorker
-  long_desc: Number of threads in per-LCWorker workpools--used to accelerate per-bucket
+  desc: Number of workpool coroutines per LCWorker
+  long_desc: Number of coroutines in per-LCWorker workpools--used to accelerate per-bucket
     processing
-  fmt_desc: This option specifies the number of threads in each lifecycle
+  fmt_desc: This option specifies the number of coroutines in each lifecycle
     workers work pool. This option can help accelerate processing each bucket.
-  default: 3
+  default: 128
   services:
   - rgw
   with_legacy: true

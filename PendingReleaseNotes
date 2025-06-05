@@ -166,6 +166,9 @@
   Tentacle or earlier release, the value of this field will be 'N/A'. Regular
   subvolumes don't have a source subvolume and therefore the output for them
   won't contain a "source" field regardless of the release.
+* RGW: The default value of `rgw_lc_max_wp_worker` has been raised from 3 to 128
+  to accelerate lifecycle processing. These workers now use coroutines instead of
+  separate threads.
 
 * RGW: Replication policies now validate permissions using `s3:ReplicateObject`,
   `s3:ReplicateDelete`, and `s3:ReplicateTags` for destination buckets. For source
