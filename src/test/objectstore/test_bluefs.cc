@@ -2647,8 +2647,8 @@ TEST(bluefs_locked_extents_t, basics) {
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
   map<string,string> defaults = {
-    { "debug_bluefs", "1/20" },
-    { "debug_bdev", "1/20" }
+    { "debug_bluefs", "20/20" },
+    { "debug_bdev", "20/20" }
   };
 
   auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
