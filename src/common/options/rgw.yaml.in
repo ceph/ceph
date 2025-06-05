@@ -450,16 +450,6 @@ options:
   services:
   - rgw
   with_legacy: true
-- name: rgw_lc_wp_worker_max_aio
-  type: int
-  level: advanced
-  desc: Max number of concurrent lifecycle handlings per workpool thread.
-  default: 1
-  services:
-  - rgw
-  min: 1
-  max: 128
-  with_legacy: true
 - name: rgw_lc_max_objs
   type: int
   level: advanced
