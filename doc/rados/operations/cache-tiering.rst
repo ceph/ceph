@@ -8,7 +8,7 @@
    notice.
 
    The upstream Ceph community strongly advises against deploying new cache
-   tiers to releases after the Reef release.
+   tiers.
 
 A cache tier provides Ceph Clients with better I/O performance for a subset of
 the data stored in a backing storage tier. Cache tiering involves creating a
