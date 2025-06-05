@@ -367,7 +367,7 @@ endif()
 
 if(WITH_BREAKPAD)
   add_dependencies(rgw_common breakpad_project)
-  target_link_libraries(rgw_common PUBLIC breakpad)
+  target_link_libraries(rgw_common PUBLIC Breakpad::client)
 endif()
 
 if(WITH_RADOSGW_DBSTORE)
