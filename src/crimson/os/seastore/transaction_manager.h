@@ -669,67 +669,235 @@ public:
   }
 
   using clone_iertr = base_iertr;
-  using clone_ret = clone_iertr::future<>;
+  using clone_ret = clone_iertr::future<LBAMapping>;
   clone_ret clone_mappings(
     Transaction &t,
-    laddr_t base,
+    laddr_t src_base,
+    laddr_t dst_base,
+    extent_len_t offset,
     extent_len_t len,
     LBAMapping pos,
     LBAMapping mapping,
     bool updateref)
   {
     LOG_PREFIX(TransactionManager::clone_mappings);
-    SUBDEBUGT(seastore_tm, "object_data={}~{} mapping={} updateref={}",
-      t, base, len, mapping, updateref);
+    SUBDEBUGT(seastore_tm,
+      "src_base={}, dst_base={}, {}~{}, mapping={}, pos={}, updateref={}",
+      t, src_base, dst_base, offset, len, mapping, pos, updateref);
     return seastar::do_with(
       std::move(pos),
       std::move(mapping),
-      0,
-      [&t, this, updateref, base, len](auto &pos, auto &mapping, auto &offset) {
-      return trans_intr::repeat(
-	[&t, this, &pos, &mapping, &offset, updateref, base, len]()
-	-> clone_iertr::future<seastar::stop_iteration> {
-	if (offset >= len) {
-	  return clone_iertr::make_ready_future<
-	    seastar::stop_iteration>(seastar::stop_iteration::yes);
-	}
-	if (!mapping.is_indirect() && mapping.get_val().is_zero()) {
-	  return reserve_region(
-	    t,
-	    std::move(pos),
-	    (base + offset).checked_to_laddr(),
-	    mapping.get_length()
-	  ).si_then([base, &t, this, &offset](auto r) {
-	    assert((base + offset).checked_to_laddr() == r.get_key());
-	    offset += r.get_length();
-	    return next_mapping(t, std::move(r));
-	  }).si_then([&pos, &t, this, &mapping](auto r) {
-	    pos = std::move(r);
-	    return next_mapping(t, std::move(mapping));
-	  }).si_then([&mapping](auto p) {
-	    mapping = std::move(p);
-	    return seastar::stop_iteration::no;
-	  }).handle_error_interruptible(
-	    clone_iertr::pass_further{},
-	    crimson::ct_error::assert_all{"unexpected error"}
-	  );
-	}
-	auto len = mapping.get_length();
-	return clone_pin(
-	  t, std::move(pos), std::move(mapping),
-	  (base + offset).checked_to_laddr(),
-	  0, len, updateref
-	).si_then([&t, this, &offset, &pos, &mapping](auto ret) {
-	  offset += ret.cloned_mapping.get_length();
-	  return next_mapping(t, std::move(ret.cloned_mapping)
-	  ).si_then([this, &t, &pos, ret=std::move(ret)](auto p) mutable {
-	    pos = std::move(p);
-	    return next_mapping(t, std::move(ret.orig_mapping));
-	  }).si_then([&mapping](auto p) {
-	    mapping = std::move(p);
-	    return seastar::stop_iteration::no;
+      offset,
+      len,
+      [&t, this, updateref, src_base, dst_base]
+      (auto &pos, auto &mapping, auto &cloned_to, auto &left) {
+      return lba_manager->refresh_lba_mapping(t, std::move(pos)
+      ).si_then([this, &t, &pos, &mapping](auto s) {
+	pos = std::move(s);
+	return lba_manager->refresh_lba_mapping(t, std::move(mapping));
+      }).si_then([this, &t, &pos, &mapping, src_base, updateref,
+		  &cloned_to, &left, dst_base](auto m) {
+	mapping = std::move(m);
+	return trans_intr::repeat(
+	  [&t, this, &pos, &mapping, &cloned_to,
+	  updateref, src_base, dst_base, &left]()
+	  -> clone_iertr::future<seastar::stop_iteration> {
+	  if (left == 0) {
+	    return clone_iertr::make_ready_future<
+	      seastar::stop_iteration>(seastar::stop_iteration::yes);
+	  }
+	  auto src_offset = src_base.template get_byte_distance<
+	    extent_len_t>(mapping.get_key());
+	  ceph_assert(cloned_to >= src_offset);
+	  extent_len_t clone_offset = cloned_to - src_offset;
+	  extent_len_t clone_len = mapping.get_length() - clone_offset;
+	  clone_len = std::min(clone_len, left);
+	  left -= clone_len;
+	  if (!mapping.is_indirect() && mapping.get_val().is_zero()) {
+	    return reserve_region(
+	      t,
+	      std::move(pos),
+	      (dst_base + cloned_to).checked_to_laddr(),
+	      clone_len
+	    ).si_then([dst_base, &cloned_to, &t, this, clone_len](auto r) {
+	      assert((dst_base + cloned_to).checked_to_laddr() == r.get_key());
+	      cloned_to += clone_len;
+	      return next_mapping(t, std::move(r));
+	    }).si_then([&pos, &t, this, &mapping](auto r) {
+	      pos = std::move(r);
+	      return next_mapping(t, std::move(mapping));
+	    }).si_then([&mapping](auto p) {
+	      mapping = std::move(p);
+	      return seastar::stop_iteration::no;
+	    }).handle_error_interruptible(
+	      clone_iertr::pass_further{},
+	      crimson::ct_error::assert_all{"unexpected error"}
+	    );
+	  }
+	  return clone_pin(
+	    t, std::move(pos), std::move(mapping),
+	    (dst_base + cloned_to).checked_to_laddr(),
+	    clone_offset, clone_len, updateref
+	  ).si_then([&t, this, &cloned_to, clone_len, &pos, &mapping](auto ret) {
+	    cloned_to += clone_len;
+	    return next_mapping(t, std::move(ret.cloned_mapping)
+	    ).si_then([this, &t, &pos, ret=std::move(ret)](auto p) mutable {
+	      pos = std::move(p);
+	      return next_mapping(t, std::move(ret.orig_mapping));
+	    }).si_then([&mapping](auto p) {
+	      mapping = std::move(p);
+	      return seastar::stop_iteration::no;
+	    });
 	  });
 	});
+      }).si_then([&pos] {
+	return std::move(pos);
+      });
+    });
+  }
+
+  struct move_mapping_params_t {
+    laddr_t begin = L_ADDR_NULL;
+    laddr_t end = L_ADDR_NULL;
+  };
+  /*
+   * move_and_clone_direct_mappings
+   *
+   * Move direct mappings within range [src_params.begin, src_params.end) to the
+   * corresponding positions in range [dest_params.begin, dest_params.end), and
+   * clone the moved mappings at the original position.
+   */
+  using move_mappings_iertr = LBAManager::move_mapping_iertr;
+  using move_mappings_ret = move_mappings_iertr::future<LBAMapping>;
+  template <typename T>
+  move_mappings_ret move_and_clone_direct_mappings(
+    Transaction &t,
+    move_mapping_params_t src_params,
+    move_mapping_params_t dest_params,
+    LBAMapping src,
+    LBAMapping dest)
+  {
+    // Note that the destination of the moving of direct mappings must be
+    // a zero mapping
+    LOG_PREFIX(TransactionManager::move_and_clone_direct_mappings);
+    SUBDEBUGT(seastore_tm,
+      "src range:{}-{}, dest range: {}-{}, src: {}, dest: {}",
+      t, src_params.begin, src_params.end,
+      dest_params.begin, dest_params.end,
+      src, dest);
+    assert(src_params.begin >= src.get_key());
+    assert(src_params.begin <
+      (src.get_key() + src.get_length()).checked_to_laddr());
+    assert(dest_params.begin >= dest.get_key());
+    assert(dest_params.begin <
+      (dest.get_key() + dest.get_length()).checked_to_laddr());
+    return seastar::do_with(
+      std::move(src),
+      std::move(dest),
+      src_params,
+      dest_params,
+      [this, &t](auto &src, auto &dest,
+		const auto &src_params, const auto &dest_params) {
+      return lba_manager->refresh_lba_mapping(t, std::move(src)
+      ).si_then([&src_params, &src, &t, this](auto s) {
+	// remap src if it represents an extent and crosses src_params' begin
+	if (!s.is_indirect() &&
+	    !s.is_zero_reserved() &&
+	    src_params.begin > s.get_key()) {
+	  auto key = s.get_key();
+	  auto len = s.get_length();
+	  auto offset = src_params.begin.template get_byte_distance<
+	    extent_len_t>(key);
+	  return this->remap_mappings<T>(
+	    t, std::move(s),
+	    std::array{
+	      remap_entry_t{0, offset},
+	      remap_entry_t{offset, len - offset}}
+	  ).si_then([&src](auto ret) {
+	    assert(ret.size() == 2);
+	    src = std::move(ret.back());
+	  });
+	} else {
+	  src = std::move(s);
+	  return move_mappings_iertr::now();
+	}
+      }).si_then([&t, &dest, this] {
+	return lba_manager->refresh_lba_mapping(t, std::move(dest));
+      }).si_then([&dest, &t, this, &src, &src_params, &dest_params](auto d) {
+	dest = std::move(d);
+	// move direct mappings in range [src_params.begin, src_params.end)
+	// to the same position in range [dest_params.begin, dest_params.end)
+	return trans_intr::repeat([&src, &dest, &src_params,
+				  &dest_params, this, &t] {
+	  if (src_params.end <= src.get_key()) {
+	    // src has stepped out of the range, leave here
+	    return move_mappings_iertr::make_ready_future<
+	      seastar::stop_iteration>(seastar::stop_iteration::yes);
+	  }
+	  if (src.is_indirect() || src.is_zero_reserved()) {
+	    if (auto src_end = src.get_key() + src.get_length();
+		src_end > src_params.end) {
+	      return move_mappings_iertr::make_ready_future<
+		seastar::stop_iteration>(seastar::stop_iteration::yes);
+	    } else {
+	      return next_mapping(t, std::move(src)
+	      ).si_then([&src](auto next_src) {
+		src = std::move(next_src);
+		return move_mappings_iertr::make_ready_future<
+		  seastar::stop_iteration>(seastar::stop_iteration::no);
+	      });
+	    }
+	  }
+	  // push dest onto src
+	  return trans_intr::repeat([&dest, &src, &t, this,
+				    &src_params, &dest_params] {
+	    auto src_off = src.get_key().template get_byte_distance<
+	      extent_len_t>(src_params.begin);
+	    auto dest_end = (dest.get_key() + dest.get_length()
+	      ).template get_byte_distance<extent_len_t>(dest_params.begin);
+	    if (src_off < dest_end) {
+	      // dest has reached src, go on.
+	      return move_mappings_iertr::make_ready_future<
+		seastar::stop_iteration>(seastar::stop_iteration::yes);
+	    }
+	    return next_mapping(t, std::move(dest)
+	    ).si_then([&dest](auto d) {
+	      dest = std::move(d);
+	      return move_mappings_iertr::make_ready_future<
+		seastar::stop_iteration>(seastar::stop_iteration::no);
+	    });
+	  }).si_then([&dest, &src, &t, this, &src_params, &dest_params] {
+	    // move src into dest
+	    auto src_off = src.get_key().template get_byte_distance<
+	      extent_len_t>(src_params.begin);
+	    auto begin = dest_params.begin + src_off;
+	    auto end = begin + src.get_length();
+	    assert(dest.is_zero_reserved());
+	    return punch_hole<T>(
+	      t, punch_hole_params_t{begin, end}, std::move(dest),
+	      [](auto&, auto) { return on_unaligned_edge_iertr::now(); },
+	      [](auto&, auto) { return on_unaligned_edge_iertr::now(); }
+	    ).si_then([&src, &src_params, &dest_params, this, &t](auto next_d) {
+	      auto offset = src.get_key().template get_byte_distance<
+		extent_len_t>(src_params.begin);
+	      auto dest_laddr = (dest_params.begin + offset).checked_to_laddr();
+	      return this->move_and_clone_direct_mapping<T>(
+		t, std::move(src), dest_laddr, std::move(next_d));
+	    }).si_then([&src, &dest, this, &t](auto ret) {
+	      src = std::move(ret.src);
+	      dest = std::move(ret.dest);
+	      return lba_manager->next_mapping(t, std::move(src));
+	    }).si_then([&src, this, &t, &dest](auto s) {
+	      src = std::move(s);
+	      return lba_manager->next_mapping(t, std::move(dest));
+	    }).si_then([&dest](auto d) {
+	      dest = std::move(d);
+	      return seastar::stop_iteration::no;
+	    });
+	  });
+	});
+      }).si_then([&src] {
+	return std::move(src);
       });
     });
   }
