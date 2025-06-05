@@ -410,6 +410,7 @@ BuildRequires:  gcc-toolset-%{gts_version}-libubsan-devel
 BuildRequires:  gcc-toolset-%{gts_version}-libasan-devel
 %endif
 %endif
+BuildRequires:  userspace-rcu-devel
 #################################################################################
 # distro-conditional dependencies
 #################################################################################
@@ -1210,6 +1211,7 @@ Summary:    Deamon for the libcephfs proxy
 Group:      System/Filesystems
 %endif
 Requires:   libcephfs2 = %{_epoch_prefix}%{version}-%{release}
+Requires:   userspace-rcu
 %description -n libcephfs-daemon
 This package contains the libcephfsd daemon that allows applications to share
 cephfs mounts to reduce resource consumption.
