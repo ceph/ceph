@@ -72,6 +72,9 @@ typedef struct _proxy_instance proxy_instance_t;
 struct _proxy_mount;
 typedef struct _proxy_mount proxy_mount_t;
 
+struct _proxy_inode;
+typedef struct _proxy_inode proxy_inode_t;
+
 typedef int32_t (*proxy_output_write_t)(proxy_output_t *);
 typedef int32_t (*proxy_output_full_t)(proxy_output_t *);
 
