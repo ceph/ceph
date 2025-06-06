@@ -98,7 +98,11 @@ WRITE_CLASS_ENCODER_FEATURES(mon_info_t)
 
 class MonMap {
  public:
-  epoch_t epoch{0};       // what epoch/version of the monmap
+  epoch_t epoch = 0;       // what epoch/version of the monmap
+  epoch_t auth_epoch = 0;
+  int auth_service_cipher;
+  std::vector<int> auth_allowed_ciphers;
+  int auth_preferred_cipher;
   uuid_d fsid;
   utime_t last_changed;
   utime_t created;
@@ -168,9 +172,6 @@ class MonMap {
   std::string tiebreaker_mon;
   std::set<std::string> stretch_marked_down_mons; // can't be leader or taken proposal in CONNECTIVITY 
                                                   // seriously until fully recovered
-
-  epoch_t auth_epoch = 0;
-
 public:
   void calc_legacy_ranks();
   void calc_addr_mons() {
@@ -183,7 +184,7 @@ public:
     }
   }
 
-  MonMap() = default;
+  MonMap();
 
   uuid_d& get_fsid() { return fsid; }
 

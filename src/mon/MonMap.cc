@@ -19,8 +19,10 @@
 
 #include "common/Formatter.h"
 
+#include "include/ceph_fs.h"
 #include "include/ceph_features.h"
 #include "include/addr_parsing.h"
+#include "auth/Crypto.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_json.h"
 #include "common/dns_resolve.h"
@@ -269,6 +271,9 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
   encode(tiebreaker_mon, blist);
   encode(stretch_marked_down_mons, blist);
   encode(auth_epoch, blist);
+  encode(auth_service_cipher, blist);
+  encode(auth_allowed_ciphers, blist);
+  encode(auth_preferred_cipher, blist);
   ENCODE_FINISH(blist);
 }
 
@@ -335,6 +340,17 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
   }
   if (struct_v >= 10) {
     decode(auth_epoch, p);
+    decode(auth_service_cipher, p);
+    decode(auth_allowed_ciphers, p);
+    decode(auth_preferred_cipher, p);
+  } else {
+    /* When decoding an old MonMap, choose defaults reasonable for an existing
+     * cluster:
+     */
+    auth_epoch = 0;
+    auth_service_cipher = CEPH_CRYPTO_AES;
+    auth_allowed_ciphers = {CEPH_CRYPTO_AES, CEPH_CRYPTO_AES256KRB5};
+    auth_preferred_cipher = CEPH_CRYPTO_AES;
   }
   calc_addr_mons();
   DECODE_FINISH(p);
@@ -480,12 +496,44 @@ void MonMap::print(ostream& out) const
     out << "\n";
   }
   out << "auth_epoch " << auth_epoch << "\n";
+  out << "auth_service_cipher " << CryptoManager::get_key_type_name(auth_service_cipher) << "\n";
+  {
+    out << "auth_allowed_ciphers ";
+    bool first = true;
+    for (auto& c : auth_allowed_ciphers) {
+      if (!first) out << ", ";
+      out << CryptoManager::get_key_type_name(c);
+      first = false;
+    }
+    out << "\n";
+  }
+  out << "auth_preferred_cipher " << CryptoManager::get_key_type_name(auth_preferred_cipher) << "\n";
 }
 
 void MonMap::dump(Formatter *f) const
 {
   f->dump_unsigned("epoch", epoch);
   f->dump_unsigned("auth_epoch", auth_epoch);
+
+  f->open_object_section("auth_service_cipher");
+  f->dump_string("name", CryptoManager::get_key_type_name(auth_service_cipher));
+  f->dump_int("value", auth_service_cipher);
+  f->close_section();
+
+  f->open_array_section("auth_allowed_ciphers");
+  for (auto const& k : auth_allowed_ciphers) {
+    f->open_object_section("key_type");
+    f->dump_string("name", CryptoManager::get_key_type_name(k));
+    f->dump_int("value", k);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_object_section("auth_preferred_cipher");
+  f->dump_string("name", CryptoManager::get_key_type_name(auth_preferred_cipher));
+  f->dump_int("value", auth_preferred_cipher);
+  f->close_section();
+
   f->dump_stream("fsid") <<  fsid;
   last_changed.gmtime(f->dump_stream("modified"));
   created.gmtime(f->dump_stream("created"));
@@ -925,10 +973,27 @@ seastar::future<> MonMap::build_monmap(const crimson::common::ConfigProxy& conf,
   });
 }
 
+MonMap::MonMap()
+  : auth_service_cipher(CEPH_CRYPTO_NONE)
+  , auth_allowed_ciphers{CEPH_CRYPTO_NONE}
+  , auth_preferred_cipher(CEPH_CRYPTO_NONE)
+{
+}
+
 seastar::future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf, bool for_mkfs)
 {
   /* an invalid epoch so the real monmap doesn't trigger rotation */
   auth_epoch = std::numeric_limits<decltype(auth_epoch)>::max();
+  if (for_mkfs) {
+    auth_service_cipher = CEPH_CRYPTO_AES256KRB5;
+    auth_allowed_ciphers = {CEPH_CRYPTO_AES256KRB5};
+    auth_preferred_cipher = CEPH_CRYPTO_AES256KRB5;
+  } else {
+    /* wait for real monmap */
+    auth_service_cipher = CEPH_CRYPTO_NONE;
+    auth_allowed_ciphers = {CEPH_CRYPTO_NONE};
+    auth_preferred_cipher = CEPH_CRYPTO_NONE;
+  }
 
   // mon_host_override?
   if (maybe_init_with_mon_host(conf.get_val<std::string>("mon_host_override"),
@@ -955,6 +1020,13 @@ seastar::future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf
 }
 
 #else  // WITH_CRIMSON
+
+MonMap::MonMap()
+  : auth_service_cipher(CEPH_CRYPTO_NONE)
+  , auth_allowed_ciphers{CEPH_CRYPTO_NONE}
+  , auth_preferred_cipher(CEPH_CRYPTO_NONE)
+{
+}
 
 int MonMap::init_with_monmap(const std::string& monmap, std::ostream& errout)
 {
@@ -1013,6 +1085,16 @@ int MonMap::build_initial(CephContext *cct, bool for_mkfs, ostream& errout)
 
   /* an invalid epoch so the real monmap doesn't trigger rotation */
   auth_epoch = std::numeric_limits<decltype(auth_epoch)>::max();
+  if (for_mkfs) {
+    auth_service_cipher = CEPH_CRYPTO_AES256KRB5;
+    auth_allowed_ciphers = {CEPH_CRYPTO_AES256KRB5};
+    auth_preferred_cipher = CEPH_CRYPTO_AES256KRB5;
+  } else {
+    /* wait for real monmap */
+    auth_service_cipher = CEPH_CRYPTO_NONE;
+    auth_allowed_ciphers = {CEPH_CRYPTO_NONE};
+    auth_preferred_cipher = CEPH_CRYPTO_NONE;
+  }
 
   // mon_host_override?
   auto mon_host_override = conf.get_val<std::string>("mon_host_override");

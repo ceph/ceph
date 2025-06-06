@@ -245,14 +245,15 @@ void KeyServerData::Incremental::dump(ceph::Formatter *f) const {
 
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx keyserver: "
-
+#define cct kscct.get()
 
 KeyServer::KeyServer(CephContext *cct_, KeyRing *extra_secrets)
-  : cct(cct_),
+  : kscct(cct_),
     data(extra_secrets),
     lock{ceph::make_mutex("KeyServer::lock")}
 {
 }
+
 
 int KeyServer::start_server()
 {
@@ -290,8 +291,9 @@ int KeyServer::_rotate_secret(uint32_t service_id, KeyServerData &pending_data)
 
   double const auth_mon_ticket_ttl = cct->_conf.get_val<double>("auth_mon_ticket_ttl");
   double const auth_service_ticket_ttl= cct->_conf.get_val<double>("auth_service_ticket_ttl");
-  auto const auth_service_cipher = cct->_conf.get_val<string>("auth_service_cipher");
-  const int auth_service_cipher_key_type = CryptoManager::get_key_type(auth_service_cipher);
+  auto const auth_service_cipher_key_type = get_service_cipher();
+  auto auth_service_cipher = CryptoManager::get_key_type_name(auth_service_cipher_key_type);
+  //const int auth_service_cipher_key_type = CryptoManager::get_key_type(auth_service_cipher);
 
   ldout(cct, 10) << __func__
           << ": auth_mon_ticket_ttl=" << auth_mon_ticket_ttl
