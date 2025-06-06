@@ -6,6 +6,7 @@
 
 #include "cls/rbd/cls_rbd_types.h"
 #include "include/rados/librados.hpp"
+#include "Types.h"
 
 class Context;
 
@@ -19,7 +20,7 @@ template<typename ImageCtxT = librbd::ImageCtx>
 class LoadRequest {
 public:
   static LoadRequest *create(librados::IoCtx &ioctx,
-                             std::map<std::string, cls::rbd::MirrorImageMap> *image_mapping,
+                             std::map<GlobalId, cls::rbd::MirrorImageMap> *image_mapping,
                              Context *on_finish) {
     return new LoadRequest(ioctx, image_mapping, on_finish);
   }
@@ -47,14 +48,14 @@ private:
    * @endverbatim
    */
   LoadRequest(librados::IoCtx &ioctx,
-              std::map<std::string, cls::rbd::MirrorImageMap> *image_mapping,
+              std::map<GlobalId, cls::rbd::MirrorImageMap> *image_mapping,
               Context *on_finish);
 
   librados::IoCtx &m_ioctx;
-  std::map<std::string, cls::rbd::MirrorImageMap> *m_image_mapping;
+  std::map<GlobalId, cls::rbd::MirrorImageMap> *m_image_mapping;
   Context *m_on_finish;
 
-  std::set<std::string> m_global_image_ids;
+  std::set<GlobalId> m_global_image_ids;
 
   bufferlist m_out_bl;
   std::string m_start_after;
