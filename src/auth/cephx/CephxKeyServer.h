@@ -21,6 +21,8 @@
 #include <map>
 #include <string>
 
+#include <boost/intrusive_ptr.hpp>
+
 #include "auth/KeyRing.h"
 #include "CephxProtocol.h"
 #include "common/ceph_mutex.h"
@@ -164,7 +166,7 @@ WRITE_CLASS_ENCODER(KeyServerData::Incremental)
 
 
 class KeyServer : public KeyStore {
-  CephContext *cct;
+  boost::intrusive_ptr<CephContext> kscct;
   KeyServerData data;
   std::map<EntityName, CryptoKey> used_pending_keys;
   mutable ceph::mutex lock;
@@ -293,6 +295,16 @@ public:
   { return data.secrets_begin(); }
   std::map<EntityName, EntityAuth>::iterator secrets_end()
   { return data.secrets_end(); }
+
+  virtual int get_service_cipher() const {
+    return CEPH_CRYPTO_AES256KRB5;
+  }
+  virtual bool is_cipher_allowed(int cipher) const {
+    return cipher == CEPH_CRYPTO_AES256KRB5;
+  }
+  virtual std::vector<int> get_ciphers_allowed() const {
+    return {CEPH_CRYPTO_AES256KRB5};
+  }
 };
 WRITE_CLASS_ENCODER(KeyServer)
 

@@ -571,6 +571,11 @@ COMMAND("mon set_location " \
 	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]",
 	"specify location <args> for the monitor <name>, using CRUSH bucket names", \
 	"mon", "rw")
+COMMAND("mon set " \
+	"name=name,type=CephString "
+	"name=value,type=CephString",
+	"set mon configuration", \
+	"mon", "rw")
 COMMAND("mon enable_stretch_mode " \
 	"name=tiebreaker_mon,type=CephString,req=false, "
 	"name=new_crush_rule,type=CephString, "
