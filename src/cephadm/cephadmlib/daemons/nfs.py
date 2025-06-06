@@ -1,8 +1,6 @@
 import logging
 import os
 import re
-import signal
-import subprocess
 from typing import Dict, List, Optional, Tuple, Union
 
 from ..call_wrappers import call, CallVerbosity
@@ -254,25 +252,3 @@ class NFSGanesha(ContainerDaemonForm):
 
     def default_entrypoint(self) -> str:
         return self.entrypoint
-
-    def perform_default_restart(self) -> int:
-        pid = None
-        try:
-            output = subprocess.check_output(['pidof', 'ganesha.nfsd'])
-            pid = int(output.strip())
-        except subprocess.CalledProcessError:
-            return 1
-        if pid:
-            logger.debug(
-                f'Sending SIGHUP signal to ganesha.nfsd process, pid: {pid}'
-            )
-            try:
-                os.kill(pid, signal.SIGHUP)
-            except Exception:
-                logger.error(
-                    f'Not able to send SIGHUP signal to ganesha.nfsd process, pid: {pid}'
-                )
-                return 1
-            return 0
-        logger.error('Process ganesha.nfsd not found.')
-        return 1

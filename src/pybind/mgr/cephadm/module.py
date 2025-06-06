@@ -2670,7 +2670,8 @@ Then run the following:
                        daemon_spec: CephadmDaemonDeploySpec,
                        action: str,
                        image: Optional[str] = None,
-                       skip_restart: bool = False) -> str:
+                       skip_restart_for_reconfig: bool = False,
+                       send_signal_to_daemon: Optional[str] = None) -> str:
         self._daemon_action_set_image(action, image, daemon_spec.daemon_type,
                                       daemon_spec.daemon_id)
 
@@ -2694,7 +2695,8 @@ Then run the following:
             with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
                 return self.wait_async(
                     CephadmServe(self)._create_daemon(daemon_spec, reconfig=(action == 'reconfig'),
-                                                      skip_restart=skip_restart))
+                                                      skip_restart_for_reconfig=skip_restart_for_reconfig,
+                                                      send_signal_to_daemon=send_signal_to_daemon))
 
         actions = {
             'start': ['reset-failed', 'start'],

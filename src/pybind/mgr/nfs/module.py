@@ -136,17 +136,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 virtual_ip: Optional[str] = None,
                                 ingress_mode: Optional[IngressType] = None,
                                 port: Optional[int] = None,
-                                inbuf: Optional[str] = None) -> None:
-                                kmip_cert: Optional[str] = None,
-                                kmip_key: Optional[str] = None,
-                                kmip_ca_cert: Optional[str] = None,
-                                kmip_host_list: Optional[List[str]] = None,
+                                inbuf: Optional[str] = None,
                                 ) -> None:
         """Create an NFS Cluster"""
+        kmip_cert = kmip_key = kmip_ca_cert = kmip_host_list = None
         ssl_cert = ssl_key = ssl_ca_cert = tls_min_version = tls_ciphers = None
         ssl = tls_ktls = tls_debug = False
         if inbuf:
             config = yaml.safe_load(inbuf)
+            kmip_cert = config.get('kmip_cert')
+            kmip_key = config.get('kmip_key')
+            kmip_ca_cert = config.get('kmip_ca_cert')
+            kmip_host_list = config.get('kmip_host_list')
             ssl = config.get('ssl')
             ssl_cert = config.get('ssl_cert')
             ssl_key = config.get('ssl_key')
