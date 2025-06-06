@@ -27,11 +27,12 @@ sub get_timestamp {
 # Function to check if radosgw is already running
 sub get_status {
     my $service = "radosgw";
-    my $cmd = "pgrep $service";
+    my $cmd = "pgrep -f $service";
     my $status = get_cmd_op($cmd);
     if ($status =~ /\d+/ ){
         return 0;
     }
+    warn "ERROR: $service is not running\n";
     return 1;
 }
 
