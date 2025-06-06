@@ -60,11 +60,17 @@ class WebCacheTest : public ::testing::Test {
     std::vector<std::string> keys;
     std::transform(
         _uut->_sieve_queue.begin(), _uut->_sieve_queue.end(),
-        std::back_inserter(keys),
-        [](const auto& node) { return *(node->key); });
+        std::back_inserter(keys), [](const auto& node) { return *node.key; });
     return keys;
   }
-  size_t sieve_hand() { return _uut->_sieve_hand; }
+  size_t sieve_hand_pos() {
+    if (_uut->_sieve_hand == nullptr) {
+      return _uut->_capacity -1;
+    }
+    return std::distance(
+        _uut->_sieve_queue.begin(),
+        _uut->_sieve_queue.iterator_to(*_uut->_sieve_hand));
+  }
 };
 
 TEST_F(WebCacheTest, AddReturnsGreaterZeroTs) {
@@ -168,18 +174,21 @@ TEST_F(WebCacheTest, ExpireEraseOne) {
       a_valptr, ceph::real_clock::from_time_t(301));
   WebCache<std::string, std::string>::Node expired_node(
       a_valptr, ceph::real_clock::from_time_t(10));
-  std::list<WebCache<std::string, std::string>::Node*> nodes = {
-      &alive_node, &expired_node};
+  WebCache<std::string, std::string>::SieveQueue nodes;
+  nodes.push_back(alive_node);
+  nodes.push_back(expired_node);
 
   lderr(_cct.get()) << "NODES:         " << &alive_node << ":" << alive_node
                     << ", " << &expired_node << ":" << expired_node << dendl;
-  lderr(_cct.get()) << "BEFORE EXPIRE: " << nodes << dendl;
+  lderr(_cct.get()) << "BEFORE EXPIRE: " << alive_node << ", " << expired_node
+                    << dendl;
   EXPECT_EQ(2, nodes.size());
   const auto expiration_cutoff = ceph::real_clock::from_time_t(300);
   std::vector<WebCache<std::string, std::string>::Node*> expired;
   WebCache<std::string, std::string>::sieve_expire_erase_unmutexed(
       nodes, expiration_cutoff, expired);
-  lderr(_cct.get()) << "AFTER EXPIRE:  " << nodes << dendl;
+  lderr(_cct.get()) << "AFTER EXPIRE:  " << alive_node << ", " << expired_node
+                    << dendl;
   lderr(_cct.get()) << "EXPIRED:       " << expired << dendl;
   EXPECT_EQ(1, nodes.size());
   ASSERT_EQ(1, expired.size());
@@ -191,18 +200,21 @@ TEST_F(WebCacheTest, ExpireEraseAll) {
       a_valptr, ceph::real_clock::from_time_t(23));
   WebCache<std::string, std::string>::Node expired_node_2(
       a_valptr, ceph::real_clock::from_time_t(42));
-  std::list<WebCache<std::string, std::string>::Node*> nodes = {
-      &expired_node_1, &expired_node_2};
+  WebCache<std::string, std::string>::SieveQueue nodes;
+  nodes.push_back(expired_node_1);
+  nodes.push_back(expired_node_2);
   lderr(_cct.get()) << "NODES:         " << &expired_node_1 << ":"
                     << expired_node_1 << ", " << &expired_node_2 << ":"
                     << expired_node_2 << dendl;
-  lderr(_cct.get()) << "BEFORE EXPIRE: " << nodes << dendl;
+  lderr(_cct.get()) << "BEFORE EXPIRE: " << expired_node_1 << ", "
+                    << expired_node_2 << dendl;
   EXPECT_EQ(2, nodes.size());
   const auto expiration_cutoff = ceph::real_clock::from_time_t(300);
   std::vector<WebCache<std::string, std::string>::Node*> expired;
   WebCache<std::string, std::string>::sieve_expire_erase_unmutexed(
       nodes, expiration_cutoff, expired);
-  lderr(_cct.get()) << "AFTER EXPIRE:  " << nodes << dendl;
+  lderr(_cct.get()) << "AFTER EXPIRE:  " << expired_node_1 << ", "
+                    << expired_node_2 << dendl;
   lderr(_cct.get()) << "EXPIRED:       " << expired << dendl;
   EXPECT_EQ(0, nodes.size());
   ASSERT_EQ(2, expired.size());
@@ -230,7 +242,7 @@ TEST_F(WebCacheTest, ExpireEraseUpdatedTTLs) {
 }
 
 TEST_F(WebCacheTest, ExpireEraseEmpty) {
-  std::list<WebCache<std::string, std::string>::Node*> nodes = {};
+  WebCache<std::string, std::string>::SieveQueue nodes;
   const auto expiration_cutoff = ceph::real_clock::from_time_t(42);
   std::vector<WebCache<std::string, std::string>::Node*> expired;
   WebCache<std::string, std::string>::sieve_expire_erase_unmutexed(
@@ -264,43 +276,43 @@ TEST_F(WebCacheTest, SieveExample) {
   ASSERT_THAT(
       sieve_queue_keys(),
       ::testing::ElementsAre("g", "f", "e", "d", "c", "b", "a"));
-  ASSERT_EQ(sieve_hand(), 6);
+  ASSERT_EQ(sieve_hand_pos(), 6);
 
   _uut->add("h", a_valptr);
   ASSERT_THAT(
       sieve_queue_keys(),
       ::testing::ElementsAre("h", "g", "f", "e", "d", "b", "a"));
-  ASSERT_EQ(sieve_hand(), 4);
+  ASSERT_EQ(sieve_hand_pos(), 4);
 
   _uut->add("a", a_valptr);
   ASSERT_THAT(
       sieve_queue_keys(),
       ::testing::ElementsAre("h", "g", "f", "e", "d", "b", "a"));
-  ASSERT_EQ(sieve_hand(), 4);
+  ASSERT_EQ(sieve_hand_pos(), 4);
 
   _uut->add("d", a_valptr);
   ASSERT_THAT(
       sieve_queue_keys(),
       ::testing::ElementsAre("h", "g", "f", "e", "d", "b", "a"));
-  ASSERT_EQ(sieve_hand(), 4);
+  ASSERT_EQ(sieve_hand_pos(), 4);
 
   _uut->add("i", a_valptr);
   ASSERT_THAT(
       sieve_queue_keys(),
       ::testing::ElementsAre("i", "h", "g", "f", "d", "b", "a"));
-  ASSERT_EQ(sieve_hand(), 3);
+  ASSERT_EQ(sieve_hand_pos(), 3);
 
   _uut->add("b", a_valptr);
   ASSERT_THAT(
       sieve_queue_keys(),
       ::testing::ElementsAre("i", "h", "g", "f", "d", "b", "a"));
-  ASSERT_EQ(sieve_hand(), 3);
+  ASSERT_EQ(sieve_hand_pos(), 3);
 
   _uut->add("j", a_valptr);
   ASSERT_THAT(
       sieve_queue_keys(),
       ::testing::ElementsAre("j", "i", "h", "g", "d", "b", "a"));
-  ASSERT_EQ(sieve_hand(), 3);
+  ASSERT_EQ(sieve_hand_pos(), 3);
 }
 
 TEST_F(WebCacheTest, SieveAllVisited) {
