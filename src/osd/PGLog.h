@@ -1010,6 +1010,9 @@ public:
 	// partial writes allow a shard which did not participate in a write to
 	// have a missing version that is newer that the most recent log entry
 	if (ec_optimizations_enabled && (log.complete_to == log.log.end())) {
+	  // keep complete_to one entry behind the end of the log to stop
+	  // code incorrectly using it to deduce that recovery has completed
+	  --log.complete_to;
 	  break;
 	}
         ceph_assert(log.complete_to != log.log.end());
