@@ -304,7 +304,7 @@ public:
 				      ceph::bufferlist&& input) const final
   {
     if (local_conf().get_val<bool>("debug_asok_assert_abort")) {
-      ceph_assert_always(0);
+      ceph_abort();
       return seastar::make_ready_future<tell_result_t>();
     } else {
       return seastar::make_ready_future<tell_result_t>(
