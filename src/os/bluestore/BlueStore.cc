@@ -3434,21 +3434,23 @@ void BlueStore::ExtentMap::dup_esb(BlueStore* b, TransContext* txc,
 }
 
 void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
-                                  bool force)
+                                  bool just_after_reshard)
 {
   auto cct = onode->c->store->cct; //used by dout
-  dout(20) << __func__ << " " << onode->oid << (force ? " force" : "") << dendl;
+  bool do_check = onode->c->store->debug_extent_map_encode_check;
+  dout(20) << __func__ << " " << onode->oid << (just_after_reshard ? " force" : "") << dendl;
   if (onode->onode.extent_map_shards.empty()) {
     if (inline_bl.length() == 0) {
       unsigned n;
       // we need to encode inline_bl to measure encoded length
-      bool never_happen = encode_some(0, OBJECT_MAX_SIZE, inline_bl, &n);
+      bool never_happen = encode_some(0, OBJECT_MAX_SIZE, inline_bl, &n,
+        do_check, do_check && just_after_reshard);
       inline_bl.reassign_to_mempool(mempool::mempool_bluestore_inline_bl);
       ceph_assert(!never_happen);
       size_t len = inline_bl.length();
       dout(20) << __func__ << "  inline shard " << len << " bytes from " << n
 	       << " extents" << dendl;
-      if (!force && len > cct->_conf->bluestore_extent_map_shard_max_size) {
+      if (!just_after_reshard && len > cct->_conf->bluestore_extent_map_shard_max_size) {
 	request_reshard(0, OBJECT_MAX_SIZE);
 	return;
       }
@@ -3486,11 +3488,11 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
       encoded_shards.emplace_back(dirty_shard_t(&(*shard)));
       bufferlist& bl = encoded_shards.back().bl;
       if (encode_some(shard->shard_info->offset, endoff - shard->shard_info->offset,
-      		bl, &shard->extents)) {
-        if (force) {
+          bl, &shard->extents, do_check, do_check && just_after_reshard)) {
+        if (just_after_reshard) {
           _dump_extent_map<-1>(cct, *this);
           derr << __func__ << "  encode_some needs reshard" << dendl;
-          ceph_assert(!force);
+          ceph_assert(!just_after_reshard);
         }
       }
       size_t len = bl.length();
@@ -3500,7 +3502,7 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
       	 << " bytes (was " << shard->shard_info->bytes << ") from "
       	 << shard->extents << " extents" << dendl;
 
-      if (!force) {
+      if (!just_after_reshard) {
         if (len > cct->_conf->bluestore_extent_map_shard_max_size) {
           // we are big; reshard ourselves
           request_reshard(shard->shard_info->offset, endoff);
@@ -3924,7 +3926,9 @@ bool BlueStore::ExtentMap::encode_some(
   uint32_t offset,
   uint32_t length,
   bufferlist& bl,
-  unsigned *pn)
+  unsigned *pn,
+  bool complain_extent_overlap,
+  bool complain_shard_spanning)
 {
   Extent dummy(offset);
   auto start = extent_map.lower_bound(dummy);
@@ -3937,10 +3941,20 @@ bool BlueStore::ExtentMap::encode_some(
   unsigned n = 0;
   size_t bound = 0;
   bool must_reshard = false;
+  uint32_t prev_offset_end = 0;
   for (auto p = start;
        p != extent_map.end() && p->logical_offset < end;
        ++p, ++n) {
     ceph_assert(p->logical_offset >= offset);
+    if (complain_extent_overlap) {
+      if (p->logical_offset < prev_offset_end) {
+        using P = BlueStore::printer;
+        dout(-1) << __func__ << " extents overlap: " << std::endl
+                 << onode->print(P::NICK + P::SDISK + P::SUSE + P::SBUF) << dendl;
+        ceph_abort();
+      }
+      prev_offset_end = p->logical_end();
+    }
     p->blob->last_encoded_id = -1;
     if (!p->blob->is_spanning() && p->blob_escapes_range(offset, length)) {
       dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
@@ -3983,6 +3997,14 @@ bool BlueStore::ExtentMap::encode_some(
 	 p != extent_map.end() && p->logical_offset < end;
 	 ++p, ++n) {
       unsigned blobid;
+      if (complain_shard_spanning) {
+        if (p->logical_end() > end) {
+          using P = BlueStore::printer;
+          dout(-1) << __func__ << " extent spans shard after reshard " << ": " << std::endl
+            << onode->print(P::NICK + P::SDISK + P::SUSE + P::SBUF) << dendl;
+          ceph_abort();
+        }
+      }
       bool include_blob = false;
       if (p->blob->is_spanning()) {
 	blobid = p->blob->id << BLOBID_SHIFT_BITS;
@@ -9313,6 +9335,7 @@ int BlueStore::_mount()
       segment_size = 0;
     }
   }
+  debug_extent_map_encode_check = cct->_conf.get_val<bool>("bluestore_debug_extent_map_encode_check");
   _kv_only = false;
   if (cct->_conf->bluestore_fsck_on_mount) {
     int rc = fsck(cct->_conf->bluestore_fsck_on_mount_deep);

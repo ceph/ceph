@@ -1044,8 +1044,12 @@ public:
 
     void dump(ceph::Formatter* f) const;
 
-    bool encode_some(uint32_t offset, uint32_t length, ceph::buffer::list& bl,
-		     unsigned *pn);
+    bool encode_some(
+      uint32_t offset, uint32_t length, ceph::buffer::list& bl, unsigned *pn,
+      bool complain_extent_overlap, //verification; in debug mode assert if extents overlap
+      bool complain_shard_spanning  //verification; in debug mode assert if extent spans shards;
+                                    //must be used only on encode after reshard
+    );
 
     class ExtentDecoder {
       uint64_t pos = 0;
@@ -1102,7 +1106,10 @@ public:
       return p->second;
     }
 
-    void update(KeyValueDB::Transaction t, bool force);
+    void update(
+      KeyValueDB::Transaction t,
+      bool just_after_reshard //true to indicate that update should now respect shard boundaries
+    );                        //as no further resharding will be done
     decltype(BlueStore::Blob::id) allocate_spanning_blob_id();
     void reshard(
       KeyValueDB *db,
@@ -2455,6 +2462,7 @@ private:
 		"not enough bits for min_alloc_size");
   bool elastic_shared_blobs = false; ///< use smart ExtentMap::dup to reduce shared blob count
   bool use_write_v2 = false; ///< use new write path
+  bool debug_extent_map_encode_check = false;
 
   enum {
     // Please preserve the order since it's DB persistent
