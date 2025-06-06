@@ -19,17 +19,15 @@
 #include "auth/Auth.h"
 
 #include "common/ceph_mutex.h"
-#include "common/config_obs.h"
 
 class KeyServer;
 struct CephXAuthenticate;
 struct CephXServiceTicketInfo;
 
-class CephxServiceHandler  : public AuthServiceHandler, md_config_obs_t {
+class CephxServiceHandler  : public AuthServiceHandler {
   KeyServer *key_server;
-  uint64_t server_challenge;
+  uint64_t server_challenge = 0;
 
-  std::set<int> allowed_ciphers;
   ceph::shared_mutex lock = ceph::make_shared_mutex("CephxServiceHandler::lock");
 
 public:
@@ -54,14 +52,6 @@ private:
 			bool& should_enc_ticket);
   void build_cephx_response_header(int request_type, int status,
 				   ceph::buffer::list& bl);
-
-  std::vector<std::string> get_tracked_keys() const noexcept final;
-
-  void init_conf(const ConfigProxy& conf);
-  void handle_conf_change(const ConfigProxy& conf,
-                          const std::set <std::string> &changed) override {
-    init_conf(conf);
-  }
 
   bool cipher_is_allowed(int type);
 };

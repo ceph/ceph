@@ -3,7 +3,6 @@ tasks:
     cluster-conf:
       global:
         auth service cipher: aes
-        cephx preferred cipher: aes
       mon:
         mon auth allow insecure key: true
     cephx:
