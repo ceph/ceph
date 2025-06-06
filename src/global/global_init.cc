@@ -14,6 +14,12 @@
 
 #include <filesystem>
 #include <memory>
+#include "acconfig.h"
+#ifdef HAVE_BREAKPAD
+#include <breakpad/client/linux/handler/exception_handler.h>
+#include <breakpad/client/linux/handler/minidump_descriptor.h>
+#include <breakpad/google_breakpad/common/minidump_format.h>
+#endif
 #include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
 #include "common/code_environment.h"
@@ -26,10 +32,6 @@
 #include "extblkdev/ExtBlkDevPlugin.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
-#ifdef HAVE_BREAKPAD
-#include <client/linux/handler/minidump_descriptor.h>
-#include <google_breakpad/common/minidump_format.h>
-#endif
 #include "global/pidfile.h"
 #include "global/signal_handler.h"
 #include "include/compat.h"

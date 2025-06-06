@@ -365,11 +365,6 @@ if(WITH_JAEGER)
   target_link_libraries(rgw_common PUBLIC jaeger_base)
 endif()
 
-if(WITH_BREAKPAD)
-  add_dependencies(rgw_common breakpad_project)
-  target_link_libraries(rgw_common PUBLIC breakpad)
-endif()
-
 if(WITH_RADOSGW_DBSTORE)
   target_link_libraries(rgw_common PRIVATE global dbstore)
 endif()
