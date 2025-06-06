@@ -85,3 +85,6 @@
 [submodule "src/lss"]
 	path = src/lss
 	url = https://chromium.googlesource.com/linux-syscall-support
+[submodule "src/nvme"]
+	path = src/nvme
+	url = https://github.com/linux-nvme/libnvme
