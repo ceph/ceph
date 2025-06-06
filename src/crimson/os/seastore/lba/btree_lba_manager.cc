@@ -206,6 +206,42 @@ BtreeLBAManager::get_cursors(
   });
 }
 
+
+LBAManager::trim_pin_ret BtreeLBAManager::try_trim_indirect_pin(
+  Transaction& t,
+  std::tuple<LBACursorRef, LBACursorRef>& packed_cursor
+  ) {
+  auto c = get_context(t);
+  return with_btree_state<LBABtree, std::tuple<LBACursorRef, LBACursorRef>>(
+    cache, c, std::move(packed_cursor),
+    [this, c](auto& btree, auto& packed_cursor) -> get_mappings_iertr::future<>
+  {
+  auto& [indirect_cursor, direct_cursor] = packed_cursor;
+  c.trans.maybe_add_to_read_set(indirect_cursor->parent);
+  c.trans.maybe_add_to_read_set(direct_cursor->parent);
+  return refresh_lba_cursor(c, btree, *indirect_cursor).si_then([this, c, &btree, &direct_cursor]{return refresh_lba_cursor(c, btree, *direct_cursor);}).
+si_then(
+    [this, c, &indirect_cursor, &direct_cursor] {
+    auto direct_val = direct_cursor->val;
+    auto trim_indirect_mapping = get_mappings_iertr::now();
+    if (direct_val && indirect_cursor->get_intermediate_key() == direct_cursor->key && direct_val->refcount == 1 && indirect_cursor->get_length() == direct_val->len) {
+      auto&& fut = this->_decref_intermediate(c.trans, direct_cursor->key, direct_cursor->get_length()
+      ).si_then([this, c, direct_val=*direct_val, indirect_cursor=std::move(indirect_cursor->duplicate())](update_mapping_ret_bare_t) {
+        auto pnext = c.cache.adjust_laddr(c.trans, direct_val.pladdr.get_paddr(), indirect_cursor->key)->template cast<LogicalChildNode>().get();
+        return this->_update_mapping(c.trans, indirect_cursor->key,
+        [direct_val](const lba_map_val_t&) -> lba_map_val_t {return direct_val;}, pnext);}
+      ).discard_result().handle_error_interruptible(
+        get_mappings_iertr::pass_further(),
+        crimson::ct_error::enoent::handle(
+          []{ceph_abort_msg("unexpected enoent error");return get_mappings_iertr::make_ready_future<>();})
+      );
+      return std::move(fut);
+    }
+    return get_mappings_iertr::make_ready_future<>();
+  });
+  }).discard_result();
+}
+
 BtreeLBAManager::resolve_indirect_cursor_ret
 BtreeLBAManager::resolve_indirect_cursor(
   op_context_t c,
@@ -218,7 +254,7 @@ BtreeLBAManager::resolve_indirect_cursor(
     btree,
     indirect_cursor.get_intermediate_key(),
     indirect_cursor.get_length()
-  ).si_then([&indirect_cursor](auto cursors) {
+  ).si_then([this, &indirect_cursor](auto cursors) {
     ceph_assert(cursors.size() == 1);
     auto& direct_cursor = cursors.front();
     auto intermediate_key = indirect_cursor.get_intermediate_key();
@@ -226,6 +262,14 @@ BtreeLBAManager::resolve_indirect_cursor(
     assert(direct_cursor->get_laddr() <= intermediate_key);
     assert(direct_cursor->get_laddr() + direct_cursor->get_length()
 	   >= intermediate_key + indirect_cursor.get_length());
+    auto dmap_val = direct_cursor->val;
+    if (dmap_val && dmap_val->refcount == 1 && indirect_cursor.get_length() == dmap_val->len) {
+          trim_actions.emplace_back(make_tuple(std::move(indirect_cursor.duplicate()), std::move(direct_cursor->duplicate())));
+        if (maybe_trim_activator) {
+          maybe_trim_activator->set_value();
+          maybe_trim_activator = std::nullopt;
+        }
+    }
     return std::move(direct_cursor);
   });
 }
