@@ -185,6 +185,7 @@ enum {
   iamGenerateServiceLastAccessedDetails,
   iamSimulateCustomPolicy,
   iamSimulatePrincipalPolicy,
+  iamGetAccountSummary,
   iamAll,
 
   stsAssumeRole,
