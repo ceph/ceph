@@ -242,6 +242,7 @@ endif (WITH_CEPHFS)
 
 if (NOT WIN32)
   # cls_lua
+  find_package(Lua 5.3 REQUIRED)
   set(cls_lua_srcs
       lua/cls_lua.cc
       lua/lua_bufferlist.cc)
