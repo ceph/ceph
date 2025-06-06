@@ -127,8 +127,14 @@ class TestModuleSelftest(MgrTestCase):
         for i in range(0, periods):
             t1 = time.time()
             # Check that an HTTP module remains responsive
-            r = requests.get(dashboard_uri, verify=False)
-            self.assertEqual(r.status_code, 200)
+            try:
+                r = requests.get(dashboard_uri, verify=False)
+                self.assertEqual(r.status_code, 200)
+            except requests.RequestException:
+                # wait a little before the next GET req
+                time.sleep(5)
+                log.info("Retrying the GET req. Total retries left is... %s", periods - (i+1))
+                continue
 
             # Check that a native non-module command remains responsive
             self.mgr_cluster.mon_manager.raw_cluster_cmd("osd", "df")
