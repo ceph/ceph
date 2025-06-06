@@ -480,6 +480,8 @@ The output format is JSON and contains the following fields.
 * ``features``: features supported by the subvolume
 * ``state``: current state of the subvolume
 * ``earmark``: earmark of the subvolume
+* ``source``: contains details about source of the clone; for clones created
+   with Tentacle or earlier release, value of this field is 'N/A'.
 
 If a subvolume has been removed but its snapshots have been retained, the
 output contains only the following fields.
