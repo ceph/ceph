@@ -1055,6 +1055,72 @@ void RGWSTSAssumeRole::execute(optional_yield y)
   }
 }
 
+int RGWSTSGetCallerIdentity::verify_permission(optional_yield y)
+{
+  // Permissions are not required because the same information is returned when access is denied.
+  return 0;
+}
+
+static std::string iam_user_arn(const RGWUserInfo& info)
+{
+  bool has_account_id = !info.account_id.empty();
+  std::string_view acct = has_account_id ? info.account_id : info.user_id.tenant;
+  std::string_view username = has_account_id ? info.display_name : info.user_id.id;
+  std::string_view path = info.path;
+  if (path.empty()) {
+    path = "/";
+  }
+  return fmt::format("arn:aws:iam::{}:user{}{}",acct, path, username);
+}
+
+static rgw::ARN make_role_arn(const std::string& path,
+                              const std::string& name,
+                              const std::string& account)
+{
+  return {string_cat_reserve(path, name), "role", account, true};
+}
+
+std::string RGWSTSGetCallerIdentity::get_arn(const req_state *s, optional_yield y, std::string& account)
+{
+  auto type = s->auth.identity->get_identity_type();
+  std::string arn;
+
+  if (type == TYPE_ROOT) {
+    arn = iam_user_arn(s->user->get_info());
+  }
+
+  if (type == TYPE_ROLE) {
+    if (auto it = s->env.find("aws:userid"); it != s->env.end()) {
+      auto pos = it->second.find(':');
+      if (pos != std::string::npos) {
+        std::string role_id(it->second.data(), pos);
+        auto role = driver->get_role(role_id);
+        int op_ret = role->load_by_id(s, y);
+        if (op_ret >= 0) {
+          arn = make_role_arn(role->get_path(), role->get_name(), account).to_string();
+        }
+      }
+    }
+  }
+  return arn;
+}
+
+void RGWSTSGetCallerIdentity::execute(optional_yield y)
+{
+  std::string account;
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    account = acc->id;
+  }
+
+  s->formatter->open_object_section_in_ns("GetCallerIdentityResponse", RGW_REST_STS_XMLNS);
+  s->formatter->open_object_section("GetCallerIdentityResult");
+  encode_json("Arn",  get_arn(s, y, account), s->formatter);
+  encode_json("UserId", s->user->get_id().id, s->formatter);
+  encode_json("Account", account, s->formatter);
+  s->formatter->close_section();
+  s->formatter->close_section();
+}
+
 int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
                             rgw::sal::Driver* driver,
                             const rgw::auth::StrategyRegistry& auth_registry,
@@ -1067,7 +1133,8 @@ using op_generator = RGWOp*(*)();
 static const std::unordered_map<std::string_view, op_generator> op_generators = {
   {"AssumeRole", []() -> RGWOp* {return new RGWSTSAssumeRole;}},
   {"GetSessionToken", []() -> RGWOp* {return new RGWSTSGetSessionToken;}},
-  {"AssumeRoleWithWebIdentity", []() -> RGWOp* {return new RGWSTSAssumeRoleWithWebIdentity;}}
+  {"AssumeRoleWithWebIdentity", []() -> RGWOp* {return new RGWSTSAssumeRoleWithWebIdentity;}},
+  {"GetCallerIdentity", []() -> RGWOp* {return new RGWSTSGetCallerIdentity;}}
 };
 
 bool RGWHandler_REST_STS::action_exists(const req_state* s)
