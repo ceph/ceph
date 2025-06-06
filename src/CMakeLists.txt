@@ -468,6 +468,10 @@ if(WITH_CRIMSON)
     "-Wno-non-virtual-dtor")
   set(Seastar_CXX_FLAGS "${Seastar_CXX_FLAGS}" CACHE STRING "" FORCE)
   add_subdirectory(seastar)
+
+  # TODO: We don't need seastar internals in the backtraces
+  # target_link_libraries(seastar PRIVATE boost_stacktrace_noop)
+
   # create the directory so cmake won't complain when looking at the imported
   # target: Seastar exports this directory created at build-time
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen/include")
