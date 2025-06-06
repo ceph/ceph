@@ -315,5 +315,8 @@ endfunction()
 
 function(add_executable target)
   _add_executable(${target} ${ARGN})
-  maybe_add_boost_dep(${target})
+  # can't add dependencies to aliases
+  if (NOT ";${ARGN};" MATCHES ";(ALIAS);")
+    maybe_add_boost_dep(${target})
+  endif()
 endfunction()
