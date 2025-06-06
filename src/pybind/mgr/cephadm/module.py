@@ -693,6 +693,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.daemon_deploy_queue = DaemonDeployQueue()
         self.daemon_removal_queue = DaemonRemovalQueue()
 
+        self.created_ganesha_pool = False
+
     def shutdown(self) -> None:
         self.log.debug('shutdown')
         self._worker_pool.close()
@@ -3106,6 +3108,12 @@ Then run the following:
         if not self.rados.pool_exists(pool):
             raise OrchestratorError(f'Cannot find pool "{pool}" for '
                                     f'service {service_name}')
+
+    def create_nfs_pool(self) -> None:  # type: ignore
+        from nfs.cluster import create_ganesha_pool
+
+        create_ganesha_pool(self)
+        self.created_ganesha_pool = True
 
     def _add_daemon(self,
                     daemon_type: str,
