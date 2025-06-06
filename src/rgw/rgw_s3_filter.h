@@ -14,6 +14,10 @@ struct rgw_s3_key_filter {
   std::string suffix_rule;
   std::string regex_rule;
 
+  bool is_prefix_negative{false};
+  bool is_suffix_negative{false};
+  bool is_regex_negative{false};
+
   bool has_content() const;
 
   void dump(Formatter *f) const;
@@ -21,29 +25,40 @@ struct rgw_s3_key_filter {
   void dump_xml(Formatter *f) const;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
       encode(prefix_rule, bl);
       encode(suffix_rule, bl);
       encode(regex_rule, bl);
+      encode(is_prefix_negative, bl);
+      encode(is_suffix_negative, bl);
+      encode(is_regex_negative, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
       decode(prefix_rule, bl);
       decode(suffix_rule, bl);
       decode(regex_rule, bl);
+      if(struct_v >= 2) {
+        decode(is_prefix_negative, bl); 
+        decode(is_suffix_negative, bl); 
+        decode(is_regex_negative, bl);
+      }
     DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_s3_key_filter)
 
 using KeyValueMap = boost::container::flat_map<std::string, std::string>;
+//add this type for negative filter support - ensure v2 structs encoded as (key, (value, is_negative)) 
+using KeyValueTypePairMap = boost::container::flat_map<std::string, std::pair<std::string,bool>>;
 using KeyMultiValueMap = std::multimap<std::string, std::string>;
 
 struct rgw_s3_key_value_filter {
   KeyValueMap kv;
-
+  // key -> {value, is_negative} ; Type - IN => is_negative = false; Type - OUT => is_negative = true
+  KeyValueTypePairMap kvt; 
   bool has_content() const;
 
   void dump(Formatter *f) const;
@@ -51,13 +66,26 @@ struct rgw_s3_key_value_filter {
   void dump_xml(Formatter *f) const;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
+    if(struct_v >= 2)
+      encode(kvt, bl);
+    else
       encode(kv, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-      decode(kv, bl);
+    DECODE_START(2, bl);
+      if(struct_v >= 2)
+        decode(kvt, bl);
+      else {
+        decode(kv, bl);
+        // convert kv to kvt for correct matching based on type
+        for (const auto& it : kv) {
+          kvt.emplace(it.first, std::make_pair(it.second, true));
+        }
+        kv.clear();
+      }
+
     DECODE_FINISH(bl);
   }
 };
