@@ -235,8 +235,11 @@ class RbdSnapshot(RESTController):
 
         def _create_snapshot(ioctx, img, snapshot_name):
             mirror_info = img.mirror_image_get_info()
-            mirror_mode = img.mirror_image_get_mode()
-            if (mirror_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED and mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT) and mirrorImageSnapshot:  # noqa E501 #pylint: disable=line-too-long
+            mirror_mode = None
+            if mirror_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED:
+                mirror_mode = img.mirror_image_get_mode()
+
+            if (mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT) and mirrorImageSnapshot:
                 img.mirror_image_create_snapshot()
             else:
                 img.create_snap(snapshot_name)
