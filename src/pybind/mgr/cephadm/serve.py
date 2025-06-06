@@ -661,7 +661,6 @@ class CephadmServe:
             removed_conflict_daemons, conflict_hosts_altered = await self.remove_given_daemons(conflicts)
             if removed_conflict_daemons:
                 r = True
-                self.mgr.spec_store.mark_needs_configuration(spec.service_name())
                 hosts_altered.update(conflict_hosts_altered)
             daemons_placed, daemon_deployed_hosts, daemon_place_fails = await self.deploy_given_daemons(to_deploy)
             if daemons_placed:
@@ -670,12 +669,7 @@ class CephadmServe:
             removed_daemons, removed_daemon_hosts = await self.remove_given_daemons(to_remove)
             if removed_daemons:
                 r = True
-                self.mgr.spec_store.mark_needs_configuration(spec.service_name())
                 hosts_altered.update(conflict_hosts_altered)
-            if self.mgr.spec_store.needs_configuration(spec.service_name()):
-                svc = service_registry.get_service(spec.service_type)
-                svc.config(spec)
-                self.mgr.spec_store.mark_configured(spec.service_name())
             return (r, hosts_altered, daemon_place_fails)
 
         async def _deploy_and_remove_all(
@@ -712,6 +706,11 @@ class CephadmServe:
         if placement_failures:
             self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(placement_failures)} daemon(s)', len(
                 placement_failures), placement_failures)
+        for spec in specs:
+            if self.mgr.spec_store.needs_configuration(spec.service_name()):
+                svc = service_registry.get_service(spec.service_type)
+                svc.config(spec)
+                self.mgr.spec_store.mark_configured(spec.service_name())
         if self.mgr.use_agent:
             # can only send ack to agents if we know for sure port they bound to
             altered_hosts = set([h for h in altered_hosts if (h in self.mgr.agent_cache.agent_ports and not self.mgr.cache.is_host_draining(h))])
@@ -947,6 +946,9 @@ class CephadmServe:
                                         len(self.mgr.apply_spec_fails),
                                         warnings)
             raise OrchestratorError(msg)
+
+        if slots_to_add or daemons_to_remove:
+            self.mgr.spec_store.mark_needs_configuration(spec.service_name())
 
         return slots_to_add, daemons_to_remove, rank_map
 
