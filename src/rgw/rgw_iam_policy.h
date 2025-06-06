@@ -186,6 +186,7 @@ enum {
   iamSimulateCustomPolicy,
   iamSimulatePrincipalPolicy,
   iamAll,
+  iamGetAccountSummary,
 
   stsAssumeRole,
   stsAssumeRoleWithWebIdentity,

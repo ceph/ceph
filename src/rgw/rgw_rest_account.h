@@ -17,6 +17,7 @@
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
+#include "rgw_op_type.h"
 
 class RGWHandler_Account : public RGWHandler_Auth_S3 {
  protected:
@@ -43,4 +44,13 @@ class RGWRESTMgr_Account : public RGWRESTMgr {
                                const std::string&) override {
     return new RGWHandler_Account(auth_registry);
   }
+};
+
+class RGWGetAccountSummary : public RGWRESTOp {
+  void add_entry(const std::string& key, int64_t value);
+  public:
+  int verify_permission(optional_yield y) override;
+  void execute(optional_yield y) override;
+  const char* name() const override { return "get_account_summary"; }
+  RGWOpType get_type() override { return RGW_OP_GET_ACCOUNT_SUMMARY; }
 };

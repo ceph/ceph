@@ -56,19 +56,9 @@ TEST(RocksDBOption, interpret) {
   ASSERT_TRUE(db->compact_on_mount);
   //check thread pool setting
   std::vector<rocksdb::ThreadStatus> thread_list;
-  /* Race hazard - rocksdb does not register its threads until they start
-   * running, and only guarantees the threads have been created before
-   * returning. We need to be prepared to wait for the scheduler to
-   * run the threads to avoid false positives.
-   */
-  for (int attempt = 0; attempt < 50; attempt++) {
-    options.env->SleepForMicroseconds(100000);
-    status = options.env->GetThreadList(&thread_list);
-    ASSERT_TRUE(status.ok());
-    if (thread_list.size() >= 15u) {
-      break;
-    }
-  }
+  status = options.env->GetThreadList(&thread_list);
+  ASSERT_TRUE(status.ok());
+
   int num_high_pri_threads = 0;
   int num_low_pri_threads = 0;
   for (vector<rocksdb::ThreadStatus>::iterator it = thread_list.begin();
