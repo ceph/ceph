@@ -20,6 +20,7 @@ from .auth_metadata import AuthMetadataManager
 from .subvolume_attrs import SubvolumeStates
 
 from ceph.fs.earmarking import CephFSVolumeEarmarking, EarmarkException
+from ceph.fs.enctag import CephFSVolumeEncryptionTag, EncryptionTagException
 
 log = logging.getLogger(__name__)
 
@@ -216,6 +217,26 @@ class SubvolumeBase(object):
         except cephfs.NoData:
             attrs["casesensitive"] = True
 
+        try:
+            fs_enctag = CephFSVolumeEncryptionTag(self.fs, pathname)
+            attrs["enctag"] = fs_enctag.get_tag()
+        except cephfs.NoData:
+            attrs["enctag"] = ''
+        except EncryptionTagException:
+            attrs["enctag"] = ''
+
+        try:
+            attrs["fscrypt_auth"] = self.fs.getxattr(pathname,
+                                                       'ceph.fscrypt.auth')
+        except cephfs.NoData:
+            attrs["fscrypt_auth"] = None
+
+        try:
+            attrs["fscrypt_file"] = self.fs.getxattr(pathname,
+                                                       'ceph.fscrypt.file')
+        except cephfs.NoData:
+            attrs["fscrypt_file"] = None
+
         return attrs
 
     def set_attrs(self, path, attrs):
@@ -320,6 +341,30 @@ class SubvolumeBase(object):
                 self.fs.setxattr(path, "ceph.dir.casesensitive", "0".encode('utf-8'), 0)
             except cephfs.Error as e:
                 raise VolumeException(-e.args[0], e.args[1])
+
+        # set encryption tag string identifier
+        enctag = attrs.get("enctag", None)
+        if enctag is not None:
+            fs_enctag = CephFSVolumeEncryptionTag(self.fs, path)
+            fs_enctag.set_tag(enctag)
+
+        fscrypt_auth = attrs.get("fscrypt_auth")
+        if fscrypt_auth is not None:
+            try:
+                self.fs.setxattr(path, 'ceph.fscrypt.auth',
+                                 fscrypt_auth, 0)
+            except cephfs.InvalidValue:
+                raise VolumeException(-errno.EINVAL,
+                                      "invalid fscrypt_auth specified: '{0}'".format(fscrypt_auth))
+
+        fscrypt_file = attrs.get("fscrypt_file")
+        if fscrypt_file is not None:
+            try:
+                self.fs.setxattr(path, 'ceph.fscrypt.file',
+                                 fscrypt_file, 0)
+            except cephfs.InvalidValue:
+                raise VolumeException(-errno.EINVAL,
+                                      "invalid fscrypt_file specified: '{0}'".format(fscrypt_file))
 
     def _resize(self, path, newsize, noshrink):
         try:
@@ -494,6 +539,14 @@ class SubvolumeBase(object):
         except cephfs.NoData:
             casesensitive = True
 
+        try:
+            fs_enctag = CephFSVolumeEncryptionTag(self.fs, subvolpath)
+            enctag = fs_enctag.get_tag()
+        except cephfs.NoData:
+            enctag = ''
+        except EncryptionTagException:
+            enctag = ''
+
         return {'path': subvolpath,
                 'type': etype.value,
                 'uid': int(st["uid"]),
@@ -515,6 +568,7 @@ class SubvolumeBase(object):
                 'earmark': earmark,
                 'normalization': normalization,
                 'casesensitive': casesensitive,
+                'enctag': enctag,
         }
 
     def set_user_metadata(self, keyname, value):
