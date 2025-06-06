@@ -966,14 +966,14 @@ public:
 class RadosRestore : public StoreRestore {
   RadosStore* store;
   librados::IoCtx& ioctx;
+  neorados::RADOS& r;
+  neorados::IOContext neo_ioctx;  
+  std::vector<std::unique_ptr<fifo::FIFO>> fifos;  
   int num_objs;
   std::vector<std::string> obj_names;
-  std::vector<std::unique_ptr<rgw::cls::fifo::FIFO>> fifos;  
 
 public:
-  RadosRestore(RadosStore* _st) : store(_st),
-       	ioctx(*store->getRados()->get_restore_pool_ctx()) {}
-
+  RadosRestore(RadosStore* _st) ;
   ~RadosRestore() override {
     finalize();
   }
@@ -999,7 +999,6 @@ public:
 					       const std::string& cookie) override;
   /** Below routines deal with actual FIFO */
   int is_empty(const DoutPrefixProvider *dpp, optional_yield y);
-  std::string_view max_marker();
   int trim(const DoutPrefixProvider *dpp, optional_yield y,
 		int index, const std::string_view& marker);
   int push(const DoutPrefixProvider *dpp, optional_yield y,
