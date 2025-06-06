@@ -2160,6 +2160,18 @@ bool ECBackend::try_reads_to_commit()
   return true;
 }
 
+bool ECBackend::should_send_nop(Op *op) {
+  for (set<pg_shard_t>::const_iterator i =
+	 get_parent()->get_acting_recovery_backfill_shards().begin();
+       i != get_parent()->get_acting_recovery_backfill_shards().end();
+       ++i) {
+          if (get_parent()->is_async_recovery_target(*i) && get_parent()->should_send_op(*i, op->hoid)) {
+            return true;
+          }
+       }
+  return false;
+}
+
 bool ECBackend::try_finish_rmw()
 {
   if (waiting_commit.empty())
@@ -2179,8 +2191,7 @@ bool ECBackend::try_finish_rmw()
 
   if (get_osdmap()->require_osd_release >= ceph_release_t::kraken) {
     if (op->version > get_parent()->get_log().get_can_rollback_to() &&
-	waiting_reads.empty() &&
-	waiting_commit.empty()) {
+	((waiting_reads.empty() && waiting_commit.empty()) || should_send_nop(op))) {
       // submit a dummy transaction to kick the rollforward
       auto tid = get_parent()->get_tid();
       Op *nop = &(tid_to_op_map[tid]);
