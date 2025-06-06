@@ -42,10 +42,10 @@ TEST_F(TestClient, LlreadvLlwritevInvalidFileHandleSync) {
     int64_t rc;
 
     rc = client->ll_writev(fh_null, iov_out, 2, 0);
-    ASSERT_EQ(rc, -CEPHFS_EBADF);
+    ASSERT_EQ(rc, -EBADF);
 
     rc = client->ll_readv(fh_null, iov_in, 2, 0);
-    ASSERT_EQ(rc, -CEPHFS_EBADF);
+    ASSERT_EQ(rc, -EBADF);
 
     // test after closing the file handle
     int mypid = getpid();
@@ -72,8 +72,8 @@ TEST_F(TestClient, LlreadvLlwritevInvalidFileHandleSync) {
     ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));
 
     rc = client->ll_writev(fh, iov_out, 2, 0);
-    ASSERT_EQ(rc, -CEPHFS_EBADF);
+    ASSERT_EQ(rc, -EBADF);
 
     rc = client->ll_readv(fh, iov_in, 2, 0);
-    ASSERT_EQ(rc, -CEPHFS_EBADF);
+    ASSERT_EQ(rc, -EBADF);
 }
