@@ -7,10 +7,18 @@ namespace crimson::os::seastore {
 
 std::ostream &operator<<(std::ostream &out, const LBAMapping &rhs)
 {
+  if (rhs.is_end()) {
+    return out << "LBAMapping(END)";
+  }
   out << "LBAMapping(" << rhs.get_key()
-      << "~0x" << std::hex << rhs.get_length() << std::dec
-      << "->" << rhs.get_val();
-  if (rhs.is_indirect()) {
+      << "~0x" << std::hex << rhs.get_length();
+  if (rhs.is_complete()) {
+    out << std::dec
+	<< "->" << rhs.get_val();
+  } else {
+    out << std::dec << "->" << rhs.indirect_cursor->val;
+  }
+  if (rhs.is_complete_indirect()) {
     out << ",indirect(" << rhs.get_intermediate_base()
         << "~0x" << std::hex << rhs.get_intermediate_length()
         << "@0x" << rhs.get_intermediate_offset() << std::dec
@@ -34,7 +42,7 @@ std::ostream &operator<<(std::ostream &out, const lba_mapping_list_t &rhs)
 using lba::LBALeafNode;
 
 get_child_ret_t<LBALeafNode, LogicalChildNode>
-LBAMapping::get_logical_extent(Transaction &t)
+LBAMapping::get_logical_extent(Transaction &t) const
 {
   assert(is_linked_direct());
   ceph_assert(direct_cursor->is_viewable());
