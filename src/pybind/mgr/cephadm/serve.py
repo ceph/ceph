@@ -28,8 +28,16 @@ from orchestrator import OrchestratorError, set_exception_subject, OrchestratorE
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.schedule import HostAssignment
 from cephadm.autotune import MemoryAutotuner
-from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
-    CephadmNoImage, CEPH_TYPES, ContainerInspectInfo, SpecialHostLabels
+from cephadm.utils import (
+    forall_hosts,
+    cephadmNoImage,
+    is_repo_digest,
+    CephadmNoImage,
+    CEPH_TYPES,
+    ContainerInspectInfo,
+    SpecialHostLabels,
+    LogrotateConfigType,
+)
 from mgr_module import MonCommandFailed
 from mgr_util import format_bytes
 from cephadm.services.service_registry import service_registry
@@ -307,6 +315,16 @@ class CephadmServe:
                         host, json.loads(str(self.mgr.get_store('registry_credentials')))))
                 if r:
                     bad_hosts.append(r)
+
+            if self.mgr.cache.host_needs_custom_logrotate_file(host):
+                for logrotate_type in LogrotateConfigType:
+                    if self.mgr.get_store(logrotate_type.config_key_entry):
+                        self.log.debug(f"Writing custom {str(logrotate_type)} logrotate file to `{host}`")
+                        with self.mgr.async_timeout_handler(host, 'cephadm write-custom-logrotate-config'):
+                            r = self.mgr.wait_async(self._write_custom_logrotate_config(
+                                host, str(self.mgr.get_store(logrotate_type.config_key_entry)), logrotate_type))
+                        if r:
+                            bad_hosts.append(r)
 
             if self.mgr.cache.host_needs_osdspec_preview_refresh(host):
                 self.log.debug(f"refreshing OSDSpec previews for {host}")
@@ -1823,6 +1841,27 @@ class CephadmServe:
             ['--registry-json', '-'], stdin=json.dumps(registry_json), error_ok=True)
         if code:
             return f"Host {host} failed to login to {registry_json['url']} as {registry_json['username']} with given password"
+        return None
+
+    # function responsible for writing a custom logrotate config to a single host
+    async def _write_custom_logrotate_config(
+        self,
+        host: str,
+        custom_template: str,
+        logrotate_config_type: LogrotateConfigType
+    ) -> Optional[str]:
+        self.log.debug(f"Attempting to write {str(logrotate_config_type)} custom logrotate config to {host}")
+        # want to pass info over stdin rather than through normal list of args
+        args = [
+            f'--{str(logrotate_config_type)}',
+            '--logrotate-config-stdin'
+        ]
+        if logrotate_config_type == LogrotateConfigType.cluster:
+            args.extend(['--fsid', self.mgr._cluster_fsid])
+        out, err, code = await self._run_cephadm(
+            host, 'mon', 'write-custom-logrotate-config', args, stdin=custom_template, error_ok=True)
+        if code:
+            return f"Failed to write {str(logrotate_config_type)} custom logrotate config to {host} "
         return None
 
     async def _deploy_cephadm_binary(self, host: str, addr: Optional[str] = None) -> None:
