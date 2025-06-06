@@ -22,6 +22,7 @@
 #include "common/Throttle.h"
 #include "common/BackTrace.h"
 #include "common/ceph_time.h"
+#include "common/async/blocked_completion.h"
 
 #include "rgw_asio_thread.h"
 #include "rgw_cksum.h"
@@ -1255,6 +1256,10 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
   if (ret < 0)
     return ret;
 
+  ret = open_restore_pool_neo_ctx(dpp);
+  if (ret < 0)
+    return ret;
+  
   ret = open_objexp_pool_ctx(dpp);
   if (ret < 0)
     return ret;
@@ -1514,6 +1519,22 @@ int RGWRados::open_restore_pool_ctx(const DoutPrefixProvider *dpp)
 {
   return rgw_init_ioctx(dpp, get_rados_handle(), svc.zone->get_zone_params().restore_pool, restore_pool_ctx, true, true);
 }
+
+int RGWRados::open_restore_pool_neo_ctx(const DoutPrefixProvider *dpp)
+{
+  try {
+    restore_pool_neo_ctx = rgw::init_iocontext(dpp, driver->get_neorados(),
+		                       svc.zone->get_zone_params().restore_pool,
+				       rgw::create, ceph::async::use_blocked);
+
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ": Failed to initialized ioctx: " << e.what()
+	      		 << ", for restore pool" << dendl;
+    throw;
+  }
+  return 0;
+}
+
 
 int RGWRados::open_objexp_pool_ctx(const DoutPrefixProvider *dpp)
 {

@@ -307,13 +307,13 @@ int RGWRestore::process(int index, int max_secs, optional_yield y)
       ", marker='" << marker << "'" <<
       ", next_marker='" << next_marker << "'" << dendl;
 
+    if (ret < 0)
+      goto done;
+
     if (entries.size() == 0) {
       lock.unlock();
       return 0;
     }
-
-    if (ret < 0)
-      goto done;
 
     marker = next_marker;
     std::vector<RGWRestoreEntry>::iterator iter;
@@ -329,6 +329,9 @@ int RGWRestore::process(int index, int max_secs, optional_yield y)
   	  	         << obj_names[index] << dendl;	 
       }
 
+      if (ret < 0)
+        goto done;
+
       ///process all entries, trim and re-add
       utime_t now = ceph_clock_now();
       if (now >= end) {
@@ -341,29 +344,30 @@ int RGWRestore::process(int index, int max_secs, optional_yield y)
 	goto done;
       }
     }
-    ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": trimming till marker: '" << marker
+  } while (truncated);
+
+  ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": trimming till marker: '" << marker
 		 	 << "' on shard:"
   	  	         << obj_names[index] << dendl;    
-    ret = sal_restore->trim_entries(this, y, index, marker);
+  ret = sal_restore->trim_entries(this, y, index, marker);
+  if (ret < 0) {
+    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to trim entries on "	    	  	         << obj_names[index] << dendl;
+  }
+
+  if (!r_entries.empty()) {
+    ret = sal_restore->add_entries(this, y, index, r_entries);
     if (ret < 0) {
-      ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to trim entries on "	    	  	         << obj_names[index] << dendl;
-    }
-
-    if (!r_entries.empty()) {
-      ret = sal_restore->add_entries(this, y, index, r_entries);
-      if (ret < 0) {
-        ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to add entries on "    
+      ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to add entries on "    
   	  	           << obj_names[index] << dendl;
-      }
     }
+  }
 
-    r_entries.clear();
-  } while (truncated);
+  r_entries.clear();
 
 done:
   lock.unlock();
 
-  return 0;
+  return ret;
 }
 
 int RGWRestore::process_restore_entry(RGWRestoreEntry& entry, optional_yield y)
@@ -375,7 +379,6 @@ int RGWRestore::process_restore_entry(RGWRestoreEntry& entry, optional_yield y)
   std::unique_ptr<rgw::sal::PlacementTier> tier;
   std::optional<uint64_t> days = entry.days;
   rgw::sal::RGWRestoreStatus restore_status = rgw::sal::RGWRestoreStatus::None;
-  RGWObjState* obj_state{nullptr};
   rgw_placement_rule target_placement;
 
   // Ensure its the same source zone processing temp entries as we do not
@@ -450,7 +453,6 @@ int RGWRestore::process_restore_entry(RGWRestoreEntry& entry, optional_yield y)
 
   // now go ahead with restoring object
   // XXX: first check if its already restored?
-  bool in_progress = true;
   ret = obj->restore_obj_from_cloud(bucket.get(), tier.get(), cct, days, in_progress,
 		  		      this, y);
   if (ret < 0) {
@@ -495,7 +497,7 @@ int RGWRestore::set_cloud_restore_status(const DoutPrefixProvider* dpp,
   if (!pobj)
     return ret;
 
-  pobj->set_atomic();
+  pobj->set_atomic(true);
 
   bufferlist bl;
   using ceph::encode;

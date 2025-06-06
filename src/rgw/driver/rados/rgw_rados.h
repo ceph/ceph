@@ -359,6 +359,7 @@ class RGWRados
   int open_gc_pool_ctx(const DoutPrefixProvider *dpp);
   int open_lc_pool_ctx(const DoutPrefixProvider *dpp);
   int open_restore_pool_ctx(const DoutPrefixProvider *dpp);
+  int open_restore_pool_neo_ctx(const DoutPrefixProvider *dpp);
   int open_objexp_pool_ctx(const DoutPrefixProvider *dpp);
   int open_reshard_pool_ctx(const DoutPrefixProvider *dpp);
   int open_notif_pool_ctx(const DoutPrefixProvider *dpp);
@@ -453,6 +454,7 @@ protected:
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
   librados::IoCtx lc_pool_ctx;        // .rgw.lc
   librados::IoCtx restore_pool_ctx;        // .rgw.restore
+  neorados::IOContext restore_pool_neo_ctx;        // .rgw.restore 
   librados::IoCtx objexp_pool_ctx;
   librados::IoCtx reshard_pool_ctx;
   librados::IoCtx notif_pool_ctx;     // .rgw.notif
@@ -551,6 +553,10 @@ public:
     return &restore_pool_ctx;
   }
 
+  neorados::IOContext* get_restore_pool_neo_ctx() {
+    return &restore_pool_neo_ctx;
+  }
+  
   librados::IoCtx& get_notif_pool_ctx() {
     return notif_pool_ctx;
   }
