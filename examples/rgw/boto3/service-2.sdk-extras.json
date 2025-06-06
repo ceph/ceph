@@ -418,6 +418,10 @@
                 "BucketIndex":{
                     "shape":"BucketIndex",
                     "documentation":"<p>Configuration to customize the bucket index layout.</p> <note> <p>This element is a Ceph RGW extension.</p> </note>"
+                },
+                "DataRedundancy":{
+                    "shape":"CreateBucketDataRedundancy",
+                    "documentation":"<p>Objects are replicated across all zones in the bucket's <code>ZoneGroup</code> by default, but this can be disabled on bucket creation. Buckets with <code>SingleZone</code> redundancy are instead pinned to the zone they're created on, and other zones will redirect requests for this bucket. Bucket Replication Policy can still be used to replicate objects to/from other buckets in the zonegroup, but cross-zonegroup replication policy is not supported.</p> <note> <p>This element is a Ceph RGW extension.</p> </note>"
                 }
             }
         },
@@ -444,7 +448,14 @@
                 "Indexless"
             ]
         },
-        "BucketIndexNumShards":{"type":"integer"}
+        "BucketIndexNumShards":{"type":"integer"},
+        "CreateBucketDataRedundancy":{
+            "type":"string",
+            "enum":[
+                "ZoneGroup",
+                "SingleZone"
+            ]
+        }
     },
     "documentation":"<p/>"
 }

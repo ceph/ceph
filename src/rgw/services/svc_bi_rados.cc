@@ -453,6 +453,18 @@ int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
                                         const rgw::bucket_index_layout_generation& idx_layout,
                                         bool judge_support_logrecord)
 {
+  // only create the index for buckets located on this zone/zonegroup
+  if (bucket_info.zonegroup != svc.zone->get_zonegroup().id) {
+    ldpp_dout(dpp, 10) << "not creating index for bucket on "
+        "remote zonegroup " << bucket_info.zonegroup << dendl;
+    return 0;
+  }
+  if (!bucket_info.local_zone_id.empty() &&
+      bucket_info.local_zone_id != svc.zone->zone_id().id) {
+    ldpp_dout(dpp, 10) << "not creating index for zone-local bucket "
+        "on remote zone " << bucket_info.local_zone_id << dendl;
+    return 0;
+  }
   if (idx_layout.layout.type != rgw::BucketIndexType::Normal) {
     return 0;
   }
