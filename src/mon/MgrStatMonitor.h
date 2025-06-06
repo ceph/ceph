@@ -28,6 +28,8 @@ public:
   MgrStatMonitor(Monitor &mn, Paxos &p, const std::string& service_name);
   ~MgrStatMonitor() override;
 
+  ceph::mutex lock = ceph::make_mutex("MgrStatMonitor::lock");
+
   void init() override {}
   void on_shutdown() override {}
 

@@ -72,6 +72,7 @@ void MgrStatMonitor::handle_conf_change(
   const std::set<std::string>& changed)
 {
   if (changed.count("enable_availability_tracking")) {
+    std::scoped_lock l(lock);
     bool oldval = enable_availability_tracking;
     bool newval = g_conf().get_val<bool>("enable_availability_tracking");
     dout(10) << __func__ << " enable_availability_tracking config option is changed from " 
@@ -108,7 +109,7 @@ void MgrStatMonitor::calc_pool_availability()
   // if feature is disabled by user, do not update the uptime 
   // and downtime, exit early
   if (!enable_availability_tracking) {
-    dout(20) << __func__ << "tracking availability score is disabled" << dendl;
+    dout(20) << __func__ << " tracking availability score is disabled" << dendl;
     return;
   }
 
