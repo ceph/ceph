@@ -1197,6 +1197,7 @@ public:
     std::set<pg_shard_t>::const_iterator remote_recovery_reservation_it;
     explicit WaitRemoteRecoveryReserved(my_context ctx);
     boost::statechart::result react(const RemoteRecoveryReserved &evt);
+    boost::statechart::result react(const AdvMap& ev);
     void exit();
   };
 
@@ -1208,6 +1209,7 @@ public:
     explicit WaitLocalRecoveryReserved(my_context ctx);
     void exit();
     boost::statechart::result react(const RecoveryTooFull &evt);
+    boost::statechart::result react(const AdvMap& ev);
   };
 
   struct Activating : boost::statechart::state< Activating, Active >, NamedState {
