@@ -110,7 +110,6 @@ Store::Store(
   t->touch(coll, sh_err_obj);
   shallow_db.emplace(
       pgid, sh_err_obj, OSDriver{&object_store, coll, sh_err_obj});
-
   // and the DB for deep errors
   const auto dp_err_obj =
       pgid.make_temp_ghobject(fmt::format("deep_scrub_{}", pgid));
@@ -162,15 +161,22 @@ void Store::add_object_error(int64_t pool, const inconsistent_obj_wrapper& e)
 	   << dendl;
 
   if (current_level == scrub_level_t::deep) {
+    if (deep_db->results.capacity() == 0) {
+      deep_db->results.reserve(1024); // unable to predict amount of errors,
+                                       // let it be quite big to minimize reallocs
+    }
     // not overriding the deep errors DB during shallow scrubs
-    deep_db->results[key] = e.encode();
+    deep_db->results.emplace_back(key, e.encode());
   }
-
+  if (shallow_db->results.capacity() == 0) {
+    shallow_db->results.reserve(1024); // unable to predict amount of errors,
+                                       // let it be quite big to minimize reallocs
+  }
   // only shallow errors are stored in the shallow DB
   auto e_copy = e;
   e_copy.errors &= librados::obj_err_t::SHALLOW_ERRORS;
   e_copy.union_shards.errors &= librados::err_t::SHALLOW_ERRORS;
-  shallow_db->results[key] = e_copy.encode();
+  shallow_db->results.emplace_back(key, e_copy.encode());
 }
 
 
@@ -182,8 +188,12 @@ void Store::add_error(int64_t pool, const inconsistent_snapset_wrapper& e)
 
 void Store::add_snap_error(int64_t pool, const inconsistent_snapset_wrapper& e)
 {
+  if (shallow_db->results.capacity() == 0) {
+    shallow_db->results.reserve(1024); // unable to predict amount of errors,
+                                       // let it be quite big to minimize reallocs
+  }
   // note: snap errors are only placed in the shallow store
-  shallow_db->results[to_snap_key(pool, e.object)] = e.encode();
+  shallow_db->results.emplace_back(to_snap_key(pool, e.object), e.encode());
 }
 
 
