@@ -14406,6 +14406,25 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						   get_last_committed() + 1));
     return true;
+  } else if (prefix == "osd pool clear-availability-status") {
+    // TODO: do not allow users to clear score if feature is disabled 
+    string pool_name;
+    cmd_getval(cmdmap, "pool", pool_name);
+    int64_t pool_id = osdmap.lookup_pg_pool_name(pool_name);
+    // check if pool exists
+    if (pool_id < 0) {
+      ss << "unrecognized pool '" << pool_name << "'";
+      return -ENOENT;
+    }
+    std::map<uint64_t, PoolAvailability> pool_availability = mon.mgrstatmon()->get_pool_availability();
+    // check if pool exists in pool_availability
+    if (pool_availability.find(pool_id) == pool_availability.end()){
+      ss << "unrecognized pool '" << pool_name << "'";
+      return -ENOENT;
+    }
+    // clear existing calculations
+    mon.mgrstatmon()->clear_pool_availability(pool_id);
+    return true;
   } else if (prefix == "osd pool availability-status") {
     TextTable tbl;
     tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);

@@ -52,6 +52,7 @@ public:
   bool preprocess_statfs(MonOpRequestRef op);
 
   void calc_pool_availability();
+  void clear_pool_availability(int64_t poolid);
 
   void check_sub(Subscription *sub);
   void check_subs();
