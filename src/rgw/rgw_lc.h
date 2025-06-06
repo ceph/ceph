@@ -562,6 +562,8 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWLifecycleConfiguration)
 
+namespace ceph::async { class spawn_throttle; }
+
 class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
   rgw::sal::Driver* driver;
@@ -573,8 +575,6 @@ class RGWLC : public DoutPrefixProvider {
 
 public:
 
-  class WorkPool;
-
   class LCWorker : public Thread
   {
     const DoutPrefixProvider *dpp;
@@ -583,7 +583,6 @@ public:
     int ix;
     std::mutex lock;
     std::condition_variable cond;
-    WorkPool* workpool{nullptr};
     /* save the target bucket names created as part of object transition
      * to cloud. This list is maintained for the duration of each RGWLC::process()
      * post which it is discarded. */
@@ -611,7 +610,6 @@ public:
 
     friend class RGWRados;
     friend class RGWLC;
-    friend class WorkQ;
   }; /* LCWorker */
 
   friend class RGWRados;
@@ -671,6 +669,7 @@ public:
 
   int handle_multipart_expiration(rgw::sal::Bucket* target,
 				  const std::multimap<std::string, lc_op>& prefix_map,
+				  ceph::async::spawn_throttle& workpool,
 				  LCWorker* worker, time_t stop_at, bool once);
 };
 
