@@ -344,7 +344,7 @@ class RadosStore : public StoreDriver {
                                  optional_yield y,
                                  const DoutPrefixProvider* dpp) override;
     virtual RGWLC* get_rgwlc(void) override { return rados->get_lc(); }
-    virtual RGWRestore* get_rgwrestore(void) override { return rados->get_restore(); }
+    virtual rgw::restore::Restore* get_rgwrestore(void) override { return rados->get_restore(); }
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return rados->get_cr_registry(); }
 
     virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y) override;
@@ -954,22 +954,20 @@ public:
   RadosRestoreSerializer(RadosStore* store, const std::string& oid, const std::string& lock_name, const std::string& cookie);
 
   virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
-  virtual int unlock() override {
-    return lock.unlock(&ioctx, oid);
-  }
+  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
 };
 
 class RadosRestore : public StoreRestore {
   RadosStore* store;
   librados::IoCtx& ioctx;
+  neorados::RADOS& r;
+  neorados::IOContext neo_ioctx;  
+  std::vector<std::unique_ptr<fifo::FIFO>> fifos;  
   int num_objs;
   std::vector<std::string> obj_names;
-  std::vector<std::unique_ptr<rgw::cls::fifo::FIFO>> fifos;  
 
 public:
-  RadosRestore(RadosStore* _st) : store(_st),
-       	ioctx(*store->getRados()->get_restore_pool_ctx()) {}
-
+  RadosRestore(RadosStore* _st) ;
   ~RadosRestore() override {
     finalize();
   }
@@ -978,14 +976,12 @@ public:
 		  int n_objs, std::vector<std::string>& obj_names) override;
   void finalize();  
 
-  virtual int add_entry(const DoutPrefixProvider* dpp, optional_yield y,
-		  int index, const RGWRestoreEntry& r_entry) override;
   virtual int add_entries(const DoutPrefixProvider* dpp, optional_yield y,
-	       int index, const std::list<RGWRestoreEntry>& restore_entries) override;
+	       int index, const std::vector<rgw::restore::RestoreEntry>& restore_entries) override;
   virtual int list(const DoutPrefixProvider *dpp, optional_yield y,
 	       	   int index,
 	           const std::string& marker, std::string* out_marker,
-		   uint32_t max_entries, std::vector<RGWRestoreEntry>& entries,
+		   uint32_t max_entries, std::vector<rgw::restore::RestoreEntry>& entries,
 		   bool* truncated) override;
   virtual int trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
 		 	  int index, const std::string_view& marker) override;
@@ -994,14 +990,12 @@ public:
 					       const std::string& oid,
 					       const std::string& cookie) override;
   /** Below routines deal with actual FIFO */
-  int is_empty(const DoutPrefixProvider *dpp, optional_yield y);
-  std::string_view max_marker();
   int trim(const DoutPrefixProvider *dpp, optional_yield y,
 		int index, const std::string_view& marker);
   int push(const DoutPrefixProvider *dpp, optional_yield y,
 		int index, ceph::buffer::list&& bl);
   int push(const DoutPrefixProvider *dpp, optional_yield y,
-		int index, std::vector<ceph::buffer::list>&& items);
+		int index, std::deque<ceph::buffer::list>&& items);
 };
 
 class RadosNotification : public StoreNotification {

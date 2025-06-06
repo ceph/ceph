@@ -41,6 +41,7 @@
 #include "rgw_sal_fwd.h"
 #include "rgw_pubsub.h"
 #include "rgw_tools.h"
+#include "rgw_restore.h"
 
 struct D3nDataCache;
 struct RGWLCCloudTierCtx;
@@ -359,6 +360,7 @@ class RGWRados
   int open_gc_pool_ctx(const DoutPrefixProvider *dpp);
   int open_lc_pool_ctx(const DoutPrefixProvider *dpp);
   int open_restore_pool_ctx(const DoutPrefixProvider *dpp);
+  int open_restore_pool_neo_ctx(const DoutPrefixProvider *dpp);
   int open_objexp_pool_ctx(const DoutPrefixProvider *dpp);
   int open_reshard_pool_ctx(const DoutPrefixProvider *dpp);
   int open_notif_pool_ctx(const DoutPrefixProvider *dpp);
@@ -373,7 +375,7 @@ class RGWRados
   rgw::sal::RadosStore* driver{nullptr};
   RGWGC* gc{nullptr};
   RGWLC* lc{nullptr};
-  RGWRestore* restore{nullptr};
+  std::unique_ptr<rgw::restore::Restore> restore{nullptr};
   RGWObjectExpirer* obj_expirer{nullptr};
   bool use_gc_thread{false};
   bool use_lc_thread{false};
@@ -453,6 +455,7 @@ protected:
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
   librados::IoCtx lc_pool_ctx;        // .rgw.lc
   librados::IoCtx restore_pool_ctx;        // .rgw.restore
+  neorados::IOContext restore_pool_neo_ctx;        // .rgw.restore 
   librados::IoCtx objexp_pool_ctx;
   librados::IoCtx reshard_pool_ctx;
   librados::IoCtx notif_pool_ctx;     // .rgw.notif
@@ -504,8 +507,8 @@ public:
     return gc;
   }
 
-  RGWRestore *get_restore() {
-    return restore;
+  rgw::restore::Restore *get_restore() {
+    return restore.get();
   }
 
   RGWRados& set_run_gc_thread(bool _use_gc_thread) {
@@ -551,6 +554,10 @@ public:
     return &restore_pool_ctx;
   }
 
+  neorados::IOContext* get_restore_pool_neo_ctx() {
+    return &restore_pool_neo_ctx;
+  }
+  
   librados::IoCtx& get_notif_pool_ctx() {
     return notif_pool_ctx;
   }

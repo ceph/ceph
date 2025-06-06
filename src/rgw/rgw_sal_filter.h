@@ -384,7 +384,7 @@ public:
     return next->get_bucket_topic_mapping(topic, bucket_keys, y, dpp);
   }
   virtual RGWLC* get_rgwlc(void) override;
-  virtual RGWRestore* get_rgwrestore(void) override;
+  virtual rgw::restore::Restore* get_rgwrestore(void) override;
   virtual RGWCoroutinesManagerRegistry* get_cr_registry() override;
 
   virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket,
@@ -1066,7 +1066,8 @@ public:
   FilterRestoreSerializer(std::unique_ptr<RestoreSerializer> _next) : next(std::move(_next)) {}
   virtual ~FilterRestoreSerializer() = default;
   virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
-  virtual int unlock() override { return next->unlock(); }
+  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override
+ 	{ return next->unlock(dpp, y); }
   virtual void print(std::ostream& out) const override { return next->print(out); }
 };
 
@@ -1081,21 +1082,18 @@ public:
 
   virtual int initialize(const DoutPrefixProvider* dpp, optional_yield y,
 		  int n_objs, std::vector<std::string>& obj_names) override;  
-  virtual int add_entry(const DoutPrefixProvider* dpp, optional_yield y,
-		  int index, const RGWRestoreEntry& r_entry) override;
   virtual int add_entries(const DoutPrefixProvider* dpp, optional_yield y,
 	       int index,
-	       const std::list<RGWRestoreEntry>& restore_entries) override;
+	       const std::vector<rgw::restore::RestoreEntry>& restore_entries) override;
 
   /** List all known entries */
   virtual int list(const DoutPrefixProvider *dpp, optional_yield y,
 	       	   int index,
 	           const std::string& marker, std::string* out_marker,
-		   uint32_t max_entries, std::vector<RGWRestoreEntry>& entries,
+		   uint32_t max_entries, std::vector<rgw::restore::RestoreEntry>& entries,
 		   bool* truncated) override;
   virtual int trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
 		 	  int index, const std::string_view& marker) override;
-  virtual int is_empty(const DoutPrefixProvider *dpp, optional_yield y);
 
   /** Get a serializer for lifecycle */
   virtual std::unique_ptr<RestoreSerializer> get_serializer(

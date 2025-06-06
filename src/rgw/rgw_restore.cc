@@ -39,6 +39,7 @@
 #include "services/svc_sys_obj.h"
 #include "services/svc_zone.h"
 #include "services/svc_tier_rados.h"
+#include "common/ceph_time.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw_restore
@@ -50,7 +51,9 @@ constexpr int32_t secs_in_a_day = hours_in_a_day * 60 * 60;
 using namespace std;
 using namespace rgw::sal;
 
-void RGWRestoreEntry::dump(Formatter *f) const
+namespace rgw::restore {
+
+void RestoreEntry::dump(Formatter *f) const
 {
   encode_json("Bucket", bucket, f);
   encode_json("Object", obj_key, f);
@@ -63,7 +66,7 @@ void RGWRestoreEntry::dump(Formatter *f) const
   encode_json("Status", static_cast<int>(status), f);
 }
 
-void RGWRestoreEntry::decode_json(JSONObj *obj)
+void RestoreEntry::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("Bucket", bucket, obj);
   JSONDecoder::decode_json("Object", obj_key, obj);
@@ -74,9 +77,9 @@ void RGWRestoreEntry::decode_json(JSONObj *obj)
   status = static_cast<rgw::sal::RGWRestoreStatus>(st);
 }
 
-void RGWRestoreEntry::generate_test_instances(std::list<RGWRestoreEntry*>& l)
+void RestoreEntry::generate_test_instances(std::list<RestoreEntry*>& l)
 {
-  auto p = new RGWRestoreEntry;
+  auto p = new RestoreEntry;
   rgw_bucket bk("tenant1", "bucket1");
   rgw_obj_key obj("object1");
   rgw_obj_key obj2("object2");
@@ -92,7 +95,7 @@ void RGWRestoreEntry::generate_test_instances(std::list<RGWRestoreEntry*>& l)
   p->status = status;
   l.push_back(p);
 
-  p = new RGWRestoreEntry;
+  p = new RestoreEntry;
   days = days1;
   status = rgw::sal::RGWRestoreStatus::CloudRestored;
   p->bucket = bk;
@@ -102,15 +105,15 @@ void RGWRestoreEntry::generate_test_instances(std::list<RGWRestoreEntry*>& l)
   p->status = status;
   l.push_back(p);
 
-  l.push_back(new RGWRestoreEntry);
+  l.push_back(new RestoreEntry);
 }
 
-int RGWRestore::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
+int Restore::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
   int ret = 0;
   cct = _cct;
   driver = _driver;
 
-  ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": initializing RGWRestore handle" << dendl;
+  ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": initializing Restore handle" << dendl;
   /* max_objs indicates the number of shards or objects
    * used to store Restore Entries */
   max_objs = cct->_conf->rgw_restore_max_objs;
@@ -137,19 +140,19 @@ int RGWRestore::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": failed to initialize sal_restore" << dendl;
   }
 
-  ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": initializing RGWRestore handle completed" << dendl;
+  ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": initializing Restore handle completed" << dendl;
 
   return ret;	  
 }
 
-void RGWRestore::finalize()
+void Restore::finalize()
 {
   sal_restore.reset(nullptr);
   obj_names.clear();
-  ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": finalize RGWRestore handle" << dendl;
+  ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": finalize Restore handle" << dendl;
 }
 
-static inline std::ostream& operator<<(std::ostream &os, RGWRestoreEntry& ent) {
+static inline std::ostream& operator<<(std::ostream &os, RestoreEntry& ent) {
   os << "<ent: bucket=";
   os << ent.bucket;
   os << "; obj_key=";
@@ -165,24 +168,24 @@ static inline std::ostream& operator<<(std::ostream &os, RGWRestoreEntry& ent) {
   return os;
 }
 
-void RGWRestore::RestoreWorker::stop()
+void Restore::RestoreWorker::stop()
 {
   std::lock_guard l{lock};
   cond.notify_all();
 }
 
-bool RGWRestore::going_down()
+bool Restore::going_down()
 {
   return down_flag;
 }
 
-void RGWRestore::start_processor()
+void Restore::start_processor()
 {
-  worker = std::make_unique<RGWRestore::RestoreWorker>(this, cct, this);
+  worker = std::make_unique<Restore::RestoreWorker>(this, cct, this);
   worker->create("rgw_restore");
 }
 
-void RGWRestore::stop_processor()
+void Restore::stop_processor()
 {
   down_flag = true;
   if (worker) {
@@ -192,27 +195,27 @@ void RGWRestore::stop_processor()
   worker.reset(nullptr);
 }
 
-unsigned RGWRestore::get_subsys() const
+unsigned Restore::get_subsys() const
 {
   return dout_subsys;
 }
 
-std::ostream& RGWRestore::gen_prefix(std::ostream& out) const
+std::ostream& Restore::gen_prefix(std::ostream& out) const
 {
   return out << "restore: ";
 }
 
 /* Hash based on both <bucket, obj> */
-int RGWRestore::choose_oid(const RGWRestoreEntry& e) {
+int Restore::choose_oid(const RestoreEntry& e) {
   int index;
   const auto& name = e.bucket.name + e.obj_key.name + e.obj_key.instance;
   index = ((ceph_str_hash_linux(name.data(), name.size())) % max_objs);
   return static_cast<int>(index);
 }
 
-void *RGWRestore::RestoreWorker::entry() {
+void *Restore::RestoreWorker::entry() {
   do {
-    utime_t start = ceph_clock_now();
+    ceph_timespec start = ceph::real_clock::to_ceph_timespec(real_clock::now());
     int r = 0;
     r = restore->process(this, null_yield);
     if (r < 0) {
@@ -220,14 +223,14 @@ void *RGWRestore::RestoreWorker::entry() {
     }
     if (restore->going_down())
       break;
-    utime_t end = ceph_clock_now();
-    end -= start;
+    ceph_timespec end = ceph::real_clock::to_ceph_timespec(real_clock::now());
+    auto d = end - start;
+    end = d;
     int secs = cct->_conf->rgw_restore_processor_period;
 
-    if (secs <= end.sec())
+    if (secs < d)
       continue; // next round
 
-    secs -= end.sec();
     std::unique_lock locker{lock};
     cond.wait_for(locker, std::chrono::seconds(secs));
   } while (!restore->going_down());
@@ -236,7 +239,7 @@ void *RGWRestore::RestoreWorker::entry() {
 
 }
 
-int RGWRestore::process(RestoreWorker* worker, optional_yield y)
+int Restore::process(RestoreWorker* worker, optional_yield y)
 {
   int max_secs = cct->_conf->rgw_restore_lock_max_time;
 
@@ -250,6 +253,19 @@ int RGWRestore::process(RestoreWorker* worker, optional_yield y)
   return 0;
 }
 
+// unique_lock expects an unlock() taking no arguments, but
+// RadosRestoreSerializer::unlock() requires two. create an adapter that binds these
+// additional args
+struct RestoreLockAdapter {
+  rgw::sal::RestoreSerializer& serializer;
+  const DoutPrefixProvider* dpp = nullptr;
+  optional_yield y;
+
+  void unlock() {
+    serializer.unlock(dpp, y);
+  }
+};
+
 /* 
  * Given an index, fetch a list of restore entries to process. After each
  * iteration, trim the list to the last marker read.
@@ -257,13 +273,13 @@ int RGWRestore::process(RestoreWorker* worker, optional_yield y)
  * While processing the entries, if any of their restore operation is still in
  * progress, such entries are added back to the list.
  */ 
-int RGWRestore::process(int index, int max_secs, optional_yield y)
+int Restore::process(int index, int max_secs, optional_yield y)
 {
   ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": process entered index="	
 		      << index << ", max_secs=" << max_secs << dendl;
 
   /* list used to gather still IN_PROGRESS */
-  std::list<RGWRestoreEntry> r_entries;
+  std::vector<RestoreEntry> r_entries;
 
   std::unique_ptr<rgw::sal::RestoreSerializer> serializer =
   			sal_restore->get_serializer(std::string(restore_index_lock_name),
@@ -281,7 +297,7 @@ int RGWRestore::process(int index, int max_secs, optional_yield y)
 
   end += max_secs;
   utime_t time(max_secs, 0);
-  int ret = serializer->try_lock(this, time, null_yield);
+  int ret = serializer->try_lock(this, time, y);
   if (ret == -EBUSY || ret == -EEXIST) {
     /* already locked by another lc processor */
     ldpp_dout(this, 0) << __PRETTY_FUNCTION__ << ": failed to acquire lock on "	 
@@ -291,14 +307,15 @@ int RGWRestore::process(int index, int max_secs, optional_yield y)
   if (ret < 0)
     return 0;
 
-  std::unique_lock<rgw::sal::RestoreSerializer> lock(*(serializer.get()), std::adopt_lock);
+  auto lock_adapter = RestoreLockAdapter{*serializer, this, y};
+  std::unique_lock<RestoreLockAdapter> lock(lock_adapter, std::adopt_lock);
   std::string marker;
   std::string next_marker;
   bool truncated = false;
 
   do {
     int max = 100;
-    std::vector<RGWRestoreEntry> entries;
+    std::vector<RestoreEntry> entries;
 
     ret = sal_restore->list(this, y, index, marker, &next_marker, max, entries, &truncated);
     ldpp_dout(this, 20) << __PRETTY_FUNCTION__ <<
@@ -307,18 +324,18 @@ int RGWRestore::process(int index, int max_secs, optional_yield y)
       ", marker='" << marker << "'" <<
       ", next_marker='" << next_marker << "'" << dendl;
 
+    if (ret < 0)
+      goto done;
+
     if (entries.size() == 0) {
       lock.unlock();
       return 0;
     }
 
-    if (ret < 0)
-      goto done;
-
     marker = next_marker;
-    std::vector<RGWRestoreEntry>::iterator iter;
+    std::vector<RestoreEntry>::iterator iter;
     for (iter = entries.begin(); iter != entries.end(); ++iter) {
-      RGWRestoreEntry entry = *iter;
+      RestoreEntry entry = *iter;
 
       ret = process_restore_entry(entry, y);
 
@@ -328,6 +345,9 @@ int RGWRestore::process(int index, int max_secs, optional_yield y)
 		 	 << "' on shard:"
   	  	         << obj_names[index] << dendl;	 
       }
+
+      if (ret < 0)
+        goto done;
 
       ///process all entries, trim and re-add
       utime_t now = ceph_clock_now();
@@ -341,32 +361,33 @@ int RGWRestore::process(int index, int max_secs, optional_yield y)
 	goto done;
       }
     }
-    ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": trimming till marker: '" << marker
+  } while (truncated);
+
+  ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": trimming till marker: '" << marker
 		 	 << "' on shard:"
   	  	         << obj_names[index] << dendl;    
-    ret = sal_restore->trim_entries(this, y, index, marker);
+  ret = sal_restore->trim_entries(this, y, index, marker);
+  if (ret < 0) {
+    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to trim entries on "	    	  	         << obj_names[index] << dendl;
+  }
+
+  if (!r_entries.empty()) {
+    ret = sal_restore->add_entries(this, y, index, r_entries);
     if (ret < 0) {
-      ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to trim entries on "	    	  	         << obj_names[index] << dendl;
-    }
-
-    if (!r_entries.empty()) {
-      ret = sal_restore->add_entries(this, y, index, r_entries);
-      if (ret < 0) {
-        ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to add entries on "    
+      ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to add entries on "    
   	  	           << obj_names[index] << dendl;
-      }
     }
+  }
 
-    r_entries.clear();
-  } while (truncated);
+  r_entries.clear();
 
 done:
   lock.unlock();
 
-  return 0;
+  return ret;
 }
 
-int RGWRestore::process_restore_entry(RGWRestoreEntry& entry, optional_yield y)
+int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
 {
   int ret = 0;
   bool in_progress = true;
@@ -375,7 +396,6 @@ int RGWRestore::process_restore_entry(RGWRestoreEntry& entry, optional_yield y)
   std::unique_ptr<rgw::sal::PlacementTier> tier;
   std::optional<uint64_t> days = entry.days;
   rgw::sal::RGWRestoreStatus restore_status = rgw::sal::RGWRestoreStatus::None;
-  RGWObjState* obj_state{nullptr};
   rgw_placement_rule target_placement;
 
   // Ensure its the same source zone processing temp entries as we do not
@@ -415,6 +435,7 @@ int RGWRestore::process_restore_entry(RGWRestoreEntry& entry, optional_yield y)
   if (attr_iter != attrs.end()) {
     bufferlist bl = attr_iter->second;
     auto iter = bl.cbegin();
+    using ceph::decode;
     decode(restore_status, iter);
   }
   if (restore_status != rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
@@ -450,7 +471,6 @@ int RGWRestore::process_restore_entry(RGWRestoreEntry& entry, optional_yield y)
 
   // now go ahead with restoring object
   // XXX: first check if its already restored?
-  bool in_progress = true;
   ret = obj->restore_obj_from_cloud(bucket.get(), tier.get(), cct, days, in_progress,
 		  		      this, y);
   if (ret < 0) {
@@ -478,7 +498,7 @@ done:
   return ret;
 }
 
-time_t RGWRestore::thread_stop_at()
+time_t Restore::thread_stop_at()
 {
   uint64_t interval = (cct->_conf->rgw_restore_debug_interval > 0)
     ? cct->_conf->rgw_restore_debug_interval : secs_in_a_day;
@@ -486,7 +506,7 @@ time_t RGWRestore::thread_stop_at()
   return time(nullptr) + interval;
 }
 
-int RGWRestore::set_cloud_restore_status(const DoutPrefixProvider* dpp,
+int Restore::set_cloud_restore_status(const DoutPrefixProvider* dpp,
 			   rgw::sal::Object* pobj, optional_yield y,
 	          	   const rgw::sal::RGWRestoreStatus& restore_status)
 {
@@ -495,7 +515,7 @@ int RGWRestore::set_cloud_restore_status(const DoutPrefixProvider* dpp,
   if (!pobj)
     return ret;
 
-  pobj->set_atomic();
+  pobj->set_atomic(true);
 
   bufferlist bl;
   using ceph::encode;
@@ -506,7 +526,7 @@ int RGWRestore::set_cloud_restore_status(const DoutPrefixProvider* dpp,
   return ret;
 }
 
-int RGWRestore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
+int Restore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
 	       			       rgw::sal::Object* pobj,
 				       rgw::sal::PlacementTier* tier,
 				       std::optional<uint64_t> days,
@@ -544,19 +564,21 @@ int RGWRestore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
 
   if (in_progress) {
     // add restore entry to the list
-    RGWRestoreEntry entry;
+    RestoreEntry entry;
     entry.bucket = pbucket->get_key();
     entry.obj_key = pobj->get_key();
     entry.status = rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress;
     entry.days = days;
     entry.zone_id = driver->get_zone()->get_id(); 
 
-    ldpp_dout(this, 10) << "RGWRestore:: Adding restore entry of object(" << pobj->get_key() << ") entry: " << entry << dendl;
+    ldpp_dout(this, 10) << "Restore:: Adding restore entry of object(" << pobj->get_key() << ") entry: " << entry << dendl;
 
     int index = choose_oid(entry);
     ldpp_dout(this, 10) << __PRETTY_FUNCTION__ << ": Adding restore entry of object(" << pobj->get_key() << ") entry: " << entry << ", to shard:" << obj_names[index] << dendl;
 
-    ret = sal_restore->add_entry(this, y, index, entry);
+    std::vector<rgw::restore::RestoreEntry> r_entries;
+    r_entries.push_back(entry);
+    ret = sal_restore->add_entries(this, y, index, r_entries);
 
     if (ret < 0) {
       ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: Adding restore entry of object(" << pobj->get_key() << ") failed" << ret << dendl;	    
@@ -573,3 +595,5 @@ int RGWRestore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
   ldpp_dout(this, 10) << __PRETTY_FUNCTION__ << ": Restore of object " << pobj->get_key() << (in_progress ? " is in progress" : " succeeded") << dendl;  
   return ret;
 }
+
+} // namespace rgw::restore

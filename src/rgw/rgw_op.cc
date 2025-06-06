@@ -5445,7 +5445,7 @@ void RGWRestoreObj::execute(optional_yield y)
   }
   rgw::sal::Attrs attrs;
   attrs = s->object->get_attrs();
-  op_ret = handle_cloudtier_obj(s, this, driver, attrs, false, expiry_days, true, y);
+  op_ret = handle_cloudtier_obj(s, this, driver, attrs, false, expiry_days, false, y);
   restore_ret = op_ret;
   ldpp_dout(this, 20) << "Restore completed of object: " << *s->object << "with op ret: " << restore_ret <<dendl;
 
