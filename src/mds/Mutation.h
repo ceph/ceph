@@ -47,7 +47,9 @@ class SimpleLock;
 struct sr_t;
 struct MDLockCache;
 
+
 struct MutationImpl : public TrackedOp {
+  using LogSegmentRef = boost::intrusive_ptr<LogSegment>;
 public:
   // -- my pins and auth_pins --
   struct ObjectState {
@@ -128,18 +130,10 @@ public:
   using lock_iterator = lock_set::iterator;
 
   // keep our default values synced with MDRequestParam's
-  MutationImpl() : TrackedOp(nullptr, ceph_clock_now()) {}
+  MutationImpl();
   MutationImpl(OpTracker *tracker, utime_t initiated,
-	       const metareqid_t &ri, __u32 att=0, mds_rank_t peer_to=MDS_RANK_NONE)
-    : TrackedOp(tracker, initiated),
-      reqid(ri), attempt(att),
-      peer_to_mds(peer_to) {}
-  ~MutationImpl() override {
-    ceph_assert(!locking);
-    ceph_assert(!lock_cache);
-    ceph_assert(num_pins == 0);
-    ceph_assert(num_auth_pins == 0);
-  }
+	       const metareqid_t &ri, __u32 att=0, mds_rank_t peer_to=MDS_RANK_NONE);
+  ~MutationImpl() override;
 
   const ObjectState* find_object_state(MDSCacheObject *obj) const {
     auto it = object_states.find(obj);
@@ -228,9 +222,7 @@ public:
   void apply();
   void cleanup();
 
-  virtual void print(std::ostream &out) const {
-    out << "mutation(" << this << ")";
-  }
+  virtual void print(std::ostream &out) const;
 
   virtual void dump(ceph::Formatter *f) const {
     _dump(f);
@@ -241,7 +233,7 @@ public:
   metareqid_t reqid;
   std::optional<int> result;
   __u32 attempt = 0;      // which attempt for this request
-  LogSegment *ls = nullptr;  // the log segment i'm committing to
+  LogSegmentRef ls;  // the log segment i'm committing to
 
   // flag mutation as peer
   mds_rank_t peer_to_mds = MDS_RANK_NONE;  // this is a peer request if >= 0.
