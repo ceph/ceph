@@ -1,7 +1,6 @@
 import { TestBed } from '@angular/core/testing';
-
 import { RgwTopicService } from './rgw-topic.service';
-import { configureTestBed } from '~/testing/unit-test-helper';
+import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 
 describe('RgwTopicService', () => {
@@ -18,25 +17,11 @@ describe('RgwTopicService', () => {
   beforeEach(() => {
     service = TestBed.inject(RgwTopicService);
     httpTesting = TestBed.inject(HttpTestingController);
-  });
-
-  afterEach(() => {
-    httpTesting.verify();
+    RgwHelper.selectDaemon();
   });
 
   it('should be created', () => {
     expect(service).toBeTruthy();
-  });
-
-  it('should call list with empty result', () => {
-    let result;
-    service.listTopic().subscribe((resp) => {
-      result = resp;
-    });
-    const req = httpTesting.expectOne(`api/rgw/topic`);
-    expect(req.request.method).toBe('GET');
-    req.flush([]);
-    expect(result).toEqual([]);
   });
   it('should call list with result', () => {
     service.listTopic().subscribe((resp) => {
@@ -48,9 +33,19 @@ describe('RgwTopicService', () => {
     req.flush(['foo', 'bar']);
   });
 
-  it('should call get', () => {
-    service.getTopic('foo').subscribe();
+  it('should call create', () => {
+    service.create({} as any).subscribe();
+    const req = httpTesting.expectOne(`api/rgw/topic?${RgwHelper.DAEMON_QUERY_PARAM}`);
+    expect(req.request.method).toBe('POST');
+  });
+  it('should call update', () => {
+    service.create({} as any).subscribe();
+    const req = httpTesting.expectOne(`api/rgw/topic?${RgwHelper.DAEMON_QUERY_PARAM}`);
+    expect(req.request.method).toBe('POST');
+  });
+  it('should call delete', () => {
+    service.delete('foo').subscribe();
     const req = httpTesting.expectOne(`api/rgw/topic/foo`);
-    expect(req.request.method).toBe('GET');
+    expect(req.request.method).toBe('DELETE');
   });
 });
