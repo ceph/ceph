@@ -175,6 +175,12 @@ class ECBackend : public ECCommon {
       bool fast_read = false
     );
 
+  bool ec_can_decode(const shard_id_set &available_shards) const;
+  shard_id_map<bufferlist> ec_encode_acting_set(const bufferlist &in_bl) const;
+  shard_id_map<bufferlist> ec_decode_acting_set(
+      const shard_id_map<bufferlist> &shard_map, int chunk_size) const;
+  ECUtil::stripe_info_t ec_get_sinfo() const;
+
  private:
   friend struct ECRecoveryHandle;
 
@@ -441,9 +447,21 @@ class ECBackend : public ECCommon {
     return sinfo.get_chunk_size();
   }
 
-  uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard
-    ) const {
+  bool get_ec_supports_crc_encode_decode() const {
+    return sinfo.supports_encode_decode_crcs();
+  }
+
+  uint64_t object_size_to_shard_size(const uint64_t size,
+                                     shard_id_t shard) const {
     return sinfo.object_size_to_shard_size(size, shard);
+  }
+
+  uint64_t get_is_nonprimary_shard(shard_id_t shard) const {
+    return sinfo.is_nonprimary_shard(shard);
+  }
+
+  bool get_is_hinfo_required() const {
+    return sinfo.get_is_hinfo_required();
   }
 
   /**

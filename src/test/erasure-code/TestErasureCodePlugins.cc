@@ -5,10 +5,18 @@
  */
 #include <errno.h>
 #include <stdlib.h>
+
+#include <map>
+#include <set>
+
 #include "erasure-code/ErasureCodePlugin.h"
 #include "global/global_context.h"
 #include "common/config_proxy.h"
 #include "gtest/gtest.h"
+#include "include/buffer.h"
+#include "osd/ECTypes.h"
+#include "osd/ECUtil.h"
+
 using namespace std;
 class PluginTest: public ::testing::TestWithParam<const char *> {
 public:
@@ -77,6 +85,37 @@ public:
       b[i] = c;
     }
     bl.append(b);
+  }
+  uint32_t calculate_crc(const bufferlist& bl, int crc_seed) {
+    bufferhash hash(crc_seed);
+    hash << bl;
+    return hash.digest();
+  }
+  uint32_t calculate_zero_buffer_crc(int crc_seed) {
+    bufferlist zero_bl;
+    generate_chunk(zero_bl, 0);
+    return calculate_crc(zero_bl, crc_seed);
+  }
+  bufferptr create_buffer_from_crc(uint32_t crc) {
+    std::size_t length = sizeof(crc);
+    char crc_bytes[length];
+    for (std::size_t i = 0; i < length; i++) {
+      crc_bytes[i] = crc >> (8 * i) & 0xFF;
+    }
+    ceph::bufferptr buffer = ceph::buffer::create_aligned(chunk_size, 4096);
+    buffer.zero(true);
+    buffer.copy_in(0, length, crc_bytes);
+    return buffer;
+  }
+  uint32_t read_crc_from_bufferlist(bufferlist& bl,
+                                    uint64_t offset = 0) {
+    uint32_t crc = 0;
+    std::size_t length = sizeof(uint32_t);
+    for (std::size_t i = 0; i < length; i++) {
+      crc |= ((bl.c_str()[offset + i] & 0xFF) << (8 * i));
+    }
+
+    return crc;
   }
 };
 TEST_P(PluginTest,Initialize)
@@ -460,6 +499,125 @@ TEST_P(PluginTest,SubChunkSupport)
         ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS) != 0);
   }
 }
+TEST_P(PluginTest, CRCEncodeDecodeSupport) {
+  initialize();
+
+  shard_id_set want_to_encode;
+  for (shard_id_t i = shard_id_t(0); i < get_k_plus_m(); ++i) {
+    want_to_encode.insert(i);
+  }
+  // Generate random data to encode
+  bufferlist data_bl;
+  for (unsigned int i = 0; i < get_k(); ++i) {
+    generate_chunk(data_bl);
+  }
+
+  int crc_seed = -1;
+  uint32_t zero_data_crc = calculate_zero_buffer_crc(crc_seed);
+
+  // Calculate CRCs for the random data
+  bufferlist hashes_bl;
+  bufferlist unseeded_hashes_bl;
+  for (unsigned int i = 0; i < get_k(); ++i) {
+    // Calculate the CRC for the shard at position i
+    bufferlist data_shard_bl;
+    data_shard_bl.substr_of(data_bl, i * chunk_size, chunk_size);
+    uint32_t crc = calculate_crc(data_shard_bl, crc_seed);
+
+    // XOR with the CRC of zeros preseeded with the same preseed
+    // This undoes the pre-seeding and gives us the CRC as if no seed was
+    // applied
+    uint32_t unseeded_crc = crc ^ zero_data_crc;
+
+    // Convert integers to bufferlists
+    hashes_bl.append(create_buffer_from_crc(crc));
+    unseeded_hashes_bl.append(create_buffer_from_crc(unseeded_crc));
+  }
+
+  // Encode data and get back data + parity chunks
+  shard_id_map<bufferlist> encoded_data(get_k_plus_m());
+  erasure_code->encode(want_to_encode, data_bl, &encoded_data);
+
+  // Encode CRCs to get back the data + parity CRCs
+  shard_id_map<bufferlist> encoded_hashes(get_k_plus_m());
+  shard_id_map<bufferlist> encoded_unseeded_hashes(get_k_plus_m());
+  erasure_code->encode(want_to_encode, hashes_bl, &encoded_hashes);
+  erasure_code->encode(want_to_encode, unseeded_hashes_bl,
+                       &encoded_unseeded_hashes);
+
+  shard_id_map<bufferlist> encoded_data_crcs(get_k_plus_m());
+
+  // Calculate CRCs for the new data and new CRCs and compare first parity shard
+  bool different = false;
+  for (shard_id_t shard_id : want_to_encode) {
+    // Calculations vary for additional parities, so only first parity supported
+    if (shard_id < get_k() + 1) {
+      // Calculate the CRC for the current shard from the encoded data
+      uint32_t calculated_crc =
+          calculate_crc(encoded_data.at(shard_id), crc_seed);
+      encoded_data_crcs[shard_id].append(
+          create_buffer_from_crc(calculated_crc));
+
+      // XOR with the CRC of zeros preseeded with the same preseed
+      // This undoes the pre-seeding and gives us the CRC as if no seed was
+      // applied
+      uint32_t calculated_unseeded_crc = calculated_crc ^ zero_data_crc;
+
+      // Calculate integer form of CRCs in bufferlists
+      uint32_t unseeded_crc =
+          read_crc_from_bufferlist(encoded_unseeded_hashes.at(shard_id));
+
+      if (calculated_unseeded_crc != unseeded_crc) {
+        different = true;
+      }
+    }
+
+    ECUtil::stripe_info_t sinfo{get_k(), get_m(), get_k() * chunk_size,
+                                erasure_code->get_chunk_mapping()};
+
+    // Decode CRCs as if 1 to m-1 data CRCs are missing and assert decoded CRC
+    // is equal to missing CRC
+    for (raw_shard_id_t missing_raw_shard_id{0}; missing_raw_shard_id < get_k();
+         ++missing_raw_shard_id) {
+      shard_id_t missing_shard_id = sinfo.get_shard(missing_raw_shard_id);
+
+      shard_id_set need;
+      need.insert(missing_shard_id);
+      shard_id_map<bufferlist> chunks(get_k_plus_m());
+      // Create a map of all buffers except the one (our missing shard)
+      for (raw_shard_id_t raw_shard_id{0}; raw_shard_id < get_k_plus_m();
+           ++raw_shard_id) {
+        shard_id_t shard_id = sinfo.get_shard(raw_shard_id);
+
+        if (shard_id != missing_shard_id) {
+          chunks.insert(shard_id, encoded_hashes[shard_id]);
+        }
+      }
+
+      // Decode the missing shard
+      shard_id_map<bufferlist> out_bls(get_k_plus_m());
+      int r = erasure_code->decode(need, chunks, &out_bls, chunk_size);
+
+      EXPECT_EQ(r, 0);
+
+      // Check the missing shard has been decoded correctly
+      uint32_t decoded_crc =
+          read_crc_from_bufferlist(out_bls[missing_shard_id]);
+      uint32_t original_crc =
+          read_crc_from_bufferlist(hashes_bl, missing_shard_id.id * chunk_size);
+
+      different = different | (decoded_crc != original_crc);
+    }
+  }
+
+  if (erasure_code->get_supported_optimizations() &
+      ErasureCodeInterface::FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT) {
+    // Plugin should not have FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT enabled,
+    // this failure proves that it can cause a data integrity issue
+    EXPECT_EQ(different, false);
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(
   PluginTests,
   PluginTest,

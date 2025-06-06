@@ -250,6 +250,20 @@ public:
     return !waiting_for_unreadable_object.empty();
   }
 
+  bool get_is_nonprimary_shard(const pg_shard_t &shard) const final
+  {
+    return get_pgbackend()->get_is_nonprimary_shard(shard.shard);
+  }
+
+  bool get_is_hinfo_required() const final
+  {
+    return get_pgbackend()->get_is_hinfo_required();
+  }
+
+  bool get_is_ec_optimized() const final {
+    return get_pgbackend()->get_is_ec_optimized();
+  }
+
   static void set_last_scrub_stamp(
     utime_t t, pg_history_t &history, pg_stat_t &stats) {
     stats.last_scrub_stamp = t;
@@ -1396,8 +1410,30 @@ public:
  }
 
  uint64_t logical_to_ondisk_size(uint64_t logical_size,
-                                 int8_t shard_id) const final {
+                                 shard_id_t shard_id) const final {
    return get_pgbackend()->be_get_ondisk_size(logical_size, shard_id_t(shard_id));
+ }
+
+ bool ec_can_decode(const shard_id_set &available_shards) const final {
+   return get_pgbackend()->ec_can_decode(available_shards);
+ }
+
+ shard_id_map<bufferlist> ec_encode_acting_set(
+     const bufferlist &in_bl) const final {
+   return get_pgbackend()->ec_encode_acting_set(in_bl);
+ }
+
+ shard_id_map<bufferlist> ec_decode_acting_set(
+     const shard_id_map<bufferlist> &shard_map, int chunk_size) const final {
+   return get_pgbackend()->ec_decode_acting_set(shard_map, chunk_size);
+ }
+
+ bool get_ec_supports_crc_encode_decode() const final {
+   return get_pgbackend()->get_ec_supports_crc_encode_decode();
+ }
+
+ ECUtil::stripe_info_t get_ec_sinfo() const final {
+   return get_pgbackend()->ec_get_sinfo();
  }
 };
 
