@@ -14,6 +14,7 @@
 #include "rgw_rest_iam_user.h"
 #include "rgw_rest_conn.h"
 #include "rgw_zone.h"
+#include "rgw_rest_iam_account.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -34,6 +35,7 @@ static const std::unordered_map<std::string_view, op_generator> op_generators = 
   {"AttachRolePolicy", make_iam_attach_role_policy_op},
   {"DetachRolePolicy", make_iam_detach_role_policy_op},
   {"ListAttachedRolePolicies", make_iam_list_attached_role_policies_op},
+  {"GetAccountSummary", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWGetAccountSummary;}},
   {"PutUserPolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWPutUserPolicy(bl_post_body);}},
   {"GetUserPolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWGetUserPolicy;}},
   {"ListUserPolicies", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWListUserPolicies;}},
