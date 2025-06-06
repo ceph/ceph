@@ -6195,6 +6195,17 @@ struct object_info_t {
     clear_omap_digest();
   }
 
+  eversion_t get_version_for_shard(const shard_id_t shard) const {
+    auto iter = shard_versions.find(shard);
+
+    // If the shard_versions is not included, then it is the same as this.
+    if (iter == shard_versions.end()) {
+      return version;
+    }
+    // Otherwise, the shard_versions should be fully populated.
+    return iter->second;
+  }
+
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void decode(const ceph::buffer::list& bl) {
