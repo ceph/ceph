@@ -279,6 +279,7 @@ options:
 	--crimson-alien-num-cores: number of cpus to use for alien threads
 	--crimson-alienstore-physical-only: use only one cpu per physical core for alienstore
 	--crimson-balance-cpu: distribute the Seastar reactors uniformly across OSDs (osd) or NUMA (socket)
+	--crimson-poll-mode: enable poll-mode (100% cpu usage)
 	--osds-per-host: populate crush_location as each host holds the specified number of osds if set
 	--require-osd-and-client-version: if supplied, do set-require-min-compat-client and require-osd-release to specified value
 	--use-crush-tunables: if supplied, set tunables to specified value
@@ -385,6 +386,7 @@ crimson_reactor_physical_only=0
 crimson_alien_num_cores=0
 crimson_alienstore_physical_only=0
 crimson_balance_cpu="" # "osd", "socket"
+crimson_poll_mode=false
 
 while [ $# -ge 1 ]; do
 case $1 in
@@ -632,6 +634,10 @@ case $1 in
         ;;
     --crimson-balance-cpu)
         crimson_balance_cpu=$2
+        shift
+        ;;
+    --crimson-poll-mode)
+        crimson_poll_mode=true
         shift
         ;;
     --bluestore-spdk)
@@ -1254,6 +1260,10 @@ start_osd() {
     do
 	if [ "$ceph_osd" == "crimson-osd" ]; then
         do_balance_cpu $osd
+        if $crimson_poll_mode; then
+            echo "$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_poll_mode true"
+            $CEPH_BIN/ceph -c $conf_fn config set "osd.$osd" crimson_poll_mode true
+        fi
     fi
 	if [ "$new" -eq 1 -o $inc_osd_num -gt 0 ]; then
             wconf <<EOF
