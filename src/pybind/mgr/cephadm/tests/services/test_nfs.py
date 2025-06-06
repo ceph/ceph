@@ -1039,22 +1039,6 @@ class TestNFS:
                 assert 'Mem_Stats_Disable' not in ganesha_conf
 
 
-def test_nfs_enable_nfs_metrics_spec_roundtrip():
-    """Verify enable_nfs_metrics survives JSON serialization round-trip."""
-    from ceph.deployment.service_spec import ServiceSpec
-    spec = NFSServiceSpec(service_id="foo", enable_nfs_metrics=True)
-    json_data = spec.to_json()
-    assert json_data['spec']['enable_nfs_metrics'] is True
-
-    restored = ServiceSpec.from_json(json_data)
-    assert restored.enable_nfs_metrics is True
-
-    # Default (False) should not appear in serialized output
-    spec_default = NFSServiceSpec(service_id="bar")
-    json_default = spec_default.to_json()
-    assert 'enable_nfs_metrics' not in json_default.get('spec', {})
-
-
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
     @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
@@ -1141,6 +1125,22 @@ def test_nfs_enable_nfs_metrics_spec_roundtrip():
                 assert nfs_generated_conf['files']['kmip_cert.pem'] == 'kmip_cert'
                 assert nfs_generated_conf['files']['kmip_key.pem'] == 'kmip_key'
                 assert nfs_generated_conf['files']['kmip_ca_cert.pem'] == 'kmip_ca_cert'
+
+
+def test_nfs_enable_nfs_metrics_spec_roundtrip():
+    """Verify enable_nfs_metrics survives JSON serialization round-trip."""
+    from ceph.deployment.service_spec import ServiceSpec
+    spec = NFSServiceSpec(service_id="foo", enable_nfs_metrics=True)
+    json_data = spec.to_json()
+    assert json_data['spec']['enable_nfs_metrics'] is True
+
+    restored = ServiceSpec.from_json(json_data)
+    assert restored.enable_nfs_metrics is True
+
+    # Default (False) should not appear in serialized output
+    spec_default = NFSServiceSpec(service_id="bar")
+    json_default = spec_default.to_json()
+    assert 'enable_nfs_metrics' not in json_default.get('spec', {})
 
 
 def test_nfs_placement_count_per_host_rejected():
