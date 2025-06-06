@@ -1118,7 +1118,7 @@ class KMSContext : public SSEContext {
     std::call_once(initialized, [&]() {
       ldout(cct, 10)
           << fmt::format(
-                 "Initializing SSE-KMS cache of size {} with TTLs pos:{} "
+                 "KMS Cache. Initializing size:{} TTL pos:{} "
                  "neg:{} err:{}",
                  cct->_conf->rgw_crypt_s3_kms_cache_max_size,
                  cct->_conf->rgw_crypt_s3_kms_cache_positive_ttl,
@@ -1135,6 +1135,12 @@ class KMSContext : public SSEContext {
            cct->_conf->rgw_crypt_s3_kms_cache_transient_error_ttl});
       ttl_reaper = webcache::make_ttl_reaper(
           *instance, std::chrono::seconds(min_ttl_secs));
+      if (!LinuxKeyringSecret::supported()) {
+        ldout(cct, 1) << "KMS Cache: Linux Kernel Key Retention Service "
+                         "unsupported. Disabling Cache."
+                      << dendl;
+        cct->_conf->rgw_crypt_s3_kms_cache_enabled = false;
+      }
     });
     return *instance;
   }
