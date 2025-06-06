@@ -14,6 +14,7 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { Permissions } from '~/app/shared/models/permissions';
 import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { USER } from '~/app/shared/constants/app.constants';
 
 @Component({
   selector: 'cd-rgw-user-details',
@@ -113,7 +114,7 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
         });
       }
 
-      this.keys = _.sortBy(this.keys, 'user');
+      this.keys = _.sortBy(this.keys, USER);
     }
   }
 

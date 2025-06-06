@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { RgwRealm, RgwZone, RgwZonegroup } from '~/app/ceph/rgw/models/rgw-multisite';
 import { Icons } from '../enum/icons.enum';
+import { USER } from '~/app/shared/constants/app.constants';
 
 @Injectable({
   providedIn: 'root'
@@ -128,7 +129,7 @@ export class RgwZoneService {
       const secret_key = zoneInfo[0].system_key['secret_key'];
       nodes['access_key'] = access_key ? access_key : '';
       nodes['secret_key'] = secret_key ? secret_key : '';
-      nodes['user'] = access_key && access_key !== '' ? true : false;
+      nodes[USER] = access_key && access_key !== '' ? true : false;
     }
     if (nodes['access_key'] === '' || nodes['access_key'] === 'null') {
       nodes['show_warning'] = true;
