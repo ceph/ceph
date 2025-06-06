@@ -2,7 +2,7 @@
 
 set -e
 
-CEPH_ANSIBLE_VAGRANT_BOX="${CEPH_ANSIBLE_VAGRANT_BOX:-centos/stream9}"
+CEPH_ANSIBLE_VAGRANT_BOX="${CEPH_ANSIBLE_VAGRANT_BOX:-CI-centos/stream9}"
 
 if [[ "${CEPH_ANSIBLE_VAGRANT_BOX}" =~ "centos/stream" ]]; then
   EL_VERSION="${CEPH_ANSIBLE_VAGRANT_BOX: -1}"
