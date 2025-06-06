@@ -3361,7 +3361,7 @@ class TestIngressService:
             '\n'
             'RADOS_KV {\n'
             '        UserId = "nfs.foo.test.0.0";\n'
-            '        nodeid = 0;\n'
+            '        nodeid = "0";\n'
             '        pool = ".nfs";\n'
             '        namespace = "foo";\n'
             '}\n'
