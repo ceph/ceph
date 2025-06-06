@@ -14655,7 +14655,7 @@ bool OSDMonitor::enforce_pool_op_caps(MonOpRequestRef op)
         pool_name = &osdmap.get_pool_name(m->pool);
       }
 
-      if (!is_unmanaged_snap_op_permitted(cct, mon.key_server,
+      if (!is_unmanaged_snap_op_permitted(cct, mon,
                                           session->entity_name, session->caps,
 					  session->get_peer_socket_addr(),
                                           pool_name)) {

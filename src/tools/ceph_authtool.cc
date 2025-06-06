@@ -177,9 +177,7 @@ int main(int argc, const char **argv)
   EntityName ename(g_conf()->name);
 
   if (key_type < 0) {
-    auto cephx_preferred_cipher = g_conf().get_val<std::string>("cephx_preferred_cipher");
-    cerr << "using key type: " << cephx_preferred_cipher << std::endl;
-    key_type = CryptoManager::get_key_type(cephx_preferred_cipher);
+    key_type = CEPH_CRYPTO_AES256KRB5;
   }
 
   // Enforce the use of gen-key or add-key when creating to avoid ending up

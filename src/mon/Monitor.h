@@ -108,6 +108,7 @@ class AdminSocketHook;
 #define COMPAT_SET_LOC "feature_set"
 
 class Monitor : public Dispatcher,
+		public KeyServer,
 		public AuthClient,
 		public AuthServer,
                 public md_config_obs_t {
@@ -147,7 +148,6 @@ public:
   LogChannelRef clog;
   LogChannelRef audit_clog;
   KeyRing keyring;
-  KeyServer key_server;
 
   AuthMethodList auth_cluster_required;
   AuthMethodList auth_service_required;
@@ -165,6 +165,15 @@ public:
   MgrClient mgr_client;
   uint64_t mgr_proxy_bytes = 0;  // in-flight proxied mgr command message bytes
   std::string gss_ktfile_client{};
+
+private:
+  mutable ceph::mutex cipher_mutex = ceph::make_mutex("Monitor::cipher_mutex");
+  std::vector<int> my_allowed_ciphers;
+  int my_service_cipher = -1;
+public:
+  int get_service_cipher() const override;
+  bool is_cipher_allowed(int cipher) const override;
+  std::vector<int> get_ciphers_allowed() const override;
 
 private:
   void new_tick();

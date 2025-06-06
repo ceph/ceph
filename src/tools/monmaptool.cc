@@ -353,6 +353,9 @@ int main(int argc, const char **argv)
     monmap.epoch = 0;
     monmap.created = ceph_clock_now();
     monmap.last_changed = monmap.created;
+    monmap.auth_service_cipher = CEPH_CRYPTO_AES256KRB5;
+    monmap.auth_allowed_ciphers = {CEPH_CRYPTO_AES256KRB5};
+    monmap.auth_preferred_cipher = CEPH_CRYPTO_AES256KRB5;
     srand(getpid() + time(0));
     if (g_conf().get_val<uuid_d>("fsid").is_zero()) {
       monmap.generate_fsid();

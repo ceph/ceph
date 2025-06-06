@@ -165,6 +165,7 @@ MonCommand mon_commands[] = {
 Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 		 Messenger *m, Messenger *mgr_m, MonMap *map) :
   Dispatcher(cct_),
+  KeyServer(cct, &keyring),
   AuthServer(cct_),
   name(nm),
   rank(-1), 
@@ -177,7 +178,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   logger(NULL), cluster_logger(NULL), cluster_logger_registered(false),
   monmap(map),
   log_client(cct_, messenger, monmap, LogClient::FLAG_MON),
-  key_server(cct, &keyring),
   auth_cluster_required(cct,
 			cct->_conf->auth_supported.empty() ?
 			cct->_conf->auth_cluster_required : cct->_conf->auth_supported),
@@ -892,7 +892,7 @@ int Monitor::preinit()
         // Attempt to decode and extract keyring only if it is found.
         KeyRing keyring;
         auto p = bl.cbegin();
-        decode(keyring, p);
+        ::decode(keyring, p);
         extract_save_mon_key(keyring);
       }
     }
@@ -904,7 +904,7 @@ int Monitor::preinit()
       EntityName mon_name;
       mon_name.set_type(CEPH_ENTITY_TYPE_MON);
       EntityAuth mon_key;
-      if (key_server.get_auth(mon_name, mon_key)) {
+      if (get_auth(mon_name, mon_key)) {
 	dout(1) << "copying mon. key from old db to external keyring" << dendl;
 	keyring.add(mon_name, mon_key);
 	bufferlist bl;
@@ -1011,7 +1011,7 @@ void Monitor::refresh_from_paxos(bool *need_bootstrap)
   if (r >= 0) {
     try {
       auto p = bl.cbegin();
-      decode(fingerprint, p);
+      ::decode(fingerprint, p);
     }
     catch (ceph::buffer::error& e) {
       dout(10) << __func__ << " failed to decode cluster_fingerprint" << dendl;
@@ -1765,7 +1765,7 @@ void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
     sync_providers.erase(sp.cookie);
   }
 
-  encode(*tx, reply->chunk_bl);
+  ::encode(*tx, reply->chunk_bl);
 
   m->get_connection()->send_message(reply);
 }
@@ -2320,7 +2320,7 @@ void Monitor::win_election(epoch_t epoch, const set<int>& active, uint64_t featu
     // do that anyway for other reasons, though.
     MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
     bufferlist bl;
-    encode(m, bl);
+    ::encode(m, bl);
     t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
   }
   elector.process_pending_pings();
@@ -4901,7 +4901,7 @@ void Monitor::handle_ping(MonOpRequestRef op)
   f->close_section();
   stringstream ss;
   f->flush(ss);
-  encode(ss.str(), payload);
+  ::encode(ss.str(), payload);
   reply->set_payload(payload);
   dout(10) << __func__ << " reply payload len " << reply->get_payload().length() << dendl;
   m->get_connection()->send_message(reply);
@@ -5542,7 +5542,7 @@ int Monitor::load_metadata()
   if (r)
     return r;
   auto it = bl.cbegin();
-  decode(mon_metadata, it);
+  ::decode(mon_metadata, it);
 
   pending_metadata = mon_metadata;
   return 0;
@@ -6097,7 +6097,7 @@ void Monitor::prepare_new_fingerprint(MonitorDBStore::TransactionRef t)
   dout(10) << __func__ << " proposing cluster_fingerprint " << nf << dendl;
 
   bufferlist bl;
-  encode(nf, bl);
+  ::encode(nf, bl);
   t->put(MONITOR_NAME, "cluster_fingerprint", bl);
 }
 
@@ -6394,7 +6394,7 @@ bool Monitor::get_authorizer(int service_id, AuthAuthorizer **authorizer)
     CryptoKey key_server_secret;
     CryptoKey keyring_secret;
 
-    bool ksb = key_server.get_secret(name, key_server_secret);
+    bool ksb = get_secret(name, key_server_secret);
     if (ksb) {
       dout(30) << __func__ << ": keyserver found secret=" << key_server_secret << dendl;
     }
@@ -6406,7 +6406,7 @@ bool Monitor::get_authorizer(int service_id, AuthAuthorizer **authorizer)
       dout(0) << " couldn't get secret for mon service from keyring or keyserver"
 	      << dendl;
       stringstream ss, ds;
-      int err = key_server.list_secrets(ds);
+      int err = list_secrets(ds);
       if (err < 0)
 	ss << "no installed auth entries!";
       else
@@ -6428,7 +6428,7 @@ bool Monitor::get_authorizer(int service_id, AuthAuthorizer **authorizer)
       secret = keyring_secret;
     }
 
-    ret = key_server.build_session_auth_info(
+    ret = build_session_auth_info(
       service_id, auth_ticket_info.ticket, secret, (uint64_t)-1, secret.get_type(), info);
     if (ret < 0) {
       dout(0) << __func__ << " failed to build mon session_auth_info "
@@ -6437,7 +6437,7 @@ bool Monitor::get_authorizer(int service_id, AuthAuthorizer **authorizer)
     }
   } else if (service_id == CEPH_ENTITY_TYPE_MGR) {
     // mgr
-    ret = key_server.build_session_auth_info(
+    ret = build_session_auth_info(
       service_id, auth_ticket_info.ticket, std::nullopt, info);
     if (ret < 0) {
       derr << __func__ << " failed to build mgr service session_auth_info "
@@ -6454,11 +6454,11 @@ bool Monitor::get_authorizer(int service_id, AuthAuthorizer **authorizer)
     return false;
   }
   bufferlist ticket_data;
-  encode(blob, ticket_data);
+  ::encode(blob, ticket_data);
 
   auto iter = ticket_data.cbegin();
   CephXTicketHandler handler(g_ceph_context, service_id);
-  decode(handler.ticket, iter);
+  ::decode(handler.ticket, iter);
 
   handler.session_key = info.session_key;
 
@@ -6511,7 +6511,7 @@ int Monitor::handle_auth_request(
     dout(20) << __func__ << ": verify authorizer was_challenge=" << was_challenge << dendl;
     bool isvalid = ah->verify_authorizer(
       cct,
-      use_mon_keyring ? static_cast<KeyStore&>(keyring) : static_cast<KeyStore&>(key_server),
+      use_mon_keyring ? static_cast<KeyStore&>(keyring) : static_cast<KeyStore&>(*this),
       payload,
       auth_meta->get_connection_secret_length(),
       reply,
@@ -6557,7 +6557,7 @@ int Monitor::handle_auth_request(
 
     // handler?
     unique_ptr<AuthServiceHandler> auth_handler{get_auth_service_handler(
-      auth_method, g_ceph_context, &key_server)};
+      auth_method, g_ceph_context, this)};
     if (!auth_handler) {
       dout(1) << __func__ << " auth_method " << auth_method << " not supported"
 	      << dendl;
@@ -6568,15 +6568,15 @@ int Monitor::handle_auth_request(
     EntityName entity_name;
 
     try {
-      decode(mode, p);
+      ::decode(mode, p);
       if (mode < AUTH_MODE_MON ||
 	  mode > AUTH_MODE_MON_MAX) {
 	dout(1) << __func__ << " invalid mode " << (int)mode << dendl;
 	return -EACCES;
       }
       assert(mode >= AUTH_MODE_MON && mode <= AUTH_MODE_MON_MAX);
-      decode(entity_name, p);
-      decode(con->peer_global_id, p);
+      ::decode(entity_name, p);
+      ::decode(con->peer_global_id, p);
     } catch (ceph::buffer::error& e) {
       dout(1) << __func__ << " failed to decode, " << e.what() << dendl;
       return -EACCES;
@@ -6733,7 +6733,7 @@ bool Monitor::ms_handle_fast_authentication(Connection *con)
     bufferlist::const_iterator p = caps_info.caps.cbegin();
     string str;
     try {
-      decode(str, p);
+      ::decode(str, p);
     } catch (const ceph::buffer::error &err) {
       derr << __func__ << " corrupt cap data for " << con->get_peer_entity_name()
 	   << " in auth db" << dendl;
@@ -6810,6 +6810,14 @@ void Monitor::notify_new_monmap(bool can_change_external_state, bool remove_rank
     }
   }
   set_elector_disallowed_leaders(can_change_external_state);
+
+  {
+    std::lock_guard lock{cipher_mutex};
+    my_service_cipher = monmap->auth_service_cipher;
+    dout(20) << __func__ << ": my_service_cipher now " << my_service_cipher << dendl;
+    my_allowed_ciphers = monmap->auth_allowed_ciphers;
+    dout(20) << __func__ << ": auth_allowed_ciphers now " << my_allowed_ciphers << dendl;
+  }
 }
 
 void Monitor::set_elector_disallowed_leaders(bool allow_election)
@@ -7136,4 +7144,41 @@ void Monitor::disconnect_disallowed_stretch_sessions()
     ++i;
     session_stretch_allowed(*j, blank);
   }
+}
+
+int Monitor::get_service_cipher() const
+{
+  dout(30) << __func__ << dendl;
+  int cipher;
+  {
+    std::lock_guard lock{cipher_mutex};
+    cipher = my_service_cipher;
+  }
+  dout(30) << __func__ << ": = " << cipher << dendl;
+  return cipher;
+}
+
+bool Monitor::is_cipher_allowed(int cipher) const
+{
+  dout(30) << __func__ << ": " << CryptoManager::get_key_type_name(cipher) << dendl;
+  bool found;
+  {
+    std::lock_guard lock{cipher_mutex};
+    auto it = std::find(my_allowed_ciphers.begin(), my_allowed_ciphers.end(), cipher);
+    found = (it != my_allowed_ciphers.end());
+  }
+  dout(30) << __func__ << ": = " << found << dendl;
+  return found;
+}
+
+std::vector<int> Monitor::get_ciphers_allowed() const
+{
+  dout(30) << __func__ << dendl;
+  std::vector<int> ciphers;
+  {
+    std::lock_guard lock{cipher_mutex};
+    ciphers = my_allowed_ciphers;
+  }
+  dout(30) << __func__ << ": = " << ciphers << dendl;
+  return ciphers;
 }
