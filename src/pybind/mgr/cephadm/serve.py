@@ -830,6 +830,10 @@ class CephadmServe:
             # return a solid indication
             return None
 
+        if service_type == 'nfs':
+            if not self.mgr.created_ganesha_pool:
+                self.mgr.create_nfs_pool()
+
         try:
             slots_to_add, daemons_to_remove, rank_map = self.discover_daemons_to_add_and_remove_by_service(spec)
             self.mgr.daemon_deploy_queue.add_to_queue([(daemon_to_add, spec) for daemon_to_add in slots_to_add])
