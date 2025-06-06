@@ -493,7 +493,7 @@ RGWLC* FilterDriver::get_rgwlc()
   return next->get_rgwlc();
 }
 
-RGWRestore* FilterDriver::get_rgwrestore()
+rgw::restore::Restore* FilterDriver::get_rgwrestore()
 {
   return next->get_rgwrestore();
 }
@@ -1475,21 +1475,16 @@ int FilterRestore::initialize(const DoutPrefixProvider* dpp, optional_yield y,
   return next->initialize(dpp, y, n_objs, obj_names);
 }
 
-int FilterRestore::add_entry(const DoutPrefixProvider* dpp, optional_yield y,
-			     int index, const RGWRestoreEntry& r_entry) {
-  return next->add_entry(dpp, y, index, r_entry);
-}
-
 int FilterRestore::add_entries(const DoutPrefixProvider* dpp, optional_yield y,
 	       		       int index,
-			       const std::list<RGWRestoreEntry>& restore_entries) {
+			       const std::vector<rgw::restore::RestoreEntry>& restore_entries) {
   return next->add_entries(dpp, y, index, restore_entries);
 }
 
 /** List all known entries */
 int FilterRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
 	       	   int index, const std::string& marker, std::string* out_marker,
-		   uint32_t max_entries, std::vector<RGWRestoreEntry>& entries,
+		   uint32_t max_entries, std::vector<rgw::restore::RestoreEntry>& entries,
 		   bool* truncated) {
   return next->list(dpp, y, index, marker, out_marker, max_entries,
   		    entries, truncated);
@@ -1500,9 +1495,6 @@ int FilterRestore::trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
   return next->trim_entries(dpp, y, index, marker);
 }
 
-int FilterRestore::is_empty(const DoutPrefixProvider *dpp, optional_yield y) {
-  return next->is_empty(dpp, y);
-}
 
 int FilterNotification::publish_reserve(const DoutPrefixProvider *dpp,
 					RGWObjTags* obj_tags)

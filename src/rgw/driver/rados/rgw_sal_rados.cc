@@ -25,12 +25,15 @@
 #include <fmt/core.h>
 
 #include "common/async/blocked_completion.h"
+#include "neorados/cls/fifo.h"
 
 #include "common/ceph_time.h"
 #include "common/Clock.h"
 #include "common/errno.h"
+#include "common/async/blocked_completion.h"
 
 #include "librados/AioCompletionImpl.h"
+#include "rgw_asio_thread.h"
 
 #include "cls/rgw/cls_rgw_client.h"
 
@@ -3038,8 +3041,6 @@ int RadosObject::transition(Bucket* bucket,
 int RadosObject::restore_obj_from_cloud(Bucket* bucket,
                                   rgw::sal::PlacementTier* tier,
                           	  CephContext* cct,
-                                  RGWObjTier& tier_config,
-                                  uint64_t olh_epoch,
                                   std::optional<uint64_t> days,
 				  bool& in_progress,
                                   const DoutPrefixProvider* dpp, 
@@ -3066,10 +3067,6 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
       using ceph::decode;
       decode(m, attr_iter->second);
       m.get_tier_config(&tier_config);
-    } catch (const buffer::end_of_buffer&) {
-      //empty manifest; it's not cloud-tiered
-      ldpp_dout(dpp, -1) << "Error reading manifest of object:" << get_key() << dendl;
-      return -EIO;
     } catch (const std::exception& e) {
       ldpp_dout(dpp, -1) << "Error reading manifest of object:" << get_key() << dendl;
       return -EIO;
@@ -3088,7 +3085,7 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
   rgw_bucket_dir_entry ent;
   ent.key.name = get_key().name;
   ent.key.instance = get_key().instance;
-  ent.meta.accounted_size = ent.meta.size = get_obj_size();
+  ent.meta.accounted_size = ent.meta.size = get_size();
   ent.meta.etag = "" ;
 
   if (!ent.key.instance.empty()) { // non-current versioned object
@@ -3141,7 +3138,7 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
     return ret;
   }
 
-  ldpp_dout(dpp, 20) << "Sucessfully restored object(" << o.key << ") from the cloud endpoint(" << endpoint << ")" << dendl;
+  ldpp_dout(dpp, 20) << "Sucessfully restored object(" << get_key() << ") from the cloud endpoint(" << endpoint << ")" << dendl;
 
   return ret;
 }
@@ -4664,6 +4661,19 @@ int RadosRestoreSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur,
   return lock.lock_exclusive((librados::IoCtx*)(&ioctx), oid);
 }
 
+int RadosRestoreSerializer::unlock(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  librados::ObjectWriteOperation op;
+  op.assert_exists();
+  lock.unlock(&op);
+  return rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
+}
+
+RadosRestore::RadosRestore(RadosStore* _st) : store(_st),
+       	ioctx(*store->getRados()->get_restore_pool_ctx()),
+	r(store->get_neorados()),
+	neo_ioctx(*store->getRados()->get_restore_pool_neo_ctx()) {}
+
 std::unique_ptr<RestoreSerializer> RadosRestore::get_serializer(
 							const std::string& lock_name,
 							const std::string& oid,
@@ -4675,26 +4685,30 @@ std::unique_ptr<RestoreSerializer> RadosRestore::get_serializer(
 int RadosRestore::initialize(const DoutPrefixProvider* dpp, optional_yield y,
 		int n_objs, std::vector<std::string>& o_names)
 {
-  int ret = 0;
   num_objs = n_objs;
   obj_names = o_names;
 
+  maybe_warn_about_blocking(dpp);
   for (auto i=0; i < num_objs; i++) {
-    std::unique_ptr<rgw::cls::fifo::FIFO> fifo_tmp;
-    ret = rgw::cls::fifo::FIFO::create(dpp, ioctx, obj_names[i], &fifo_tmp, y);
-
-    ldpp_dout(dpp, 20) << "creating fifo object for index=" << i
-	   << ", objname=" << obj_names[i] <<
-	   " returned ret=" << ret << dendl;
-
-    if (ret) {
-      return ret;
+    std::unique_ptr<fifo::FIFO> fifo_tmp;
+    try {
+      fifo_tmp = fifo::FIFO::create(dpp, r, obj_names[i], neo_ioctx, ceph::async::use_blocked);
+    } catch (const sys::system_error& e) {
+      ldpp_dout(dpp, -1) << "creating fifo object for index=" << i
+	   << ", objname=" << obj_names[i] << " failed : " << e.what() << dendl;
+      return ceph::from_error_code(e.code());
     }
+
+    if (!fifo_tmp) {
+      return -ENOMEM;
+    }
+    ldpp_dout(dpp, 20) << "created fifo object for index=" << i
+	   << ", objname=" << obj_names[i] << dendl;
 
     fifos.push_back(std::move(fifo_tmp));
   }
 
-  return ret;
+  return 0;
 }
 
 void RadosRestore::finalize() {
@@ -4702,28 +4716,10 @@ void RadosRestore::finalize() {
   fifos.clear();
 }
 
-int RadosRestore::add_entry(const DoutPrefixProvider* dpp, optional_yield y,
-		int index, const RGWRestoreEntry& entry) {
-  bufferlist bl;
-
-  encode(entry, bl);
-
-  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
-		 << "Adding entry:(" << entry.bucket << "," << entry.obj_key << ") to FIFO:" << obj_names[index] << dendl;
-
-  auto ret = push(dpp, y, index, std::move(bl));
-  if (ret < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: push() returned " << ret << dendl;
-    return ret;
-  }
-
-  return 0;
-}
-
 
 int RadosRestore::add_entries(const DoutPrefixProvider* dpp, optional_yield y,
-		int index, const std::list<RGWRestoreEntry>& restore_entries) {
-  std::vector<ceph::buffer::list> ent_list;
+		int index, const std::vector<rgw::restore::RestoreEntry>& restore_entries) {
+  std::deque<ceph::buffer::list> ent_list;
 
   for (auto& entry : restore_entries) {
     bufferlist bl;
@@ -4734,7 +4730,8 @@ int RadosRestore::add_entries(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
-		 << "Adding " << restore_entries.size() << " entries to FIFO:" << obj_names[index] << dendl;
+		 << "Adding " << restore_entries.size() << " entries to FIFO:"
+		 << obj_names[index] << dendl;
 
   int ret = push(dpp, y, index, std::move(ent_list));
 
@@ -4747,17 +4744,19 @@ int RadosRestore::add_entries(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
-		int index, std::vector<ceph::buffer::list>&& items) {
+		int index, std::deque<ceph::buffer::list>&& items) {
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Pushing entries to FIFO:" << obj_names[index] << dendl;
-
-  auto r = fifos[index]->push(dpp, items, y);
-  if (r < 0) {
+  maybe_warn_about_blocking(dpp);
+  try {
+    fifos[index]->push(dpp, items, ceph::async::use_blocked);
+  } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to push to FIFO: " << obj_names[index]
-		 << ": " << cpp_strerror(-r) << dendl;
-    }
-    return r;
+		 << ": " << e.what() << dendl;
+    return ceph::from_error_code(e.code());
+  }
+  return 0;
 }
 
 int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
@@ -4765,19 +4764,22 @@ int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Pushing entry to FIFO:" << obj_names[index] << dendl;
 
-  auto r = fifos[index]->push(dpp, std::move(bl), y);
-  if (r < 0) {
+  maybe_warn_about_blocking(dpp);
+  try {
+    fifos[index]->push(dpp, std::move(bl), ceph::async::use_blocked);
+  } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to push to FIFO: " << obj_names[index]
-		 << ": " << cpp_strerror(-r) << dendl;
+		 << ": " << e.what() << dendl;
+    return ceph::from_error_code(e.code());
   }
-  return r;
+  return 0;
 }
 
 struct rgw_restore_fifo_entry {
   std::string id;
   ceph::real_time mtime;
-  RGWRestoreEntry entry;
+  rgw::restore::RestoreEntry entry;
   rgw_restore_fifo_entry() {}
 
   void encode(ceph::buffer::list& bl) const {
@@ -4803,53 +4805,58 @@ WRITE_CLASS_ENCODER(rgw_restore_fifo_entry)
 
 int RadosRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
 	       	   int index, const std::string& marker, std::string* out_marker,
-		   uint32_t max_entries, std::vector<RGWRestoreEntry>& entries,
+		   uint32_t max_entries, std::vector<rgw::restore::RestoreEntry>& entries,
 		   bool* truncated)
 {
-  std::vector<rgw::cls::fifo::list_entry> restore_entries;
+  std::vector<fifo::entry> restore_entries{max_entries};
+  std::string omark = {};
   bool more = false;
 
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Listing entries from FIFO:" << obj_names[index] << dendl;
 
-  auto r = fifos[index]->list(dpp, max_entries, marker, &restore_entries, &more, y);
-  if (r < 0) {
-    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
-		 << ": unable to list FIFO: " << obj_names[index]
-		 << ": " << cpp_strerror(-r) << dendl;
-    return r;
-  }
+  maybe_warn_about_blocking(dpp);
+  try {
+    auto [lentries, lmark] = fifos[index]->list(dpp, marker,
+			  	 restore_entries, ceph::async::use_blocked);
+    entries.clear();
 
-  entries.clear();
-
-  for (const auto& entry : restore_entries) {
+    for (const auto& entry : lentries) {
       rgw_restore_fifo_entry r_entry;
       r_entry.id = entry.marker;
       r_entry.mtime = entry.mtime;
 
       auto liter = entry.data.cbegin();
-      try {
-	decode(r_entry.entry, liter);
-      } catch (const buffer::error& err) {
-	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
-		   << ": failed to decode restore entry: "
-		   << err.what() << dendl;
-	return -EIO;
-      }
-      RGWRestoreEntry& e = r_entry.entry;
+      decode(r_entry.entry, liter);
+      rgw::restore::RestoreEntry& e = r_entry.entry;
       entries.push_back(std::move(e));
+      omark = entry.marker;
+    }
+    if (!lmark.empty()) {
+      more = true;
+    }
+  } catch (const sys::system_error& e) {
+    if (e.code() == sys::errc::no_such_file_or_directory) {
+    } else {
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
+		 << ": unable to list FIFO: " << obj_names[index]
+		 << ": " << e.what() << dendl;
+      return ceph::from_error_code(e.code());
+    }
   }
 
-  if (truncated)
+  if (truncated) {
     *truncated = more;
+  }				 
 
-  if (out_marker && !restore_entries.empty()) {
-    *out_marker = restore_entries.back().marker;
+  if (out_marker) {
+    *out_marker = omark;
   }
 
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Listing from FIFO:" << obj_names[index] << ", returned:"
-		 << restore_entries.size() << " entries, truncated:" << more
+		 << restore_entries.size() << " entries, truncated:"
+		 << (truncated ? *truncated : false) 
 		 << ", out_marker:" << (out_marker ? *out_marker : "") << dendl;
 
   return 0;
@@ -4869,41 +4876,16 @@ int RadosRestore::trim(const DoutPrefixProvider *dpp, optional_yield y,
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Trimming FIFO:" << obj_names[index] << " upto marker:" << marker << dendl;
 
-  auto r = fifos[index]->trim(dpp, marker, false, y);
-  if (r < 0) {
+  maybe_warn_about_blocking(dpp);
+  try {
+    fifos[index]->trim(dpp, std::string(marker), false, ceph::async::use_blocked);
+  } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to trim FIFO: " << obj_names[index]
-		 << ": " << cpp_strerror(-r) << dendl;
+		 << ": " << e.what() << dendl;
+    return ceph::from_error_code(e.code());
   }
-
-  return r;
-}
-
-std::string_view RadosRestore::max_marker() {
-  static const std::string mm = rgw::cls::fifo::marker::max().to_string();
-  return std::string_view(mm);
-}
-
-int RadosRestore::is_empty(const DoutPrefixProvider *dpp, optional_yield y) {
-    std::vector<rgw::cls::fifo::list_entry> restore_entries;
-    bool more = false;
-
-    for (auto shard = 0u; shard < fifos.size(); ++shard) {
-      auto r = fifos[shard]->list(dpp, 1, {}, &restore_entries, &more, y);
-      if (r < 0) {
-	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
-		   << ": unable to list FIFO: " << obj_names[shard]
-		   << ": " << cpp_strerror(-r) << dendl;
-	return r;
-      }
-      if (!restore_entries.empty()) {
-  	ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
-		 << "Entries found in FIFO:" << obj_names[shard] << dendl;	      
-	return 0;
-      }
-    }
-
-    return 1;
+  return 0;
 }
 
 int RadosNotification::publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags)

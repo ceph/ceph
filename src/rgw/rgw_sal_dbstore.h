@@ -926,7 +926,7 @@ public:
                                   const std::string& topic_queue) override;
 
       virtual RGWLC* get_rgwlc(void) override;
-      virtual RGWRestore* get_rgwrestore(void) override { return NULL; }
+      virtual rgw::restore::Restore* get_rgwrestore(void) override { return NULL; }
       virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
       virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y) override;
       virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) override;

@@ -36,7 +36,6 @@
 struct RGWBucketEnt;
 class RGWRESTMgr;
 class RGWLC;
-class RGWRestore;
 struct rgw_user_bucket;
 class RGWUsageBatch;
 class RGWCoroutinesManagerRegistry;
@@ -52,7 +51,6 @@ class RGWZonePlacementInfo;
 struct rgw_pubsub_topic;
 struct RGWOIDCProviderInfo;
 struct RGWRoleInfo;
-struct RGWRestoreEntry;
 
 using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
 
@@ -60,6 +58,11 @@ using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
 namespace rgw {
   class Aio;
   namespace IAM { struct Policy; }
+}
+
+namespace rgw::restore {
+  class Restore;
+  struct RestoreEntry;
 }
 
 class RGWGetDataCB {
@@ -568,7 +571,7 @@ class Driver {
     /** Get access to the lifecycle management thread */
     virtual RGWLC* get_rgwlc(void) = 0;
     /** Get access to the tier restore management thread */
-    virtual RGWRestore* get_rgwrestore(void) = 0;   
+    virtual rgw::restore::Restore* get_rgwrestore(void) = 0;   
     /** Get access to the coroutine registry.  Used to create new coroutine managers */
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() = 0;
 
@@ -1692,24 +1695,19 @@ public:
   virtual ~Restore() = default;
   virtual int initialize(const DoutPrefixProvider* dpp, optional_yield y,
 		  int n_objs, std::vector<std::string>& obj_names) = 0;  
-  /** Add a single restore entry state */
-  virtual int add_entry(const DoutPrefixProvider* dpp, optional_yield y,
-		  int index, const RGWRestoreEntry& r_entry) = 0;
   /** Add list of restore entries */
   virtual int add_entries(const DoutPrefixProvider* dpp, optional_yield y,
-	       int index, const std::list<RGWRestoreEntry>& restore_entries) = 0;
+	       int index, const std::vector<rgw::restore::RestoreEntry>& restore_entries) = 0;
   /** List all known entries given a marker */
   virtual int list(const DoutPrefixProvider *dpp, optional_yield y,
 	       	   int index,
 	           const std::string& marker, std::string* out_marker,
-		   uint32_t max_entries, std::vector<RGWRestoreEntry>& entries,
+		   uint32_t max_entries, std::vector<rgw::restore::RestoreEntry>& entries,
 		   bool* truncated) = 0;
 
   /** Trim restore entries upto the marker */
   virtual int trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
 		 	  int index, const std::string_view& marker) = 0;
-  /* Check if the list is empty */
-  virtual int is_empty(const DoutPrefixProvider *dpp, optional_yield y) = 0;
 
   /** Get a serializer for restore processing */
   virtual std::unique_ptr<RestoreSerializer> get_serializer(
