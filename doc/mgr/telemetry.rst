@@ -219,10 +219,10 @@ If telemetry is off you can preview a sample report by channel with:
 Collections
 -----------
 
-Collections represent different aspects of data that we collect within a
+Collections represent different aspects of data collected within a
 channel.
 
-List all collections with:
+To list all collections, run the following command:
 
 .. prompt:: bash #
 
@@ -247,29 +247,38 @@ List all collections with:
 
 Where:
 
-**NAME**: Collection name; prefix indicates the channel the collection belongs to.
+.. glossary:: 
 
-**STATUS**: Indicates whether the collection metrics are reported; this is
-determined by the status (enabled / disabled) of the channel the collection
-belongs to, along with the enrollment status of the collection (whether the user
-is opted-in to this collection).
+        NAME
+                Collection name; prefix indicates the channel the collection
+                belongs to.
 
-**DESC**: General description of the collection.
+        STATUS
+                Indicates whether the collection metrics are reported; this is
+                determined by the status (enabled / disabled) of the channel
+                the collection belongs to, along with the enrollment status of
+                the collection (whether the user is opted-in to this
+                collection).
 
-See the diff between the collections you are enrolled to, and the new,
-available collections with:
+        DESC
+                General description of the collection.
+
+To print the diff that displays the differences between (1) the collections you
+are enrolled to and (2) the new, available collections, run the following
+command:
 
 .. prompt:: bash #
 
    ceph telemetry diff
 
-Enroll to the most recent collections with:
+To enroll to the most recent collections, run the following command:
 
 .. prompt:: bash #
 
    ceph telemetry on
 
-Then enable new channels that are off with:
+Enable a new channel that is disabled by running a command of the following
+form:
 
 .. prompt:: bash #
 
@@ -278,8 +287,8 @@ Then enable new channels that are off with:
 Interval
 --------
 
-The module compiles and sends a new report every 24 hours by default.
-You can adjust this interval with:
+The telemetry module compiles and sends a new report every 24 hours by default.
+Adjust this interval by running a command of the following form:
 
 .. prompt:: bash #
 
@@ -288,7 +297,8 @@ You can adjust this interval with:
 Status
 --------
 
-The see the current configuration:
+To print the current configuration of the telemetry module, run a command of
+the following form:
 
 .. prompt:: bash #
 
@@ -297,7 +307,7 @@ The see the current configuration:
 Manually sending telemetry
 --------------------------
 
-To ad hoc send telemetry data:
+To ad hoc [fixme] send telemetry data:
 
 .. prompt:: bash #
 
