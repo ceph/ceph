@@ -114,14 +114,19 @@ private:
 
   Context* m_load_snapshots_task = nullptr;
   Context* m_on_shutdown = nullptr;
+  Context* m_handle_local_group_snapshots_ctx = nullptr;
+  Context* m_handle_remote_group_snapshots_ctx = nullptr;
 
   AsyncOpTracker m_in_flight_op_tracker;
+  bufferlist m_out_bl;
 
   int m_error_code = 0;
   std::string m_error_description;
 
   bool m_stop_requested = false;
   bool m_retry_validate_snap = false;
+  bool m_is_resync_requested = false;
+  bool m_is_rename_requested = false;
 
   utime_t m_snapshot_start;
   uint64_t m_last_snapshot_complete_seconds = 0;
@@ -130,8 +135,10 @@ private:
 
   bool is_replay_interrupted();
   bool is_replay_interrupted(std::unique_lock<ceph::mutex>* locker);
-  int local_group_image_list_by_id(
-      std::vector<cls::rbd::GroupImageStatus> *image_ids);
+  void local_group_image_list_by_id(
+    std::vector<cls::rbd::GroupImageStatus>* image_ids, Context* on_finish);
+  void handle_local_group_image_list_by_id(int r,
+    std::vector<cls::rbd::GroupImageStatus>* image_ids, Context* on_finish);
 
   void schedule_load_group_snapshots();
   void handle_schedule_load_group_snapshots(int r);
@@ -140,16 +147,24 @@ private:
   void handle_replay_complete(int r, const std::string& desc);
   void notify_group_listener();
 
-  bool is_resync_requested();
-  bool is_rename_requested();
+  void is_resync_requested();
+  void handle_is_resync_requested (int r);
+  void is_rename_requested();
+  void handle_is_rename_requested(int r);
 
   void load_local_group_snapshots();
+  void continue_load_local_group_snapshots();
   void handle_load_local_group_snapshots(int r);
 
   void load_remote_group_snapshots(std::unique_lock<ceph::mutex>* locker);
   void handle_load_remote_group_snapshots(int r);
+  void continue_handle_load_remote_group_snapshots();
 
   void validate_image_snaps_sync_complete(const std::string &group_snap_id);
+  void handle_validate_image_snaps_sync_complete(const std::string &group_snap_id,
+    cls::rbd::GroupSnapshot &remote_snap, cls::rbd::GroupSnapshot &local_snap,
+    std::vector<cls::rbd::GroupImageStatus> &local_images, int r);
+
   void scan_for_unsynced_group_snapshots();
 
   void try_create_group_snapshot(cls::rbd::GroupSnapshot snap,
@@ -190,6 +205,11 @@ private:
   void regular_snapshot_complete(
     const std::string &group_snap_id,
     Context *on_finish);
+  void handle_continue_regular_snapshot_complete(
+    const std::string &group_snap_id, cls::rbd::GroupSnapshot &remote_snap,
+    cls::rbd::GroupSnapshot &local_snap,
+    std::vector<cls::rbd::GroupImageStatus> &local_images,
+    Context *on_finish, int r);
   void handle_regular_snapshot_complete(
     int r, const std::string &group_snap_id, Context *on_finish);
 
