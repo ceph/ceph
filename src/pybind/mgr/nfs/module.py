@@ -1,6 +1,7 @@
 import logging
 import threading
 from typing import Tuple, Optional, List, Dict, Any
+import yaml
 
 from mgr_module import MgrModule, CLICommand, Option, CLICheckNonemptyFileInput
 import object_format
@@ -135,12 +136,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 virtual_ip: Optional[str] = None,
                                 ingress_mode: Optional[IngressType] = None,
                                 port: Optional[int] = None,
-                                kmip_cert: Optional[str] = None,
-                                kmip_key: Optional[str] = None,
-                                kmip_ca_cert: Optional[str] = None,
-                                kmip_host_list: Optional[List[str]] = None,
+                                inbuf: Optional[str] = None,
                                 ) -> None:
         """Create an NFS Cluster"""
+        kmip_cert = kmip_key = kmip_ca_cert = kmip_host_list = None
+        if inbuf:
+            kmip_config = yaml.safe_load(inbuf)
+            kmip_cert = kmip_config.get('kmip_cert')
+            kmip_key = kmip_config.get('kmip_key')
+            kmip_ca_cert = kmip_config.get('kmip_ca_cert')
+            kmip_host_list = kmip_config.get('kmip_host_list')
+
         return self.nfs.create_nfs_cluster(cluster_id=cluster_id, placement=placement,
                                            virtual_ip=virtual_ip, ingress=ingress,
                                            ingress_mode=ingress_mode, port=port,
