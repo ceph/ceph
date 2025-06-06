@@ -3118,23 +3118,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
     {
       size_t maxlen = 3;
       auto& service_map = mgrstatmon()->get_service_map();
-      std::map<NvmeGroupKey, std::set<std::string>> nvmeof_services;
       for (auto& p : service_map.services) {
-        if (p.first == "nvmeof") {
-          auto daemons = p.second.daemons;
-          for (auto& d : daemons) {
-            auto group = d.second.metadata.find("group");
-            auto pool = d.second.metadata.find("pool_name"); 
-            auto gw_id = d.second.metadata.find("id");
-            NvmeGroupKey group_key = std::make_pair(pool->second,  group->second); 
-            nvmeof_services[group_key].insert(gw_id->second);
-            maxlen = std::max(maxlen, 
-                p.first.size() + group->second.size() + pool->second.size() + 4
-              ); // nvmeof (pool.group):
-          }
-        } else {
-          maxlen = std::max(maxlen, p.first.size());
-        }
+	maxlen = std::max(maxlen, p.first.size());
       }
       string spacing(maxlen - 3, ' ');
       const auto quorum_names = get_quorum_names();
@@ -3181,31 +3166,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
         if (ServiceMap::is_normal_ceph_entity(service)) {
           continue;
         }
-        if (p.first == "nvmeof") {
-          auto created_gws = nvmegwmon()->get_map().created_gws;
-          for (const auto& created_map_pair: created_gws) {
-            const auto& group_key = created_map_pair.first;
-            const NvmeGwMonStates& gw_created_map = created_map_pair.second;
-            const int total = gw_created_map.size();
-            auto& active_gws = nvmeof_services[group_key];
-
-            ss << "    " << p.first << " (" << group_key.first << "." << group_key.second << "): ";
-            ss << string(maxlen - p.first.size() - group_key.first.size() 
-                    - group_key.second.size() - 4, ' ');
-            ss << total << " gateway" << (total > 1 ? "s" : "") << ": " 
-               << active_gws.size() << " active (";
-            for (auto gw = active_gws.begin(); gw != active_gws.end(); ++gw){
-              if (gw != active_gws.begin()) {
-	              ss << ", ";
-              }
-              ss << *gw; 
-            }
-            ss << ") \n";
-          }
-        } else {
 	ss << "    " << p.first << ": " << string(maxlen - p.first.size(), ' ')
 	   << p.second.get_summary() << "\n";
-        }
       }
     }
 
