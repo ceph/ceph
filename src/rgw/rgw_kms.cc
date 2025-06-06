@@ -1267,7 +1267,13 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
   };
 
   if (!kctx.cache_enabled()) {
-    return fetch(actual_key);
+    const auto ret = fetch(actual_key);
+    if (ret == -ENOENT) {
+      perfcounter->inc(l_rgw_kms_error_permanent);
+    } else if (ret < 0) {
+      perfcounter->inc(l_rgw_kms_error_transient);
+    }
+    return ret;
   }
 
   auto& cache = kctx.secrets_cache(dpp->get_cct());
@@ -1294,6 +1300,7 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
           cache_key, value,
           std::chrono::seconds(
               dpp->get_cct()->_conf->rgw_crypt_s3_kms_cache_negative_ttl));
+      perfcounter->inc(l_rgw_kms_error_permanent);
       return tl::unexpected(ret);
     } else if (ret < 0) {  // treat other errors as transient
       ldpp_dout(dpp, 15) << "kms-cache: " << cache_key << " fetch error ("
@@ -1304,6 +1311,7 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
           std::chrono::seconds(
               dpp->get_cct()
                   ->_conf->rgw_crypt_s3_kms_cache_transient_error_ttl));
+      perfcounter->inc(l_rgw_kms_error_transient);
       return tl::unexpected(ret);
     }
 
