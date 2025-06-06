@@ -44,9 +44,6 @@ class DaemonForm(abc.ABC):
         """
         raise NotImplementedError()  # pragma: no cover
 
-    def perform_default_restart(self) -> int:
-        return 0
-
 
 DF = TypeVar('DF', bound=DaemonForm)
 
