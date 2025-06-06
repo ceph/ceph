@@ -121,8 +121,7 @@ List all channels with:
 Enabling Telemetry
 ------------------
 
-To allow the *telemetry* module to start sharing data, run the following
-command:
+To allow the *telemetry* module to share data, run the following command:
 
 .. prompt:: bash #
 
@@ -177,10 +176,10 @@ report:
 
    ceph telemetry preview-device
 
-.. note:: In order to generate the device report we use Smartmontools version
-   7.0 and up, which supports JSON output. If you have any concerns about
-   privacy with regard to the information included in this report, contact the
-   Ceph developers.
+.. note:: ``smartmontools`` version 7.0 or later must be installed so that JSON
+   output can be specified and parsed. If you have any concerns about privacy
+   with regard to the information included in this report, contact the Ceph
+   developers.
 
 When telemetry is enabled, run the following command to generate both reports
 in a single output: 
