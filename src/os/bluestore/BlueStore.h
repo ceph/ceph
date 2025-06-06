@@ -4175,6 +4175,13 @@ private:
 
   void _fsck_check_objects(FSCKDepth depth,
     FSCK_ObjectCtx& ctx);
+
+public:
+  static int create_bdev_labels(CephContext *cct,
+                          const std::string& path,
+                          const std::vector<std::string>& devs,
+			  std::vector<uint64_t>* valid_positions,
+			  bool force);
 };
 
 inline std::ostream& operator<<(std::ostream& out, const BlueStore::volatile_statfs& s) {
