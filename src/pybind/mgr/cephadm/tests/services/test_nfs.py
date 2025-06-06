@@ -829,7 +829,6 @@ class TestNFS:
                 assert "client_oc_size = 1048576;" in ganesha_conf
                 assert "client_oc_max_dirty = 0;" in ganesha_conf
 
-
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
     @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
