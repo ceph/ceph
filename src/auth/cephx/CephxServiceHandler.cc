@@ -38,39 +38,15 @@ using ceph::decode;
 using ceph::encode;
 
 CephxServiceHandler::CephxServiceHandler(CephContext *cct_, KeyServer *ks)
-  : AuthServiceHandler(cct_), key_server(ks), server_challenge(0) {
-  cct->_conf.add_observer(this);
-  init_conf(cct->_conf);
-}
-
-std::vector<std::string> CephxServiceHandler::get_tracked_keys() const noexcept
+  : AuthServiceHandler(cct_)
+  , key_server(ks)
 {
-  static constexpr auto as_sv = std::to_array<std::string_view>({
-    "cephx_allowed_ciphers",
-  });
-  static_assert(std::is_sorted(as_sv.begin(), as_sv.end()), "keys are not sorted!");
-  return {as_sv.begin(), as_sv.end()};
-}
-
-void CephxServiceHandler::init_conf(const ConfigProxy& conf) {
-  std::unique_lock wl(lock);
-  auto s = conf.get_val<std::string>("cephx_allowed_ciphers");
-
-  std::vector<std::string> v;
-  get_str_vec(s, ", ", v);
-
-  for (auto& cipher : v) {
-    int cipher_type = CryptoManager::get_key_type(cipher);
-    if (cipher_type > 0) {
-      allowed_ciphers.insert(cipher_type);
-    }
-  }
 }
 
 bool CephxServiceHandler::cipher_is_allowed(int cipher)
 {
   std::shared_lock rl(lock);
-  return (allowed_ciphers.find(cipher) != allowed_ciphers.end());
+  return key_server->is_cipher_allowed(cipher);
 }
 
 int CephxServiceHandler::do_start_session(
@@ -216,7 +192,18 @@ int CephxServiceHandler::handle_request(
       }
 
       if (!cipher_is_allowed(eauth.key.get_type())) {
-	ldout(cct, 20) << __func__ << " authentication failed due to unallowed cipher type: " << eauth.key.get_type() << dendl;
+	ldout(cct, 20) << __func__
+                       << " authentication failed due to unallowed cipher type: "
+                       << CryptoManager::get_key_type_name(eauth.key.get_type()) << dendl;
+        ldout(cct, 30);
+          std::shared_lock rl(lock);
+          auto ciphers = key_server->get_ciphers_allowed();
+          dout_prefix << __func__
+                      << ": ciphers are:";
+          for (auto& cipher : ciphers) {
+            dout_prefix << " " << CryptoManager::get_key_type_name(cipher);
+          }
+        dout_prefix << dendl;
         ret = -EACCES;
         break;
       }
