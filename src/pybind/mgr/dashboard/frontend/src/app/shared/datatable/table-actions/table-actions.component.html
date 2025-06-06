@@ -21,8 +21,8 @@
             [cdsOverflowMenu]="overflowMenuTpl"
             data-testid="table-action-btn">
       <svg class="cds--btn__icon"
-           cdsIcon="caret--down"
-           size="16"></svg>
+           [cdsIcon]="icons.downArrow"
+           [size]="icons.size16"></svg>
     </button>
     <ng-template #overflowMenuTpl>
       <ng-container *ngFor="let action of dropDownActions">
