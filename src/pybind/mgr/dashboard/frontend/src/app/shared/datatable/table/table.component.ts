@@ -32,9 +32,10 @@ import { CdUserConfig } from '~/app/shared/models/cd-user-config';
 import { TimerService } from '~/app/shared/services/timer.service';
 import { TableActionsComponent } from '../table-actions/table-actions.component';
 import { TableDetailDirective } from '../directives/table-detail.directive';
-import { filter, map } from 'rxjs/operators';
+import { filter, map, take } from 'rxjs/operators';
 import { CdSortDirection } from '../../enum/cd-sort-direction';
 import { CdSortPropDir } from '../../models/cd-sort-prop-dir';
+import { ActivatedRoute, Router } from '@angular/router';
 
 const TABLE_LIST_LIMIT = 10;
 type TPaginationInput = { page: number; size: number; filteredData: any[] };
@@ -252,6 +253,18 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   set expanded(value: any) {
     this._expanded = value;
     this.setExpandedRow.emit(value);
+
+    if (value) {
+      this.router.navigate([], {
+        queryParams: { details: value[this.identifier] },
+        queryParamsHandling: 'merge'
+      });
+    } else {
+      this.router.navigate([], {
+        queryParams: { details: null },
+        queryParamsHandling: 'merge'
+      });
+    }
   }
 
   get expanded() {
@@ -380,7 +393,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   constructor(
     // private ngZone: NgZone,
     private cdRef: ChangeDetectorRef,
-    private timerService: TimerService
+    private timerService: TimerService,
+    private route: ActivatedRoute,
+    private router: Router
   ) {}
 
   static prepareSearch(search: string) {
@@ -463,6 +478,18 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
                 if (this.hasDetails) {
                   tableItem.expandedData = val;
                   tableItem.expandedTemplate = this.rowDetailTpl;
+
+                  this.route.queryParams.pipe(take(1)).subscribe((params) => {
+                    const expandedId = params['details'];
+                    if (expandedId) {
+                      const expandedItem =
+                        this.data.find((item) => item[this.identifier] === expandedId) || null;
+                      if (expandedItem && expandedItem !== this._expanded) {
+                        this._expanded = expandedItem;
+                        this.setExpandedRow.emit(this._expanded);
+                      }
+                    }
+                  });
                 }
               }
 
