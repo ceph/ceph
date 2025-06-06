@@ -607,15 +607,15 @@ def lookup_container_id_by_daemon_name(ctx: CephadmContext, fsid: str, name: str
     )
     daemons = [updater.expand(ctx, entry) for entry in daemon_entries]
     if not daemons:
-        raise Error('Failed to find daemon {}'.format(name))
+        raise Error(f'Failed to find daemon {name}')
     if len(daemons) > 1:
-        raise Error('Found multiple daemons matching name {}: {}'.format(name, daemons))
+        raise Error(f'Found multiple daemons matching name {name}: {daemons}')
 
     daemon = daemons[0]
     try:
         return daemon['container_id']
     except KeyError:
-        raise Error('Failed to get container id for {}'.format(daemon))
+        raise Error(f'Failed to get container id for {daemon}')
 
 
 def create_daemon_dirs(
@@ -1005,14 +1005,15 @@ def deploy_daemon(
     # If this was a reconfig and the daemon is not a Ceph daemon, restart it
     # so it can pick up potential changes to its configuration files
     if deployment_type == DeploymentType.RECONFIG and daemon_type not in ceph_daemons():
-        if not ctx.skip_restart:
+        if not ctx.skip_restart_for_reconfig:
             # ceph daemons do not need a restart; others (presumably) do to pick
             # up the new config
             call_throws(ctx, ['systemctl', 'reset-failed', ident.unit_name])
             call_throws(ctx, ['systemctl', 'restart', ident.unit_name])
-        else:
-            # perform default action
-            daemon_form_create(ctx, ident).perform_default_restart()
+        elif ctx.send_signal_to_daemon:
+            ctx.signal_name = ctx.send_signal_to_daemon
+            ctx.signal_number = None
+            command_signal(ctx)
 
 
 def clean_cgroup(ctx: CephadmContext, fsid: str, unit_name: str) -> None:
@@ -3279,8 +3280,7 @@ def command_unit(ctx: CephadmContext) -> int:
 
 
 @infer_fsid
-def command_signal(ctx):
-    # type: (CephadmContext) -> int
+def command_signal(ctx: CephadmContext) -> int:
     if not ctx.fsid:
         raise Error('must pass --fsid to specify cluster')
 
@@ -4534,10 +4534,14 @@ def _add_deploy_parser_args(
         help='Additional entrypoint arguments to apply to deamon'
     )
     parser_deploy.add_argument(
-        '--skip-restart',
+        '--skip-restart-for-reconfig',
         action='store_true',
         default=False,
         help='skip restart for non ceph daemons and perform default action'
+    )
+    parser_deploy.add_argument(
+        '--send-signal-to-daemon',
+        help='Send signal to daemon'
     )
 
 
