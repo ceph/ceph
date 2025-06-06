@@ -134,7 +134,6 @@ bool BtreeCursor<key_t, val_t>::is_viewable() const {
   }
 
   auto [viewable, state] = parent->is_viewable_by_trans(ctx.trans);
-  assert(state != CachedExtent::viewable_state_t::invalid);
   SUBTRACET(seastore_cache, "{} with viewable state {}",
             ctx.trans, *parent, state);
   return viewable;
