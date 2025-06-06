@@ -1,10 +1,5 @@
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rocksdb/include")
 
-add_library(alien::cflags INTERFACE IMPORTED)
-set_target_properties(alien::cflags PROPERTIES
-  INTERFACE_COMPILE_DEFINITIONS "WITH_SEASTAR;WITH_ALIEN"
-  INTERFACE_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:Seastar::seastar,INTERFACE_INCLUDE_DIRECTORIES>)
-
 set(crimson_alien_common_srcs
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket.cc
   ${PROJECT_SOURCE_DIR}/src/common/url_escape.cc
@@ -38,9 +33,9 @@ endif()
 add_library(crimson-alien-common STATIC
   ${crimson_alien_common_srcs})
 
-target_link_libraries(crimson-alien-common
-  crimson-common
-  alien::cflags)
+add_library(alien::cflags INTERFACE IMPORTED)
+set_target_properties(alien::cflags PROPERTIES
+  INTERFACE_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:Seastar::seastar,INTERFACE_INCLUDE_DIRECTORIES>)
 
 set(alien_store_srcs
   alien_store.cc
@@ -48,6 +43,7 @@ set(alien_store_srcs
   alien_log.cc
   ${PROJECT_SOURCE_DIR}/src/os/ObjectStore.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/Allocator.cc
+  ${PROJECT_SOURCE_DIR}/src/os/bluestore/AllocatorBase.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/AvlAllocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BtreeAllocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/Btree2Allocator.cc
@@ -64,13 +60,18 @@ set(alien_store_srcs
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/StupidAllocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BitmapAllocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/Writer.cc
+  ${PROJECT_SOURCE_DIR}/src/os/bluestore/Compression.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueStore_debug.cc
+  ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueAdmin.cc
   ${PROJECT_SOURCE_DIR}/src/os/memstore/MemStore.cc)
+
 add_library(crimson-alienstore STATIC
   ${alien_store_srcs})
 if(WITH_LTTNG)
   add_dependencies(crimson-alienstore bluestore-tp)
 endif()
+
+# For crimson-alienstore WITH_CRIMSON is not defined
 target_link_libraries(crimson-alienstore
   PRIVATE
     alien::cflags
@@ -80,5 +81,5 @@ target_link_libraries(crimson-alienstore
     crimson-alien-common
     ${BLKID_LIBRARIES}
     ${UDEV_LIBRARIES}
-    crimson
+    seastar
     blk)

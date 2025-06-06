@@ -1,15 +1,16 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "CrushWrapper.h"
+#include "CrushTreeDumper.h"
+
 #include "osd/osd_types.h"
+#include "common/ceph_context.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
 #include "common/errno.h"
 #include "common/TextTable.h"
 #include "include/stringify.h"
-
-#include "CrushWrapper.h"
-#include "CrushTreeDumper.h"
 
 #define dout_subsys ceph_subsys_crush
 
@@ -29,6 +30,25 @@ using ceph::decode;
 using ceph::decode_nohead;
 using ceph::encode;
 using ceph::Formatter;
+
+CrushWrapper::~CrushWrapper()
+{
+  if (crush)
+    crush_destroy(crush);
+  choose_args_clear();
+}
+
+void CrushWrapper::create()
+{
+  if (crush)
+    crush_destroy(crush);
+  crush = crush_create();
+  choose_args_clear();
+  ceph_assert(crush);
+  have_rmaps = false;
+
+  set_tunables_default();
+}
 
 bool CrushWrapper::has_non_straw2_buckets() const
 {
@@ -2541,13 +2561,15 @@ int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno,
 
   // build a weight map for each TAKE in the rule, and then merge them
 
-  // FIXME: if there are multiple takes that place a different number of
-  // objects we do not take that into account.  (Also, note that doing this
+  // We do handles varying object counts across multiple takes.
+  // However, the ultimate object placement is subject to the
+  // pool size constraint, which might restrict the number of
+  // objects selected by the Crush rule (Also, note that doing this
   // right is also a function of the pool, since the crush rule
   // might choose 2 + choose 2 but pool size may only be 3.)
+  float sum = 0;
+  map<int,float> m;
   for (unsigned i=0; i<rule->len; ++i) {
-    map<int,float> m;
-    float sum = 0;
     if (rule->steps[i].op == CRUSH_RULE_TAKE) {
       int n = rule->steps[i].arg1;
       if (n >= 0) {
@@ -2557,8 +2579,8 @@ int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno,
 	sum += _get_take_weight_osd_map(n, &m);
       }
     }
-    _normalize_weight_map(sum, m, pmap);
   }
+  _normalize_weight_map(sum, m, pmap);
 
   return 0;
 }

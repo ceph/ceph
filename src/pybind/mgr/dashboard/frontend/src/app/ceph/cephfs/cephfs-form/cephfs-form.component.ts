@@ -19,6 +19,8 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permission } from '~/app/shared/models/permissions';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { PoolService } from '~/app/shared/api/pool.service';
+import { Pool } from '../../pool/pool';
 
 @Component({
   selector: 'cd-cephfs-form',
@@ -51,6 +53,9 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
   fsId: number;
   disableRename: boolean = true;
   hostsAndLabels$: Observable<{ hosts: any[]; labels: any[] }>;
+  pools: Pool[] = [];
+  dataPools: Pool[] = [];
+  metadatPools: Pool[] = [];
 
   fsFailCmd: string;
   fsSetCmd: string;
@@ -66,7 +71,8 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
     public actionLabels: ActionLabelsI18n,
     private hostService: HostService,
     private cephfsService: CephfsService,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private poolService: PoolService
   ) {
     super();
     this.editing = this.router.url.startsWith(`/cephfs/fs/${URLVerbs.EDIT}`);
@@ -94,7 +100,20 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
           })
         ]
       ],
-      unmanaged: [false]
+      unmanaged: [false],
+      customPools: [false],
+      dataPool: [
+        null,
+        CdValidators.requiredIf({
+          customPools: true
+        })
+      ],
+      metadataPool: [
+        null,
+        CdValidators.requiredIf({
+          customPools: true
+        })
+      ]
     });
     this.orchService.status().subscribe((status) => {
       this.hasOrchestrator = status.available;
@@ -111,6 +130,15 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
       this.cephfsService.getCephfs(this.fsId).subscribe((resp: object) => {
         this.currentVolumeName = resp['cephfs']['name'];
         this.form.get('name').setValue(this.currentVolumeName);
+        const dataPool =
+          resp['cephfs'].pools.find((pool: Pool) => pool.type === 'data')?.pool || '';
+        const metaPool =
+          resp['cephfs'].pools.find((pool: Pool) => pool.type === 'metadata')?.pool || '';
+        this.form.get('dataPool').setValue(dataPool);
+        this.form.get('metadataPool').setValue(metaPool);
+
+        this.form.get('dataPool').disable();
+        this.form.get('metadataPool').disable();
 
         this.disableRename = !(
           !resp['cephfs']['flags']['joinable'] && resp['cephfs']['flags']['refuse_client_session']
@@ -122,6 +150,27 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
         }
       });
     } else {
+      forkJoin({
+        usedPools: this.cephfsService.getUsedPools(),
+        pools: this.poolService.getList()
+      }).subscribe(({ usedPools, pools }) => {
+        // filtering pools if
+        // * pool is labelled with cephfs
+        // * its not already used by cephfs
+        // * its not erasure coded
+        // * and only if its empty
+        const filteredPools = Object.values(pools).filter(
+          (pool: Pool) =>
+            this.cephfsService.isCephFsPool(pool) &&
+            !usedPools.includes(pool.pool) &&
+            pool.type !== 'erasure' &&
+            pool.stats.bytes_used.latest === 0
+        );
+        if (filteredPools.length < 2) this.form.get('customPools').disable();
+        this.pools = filteredPools;
+        this.metadatPools = this.dataPools = this.pools;
+      });
+
       this.hostsAndLabels$ = forkJoin({
         hosts: this.hostService.getAllHosts(),
         labels: this.hostService.getLabels()
@@ -134,6 +183,12 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
     }
     this.orchStatus$ = this.orchService.status();
     this.loadingReady();
+  }
+
+  onPoolChange(poolName: string, metadataChange = false) {
+    if (!metadataChange) {
+      this.metadatPools = this.pools.filter((pool: Pool) => pool.pool_name != poolName);
+    } else this.dataPools = this.pools.filter((pool: Pool) => pool.pool_name !== poolName);
   }
 
   multiSelector(event: any, field: 'label' | 'hosts') {
@@ -178,6 +233,9 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
           break;
       }
 
+      const dataPool = values['dataPool'];
+      const metadataPool = values['metadataPool'];
+
       const self = this;
       let taskUrl = `${BASE_URL}/${URLVerbs.CREATE}`;
       this.taskWrapperService
@@ -185,7 +243,12 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
           task: new FinishedTask(taskUrl, {
             volumeName: volumeName
           }),
-          call: this.cephfsService.create(this.form.get('name').value, serviceSpec)
+          call: this.cephfsService.create(
+            this.form.get('name').value,
+            serviceSpec,
+            dataPool,
+            metadataPool
+          )
         })
         .subscribe({
           error() {

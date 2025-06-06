@@ -22,6 +22,7 @@
 #include <list>
 #include <vector>
 #include <thread>
+#include <unordered_map>
 
 #include "common/ceph_context.h"
 #include "common/debug.h"
@@ -61,7 +62,7 @@ class RDMADispatcher {
    *
    * @param qp The qp needed to dead
    */
-  ceph::unordered_map<uint32_t, std::pair<QueuePair*, RDMAConnectedSocketImpl*> > qp_conns;
+  std::unordered_map<uint32_t, std::pair<QueuePair*, RDMAConnectedSocketImpl*> > qp_conns;
 
   /// if a queue pair is closed when transmit buffers are active
   /// on it, the transmit buffers never get returned via tx_cq.  To

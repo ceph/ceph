@@ -12,7 +12,6 @@
  * 
  */
 
-#include <sstream>
 #include "Paxos.h"
 #include "Monitor.h"
 #include "messages/MMonPaxos.h"
@@ -23,6 +22,12 @@
 #include "include/stringify.h"
 #include "common/Timer.h"
 #include "messages/PaxosServiceMessage.h"
+
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 using std::string;
 using std::unique_lock;

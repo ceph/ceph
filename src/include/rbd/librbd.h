@@ -32,7 +32,7 @@ extern "C" {
 #include "features.h"
 
 #define LIBRBD_VER_MAJOR 1
-#define LIBRBD_VER_MINOR 19
+#define LIBRBD_VER_MINOR 20
 #define LIBRBD_VER_EXTRA 0
 
 #define LIBRBD_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
@@ -52,6 +52,7 @@ extern "C" {
 #define LIBRBD_SUPPORTS_ENCRYPTION 1
 #define LIBRBD_SUPPORTS_ENCRYPTION_LOAD2 1
 #define LIBRBD_SUPPORTS_GROUP_SNAP_GET_INFO 1
+#define LIBRBD_SUPPORTS_DIFF_ITERATE3 1
 
 #if __GNUC__ >= 4
   #define CEPH_RBD_API          __attribute__ ((visibility ("default")))
@@ -151,7 +152,9 @@ typedef struct {
 typedef enum {
   RBD_MIRROR_MODE_DISABLED, /* mirroring is disabled */
   RBD_MIRROR_MODE_IMAGE,    /* mirroring enabled on a per-image basis */
-  RBD_MIRROR_MODE_POOL      /* mirroring enabled on all journaled images */
+  RBD_MIRROR_MODE_POOL,     /* mirroring enabled on all journaled images */
+  RBD_MIRROR_MODE_INIT_ONLY /* mirroring is initialized but not enabled
+                               (default namespace only) */
 } rbd_mirror_mode_t;
 
 typedef enum {
@@ -186,7 +189,8 @@ typedef enum {
 typedef enum {
   RBD_MIRROR_IMAGE_DISABLING = 0,
   RBD_MIRROR_IMAGE_ENABLED = 1,
-  RBD_MIRROR_IMAGE_DISABLED = 2
+  RBD_MIRROR_IMAGE_DISABLED = 2,
+  RBD_MIRROR_IMAGE_CREATING = 3
 } rbd_mirror_image_state_t;
 
 typedef struct {
@@ -399,6 +403,14 @@ typedef enum {
 /* rbd_write_zeroes / rbd_aio_write_zeroes flags */
 enum {
   RBD_WRITE_ZEROES_FLAG_THICK_PROVISION = (1U<<0), /* fully allocated zeroed extent */
+};
+
+/* rbd_diff_iterate3 flags */
+enum {
+  /* full history diff should include parent */
+  RBD_DIFF_ITERATE_FLAG_INCLUDE_PARENT = (1U<<0),
+  /* diff extents should cover whole object */
+  RBD_DIFF_ITERATE_FLAG_WHOLE_OBJECT = (1U<<1),
 };
 
 typedef enum {
@@ -1233,6 +1245,11 @@ CEPH_RBD_API int rbd_diff_iterate2(rbd_image_t image,
                                    uint8_t include_parent, uint8_t whole_object,
 		                   int (*cb)(uint64_t, size_t, int, void *),
                                    void *arg);
+CEPH_RBD_API int rbd_diff_iterate3(rbd_image_t image, uint64_t from_snap_id,
+                                   uint64_t ofs, uint64_t len, uint32_t flags,
+                                   int (*cb)(uint64_t, size_t, int, void *),
+                                   void *arg);
+
 CEPH_RBD_API ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len,
                                const char *buf);
 /*

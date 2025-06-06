@@ -1,4 +1,7 @@
+
+import importlib
 import json
+import logging
 from typing import Dict, List
 from urllib.parse import quote
 
@@ -10,6 +13,13 @@ from ...services.auth import BaseAuth, SSOAuth, decode_jwt_segment
 from ...tools import prepare_url_prefix
 from ..access_control import Role, User, UserAlreadyExists
 
+try:
+    jmespath = importlib.import_module("jmespath")
+except ModuleNotFoundError:
+    logging.error("Module 'jmespath' is not installed.")
+
+logger = logging.getLogger('services.oauth2')
+
 
 class OAuth2(SSOAuth):
     LOGIN_URL = 'auth/oauth2/login'
@@ -17,19 +27,29 @@ class OAuth2(SSOAuth):
     sso = True
 
     class OAuth2Config(BaseAuth.Config):
-        pass
+        roles_path: str
+
+    def __init__(self, roles_path=None):
+        self.roles_path = roles_path
+
+    def get_roles_path(self):
+        return self.roles_path
 
     @staticmethod
     def enabled():
         return mgr.get_module_option('sso_oauth2')
 
-    def to_dict(self) -> 'BaseAuth.Config':
-        return self.OAuth2Config()
+    def to_dict(self) -> 'OAuth2Config':
+        return {
+            'roles_path': self.roles_path
+        }
 
     @classmethod
     def from_dict(cls, s_dict: OAuth2Config) -> 'OAuth2':
-        # pylint: disable=unused-argument
-        return OAuth2()
+        try:
+            return OAuth2(s_dict['roles_path'])
+        except KeyError:
+            return OAuth2({})
 
     @classmethod
     def get_auth_name(cls):
@@ -66,25 +86,30 @@ class OAuth2(SSOAuth):
 
     @classmethod
     def get_user_roles(cls):
-        roles: List[Role] = []
+        roles: List[str] = []
         user_roles: List[Role] = []
         try:
             jwt_payload = cherrypy.request.jwt_payload
         except AttributeError:
-            raise cherrypy.HTTPError()
+            raise cherrypy.HTTPError(401)
 
-        # check for client roes
-        if 'resource_access' in jwt_payload:
-            # Find the first value where the key is not 'account'
-            roles = next((value['roles'] for key, value in jwt_payload['resource_access'].items()
-                          if key != "account"), user_roles)
-        # check for global roles
-        elif 'realm_access' in jwt_payload:
-            roles = next((value['roles'] for _, value in jwt_payload['realm_access'].items()),
-                         user_roles)
+        if jmespath and getattr(mgr.SSO_DB.config, 'roles_path', None):
+            logger.debug("Using 'roles_path' to fetch roles")
+            roles = jmespath.search(mgr.SSO_DB.config.roles_path, jwt_payload)
+        # e.g Keycloak
+        elif 'resource_access' in jwt_payload or 'realm_access' in jwt_payload:
+            logger.debug("Using 'resource_access' or 'realm_access' to fetch roles")
+            roles = jmespath.search(
+                "resource_access.*[?@!='account'].roles[] || realm_access.roles[]",
+                jwt_payload)
+        elif 'roles' in jwt_payload:
+            logger.debug("Using 'roles' to fetch roles")
+            roles = jwt_payload['roles']
+            if isinstance(roles, str):
+                roles = [roles]
         else:
-            raise cherrypy.HTTPError()
-        user_roles = Role.map_to_system_roles(roles)
+            raise cherrypy.HTTPError(403)
+        user_roles = Role.map_to_system_roles(roles or [])
         return user_roles
 
     @classmethod
@@ -106,6 +131,7 @@ class OAuth2(SSOAuth):
             user = mgr.ACCESS_CTRL_DB.create_user(
                 jwt_payload['sub'], None, jwt_payload['name'], jwt_payload['email'])
         except UserAlreadyExists:
+            logger.debug("User already exists")
             user = mgr.ACCESS_CTRL_DB.get_user(jwt_payload['sub'])
         user.set_roles(cls.get_user_roles())
         # set user last update to token time issued

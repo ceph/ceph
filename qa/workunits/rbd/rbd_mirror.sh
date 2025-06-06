@@ -29,9 +29,45 @@ fi
 . $(dirname $0)/rbd_mirror_helpers.sh
 setup
 
-testlog "TEST: add image and test replay"
+testlog "TEST: mirror from default namespace to non-default namespace"
 start_mirrors ${CLUSTER1}
 image=test
+rbd --cluster ${CLUSTER1} mirror pool enable ${POOL} init-only
+rbd --cluster ${CLUSTER2} mirror pool enable ${POOL} init-only
+rbd --cluster ${CLUSTER1} mirror pool disable ${POOL}/${NS1}
+rbd --cluster ${CLUSTER2} mirror pool disable ${POOL}/${NS1}
+rbd --cluster ${CLUSTER2} mirror pool enable ${POOL} ${MIRROR_POOL_MODE} --remote-namespace ${NS1}
+rbd --cluster ${CLUSTER1} mirror pool enable ${POOL}/${NS1} ${MIRROR_POOL_MODE} --remote-namespace ""
+create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${image} ${RBD_MIRROR_MODE}
+wait_for_image_replay_started ${CLUSTER1} ${POOL}/${NS1} ${image}
+write_image ${CLUSTER2} ${POOL} ${image} 100
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS1} ${POOL} ${image}
+wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL}/${NS1} ${image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS1} ${POOL} ${image}
+remove_image_retry ${CLUSTER2} ${POOL} ${image}
+wait_for_image_present ${CLUSTER1} ${POOL}/${NS1} ${image} 'deleted'
+rbd --cluster ${CLUSTER1} mirror pool disable ${POOL}/${NS1}
+rbd --cluster ${CLUSTER2} mirror pool enable ${POOL} init-only
+
+testlog "TEST: mirror from non-default namespace to default namespace"
+rbd --cluster ${CLUSTER2} mirror pool enable ${POOL}/${NS1} ${MIRROR_POOL_MODE} --remote-namespace ""
+rbd --cluster ${CLUSTER1} mirror pool enable ${POOL} ${MIRROR_POOL_MODE} --remote-namespace ${NS1}
+create_image_and_enable_mirror ${CLUSTER2} ${POOL}/${NS1} ${image} ${RBD_MIRROR_MODE}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+write_image ${CLUSTER2} ${POOL}/${NS1} ${image} 100
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL}/${NS1} ${image}
+wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${image}
+compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL}/${NS1} ${image}
+remove_image_retry ${CLUSTER2} ${POOL}/${NS1} ${image}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
+rbd --cluster ${CLUSTER1} mirror pool enable ${POOL} init-only
+rbd --cluster ${CLUSTER2} mirror pool disable ${POOL}/${NS1}
+rbd --cluster ${CLUSTER1} mirror pool enable ${POOL} ${MIRROR_POOL_MODE}
+rbd --cluster ${CLUSTER2} mirror pool enable ${POOL} ${MIRROR_POOL_MODE}
+rbd --cluster ${CLUSTER1} mirror pool enable ${POOL}/${NS1} ${MIRROR_POOL_MODE}
+rbd --cluster ${CLUSTER2} mirror pool enable ${POOL}/${NS1} ${MIRROR_POOL_MODE}
+
+testlog "TEST: add image and test replay"
 create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${image} ${RBD_MIRROR_MODE}
 set_image_meta ${CLUSTER2} ${POOL} ${image} "key1" "value1"
 set_image_meta ${CLUSTER2} ${POOL} ${image} "key2" "value2"
@@ -713,3 +749,36 @@ if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   CEPH_ARGS='--id admin' ceph --cluster ${CLUSTER1} osd blocklist ls 2>&1 | grep -q "listed 0 entries"
   CEPH_ARGS='--id admin' ceph --cluster ${CLUSTER2} osd blocklist ls 2>&1 | grep -q "listed 0 entries"
 fi
+
+testlog "TEST: force promote with a user snapshot"
+force_promote_image=test_force_promote_user
+create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${force_promote_image} ${RBD_MIRROR_MODE} 10G
+write_image ${CLUSTER2} ${POOL} ${force_promote_image} 100
+wait_for_image_replay_stopped ${CLUSTER2} ${POOL} ${force_promote_image}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${force_promote_image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${force_promote_image}
+wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${force_promote_image}
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${force_promote_image} 'up+stopped'
+write_image ${CLUSTER2} ${POOL} ${force_promote_image} 100
+create_snapshot ${CLUSTER2} ${POOL} ${force_promote_image} 'snap1'
+write_image ${CLUSTER2} ${POOL} ${force_promote_image} 2560 4194304
+if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
+  mirror_image_snapshot ${CLUSTER2} ${POOL} ${force_promote_image}
+fi
+wait_for_snap_present ${CLUSTER1} ${POOL} ${force_promote_image} 'snap1'
+sleep $((1 + RANDOM % 5))
+stop_mirrors ${CLUSTER1} -KILL
+if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
+  SNAPS=$(get_snaps_json ${CLUSTER1} ${POOL} ${force_promote_image})
+  jq -e '.[-1].namespace["type"] == "mirror" and .[-1].namespace["state"] == "non-primary" and .[-1].namespace["complete"] == false' <<< ${SNAPS}
+fi
+promote_image ${CLUSTER1} ${POOL} ${force_promote_image} '--force'
+start_mirrors ${CLUSTER1}
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${force_promote_image}
+wait_for_image_replay_stopped ${CLUSTER2} ${POOL} ${force_promote_image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${force_promote_image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${force_promote_image} 'up+stopped'
+write_image ${CLUSTER1} ${POOL} ${force_promote_image} 100
+write_image ${CLUSTER2} ${POOL} ${force_promote_image} 100
+remove_image_retry ${CLUSTER1} ${POOL} ${force_promote_image}
+remove_image_retry ${CLUSTER2} ${POOL} ${force_promote_image}

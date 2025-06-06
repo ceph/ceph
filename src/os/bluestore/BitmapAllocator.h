@@ -7,12 +7,13 @@
 #include <mutex>
 
 #include "Allocator.h"
+#include "AllocatorBase.h"
 #include "os/bluestore/bluestore_types.h"
 #include "fastbmap_allocator_impl.h"
 #include "include/mempool.h"
 #include "common/debug.h"
 
-class BitmapAllocator : public Allocator,
+class BitmapAllocator : public AllocatorBase,
   public AllocatorLevel02<AllocatorLevel01Loose> {
   CephContext* cct;
 public:

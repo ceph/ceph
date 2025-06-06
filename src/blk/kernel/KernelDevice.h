@@ -32,6 +32,7 @@
 enum {
   l_blk_kernel_device_first = 1000,
   l_blk_kernel_device_discard_op,
+  l_blk_kernel_discard_threads,
   l_blk_kernel_device_last,
 };
 
@@ -58,6 +59,7 @@ private:
   aio_callback_t discard_callback;
   void *discard_callback_priv;
   bool aio_stop;
+  bool need_notify = false;
   std::unique_ptr<PerfCounters> logger;
 
   ceph::mutex discard_lock = ceph::make_mutex("KernelDevice::discard_lock");
@@ -93,7 +95,7 @@ private:
 
   void _aio_thread();
   void _discard_thread(uint64_t tid);
-  void _queue_discard(interval_set<uint64_t> &to_release);
+  bool _queue_discard(interval_set<uint64_t> &to_release);
   bool try_discard(interval_set<uint64_t> &to_release, bool async = true) override;
 
   int _aio_start();
@@ -165,7 +167,7 @@ public:
   void close() override;
 
   // config observer bits
-  const char** get_tracked_conf_keys() const override;
+  std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
 };

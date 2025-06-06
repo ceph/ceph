@@ -44,7 +44,7 @@
 </ng-template>
 
 <ng-template #listTpl
-             let-events="value">
+             let-events="data.value">
   <ul class="list-group list-group-flush"
       *ngIf="events?.length else noEventsAvailable">
     <li class="list-group-item"
@@ -63,8 +63,7 @@
     </li>
   </ul>
   <ng-template #noEventsAvailable>
-    <div *ngIf="events?.length === 0"
-         class="list-group-item">
+    <div class="list-group-item">
       <span>No data available</span>
     </div>
   </ng-template>

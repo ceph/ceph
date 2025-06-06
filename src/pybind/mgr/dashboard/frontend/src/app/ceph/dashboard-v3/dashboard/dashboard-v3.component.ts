@@ -26,6 +26,7 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { AlertClass } from '~/app/shared/enum/health-icon.enum';
 import { HardwareService } from '~/app/shared/api/hardware.service';
 import { SettingsService } from '~/app/shared/api/settings.service';
+import { OsdSettings } from '~/app/shared/models/osd-settings';
 
 @Component({
   selector: 'cd-dashboard-v3',
@@ -35,7 +36,7 @@ import { SettingsService } from '~/app/shared/api/settings.service';
 export class DashboardV3Component extends PrometheusListHelper implements OnInit, OnDestroy {
   detailsCardData: DashboardDetails = {};
   osdSettingsService: any;
-  osdSettings: any;
+  osdSettings = new OsdSettings();
   interval = new Subscription();
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;
@@ -117,7 +118,8 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     }
     this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
       this.getHealth();
-      this.getCapacityCardData();
+      this.getCapacity();
+      if (this.permissions.configOpt.read) this.getOsdSettings();
       if (this.hardwareEnabled) this.hardwareSubject.next([]);
     });
     this.getPrometheusData(this.prometheusService.lastHourDateObject);
@@ -165,16 +167,19 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     );
   }
 
-  getCapacityCardData() {
-    this.osdSettingsService = this.osdService
-      .getOsdSettings()
-      .pipe(take(1))
-      .subscribe((data: any) => {
-        this.osdSettings = data;
-      });
+  private getCapacity() {
     this.capacityService = this.healthService.getClusterCapacity().subscribe((data: any) => {
       this.capacity = data;
     });
+  }
+
+  private getOsdSettings() {
+    this.osdSettingsService = this.osdService
+      .getOsdSettings()
+      .pipe(take(1))
+      .subscribe((data: OsdSettings) => {
+        this.osdSettings = data;
+      });
   }
 
   public getPrometheusData(selectedTime: any) {

@@ -34,13 +34,15 @@ namespace ca = ceph::async;
 
 class ClientScaffold : public Client {  
 public:
+    using Client::walk_dentry_result;
+
     ClientScaffold(Messenger *m, MonClient *mc, Objecter *objecter_) : Client(m, mc, objecter_) {}
     virtual ~ClientScaffold()
     { }
     int check_dummy_op(const UserPerm& perms){
       RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
       if (!mref_reader.is_state_satisfied()) {
-        return -CEPHFS_ENOTCONN;
+        return -ENOTCONN;
       }
       std::scoped_lock l(client_lock);
       MetaRequest *req = new MetaRequest(CEPH_MDS_OP_DUMMY);
@@ -51,7 +53,7 @@ public:
     int send_unknown_session_op(int op) {
       RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
       if (!mref_reader.is_state_satisfied()) {
-        return -CEPHFS_ENOTCONN;
+        return -ENOTCONN;
       }
       std::scoped_lock l(client_lock);
       auto session = _get_or_open_mds_session(0);
@@ -63,7 +65,7 @@ public:
     bool check_client_blocklisted() {
       RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
       if (!mref_reader.is_state_satisfied()) {
-        return -CEPHFS_ENOTCONN;
+        return -ENOTCONN;
       }
       std::scoped_lock l(client_lock);
       bs::error_code ec;
@@ -76,7 +78,7 @@ public:
     bool check_unknown_reclaim_flag(uint32_t flag) {
       RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
       if (!mref_reader.is_state_satisfied()) {
-        return -CEPHFS_ENOTCONN;
+        return -ENOTCONN;
       }
       std::scoped_lock l(client_lock);
       char uuid[256];
@@ -86,6 +88,31 @@ public:
       ceph_assert(session->con->send_message2(std::move(m)) == 0);
       wait_on_list(waiting_for_reclaim);
       return session->reclaim_state == MetaSession::RECLAIM_FAIL ? true : false;
+    }
+
+    /* Expose alternate_name for testing. There is no need to use virtual
+     * methods as we will call these only from the Derived class.
+     */
+    int symlinkat(const char *target, int dirfd, const char *linkpath, const UserPerm& perms, std::string alternate_name) {
+      return do_symlinkat(target, dirfd, linkpath, perms, std::move(alternate_name));
+    }
+    int mkdirat(int dirfd, const char *path, mode_t mode, const UserPerm& perm, std::string alternate_name) {
+      return do_mkdirat(CEPHFS_AT_FDCWD, path, mode, perm, std::move(alternate_name));
+    }
+    int rename(const char *from, const char *to, const UserPerm& perm, std::string alternate_name) {
+      return do_rename(from, to, perm, std::move(alternate_name));
+    }
+    int link(const char *oldpath, const char *newpath, const UserPerm& perm, std::string alternate_name) {
+      return do_link(oldpath, newpath, perm, std::move(alternate_name));
+    }
+    int openat(int dirfd, const char *path, int flags, const UserPerm& perms,
+               mode_t mode, int stripe_unit, int stripe_count,
+               int object_size, const char *data_pool, std::string alternate_name) {
+      return do_openat(dirfd, path, flags, perms, mode, stripe_unit, stripe_count, object_size, data_pool, std::move(alternate_name));
+    }
+
+    int walk(std::string_view path, struct walk_dentry_result* result, const UserPerm& perms, bool followsym=true) {
+      return Client::walk(path, result, perms, followsym);
     }
 };
 
@@ -141,6 +168,7 @@ public:
       delete messenger;
       messenger = nullptr;
     }
+    // TODO expose altname versions
 protected:
     static inline ceph::async::io_context_pool icp;
     static inline UserPerm myperm{0,0};

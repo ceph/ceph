@@ -21,6 +21,7 @@
 
 namespace dmc = crimson::dmclock;
 using namespace std::placeholders;
+using namespace std::string_literals;
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -122,12 +123,12 @@ item_t mClockScheduler::dequeue()
   } else {
     mclock_queue_t::PullReq result = scheduler.pull_request();
     if (result.is_future()) {
-      ceph_assert(
-	0 == "Not implemented, user would have to be able to be woken up");
+      ceph_abort_msg(
+	"Not implemented, user would have to be able to be woken up");
       return std::move(*(item_t*)nullptr);
     } else if (result.is_none()) {
-      ceph_assert(
-	0 == "Impossible, must have checked empty() first");
+      ceph_abort_msg(
+	"Impossible, must have checked empty() first");
       return std::move(*(item_t*)nullptr);
     } else {
       ceph_assert(result.is_retn());
@@ -138,22 +139,21 @@ item_t mClockScheduler::dequeue()
   }
 }
 
-const char** mClockScheduler::get_tracked_conf_keys() const
+std::vector<std::string> mClockScheduler::get_tracked_keys() const noexcept
 {
-  static const char* KEYS[] = {
-    "osd_mclock_scheduler_client_res",
-    "osd_mclock_scheduler_client_wgt",
-    "osd_mclock_scheduler_client_lim",
-    "osd_mclock_scheduler_background_recovery_res",
-    "osd_mclock_scheduler_background_recovery_wgt",
-    "osd_mclock_scheduler_background_recovery_lim",
-    "osd_mclock_scheduler_background_best_effort_res",
-    "osd_mclock_scheduler_background_best_effort_wgt",
-    "osd_mclock_scheduler_background_best_effort_lim",
-    NULL
+  return {
+    "osd_mclock_scheduler_client_res"s,
+    "osd_mclock_scheduler_client_wgt"s,
+    "osd_mclock_scheduler_client_lim"s,
+    "osd_mclock_scheduler_background_recovery_res"s,
+    "osd_mclock_scheduler_background_recovery_wgt"s,
+    "osd_mclock_scheduler_background_recovery_lim"s,
+    "osd_mclock_scheduler_background_best_effort_res"s,
+    "osd_mclock_scheduler_background_best_effort_wgt"s,
+    "osd_mclock_scheduler_background_best_effort_lim"s
   };
-  return KEYS;
 }
+
 
 void mClockScheduler::handle_conf_change(
   const ConfigProxy& conf,

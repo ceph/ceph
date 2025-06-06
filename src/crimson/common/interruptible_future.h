@@ -1179,7 +1179,7 @@ public:
       std::move(ic),
       std::forward<OpFunc>(opfunc),
       std::forward<Params>(params)...
-    ).template handle_interruption(std::move(efunc));
+    ).handle_interruption(std::move(efunc));
   }
 
   template <typename OpFunc, typename OnInterrupt,
@@ -1403,9 +1403,8 @@ public:
       auto f = seastar::futurize_invoke(decorated_func, *begin++);
       if (!f.available() || f.failed()) {
 	if (!s) {
-	  using itraits = std::iterator_traits<Iterator>;
 	  auto n = (seastar::internal::iterator_range_estimate_vector_capacity(
-		begin, end, typename itraits::iterator_category()) + 1);
+		begin, end) + 1);
 	  s = new parallel_for_each_state<InterruptCond, ResultType>(n);
 	}
 	s->add_future(std::move(f));
@@ -1486,6 +1485,17 @@ public:
     return ::seastar::internal::when_all_succeed_impl(
 	futurize_invoke_if_func(std::forward<FutOrFuncs>(fut_or_funcs))...);
   }
+
+  // This is a simpler implemation than seastar::when_all_succeed.
+  // We are not using ::seastar::internal::complete_when_all
+  template <typename T>
+  static inline auto when_all_succeed(std::vector<interruptible_future<InterruptCond, T>>&& futures) noexcept {
+    return interruptor::parallel_for_each(futures,
+    [] (auto&& ifut) -> interruptible_future<InterruptCond, T> {
+      return std::move(ifut);
+    });
+  }
+
 
   template <typename Func,
 	    typename Result = futurize_t<std::invoke_result_t<Func>>>

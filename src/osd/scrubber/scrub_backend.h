@@ -43,6 +43,7 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 
+#include <iosfwd>
 #include <string_view>
 
 #include "common/LogClient.h"
@@ -516,7 +517,8 @@ class ScrubBackend {
     Scrub::SnapMapReaderI& snaps_getter);
 
   // accessing the PG backend for this translation service
-  uint64_t logical_to_ondisk_size(uint64_t logical_size) const;
+  uint64_t logical_to_ondisk_size(uint64_t logical_size,
+                                 int8_t shard_id) const;
 };
 
 namespace fmt {

@@ -13,6 +13,7 @@
 #include "crimson/os/seastore/onode.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/logical_child_node.h"
 
 namespace crimson::os::seastore {
 
@@ -77,7 +78,7 @@ private:
   mutable std::optional<ceph::bufferptr> ptr = std::nullopt;
 };
 
-struct ObjectDataBlock : crimson::os::seastore::LogicalCachedExtent {
+struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
   using Ref = TCachedExtentRef<ObjectDataBlock>;
 
   std::vector<block_delta_t> delta = {};
@@ -88,11 +89,11 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalCachedExtent {
   overwrite_buf_t cached_overwrites;
 
   explicit ObjectDataBlock(ceph::bufferptr &&ptr)
-    : LogicalCachedExtent(std::move(ptr)) {}
+    : LogicalChildNode(std::move(ptr)) {}
   explicit ObjectDataBlock(const ObjectDataBlock &other, share_buffer_t s)
-    : LogicalCachedExtent(other, s), modified_region(other.modified_region) {}
+    : LogicalChildNode(other, s), modified_region(other.modified_region) {}
   explicit ObjectDataBlock(extent_len_t length)
-    : LogicalCachedExtent(length) {}
+    : LogicalChildNode(length) {}
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new ObjectDataBlock(*this, share_buffer_t{}));
@@ -127,7 +128,7 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalCachedExtent {
   }
 
   void prepare_commit() final {
-    if (is_mutation_pending() || is_exist_mutation_pending()) {
+    if (has_mutation()) {
       ceph_assert(!cached_overwrites.is_empty());
       if (cached_overwrites.has_cached_bptr()) {
         set_bptr(cached_overwrites.move_cached_bptr());
@@ -233,7 +234,7 @@ private:
     objaddr_t offset,     ///< [in] write offset
     extent_len_t len,     ///< [in] len to write, len == bl->length() if bl
     std::optional<bufferlist> &&bl, ///< [in] buffer to write, empty for zeros
-    lba_pin_list_t &&pins ///< [in] set of pins overlapping above region
+    lba_mapping_list_t &&pins ///< [in] set of pins overlapping above region
   );
 
   /// Ensures object_data reserved region is prepared
@@ -251,7 +252,7 @@ private:
   clone_ret clone_extents(
     context_t ctx,
     object_data_t &object_data,
-    lba_pin_list_t &pins,
+    lba_mapping_list_t &pins,
     laddr_t data_base);
 
 private:

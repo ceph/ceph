@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { NgxPipeFunctionModule } from 'ngx-pipe-function';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -23,7 +23,7 @@ describe('TableActionsComponent', () => {
 
   configureTestBed({
     declarations: [TableActionsComponent],
-    imports: [ComponentsModule, NgxPipeFunctionModule, RouterTestingModule]
+    imports: [ComponentsModule, PipesModule, RouterTestingModule]
   });
 
   beforeEach(() => {

@@ -22,8 +22,6 @@
 #include "include/xlist.h"
 #include "include/elist.h"
 
-#include "common/config.h"
-
 #include "mdstypes.h"
 
 

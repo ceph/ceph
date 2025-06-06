@@ -20,8 +20,10 @@
 #include "ExtBlkDevVdo.h"
 #include "common/blkdev.h"
 #include "include/stringify.h"
-#include <errno.h>
 #include "common/debug.h"
+
+#include <dirent.h> // for opendir()
+#include <errno.h>
 
 #define dout_subsys ceph_subsys_bdev
 #define dout_context cct

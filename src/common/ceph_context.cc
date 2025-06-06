@@ -48,7 +48,7 @@
 #include "common/PluginRegistry.h"
 #include "common/valgrind.h"
 #include "include/spinlock.h"
-#if !(defined(WITH_SEASTAR) && !defined(WITH_ALIEN))
+#ifndef WITH_CRIMSON
 #include "mon/MonMap.h"
 #endif
 
@@ -64,7 +64,7 @@ using ceph::bufferlist;
 using ceph::HeartbeatMap;
 
 
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#ifdef WITH_CRIMSON
 namespace crimson::common {
 CephContext::CephContext()
   : _conf{crimson::common::local_conf()},
@@ -105,7 +105,7 @@ PerfCountersCollectionImpl* CephContext::get_perfcounters_collection()
 }
 
 }
-#else  // WITH_SEASTAR
+#else  // WITH_CRIMSON
 namespace {
 
 #ifdef CEPH_DEBUG_MUTEX
@@ -387,14 +387,12 @@ class CephContextObs : public md_config_obs_t {
 public:
   explicit CephContextObs(CephContext *cct) : cct(cct) {}
 
-  const char** get_tracked_conf_keys() const override {
-    static const char *KEYS[] = {
-      "enable_experimental_unrecoverable_data_corrupting_features",
-      "crush_location",
-      "container_image",  // just so we don't hear complaints about it!
-      NULL
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return {
+      "enable_experimental_unrecoverable_data_corrupting_features"s,
+      "crush_location"s,
+      "container_image"s  // just so we don't hear complaints about it!
     };
-    return KEYS;
   }
 
   void handle_conf_change(const ConfigProxy& conf,
@@ -715,6 +713,7 @@ CephContext::CephContext(uint32_t module_type_,
 #ifdef CEPH_DEBUG_MUTEX
     _lockdep_obs(NULL),
 #endif
+    _msgr_hook(nullptr),
     crush_location(this)
 {
   if (options.create_log) {
@@ -777,6 +776,17 @@ CephContext::CephContext(uint32_t module_type_,
   lookup_or_create_singleton_object<MempoolObs>("mempool_obs", false, this);
 }
 
+void CephContext::modify_msgr_hook(
+    std::function<AdminSocketHook*(void)> create,
+    std::function<void(AdminSocketHook*)> add) {
+  std::lock_guard l{_msgr_hook_lock};
+  if (_msgr_hook) {
+    add(_msgr_hook.get());
+  } else {
+    _msgr_hook.reset(create());
+  }
+}
+
 CephContext::~CephContext()
 {
   associated_objs.clear();
@@ -790,6 +800,9 @@ CephContext::~CephContext()
 
   delete _plugin_registry;
 
+  if (_msgr_hook) {
+    _admin_socket->unregister_commands(_msgr_hook.get());
+  }
   _admin_socket->unregister_commands(_admin_hook);
   delete _admin_hook;
   delete _admin_socket;
@@ -986,11 +999,13 @@ void CephContext::_refresh_perf_values()
     _cct_perf->set(l_cct_total_workers, _heartbeat_map->get_total_workers());
     _cct_perf->set(l_cct_unhealthy_workers, _heartbeat_map->get_unhealthy_workers());
   }
-  unsigned l = l_mempool_first + 1;
-  for (unsigned i = 0; i < mempool::num_pools; ++i) {
-    mempool::pool_t& p = mempool::get_pool(mempool::pool_index_t(i));
-    _mempool_perf->set(l++, p.allocated_bytes());
-    _mempool_perf->set(l++, p.allocated_items());
+  if (_mempool_perf) {
+    unsigned l = l_mempool_first + 1;
+    for (unsigned i = 0; i < mempool::num_pools; ++i) {
+      mempool::pool_t& p = mempool::get_pool(mempool::pool_index_t(i));
+      _mempool_perf->set(l++, p.allocated_bytes());
+      _mempool_perf->set(l++, p.allocated_items());
+    }
   }
 }
 
@@ -1050,4 +1065,4 @@ void CephContext::set_mon_addrs(const MonMap& mm) {
   set_mon_addrs(mon_addrs);
 }
 }
-#endif	// WITH_SEASTAR
+#endif	// WITH_CRIMSON

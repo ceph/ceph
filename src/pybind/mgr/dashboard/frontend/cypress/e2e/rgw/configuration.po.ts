@@ -1,4 +1,7 @@
 import { PageHelper } from '../page-helper.po';
+import { BucketsPageHelper } from './buckets.po';
+
+const buckets = new BucketsPageHelper();
 
 export class ConfigurationPageHelper extends PageHelper {
   pages = {
@@ -14,22 +17,22 @@ export class ConfigurationPageHelper extends PageHelper {
     this.selectKmsProvider(provider);
     cy.get('#kms_provider').should('have.class', 'ng-valid');
     this.selectAuthMethod(auth_method);
-    cy.get('#auth_method').should('have.class', 'ng-valid');
+    cy.get('#auth').should('have.class', 'ng-valid');
     this.selectSecretEngine(secret_engine);
     cy.get('#secret_engine').should('have.class', 'ng-valid');
-    cy.get('#address').type(address);
-    cy.get('#address').should('have.value', address);
-    cy.get('#address').should('have.class', 'ng-valid');
+    cy.get('#addr').type(address);
+    cy.get('#addr').should('have.value', address);
+    cy.get('#addr').should('have.class', 'ng-valid');
     cy.contains('button', 'Submit').click();
     cy.wait(500);
     cy.get('cd-table').should('exist');
-    this.getFirstTableCell('SSE_KMS').should('exist');
+    this.getFirstTableCell('kms').should('exist');
   }
 
   edit(new_address: string) {
-    this.navigateEdit('SSE_KMS', true, false);
-    cy.get('#address').clear().type(new_address);
-    cy.get('#address').should('have.class', 'ng-valid');
+    this.navigateEdit('kms', true, false);
+    cy.get('#addr').clear().type(new_address);
+    cy.get('#addr').should('have.class', 'ng-valid');
     cy.get('#kms_provider').should('be.disabled');
     cy.contains('button', 'Submit').click();
     this.getFirstTableCell(new_address);
@@ -40,10 +43,15 @@ export class ConfigurationPageHelper extends PageHelper {
   }
 
   private selectAuthMethod(auth_method: string) {
-    return this.selectOption('auth_method', auth_method);
+    return this.selectOption('auth', auth_method);
   }
 
   private selectSecretEngine(secret_engine: string) {
     return this.selectOption('secret_engine', secret_engine);
+  }
+
+  checkBucketEncryption() {
+    buckets.navigateTo('create');
+    cy.get('input[name=encryption_enabled]').should('be.enabled');
   }
 }

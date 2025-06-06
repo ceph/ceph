@@ -70,6 +70,30 @@ overhead for encoding and decoding, and would provide an easy way to support
 backward compatibility if the network protocol needs to be modified in the
 future.
 
+**Feature negotiation**
+
+During the initial connection through the UNIX socket, the client will
+initiate a negotiation of the features that it want to enable. Currently it
+supports a bitmap of features supported/required/desired, but it allows the
+structure containing the negotiated data to be extended by adding more fields
+without breaking backward compatibility.
+
+The structure itself contains the version and size of the structure, as well as
+the minimum required version supported, allowing the other peer to read the
+transmitted data even if it doesn't fully understand its contents, and adjust
+to the highest possible version known by both peers.
+
+The client will send the bitmap of supported features, the bitmap of features
+that must be available (otherwise the connection cannot proceed), and the
+bitmap of features the client would like to enable. When the server receives
+it, it will create a bitmap of the supported features on both sides, and verify
+that all required features by the server are supported by the client. It will
+also add its desired features to the features desired by the client. This data
+will be sent back to the client, who will do a final check and decide the
+final set of enabled features. Once this feature set is sent to the server,
+both peers can start using the enabled features.
+
+
 Design of the *libcephfs_proxy.so* library
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

@@ -80,6 +80,14 @@ options:
   default: 10
   services:
   - mon
+- name: mon_nvmeofgw_skip_failovers_interval
+  type: secs
+  level: advanced
+  desc: Period in seconds in which no failovers are performed in GW's pool-group
+    this is equal to max GW redeploy interval
+  default: 16
+  services:
+  - mon
 - name: mon_nvmeofgw_set_group_id_retry
   type: uint
   level: advanced
@@ -89,6 +97,11 @@ options:
     receives a monitor group ID assignment before the gateway is fully up during
     initialization, a retry is required.
   default: 1000
+- name: mon_nvmeofgw_beacons_till_ack
+  type: uint
+  level: advanced
+  default: 15
+  desc: Number of beacons from MonClient before NVMeofGwMon sends ack-map to it
   services:
   - mon
 - name: mon_nvmeofgw_delete_grace

@@ -165,11 +165,24 @@ class TestAdminCommands(CephFSTestCase):
         if overwrites:
             self.run_ceph_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
 
-    def gen_health_warn_mds_cache_oversized(self):
+    def gen_health_warn_mds_cache_oversized(self, mds_id=None, fs=None):
         health_warn = 'MDS_CACHE_OVERSIZED'
 
-        self.config_set('mds', 'mds_cache_memory_limit', '1K')
-        self.config_set('mds', 'mds_health_cache_threshold', '1.00000')
+        # cs_name = config section name
+        cs_name = None   # declaring here in case no if/elif condition is true
+        if mds_id and not fs:
+            cs_name = f'mds.{mds_id}'
+        elif not mds_id and fs:
+            mds_id = self.fs.get_active_names()[0]
+            cs_name = f'mds.{mds_id}'
+        elif not mds_id and not fs:
+            cs_name = 'mds'
+        elif mds_id and fs:
+            raise RuntimeError('Makes no sense to pass both, mds_id as well as '
+                               'FS object')
+
+        self.config_set(cs_name, 'mds_cache_memory_limit', '1K')
+        self.config_set(cs_name, 'mds_health_cache_threshold', '1.00000')
         self.mount_a.open_n_background('.', 400)
 
         self.wait_for_health(health_warn, 30)
@@ -2541,7 +2554,7 @@ class TestPermErrMsg(CephFSTestCase):
 class TestFSFail(TestAdminCommands):
 
     MDSS_REQUIRED = 2
-    CLIENTS_REQUIRED = 1
+    CLIENTS_REQUIRED = 2
 
     def test_with_health_warn_cache_oversized(self):
         '''
@@ -2602,11 +2615,53 @@ class TestFSFail(TestAdminCommands):
         self.fs.set_joinable()
         self.fs.wait_for_daemons()
 
+    def test_when_other_FS_has_warn_TRIM(self):
+        '''
+        Test that "fs fail" runs successfully for an FS when a MDS which is
+        active for a different FS has health warning MDS_TRIM.
+        '''
+        self.fs1 = self.fs
+
+        self.fs2 = self.fs.newfs(name='cephfs2', create=True)
+        self.mount_b.remount(fsname=self.fs2.name)
+        self.mount_b.wait_until_mounted()
+
+        # generates health warning for self.fs1
+        self.gen_health_warn_mds_trim()
+
+        # actual testing begins now.
+        self.run_ceph_cmd(f'fs fail {self.fs2.name}')
+
+        # Bring and wait for MDS to be up since it is needed for unmounting
+        # of CephFS in CephFSTestCase.tearDown() to be successful.
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+
+    def test_when_other_FS_has_warn_CACHE_OVERSIZED(self):
+        '''
+        Test that "fs fail" runs successfully for an FS when a MDS which is
+        active for a different FS) has health warning MDS_CACHE_OVERSIZED.
+        '''
+        self.fs1 = self.fs
+
+        self.fs2 = self.fs.newfs(name='cephfs2', create=True)
+        self.mount_b.remount(fsname=self.fs2.name)
+        self.mount_b.wait_until_mounted()
+
+        # actual testing begins now.
+        self.gen_health_warn_mds_cache_oversized(fs=self.fs1)
+        self.run_ceph_cmd(f'fs fail {self.fs2.name}')
+
+        # Bring and wait for MDS to be up since it is needed for unmounting
+        # of CephFS in CephFSTestCase.tearDown() to be successful.
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+
 
 class TestMDSFail(TestAdminCommands):
 
     MDSS_REQUIRED = 2
-    CLIENTS_REQUIRED = 1
+    CLIENTS_REQUIRED = 2
 
     def test_with_health_warn_cache_oversized(self):
         '''
@@ -2683,6 +2738,51 @@ class TestMDSFail(TestAdminCommands):
                               errmsgs=health_warn)
         self.run_ceph_cmd(f'mds fail {mds1_id} --yes-i-really-mean-it')
         self.run_ceph_cmd(f'mds fail {mds2_id} --yes-i-really-mean-it')
+
+    def test_when_other_MDS_has_warn_TRIM(self):
+        '''
+        Test that "mds fail" runs successfully for a MDS when a MDS which is
+        active for a different FS has health warning MDS_TRIM.
+        '''
+        self.fs1 = self.fs
+
+        self.fs2 = self.fs.newfs(name='cephfs2', create=True)
+        self.mount_b.remount(fsname=self.fs2.name)
+        self.mount_b.wait_until_mounted()
+
+        # generates health warning for self.fs1
+        self.gen_health_warn_mds_trim()
+
+        active_mds_id = self.fs2.get_active_names()[0]
+        # actual testing begins now.
+        self.run_ceph_cmd(f'mds fail {active_mds_id}')
+
+        # Bring and wait for MDS to be up since it is needed for unmounting
+        # of CephFS in CephFSTestCase.tearDown() to be successful.
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+
+    def test_when_other_MDS_has_warn_CACHE_OVERSIZED(self):
+        '''
+        Test that "mds fail" runs successfully for a MDS when a MDS which is
+        active for a different FS has health warning MDS_CACHE_OVERSIZED.
+        '''
+        self.fs1 = self.fs
+
+        self.fs2 = self.fs.newfs(name='cephfs2', create=True)
+        self.mount_b.remount(fsname=self.fs2.name)
+        self.mount_b.wait_until_mounted()
+
+        # actual testing begins now.
+        mds_id_for_fs1 = self.fs1.get_active_names()[0]
+        self.gen_health_warn_mds_cache_oversized(mds_id=mds_id_for_fs1)
+        mds_id_for_fs2 = self.fs2.get_active_names()[0]
+        self.run_ceph_cmd(f'mds fail {mds_id_for_fs2}')
+
+        # Bring and wait for MDS to be up since it is needed for unmounting
+        # of CephFS in CephFSTestCase.tearDown() to be successful.
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
 
 
 class TestFSSetMaxMDS(TestAdminCommands):

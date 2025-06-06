@@ -245,6 +245,7 @@ public:
   void unwatch() {
     if (m_watch_handle != 0) {
       m_remote_ioctx.unwatch2(m_watch_handle);
+      m_remote_cluster.watch_flush();
       delete m_watch_ctx;
       m_watch_ctx = nullptr;
       m_watch_handle = 0;

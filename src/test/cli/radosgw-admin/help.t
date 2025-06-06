@@ -16,6 +16,12 @@
     user policy list attached        list attached managed policies
     caps add                         add user capabilities
     caps rm                          remove user capabilities
+    dedup stats                      Display dedup statistics from the last run
+    dedup estimate                   Runs dedup in estimate mode (no changes will be made)
+    dedup restart                    Restart dedup
+    dedup abort                      Abort dedup
+    dedup pause                      Pause dedup
+    dedup resume                     Resume paused dedup
     subuser create                   create a new subuser
     subuser modify                   modify subuser
     subuser rm                       remove subuser
@@ -38,6 +44,7 @@
     bucket check unlinked            check for object versions that are not visible in a bucket listing 
     bucket chown                     link bucket to specified user and update its object ACLs
     bucket reshard                   reshard bucket
+    bucket set-min-shards            set the minimum number of shards that dynamic resharding will consider for a bucket
     bucket rewrite                   rewrite all objects in the specified bucket
     bucket sync checkpoint           poll a bucket's sync status until it catches up to its remote
     bucket sync disable              disable bucket sync
@@ -49,7 +56,7 @@
     bi put                           store bucket index object entries
     bi list                          list raw bucket index entries
     bi purge                         purge bucket index entries
-    object rm                        remove object
+    object rm                        remove object; include --yes-i-really-mean-it to force removal from bucket index
     object put                       put object
     object stat                      stat an object for its metadata
     object unlink                    unlink object from bucket index
@@ -161,6 +168,8 @@
     datalog trim                     trim data log
     datalog status                   read data log status
     datalog type                     change datalog type to --log_type={fifo,omap}
+    datalog semaphore list           List recovery semaphores
+    datalog semaphore reset          Reset recovery semaphore (use marker)
     orphans find                     deprecated -- init and run search for leaked rados objects (use job-id, pool)
     orphans finish                   deprecated -- clean up search for leaked rados objects
     orphans list-jobs                deprecated -- list the current job-ids for orphans search
@@ -248,6 +257,8 @@
      --end-date=<date>                 end date in the format yyyy-mm-dd
      --bucket-id=<bucket-id>           bucket id
      --bucket-new-name=<bucket>        for bucket link: optional new name
+     --count=<count>                   optional for:
+                                         datalog semaphore reset
      --shard-id=<shard-id>             optional for:
                                          mdlog list
                                          data sync status

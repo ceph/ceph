@@ -16,12 +16,11 @@
                  formControlName="encryptionType"
                  id="s3Enabled"
                  type="radio"
-                 name="encryptionType"
                  (change)="checkKmsProviders()"
-                 [attr.disabled]="editing && configForm.getValue('encryptionType') !== 'AES256' ? true : null"
-                 value="AES256">
+                 [attr.disabled]="editing && configForm.getValue('encryptionType') !== ENCRYPTION_TYPE.SSE_S3 ? true : null"
+                 [value]="ENCRYPTION_TYPE.SSE_S3">
           <label class="custom-check-label"
-                 [ngClass]="{'text-muted': editing && configForm.getValue('encryptionType') !== 'AES256'}"
+                 [ngClass]="{'text-muted': editing && configForm.getValue('encryptionType') !== ENCRYPTION_TYPE.SSE_S3}"
                  for="s3Enabled"
                  i18n>SSE-S3</label>
         </div>
@@ -30,27 +29,26 @@
           <input class="form-check-input"
                  formControlName="encryptionType"
                  id="kmsEnabled"
-                 name="encryptionType"
                  (change)="checkKmsProviders()"
-                 value="aws:kms"
-                 [attr.disabled]="editing && configForm.getValue('encryptionType') !== 'aws:kms' ? true : null"
+                 [value]="ENCRYPTION_TYPE.SSE_KMS"
+                 [attr.disabled]="editing && configForm.getValue('encryptionType') !== ENCRYPTION_TYPE.SSE_KMS ? true : null"
                  type="radio">
           <label class="custom-check-label"
-                 [ngClass]="{'text-muted': editing && configForm.getValue('encryptionType') !== 'aws:kms'}"
+                 [ngClass]="{'text-muted': editing && configForm.getValue('encryptionType') !== ENCRYPTION_TYPE.SSE_KMS}"
                  for="kmsEnabled"
                  i18n>SSE-KMS</label>
         </div>
       </div>
 
-      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+      <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3">
         <div class="form-group row">
           <label class="cd-col-form-label required"
                  for="kms_provider"
                  i18n>Key management service provider</label>
           <div class="cd-col-form-input">
             <select id="kms_provider"
-                    name="kms_provider"
                     class="form-select"
+                    (change)="setKmsProvider()"
                     formControlName="kms_provider">
               <option *ngIf="kmsProviders !== null && kmsProviders.length === 0"
                       ngValue="null"
@@ -61,6 +59,10 @@
               <option *ngFor="let provider of kmsProviders"
                       [value]="provider">{{ provider }}</option>
             </select>
+            <cd-help-text>
+              <span i18n>Where the encryption keys are stored.
+              </span>
+            </cd-help-text>
             <span class="invalid-feedback"
                   *ngIf="configForm.showError('kms_provider', frm, 'required')"
                   i18n>This field is required.</span>
@@ -69,39 +71,45 @@
       </div>
 
       <div *ngIf="kmsProviders.length !== 0 && configForm.getValue('kms_provider') !== ''">
-        <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div *ngIf="(configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT) || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3">
           <div class="form-group row">
             <label class="cd-col-form-label required"
-                   for="auth_method"
+                   for="auth"
                    i18n>Authentication Method</label>
             <div class="cd-col-form-input">
-              <select id="auth_method"
-                      name="auth_method"
-                      class="form-select"
-                      formControlName="auth_method">
-                <option *ngFor="let auth_method of authMethods"
-                        [value]="auth_method">{{ auth_method }}</option>
+              <select class="form-select"
+                      id="auth"
+                      formControlName="auth">
+                <option *ngFor="let auth of authMethods"
+                        [value]="auth">{{ auth }}</option>
               </select>
+              <cd-help-text>
+                <span i18n>Type of authentication method to be used with Vault
+                </span>
+              </cd-help-text>
               <span class="invalid-feedback"
-                    *ngIf="configForm.showError('auth_method', frm, 'required')"
+                    *ngIf="configForm.showError('auth', frm, 'required')"
                     i18n>This field is required.</span>
             </div>
           </div>
         </div>
 
-        <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div *ngIf="(configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT) || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3">
           <div class="form-group row">
             <label class="cd-col-form-label required"
                    for="secret_engine"
                    i18n>Secret Engine</label>
             <div class="cd-col-form-input">
-              <select id="secret_engine"
-                      name="secret_engine"
-                      class="form-select"
+              <select class="form-select"
+                      id="secret_engine"
                       formControlName="secret_engine">
                 <option *ngFor="let secret_engine of secretEngines"
                         [value]="secret_engine">{{ secret_engine }}</option>
               </select>
+              <cd-help-text>
+                <span i18n>Vault Secret Engine to be used to retrieve encryption keys.
+                </span>
+              </cd-help-text>
               <span class="invalid-feedback"
                     *ngIf="configForm.showError('secret_engine', frm, 'required')"
                     i18n>This field is required.</span>
@@ -109,18 +117,22 @@
           </div>
         </div>
 
-        <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div *ngIf="(configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT) || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3">
           <div class="form-group row">
             <label class="cd-col-form-label"
                    for="secret_path"
                    i18n>Secret Path
             </label>
             <div class="cd-col-form-input">
-              <input id="secret_path"
-                     name="secret_path"
-                     class="form-control"
-                     type="text"
-                     formControlName="secret_path">
+              <input  class="form-control"
+                      type="text"
+                      id="secret_path"
+                      formControlName="secret_path"
+                      placeholder="/v1/secret/data">
+                <cd-help-text>
+                  <span i18n>Vault secret URL prefix, which can be used to restrict access to a particular subset of the Vault secret space.
+                  </span>
+                </cd-help-text>
               <span class="invalid-feedback"
                     *ngIf="configForm.showError('secret_path', frm, 'required')"
                     i18n>This field is required.</span>
@@ -128,109 +140,215 @@
           </div>
         </div>
 
-        <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div *ngIf="(configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') == KMS_PROVIDER.VAULT) || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3">
           <div class="form-group row">
             <label class="cd-col-form-label"
                    for="namespace"
                    i18n>Namespace
             </label>
             <div class="cd-col-form-input">
-              <input id="namespace"
-                     name="namespace"
-                     class="form-control"
-                     type="text"
-                     formControlName="namespace">
+              <input  class="form-control"
+                      id="namespace"
+                      type="text"
+                      placeholder="tenant1"
+                      formControlName="namespace">
+              <cd-help-text>
+                <span i18n>Vault Namespace to be used to select your tenant.
+                </span>
+              </cd-help-text>
             </div>
           </div>
         </div>
 
-        <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3">
           <div class="form-group row">
-            <label class="cd-col-form-label required"
-                   for="address"
-                   i18n>Vault Address
+            <label  class="cd-col-form-label required"
+                    for="addr">
+              <span i18n
+                    *ngIf="configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT">Vault Address
+              </span>
+              <span i18n
+                    *ngIf="configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP">KMIP Address
+              </span>
             </label>
             <div class="cd-col-form-input">
-              <input id="address"
-                     name="address"
-                     class="form-control"
-                     formControlName="address"
-                     placeholder="http://127.0.0.1:8000">
+              <input  class="form-control"
+                      id="addr"
+                      formControlName="addr"
+                      placeholder="http://127.0.0.1:8000"
+                      i18n>
+                <cd-help-text >
+                  <span *ngIf="configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT"
+                        i18n>Vault server base address.
+                  </span>
+                  <span *ngIf="configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP"
+                        i18n>Kmip server base address.
+                  </span>
+                </cd-help-text>
               <span class="invalid-feedback"
-                    *ngIf="configForm.showError('address', frm, 'required')"
+                    *ngIf="configForm.showError('addr', frm, 'required')"
                     i18n>This field is required.</span>
             </div>
           </div>
         </div>
 
-        <div *ngIf="configForm.getValue('auth_method') === 'token'"
-             class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="token">
+        <div *ngIf="(configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT)|| configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3">
+          <div  *ngIf="configForm.getValue('auth') === 'token'"
+                class="form-group row">
+          <label  class="cd-col-form-label required"
+                  for="token">
           <span i18n>Token</span>
           <cd-helper i18n>
             The token authentication method expects a Vault token to be present in a plaintext file.
           </cd-helper>
           </label>
           <div class="cd-col-form-input">
-            <input type="file"
-                   formControlName="token"
-                   (change)="fileUpload($event.target.files, 'token')">
+            <input  type="file"
+                    id="token"
+                    formControlName="token"
+                    (change)="fileUpload($event.target.files, 'token')">
+              <cd-help-text>
+                <span i18n>If authentication method is 'token', provide a path to the token file.
+                </span>
+              </cd-help-text>
             <span class="invalid-feedback"
                   *ngIf="configForm.showError('token', frm, 'required')"
                   i18n>This field is required.</span>
           </div>
+          </div>
         </div>
 
-        <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+      <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP">
+        <div class="form-group row">
+          <label  class="cd-col-form-label"
+                  for="kms_key_template"
+                  i18n>KMS Key Template
+          </label>
+          <div class="cd-col-form-input">
+            <input  class="form-control"
+                    id="kms_key_template"
+                    placeholder="$keyid"
+                    formControlName="kms_key_template">
+            <cd-help-text>
+              <span i18n>sse-kms; kmip key names
+              </span>
+            </cd-help-text>
+          </div>
+        </div>
+        <div class="form-group row">
+          <label  class="cd-col-form-label"
+                  for="s3_key_template"
+                  i18n>S3 Key Template
+          </label>
+          <div class="cd-col-form-input">
+            <input  class="form-control"
+                    id="s3_key_template"
+                    placeholder="$keyid"
+                    formControlName="s3_key_template">
+            <cd-help-text>
+              <span i18n>sse-s3; kmip key template
+              </span>
+            </cd-help-text>
+          </div>
+        </div>
+
+        <div class="form-group row">
+          <label  class="cd-col-form-label"
+                  for="username"
+                  i18n>Username
+          </label>
+          <div class="cd-col-form-input">
+            <input  id="username"
+                    class="form-control"
+                    [attr.disabled]="configForm.getValue('kms_provider') !== KMS_PROVIDER.KMIP ? true : null"
+                    formControlName="username">
+            <cd-help-text>
+              <span i18n>When authenticating via username
+              </span>
+            </cd-help-text>
+          </div>
+        </div>
+        <div class="form-group row">
+          <label  class="cd-col-form-label"
+                  for="password"
+                  i18n>Password
+          </label>
+          <div class="cd-col-form-input">
+            <input  id="password"
+                    class="form-control"
+                    type="password"
+                    [attr.disabled]="configForm.getValue('kms_provider') != KMS_PROVIDER.KMIP"
+                    formControlName="password">
+            <cd-help-text>
+              <span i18n>optional w/ username
+              </span>
+            </cd-help-text>
+          </div>
+        </div>
+      </div>
+
+        <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3">
           <div class="form-group row">
             <label class="cd-col-form-label"
                    for="ssl_cert">
-            <span i18n>CA Certificate</span>
-            <cd-helper i18n>The SSL certificate in PEM format.</cd-helper>
+            <span i18n>CA Certificate Path</span>
+            <cd-helper i18n>The SSL certificate in PEM format. Please provide file path to the RGW host.</cd-helper>
             </label>
             <div class="cd-col-form-input">
-              <input type="file"
-                     formControlName="ssl_cert"
-                     (change)="fileUpload($event.target.files, 'ssl_cert')">
-              <span class="invalid-feedback"
-                    *ngIf="configForm.showError('ssl_cert', frm, 'required')"
-                    i18n>This field is required.</span>
+            <input  type="text"
+                    id="ssl_cert"
+                    class="form-control"
+                    formControlName="ssl_cert"
+                    placeholder="/path/to/ca_cert.pem">
+            <cd-help-text>
+              <span i18n>
+                Path for custom ca certificate for accessing server
+              </span>
+            </cd-help-text>
             </div>
           </div>
         </div>
 
-        <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3">
           <div class="form-group row">
             <label class="cd-col-form-label"
                    for="client_cert">
-            <span i18n>Client Certificate</span>
-            <cd-helper i18n>The Client certificate in PEM format.</cd-helper>
+            <span i18n>Client Certificate Path</span>
+            <cd-helper i18n>The Client certificate in PEM format. Please provide file path to the RGW host.</cd-helper>
             </label>
             <div class="cd-col-form-input">
-              <input type="file"
-                     formControlName="client_cert"
-                     (change)="fileUpload($event.target.files, 'client_cert')">
-              <span class="invalid-feedback"
-                    *ngIf="configForm.showError('client_cert', frm, 'required')"
-                    i18n>This field is required.</span>
+              <input  type="text"
+                      id="client_cert"
+                      class="form-control"
+                      formControlName="client_cert"
+                      placeholder="/path/to/client_cert.pem">
+              <cd-help-text>
+                <span i18n>
+                  Path for custom client certificate for accessing server
+                </span>
+              </cd-help-text>
             </div>
           </div>
         </div>
 
-        <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3">
           <div class="form-group row">
             <label class="cd-col-form-label"
                    for="client_key">
-            <span i18n>Client Private Key</span>
-            <cd-helper i18n>The Client Private Key in PEM format.</cd-helper>
+            <span i18n>Client Private Key Path</span>
+            <cd-helper i18n>The Client Private Key in PEM format. Please provide file path to the RGW host.</cd-helper>
             </label>
             <div class="cd-col-form-input">
-              <input type="file"
-                     (change)="fileUpload($event.target.files, 'client_key')">
-              <span class="invalid-feedback"
-                    *ngIf="configForm.showError('client_key', frm, 'required')"
-                    i18n>This field is required.</span>
+              <input  type="text"
+                      id="client_key"
+                      formControlName="client_key"
+                      placeholder="/path/to/client_key.pem"
+                      class="form-control">
+              <cd-help-text>
+                <span i18n>
+                  Path for private key required for client cert
+                </span>
+              </cd-help-text>
             </div>
           </div>
         </div>

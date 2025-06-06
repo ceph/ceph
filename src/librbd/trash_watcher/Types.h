@@ -11,7 +11,7 @@
 #include <iosfwd>
 #include <list>
 #include <string>
-#include <boost/variant.hpp>
+#include <variant>
 
 
 namespace librbd {
@@ -67,9 +67,9 @@ struct UnknownPayload {
   void dump(Formatter *f) const;
 };
 
-typedef boost::variant<ImageAddedPayload,
-                       ImageRemovedPayload,
-                       UnknownPayload> Payload;
+typedef std::variant<ImageAddedPayload,
+		     ImageRemovedPayload,
+		     UnknownPayload> Payload;
 
 struct NotifyMessage {
   NotifyMessage(const Payload &payload = UnknownPayload()) : payload(payload) {

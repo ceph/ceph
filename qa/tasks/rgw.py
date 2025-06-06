@@ -409,30 +409,27 @@ def configure_datacache(ctx, clients, datacache_path):
 
 @contextlib.contextmanager
 def configure_storage_classes(ctx, clients, storage_classes):
-    """ set a compression type in the default zone placement """
-
-    sc = [s.strip() for s in storage_classes.split(',')]
-
+    """ create additional storage classes in the default zone placement """
     for client in clients:
         if not ctx.rgw.realm:
             # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
             # issue a 'radosgw-admin user list' command to trigger this
             rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
 
-        for storage_class in sc:
-            log.info('Configuring storage class type = %s', storage_class)
+        for name, args in storage_classes.items():
+            log.info('Configuring storage class = %s', name)
             rgwadmin(ctx, client,
                     cmd=['zonegroup', 'placement', 'add',
                         '--rgw-zone', ctx.rgw.zone,
                         '--placement-id', 'default-placement',
-                        '--storage-class', storage_class],
+                        '--storage-class', name],
                     check_status=True)
             rgwadmin(ctx, client,
                     cmd=['zone', 'placement', 'add',
                         '--rgw-zone', ctx.rgw.zone,
                         '--placement-id', 'default-placement',
-                        '--storage-class', storage_class,
-                        '--data-pool', 'default.rgw.buckets.data.' + storage_class.lower()],
+                        '--storage-class', name,
+                        '--data-pool', 'default.rgw.buckets.data.' + name.lower()] + (args or []),
                     check_status=True)
     yield
 
@@ -506,7 +503,7 @@ def task(ctx, config):
     ctx.rgw.frontend = config.pop('frontend', 'beast')
     ctx.rgw.compression_type = config.pop('compression type', None)
     ctx.rgw.inline_data = config.pop('inline data', True)
-    ctx.rgw.storage_classes = config.pop('storage classes', None)
+    storage_classes = config.pop('storage classes', None)
     default_cert = config.pop('ssl certificate', None)
     ctx.rgw.data_pool_pg_size = config.pop('data_pool_pg_size', 64)
     ctx.rgw.index_pool_pg_size = config.pop('index_pool_pg_size', 64)
@@ -543,10 +540,10 @@ def task(ctx, config):
             lambda: configure_datacache(ctx=ctx, clients=clients,
                                         datacache_path=ctx.rgw.datacache_path),
         ])
-    if ctx.rgw.storage_classes:
+    if storage_classes:
         subtasks.extend([
             lambda: configure_storage_classes(ctx=ctx, clients=clients,
-                                              storage_classes=ctx.rgw.storage_classes),
+                                              storage_classes=storage_classes),
         ])
     subtasks.extend([
         lambda: start_rgw(ctx=ctx, config=config, clients=clients),

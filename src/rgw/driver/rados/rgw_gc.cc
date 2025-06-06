@@ -51,7 +51,7 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store, optional_yield y) {
     op.create(false);
     const uint64_t queue_size = cct->_conf->rgw_gc_max_queue_size, num_deferred_entries = cct->_conf->rgw_gc_max_deferred;
     gc_log_init2(op, queue_size, num_deferred_entries);
-    store->gc_operate(this, obj_names[i], &op, y);
+    store->gc_operate(this, obj_names[i], std::move(op), y);
   }
 }
 
@@ -129,13 +129,13 @@ int RGWGC::send_chain(const cls_rgw_obj_chain& chain, const string& tag, optiona
 
   ldpp_dout(this, 20) << "RGWGC::send_chain - on object name: " << obj_names[i] << "tag is: " << tag << dendl;
 
-  auto ret = store->gc_operate(this, obj_names[i], &op, y);
+  auto ret = store->gc_operate(this, obj_names[i], std::move(op), y);
   if (ret != -ECANCELED && ret != -EPERM) {
     return ret;
   }
   ObjectWriteOperation set_entry_op;
   cls_rgw_gc_set_entry(set_entry_op, cct->_conf->rgw_gc_obj_min_wait, info);
-  return store->gc_operate(this, obj_names[i], &set_entry_op, y);
+  return store->gc_operate(this, obj_names[i], std::move(set_entry_op), y);
 }
 
 struct defer_chain_state {
@@ -241,7 +241,7 @@ int RGWGC::remove(int index, int num_entries, optional_yield y)
   ObjectWriteOperation op;
   cls_rgw_gc_queue_remove_entries(op, num_entries);
 
-  return store->gc_operate(this, obj_names[index], &op, y);
+  return store->gc_operate(this, obj_names[index], std::move(op), y);
 }
 
 static int gc_list(const DoutPrefixProvider* dpp, optional_yield y, librados::IoCtx& io_ctx,
@@ -251,7 +251,7 @@ static int gc_list(const DoutPrefixProvider* dpp, optional_yield y, librados::Io
   librados::ObjectReadOperation op;
   bufferlist bl;
   cls_rgw_gc_list(op, marker, max, expired_only, bl);
-  int ret = rgw_rados_operate(dpp, io_ctx, oid, &op, nullptr, y);
+  int ret = rgw_rados_operate(dpp, io_ctx, oid, std::move(op), nullptr, y);
   if (ret < 0) {
     return ret;
   }
@@ -685,6 +685,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
 	  }
 
 	  ctx->locator_set_key(obj.loc);
+	  ctx->set_pool_full_try(); // allow deletion at pool quota limit
 
 	  const string& oid = obj.key.name; /* just stored raw oid there */
 

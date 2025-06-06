@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, Input } from '@angular/core';
 
 @Component({
   selector: 'cd-form-advanced-fieldset',
@@ -6,5 +6,7 @@ import { Component } from '@angular/core';
   styleUrls: ['./form-advanced-fieldset.component.scss']
 })
 export class FormAdvancedFieldsetComponent {
+  @Input()
+  title: string = 'Advanced';
   showAdvanced: boolean = false;
 }

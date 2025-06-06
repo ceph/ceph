@@ -13,7 +13,6 @@ import { RoleService } from '~/app/shared/api/role.service';
 import { SettingsService } from '~/app/shared/api/settings.service';
 import { UserService } from '~/app/shared/api/user.service';
 import { ComponentsModule } from '~/app/shared/components/components.module';
-import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -44,21 +43,18 @@ describe('UserFormComponent', () => {
     { path: 'users', component: FakeComponent }
   ];
 
-  configureTestBed(
-    {
-      imports: [
-        RouterTestingModule.withRoutes(routes),
-        HttpClientTestingModule,
-        ReactiveFormsModule,
-        ComponentsModule,
-        ToastrModule.forRoot(),
-        SharedModule,
-        NgbPopoverModule
-      ],
-      declarations: [UserFormComponent, FakeComponent]
-    },
-    [LoadingPanelComponent]
-  );
+  configureTestBed({
+    imports: [
+      RouterTestingModule.withRoutes(routes),
+      HttpClientTestingModule,
+      ReactiveFormsModule,
+      ComponentsModule,
+      ToastrModule.forRoot(),
+      SharedModule,
+      NgbPopoverModule
+    ],
+    declarations: [UserFormComponent, FakeComponent]
+  });
 
   beforeEach(() => {
     spyOn(TestBed.inject(PasswordPolicyService), 'getHelpText').and.callFake(() => of(''));

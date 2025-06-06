@@ -4,7 +4,7 @@ import { Observable, ReplaySubject, Subscription } from 'rxjs';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -109,7 +109,7 @@ export class UpgradeProgressComponent implements OnInit, OnDestroy {
   stopUpgradeModal() {
     // pause the upgrade meanwhile we get stop confirmation from user
     this.pauseUpgrade();
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: 'Upgrade',
       actionDescription: 'stop',
       submitAction: () => this.stopUpgrade(),

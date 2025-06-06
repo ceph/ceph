@@ -119,7 +119,7 @@ struct TestMockCryptoLoadRequest : public TestMockFixture {
   void expect_image_flush(int r = 0) {
     EXPECT_CALL(*mock_image_ctx->io_image_dispatcher, send(_)).WillOnce(
             Invoke([r](io::ImageDispatchSpec* spec) {
-              ASSERT_TRUE(boost::get<io::ImageDispatchSpec::Flush>(
+              ASSERT_TRUE(std::get_if<io::ImageDispatchSpec::Flush>(
                       &spec->request) != nullptr);
               spec->dispatch_result = io::DISPATCH_RESULT_COMPLETE;
               spec->aio_comp->set_request_count(1);

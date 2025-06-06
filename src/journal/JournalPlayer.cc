@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/PriorityCache.h"
+#include "include/intarith.h" // for p2align()
 #include "include/stringify.h"
 #include "journal/JournalPlayer.h"
 #include "journal/Entry.h"

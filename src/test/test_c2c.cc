@@ -19,16 +19,18 @@ static void usage(void)
 }
 
 
-mempool::shard_t shards[mempool::num_shards] = {0};
+mempool::shard_t *shards = new mempool::shard_t[mempool::get_num_shards()]();
 
 void sigterm_handler(int signum)
 {
   size_t total = 0;
-  for (auto& shard : shards) {
+  for (size_t i = 0; i < mempool::get_num_shards();i++) {
+    auto& shard = shards[i].pool[mempool::mempool_unittest_1];
     total += shard.bytes;
   }
   std::cout << total << std::endl;
-  exit(0);
+  signal(SIGTERM,SIG_DFL);
+  raise(SIGTERM);
 }
 
 int main(int argc, const char **argv)
@@ -74,7 +76,7 @@ int main(int argc, const char **argv)
 	    } else {
 	      i = 0;
 	    }
-	    shards[i].bytes++;
+	    shards[i].pool[mempool::mempool_unittest_1].bytes++;
 	  }
 	}));
   }

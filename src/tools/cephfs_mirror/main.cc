@@ -9,6 +9,7 @@
 #include "common/Preforker.h"
 #include "global/global_init.h"
 #include "global/signal_handler.h"
+#include "log/Log.h"
 #include "mon/MonClient.h"
 #include "msg/Messenger.h"
 #include "Mirror.h"

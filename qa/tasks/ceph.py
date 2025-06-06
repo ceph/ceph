@@ -1524,7 +1524,8 @@ def run_daemon(ctx, config, type_):
     try:
         yield
     finally:
-        teuthology.stop_daemons_of_type(ctx, type_, cluster_name)
+        timeout = config.get('stop-daemons-timeout', 300)
+        teuthology.stop_daemons_of_type(ctx, type_, cluster_name, timeout=timeout)
 
 
 def healthy(ctx, config):

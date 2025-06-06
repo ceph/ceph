@@ -1,672 +1,688 @@
-<div class="cd-col-form"
+<div cdsCol
+     [columnNumbers]="{md: 4}"
      *cdFormLoading="loading">
   <form #frm="ngForm"
         [formGroup]="userForm"
         novalidate>
-    <div class="card">
-      <div i18n="form title"
-           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+    <div i18n="form title"
+         class="form-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
 
-      <div class="card-body">
-        <!-- User ID -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 [ngClass]="{'required': !editing}"
-                 for="user_id"
-                 i18n>User ID</label>
-          <div class="cd-col-form-input">
-            <input id="user_id"
-                   class="form-control"
-                   type="text"
-                   formControlName="user_id"
-                   [readonly]="editing">
-              <span class="invalid-feedback"
-                    *ngIf="userForm.showError('user_id', frm, 'required')"
-                    i18n>This field is required.</span>
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('user_id', frm, 'pattern')"
-                  i18n>The value is not valid.</span>
-            <span class="invalid-feedback"
-                  *ngIf="!userForm.getValue('show_tenant') && userForm.showError('user_id', frm, 'notUnique')"
-                  i18n>The chosen user ID is already in use.</span>
-          </div>
-        </div>
-
-          <!-- Show Tenant -->
-          <div class="form-group row">
-            <div class="cd-col-form-offset">
-              <div class="custom-control custom-checkbox">
-                <input class="custom-control-input"
-                       id="show_tenant"
-                       type="checkbox"
-                       (click)="updateFieldsWhenTenanted()"
-                       formControlName="show_tenant"
-                       [readonly]="true">
-                <label class="custom-control-label"
-                       for="show_tenant"
-                       i18n>Show Tenant</label>
-              </div>
-            </div>
-          </div>
-
-        <!-- Tenant -->
-        <div class="form-group row"
-             *ngIf="userForm.getValue('show_tenant')">
-          <label class="cd-col-form-label"
-                 for="tenant"
-                 i18n>Tenant</label>
-          <div class="cd-col-form-input">
-            <input id="tenant"
-                   class="form-control"
-                   type="text"
-                   formControlName="tenant"
-                   [readonly]="editing"
-                   autofocus>
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('tenant', frm, 'pattern')"
-                  i18n>The value is not valid.</span>
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('tenant', frm, 'notUnique')"
-                  i18n>The chosen user ID exists in this tenant.</span>
-          </div>
-        </div>
-
-        <!-- Full name -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 [ngClass]="{'required': !editing}"
-                 for="display_name"
-                 i18n>Full name</label>
-          <div class="cd-col-form-input">
-            <input id="display_name"
-                   class="form-control"
-                   type="text"
-                   formControlName="display_name">
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('display_name', frm, 'pattern')"
-                  i18n>The value is not valid.</span>
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('display_name', frm, 'required')"
-                  i18n>This field is required.</span>
-          </div>
-        </div>
-
-        <!-- Email address -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="email"
-                 i18n>Email address</label>
-          <div class="cd-col-form-input">
-            <input id="email"
-                   class="form-control"
-                   type="text"
-                   formControlName="email">
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('email', frm, 'email')"
-                  i18n>This is not a valid email address.</span>
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('email', frm, 'notUnique')"
-                  i18n>The chosen email address is already in use.</span>
-          </div>
-        </div>
-
-        <!-- Max. buckets -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="max_buckets_mode"
-                 i18n>Max. buckets</label>
-          <div class="cd-col-form-input">
-            <select class="form-select"
-                    formControlName="max_buckets_mode"
-                    name="max_buckets_mode"
-                    id="max_buckets_mode"
-                    (change)="onMaxBucketsModeChange($event.target.value)">
-              <option i18n
-                      value="-1">Disabled</option>
-              <option i18n
-                      value="0">Unlimited</option>
-              <option i18n
-                      value="1">Custom</option>
-            </select>
-          </div>
-        </div>
-        <div *ngIf="1 == userForm.get('max_buckets_mode').value"
-             class="form-group row">
-          <label class="cd-col-form-label"></label>
-          <div class="cd-col-form-input">
-            <input id="max_buckets"
-                   class="form-control"
-                   type="number"
-                   formControlName="max_buckets"
-                   min="1">
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('max_buckets', frm, 'required')"
-                  i18n>This field is required.</span>
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('max_buckets', frm, 'min')"
-                  i18n>The entered value must be >= 1.</span>
-          </div>
-        </div>
-
-        <!-- Suspended -->
-        <div class="form-group row">
-          <div class="cd-col-form-offset">
-            <div class="custom-control custom-checkbox">
-              <input class="custom-control-input"
-                     id="suspended"
-                     type="checkbox"
-                     formControlName="suspended">
-              <label class="custom-control-label"
-                     for="suspended"
-                     i18n>Suspended</label>
-              <cd-helper i18n>Suspending the user disables the user and subuser.</cd-helper>
-            </div>
-          </div>
-        </div>
-
-        <!-- System User -->
-        <div class="form-group row">
-          <div class="cd-col-form-offset">
-            <div class="custom-control custom-checkbox">
-              <input class="custom-control-input"
-                     id="system"
-                     type="checkbox"
-                     formControlName="system">
-              <label class="custom-control-label"
-                     for="system"
-                     i18n>System user</label>
-              <cd-helper i18n>System users are distinct from regular users, they are used by the RGW service to perform administrative tasks, manage buckets and objects</cd-helper>
-            </div>
-          </div>
-        </div>
-
-        <!-- S3 key -->
-        <fieldset *ngIf="!editing">
-          <legend i18n>S3 key</legend>
-
-          <!-- Auto-generate key -->
-          <div class="form-group row">
-            <div class="cd-col-form-offset">
-              <div class="custom-control custom-checkbox">
-                <input class="custom-control-input"
-                       id="generate_key"
-                       type="checkbox"
-                       formControlName="generate_key">
-                <label class="custom-control-label"
-                       for="generate_key"
-                       i18n>Auto-generate key</label>
-              </div>
-            </div>
-          </div>
-
-          <!-- Access key -->
-          <div class="form-group row"
-               *ngIf="!editing && !userForm.getValue('generate_key')">
-            <label class="cd-col-form-label required"
-                   for="access_key"
-                   i18n>Access key</label>
-            <div class="cd-col-form-input">
-              <div class="input-group">
-                <input id="access_key"
-                       class="form-control"
-                       type="password"
-                       formControlName="access_key">
-                <button type="button"
-                        class="btn btn-light"
-                        cdPasswordButton="access_key">
-                </button>
-                <cd-copy-2-clipboard-button source="access_key">
-                </cd-copy-2-clipboard-button>
-              </div>
-              <span class="invalid-feedback"
-                    *ngIf="userForm.showError('access_key', frm, 'required')"
-                    i18n>This field is required.</span>
-            </div>
-          </div>
-
-          <!-- Secret key -->
-          <div class="form-group row"
-               *ngIf="!editing && !userForm.getValue('generate_key')">
-            <label class="cd-col-form-label required"
-                   for="secret_key"
-                   i18n>Secret key</label>
-            <div class="cd-col-form-input">
-              <div class="input-group">
-                <input id="secret_key"
-                       class="form-control"
-                       type="password"
-                       formControlName="secret_key">
-                <button type="button"
-                        class="btn btn-light"
-                        cdPasswordButton="secret_key">
-                </button>
-                <cd-copy-2-clipboard-button source="secret_key">
-                </cd-copy-2-clipboard-button>
-              </div>
-              <span class="invalid-feedback"
-                    *ngIf="userForm.showError('secret_key', frm, 'required')"
-                    i18n>This field is required.</span>
-            </div>
-          </div>
-        </fieldset>
-
-        <!-- Subusers -->
-        <fieldset *ngIf="editing">
-          <legend i18n>Subusers</legend>
-          <div class="row">
-            <div class="cd-col-form-offset">
-              <span *ngIf="subusers.length === 0"
-                    class="no-border">
-                <span class="form-text text-muted"
-                      i18n>There are no subusers.</span>
-              </span>
-
-              <span *ngFor="let subuser of subusers; let i=index;">
-                <div class="input-group">
-                  <span class="input-group-text">
-                    <i class="{{ icons.user }}"></i>
-                  </span>
-                  <input type="text"
-                         class="cd-form-control"
-                         value="{{ subuser.id }}"
-                         readonly>
-                  <span class="input-group-text">
-                    <i class="{{ icons.share }}"></i>
-                  </span>
-                  <input type="text"
-                         class="cd-form-control"
-                         value="{{ ('full-control' === subuser.permissions) ? 'full' : subuser.permissions }}"
-                         readonly>
-                  <button type="button"
-                          class="btn btn-light tc_showSubuserButton"
-                          i18n-ngbTooltip
-                          ngbTooltip="Edit"
-                          (click)="showSubuserModal(i)">
-                    <i [ngClass]="[icons.edit]"></i>
-                  </button>
-                  <button type="button"
-                          class="btn btn-light tc_deleteSubuserButton"
-                          i18n-ngbTooltip
-                          ngbTooltip="Delete"
-                          (click)="deleteSubuser(i)">
-                    <i [ngClass]="[icons.destroy]"></i>
-                  </button>
-                </div>
-                <span class="form-text text-muted"></span>
-              </span>
-
-              <div class="row my-2">
-                <div class="col-12">
-                  <button type="button"
-                          class="btn btn-light float-end tc_addSubuserButton"
-                          (click)="showSubuserModal()">
-                    <i [ngClass]="[icons.add]"></i>
-                    <ng-container i18n>{{ actionLabels.CREATE | titlecase }}
-                      {{ subuserLabel | upperFirst }}</ng-container>
-                  </button>
-                </div>
-              </div>
-              <span class="help-block"></span>
-            </div>
-          </div>
-        </fieldset>
-
-        <!-- Keys -->
-        <fieldset *ngIf="editing">
-          <legend i18n>Keys</legend>
-
-          <!-- S3 keys -->
-          <div class="form-group row">
-            <label class="cd-col-form-label"
-                   i18n>S3</label>
-            <div class="cd-col-form-input">
-              <span *ngIf="s3Keys.length === 0"
-                    class="no-border">
-                <span class="form-text text-muted"
-                      i18n>There are no keys.</span>
-              </span>
-
-              <span *ngFor="let key of s3Keys; let i=index;">
-                <div class="input-group">
-                  <div class="input-group-text">
-                    <i class="{{ icons.key }}"></i>
-                  </div>
-                  <input type="text"
-                         class="cd-form-control"
-                         value="{{ key.user }}"
-                         readonly>
-                  <button type="button"
-                          class="btn btn-light tc_showS3KeyButton"
-                          i18n-ngbTooltip
-                          ngbTooltip="Show"
-                          (click)="showS3KeyModal(i)">
-                    <i [ngClass]="[icons.show]"></i>
-                  </button>
-                  <button type="button"
-                          class="btn btn-light tc_deleteS3KeyButton"
-                          i18n-ngbTooltip
-                          ngbTooltip="Delete"
-                          (click)="deleteS3Key(i)">
-                    <i [ngClass]="[icons.destroy]"></i>
-                  </button>
-                </div>
-                <span class="form-text text-muted"></span>
-              </span>
-
-              <div class="row my-2">
-                <div class="col-12">
-                  <button type="button"
-                          class="btn btn-light float-end tc_addS3KeyButton"
-                          (click)="showS3KeyModal()">
-                    <i [ngClass]="[icons.add]"></i>
-                    <ng-container i18n>{{ actionLabels.CREATE | titlecase }}
-                      {{ s3keyLabel | upperFirst }}</ng-container>
-                  </button>
-                </div>
-              </div>
-
-              <span class="help-block"></span>
-            </div>
-
-            <hr>
-          </div>
-
-          <!-- Swift keys -->
-          <div class="form-group row">
-            <label class="cd-col-form-label"
-                   i18n>Swift</label>
-
-            <div class="cd-col-form-input">
-              <span *ngIf="swiftKeys.length === 0"
-                    class="no-border">
-                <span class="form-text text-muted"
-                      i18n>There are no keys.</span>
-              </span>
-
-              <span *ngFor="let key of swiftKeys; let i=index;">
-                <div class="input-group">
-                  <span class="input-group-text">
-                    <i class="{{ icons.key }}"></i>
-                  </span>
-                  <input type="text"
-                         class="cd-form-control"
-                         value="{{ key.user }}"
-                         readonly>
-                  <button type="button"
-                          class="btn btn-light tc_showSwiftKeyButton"
-                          i18n-ngbTooltip
-                          ngbTooltip="Show"
-                          (click)="showSwiftKeyModal(i)">
-                    <i [ngClass]="[icons.show]"></i>
-                  </button>
-                </div>
-                <span class="form-text text-muted"></span>
-              </span>
-            </div>
-          </div>
-        </fieldset>
-
-        <!-- Capabilities -->
-        <fieldset *ngIf="editing">
-          <legend i18n>Capabilities</legend>
-
-          <div class="form-group row">
-            <div class="cd-col-form-offset">
-              <span *ngIf="capabilities.length === 0"
-                    class="no-border">
-                <span class="form-text text-muted"
-                      i18n>There are no capabilities.</span>
-              </span>
-
-              <span *ngFor="let cap of capabilities; let i=index;">
-                <div class="input-group">
-                  <div class="input-group-text">
-                    <i class="{{ icons.share }}"></i>
-                  </div>
-                  <input type="text"
-                         class="cd-form-control"
-                         value="{{ cap.type }}:{{ cap.perm }}"
-                         readonly>
-                  <button type="button"
-                          class="btn btn-light tc_editCapButton"
-                          i18n-ngbTooltip
-                          ngbTooltip="Edit"
-                          (click)="showCapabilityModal(i)">
-                    <i [ngClass]="[icons.edit]"></i>
-                  </button>
-                  <button type="button"
-                          class="btn btn-light tc_deleteCapButton"
-                          i18n-ngbTooltip
-                          ngbTooltip="Delete"
-                          (click)="deleteCapability(i)">
-                    <i [ngClass]="[icons.destroy]"></i>
-                  </button>
-                </div>
-                <span class="form-text text-muted"></span>
-              </span>
-
-              <div class="row my-2">
-                <div class="col-12">
-                  <button type="button"
-                          class="btn btn-light float-end tc_addCapButton"
-                          [disabled]="capabilities | pipeFunction:hasAllCapabilities"
-                          i18n-ngbTooltip
-                          ngbTooltip="All capabilities are already added."
-                          [disableTooltip]="!(capabilities | pipeFunction:hasAllCapabilities)"
-                          triggers="pointerenter:pointerleave"
-                          (click)="showCapabilityModal()">
-                    <i [ngClass]="[icons.add]"></i>
-                    <ng-container i18n>{{ actionLabels.ADD | titlecase }}
-                      {{ capabilityLabel | upperFirst }}</ng-container>
-                  </button>
-                </div>
-              </div>
-              <span class="help-block"></span>
-            </div>
-          </div>
-        </fieldset>
-
-        <!-- User quota -->
-        <fieldset>
-          <legend i18n>User quota</legend>
-
-          <!-- Enabled -->
-          <div class="form-group row">
-            <div class="cd-col-form-offset">
-              <div class="custom-control custom-checkbox">
-                <input class="custom-control-input"
-                       id="user_quota_enabled"
-                       type="checkbox"
-                       formControlName="user_quota_enabled">
-                <label class="custom-control-label"
-                       for="user_quota_enabled"
-                       i18n>Enabled</label>
-              </div>
-            </div>
-          </div>
-
-          <!-- Unlimited size -->
-          <div class="form-group row"
-               *ngIf="userForm.controls.user_quota_enabled.value">
-            <div class="cd-col-form-offset">
-              <div class="custom-control custom-checkbox">
-                <input class="custom-control-input"
-                       id="user_quota_max_size_unlimited"
-                       type="checkbox"
-                       formControlName="user_quota_max_size_unlimited">
-                <label class="custom-control-label"
-                       for="user_quota_max_size_unlimited"
-                       i18n>Unlimited size</label>
-              </div>
-            </div>
-          </div>
-
-          <!-- Maximum size -->
-          <div class="form-group row"
-               *ngIf="userForm.controls.user_quota_enabled.value && !userForm.getValue('user_quota_max_size_unlimited')">
-            <label class="cd-col-form-label required"
-                   for="user_quota_max_size"
-                   i18n>Max. size</label>
-            <div class="cd-col-form-input">
-              <input id="user_quota_max_size"
-                     class="form-control"
-                     type="text"
-                     formControlName="user_quota_max_size"
-                     cdDimlessBinary>
-              <span class="invalid-feedback"
-                    *ngIf="userForm.showError('user_quota_max_size', frm, 'required')"
-                    i18n>This field is required.</span>
-              <span class="invalid-feedback"
-                    *ngIf="userForm.showError('user_quota_max_size', frm, 'quotaMaxSize')"
-                    i18n>The value is not valid.</span>
-              <span *ngIf="userForm.showError('user_quota_max_size', formDir, 'pattern')"
-                    class="invalid-feedback"
-                    i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
-            </div>
-          </div>
-
-          <!-- Unlimited objects -->
-          <div class="form-group row"
-               *ngIf="userForm.controls.user_quota_enabled.value">
-            <div class="cd-col-form-offset">
-              <div class="custom-control custom-checkbox">
-                <input class="custom-control-input"
-                       id="user_quota_max_objects_unlimited"
-                       type="checkbox"
-                       formControlName="user_quota_max_objects_unlimited">
-                <label class="custom-control-label"
-                       for="user_quota_max_objects_unlimited"
-                       i18n>Unlimited objects</label>
-              </div>
-            </div>
-          </div>
-
-          <!-- Maximum objects -->
-          <div class="form-group row"
-               *ngIf="userForm.controls.user_quota_enabled.value && !userForm.getValue('user_quota_max_objects_unlimited')">
-            <label class="cd-col-form-label required"
-                   for="user_quota_max_objects"
-                   i18n>Max. objects</label>
-            <div class="cd-col-form-input">
-              <input id="user_quota_max_objects"
-                     class="form-control"
-                     type="number"
-                     formControlName="user_quota_max_objects"
-                     min="0">
-              <span class="invalid-feedback"
-                    *ngIf="userForm.showError('user_quota_max_objects', frm, 'required')"
-                    i18n>This field is required.</span>
-              <span class="invalid-feedback"
-                    *ngIf="userForm.showError('user_quota_max_objects', frm, 'min')"
-                    i18n>The entered value must be >= 0.</span>
-            </div>
-          </div>
-        </fieldset>
-
-        <!-- Bucket quota -->
-        <fieldset>
-          <legend i18n>Bucket quota</legend>
-
-          <!-- Enabled -->
-          <div class="form-group row">
-            <div class="cd-col-form-offset">
-              <div class="custom-control custom-checkbox">
-                <input class="custom-control-input"
-                       id="bucket_quota_enabled"
-                       type="checkbox"
-                       formControlName="bucket_quota_enabled">
-                <label class="custom-control-label"
-                       for="bucket_quota_enabled"
-                       i18n>Enabled</label>
-              </div>
-            </div>
-          </div>
-
-          <!-- Unlimited size -->
-          <div class="form-group row"
-               *ngIf="userForm.controls.bucket_quota_enabled.value">
-            <div class="cd-col-form-offset">
-              <div class="custom-control custom-checkbox">
-                <input class="custom-control-input"
-                       id="bucket_quota_max_size_unlimited"
-                       type="checkbox"
-                       formControlName="bucket_quota_max_size_unlimited">
-                <label class="custom-control-label"
-                       for="bucket_quota_max_size_unlimited"
-                       i18n>Unlimited size</label>
-              </div>
-            </div>
-          </div>
-
-          <!-- Maximum size -->
-          <div class="form-group row"
-               *ngIf="userForm.controls.bucket_quota_enabled.value && !userForm.getValue('bucket_quota_max_size_unlimited')">
-            <label class="cd-col-form-label required"
-                   for="bucket_quota_max_size"
-                   i18n>Max. size</label>
-            <div class="cd-col-form-input">
-              <input id="bucket_quota_max_size"
-                     class="form-control"
-                     type="text"
-                     formControlName="bucket_quota_max_size"
-                     cdDimlessBinary>
-              <span class="invalid-feedback"
-                    *ngIf="userForm.showError('bucket_quota_max_size', frm, 'required')"
-                    i18n>This field is required.</span>
-              <span class="invalid-feedback"
-                    *ngIf="userForm.showError('bucket_quota_max_size', frm, 'quotaMaxSize')"
-                    i18n>The value is not valid.</span>
-              <span *ngIf="userForm.showError('bucket_quota_max_size', formDir, 'pattern')"
-                    class="invalid-feedback"
-                    i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
-            </div>
-          </div>
-
-          <!-- Unlimited objects -->
-          <div class="form-group row"
-               *ngIf="userForm.controls.bucket_quota_enabled.value">
-            <div class="cd-col-form-offset">
-              <div class="custom-control custom-checkbox">
-                <input class="custom-control-input"
-                       id="bucket_quota_max_objects_unlimited"
-                       type="checkbox"
-                       formControlName="bucket_quota_max_objects_unlimited">
-                <label class="custom-control-label"
-                       for="bucket_quota_max_objects_unlimited"
-                       i18n>Unlimited objects</label>
-              </div>
-            </div>
-          </div>
-
-          <!-- Maximum objects -->
-          <div class="form-group row"
-               *ngIf="userForm.controls.bucket_quota_enabled.value && !userForm.getValue('bucket_quota_max_objects_unlimited')">
-            <label class="cd-col-form-label required"
-                   for="bucket_quota_max_objects"
-                   i18n>Max. objects</label>
-            <div class="cd-col-form-input">
-              <input id="bucket_quota_max_objects"
-                     class="form-control"
-                     type="number"
-                     formControlName="bucket_quota_max_objects"
-                     min="0">
-              <span class="invalid-feedback"
-                    *ngIf="userForm.showError('bucket_quota_max_objects', frm, 'required')"
-                    i18n>This field is required.</span>
-              <span class="invalid-feedback"
-                    *ngIf="userForm.showError('bucket_quota_max_objects', frm, 'min')"
-                    i18n>The entered value must be >= 0.</span>
-            </div>
-          </div>
-        </fieldset>
+    @if(accounts.length > 0){
+      <!-- Link Account -->
+      <div class="form-item">
+        <cds-select label="Link Account"
+                    i18n-label
+                    id="link_account"
+                    for="link_account"
+                    formControlName="account_id"
+                    [invalid]="userForm.controls.account_id.invalid && userForm.controls.account_id.dirty"
+                    [invalidText]="accountError"
+                    [helperText]="accountsHelper">
+          <option i18n
+                  *ngIf="accounts === null"
+                  [ngValue]="null">Loading...</option>
+          <option i18n
+                  *ngIf="accounts !== null"
+                  [ngValue]="null">-- Select an Account --</option>
+          <option *ngFor="let account of accounts"
+                  [value]="account.id">{{ account.name }} {{account.tenant ? '- '+account.tenant : ''}}</option>
+        </cds-select>
+        <ng-template #accountError>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('account_id', frm, 'tenantedAccount')"
+                i18n>Only accounts with the same tenant name can be linked to a tenanted user.</span>
+        </ng-template>
+        <ng-template #accountsHelper>
+          <div i18n>Account membership is permanent. Once added, users cannot be removed from their account.</div>
+          <div i18n>Ownership of all of the user's buckets will be transferred to the account.</div>
+        </ng-template>
       </div>
 
-      <div class="card-footer">
-        <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                              [form]="userForm"
-                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-                              wrappingClass="text-right"></cd-form-button-panel>
+      <!-- Account Root user -->
+      <div *ngIf="userForm.getValue('account_id')"
+           class="form-item">
+        <cds-checkbox formControlName="account_root_user"
+                      id="account_root_user"
+                      i18n>Account Root user
+          <cd-help-text>The account root user has full access to all resources and manages the account.
+            It's recommended to use this account for management tasks only and create additional users with specific permissions.
+          </cd-help-text>
+        </cds-checkbox>
       </div>
+    }
+
+    <!-- User ID -->
+    <div class="form-item">
+      <cds-text-label for="user_id"
+                      i18n
+                      cdRequiredField="User ID"
+                      [invalid]="userForm.controls.user_id.invalid && (userForm.controls.user_id.dirty)"
+                      [invalidText]="userError">User ID
+        <input cdsText
+               formControlName="user_id"
+               name="user_id"
+               id="user_id"
+               [invalid]="userForm.controls.user_id.invalid && (userForm.controls.user_id.dirty)"
+               [readonly]="editing"
+               [autofocus]="!editing"/>
+      </cds-text-label>
+      <ng-template #userError>
+        <span class="invalid-feedback"
+              *ngIf="userForm.showError('user_id', frm, 'required')"
+              i18n>This field is required.</span>
+        <span class="invalid-feedback"
+              *ngIf="userForm.showError('user_id', frm, 'pattern')"
+              i18n>The value is not valid.</span>
+        <span class="invalid-feedback"
+              *ngIf="!userForm.getValue('show_tenant') && userForm.showError('user_id', frm, 'notUnique')"
+              i18n>The chosen user ID is already in use.</span>
+      </ng-template>
     </div>
+
+    <!-- Show Tenant -->
+    <div class="form-item">
+      <cds-checkbox formControlName="show_tenant"
+                    id="show_tenant"
+                    [readonly]="true"
+                    (checkedChange)="updateFieldsWhenTenanted()">Show Tenant
+      </cds-checkbox>
+    </div>
+
+    <!-- Tenant -->
+    <div class="form-item"
+         *ngIf="userForm.getValue('show_tenant')">
+      <cds-text-label for="tenant"
+                      i18n
+                      [invalid]="userForm.controls.tenant.invalid && (userForm.controls.tenant.dirty)"
+                      [invalidText]="tenantError">Tenant
+        <input cdsText
+               formControlName="tenant"
+               name="tenant"
+               id="tenant"
+               [invalid]="userForm.controls.tenant.invalid && (userForm.controls.tenant.dirty)"
+               [readonly]="editing"
+               autofocus/>
+      </cds-text-label>
+      <ng-template #tenantError>
+        <span class="invalid-feedback"
+              *ngIf="userForm.showError('tenant', frm, 'pattern')"
+              i18n>The value is not valid.</span>
+        <span class="invalid-feedback"
+              *ngIf="userForm.showError('tenant', frm, 'notUnique')"
+              i18n>The chosen user ID exists in this tenant.</span>
+      </ng-template>
+    </div>
+
+    <!-- Full name -->
+    <div class="form-item">
+      <cds-text-label  for="display_name"
+                       i18n
+                       cdRequiredField="Full name"
+                       [invalid]="userForm.controls.display_name.invalid && (userForm.controls.display_name.dirty)"
+                       [invalidText]="displayNameError">Full name
+        <input cdsText
+               formControlName="display_name"
+               name="display_name"
+               id="display_name"
+               [invalid]="userForm.showError('display_name', formDir)"/>
+      </cds-text-label>
+      <ng-template #displayNameError>
+        <span class="invalid-feedback"
+              *ngIf="userForm.showError('display_name', frm, 'required')"
+              i18n>This field is required.</span>
+        <span class="invalid-feedback"
+              *ngIf="userForm.showError('display_name', frm, 'pattern')"
+              i18n>The value is not valid.</span>
+      </ng-template>
+    </div>
+
+    <!-- Email address -->
+    <div class="form-item">
+      <cds-text-label for="email"
+                      i18n
+                      [invalid]="userForm.controls.email.invalid && (userForm.controls.email.dirty)"
+                      [invalidText]="emailError">Email address
+        <input cdsText
+               formControlName="email"
+               name="email"
+               id="email"
+               [invalid]="userForm.controls.email.invalid && (userForm.controls.email.dirty)"/>
+      </cds-text-label>
+      <ng-template #emailError>
+        <span class="invalid-feedback"
+              *ngIf="userForm.showError('email', frm, 'email')"
+              i18n>This is not a valid email address.</span>
+        <span class="invalid-feedback"
+              *ngIf="userForm.showError('email', frm, 'notUnique')"
+              i18n>The chosen email address is already in use.</span>
+      </ng-template>
+    </div>
+
+    <!-- Max. buckets -->
+    <div class="form-item">
+      <cds-select label="Maximum buckets"
+                  for="max_buckets_mode"
+                  formControlName="max_buckets_mode"
+                  id="max_buckets_mode"
+                  (valueChange)="onMaxBucketsModeChange($event)">
+        <option value="-1"
+                i18n>Disabled</option>
+        <option value="0"
+                i18n>Unlimited</option>
+        <option value="1"
+                i18n>Custom</option>
+      </cds-select>
+    </div>
+    <div *ngIf="1 == userForm.get('max_buckets_mode').value"
+         class="form-item">
+      <cds-number for="max_buckets"
+                  formControlName="max_buckets"
+                  id="max_buckets"
+                  min="1"
+                  [invalid]="userForm.controls.max_buckets.invalid && (userForm.controls.max_buckets.dirty)"
+                  [invalidText]="maxBucketsError"></cds-number>
+      <ng-template #maxBucketsError>
+        <span class="invalid-feedback"
+              *ngIf="userForm.showError('max_buckets', frm, 'required')"
+              i18n>This field is required.</span>
+        <span class="invalid-feedback"
+              i18n>The entered value must be >= 1.</span>
+      </ng-template>
+    </div>
+
+    <!-- Suspended -->
+    <div class="form-item">
+      <cds-checkbox formControlName="suspended"
+                    id="suspended"
+                    i18n>Suspended
+        <cd-help-text>Suspending the user disables the user and subuser.</cd-help-text>
+      </cds-checkbox>
+    </div>
+
+    <!-- System User -->
+    <div class="form-item">
+      <cds-checkbox formControlName="system"
+                    id="system"
+                    i18n>System user
+        <cd-help-text>System users are distinct from regular users, they are used by the RGW service to perform administrative tasks, manage buckets and objects</cd-help-text>
+      </cds-checkbox>
+    </div>
+
+    <!-- S3 key -->
+    <fieldset *ngIf="!editing">
+      <legend i18n
+              class="cd-header">S3 key</legend>
+
+      <!-- Auto-generate key -->
+      <div class="form-item">
+        <cds-checkbox formControlName="generate_key"
+                      id="generate_key"
+                      i18n>Auto-generate key</cds-checkbox>
+      </div>
+
+      <!-- Access key -->
+      <div class="form-item form-item-append"
+           *ngIf="!editing && !userForm.getValue('generate_key')">
+        <cds-password-label for="access_key"
+                            i18n
+                            cdRequiredField="Access key"
+                            [invalid]="userForm.controls.access_key.invalid && (userForm.controls.access_key.dirty)"
+                            [invalidText]="accessKeyError">Access key
+          <input cdsPassword
+                 type="password"
+                 formControlName="access_key"
+                 name="access_key"
+                 id="access_key"
+                 [invalid]="userForm.controls.access_key.invalid && (userForm.controls.access_key.dirty)"/>
+        </cds-password-label>
+        <cd-copy-2-clipboard-button source="access_key"
+                                    class="mt-4">
+        </cd-copy-2-clipboard-button>
+        <ng-template #accessKeyError>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('access_key', frm, 'required')"
+                i18n>This field is required.</span>
+        </ng-template>
+      </div>
+
+      <!-- Secret key -->
+      <div class="form-item form-item-append"
+           *ngIf="!editing && !userForm.getValue('generate_key')">
+        <cds-password-label for="secret"
+                            i18n
+                            cdRequiredField="Secret key"
+                            [invalid]="userForm.controls.secret_key.invalid && (userForm.controls.secret_key.dirty)"
+                            [invalidText]="secretKeyError">Secret key
+          <input cdsPassword
+                 type="password"
+                 formControlName="secret_key"
+                 name="secret_key"
+                 id="secret_key"
+                 [invalid]="userForm.controls.secret_key.invalid && (userForm.controls.secret_key.dirty)"/>
+        </cds-password-label>
+        <cd-copy-2-clipboard-button source="secret_key"
+                                    class="mt-4">
+        </cd-copy-2-clipboard-button>
+        <ng-template #secretKeyError>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('secret_key', frm, 'required')"
+                i18n>This field is required.</span>
+        </ng-template>
+      </div>
+    </fieldset>
+
+    <!-- Subusers -->
+    <fieldset *ngIf="editing">
+      <div class="form-item">
+      <legend i18n
+              class="cd-header">Subusers</legend>
+      <span *ngIf="subusers.length === 0"
+            class="no-border">
+        <span class="form-text text-muted"
+              i18n>There are no subusers.</span>
+      </span>
+
+      <ng-container *ngFor="let subuser of subusers; let i=index;">
+
+      <div cdsRow
+           class="form-item-append"
+           [ngClass]="{'form-item': i > 0}">
+        <div cdsCol>
+          <cds-text-label>Subuser id
+            <input cdsText
+                   [value]="subuser.id"
+                   readonly>
+          </cds-text-label>
+        </div>
+        <div cdsCol>
+          <cds-text-label>Permissions
+            <input cdsText
+                   [value]="('full-control' === subuser.permissions) ? 'full' : subuser.permissions"
+                   readonly>
+          </cds-text-label>
+        </div>
+        <cds-icon-button kind="tertiary"
+                         size="md"
+                         title="Edit"
+                         class="mt-4 tc_showSubuserButton"
+                         (click)="showSubuserModal(i)">
+          <svg cdsIcon="edit"
+               size="32"
+               class="cds--btn__icon"></svg>
+        </cds-icon-button>
+        <cds-icon-button kind="danger"
+                         size="md"
+                         title="Delete"
+                         class="mt-4 tc_deleteSubuserButton"
+                         (click)="deleteSubuser(i)">
+          <svg cdsIcon="trash-can"
+               size="32"
+               class="cds--btn__icon"></svg>
+        </cds-icon-button>
+        </div>
+      </ng-container>
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <button cdsButton="tertiary"
+                  type="button"
+                  class="tc_addSubuserButton"
+                  (click)="showSubuserModal()">
+            <ng-container i18n>{{ actionLabels.CREATE | titlecase }}
+              {{ subuserLabel | upperFirst }}</ng-container>
+            <svg cdsIcon="add"
+                 size="32"
+                 class="cds--btn__icon"></svg>
+          </button>
+        </div>
+      </div>
+      </div>
+    </fieldset>
+
+    <!-- Keys -->
+    <fieldset *ngIf="editing">
+      <div class="form-item">
+        <legend i18n
+                class="cd-header">Keys</legend>
+
+        <!-- S3 keys -->
+        <h6>S3</h6>
+        <span *ngIf="s3Keys.length === 0"
+              class="no-border">
+          <span class="form-text text-muted"
+                i18n>There are no keys.</span>
+        </span>
+
+        <span *ngFor="let key of s3Keys; let i=index;">
+          <div class="form-item-append"
+               cdsRow>
+            <div cdsCol>
+              <cds-text-label>
+                <input cdsText
+                       [value]="key.user"
+                       readonly>
+              </cds-text-label>
+            </div>
+            <cds-icon-button kind="tertiary"
+                             size="md"
+                             title="Show"
+                             class="mt-2 tc_showS3KeyButton"
+                             (click)="showS3KeyModal(i)">
+              <svg cdsIcon="view"
+                   size="16"
+                   class="cds--btn__icon"></svg>
+            </cds-icon-button>
+            <cds-icon-button kind="danger"
+                             size="md"
+                             title="Delete"
+                             class="mt-2 tc_deleteS3KeyButton"
+                             (click)="deleteS3Key(i)">
+              <svg cdsIcon="trash-can"
+                   size="32"
+                   class="cds--btn__icon"></svg>
+            </cds-icon-button>
+          </div>
+          <span class="form-text text-muted"></span>
+        </span>
+
+        <div class="form-item"
+             cdsRow>
+          <div cdsCol>
+            <button type="button"
+                    cdsButton="tertiary"
+                    class="tc_addS3KeyButton"
+                    (click)="showS3KeyModal()">
+              <ng-container i18n>{{ actionLabels.CREATE | titlecase }}
+                {{ s3keyLabel | upperFirst }}</ng-container>
+              <svg cdsIcon="add"
+                   size="32"
+                   class="cds--btn__icon"></svg>
+            </button>
+          </div>
+        </div>
+
+        <hr>
+      </div>
+
+      <!-- Swift keys -->
+      <div class="form-item">
+
+        <h6>Swift</h6>
+        <span *ngIf="swiftKeys.length === 0"
+              class="no-border">
+          <span class="form-text text-muted"
+                i18n>There are no keys.</span>
+        </span>
+
+        <span *ngFor="let key of swiftKeys; let i=index;">
+          <div class="form-item-append"
+               cdsRow>
+            <div cdsCol>
+              <cds-text-label>
+                <input cdsText
+                       [value]="key.user"
+                       readonly>
+              </cds-text-label>
+            </div>
+            <cds-icon-button kind="tertiary"
+                             size="md"
+                             title="Show"
+                             class="mt-2 tc_showSwiftKeyButton"
+                             (click)="showSwiftKeyModal(i)">
+              <svg cdsIcon="view"
+                   size="16"
+                   class="cds--btn__icon"></svg>
+            </cds-icon-button>
+          </div>
+        </span>
+      </div>
+    </fieldset>
+
+    <!-- Capabilities -->
+    <fieldset *ngIf="editing">
+
+      <div class="form-item">
+        <legend i18n
+                class="cd-header">Capabilities</legend>
+        <span *ngIf="capabilities.length === 0"
+              class="no-border">
+          <span class="form-text text-muted"
+                i18n>There are no capabilities.</span>
+        </span>
+
+        <span *ngFor="let cap of capabilities; let i=index;">
+          <div class="form-item-append"
+               [ngClass]="{'form-item': i > 0}"
+               cdsRow>
+            <div cdsCol>
+              <cds-text-label i18n>Type
+                <input cdsText
+                       [value]="cap.type"
+                       readonly>
+              </cds-text-label>
+            </div>
+            <div cdsCol>
+              <cds-text-label i18n>Permission
+                <input cdsText
+                       [value]="cap.perm"
+                       readonly>
+              </cds-text-label>
+            </div>
+            <cds-icon-button kind="tertiary"
+                             size="md"
+                             title="Edit"
+                             class="mt-4 tc_editCapButton"
+                             (click)="showCapabilityModal(i)">
+              <svg cdsIcon="edit"
+                   size="32"
+                   class="cds--btn__icon"></svg>
+            </cds-icon-button>
+            <cds-icon-button kind="danger"
+                             size="md"
+                             title="Delete"
+                             class="mt-4 tc_deleteCapButton"
+                             (click)="deleteCapability(i)">
+              <svg cdsIcon="trash-can"
+                   size="32"
+                   class="cds--btn__icon"></svg>
+            </cds-icon-button>
+          </div>
+          <span class="form-text text-muted"></span>
+        </span>
+
+        <div class="form-item"
+             cdsRow>
+          <div cdsCol>
+            <button type="button"
+                    class="tc_addCapButton"
+                    cdsButton="tertiary"
+                    [disabled]="capabilities | pipeFunction:hasAllCapabilities"
+                    i18n-ngbTooltip
+                    ngbTooltip="All capabilities are already added."
+                    [disableTooltip]="!(capabilities | pipeFunction:hasAllCapabilities)"
+                    triggers="pointerenter:pointerleave"
+                    (click)="showCapabilityModal()">
+              <ng-container i18n>{{ actionLabels.ADD | titlecase }}
+                {{ capabilityLabel | upperFirst }}</ng-container>
+              <svg cdsIcon="add"
+                   size="32"
+                   class="cds--btn__icon"></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- User quota -->
+    <fieldset>
+      <div class="form-item">
+        <legend i18n
+                class="cd-header">User quota</legend>
+
+      <!-- Enabled -->
+        <cds-checkbox formControlName="user_quota_enabled"
+                      id="user_quota_enabled"
+                      i18n>Enabled
+        </cds-checkbox>
+      </div>
+
+      <!-- Unlimited size -->
+      <div class="form-item"
+           *ngIf="userForm.controls.user_quota_enabled.value">
+        <cds-checkbox formControlName="user_quota_max_size_unlimited"
+                      id="user_quota_max_size_unlimited"
+                      i18n>Unlimited size</cds-checkbox>
+      </div>
+
+      <!-- Maximum size -->
+      <div class="form-item"
+           *ngIf="userForm.controls.user_quota_enabled.value && !userForm.getValue('user_quota_max_size_unlimited')">
+        <cds-text-label for="user_quota_max_size"
+                        i18n
+                        cdRequiredField="Maximum size"
+                        [invalid]="userForm.controls.user_quota_max_size.invalid && (userForm.controls.user_quota_max_size.dirty)"
+                        [invalidText]="quotaMaxSizeError">Maximum size
+          <input cdsText
+                 formControlName="user_quota_max_size"
+                 name="user_quota_max_size"
+                 id="user_quota_max_size"
+                 [invalid]="userForm.controls.user_quota_max_size.invalid && (userForm.controls.user_quota_max_size.dirty)"
+                 cdDimlessBinary/>
+        </cds-text-label>
+        <ng-template #quotaMaxSizeError>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('user_quota_max_size', frm, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('user_quota_max_size', frm, 'quotaMaxSize')"
+                i18n>The value is not valid.</span>
+          <span *ngIf="userForm.showError('user_quota_max_size', formDir, 'pattern')"
+                class="invalid-feedback"
+                i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
+        </ng-template>
+      </div>
+
+      <!-- Unlimited objects -->
+      <div class="form-item"
+           *ngIf="userForm.controls.user_quota_enabled.value">
+        <cds-checkbox formControlName="user_quota_max_objects_unlimited"
+                      id="user_quota_max_objects_unlimited"
+                      i18n>Unlimited objects</cds-checkbox>
+      </div>
+
+      <!-- Maximum objects -->
+      <div class="form-item"
+           *ngIf="userForm.controls.user_quota_enabled.value && !userForm.getValue('user_quota_max_objects_unlimited')">
+        <cds-number for="user_quota_max_objects"
+                    formControlName="user_quota_max_objects"
+                    id="user_quota_max_objects"
+                    [min]="0"
+                    [invalid]="userForm.controls.user_quota_max_objects.invalid && (userForm.controls.user_quota_max_objects.dirty)"
+                    [invalidText]="maxObjectsError"
+                    label="Maximum Objects"
+                    cdRequiredField="Maximum Objects"></cds-number>
+        <ng-template #maxObjectsError>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('user_quota_max_objects', frm, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('user_quota_max_objects', frm, 'min')"
+                i18n>The entered value must be >= 0.</span>
+        </ng-template>
+      </div>
+    </fieldset>
+
+    <!-- Bucket quota -->
+    <fieldset>
+      <div class="form-item">
+        <legend i18n
+                class="cd-header">Bucket quota</legend>
+
+      <!-- Enabled -->
+        <cds-checkbox formControlName="bucket_quota_enabled"
+                      id="bucket_quota_enabled"
+                      i18n>Enabled</cds-checkbox>
+      </div>
+
+      <!-- Unlimited size -->
+      <div class="form-item"
+           *ngIf="userForm.controls.bucket_quota_enabled.value">
+        <cds-checkbox formControlName="bucket_quota_max_size_unlimited"
+                      id="bucket_quota_max_size_unlimited"
+                      i18n>Unlimited size</cds-checkbox>
+      </div>
+
+      <!-- Maximum size -->
+      <div class="form-item"
+           *ngIf="userForm.controls.bucket_quota_enabled.value && !userForm.getValue('bucket_quota_max_size_unlimited')">
+        <cds-text-label for="bucket_quota_max_size"
+                        i18n
+                        cdRequiredField="Maximum size"
+                        [invalid]="userForm.controls.bucket_quota_max_size.invalid && (userForm.controls.bucket_quota_max_size.dirty)"
+                        [invalidText]="bucketQuotaMaxSizeError">Maximum size
+          <input cdsText
+                 formControlName="bucket_quota_max_size"
+                 name="bucket_quota_max_size"
+                 id="bucket_quota_max_size"
+                 [invalid]="userForm.controls.bucket_quota_max_size.invalid && (userForm.controls.bucket_quota_max_size.dirty)"
+                 cdDimlessBinary/>
+        </cds-text-label>
+        <ng-template #bucketQuotaMaxSizeError>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('bucket_quota_max_size', frm, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('bucket_quota_max_size', frm, 'quotaMaxSize')"
+                i18n>The value is not valid.</span>
+          <span *ngIf="userForm.showError('bucket_quota_max_size', formDir, 'pattern')"
+                class="invalid-feedback"
+                i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
+        </ng-template>
+      </div>
+
+      <!-- Unlimited objects -->
+      <div class="form-item"
+           *ngIf="userForm.controls.bucket_quota_enabled.value">
+        <cds-checkbox formControlName="bucket_quota_max_objects_unlimited"
+                      id="bucket_quota_max_objects_unlimited"
+                      i18n>Unlimited objects</cds-checkbox>
+      </div>
+
+      <!-- Maximum objects -->
+      <div class="form-item"
+           *ngIf="userForm.controls.bucket_quota_enabled.value && !userForm.getValue('bucket_quota_max_objects_unlimited')">
+        <cds-number for="bucket_quota_max_objects"
+                    formControlName="bucket_quota_max_objects"
+                    id="bucket_quota_max_objects"
+                    [min]="0"
+                    [invalid]="userForm.controls.bucket_quota_max_objects.invalid && ( userForm.controls.bucket_quota_max_objects.dirty)"
+                    [invalidText]="bucketMaxObjectsError"
+                    label="Maximum objects"
+                    cdRequiredField="Maximum objects"></cds-number>
+        <ng-template #bucketMaxObjectsError>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('bucket_quota_max_objects', frm, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('bucket_quota_max_objects', frm, 'min')"
+                i18n>The entered value must be >= 0.</span>
+        </ng-template>
+      </div>
+    </fieldset>
+
+    <!-- Advanced Section -->
+    <cd-form-advanced-fieldset>
+      <!-- User Rate Limit -->
+      <cd-rgw-rate-limit [type]="'user'"
+                         [isEditing]="this.editing"
+                         [id]="uid"
+                         (rateLimitFormGroup)="rateLimitFormInit($event)">
+      </cd-rgw-rate-limit>
+    </cd-form-advanced-fieldset>
+
+    <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                          [form]="userForm"
+                          [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                          wrappingClass="text-right"></cd-form-button-panel>
   </form>
 </div>

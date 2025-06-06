@@ -1,15 +1,19 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <boost/range/adaptor/map.hpp>
-#include <boost/range/algorithm/copy.hpp>
+#include "MetricAggregator.h"
+#include "MDSMap.h"
+#include "MDSRank.h"
+#include "mgr/MgrClient.h"
 
 #include "common/ceph_context.h"
+#include "common/debug.h"
 #include "common/perf_counters_key.h"
 
-#include "MDSRank.h"
-#include "MetricAggregator.h"
-#include "mgr/MgrClient.h"
+#include "messages/MMDSMetrics.h"
+
+#include <boost/range/adaptor/map.hpp>
+#include <boost/range/algorithm/copy.hpp>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -127,7 +131,7 @@ void MetricAggregator::shutdown() {
   }
 }
 
-bool MetricAggregator::ms_dispatch2(const ref_t<Message> &m) {
+Dispatcher::dispatch_result_t MetricAggregator::ms_dispatch2(const ref_t<Message> &m) {
   dout(25) << " processing " << m << dendl;
   if (m->get_type() == MSG_MDS_METRICS &&
       m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MDS) {
@@ -547,7 +551,7 @@ void MetricAggregator::notify_mdsmap(const MDSMap &mdsmap) {
 }
 
 void MetricAggregator::set_perf_queries(const ConfigPayload &config_payload) {
-  const MDSConfigPayload &mds_config_payload = boost::get<MDSConfigPayload>(config_payload);
+  const MDSConfigPayload &mds_config_payload = std::get<MDSConfigPayload>(config_payload);
   const std::map<MDSPerfMetricQuery, MDSPerfMetricLimits> &queries = mds_config_payload.config;
 
   dout(10) << ": setting " << queries.size() << " queries" << dendl;

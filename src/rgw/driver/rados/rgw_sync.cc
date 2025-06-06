@@ -39,7 +39,7 @@ string RGWSyncErrorLogger::get_shard_oid(const string& oid_prefix, int shard_id)
 }
 
 RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const DoutPrefixProvider *dpp, const string& source_zone, const string& section, const string& name, uint32_t error_code, const string& message) {
-  cls_log_entry entry;
+  cls::log::entry entry;
 
   rgw_sync_error_info info(source_zone, error_code, message);
   bufferlist bl;
@@ -399,7 +399,7 @@ protected:
   }
 public:
   string marker;
-  list<cls_log_entry> entries;
+  vector<cls::log::entry> entries;
   bool truncated;
 
   RGWAsyncReadMDLogEntries(const DoutPrefixProvider *dpp, RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
@@ -416,7 +416,7 @@ class RGWReadMDLogEntriesCR : public RGWSimpleCoroutine {
   string marker;
   string *pmarker;
   int max_entries;
-  list<cls_log_entry> *entries;
+  vector<cls::log::entry> *entries;
   bool *truncated;
 
   RGWAsyncReadMDLogEntries *req{nullptr};
@@ -424,7 +424,7 @@ class RGWReadMDLogEntriesCR : public RGWSimpleCoroutine {
 public:
   RGWReadMDLogEntriesCR(RGWMetaSyncEnv *_sync_env, RGWMetadataLog* mdlog,
                         int _shard_id, string*_marker, int _max_entries,
-                        list<cls_log_entry> *_entries, bool *_truncated)
+                        vector<cls::log::entry> *_entries, bool *_truncated)
     : RGWSimpleCoroutine(_sync_env->cct), sync_env(_sync_env), mdlog(mdlog),
       shard_id(_shard_id), pmarker(_marker), max_entries(_max_entries),
       entries(_entries), truncated(_truncated) {}
@@ -1450,8 +1450,8 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
 
   RGWMetaSyncShardMarkerTrack *marker_tracker = nullptr;
 
-  list<cls_log_entry> log_entries;
-  list<cls_log_entry>::iterator log_iter;
+  vector<cls::log::entry> log_entries;
+  decltype(log_entries)::iterator log_iter;
   bool truncated = false;
 
   string mdlog_marker;
@@ -1877,7 +1877,7 @@ public:
               continue;
             }
             tn->log(20, SSTR("log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp));
-            if (!marker_tracker->start(log_iter->id, 0, log_iter->timestamp.to_real_time())) {
+            if (!marker_tracker->start(log_iter->id, 0, log_iter->timestamp)) {
               ldpp_dout(sync_env->dpp, 0) << "ERROR: cannot start syncing " << log_iter->id << ". Duplicate entry?" << dendl;
             } else {
               raw_key = log_iter->section + ":" + log_iter->name;
@@ -1996,8 +1996,7 @@ public:
         set_status("sync lock notification");
         yield call(sync_env->bid_manager->notify_cr());
         if (retcode < 0) {
-          tn->log(5, SSTR("ERROR: failed to notify bidding information" << retcode));
-          return set_cr_error(retcode);
+          tn->log(5, SSTR("ERROR: failed to notify bidding information retcode=" << retcode));
         }
 
         set_status("sleeping");
@@ -2211,7 +2210,7 @@ int RGWRemoteMetaLog::store_sync_info(const DoutPrefixProvider *dpp, const rgw_m
 static RGWPeriodHistory::Cursor get_period_at(const DoutPrefixProvider *dpp,
                                               rgw::sal::RadosStore* store,
                                               const rgw_meta_sync_info& info,
-					      optional_yield y)
+					      optional_yield y, rgw::sal::ConfigStore* cfgstore)
 {
   if (info.period.empty()) {
     // return an empty cursor with error=0
@@ -2234,14 +2233,14 @@ static RGWPeriodHistory::Cursor get_period_at(const DoutPrefixProvider *dpp,
 
   // read the period from rados or pull it from the master
   RGWPeriod period;
-  int r = store->svc()->mdlog->pull_period(dpp, info.period, period, y);
+  int r = store->svc()->mdlog->pull_period(dpp, info.period, period, y, cfgstore);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed to read period id "
         << info.period << ": " << cpp_strerror(r) << dendl;
     return RGWPeriodHistory::Cursor{r};
   }
   // attach the period to our history
-  cursor = store->svc()->mdlog->get_period_history()->attach(dpp, std::move(period), y);
+  cursor = store->svc()->mdlog->get_period_history()->attach(dpp, std::move(period), y, cfgstore);
   if (!cursor) {
     r = cursor.get_error();
     ldpp_dout(dpp, -1) << "ERROR: failed to read period history back to "
@@ -2250,7 +2249,7 @@ static RGWPeriodHistory::Cursor get_period_at(const DoutPrefixProvider *dpp,
   return cursor;
 }
 
-int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y)
+int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y, rgw::sal::ConfigStore* cfgstore)
 {
   if (store->svc()->zone->is_meta_master()) {
     return 0;
@@ -2384,7 +2383,7 @@ int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y)
       case rgw_meta_sync_info::StateSync:
         tn->log(20, "sync");
         // find our position in the period history (if any)
-        cursor = get_period_at(dpp, store, sync_status.sync_info, y);
+        cursor = get_period_at(dpp, store, sync_status.sync_info, y, cfgstore);
         r = cursor.get_error();
         if (r < 0) {
           return r;
@@ -2476,7 +2475,7 @@ int RGWCloneMetaLogCoroutine::state_read_shard_status()
   const bool add_ref = false; // default constructs with refs=1
 
   completion.reset(new RGWMetadataLogInfoCompletion(
-    [this](int ret, const cls_log_header& header) {
+    [this](int ret, const cls::log::header& header) {
       if (ret < 0) {
         if (ret != -ENOENT) {
           ldpp_dout(sync_env->dpp, 1) << "ERROR: failed to read mdlog info with "
@@ -2484,7 +2483,7 @@ int RGWCloneMetaLogCoroutine::state_read_shard_status()
         }
       } else {
         shard_info.marker = header.max_marker;
-        shard_info.last_update = header.max_time.to_real_time();
+        shard_info.last_update = header.max_time;
       }
       // wake up parent stack
       io_complete();
@@ -2583,18 +2582,18 @@ int RGWCloneMetaLogCoroutine::state_receive_rest_response()
 
 int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
 {
-  list<cls_log_entry> dest_entries;
+  vector<cls::log::entry> dest_entries;
 
   vector<rgw_mdlog_entry>::iterator iter;
   for (iter = data.entries.begin(); iter != data.entries.end(); ++iter) {
     rgw_mdlog_entry& entry = *iter;
     ldpp_dout(sync_env->dpp, 20) << "entry: name=" << entry.name << dendl;
 
-    cls_log_entry dest_entry;
+    cls::log::entry dest_entry;
     dest_entry.id = entry.id;
     dest_entry.section = entry.section;
     dest_entry.name = entry.name;
-    dest_entry.timestamp = utime_t(entry.timestamp);
+    dest_entry.timestamp = entry.timestamp;
   
     encode(entry.log_data, dest_entry.data);
 

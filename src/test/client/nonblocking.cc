@@ -264,13 +264,13 @@ TEST_F(TestClient, LlreadvLlwritevOPathFileHandle) {
                                  nullptr);
   ASSERT_EQ(rc, 0);
   rc = writefinish->wait();
-  ASSERT_EQ(rc, -CEPHFS_EBADF);
+  ASSERT_EQ(rc, -EBADF);
 
   rc = client->ll_preadv_pwritev(fh, iov_in, 2, 0, false, readfinish.get(),
                                  &bl);
   ASSERT_EQ(rc, 0);
   rc = readfinish->wait();
-  ASSERT_EQ(rc, -CEPHFS_EBADF);
+  ASSERT_EQ(rc, -EBADF);
   ASSERT_EQ(bl.length(), 0);
 
   client->ll_release(fh);
@@ -327,7 +327,7 @@ TEST_F(TestClient, LlreadvLlwritevReadOnlyFile) {
                                  nullptr);
   ASSERT_EQ(rc, 0);
   rc = writefinish->wait();
-  ASSERT_EQ(rc, -CEPHFS_EBADF);
+  ASSERT_EQ(rc, -EBADF);
 
   rc = client->ll_preadv_pwritev(fh, iov_in, 2, 0, false, readfinish.get(),
                                  &bl);
@@ -392,12 +392,12 @@ TEST_F(TestClient, LlreadvLlwritevIOClientNotMounted) {
   rc = client->ll_preadv_pwritev(fh, iov_out, 2, 0, true, writefinish.get(), nullptr);
   ASSERT_EQ(rc, 0);
   rc = writefinish->wait();
-  ASSERT_EQ(rc, -CEPHFS_ENOTCONN);
+  ASSERT_EQ(rc, -ENOTCONN);
 
   rc = client->ll_preadv_pwritev(fh, iov_in, 2, 0, false, readfinish.get(), &bl);
   ASSERT_EQ(rc, 0);
   rc = readfinish->wait();
-  ASSERT_EQ(rc, -CEPHFS_ENOTCONN);
+  ASSERT_EQ(rc, -ENOTCONN);
 }
 
 TEST_F(TestClient, LlreadvLlwritevNegativeIOVCount) {
@@ -449,13 +449,13 @@ TEST_F(TestClient, LlreadvLlwritevNegativeIOVCount) {
                                  nullptr);
   ASSERT_EQ(rc, 0);
   ssize_t bytes_written = writefinish->wait();
-  ASSERT_EQ(bytes_written, -CEPHFS_EINVAL);
+  ASSERT_EQ(bytes_written, -EINVAL);
 
   rc = client->ll_preadv_pwritev(fh, iov_in, -2, 0, false, readfinish.get(),
                                  &bl);
   ASSERT_EQ(rc, 0);
   ssize_t bytes_read = readfinish->wait();
-  ASSERT_EQ(bytes_read, -CEPHFS_EINVAL);
+  ASSERT_EQ(bytes_read, -EINVAL);
   ASSERT_EQ(bl.length(), 0);
 
   client->ll_release(fh);
@@ -512,7 +512,7 @@ TEST_F(TestClient, LlreadvLlwritevZeroBytes) {
                                  nullptr);
   ASSERT_EQ(rc, 0);
   ssize_t bytes_written = writefinish->wait();
-  ASSERT_EQ(bytes_written, -CEPHFS_EINVAL);
+  ASSERT_EQ(bytes_written, -EINVAL);
 
   rc = client->ll_preadv_pwritev(fh, iov_in, 2, 0, false, readfinish.get(),
                                  &bl);
@@ -566,13 +566,13 @@ TEST_F(TestClient, LlreadvLlwritevInvalidFileHandle) {
                                  writefinish.get(), nullptr);
   ASSERT_EQ(rc, 0);
   bytes_written = writefinish->wait();
-  ASSERT_EQ(bytes_written, -CEPHFS_EBADF);
+  ASSERT_EQ(bytes_written, -EBADF);
 
   rc = client->ll_preadv_pwritev(fh_null, iov_in, 2, 0, false,
                                  readfinish.get(), &bl);
   ASSERT_EQ(rc, 0);
   bytes_read = readfinish->wait();
-  ASSERT_EQ(bytes_read, -CEPHFS_EBADF);
+  ASSERT_EQ(bytes_read, -EBADF);
   ASSERT_EQ(bl.length(), 0);
 
   // test after closing the file handle
@@ -606,13 +606,13 @@ TEST_F(TestClient, LlreadvLlwritevInvalidFileHandle) {
                                  nullptr);
   ASSERT_EQ(rc, 0);
   bytes_written = writefinish->wait();
-  ASSERT_EQ(bytes_written, -CEPHFS_EBADF);
+  ASSERT_EQ(bytes_written, -EBADF);
 
   rc = client->ll_preadv_pwritev(fh, iov_in, 2, 0, false, readfinish.get(),
                                  &bl);
   ASSERT_EQ(rc, 0);
   bytes_read = readfinish->wait();
-  ASSERT_EQ(bytes_read, -CEPHFS_EBADF);
+  ASSERT_EQ(bytes_read, -EBADF);
   ASSERT_EQ(bl.length(), 0);
 }
 

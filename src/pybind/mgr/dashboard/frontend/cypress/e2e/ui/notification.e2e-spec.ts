@@ -16,7 +16,7 @@ describe('Notification page', () => {
   after(() => {
     cy.login();
     pools.navigateTo();
-    pools.delete(poolName, null, null, true, false, true);
+    pools.delete(poolName, null, null, true, false, true, true);
   });
 
   beforeEach(() => {

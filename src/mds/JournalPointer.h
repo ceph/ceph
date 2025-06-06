@@ -19,6 +19,7 @@
 #include "include/encoding.h"
 #include "mdstypes.h"
 
+class Context;
 class Objecter;
 
 // This always lives in the same location for a given MDS

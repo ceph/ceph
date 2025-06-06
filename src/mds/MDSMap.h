@@ -16,6 +16,7 @@
 #define CEPH_MDSMAP_H
 
 #include <algorithm>
+#include <bitset>
 #include <map>
 #include <set>
 #include <string>
@@ -31,12 +32,12 @@
 #include "include/common_fwd.h"
 
 #include "common/Clock.h"
-#include "common/Formatter.h"
 #include "common/ceph_releases.h"
 #include "common/config.h"
 
 #include "mds/mdstypes.h"
-#include "mds/cephfs_features.h"
+
+namespace ceph { class Formatter; }
 
 static inline const auto MDS_FEATURE_INCOMPAT_BASE = CompatSet::Feature(1, "base v0.20");
 static inline const auto MDS_FEATURE_INCOMPAT_CLIENTRANGES = CompatSet::Feature(2, "client writeable ranges");
@@ -178,12 +179,10 @@ public:
   static CompatSet get_compat_set_base(); // pre v0.20
   static CompatSet get_compat_set_v16_2_4(); // pre-v16.2.5 CompatSet in MDS beacon
 
-  static MDSMap create_null_mdsmap() {
-    MDSMap null_map;
-    /* Use the largest epoch so it's always bigger than whatever the MDS has. */
-    null_map.epoch = std::numeric_limits<decltype(epoch)>::max();
-    return null_map;
-  }
+  MDSMap() noexcept;
+  ~MDSMap() noexcept;
+
+  static MDSMap create_null_mdsmap();
 
   bool get_inline_data_enabled() const { return inline_data_enabled; }
   void set_inline_data_enabled(bool enabled) { inline_data_enabled = enabled; }
@@ -236,6 +235,15 @@ public:
   void clear_snaps_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
   bool allows_snaps() const { return test_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
   bool was_snaps_ever_allowed() const { return ever_allowed_features & CEPH_MDSMAP_ALLOW_SNAPS; }
+
+  void set_referent_inodes() {
+    set_flag(CEPH_MDSMAP_REFERENT_INODES);
+    ever_allowed_features |= CEPH_MDSMAP_REFERENT_INODES;
+    explicitly_allowed_features |= CEPH_MDSMAP_REFERENT_INODES;
+  }
+  void clear_referent_inodes() { clear_flag(CEPH_MDSMAP_REFERENT_INODES); }
+  bool allow_referent_inodes() const { return test_flag(CEPH_MDSMAP_REFERENT_INODES); }
+  bool was_referent_inodes_ever_used() const { return ever_allowed_features & CEPH_MDSMAP_REFERENT_INODES; }
 
   void set_standby_replay_allowed() {
     set_flag(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY);
@@ -345,25 +353,15 @@ public:
   const std::vector<int64_t> &get_data_pools() const { return data_pools; }
   int64_t get_first_data_pool() const { return *data_pools.begin(); }
   int64_t get_metadata_pool() const { return metadata_pool; }
-  bool is_data_pool(int64_t poolid) const {
-    auto p = std::find(data_pools.begin(), data_pools.end(), poolid);
-    if (p == data_pools.end())
-      return false;
-    return true;
-  }
+  bool is_data_pool(int64_t poolid) const noexcept;
 
   bool pool_in_use(int64_t poolid) const {
     return get_enabled() && (is_data_pool(poolid) || metadata_pool == poolid);
   }
 
   const auto& get_mds_info() const { return mds_info; }
-  const auto& get_mds_info_gid(mds_gid_t gid) const {
-    return mds_info.at(gid);
-  }
-  const mds_info_t& get_mds_info(mds_rank_t m) const {
-    ceph_assert(up.count(m) && mds_info.count(up.at(m)));
-    return mds_info.at(up.at(m));
-  }
+  const mds_info_t& get_mds_info_gid(mds_gid_t gid) const noexcept;
+  const mds_info_t& get_mds_info(mds_rank_t m) const noexcept;
   mds_gid_t find_mds_gid_by_name(std::string_view s) const;
 
   // counts
@@ -391,16 +389,8 @@ public:
   }
   unsigned get_num_mds(int state) const;
   // data pools
-  void add_data_pool(int64_t poolid) {
-    data_pools.push_back(poolid);
-  }
-  int remove_data_pool(int64_t poolid) {
-    std::vector<int64_t>::iterator p = std::find(data_pools.begin(), data_pools.end(), poolid);
-    if (p == data_pools.end())
-      return -CEPHFS_ENOENT;
-    data_pools.erase(p);
-    return 0;
-  }
+  void add_data_pool(int64_t poolid);
+  int remove_data_pool(int64_t poolid);
 
   // sets
   void get_mds_set(std::set<mds_rank_t>& s) const {
@@ -493,32 +483,16 @@ public:
   /**
    * Get MDS daemon status by GID
    */
-  auto get_state_gid(mds_gid_t gid) const {
-    auto it = mds_info.find(gid);
-    if (it == mds_info.end())
-      return STATE_NULL;
-    return it->second.state;
-  }
+  MDSMap::DaemonState get_state_gid(mds_gid_t gid) const noexcept;
 
   /**
    * Get MDS rank state if the rank is up, else STATE_NULL
    */
-  auto get_state(mds_rank_t m) const {
-    auto it = up.find(m);
-    if (it == up.end())
-      return STATE_NULL;
-    return get_state_gid(it->second);
-  }
+  MDSMap::DaemonState get_state(mds_rank_t m) const noexcept;
 
-  auto get_gid(mds_rank_t r) const {
-    return up.at(r);
-  }
-  const auto& get_info(mds_rank_t m) const {
-    return mds_info.at(up.at(m));
-  }
-  const auto& get_info_gid(mds_gid_t gid) const {
-    return mds_info.at(gid);
-  }
+  mds_gid_t get_gid(mds_rank_t r) const noexcept;
+  const mds_info_t& get_info(mds_rank_t m) const noexcept;
+  const mds_info_t& get_info_gid(mds_gid_t gid) const noexcept;
 
   bool is_boot(mds_rank_t m) const { return get_state(m) == STATE_BOOT; }
   bool is_bootstrapping(mds_rank_t m) const {
@@ -545,22 +519,8 @@ public:
     return get_standby_replay(r) != MDS_GID_NONE;
   }
 
-  bool is_followable(mds_rank_t r) const {
-    if (auto it1 = up.find(r); it1 != up.end()) {
-      if (auto it2 = mds_info.find(it1->second); it2 != mds_info.end()) {
-        auto& info = it2->second;
-        if (!info.is_degraded() && !has_standby_replay(r)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  bool is_laggy_gid(mds_gid_t gid) const {
-    auto it = mds_info.find(gid);
-    return it == mds_info.end() ? false : it->second.laggy();
-  }
+  bool is_followable(mds_rank_t r) const;
+  bool is_laggy_gid(mds_gid_t gid) const;
 
   // degraded = some recovery in process.  fixes active membership and
   // recovery_set.
@@ -595,42 +555,21 @@ public:
    * an MDS daemon's entity_inst_t associated
    * with it.
    */
-  bool have_inst(mds_rank_t m) const {
-    return up.count(m);
-  }
+  bool have_inst(mds_rank_t m) const;
 
   /**
    * Get the MDS daemon entity_inst_t for a rank
    * known to be up.
    */
-  entity_addrvec_t get_addrs(mds_rank_t m) const {
-    return mds_info.at(up.at(m)).get_addrs();
-  }
+  entity_addrvec_t get_addrs(mds_rank_t m) const;
 
-  mds_rank_t get_rank_gid(mds_gid_t gid) const {
-    if (mds_info.count(gid)) {
-      return mds_info.at(gid).rank;
-    } else {
-      return MDS_RANK_NONE;
-    }
-  }
+  mds_rank_t get_rank_gid(mds_gid_t gid) const;
 
   /**
    * Get MDS rank incarnation if the rank is up, else -1
    */
-  mds_gid_t get_incarnation(mds_rank_t m) const {
-    auto it = up.find(m);
-    if (it == up.end())
-      return MDS_GID_NONE;
-    return (mds_gid_t)get_inc_gid(it->second);
-  }
-
-  int get_inc_gid(mds_gid_t gid) const {
-    auto mds_info_entry = mds_info.find(gid);
-    if (mds_info_entry != mds_info.end())
-      return mds_info_entry->second.inc;
-    return -1;
-  }
+  mds_gid_t get_incarnation(mds_rank_t m) const;
+  int get_inc_gid(mds_gid_t gid) const;
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void decode(const ceph::buffer::list& bl) {
@@ -711,15 +650,7 @@ protected:
   bool inline_data_enabled = false;
 
 private:
-  inline static const std::map<int, std::string> flag_display = {
-    {CEPH_MDSMAP_NOT_JOINABLE, "joinable"}, //inverse for user display
-    {CEPH_MDSMAP_ALLOW_SNAPS, "allow_snaps"},
-    {CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS, "allow_multimds_snaps"},
-    {CEPH_MDSMAP_ALLOW_STANDBY_REPLAY, "allow_standby_replay"},
-    {CEPH_MDSMAP_REFUSE_CLIENT_SESSION, "refuse_client_session"},
-    {CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS, "refuse_standby_for_another_fs"},
-    {CEPH_MDSMAP_BALANCE_AUTOMATE, "balance_automate"}
-  };
+  static const std::map<int, std::string> flag_display;
 };
 WRITE_CLASS_ENCODER_FEATURES(MDSMap::mds_info_t)
 WRITE_CLASS_ENCODER_FEATURES(MDSMap)

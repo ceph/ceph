@@ -139,6 +139,8 @@ struct configuration {
 };
 WRITE_CLASS_ENCODER(configuration)
 
+static const std::string service_principal = "logging.s3.amazonaws.com";
+
 using source_buckets = std::set<rgw_bucket>;
 
 constexpr unsigned MAX_BUCKET_LOGGING_BUFFER = 1000;
@@ -157,13 +159,13 @@ inline std::string to_string(const Records& records) {
 // log a bucket logging record according to the configuration
 int log_record(rgw::sal::Driver* driver,
     const sal::Object* obj,
-    const req_state* s, 
-    const std::string& op_name, 
-    const std::string& etag, 
-    size_t size, 
+    req_state* s,
+    const std::string& op_name,
+    const std::string& etag,
+    size_t size,
     const configuration& conf,
-    const DoutPrefixProvider *dpp, 
-    optional_yield y, 
+    const DoutPrefixProvider *dpp,
+    optional_yield y,
     bool async_completion,
     bool log_source_bucket);
 
@@ -206,12 +208,12 @@ std::string object_name_oid(const rgw::sal::Bucket* bucket, const std::string& p
 int log_record(rgw::sal::Driver* driver,
     LoggingType type,
     const sal::Object* obj,
-    const req_state* s, 
-    const std::string& op_name, 
-    const std::string& etag, 
-    size_t size, 
-    const DoutPrefixProvider *dpp, 
-    optional_yield y, 
+    req_state* s,
+    const std::string& op_name,
+    const std::string& etag,
+    size_t size,
+    const DoutPrefixProvider *dpp,
+    optional_yield y,
     bool async_completion,
     bool log_source_bucket);
 
@@ -246,5 +248,33 @@ int source_bucket_cleanup(const DoutPrefixProvider* dpp,
                                    sal::Bucket* bucket,
                                    bool remove_attr,
                                    optional_yield y);
+
+// verify that the target bucket has the correct policy to allow the source bucket to log to it
+// note that this function adds entries to the request state environment
+int verify_target_bucket_policy(const DoutPrefixProvider* dpp,
+    rgw::sal::Bucket* target_bucket,
+    const rgw::ARN& target_resource_arn,
+    req_state* s);
+
+// verify that target bucket does not have:
+// - bucket logging
+// - requester pays
+// - encryption
+int verify_target_bucket_attributes(const DoutPrefixProvider* dpp, rgw::sal::Bucket* target_bucket);
+
+// given a source bucket this function is parsing the configuration object
+// extracting the target bucket and load it
+// the log bucket tenant is taken from configuration
+// however, if not explicitly set there, it is taken from the tenant parameter
+// both configuration and target bucket are returned by reference
+int get_target_and_conf_from_source(
+    const DoutPrefixProvider* dpp,
+    rgw::sal::Driver* driver,
+    rgw::sal::Bucket* src_bucket,
+    const std::string& tenant,
+    configuration& configuration,
+    std::unique_ptr<rgw::sal::Bucket>& target_bucket,
+    optional_yield y);
+
 } // namespace rgw::bucketlogging
 

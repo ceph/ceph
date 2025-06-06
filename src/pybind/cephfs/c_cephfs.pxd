@@ -1,3 +1,6 @@
+# cython: language_level=3
+# cython: legacy_implicit_noexcept=True
+
 from libc.stdint cimport *
 from types cimport *
 
@@ -71,6 +74,10 @@ cdef extern from "cephfs/libcephfs.h" nogil:
 
     int ceph_setattrx(ceph_mount_info *cmount, const char *relpath, statx *stx, int mask, int flags)
     int ceph_fsetattrx(ceph_mount_info *cmount, int fd, statx *stx, int mask)
+
+    ctypedef void (*libcephfs_c_completion_t)(int rc, const void* out, size_t outlen, const void* outs, size_t outslen, void* ud) nogil
+    int ceph_mds_command2(ceph_mount_info* cmount, const char* mds_spec, const char** cmd, size_t cmdlen, const char* inbuf, size_t inbuflen, int one_shot, libcephfs_c_completion_t c, void* ud)
+
     int ceph_mds_command(ceph_mount_info *cmount, const char *mds_spec, const char **cmd, size_t cmdlen,
                          const char *inbuf, size_t inbuflen, char **outbuf, size_t *outbuflen,
                          char **outs, size_t *outslen)

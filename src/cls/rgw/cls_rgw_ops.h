@@ -7,9 +7,7 @@
 
 struct rgw_cls_tag_timeout_op
 {
-  uint64_t tag_timeout;
-
-  rgw_cls_tag_timeout_op() : tag_timeout(0) {}
+  uint64_t tag_timeout = 0;
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);
@@ -32,11 +30,11 @@ struct rgw_cls_obj_prepare_op
   cls_rgw_obj_key key;
   std::string tag;
   std::string locator;
-  bool log_op;
-  uint16_t bilog_flags;
-  rgw_zone_set zones_trace;
+  bool log_op{false}; // i'm useless, but i'm here for compatibility
+  uint16_t bilog_flags{0}; // i'm useless, but i'm here for compatibility
+  rgw_zone_set zones_trace; // i'm useless, but i'm here for compatibility
 
-  rgw_cls_obj_prepare_op() : op(CLS_RGW_OP_UNKNOWN), log_op(false), bilog_flags(0) {}
+  rgw_cls_obj_prepare_op() : op(CLS_RGW_OP_UNKNOWN) {}
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(7, 5, bl);

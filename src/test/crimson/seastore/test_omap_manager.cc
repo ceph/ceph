@@ -273,7 +273,8 @@ struct omap_manager_test_t :
     omap_root_t omap_root = with_trans_intr(
       *t,
       [this](auto &t) {
-	return omap_manager->initialize_omap(t, L_ADDR_MIN);
+	return omap_manager->initialize_omap(t, L_ADDR_MIN,
+	  omap_type_t::OMAP);
       }).unsafe_get();
     submit_transaction(std::move(t));
     return omap_root;

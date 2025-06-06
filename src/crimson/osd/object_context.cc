@@ -8,6 +8,8 @@
 #include "common/Formatter.h"
 #include "crimson/common/config_proxy.h"
 
+using namespace std::string_literals;
+
 namespace {
   seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_osd);
@@ -28,13 +30,9 @@ ObjectContextRegistry::~ObjectContextRegistry()
   obc_lru.set_target_size(0UL);
 }
 
-const char** ObjectContextRegistry::get_tracked_conf_keys() const
+std::vector<std::string> ObjectContextRegistry::get_tracked_keys() const noexcept
 {
-  static const char* KEYS[] = {
-    "crimson_osd_obc_lru_size",
-    nullptr
-  };
-  return KEYS;
+  return {"crimson_osd_obc_lru_size"s};
 }
 
 void ObjectContextRegistry::handle_conf_change(

@@ -10,6 +10,8 @@
 #include "cls/queue/cls_queue_src.h"
 #include "objclass/objclass.h"
 
+#include <numeric> // for std::accumulate()
+
 CLS_VER(1,0)
 CLS_NAME(2pc_queue)
 

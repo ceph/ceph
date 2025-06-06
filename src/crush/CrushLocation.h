@@ -7,6 +7,8 @@
 #include <iosfwd>
 #include <map>
 #include <string>
+
+#include <fmt/core.h> // for FMT_VERSION
 #if FMT_VERSION >= 90000
 #include <fmt/ostream.h>
 #endif

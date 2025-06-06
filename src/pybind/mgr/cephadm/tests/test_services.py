@@ -44,11 +44,11 @@ from orchestrator._interface import DaemonDescription
 
 from typing import Dict, List
 
-cephadm_root_ca = """-----BEGIN CERTIFICATE-----\\nMIIE7DCCAtSgAwIBAgIUE8b2zZ64geu2ns3Zfn3/4L+Cf6MwDQYJKoZIhvcNAQEL\\nBQAwFzEVMBMGA1UEAwwMY2VwaGFkbS1yb290MB4XDTI0MDYyNjE0NDA1M1oXDTM0\\nMDYyNzE0NDA1M1owFzEVMBMGA1UEAwwMY2VwaGFkbS1yb290MIICIjANBgkqhkiG\\n9w0BAQEFAAOCAg8AMIICCgKCAgEAsZRJsdtTr9GLG1lWFql5SGc46ldFanNJd1Gl\\nqXq5vgZVKRDTmNgAb/XFuNEEmbDAXYIRZolZeYKMHfn0pouPRSel0OsC6/02ZUOW\\nIuN89Wgo3IYleCFpkVIumD8URP3hwdu85plRxYZTtlruBaTRH38lssyCqxaOdEt7\\nAUhvYhcMPJThB17eOSQ73mb8JEC83vB47fosI7IhZuvXvRSuZwUW30rJanWNhyZq\\neS2B8qw2RSO0+77H6gA4ftBnitfsE1Y8/F9Z/f92JOZuSMQXUB07msznPbRJia3f\\nueO8gOc32vxd1A1/Qzp14uX34yEGY9ko2lW226cZO29IVUtXOX+LueQttwtdlpz8\\ne6Npm09pXhXAHxV/OW3M28MdXmobIqT/m9MfkeAErt5guUeC5y8doz6/3VQRjFEn\\nRpN0WkblgnNAQ3DONPc+Qd9Fi/wZV2X7bXoYpNdoWDsEOiE/eLmhG1A2GqU/mneP\\nzQ6u79nbdwTYpwqHpa+PvusXeLfKauzI8lLUJotdXy9EK8iHUofibB61OljYye6B\\nG3b8C4QfGsw8cDb4APZd/6AZYyMx/V3cGZ+GcOV7WvsC8k7yx5Uqasm/kiGQ3EZo\\nuNenNEYoGYrjb8D/8QzqNUTwlEh27/ps80tO7l2GGTvWVZL0PRZbmLDvO77amtOf\\nOiRXMoUCAwEAAaMwMC4wGwYDVR0RBBQwEocQAAAAAAAAAAAAAAAAAAAAATAPBgNV\\nHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4ICAQAxwzX5AhYEWhTV4VUwUj5+\\nqPdl4Q2tIxRokqyE+cDxoSd+6JfGUefUbNyBxDt0HaBq8obDqqrbcytxnn7mpnDu\\nhtiauY+I4Amt7hqFOiFA4cCLi2mfok6g2vL53tvhd9IrsfflAU2wy7hL76Ejm5El\\nA+nXlkJwps01Whl9pBkUvIbOn3pXX50LT4hb5zN0PSu957rjd2xb4HdfuySm6nW4\\n4GxtVWfmGA6zbC4XMEwvkuhZ7kD2qjkAguGDF01uMglkrkCJT3OROlNBuSTSBGqt\\ntntp5VytHvb7KTF7GttM3ha8/EU2KYaHM6WImQQTrOfiImAktOk4B3lzUZX3HYIx\\n+sByO4P4dCvAoGz1nlWYB2AvCOGbKf0Tgrh4t4jkiF8FHTXGdfvWmjgi1pddCNAy\\nn65WOCmVmLZPERAHOk1oBwqyReSvgoCFo8FxbZcNxJdlhM0Z6hzKggm3O3Dl88Xl\\n5euqJjh2STkBW8Xuowkg1TOs5XyWvKoDFAUzyzeLOL8YSG+gXV22gPTUaPSVAqdb\\nwd0Fx2kjConuC5bgTzQHs8XWA930U3XWZraj21Vaa8UxlBLH4fUro8H5lMSYlZNE\\nJHRNW8BkznAClaFSDG3dybLsrzrBFAu/Qb5zVkT1xyq0YkepGB7leXwq6vjWA5Pw\\nmZbKSphWfh0qipoqxqhfkw==\\n-----END CERTIFICATE-----\\n"""
+cephadm_root_ca = """-----BEGIN CERTIFICATE-----\nMIIE7DCCAtSgAwIBAgIUE8b2zZ64geu2ns3Zfn3/4L+Cf6MwDQYJKoZIhvcNAQEL\nBQAwFzEVMBMGA1UEAwwMY2VwaGFkbS1yb290MB4XDTI0MDYyNjE0NDA1M1oXDTM0\nMDYyNzE0NDA1M1owFzEVMBMGA1UEAwwMY2VwaGFkbS1yb290MIICIjANBgkqhkiG\n9w0BAQEFAAOCAg8AMIICCgKCAgEAsZRJsdtTr9GLG1lWFql5SGc46ldFanNJd1Gl\nqXq5vgZVKRDTmNgAb/XFuNEEmbDAXYIRZolZeYKMHfn0pouPRSel0OsC6/02ZUOW\nIuN89Wgo3IYleCFpkVIumD8URP3hwdu85plRxYZTtlruBaTRH38lssyCqxaOdEt7\nAUhvYhcMPJThB17eOSQ73mb8JEC83vB47fosI7IhZuvXvRSuZwUW30rJanWNhyZq\neS2B8qw2RSO0+77H6gA4ftBnitfsE1Y8/F9Z/f92JOZuSMQXUB07msznPbRJia3f\nueO8gOc32vxd1A1/Qzp14uX34yEGY9ko2lW226cZO29IVUtXOX+LueQttwtdlpz8\ne6Npm09pXhXAHxV/OW3M28MdXmobIqT/m9MfkeAErt5guUeC5y8doz6/3VQRjFEn\nRpN0WkblgnNAQ3DONPc+Qd9Fi/wZV2X7bXoYpNdoWDsEOiE/eLmhG1A2GqU/mneP\nzQ6u79nbdwTYpwqHpa+PvusXeLfKauzI8lLUJotdXy9EK8iHUofibB61OljYye6B\nG3b8C4QfGsw8cDb4APZd/6AZYyMx/V3cGZ+GcOV7WvsC8k7yx5Uqasm/kiGQ3EZo\nuNenNEYoGYrjb8D/8QzqNUTwlEh27/ps80tO7l2GGTvWVZL0PRZbmLDvO77amtOf\nOiRXMoUCAwEAAaMwMC4wGwYDVR0RBBQwEocQAAAAAAAAAAAAAAAAAAAAATAPBgNV\nHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4ICAQAxwzX5AhYEWhTV4VUwUj5+\nqPdl4Q2tIxRokqyE+cDxoSd+6JfGUefUbNyBxDt0HaBq8obDqqrbcytxnn7mpnDu\nhtiauY+I4Amt7hqFOiFA4cCLi2mfok6g2vL53tvhd9IrsfflAU2wy7hL76Ejm5El\nA+nXlkJwps01Whl9pBkUvIbOn3pXX50LT4hb5zN0PSu957rjd2xb4HdfuySm6nW4\n4GxtVWfmGA6zbC4XMEwvkuhZ7kD2qjkAguGDF01uMglkrkCJT3OROlNBuSTSBGqt\ntntp5VytHvb7KTF7GttM3ha8/EU2KYaHM6WImQQTrOfiImAktOk4B3lzUZX3HYIx\n+sByO4P4dCvAoGz1nlWYB2AvCOGbKf0Tgrh4t4jkiF8FHTXGdfvWmjgi1pddCNAy\nn65WOCmVmLZPERAHOk1oBwqyReSvgoCFo8FxbZcNxJdlhM0Z6hzKggm3O3Dl88Xl\n5euqJjh2STkBW8Xuowkg1TOs5XyWvKoDFAUzyzeLOL8YSG+gXV22gPTUaPSVAqdb\nwd0Fx2kjConuC5bgTzQHs8XWA930U3XWZraj21Vaa8UxlBLH4fUro8H5lMSYlZNE\nJHRNW8BkznAClaFSDG3dybLsrzrBFAu/Qb5zVkT1xyq0YkepGB7leXwq6vjWA5Pw\nmZbKSphWfh0qipoqxqhfkw==\n-----END CERTIFICATE-----\n"""
 
-ceph_generated_cert = """-----BEGIN CERTIFICATE-----\\nMIICxjCCAa4CEQDIZSujNBlKaLJzmvntjukjMA0GCSqGSIb3DQEBDQUAMCExDTAL\\nBgNVBAoMBENlcGgxEDAOBgNVBAMMB2NlcGhhZG0wHhcNMjIwNzEzMTE0NzA3WhcN\\nMzIwNzEwMTE0NzA3WjAhMQ0wCwYDVQQKDARDZXBoMRAwDgYDVQQDDAdjZXBoYWRt\\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyyMe4DMA+MeYK7BHZMHB\\nq7zjliEOcNgxomjU8qbf5USF7Mqrf6+/87XWqj4pCyAW8x0WXEr6A56a+cmBVmt+\\nqtWDzl020aoId6lL5EgLLn6/kMDCCJLq++Lg9cEofMSvcZh+lY2f+1p+C+00xent\\nrLXvXGOilAZWaQfojT2BpRnNWWIFbpFwlcKrlg2G0cFjV5c1m6a0wpsQ9JHOieq0\\nSvwCixajwq3CwAYuuiU1wjI4oJO4Io1+g8yB3nH2Mo/25SApCxMXuXh4kHLQr/T4\\n4hqisvG4uJYgKMcSIrWj5o25mclByGi1UI/kZkCUES94i7Z/3ihx4Bad0AMs/9tw\\nFwIDAQABMA0GCSqGSIb3DQEBDQUAA4IBAQAf+pwz7Gd7mDwU2LY0TQXsK6/8KGzh\\nHuX+ErOb8h5cOAbvCnHjyJFWf6gCITG98k9nxU9NToG0WYuNm/max1y/54f0dtxZ\\npUo6KSNl3w6iYCfGOeUIj8isi06xMmeTgMNzv8DYhDt+P2igN6LenqWTVztogkiV\\nxQ5ZJFFLEw4sN0CXnrZX3t5ruakxLXLTLKeE0I91YJvjClSBGkVJq26wOKQNHMhx\\npWxeydQ5EgPZY+Aviz5Dnxe8aB7oSSovpXByzxURSabOuCK21awW5WJCGNpmqhWK\\nZzACBDEstccj57c4OGV0eayHJRsluVr2e9NHRINZA3qdB37e6gsI1xHo\\n-----END CERTIFICATE-----\\n"""
+ceph_generated_cert = """-----BEGIN CERTIFICATE-----\nMIICxjCCAa4CEQDIZSujNBlKaLJzmvntjukjMA0GCSqGSIb3DQEBDQUAMCExDTAL\nBgNVBAoMBENlcGgxEDAOBgNVBAMMB2NlcGhhZG0wHhcNMjIwNzEzMTE0NzA3WhcN\nMzIwNzEwMTE0NzA3WjAhMQ0wCwYDVQQKDARDZXBoMRAwDgYDVQQDDAdjZXBoYWRt\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyyMe4DMA+MeYK7BHZMHB\nq7zjliEOcNgxomjU8qbf5USF7Mqrf6+/87XWqj4pCyAW8x0WXEr6A56a+cmBVmt+\nqtWDzl020aoId6lL5EgLLn6/kMDCCJLq++Lg9cEofMSvcZh+lY2f+1p+C+00xent\nrLXvXGOilAZWaQfojT2BpRnNWWIFbpFwlcKrlg2G0cFjV5c1m6a0wpsQ9JHOieq0\nSvwCixajwq3CwAYuuiU1wjI4oJO4Io1+g8yB3nH2Mo/25SApCxMXuXh4kHLQr/T4\n4hqisvG4uJYgKMcSIrWj5o25mclByGi1UI/kZkCUES94i7Z/3ihx4Bad0AMs/9tw\nFwIDAQABMA0GCSqGSIb3DQEBDQUAA4IBAQAf+pwz7Gd7mDwU2LY0TQXsK6/8KGzh\nHuX+ErOb8h5cOAbvCnHjyJFWf6gCITG98k9nxU9NToG0WYuNm/max1y/54f0dtxZ\npUo6KSNl3w6iYCfGOeUIj8isi06xMmeTgMNzv8DYhDt+P2igN6LenqWTVztogkiV\nxQ5ZJFFLEw4sN0CXnrZX3t5ruakxLXLTLKeE0I91YJvjClSBGkVJq26wOKQNHMhx\npWxeydQ5EgPZY+Aviz5Dnxe8aB7oSSovpXByzxURSabOuCK21awW5WJCGNpmqhWK\nZzACBDEstccj57c4OGV0eayHJRsluVr2e9NHRINZA3qdB37e6gsI1xHo\n-----END CERTIFICATE-----\n"""
 
-ceph_generated_key = """-----BEGIN PRIVATE KEY-----\\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDLIx7gMwD4x5gr\\nsEdkwcGrvOOWIQ5w2DGiaNTypt/lRIXsyqt/r7/ztdaqPikLIBbzHRZcSvoDnpr5\\nyYFWa36q1YPOXTbRqgh3qUvkSAsufr+QwMIIkur74uD1wSh8xK9xmH6VjZ/7Wn4L\\n7TTF6e2ste9cY6KUBlZpB+iNPYGlGc1ZYgVukXCVwquWDYbRwWNXlzWbprTCmxD0\\nkc6J6rRK/AKLFqPCrcLABi66JTXCMjigk7gijX6DzIHecfYyj/blICkLExe5eHiQ\\nctCv9PjiGqKy8bi4liAoxxIitaPmjbmZyUHIaLVQj+RmQJQRL3iLtn/eKHHgFp3Q\\nAyz/23AXAgMBAAECggEAVoTB3Mm8azlPlaQB9GcV3tiXslSn+uYJ1duCf0sV52dV\\nBzKW8s5fGiTjpiTNhGCJhchowqxoaew+o47wmGc2TvqbpeRLuecKrjScD0GkCYyQ\\neM2wlshEbz4FhIZdgS6gbuh9WaM1dW/oaZoBNR5aTYo7xYTmNNeyLA/jO2zr7+4W\\n5yES1lMSBXpKk7bDGKYY4bsX2b5RLr2Grh2u2bp7hoLABCEvuu8tSQdWXLEXWpXo\\njwmV3hc6tabypIa0mj2Dmn2Dmt1ppSO0AZWG/WAizN3f4Z0r/u9HnbVrVmh0IEDw\\n3uf2LP5o3msG9qKCbzv3lMgt9mMr70HOKnJ8ohMSKQKBgQDLkNb+0nr152HU9AeJ\\nvdz8BeMxcwxCG77iwZphZ1HprmYKvvXgedqWtS6FRU+nV6UuQoPUbQxJBQzrN1Qv\\nwKSlOAPCrTJgNgF/RbfxZTrIgCPuK2KM8I89VZv92TSGi362oQA4MazXC8RAWjoJ\\nSu1/PHzK3aXOfVNSLrOWvIYeZQKBgQD/dgT6RUXKg0UhmXj7ExevV+c7oOJTDlMl\\nvLngrmbjRgPO9VxLnZQGdyaBJeRngU/UXfNgajT/MU8B5fSKInnTMawv/tW7634B\\nw3v6n5kNIMIjJmENRsXBVMllDTkT9S7ApV+VoGnXRccbTiDapBThSGd0wri/CuwK\\nNWK1YFOeywKBgEDyI/XG114PBUJ43NLQVWm+wx5qszWAPqV/2S5MVXD1qC6zgCSv\\nG9NLWN1CIMimCNg6dm7Wn73IM7fzvhNCJgVkWqbItTLG6DFf3/DPODLx1wTMqLOI\\nqFqMLqmNm9l1Nec0dKp5BsjRQzq4zp1aX21hsfrTPmwjxeqJZdioqy2VAoGAXR5X\\nCCdSHlSlUW8RE2xNOOQw7KJjfWT+WAYoN0c7R+MQplL31rRU7dpm1bLLRBN11vJ8\\nMYvlT5RYuVdqQSP6BkrX+hLJNBvOLbRlL+EXOBrVyVxHCkDe+u7+DnC4epbn+N8P\\nLYpwqkDMKB7diPVAizIKTBxinXjMu5fkKDs5n+sCgYBbZheYKk5M0sIxiDfZuXGB\\nkf4mJdEkTI1KUGRdCwO/O7hXbroGoUVJTwqBLi1tKqLLarwCITje2T200BYOzj82\\nqwRkCXGtXPKnxYEEUOiFx9OeDrzsZV00cxsEnX0Zdj+PucQ/J3Cvd0dWUspJfLHJ\\n39gnaegswnz9KMQAvzKFdg==\\n-----END PRIVATE KEY-----\\n"""
+ceph_generated_key = """-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDLIx7gMwD4x5gr\nsEdkwcGrvOOWIQ5w2DGiaNTypt/lRIXsyqt/r7/ztdaqPikLIBbzHRZcSvoDnpr5\nyYFWa36q1YPOXTbRqgh3qUvkSAsufr+QwMIIkur74uD1wSh8xK9xmH6VjZ/7Wn4L\n7TTF6e2ste9cY6KUBlZpB+iNPYGlGc1ZYgVukXCVwquWDYbRwWNXlzWbprTCmxD0\nkc6J6rRK/AKLFqPCrcLABi66JTXCMjigk7gijX6DzIHecfYyj/blICkLExe5eHiQ\nctCv9PjiGqKy8bi4liAoxxIitaPmjbmZyUHIaLVQj+RmQJQRL3iLtn/eKHHgFp3Q\nAyz/23AXAgMBAAECggEAVoTB3Mm8azlPlaQB9GcV3tiXslSn+uYJ1duCf0sV52dV\nBzKW8s5fGiTjpiTNhGCJhchowqxoaew+o47wmGc2TvqbpeRLuecKrjScD0GkCYyQ\neM2wlshEbz4FhIZdgS6gbuh9WaM1dW/oaZoBNR5aTYo7xYTmNNeyLA/jO2zr7+4W\n5yES1lMSBXpKk7bDGKYY4bsX2b5RLr2Grh2u2bp7hoLABCEvuu8tSQdWXLEXWpXo\njwmV3hc6tabypIa0mj2Dmn2Dmt1ppSO0AZWG/WAizN3f4Z0r/u9HnbVrVmh0IEDw\n3uf2LP5o3msG9qKCbzv3lMgt9mMr70HOKnJ8ohMSKQKBgQDLkNb+0nr152HU9AeJ\nvdz8BeMxcwxCG77iwZphZ1HprmYKvvXgedqWtS6FRU+nV6UuQoPUbQxJBQzrN1Qv\nwKSlOAPCrTJgNgF/RbfxZTrIgCPuK2KM8I89VZv92TSGi362oQA4MazXC8RAWjoJ\nSu1/PHzK3aXOfVNSLrOWvIYeZQKBgQD/dgT6RUXKg0UhmXj7ExevV+c7oOJTDlMl\nvLngrmbjRgPO9VxLnZQGdyaBJeRngU/UXfNgajT/MU8B5fSKInnTMawv/tW7634B\nw3v6n5kNIMIjJmENRsXBVMllDTkT9S7ApV+VoGnXRccbTiDapBThSGd0wri/CuwK\nNWK1YFOeywKBgEDyI/XG114PBUJ43NLQVWm+wx5qszWAPqV/2S5MVXD1qC6zgCSv\nG9NLWN1CIMimCNg6dm7Wn73IM7fzvhNCJgVkWqbItTLG6DFf3/DPODLx1wTMqLOI\nqFqMLqmNm9l1Nec0dKp5BsjRQzq4zp1aX21hsfrTPmwjxeqJZdioqy2VAoGAXR5X\nCCdSHlSlUW8RE2xNOOQw7KJjfWT+WAYoN0c7R+MQplL31rRU7dpm1bLLRBN11vJ8\nMYvlT5RYuVdqQSP6BkrX+hLJNBvOLbRlL+EXOBrVyVxHCkDe+u7+DnC4epbn+N8P\nLYpwqkDMKB7diPVAizIKTBxinXjMu5fkKDs5n+sCgYBbZheYKk5M0sIxiDfZuXGB\nkf4mJdEkTI1KUGRdCwO/O7hXbroGoUVJTwqBLi1tKqLLarwCITje2T200BYOzj82\nqwRkCXGtXPKnxYEEUOiFx9OeDrzsZV00cxsEnX0Zdj+PucQ/J3Cvd0dWUspJfLHJ\n39gnaegswnz9KMQAvzKFdg==\n-----END PRIVATE KEY-----\n"""
 
 
 class FakeInventory:
@@ -339,11 +339,11 @@ class TestNVMEOFService:
     @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
     def test_nvmeof_config(self, _get_name, _run_cephadm, cephadm_module: CephadmOrchestrator):
 
-        nvmeof_daemon_id = 'testpool.test.qwert'
         pool = 'testpool'
+        group = 'mygroup'
+        nvmeof_daemon_id = f'{pool}.{group}.test.qwert'
         tgt_cmd_extra_args = '--cpumask=0xFF --msg-mempool-size=524288'
         default_port = 5500
-        group = 'mygroup'
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         _get_name.return_value = nvmeof_daemon_id
 
@@ -368,6 +368,12 @@ prometheus_stats_interval = 10
 verify_nqns = True
 verify_keys = True
 verify_listener_ip = True
+# This is a development flag, do not change it
+abort_on_errors = True
+# This is a development flag, do not change it
+omap_file_ignore_unlock_errors = False
+# This is a development flag, do not change it
+omap_file_lock_on_read = True
 omap_file_lock_duration = 20
 omap_file_lock_retries = 30
 omap_file_lock_retry_sleep_interval = 1.0
@@ -380,7 +386,7 @@ max_hosts_per_namespace = 8
 max_namespaces_with_netmask = 1000
 max_subsystems = 128
 max_hosts = 2048
-max_namespaces = 1024
+max_namespaces = 2048
 max_namespaces_per_subsystem = 256
 max_hosts_per_subsystem = 128
 
@@ -397,6 +403,8 @@ log_directory = /var/log/ceph/
 [discovery]
 addr = 192.168.100.100
 port = 8009
+# This is a development flag, do not change it
+abort_on_errors = True
 
 [ceph]
 pool = {pool}
@@ -415,18 +423,19 @@ tgt_path = /usr/local/bin/nvmf_tgt
 rpc_socket_dir = /var/tmp/
 rpc_socket_name = spdk.sock
 timeout = 60.0
-bdevs_per_cluster = 32
+cluster_connections = 32
 protocol_log_level = WARNING
 conn_retries = 10
 transports = tcp
 transport_tcp_options = {{"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7}}
 tgt_cmd_extra_args = {tgt_cmd_extra_args}
+qos_timeslice_in_usecs = 0
 
 [monitor]
 timeout = 1.0\n"""
 
         with with_host(cephadm_module, 'test'):
-            with with_service(cephadm_module, NvmeofServiceSpec(service_id=pool,
+            with with_service(cephadm_module, NvmeofServiceSpec(service_id=f'{pool}.{group}',
                                                                 tgt_cmd_extra_args=tgt_cmd_extra_args,
                                                                 group=group,
                                                                 pool=pool)):
@@ -437,14 +446,14 @@ timeout = 1.0\n"""
                     [],
                     stdin=json.dumps({
                         "fsid": "fsid",
-                        "name": "nvmeof.testpool.test.qwert",
+                        "name": "nvmeof.testpool.mygroup.test.qwert",
                         "image": "",
                         "deploy_arguments": [],
                         "params": {
                             "tcp_ports": [5500, 4420, 8009, 10008]
                         },
                         "meta": {
-                            "service_name": "nvmeof.testpool",
+                            "service_name": "nvmeof.testpool.mygroup",
                             "ports": [5500, 4420, 8009, 10008],
                             "ip": None,
                             "deployed_by": [],
@@ -455,7 +464,7 @@ timeout = 1.0\n"""
                         },
                         "config_blobs": {
                             "config": "",
-                            "keyring": "[client.nvmeof.testpool.test.qwert]\nkey = None\n",
+                            "keyring": "[client.nvmeof.testpool.mygroup.test.qwert]\nkey = None\n",
                             "files": {
                                 "ceph-nvmeof.conf": nvmeof_gateway_conf
                             }
@@ -464,6 +473,70 @@ timeout = 1.0\n"""
                     error_ok=True,
                     use_current_daemon_image=False,
                 )
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_validate_no_group_duplicate_on_apply(self, cephadm_module: CephadmOrchestrator):
+        nvmeof_spec_group1 = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            group='testgroup',
+            pool='testpool'
+        )
+        nvmeof_spec_also_group1 = NvmeofServiceSpec(
+            service_id='testpool2.testgroup',
+            group='testgroup',
+            pool='testpool2'
+        )
+        with with_host(cephadm_module, 'test'):
+            out = cephadm_module._apply_service_spec(nvmeof_spec_group1)
+            assert out == 'Scheduled nvmeof.testpool.testgroup update...'
+            nvmeof_specs = cephadm_module.spec_store.get_by_service_type('nvmeof')
+            assert len(nvmeof_specs) == 1
+            assert nvmeof_specs[0].spec.service_name() == 'nvmeof.testpool.testgroup'
+            with pytest.raises(
+                OrchestratorError,
+                match='Cannot create nvmeof service with group testgroup. That group is already '
+                      'being used by the service nvmeof.testpool.testgroup'
+            ):
+                cephadm_module._apply_service_spec(nvmeof_spec_also_group1)
+            assert len(cephadm_module.spec_store.get_by_service_type('nvmeof')) == 1
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_validate_service_id_matches_group_on_apply(self, cephadm_module: CephadmOrchestrator):
+        matching_nvmeof_spec_group_service_id = NvmeofServiceSpec(
+            service_id='pool1.right_group',
+            group='right_group',
+            pool='pool1'
+        )
+        mismatch_nvmeof_spec_group_service_id = NvmeofServiceSpec(
+            service_id='pool2.wrong_group',
+            group='right_group',
+            pool='pool2'
+        )
+        matching_nvmeof_spec_group_service_id_with_dot = NvmeofServiceSpec(
+            service_id='pool3.right.group',
+            group='right.group',
+            pool='pool3'
+        )
+        mismatch_nvmeof_spec_group_service_id_with_dot = NvmeofServiceSpec(
+            service_id='pool4.wrong.group',
+            group='right.group',
+            pool='pool4'
+        )
+        with with_host(cephadm_module, 'test'):
+            cephadm_module._apply_service_spec(matching_nvmeof_spec_group_service_id)
+            with pytest.raises(
+                OrchestratorError,
+                match='The \'nvmeof\' service id/name must end with \'.<nvmeof-group-name>\'. Found '
+                      'group name \'right_group\' and service id \'pool2.wrong_group\''
+            ):
+                cephadm_module._apply_service_spec(mismatch_nvmeof_spec_group_service_id)
+            cephadm_module._apply_service_spec(matching_nvmeof_spec_group_service_id_with_dot)
+            with pytest.raises(
+                OrchestratorError,
+                match='The \'nvmeof\' service id/name must end with \'.<nvmeof-group-name>\'. Found '
+                      'group name \'right.group\' and service id \'pool4.wrong.group\''
+            ):
+                cephadm_module._apply_service_spec(mismatch_nvmeof_spec_group_service_id_with_dot)
 
 
 class TestMonitoring:
@@ -1467,10 +1540,19 @@ class TestMonitoring:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1::4')
     @patch("cephadm.module.CephadmOrchestrator.get_fqdn", lambda a, b: 'host_fqdn')
-    @patch("cephadm.services.monitoring.verify_tls", lambda *_: None)
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     def test_grafana_config_with_mgmt_gw_and_ouath2_proxy(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
+
+        def inline_certificate(multi_line_cert):
+            """
+            Converts a multi-line certificate into a one-line string with escaped newlines.
+            """
+            return '\\n'.join([line.strip() for line in multi_line_cert.splitlines()])
+
+        oneline_cephadm_root_ca = inline_certificate(cephadm_root_ca)
+        oneline_ceph_generated_cert = inline_certificate(ceph_generated_cert)
+        oneline_ceph_generated_key = inline_certificate(ceph_generated_key)
 
         y = dedent(f"""
              # This file is generated by cephadm.
@@ -1497,9 +1579,9 @@ class TestMonitoring:
                     tlsSkipVerify: false
                  secureJsonData:
                    basicAuthPassword: admin
-                   tlsCACert: "{cephadm_root_ca}"
-                   tlsClientCert: "{ceph_generated_cert}"
-                   tlsClientKey: "{ceph_generated_key}"
+                   tlsCACert: "{oneline_cephadm_root_ca}"
+                   tlsClientCert: "{oneline_ceph_generated_cert}"
+                   tlsClientKey: "{oneline_ceph_generated_key}"
 
                - name: 'Loki'
                  type: 'loki'
@@ -1514,12 +1596,12 @@ class TestMonitoring:
                                       client_secret='my_client_secret',
                                       oidc_issuer_url='http://192.168.10.10:8888/dex',
                                       cookie_secret='kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ=',
-                                      ssl_certificate=ceph_generated_cert,
-                                      ssl_certificate_key=ceph_generated_key)
+                                      ssl_cert=ceph_generated_cert,
+                                      ssl_key=ceph_generated_key)
 
         with with_host(cephadm_module, "test"):
-            cephadm_module.cert_key_store.save_cert('grafana_cert', ceph_generated_cert, host='test')
-            cephadm_module.cert_key_store.save_key('grafana_key', ceph_generated_key, host='test')
+            cephadm_module.cert_mgr.save_cert('grafana_cert', ceph_generated_cert, host='test')
+            cephadm_module.cert_mgr.save_key('grafana_key', ceph_generated_key, host='test')
             with with_service(cephadm_module, PrometheusSpec("prometheus")) as _, \
                  with_service(cephadm_module, MgmtGatewaySpec("mgmt-gateway")) as _, \
                  with_service(cephadm_module, oauth2_spec) as _, \
@@ -1618,10 +1700,19 @@ class TestMonitoring:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1::4')
     @patch("cephadm.module.CephadmOrchestrator.get_fqdn", lambda a, b: 'host_fqdn')
-    @patch("cephadm.services.monitoring.verify_tls", lambda *_: None)
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     def test_grafana_config_with_mgmt_gw(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
+
+        def inline_certificate(multi_line_cert):
+            """
+            Converts a multi-line certificate into a one-line string with escaped newlines.
+            """
+            return '\\n'.join([line.strip() for line in multi_line_cert.splitlines()])
+
+        oneline_cephadm_root_ca = inline_certificate(cephadm_root_ca)
+        oneline_ceph_generated_cert = inline_certificate(ceph_generated_cert)
+        oneline_ceph_generated_key = inline_certificate(ceph_generated_key)
 
         y = dedent(f"""
              # This file is generated by cephadm.
@@ -1648,9 +1739,9 @@ class TestMonitoring:
                     tlsSkipVerify: false
                  secureJsonData:
                    basicAuthPassword: admin
-                   tlsCACert: "{cephadm_root_ca}"
-                   tlsClientCert: "{ceph_generated_cert}"
-                   tlsClientKey: "{ceph_generated_key}"
+                   tlsCACert: "{oneline_cephadm_root_ca}"
+                   tlsClientCert: "{oneline_ceph_generated_cert}"
+                   tlsClientKey: "{oneline_ceph_generated_key}"
 
                - name: 'Loki'
                  type: 'loki'
@@ -1661,8 +1752,8 @@ class TestMonitoring:
                  editable: false""").lstrip()
 
         with with_host(cephadm_module, "test"):
-            cephadm_module.cert_key_store.save_cert('grafana_cert', ceph_generated_cert, host='test')
-            cephadm_module.cert_key_store.save_key('grafana_key', ceph_generated_key, host='test')
+            cephadm_module.cert_mgr.save_cert('grafana_cert', ceph_generated_cert, host='test')
+            cephadm_module.cert_mgr.save_key('grafana_key', ceph_generated_key, host='test')
             with with_service(
                 cephadm_module, PrometheusSpec("prometheus")
             ) as _, with_service(cephadm_module, MgmtGatewaySpec("mgmt-gateway")) as _, \
@@ -1749,13 +1840,12 @@ class TestMonitoring:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1::4')
     @patch("cephadm.module.CephadmOrchestrator.get_fqdn", lambda a, b: 'host_fqdn')
-    @patch("cephadm.services.monitoring.verify_tls", lambda *_: None)
     def test_grafana_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
 
         with with_host(cephadm_module, "test"):
-            cephadm_module.cert_key_store.save_cert('grafana_cert', ceph_generated_cert, host='test')
-            cephadm_module.cert_key_store.save_key('grafana_key', ceph_generated_key, host='test')
+            cephadm_module.cert_mgr.save_cert('grafana_cert', ceph_generated_cert, host='test')
+            cephadm_module.cert_mgr.save_key('grafana_key', ceph_generated_key, host='test')
             with with_service(
                 cephadm_module, PrometheusSpec("prometheus")
             ) as _, with_service(cephadm_module, ServiceSpec("mgr")) as _, with_service(
@@ -2447,7 +2537,11 @@ class TestIngressService:
         haproxy_generated_conf = service_registry.get_service('ingress').haproxy_generate_config(
             CephadmDaemonDeploySpec(host='host1', daemon_id='ingress', service_name=ispec.service_name()))
 
-        assert haproxy_generated_conf[0] == haproxy_expected_conf
+        haproxy_generated_conf = haproxy_generated_conf[0]
+        gen_config_lines = [line.rstrip() for line in haproxy_generated_conf['files']['haproxy.cfg'].splitlines()]
+        exp_config_line = [line.rstrip() for line in haproxy_expected_conf['files']['haproxy.cfg'].splitlines()]
+
+        assert gen_config_lines == exp_config_line
 
         # swapping order now, should still pick out the one with the higher rank_generation
         # in this case both nfs are rank 0, so it should only take the one with rank_generation 1 a.k.a
@@ -2458,10 +2552,13 @@ class TestIngressService:
         ]
         _get_daemons_by_service.return_value = nfs_daemons
 
-        haproxy_generated_conf = service_registry.get_service('ingress').haproxy_generate_config(
+        haproxy_generated_conf, _ = service_registry.get_service('ingress').haproxy_generate_config(
             CephadmDaemonDeploySpec(host='host1', daemon_id='ingress', service_name=ispec.service_name()))
 
-        assert haproxy_generated_conf[0] == haproxy_expected_conf
+        gen_config_lines = [line.rstrip() for line in haproxy_generated_conf['files']['haproxy.cfg'].splitlines()]
+        exp_config_lines = [line.rstrip() for line in haproxy_expected_conf['files']['haproxy.cfg'].splitlines()]
+
+        assert gen_config_lines == exp_config_lines
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_ingress_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -2591,7 +2688,10 @@ class TestIngressService:
                         }
                 }
 
-                assert haproxy_generated_conf[0] == haproxy_expected_conf
+                gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]
+                exp_config_lines = [line.rstrip() for line in haproxy_expected_conf['files']['haproxy.cfg'].splitlines()]
+
+                assert gen_config_lines == exp_config_lines
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_ingress_config_ssl_rgw(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -2719,7 +2819,9 @@ class TestIngressService:
                         }
                 }
 
-                assert haproxy_generated_conf[0] == haproxy_expected_conf
+                gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]
+                exp_config_lines = [line.rstrip() for line in haproxy_expected_conf['files']['haproxy.cfg'].splitlines()]
+                assert gen_config_lines == exp_config_lines
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_ingress_config_multi_vips(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -2835,7 +2937,7 @@ class TestIngressService:
                                 'http-request use-service prometheus-exporter if { path /metrics }\n    '
                                 'monitor-uri /health\n'
                                 '\nfrontend frontend\n    '
-                                'bind [::]:8089\n    '
+                                'bind [::]:8089 v4v6\n    '
                                 'default_backend backend\n\n'
                                 'backend backend\n    '
                                 'option forwardfor\n    '
@@ -3251,15 +3353,15 @@ class TestIngressService:
             '\n'
             'NFSv4 {\n'
             '        Delegations = false;\n'
-            "        RecoveryBackend = 'rados_cluster';\n"
+            '        RecoveryBackend = "rados_cluster";\n'
             '        Minor_Versions = 1, 2;\n'
-            f'        Server_Scope = {cephadm_module._cluster_fsid}-foo\n'
+            f'        Server_Scope = "{cephadm_module._cluster_fsid}-foo";\n'
             '        IdmapConf = "/etc/ganesha/idmap.conf";\n'
             '}\n'
             '\n'
             'RADOS_KV {\n'
             '        UserId = "nfs.foo.test.0.0";\n'
-            '        nodeid = "nfs.foo.None";\n'
+            '        nodeid = 0;\n'
             '        pool = ".nfs";\n'
             '        namespace = "foo";\n'
             '}\n'
@@ -3353,13 +3455,16 @@ class TestIngressService:
                 service_name=ispec.service_name(),
             ),
         )
-        assert haproxy_generated_conf == haproxy_expected_conf
+        gen_config_lines = [line.rstrip() for line in haproxy_generated_conf['files']['haproxy.cfg'].splitlines()]
+        exp_config_lines = [line.rstrip() for line in haproxy_expected_conf['files']['haproxy.cfg'].splitlines()]
+        assert gen_config_lines == exp_config_lines
 
         nfs_generated_conf, _ = nfs_svc.generate_config(
             CephadmDaemonDeploySpec(
                 host='test',
                 daemon_id='foo.test.0.0',
                 service_name=nfs_service.service_name(),
+                rank=0,
             ),
         )
         assert nfs_generated_conf == nfs_expected_conf
@@ -3557,6 +3662,48 @@ class TestJaeger:
                     )
 
 
+class TestAgent:
+    @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
+    @patch('cephadm.cert_mgr.CertMgr.generate_cert',
+           lambda instance, test, ip: (ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_deploy_cephadm_agent(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        agent_spec = ServiceSpec(service_type="agent", placement=PlacementSpec(count=1))
+        agent_config = {"agent.json": "{\"target_ip\": \"::1\", \"target_port\": 7150, \"refresh_period\": 20, \"listener_port\": 4721, \"host\": \"test\", \"device_enhanced_scan\": \"False\"}", "keyring": "[client.agent.test]\nkey = None\n", "root_cert.pem": f"{cephadm_root_ca}", "listener.crt": f"{ceph_generated_cert}", "listener.key": f"{ceph_generated_key}"}
+
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, agent_spec):
+                _run_cephadm.assert_called_with(
+                    "test",
+                    "agent.test",
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=json.dumps({
+                        "fsid": "fsid",
+                        "name": 'agent.test',
+                        "image": '',
+                        "deploy_arguments": [],
+                        "params": {
+                            'tcp_ports': [4721],
+                        },
+                        "meta": {
+                            'service_name': 'agent',
+                            'ports': [4721],
+                            'ip': None,
+                            'deployed_by': [],
+                            'rank': None,
+                            'rank_generation': None,
+                            'extra_container_args': None,
+                            'extra_entrypoint_args': None,
+                        },
+                        "config_blobs": agent_config,
+                    }),
+                    error_ok=True,
+                    use_current_daemon_image=False,
+                )
+
+
 class TestCustomContainer:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_deploy_custom_container(
@@ -3722,10 +3869,12 @@ class TestSMB:
             'name': 'smb.tango.briskly',
             'image': '',
             'deploy_arguments': [],
-            'params': {},
+            'params': {
+                "tcp_ports": [445, 9922]
+            },
             'meta': {
                 'service_name': 'smb',
-                'ports': [],
+                'ports': [445, 9922],
                 'ip': None,
                 'deployed_by': [],
                 'rank': None,
@@ -3785,10 +3934,12 @@ class TestSMB:
             'name': 'smb.tango.briskly',
             'image': '',
             'deploy_arguments': [],
-            'params': {},
+            'params': {
+                'tcp_ports': [445, 9922]
+            },
             'meta': {
                 'service_name': 'smb',
-                'ports': [],
+                'ports': [445, 9922],
                 'ip': None,
                 'deployed_by': [],
                 'rank': None,
@@ -3862,8 +4013,8 @@ class TestMgmtGateway:
 
         server_port = 5555
         spec = MgmtGatewaySpec(port=server_port,
-                               ssl_certificate=ceph_generated_cert,
-                               ssl_certificate_key=ceph_generated_key)
+                               ssl_cert=ceph_generated_cert,
+                               ssl_key=ceph_generated_key)
 
         expected = {
             "fsid": "fsid",
@@ -3894,7 +4045,7 @@ class TestMgmtGateway:
                                          http {
 
                                              #access_log /dev/stdout;
-                                             error_log /dev/stderr info;
+                                             error_log /dev/stderr warn;
                                              client_header_buffer_size 32K;
                                              large_client_header_buffers 4 32k;
                                              proxy_busy_buffers_size 512k;
@@ -3920,6 +4071,7 @@ class TestMgmtGateway:
                                              }
 
                                              upstream prometheus_servers {
+                                              ip_hash;
                                               server 192.168.100.100:9095;
                                               server 192.168.100.101:9095;
                                              }
@@ -4109,8 +4261,8 @@ class TestMgmtGateway:
 
         server_port = 5555
         spec = MgmtGatewaySpec(port=server_port,
-                               ssl_certificate=ceph_generated_cert,
-                               ssl_certificate_key=ceph_generated_key,
+                               ssl_cert=ceph_generated_cert,
+                               ssl_key=ceph_generated_key,
                                enable_auth=True)
 
         expected = {
@@ -4142,7 +4294,7 @@ class TestMgmtGateway:
                                          http {
 
                                              #access_log /dev/stdout;
-                                             error_log /dev/stderr info;
+                                             error_log /dev/stderr warn;
                                              client_header_buffer_size 32K;
                                              large_client_header_buffers 4 32k;
                                              proxy_busy_buffers_size 512k;
@@ -4172,6 +4324,7 @@ class TestMgmtGateway:
                                              }
 
                                              upstream prometheus_servers {
+                                              ip_hash;
                                               server 192.168.100.100:9095;
                                               server 192.168.100.101:9095;
                                              }
@@ -4458,19 +4611,22 @@ class TestMgmtGateway:
 
         server_port = 5555
         mgmt_gw_spec = MgmtGatewaySpec(port=server_port,
-                                       ssl_certificate=ceph_generated_cert,
-                                       ssl_certificate_key=ceph_generated_key,
+                                       ssl_cert=ceph_generated_cert,
+                                       ssl_key=ceph_generated_key,
                                        enable_auth=True,
                                        virtual_ip=virtual_ip)
 
+        allowed_domain = '192.168.100.1:8080'
         oauth2_spec = OAuth2ProxySpec(provider_display_name='my_idp_provider',
                                       client_id='my_client_id',
                                       client_secret='my_client_secret',
                                       oidc_issuer_url='http://192.168.10.10:8888/dex',
                                       cookie_secret='kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ=',
-                                      ssl_certificate=ceph_generated_cert,
-                                      ssl_certificate_key=ceph_generated_key)
+                                      ssl_cert=ceph_generated_cert,
+                                      ssl_key=ceph_generated_key,
+                                      allowlist_domains=[allowed_domain])
 
+        whitelist_domains = f"{allowed_domain},1::4,ceph-node" if virtual_ip is None else f"{allowed_domain},{virtual_ip},1::4,ceph-node"
         redirect_url = f"https://{virtual_ip if virtual_ip else 'host_fqdn'}:5555/oauth2/callback"
         expected = {
             "fsid": "fsid",
@@ -4524,7 +4680,7 @@ class TestMgmtGateway:
                                          # Secret value for encrypting cookies.
                                          cookie_secret= "kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ="
                                          email_domains= "*"
-                                         whitelist_domains= "1::4,ceph-node\""""),
+                                         whitelist_domains= "{whitelist_domains}\""""),
                     "oauth2-proxy.crt": f"{ceph_generated_cert}",
                     "oauth2-proxy.key": f"{ceph_generated_key}",
                 }

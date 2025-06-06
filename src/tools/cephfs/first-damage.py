@@ -56,7 +56,7 @@ MEMO = None
 REMOVE = False
 POOL = None
 NEXT_SNAP = None
-CONF = os.environ.get('CEPH_CONF')
+CONF = os.environ.get('CEPH_CONF', '/etc/ceph/ceph.conf')
 REPAIR_NOSNAP = None
 
 CEPH_NOSNAP = 0xfffffffffffffffe # int64 -2

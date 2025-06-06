@@ -154,7 +154,7 @@ class SubvolumeV2(SubvolumeV1):
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, qpath)
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, initial_state.value)
 
-    def create(self, size, isolate_nspace, pool, mode, uid, gid, earmark):
+    def create(self, size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, casesensitive):
         subvolume_type = SubvolumeTypes.TYPE_NORMAL
         try:
             initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
@@ -176,7 +176,9 @@ class SubvolumeV2(SubvolumeV1):
                 'data_pool': pool,
                 'pool_namespace': self.namespace if isolate_nspace else None,
                 'quota': size,
-                'earmark': earmark
+                'earmark': earmark,
+                'normalization': normalization,
+                'casesensitive': casesensitive,
             }
             self.set_attrs(subvol_path, attrs)
 
@@ -280,6 +282,7 @@ class SubvolumeV2(SubvolumeV1):
                 SubvolumeOpType.INFO,
                 SubvolumeOpType.SNAP_REMOVE,
                 SubvolumeOpType.SNAP_LIST,
+                SubvolumeOpType.SNAP_GETPATH,
                 SubvolumeOpType.SNAP_INFO,
                 SubvolumeOpType.SNAP_PROTECT,
                 SubvolumeOpType.SNAP_UNPROTECT,

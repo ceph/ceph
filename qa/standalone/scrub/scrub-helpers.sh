@@ -231,8 +231,13 @@ function standard_scrub_cluster() {
 
     local OSDS=${args['osds_num']:-"3"}
     local pg_num=${args['pgs_in_pool']:-"8"}
+
     local poolname="${args['pool_name']:-test}"
     args['pool_name']=$poolname
+
+    local pool_default_size=${args['pool_default_size']:-3}
+    args['pool_default_size']=$pool_default_size
+
     local extra_pars=${args['extras']}
     local debug_msg=${args['msg']:-"dbg"}
 
@@ -240,7 +245,7 @@ function standard_scrub_cluster() {
     local saved_echo_flag=${-//[^x]/}
     set +x
 
-    run_mon $dir a --osd_pool_default_size=3 || return 1
+    run_mon $dir a --osd_pool_default_size=$pool_default_size || return 1
     run_mgr $dir x --mgr_stats_period=1 || return 1
 
     local ceph_osd_args="--osd_deep_scrub_randomize_ratio=0 \
@@ -254,7 +259,7 @@ function standard_scrub_cluster() {
             --osd_scrub_retry_after_noscrub=5 \
             --osd_scrub_retry_pg_state=5 \
             --osd_scrub_retry_delay=3 \
-            --osd_pool_default_size=3 \
+            --osd_pool_default_size=$pool_default_size \
             $extra_pars"
 
     for osd in $(seq 0 $(expr $OSDS - 1))
@@ -262,14 +267,18 @@ function standard_scrub_cluster() {
       run_osd $dir $osd $(echo $ceph_osd_args) || return 1
     done
 
-    create_pool $poolname $pg_num $pg_num
-    wait_for_clean || return 1
+    if [[ "$poolname" != "nopool" ]]; then
+        create_pool $poolname $pg_num $pg_num
+        wait_for_clean || return 1
+    fi
 
     # update the in/out 'args' with the ID of the new pool
     sleep 1
-    name_n_id=`ceph osd dump | awk '/^pool.*'$poolname'/ { gsub(/'"'"'/," ",$3); print $3," ", $2}'`
-    echo "standard_scrub_cluster: $debug_msg: test pool is $name_n_id"
-    args['pool_id']="${name_n_id##* }"
+    if [[ "$poolname" != "nopool" ]]; then
+        name_n_id=`ceph osd dump | awk '/^pool.*'$poolname'/ { gsub(/'"'"'/," ",$3); print $3," ", $2}'`
+        echo "standard_scrub_cluster: $debug_msg: test pool is $name_n_id"
+        args['pool_id']="${name_n_id##* }"
+    fi
     args['osd_args']=$ceph_osd_args
     if [[ -n "$saved_echo_flag" ]]; then set -x; fi
 }
@@ -358,7 +367,6 @@ function count_common_active {
   local pg1=$1
   local pg2=$2
   local -n pg_acting_dict=$3
-  local -n res=$4
 
   local -a a1=(${pg_acting_dict[$pg1]})
   local -a a2=(${pg_acting_dict[$pg2]})
@@ -372,7 +380,7 @@ function count_common_active {
     done
   done
 
-  res=$cnt
+  printf '%d' "$cnt"
 }
 
 
@@ -389,8 +397,7 @@ function find_disjoint_but_primary {
 
   for cand in "${!ac_dict[@]}"; do
     if [[ "$cand" != "$pg" ]]; then
-      local -i common=0
-      count_common_active "$pg" "$cand" ac_dict common
+      local -i common=$(count_common_active "$pg" "$cand" ac_dict)
       if [[ $common -eq 0 || ( $common -eq 1 && "${p_dict[$pg]}" == "${p_dict[$cand]}" )]]; then
         res=$cand
         return

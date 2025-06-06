@@ -5,7 +5,9 @@
 #define _MSG_ASYNC_PROTOCOL_V1_
 
 #include "Protocol.h"
+#include "AsyncConnection.h"
 
+struct AuthSessionHandler;
 class ProtocolV1;
 using CtPtr = Ct<ProtocolV1>*;
 
@@ -234,6 +236,8 @@ public:
   virtual void read_event() override;
   virtual void write_event() override;
   virtual bool is_queued() override;
+
+  virtual void dump(Formatter *f) override;
 
   // Client Protocol
 private:

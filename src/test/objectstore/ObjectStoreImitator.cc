@@ -318,7 +318,7 @@ int ObjectStoreImitator::queue_transactions(CollectionHandle &ch,
 ObjectStoreImitator::CollectionRef
 ObjectStoreImitator::_get_collection(const coll_t &cid) {
   std::shared_lock l(coll_lock);
-  ceph::unordered_map<coll_t, CollectionRef>::iterator cp = coll_map.find(cid);
+  auto cp = coll_map.find(cid);
   if (cp == coll_map.end())
     return CollectionRef();
   return cp->second;
@@ -939,7 +939,7 @@ int ObjectStoreImitator::_split_collection(CollectionRef &c, CollectionRef &d,
 ObjectStore::CollectionHandle
 ObjectStoreImitator::open_collection(const coll_t &cid) {
   std::shared_lock l(coll_lock);
-  ceph::unordered_map<coll_t, CollectionRef>::iterator cp = coll_map.find(cid);
+  auto cp = coll_map.find(cid);
   if (cp == coll_map.end())
     return CollectionRef();
   return cp->second;
@@ -996,9 +996,7 @@ int ObjectStoreImitator::set_collection_opts(CollectionHandle &ch,
 int ObjectStoreImitator::list_collections(std::vector<coll_t> &ls) {
   std::shared_lock l(coll_lock);
   ls.reserve(coll_map.size());
-  for (ceph::unordered_map<coll_t, CollectionRef>::iterator p =
-           coll_map.begin();
-       p != coll_map.end(); ++p)
+  for (auto p = coll_map.begin(); p != coll_map.end(); ++p)
     ls.push_back(p->first);
   return 0;
 }

@@ -21,10 +21,10 @@
 
 #include <atomic>
 #include <mutex>
+#include <unordered_map>
 #include <condition_variable>
 
 #include "include/ceph_assert.h"
-#include "include/unordered_map.h"
 #include "common/Finisher.h"
 #include "common/Throttle.h"
 #include "common/WorkQueue.h"
@@ -115,7 +115,7 @@ public:
 	&Onode::lru_item> > lru_list_t;
 
     std::mutex lock;
-    ceph::unordered_map<ghobject_t,OnodeRef> onode_map;  ///< forward lookups
+    std::unordered_map<ghobject_t, OnodeRef> onode_map;  ///< forward lookups
     lru_list_t lru;                                      ///< lru
 
     OnodeHashLRU(CephContext* cct) : cct(cct) {}
@@ -165,26 +165,6 @@ public:
     Collection(KStore *ns, coll_t c);
   };
   using CollectionRef = ceph::ref_t<Collection>;
-
-  class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
-    CollectionRef c;
-    OnodeRef o;
-    KeyValueDB::Iterator it;
-    std::string head, tail;
-  public:
-    OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
-    int seek_to_first() override;
-    int upper_bound(const std::string &after) override;
-    int lower_bound(const std::string &to) override;
-    bool valid() override;
-    int next() override;
-    std::string key() override;
-    ceph::buffer::list value() override;
-    std::string_view value_as_sv() override;
-    int status() override {
-      return 0;
-    }
-  };
 
   struct TransContext {
     typedef enum {
@@ -325,7 +305,7 @@ private:
 
   /// rwlock to protect coll_map
   ceph::shared_mutex coll_lock = ceph::make_shared_mutex("KStore::coll_lock");
-  ceph::unordered_map<coll_t, CollectionRef> coll_map;
+  std::unordered_map<coll_t, CollectionRef> coll_map;
   std::map<coll_t,CollectionRef> new_coll_map;
 
   std::mutex nid_lock;
@@ -546,12 +526,6 @@ public:
     const ghobject_t &oid,   ///< [in] Object containing omap
     const std::set<std::string> &keys, ///< [in] Keys to check
     std::set<std::string> *out         ///< [out] Subset of keys defined on oid
-    ) override;
-
-  using ObjectStore::get_omap_iterator;
-  ObjectMap::ObjectMapIterator get_omap_iterator(
-    CollectionHandle& c,              ///< [in] collection
-    const ghobject_t &oid  ///< [in] object
     ) override;
 
   int omap_iterate(

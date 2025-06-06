@@ -5,6 +5,16 @@
 #include "common/intrusive_lru.h"
 #include "include/utime.h"
 
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
+#include <functional>
+#include <memory>
+#include <string>
+
 namespace ceph::perf_counters {
 
 struct perf_counters_cache_item_to_key;

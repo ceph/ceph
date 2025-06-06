@@ -19,8 +19,19 @@
 #include <iterator>
 #include <map>
 #include <ostream>
+#include <fmt/ranges.h>
+#include "common/fmt_common.h"
+#include "common/dout.h"
 
 #include "encoding.h"
+
+/* strict_mode_assert is a standard ceph_assert() in product code. Some tests
+ * (specifically test_interval_set.cc) can override this macro with an
+ * exception.
+ */
+#ifndef strict_mode_assert
+#define strict_mode_assert(expr) ceph_assert(expr)
+#endif
 
 /*
  * *** NOTE ***
@@ -30,9 +41,10 @@
  * flat_map and btree_map).
  */
 
-template<typename T, template<typename, typename, typename ...> class C = std::map>
+template<typename T, template<typename, typename, typename ...> class C = std::map, bool strict = true>
 class interval_set {
  public:
+  enum UnittestType { test_strict = strict }; // Required by test_interval_set.cc
   using Map = C<T, T>;
   using value_type = typename Map::value_type;
   using offset_type = T;
@@ -245,6 +257,35 @@ class interval_set {
     return const_iterator(m.end());
   }
 
+  void print(std::ostream& os) const {
+    os << "[";
+    bool first = true;
+    for (const auto& [start, len] : *this) {
+      if (!first) {
+        os << ",";
+      }
+      os << start << "~" << len;
+      first = false;
+    }
+    os << "]";
+  }
+
+  std::string fmt_print() const
+  requires fmt::formattable<T> {
+    std::string s = "[";
+    bool first = true;
+    for (const auto& [start, len] : *this) {
+      if (!first) {
+        s += ",";
+      } else {
+        first = false;
+      }
+      s += fmt::format("{}~{}", start, len);
+    }
+    s += "]";
+    return s;
+  }
+
   // helpers
  private:
   auto find_inc(T start) const {
@@ -329,7 +370,7 @@ class interval_set {
 
       auto start = std::max<T>(ps->first, pl->first);
       auto en = std::min<T>(ps->first + ps->second, offset);
-      ceph_assert(en > start);
+      strict_mode_assert(en > start);
       mi = m.emplace_hint(mi, start, en - start);
       _size += mi->second;
       if (ps->first + ps->second <= offset) {
@@ -506,7 +547,8 @@ class interval_set {
    * @param pstart (optional) returns the start of the resulting interval
    * @param plen (optional) returns the length of the resulting interval.
    */
-  void insert(T start, T len, T *pstart=0, T *plen=0) {
+  void insert(T start, T len, T *pstart=0, T *plen=0) requires (strict)
+  {
     //cout << "insert " << start << "~" << len << endl;
     ceph_assert(len > 0);
     _size += len;
@@ -522,7 +564,7 @@ class interval_set {
 
         if (p->first + p->second != start) {
           //cout << "p is " << p->first << "~" << p->second << ", start is " << start << ", len is " << len << endl;
-          ceph_abort();
+          strict_mode_assert(false);
         }
 
         p->second += len;               // append to end
@@ -538,6 +580,7 @@ class interval_set {
 	    *plen = p->second;
           m.erase(n);
         } else {
+          strict_mode_assert(n == m.end() || start + len < n->first);
 	  if (plen)
 	    *plen = p->second;
 	}
@@ -551,7 +594,7 @@ class interval_set {
           m.erase(p);
           m[start] = len + psecond;  // append to front
         } else {
-          ceph_assert(p->first > start+len);
+          strict_mode_assert(p->first > start+len);
 	  if (pstart)
 	    *pstart = start;
 	  if (plen)
@@ -612,14 +655,19 @@ class interval_set {
     _size += new_len;
   }
 
+  void insert(T start, T len) requires(!strict)
+  {
+    union_insert(start, len);
+  }
+
   void swap(interval_set& other) {
     m.swap(other.m);
     std::swap(_size, other._size);
   }
   
-  void erase(const iterator &i) {
+  iterator erase(const iterator &i) {
     _size -= i.get_len();
-    m.erase(i._iter);
+    return iterator(m.erase(i._iter));
   }
 
   void erase(T val) {
@@ -632,16 +680,16 @@ class interval_set {
    * interval in *this.
    */
   void erase(T start, T len,
-    std::function<bool(T, T)> claim) {
+    std::function<bool(T, T)> claim = {}) requires (strict) {
     auto p = find_inc_m(start);
 
     _size -= len;
 
-    ceph_assert(p != m.end());
-    ceph_assert(p->first <= start);
+    strict_mode_assert(p != m.end());
+    strict_mode_assert(p->first <= start);
 
     T before = start - p->first;
-    ceph_assert(p->second >= before+len);
+    strict_mode_assert(p->second >= before+len);
     T after = p->second - before - len;
     if (before) {
       if (claim && claim(p->first, before)) {
@@ -666,7 +714,7 @@ class interval_set {
    * functions like subtract). It can cope with any overlaps and will erase
    * multiple. entries.
    */
-  void erase(T start, T len) {
+  void erase(T start, T len) requires(!strict) {
     T begin = start;
     T end = start + len;
 
@@ -700,8 +748,9 @@ class interval_set {
   }
 
   /** This general erase method erases after a particular offset.
- */
-  void erase_after(T start) {
+  */
+  void erase_after(T start) requires(!strict)
+  {
     T begin = start;
 
     auto p = find_inc_m(begin);
@@ -724,7 +773,7 @@ class interval_set {
     }
   }
 
-  void subtract(const interval_set &a) {
+  void subtract(const interval_set &a) requires (!strict) {
     if (empty() || a.empty()) return;
 
     auto start = range_start();
@@ -735,6 +784,12 @@ class interval_set {
          ap != a.m.end() && ap->first <= end;
         ++ap) {
       erase(ap->first, ap->second);
+    }
+  }
+
+  void subtract(const interval_set &a) requires (strict) {
+    for (const auto& [start, len] : a.m) {
+      erase(start, len);
     }
   }
 
@@ -948,19 +1003,9 @@ public:
   }
 };
 
+// make sure fmt::range would not try (and fail) to treat interval_set as a range
+template<typename T, template<typename, typename, typename ...> class C, bool strict>
+struct fmt::is_range<interval_set<T, C, strict>, char> : std::false_type {};
 
-template<typename T, template<typename, typename, typename ...> class C>
-inline std::ostream& operator<<(std::ostream& out, const interval_set<T,C> &s) {
-  out << "[";
-  bool first = true;
-  for (const auto& [start, len] : s) {
-    if (!first) out << ",";
-    out << start << "~" << len;
-    first = false;
-  }
-  out << "]";
-  return out;
-}
-
-
+#undef strict_mode_assert
 #endif

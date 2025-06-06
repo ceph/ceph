@@ -3,6 +3,7 @@
   $flex-grid-columns: 16,
   $use-flexbox-grid: true,
 );
+@use '@carbon/layout';
 @use '@carbon/colors';
 @use './src/styles/vendor/variables' as vv;
 @use './themes/default';
@@ -18,14 +19,14 @@
   ******************************************/
 
 @use '@carbon/styles/scss/components/button/tokens' as button-tokens with (
-  $button-primary: vv.$primary, 
-  $button-primary-hover: darken(vv.$primary, 5%), 
+  $button-primary: vv.$primary,
+  $button-primary-hover: darken(vv.$primary, 5%),
   $button-primary-active: darken(vv.$primary, 10%),
-  $button-secondary: vv.$secondary, 
-  $button-secondary-hover: darken(vv.$secondary, 5%), 
+  $button-secondary: vv.$secondary,
+  $button-secondary-hover: darken(vv.$secondary, 5%),
   $button-secondary-active: darken(vv.$secondary, 10%),
-  $button-tertiary: vv.$primary, 
-  $button-tertiary-hover: darken(vv.$primary, 5%), 
+  $button-tertiary: vv.$primary,
+  $button-tertiary-hover: darken(vv.$primary, 5%),
   $button-tertiary-active: darken(vv.$primary, 10%)
 );
 
@@ -148,4 +149,27 @@ Code snippet
 ******************************************/
 .cds--snippet {
   width: fit-content;
+}
+
+/******************************************
+Tooltip
+******************************************/
+.cds--tooltip-content {
+  background-color: theme.$layer-02;
+}
+
+/******************************************
+Carbon Popover
+******************************************/
+.cds--popover-content {
+  background-color: theme.$layer-02;
+  max-height: layout.$spacing-13;
+  overflow: auto;
+}
+
+/******************************************
+Tabs
+******************************************/
+.cds--tab-content {
+  background: var(--cds-layer-01);
 }

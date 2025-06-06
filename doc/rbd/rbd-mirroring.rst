@@ -87,12 +87,20 @@ site name to describe the local cluster::
 
         rbd mirror pool enable [--site-name {local-site-name}] {pool-name} {mode}
 
-The mirroring mode can either be ``image`` or ``pool``:
+The mirroring mode can be ``image``, ``pool`` or ``init-only``:
 
-* **image**: When configured in ``image`` mode, mirroring must
-  `explicitly enabled`_ on each image.
-* **pool** (default):  When configured in ``pool`` mode, all images in the pool
-  with the journaling feature enabled are mirrored.
+* **image**: When configured in ``image`` mode, mirroring must be
+  `explicitly enabled`_ for each intended image in the default namespace
+  of the pool. Other namespaces aren't affected and must be
+  `configured separately`_.
+* **pool**: When configured in ``pool`` mode, all images in the default
+  namespace of the pool with the journaling feature enabled are mirrored.
+  Other namespaces aren't affected and must be `configured separately`_.
+* **init-only**: When configured in ``init-only`` mode, no images in the
+  default namespace of the pool will be mirrored but other namespaces can
+  still be configured. This is needed to allow some other namespace to be
+  mirrored to the default namespace of the remote pool but can be useful
+  on its own as well.
 
 For example::
 
@@ -237,9 +245,11 @@ pool as follows:
 Namespace Configuration
 =======================
 
-Mirroring can be configured on a namespace in a pool. The pool must already
-have been configured for mirroring. The namespace can be mirrored to a namespace
-with the same or a different name in the remote pool.
+Mirroring can be enabled on non-default namespaces of a pool independent of
+the default namespace. The pool must be configured for mirroring in advance.
+A given namespace can be mirrored to a namespace with the same or a different
+name in the remote pool, including to the default namespace (referred to as
+``''`` or ``""``).
 
 Enable Mirroring
 ----------------
@@ -252,9 +262,9 @@ remote namespace name::
 
 The mirroring mode can either be ``image`` or ``pool``:
 
-* **image**: When configured in ``image`` mode, mirroring must
-  `explicitly enabled`_ on each image.
-* **pool** (default):  When configured in ``pool`` mode, all images in the namespace
+* **image**: When configured in ``image`` mode, mirroring must be
+  `explicitly enabled`_ for each intended image in the namespace.
+* **pool**: When configured in ``pool`` mode, all images in the namespace
   with the journaling feature enabled are mirrored.
 
 For example::
@@ -262,12 +272,29 @@ For example::
         $ rbd --cluster site-a mirror pool enable image-pool/namespace-a image --remote-namespace namespace-b
         $ rbd --cluster site-b mirror pool enable image-pool/namespace-b image --remote-namespace namespace-a
 
-This will set up image mode mirroring between image-pool/namespace-a on cluster
-site-a and image-pool/namespace-b on cluster site-b.
-The namespace and remote-namespace pair configured on a cluster must
+This will set up image mode mirroring between ``image-pool/namespace-a`` on
+cluster ``site-a`` and ``image-pool/namespace-b`` on cluster ``site-b``.
+The namespace and remote-namespace pair configured on a local cluster must
 match the remote-namespace and namespace respectively on the remote cluster.
 If the ``--remote-namespace`` option is not provided, the namespace will be
 mirrored to a namespace with the same name in the remote pool.
+
+To set up pool mode mirroring between ``image-pool`` (default namespace) on
+cluster ``site-a`` and ``image-pool/namespace-c`` on cluster ``site-b``::
+
+        $ rbd --cluster site-a mirror pool enable image-pool pool --remote-namespace namespace-c
+        $ rbd --cluster site-b mirror pool enable image-pool init-only
+        $ rbd --cluster site-b mirror pool enable image-pool/namespace-c pool --remote-namespace ""
+
+To set up pool mode mirroring between ``image-pool`` (default namespace) on
+cluster ``site-a`` and ``image-pool/namespace-d`` on cluster ``site-b`` and
+at the same time image mode mirroring between ``image-pool`` (default namespace)
+on cluster ``site-b`` and ``image-pool/namespace-e`` on cluster ``site-a``::
+
+        $ rbd --cluster site-a mirror pool enable image-pool pool --remote-namespace namespace-d
+        $ rbd --cluster site-a mirror pool enable image-pool/namespace-e image --remote-namespace ""
+        $ rbd --cluster site-b mirror pool enable image-pool image --remote-namespace namespace-e
+        $ rbd --cluster site-b mirror pool enable image-pool/namespace-d pool --remote-namespace ""
 
 Disable Mirroring
 -----------------
@@ -584,6 +611,7 @@ The ``rbd-mirror`` can also be run in foreground by ``rbd-mirror`` command::
 .. _rbd: ../../man/8/rbd
 .. _ceph-conf: ../../rados/configuration/ceph-conf/#running-multiple-clusters
 .. _explicitly enabled: #enable-image-mirroring
+.. _configured separately: #namespace-configuration
 .. _bootstrap token: #bootstrap-peers
 .. _force resync command: #force-image-resync
 .. _demote the image: #image-promotion-and-demotion

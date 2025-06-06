@@ -109,9 +109,9 @@ void RGWOp_MDLog_List::send_response() {
   s->formatter->dump_bool("truncated", truncated);
   {
     s->formatter->open_array_section("entries");
-    for (list<cls_log_entry>::iterator iter = entries.begin();
+    for (auto iter = entries.begin();
 	 iter != entries.end(); ++iter) {
-      cls_log_entry& entry = *iter;
+      auto& entry = *iter;
       static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->dump_log_entry(entry, s->formatter);
       flusher.flush();
     }
@@ -451,7 +451,7 @@ void RGWOp_BILog_List::execute(optional_yield y) {
   send_response();
   do {
     list<rgw_bi_log_entry> entries;
-    int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->bilog_rados->log_list(s, bucket->get_info(), log_layout, shard_id,
+    int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->bilog_rados->log_list(s, y, bucket->get_info(), log_layout, shard_id,
                                                marker, max_entries - count,
                                                entries, &truncated);
     if (ret < 0) {
@@ -557,7 +557,7 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
   map<RGWObjCategory, RGWStorageStats> stats;
   const auto& index = log_to_index_layout(logs.back());
 
-  int ret =  bucket->read_stats(s, index, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
+  int ret =  bucket->read_stats(s, y, index, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
   if (ret < 0 && ret != -ENOENT) {
     op_ret = ret;
     return;
@@ -641,7 +641,7 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
     return;
   }
 
-  op_ret = bilog_trim(this, static_cast<rgw::sal::RadosStore*>(driver),
+  op_ret = bilog_trim(this, y, static_cast<rgw::sal::RadosStore*>(driver),
 		      bucket->get_info(), gen, shard_id,
 		      start_marker, end_marker);
   if (op_ret < 0) {
@@ -691,6 +691,12 @@ void RGWOp_DATALog_List::execute(optional_yield y) {
   op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->
     datalog_rados->list_entries(this, shard_id, max_entries, entries,
 				marker, &last_marker, &truncated, y);
+
+  RGWDataChangesLogInfo info;
+  op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->
+    datalog_rados->get_info(this, shard_id, &info, y);
+
+  last_update = info.last_update;
 }
 
 void RGWOp_DATALog_List::send_response() {
@@ -703,6 +709,8 @@ void RGWOp_DATALog_List::send_response() {
 
   s->formatter->open_object_section("log_entries");
   s->formatter->dump_string("marker", last_marker);
+  utime_t lu(last_update);
+  encode_json("last_update", lu, s->formatter);
   s->formatter->dump_bool("truncated", truncated);
   {
     s->formatter->open_array_section("entries");

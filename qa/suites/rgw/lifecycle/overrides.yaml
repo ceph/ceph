@@ -12,4 +12,10 @@ overrides:
         rgw s3 auth use sts: true
         rgw lc debug interval: 10
   rgw:
-    storage classes: LUKEWARM, FROZEN
+    storage classes:
+      LUKEWARM:
+      FROZEN:
+  s3tests:
+    accounts:
+      iam root: RGW88888888888888888
+      iam alt root: RGW99999999999999999

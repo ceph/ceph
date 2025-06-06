@@ -12,4 +12,8 @@ set(libclient_srcs
 add_library(client STATIC ${libclient_srcs})
 target_link_libraries(client
   legacy-option-headers
-  osdc)
+  osdc
+  Boost::locale
+  ICU::uc
+  ICU::i18n
+  )

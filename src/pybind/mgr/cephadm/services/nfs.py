@@ -48,7 +48,7 @@ class NFSService(CephService):
                     if daemon_id is not None:
                         self.fence(daemon_id)
                 del rank_map[rank]
-                nodeid = f'{spec.service_name()}.{rank}'
+                nodeid = f'{rank}'
                 self.mgr.log.info(f'Removing {nodeid} from the ganesha grace table')
                 self.run_grace_tool(cast(NFSServiceSpec, spec), 'remove', nodeid)
                 self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
@@ -82,7 +82,7 @@ class NFSService(CephService):
 
         deps: List[str] = []
 
-        nodeid = f'{daemon_spec.service_name}.{daemon_spec.rank}'
+        nodeid = f'{daemon_spec.rank}'
 
         nfs_idmap_conf = '/etc/ganesha/idmap.conf'
 
@@ -97,11 +97,14 @@ class NFSService(CephService):
         # create the rados config object
         self.create_rados_config_obj(spec)
 
+        port = daemon_spec.ports[0] if daemon_spec.ports else 2049
+
         # create the RGW keyring
         rgw_user = f'{rados_user}-rgw'
         rgw_keyring = self.create_rgw_keyring(daemon_spec)
-        if spec.virtual_ip:
+        if spec.virtual_ip and not spec.enable_haproxy_protocol:
             bind_addr = spec.virtual_ip
+            daemon_spec.port_ips = {str(port): spec.virtual_ip}
         else:
             bind_addr = daemon_spec.ip if daemon_spec.ip else ''
         if not bind_addr:
@@ -119,7 +122,7 @@ class NFSService(CephService):
                 "rgw_user": rgw_user,
                 "url": f'rados://{POOL_NAME}/{spec.service_id}/{spec.rados_config_name()}',
                 # fall back to default NFS port if not present in daemon_spec
-                "port": daemon_spec.ports[0] if daemon_spec.ports else 2049,
+                "port": port,
                 "monitoring_port": spec.monitoring_port if spec.monitoring_port else 9587,
                 "bind_addr": bind_addr,
                 "haproxy_hosts": [],
@@ -129,6 +132,8 @@ class NFSService(CephService):
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
+                if spec.virtual_ip:
+                    context["haproxy_hosts"].append(spec.virtual_ip)
                 logger.debug("selected haproxy_hosts: %r", context["haproxy_hosts"])
             return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
 

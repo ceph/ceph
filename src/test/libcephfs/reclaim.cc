@@ -60,7 +60,7 @@ static int dying_client(int argc, char **argv)
 
   ceph_set_session_timeout(cmount, CEPHFS_RECLAIM_TIMEOUT);
 
-  if (ceph_start_reclaim(cmount, argv[1], CEPH_RECLAIM_RESET) != -CEPHFS_ENOENT)
+  if (ceph_start_reclaim(cmount, argv[1], CEPH_RECLAIM_RESET) != -ENOENT)
     return 1;
 
   ceph_set_uuid(cmount, argv[1]);

@@ -38,7 +38,6 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/small_vector.hpp>
-#include <boost/intrusive/set.hpp>
 #include <boost/optional.hpp>
 
 #include "include/cpp_lib_backport.h"
@@ -1791,6 +1790,42 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
     "' v=" + std::to_string(code_v)+ " cannot decode v=" + std::to_string(struct_v) +
     " minimal_decoder=" + std::to_string(struct_compat));
 }
+
+// compile-time  checker for struct_v to detect mismatch of declared
+// decoder version with actually implemented blocks like "struct_v < 100".
+// it addresses the common problem of forgetting to bump the version up
+// in decoder's `DECODE_START` (or `DENC_START`) when adding a new
+// schema revision.
+template <__u8 MaxV>
+struct StructVChecker
+{
+  struct CheckingWrapper {
+    consteval CheckingWrapper(__u8 c) : c(c) {
+      consteval_assert(
+        c <= MaxV,
+	"checking against higher version than declared in DECODE_START");
+    }
+    __u8 c;
+  };
+  // we want the implicit conversion to take place but with lower
+  // rank than the CheckingWrapper-conversion during struct_v cmps.
+  template<class T=void> operator __u8() {
+    return v;
+  }
+  // need the wrapper as the operator cannot be consteval; otherwise
+  // it couldn't have accessed the non-constexpr `v`.
+  auto operator<=>(CheckingWrapper c) {
+    return v <=> c.c;
+  }
+  auto operator==(CheckingWrapper c) {
+    return v == c.c;
+  }
+  auto operator!=(CheckingWrapper c) {
+    return v != c.c;
+  }
+  __u8 v;
+};
+
 #define DENC_HELPERS							\
   /* bound_encode */							\
   static void _denc_start(size_t& p,					\
@@ -1800,8 +1835,6 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
     p += 2 + 4;								\
   }									\
   static void _denc_finish(size_t& p,					\
-			   __u8 *struct_v,				\
-			   __u8 *struct_compat,				\
 			   char **, uint32_t *) { }			\
   /* encode */								\
   static void _denc_start(::ceph::buffer::list::contiguous_appender& p,	\
@@ -1815,8 +1848,6 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
     *start_oob_off = p.get_out_of_band_offset();			\
   }									\
   static void _denc_finish(::ceph::buffer::list::contiguous_appender& p, \
-			   __u8 *struct_v,				\
-			   __u8 *struct_compat,				\
 			   char **len_pos,				\
 			   uint32_t *start_oob_off) {			\
     *(ceph_le32*)*len_pos = p.get_pos() - *len_pos - sizeof(uint32_t) +	\
@@ -1837,7 +1868,6 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
     *start_pos = const_cast<char*>(p.get_pos());			\
   }									\
   static void _denc_finish(::ceph::buffer::ptr::const_iterator& p,	\
-			   __u8 *struct_v, __u8 *struct_compat,		\
 			   char **start_pos,				\
 			   uint32_t *struct_len) {			\
     const char *pos = p.get_pos();					\
@@ -1858,8 +1888,18 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
 // Due to -2 compatibility rule we cannot bump up compat until U____ release.
 // SQUID=19 T____=20 U____=21
 
-#define DENC_START(v, compat, p)					\
-  __u8 struct_v = v;							\
+#define DENC_START(_v, compat, p)					\
+  StructVChecker<_v> struct_v{_v};					\
+  __u8 struct_compat = compat;						\
+  char *_denc_pchar;							\
+  uint32_t _denc_u32;							\
+  static_assert(CEPH_RELEASE >= (CEPH_RELEASE_SQUID /*19*/ + 2) || compat == 1);	\
+  _denc_start(p, &struct_v.v, &struct_compat, &_denc_pchar, &_denc_u32);	\
+  do {
+
+// the variant for seldom-used cases when we manually select encoding version
+#define DENC_START_UNCHECKED(_v, compat, p)				\
+  __u8 struct_v = _v; 							\
   __u8 struct_compat = compat;						\
   char *_denc_pchar;							\
   uint32_t _denc_u32;							\
@@ -1868,30 +1908,39 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
   do {
 
 // For the only type that is with compat 2: unittest.
-#define DENC_START_COMPAT_2(v, compat, p)				\
-  __u8 struct_v = v;							\
+#define DENC_START_COMPAT_2(_v, compat, p)				\
+  StructVChecker<_v> struct_v{_v};					\
   __u8 struct_compat = compat;						\
   char *_denc_pchar;							\
   uint32_t _denc_u32;							\
   static_assert(CEPH_RELEASE >= (CEPH_RELEASE_SQUID /*19*/ + 2) || compat == 2);	\
+  _denc_start(p, &struct_v.v, &struct_compat, &_denc_pchar, &_denc_u32);	\
+  do {
+
+// This variant is unsafe, because older versions will not even catch incompatibility.
+// The ability to decode must be verified by other means,
+#define DENC_START_UNSAFE(v, compat, p)				\
+  __u8 struct_v = v;							\
+  __u8 struct_compat = compat;						\
+  char *_denc_pchar;							\
+  uint32_t _denc_u32;							\
   _denc_start(p, &struct_v, &struct_compat, &_denc_pchar, &_denc_u32);	\
   do {
 
 // For osd_reqid_t which cannot be upgraded at all.
 // We used it to communicate with clients and now we cannot safely upgrade.
-#define DENC_START_OSD_REQID(v, compat, p)				\
-  __u8 struct_v = v;							\
+#define DENC_START_OSD_REQID(_v, compat, p)				\
+  StructVChecker<_v> struct_v{_v};					\
   __u8 struct_compat = compat;						\
   char *_denc_pchar;							\
   uint32_t _denc_u32;							\
   static_assert(compat == 2, "osd_reqid_t cannot be upgraded");		\
-  _denc_start(p, &struct_v, &struct_compat, &_denc_pchar, &_denc_u32);	\
+  _denc_start(p, &struct_v.v, &struct_compat, &_denc_pchar, &_denc_u32);	\
   do {
 
 #define DENC_FINISH(p)							\
   } while (false);							\
-  _denc_finish(p, &struct_v, &struct_compat, &_denc_pchar, &_denc_u32);
-
+  _denc_finish(p, &_denc_pchar, &_denc_u32);
 
 // ----------------------------------------------------------------------
 

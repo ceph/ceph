@@ -2,7 +2,7 @@
 set -ex
 
 if [ -d .git ]; then
-    git submodule update --init --recursive --progress --recommend-shallow
+    git submodule update --init --recursive --recommend-shallow
 fi
 
 : ${BUILD_DIR:=build}
@@ -19,7 +19,9 @@ if [ -r /etc/os-release ]; then
   source /etc/os-release
   case "$ID" in
       fedora)
-          if [ "$VERSION_ID" -ge "39" ] ; then
+          if [ "$VERSION_ID" -ge "41" ] ; then
+            PYBUILD="3.13"
+          elif [ "$VERSION_ID" -ge "39" ] ; then
             PYBUILD="3.12"
           else
             # Fedora 37 and above
@@ -28,7 +30,9 @@ if [ -r /etc/os-release ]; then
           ;;
       almalinux|rocky|rhel|centos)
           MAJOR_VER=$(echo "$VERSION_ID" | sed -e 's/\..*$//')
-          if [ "$MAJOR_VER" -ge "9" ] ; then
+          if [ "$MAJOR_VER" -ge "10" ] ; then
+              PYBUILD="3.12"
+          elif [ "$MAJOR_VER" -ge "9" ] ; then
               PYBUILD="3.9"
           elif [ "$MAJOR_VER" -ge "8" ] ; then
               PYBUILD="3.6"
@@ -41,7 +45,9 @@ if [ -r /etc/os-release ]; then
           ;;
       ubuntu)
           MAJOR_VER=$(echo "$VERSION_ID" | sed -e 's/\..*$//')
-          if [ "$MAJOR_VER" -ge "22" ] ; then
+          if [ "$MAJOR_VER" -ge "24" ] ; then
+              PYBUILD="3.12"
+          elif [ "$MAJOR_VER" -ge "22" ] ; then
               PYBUILD="3.10"
           fi
           ;;
@@ -99,13 +105,20 @@ EOF
 echo done.
 
 if [[ ! "$ARGS $@" =~ "-DCMAKE_BUILD_TYPE" ]]; then
-  cat <<EOF
-
+    if [ -d ../.git ]; then
+        printf "
 ****
-WARNING: do_cmake.sh now creates debug builds by default. Performance
-may be severely affected. Please use -DCMAKE_BUILD_TYPE=RelWithDebInfo
+WARNING: do_cmake.sh now creates debug builds by default if .git exists.
+Performance may be severely affected. Please use -DCMAKE_BUILD_TYPE=RelWithDebInfo
 if a performance sensitive build is required.
 ****
-EOF
+"
+    else
+        printf "
+****
+WARNING: do_cmake.sh now creates RelWithDebInfo builds by default when .git is absent.
+****
+"
+    fi
 fi
 

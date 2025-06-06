@@ -81,13 +81,13 @@ things to do:
 * **Deny all reconnect to clients.** This effectively blocklists all existing
   CephFS sessions so all mounts will hang or become unavailable.
 
-.. code:: bash
+  .. code:: bash
 
-   ceph config set mds mds_deny_all_reconnect true
+     ceph config set mds mds_deny_all_reconnect true
 
   Remember to undo this after the MDS becomes active.
 
-.. note:: This does not prevent new sessions from connecting. For that, see the ``refuse_client_session`` file system setting.
+  .. note:: This does not prevent new sessions from connecting. For that, see the ``refuse_client_session`` file system setting.
 
 * **Extend the MDS heartbeat grace period**. This avoids replacing an MDS that appears
   "stuck" doing some operation. Sometimes recovery of an MDS may involve an
@@ -96,23 +96,23 @@ things to do:
   normal amount of time to complete (indicated by your reading this document).
   Avoid unnecessary replacement loops by extending the heartbeat graceperiod:
 
-.. code:: bash
+  .. code:: bash
 
-   ceph config set mds mds_heartbeat_grace 3600
+     ceph config set mds mds_heartbeat_grace 3600
 
-.. note:: This has the effect of having the MDS continue to send beacons to the monitors
-          even when its internal "heartbeat" mechanism has not been reset (beat) in one
-          hour. The previous mechanism for achieving this was via the
-          `mds_beacon_grace` monitor setting.
+  .. note:: This has the effect of having the MDS continue to send beacons to the monitors
+            even when its internal "heartbeat" mechanism has not been reset (beat) in one
+            hour. The previous mechanism for achieving this was via the
+            `mds_beacon_grace` monitor setting.
 
 * **Disable open file table prefetch.** Normally, the MDS will prefetch
   directory contents during recovery to heat up its cache. During long
   recovery, the cache is probably already hot **and large**. So this behavior
   can be undesirable. Disable using:
 
-.. code:: bash
+  .. code:: bash
 
-   ceph config set mds mds_oft_prefetch_dirfrags false
+     ceph config set mds mds_oft_prefetch_dirfrags false
 
 * **Turn off clients.** Clients reconnecting to the newly ``up:active`` MDS may
   cause new load on the file system when it's just getting back on its feet.
@@ -122,9 +122,9 @@ things to do:
 
   You can do this manually or use the new file system tunable:
 
-.. code:: bash
+  .. code:: bash
 
-   ceph fs set <fs_name> refuse_client_session true
+     ceph fs set <fs_name> refuse_client_session true
 
   That prevents any clients from establishing new sessions with the MDS.
 
@@ -133,6 +133,35 @@ things to do:
   Instead, doing so might further destabilize the cluster. If ``max_mds`` must
   be changed in such circumstances, run the command to change ``max_mds`` with
   the confirmation flag (``--yes-i-really-mean-it``)
+
+.. _pause-purge-threads:
+
+* **Turn off async purge threads** The volumes plugin spawns threads for
+  asynchronously purging trashed/deleted subvolumes. To help troubleshooting or
+  recovery effort, these purge threads can be disabled using:
+
+  .. code:: bash
+
+     ceph config set mgr mgr/volumes/pause_purging true
+
+  To resume purging run::
+
+     ceph config set mgr mgr/volumes/pause_purging false
+
+.. _pause-clone-threads:
+
+* **Turn off async cloner threads** The volumes plugin spawns threads for
+  asynchronously cloning subvolume snapshots. To help troubleshooting or
+  recovery effort, these cloner threads can be disabled using:
+
+  .. code:: bash
+
+     ceph config set mgr mgr/volumes/pause_cloning true
+
+  To resume cloning run::
+
+     ceph config set mgr mgr/volumes/pause_cloning false
+
 
 
 Expediting MDS journal trim

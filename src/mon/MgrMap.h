@@ -14,11 +14,14 @@
 #ifndef MGR_MAP_H_
 #define MGR_MAP_H_
 
-#include <sstream>
+#include <map>
 #include <set>
+#include <string>
+#include <vector>
 
 #include "msg/msg_types.h"
 #include "include/encoding.h"
+#include "include/types.h" // for epoch_t
 #include "include/utime.h"
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -143,7 +146,7 @@ public:
     }
 
     void decode(ceph::buffer::list::const_iterator &bl) {
-      DECODE_START(1, bl);
+      DECODE_START(2, bl);
       decode(name, bl);
       decode(can_run, bl);
       decode(error_string, bl);

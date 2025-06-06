@@ -26,7 +26,7 @@ namespace {
 
 const std::string RBD_MIRROR_AUTH_ID_PREFIX("rbd-mirror.");
 
-struct AttributeDumpVisitor : public boost::static_visitor<void> {
+struct AttributeDumpVisitor {
   ceph::Formatter *f;
   const std::string& name;
 
@@ -184,6 +184,13 @@ void ServiceDaemon<I>::remove_callout(int64_t pool_id, uint64_t callout_id) {
   schedule_update_status();
 }
 
+std::ostream& operator<<(std::ostream& out, const AttributeValue& value) {
+  std::visit([&out](const auto& v) {
+    out << v;
+  }, value);
+  return out;
+}
+
 template <typename I>
 void ServiceDaemon<I>::add_or_update_attribute(int64_t pool_id,
                                                const std::string& key,
@@ -208,11 +215,6 @@ template <typename I>
 void ServiceDaemon<I>::add_or_update_namespace_attribute(
     int64_t pool_id, const std::string& namespace_name, const std::string& key,
     const AttributeValue& value) {
-  if (namespace_name.empty()) {
-    add_or_update_attribute(pool_id, key, value);
-    return;
-  }
-
   dout(20) << "pool_id=" << pool_id << ", "
            << "namespace=" << namespace_name << ", "
            << "key=" << key << ", "
@@ -292,21 +294,20 @@ void ServiceDaemon<I>::update_status() {
 
       for (auto& attribute : pool_pair.second.attributes) {
         AttributeDumpVisitor attribute_dump_visitor(&f, attribute.first);
-        boost::apply_visitor(attribute_dump_visitor, attribute.second);
+        std::visit(attribute_dump_visitor, attribute.second);
       }
 
-      if (!pool_pair.second.ns_attributes.empty()) {
-        f.open_object_section("namespaces");
-        for (auto& [ns, attributes] : pool_pair.second.ns_attributes) {
-          f.open_object_section(ns.c_str());
-          for (auto& [key, value] : attributes) {
-            AttributeDumpVisitor attribute_dump_visitor(&f, key);
-            boost::apply_visitor(attribute_dump_visitor, value);
-          }
-          f.close_section(); // namespace
+      f.open_object_section("namespaces");
+      for (auto& [ns, attributes] : pool_pair.second.ns_attributes) {
+        f.open_object_section(ns.c_str());
+        for (auto& [key, value] : attributes) {
+          AttributeDumpVisitor attribute_dump_visitor(&f, key);
+          std::visit(attribute_dump_visitor, value);
         }
-        f.close_section(); // namespaces
+        f.close_section(); // namespace
       }
+      f.close_section(); // namespaces
+
       f.close_section(); // pool
     }
     f.close_section(); // pools

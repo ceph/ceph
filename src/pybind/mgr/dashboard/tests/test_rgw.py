@@ -1,7 +1,8 @@
+
 from unittest.mock import Mock, call, patch
 
 from .. import mgr
-from ..controllers.rgw import Rgw, RgwDaemon, RgwUser
+from ..controllers.rgw import Rgw, RgwDaemon, RgwTopic, RgwUser
 from ..rest_client import RequestException
 from ..services.rgw_client import RgwClient, RgwMultisite
 from ..tests import ControllerTestCase, RgwStub
@@ -415,3 +416,185 @@ class RgwUserControllerTestCase(ControllerTestCase):
         self.assertStatus(200)
         self.assertNotIn('keys', self.json_body())
         self.assertNotIn('swift_keys', self.json_body())
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_get_rate_limit(self, mock_proxy, send_rgwadmin_command):
+        mock_proxy.side_effect = [{
+            'count': 3,
+            'keys': ['test1', 'test2', 'test3'],
+            'truncated': False
+        }]
+        send_rgwadmin_command.return_value = (
+            0,
+            {
+                "user_ratelimit": {
+                    "max_read_ops": 100,
+                    "max_write_ops": 50
+                }
+            },
+            ""   # empty error msg
+        )
+
+        self._get('/test/api/rgw/user/testuser/ratelimit')
+        self.assertStatus(200)
+        self.assertInJsonBody('user_ratelimit')
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_get_global_rate_limit(self, mock_proxy, send_rgwadmin_command):
+        mock_proxy.side_effect = [{
+            'count': 3,
+            'keys': ['test1', 'test2', 'test3'],
+            'truncated': False
+        }]
+        mock_return_value = {
+            "bucket_ratelimit": {
+                "max_read_ops": 2024,
+                "max_write_ops": 0,
+                "max_read_bytes": 0,
+                "max_write_bytes": 0,
+                "enabled": True
+            },
+            "user_ratelimit": {
+                "max_read_ops": 1024,
+                "max_write_ops": 0,
+                "max_read_bytes": 0,
+                "max_write_bytes": 0,
+                "enabled": True
+            },
+            "anonymous_ratelimit": {
+                "max_read_ops": 0,
+                "max_write_ops": 0,
+                "max_read_bytes": 0,
+                "max_write_bytes": 0,
+                "enabled": True
+            }
+        }
+        send_rgwadmin_command.return_value = (
+            0,
+            mock_return_value,
+            ""   # empty error msg
+        )
+
+        self._get('/test/api/rgw/user/testuser/ratelimit')
+        self.assertStatus(200)
+        self.assertJsonBody(mock_return_value)
+
+
+class TestRgwTopicController(ControllerTestCase):
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([RgwTopic], '/test')
+
+    @patch('dashboard.services.rgw_client._get_daemons')
+    @patch('dashboard.services.rgw_client.RgwClient', autospec=True)
+    def test_create_topic(self, mock_rgw_client, mock_get_daemons):
+        """
+        Test creating a topic with mock return values.
+        """
+        mock_daemon = {
+            "name": "dummy_daemon",
+            "host": "127.0.0.1",
+            "port": 8000,
+            "ssl": False,
+            "realm_name": "dummy_realm",
+            "zonegroup_name": "dummy_zonegroup",
+            "zonegroup_id": "dummy_zonegroup_id",
+            "zone_name": "dummy_zone"
+        }
+        mock_daemon_dict = {'dummy_daemon': mock_daemon}
+
+        mock_get_daemons.return_value = mock_daemon_dict
+        mock_rgw_client_instance = mock_rgw_client.return_value
+        mock_rgw_client_instance._daemons = mock_daemon_dict  # pylint: disable=W0212
+
+        mock_response = {
+            "CreateTopicResult": {
+                "TopicArn": "arn:aws:sns:zg1-realm1::HttpTest"
+            },
+            "ResponseMetadata": {
+                "RequestId": "b13925ff-a04a-4ff5-9578-7c51aa7932df.4926.3389207753149441947"
+            }
+        }
+        with patch('dashboard.controllers.rgw.RgwTopic.create', return_value=mock_response):
+            self._post('/test/api/rgw/topic', {
+                'name': 'HttpTest',
+                'owner': 'dashboard',
+                'opaque_data': 'testopaque',
+                'persistent': True,
+                'time_to_live': '10',
+                'max_retries': '3',
+                'retry_sleep_duration': '5',
+                'policy': {}
+            })
+            self.assertStatus(200)
+
+    @patch('dashboard.controllers.rgw.RgwTopic.list')
+    def test_list_topic_with_details(self, mock_list_topics):
+        mock_return_value = [
+            {
+                "owner": "dashboard",
+                "name": "HttpTest",
+                "dest": {
+                    "push_endpoint": "https://10.0.66.13:443",
+                    "push_endpoint_args": "verify_ssl=true",
+                    "push_endpoint_topic": "HttpTest",
+                    "stored_secret": False,
+                    "persistent": True,
+                    "persistent_queue": ":HttpTest",
+                    "time_to_live": "5",
+                    "max_retries": "2",
+                    "retry_sleep_duration": "2"
+                },
+                "arn": "arn:aws:sns:zg1-realm1::HttpTest",
+                "opaqueData": "test123",
+                "policy": "{}",
+                "subscribed_buckets": []
+            }
+        ]
+        mock_list_topics.return_value = mock_return_value
+        controller = RgwTopic()
+        result = controller.list(True, None)
+        mock_list_topics.assert_called_with(True, None)
+        self.assertEqual(result, mock_return_value)
+
+    @patch('dashboard.controllers.rgw.RgwTopic.get')
+    def test_get_topic(self, mock_get_topic):
+        mock_return_value = [
+            {
+                "owner": "dashboard",
+                "name": "HttpTest",
+                "dest": {
+                    "push_endpoint": "https://10.0.66.13:443",
+                    "push_endpoint_args": "verify_ssl=true",
+                    "push_endpoint_topic": "HttpTest",
+                    "stored_secret": False,
+                    "persistent": True,
+                    "persistent_queue": ":HttpTest",
+                    "time_to_live": "5",
+                    "max_retries": "2",
+                    "retry_sleep_duration": "2"
+                },
+                "arn": "arn:aws:sns:zg1-realm1::HttpTest",
+                "opaqueData": "test123",
+                "policy": "{}",
+                "subscribed_buckets": []
+            }
+        ]
+        mock_get_topic.return_value = mock_return_value
+
+        controller = RgwTopic()
+        result = controller.get('HttpTest', None)
+        mock_get_topic.assert_called_with('HttpTest', None)
+        self.assertEqual(result, mock_return_value)
+
+    @patch('dashboard.controllers.rgw.RgwTopic.delete')
+    def test_delete_topic(self, mock_delete_topic):
+        mock_delete_topic.return_value = None
+
+        controller = RgwTopic()
+        result = controller.delete(name='HttpTest', tenant=None)
+        mock_delete_topic.assert_called_with(name='HttpTest', tenant=None)
+        self.assertEqual(result, None)

@@ -96,7 +96,7 @@ struct TestMockCryptoLuksFlattenRequest : public TestMockFixture {
     EXPECT_CALL(*mock_image_ctx->io_image_dispatcher, send(_))
             .WillOnce(Invoke([this, offset,
                               length](io::ImageDispatchSpec* spec) {
-                auto* read = boost::get<io::ImageDispatchSpec::Read>(
+                auto* read = std::get_if<io::ImageDispatchSpec::Read>(
                         &spec->request);
                 ASSERT_TRUE(read != nullptr);
 
@@ -122,7 +122,7 @@ struct TestMockCryptoLuksFlattenRequest : public TestMockFixture {
   void expect_image_write() {
     EXPECT_CALL(*mock_image_ctx->io_image_dispatcher, send(_))
             .WillOnce(Invoke([this](io::ImageDispatchSpec* spec) {
-                auto* write = boost::get<io::ImageDispatchSpec::Write>(
+                auto* write = std::get_if<io::ImageDispatchSpec::Write>(
                         &spec->request);
                 ASSERT_TRUE(write != nullptr);
 
@@ -145,7 +145,7 @@ struct TestMockCryptoLuksFlattenRequest : public TestMockFixture {
   void expect_image_flush(int r) {
     EXPECT_CALL(*mock_image_ctx->io_image_dispatcher, send(_)).WillOnce(
             Invoke([r](io::ImageDispatchSpec* spec) {
-              ASSERT_TRUE(boost::get<io::ImageDispatchSpec::Flush>(
+              ASSERT_TRUE(std::get_if<io::ImageDispatchSpec::Flush>(
                       &spec->request) != nullptr);
               spec->dispatch_result = io::DISPATCH_RESULT_COMPLETE;
               spec->aio_comp->set_request_count(1);

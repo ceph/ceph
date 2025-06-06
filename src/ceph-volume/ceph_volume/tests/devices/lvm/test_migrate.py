@@ -1,5 +1,5 @@
 import pytest
-from mock.mock import patch, Mock
+from unittest.mock import patch, Mock
 from ceph_volume import process
 from ceph_volume.api import lvm as api
 from ceph_volume.devices.lvm import migrate

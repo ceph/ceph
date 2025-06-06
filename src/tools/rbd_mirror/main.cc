@@ -6,6 +6,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
+#include "common/perf_counters_collection.h"
 #include "global/global_init.h"
 #include "global/signal_handler.h"
 #include "Mirror.h"

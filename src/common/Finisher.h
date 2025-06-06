@@ -16,7 +16,6 @@
 #define CEPH_FINISHER_H
 
 #include "include/Context.h"
-#include "include/common_fwd.h"
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
 #include "common/Cond.h"

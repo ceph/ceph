@@ -124,7 +124,7 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
   if (identity) {
     token.acct_name = identity->get_acct_name();
     token.perm_mask = identity->get_perm_mask();
-    token.is_admin = identity->is_admin_of(token.user);
+    token.is_admin = identity->is_admin();
     token.acct_type = identity->get_identity_type();
   } else {
     token.acct_name = {};

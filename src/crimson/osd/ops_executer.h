@@ -169,6 +169,10 @@ public:
       IOInterruptCondition, osd_op_errorator>;
 
   object_stat_sum_t delta_stats;
+
+  size_t get_bytes_written() {
+    return txn.get_num_bytes();
+  }
 private:
   // with_effect can be used to schedule operations to be performed
   // at commit time.  effects will be discarded if the operation does
@@ -382,6 +386,8 @@ public:
         conn,
         snapc) {
   }
+
+  ~OpsExecuter();
 
   template <class Func>
   struct RollbackHelper;

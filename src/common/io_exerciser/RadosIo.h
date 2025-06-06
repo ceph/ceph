@@ -42,17 +42,16 @@ class RadosIo : public Model {
           const std::string& pool, const std::string& oid,
           const std::optional<std::vector<int>>& cached_shard_order,
           uint64_t block_size, int seed, int threads, ceph::mutex& lock,
-          ceph::condition_variable& cond);
+          ceph::condition_variable& cond, bool ec_optimizations);
 
   ~RadosIo();
 
   void allow_ec_overwrites(bool allow);
+  void allow_ec_optimizations();
 
   template <int N>
   class AsyncOpInfo {
    public:
-    librados::ObjectReadOperation rop;
-    librados::ObjectWriteOperation wop;
     std::array<ceph::bufferlist, N> bufferlist;
     std::array<uint64_t, N> offset;
     std::array<uint64_t, N> length;

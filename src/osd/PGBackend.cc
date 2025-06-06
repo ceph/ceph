@@ -15,13 +15,15 @@
  *
  */
 
-
+#include "PGBackend.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/scrub_types.h"
+#include "include/random.h" // for ceph::util::generate_random_number()
 #include "ReplicatedBackend.h"
 #include "osd/scrubber/ScrubStore.h"
 #include "ECBackend.h"
-#include "PGBackend.h"
+#include "ECSwitch.h"
 #include "OSD.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "OSDMap.h"
@@ -202,21 +204,56 @@ void PGBackend::rollback(
   struct RollbackVisitor : public ObjectModDesc::Visitor {
     const hobject_t &hoid;
     PGBackend *pg;
+    const pg_log_entry_t &entry;
     ObjectStore::Transaction t;
     RollbackVisitor(
       const hobject_t &hoid,
-      PGBackend *pg) : hoid(hoid), pg(pg) {}
+      PGBackend *pg,
+      const pg_log_entry_t &entry) : hoid(hoid), pg(pg), entry(entry) {}
     void append(uint64_t old_size) override {
       ObjectStore::Transaction temp;
-      pg->rollback_append(hoid, old_size, &temp);
+      auto dpp = pg->get_parent()->get_dpp();
+      const uint64_t shard_size = pg->object_size_to_shard_size(old_size,
+		       pg->get_parent()->whoami_shard().shard);
+      ldpp_dout(dpp, 20) << " entry " << entry.version
+			 << " rollback append object_size " << old_size
+			 << " shard_size " << shard_size << dendl;
+      pg->rollback_append(hoid, shard_size, &temp);
       temp.append(t);
       temp.swap(t);
     }
     void setattrs(map<string, std::optional<bufferlist> > &attrs) override {
-      ObjectStore::Transaction temp;
-      pg->rollback_setattrs(hoid, attrs, &temp);
-      temp.append(t);
-      temp.swap(t);
+      auto dpp = pg->get_parent()->get_dpp();
+      const pg_pool_t &pool = pg->get_parent()->get_pool();
+      if (pool.is_nonprimary_shard(pg->get_parent()->whoami_shard().shard)) {
+        if (entry.is_written_shard(pg->get_parent()->whoami_shard().shard)) {
+	  // Written shard - only rollback OI attr
+	  ldpp_dout(dpp, 20) << " entry " << entry.version
+			     << " written shard OI attr rollback "
+			     << pg->get_parent()->whoami_shard().shard
+			     << dendl;
+	  ObjectStore::Transaction temp;
+	  pg->rollback_setattrs(hoid, attrs, &temp, true);
+	  temp.append(t);
+	  temp.swap(t);
+	} else {
+	  // Unwritten shard - nothing to rollback
+	  ldpp_dout(dpp, 20) << " entry " << entry.version
+			     << " unwritten shard skipping attr rollback "
+			     << pg->get_parent()->whoami_shard().shard
+			     << dendl;
+	}
+      } else {
+	// Primary shard - rollback all attrs
+	ldpp_dout(dpp, 20) << " entry " << entry.version
+			   << " primary_shard attr rollback "
+			   << pg->get_parent()->whoami_shard().shard
+			   << dendl;
+	ObjectStore::Transaction temp;
+	pg->rollback_setattrs(hoid, attrs, &temp, false);
+	temp.append(t);
+	temp.swap(t);
+      }
     }
     void rmobject(version_t old_version) override {
       ObjectStore::Transaction temp;
@@ -243,17 +280,58 @@ void PGBackend::rollback(
       temp.swap(t);
     }
     void rollback_extents(
-      version_t gen,
-      const vector<pair<uint64_t, uint64_t> > &extents) override {
+      const version_t gen,
+      const std::vector<std::pair<uint64_t, uint64_t>> &extents,
+      const uint64_t object_size,
+      const std::vector<shard_id_set> &shards) override {
       ObjectStore::Transaction temp;
-      pg->rollback_extents(gen, extents, hoid, &temp);
-      temp.append(t);
-      temp.swap(t);
+      const pg_pool_t& pool = pg->get_parent()->get_pool();
+      ceph_assert(entry.written_shards.empty() ||
+		  pool.allows_ecoptimizations());
+      auto dpp = pg->get_parent()->get_dpp();
+      bool donework = false;
+      ceph_assert(shards.empty() || shards.size() == extents.size());
+      for (unsigned int i = 0; i < extents.size(); i++) {
+        if (shards.empty() ||
+	    shards[i].empty() ||
+	    shards[i].contains(pg->get_parent()->whoami_shard().shard)) {
+	  // Written shard - rollback extents
+	  const uint64_t shard_size = pg->object_size_to_shard_size(
+					object_size,
+					pg->get_parent()->whoami_shard().shard);
+	  ldpp_dout(dpp, 20) << " entry " << entry.version
+			     << " written shard rollback_extents "
+			     << entry.written_shards
+			     << " shards "
+			     << (shards.empty() ? shard_id_set() : shards[i])
+			     << " " << pg->get_parent()->whoami_shard().shard
+			     << " " << object_size
+			     << " " << shard_size
+			     << dendl;
+	  pg->rollback_extents(gen, extents[i].first, extents[i].second,
+			       hoid, shard_size, &temp);
+	  donework = true;
+	} else {
+	  // Unwritten shard - nothing to rollback
+	  ldpp_dout(dpp, 20) << " entry " << entry.version
+			     << " unwritten shard skipping rollback_extents "
+			     << entry.written_shards
+			     << " " << pg->get_parent()->whoami_shard().shard
+			     << dendl;
+	}
+      }
+      if (donework) {
+	t.remove(
+	  pg->coll,
+	  ghobject_t(hoid, gen, pg->get_parent()->whoami_shard().shard));
+	temp.append(t);
+	temp.swap(t);
+      }
     }
   };
 
   ceph_assert(entry.mod_desc.can_rollback());
-  RollbackVisitor vis(entry.soid, this);
+  RollbackVisitor vis(entry.soid, this, entry);
   entry.mod_desc.visit(&vis);
   t->append(vis.t);
 }
@@ -275,12 +353,28 @@ struct Trimmer : public ObjectModDesc::Visitor {
   }
   // try_rmobject defaults to rmobject
   void rollback_extents(
-    version_t gen,
-    const vector<pair<uint64_t, uint64_t> > &extents) override {
-    pg->trim_rollback_object(
-      soid,
-      gen,
-      t);
+    const version_t gen,
+    const std::vector<std::pair<uint64_t, uint64_t>> &extents,
+    const uint64_t object_size,
+    const std::vector<shard_id_set> &shards) override {
+    auto dpp = pg->get_parent()->get_dpp();
+    ceph_assert(shards.empty() || shards.size() == extents.size());
+    for (unsigned int i = 0; i < extents.size(); i++) {
+      if (shards.empty() ||
+	  shards[i].empty() ||
+	  shards[i].contains(pg->get_parent()->whoami_shard().shard)) {
+        ldpp_dout(dpp, 30) << __func__ << " trim " << shards << " "
+			   << pg->get_parent()->whoami_shard().shard << dendl;
+        pg->trim_rollback_object(
+          soid,
+          gen,
+          t);
+	break;
+      } else {
+	ldpp_dout(dpp, 20) << __func__ << " skipping trim " << shards << " "
+			   << pg->get_parent()->whoami_shard().shard << dendl;
+      }
+    }
   }
 };
 
@@ -315,6 +409,55 @@ void PGBackend::try_stash(
     coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     ghobject_t(hoid, v, get_parent()->whoami_shard().shard));
+}
+
+void PGBackend::partial_write(
+   pg_info_t *info,
+   const pg_log_entry_t &entry)
+{
+  ceph_assert(info != nullptr);
+  auto dpp = get_parent()->get_dpp();
+  if (!entry.written_shards.empty()) {
+    ldpp_dout(dpp, 20) << __func__ << " version=" << entry.version
+		       << " written_shards=" << entry.written_shards
+		       << " present_shards=" << entry.present_shards
+		       << " pwlc=" << info->partial_writes_last_complete
+		       << dendl;
+    const pg_pool_t &pool = get_parent()->get_pool();
+    for (unsigned int shard = 0;
+	 shard < get_parent()->get_pool().size;
+	 shard++) {
+      if (pool.is_nonprimary_shard(shard_id_t(shard))) {
+        if (!entry.is_written_shard(shard_id_t(shard))) {
+	  if (!info->partial_writes_last_complete.contains(shard_id_t(shard))) {
+	    // 1st partial write since all logs were updated
+	    info->partial_writes_last_complete[shard_id_t(shard)] =
+	      std::pair(entry.prior_version, entry.version);
+	  } else if (info->partial_writes_last_complete[shard_id_t(shard)]
+		     .second.version + 1 == entry.version.version) {
+	    // Subsequent partial write, version is sequential
+	    info->partial_writes_last_complete[shard_id_t(shard)].second =
+	      entry.version;
+	  } else {
+	    // Subsequent partial write, discontiguous versions
+	    ldpp_dout(dpp, 20) << __func__ << " cannot update shard " << shard
+			       << dendl;
+	  }
+        } else {
+	  // Log updated or shard absent, partial write entry not required
+          info->partial_writes_last_complete.erase(shard_id_t(shard));
+	}
+      }
+    }
+    ldpp_dout(dpp, 20) << __func__ << " after pwlc="
+		       << info->partial_writes_last_complete << dendl;
+  } else {
+    // All shard updated - clear partial write data
+    if (!info->partial_writes_last_complete.empty()) {
+      ldpp_dout(dpp, 20) << __func__ << " clear pwlc" << dendl;
+    }
+    info->partial_writes_last_complete.clear();
+  }
 }
 
 void PGBackend::remove(
@@ -477,7 +620,8 @@ int PGBackend::objects_get_attrs(
 void PGBackend::rollback_setattrs(
   const hobject_t &hoid,
   map<string, std::optional<bufferlist> > &old_attrs,
-  ObjectStore::Transaction *t) {
+  ObjectStore::Transaction *t,
+  bool only_oi) {
   map<string, bufferlist, less<>> to_set;
   ceph_assert(!hoid.is_temp());
   for (map<string, std::optional<bufferlist> >::iterator i = old_attrs.begin();
@@ -485,28 +629,36 @@ void PGBackend::rollback_setattrs(
        ++i) {
     if (i->second) {
       to_set[i->first] = *(i->second);
-    } else {
+    } else if (!only_oi) {
       t->rmattr(
 	coll,
 	ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
 	i->first);
     }
   }
-  t->setattrs(
-    coll,
-    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-    to_set);
+  if (only_oi) {
+    t->setattr(
+      coll,
+      ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      OI_ATTR,
+      to_set[OI_ATTR]);
+  } else {
+    t->setattrs(
+      coll,
+      ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      to_set);
+  }
 }
 
 void PGBackend::rollback_append(
   const hobject_t &hoid,
-  uint64_t old_size,
+  uint64_t old_shard_size,
   ObjectStore::Transaction *t) {
   ceph_assert(!hoid.is_temp());
   t->truncate(
     coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-    old_size);
+    old_shard_size);
 }
 
 void PGBackend::rollback_stash(
@@ -529,6 +681,7 @@ void PGBackend::rollback_try_stash(
   version_t old_version,
   ObjectStore::Transaction *t) {
   ceph_assert(!hoid.is_temp());
+  dout(20) << __func__ << " " << hoid << " " << old_version << dendl;
   t->remove(
     coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
@@ -540,22 +693,33 @@ void PGBackend::rollback_try_stash(
 
 void PGBackend::rollback_extents(
   version_t gen,
-  const vector<pair<uint64_t, uint64_t> > &extents,
+  const uint64_t offset,
+  uint64_t length,
   const hobject_t &hoid,
+  const uint64_t shard_size,
   ObjectStore::Transaction *t) {
   auto shard = get_parent()->whoami_shard().shard;
-  for (auto &&extent: extents) {
+  if (offset >= shard_size) {
+    // extent on this shard is beyond the end of the object - nothing to do
+    dout(20) << __func__ << " " << hoid << " "
+	     << offset << "~" << length << " is out of range "
+	     << shard_size << dendl;
+  } else {
+    if (offset + length > shard_size) {
+      dout(20) << __func__ << " " << length << " is being truncated" << dendl;
+      // extent on this shard goes beyond end of the object - truncate length
+      length = shard_size - offset;
+    }
+    dout(20) << __func__ << " " << hoid << " " << offset << "~" << length
+	     << dendl;
     t->clone_range(
       coll,
       ghobject_t(hoid, gen, shard),
       ghobject_t(hoid, ghobject_t::NO_GEN, shard),
-      extent.first,
-      extent.second,
-      extent.first);
+      offset,
+      length,
+      offset);
   }
-  t->remove(
-    coll,
-    ghobject_t(hoid, gen, shard));
 }
 
 void PGBackend::trim_rollback_object(
@@ -563,6 +727,7 @@ void PGBackend::trim_rollback_object(
   version_t old_version,
   ObjectStore::Transaction *t) {
   ceph_assert(!hoid.is_temp());
+  dout(20) << __func__ << " trim " << hoid << " " << old_version << dendl;
   t->remove(
     coll, ghobject_t(hoid, old_version, get_parent()->whoami_shard().shard));
 }
@@ -574,7 +739,8 @@ PGBackend *PGBackend::build_pg_backend(
   coll_t coll,
   ObjectStore::CollectionHandle &ch,
   ObjectStore *store,
-  CephContext *cct)
+  CephContext *cct,
+  ECExtentCache::LRU &ec_extent_cache_lru)
 {
   ErasureCodeProfile ec_profile = profile;
   switch (pool.type) {
@@ -591,14 +757,15 @@ PGBackend *PGBackend::build_pg_backend(
       &ec_impl,
       &ss);
     ceph_assert(ec_impl);
-    return new ECBackend(
+    return new ECSwitch(
       l,
       coll,
       ch,
       store,
       cct,
       ec_impl,
-      pool.stripe_width);
+      pool.stripe_width,
+      ec_extent_cache_lru);
   }
   default:
     ceph_abort();
@@ -607,6 +774,7 @@ PGBackend *PGBackend::build_pg_backend(
 }
 
 int PGBackend::be_scan_list(
+  const Scrub::ScrubCounterSet& io_counters,
   ScrubMap &map,
   ScrubMapBuilder &pos)
 {
@@ -614,10 +782,12 @@ int PGBackend::be_scan_list(
   ceph_assert(!pos.done());
   ceph_assert(pos.pos < pos.ls.size());
   hobject_t& poid = pos.ls[pos.pos];
+  auto& perf_logger = *(get_parent()->get_logger());
 
   int r = 0;
   ScrubMap::object &o = map.objects[poid];
   if (!pos.metadata_done) {
+    perf_logger.inc(io_counters.stats_cnt);
     struct stat st;
     r = store->stat(
       ch,
@@ -627,6 +797,7 @@ int PGBackend::be_scan_list(
       true);
 
     if (r == 0) {
+      perf_logger.inc(io_counters.getattr_cnt);
       o.size = st.st_size;
       ceph_assert(!o.negative);
       r = store->getattrs(
@@ -661,7 +832,7 @@ int PGBackend::be_scan_list(
   }
 
   if (pos.deep) {
-    r = be_deep_scrub(poid, map, pos, o);
+    r = be_deep_scrub(io_counters, poid, map, pos, o);
     if (r == -EINPROGRESS) {
       return -EINPROGRESS;
     } else if (r != 0) {

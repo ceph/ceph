@@ -10,6 +10,12 @@ def _cluster(**kwargs):
     return smb.resources.Cluster(**kwargs)
 
 
+def _cephfs(**kwargs):
+    if 'provider' not in kwargs:
+        kwargs['provider'] = smb.enums.CephFSStorageProvider.SAMBA_VFS_NEW
+    return smb.resources.CephFSStorage(**kwargs)
+
+
 @pytest.fixture
 def thandler():
     ext_store = smb.config_store.MemConfigStore()
@@ -79,7 +85,7 @@ def test_internal_apply_cluster_and_share(thandler):
         cluster_id='foo',
         share_id='s1',
         name='Ess One',
-        cephfs=smb.resources.CephFSStorage(
+        cephfs=_cephfs(
             volume='cephfs',
             path='/',
         ),
@@ -546,7 +552,7 @@ def test_error_result():
         cluster_id='foo',
         share_id='s1',
         name='Ess One',
-        cephfs=smb.resources.CephFSStorage(
+        cephfs=_cephfs(
             volume='cephfs',
             path='/',
         ),
@@ -562,7 +568,7 @@ def test_error_result():
 
 def test_apply_type_error(thandler):
     # a resource component, not valid on its own
-    r = smb.resources.CephFSStorage(
+    r = _cephfs(
         volume='cephfs',
         path='/',
     )
@@ -576,7 +582,7 @@ def test_apply_no_matching_cluster_error(thandler):
         cluster_id='woops',
         share_id='s1',
         name='Ess One',
-        cephfs=smb.resources.CephFSStorage(
+        cephfs=_cephfs(
             volume='cephfs',
             path='/',
         ),
@@ -612,7 +618,7 @@ def test_apply_full_cluster_create(thandler):
             cluster_id='mycluster1',
             share_id='homedirs',
             name='Home Directries',
-            cephfs=smb.resources.CephFSStorage(
+            cephfs=_cephfs(
                 volume='cephfs',
                 subvolume='homedirs',
                 path='/',
@@ -621,7 +627,7 @@ def test_apply_full_cluster_create(thandler):
         smb.resources.Share(
             cluster_id='mycluster1',
             share_id='archive',
-            cephfs=smb.resources.CephFSStorage(
+            cephfs=_cephfs(
                 volume='cephfs',
                 path='/archive',
             ),
@@ -743,7 +749,7 @@ def test_apply_add_second_cluster(thandler):
         smb.resources.Share(
             cluster_id='coolcluster',
             share_id='images',
-            cephfs=smb.resources.CephFSStorage(
+            cephfs=_cephfs(
                 volume='imgvol',
                 path='/',
             ),
@@ -801,7 +807,7 @@ def test_modify_cluster_only_touches_changed_cluster(thandler):
         smb.resources.Share(
             cluster_id='coolcluster',
             share_id='photos',
-            cephfs=smb.resources.CephFSStorage(
+            cephfs=_cephfs(
                 volume='imgvol',
                 path='/photos',
             ),
@@ -915,7 +921,7 @@ def test_apply_remove_all_clusters(thandler):
         smb.resources.Share(
             cluster_id='mycluster2',
             share_id='m2',
-            cephfs=smb.resources.CephFSStorage(
+            cephfs=_cephfs(
                 volume='imgvol',
                 path='/',
             ),
@@ -923,7 +929,7 @@ def test_apply_remove_all_clusters(thandler):
         smb.resources.Share(
             cluster_id='mycluster3',
             share_id='m3',
-            cephfs=smb.resources.CephFSStorage(
+            cephfs=_cephfs(
                 volume='imgvol',
                 path='/',
             ),
@@ -1196,7 +1202,7 @@ def test_apply_cluster_linked_auth(thandler):
             cluster_id='mycluster1',
             share_id='homedirs',
             name='Home Directries',
-            cephfs=smb.resources.CephFSStorage(
+            cephfs=_cephfs(
                 volume='cephfs',
                 subvolume='homedirs',
                 path='/',
@@ -1317,7 +1323,7 @@ def test_apply_with_create_only(thandler):
             cluster_id='mycluster1',
             share_id='homedirs',
             name='Altered Home Directries',
-            cephfs=smb.resources.CephFSStorage(
+            cephfs=_cephfs(
                 volume='cephfs',
                 subvolume='homedirs',
                 path='/',
@@ -1327,7 +1333,7 @@ def test_apply_with_create_only(thandler):
             cluster_id='mycluster1',
             share_id='foodirs',
             name='Foo Directries',
-            cephfs=smb.resources.CephFSStorage(
+            cephfs=_cephfs(
                 volume='cephfs',
                 subvolume='homedirs',
                 path='/foo',
@@ -1366,7 +1372,7 @@ def test_apply_with_create_only(thandler):
             cluster_id='mycluster1',
             share_id='foodirs',
             name='Foo Directries',
-            cephfs=smb.resources.CephFSStorage(
+            cephfs=_cephfs(
                 volume='cephfs',
                 subvolume='homedirs',
                 path='/foo',
@@ -1557,7 +1563,7 @@ def test_remove_in_use_ug(thandler):
                     cluster_id='c1',
                     share_id='zeta',
                     name='Zeta Zoom',
-                    cephfs=smb.resources.CephFSStorage(
+                    cephfs=_cephfs(
                         volume='cephfs',
                         path='/zeta',
                     ),
@@ -1571,7 +1577,7 @@ def test_remove_in_use_ug(thandler):
                     cluster_id='c2',
                     share_id='max',
                     name='Beta Max',
-                    cephfs=smb.resources.CephFSStorage(
+                    cephfs=_cephfs(
                         volume='cephfs',
                         path='/max',
                     ),
@@ -1585,7 +1591,7 @@ def test_remove_in_use_ug(thandler):
                     cluster_id='c1',
                     share_id='zalpha',
                     name='Alphabet Soup',
-                    cephfs=smb.resources.CephFSStorage(
+                    cephfs=_cephfs(
                         volume='cephfs',
                         path='/zalpha',
                     ),
@@ -1601,7 +1607,7 @@ def test_remove_in_use_ug(thandler):
                     cluster_id='c1',
                     share_id='epsilon',
                     name='Epsilon Eggs',
-                    cephfs=smb.resources.CephFSStorage(
+                    cephfs=_cephfs(
                         volume='cephfs',
                         path='/eggs',
                     ),
@@ -1610,7 +1616,7 @@ def test_remove_in_use_ug(thandler):
                     cluster_id='c1',
                     share_id='eggs',
                     name='Epsilon Eggs',
-                    cephfs=smb.resources.CephFSStorage(
+                    cephfs=_cephfs(
                         volume='cephfs',
                         path='/eggs',
                     ),
@@ -1630,7 +1636,7 @@ def test_remove_in_use_ug(thandler):
                     cluster_id='c1',
                     share_id='macks',
                     name='Beta Max',
-                    cephfs=smb.resources.CephFSStorage(
+                    cephfs=_cephfs(
                         volume='cephfs',
                         path='/macks',
                     ),

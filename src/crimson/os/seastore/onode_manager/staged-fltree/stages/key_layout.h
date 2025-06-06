@@ -430,7 +430,7 @@ class key_hobj_t {
    * common interfaces as a full_key_t
    */
   shard_t shard() const {
-    return ghobj.shard_id;
+    return static_cast<shard_t>(ghobj.shard_id);
   }
   pool_t pool() const {
     return ghobj.hobj.pool;

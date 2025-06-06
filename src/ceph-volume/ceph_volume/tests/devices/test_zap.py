@@ -1,6 +1,6 @@
 import pytest
 from ceph_volume.devices import lvm
-from mock.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock
 
 
 class TestZap(object):
@@ -30,7 +30,8 @@ class TestZap(object):
             exists=True,
             has_partitions=False,
             has_gpt_headers=False,
-            has_fs=False
+            has_fs=False,
+            is_partition=False
         )
         with pytest.raises(SystemExit):
             lvm.zap.Zap(argv=[device_name]).main()

@@ -44,9 +44,12 @@ the zonegroups and zones.
 
 The zonegroup placement configuration can be queried with:
 
+.. prompt:: bash #
+
+   radosgw-admin zonegroup get
+
 ::
 
-  $ radosgw-admin zonegroup get
   {
       "id": "ab01123f-e0df-4f29-9d71-b44888d67cd5",
       "name": "default",
@@ -67,9 +70,12 @@ The zonegroup placement configuration can be queried with:
 
 The zone placement configuration can be queried with:
 
+.. prompt:: bash #
+
+   radosgw-admin zone get
+
 ::
 
-  $ radosgw-admin zone get
   {
       "id": "557cdcee-3aae-4e9e-85c7-2f86f5eddb1f",
       "name": "default",
@@ -94,7 +100,7 @@ The zone placement configuration can be queried with:
       ...
   }
 
-.. note:: If you have not done any previous `Multisite Configuration`_,
+.. note:: If you have not done any previous :ref:`Multisite Configuration <multisite>`,
           a ``default`` zone and zonegroup are created for you, and changes
           to the zone/zonegroup will not take effect until the Ceph Object
           Gateways are restarted. If you have created a realm for multisite,
@@ -104,35 +110,35 @@ The zone placement configuration can be queried with:
 Adding a Placement Target
 -------------------------
 
-To create a new placement target named ``temporary``, start by adding it to
+To create a new placement target named ``temporary``, add it to
 the zonegroup:
 
-::
+.. prompt:: bash #
 
-  $ radosgw-admin zonegroup placement add \
-        --rgw-zonegroup default \
-        --placement-id temporary
+   radosgw-admin zonegroup placement add --rgw-zonegroup default \
+                                           --placement-id temporary
 
 Then provide the zone placement info for that target:
 
-::
+.. prompt:: bash #
 
-  $ radosgw-admin zone placement add \
-        --rgw-zone default \
-        --placement-id temporary \
-        --data-pool default.rgw.temporary.data \
-        --index-pool default.rgw.temporary.index \
-        --data-extra-pool default.rgw.temporary.non-ec
+   radosgw-admin zone placement add --rgw-zone default \
+                                      --placement-id temporary \
+                                      --data-pool default.rgw.temporary.data \
+                                      --index-pool default.rgw.temporary.index \
+                                      --data-extra-pool default.rgw.temporary.non-ec
 
-.. note:: With default placement target settings, RGW stores an object's first data chunk in the RADOS "head" object along
-          with XATTR metadata. The `--placement-inline-data=false` flag may be passed with the `zone placement add` or
-          `zone placement modify` commands to change this behavior for new objects stored on the target.
+.. note:: With default placement target settings, RGW stores an object's first data chunk in the RADOS ``HEAD`` object along
+          with XATTR metadata. The ``--placement-inline-data=false`` flag may be passed with the ``zone placement add`` or
+          ``zone placement modify`` commands to change this behavior for new objects stored on the target.
           When data is stored inline (default), it may provide an advantage for read/write workloads since the first chunk of
           an object's data can be retrieved/stored in a single librados call along with object metadata. On the other hand, a
           target that does not store data inline can provide a performance benefit for RGW client delete requests when
           the BlueStore DB is located on faster storage than bucket data since it eliminates the need to access
           slower devices synchronously while processing the client request. In that case, data associated with the deleted
-          objects is removed asynchronously in the background by garbage collection.                                          
+          objects is removed asynchronously in the background by garbage collection. Note that inlining is only ever performed
+          when writing to the default storage class.  Inlining is *never* performed when writing to a non-default
+          storage class.
 
 .. _adding_a_storage_class:
 
@@ -142,23 +148,21 @@ Adding a Storage Class
 To add a new storage class named ``STANDARD_IA`` to the ``default-placement`` target,
 start by adding it to the zonegroup:
 
-::
+.. prompt:: bash #
 
-  $ radosgw-admin zonegroup placement add \
-        --rgw-zonegroup default \
-        --placement-id default-placement \
-        --storage-class STANDARD_IA
+   radosgw-admin zonegroup placement add --rgw-zonegroup default \
+                                           --placement-id default-placement \
+                                           --storage-class STANDARD_IA
 
 Then provide the zone placement info for that storage class:
 
-::
+.. prompt:: bash #
 
-  $ radosgw-admin zone placement add \
-        --rgw-zone default \
-        --placement-id default-placement \
-        --storage-class STANDARD_IA \
-        --data-pool default.rgw.glacier.data \
-        --compression lz4
+   radosgw-admin zone placement add --rgw-zone default \
+                                      --placement-id default-placement \
+                                      --storage-class STANDARD_IA \
+                                      --data-pool default.rgw.glacier.data \
+                                      --compression lz4
 
 Customizing Placement
 =====================
@@ -169,11 +173,10 @@ Default Placement
 By default, new buckets will use the zonegroup's ``default_placement`` target.
 This zonegroup setting can be changed with:
 
-::
+.. prompt:: bash #
 
-  $ radosgw-admin zonegroup placement default \
-        --rgw-zonegroup default \
-        --placement-id new-placement
+   radosgw-admin zonegroup placement default --rgw-zonegroup default \
+                                               --placement-id new-placement
 
 User Placement
 --------------
@@ -183,9 +186,12 @@ target by setting a non-empty ``default_placement`` field in the user info.
 Similarly, the ``default_storage_class`` can override the ``STANDARD``
 storage class applied to objects by default.
 
+.. prompt:: bash #
+
+   radosgw-admin user info --uid testid
+
 ::
 
-  $ radosgw-admin user info --uid testid
   {
       ...
       "default_placement": "",
@@ -201,13 +207,12 @@ to restrict access to certain types of storage.
 
 The ``radosgw-admin`` command can modify these fields directly with:
 
-::
+.. prompt:: bash #
 
-  $ radosgw-admin user modify \
-        --uid <user-id> \
-        --placement-id <default-placement-id> \
-        --storage-class <default-storage-class> \
-        --tags <tag1,tag2>
+   radosgw-admin user modify --uid <user-id> \
+                               --placement-id <default-placement-id> \
+                               --storage-class <default-storage-class> \
+                               --tags <tag1,tag2>
 
 .. _s3_bucket_placement:
 
@@ -215,10 +220,10 @@ S3 Bucket Placement
 -------------------
 
 When creating a bucket with the S3 protocol, a placement target can be
-provided as part of the LocationConstraint to override the default placement
+provided as part of the ``LocationConstraint`` to override the default placement
 targets from the user and zonegroup.
 
-Normally, the LocationConstraint must match the zonegroup's ``api_name``:
+Normally, the ``LocationConstraint`` must match the zonegroup's ``api_name``:
 
 ::
 
@@ -267,4 +272,3 @@ names be used with Ceph, including ``INTELLIGENT-TIERING``, ``STANDARD_IA``,
 libraries.
 
 .. _`Pools`: ../pools
-.. _`Multisite Configuration`: ../multisite

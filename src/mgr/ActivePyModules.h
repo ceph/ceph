@@ -21,7 +21,6 @@
 #include "PyFormatter.h"
 
 #include "osdc/Objecter.h"
-#include "client/Client.h"
 #include "common/LogClient.h"
 #include "mon/MgrMap.h"
 #include "mon/MonCommand.h"
@@ -32,6 +31,10 @@
 #include "DaemonState.h"
 #include "ClusterState.h"
 #include "OSDPerfMetricTypes.h"
+
+#include <map>
+#include <set>
+#include <string>
 
 class health_check_map_t;
 class DaemonServer;
@@ -54,7 +57,6 @@ class ActivePyModules
   MonClient &monc;
   LogChannelRef clog, audit_clog;
   Objecter &objecter;
-  Client   &client;
   Finisher &finisher;
   TTLCache<std::string, PyObject*> ttl_cache;
 public:
@@ -73,7 +75,7 @@ public:
     std::map<std::string, std::string> store_data,
     bool mon_provides_kv_sub,
     DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-    LogChannelRef clog_, LogChannelRef audit_clog_, Objecter &objecter_, Client &client_,
+    LogChannelRef clog_, LogChannelRef audit_clog_, Objecter &objecter_,
     Finisher &f, DaemonServer &server, PyModuleRegistry &pmr);
 
   ~ActivePyModules();
@@ -81,7 +83,6 @@ public:
   // FIXME: wrap for send_command?
   MonClient &get_monc() {return monc;}
   Objecter  &get_objecter() {return objecter;}
-  Client    &get_client() {return client;}
   PyObject *cacheable_get_python(const std::string &what);
   PyObject *get_python(const std::string &what);
   PyObject *get_server_python(const std::string &hostname);
@@ -90,29 +91,50 @@ public:
     const std::string &svc_type, const std::string &svc_id);
   PyObject *get_daemon_status_python(
     const std::string &svc_type, const std::string &svc_id);
-  PyObject *get_counter_python(
+  PyObject *get_unlabeled_counter_python(
     const std::string &svc_type,
     const std::string &svc_id,
     const std::string &path);
+  PyObject *get_latest_unlabeled_counter_python(
+      const std::string &svc_type,
+      const std::string &svc_id,
+      const std::string &path);
   PyObject *get_latest_counter_python(
-    const std::string &svc_type,
-    const std::string &svc_id,
-    const std::string &path);
+      const std::string &svc_type,
+      const std::string &svc_id,
+      std::string_view counter_name,
+      std::string_view sub_counter_name,
+      const std::vector<std::pair<std::string_view, std::string_view>> &labels);
+  PyObject *get_unlabeled_perf_schema_python(
+      const std::string &svc_type,
+      const std::string &svc_id);
   PyObject *get_perf_schema_python(
-     const std::string &svc_type,
-     const std::string &svc_id);
+      const std::string &svc_type,
+      const std::string &svc_id);
   PyObject *get_rocksdb_version();
   PyObject *get_context();
   PyObject *get_osdmap();
   /// @note @c fct is not allowed to acquire locks when holding GIL
-  PyObject *with_perf_counters(
+  PyObject *with_unlabled_perf_counters(
       std::function<void(
-        PerfCounterInstance& counter_instance,
-        PerfCounterType& counter_type,
-        PyFormatter& f)> fct,
+	  PerfCounterInstance &counter_instance,
+	  PerfCounterType &counter_type,
+	  PyFormatter &f)> fct,
       const std::string &svc_name,
       const std::string &svc_id,
       const std::string &path) const;
+  /// @note @c fct is not allowed to acquire locks when holding GIL
+  PyObject *with_perf_counters(
+      std::function<void(
+	  PerfCounterInstance &counter_instance,
+	  PerfCounterType &counter_type,
+	  PyFormatter &f)> fct,
+      const std::string &svc_name,
+      const std::string &svc_id,
+      std::string_view counter_name,
+      std::string_view sub_counter_name,
+      const std::vector<std::pair<std::string_view, std::string_view>> &labels)
+      const;
 
   MetricQueryID add_osd_perf_query(
       const OSDPerfMetricQuery &query,
@@ -179,7 +201,7 @@ public:
   void update_kv_data(
     const std::string prefix,
     bool incremental,
-    const map<std::string, std::optional<bufferlist>, std::less<>>& data);
+    const std::map<std::string, std::optional<bufferlist>, std::less<>>& data);
   void _refresh_config_map();
 
   // Public so that MonCommandCompletion can use it

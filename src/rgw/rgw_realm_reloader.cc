@@ -97,6 +97,7 @@ void RGWRealmReloader::reload()
   // TODO: make RGWRados responsible for rgw_log_usage lifetime
   rgw_log_usage_finalize();
 
+  env.driver->shutdown();
   // destroy the existing driver
   DriverManager::close_storage(env.driver);
   env.driver = nullptr;
@@ -127,7 +128,7 @@ void RGWRealmReloader::reload()
           cct->_conf->rgw_enable_quota_threads,
           cct->_conf->rgw_run_sync_thread,
           cct->_conf.get_val<bool>("rgw_dynamic_resharding"),
-          true, null_yield, // run notification thread
+	        true, true, null_yield, env.cfgstore, // run notification thread
           cct->_conf->rgw_cache_enabled);
     }
 
@@ -186,9 +187,12 @@ void RGWRealmReloader::reload()
    * the dynamic reconfiguration. */
   env.auth_registry = rgw::auth::StrategyRegistry::create(
       cct, implicit_tenants, env.driver);
-  env.lua.manager = env.driver->get_lua_manager(env.lua.manager->luarocks_path());
-  if (env.lua.background) {
-    env.lua.background->set_manager(env.lua.manager.get());
+  if (env.lua.manager.get()) {
+    env.lua.manager = env.driver->get_lua_manager(
+        env.lua.manager->luarocks_path());
+    if (env.lua.background) {
+      env.lua.background->set_manager(env.lua.manager.get());
+    }
   }
 
   ldpp_dout(&dp, 1) << "Resuming frontends with new realm configuration." << dendl;

@@ -35,7 +35,7 @@ except AttributeError:
             return date
         except ValueError:
             msg = f'''The date string {data_string} does not match the required format
-            {SNAP_DB_TS_FORMAT}. For more flexibel date parsing upgrade to
+            {SNAP_DB_TS_FORMAT}. For more flexible date parsing upgrade to
             python3.7 or install
             https://github.com/movermeyer/backports.datetime_fromisoformat'''
             log.error(msg)
@@ -364,9 +364,9 @@ class Schedule(object):
             current_retention = json.loads(current)
             for r, v in retention.items():
                 if r in current_retention:
-                    msg = (f'Retention for {r} is already present with value'
-                           f'{current_retention[r]}. Please remove first')
-                    raise ValueError(msg)
+                    msg = (f'Retention for {r} is already present with value '
+                           f'{current_retention[r]}. Please remove it first.')
+                    raise FileExistsError(msg)
             current_retention.update(retention)
             db.execute(cls.UPDATE_RETENTION,
                        (json.dumps(current_retention), path))

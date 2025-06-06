@@ -15,30 +15,35 @@
 #ifndef CEPH_MDS_MUTATION_H
 #define CEPH_MDS_MUTATION_H
 
+#include <list>
+#include <map>
 #include <optional>
+#include <ostream>
+#include <set>
+#include <unordered_map>
+#include <vector>
 
 #include "include/interval_set.h"
 #include "include/elist.h"
 #include "include/filepath.h"
 
-#include "MDSCacheObject.h"
-#include "MDSContext.h"
-
-#include "SimpleLock.h"
 #include "Capability.h"
-#include "BatchOp.h"
 
+#include "common/StackStringStream.h"
 #include "common/TrackedOp.h"
 #include "messages/MClientRequest.h"
 #include "messages/MMDSPeerRequest.h"
-#include "messages/MClientReply.h"
 
 class LogSegment;
+class BatchOp;
 class CInode;
 class CDir;
 class CDentry;
+class MDSCacheObject;
+class MDSContext;
 class Session;
 class ScatterLock;
+class SimpleLock;
 struct sr_t;
 struct MDLockCache;
 
@@ -78,15 +83,7 @@ public:
       return lock < r.lock;
     }
 
-    void print(std::ostream& out) const {
-      CachedStackStringStream css;
-      *css << "0x" << std::hex << flags;
-      out << "LockOp(l=" << *lock << ",f=" << css->strv();
-      if (wrlock_target != MDS_RANK_NONE) {
-        out << ",wt=" << wrlock_target;
-      }
-      out << ")";
-    }
+    void print(std::ostream& out) const;
 
     SimpleLock* lock;
     mutable unsigned flags;
@@ -249,7 +246,7 @@ public:
   // flag mutation as peer
   mds_rank_t peer_to_mds = MDS_RANK_NONE;  // this is a peer request if >= 0.
 
-  ceph::unordered_map<MDSCacheObject*, ObjectState> object_states;
+  std::unordered_map<MDSCacheObject*, ObjectState> object_states;
   int num_pins = 0;
   int num_auth_pins = 0;
   int num_remote_auth_pins = 0;
@@ -347,7 +344,7 @@ struct MDRequestImpl : public MutationImpl {
     Context *peer_commit = nullptr;
     ceph::buffer::list rollback_bl;
 
-    MDSContext::vec waiting_for_finish;
+    std::vector<MDSContext*> waiting_for_finish;
 
     std::map<inodeno_t, metareqid_t> quiesce_ops;
 
@@ -487,6 +484,9 @@ struct MDRequestImpl : public MutationImpl {
 
   // indicator for vxattr osdmap update
   bool waited_for_osdmap = false;
+
+  // referent straydn
+  bool referent_straydn = false;
 
 protected:
   void _dump(ceph::Formatter *f) const override {

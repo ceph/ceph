@@ -128,7 +128,33 @@ struct NvmeGwMonState {
   // state machine states per ANA group
   SmState sm_state;
   BlocklistData blocklist_data;
-
+  //ceph entity address allocated for the GW-client that represents this GW-id
+  entity_addrvec_t addr_vect;
+  uint16_t beacon_index = 0;
+  /**
+   * during redeploy action and maybe other emergency use-cases gw performs scenario
+   * that we call fast-reboot. It quickly reboots(due to redeploy f.e) and sends the
+   * first beacon to monitor in "Created" state while according to monitor FSM it
+   * still appears "Available".
+   * This lost of synchronizarion with GW is detected by monitor. After fast reboot, the monitor
+   * still considers this GW as not eligible for owning any ANA group until it becomes
+   * in Available state (sends the next beacon that includes the subsystems information).
+   * In this specific fast-reboot case, we prefer to avoid failing over the ANA groups
+   * that were owned by this GW for a short time frame, assuming that this GW will be
+   * in Available State in few seconds. Doing too many failovers and failbacks
+   * in a very short times frame, on many GWs, is causing a lot of pain to the
+   * initiators, up to the point that they might stuck.
+   *
+   * So was decided to set to GW new timeout varible "allow_failovers_ts" - no failovers
+   * are performed to GW's pool-group during 12 seconds from the time it is set.
+   * this variable is not persistent - not serialized to peers, so need to prevent
+   * it from being overriden by new epochs in monitor's function create_pending -
+   * function restore_pending_map_info is called for this purpose
+  */
+  std::chrono::system_clock::time_point allow_failovers_ts =
+             std::chrono::system_clock::now();
+  std::chrono::system_clock::time_point last_gw_down_ts =
+             std::chrono::system_clock::now() - std::chrono::seconds(30);
   NvmeGwMonState(): ana_grp_id(REDUNDANT_GW_ANA_GROUP_ID) {}
 
   NvmeGwMonState(NvmeAnaGrpId id)
@@ -149,6 +175,9 @@ struct NvmeGwMonState {
   void active_state(NvmeAnaGrpId grpid) {
     sm_state[grpid]       = gw_states_per_group_t::GW_ACTIVE_STATE;
     blocklist_data[grpid].osd_epoch = 0;
+  }
+  void set_last_gw_down_ts(){
+    last_gw_down_ts = std::chrono::system_clock::now();
   }
 };
 

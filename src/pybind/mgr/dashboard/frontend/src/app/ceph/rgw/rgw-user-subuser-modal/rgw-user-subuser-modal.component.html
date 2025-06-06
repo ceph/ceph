@@ -1,126 +1,123 @@
-<cd-modal [modalRef]="bsModalRef">
-  <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
-  <ng-container class="modal-content">
-    <form #frm="ngForm"
-          [formGroup]="formGroup"
-          novalidate>
-      <div class="modal-body">
+<cds-modal size="md"
+           [open]="open"
+           [hasScrollingContent]="false"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
 
-        <!-- Username -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="uid"
-                 i18n>Username</label>
-          <div class="cd-col-form-input">
-            <input id="uid"
-                   class="form-control"
-                   type="text"
-                   formControlName="uid"
-                   [readonly]="true">
-          </div>
-        </div>
+    <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
+  </cds-modal-header>
 
-        <!-- Subuser -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 [ngClass]="{'required': !editing}"
-                 for="subuid"
-                 i18n>Subuser</label>
-          <div class="cd-col-form-input">
-            <input id="subuid"
-                   class="form-control"
-                   type="text"
-                   formControlName="subuid"
-                   [readonly]="editing"
-                   autofocus>
-            <span class="invalid-feedback"
-                  *ngIf="formGroup.showError('subuid', frm, 'required')"
-                  i18n>This field is required.</span>
-            <span class="invalid-feedback"
-                  *ngIf="formGroup.showError('subuid', frm, 'subuserIdExists')"
-                  i18n>The chosen subuser ID is already in use.</span>
-          </div>
-        </div>
-
-        <!-- Permission -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="perm"
-                 i18n>Permission</label>
-          <div class="cd-col-form-input">
-            <select id="perm"
-                    class="form-select"
-                    formControlName="perm">
-              <option i18n
-                      [ngValue]="null">-- Select a permission --</option>
-              <option *ngFor="let perm of ['read', 'write']"
-                      [value]="perm">
-                {{ perm }}
-              </option>
-              <option i18n
-                      value="read-write">read, write</option>
-              <option i18n
-                      value="full-control">full</option>
-            </select>
-            <span class="invalid-feedback"
-                  *ngIf="formGroup.showError('perm', frm, 'required')"
-                  i18n>This field is required.</span>
-          </div>
-        </div>
-
-        <!-- Swift key -->
-        <fieldset *ngIf="!editing">
-          <legend i18n>Swift key</legend>
-
-          <!-- Auto-generate key -->
-          <div class="form-group row">
-            <div class="cd-col-form-offset">
-              <div class="custom-control custom-checkbox">
-                <input class="custom-control-input"
-                       id="generate_secret"
-                       type="checkbox"
-                       formControlName="generate_secret">
-                <label class="custom-control-label"
-                       for="generate_secret"
-                       i18n>Auto-generate secret</label>
-              </div>
-            </div>
-          </div>
-
-          <!-- Secret key -->
-          <div class="form-group row"
-               *ngIf="!editing && !formGroup.getValue('generate_secret')">
-            <label class="cd-col-form-label required"
-                   for="secret_key"
-                   i18n>Secret key</label>
-            <div class="cd-col-form-input">
-              <div class="input-group">
-                <input id="secret_key"
-                       class="form-control"
-                       type="password"
-                       formControlName="secret_key">
-                <button type="button"
-                        class="btn btn-light"
-                        cdPasswordButton="secret_key">
-                </button>
-                <cd-copy-2-clipboard-button source="secret_key">
-                </cd-copy-2-clipboard-button>
-              </div>
-              <span class="invalid-feedback"
-                    *ngIf="formGroup.showError('secret_key', frm, 'required')"
-                    i18n>This field is required.</span>
-            </div>
-          </div>
-
-        </fieldset>
-
+  <form #frm="ngForm"
+        [formGroup]="formGroup"
+        novalidate>
+    <div cdsModalContent>
+      <!-- Username -->
+      <div class="form-item">
+        <cds-text-label for="uid"
+                        i18n>Username
+          <input cdsText
+                 id="uid"
+                 name="uid"
+                 formControlName="uid"
+                 readonly
+                 modal-primary-focus>
+        </cds-text-label>
       </div>
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                              [form]="formGroup"
-                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
+
+      <!-- Subuser -->
+      <div class="form-item">
+        <cds-text-label for="subuid"
+                        [invalid]="formGroup.controls.subuid.invalid && formGroup.controls.subuid.dirty"
+                        [invalidText]="subuserHelper">Subuser
+          <input cdsText
+                 id="subuid"
+                 name="subuid"
+                 formControlName="subuid"
+                 [readonly]="editing"
+                 autofocus>
+        </cds-text-label>
+        <ng-template #subuserHelper>
+          <span class="invalid-feedback"
+                *ngIf="formGroup.showError('subuid', frm, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="formGroup.showError('subuid', frm, 'subuserIdExists')"
+                i18n>The chosen subuser ID is already in use.</span>
+        </ng-template>
       </div>
-    </form>
-  </ng-container>
-</cd-modal>
+
+      <!-- Permission -->
+      <div class="form-item">
+        <cds-select label="Permission"
+                    i18n-label
+                    for="perm"
+                    formControlName="perm"
+                    [invalid]="formGroup.controls.perm.invalid && formGroup.controls.perm.dirty"
+                    [invalidText]="permError">
+          <option value="">--- Select a permission ---</option>
+          <option *ngFor="let perm of ['read', 'write']"
+                  [value]="perm">
+            {{ perm }}
+          </option>
+          <option i18n
+                  value="read-write">read, write</option>
+          <option i18n
+                  value="full-control">full</option>
+        </cds-select>
+
+        <ng-template #permError>
+          <span class="invalid-feedback"
+                *ngIf="formGroup.showError('perm', frm, 'required')"
+                i18n>This field is required.</span>
+        </ng-template>
+      </div>
+
+      <!-- Swift key -->
+      <fieldset *ngIf="!editing">
+        <legend i18n>Swift key</legend>
+
+        <!-- Auto-generate key -->
+        <div class="form-item">
+          <cds-checkbox id="generate_secret"
+                        formControlName="generate_secret"
+                        i18n>Auto-generate key
+          </cds-checkbox>
+        </div>
+
+        <!-- Secret key -->
+        <div class="form-item form-item-append"
+             *ngIf="!editing && !formGroup.getValue('generate_secret')">
+          <cds-password-label for="secret_key"
+                              [invalid]="formGroup.controls.secret_key.invalid && formGroup.controls.secret_key.dirty"
+                              [invalidText]="secretKeyError"
+                              i18n>Secret key
+            <input cdsPassword
+                   id="secret_key"
+                   name="secret_key"
+                   formControlName="secret_key"
+                   [invalid]="formGroup.controls.secret_key.invalid && formGroup.controls.secret_key.dirty"
+                   [autofocus]="true">
+          </cds-password-label>
+
+          <cd-copy-2-clipboard-button source="secret_key"
+                                      class="mt-4">
+          </cd-copy-2-clipboard-button>
+
+          <ng-template #secretKeyError>
+            <span class="invalid-feedback"
+                  *ngIf="formGroup.showError('secret_key', frm, 'required')"
+                  i18n>This field is required.</span>
+          </ng-template>
+        </div>
+
+      </fieldset>
+    </div>
+    <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                          [form]="formGroup"
+                          [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                          [modalForm]="true"></cd-form-button-panel>
+
+  </form>
+</cds-modal>

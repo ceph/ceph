@@ -12,12 +12,15 @@
  * 
  */
 
+#include "MDSMap.h"
+#include "mds/cephfs_features.h"
+
 #include <ostream>
 
 #include "common/debug.h"
+#include "common/Formatter.h"
+#include "common/StackStringStream.h"
 #include "mon/health_check.h"
-
-#include "MDSMap.h"
 
 using std::dec;
 using std::hex;
@@ -36,6 +39,27 @@ using ceph::Formatter;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
+
+const std::map<int, std::string> MDSMap::flag_display = {
+  {CEPH_MDSMAP_NOT_JOINABLE, "joinable"}, //inverse for user display
+  {CEPH_MDSMAP_ALLOW_SNAPS, "allow_snaps"},
+  {CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS, "allow_multimds_snaps"},
+  {CEPH_MDSMAP_ALLOW_STANDBY_REPLAY, "allow_standby_replay"},
+  {CEPH_MDSMAP_REFUSE_CLIENT_SESSION, "refuse_client_session"},
+  {CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS, "refuse_standby_for_another_fs"},
+  {CEPH_MDSMAP_BALANCE_AUTOMATE, "balance_automate"},
+  {CEPH_MDSMAP_REFERENT_INODES, "allow_referent_inodes"}
+};
+
+MDSMap::MDSMap() noexcept = default;
+MDSMap::~MDSMap() noexcept = default;
+
+MDSMap MDSMap::create_null_mdsmap() {
+  MDSMap null_map;
+  /* Use the largest epoch so it's always bigger than whatever the MDS has. */
+  null_map.epoch = std::numeric_limits<decltype(epoch)>::max();
+  return null_map;
+}
 
 // features
 CompatSet MDSMap::get_compat_set_all() {
@@ -248,6 +272,7 @@ void MDSMap::dump_flags_state(Formatter *f) const
     f->dump_bool(flag_display.at(CEPH_MDSMAP_REFUSE_CLIENT_SESSION), test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION));
     f->dump_bool(flag_display.at(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS), test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS));
     f->dump_bool(flag_display.at(CEPH_MDSMAP_BALANCE_AUTOMATE), test_flag(CEPH_MDSMAP_BALANCE_AUTOMATE));
+    f->dump_bool(flag_display.at(CEPH_MDSMAP_REFERENT_INODES), allow_referent_inodes());
     f->close_section();
 }
 
@@ -395,6 +420,8 @@ void MDSMap::print_flags(std::ostream& out) const {
     out << " " << flag_display.at(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS);
   if (test_flag(CEPH_MDSMAP_BALANCE_AUTOMATE))
     out << " " << flag_display.at(CEPH_MDSMAP_BALANCE_AUTOMATE);
+  if (allow_referent_inodes())
+    out << " " << flag_display.at(CEPH_MDSMAP_REFERENT_INODES);
 }
 
 void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
@@ -1038,6 +1065,32 @@ MDSMap::availability_t MDSMap::is_cluster_available() const
   }
 }
 
+MDSMap::DaemonState MDSMap::get_state_gid(mds_gid_t gid) const noexcept {
+  auto it = mds_info.find(gid);
+  if (it == mds_info.end())
+    return STATE_NULL;
+  return it->second.state;
+}
+
+MDSMap::DaemonState MDSMap::get_state(mds_rank_t m) const noexcept {
+  auto it = up.find(m);
+  if (it == up.end())
+    return STATE_NULL;
+  return get_state_gid(it->second);
+}
+
+mds_gid_t MDSMap::get_gid(mds_rank_t r) const noexcept {
+  return up.at(r);
+}
+
+const MDSMap::mds_info_t& MDSMap::get_info(mds_rank_t m) const noexcept {
+  return mds_info.at(up.at(m));
+}
+
+const MDSMap::mds_info_t& MDSMap::get_info_gid(mds_gid_t gid) const noexcept {
+  return mds_info.at(gid);
+}
+
 bool MDSMap::state_transition_valid(DaemonState prev, DaemonState next)
 {
   if (next == prev)
@@ -1101,6 +1154,22 @@ bool MDSMap::check_health(mds_rank_t standby_daemon_count)
   return false;
 }
 
+bool MDSMap::is_data_pool(int64_t poolid) const noexcept {
+  auto p = std::find(data_pools.begin(), data_pools.end(), poolid);
+  if (p == data_pools.end())
+    return false;
+  return true;
+}
+
+const MDSMap::mds_info_t& MDSMap::get_mds_info_gid(mds_gid_t gid) const noexcept {
+  return mds_info.at(gid);
+}
+
+const MDSMap::mds_info_t& MDSMap::get_mds_info(mds_rank_t m) const noexcept {
+  ceph_assert(up.count(m) && mds_info.count(up.at(m)));
+  return mds_info.at(up.at(m));
+}
+
 mds_gid_t MDSMap::find_mds_gid_by_name(std::string_view s) const {
   for (const auto& [gid, info] : mds_info) {
     if (info.name == s) {
@@ -1124,6 +1193,18 @@ void MDSMap::get_up_mds_set(std::set<mds_rank_t>& s) const {
        p != up.end();
        ++p)
     s.insert(p->first);
+}
+
+void MDSMap::add_data_pool(int64_t poolid) {
+  data_pools.push_back(poolid);
+}
+
+int MDSMap::remove_data_pool(int64_t poolid) {
+  std::vector<int64_t>::iterator p = std::find(data_pools.begin(), data_pools.end(), poolid);
+  if (p == data_pools.end())
+    return -ENOENT;
+  data_pools.erase(p);
+  return 0;
 }
 
 uint64_t MDSMap::get_up_features() const {
@@ -1176,6 +1257,23 @@ mds_gid_t MDSMap::get_standby_replay(mds_rank_t r) const {
   return MDS_GID_NONE;
 }
 
+bool MDSMap::is_followable(mds_rank_t r) const {
+  if (auto it1 = up.find(r); it1 != up.end()) {
+    if (auto it2 = mds_info.find(it1->second); it2 != mds_info.end()) {
+      auto& info = it2->second;
+      if (!info.is_degraded() && !has_standby_replay(r)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool MDSMap::is_laggy_gid(mds_gid_t gid) const {
+  auto it = mds_info.find(gid);
+  return it == mds_info.end() ? false : it->second.laggy();
+}
+
 bool MDSMap::is_degraded() const {
   if (!failed.empty() || !damaged.empty())
     return true;
@@ -1184,6 +1282,36 @@ bool MDSMap::is_degraded() const {
       return true;
   }
   return false;
+}
+
+bool MDSMap::have_inst(mds_rank_t m) const {
+  return up.count(m);
+}
+
+entity_addrvec_t MDSMap::get_addrs(mds_rank_t m) const {
+  return mds_info.at(up.at(m)).get_addrs();
+}
+
+mds_rank_t MDSMap::get_rank_gid(mds_gid_t gid) const {
+  if (mds_info.count(gid)) {
+    return mds_info.at(gid).rank;
+  } else {
+    return MDS_RANK_NONE;
+  }
+}
+
+mds_gid_t MDSMap::get_incarnation(mds_rank_t m) const {
+  auto it = up.find(m);
+  if (it == up.end())
+    return MDS_GID_NONE;
+  return (mds_gid_t)get_inc_gid(it->second);
+}
+
+int MDSMap::get_inc_gid(mds_gid_t gid) const {
+  auto mds_info_entry = mds_info.find(gid);
+  if (mds_info_entry != mds_info.end())
+    return mds_info_entry->second.inc;
+  return -1;
 }
 
 void MDSMap::set_min_compat_client(ceph_release_t version)

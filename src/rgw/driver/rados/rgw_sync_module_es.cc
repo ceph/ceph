@@ -9,6 +9,7 @@
 #include "rgw_sync_module_es.h"
 #include "rgw_sync_module_es_rest.h"
 #include "rgw_rest_conn.h"
+#include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
 #include "rgw_op.h"
 #include "rgw_es_query.h"

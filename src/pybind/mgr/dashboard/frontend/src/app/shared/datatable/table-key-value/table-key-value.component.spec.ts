@@ -3,7 +3,6 @@ import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -27,8 +26,7 @@ describe('TableKeyValueComponent', () => {
       RouterTestingModule,
       NgbDropdownModule,
       PipesModule,
-      NgbTooltipModule,
-      NgxPipeFunctionModule
+      NgbTooltipModule
     ]
   });
 

@@ -6,6 +6,7 @@
 #include "osd/OSDMap.h"
 #include "common/errno.h"
 #include "common/version.h"
+#include "crush/CrushWrapper.h"
 #include "include/stringify.h"
 
 #include "PyOSDMap.h"

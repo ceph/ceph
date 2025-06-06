@@ -115,6 +115,9 @@ endif()
 
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-ftemplate-depth-1024>)
 
+# Because Boost can't be bothered to not include its own deprecated headers
+add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DBOOST_ALLOW_DEPRECATED_HEADERS>)
+
 CHECK_CXX_COMPILER_FLAG("-Wpessimizing-move" COMPILER_SUPPORTS_PESSIMIZING_MOVE)
 if(COMPILER_SUPPORTS_PESSIMIZING_MOVE)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wpessimizing-move>)
@@ -125,14 +128,18 @@ if(COMPILER_SUPPORTS_REDUNDANT_MOVE)
 endif()
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   if(WIN32)
-    # require >= gcc-10 for compiling the windows port
-    set(minimum_gcc_version 10)
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 10)
+      message(FATAL_ERROR "C++20 support for win32 requires a minimum GCC version of 10.")
+    endif()
+  elseif(HAVE_SEASTAR)
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 13)
+      # see https://tracker.ceph.com/issues/64375 for details
+      message(FATAL_ERROR "crimson/seastar require minimum GCC version of 13 for C++20 and coroutine support")
+    endif()
   else()
-    # require >= gcc-11 for compiling the whole tree
-    set(minimum_gcc_version 11)
-  endif()
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS minimum_gcc_version)
-    message(FATAL_ERROR "C++20 support requires a minimum GCC version of ${minimum_gcc_version}.")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 11)
+      message(FATAL_ERROR "C++20 support requires a minimum GCC version of 11.")
+    endif()
   endif()
   if(MINGW)
     # The MINGW headers are missing some "const" qualifiers.
@@ -151,8 +158,8 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     endif()
   endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 12) # require >= clang-12
-    message(FATAL_ERROR "C++20 support requires a minimum Clang version of 12.")
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 16)
+    message(FATAL_ERROR "C++20 support requires a minimum Clang version of 16.")
   endif()
   string(APPEND CMAKE_EXE_LINKER_FLAGS " ${CMAKE_EXE_EXPORTS_C_FLAG}")
   string(APPEND CMAKE_LINKER_FLAGS " -rdynamic -export-dynamic ${CMAKE_EXE_EXPORTS_C_FLAG}")
@@ -169,6 +176,10 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
     -Wno-missing-braces
     -Wno-parentheses
     -Wno-deprecated-register)
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 18)
+    add_compile_options(
+    -Wno-vla-cxx-extension)
+  endif()
   if(FREEBSD)
     # Need to use the GNU binutils linker to get versioning right.
     string(APPEND CMAKE_EXE_LINKER_FLAGS " -fuse-ld=/usr/local/bin/ld -Wno-unused-command-line-argument")
@@ -314,14 +325,52 @@ if (WITH_BLKIN)
   add_subdirectory(blkin/blkin-lib)
 endif(WITH_BLKIN)
 
+## breakpad
+if(WITH_BREAKPAD)
+  set(breakpad_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/breakpad)
+  set(lss_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/lss)
+
+  add_custom_target(breakpad_lss_symlink)
+  add_custom_command(
+    TARGET breakpad_lss_symlink
+    PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${lss_SOURCE_DIR} ${breakpad_SOURCE_DIR}/src/third_party/lss
+    COMMENT "Creating symbolic link lss -> breakpad third party"
+  )
+  ExternalProject_Add(
+    breakpad_project
+    SOURCE_DIR "${breakpad_SOURCE_DIR}"
+    CONFIGURE_COMMAND cd "${breakpad_SOURCE_DIR}"
+        COMMAND "${breakpad_SOURCE_DIR}/configure"
+	    "CC=${CMAKE_C_COMPILER}"
+	    "CXX=${CMAKE_CXX_COMPILER}"
+	    "CFLAGS=${CMAKE_C_FLAGS} -fPIC -Wno-unknown-warning-option -Wno-array-bounds  -Wno-maybe-uninitialized"
+	    "CXXFLAGS=${CMAKE_CXX_FLAGS} -fPIC -Wno-unknown-warning-option -Wno-ignored-qualifiers  -Wno-array-bounds  -Wno-maybe-uninitialized"
+            "LDFLAGS=${CMAKE_EXE_LINKER_FLAGS} -fPIC -Wno-unknown-warning-option -Wno-array-bounds  -Wno-maybe-uninitialized"
+    BUILD_COMMAND
+    /bin/sh -cx "cd ${breakpad_SOURCE_DIR} && make"
+    INSTALL_COMMAND ""
+    UPDATE_DISCONNECTED ON
+    BUILD_IN_SOURCE ON
+    DEPENDS breakpad_lss_symlink
+    BUILD_BYPRODUCTS "${breakpad_SOURCE_DIR}/src/libbreakpad.a;${breakpad_SOURCE_DIR}/src/client/linux/libbreakpad_client.a"
+  )
+
+  add_library(libbreakpad STATIC IMPORTED GLOBAL)
+  set_property(TARGET libbreakpad PROPERTY IMPORTED_LOCATION ${breakpad_SOURCE_DIR}/src/libbreakpad.a)
+  add_library(libbreakpad_client STATIC IMPORTED GLOBAL)
+  set_property(TARGET libbreakpad_client PROPERTY IMPORTED_LOCATION ${breakpad_SOURCE_DIR}/src/client/linux/libbreakpad_client.a)
+
+  include_directories(SYSTEM "${breakpad_SOURCE_DIR}/src")
+  add_dependencies(libbreakpad breakpad_project)
+  add_dependencies(libbreakpad_client breakpad_project)
+
+  add_library(breakpad INTERFACE)
+  target_link_libraries(breakpad INTERFACE libbreakpad libbreakpad_client)
+endif(WITH_BREAKPAD)
+
 if(WITH_JAEGER)
   find_package(thrift 0.13.0 REQUIRED)
-
-  if(EXISTS "/etc/redhat-release" OR EXISTS "/etc/fedora-release")
-    # absl is installed as grpc build dependency on RPM based systems
-    add_definitions(-DHAVE_ABSEIL)
-  endif()
-
   include(BuildOpentelemetry)
   build_opentelemetry()
   add_library(jaeger_base INTERFACE)
@@ -354,7 +403,7 @@ endif()
 option(WITH_FMT_HEADER_ONLY "use header-only version of fmt library" OFF)
 option(WITH_SYSTEM_FMT "build against system fmt" OFF)
 if(WITH_SYSTEM_FMT)
-  find_package(fmt 8.1.1...<10.0.0 REQUIRED)
+  find_package(fmt 8.1.1...11.1.4 REQUIRED)
 endif()
 if (WITH_FMT_HEADER_ONLY)
   message(STATUS "Using fmt header-only.")
@@ -386,7 +435,7 @@ set_target_properties(Boost::MPL PROPERTIES
   INTERFACE_COMPILE_DEFINITIONS
     "BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS;BOOST_MPL_LIMIT_LIST_SIZE=30")
 
-if(WITH_SEASTAR)
+if(WITH_CRIMSON)
   find_package(c-ares 1.13.0 QUIET)
   if(NOT c-ares_FOUND)
     message(STATUS "Could not find c-ares, will build it")
@@ -476,6 +525,11 @@ if(WITH_JAEGER)
   target_link_libraries(common-objs jaeger_base)
 endif()
 
+if(WITH_BREAKPAD)
+  add_dependencies(common-objs breakpad_project)
+  target_link_libraries(common-objs breakpad)
+endif()
+
 CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
 add_subdirectory(auth)
 add_subdirectory(common)
@@ -537,6 +591,10 @@ if(WITH_JAEGER)
   list(APPEND ceph_common_deps jaeger_base)
 endif()
 
+if(WITH_BREAKPAD)
+  list(APPEND ceph_common_deps breakpad)
+endif()
+
 if(WIN32)
   list(APPEND ceph_common_deps ws2_32 mswsock iphlpapi bcrypt)
   list(APPEND ceph_common_deps dlfcn_win32)
@@ -573,6 +631,10 @@ if(WITH_JAEGER)
 add_dependencies(common jaeger_base)
 endif()
 
+if(WITH_BREAKPAD)
+add_dependencies(common breakpad_project)
+endif()
+
 if (WIN32)
   # Statically building ceph-common on Windows fails. We're temporarily
   # reverting this: 22fefb2338cfc4fcb03ece3cbf77aa964a7f17f2
@@ -590,6 +652,10 @@ target_link_libraries(ceph-common legacy-option-headers)
 
 if(WITH_JAEGER)
 add_dependencies(ceph-common jaeger_base)
+endif()
+
+if(WITH_BREAKPAD)
+add_dependencies(ceph-common breakpad_project)
 endif()
 
 # appease dpkg-shlibdeps
@@ -683,12 +749,16 @@ if(NOT CEPH_BUILD_VIRTUALENV)
   set(CEPH_BUILD_VIRTUALENV ${CMAKE_BINARY_DIR})
 endif()
 
+option(WITH_CEPHADM "Flag to determine if cephadm should be built" ON)
+
 if(NOT WIN32)
 add_subdirectory(pybind)
 add_subdirectory(ceph-volume)
 add_subdirectory(ceph-node-proxy)
 add_subdirectory(python-common)
-add_subdirectory(cephadm)
+  if(WITH_CEPHADM)
+    add_subdirectory(cephadm)
+  endif()
 endif(NOT WIN32)
 
 # Monitor
@@ -759,7 +829,7 @@ add_subdirectory(erasure-code)
 if(WITH_TESTS)
   option(WITH_SYSTEM_GTEST "require and build with system gtest and gmock" OFF)
   if(WITH_SYSTEM_GTEST)
-    find_package(GTest REQUIRED)
+    find_package(GTest 1.13.0 REQUIRED)
     find_package(GMock REQUIRED)
   else()
     set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
@@ -770,6 +840,11 @@ if(WITH_TESTS)
       $<TARGET_PROPERTY:gtest,INTERFACE_INCLUDE_DIRECTORIES>)
     target_include_directories(gmock_main INTERFACE
       $<TARGET_PROPERTY:gtest,INTERFACE_INCLUDE_DIRECTORIES>)
+    if(NOT COMPILER_IGNORES_DEPRECATED_DECL_IN_SYSTEM_HEADERS)
+      # See https://github.com/llvm/llvm-project/issues/76515
+      target_compile_options(gtest
+        PRIVATE "-Wno-deprecated-declarations")
+    endif()
     add_library(GTest::GTest ALIAS gtest)
     add_library(GTest::Main ALIAS gtest_main)
   endif()
@@ -831,7 +906,10 @@ install(PROGRAMS
   DESTINATION sbin)
 
 add_subdirectory(bash_completion)
-add_subdirectory(client)
+
+if(WITH_LIBCEPHFS OR WITH_FUSE)
+  add_subdirectory(client)
+endif()
 
 if(WITH_LIBCEPHFS)
   set(libcephfs_srcs libcephfs.cc)
@@ -993,6 +1071,12 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
     nvmeof/NVMeofGwMonitorClient.cc)
   add_executable(ceph-nvmeof-monitor-client ${ceph_nvmeof_monitor_client_srcs})
   add_dependencies(ceph-nvmeof-monitor-client ceph-common)
+  # absl is installed as grpc build dependency on RPM based systems
+  # Also isolate this flag to specific targets which needs this package
+  if(EXISTS "/etc/redhat-release" OR EXISTS "/etc/fedora-release")
+    target_compile_definitions(ceph-nvmeof-monitor-client PRIVATE HAVE_ABSEIL)
+    target_compile_definitions(ceph-mon PRIVATE HAVE_ABSEIL)
+  endif()
   target_link_libraries(ceph-nvmeof-monitor-client
     client
     mon

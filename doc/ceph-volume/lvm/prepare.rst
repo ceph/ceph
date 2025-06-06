@@ -47,25 +47,25 @@ case it looks like:
 
 .. prompt:: bash #
 
-    ceph-volume lvm prepare --bluestore --data vg/lv
+   ceph-volume lvm prepare --bluestore --data vg/lv
 
 A raw device can be specified in the same way:
 
 .. prompt:: bash #
 
-    ceph-volume lvm prepare --bluestore --data /path/to/device
+   ceph-volume lvm prepare --bluestore --data /path/to/device
 
 For enabling :ref:`encryption <ceph-volume-lvm-encryption>`, the ``--dmcrypt`` flag is required:
 
 .. prompt:: bash #
 
-    ceph-volume lvm prepare --bluestore --dmcrypt --data vg/lv
+   ceph-volume lvm prepare --bluestore --dmcrypt --data vg/lv
 
 Starting with Ceph Squid, you can opt for TPM2 token enrollment for the created LUKS2 devices with the ``--with-tpm`` flag:
 
 .. prompt:: bash #
 
-    ceph-volume lvm prepare --bluestore --dmcrypt --with-tpm --data vg/lv
+   ceph-volume lvm prepare --bluestore --dmcrypt --with-tpm --data vg/lv
 
 If a ``block.db`` device or a ``block.wal`` device is needed, it can be
 specified with ``--block.db`` or ``--block.wal``. These can be physical
@@ -81,9 +81,14 @@ and are ephemeral.
 
 A symlink is created for the ``block`` device, and is optional for ``block.db``
 and ``block.wal``. For a cluster with a default name and an OSD ID of 0, the
-directory looks like this::
+directory looks like this:
 
-    # ls -l /var/lib/ceph/osd/ceph-0
+.. prompt:: bash #
+
+   ls -l /var/lib/ceph/osd/ceph-0
+
+::
+
     lrwxrwxrwx. 1 ceph ceph 93 Oct 20 13:05 block -> /dev/ceph-be2b6fbd-bcf2-4c51-b35d-a35a162a02f0/osd-block-25cf0a05-2bc6-44ef-9137-79d65bd7ad62
     lrwxrwxrwx. 1 ceph ceph 93 Oct 20 13:05 block.db -> /dev/sda1
     lrwxrwxrwx. 1 ceph ceph 93 Oct 20 13:05 block.wal -> /dev/ceph/osd-wal-0
@@ -187,18 +192,19 @@ To fetch the monmap by using the bootstrap key from the OSD, use this command:
 
 .. prompt:: bash #
 
-   /usr/bin/ceph --cluster ceph --name client.bootstrap-osd --keyring
-   /var/lib/ceph/bootstrap-osd/ceph.keyring mon getmap -o
+   /usr/bin/ceph --cluster ceph --name client.bootstrap-osd --keyring \
+   /var/lib/ceph/bootstrap-osd/ceph.keyring mon getmap -o \
    /var/lib/ceph/osd/<cluster name>-<osd id>/activate.monmap
 
 To populate the OSD directory (which has already been mounted), use this ``ceph-osd`` command:  
+
 .. prompt:: bash #
 
-   ceph-osd --cluster ceph --mkfs --mkkey -i <osd id> \ --monmap
+   ceph-osd --cluster ceph --mkfs --mkkey -i <osd id> --monmap \
    /var/lib/ceph/osd/<cluster name>-<osd id>/activate.monmap --osd-data \
-   /var/lib/ceph/osd/<cluster name>-<osd id> --osd-journal
-   /var/lib/ceph/osd/<cluster name>-<osd id>/journal \ --osd-uuid <osd uuid>
-   --keyring /var/lib/ceph/osd/<cluster name>-<osd id>/keyring \ --setuser ceph
+   /var/lib/ceph/osd/<cluster name>-<osd id> --osd-journal \
+   /var/lib/ceph/osd/<cluster name>-<osd id>/journal --osd-uuid <osd uuid> \
+   --keyring /var/lib/ceph/osd/<cluster name>-<osd id>/keyring --setuser ceph \
    --setgroup ceph
 
 All of the information from the previous steps is used in the above command.      
@@ -216,9 +222,14 @@ If using device partitions the only requirement is that they contain the
 
 For example, using a new, unformatted drive (``/dev/sdd`` in this case) we can
 use ``parted`` to create a new partition. First we list the device
-information::
+information:
 
-    $ parted --script /dev/sdd print
+.. prompt:: bash #
+
+   parted --script /dev/sdd print
+
+::
+
     Model: VBOX HARDDISK (scsi)
     Disk /dev/sdd: 11.5GB
     Sector size (logical/physical): 512B/512B
@@ -226,10 +237,15 @@ information::
 
 This device is not even labeled yet, so we can use ``parted`` to create
 a ``gpt`` label before we create a partition, and verify again with ``parted
-print``::
+print``:
 
-    $ parted --script /dev/sdd mklabel gpt
-    $ parted --script /dev/sdd print
+.. prompt:: bash #
+
+   parted --script /dev/sdd mklabel gpt
+   parted --script /dev/sdd print
+
+::
+
     Model: VBOX HARDDISK (scsi)
     Disk /dev/sdd: 11.5GB
     Sector size (logical/physical): 512B/512B
@@ -237,10 +253,15 @@ print``::
     Disk Flags:
 
 Now lets create a single partition, and verify later if ``blkid`` can find
-a ``PARTUUID`` that is needed by ``ceph-volume``::
+a ``PARTUUID`` that is needed by ``ceph-volume``:
 
-    $ parted --script /dev/sdd mkpart primary 1 100%
-    $ blkid /dev/sdd1
+.. prompt:: bash #
+
+   parted --script /dev/sdd mkpart primary 1 100%
+   blkid /dev/sdd1
+
+::
+
     /dev/sdd1: PARTLABEL="primary" PARTUUID="16399d72-1e1f-467d-96ee-6fe371a7d0d4"
 
 
@@ -263,9 +284,11 @@ already running there are a few things to take into account:
 
 The one time process for an existing OSD, with an ID of 0 and using
 a ``"ceph"`` cluster name would look like (the following command will **destroy
-any data** in the OSD)::
+any data** in the OSD):
 
-    ceph-volume lvm prepare --filestore --osd-id 0 --osd-fsid E3D291C1-E7BF-4984-9794-B60D9FA139CB
+.. prompt:: bash #
+
+   ceph-volume lvm prepare --filestore --osd-id 0 --osd-fsid E3D291C1-E7BF-4984-9794-B60D9FA139CB
 
 The command line tool will not contact the monitor to generate an OSD ID and
 will format the LVM device in addition to storing the metadata on it so that it
@@ -278,7 +301,9 @@ Crush device class
 
 To set the crush device class for the OSD, use the ``--crush-device-class`` flag. 
 
-    ceph-volume lvm prepare --bluestore --data vg/lv --crush-device-class foo
+.. prompt:: bash #
+
+   ceph-volume lvm prepare --bluestore --data vg/lv --crush-device-class foo
 
 
 .. _ceph-volume-lvm-multipath:

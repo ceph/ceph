@@ -299,9 +299,11 @@ setup_pools()
 
     rbd --cluster ${cluster} namespace create ${POOL}/${NS1}
     rbd --cluster ${cluster} namespace create ${POOL}/${NS2}
+    rbd --cluster ${cluster} namespace create ${PARENT_POOL}/${NS1}
 
     rbd --cluster ${cluster} mirror pool enable ${POOL}/${NS1} ${MIRROR_POOL_MODE}
     rbd --cluster ${cluster} mirror pool enable ${POOL}/${NS2} image
+    rbd --cluster ${cluster} mirror pool enable ${PARENT_POOL}/${NS1} ${MIRROR_POOL_MODE}
 
     if [ -z ${RBD_MIRROR_MANUAL_PEERS} ]; then
       if [ -z ${RBD_MIRROR_CONFIG_KEY} ]; then
@@ -1250,6 +1252,15 @@ count_mirror_snaps()
 
     rbd --cluster ${cluster} snap ls ${pool}/${image} --all |
         grep -c -F " mirror ("
+}
+
+get_snaps_json()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+
+    rbd --cluster ${cluster} snap ls ${pool}/${image} --all --format json
 }
 
 write_image()

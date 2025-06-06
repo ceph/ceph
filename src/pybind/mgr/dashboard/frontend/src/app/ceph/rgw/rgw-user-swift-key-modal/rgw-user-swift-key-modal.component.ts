@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 
@@ -9,13 +9,14 @@ import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
   templateUrl: './rgw-user-swift-key-modal.component.html',
   styleUrls: ['./rgw-user-swift-key-modal.component.scss']
 })
-export class RgwUserSwiftKeyModalComponent {
+export class RgwUserSwiftKeyModalComponent extends BaseModal {
   user: string;
   secret_key: string;
   resource: string;
   action: string;
 
-  constructor(public activeModal: NgbActiveModal, public actionLabels: ActionLabelsI18n) {
+  constructor(public actionLabels: ActionLabelsI18n) {
+    super();
     this.resource = $localize`Swift Key`;
     this.action = this.actionLabels.SHOW;
   }

@@ -183,8 +183,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def fetch_nfs_export_obj(self) -> ExportMgr:
         return self.export_mgr
 
-    def export_ls(self) -> List[Dict[Any, Any]]:
-        return self.export_mgr.list_all_exports()
+    def export_ls(self, cluster_id: Optional[str] = None, detailed: bool = False) -> List[Dict[Any, Any]]:
+        if not (cluster_id):
+            return self.export_mgr.list_all_exports()
+        return self.export_mgr.list_exports(cluster_id, detailed)
 
     def export_get(self, cluster_id: str, export_id: int) -> Optional[Dict[str, Any]]:
         return self.export_mgr.get_export_by_id(cluster_id, export_id)
@@ -194,3 +196,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def cluster_ls(self) -> List[str]:
         return available_clusters(self)
+
+    def cluster_info(self, cluster_id: Optional[str] = None) -> Dict[str, Any]:
+        return self.nfs.show_nfs_cluster_info(cluster_id=cluster_id)
+
+    def fetch_nfs_cluster_obj(self) -> NFSCluster:
+        return self.nfs

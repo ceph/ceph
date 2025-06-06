@@ -14,6 +14,9 @@
 
 #include "Mutation.h"
 #include "ScatterLock.h"
+#include "SimpleLock.h"
+#include "BatchOp.h"
+#include "CDentry.h"
 #include "CInode.h"
 #include "CDir.h"
 
@@ -101,6 +104,16 @@ bool MutationImpl::is_wrlocked(SimpleLock *lock) const {
   if (lock_cache)
     return static_cast<const MutationImpl*>(lock_cache)->is_wrlocked(lock);
   return false;
+}
+
+void MutationImpl::LockOp::print(std::ostream& out) const {
+  CachedStackStringStream css;
+  *css << "0x" << std::hex << flags;
+  out << "LockOp(l=" << *lock << ",f=" << css->strv();
+  if (wrlock_target != MDS_RANK_NONE) {
+    out << ",wt=" << wrlock_target;
+  }
+  out << ")";
 }
 
 void MutationImpl::LockOpVec::erase_rdlock(SimpleLock* lock)

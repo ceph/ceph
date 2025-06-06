@@ -39,9 +39,13 @@ class MgrModuleTestCase(DashboardTestCase):
 class MgrModuleTest(MgrModuleTestCase):
 
     def test_list_disabled_module(self):
-        self._ceph_cmd(['mgr', 'module', 'disable', 'iostat'])
-        self.wait_until_rest_api_accessible()
-        data = self._get('/api/mgr/module')
+        self._ceph_cmd(['mgr', 'module', 'disable', 'iostat'], wait=3)
+        data = self._get(
+            '/api/mgr/module',
+            retries=1,
+            wait_func=lambda:  # pylint: disable=unnecessary-lambda
+            self.wait_until_rest_api_accessible()
+        )
         self.assertStatus(200)
         self.assertSchema(
             data,
@@ -57,9 +61,13 @@ class MgrModuleTest(MgrModuleTestCase):
         self.assertFalse(module_info['enabled'])
 
     def test_list_enabled_module(self):
-        self._ceph_cmd(['mgr', 'module', 'enable', 'iostat'])
-        self.wait_until_rest_api_accessible()
-        data = self._get('/api/mgr/module')
+        self._ceph_cmd(['mgr', 'module', 'enable', 'iostat'], wait=3)
+        data = self._get(
+            '/api/mgr/module',
+            retries=1,
+            wait_func=lambda:  # pylint: disable=unnecessary-lambda
+            self.wait_until_rest_api_accessible()
+        )
         self.assertStatus(200)
         self.assertSchema(
             data,

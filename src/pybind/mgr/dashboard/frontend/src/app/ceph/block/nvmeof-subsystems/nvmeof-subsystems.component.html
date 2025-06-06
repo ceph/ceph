@@ -6,11 +6,12 @@
   <cds-combo-box
       type="single"
       label="Selected Gateway Group"
-      i18n-placeholder
-      placeholder="Enter group"
+      i18n-label
+      [placeholder]="gwGroupPlaceholder"
       [items]="gwGroups"
       (selected)="onGroupSelection($event)"
-      (clear)="onGroupClear()">
+      (clear)="onGroupClear()"
+      [disabled]="gwGroupsEmpty">
     <cds-dropdown-list></cds-dropdown-list>
   </cds-combo-box>
 </div>
@@ -30,8 +31,8 @@
           (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)">
 
-  <div class="table-actions btn-toolbar">
-    <cd-table-actions [permission]="permission"
+  <div class="table-actions">
+    <cd-table-actions [permission]="permissions.nvmeof"
                       [selection]="selection"
                       class="btn-group"
                       [tableActions]="tableActions">
@@ -40,6 +41,7 @@
 
   <cd-nvmeof-subsystems-details *cdTableDetail
                                 [selection]="expandedRow"
+                                [permissions]="permissions"
                                 [group]="group">
   </cd-nvmeof-subsystems-details>
 </cd-table>

@@ -1,10 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <boost/algorithm/string/predicate.hpp>
-
-#include "mon/Monitor.h"
 #include "mon/ConfigMonitor.h"
+#include "mon/Monitor.h"
 #include "mon/KVMonitor.h"
 #include "mon/MgrMonitor.h"
 #include "mon/OSDMonitor.h"
@@ -15,6 +13,9 @@
 #include "common/TextTable.h"
 #include "common/cmdparse.h"
 #include "include/stringify.h"
+#include "crush/CrushWrapper.h"
+
+#include <boost/algorithm/string/predicate.hpp>
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

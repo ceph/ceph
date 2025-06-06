@@ -40,8 +40,4 @@ export class NotificationsComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.subs.unsubscribe();
   }
-
-  toggleSidebar() {
-    this.notificationService.toggleSidebar();
-  }
 }

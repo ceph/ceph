@@ -130,6 +130,10 @@ void NamespaceReplayer<I>::print_status(Formatter *f)
 
   std::lock_guard locker{m_lock};
 
+  f->open_object_section("namespace_replayer_status");
+  f->dump_string("local_namespace", m_local_namespace_name);
+  f->dump_string("remote_namespace", m_remote_namespace_name);
+
   m_instance_replayer->print_status(f);
 
   if (m_image_deleter) {
@@ -137,6 +141,8 @@ void NamespaceReplayer<I>::print_status(Formatter *f)
     m_image_deleter->print_status(f);
     f->close_section();
   }
+
+  f->close_section(); // namespace_replayer_status
 }
 
 template <typename I>

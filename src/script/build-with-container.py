@@ -73,6 +73,7 @@ import glob
 import logging
 import os
 import pathlib
+import re
 import shlex
 import shutil
 import subprocess
@@ -84,6 +85,7 @@ log = logging.getLogger()
 try:
     from enum import StrEnum
 except ImportError:
+
     class StrEnum(str, enum.Enum):
         def __str__(self):
             return self.value
@@ -93,7 +95,7 @@ class DistroKind(StrEnum):
     CENTOS10 = "centos10"
     CENTOS8 = "centos8"
     CENTOS9 = "centos9"
-    FEDORA41 = 'fedora41'
+    FEDORA41 = "fedora41"
     UBUNTU2204 = "ubuntu22.04"
     UBUNTU2404 = "ubuntu24.04"
 
@@ -101,12 +103,40 @@ class DistroKind(StrEnum):
     def uses_dnf(cls):
         return {cls.CENTOS8, cls.CENTOS9, cls.CENTOS10, cls.FEDORA41}
 
+    @classmethod
+    def uses_rpmbuild(cls):
+        # right now this is the same as uses_dnf, but perhaps not always
+        # let's be specific in our interface
+        return cls.uses_dnf()  # but lazy in the implementation
+
+    @classmethod
+    def aliases(cls):
+        return {
+            str(cls.CENTOS10): cls.CENTOS10,
+            "centos10stream": cls.CENTOS10,
+            str(cls.CENTOS8): cls.CENTOS8,
+            str(cls.CENTOS9): cls.CENTOS9,
+            "centos9stream": cls.CENTOS9,
+            str(cls.FEDORA41): cls.FEDORA41,
+            "fc41": cls.FEDORA41,
+            str(cls.UBUNTU2204): cls.UBUNTU2204,
+            "ubuntu-jammy": cls.UBUNTU2204,
+            "jammy": cls.UBUNTU2204,
+            str(cls.UBUNTU2404): cls.UBUNTU2404,
+            "ubuntu-noble": cls.UBUNTU2404,
+            "noble": cls.UBUNTU2404,
+        }
+
+    @classmethod
+    def from_alias(cls, value):
+        return cls.aliases()[value]
+
 
 class DefaultImage(StrEnum):
     CENTOS10 = "quay.io/centos/centos:stream10"
     CENTOS8 = "quay.io/centos/centos:stream8"
     CENTOS9 = "quay.io/centos/centos:stream9"
-    FEDORA41 = 'registry.fedoraproject.org/fedora:41'
+    FEDORA41 = "registry.fedoraproject.org/fedora:41"
     UBUNTU2204 = "docker.io/ubuntu:22.04"
     UBUNTU2404 = "docker.io/ubuntu:24.04"
 
@@ -150,20 +180,28 @@ def _container_cmd(ctx, args, *, workdir=None, interactive=False):
         cmd.append("--pids-limit=-1")
     if ctx.map_user:
         cmd.append("--user=0")
+    if ctx.cli.env_file:
+        cmd.append(f"--env-file={ctx.cli.env_file.absolute()}")
     if workdir:
         cmd.append(f"--workdir={workdir}")
     cwd = pathlib.Path(".").absolute()
-    cmd += [
-        f"--volume={cwd}:{ctx.cli.homedir}:Z",
-        f"-eHOMEDIR={ctx.cli.homedir}",
-    ]
+    overlay = ctx.overlay()
+    if overlay and overlay.temporary:
+        cmd.append(f"--volume={cwd}:{ctx.cli.homedir}:O")
+    elif overlay:
+        cmd.append(
+            f"--volume={cwd}:{ctx.cli.homedir}:O,upperdir={overlay.upper},workdir={overlay.work}"
+        )
+    else:
+        cmd.append(f"--volume={cwd}:{ctx.cli.homedir}:Z")
+    cmd.append(f"-eHOMEDIR={ctx.cli.homedir}")
     if ctx.cli.build_dir:
         cmd.append(f"-eBUILD_DIR={ctx.cli.build_dir}")
     if ctx.cli.ccache_dir:
         ccdir = str(ctx.cli.ccache_dir).format(
-            homedir=ctx.cli.homedir or '',
-            build_dir=ctx.cli.build_dir or '',
-            distro=ctx.cli.distro or '',
+            homedir=ctx.cli.homedir or "",
+            build_dir=ctx.cli.build_dir or "",
+            distro=ctx.cli.distro or "",
         )
         cmd.append(f"-eCCACHE_DIR={ccdir}")
         cmd.append(f"-eCCACHE_BASEDIR={ctx.cli.homedir}")
@@ -208,6 +246,7 @@ class Steps(StrEnum):
     SOURCE_RPM = "source-rpm"
     RPM = "rpm"
     DEBS = "debs"
+    PACKAGES = "packages"
     INTERACTIVE = "interactive"
 
 
@@ -261,13 +300,27 @@ class Context:
         return f"{base}:{self.target_tag()}"
 
     def target_tag(self):
-        if self.cli.tag:
+        suffix = ""
+        if self.cli.tag and self.cli.tag.startswith("+"):
+            suffix = f".{self.cli.tag[1:]}"
+        elif self.cli.tag:
             return self.cli.tag
-        try:
-            branch = _git_current_branch(self).replace("/", "-")
-        except subprocess.CalledProcessError:
-            branch = "UNKNOWN"
-        return f"{branch}.{self.cli.distro}"
+        branch = self.cli.current_branch
+        if not branch:
+            try:
+                branch = _git_current_branch(self).replace("/", "-")
+            except subprocess.CalledProcessError:
+                branch = "UNKNOWN"
+        return f"{branch}.{self.cli.distro}{suffix}"
+
+    def base_branch(self):
+        # because git truly is the *stupid* content tracker there's not a
+        # simple way to detect base branch. In BWC the base branch is really
+        # only here for an optional 2nd level of customization in the build
+        # container bootstrap we default to `main` even when that's not true.
+        # One can explicltly set the base branch on the command line to invoke
+        # customizations (that don't yet exist) or invalidate image caching.
+        return self.cli.base_branch or "main"
 
     @property
     def from_image(self):
@@ -282,9 +335,11 @@ class Context:
     @property
     def dnf_cache_dir(self):
         if self.cli.dnf_cache_path and self.distro_cache_name:
-            return (
+            path = (
                 pathlib.Path(self.cli.dnf_cache_path) / self.distro_cache_name
             )
+            path = path.expanduser()
+            return path.resolve()
         return None
 
     @property
@@ -310,6 +365,29 @@ class Context:
         except DidNotExecute:
             pass
 
+    def overlay(self):
+        if not self.cli.overlay_dir:
+            return None
+        overlay = Overlay(temporary=self.cli.overlay_dir == "-")
+        if not overlay.temporary:
+            obase = pathlib.Path(self.cli.overlay_dir).resolve()
+            # you can't nest the workdir inside the upperdir at least on the
+            # version of podman I tried. But the workdir does need to be on the
+            # same FS according to the docs.  So make the workdir and the upper
+            # dir (content) siblings within the specified dir. podman doesn't
+            # have the courtesy to manage the workdir automatically when
+            # specifying upper dir.
+            overlay.upper = obase / "content"
+            overlay.work = obase / "work"
+        return overlay
+
+
+class Overlay:
+    def __init__(self, temporary=True, upper=None, work=None):
+        self.temporary = temporary
+        self.upper = upper
+        self.work = work
+
 
 class Builder:
     """Organize and manage the build steps."""
@@ -327,6 +405,8 @@ class Builder:
         if step in self._did_steps:
             log.info("step already done: %s", step)
             return
+        if not self._did_steps:
+            prepare_env_once(ctx)
         self._steps[step](ctx)
         self._did_steps.add(step)
         log.info("step done: %s", step)
@@ -347,6 +427,14 @@ class Builder:
     def docs(cls):
         for step, func in cls._steps.items():
             yield str(step), getattr(func, "__doc__", "")
+
+
+def prepare_env_once(ctx):
+    overlay = ctx.overlay()
+    if overlay and not overlay.temporary:
+        log.info("Creating overlay dirs: %s, %s", overlay.upper, overlay.work)
+        overlay.upper.mkdir(parents=True, exist_ok=True)
+        overlay.work.mkdir(parents=True, exist_ok=True)
 
 
 @Builder.set(Steps.DNF_CACHE)
@@ -371,21 +459,24 @@ def build_container(ctx):
     cmd = [
         ctx.container_engine,
         "build",
+        "--pull",
         "-t",
         ctx.image_name,
         f"--build-arg=JENKINS_HOME={ctx.cli.homedir}",
+        f"--build-arg=CEPH_BASE_BRANCH={ctx.base_branch()}",
     ]
     if ctx.cli.distro:
         cmd.append(f"--build-arg=DISTRO={ctx.from_image}")
-    if ctx.dnf_cache_dir:
+    if ctx.dnf_cache_dir and "docker" in ctx.container_engine:
+        log.warning(
+            "The --volume option is not supported by docker. Skipping dnf cache dir mounts"
+        )
+    elif ctx.dnf_cache_dir:
         cmd += [
             f"--volume={ctx.dnf_cache_dir}/lib:/var/lib/dnf:Z",
             f"--volume={ctx.dnf_cache_dir}:/var/cache/dnf:Z",
             "--build-arg=CLEAN_DNF=no",
         ]
-    if ctx.cli.homedir:
-        cwd = pathlib.Path(".").absolute()
-        cmd.append(f"--volume={cwd}:{ctx.cli.homedir}:Z")
     cmd += ["-f", ctx.cli.containerfile, ctx.cli.containerdir]
     with ctx.user_command():
         _run(cmd, check=True, ctx=ctx)
@@ -481,7 +572,7 @@ def bc_run_tests(ctx):
         [
             "bash",
             "-c",
-            f"cd {ctx.cli.homedir} && source ./run-make-check.sh && build && run",
+            f"cd {ctx.cli.homedir} && source ./run-make-check.sh && build tests && run",
         ],
     )
     with ctx.user_command():
@@ -492,12 +583,15 @@ def bc_run_tests(ctx):
 def bc_make_source_rpm(ctx):
     """Build SPRMs."""
     ctx.build.wants(Steps.CONTAINER, ctx)
+    make_srpm_cmd = f"cd {ctx.cli.homedir} && ./make-srpm.sh"
+    if ctx.cli.ceph_version:
+        make_srpm_cmd = f"{make_srpm_cmd} {ctx.cli.ceph_version}"
     cmd = _container_cmd(
         ctx,
         [
             "bash",
             "-c",
-            f"cd {ctx.cli.homedir} && ./make-srpm.sh",
+            make_srpm_cmd,
         ],
     )
     with ctx.user_command():
@@ -509,8 +603,21 @@ def bc_build_rpm(ctx):
     """Build RPMs from SRPM."""
     srpm_glob = "ceph*.src.rpm"
     if ctx.cli.rpm_match_sha:
-        head_sha = _git_current_sha(ctx)
-        srpm_glob = f"ceph*.g{head_sha}.*.src.rpm"
+        if not ctx.cli.ceph_version:
+            head_sha = _git_current_sha(ctx)
+            srpm_glob = f"ceph*.g{head_sha}.*.src.rpm"
+        else:
+            # Given a tarball with a name like
+            #   ceph-19.3.0-7462-g565e5c65.tar.bz2
+            # The SRPM name would be:
+            #   ceph-19.3.0-7462.g565e5c65.el9.src.rpm
+            # This regex replaces the second '-' with a '.'
+            srpm_version = re.sub(
+                r"(\d+\.\d+\.\d+-\d+)-(.*)",
+                r"\1.\2",
+                ctx.cli.ceph_version
+            )
+            srpm_glob = f"ceph-{srpm_version}.*.src.rpm"
     paths = glob.glob(srpm_glob)
     if len(paths) > 1:
         raise RuntimeError(
@@ -529,12 +636,18 @@ def bc_build_rpm(ctx):
         topdir = (
             pathlib.Path(ctx.cli.homedir) / ctx.cli.build_dir / "rpmbuild"
         )
+    rpmbuild_args = [
+        'rpmbuild',
+        '--rebuild',
+        f'-D_topdir {topdir}',
+    ] + list(ctx.cli.rpmbuild_arg) + [str(srpm_path)]
+    rpmbuild_cmd = ' '.join(shlex.quote(cmd) for cmd in rpmbuild_args)
     cmd = _container_cmd(
         ctx,
         [
             "bash",
             "-c",
-            f"set -x; mkdir -p {topdir} && rpmbuild --rebuild -D'_topdir {topdir}' {srpm_path}",
+            f"set -x; mkdir -p {topdir} && {rpmbuild_cmd}",
         ],
     )
     with ctx.user_command():
@@ -548,16 +661,28 @@ def bc_make_debs(ctx):
     basedir = pathlib.Path(ctx.cli.homedir) / "debs"
     if ctx.cli.build_dir:
         basedir = pathlib.Path(ctx.cli.homedir) / ctx.cli.build_dir
+    make_debs_cmd = f"./make-debs.sh {basedir}"
+    if ctx.cli.ceph_version:
+        make_debs_cmd = f"{make_debs_cmd} {ctx.cli.ceph_version} {ctx.cli.distro}"
     cmd = _container_cmd(
         ctx,
         [
             "bash",
             "-c",
-            f"mkdir -p {basedir} && cd {ctx.cli.homedir} && ./make-debs.sh {basedir}",
+            f"mkdir -p {basedir} && cd {ctx.cli.homedir} && {make_debs_cmd}",
         ],
     )
     with ctx.user_command():
         _run(cmd, check=True, ctx=ctx)
+
+
+@Builder.set(Steps.PACKAGES)
+def bc_make_packages(ctx):
+    """Build some sort of distro packages - chooses target based on distro."""
+    if ctx.cli.distro in DistroKind.uses_rpmbuild():
+        ctx.build.wants(Steps.RPM, ctx)
+    else:
+        ctx.build.wants(Steps.DEBS, ctx)
 
 
 @Builder.set(Steps.CUSTOM)
@@ -633,14 +758,24 @@ def parse_cli(build_step_names):
     parser.add_argument(
         "--distro",
         "-d",
-        choices=[str(f) for f in DistroKind],
+        choices=DistroKind.aliases().keys(),
+        type=DistroKind.from_alias,
         default=str(DistroKind.CENTOS9),
         help="Specify a distro short name",
     )
     parser.add_argument(
         "--tag",
         "-t",
-        help="Specify a container tag",
+        help="Specify a container tag. Append to the auto generated tag"
+        " by prefixing the supplied value with the plus (+) character",
+    )
+    parser.add_argument(
+        "--base-branch",
+        help="Specify a base branch name",
+    )
+    parser.add_argument(
+        "--current-branch",
+        help="Manually specify the current branch name",
     )
     parser.add_argument(
         "--image-repo",
@@ -675,6 +810,15 @@ def parse_cli(build_step_names):
         help=(
             "Specify a build directory relative to the home dir"
             " (the ceph source root)"
+        ),
+    )
+    parser.add_argument(
+        "--overlay-dir",
+        "-l",
+        help=(
+            "Mount the homedir as an overlay volume using the given dir"
+            "to host the overlay content and working dir. Specify '-' to"
+            "use a temporary overlay (discarding writes on container exit)"
         ),
     )
     parser.add_argument(
@@ -721,12 +865,27 @@ def parse_cli(build_step_names):
         ),
     )
     parser.add_argument(
+        "--rpmbuild-arg",
+        '-R',
+        action="append",
+        help="Pass this extra argument to rpmbuild",
+    )
+    parser.add_argument(
+        "--ceph-version",
+        help="Rather than infer the Ceph version, use this value",
+    )
+    parser.add_argument(
         "--execute",
         "-e",
         dest="steps",
         action="append",
         choices=build_step_names,
         help="Execute the target build step(s)",
+    )
+    parser.add_argument(
+        "--env-file",
+        type=pathlib.Path,
+        help="Use this environment file when building",
     )
     parser.add_argument(
         "--dry-run",

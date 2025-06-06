@@ -4,7 +4,7 @@ import getpass
 import pytest
 from textwrap import dedent
 from ceph_volume.util import system
-from mock.mock import patch
+from unittest.mock import patch
 from ceph_volume.tests.conftest import Factory
 
 

@@ -17,11 +17,11 @@ std::ostream& operator<<(std::ostream& os, const aio_t& aio)
 
 int aio_queue_t::submit_batch(aio_iter begin, aio_iter end, 
 			      void *priv,
-			      int *retries)
+			      int *retries, int submit_retries, int initial_delay_us)
 {
-  // 2^16 * 125us = ~8 seconds, so max sleep is ~16 seconds
-  int attempts = 16;
-  int delay = 125;
+  // 2^16 * 125us = ~8 seconds, so default max sleep is ~16 seconds
+  int attempts = submit_retries;
+  uint64_t delay = initial_delay_us;
   int r;
 
   aio_iter cur = begin;
@@ -74,8 +74,8 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
     }
     ceph_assert(r > 0);
     done += r;
-    attempts = 16;
-    delay = 125;
+    attempts = submit_retries;
+    delay = initial_delay_us;
     pushed = pulled = 0;
   }
   return done;

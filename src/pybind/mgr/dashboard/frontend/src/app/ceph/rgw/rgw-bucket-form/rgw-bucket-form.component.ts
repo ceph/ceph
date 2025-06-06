@@ -6,7 +6,7 @@ import {
   ViewChild,
   ElementRef
 } from '@angular/core';
-import { AbstractControl, Validators } from '@angular/forms';
+import { AbstractControl, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
@@ -23,7 +23,6 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { rgwBucketEncryptionModel } from '../models/rgw-bucket-encryption';
 import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
@@ -39,6 +38,9 @@ import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { map, switchMap } from 'rxjs/operators';
 import { TextAreaXmlFormatterService } from '~/app/shared/services/text-area-xml-formatter.service';
+import { RgwRateLimitComponent } from '../rgw-rate-limit/rgw-rate-limit.component';
+import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-rgw-bucket-form',
@@ -86,13 +88,15 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     return this.bucketForm.getValue('mfa-delete');
   }
 
+  @ViewChild(RgwRateLimitComponent, { static: false }) rateLimitComponent!: RgwRateLimitComponent;
+
   constructor(
     private route: ActivatedRoute,
     private router: Router,
     private formBuilder: CdFormBuilder,
     private rgwBucketService: RgwBucketService,
     private rgwSiteService: RgwSiteService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private rgwUserService: RgwUserService,
     private notificationService: NotificationService,
     private textAreaJsonFormatterService: TextAreaJsonFormatterService,
@@ -186,12 +190,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
     this.kmsProviders = rgwBucketEncryptionModel.kmsProviders;
     this.rgwBucketService.getEncryptionConfig().subscribe((data) => {
-      if (data['SSE_KMS']?.length > 0) {
-        this.kmsConfigured = true;
-      }
-      if (data['SSE_S3']?.length > 0) {
-        this.s3Configured = true;
-      }
+      this.s3Configured = data.s3 && Object.keys(data.s3).length > 0;
+      this.kmsConfigured = data.kms && Object.keys(data.kms).length > 0;
       // Set the encryption type based on the configurations
       if (this.kmsConfigured && this.s3Configured) {
         this.bucketForm.get('encryption_type').setValue('');
@@ -307,10 +307,12 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   goToListView() {
     this.router.navigate(['/rgw/bucket']);
   }
-
+  rateLimitFormInit(rateLimitForm: FormGroup) {
+    this.bucketForm.addControl('rateLimit', rateLimitForm);
+  }
   submit() {
     // Exit immediately if the form isn't dirty.
-    if (this.bucketForm.pristine) {
+    if (this.bucketForm.pristine && this.rateLimitComponent.form.pristine) {
       this.goToListView();
       return;
     }
@@ -365,6 +367,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
               NotificationType.success,
               $localize`Updated Object Gateway bucket '${values.bid}'.`
             );
+            this.updateBucketRateLimit();
             this.goToListView();
           },
           () => {
@@ -398,12 +401,53 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
               $localize`Created Object Gateway bucket '${values.bid}'`
             );
             this.goToListView();
+            this.updateBucketRateLimit();
           },
           () => {
             // Reset the 'Submit' button.
             this.bucketForm.setErrors({ cdSubmitButton: true });
           }
         );
+    }
+  }
+
+  updateBucketRateLimit() {
+    /**
+     * Whenever we change the owner of bucket from non-tenanted to tenanted
+     * and vice-versa with the rate-limit changes there was issue in sending
+     * bucket name, hence the below logic caters to it.
+     *
+     * Scenario 1: Changing the bucket owner from tenanted to non-tenanted
+     * Scenario 2: Changing the bucket owner from non-tenanted to tenanted
+     * Scenario 3: Keeping the owner(tenanted) same and changing only rate limit
+     */
+    const owner = this.bucketForm.getValue('owner');
+    const bidInput = this.bucketForm.getValue('bid');
+
+    let bid: string;
+
+    const hasOwnerWithDollar = owner.includes('$');
+    const bidHasSlash = bidInput.includes('/');
+
+    if (bidHasSlash && hasOwnerWithDollar) {
+      bid = bidInput;
+    } else if (hasOwnerWithDollar) {
+      const ownerPrefix = owner.split('$')[0];
+      bid = `${ownerPrefix}/${bidInput}`;
+    } else if (bidHasSlash) {
+      bid = bidInput.split('/')[1];
+    } else {
+      bid = bidInput;
+    }
+    // Check if bucket ratelimit has been modified.
+    const rateLimitConfig: RgwRateLimitConfig = this.rateLimitComponent.getRateLimitFormValue();
+    if (!!rateLimitConfig) {
+      this.rgwBucketService.updateBucketRateLimit(bid, rateLimitConfig).subscribe(
+        () => {},
+        (error: any) => {
+          this.notificationService.show(NotificationType.error, error);
+        }
+      );
     }
   }
 
@@ -475,7 +519,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
   showTagModal(index?: number) {
     const modalRef = this.modalService.show(BucketTagModalComponent);
-    const modalComponent = modalRef.componentInstance as BucketTagModalComponent;
+    const modalComponent = modalRef as BucketTagModalComponent;
     modalComponent.currentKeyTags = this.tags.map((item) => item.key);
 
     if (_.isNumber(index)) {

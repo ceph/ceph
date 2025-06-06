@@ -1,5 +1,5 @@
-import { Component, OnInit } from '@angular/core';
-import { AbstractControl, ValidationErrors, Validators } from '@angular/forms';
+import { Component, OnInit, ViewChild } from '@angular/core';
+import { AbstractControl, FormGroup, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
@@ -12,9 +12,8 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { CdValidators, isEmptyInputValue } from '~/app/shared/forms/cd-validators';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FormatterService } from '~/app/shared/services/formatter.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
 import { RgwUserCapability } from '../models/rgw-user-capability';
@@ -25,6 +24,12 @@ import { RgwUserCapabilityModalComponent } from '../rgw-user-capability-modal/rg
 import { RgwUserS3KeyModalComponent } from '../rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
 import { RgwUserSubuserModalComponent } from '../rgw-user-subuser-modal/rgw-user-subuser-modal.component';
 import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
+import { RgwRateLimitComponent } from '../rgw-rate-limit/rgw-rate-limit.component';
+import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
+import { Account } from '../models/rgw-user-accounts';
+import { RGW } from '../utils/constants';
 
 @Component({
   selector: 'cd-rgw-user-form',
@@ -40,7 +45,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   s3Keys: RgwUserS3Key[] = [];
   swiftKeys: RgwUserSwiftKey[] = [];
   capabilities: RgwUserCapability[] = [];
-
+  uid: string;
   action: string;
   resource: string;
   subuserLabel: string;
@@ -49,15 +54,18 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   usernameExists: boolean;
   showTenant = false;
   previousTenant: string = null;
+  @ViewChild(RgwRateLimitComponent, { static: false }) rateLimitComponent!: RgwRateLimitComponent;
+  accounts: Account[] = [];
 
   constructor(
     private formBuilder: CdFormBuilder,
     private route: ActivatedRoute,
     private router: Router,
     private rgwUserService: RgwUserService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private notificationService: NotificationService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private rgwUserAccountService: RgwUserAccountsService
   ) {
     super();
     this.resource = $localize`user`;
@@ -74,7 +82,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       // General
       user_id: [
         null,
-        [Validators.required, Validators.pattern(/^[a-zA-Z0-9!@#%^&*()_-]+$/)],
+        [Validators.required, Validators.pattern(/^[a-zA-Z0-9!@#%^&*()._-]+$/)],
         this.editing
           ? []
           : [
@@ -86,7 +94,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       show_tenant: [this.editing],
       tenant: [
         null,
-        [Validators.pattern(/^[a-zA-Z0-9!@#%^&*()_-]+$/)],
+        [Validators.pattern(/^[a-zA-Z0-9_]+$/)],
         this.editing
           ? []
           : [
@@ -107,6 +115,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
         [CdValidators.email],
         [CdValidators.unique(this.rgwUserService.emailExists, this.rgwUserService)]
       ],
+      account_id: [null, [this.tenantedAccountValidator.bind(this)]],
+      account_root_user: [false],
       max_buckets_mode: [1],
       max_buckets: [
         1000,
@@ -175,7 +185,6 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     // Process route parameters.
     this.route.params.subscribe((params: { uid: string }) => {
       if (!params.hasOwnProperty('uid')) {
-        this.loadingReady();
         return;
       }
       const uid = decodeURIComponent(params.uid);
@@ -183,6 +192,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       const observables = [];
       observables.push(this.rgwUserService.get(uid));
       observables.push(this.rgwUserService.getQuota(uid));
+      observables.push(this.rgwUserService.getUserRateLimit(uid));
       observableForkJoin(observables).subscribe(
         (resp: any[]) => {
           // Get the default values.
@@ -222,11 +232,19 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
               value[type + '_quota_max_objects'] = quota.max_objects;
             }
           });
+
           // Merge with default values.
           value = _.merge(defaults, value);
           // Update the form.
           this.userForm.setValue(value);
 
+          if (this.userForm.getValue('account_id')) {
+            this.userForm.get('account_id').disable();
+          } else {
+            this.userForm.get('account_id').setValue(null);
+          }
+          const isAccountRoot: boolean = resp[0]['type'] !== RGW;
+          this.userForm.get('account_root_user').setValue(isAccountRoot);
           // Get the sub users.
           this.subusers = resp[0].subusers;
 
@@ -242,14 +260,59 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
             }
           });
           this.capabilities = resp[0].caps;
-
-          this.loadingReady();
+          this.uid = this.getUID();
         },
         () => {
           this.loadingError();
         }
       );
     });
+    this.rgwUserAccountService.list(true).subscribe(
+      (accounts: Account[]) => {
+        this.accounts = accounts;
+        if (!this.editing) {
+          // needed to disable checkbox on create form load
+          this.userForm.get('account_id').reset();
+        }
+        this.loadingReady();
+      },
+      () => {
+        this.loadingError();
+      }
+    );
+    this.userForm.get('account_id').valueChanges.subscribe((value) => {
+      if (!value) {
+        this.userForm
+          .get('display_name')
+          .setValidators([Validators.pattern(/^[a-zA-Z0-9!@#%^&*()._ -]+$/), Validators.required]);
+        this.userForm.get('display_name').updateValueAndValidity();
+        this.userForm.get('account_root_user').disable();
+      } else {
+        this.userForm
+          .get('display_name')
+          .setValidators([Validators.pattern(/^[\w+=,.@-]+$/), Validators.required]);
+        this.userForm.get('display_name').updateValueAndValidity();
+        this.userForm.get('account_root_user').enable();
+      }
+    });
+  }
+
+  tenantedAccountValidator(control: AbstractControl): ValidationErrors | null {
+    if (this?.userForm?.getValue('tenant') && this.accounts.length > 0) {
+      const index: number = this.accounts.findIndex(
+        (account: Account) => account.id === control.value
+      );
+      if (index !== -1) {
+        return this.userForm.getValue('tenant') !== this.accounts[index].tenant
+          ? { tenantedAccount: true }
+          : null;
+      }
+    }
+    return null;
+  }
+
+  rateLimitFormInit(rateLimitForm: FormGroup) {
+    this.userForm.addControl('rateLimit', rateLimitForm);
   }
 
   goToListView() {
@@ -257,35 +320,43 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   }
 
   onSubmit() {
+    this.uid = this.getUID();
     let notificationTitle: string;
     // Exit immediately if the form isn't dirty.
-    if (this.userForm.pristine) {
+    if (this.userForm.pristine && this.rateLimitComponent.form.pristine) {
       this.goToListView();
       return;
     }
-    const uid = this.getUID();
     if (this.editing) {
       // Edit
       if (this._isGeneralDirty()) {
         const args = this._getUpdateArgs();
-        this.submitObservables.push(this.rgwUserService.update(uid, args));
+        this.submitObservables.push(this.rgwUserService.update(this.uid, args));
       }
-      notificationTitle = $localize`Updated Object Gateway user '${uid}'`;
+      notificationTitle = $localize`Updated Object Gateway user '${this.uid}'`;
     } else {
       // Add
       const args = this._getCreateArgs();
       this.submitObservables.push(this.rgwUserService.create(args));
-      notificationTitle = $localize`Created Object Gateway user '${uid}'`;
+      notificationTitle = $localize`Created Object Gateway user '${this.uid}'`;
     }
     // Check if user quota has been modified.
     if (this._isUserQuotaDirty()) {
       const userQuotaArgs = this._getUserQuotaArgs();
-      this.submitObservables.push(this.rgwUserService.updateQuota(uid, userQuotaArgs));
+      this.submitObservables.push(this.rgwUserService.updateQuota(this.uid, userQuotaArgs));
     }
     // Check if bucket quota has been modified.
     if (this._isBucketQuotaDirty()) {
       const bucketQuotaArgs = this._getBucketQuotaArgs();
-      this.submitObservables.push(this.rgwUserService.updateQuota(uid, bucketQuotaArgs));
+      this.submitObservables.push(this.rgwUserService.updateQuota(this.uid, bucketQuotaArgs));
+    }
+
+    // Check if user ratelimit has been modified.
+    const ratelimitvalue: RgwRateLimitConfig = this.rateLimitComponent.getRateLimitFormValue();
+    if (!!ratelimitvalue) {
+      this.submitObservables.push(
+        this.rgwUserService.updateUserRateLimit(this.userForm.getValue('user_id'), ratelimitvalue)
+      );
     }
     // Finally execute all observables one by one in serial.
     observableConcat(...this.submitObservables).subscribe({
@@ -325,17 +396,12 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * Validate the quota maximum size, e.g. 1096, 1K, 30M or 1.9MiB.
    */
   quotaMaxSizeValidator(control: AbstractControl): ValidationErrors | null {
-    if (isEmptyInputValue(control.value)) {
-      return null;
-    }
-    const m = RegExp('^(\\d+(\\.\\d+)?)\\s*(B|K(B|iB)?|M(B|iB)?|G(B|iB)?|T(B|iB)?)?$', 'i').exec(
-      control.value
+    return new FormatterService().performValidation(
+      control,
+      '^(\\d+(\\.\\d+)?)\\s*(B|K(B|iB)?|M(B|iB)?|G(B|iB)?|T(B|iB)?)?$',
+      { quotaMaxSize: true },
+      'quota'
     );
-    if (m === null) {
-      return { quotaMaxSize: true };
-    }
-    const bytes = new FormatterService().toBytes(control.value);
-    return bytes < 1024 ? { quotaMaxSize: true } : null;
   }
 
   /**
@@ -510,15 +576,15 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     if (_.isNumber(index)) {
       // Edit
       const subuser = this.subusers[index];
-      modalRef.componentInstance.setEditing();
-      modalRef.componentInstance.setValues(uid, subuser.id, subuser.permissions);
+      modalRef.setEditing();
+      modalRef.setValues(uid, subuser.id, subuser.permissions);
     } else {
       // Add
-      modalRef.componentInstance.setEditing(false);
-      modalRef.componentInstance.setValues(uid);
-      modalRef.componentInstance.setSubusers(this.subusers);
+      modalRef.setEditing(false);
+      modalRef.setValues(uid);
+      modalRef.setSubusers(this.subusers);
     }
-    modalRef.componentInstance.submitAction.subscribe((subuser: RgwUserSubuser) => {
+    modalRef.submitAction.subscribe((subuser: RgwUserSubuser) => {
       this.setSubuser(subuser, index);
     });
   }
@@ -532,14 +598,14 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     if (_.isNumber(index)) {
       // View
       const key = this.s3Keys[index];
-      modalRef.componentInstance.setViewing();
-      modalRef.componentInstance.setValues(key.user, key.access_key, key.secret_key);
+      modalRef.setViewing();
+      modalRef.setValues(key.user, key.access_key, key.secret_key);
     } else {
       // Add
       const candidates = this._getS3KeyUserCandidates();
-      modalRef.componentInstance.setViewing(false);
-      modalRef.componentInstance.setUserCandidates(candidates);
-      modalRef.componentInstance.submitAction.subscribe((key: RgwUserS3Key) => {
+      modalRef.setViewing(false);
+      modalRef.setUserCandidates(candidates);
+      modalRef.submitAction.subscribe((key: RgwUserS3Key) => {
         this.setS3Key(key);
       });
     }
@@ -552,7 +618,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   showSwiftKeyModal(index: number) {
     const modalRef = this.modalService.show(RgwUserSwiftKeyModalComponent);
     const key = this.swiftKeys[index];
-    modalRef.componentInstance.setValues(key.user, key.secret_key);
+    modalRef.setValues(key.user, key.secret_key);
   }
 
   /**
@@ -564,14 +630,14 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     if (_.isNumber(index)) {
       // Edit
       const cap = this.capabilities[index];
-      modalRef.componentInstance.setEditing();
-      modalRef.componentInstance.setValues(cap.type, cap.perm);
+      modalRef.setEditing();
+      modalRef.setValues(cap.type, cap.perm);
     } else {
       // Add
-      modalRef.componentInstance.setEditing(false);
-      modalRef.componentInstance.setCapabilities(this.capabilities);
+      modalRef.setEditing(false);
+      modalRef.setCapabilities(this.capabilities);
     }
-    modalRef.componentInstance.submitAction.subscribe((cap: RgwUserCapability) => {
+    modalRef.submitAction.subscribe((cap: RgwUserCapability) => {
       this.setCapability(cap, index);
     });
   }
@@ -581,11 +647,18 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * @return {Boolean} Returns TRUE if the general user settings have been modified.
    */
   private _isGeneralDirty(): boolean {
-    return ['display_name', 'email', 'max_buckets_mode', 'max_buckets', 'system', 'suspended'].some(
-      (path) => {
-        return this.userForm.get(path).dirty;
-      }
-    );
+    return [
+      'display_name',
+      'email',
+      'max_buckets_mode',
+      'max_buckets',
+      'system',
+      'suspended',
+      'account_id',
+      'account_root_user'
+    ].some((path) => {
+      return this.userForm.get(path).dirty;
+    });
   }
 
   /**
@@ -627,6 +700,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   private _getCreateArgs() {
     const result = {
       uid: this.getUID(),
+      account_id: this.userForm.getValue('account_id') ? this.userForm.getValue('account_id') : '',
+      account_root_user: this.userForm.getValue('account_root_user'),
       display_name: this.userForm.getValue('display_name'),
       system: this.userForm.getValue('system'),
       suspended: this.userForm.getValue('suspended'),
@@ -663,9 +738,19 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    */
   private _getUpdateArgs() {
     const result: Record<string, any> = {};
-    const keys = ['display_name', 'email', 'max_buckets', 'system', 'suspended'];
+    const keys = [
+      'display_name',
+      'email',
+      'max_buckets',
+      'system',
+      'suspended',
+      'account_root_user'
+    ];
     for (const key of keys) {
       result[key] = this.userForm.getValue(key);
+    }
+    if (this.userForm.getValue('account_id')) {
+      result['account_id'] = this.userForm.getValue('account_id');
     }
     const maxBucketsMode = parseInt(this.userForm.getValue('max_buckets_mode'), 10);
     if (_.includes([-1, 0], maxBucketsMode)) {
@@ -680,7 +765,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * Helper function to get the arguments for the API request when the user
    * quota configuration has been modified.
    */
-  private _getUserQuotaArgs(): Record<string, any> {
+  _getUserQuotaArgs(): Record<string, any> {
     const result = {
       quota_type: 'user',
       enabled: this.userForm.getValue('user_quota_enabled'),
@@ -757,5 +842,9 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
         });
       }
     }
+  }
+
+  goToCreateAccountForm() {
+    this.router.navigate(['rgw/accounts/create']);
   }
 }

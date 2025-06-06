@@ -40,6 +40,7 @@
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/strtol.h" // for strict_strtoll()
 #include "common/version.h"
 
 #include "SimpleRADOSStriper.h"

@@ -15,6 +15,8 @@
 #include "librbd/exclusive_lock/Policy.h"
 #include "librbd/journal/Policy.h"
 #include "librbd/mirror/GetInfoRequest.h"
+
+#include <shared_mutex> // for std::shared_lock
 #include <type_traits>
 
 #define dout_context g_ceph_context

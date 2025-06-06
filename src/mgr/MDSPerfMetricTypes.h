@@ -6,7 +6,7 @@
 
 #include <regex>
 #include <vector>
-#include <iostream>
+#include <iosfwd>
 
 #include "include/denc.h"
 #include "include/stringify.h"

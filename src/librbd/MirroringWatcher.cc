@@ -108,8 +108,8 @@ void MirroringWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
     return;
   }
 
-  apply_visitor(watcher::util::HandlePayloadVisitor<MirroringWatcher<I>>(
-                  this, notify_id, handle), notify_message.payload);
+  std::visit(watcher::util::HandlePayloadVisitor<MirroringWatcher<I>>(
+      this, notify_id, handle), notify_message.payload);
 }
 
 template <typename I>

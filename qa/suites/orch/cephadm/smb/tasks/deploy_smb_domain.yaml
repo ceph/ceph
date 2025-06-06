@@ -42,7 +42,7 @@ tasks:
           globals = ["default", "domain"]
           instance_name = "SAMBA"
           [shares.share1.options]
-          "vfs objects" = "acl_xattr ceph"
+          "vfs objects" = "acl_xattr ceph_snapshots ceph"
           path = "/"
           "acl_xattr:security_acl_name" = "user.NTACL"
           "ceph:config_file" = "/etc/ceph/ceph.conf"
@@ -56,6 +56,7 @@ tasks:
           "printcap name" = "/dev/null"
           "disable spoolss" = "yes"
           "guest ok" = "no"
+          "smbd profiling level" = "on"
           [globals.domain.options]
           security = "ads"
           workgroup = "DOMAIN1"

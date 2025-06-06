@@ -64,6 +64,9 @@ cdef nogil:
 
         _RBD_WRITE_ZEROES_FLAG_THICK_PROVISION "RBD_WRITE_ZEROES_FLAG_THICK_PROVISION"
 
+        _RBD_DIFF_ITERATE_FLAG_INCLUDE_PARENT "RBD_DIFF_ITERATE_FLAG_INCLUDE_PARENT"
+        _RBD_DIFF_ITERATE_FLAG_WHOLE_OBJECT "RBD_DIFF_ITERATE_FLAG_WHOLE_OBJECT"
+
     ctypedef void* rados_t
     ctypedef void* rados_ioctx_t
     ctypedef void* rbd_image_t
@@ -140,6 +143,7 @@ cdef nogil:
         _RBD_MIRROR_MODE_DISABLED "RBD_MIRROR_MODE_DISABLED"
         _RBD_MIRROR_MODE_IMAGE "RBD_MIRROR_MODE_IMAGE"
         _RBD_MIRROR_MODE_POOL "RBD_MIRROR_MODE_POOL"
+        _RBD_MIRROR_MODE_INIT_ONLY "RBD_MIRROR_MODE_INIT_ONLY"
 
     ctypedef enum rbd_mirror_peer_direction_t:
         _RBD_MIRROR_PEER_DIRECTION_RX "RBD_MIRROR_PEER_DIRECTION_RX"
@@ -165,6 +169,7 @@ cdef nogil:
         _RBD_MIRROR_IMAGE_DISABLING "RBD_MIRROR_IMAGE_DISABLING"
         _RBD_MIRROR_IMAGE_ENABLED "RBD_MIRROR_IMAGE_ENABLED"
         _RBD_MIRROR_IMAGE_DISABLED "RBD_MIRROR_IMAGE_DISABLED"
+        _RBD_MIRROR_IMAGE_CREATING "RBD_MIRROR_IMAGE_CREATING"
 
     ctypedef struct rbd_mirror_image_info_t:
         char *global_id
@@ -774,6 +779,12 @@ cdef nogil:
     int rbd_diff_iterate2(rbd_image_t image, const char *fromsnapname,
                          uint64_t ofs, uint64_t len,
                          uint8_t include_parent, uint8_t whole_object,
+                         int (*cb)(uint64_t, size_t, int, void *)
+                             nogil except? -9000,
+                         void *arg) except? -9000:
+        pass
+    int rbd_diff_iterate3(rbd_image_t image, uint64_t from_snap_id,
+                         uint64_t ofs, uint64_t len, uint32_t flags,
                          int (*cb)(uint64_t, size_t, int, void *)
                              nogil except? -9000,
                          void *arg) except? -9000:

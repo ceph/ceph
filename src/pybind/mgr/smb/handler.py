@@ -60,6 +60,7 @@ ShareRef = Union[resources.Share, resources.RemovedShare]
 
 _DOMAIN = 'domain'
 _CLUSTERED = 'clustered'
+_CEPHFS_PROXY = 'cephfs-proxy'
 log = logging.getLogger(__name__)
 
 
@@ -685,6 +686,7 @@ class ClusterConfigHandler:
             join_source_entries=join_source_entries,
             user_source_entries=user_source_entries,
             data_entity=data_entity,
+            needs_proxy=_has_proxied_vfs(change_group),
         )
         _save_pending_spec_backup(self.public_store, change_group, smb_spec)
         # if orch was ever needed in the past we must "re-orch", but if we have
@@ -1157,8 +1159,8 @@ def _ug_refs(cluster: resources.Cluster) -> Collection[str]:
 def _generate_share(
     share: resources.Share, resolver: PathResolver, cephx_entity: str
 ) -> Dict[str, Dict[str, str]]:
-    assert share.cephfs is not None
-    assert share.cephfs.provider.is_vfs(), "not a vfs provider"
+    cephfs = share.checked_cephfs
+    assert cephfs.provider.is_vfs(), "not a vfs provider"
     assert cephx_entity, "cephx entity name missing"
     # very annoyingly, samba's ceph module absolutely must NOT have the
     # "client." bit in front. JJM has been tripped up by this multiple times -
@@ -1168,28 +1170,27 @@ def _generate_share(
     if cephx_entity.startswith(_prefix):
         cephx_entity = cephx_entity[plen:]
     path = resolver.resolve(
-        share.cephfs.volume,
-        share.cephfs.subvolumegroup,
-        share.cephfs.subvolume,
-        share.cephfs.path,
+        cephfs.volume,
+        cephfs.subvolumegroup,
+        cephfs.subvolume,
+        cephfs.path,
     )
     try:
-        ceph_vfs = {
-            CephFSStorageProvider.SAMBA_VFS_CLASSIC: 'ceph',
-            CephFSStorageProvider.SAMBA_VFS_NEW: 'ceph_new',
-        }[share.checked_cephfs.provider.expand()]
+        ceph_vfs, proxy_val = {
+            CephFSStorageProvider.SAMBA_VFS_CLASSIC: ('ceph', ''),
+            CephFSStorageProvider.SAMBA_VFS_NEW: ('ceph_new', 'no'),
+            CephFSStorageProvider.SAMBA_VFS_PROXIED: ('ceph_new', 'yes'),
+        }[cephfs.provider.expand()]
     except KeyError:
-        raise ValueError(
-            f'unsupported provider: {share.checked_cephfs.provider}'
-        )
+        raise ValueError(f'unsupported provider: {cephfs.provider}')
     cfg = {
         # smb.conf options
         'options': {
             'path': path,
-            "vfs objects": f"acl_xattr {ceph_vfs}",
+            "vfs objects": f"acl_xattr ceph_snapshots {ceph_vfs}",
             'acl_xattr:security_acl_name': 'user.NTACL',
             f'{ceph_vfs}:config_file': '/etc/ceph/ceph.conf',
-            f'{ceph_vfs}:filesystem': share.cephfs.volume,
+            f'{ceph_vfs}:filesystem': cephfs.volume,
             f'{ceph_vfs}:user_id': cephx_entity,
             'read only': ynbool(share.readonly),
             'browseable': ynbool(share.browseable),
@@ -1197,6 +1198,8 @@ def _generate_share(
             'x:ceph:id': f'{share.cluster_id}.{share.share_id}',
         }
     }
+    if proxy_val:
+        cfg['options'][f'{ceph_vfs}:proxy'] = proxy_val
     # extend share with user+group login access lists
     _generate_share_login_control(share, cfg)
     # extend share with custom options
@@ -1285,6 +1288,7 @@ def _generate_config(
                     'printing': 'bsd',
                     'printcap name': '/dev/null',
                     'disable spoolss': 'Yes',
+                    'smbd profiling level': 'on',
                 }
             },
             cluster.cluster_id: {
@@ -1310,12 +1314,15 @@ def _generate_smb_service_spec(
     join_source_entries: List[ConfigEntry],
     user_source_entries: List[ConfigEntry],
     data_entity: str = '',
+    needs_proxy: bool = False,
 ) -> SMBSpec:
     features = []
     if cluster.auth_mode == AuthMode.ACTIVE_DIRECTORY:
         features.append(_DOMAIN)
     if cluster.is_clustered():
         features.append(_CLUSTERED)
+    if needs_proxy:
+        features.append(_CEPHFS_PROXY)
     # only one config uri can be used, the input list should be
     # ordered from lowest to highest priority and the highest priority
     # item that exists in the store will be used.
@@ -1471,3 +1478,14 @@ def _store_transaction(store: ConfigStore) -> Iterator[None]:
     log.debug("Using store transaction")
     with transaction():
         yield None
+
+
+def _has_proxied_vfs(change_group: ClusterChangeGroup) -> bool:
+    """Return true if any shares in the change group use the new vfs module
+    with the proxied cephfs library.
+    """
+    return any(
+        s.checked_cephfs.provider.expand()
+        == CephFSStorageProvider.SAMBA_VFS_PROXIED
+        for s in change_group.shares
+    )

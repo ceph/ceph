@@ -117,7 +117,8 @@ public:
     ostream << "mClockScheduler";
   }
 
-  const char** get_tracked_conf_keys() const final;
+  std::vector<std::string> get_tracked_keys() const noexcept final;
+
   void handle_conf_change(const ConfigProxy& conf,
 			  const std::set<std::string> &changed) final;
 };

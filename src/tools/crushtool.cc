@@ -27,6 +27,7 @@
 #include "common/errno.h"
 #include "common/config.h"
 #include "common/Formatter.h"
+#include "common/strtol.h" // for strict_strtol()
 
 #include "common/ceph_argparse.h"
 #include "include/stringify.h"
@@ -451,9 +452,11 @@ int main(int argc, const char **argv)
   vector<const char *> empty_args;
   auto cct = global_init(NULL, empty_args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
-			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE|
+			 CINIT_FLAG_NO_DAEMON_ACTIONS);
   // crushtool times out occasionally when quits. so do not
-  // release the g_ceph_context.
+  // release the g_ceph_context. This causes other problems
+  // see https://tracker.ceph.com/issues/71027
   cct->get();
   common_init_finish(g_ceph_context);
 

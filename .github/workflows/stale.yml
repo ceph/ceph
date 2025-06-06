@@ -9,7 +9,7 @@ jobs:
   stale:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/stale@v9
+      - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # v9.1.0
         with:
           # PAT for GitHub API authentication
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
@@ -46,6 +46,9 @@ jobs:
           
           # Labels on PRs exempted from stale
           exempt-pr-labels: 'pinned,security'
+          
+          # Exempt all PRs with milestones from stale (also exempts Issues)
+          exempt-all-pr-milestones: true
           
           # Max number of operations per run
           operations-per-run: 100

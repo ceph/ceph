@@ -6,6 +6,7 @@
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
 #include <seastar/core/weak_ptr.hh>
+#include "messages/MOSDPGPCT.h"
 #include "include/buffer_fwd.h"
 #include "osd/osd_types.h"
 
@@ -20,6 +21,12 @@ namespace crimson::osd {
 class ReplicatedBackend : public PGBackend
 {
 public:
+  using interruptor = ::crimson::interruptible::interruptor<
+    ::crimson::osd::IOInterruptCondition>;
+  template <typename T = void>
+  using interruptible_future =
+    ::crimson::interruptible::interruptible_future<
+      ::crimson::osd::IOInterruptCondition, T>;
   ReplicatedBackend(pg_t pgid, pg_shard_t whoami,
 		    crimson::osd::PG& pg,
 		    CollectionRef coll,
@@ -44,8 +51,13 @@ private:
   const pg_shard_t whoami;
   class pending_on_t : public seastar::weakly_referencable<pending_on_t> {
   public:
-    pending_on_t(size_t pending, const eversion_t& at_version)
-      : pending{static_cast<unsigned>(pending)}, at_version(at_version)
+    pending_on_t(
+      size_t pending,
+      const eversion_t& at_version,
+      const eversion_t& last_complete)
+      : pending{static_cast<unsigned>(pending)},
+	at_version(at_version),
+	last_complete(last_complete)
     {}
     unsigned pending;
     // The order of pending_txns' at_version must be the same as their
@@ -54,6 +66,7 @@ private:
     // way, client requests at_version must be updated synchorously/simultaneously
     // with ceph_tid_t.
     const eversion_t at_version;
+    const eversion_t last_complete;
     crimson::osd::acked_peers_t acked_peers;
     seastar::shared_promise<> all_committed;
   };
@@ -64,7 +77,8 @@ private:
   MURef<MOSDRepOp> new_repop_msg(
     const pg_shard_t &pg_shard,
     const hobject_t &hoid,
-    const bufferlist &encoded_txn,
+    bufferlist &encoded_txn_p_bl,
+    bufferlist &encoded_txn_d_bl,
     const osd_op_params_t &osd_op_p,
     epoch_t min_epoch,
     epoch_t map_epoch,
@@ -74,4 +88,19 @@ private:
 
   seastar::future<> request_committed(
     const osd_reqid_t& reqid, const eversion_t& at_version) final;
+
+  seastar::timer<seastar::lowres_clock> pct_timer;
+
+  /// Invoked by pct_timer to update PCT after a pause in IO
+  interruptible_future<> send_pct_update();
+
+  /// Kick pct timer if repop_queue is empty
+  void maybe_kick_pct_update();
+
+  /// Cancel pct timer if scheduled
+  void cancel_pct_update();
+
+public:
+  /// Handle MOSDPGPCT message
+  void do_pct(const MOSDPGPCT &m);
 };

@@ -12,7 +12,10 @@
  *
  */
 
+#include "DataScan.h"
+
 #include "include/compat.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
 #include <fstream>
@@ -27,7 +30,6 @@
 #include "cls/cephfs/cls_cephfs_client.h"
 
 #include "PgFiles.h"
-#include "DataScan.h"
 #include "include/compat.h"
 
 #define dout_context g_ceph_context
@@ -765,8 +767,9 @@ int DataScan::scan_inodes()
     inode_backtrace_t backtrace;
     file_layout_t loaded_layout = file_layout_t::get_default();
     std::string symlink;
+    inodeno_t remote_inode;
     r = ClsCephFSClient::fetch_inode_accumulate_result(
-        data_io, oid, &backtrace, &loaded_layout, &symlink, &accum_res);
+        data_io, oid, &backtrace, &loaded_layout, &symlink, &remote_inode, &accum_res);
 
     if (r == -EINVAL) {
       dout(4) << "Accumulated metadata missing from '"
@@ -962,7 +965,7 @@ int DataScan::scan_inodes()
     }
 
     InodeStore dentry;
-    build_file_dentry(obj_name_ino, file_size, file_mtime, guessed_layout, &dentry, symlink);
+    build_file_dentry(obj_name_ino, file_size, file_mtime, guessed_layout, symlink, remote_inode, &dentry);
 
     // Inject inode to the metadata pool
     if (have_backtrace) {
@@ -1049,6 +1052,7 @@ int DataScan::scan_links()
 
   interval_set<uint64_t> used_inos;
   map<inodeno_t, int> remote_links;
+  map<inodeno_t, vector<uint64_t>> referent_inodes; //referent inode list of primary inode
   map<snapid_t, SnapInfo> snaps;
   snapid_t last_snap = 1;
   snapid_t snaprealm_v2_since = 2;
@@ -1061,17 +1065,26 @@ int DataScan::scan_links()
     int nlink;
     bool is_dir;
     map<snapid_t, SnapInfo> snaps;
+    vector<uint64_t> referent_inodes;
     link_info_t() : version(0), nlink(0), is_dir(false) {}
     link_info_t(inodeno_t di, frag_t df, const string& n, const CInode::inode_const_ptr& i) :
       dirino(di), frag(df), name(n),
-      version(i->version), nlink(i->nlink), is_dir(S_IFDIR & i->mode) {}
+      version(i->version), nlink(i->nlink), is_dir(S_IFDIR & i->mode), referent_inodes(i->referent_inodes) {}
     dirfrag_t dirfrag() const {
       return dirfrag_t(dirino, frag);
+    }
+    void print(std::ostream& os) const {
+      os << "link_info_t(diri=" << dirino << "." << frag << " name=" << name << " v=" << version << " l=" << nlink << ")";
+    }
+    bool operator==(const link_info_t& o) const {
+      return dirino == o.dirino
+             && frag == o.frag
+             && name == o.name;
     }
   };
   map<inodeno_t, list<link_info_t> > dup_primaries;
   map<inodeno_t, link_info_t> bad_nlink_inos;
-  map<inodeno_t, link_info_t> injected_inos;
+  multimap<inodeno_t, link_info_t> injected_inos;
 
   map<dirfrag_t, set<string> > to_remove;
 
@@ -1192,28 +1205,67 @@ int DataScan::scan_links()
 		  nlink = r->second;
 		if (!MDS_INO_IS_STRAY(dir_ino))
 		  nlink++;
+
 		if (inode.inode->nlink != nlink) {
+		  if (nlink > 1)
+		    ceph_assert(!referent_inodes[ino].empty());
+                  ceph_assert(static_cast<unsigned int>(nlink) == (referent_inodes[ino].size()+1));
 		  derr << "Bad nlink on " << ino << " expected " << nlink
 		       << " has " << inode.inode->nlink << dendl;
 		  bad_nlink_inos[ino] = link_info_t(dir_ino, frag_id, dname, inode.inode);
 		  bad_nlink_inos[ino].nlink = nlink;
+                  dout(1) << "Bad nlink, adding referent inode list " <<  referent_inodes[ino]
+                          << " to the primary inode " << ino << dendl;
+		  bad_nlink_inos[ino].referent_inodes = referent_inodes[ino];
 		}
 		snaps.insert(make_move_iterator(begin(srnode.snaps)),
 			     make_move_iterator(end(srnode.snaps)));
 	      }
 	      if (dnfirst == CEPH_NOSNAP) {
-                injected_inos[ino] = link_info_t(dir_ino, frag_id, dname, inode.inode);
+                injected_inos.insert({ino, link_info_t(dir_ino, frag_id, dname, inode.inode)});
                 dout(20) << "adding " << ino << " for future processing to fix dnfirst" << dendl;
               }
 	    }
-	  } else if (dentry_type == 'L' || dentry_type == 'l') {
+	  } else if (dentry_type == 'L' || dentry_type == 'l' || dentry_type == 'R' || dentry_type == 'r') {
 	    inodeno_t ino;
+	    inodeno_t referent_ino;
+	    InodeStore inode;
 	    unsigned char d_type;
-            CDentry::decode_remote(dentry_type, ino, d_type, alternate_name, q);
+
+	    if (dentry_type == 'r') {
+	      DECODE_START(2, q);
+              if (struct_v >= 2)
+                decode(alternate_name, q);
+	      dout(20) << "decoding referent inode dentry  type 'r' 0x" << std::hex << dir_ino << std::dec << "/" << dname << dendl;
+	      inode.decode(q);
+	      DECODE_FINISH(q);
+	      ino = inode.inode->remote_ino;
+	      referent_ino = inode.inode->ino;
+	    } else if (dentry_type == 'R') {
+	      dout(20) << "decoding referent inode dentry type 'R' 0x" << std::hex << dir_ino << std::dec << "/" << dname << dendl;
+	      inode.decode_bare(q);
+	      ino = inode.inode->remote_ino;
+	      referent_ino = inode.inode->ino;
+	    } else {
+              CDentry::decode_remote(dentry_type, ino, d_type, alternate_name, q);
+	    }
 
 	    if (step == SCAN_INOS) {
-	      remote_links[ino]++;
+	      dout(20) << "Add referent inode dentry 0x" << std::hex << dir_ino << std::dec << "/" << dname << " to used_inos" << dendl;
+              used_inos.insert(referent_ino);
+              dout(20) << "Add referent inode dentry 0x" << std::hex << dir_ino << std::dec << "/" << dname << " to remote_links" << dendl;
+              remote_links[ino]++;
+              referent_inodes[ino].push_back(referent_ino);
+              dout(20) << "Added referent inode " << referent_ino << " of dentry 0x"
+                       << std::hex << dir_ino << std::dec << "/" << dname
+                       << " to referent_inodes list of primary inode " << ino
+                       << " referent_inode list after addition " << referent_inodes[ino]
+                       << dendl;
 	    } else if (step == CHECK_LINK) {
+	      if (dnfirst == CEPH_NOSNAP) {
+                injected_inos.insert({referent_ino, link_info_t(dir_ino, frag_id, dname, inode.inode)});
+                dout(20) << "Adding referent inode " << referent_ino << " for future processing to fix dnfirst" << dendl;
+	      }
 	      if (!used_inos.contains(ino, 1)) {
 		derr << "Bad remote link dentry 0x" << std::hex << dir_ino
 		     << std::dec << "/" << dname
@@ -1270,6 +1322,7 @@ int DataScan::scan_links()
 
     link_info_t newest;
     for (auto& q : p.second) {
+      dout(10) << " primary: " << q << dendl;
       if (q.version > newest.version) {
 	newest = q;
       } else if (q.version == newest.version &&
@@ -1278,10 +1331,11 @@ int DataScan::scan_links()
 	newest = q;
       }
     }
+    dout(10) << "newest is: " << newest << dendl;
 
     for (auto& q : p.second) {
       // in the middle of dir fragmentation?
-      if (newest.dirino == q.dirino && newest.name == q.name) {
+      if (newest == q) {
 	snaps.insert(make_move_iterator(begin(q.snaps)),
 		     make_move_iterator(end(q.snaps)));
 	continue;
@@ -1293,6 +1347,17 @@ int DataScan::scan_links()
       to_remove[q.dirfrag()].insert(key);
       derr << "Remove duplicated ino 0x" << p.first << " from "
 	   << q.dirfrag() << "/" << q.name << dendl;
+      {
+        /* we've removed the injected linkage: don't fix it later */
+        auto range = injected_inos.equal_range(p.first);
+        for (auto it = range.first; it != range.second; ) {
+          if (it->second == q) {
+            it = injected_inos.erase(it);
+          } else {
+            ++it;
+          }
+        }
+      }
     }
 
     int nlink = 0;
@@ -1303,10 +1368,18 @@ int DataScan::scan_links()
       nlink++;
 
     if (nlink != newest.nlink) {
-      derr << "Bad nlink on " << p.first << " expected " << nlink
+      derr << "Dup primaries - Bad nlink on " << p.first << " expected " << nlink
 	   << " has " << newest.nlink << dendl;
+      if (nlink > 1)
+        ceph_assert(!referent_inodes[p.first].empty());
+      ceph_assert(static_cast<unsigned int>(nlink) == (referent_inodes[p.first].size()+1));
       bad_nlink_inos[p.first] = newest;
       bad_nlink_inos[p.first].nlink = nlink;
+      dout(1) << "Dup primaries - Bad nlink, adding referent inode list " <<  referent_inodes[p.first]
+              << " to the primary inode " << p.first << dendl;
+      bad_nlink_inos[p.first].referent_inodes = referent_inodes[p.first];
+    } else {
+      bad_nlink_inos.erase(p.first);
     }
   }
   dup_primaries.clear();
@@ -1358,13 +1431,16 @@ int DataScan::scan_links()
       derr << "Unexpected error reading dentry "
 	   << p.second.dirfrag() << "/" << p.second.name
 	   << ": " << cpp_strerror(r) << dendl;
-      return r;
+      continue;
     }
 
     if (inode.inode->ino != p.first || inode.inode->version != p.second.version)
       continue;
 
     inode.get_inode()->nlink = p.second.nlink;
+    inode.get_inode()->referent_inodes = p.second.referent_inodes;
+    dout(10) << "bad_nlink_inos processing - Injecting referent_inodes "
+             << p.second.referent_inodes << " to the primary inode " << inode.inode->ino  << dendl;
     r = metadata_driver->inject_linkage(p.second.dirino, p.second.name, p.second.frag, inode, first);
     if (r < 0)
       return r;
@@ -1384,7 +1460,7 @@ int DataScan::scan_links()
       derr << "Unexpected error reading dentry "
 	<< p.second.dirfrag() << "/" << p.second.name
 	<< ": " << cpp_strerror(r) << dendl;
-      return r;
+      continue;
     }
 
     if (first != CEPH_NOSNAP) {
@@ -1658,8 +1734,8 @@ int MetadataTool::read_dentry(inodeno_t parent_ino, frag_t frag,
     decode(first, q);
     char dentry_type;
     decode(dentry_type, q);
-    if (dentry_type == 'I' || dentry_type == 'i') {
-      if (dentry_type == 'i') {
+    if (dentry_type == 'I' || dentry_type == 'i' || dentry_type == 'R' || dentry_type == 'r') {
+      if (dentry_type == 'i' || dentry_type == 'r') {
         mempool::mds_co::string alternate_name;
 
         DECODE_START(2, q);
@@ -2046,19 +2122,13 @@ int MetadataDriver::inject_with_backtrace(
       }
     }
 
-    if (!created_dirfrag) {
-      // If the parent dirfrag already existed, then stop traversing the
-      // backtrace: assume that the other ancestors already exist too.  This
-      // is an assumption rather than a truth, but it's a convenient way
-      // to avoid the risk of creating multiply-linked directories while
-      // injecting data.  If there are in fact missing ancestors, this
-      // should be fixed up using a separate tool scanning the metadata
-      // pool.
-      break;
-    } else {
-      // Proceed up the backtrace, creating parents
-      ino = parent_ino;
-    }
+    // N.B.: when the metadata pool has suffered a partial loss (like one PG), then
+    // an arbitrary ancestor dirfrag may be missing. We need to traverse up the
+    // backtrace ancestry to create those missing dirfrags/links. There is a risk
+    // that we create duplicate primary links to a directory this way. scan_links
+    // will catch this and pick either a legitimate link (with a version >1) or
+    // an arbitrary injected link, removing the others.
+    ino = parent_ino;
   }
 
   return 0;
@@ -2115,28 +2185,23 @@ int MetadataDriver::find_or_create_dirfrag(
     r = metadata_io.operate(frag_oid.name, &op);
     if (r == -EOVERFLOW || r == -EEXIST) {
       // Someone else wrote it (see case A above)
-      dout(10) << "Dirfrag creation race: 0x" << std::hex
-        << ino << " " << fragment << std::dec << dendl;
+      dout(10) << "Dirfrag creation race: " << ino << "." << fragment << dendl;
       *created = false;
       return 0;
     } else if (r < 0) {
       // We were unable to create or write it, error out
-      derr << "Failed to create dirfrag 0x" << std::hex
-        << ino << std::dec << ": " << cpp_strerror(r) << dendl;
+      derr << "Failed to create dirfrag " << ino << ": " << cpp_strerror(r) << dendl;
       return r;
     } else {
       // Success: the dirfrag object now exists with a value header
-      dout(10) << "Created dirfrag: 0x" << std::hex
-        << ino << std::dec << dendl;
+      dout(10) << "Created dirfrag: " << ino << dendl;
       *created = true;
     }
   } else if (r < 0) {
-    derr << "Unexpected error reading dirfrag 0x" << std::hex
-      << ino << std::dec << " : " << cpp_strerror(r) << dendl;
+    derr << "Unexpected error reading dirfrag " << ino << " : " << cpp_strerror(r) << dendl;
     return r;
   } else {
-    dout(20) << "Dirfrag already exists: 0x" << std::hex
-      << ino << " " << fragment << std::dec << dendl;
+    dout(20) << "Dirfrag already exists: " << ino << "." << fragment << dendl;
   }
 
   return 0;
@@ -2154,7 +2219,10 @@ int MetadataDriver::inject_linkage(
 
   bufferlist dentry_bl;
   encode(dnfirst, dentry_bl);
-  encode('I', dentry_bl);
+  if (inode.inode->remote_ino)
+    encode('R', dentry_bl);
+  else
+    encode('I', dentry_bl);
   inode.encode_bare(dentry_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
   // Write out
@@ -2162,14 +2230,10 @@ int MetadataDriver::inject_linkage(
   vals[key] = dentry_bl;
   int r = metadata_io.omap_set(frag_oid.name, vals);
   if (r != 0) {
-    derr << "Error writing dentry 0x" << std::hex
-      << dir_ino << std::dec << "/"
-      << dname << ": " << cpp_strerror(r) << dendl;
+    derr << "Error writing dentry " << dir_ino << "/" << dname << ": " << cpp_strerror(r) << dendl;
     return r;
   } else {
-    dout(20) << "Injected dentry 0x" << std::hex
-      << dir_ino << "/" << dname << " pointing to 0x"
-      << inode.inode->ino << std::dec << dendl;
+    dout(20) << "Injected dentry " << dir_ino << "/" << dname << " pointing to " << inode.inode->ino << dendl;
     return 0;
   }
 }
@@ -2333,7 +2397,8 @@ int LocalFileDriver::check_roots(bool *result)
 
 void MetadataTool::build_file_dentry(
     inodeno_t ino, uint64_t file_size, time_t file_mtime,
-    const file_layout_t &layout, InodeStore *out, std::string symlink)
+    const file_layout_t &layout, std::string symlink, inodeno_t remote_inode,
+    InodeStore *out)
 {
   ceph_assert(out != NULL);
 
@@ -2365,6 +2430,7 @@ void MetadataTool::build_file_dentry(
   inode->backtrace_version = 1;
   inode->uid = g_conf()->mds_root_ino_uid;
   inode->gid = g_conf()->mds_root_ino_gid;
+  inode->remote_ino = remote_inode;
 }
 
 void MetadataTool::build_dir_dentry(

@@ -17,10 +17,17 @@
 #include <functional>
 
 #include "osd/scheduler/mClockScheduler.h"
-#include "common/dout.h"
+#include "common/debug.h"
+
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 namespace dmc = crimson::dmclock;
 using namespace std::placeholders;
+using namespace std::literals;
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_mclock
@@ -112,41 +119,6 @@ void mClockScheduler::_init_logger()
   logger->set(l_mclock_recovery_queue_len, 0);
   logger->set(l_mclock_best_effort_queue_len, 0);
   logger->set(l_mclock_all_type_queue_len, 0);
-}
-
-mClockScheduler::mClockScheduler(CephContext *cct,
-  int whoami,
-  uint32_t num_shards,
-  int shard_id,
-  bool is_rotational,
-  unsigned cutoff_priority,
-  MonClient *monc,
-  bool init_perfcounter)
-  : cct(cct),
-    whoami(whoami),
-    num_shards(num_shards),
-    shard_id(shard_id),
-    is_rotational(is_rotational),
-    cutoff_priority(cutoff_priority),
-    monc(monc),
-    logger(nullptr),
-    scheduler(
-      std::bind(&mClockScheduler::ClientRegistry::get_info,
-                &client_registry,
-                _1),
-      dmc::AtLimit::Wait,
-      cct->_conf.get_val<double>("osd_mclock_scheduler_anticipation_timeout"))
-{
-  cct->_conf.add_observer(this);
-  ceph_assert(num_shards > 0);
-  set_osd_capacity_params_from_config();
-  set_config_defaults_from_profile();
-  client_registry.update_from_config(
-    cct->_conf, osd_bandwidth_capacity_per_shard);
-
-  if (init_perfcounter) {
-    _init_logger();
-  }
 }
 
 /* ClientRegistry holds the dmclock::ClientInfo configuration parameters
@@ -590,26 +562,24 @@ std::string mClockScheduler::display_queues() const
   return out.str();
 }
 
-const char** mClockScheduler::get_tracked_conf_keys() const
+std::vector<std::string> mClockScheduler::get_tracked_keys() const noexcept
 {
-  static const char* KEYS[] = {
-    "osd_mclock_scheduler_client_res",
-    "osd_mclock_scheduler_client_wgt",
-    "osd_mclock_scheduler_client_lim",
-    "osd_mclock_scheduler_background_recovery_res",
-    "osd_mclock_scheduler_background_recovery_wgt",
-    "osd_mclock_scheduler_background_recovery_lim",
-    "osd_mclock_scheduler_background_best_effort_res",
-    "osd_mclock_scheduler_background_best_effort_wgt",
-    "osd_mclock_scheduler_background_best_effort_lim",
-    "osd_mclock_max_capacity_iops_hdd",
-    "osd_mclock_max_capacity_iops_ssd",
-    "osd_mclock_max_sequential_bandwidth_hdd",
-    "osd_mclock_max_sequential_bandwidth_ssd",
-    "osd_mclock_profile",
-    NULL
+  return {
+    "osd_mclock_scheduler_client_res"s,
+    "osd_mclock_scheduler_client_wgt"s,
+    "osd_mclock_scheduler_client_lim"s,
+    "osd_mclock_scheduler_background_recovery_res"s,
+    "osd_mclock_scheduler_background_recovery_wgt"s,
+    "osd_mclock_scheduler_background_recovery_lim"s,
+    "osd_mclock_scheduler_background_best_effort_res"s,
+    "osd_mclock_scheduler_background_best_effort_wgt"s,
+    "osd_mclock_scheduler_background_best_effort_lim"s,
+    "osd_mclock_max_capacity_iops_hdd"s,
+    "osd_mclock_max_capacity_iops_ssd"s,
+    "osd_mclock_max_sequential_bandwidth_hdd"s,
+    "osd_mclock_max_sequential_bandwidth_ssd"s,
+    "osd_mclock_profile"s
   };
-  return KEYS;
 }
 
 void mClockScheduler::handle_conf_change(

@@ -24,6 +24,7 @@ int main(int argc, char **argv) {
   return RUN_ALL_TESTS();
 }
 
+using namespace std::literals;
 
 class mClockSchedulerTest : public testing::Test {
 public:
@@ -49,7 +50,9 @@ public:
     monc(nullptr),
     init_perfcounter(true),
     q(g_ceph_context, whoami, num_shards, shard_id, is_rotational,
-      cutoff_priority, monc, init_perfcounter),
+      cutoff_priority,
+      2ms, 2ms, 1ms,
+      monc, init_perfcounter),
     client1(1001),
     client2(9999),
     client3(100000001)
@@ -90,7 +93,7 @@ OpSchedulerItem create_item(
   return OpSchedulerItem(
     std::make_unique<mClockSchedulerTest::MockDmclockItem>(
       std::forward<Args>(args)...),
-    12, 12,
+    12, 1,
     utime_t(), owner, e);
 }
 
@@ -172,7 +175,7 @@ TEST_F(mClockSchedulerTest, TestMultiClientOrderedEnqueueDequeue) {
   const unsigned NUM = 1000;
   for (unsigned i = 0; i < NUM; ++i) {
     for (auto &&c: {client1, client2, client3}) {
-      q.enqueue(create_item(i, c));
+      q.enqueue(create_item(i, c, op_scheduler_class::client));
       std::this_thread::sleep_for(std::chrono::microseconds(1));
     }
   }
@@ -261,5 +264,34 @@ TEST_F(mClockSchedulerTest, TestAllQueuesEnqueueDequeue) {
   r = get_item(q.dequeue());
   ASSERT_EQ(101u, r.get_map_epoch());
 
+  ASSERT_TRUE(q.empty());
+}
+
+const OpSchedulerItem *maybe_get_item(const WorkItem &item)
+{
+  return std::get_if<OpSchedulerItem>(&item);
+}
+
+TEST_F(mClockSchedulerTest, TestSlowDequeue) {
+  ASSERT_TRUE(q.empty());
+
+  // Insert ops into the mClock queue
+  unsigned i = 0;
+  for (; i < 100; ++i) {
+    q.enqueue(create_item(i, client1, op_scheduler_class::background_best_effort));
+    std::this_thread::sleep_for(5ms);
+  }
+  for (; i < 200; ++i) {
+    q.enqueue(create_item(i, client2, op_scheduler_class::client));
+    std::this_thread::sleep_for(5ms);
+  }
+
+  i = 0;
+  for (; i < 200; ++i) {
+    ASSERT_FALSE(q.empty());
+    auto item = q.dequeue();
+    auto *wqi = maybe_get_item(item);
+    ASSERT_TRUE(wqi);
+  }
   ASSERT_TRUE(q.empty());
 }

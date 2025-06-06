@@ -5,6 +5,8 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/Formatter.h"
 
+#include <iomanip>
+
 namespace cls {
 namespace rbd {
 
@@ -106,6 +108,9 @@ std::ostream& operator<<(std::ostream& os, const MirrorMode& mirror_mode) {
     break;
   case MIRROR_MODE_POOL:
     os << "pool";
+    break;
+  case MIRROR_MODE_INIT_ONLY:
+    os << "init-only";
     break;
   default:
     os << "unknown (" << static_cast<uint32_t>(mirror_mode) << ")";

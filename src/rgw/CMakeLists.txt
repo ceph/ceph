@@ -19,6 +19,11 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   message("-- arrow flight is installed")
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
+if(CEPH_HAVE_ISAL)
+  message("-- building RGW with ISA-L support")
+  add_definitions(-DSPDK_CONFIG_ISAL)
+endif()
+
 function(gperf_generate input output)
   add_custom_command(
     OUTPUT ${output}
@@ -51,6 +56,10 @@ set(librgw_common_srcs
   services/svc_user_rados.cc
   services/svc_zone.cc
   services/svc_zone_utils.cc
+  spdk/crc64.c
+  madler/crc64nvme.c
+  madler/crc32iso_hdlc.c
+  madler/crc32iscsi.c
   rgw_account.cc
   rgw_acl.cc
   rgw_acl_s3.cc
@@ -65,6 +74,7 @@ set(librgw_common_srcs
   rgw_bucket.cc
   rgw_bucket_layout.cc
   rgw_cache.cc
+  rgw_cksum.cc
   rgw_cksum_pipe.cc
   rgw_common.cc
   rgw_compression.cc
@@ -149,12 +159,17 @@ set(librgw_common_srcs
   rgw_bucket_encryption.cc
   rgw_tracer.cc
   rgw_lua_background.cc
+  rgw_dedup.cc
+  rgw_dedup_table.cc
+  rgw_dedup_store.cc
+  rgw_dedup_utils.cc
+  rgw_dedup_cluster.cc
   rgw_data_access.cc
+  rgw_realm_watcher.cc
   driver/rados/account.cc
   driver/rados/buckets.cc
   rgw_bucket_logging.cc
   rgw_rest_bucket_logging.cc
-  driver/rados/cls_fifo_legacy.cc
   driver/rados/group.cc
   driver/rados/groups.cc
   driver/rados/rgw_bucket.cc
@@ -216,6 +231,7 @@ list(APPEND librgw_common_srcs
   driver/rados/config/period.cc
   driver/rados/config/period_config.cc
   driver/rados/config/realm.cc
+  driver/rados/config/realm_watcher.cc
   driver/rados/config/store.cc
   driver/rados/config/zone.cc
   driver/rados/config/zonegroup.cc)
@@ -349,6 +365,11 @@ if(WITH_JAEGER)
   target_link_libraries(rgw_common PUBLIC jaeger_base)
 endif()
 
+if(WITH_BREAKPAD)
+  add_dependencies(rgw_common breakpad_project)
+  target_link_libraries(rgw_common PUBLIC breakpad)
+endif()
+
 if(WITH_RADOSGW_DBSTORE)
   target_link_libraries(rgw_common PRIVATE global dbstore)
 endif()
@@ -386,7 +407,6 @@ set(rgw_a_srcs
   rgw_period_pusher.cc
   rgw_process.cc
   rgw_realm_reloader.cc
-  rgw_realm_watcher.cc
   rgw_rest_config.cc
   rgw_rest_info.cc
   rgw_rest_metadata.cc

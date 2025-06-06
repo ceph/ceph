@@ -109,20 +109,26 @@
           </tbody>
         </table>
 
-      <!-- Tags -->
-      <ng-container *ngIf="(selection.tagset | keyvalue)?.length">
-        <legend i18n>Tags</legend>
-        <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
-          <tbody>
-            <tr *ngFor="let tag of selection.tagset | keyvalue">
-              <td i18n
-                  class="bold w-25">{{tag.key}}</td>
-              <td class="w-75">{{ tag.value }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </ng-container>
+        <!-- Tags -->
+        <ng-container *ngIf="(selection.tagset | keyvalue)?.length">
+          <legend i18n>Tags</legend>
+          <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
+            <tbody>
+              <tr *ngFor="let tag of selection.tagset | keyvalue">
+                <td i18n
+                    class="bold w-25">{{tag.key}}</td>
+                <td class="w-75">{{ tag.value }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </ng-container>
 
+
+        <!-- Bucket Rate Limit -->
+        <ng-container *ngIf="!!bucketRateLimit">
+          <cd-rgw-rate-limit-details [rateLimitConfig]="bucketRateLimit"
+                                     [type]="'bucket'"></cd-rgw-rate-limit-details>
+        </ng-container>
       </ng-template>
     </ng-container>
 
@@ -146,13 +152,13 @@
                     <button type="button"
                             class="btn btn-light"
                             [ngClass]="{'active': lifecycleFormat === 'json'}"
-                            (click)="lifecycleFormat = 'json'">
+                            (click)="updateLifecycleFormatTo('json')">
                           JSON
                     </button>
                     <button type="button"
                             class="btn btn-light"
                             [ngClass]="{'active': lifecycleFormat === 'xml'}"
-                            (click)="lifecycleFormat = 'xml'">
+                            (click)="updateLifecycleFormatTo('xml')">
                           XML
                     </button>
                   </div>
@@ -166,6 +172,23 @@
                                     *ngIf="lifecycleFormat === 'xml'">
                     {{ (selection.lifecycle | xml:{'Rules':'Rule'}) || '-'}}
                   </cds-code-snippet>
+                </td>
+              </tr>
+              <tr *ngIf="selection.lifecycle_progress?.length > 0">
+                <td i18n
+                    class="bold w-25">
+                  Lifecycle progress
+                </td>
+                <td>
+                  <cds-tooltip [description]="lifecycleProgressMap.get(lifecycleProgress.status)?.description"
+                               [align]="'top'">
+                    <cds-tag size="md"
+                             [type]="lifecycleProgressMap.get(lifecycleProgress.status)?.color">
+                      {{ lifecycleProgress.status }}
+                    </cds-tag>
+                  </cds-tooltip>
+                  <div *ngIf="lifecycleProgress?.status !== 'UNINITIAL'"
+                       class="spacing-left">{{lifecycleProgress?.started}}</div>
                 </td>
               </tr>
               <tr>
@@ -204,6 +227,15 @@
             </tbody>
           </table>
         </div>
+      </ng-template>
+    </ng-container>
+
+    <ng-container ngbNavItem="tiering">
+      <a ngbNavLink
+         i18n>Tiering</a>
+      <ng-template ngbNavContent>
+        <cd-rgw-bucket-lifecycle-list [bucket]="selection"
+                                      (updateBucketDetails)="updateBucketDetails(extractLifecycleDetails.bind(this))"></cd-rgw-bucket-lifecycle-list>
       </ng-template>
     </ng-container>
   </nav>

@@ -635,6 +635,7 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
   }
   curl_easy_setopt(easy_handle, CURLOPT_PRIVATE, (void *)req_data);
   curl_easy_setopt(easy_handle, CURLOPT_TIMEOUT, req_timeout);
+  curl_easy_setopt(easy_handle, CURLOPT_CONNECTTIMEOUT, req_connect_timeout);
 
   return 0;
 }

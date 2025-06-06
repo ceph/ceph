@@ -30,7 +30,7 @@
           [toolHeader]="true"
           (updateSelection)="updateSelection($event, flowType.symmetrical)"
           (fetchData)="loadData($event)">
-          <div class="table-actions btn-toolbar">
+          <div class="table-actions">
             <cd-table-actions
               [permission]="permission"
               [selection]="symFlowSelection"
@@ -60,7 +60,7 @@
           [toolHeader]="true"
           (updateSelection)="updateSelection($event, flowType.directional)"
           (fetchData)="loadData($event)">
-          <div class="table-actions btn-toolbar">
+          <div class="table-actions">
             <cd-table-actions
               [permission]="permission"
               [selection]="dirFlowSelection"
@@ -92,7 +92,7 @@
         [toolHeader]="true"
         (updateSelection)="pipeSelection = $event"
         (fetchData)="loadData($event)">
-        <div class="table-actions btn-toolbar">
+        <div class="table-actions">
           <cd-table-actions
             [permission]="permission"
             [selection]="pipeSelection"

@@ -8,6 +8,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "common/ceph_json.h"
+#include "common/strtol.h"
 #include "rgw_common.h"
 #include "rgw_es_query.h"
 

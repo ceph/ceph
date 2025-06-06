@@ -12,8 +12,9 @@
  * 
  */
 
-#include "common/config.h"
 #include "LogEvent.h"
+#include "common/config.h"
+#include "common/debug.h"
 
 #include "MDSRank.h"
 

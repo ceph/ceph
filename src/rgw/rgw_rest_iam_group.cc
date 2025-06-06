@@ -123,7 +123,7 @@ int RGWCreateGroup_IAM::forward_to_master(optional_yield y,
   s->info.args.remove("Version");
 
   int r = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                        post_body, parser, s->info, y);
+                                        post_body, parser, s->info, s->err, y);
   if (r < 0) {
     ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
     return r;
@@ -422,7 +422,7 @@ int RGWUpdateGroup_IAM::forward_to_master(optional_yield y, const rgw::SiteConfi
   s->info.args.remove("Version");
 
   int r = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                        post_body, parser, s->info, y);
+                                        post_body, parser, s->info, s->err, y);
   if (r < 0) {
     ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
     return r;
@@ -556,7 +556,7 @@ int RGWDeleteGroup_IAM::forward_to_master(optional_yield y, const rgw::SiteConfi
   s->info.args.remove("Version");
 
   int r = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                        post_body, parser, s->info, y);
+                                        post_body, parser, s->info, s->err, y);
   if (r < 0) {
     ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
     return r;
@@ -885,7 +885,7 @@ int RGWAddUserToGroup_IAM::forward_to_master(optional_yield y,
   s->info.args.remove("Version");
 
   int r = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                        post_body, parser, s->info, y);
+                                        post_body, parser, s->info, s->err, y);
   if (r < 0) {
     ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
     return r;
@@ -1022,7 +1022,7 @@ int RGWRemoveUserFromGroup_IAM::forward_to_master(optional_yield y,
   s->info.args.remove("Version");
 
   int r = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                        post_body, parser, s->info, y);
+                                        post_body, parser, s->info, s->err, y);
   if (r < 0) {
     ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
     return r;
@@ -1261,7 +1261,7 @@ int RGWPutGroupPolicy_IAM::forward_to_master(optional_yield y,
   s->info.args.remove("Version");
 
   int r = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                        post_body, parser, s->info, y);
+                                        post_body, parser, s->info, s->err, y);
   if (r < 0) {
     ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
     return r;
@@ -1508,7 +1508,7 @@ int RGWDeleteGroupPolicy_IAM::forward_to_master(optional_yield y,
   s->info.args.remove("Version");
 
   int r = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                        post_body, parser, s->info, y);
+                                        post_body, parser, s->info, s->err, y);
   if (r < 0) {
     ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
     return r;
@@ -1749,7 +1749,7 @@ int RGWAttachGroupPolicy_IAM::forward_to_master(optional_yield y,
   s->info.args.remove("Version");
 
   int r = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                        post_body, parser, s->info, y);
+                                        post_body, parser, s->info, s->err, y);
   if (r < 0) {
     ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
     return r;
@@ -1898,7 +1898,7 @@ int RGWDetachGroupPolicy_IAM::forward_to_master(optional_yield y,
   s->info.args.remove("Version");
 
   int r = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                        post_body, parser, s->info, y);
+                                        post_body, parser, s->info, s->err, y);
   if (r < 0) {
     ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
     return r;

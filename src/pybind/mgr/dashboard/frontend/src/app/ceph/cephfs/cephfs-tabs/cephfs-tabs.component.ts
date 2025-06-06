@@ -112,8 +112,8 @@ export class CephfsTabsComponent implements OnChanges, OnDestroy {
   softRefresh() {
     const data = _.cloneDeep(this.data); // Forces update of tab tables on tab switch
     // Clients tab
-    this.clients = data.clients;
-    this.clients.status = new TableStatusViewCache(this.clients.status);
+    this.clients = data?.clients;
+    this.clients.status = new TableStatusViewCache(this.clients?.status);
     // Details tab
     this.details = {
       standbys: data.standbys,

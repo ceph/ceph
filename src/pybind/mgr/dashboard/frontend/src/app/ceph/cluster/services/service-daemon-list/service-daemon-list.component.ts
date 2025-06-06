@@ -190,18 +190,6 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
 
     this.serviceColumns = [
       {
-        name: $localize`Service Name`,
-        prop: 'service_name',
-        flexGrow: 2,
-        filterable: true
-      },
-      {
-        name: $localize`Service Type`,
-        prop: 'service_type',
-        flexGrow: 1,
-        filterable: true
-      },
-      {
         name: $localize`Service Events`,
         prop: 'events',
         flexGrow: 5,

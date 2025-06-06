@@ -116,7 +116,7 @@ int RGWObjExpStore::objexp_hint_add(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
     return r;
   }
-  return obj.operate(dpp, &op, null_yield);
+  return obj.operate(dpp, std::move(op), null_yield);
 }
 
 int RGWObjExpStore::objexp_hint_list(const DoutPrefixProvider *dpp, 
@@ -142,7 +142,7 @@ int RGWObjExpStore::objexp_hint_list(const DoutPrefixProvider *dpp,
     return r;
   }
   bufferlist obl;
-  int ret = obj.operate(dpp, &op, &obl, null_yield);
+  int ret = obj.operate(dpp, std::move(op), &obl, null_yield);
 
   if ((ret < 0 ) && (ret != -ENOENT)) {
     return ret;
@@ -167,7 +167,7 @@ static int cls_timeindex_trim_repeat(const DoutPrefixProvider *dpp,
   do {
     librados::ObjectWriteOperation op;
     cls_timeindex_trim(op, from_time, to_time, from_marker, to_marker);
-    int r = rgw_rados_operate(dpp, ref.ioctx, oid, &op, null_yield);
+    int r = rgw_rados_operate(dpp, ref.ioctx, oid, std::move(op), null_yield);
     if (r == -ENODATA)
       done = true;
     else if (r < 0)

@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_pubsub_push.h"
+#include <shared_mutex> // for std::shared_lock
 #include <string>
 #include <sstream>
 #include <algorithm>
@@ -100,6 +101,8 @@ public:
     }
     bufferlist read_bl;
     RGWPostHTTPData request(cct, "POST", endpoint, &read_bl, verify_ssl);
+    //default to 3 seconds for wrong url hits - if wrong endpoint configured
+    request.set_req_connect_timeout(3);
     const auto post_data = json_format_pubsub_event(event);
     if (cloudevents) {
       // following: https://github.com/cloudevents/spec/blob/v1.0.1/http-protocol-binding.md

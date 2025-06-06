@@ -1,6 +1,6 @@
 import pytest
 from ceph_volume.devices import raw
-from mock.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock
 from ceph_volume import objectstore
 
 class TestRaw(object):

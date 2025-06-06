@@ -51,7 +51,7 @@ prefixes = ['bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
 signed_off_re = re.compile("Signed-off-by: (.+) <")
 tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
 rst_link_re = re.compile(r"([a-zA-Z0-9])_(\W)")
-release_re = re.compile(r"^(nautilus|octopus|pacific|Pacific|quincy|Quincy|reef|Reef):\s*")
+release_re = re.compile(r"^(nautilus|octopus|pacific|quincy|reef|squid|tentacle):\s*", re.IGNORECASE)
 
 tracker_uri = "http://tracker.ceph.com/issues/{0}.json"
 

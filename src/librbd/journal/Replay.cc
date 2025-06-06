@@ -14,6 +14,8 @@
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::journal::Replay: " << this << " "
@@ -218,8 +220,8 @@ void Replay<I>::process(const EventEntry &event_entry,
     return;
   }
 
-  boost::apply_visitor(EventVisitor(this, on_ready, on_safe),
-                       event_entry.event);
+  std::visit(EventVisitor(this, on_ready, on_safe),
+             event_entry.event);
 }
 
 template <typename I>

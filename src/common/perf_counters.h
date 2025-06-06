@@ -18,6 +18,7 @@
 #define CEPH_COMMON_PERF_COUNTERS_H
 
 #include <functional>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -248,6 +249,7 @@ public:
   uint64_t get(int idx) const;
 
   void tset(int idx, utime_t v);
+  void tset(int idx, ceph::timespan v);
   void tinc(int idx, utime_t v);
   void tinc(int idx, ceph::timespan v);
   utime_t tget(int idx) const;
@@ -304,7 +306,7 @@ private:
 
   int prio_adjust = 0;
 
-#if !defined(WITH_SEASTAR) || defined(WITH_ALIEN)
+#ifndef WITH_CRIMSON
   const std::string m_lock_name;
   /** Protects m_data */
   ceph::mutex m_lock;

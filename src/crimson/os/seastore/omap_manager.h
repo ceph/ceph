@@ -18,6 +18,7 @@
 //	and return errors during insert if the max is exceeded.
 #define OMAP_INNER_BLOCK_SIZE 8192
 #define OMAP_LEAF_BLOCK_SIZE 65536
+#define LOG_LEAF_BLOCK_SIZE 16384
 
 namespace crimson::os::seastore {
 
@@ -40,7 +41,8 @@ public:
    */
   using initialize_omap_iertr = base_iertr;
   using initialize_omap_ret = initialize_omap_iertr::future<omap_root_t>;
-  virtual initialize_omap_ret initialize_omap(Transaction &t, laddr_t hint) = 0;
+  virtual initialize_omap_ret initialize_omap(Transaction &t, laddr_t hint,
+    omap_type_t type) = 0;
 
   /**
    * get value(string) by key(string)
@@ -66,7 +68,8 @@ public:
    * @param string &key, omap string key
    * @param string &value, mapped value corresponding key
    */
-  using omap_set_key_iertr = base_iertr;
+  using omap_set_key_iertr = base_iertr::extend<
+    crimson::ct_error::value_too_large>;
   using omap_set_key_ret = omap_set_key_iertr::future<>;
   virtual omap_set_key_ret omap_set_key(
     omap_root_t &omap_root,
@@ -74,7 +77,7 @@ public:
     const std::string &key,
     const ceph::bufferlist &value) = 0;
 
-  using omap_set_keys_iertr = base_iertr;
+  using omap_set_keys_iertr = omap_set_key_iertr;
   using omap_set_keys_ret = omap_set_keys_iertr::future<>;
   virtual omap_set_keys_ret omap_set_keys(
     omap_root_t &omap_root,

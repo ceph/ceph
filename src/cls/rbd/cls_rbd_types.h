@@ -7,10 +7,12 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/object.h" // for snapid_t
 #include "include/stringify.h"
 #include "include/utime.h"
 #include "msg/msg_types.h"
 #include <iosfwd>
+#include <map>
 #include <string>
 #include <set>
 #include <variant>
@@ -44,9 +46,10 @@ inline void decode(DirectoryState &state, ceph::buffer::list::const_iterator& it
 }
 
 enum MirrorMode {
-  MIRROR_MODE_DISABLED = 0,
-  MIRROR_MODE_IMAGE    = 1,
-  MIRROR_MODE_POOL     = 2
+  MIRROR_MODE_DISABLED  = 0,
+  MIRROR_MODE_IMAGE     = 1,
+  MIRROR_MODE_POOL      = 2,
+  MIRROR_MODE_INIT_ONLY = 3
 };
 
 enum GroupImageLinkState {

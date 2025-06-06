@@ -34,7 +34,7 @@
 #include "include/ipaddr.h"
 #include "include/str_list.h"
 #include "common/ceph_context.h"
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 #include "common/config.h"
 #include "common/config_obs.h"
 #endif
@@ -137,7 +137,7 @@ bool matches_with_net(CephContext *cct,
 
 int grade_with_numa_node(const ifaddrs& ifa, int numa_node)
 {
-#if defined(WITH_SEASTAR) || defined(_WIN32)
+#if defined(WITH_CRIMSON) || defined(_WIN32)
   return 0;
 #else
   if (numa_node < 0) {
@@ -198,17 +198,14 @@ const struct sockaddr *find_ip_in_subnet_list(
   return best_addr;
 }
 
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 // observe this change
 struct Observer : public md_config_obs_t {
-  const char *keys[2];
-  explicit Observer(const char *c) {
-    keys[0] = c;
-    keys[1] = NULL;
-  }
+  const std::string key;
+  explicit Observer(const char *c) : key(c) {}
 
-  const char** get_tracked_conf_keys() const override {
-    return (const char **)keys;
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return std::vector<std::string>{key};
   }
   void handle_conf_change(const ConfigProxy& conf,
 			  const std::set <std::string> &changed) override {
@@ -301,7 +298,7 @@ void pick_addresses(CephContext *cct, int needs)
     }
   }
 }
-#endif	// !WITH_SEASTAR
+#endif	// !WITH_CRIMSON
 
 static std::optional<entity_addr_t> get_one_address(
   CephContext *cct,

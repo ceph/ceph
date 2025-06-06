@@ -48,14 +48,14 @@ void DaemonMetricCollector::request_loop() {
     dump_asok_metrics(sort_metrics, prio_limit, true, dump_response, schema_response, true);
     auto stats_period = g_conf().get_val<int64_t>("exporter_stats_period");
     // time to wait before sending requests again
-    timer.expires_from_now(std::chrono::seconds(stats_period));
+    timer.expires_after(std::chrono::seconds(stats_period));
     request_loop();
   });
 }
 
 void DaemonMetricCollector::main() {
   shutdown_flag = false;
-  timer.expires_from_now(std::chrono::seconds(0));
+  timer.expires_after(std::chrono::seconds(0));
   request_loop();
   io.run();
 }

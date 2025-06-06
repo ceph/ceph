@@ -362,8 +362,8 @@ class Module(MgrModule):
                 == {"testkey"} | existing_keys)
 
     def _self_test_perf_counters(self) -> None:
-        self.get_perf_schema("osd", "0")
-        self.get_counter("osd", "0", "osd.op")
+        self.get_unlabeled_perf_schema("osd", "0")
+        self.get_unlabeled_counter("osd", "0", "osd.op")
         # get_counter
         # get_all_perf_coutners
 

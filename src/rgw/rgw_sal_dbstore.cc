@@ -203,7 +203,7 @@ namespace rgw::sal {
   }
 
   /* stats - Not for first pass */
-  int DBBucket::read_stats(const DoutPrefixProvider *dpp,
+  int DBBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
       const bucket_index_layout_generation& idx_layout,
       int shard_id,
       std::string *bucket_ver, std::string *master_ver,
@@ -309,19 +309,21 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats)
+  int DBBucket::check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                            std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
+                            std::map<RGWObjCategory, RGWStorageStats>& calculated_stats)
   {
     /* XXX: stats not supported yet */
     return 0;
   }
 
-  int DBBucket::rebuild_index(const DoutPrefixProvider *dpp)
+  int DBBucket::rebuild_index(const DoutPrefixProvider *dpp, optional_yield y)
   {
     /* there is no index table in dbstore. Not applicable */
     return 0;
   }
 
-  int DBBucket::set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout)
+  int DBBucket::set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y, uint64_t timeout)
   {
     /* XXX: CHECK: set tag timeout for all the bucket objects? */
     return 0;
@@ -496,6 +498,12 @@ namespace rgw::sal {
     return -EOPNOTSUPP;
   }
 
+  bool DBObject::is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
+                                   const ceph::real_time& obj_mtime)
+  {
+    return false;
+  }
+
   int DBObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
   {
     RGWObjState* astate;
@@ -544,16 +552,16 @@ namespace rgw::sal {
     return read_attrs(dpp, read_op, y, target_obj);
   }
 
-  int DBObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp)
+  int DBObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
   {
     rgw_obj target = get_obj();
     int r = get_obj_attrs(y, dpp, &target);
     if (r < 0) {
       return r;
     }
-    set_atomic();
+    set_atomic(true);
     state.attrset[attr_name] = attr_val;
-    return set_obj_attrs(dpp, &state.attrset, nullptr, y, rgw::sal::FLAG_LOG_OP);
+    return set_obj_attrs(dpp, &state.attrset, nullptr, y, flags);
   }
 
   int DBObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
@@ -561,7 +569,7 @@ namespace rgw::sal {
     Attrs rmattr;
     bufferlist bl;
 
-    set_atomic();
+    set_atomic(true);
     rmattr[attr_name] = bl;
     return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
   }

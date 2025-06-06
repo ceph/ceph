@@ -62,7 +62,6 @@
           for="default_realm"
           formControlName="default_realm"
           name="default_realm"
-          [disabled]="action === actionLabels.EDIT"
           i18n
           >Default
           <cd-help-text *ngIf="action === actionLabels.EDIT && info.data.is_default">

@@ -13,6 +13,7 @@
 
 #include "common/ceph_context.h"
 #include "common/dbstore.h"
+#include "log/Log.h"
 #include "sqlite/sqliteDB.h"
 
 using namespace rgw::store;

@@ -16,10 +16,10 @@ import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.s
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { HealthPieComponent } from '../health-pie/health-pie.component';
-import { MdsSummaryPipe } from '../mds-summary.pipe';
-import { MgrSummaryPipe } from '../mgr-summary.pipe';
+import { MdsDashboardSummaryPipe } from '../mds-dashboard-summary.pipe';
+import { MgrDashboardSummaryPipe } from '../mgr-dashboard-summary.pipe';
 import { MonSummaryPipe } from '../mon-summary.pipe';
-import { OsdSummaryPipe } from '../osd-summary.pipe';
+import { osdDashboardSummaryPipe } from '../osd-dashboard-summary.pipe';
 import { HealthComponent } from './health.component';
 
 describe('HealthComponent', () => {
@@ -54,9 +54,9 @@ describe('HealthComponent', () => {
       HealthComponent,
       HealthPieComponent,
       MonSummaryPipe,
-      OsdSummaryPipe,
-      MdsSummaryPipe,
-      MgrSummaryPipe
+      osdDashboardSummaryPipe,
+      MdsDashboardSummaryPipe,
+      MgrDashboardSummaryPipe
     ],
     schemas: [NO_ERRORS_SCHEMA],
     providers: [

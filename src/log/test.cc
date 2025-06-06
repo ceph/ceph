@@ -191,7 +191,7 @@ static void readpipe(int fd, int verify)
         if (p == NULL) {
           _exit(2);
         } else if (p[1] != '\0') {
-          write(2, buf, strlen(buf));
+          std::ignore = write(2, buf, strlen(buf));
           _exit(3);
         }
       }

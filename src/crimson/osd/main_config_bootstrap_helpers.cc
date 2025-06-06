@@ -11,6 +11,7 @@
 #include <seastar/util/closeable.hh>
 #include <seastar/util/defer.hh>
 #include <seastar/util/std-compat.hh>
+#include <seastar/core/app-template.hh>
 
 #include "common/ceph_argparse.h"
 #include "common/config_tracker.h"
@@ -84,6 +85,41 @@ seastar::future<> populate_config_from_mon()
   });
 }
 
+struct SeastarOption {
+  std::string option_name;  // Command-line option name
+  std::string config_key;   // Configuration key
+  Option::type_t value_type ;   // Type of configuration value
+};
+
+// Define a list of Seastar options
+const std::vector<SeastarOption> seastar_options = {
+  {"--task-quota-ms", "crimson_reactor_task_quota_ms", Option::TYPE_FLOAT},
+  {"--io-latency-goal-ms", "crimson_reactor_io_latency_goal_ms", Option::TYPE_FLOAT},
+  {"--idle-poll-time-us", "crimson_reactor_idle_poll_time_us", Option::TYPE_UINT}
+};
+
+// Function to get the option value as a string
+std::optional<std::string> get_option_value(const SeastarOption& option) {
+  switch (option.value_type) {
+    case Option::TYPE_FLOAT: {
+      if (auto value = crimson::common::get_conf<double>(option.config_key)) {
+        return std::to_string(value);
+      }
+      break;
+    }
+    case Option::TYPE_UINT: {
+      if (auto value = crimson::common::get_conf<uint64_t>(option.config_key)) {
+        return std::to_string(value);
+      }
+      break;
+    }
+    default:
+      logger().warn("get_option_value --option_name {} encountered unknown type", option.config_key);
+      return std::nullopt;
+  }
+  return std::nullopt;
+}
+
 static tl::expected<early_config_t, int>
 _get_early_config(int argc, const char *argv[])
 {
@@ -143,6 +179,14 @@ _get_early_config(int argc, const char *argv[])
 	  std::begin(early_args),
 	  std::end(early_args));
 
+        for (const auto& option : seastar_options) {
+          auto option_value = get_option_value(option);
+          if (option_value) {
+            logger().info("Configure option_name {} with value : {}", option.config_key, option_value);
+            ret.early_args.emplace_back(option.option_name);
+            ret.early_args.emplace_back(*option_value);
+          }
+        }
 	if (auto found = std::find_if(
 	      std::begin(early_args),
 	      std::end(early_args),

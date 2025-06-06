@@ -159,7 +159,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
 
   retire_iertr::future<> retire_extent(
       Transaction& t, NodeExtentRef _extent) override {
-    LogicalCachedExtentRef extent = _extent;
+    LogicalChildNodeRef extent = _extent;
     auto addr = extent->get_laddr();
     auto len = extent->get_length();
     SUBDEBUGT(seastore_onode,

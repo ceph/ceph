@@ -36,6 +36,7 @@
 #include "json_spirit/json_spirit.h"
 
 #include <algorithm>
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -443,7 +444,8 @@ int Mirror<I>::image_enable(I *ictx, mirror_image_mode_t mode,
     return r;
   }
 
-  if (mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
+  if (mirror_mode == cls::rbd::MIRROR_MODE_DISABLED ||
+      mirror_mode == cls::rbd::MIRROR_MODE_INIT_ONLY) {
     lderr(cct) << "cannot enable mirroring: mirroring is not enabled on a "
                << pool_or_namespace(ictx) << dendl;
     return -EINVAL;
@@ -572,9 +574,8 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
     }
   };
 
-  std::unique_lock image_locker{ictx->image_lock};
-  std::map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
-  for (auto &info : snap_info) {
+  std::shared_lock image_locker{ictx->image_lock};
+  for (const auto& info : ictx->snap_info) {
     cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
                                           ictx->md_ctx.get_namespace(),
                                           ictx->id, info.first};
@@ -1064,6 +1065,7 @@ int Mirror<I>::mode_get(librados::IoCtx& io_ctx,
   case cls::rbd::MIRROR_MODE_DISABLED:
   case cls::rbd::MIRROR_MODE_IMAGE:
   case cls::rbd::MIRROR_MODE_POOL:
+  case cls::rbd::MIRROR_MODE_INIT_ONLY:
     *mirror_mode = static_cast<rbd_mirror_mode_t>(mirror_mode_internal);
     break;
   default:
@@ -1086,11 +1088,18 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
   case RBD_MIRROR_MODE_DISABLED:
   case RBD_MIRROR_MODE_IMAGE:
   case RBD_MIRROR_MODE_POOL:
+  case RBD_MIRROR_MODE_INIT_ONLY:
     next_mirror_mode = static_cast<cls::rbd::MirrorMode>(mirror_mode);
     break;
   default:
     lderr(cct) << "unknown mirror mode ("
                << static_cast<uint32_t>(mirror_mode) << ")" << dendl;
+    return -EINVAL;
+  }
+
+  if (next_mirror_mode == cls::rbd::MIRROR_MODE_INIT_ONLY &&
+      !io_ctx.get_namespace().empty()) {
+    lderr(cct) << "init-only mode cannot be set on a namespace" << dendl;
     return -EINVAL;
   }
 
@@ -1191,7 +1200,8 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
         }
       }
     }
-  } else if (next_mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
+  } else if (next_mirror_mode == cls::rbd::MIRROR_MODE_DISABLED ||
+             next_mirror_mode == cls::rbd::MIRROR_MODE_INIT_ONLY) {
     while (true) {
       bool retry_busy = false;
       bool pending_busy = false;
@@ -1295,20 +1305,6 @@ int Mirror<I>::remote_namespace_set(librados::IoCtx& io_ctx,
                                     const std::string& remote_namespace) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << dendl;
-  
-  std::string local_namespace = io_ctx.get_namespace();
-
-  if (local_namespace.empty() && !remote_namespace.empty()) {
-    lderr(cct) << "cannot mirror the default namespace to a "
-               << "non-default namespace." << dendl;
-    return -EINVAL;
-  }
-
-  if (!local_namespace.empty() && remote_namespace.empty()) {
-    lderr(cct) << "cannot mirror a non-default namespace to the default "
-               << "namespace." << dendl;
-    return -EINVAL;
-  }
 
   int r = cls_client::mirror_remote_namespace_set(&io_ctx, remote_namespace);
   if (r < 0) {
@@ -1993,8 +1989,11 @@ int Mirror<I>::image_status_summary(librados::IoCtx& io_ctx,
                                     MirrorImageStatusStates *states) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
 
+  librados::IoCtx default_ns_io_ctx;
+  default_ns_io_ctx.dup(io_ctx);
+  default_ns_io_ctx.set_namespace("");
   std::vector<cls::rbd::MirrorPeer> mirror_peers;
-  int r = cls_client::mirror_peer_list(&io_ctx, &mirror_peers);
+  int r = cls_client::mirror_peer_list(&default_ns_io_ctx, &mirror_peers);
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to list mirror peers: " << cpp_strerror(r) << dendl;
     return r;

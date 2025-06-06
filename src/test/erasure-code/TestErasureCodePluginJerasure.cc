@@ -17,6 +17,7 @@
 
 #include <errno.h>
 #include <stdlib.h>
+
 #include "erasure-code/ErasureCodePlugin.h"
 #include "log/Log.h"
 #include "global/global_context.h"
@@ -28,8 +29,9 @@ using namespace std;
 TEST(ErasureCodePlugin, factory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  ErasureCodeProfile profile;
   {
+    ErasureCodeProfile profile;
+    profile["technique"] = "doesnotexist";
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(-ENOENT, instance.factory("jerasure",
@@ -58,6 +60,80 @@ TEST(ErasureCodePlugin, factory)
 				  profile,
                                   &erasure_code, &cerr));
     EXPECT_TRUE(erasure_code.get());
+  }
+}
+
+bufferptr create_bufferptr(uint64_t value) {
+  bufferlist bl;
+  bl.append_zero(4096);
+  memcpy(bl.c_str(), &value, sizeof(value));
+  return bl.begin().get_current_ptr();
+}
+
+TEST(ErasureCodePlugin, parity_delta_write) {
+  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  ErasureCodeInterfaceRef erasure_code;
+  ErasureCodeProfile profile;
+  profile["technique"] = "reed_sol_van";
+  profile["k"] = "5";
+  int k=5;
+  profile["m"] = "3";
+  int m=3;
+  EXPECT_EQ(0, instance.factory("jerasure",
+                              g_conf().get_val<std::string>("erasure_code_dir"),
+                              profile,
+                              &erasure_code, &cerr));
+  shard_id_map<bufferptr> data(8);
+  shard_id_map<bufferptr> coding(8);
+  shard_id_map<bufferptr> coding2(8);
+  shard_id_map<bufferptr> decode_in(8);
+  shard_id_map<bufferptr> decode_out(8);
+
+  uint32_t seeds[] = {100, 101, 102, 103, 104};
+  uint32_t overwrite3 = 1032;
+
+  for (shard_id_t s; s < k; ++s) {
+    data[s] = create_bufferptr(seeds[int(s)]);
+  }
+  for (shard_id_t s(k); s < k + m; ++s) {
+    coding[s] = create_bufferptr(-1);
+    coding2[s] = create_bufferptr(-1);
+  }
+
+  // Do a normal encode.
+  erasure_code->encode_chunks(data, coding);
+
+  shard_id_map<bufferptr> delta(8);
+  delta[shard_id_t(3)] = create_bufferptr(-1);
+
+  bufferptr overwrite_bp = create_bufferptr(overwrite3);
+
+  erasure_code->encode_delta(data[shard_id_t(3)], overwrite_bp, &delta[shard_id_t(3)]);
+  erasure_code->apply_delta(delta, coding);
+  data[shard_id_t(3)] = overwrite_bp;
+
+  erasure_code->encode_chunks(data, coding2);
+
+  for (shard_id_t s(k); s < k + m; ++s) {
+    ASSERT_EQ(*(uint32_t*)coding[s].c_str(), *(uint32_t*)coding2[s].c_str());
+  }
+
+  data.erase(shard_id_t(4));
+  data.emplace(shard_id_t(4), (char*)malloc(4096), 4096);
+  shard_id_set want;
+  want.insert_range(shard_id_t(0), 5);
+  decode_in[shard_id_t(0)] = data[shard_id_t(0)];
+  decode_in[shard_id_t(1)] = data[shard_id_t(1)];
+  decode_in[shard_id_t(2)] = data[shard_id_t(2)];
+  decode_in[shard_id_t(3)] = data[shard_id_t(3)];
+  decode_out[shard_id_t(4)] = data[shard_id_t(4)];
+  decode_in[shard_id_t(6)] = coding[shard_id_t(6)];
+
+  ASSERT_EQ(0, erasure_code->decode_chunks(want, decode_in, decode_out));
+
+  seeds[3] = overwrite3;
+  for (shard_id_t s(0); s < k; ++s) {
+    ASSERT_EQ(seeds[int(s)], *(uint32_t*)data[s].c_str());
   }
 }
 

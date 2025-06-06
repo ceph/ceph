@@ -29,4 +29,8 @@ overrides:
         # cephadm can take up to 5 minutes to bring up remaining mons
         mon down mkfs grace: 300
     log-ignorelist:
+      - OSD_DOWN
+      - OSD_HOST_DOWN
+      - OSD_ROOT_DOWN
+      - PG_DEGRADED
       - NVMEOF_SINGLE_GATEWAY

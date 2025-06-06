@@ -1,14 +1,18 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "MetricsHandler.h"
+
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/cephfs/metrics/Types.h"
 
+#include "messages/MClientMetrics.h"
 #include "messages/MMDSMetrics.h"
+#include "messages/MMDSPing.h"
 
 #include "MDSRank.h"
 #include "SessionMap.h"
-#include "MetricsHandler.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -20,7 +24,7 @@ MetricsHandler::MetricsHandler(CephContext *cct, MDSRank *mds)
     mds(mds) {
 }
 
-bool MetricsHandler::ms_dispatch2(const ref_t<Message> &m) {
+Dispatcher::dispatch_result_t MetricsHandler::ms_dispatch2(const ref_t<Message> &m) {
   if (m->get_type() == CEPH_MSG_CLIENT_METRICS &&
       m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT) {
     handle_client_metrics(ref_cast<MClientMetrics>(m));
@@ -339,7 +343,7 @@ void MetricsHandler::handle_client_metrics(const cref_t<MClientMetrics> &m) {
   }
 
   for (auto &metric : m->updates) {
-    boost::apply_visitor(HandlePayloadVisitor(this, session), metric.payload);
+    std::visit(HandlePayloadVisitor(this, session), metric.payload);
   }
 }
 

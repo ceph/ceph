@@ -13,6 +13,7 @@
  */
 
 #include "include/rados/librados.hpp"
+#include "common/debug.h"
 #include "common/errno.h"
 
 #include "PoolDump.h"

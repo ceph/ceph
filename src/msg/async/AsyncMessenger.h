@@ -19,12 +19,11 @@
 
 #include <map>
 #include <optional>
+#include <unordered_map>
 
 #include "include/types.h"
 #include "include/xlist.h"
 #include "include/spinlock.h"
-#include "include/unordered_map.h"
-#include "include/unordered_set.h"
 
 #include "common/ceph_mutex.h"
 #include "common/Cond.h"
@@ -36,6 +35,7 @@
 #include "Event.h"
 
 #include "include/ceph_assert.h"
+#include "common/admin_socket.h"
 
 class AsyncMessenger;
 
@@ -62,6 +62,27 @@ class Processor {
 	   entity_addrvec_t* bound_addrs);
   void start();
   void accept();
+  friend class AsyncMessenger;
+};
+
+class AsyncMessengerSocketHook : public AdminSocketHook {
+  std::map<std::string, AsyncMessenger*> m_msgrs;
+
+ public:
+  static constexpr std::string_view COMMAND =
+      "messenger dump "
+      "name=msgr,type=CephString,req=false "
+      "name=dumpcontents,type=CephChoices,"
+      "strings=all|listen_sockets|connections|anon_conns|accepting_conns|deleted_conns,"
+      "n=N,req=false "
+      "name=tcp_info,type=CephBool,req=false";
+  AsyncMessengerSocketHook(AsyncMessenger& m, const std::string& name);
+  int call(
+      std::string_view command, const cmdmap_t& cmdmap, const bufferlist&,
+      Formatter* f, std::ostream& errss, ceph::buffer::list& out) override;
+  bool add_messenger(const std::string& name, AsyncMessenger& msgr);
+  void remove_messenger(AsyncMessenger& msgr);
+  std::list<std::string> messengers() const;
 };
 
 /*
@@ -96,11 +117,11 @@ public:
    */
   bool set_addr_unknowns(const entity_addrvec_t &addr) override;
 
-  int get_dispatch_queue_len() override {
+  int get_dispatch_queue_len() const override {
     return dispatch_queue.get_queue_len();
   }
 
-  double get_dispatch_queue_max_age(utime_t now) override {
+  double get_dispatch_queue_max_age(utime_t now) const override {
     return dispatch_queue.get_max_age(now);
   }
   /** @} Accessors */
@@ -135,6 +156,10 @@ public:
   int start() override;
   void wait() override;
   int shutdown() override;
+
+  void dump(
+      Formatter* f, std::function<bool(const std::string&)> filter =
+      [](const std::string&) { return true; }) const override;
 
   /** @} // Startup/Shutdown */
 
@@ -222,7 +247,7 @@ private:
   std::string ms_type;
 
   /// overall lock used for AsyncMessenger data structures
-  ceph::mutex lock = ceph::make_mutex("AsyncMessenger::lock");
+  mutable ceph::mutex lock = ceph::make_mutex("AsyncMessenger::lock");
   // AsyncMessenger stuff
   /// approximately unique ID set by the Constructor for use in entity_addr_t
   uint64_t nonce;
@@ -271,7 +296,7 @@ private:
    * NOTE: a Asyncconnection* with state CLOSED may still be in the map but is considered
    * invalid and can be replaced by anyone holding the msgr lock
    */
-  ceph::unordered_map<entity_addrvec_t, AsyncConnectionRef> conns;
+  std::unordered_map<entity_addrvec_t, AsyncConnectionRef> conns;
 
   /**
    * list of connection are in the process of accepting

@@ -33,6 +33,7 @@
 
 #include "common/admin_socket.h"
 #include "common/async/completion.h"
+#include "common/strtol.h" // for strict_strtoll()
 #include "common/Timer.h"
 #include "common/config.h"
 #include "messages/MMonGetVersion.h"
@@ -559,6 +560,7 @@ private:
   struct MonCommand {
     // for tell only
     std::string target_name;
+    std::string sent_name;
     int target_rank = -1;
     ConnectionRef target_con;
     std::unique_ptr<MonConnection> target_session;

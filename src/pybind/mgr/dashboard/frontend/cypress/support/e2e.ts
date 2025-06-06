@@ -17,3 +17,10 @@ Cypress.on('uncaught:exception', (err: Error) => {
   }
   return true;
 });
+
+Cypress.on('fail', (err: Error) => {
+  if (err.message.includes('xhr') && err.message.includes('canceled')) {
+    return false; // Ignore canceled XHR requests
+  }
+  return true;
+});

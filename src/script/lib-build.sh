@@ -32,6 +32,16 @@ function ci_debug() {
     fi
 }
 
+function wrap_sudo() {
+    # set or unset the SUDO env var so that scripts already running
+    # as root do not call into sudo to escalate privs
+    if test $(id -u) != 0 ; then
+        SUDO=sudo
+    else
+        SUDO=""
+    fi
+}
+
 # get_processors returns 1/2 the value of the value returned by
 # the nproc program OR the value of the environment variable NPROC
 # allowing the user to tune the number of cores visible to the
@@ -72,7 +82,7 @@ function discover_compiler() {
     local cxx_compiler=g++
     local c_compiler=gcc
     # ubuntu/debian ci builds prefer clang
-    for i in {17..12}; do
+    for i in {19..12}; do
         if type -t "clang-$i" > /dev/null; then
             cxx_compiler="clang++-$i"
             c_compiler="clang-$i"

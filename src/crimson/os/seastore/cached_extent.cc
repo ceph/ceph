@@ -8,6 +8,7 @@
 
 #include "crimson/os/seastore/btree/fixed_kv_node.h"
 #include "crimson/os/seastore/lba_mapping.h"
+#include "crimson/os/seastore/logical_child_node.h"
 
 namespace {
   [[maybe_unused]] seastar::logger& logger() {
@@ -46,8 +47,6 @@ std::ostream &operator<<(std::ostream &out, CachedExtent::extent_state_t state)
     return out << "INITIAL_WRITE_PENDING";
   case CachedExtent::extent_state_t::MUTATION_PENDING:
     return out << "MUTATION_PENDING";
-  case CachedExtent::extent_state_t::CLEAN_PENDING:
-    return out << "CLEAN_PENDING";
   case CachedExtent::extent_state_t::CLEAN:
     return out << "CLEAN";
   case CachedExtent::extent_state_t::DIRTY:
@@ -80,37 +79,19 @@ CachedExtent* CachedExtent::get_transactional_view(Transaction &t) {
 }
 
 CachedExtent* CachedExtent::get_transactional_view(transaction_id_t tid) {
-  auto it = mutation_pendings.find(tid, trans_spec_view_t::cmp_t());
-  if (it != mutation_pendings.end()) {
+  auto it = mutation_pending_extents.find(tid, trans_spec_view_t::cmp_t());
+  if (it != mutation_pending_extents.end()) {
     return (CachedExtent*)&(*it);
   } else {
     return this;
   }
 }
 
-std::ostream &operator<<(std::ostream &out, const parent_tracker_t &tracker) {
-  return out << "tracker_ptr=" << (void*)&tracker
-	     << ", parent_ptr=" << (void*)tracker.get_parent().get();
-}
-
-std::ostream &ChildableCachedExtent::print_detail(std::ostream &out) const {
-  if (parent_tracker) {
-    out << ", parent_tracker(" << *parent_tracker << ")";
-  } else {
-    out << ", parent_tracker(nullptr)";
-  }
-  _print_detail(out);
-  return out;
-}
-
-std::ostream &LogicalCachedExtent::_print_detail(std::ostream &out) const
+std::ostream &LogicalCachedExtent::print_detail(std::ostream &out) const
 {
-  out << ", laddr=" << laddr;
+  out << ", laddr=" << laddr
+      << ", seen=" << seen_by_users;
   return print_detail_l(out);
-}
-
-void child_pos_t::link_child(ChildableCachedExtent *c) {
-  get_parent<FixedKVNode<laddr_t>>()->link_child(c, pos);
 }
 
 void CachedExtent::set_invalid(Transaction &t) {
@@ -121,39 +102,54 @@ void CachedExtent::set_invalid(Transaction &t) {
   on_invalidated(t);
 }
 
-LogicalCachedExtent::~LogicalCachedExtent() {
-  if (has_parent_tracker() && is_valid() && !is_pending()) {
-    assert(get_parent_node());
-    auto parent = get_parent_node<FixedKVNode<laddr_t>>();
-    auto off = parent->lower_bound_offset(laddr);
-    assert(parent->get_key_from_idx(off) == laddr);
-    assert(parent->children[off] == this);
-    parent->children[off] = nullptr;
+std::pair<bool, CachedExtent::viewable_state_t>
+CachedExtent::is_viewable_by_trans(Transaction &t) {
+  if (!is_valid()) {
+    return std::make_pair(false, viewable_state_t::invalid);
   }
+
+  auto trans_id = t.get_trans_id();
+  if (is_pending()) {
+    ceph_assert(is_pending_in_trans(trans_id));
+    return std::make_pair(true, viewable_state_t::pending);
+  }
+
+  // shared by multiple transactions
+  assert(t.is_in_read_set(this));
+  assert(is_stable_written());
+
+  auto cmp = trans_spec_view_t::cmp_t();
+  if (mutation_pending_extents.find(trans_id, cmp) !=
+      mutation_pending_extents.end()) {
+    return std::make_pair(false, viewable_state_t::stable_become_pending);
+  }
+
+  if (retired_transactions.find(trans_id, cmp) !=
+      retired_transactions.end()) {
+    assert(t.is_stable_extent_retired(get_paddr(), get_length()));
+    return std::make_pair(false, viewable_state_t::stable_become_retired);
+  }
+
+  return std::make_pair(true, viewable_state_t::stable);
 }
 
-void LogicalCachedExtent::on_replace_prior() {
-  assert(is_mutation_pending());
-  take_prior_parent_tracker();
-  assert(get_parent_node());
-  auto parent = get_parent_node<FixedKVNode<laddr_t>>();
-  //TODO: can this search be avoided?
-  auto off = parent->lower_bound_offset(laddr);
-  assert(parent->get_key_from_idx(off) == laddr);
-  parent->children[off] = this;
-}
-
-void LogicalCachedExtent::maybe_set_intermediate_laddr(LBAMapping &mapping) {
-  laddr = mapping.is_indirect()
-    ? mapping.get_intermediate_base()
-    : mapping.get_key();
-}
-
-parent_tracker_t::~parent_tracker_t() {
-  // this is parent's tracker, reset it
-  auto &p = (FixedKVNode<laddr_t>&)*parent;
-  if (p.my_tracker == this) {
-    p.my_tracker = nullptr;
+std::ostream &operator<<(
+  std::ostream &out,
+  CachedExtent::viewable_state_t state)
+{
+  switch(state) {
+  case CachedExtent::viewable_state_t::stable:
+    return out << "stable";
+  case CachedExtent::viewable_state_t::pending:
+    return out << "pending";
+  case CachedExtent::viewable_state_t::invalid:
+    return out << "invalid";
+  case CachedExtent::viewable_state_t::stable_become_retired:
+    return out << "stable_become_retired";
+  case CachedExtent::viewable_state_t::stable_become_pending:
+    return out << "stable_become_pending";
+  default:
+    __builtin_unreachable();
   }
 }
 

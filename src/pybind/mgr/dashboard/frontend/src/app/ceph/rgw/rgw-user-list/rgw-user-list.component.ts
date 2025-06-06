@@ -1,13 +1,15 @@
 import { Component, NgZone, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
+import { forkJoin as observableForkJoin, Observable, Subscriber, Subject } from 'rxjs';
+import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
 
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -17,6 +19,9 @@ import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { Account } from '../models/rgw-user-accounts';
+import { switchMap } from 'rxjs/operators';
+import { RgwUser } from '../models/rgw-user';
 
 const BASE_URL = 'rgw/user';
 
@@ -33,11 +38,15 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
   userSizeTpl: TemplateRef<any>;
   @ViewChild('userObjectTpl', { static: true })
   userObjectTpl: TemplateRef<any>;
+  @ViewChild('accountTmpl', { static: true })
+  public accountTmpl: TemplateRef<any>;
   permission: Permission;
   tableActions: CdTableAction[];
   columns: CdTableColumn[] = [];
   users: object[] = [];
+  userAccounts: Account[];
   selection: CdTableSelection = new CdTableSelection();
+  userDataSubject = new Subject();
   declare staleTimeout: number;
 
   constructor(
@@ -46,7 +55,8 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
     private modalService: ModalCdsService,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n,
-    protected ngZone: NgZone
+    protected ngZone: NgZone,
+    private rgwUserAccountService: RgwUserAccountsService
   ) {
     super(ngZone);
   }
@@ -63,6 +73,12 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
         name: $localize`Tenant`,
         prop: 'tenant',
         flexGrow: 1
+      },
+      {
+        name: $localize`Account name`,
+        prop: 'account.name',
+        flexGrow: 1,
+        cellTemplate: this.accountTmpl
       },
       {
         name: $localize`Full name`,
@@ -104,6 +120,17 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
         flexGrow: 0.8
       }
     ];
+    this.userDataSubject
+      .pipe(
+        switchMap((_: object[]) => {
+          return this.rgwUserAccountService.list(true);
+        })
+      )
+      .subscribe((accounts: Account[]) => {
+        this.userAccounts = accounts;
+        this.mapUsersWithAccount();
+      });
+
     const getUserUri = () =>
       this.selection.first() && `${encodeURIComponent(this.selection.first().uid)}`;
     const addAction: CdTableAction = {
@@ -124,8 +151,7 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
       icon: Icons.destroy,
       click: () => this.deleteAction(),
       disable: () => !this.selection.hasSelection,
-      name: this.actionLabels.DELETE,
-      canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
+      name: this.actionLabels.DELETE
     };
     this.tableActions = [addAction, editAction, deleteAction];
     this.setTableRefreshTimeout();
@@ -136,6 +162,7 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
     this.rgwUserService.list().subscribe(
       (resp: object[]) => {
         this.users = resp;
+        this.userDataSubject.next(resp);
       },
       () => {
         context.error();
@@ -143,12 +170,23 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
     );
   }
 
+  mapUsersWithAccount() {
+    this.users = this.users.map((user: RgwUser) => {
+      const account: Account = this.userAccounts.find((acc) => acc.id === user.account_id);
+      return {
+        account: account ? account : { name: '' }, // adding {name: ''} for sorting account name in user list to work
+        ...user
+      };
+    });
+  }
+
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
   }
 
   deleteAction() {
-    this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalService.show(DeleteConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: this.selection.hasSingleSelection ? $localize`user` : $localize`users`,
       itemNames: this.selection.selected.map((user: any) => user['uid']),
       submitActionObservable: (): Observable<any> => {

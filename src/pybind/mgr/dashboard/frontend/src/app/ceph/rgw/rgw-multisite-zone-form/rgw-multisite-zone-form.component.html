@@ -105,8 +105,8 @@
                 *ngIf="multisiteZoneForm.showError('zone_endpoints', formDir, 'required')"
                 i18n>This field is required.</span>
           <span class="invalid-feedback"
-                *ngIf="multisiteZoneForm.showError('zone_endpoints', formDir, 'endpoint')"
-                i18n>Please enter a valid IP address.</span>
+                *ngIf="multisiteZoneForm.showError('zone_endpoints', formDir, 'invalidURL')"
+                i18n>Please enter a valid URL.</span>
         </div>
       </div>
       <div class="form-group row">

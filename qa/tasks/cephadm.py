@@ -882,6 +882,15 @@ def ceph_bootstrap(ctx, config):
         yield
 
     finally:
+        log.info('Disabling cephadm mgr module')
+        _shell(
+            ctx,
+            cluster_name,
+            bootstrap_remote,
+            ['ceph', 'mgr', 'module', 'disable', 'cephadm'],
+            check_status=False  # can fail if bootstrap failed and mask errors
+        )
+
         log.info('Cleaning up testdir ceph.* files...')
         ctx.cluster.run(args=[
             'rm', '-f',
@@ -917,11 +926,14 @@ def ceph_bootstrap(ctx, config):
         )
 
         # clean up /etc/ceph
-        ctx.cluster.run(args=[
-            'sudo', 'rm', '-f',
-            '/etc/ceph/{}.conf'.format(cluster_name),
-            '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
-        ])
+        ctx.cluster.run(
+            args=[
+                'sudo', 'rm', '-f',
+                '/etc/ceph/{}.conf'.format(cluster_name),
+                '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
+            ],
+            check_status=False,  # rm-cluster above should have cleaned these up
+        )
 
 
 @contextlib.contextmanager
@@ -1105,6 +1117,7 @@ def ceph_osds(ctx, config):
 
         cur = 0
         raw = config.get('raw-osds', False)
+        use_skip_validation = True
         for osd_id in sorted(id_to_remote.keys()):
             if raw:
                 raise ConfigError(
@@ -1139,7 +1152,16 @@ def ceph_osds(ctx, config):
             osd_method = config.get('osd_method')
             if osd_method:
                 add_osd_args.append(osd_method)
-            _shell(ctx, cluster_name, remote, add_osd_args)
+            if use_skip_validation:
+                try:
+                    _shell(ctx, cluster_name, remote, add_osd_args + ['--skip-validation'])
+                except Exception as e:
+                    log.warning(f"--skip-validation falied with error {e}. Retrying without it")
+                    use_skip_validation = False
+                    _shell(ctx, cluster_name, remote, add_osd_args)
+            else:
+                _shell(ctx, cluster_name, remote, add_osd_args)
+
             ctx.daemons.register_daemon(
                 remote, 'osd', id_,
                 cluster=cluster_name,

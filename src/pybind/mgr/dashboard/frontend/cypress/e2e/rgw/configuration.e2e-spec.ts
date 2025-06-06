@@ -25,12 +25,18 @@ describe('RGW configuration page', () => {
   describe('create and edit encryption configuration', () => {
     it('should create configuration', () => {
       configurations.create('vault', 'agent', 'transit', 'https://localhost:8080');
-      configurations.getFirstTableCell('SSE_KMS').should('exist');
+      configurations.getFirstTableCell('kms').should('exist');
     });
 
     it('should edit configuration', () => {
       configurations.edit('https://localhost:9090');
       configurations.getDataTables().should('contain.text', 'https://localhost:9090');
+    });
+  });
+
+  describe('check bucket encryption checkbox', () => {
+    it('should ensure encryption checkbox to be enabled in bucket form', () => {
+      configurations.checkBucketEncryption();
     });
   });
 });

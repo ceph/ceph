@@ -54,7 +54,7 @@ filename=$(echo "$selected_drives" | sed -z 's/\n/:\/dev\//g' | sed 's/:\/dev\/$
 filename="/dev/$filename"
 
 cat >> $fio_file <<EOF
-[nvmeof-fio-test]
+[global]
 ioengine=${IO_ENGINE:-sync}
 bsrange=${BS_RANGE:-4k-64k}
 numjobs=${NUM_OF_JOBS:-1}
@@ -62,11 +62,43 @@ size=${SIZE:-1G}
 time_based=1
 runtime=$RUNTIME
 rw=${RW:-randrw}
-filename=${filename}
 verify=md5
 verify_fatal=1
+do_verify=1
+serialize_overlap=1
+group_reporting
 direct=1
+
 EOF
+
+for i in $selected_drives; do
+  echo "[job-$i]" >> "$fio_file"
+  echo "filename=/dev/$i" >> "$fio_file"
+  echo "" >> "$fio_file"  # Adds a blank line
+done
+
+cat $fio_file
+
+status_log() {
+    POOL="${RBD_POOL:-mypool}"
+    GROUP="${NVMEOF_GROUP:-mygroup0}"
+    ceph -s
+    ceph orch host ls
+    ceph orch ls 
+    ceph orch ps
+    ceph health detail
+    ceph nvme-gw show $POOL $GROUP
+    sudo nvme list
+    sudo nvme list | wc -l
+    sudo nvme list-subsys
+    for device in $selected_drives; do
+        echo "Processing device: $device"
+        sudo nvme list-subsys /dev/$device
+        sudo nvme id-ns /dev/$device
+    done
+    
+}
+
 
 echo "[nvmeof.fio] starting fio test..."
 
@@ -79,6 +111,14 @@ if [ "$rbd_iostat" = true  ]; then
     timeout 20 rbd perf image iostat $RBD_POOL --iterations $iterations &
 fi
 fio --showcmd $fio_file
-sudo fio $fio_file 
+
+set +e 
+sudo fio $fio_file
+if [ $? -ne 0 ]; then
+    echo "[nvmeof.fio]: fio failed!" 
+    status_log
+    exit 1
+fi
+
 
 echo "[nvmeof.fio] fio test successful!"

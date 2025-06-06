@@ -46,6 +46,7 @@ static const std::unordered_map<std::string_view, op_generator> op_generators = 
   {"GetOpenIDConnectProvider", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWGetOIDCProvider;}},
   {"DeleteOpenIDConnectProvider", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWDeleteOIDCProvider;}},
   {"AddClientIDToOpenIDConnectProvider", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWAddClientIdToOIDCProvider;}},
+  {"RemoveClientIDFromOpenIDConnectProvider", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWRemoveCientIdFromOIDCProvider;}},
   {"UpdateOpenIDConnectProviderThumbprint", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWUpdateOIDCProviderThumbprint;}},
   {"TagRole", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWTagRole(bl_post_body);}},
   {"ListRoleTags", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWListRoleTags;}},
@@ -268,12 +269,39 @@ std::string iam_group_arn(const RGWGroupInfo& info)
                      info.account_id, path, info.name);
 }
 
+// try to parse the xml <ErrorResponse> response body
+bool parse_aws_error_response(const std::string& input, rgw_err& err)
+{
+  RGWXMLParser parser;
+  if (!parser.init()) {
+    return false;
+  }
+  if (!parser.parse(input.c_str(), input.length(), 1)) {
+    return false;
+  }
+  auto error_response = parser.find_first("ErrorResponse");
+  if (!error_response) {
+    return false;
+  }
+  auto error = error_response->find_first("Error");
+  if (!error) {
+    return false;
+  }
+  if (auto code = error->find_first("Code"); code) {
+    err.err_code = code->get_data();
+  }
+  if (auto message = error->find_first("Message"); message) {
+    err.message = message->get_data();
+  }
+  return true;
+}
+
 int forward_iam_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw::SiteConfig& site,
                                   const RGWUserInfo& user,
-                                  bufferlist& indata,
-                                  RGWXMLDecoder::XMLParser& parser,
-                                  req_info& req, optional_yield y)
+                                  bufferlist& indata, RGWXMLParser& parser,
+                                  const req_info& req, rgw_err& err,
+                                  optional_yield y)
 {
   const auto& period = site.get_period();
   if (!period) {
@@ -303,8 +331,16 @@ int forward_iam_request_to_master(const DoutPrefixProvider* dpp,
                           std::move(creds), zg->second.id, zg->second.api_name};
   bufferlist outdata;
   constexpr size_t max_response_size = 128 * 1024; // we expect a very small response
-  int ret = conn.forward_iam_request(dpp, req, nullptr, max_response_size,
-                                     &indata, &outdata, y);
+  auto result = conn.forward_iam(dpp, req, max_response_size,
+                                 &indata, &outdata, y);
+  if (!result) {
+    return result.error();
+  }
+  err.http_ret = *result;
+  if (err.is_err() && outdata.length()) { // 4xx or 5xx
+    std::ignore = parse_aws_error_response(rgw_bl_str(outdata), err);
+  }
+  int ret = rgw_http_error_to_errno(err.http_ret);
   if (ret < 0) {
     return ret;
   }

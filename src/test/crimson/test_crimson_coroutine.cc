@@ -5,6 +5,7 @@
 #include <numeric>
 
 #include "seastar/core/sleep.hh"
+#include "seastar/core/loop.hh"
 
 #include "crimson/common/coroutine.h"
 #include "crimson/common/errorator.h"
@@ -103,6 +104,28 @@ TEST_F(coroutine_test_t, test_coroutine)
   });
 }
 
+TEST_F(coroutine_test_t, test_coroutine_loops)
+{
+  run_scl([]() -> seastar::future<> {
+    int CHECK = 0;
+    std::vector<int> v = {1,2,3};
+    co_await seastar::parallel_for_each(v,
+      [&CHECK] (auto i) -> seastar::future<> {
+      CHECK++;
+      co_return;
+    });
+    EXPECT_EQ(CHECK, v.size());
+
+    co_await seastar::do_until(
+      [&CHECK] { return CHECK == 0; },
+      [&CHECK] () -> seastar::future<> {
+      CHECK--;
+      co_return;
+    });
+    EXPECT_EQ(CHECK, 0);
+  });
+}
+
 TEST_F(coroutine_test_t, test_ertr_coroutine_basic)
 {
   run_ertr_scl([]() -> ertr::future<> {
@@ -136,6 +159,58 @@ TEST_F(coroutine_test_t, test_ertr_coroutine_error)
 	return 20;
       }
     );
+    EXPECT_EQ(ret, 20);
+  });
+}
+
+// same as test_ertr_coroutine_error but without ignoring the
+// exeptional future.
+TEST_F(coroutine_test_t, test_ertr_coroutine_error_2)
+{
+  run_scl([this]() -> seastar::future<> {
+
+    auto fut = scl([]() -> ertr::future<int> {
+      co_await ertr::future<int>(crimson::ct_error::invarg::make());
+      EXPECT_EQ("above co_await should throw", nullptr);
+      co_return 10;
+    })();
+
+    auto ret = co_await std::move(fut).handle_error(
+      [](const crimson::ct_error::invarg &e) {
+	return 20;
+      }
+    );
+    EXPECT_EQ(ret, 20);
+  });
+}
+
+TEST_F(coroutine_test_t, test_ertr_coroutine_pass_further)
+{
+  run_scl([this]() -> seastar::future<> {
+
+    // foo1 makes an error which throws
+    auto fut = scl([]() -> ertr::future<int> {
+      co_await ertr::future<int>(crimson::ct_error::invarg::make());
+      EXPECT_EQ("above co_await should throw", nullptr);
+      co_return 10;
+    })();
+
+    // foo2 handles the error and passes it further
+    auto fut2 = scl([fut = std::move(fut)]() mutable -> ertr::future<int> {
+      co_await std::move(fut).handle_error(
+        ertr::pass_further{}
+      );
+      EXPECT_EQ("above co_await should throw", nullptr);
+      co_return 10;
+    })();
+
+    // handle the passed further error from foo2
+    auto ret = co_await std::move(fut2).handle_error(
+      [](const crimson::ct_error::invarg &e) {
+	return 20;
+      }
+    );
+
     EXPECT_EQ(ret, 20);
   });
 }

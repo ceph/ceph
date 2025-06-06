@@ -6,7 +6,9 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "cls/lock/cls_lock_client.h"
+
 #include <iostream>
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

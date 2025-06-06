@@ -114,6 +114,8 @@ const char *ceph_release_name(int r)
 		return "reef";
 	case CEPH_RELEASE_SQUID:
 		return "squid";
+	case CEPH_RELEASE_TENTACLE:
+		return "tentacle";
 	default:
 		if (r < 0)
 			return "unspecified";
@@ -227,6 +229,8 @@ const char *ceph_osd_alloc_hint_flag_name(int f)
 		return "compressible";
 	case CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE:
 		return "incompressible";
+	case CEPH_OSD_ALLOC_HINT_FLAG_LOG:
+		return "log";
 	default:
 		return "???";
 	}
@@ -290,6 +294,7 @@ const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_LOOKUPNAME:  return "lookupname";
 	case CEPH_MDS_OP_GETATTR:  return "getattr";
 	case CEPH_MDS_OP_DUMMY:  return "dummy";
+	case CEPH_MDS_OP_GETVXATTR:  return "getvxattr";
 	case CEPH_MDS_OP_SETXATTR: return "setxattr";
 	case CEPH_MDS_OP_SETATTR: return "setattr";
 	case CEPH_MDS_OP_RMXATTR: return "rmxattr";
@@ -321,6 +326,9 @@ const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_REPAIR_INODESTATS: return "repair_inodestats";
 	case CEPH_MDS_OP_QUIESCE_PATH: return "quiesce_path";
 	case CEPH_MDS_OP_QUIESCE_INODE: return "quiesce_inode";
+	case CEPH_MDS_OP_LOCK_PATH: return "lock_path";
+	case CEPH_MDS_OP_UNINLINE_DATA: return "uninline_data";
+        case CEPH_MDS_OP_FILE_BLOCKDIFF: return "blockdiff";
 	}
 	return "???";
 }

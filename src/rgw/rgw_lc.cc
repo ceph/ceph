@@ -1517,7 +1517,7 @@ public:
 
     r = zonegroup.get_placement_tier(target_placement, &oc.tier);
 
-    if (!r && oc.tier->get_tier_type() == "cloud-s3") {
+    if (!r && oc.tier->is_tier_type_s3()) {
       ldpp_dout(oc.dpp, 30) << "Found cloud s3 tier: " << target_placement.storage_class << dendl;
       if (!oc.o.is_current() &&
           !pass_object_lock_check(oc.driver, oc.obj.get(), oc.dpp)) {
@@ -2719,18 +2719,16 @@ int RGWLC::set_bucket_config(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int RGWLC::remove_bucket_config(const DoutPrefixProvider* dpp, optional_yield y,
-                                rgw::sal::Bucket* bucket,
-                                const rgw::sal::Attrs& bucket_attrs,
-				bool merge_attrs)
+                                rgw::sal::Bucket* bucket, bool update_attrs)
 {
-  rgw::sal::Attrs attrs = bucket_attrs;
   rgw_bucket& b = bucket->get_key();
   int ret{0};
 
-  if (merge_attrs) {
-    attrs.erase(RGW_ATTR_LC);
-    ret = bucket->merge_and_store_attrs(dpp, attrs, y);
-
+  // remove the lifecycle attr if present. if not, try to remove from
+  // the 'lc list' anyway
+  rgw::sal::Attrs& attrs = bucket->get_attrs();
+  if (update_attrs && attrs.erase(RGW_ATTR_LC)) {
+    ret = bucket->put_info(dpp, false, real_time(), y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
 			 << b.name << " returned err=" << ret << dendl;

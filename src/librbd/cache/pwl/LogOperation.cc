@@ -4,6 +4,8 @@
 #include <iostream>
 #include "LogOperation.h"
 #include "librbd/cache/pwl/Types.h"
+#include "common/debug.h"
+#include "common/perf_counters.h"
 
 #define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix

@@ -74,7 +74,8 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw::SiteConfig& site,
                                   const rgw_owner& effective_owner,
                                   bufferlist* indata, JSONParser* jp,
-                                  req_info& req, optional_yield y);
+                                  const req_info& req, rgw_err& err,
+                                  optional_yield y);
 
 int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
                                        CephContext *cct,
@@ -87,6 +88,12 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
 std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvider *dpp, req_state* s, bool check_obj_exist_tag=true);
 
 int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s);
+
+int get_owner_quota_info(const DoutPrefixProvider* dpp,
+                                optional_yield y,
+                                rgw::sal::Driver* driver,
+                                const rgw_owner& owner,
+                                RGWQuota& quotas);
 
 class RGWHandler {
 protected:
@@ -302,6 +309,8 @@ public:
   virtual const char* name() const = 0;
   virtual RGWOpType get_type() { return RGW_OP_UNKNOWN; }
   virtual std::string canonical_name() const { return fmt::format("REST.{}.{}", s->info.method, name()); }
+  // by default we log all bucket operations
+  virtual bool always_do_bucket_logging() const { return s->bucket != nullptr; }
 
   virtual uint32_t op_mask() { return 0; }
 
@@ -1240,6 +1249,7 @@ protected:
   std::string multipart_part_str;
   int multipart_part_num = 0;
   rgw::cksum::Type multipart_cksum_type{rgw::cksum::Type::none};
+  uint16_t multipart_cksum_flags{rgw::cksum::Cksum::FLAG_CKSUM_NONE};
   jspan_ptr multipart_trace;
 
   boost::optional<ceph::real_time> delete_at;
@@ -1319,6 +1329,7 @@ public:
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
+  bool always_do_bucket_logging() const override { return false; }
 };
 
 class RGWPostObj : public RGWOp {
@@ -1914,6 +1925,7 @@ protected:
   std::optional<RGWObjectLegalHold> obj_legal_hold = std::nullopt;
   rgw::sal::Attrs attrs;
   rgw::cksum::Type cksum_algo{rgw::cksum::Type::none};
+  uint16_t cksum_flags{rgw::cksum::Cksum::FLAG_CKSUM_NONE};
 
 public:
   RGWInitMultipart() {}
@@ -1960,6 +1972,7 @@ public:
   const char* name() const override { return "complete_multipart"; }
   RGWOpType get_type() override { return RGW_OP_COMPLETE_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  bool always_do_bucket_logging() const override { return false; }
 };
 
 class RGWAbortMultipart : public RGWOp {

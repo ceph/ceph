@@ -7,25 +7,25 @@
 
 Bucket and Host Name
 --------------------
-There are two different modes of accessing buckets. The first method identifies
-the bucket as the top-level directory in the URI::
+There are two different modes of accessing buckets: path-style and virtual-hosted-style.
+Path-style requests identify the bucket as the top-level directory of the request's path::
 
 	GET /mybucket HTTP/1.1
 	Host: cname.domain.com
 
-Most S3 clients nowadays rely on vhost-style access. The desired bucket is
-indicated by a DNS FQDN. For example::
+Most S3 clients default to virtual-hosted-style access, where the bucket name is instead
+indicated as part of the fully-qualified domain name::
 
 	GET / HTTP/1.1
 	Host: mybucket.cname.domain.com
 
-The second method is deprecated by AWS. See the `Amazon S3 Path Deprecation
+Path-style access is deprecated by AWS. See the `Amazon S3 Path Deprecation
 Plan`_ for more information.
 
 To configure virtual hosted buckets, you can either set ``rgw_dns_name =
 cname.domain.com`` in ``ceph.conf`` or add ``cname.domain.com`` to the list of
-``hostnames`` in your zonegroup configuration. See `Ceph Object Gateway -
-Multisite Configuration`_ for more on zonegroups.
+``hostnames`` in your zonegroup configuration. See :ref:`Ceph Object Gateway -
+Multisite Configuration <multisite>` for more on zonegroups.
 
 Here is an example of a ``ceph config set`` comamnd that sets ``rgw_dns_name``
 to ``cname.domain.com``:
@@ -135,5 +135,4 @@ Common Response Status
 | ``500``       | InternalError                     |
 +---------------+-----------------------------------+
 
-.. _`Ceph Object Gateway - Multisite Configuration`: ../../multisite
 .. _`Amazon S3 Path Deprecation Plan`: https://aws.amazon.com/blogs/aws/amazon-s3-path-deprecation-plan-the-rest-of-the-story/

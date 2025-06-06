@@ -8,7 +8,7 @@ import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { Permission } from '~/app/shared/models/permissions';
@@ -143,7 +143,7 @@ describe('SilenceListComponent', () => {
 
     const expireSilence = () => {
       component.expireSilence();
-      const deletion: CriticalConfirmationModalComponent = component.modalRef.componentInstance;
+      const deletion: DeleteConfirmationModalComponent = component.modalRef.componentInstance;
       // deletion.modalRef = new BsModalRef();
       deletion.ngOnInit();
       deletion.callSubmitAction();

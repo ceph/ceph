@@ -12,12 +12,16 @@
  * 
  */
 
+#include "PurgeQueue.h"
+#include "BatchOp.h"
+#include "mds/MDSMap.h"
+
 #include "common/debug.h"
+#include "common/Formatter.h"
 #include "mds/mdstypes.h"
 #include "mds/CInode.h"
-#include "mds/MDCache.h"
-
-#include "PurgeQueue.h"
+#include "osdc/Objecter.h"
+#include "osdc/Striper.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_mds
@@ -99,6 +103,22 @@ void PurgeItem::decode(bufferlist::const_iterator &p)
   DECODE_FINISH(p);
 }
 
+void PurgeItem::dump(Formatter *f) const
+{
+  f->dump_int("action", action);
+  f->dump_int("ino", ino);
+  f->dump_int("size", size);
+  f->open_object_section("layout");
+  layout.dump(f);
+  f->close_section();
+  f->open_object_section("SnapContext");
+  snapc.dump(f);
+  f->close_section();
+  f->open_object_section("fragtree");
+  fragtree.dump(f);
+  f->close_section();
+}
+
 void PurgeItem::generate_test_instances(std::list<PurgeItem*>& ls) {
   ls.push_back(new PurgeItem());
   ls.push_back(new PurgeItem());
@@ -110,6 +130,7 @@ void PurgeItem::generate_test_instances(std::list<PurgeItem*>& ls) {
   ls.back()->snapc = SnapContext();
   ls.back()->stamp = utime_t(3, 4);
 }
+
 // if Objecter has any slow requests, take that as a hint and
 // slow down our rate of purging
 PurgeQueue::PurgeQueue(
@@ -225,7 +246,7 @@ void PurgeQueue::open(Context *completion)
     waiting_for_recovery.push_back(completion);
 
   journaler.recover(new LambdaContext([this](int r){
-    if (r == -CEPHFS_ENOENT) {
+    if (r == -ENOENT) {
       dout(1) << "Purge Queue not found, assuming this is an upgrade and "
                  "creating it." << dendl;
       create(NULL);
@@ -261,7 +282,7 @@ void PurgeQueue::wait_for_recovery(Context* c)
     c->complete(0);
   } else if (readonly) {
     dout(10) << "cannot wait for recovery: PurgeQueue is readonly" << dendl;
-    c->complete(-CEPHFS_EROFS);
+    c->complete(-EROFS);
   } else {
     waiting_for_recovery.push_back(c);
   }
@@ -340,7 +361,7 @@ void PurgeQueue::push(const PurgeItem &pi, Context *completion)
 
   if (readonly) {
     dout(10) << "cannot push inode: PurgeQueue is readonly" << dendl;
-    completion->complete(-CEPHFS_EROFS);
+    completion->complete(-EROFS);
     return;
   }
 
@@ -477,7 +498,7 @@ bool PurgeQueue::_consume()
           std::lock_guard l(lock);
           if (r == 0) {
             _consume();
-          } else if (r != -CEPHFS_EAGAIN) {
+          } else if (r != -EAGAIN) {
             _go_readonly(r);
           }
         }));
@@ -500,7 +521,7 @@ bool PurgeQueue::_consume()
     } catch (const buffer::error &err) {
       derr << "Decode error at read_pos=0x" << std::hex
            << journaler.get_read_pos() << dendl;
-      _go_readonly(CEPHFS_EIO);
+      _go_readonly(EIO);
     }
     dout(20) << " executing item (" << item.ino << ")" << dendl;
     _execute_item(item, journaler.get_read_pos());
@@ -581,7 +602,7 @@ void PurgeQueue::_commit_ops(int r, const std::vector<PurgeItemCommitOp>& ops_ve
 	              new LambdaContext([this, expire_to](int r) {
     std::lock_guard l(lock);
 
-    if (r == -CEPHFS_EBLOCKLISTED) {
+    if (r == -EBLOCKLISTED) {
       finisher.queue(on_error, r);
       on_error = nullptr;
       return;

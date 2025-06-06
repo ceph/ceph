@@ -12,11 +12,14 @@
  *
  */
 
+#include "MDBalancer.h"
+#include "RetryMessage.h"
+
 #include "include/compat.h"
 #include "mdstypes.h"
 
 #include "mon/MonClient.h"
-#include "MDBalancer.h"
+#include "osdc/Objecter.h"
 #include "MDSRank.h"
 #include "MDSMap.h"
 #include "CInode.h"
@@ -27,6 +30,7 @@
 
 #include "include/Context.h"
 #include "msg/Messenger.h"
+#include "messages/MHeartbeat.h"
 
 #include <fstream>
 #include <vector>
@@ -35,6 +39,7 @@
 using namespace std;
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "common/errno.h"
 
 /* Note, by default debug_mds_balancer is 1/5. For debug messages 1<lvl<=5,
@@ -440,8 +445,8 @@ int MDBalancer::localize_balancer()
   /* success: store the balancer in memory and set the version. */
   if (!r) {
     if (ret_t == std::cv_status::timeout) {
-      mds->objecter->op_cancel(tid, -CEPHFS_ECANCELED);
-      return -CEPHFS_ETIMEDOUT;
+      mds->objecter->op_cancel(tid, -ECANCELED);
+      return -ETIMEDOUT;
     }
     bal_code.assign(lua_src.to_str());
     bal_version.assign(oid.name);
@@ -966,7 +971,7 @@ int MDBalancer::mantle_prep_rebalance()
 
   /* mantle doesn't know about cluster size, so check target len here */
   if ((int) state.targets.size() != cluster_size)
-    return -CEPHFS_EINVAL;
+    return -EINVAL;
   else if (ret)
     return ret;
 

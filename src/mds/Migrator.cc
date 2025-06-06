@@ -12,13 +12,14 @@
  * 
  */
 
+#include "Migrator.h"
 #include "MDSRank.h"
 #include "MDCache.h"
 #include "CInode.h"
 #include "CDir.h"
 #include "CDentry.h"
-#include "Migrator.h"
 #include "Locker.h"
+#include "RetryMessage.h"
 #include "Server.h"
 
 #include "MDBalancer.h"
@@ -27,6 +28,7 @@
 #include "Mutation.h"
 
 #include "include/filepath.h"
+#include "common/debug.h"
 #include "common/likely.h"
 
 #include "events/EExport.h"
@@ -37,6 +39,19 @@
 #include "msg/Messenger.h"
 
 #include "messages/MClientCaps.h"
+#include "messages/MExportCaps.h"
+#include "messages/MExportCapsAck.h"
+#include "messages/MExportDir.h"
+#include "messages/MExportDirAck.h"
+#include "messages/MExportDirCancel.h"
+#include "messages/MExportDirDiscover.h"
+#include "messages/MExportDirDiscoverAck.h"
+#include "messages/MExportDirFinish.h"
+#include "messages/MExportDirNotify.h"
+#include "messages/MExportDirNotifyAck.h"
+#include "messages/MExportDirPrep.h"
+#include "messages/MExportDirPrepAck.h"
+#include "messages/MGatherCaps.h"
 
 /*
  * this is what the dir->dir_auth values look like
@@ -921,7 +936,7 @@ void Migrator::maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
 	dirfrag_size += null_size;
 	continue;
       }
-      if (dn->get_linkage()->is_remote()) {
+      if (dn->get_linkage()->is_remote() || dn->get_linkage()->is_referent_remote()) {
 	dirfrag_size += remote_size;
 	continue;
       }
@@ -1791,6 +1806,7 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
   for (auto &p : *dir) {
     CDentry *dn = p.second;
     CInode *in = dn->get_linkage()->get_inode();
+    CInode *ref_in = dn->get_linkage()->get_referent_inode();
 
     num_exported++;
     
@@ -1821,6 +1837,16 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
       continue;
     }
 
+    if (dn->get_linkage()->is_referent_remote()) {
+      // referent inode
+      ceph_assert(ref_in);
+      exportbl.append("r", 1);    // referent inode dentry
+      ENCODE_START(2, 1, exportbl);
+      encode_export_inode(ref_in, exportbl, exported_client_map, exported_client_metadata_map);  // encode, and (update state for) export
+      encode(dn->alternate_name, exportbl);
+      ENCODE_FINISH(exportbl);
+      continue;
+    }
     // primary link
     // -- inode
     exportbl.append("i", 1);    // inode dentry
@@ -1888,6 +1914,10 @@ void Migrator::finish_export_dir(CDir *dir, mds_rank_t peer,
       // subdirs?
       auto&& dirs = in->get_nested_dirfrags();
       subdirs.insert(std::end(subdirs), std::begin(dirs), std::end(dirs));
+    } else if (dn->get_linkage()->is_referent_remote()) { //referent inode ?
+      CInode *ref_in = dn->get_linkage()->get_referent_inode();
+      finish_export_inode(ref_in, peer, peer_imported[ref_in->ino()], finished);
+      // referent inode - no subdirs
     }
 
     mdcache->touch_dentry_bottom(dn); // move dentry to tail of LRU
@@ -2352,7 +2382,7 @@ void Migrator::handle_export_discover(const cref_t<MExportDirDiscover> &m, bool 
     int r = mdcache->path_traverse(null_ref, cf, fpath, flags, &trace);
     if (r > 0) return;
     if (r < 0) {
-      if (r == -CEPHFS_EAGAIN) {
+      if (r == -EAGAIN) {
         dout(5) << "blocking import during quiesce" << dendl;
         import_reverse_discovering(df);
         mds->send_message_mds(make_message<MExportDirDiscoverAck>(df, m->get_tid(), false), from);
@@ -3331,7 +3361,18 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
   }
 
   // link before state  -- or not!  -sage
-  if (dn->get_linkage()->get_inode() != in) {
+  if (in->get_remote_ino()) { //referent inode ?
+    dout(20) << __func__ << " linking decoded referent_inode="  << *in << " remote_inode=" << in->get_remote_ino() << dendl;
+    if (dn->get_linkage()->get_referent_inode() != in) {
+      ceph_assert(!dn->get_linkage()->get_referent_inode());
+      dout(20) << __func__ << " null dentry_linkage, linking decode referent_inode, linkage referent_inode=" << dn->get_linkage()->get_referent_inode() << dendl;
+      dn->dir->link_referent_inode(dn, in, in->get_remote_ino(), in->d_type());
+    } else {
+      dout(20) << __func__ << " non-null dentry_linkage, validating decoded referent_inode against existing" << dendl;
+      ceph_assert(dn->get_linkage()->get_remote_ino() == in->get_remote_ino());
+      ceph_assert(dn->get_linkage()->get_referent_ino() == in->ino());
+    }
+  } else if (dn->get_linkage()->get_inode() != in) {
     ceph_assert(!dn->get_linkage()->get_inode());
     dn->dir->link_primary_inode(dn, in);
   }
@@ -3571,6 +3612,21 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
       // inode
       ceph_assert(le);
       if (icode == 'i') {
+        DECODE_START(2, blp);
+        decode_import_inode(dn, blp, oldauth, ls,
+                            peer_exports, updated_scatterlocks);
+        ceph_assert(!dn->is_projected());
+        decode(dn->alternate_name, blp);
+        DECODE_FINISH(blp);
+      } else {
+        decode_import_inode(dn, blp, oldauth, ls,
+                            peer_exports, updated_scatterlocks);
+      }
+    }
+    else if (icode == 'R' || icode == 'r') {
+      // remote link with referent inode
+      ceph_assert(le);
+      if (icode == 'r') {
         DECODE_START(2, blp);
         decode_import_inode(dn, blp, oldauth, ls,
                             peer_exports, updated_scatterlocks);

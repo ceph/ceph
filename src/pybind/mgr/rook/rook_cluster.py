@@ -749,9 +749,13 @@ class RookCluster(object):
             port = None
             secure_port = None
             if spec.ssl:
-                secure_port = spec.get_port()
+                _secure_port = spec.get_port()
+                if len(_secure_port) > 1:
+                    secure_port = _secure_port[1]
+                else:
+                    secure_port = _secure_port[0]
             else:
-                port = spec.get_port()
+                port = spec.get_port()[0]
             object_store = cos.CephObjectStore(
                     apiVersion=self.rook_env.api_name,
                     metadata=dict(

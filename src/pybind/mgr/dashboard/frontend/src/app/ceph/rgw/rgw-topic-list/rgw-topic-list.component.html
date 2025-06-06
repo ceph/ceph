@@ -1,0 +1,15 @@
+  <ng-container *ngIf="topic$ | async as topics">
+  <cd-table #table
+            [autoReload]="false"
+            [data]="topics"
+            [columns]="columns"
+            columnMode="flex"
+            selectionType="single"
+            [hasDetails]="true"
+            (setExpandedRow)="setExpandedRow($event)"
+            (updateSelection)="updateSelection($event)"
+            (fetchData)="fetchData($event)">
+  <cd-rgw-topic-details *cdTableDetail
+                        [selection]="expandedRow"></cd-rgw-topic-details>
+  </cd-table>
+  </ng-container>

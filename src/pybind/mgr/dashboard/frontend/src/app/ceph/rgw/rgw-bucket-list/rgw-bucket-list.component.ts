@@ -6,7 +6,7 @@ import { switchMap } from 'rxjs/operators';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -23,6 +23,8 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Bucket } from '../models/rgw-bucket';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
+import { RgwBucketTieringFormComponent } from '../rgw-bucket-tiering-form/rgw-bucket-tiering-form.component';
 
 const BASE_URL = 'rgw/bucket';
 
@@ -125,12 +127,19 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit, O
     const deleteAction: CdTableAction = {
       permission: 'delete',
       icon: Icons.destroy,
+      title: $localize`Bucket is not empty. Remove all objects before deletion.`,
       click: () => this.deleteAction(),
-      disable: () => !this.selection.hasSelection,
-      name: this.actionLabels.DELETE,
-      canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
+      disable: () => this.selection.first()?.num_objects > 0,
+      name: this.actionLabels.DELETE
     };
-    this.tableActions = [addAction, editAction, deleteAction];
+    const tieringAction: CdTableAction = {
+      permission: 'update',
+      icon: Icons.edit,
+      click: () => this.openTieringModal(),
+      disable: () => !this.selection.hasSelection,
+      name: this.actionLabels.TIERING
+    };
+    this.tableActions = [addAction, editAction, tieringAction, deleteAction];
     this.setTableRefreshTimeout();
   }
 
@@ -153,10 +162,17 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit, O
     this.selection = selection;
   }
 
+  openTieringModal() {
+    this.modalService.show(RgwBucketTieringFormComponent, {
+      bucket: this.selection.first()
+    });
+  }
+
   deleteAction() {
     const itemNames = this.selection.selected.map((bucket: any) => bucket['bid']);
-    this.modalService.show(CriticalConfirmationModalComponent, {
-      itemDescription: this.selection.hasSingleSelection ? $localize`bucket` : $localize`buckets`,
+    this.modalService.show(DeleteConfirmationModalComponent, {
+      itemDescription: $localize`bucket`,
+      impact: DeletionImpact.high,
       itemNames: itemNames,
       bodyTemplate: this.deleteTpl,
       submitActionObservable: () => {

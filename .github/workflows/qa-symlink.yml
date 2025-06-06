@@ -1,0 +1,29 @@
+---
+name: "Check for missing .qa links"
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - edited
+      - reopened
+
+jobs:
+  pull_request:
+    name: "Check for missing .qa links"
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout PR HEAD
+        uses: actions/checkout@v4
+        with:
+          path: head
+
+      - name: checkout base
+        uses: actions/checkout@v4
+        with:
+          path: base
+          ref: ${{ github.base_ref }}
+
+      - name: verify .qa links
+        run: ../base/src/script/verify-qa
+        working-directory: head/

@@ -6,6 +6,7 @@
 #include <span>
 
 #include "common/ceph_time.h"
+#include "common/debug.h"
 #include "osd/OSD.h"
 #include "osd/PG.h"
 #include "osd/osd_types_fmt.h"
@@ -31,13 +32,13 @@ namespace Scrub {
 ReplicaReservations::ReplicaReservations(
     ScrubMachineListener& scrbr,
     reservation_nonce_t& nonce,
-    PerfCounters& pc)
+    const ScrubCounterSet& pc)
     : m_scrubber{scrbr}
     , m_pg{m_scrubber.get_pg()}
     , m_pgid{m_scrubber.get_spgid().pgid}
     , m_osds{m_pg->get_pg_osd(ScrubberPasskey())}
     , m_last_request_sent_nonce{nonce}
-    , m_perf_set{pc}
+    , m_perf_indices{pc}
 {
   // the acting set is sorted by pg_shard_t. The reservations are to be issued
   // in this order, so that the OSDs will receive the requests in a consistent
@@ -51,7 +52,8 @@ ReplicaReservations::ReplicaReservations(
       [whoami = m_pg->pg_whoami](const pg_shard_t& shard) {
 	return shard != whoami;
       });
-  m_perf_set.set(scrbcnt_resrv_replicas_num, m_sorted_secondaries.size());
+  m_osds->logger->set(
+      m_perf_indices.rsv_secondaries_num, m_sorted_secondaries.size());
 
   m_next_to_request = m_sorted_secondaries.cbegin();
   if (m_scrubber.is_reservation_required()) {
@@ -62,7 +64,7 @@ ReplicaReservations::ReplicaReservations(
     // for high-priority scrubs (i.e. - user-initiated), no reservations are
     // needed. Note: not perf-counted as either success or failure.
     dout(10) << "high-priority scrub - no reservations needed" << dendl;
-    m_perf_set.inc(scrbcnt_resrv_skipped);
+    m_osds->logger->inc(m_perf_indices.rsv_skipped_cnt);
   }
 }
 
@@ -96,8 +98,8 @@ void ReplicaReservations::log_success_and_duration()
 {
   ceph_assert(m_process_started_at.has_value());
   auto logged_duration = ScrubClock::now() - m_process_started_at.value();
-  m_perf_set.tinc(scrbcnt_resrv_successful_elapsed, logged_duration);
-  m_perf_set.inc(scrbcnt_resrv_success);
+  m_osds->logger->tinc(m_perf_indices.rsv_successful_elapsed, logged_duration);
+  m_osds->logger->inc(m_perf_indices.rsv_successful_cnt);
   m_osds->logger->hinc(
       l_osd_scrub_reservation_dur_hist, std::ssize(m_sorted_secondaries),
       logged_duration.count());
@@ -111,16 +113,16 @@ void ReplicaReservations::log_failure_and_duration(int failure_cause_counter)
     return;
   }
   auto logged_duration = ScrubClock::now() - m_process_started_at.value();
-  m_perf_set.tinc(scrbcnt_resrv_failed_elapsed, logged_duration);
+  m_osds->logger->tinc(m_perf_indices.rsv_failed_elapsed, logged_duration);
   m_process_started_at.reset();
   // note: not counted into l_osd_scrub_reservation_dur_hist
-  m_perf_set.inc(failure_cause_counter);
+  m_osds->logger->inc(failure_cause_counter);
 }
 
 ReplicaReservations::~ReplicaReservations()
 {
   release_all();
-  log_failure_and_duration(scrbcnt_resrv_aborted);
+  log_failure_and_duration(m_perf_indices.rsv_aborted_cnt);
 }
 
 bool ReplicaReservations::is_reservation_response_relevant(
@@ -230,7 +232,7 @@ bool ReplicaReservations::handle_reserve_rejection(
     return false;
   }
 
-  log_failure_and_duration(scrbcnt_resrv_rejected);
+  log_failure_and_duration(m_perf_indices.rsv_rejected_cnt);
 
   // we should never see a rejection carrying a valid
   // reservation nonce - arriving while we have no pending requests

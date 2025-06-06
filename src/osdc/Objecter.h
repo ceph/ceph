@@ -15,12 +15,10 @@
 #ifndef CEPH_OBJECTER_H
 #define CEPH_OBJECTER_H
 
-#include <condition_variable>
 #include <list>
 #include <map>
 #include <mutex>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -35,8 +33,6 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/io_context_strand.hpp>
 #include <boost/asio/post.hpp>
-
-#include <fmt/format.h>
 
 #include "include/buffer.h"
 #include "include/ceph_assert.h"
@@ -54,9 +50,11 @@
 #include "common/ceph_timer.h"
 #include "common/config_obs.h"
 #include "common/shunique_lock.h"
+#include "common/snap_types.h" // for class SnapContext
 #include "common/zipkin_trace.h"
 #include "common/tracer.h"
 #include "common/Throttle.h"
+#include "crush/crush.h" // for CRUSH_ITEM_NONE
 
 #include "mon/MonClient.h"
 
@@ -1692,7 +1690,7 @@ public:
   using OpCompletion = boost::asio::any_completion_handler<OpSignature>;
 
   // config observer bits
-  const char** get_tracked_conf_keys() const override;
+  std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
 
@@ -1858,6 +1856,7 @@ public:
     int min_size = -1; ///< the min size of the pool when were were last mapped
     bool sort_bitwise = false; ///< whether the hobject_t sort order is bitwise
     bool recovery_deletes = false; ///< whether the deletes are performed during recovery instead of peering
+    bool allows_ecoptimizations = false; ///< whether EC plugin optimizations are enabled.
     uint32_t peering_crush_bucket_count = 0;
     uint32_t peering_crush_bucket_target = 0;
     uint32_t peering_crush_bucket_barrier = 0;
@@ -2065,7 +2064,7 @@ public:
     }
 
     Op(const object_t& o, const object_locator_t& ol,  osdc_opvec&& _ops,
-       int f, OpComp&& fin, version_t *ov, int *offset = nullptr,
+       int f, OpComp fin, version_t *ov, int *offset = nullptr,
        ZTracer::Trace *parent_trace = nullptr) :
       target(o, ol, f),
       ops(std::move(_ops)),
@@ -2097,26 +2096,6 @@ public:
       objver(ov),
       data_offset(offset),
       otel_trace(otel_trace) {
-      if (target.base_oloc.key == o)
-	target.base_oloc.key.clear();
-      if (parent_trace && parent_trace->valid()) {
-        trace.init("op", nullptr, parent_trace);
-        trace.event("start");
-      }
-    }
-
-    Op(const object_t& o, const object_locator_t& ol, osdc_opvec&&  _ops,
-       int f, fu2::unique_function<OpSig>&& fin, version_t *ov, int *offset = nullptr,
-       ZTracer::Trace *parent_trace = nullptr) :
-      target(o, ol, f),
-      ops(std::move(_ops)),
-      out_bl(ops.size(), nullptr),
-      out_handler(ops.size()),
-      out_rval(ops.size(), nullptr),
-      out_ec(ops.size(), nullptr),
-      onfinish(std::move(fin)),
-      objver(ov),
-      data_offset(offset) {
       if (target.base_oloc.key == o)
 	target.base_oloc.key.clear();
       if (parent_trace && parent_trace->valid()) {
@@ -2379,6 +2358,11 @@ public:
 			      uint64_t cookie,
 			      uint64_t notifier_id,
 			      ceph::buffer::list&& bl)> handle;
+    // I am sorely tempted to replace function2 with cxx_function, as
+    // cxx_function has the `target` method from `std::function` and I
+    // keep having to do annoying circumlocutions like this one to be
+    // able to access function object data with function2.
+    ceph::unique_any user_data;
     OSDSession *session{nullptr};
 
     int ctx_budget{-1};
@@ -2732,7 +2716,8 @@ private:
 
   // messages
  public:
-  bool ms_dispatch(Message *m) override;
+  Dispatcher::dispatch_result_t ms_dispatch2(const MessageRef &m) override;
+
   bool ms_can_fast_dispatch_any() const override {
     return true;
   }
@@ -2745,10 +2730,8 @@ private:
       return false;
     }
   }
-  void ms_fast_dispatch(Message *m) override {
-    if (!ms_dispatch(m)) {
-      m->put();
-    }
+  void ms_fast_dispatch2(const MessageRef& m) override {
+    [[maybe_unused]] auto s = ms_dispatch2(m);
   }
 
   void handle_osd_op_reply(class MOSDOpReply *m);

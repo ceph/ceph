@@ -18,19 +18,26 @@
 #include "include/elist.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
-#include "MDSContext.h"
 #include "mdstypes.h"
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"
 
-#include "include/unordered_set.h"
+#include <unordered_set>
 
-using ceph::unordered_set;
+#include <cstdint>
+#include <map>
+#include <ostream>
+#include <set>
+#include <vector>
 
 class CDir;
 class CInode;
 class CDentry;
+class MDSContext;
+class C_MDSInternalNoop;
+using MDSGather = C_GatherBase<MDSContext, C_MDSInternalNoop>;
+using MDSGatherBuilder = C_GatherBuilderBase<MDSContext, MDSGather>;
 class MDSRank;
 struct MDPeerUpdate;
 
@@ -52,12 +59,7 @@ class LogSegment {
   {}
 
   void try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio);
-  void purge_inodes_finish(interval_set<inodeno_t>& inos){
-    purging_inodes.subtract(inos);
-    if (NULL != purged_cb &&
-	purging_inodes.empty())
-      purged_cb->complete(0);
-  }
+  void purge_inodes_finish(interval_set<inodeno_t>& inos);
   void set_purged_cb(MDSContext* c){
     ceph_assert(purged_cb == NULL);
     purged_cb = c;
@@ -87,7 +89,7 @@ class LogSegment {
   interval_set<inodeno_t> purging_inodes;
   MDSContext* purged_cb = nullptr;
 
-  std::map<int, ceph::unordered_set<version_t> > pending_commit_tids;  // mdstable
+  std::map<int, std::unordered_set<version_t>> pending_commit_tids;  // mdstable
   std::set<metareqid_t> uncommitted_leaders;
   std::set<metareqid_t> uncommitted_peers;
   std::set<dirfrag_t> uncommitted_fragments;
@@ -103,7 +105,7 @@ class LogSegment {
   version_t sessionmapv = 0;
   std::map<int,version_t> tablev;
 
-  MDSContext::vec expiry_waiters;
+  std::vector<MDSContext*> expiry_waiters;
 };
 
 static inline std::ostream& operator<<(std::ostream& out, const LogSegment& ls) {

@@ -81,7 +81,7 @@ struct TestMockCryptoLuksLoadRequest : public TestMockFixture {
     EXPECT_CALL(*mock_image_ctx->io_image_dispatcher, send(_))
             .WillOnce(Invoke([this, offset,
                               length](io::ImageDispatchSpec* spec) {
-                auto* read = boost::get<io::ImageDispatchSpec::Read>(
+                auto* read = std::get_if<io::ImageDispatchSpec::Read>(
                         &spec->request);
                 ASSERT_TRUE(read != nullptr);
 

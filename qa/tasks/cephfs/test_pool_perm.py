@@ -6,7 +6,7 @@ import os
 
 class TestPoolPerm(CephFSTestCase):
     def test_pool_perm(self):
-        self.mount_a.run_shell(["touch", "test_file"])
+        self.mount_a.run_shell_payload("dd if=/dev/urandom of=test_file bs=4k count=1")
 
         file_path = os.path.join(self.mount_a.mountpoint, "test_file")
 
@@ -14,12 +14,12 @@ class TestPoolPerm(CephFSTestCase):
             import os
             import errno
 
-            fd = os.open("{path}", os.O_RDWR)
+            fd = os.open("{path}", os.O_RDWR | os.O_SYNC)
             try:
                 if {check_read}:
                     ret = os.read(fd, 1024)
                 else:
-                    os.write(fd, b'content')
+                    os.pwrite(fd, b'content', 0)
             except OSError as e:
                 if e.errno != errno.EPERM:
                     raise

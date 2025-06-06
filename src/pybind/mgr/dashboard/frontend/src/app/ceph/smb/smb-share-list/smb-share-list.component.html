@@ -1,0 +1,23 @@
+<ng-container *ngIf="smbShares$ | async as smbShares">
+  <cd-table
+    headerTitle="Shares"
+    headerDescription="Logical unit hosted by the cluster that maps to the given CephFS volume and path"
+    [data]="smbShares"
+    columnMode="flex"
+    [columns]="columns"
+    selectionType="single"
+    [hasDetails]="false"
+    (fetchData)="loadSMBShares()"
+    (updateSelection)="updateSelection($event)"
+  >
+    <div class="table-actions">
+      <cd-table-actions
+        class="btn-group"
+        [permission]="permission"
+        [selection]="selection"
+        [tableActions]="tableActions"
+      >
+      </cd-table-actions>
+    </div>
+  </cd-table>
+</ng-container>

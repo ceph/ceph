@@ -1,22 +1,30 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <boost/algorithm/string.hpp>
+#include "PGMap.h"
+#include "mon/health_check.h"
+#include "common/ceph_context.h"
 
 #include "include/rados.h"
-#include "PGMap.h"
 
 #define dout_subsys ceph_subsys_mon
 #include "common/debug.h"
 #include "common/Clock.h"
 #include "common/Formatter.h"
+#include "common/TextTable.h"
 #include "global/global_context.h"
 #include "include/ceph_features.h"
+#include "include/health.h"
 #include "include/stringify.h"
 
 #include "osd/osd_types.h"
 #include "osd/OSDMap.h"
+
+#include <boost/algorithm/string.hpp>
 #include <boost/range/adaptor/reversed.hpp>
+
+#include <iomanip> // for std::setw()
+#include <sstream>
 
 #define dout_context g_ceph_context
 
@@ -48,7 +56,7 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
 void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
   // NOTE: see PGMap::encode_digest
-  uint8_t v = 4;
+  uint8_t v = 5;
   assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
   ENCODE_START(v, 1, bl);
   encode(num_pg, bl);
@@ -69,12 +77,13 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   encode(avail_space_by_rule, bl);
   encode(purged_snaps, bl);
   encode(osd_sum_by_class, bl, features);
+  encode(pool_pg_unavailable_map, bl);
   ENCODE_FINISH(bl);
 }
 
 void PGMapDigest::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START(4, p);
+  DECODE_START(5, p);
   assert(struct_v >= 4);
   decode(num_pg, p);
   decode(num_pg_active, p);
@@ -94,6 +103,9 @@ void PGMapDigest::decode(bufferlist::const_iterator& p)
   decode(avail_space_by_rule, p);
   decode(purged_snaps, p);
   decode(osd_sum_by_class, p);
+  if (struct_v >= 5) {
+    decode(pool_pg_unavailable_map, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -140,6 +152,18 @@ void PGMapDigest::dump(ceph::Formatter *f) const
     f->open_object_section("count");
     f->dump_string("state", pg_state_string(p.first));
     f->dump_unsigned("num", p.second);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("pool_pg_unavailable_map");
+  for (auto& p : pool_pg_unavailable_map) {
+    f->open_object_section("pool_pg_unavailable_map");
+    f->dump_string("poolid", std::to_string(p.first));
+    f->open_array_section("pgs");
+    for (const auto& pg : p.second) {
+      f->dump_stream("pg") << pg;
+    }
+    f->close_section();
     f->close_section();
   }
   f->close_section();
@@ -1253,6 +1277,52 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     last_pg_scan = inc.pg_scan;
 }
 
+/*
+  Returns a map of all pools in a cluster. Each value lists any PGs that 
+  are in any of the following states: 
+  - non-active 
+  - stale 
+
+  Any PG that has unfound objects is also added to the map. 
+
+  Eg: {1=[1.0],2=[],3=[]}
+  Here the cluster has 3 pools with id 1,2,3 and pool 1 has an inactive PG 1.0
+*/
+void PGMap::get_unavailable_pg_in_pool_map(const OSDMap& osdmap)
+{
+  dout(20) << __func__ << dendl;
+  pool_pg_unavailable_map.clear();
+  utime_t now(ceph_clock_now());
+  utime_t cutoff = now - utime_t(g_conf().get_val<int64_t>("mon_pg_stuck_threshold"), 0);
+  for (auto i = pg_stat.begin();
+       i != pg_stat.end();
+       ++i) {
+    const auto poolid = i->first.pool();
+    pool_pg_unavailable_map[poolid];
+    utime_t val = cutoff;
+
+    if (!(i->second.state & PG_STATE_ACTIVE)) { // This case covers unknown state since unknow state bit == 0;
+      if (i->second.last_active < val)
+	val = i->second.last_active;
+    }
+
+    if (i->second.state & PG_STATE_STALE) {
+      if (i->second.last_unstale < val)
+	val = i->second.last_unstale;
+    }
+
+    if (val < cutoff) {
+      pool_pg_unavailable_map[poolid].push_back(i->first);
+      dout(20) << "pool: " << poolid << " pg: " << i->first
+         << " is stuck unavailable" << " state: " << i->second.state << dendl;
+    } else if (i->second.stats.sum.num_objects_unfound) {
+      pool_pg_unavailable_map[poolid].push_back(i->first);
+      dout(20) << "pool: " << poolid << " pg: " << i->first
+         << " has " << i->second.stats.sum.num_objects_unfound << " unfound objects" << dendl;
+    }
+  }
+}
+
 void PGMap::calc_stats()
 {
   num_pg = 0;
@@ -1480,6 +1550,7 @@ void PGMap::encode_digest(const OSDMap& osdmap,
   get_rules_avail(osdmap, &avail_space_by_rule);
   calc_osd_sum_by_class(osdmap);
   calc_purged_snaps();
+  get_unavailable_pg_in_pool_map(osdmap);
   PGMapDigest::encode(bl, features);
 }
 

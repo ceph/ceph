@@ -16,6 +16,7 @@
 #include "include/denc.h"
 #include "global/global_init.h"
 #include "os/bluestore/Allocator.h"
+#include "os/bluestore/AllocatorBase.h"
 
 using namespace std;
 
@@ -184,7 +185,7 @@ int replay_and_check_for_duplicate(char* fname)
 	return -1;
       }
       tmp.clear();
-      auto allocated = alloc->allocate(want, alloc_unit, 0, 0, &tmp);
+      auto allocated = alloc->allocate(want, alloc_unit, 0, -1, &tmp);
       std::cout << "allocated TOTAL: " << allocated << std::endl;
       for (auto& ee : tmp) {
         std::cerr << "dump extent: " << std::hex
@@ -627,7 +628,7 @@ int main(int argc, char **argv)
           for(size_t i = 0; i < count; i++) {
             extents.clear();
 	    auto t0 = ceph::mono_clock::now();
-            auto r = a->allocate(want, alloc_unit, 0, &extents);
+            auto r = a->allocate(want, alloc_unit, -1, &extents);
             std::cout << "Duration (ns): " << (ceph::mono_clock::now() - t0).count() << std::endl;
             if (r < 0) {
               std::cerr << "Error: allocation failure at step:" << i + 1
@@ -694,7 +695,8 @@ int main(int argc, char **argv)
           for (auto i = 0; i < replay_count; ++i) {
             while (fgets(s, sizeof(s), f_alloc_list) != nullptr) {
               /* parse allocation request */
-              uint64_t want = 0, unit = 0, max = 0, hint = 0;
+              uint64_t want = 0, unit = 0, max = 0;
+              int64_t hint = -1;
 
               if (std::sscanf(s, "%ji %ji %ji %ji", &want, &unit, &max, &hint) < 2)
               {
@@ -773,7 +775,7 @@ int main(int argc, char **argv)
         std::cout << "Allocation unit:" << alloc_unit
                   << std::endl;
 
-        Allocator::FreeStateHistogram hist(num_buckets);
+        AllocatorBase::FreeStateHistogram hist(num_buckets);
         a->foreach(
           [&](size_t off, size_t len) {
             hist.record_extent(uint64_t(alloc_unit), off, len);

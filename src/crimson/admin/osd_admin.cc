@@ -343,7 +343,7 @@ public:
           for (const auto& [labels, metric] : metric_family) {
             if (metric && metric->is_enabled()) {
 	      f->open_object_section(""); // enclosed by array
-              DumpMetricsHook::dump_metric_value(f, full_name, *metric, labels);
+              DumpMetricsHook::dump_metric_value(f, full_name, *metric, labels.labels());
 	      f->close_section();
             }
           }
@@ -465,7 +465,7 @@ static ghobject_t test_ops_get_object_name(
 
   auto shard_id = cmd_getval_or<int64_t>(cmdmap,
 					 "shardid",
-					 shard_id_t::NO_SHARD);
+					 static_cast<int64_t>(shard_id_t::NO_SHARD));
 
   return ghobject_t{
     hobject_t{

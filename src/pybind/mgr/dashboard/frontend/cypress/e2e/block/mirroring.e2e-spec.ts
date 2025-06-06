@@ -112,7 +112,7 @@ describe('Mirroring page', () => {
 
     afterEach(() => {
       pools.navigateTo();
-      pools.delete(poolName, null, null, true);
+      pools.delete(poolName, null, null, true, false, false, true);
     });
   });
 });

@@ -250,6 +250,9 @@
 /* we have a recent nasm and are x86_64 */
 #cmakedefine HAVE_NASM_X64
 
+/* nasm can also build the isa-l:avx2 */
+#cmakedefine HAVE_NASM_X64_AVX2
+
 /* nasm can also build the isa-l:avx512 */
 #cmakedefine HAVE_NASM_X64_AVX512
 
@@ -401,5 +404,8 @@
 
 /* libexec directory path */
 #cmakedefine CMAKE_INSTALL_LIBEXECDIR "@CMAKE_INSTALL_LIBEXECDIR@"
+
+/* Define if breakpad is available */
+#cmakedefine HAVE_BREAKPAD
 
 #endif /* CONFIG_H */

@@ -7,7 +7,7 @@
 #include "include/int_types.h"
 #include <iosfwd>
 #include <string>
-#include <boost/variant.hpp>
+#include <variant>
 
 namespace rbd {
 namespace mirror {
@@ -24,7 +24,7 @@ enum CalloutLevel {
 
 std::ostream& operator<<(std::ostream& os, const CalloutLevel& callout_level);
 
-typedef boost::variant<bool, uint64_t, std::string> AttributeValue;
+typedef std::variant<bool, uint64_t, std::string> AttributeValue;
 
 } // namespace service_daemon
 } // namespace mirror

@@ -6,7 +6,7 @@ import { Subscription } from 'rxjs';
 
 import { IscsiService } from '~/app/shared/api/iscsi.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -223,7 +223,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
   deleteIscsiTargetModal() {
     const target_iqn = this.selection.first().target_iqn;
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`iSCSI target`,
       itemNames: [target_iqn],
       submitActionObservable: () =>

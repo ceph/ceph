@@ -368,25 +368,6 @@ void PoolReplayer<I>::init(const std::string& site_name) {
   m_pool_meta_cache->set_local_pool_meta(
     m_local_io_ctx.get_id(), {m_local_mirror_uuid});
 
-  m_default_namespace_replayer.reset(NamespaceReplayer<I>::create(
-      "", "", m_local_io_ctx, m_remote_io_ctx, m_local_mirror_uuid, m_peer.uuid,
-      m_remote_pool_meta, m_threads, m_image_sync_throttler.get(),
-      m_image_deletion_throttler.get(), m_service_daemon,
-      m_cache_manager_handler, m_pool_meta_cache));
-
-  C_SaferCond on_init;
-  m_default_namespace_replayer->init(&on_init);
-  r = on_init.wait();
-  if (r < 0) {
-    derr << "error initializing default namespace replayer: " << cpp_strerror(r)
-         << dendl;
-    m_callout_id = m_service_daemon->add_or_update_callout(
-      m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
-      "unable to initialize default namespace replayer");
-    m_default_namespace_replayer.reset();
-    return;
-  }
-
   m_leader_watcher.reset(LeaderWatcher<I>::create(m_threads, m_local_io_ctx,
                                                   &m_leader_listener));
   r = m_leader_watcher->init();
@@ -427,13 +408,6 @@ void PoolReplayer<I>::shut_down() {
     m_leader_watcher->shut_down();
   }
   m_leader_watcher.reset();
-
-  if (m_default_namespace_replayer) {
-    C_SaferCond on_shut_down;
-    m_default_namespace_replayer->shut_down(&on_shut_down);
-    on_shut_down.wait();
-  }
-  m_default_namespace_replayer.reset();
 
   if (m_remote_pool_poller) {
     C_SaferCond ctx;
@@ -602,10 +576,10 @@ void PoolReplayer<I>::run() {
 
     std::unique_lock locker{m_lock};
 
-    if (m_leader_watcher->is_blocklisted() ||
-        m_default_namespace_replayer->is_blocklisted()) {
+    if (m_leader_watcher->is_blocklisted()) {
       m_blocklisted = true;
       m_stopping = true;
+      break;
     }
 
     for (auto &it : m_namespace_replayers) {
@@ -680,8 +654,8 @@ void PoolReplayer<I>::update_namespace_replayers() {
          ctx=gather_ctx->new_sub()](int r) {
           std::lock_guard locker{m_lock};
           if (r < 0) {
-            derr << "failed to initialize namespace replayer for namespace "
-                 << names.first << ": " << cpp_strerror(r) << dendl;
+            derr << "failed to initialize namespace replayer for namespace '"
+                 << names.first << "': " << cpp_strerror(r) << dendl;
             delete namespace_replayer;
             mirroring_namespaces.erase(names.first);
           } else {
@@ -740,43 +714,47 @@ int PoolReplayer<I>::list_mirroring_namespaces(
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
   std::vector<std::string> names;
-
   int r = librbd::api::Namespace<I>::list(m_local_io_ctx, &names);
   if (r < 0) {
     derr << "failed to list namespaces: " << cpp_strerror(r) << dendl;
     return r;
   }
 
+  // handle the default namespace the same way
+  names.push_back("");
+
   for (auto &name : names) {
     librados::IoCtx ns_ioctx;
     ns_ioctx.dup(m_local_io_ctx);
     ns_ioctx.set_namespace(name);
 
-    std::string remote_namespace;
     cls::rbd::MirrorMode mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
     int r = librbd::cls_client::mirror_mode_get(&ns_ioctx, &mirror_mode);
     if (r < 0 && r != -ENOENT) {
-      derr << "failed to get namespace mirror mode: " << cpp_strerror(r)
-           << dendl;
+      derr << "failed to get mirror mode for namespace '" << name << "': "
+           << cpp_strerror(r) << dendl;
       if (m_namespace_replayers.count(name) == 0) {
         continue;
       }
-    } else if (mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
+    } else if (mirror_mode == cls::rbd::MIRROR_MODE_DISABLED ||
+               mirror_mode == cls::rbd::MIRROR_MODE_INIT_ONLY) {
       dout(10) << "mirroring is disabled for namespace " << name << dendl;
       continue;
     }
+
+    std::string remote_namespace;
     r = librbd::cls_client::mirror_remote_namespace_get(&ns_ioctx,
                                                         &remote_namespace);
-    if (r < 0) { 
+    if (r < 0) {
       if (r != -ENOENT && r != -EOPNOTSUPP) {
-	derr << "failed to get remote mirror namespace: " << cpp_strerror(r)
-	     << dendl;
+	derr << "failed to get remote namespace for namespace '" << name
+             << "': " << cpp_strerror(r) << dendl;
 	continue;
       } else {
         remote_namespace = name;
       }
     }
- 
+
     dout(10) << " local namespace=" << name << ", remote namespace="
              << remote_namespace << dendl;
     namespaces->insert(std::make_pair(name, remote_namespace));
@@ -811,8 +789,8 @@ void PoolReplayer<I>::namespace_replayer_acquire_leader(const std::string &name,
   on_finish = new LambdaContext(
       [this, name, on_finish](int r) {
         if (r < 0) {
-          derr << "failed to handle acquire leader for namespace: "
-               << name << ": " << cpp_strerror(r) << dendl;
+          derr << "failed to handle acquire leader for namespace '"
+               << name << "': " << cpp_strerror(r) << dendl;
 
           // remove the namespace replayer -- update_namespace_replayers will
           // retry to create it and acquire leader.
@@ -902,18 +880,11 @@ void PoolReplayer<I>::print_status(Formatter *f) {
     f->close_section(); // deletion_throttler
   }
 
-  if (m_default_namespace_replayer) {
-    m_default_namespace_replayer->print_status(f);
-  }
-
-  f->open_array_section("namespaces");
+  f->open_array_section("namespace_replayers");
   for (auto &it : m_namespace_replayers) {
-    f->open_object_section("namespace");
-    f->dump_string("name", it.first);
     it.second->print_status(f);
-    f->close_section(); // namespace
   }
-  f->close_section(); // namespaces
+  f->close_section(); // namespace_replayers
 
   f->close_section(); // pool_replayer_status
 }
@@ -930,9 +901,6 @@ void PoolReplayer<I>::start() {
 
   m_manual_stop = false;
 
-  if (m_default_namespace_replayer) {
-    m_default_namespace_replayer->start();
-  }
   for (auto &it : m_namespace_replayers) {
     it.second->start();
   }
@@ -953,9 +921,6 @@ void PoolReplayer<I>::stop(bool manual) {
 
   m_manual_stop = true;
 
-  if (m_default_namespace_replayer) {
-    m_default_namespace_replayer->stop();
-  }
   for (auto &it : m_namespace_replayers) {
     it.second->stop();
   }
@@ -971,9 +936,6 @@ void PoolReplayer<I>::restart() {
     return;
   }
 
-  if (m_default_namespace_replayer) {
-    m_default_namespace_replayer->restart();
-  }
   for (auto &it : m_namespace_replayers) {
     it.second->restart();
   }
@@ -989,9 +951,6 @@ void PoolReplayer<I>::flush() {
     return;
   }
 
-  if (m_default_namespace_replayer) {
-    m_default_namespace_replayer->flush();
-  }
   for (auto &it : m_namespace_replayers) {
     it.second->flush();
   }
@@ -1023,20 +982,18 @@ void PoolReplayer<I>::handle_post_acquire_leader(Context *on_finish) {
         m_service_daemon->add_or_update_attribute(m_local_pool_id,
                                                   SERVICE_DAEMON_LEADER_KEY,
                                                   true);
-        auto ctx = new LambdaContext(
+        auto ctx = librbd::util::create_async_context_callback(
+          m_threads->work_queue, new LambdaContext(
             [this, on_finish](int r) {
               if (r == 0) {
                 std::lock_guard locker{m_lock};
                 m_leader = true;
               }
               on_finish->complete(r);
-            });
+            }));
 
         auto cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
         auto gather_ctx = new C_Gather(cct, ctx);
-
-        m_default_namespace_replayer->handle_acquire_leader(
-            gather_ctx->new_sub());
 
         for (auto &it : m_namespace_replayers) {
           namespace_replayer_acquire_leader(it.first, gather_ctx->new_sub());
@@ -1059,12 +1016,11 @@ void PoolReplayer<I>::handle_pre_release_leader(Context *on_finish) {
         m_leader = false;
         m_service_daemon->remove_attribute(m_local_pool_id,
                                            SERVICE_DAEMON_LEADER_KEY);
+        auto ctx = librbd::util::create_async_context_callback(
+          m_threads->work_queue, on_finish);
 
         auto cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
-        auto gather_ctx = new C_Gather(cct, on_finish);
-
-        m_default_namespace_replayer->handle_release_leader(
-            gather_ctx->new_sub());
+        auto gather_ctx = new C_Gather(cct, ctx);
 
         for (auto &it : m_namespace_replayers) {
           it.second->handle_release_leader(gather_ctx->new_sub());
@@ -1081,8 +1037,6 @@ void PoolReplayer<I>::handle_update_leader(
 
   std::lock_guard locker{m_lock};
 
-  m_default_namespace_replayer->handle_update_leader(leader_instance_id);
-
   for (auto &it : m_namespace_replayers) {
     it.second->handle_update_leader(leader_instance_id);
   }
@@ -1097,8 +1051,6 @@ void PoolReplayer<I>::handle_instances_added(
   if (!m_leader_watcher->is_leader()) {
     return;
   }
-
-  m_default_namespace_replayer->handle_instances_added(instance_ids);
 
   for (auto &it : m_namespace_replayers) {
     it.second->handle_instances_added(instance_ids);
@@ -1115,8 +1067,6 @@ void PoolReplayer<I>::handle_instances_removed(
     return;
   }
 
-  m_default_namespace_replayer->handle_instances_removed(instance_ids);
-
   for (auto &it : m_namespace_replayers) {
     it.second->handle_instances_removed(instance_ids);
   }
@@ -1127,7 +1077,7 @@ void PoolReplayer<I>::handle_remote_pool_meta_updated(
     const RemotePoolMeta& remote_pool_meta) {
   dout(5) << "remote_pool_meta=" << remote_pool_meta << dendl;
 
-  if (!m_default_namespace_replayer) {
+  if (!m_leader_watcher) {
     m_remote_pool_meta = remote_pool_meta;
     return;
   }

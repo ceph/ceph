@@ -21,6 +21,7 @@ import contextlib
 import copy
 import json
 import logging
+import threading
 
 from .config_store import ObjectCachingEntry
 from .proto import (
@@ -257,6 +258,7 @@ class SqliteStore:
         self._tables: Dict[str, Table] = {t.namespace: t for t in tables}
         self._prepared = False
         self._cursor: Optional[Cursor] = None
+        self._db_lock = threading.Lock()
 
     def _prepare_tables(self) -> None:
         """Automatic/internal table preparation."""
@@ -281,7 +283,7 @@ class SqliteStore:
     @contextlib.contextmanager
     def transaction(self) -> Iterator[None]:
         """Explicitly start a DB transaction."""
-        with self._db():
+        with self._db_lock, self._db():
             assert self._cursor
             self._cursor.execute('BEGIN;')
             yield None

@@ -293,6 +293,17 @@ over manual test execution. To view these options run:
 	man ctest
 
 
+### Building Ceph using Containers
+
+Ceph now provides tools to build the code, run unit tests, or build packages
+from within an OCI-style container using Podman or Docker! This allows one to
+build code for distributions other than the one you have on your system, avoids
+the need to install build dependencies for Ceph on your local system and
+provides an opportunity to test builds on platforms that are not yet supported
+by the official build infrastructure. For more details see the [container build
+document](ContainerBuild.md).
+
+
 ## Building the Documentation
 
 ### Prerequisites

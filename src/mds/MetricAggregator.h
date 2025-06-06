@@ -13,16 +13,17 @@
 #include "common/ceph_mutex.h"
 #include "common/perf_counters.h"
 #include "include/common_fwd.h"
-#include "messages/MMDSMetrics.h"
 
 #include "mgr/MetricTypes.h"
 #include "mgr/MDSPerfMetricTypes.h"
 
 #include "mdstypes.h"
-#include "MDSMap.h"
 #include "MDSPinger.h"
 
+class MDSMap;
 class MDSRank;
+class MMDSMetrics;
+struct Metrics;
 class MgrClient;
 
 class MetricAggregator : public Dispatcher {
@@ -34,7 +35,7 @@ public:
 
   void notify_mdsmap(const MDSMap &mdsmap);
 
-  bool ms_dispatch2(const ref_t<Message> &m) override;
+  Dispatcher::dispatch_result_t ms_dispatch2(const ref_t<Message> &m) override;
 
   void ms_handle_connect(Connection *c) override {
   }

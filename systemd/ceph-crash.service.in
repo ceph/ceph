@@ -3,7 +3,7 @@ Description=Ceph crash dump collector
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/ceph-crash
+ExecStart=@CMAKE_INSTALL_PREFIX@/bin/ceph-crash
 Restart=always
 RestartSec=10
 StartLimitInterval=10min

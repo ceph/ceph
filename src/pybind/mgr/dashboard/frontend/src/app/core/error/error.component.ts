@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
-import { NavigationEnd, Router, RouterEvent } from '@angular/router';
+import { NavigationEnd, Router } from '@angular/router';
 
 import { Subscription } from 'rxjs';
 import { filter } from 'rxjs/operators';
@@ -47,7 +47,7 @@ export class ErrorComponent implements OnDestroy, OnInit {
   ngOnInit() {
     this.fetchData();
     this.routerSubscription = this.router.events
-      .pipe(filter((event: RouterEvent) => event instanceof NavigationEnd))
+      .pipe(filter((event: any) => event instanceof NavigationEnd))
       .subscribe(() => {
         this.fetchData();
       });

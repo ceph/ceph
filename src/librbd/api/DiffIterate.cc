@@ -21,6 +21,7 @@
 #include <boost/tuple/tuple.hpp>
 #include <list>
 #include <map>
+#include <shared_mutex> // for std::shared_lock
 #include <vector>
 
 #define dout_subsys ceph_subsys_rbd
@@ -195,15 +196,12 @@ int simple_diff_cb(uint64_t off, size_t len, int exists, void *arg) {
 } // anonymous namespace
 
 template <typename I>
-int DiffIterate<I>::diff_iterate(I *ictx,
-				 const cls::rbd::SnapshotNamespace& from_snap_namespace,
-				 const char *fromsnapname,
+int DiffIterate<I>::diff_iterate(I *ictx, uint64_t from_snap_id,
                                  uint64_t off, uint64_t len,
                                  bool include_parent, bool whole_object,
                                  int (*cb)(uint64_t, size_t, int, void *),
                                  void *arg) {
-  ldout(ictx->cct, 10) << "from_snap_namespace=" << from_snap_namespace
-                       << ", fromsnapname=" << (fromsnapname ?: "")
+  ldout(ictx->cct, 10) << "from_snap_id=" << from_snap_id
                        << ", off=" << off
                        << ", len=" << len
                        << ", include_parent=" << include_parent
@@ -249,7 +247,7 @@ int DiffIterate<I>::diff_iterate(I *ictx,
     // lock is acquired
     // acquire exclusive lock only if not busy (i.e. don't request),
     // throttle acquisition attempts and ignore errors
-    if (fromsnapname == nullptr && whole_object &&
+    if (from_snap_id == 0 && whole_object &&
         should_try_acquire_lock(ictx)) {
       C_SaferCond lock_ctx;
       ictx->exclusive_lock->try_acquire_lock(&lock_ctx);
@@ -259,7 +257,7 @@ int DiffIterate<I>::diff_iterate(I *ictx,
     }
   }
 
-  DiffIterate command(*ictx, from_snap_namespace, fromsnapname, off, len,
+  DiffIterate command(*ictx, from_snap_id, off, len,
 		      include_parent, whole_object, cb, arg);
   r = command.execute();
   return r;
@@ -295,24 +293,23 @@ int DiffIterate<I>::execute() {
 
   ceph_assert(m_image_ctx.data_ctx.is_valid());
 
-  librados::snap_t from_snap_id = 0;
+  librados::snap_t from_snap_id = m_from_snap_id;
   librados::snap_t end_snap_id;
   uint64_t from_size = 0;
   uint64_t end_size;
   {
     std::shared_lock image_locker{m_image_ctx.image_lock};
-    if (m_from_snap_name) {
-      from_snap_id = m_image_ctx.get_snap_id(m_from_snap_namespace,
-                                             m_from_snap_name);
-      from_size = m_image_ctx.get_image_size(from_snap_id);
+    if (from_snap_id != 0) {
+      auto info = m_image_ctx.get_snap_info(from_snap_id);
+      if (info == nullptr) {
+        return -ENOENT;
+      }
+      from_size = info->size;
     }
     end_snap_id = m_image_ctx.snap_id;
     end_size = m_image_ctx.get_image_size(end_snap_id);
   }
 
-  if (from_snap_id == CEPH_NOSNAP) {
-    return -ENOENT;
-  }
   if (from_snap_id > end_snap_id) {
     return -EINVAL;
   }
@@ -352,7 +349,7 @@ int DiffIterate<I>::execute() {
         if (m_image_ctx.prune_parent_extents(parent_extents, io::ImageArea::DATA,
                                              raw_overlap, false) > 0) {
           ldout(cct, 10) << " first getting parent diff" << dendl;
-          DiffIterate diff_parent(*m_image_ctx.parent, {}, nullptr,
+          DiffIterate diff_parent(*m_image_ctx.parent, 0,
                                   parent_extents[0].first,
                                   parent_extents[0].second, true, true,
                                   &simple_diff_cb, &parent_diff);

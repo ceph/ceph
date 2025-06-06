@@ -145,7 +145,6 @@ chunk_validation_policy_t PGScrubber::get_policy() const
 {
   return chunk_validation_policy_t{
     pg.get_primary(),
-    std::nullopt /* stripe_info, populate when EC is implemented */,
     crimson::common::local_conf().get_val<Option::size_t>(
       "osd_max_object_size"),
     crimson::common::local_conf().get_val<std::string>(

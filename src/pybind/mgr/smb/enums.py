@@ -18,12 +18,13 @@ class CephFSStorageProvider(_StrEnum):
     SAMBA_VFS = 'samba-vfs'
     SAMBA_VFS_CLASSIC = 'samba-vfs/classic'
     SAMBA_VFS_NEW = 'samba-vfs/new'
+    SAMBA_VFS_PROXIED = 'samba-vfs/proxied'
 
     def expand(self) -> 'CephFSStorageProvider':
         """Expand abbreviated/default values into the full/expanded form."""
         if self is self.SAMBA_VFS:
             # mypy gets confused by enums
-            return self.__class__(self.SAMBA_VFS_NEW)
+            return self.__class__(self.SAMBA_VFS_PROXIED)
         return self
 
     def is_vfs(self) -> bool:
@@ -32,6 +33,7 @@ class CephFSStorageProvider(_StrEnum):
             self.SAMBA_VFS,
             self.SAMBA_VFS_CLASSIC,
             self.SAMBA_VFS_NEW,
+            self.SAMBA_VFS_PROXIED,
         }
 
 
@@ -100,3 +102,30 @@ class SMBClustering(_StrEnum):
     DEFAULT = 'default'
     ALWAYS = 'always'
     NEVER = 'never'
+
+
+class ShowResults(_StrEnum):
+    FULL = 'full'
+    COLLAPSED = 'collapsed'
+
+
+class PasswordFilter(_StrEnum):
+    """Filter type for password values."""
+
+    NONE = 'none'
+    BASE64 = 'base64'
+    HIDDEN = 'hidden'
+
+
+class InputPasswordFilter(_StrEnum):
+    """Filter type for input password values."""
+
+    NONE = 'none'
+    BASE64 = 'base64'
+
+    def to_password_filter(self) -> PasswordFilter:
+        """Convert input password filter to password filter type."""
+        # This is because python doesn't allow extending enums (with values)
+        # but we want a InputPasswordFilter to be a strict subset of the
+        # password filter enum.
+        return PasswordFilter(self.value)

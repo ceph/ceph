@@ -54,8 +54,6 @@ function TEST_scrub_test() {
     local OSDS=3
     local objects=15
 
-    TESTDATA="testdata.$$"
-
     run_mon $dir a --osd_pool_default_size=3 || return 1
     run_mgr $dir x --mgr_stats_period=1 || return 1
     local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0 "
@@ -71,12 +69,12 @@ function TEST_scrub_test() {
     wait_for_clean || return 1
     poolid=$(ceph osd dump | grep "^pool.*[']${poolname}[']" | awk '{ print $2 }')
 
-    dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
+    local testdata_file=$(file_with_random_data 1032)
     for i in `seq 1 $objects`
     do
-        rados -p $poolname put obj${i} $TESTDATA
+        rados -p $poolname put obj${i} $testdata_file || return 1
     done
-    rm -f $TESTDATA
+    rm -f $testdata_file
 
     local primary=$(get_primary $poolname obj1)
     local otherosd=$(get_not_primary $poolname obj1)
@@ -87,10 +85,9 @@ function TEST_scrub_test() {
       local anotherosd="2"
     fi
 
-    CORRUPT_DATA="corrupt-data.$$"
-    dd if=/dev/urandom of=$CORRUPT_DATA bs=512 count=1
-    objectstore_tool $dir $anotherosd obj1 set-bytes $CORRUPT_DATA
-    rm -f $CORRUPT_DATA
+    local corrupt_data_file=$(file_with_random_data 512)
+    objectstore_tool $dir $anotherosd obj1 set-bytes $corrupt_data_file || return 1
+    rm -f $corrupt_data_file
 
     local pgid="${poolid}.0"
     pg_deep_scrub "$pgid" || return 1
@@ -134,15 +131,11 @@ DATEFORMAT="%Y-%m-%d"
 function check_dump_scrubs() {
     local primary=$1
     local sched_time_check="$2"
-    local deadline_check="$3"
 
     DS="$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) dump_scrubs)"
     # use eval to drop double-quotes
     eval SCHED_TIME=$(echo $DS | jq '.[0].sched_time')
     test $(echo $SCHED_TIME | sed $DATESED) = $(date +${DATEFORMAT} -d "now + $sched_time_check") || return 1
-    # use eval to drop double-quotes
-    eval DEADLINE=$(echo $DS | jq '.[0].deadline')
-    test $(echo $DEADLINE | sed $DATESED) = $(date +${DATEFORMAT} -d "now + $deadline_check") || return 1
 }
 
 function TEST_interval_changes() {
@@ -181,27 +174,27 @@ function TEST_interval_changes() {
     local primary=$(get_primary $poolname obj1)
 
     # Check initial settings from above (min 1 day, min 1 week)
-    check_dump_scrubs $primary "1 day" "1 week" || return 1
+    check_dump_scrubs $primary "1 day" || return 1
 
     # Change global osd_scrub_min_interval to 2 days
     CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) config set osd_scrub_min_interval $(expr $day \* 2)
     sleep $WAIT_FOR_UPDATE
-    check_dump_scrubs $primary "2 days" "1 week" || return 1
+    check_dump_scrubs $primary "2 days" || return 1
 
     # Change global osd_scrub_max_interval to 2 weeks
     CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) config set osd_scrub_max_interval $(expr $week \* 2)
     sleep $WAIT_FOR_UPDATE
-    check_dump_scrubs $primary "2 days" "2 week" || return 1
+    check_dump_scrubs $primary "2 days" || return 1
 
     # Change pool osd_scrub_min_interval to 3 days
     ceph osd pool set $poolname scrub_min_interval $(expr $day \* 3)
     sleep $WAIT_FOR_UPDATE
-    check_dump_scrubs $primary "3 days" "2 week" || return 1
+    check_dump_scrubs $primary "3 days" || return 1
 
     # Change pool osd_scrub_max_interval to 3 weeks
     ceph osd pool set $poolname scrub_max_interval $(expr $week \* 3)
     sleep $WAIT_FOR_UPDATE
-    check_dump_scrubs $primary "3 days" "3 week" || return 1
+    check_dump_scrubs $primary "3 days" || return 1
     perf_counters $dir $OSDS
 }
 
@@ -490,6 +483,7 @@ function TEST_just_deep_scrubs() {
     # set both 'no scrub' & 'no deep-scrub', then request a deep-scrub.
     # we do not expect to see the scrub scheduled.
 
+    ceph tell osd.* config set osd_scrub_retry_after_noscrub 2
     ceph osd set noscrub || return 1
     ceph osd set nodeep-scrub || return 1
     sleep 6 # the 'noscrub' command takes a long time to reach the OSDs
@@ -516,10 +510,14 @@ function TEST_just_deep_scrubs() {
 
     # unset the 'no deep-scrub'. Deep scrubbing should start now.
     ceph osd unset nodeep-scrub || return 1
-    sleep 5
+    sleep 8
     declare -A expct_qry_duration=( ['query_last_duration']="0" ['query_last_duration_neg']="not0" )
     sc_data_2=()
+    extract_published_sch $pgid $now_is $now_is sc_data_2
     echo "test counter @ should be higher than before the unset: " ${sc_data_2['query_scrub_seq']}
+
+    declare -A expct_qry_duration=( ['query_last_duration']="0" ['query_last_duration_neg']="not0" )
+    sc_data_2=()
     wait_any_cond $pgid 10 $saved_last_stamp expct_qry_duration "WaitingAfterScrub " sc_data_2 || return 1
     perf_counters $dir ${cluster_conf['osds_num']}
 }
@@ -694,7 +692,7 @@ function wait_initial_scrubs() {
     ceph tell osd.* config set osd_scrub_min_interval 7200
     ceph tell osd.* config set osd_deep_scrub_interval 14400
     ceph tell osd.* config set osd_max_scrubs 32
-    ceph tell osd.* config set osd_scrub_sleep 0
+    ceph tell osd.* config set osd_scrub_sleep 1
     ceph tell osd.* config set osd_shallow_scrub_chunk_max 10
     ceph tell osd.* config set osd_scrub_chunk_max 10
 
@@ -709,8 +707,8 @@ function wait_initial_scrubs() {
 
     tout=20
     while [ $tout -gt 0 ] ; do
-      sleep 0.5
-      (( extr_dbg >= 2 )) && ceph pg dump pgs --format=json-pretty | \
+      sleep 1
+      (( extr_dbg >= 1 )) && ceph pg dump pgs --format=json-pretty | \
         jq '.pg_stats | map(select(.last_scrub_duration == 0)) | map({pgid: .pgid, last_scrub_duration: .last_scrub_duration})'
       not_done=$(ceph pg dump pgs --format=json-pretty | \
         jq '.pg_stats | map(select(.last_scrub_duration == 0)) | map({pgid: .pgid, last_scrub_duration: .last_scrub_duration})' | wc -l )
@@ -722,6 +720,8 @@ function wait_initial_scrubs() {
       echo "Still waiting for $not_done PGs to finish initial scrubs (timeout $tout)"
       tout=$((tout - 1))
     done
+    ceph pg dump pgs --format=json-pretty | \
+      jq '.pg_stats | map(select(.last_scrub_duration == 0)) | map({pgid: .pgid, last_scrub_duration: .last_scrub_duration})'
     (( tout == 0 )) && return 1
     return 0
 }
@@ -749,7 +749,7 @@ function TEST_abort_periodic_for_operator() {
     )
     local extr_dbg=1 # note: 3 and above leave some temp files around
 
-    standard_scrub_wpq_cluster "$dir" cluster_conf 3 || return 1
+    standard_scrub_wpq_cluster "$dir" cluster_conf 2 || return 1
     local poolid=${cluster_conf['pool_id']}
     local poolname=${cluster_conf['pool_name']}
     echo "Pool: $poolname : $poolid"
@@ -791,23 +791,25 @@ function TEST_abort_periodic_for_operator() {
     (( extr_dbg >= 2 )) && ceph tell osd.2 dump_scrub_reservations --format=json-pretty
 
     # the first PG to work with:
-    local pg1="1.0"
-    # and another one, that shares its primary, and at least one more active set member
     local pg2=""
-     for pg in "${!pg_pr[@]}"; do
-      if [[ "${pg_pr[$pg]}" == "${pg_pr[$pg1]}" ]]; then
-        local -i common=0
-        count_common_active $pg $pg1 pg_ac common
-        if [[ $common -gt 1 ]]; then
-          pg2=$pg
-          break
+    for pg1 in "${!pg_pr[@]}"; do
+      for pg in "${!pg_pr[@]}"; do
+        if [[ "$pg" == "$pg1" ]]; then
+          continue
         fi
-      fi
+        if [[ "${pg_pr[$pg]}" == "${pg_pr[$pg1]}" ]]; then
+          local -i common=$(count_common_active $pg $pg1 pg_ac)
+          if [[ $common -gt 1 ]]; then
+            pg2=$pg
+            break 2
+          fi
+        fi
+      done
     done
+
     if [[ -z "$pg2" ]]; then
-      # \todo handle the case when no such PG is found
       echo "No PG found with the same primary as $pg1"
-      return 1
+      return 0 # not an error
     fi
 
     # the common primary is allowed two concurrent scrubs

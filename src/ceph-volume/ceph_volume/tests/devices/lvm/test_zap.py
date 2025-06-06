@@ -2,7 +2,7 @@
 import os
 import pytest
 from copy import deepcopy
-from mock.mock import patch, call, Mock
+from unittest.mock import patch, call, Mock
 from ceph_volume import process
 from ceph_volume.api import lvm as api
 from ceph_volume.devices.lvm import zap

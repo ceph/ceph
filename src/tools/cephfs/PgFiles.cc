@@ -12,6 +12,7 @@
  *
  */
 
+#include "common/debug.h"
 #include "common/errno.h"
 #include "osdc/Striper.h"
 

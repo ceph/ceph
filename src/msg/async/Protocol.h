@@ -132,6 +132,8 @@ public:
   virtual void write_event() = 0;
   virtual bool is_queued() = 0;
 
+  virtual void dump(Formatter *f) = 0;
+
   int get_con_mode() const {
     return auth_meta->con_mode;
   }

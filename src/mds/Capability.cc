@@ -13,9 +13,11 @@
  */
 
 #include "Capability.h"
+#include "BatchOp.h"
 #include "CInode.h"
 #include "SessionMap.h"
 
+#include "common/debug.h"
 #include "common/Formatter.h"
 
 #define dout_context g_ceph_context

@@ -3,11 +3,11 @@
 #ifndef CEPH_FORMATTER_H
 #define CEPH_FORMATTER_H
 
-#include "include/int_types.h"
 #include "include/buffer_fwd.h"
 
 #include <deque>
 #include <fstream>
+#include <functional>
 #include <list>
 #include <memory>
 #include <vector>
@@ -54,6 +54,122 @@ namespace ceph {
         formatter.close_section();
       }
     };
+
+    /// Helper to check if a type is a map for our purpose
+    /// (based on fmt code)
+    template <typename T> class is_map {
+      template <typename U> static auto check(U*) -> typename U::mapped_type;
+      template <typename> static void check(...);
+    public:
+      static constexpr const bool value =
+        !std::is_void<decltype(check<T>(nullptr))>::value;
+    };
+
+    /**
+     * with_array_section()
+     * Opens an array section and calls 'fn' on each element in the container.
+     * Two overloads are provided:
+     * 1. for maps, where the function takes a key and a value, and
+     * 2. for other types of containers, where the function takes just an
+     *    element.
+     */
+
+    // for maps
+    template <
+	typename M,     //!< a map<K, V>
+	typename FN,    //!< a callable to be applied to each element
+	typename K = std::remove_cvref_t<M>::key_type,
+	typename V = std::remove_cvref_t<M>::mapped_type>
+      requires(
+	  is_map<M>::value && (
+          std::is_invocable_v<FN, Formatter&, const K&, const V&, std::string_view> ||
+          std::is_invocable_v<FN, Formatter&, const K&, const V&>))
+    void with_array_section(std::string_view txt, const M& m, FN&& fn) {
+      Formatter::ArraySection as(*this, txt);
+      for (const auto& [k, v] : m) {
+        if constexpr (std::is_invocable_v<FN, Formatter&, const K&, const V&, std::string_view>) {
+	  std::invoke(std::forward<FN>(fn), *this, k, v, txt);
+        } else {
+          std::invoke(std::forward<FN>(fn), *this, k, v);
+        }
+      }
+    }
+
+    // for other types of containers
+    template <
+	typename M,
+	typename FN,
+	typename V = std::remove_cvref_t<M>::value_type>
+      requires(
+	  !is_map<M>::value && (
+          std::is_invocable_r_v<void, FN, Formatter&, const V&,
+	       std::string_view> ||
+	  std::is_invocable_r_v<void, FN, Formatter&, const V&>))
+    void with_array_section(std::string_view txt, const M& m, FN&& fn) {
+      Formatter::ArraySection as(*this, txt);
+      for (const auto& v : m) {
+	if constexpr (std::is_invocable_v<
+			  FN, Formatter&, const V&, std::string_view>) {
+	  std::invoke(std::forward<FN>(fn), *this, v, txt);
+	} else {
+	  std::invoke(std::forward<FN>(fn), *this, v);
+	}
+      }
+    }
+
+    /**
+     * with_obj_array_section()
+     * Opens an array section, then - iterates over the container
+     * (which can be a map or a vector) and creates an object section
+     * for each element in the container. The provided function 'fn' is
+     * called on each element in the container.
+     *
+     * Two overloads are provided:
+     * 1. for maps, where the function takes a key and a value, and
+     * 2. for other types of containers, where the function is only
+     *    handed the object (value) in the container.
+     */
+
+    template <
+	typename M,     //!< a map<K, V>
+	typename FN,    //!< a callable to be applied to each element
+	typename K = std::remove_cvref_t<M>::key_type,
+	typename V = std::remove_cvref_t<M>::mapped_type>
+      requires(
+	  is_map<M>::value && (
+          std::is_invocable_v<FN, Formatter&, const K&, const V&, std::string_view> ||
+          std::is_invocable_v<FN, Formatter&, const K&, const V&>))
+    void with_obj_array_section(std::string_view txt, const M& m, FN&& fn) {
+      Formatter::ArraySection as(*this, txt);
+      for (const auto& [k, v] : m) {
+	Formatter::ObjectSection os(*this, txt);
+        if constexpr (std::is_invocable_v<FN, Formatter&, const K&, const V&, std::string_view>) {
+            std::invoke(std::forward<FN>(fn), *this, k, v, txt);
+        } else {
+            std::invoke(std::forward<FN>(fn), *this, k, v);
+        }
+      }
+    }
+
+    template <
+	typename M,  //!< a container (which is not a map) of 'V's
+	typename FN,
+	typename V = std::remove_cvref_t<M>::value_type>
+      requires(
+	  (!is_map<M>::value) && (
+          std::is_invocable_v<FN, Formatter&, const V&, std::string_view> ||
+          std::is_invocable_v<FN, Formatter&, const V&>))
+    void with_obj_array_section(std::string_view txt, const M& m, FN&& fn) {
+      Formatter::ArraySection as(*this, txt);
+      for (const auto& v : m) {
+	Formatter::ObjectSection os(*this, txt);
+        if constexpr (std::is_invocable_v<FN, Formatter&, const V&, std::string_view>) {
+            std::invoke(std::forward<FN>(fn), *this, v, txt);
+        } else {
+            std::invoke(std::forward<FN>(fn), *this, v);
+        }
+      }
+    }
 
     static Formatter *create(std::string_view type,
 			     std::string_view default_type,
@@ -328,7 +444,7 @@ private:
     void open_section_in_ns(std::string_view name, const char *ns, const FormatterAttrs *attrs);
     void finish_pending_string();
     void print_spaces();
-    void get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str);
+    void get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str) const;
     char to_lower_underscore(char c) const;
     std::string get_xml_name(std::string_view name) const;
 
@@ -376,7 +492,7 @@ private:
 
     int get_len() const override;
     void write_raw_data(const char *data) override;
-    void get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str);
+    void get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str) const;
 
   private:
     template <class T>

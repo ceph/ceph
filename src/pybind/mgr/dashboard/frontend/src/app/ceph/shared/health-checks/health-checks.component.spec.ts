@@ -4,6 +4,7 @@ import { HealthChecksComponent } from './health-checks.component';
 import { HealthColorPipe } from '~/app/shared/pipes/health-color.pipe';
 import { By } from '@angular/platform-browser';
 import { CssHelper } from '~/app/shared/classes/css-helper';
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 
 describe('HealthChecksComponent', () => {
   let component: HealthChecksComponent;
@@ -12,7 +13,8 @@ describe('HealthChecksComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [HealthChecksComponent, HealthColorPipe],
-      providers: [CssHelper]
+      providers: [CssHelper],
+      schemas: [CUSTOM_ELEMENTS_SCHEMA]
     }).compileComponents();
 
     fixture = TestBed.createComponent(HealthChecksComponent);

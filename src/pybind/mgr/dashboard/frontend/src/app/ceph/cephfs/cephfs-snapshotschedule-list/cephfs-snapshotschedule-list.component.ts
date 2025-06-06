@@ -8,8 +8,8 @@ import {
   ViewChild
 } from '@angular/core';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { BehaviorSubject, Observable, Subscription, of, timer } from 'rxjs';
-import { finalize, map, shareReplay, switchMap } from 'rxjs/operators';
+import { BehaviorSubject, Observable, Subscription, of } from 'rxjs';
+import { map, shareReplay, switchMap } from 'rxjs/operators';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -22,12 +22,9 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
-import { NotificationService } from '~/app/shared/services/notification.service';
-import { BlockUI, NgBlockUI } from 'ng-block-ui';
-import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CephfsSnapshotscheduleFormComponent } from '../cephfs-snapshotschedule-form/cephfs-snapshotschedule-form.component';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
@@ -52,9 +49,6 @@ export class CephfsSnapshotscheduleListComponent
   @ViewChild('subvolTpl', { static: true })
   subvolTpl: any;
 
-  @BlockUI()
-  blockUI: NgBlockUI;
-
   snapshotSchedules$!: Observable<SnapshotSchedule[]>;
   subject$ = new BehaviorSubject<SnapshotSchedule[]>([]);
   snapScheduleModuleStatus$ = new BehaviorSubject<boolean>(false);
@@ -68,26 +62,7 @@ export class CephfsSnapshotscheduleListComponent
   errorMessage: string = '';
   selectedName: string = '';
   icons = Icons;
-  tableActions: CdTableAction[] = [
-    {
-      name: this.actionLabels.CREATE,
-      permission: 'create',
-      icon: Icons.add,
-      click: () => this.openModal(false)
-    },
-    {
-      name: this.actionLabels.EDIT,
-      permission: 'update',
-      icon: Icons.edit,
-      click: () => this.openModal(true)
-    },
-    {
-      name: this.actionLabels.DELETE,
-      permission: 'delete',
-      icon: Icons.trash,
-      click: () => this.deleteSnapshotSchedule()
-    }
-  ];
+  tableActions!: CdTableAction[];
 
   MODULE_NAME = 'snap_schedule';
   ENABLE_MODULE_TIMER = 2 * 1000;
@@ -97,7 +72,6 @@ export class CephfsSnapshotscheduleListComponent
     private authStorageService: AuthStorageService,
     private modalService: ModalCdsService,
     private mgrModuleService: MgrModuleService,
-    private notificationService: NotificationService,
     private actionLabels: ActionLabelsI18n,
     private taskWrapper: TaskWrapperService
   ) {
@@ -112,6 +86,27 @@ export class CephfsSnapshotscheduleListComponent
   }
 
   ngOnInit(): void {
+    this.tableActions = [
+      {
+        name: this.actionLabels.CREATE,
+        permission: 'create',
+        icon: Icons.add,
+        click: () => this.openModal(false)
+      },
+      {
+        name: this.actionLabels.EDIT,
+        permission: 'update',
+        icon: Icons.edit,
+        click: () => this.openModal(true)
+      },
+      {
+        name: this.actionLabels.DELETE,
+        permission: 'delete',
+        icon: Icons.trash,
+        click: () => this.deleteSnapshotSchedule()
+      }
+    ];
+
     this.moduleServiceListSub = this.mgrModuleService
       .list()
       .pipe(
@@ -197,53 +192,19 @@ export class CephfsSnapshotscheduleListComponent
   }
 
   enableSnapshotSchedule() {
-    let $obs;
-    const fnWaitUntilReconnected = () => {
-      timer(this.ENABLE_MODULE_TIMER).subscribe(() => {
-        // Trigger an API request to check if the connection is
-        // re-established.
-        this.mgrModuleService.list().subscribe(
-          () => {
-            // Resume showing the notification toasties.
-            this.notificationService.suspendToasties(false);
-            // Unblock the whole UI.
-            this.blockUI.stop();
-            // Reload the data table content.
-            this.notificationService.show(
-              NotificationType.success,
-              $localize`Enabled Snapshot Schedule Module`
-            );
-            // Reload the data table content.
-          },
-          () => {
-            fnWaitUntilReconnected();
-          }
-        );
-      });
-    };
-
-    if (!this.snapScheduleModuleStatus$.value) {
-      $obs = this.mgrModuleService
-        .enable(this.MODULE_NAME)
-        .pipe(finalize(() => this.snapScheduleModuleStatus$.next(true)));
-    }
-    $obs.subscribe(
-      () => undefined,
-      () => {
-        // Suspend showing the notification toasties.
-        this.notificationService.suspendToasties(true);
-        // Block the whole UI to prevent user interactions until
-        // the connection to the backend is reestablished
-        this.blockUI.start($localize`Reconnecting, please wait ...`);
-        fnWaitUntilReconnected();
-      }
+    this.mgrModuleService.updateModuleState(
+      this.MODULE_NAME,
+      false,
+      null,
+      '',
+      'Enabled Snapshot Schedule Module'
     );
   }
 
   deactivateSnapshotSchedule() {
     const { path, start, fs, schedule, subvol, group } = this.selection.first();
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`snapshot schedule`,
       actionDescription: this.actionLabels.DEACTIVATE,
       submitActionObservable: () =>
@@ -266,7 +227,7 @@ export class CephfsSnapshotscheduleListComponent
   activateSnapshotSchedule() {
     const { path, start, fs, schedule, subvol, group } = this.selection.first();
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`snapshot schedule`,
       actionDescription: this.actionLabels.ACTIVATE,
       submitActionObservable: () =>
@@ -298,7 +259,7 @@ export class CephfsSnapshotscheduleListComponent
       })
       ?.join('|');
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`snapshot schedule`,
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({

@@ -98,6 +98,7 @@ describe('Services page', () => {
     cy.get('cd-service-details').within(() => {
       services.checkServiceStatus('snmp-gateway');
     });
+    services.clickServiceTab('snmp-gateway', 'Daemons');
 
     services.deleteService('snmp-gateway');
   });
@@ -111,6 +112,7 @@ describe('Services page', () => {
     cy.get('cd-service-details').within(() => {
       services.checkServiceStatus('snmp-gateway');
     });
+    services.clickServiceTab('snmp-gateway', 'Daemons');
 
     services.deleteService('snmp-gateway');
   });

@@ -105,6 +105,69 @@ static inline uint64_t random_unscramble(proxy_random_t *rnd, uint64_t value)
 	return (value >> bits) | (value << (64 - bits));
 }
 
+static inline uint64_t uint64_checksum(uint64_t value)
+{
+	value = (value & 0xff00ff00ff00ffULL) +
+		((value >> 8) & 0xff00ff00ff00ffULL);
+	value += value >> 16;
+	value += value >> 32;
+
+	return value & 0xff;
+}
+
+static inline uint64_t ptr_checksum(proxy_random_t *rnd, void *ptr)
+{
+	uint64_t value;
+
+	if (ptr == NULL) {
+		return 0;
+	}
+
+	value = (uint64_t)(uintptr_t)ptr;
+	/* Many current processors don't use the full 64-bits for the virtual
+         * address space, and Linux assigns the lower 128 TiB (47 bits) for
+         * user-space applications on most architectures, so the highest 8 bits
+         * of all valid addressess are always 0.
+         *
+         * We use this to encode a checksum in the high byte of the address to
+         * be able to do a verification before dereferencing the pointer,
+	 * avoiding crashes if the client passes an invalid or corrupted pointer
+	 * value.
+         *
+         * Alternatives like using indexes in a table or registering valid
+	 * pointers require access to a shared data structure that will require
+	 * thread synchronization, making it slower. */
+	if ((value & 0xff00000000000007ULL) != 0) {
+		proxy_log(LOG_ERR, EINVAL,
+			  "Unexpected pointer value");
+		abort();
+	}
+
+	value -= uint64_checksum(value) << 56;
+
+	return random_scramble(rnd, value);
+}
+
+static inline int32_t ptr_check(proxy_random_t *rnd, uint64_t value,
+				void **pptr)
+{
+	if (value == 0) {
+		*pptr = NULL;
+		return 0;
+	}
+
+	value = random_unscramble(rnd, value);
+
+	if ((uint64_checksum(value) != 0) || ((value & 7) != 0)) {
+		proxy_log(LOG_ERR, EFAULT, "Unexpected pointer value");
+		return -EFAULT;
+	}
+
+	*pptr = (void *)(uintptr_t)(value & 0xffffffffffffffULL);
+
+	return 0;
+}
+
 static inline void *proxy_malloc(size_t size)
 {
 	void *ptr;

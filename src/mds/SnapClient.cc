@@ -13,12 +13,14 @@
  */
 
 #include "MDSMap.h"
+#include "MDSContext.h"
 #include "MDSRank.h"
 #include "msg/Messenger.h"
 #include "messages/MMDSTableRequest.h"
 #include "SnapClient.h"
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
@@ -282,7 +284,7 @@ int SnapClient::dump_cache(Formatter *f) const
 {
   if (!is_synced()) {
     dout(5) << "dump_cache: not synced" << dendl;
-    return -CEPHFS_EINVAL;
+    return -EINVAL;
   }
 
   map<snapid_t, const SnapInfo*> snaps;

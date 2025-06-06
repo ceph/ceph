@@ -15,9 +15,14 @@
 #ifndef CEPH_MDS_SESSIONMAP_H
 #define CEPH_MDS_SESSIONMAP_H
 
+#include <deque>
+#include <functional>
+#include <list>
+#include <map>
+#include <ostream>
 #include <set>
-
-#include "include/unordered_map.h"
+#include <string>
+#include <unordered_map>
 
 #include "include/Context.h"
 #include "include/xlist.h"
@@ -25,15 +30,16 @@
 #include "include/interval_set.h"
 #include "mdstypes.h"
 #include "mds/MDSAuthCaps.h"
-#include "common/perf_counters.h"
 #include "common/DecayCounter.h"
 
-#include "CInode.h"
-#include "Capability.h"
-#include "MDSContext.h"
+#include "Mutation.h" // for struct MDRequestImpl
 #include "msg/Message.h"
 
 struct MDRequestImpl;
+class MDSContext;
+class C_MDSInternalNoop;
+using MDSGather = C_GatherBase<MDSContext, C_MDSInternalNoop>;
+using MDSGatherBuilder = C_GatherBuilderBase<MDSContext, MDSGather>;
 
 enum {
   l_mdssm_first = 5500,
@@ -49,6 +55,8 @@ enum {
   l_mdssm_last,
 };
 
+struct ClientLease;
+class Capability;
 class CInode;
 
 /* 
@@ -273,7 +281,7 @@ public:
     waitfor_flush[get_push_seq()].push_back(c);
     return get_push_seq();
   }
-  void finish_flush(version_t seq, MDSContext::vec& ls) {
+  void finish_flush(version_t seq, std::vector<MDSContext*>& ls) {
     while (!waitfor_flush.empty()) {
       auto it = waitfor_flush.begin();
       if (it->first > seq)
@@ -288,20 +296,10 @@ public:
     cap_acquisition.hit(count);
   }
 
-  void touch_cap(Capability *cap) {
-    session_cache_liveness.hit(1.0);
-    caps.push_front(&cap->item_session_caps);
-  }
+  void touch_cap(Capability *cap);
+  void touch_cap_bottom(Capability *cap);
 
-  void touch_cap_bottom(Capability *cap) {
-    session_cache_liveness.hit(1.0);
-    caps.push_back(&cap->item_session_caps);
-  }
-
-  void touch_lease(ClientLease *r) {
-    session_cache_liveness.hit(1.0);
-    leases.push_back(&r->item_session_lease);
-  }
+  void touch_lease(ClientLease *r);
 
   bool is_any_flush_waiter() {
     return !waitfor_flush.empty();
@@ -491,7 +489,7 @@ private:
   // -- caps --
   uint32_t cap_gen = 0;
   version_t cap_push_seq = 0;        // cap push seq #
-  std::map<version_t, MDSContext::vec > waitfor_flush; // flush session messages
+  std::map<version_t, std::vector<MDSContext*> > waitfor_flush; // flush session messages
 
   // Has completed_requests been modified since the last time we
   // wrote this session out?
@@ -559,23 +557,7 @@ public:
     rank = r;
   }
 
-  Session* get_or_add_session(const entity_inst_t& i) {
-    Session *s;
-    auto session_map_entry = session_map.find(i.name);
-    if (session_map_entry != session_map.end()) {
-      s = session_map_entry->second;
-    } else {
-      s = session_map[i.name] = new Session(ConnectionRef());
-      s->info.inst = i;
-      s->last_cap_renew = Session::clock::now();
-      if (logger) {
-        logger->set(l_mdssm_session_count, session_map.size());
-        logger->inc(l_mdssm_session_add);
-      }
-    }
-
-    return s;
-  }
+  Session* get_or_add_session(const entity_inst_t& i);
 
   static void generate_test_instances(std::list<SessionMapStore*>& ls);
   void reset_state()
@@ -587,7 +569,7 @@ public:
 
 protected:
   version_t version = 0;
-  ceph::unordered_map<entity_name_t, Session*> session_map;
+  std::unordered_map<entity_name_t, Session*> session_map;
   PerfCounters *logger =nullptr;
 
   // total request load avg
@@ -600,17 +582,7 @@ public:
   SessionMap() = delete;
   explicit SessionMap(MDSRank *m);
 
-  ~SessionMap() override
-  {
-    for (auto p : by_state)
-      delete p.second;
-
-    if (logger) {
-      g_ceph_context->get_perfcounters_collection()->remove(logger);
-    }
-
-    delete logger;
-  }
+  ~SessionMap() override;
 
   uint64_t set_state(Session *session, int state);
   void update_average_session_age();
@@ -673,7 +645,7 @@ public:
 	    session_map_entry-> second : nullptr);
   }
   const Session* get_session(entity_name_t w) const {
-    ceph::unordered_map<entity_name_t, Session*>::const_iterator p = session_map.find(w);
+    auto p = session_map.find(w);
     if (p == session_map.end()) {
       return NULL;
     } else {
@@ -817,11 +789,11 @@ public:
 
   MDSRank *mds;
   std::map<int,xlist<Session*>*> by_state;
-  std::map<version_t, MDSContext::vec> commit_waiters;
+  std::map<version_t, std::vector<MDSContext*>> commit_waiters;
 
   // -- loading, saving --
   inodeno_t ino;
-  MDSContext::vec waiting_for_load;
+  std::vector<MDSContext*> waiting_for_load;
 
 protected:
   void _mark_dirty(Session *session, bool may_save);

@@ -13,6 +13,7 @@ import { map, switchMapTo, take } from 'rxjs/operators';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { FormatterService } from '~/app/shared/services/formatter.service';
+import validator from 'validator';
 
 export function isEmptyInputValue(value: any): boolean {
   return value == null || value.length === 0;
@@ -682,5 +683,30 @@ export class CdValidators {
       const portTest = Number(port) >= 0 && Number(port) <= 65535;
       return { invalidAddress: !(addressTest && portTest) };
     };
+  }
+
+  /**
+   * Validator function to validate endpoints, allowing FQDN, IPv4, and IPv6 addresses with ports.
+   * Accepts multiple endpoints separated by commas.
+   */
+  static url(control: AbstractControl): ValidationErrors | null {
+    const value = control.value;
+
+    if (_.isEmpty(value)) {
+      return null;
+    }
+
+    const urls = value.includes(',') ? value.split(',') : [value];
+
+    const invalidUrls = urls.filter(
+      (url: string) =>
+        !validator.isURL(url, {
+          require_protocol: true,
+          allow_underscores: true,
+          require_tld: false
+        }) && !validator.isIP(url)
+    );
+
+    return invalidUrls.length > 0 ? { invalidURL: true } : null;
   }
 }

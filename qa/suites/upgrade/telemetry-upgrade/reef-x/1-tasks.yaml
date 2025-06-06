@@ -18,6 +18,8 @@ overrides:
       - do not have an application enabled
       - is down
       - TELEMETRY_CHANGED
+      - pg .*? is .*?degraded.*?, acting
+      - pg .* is stuck peering
 tasks:
 - install:
     branch: reef
@@ -67,7 +69,7 @@ tasks:
     - cephadm.shell:
         env: [sha1]
         mon.a:
-            - ceph osd require-osd-release squid
+            - ceph osd require-osd-release tentacle
 
     - print: "**** done start telemetry x..."
     - workunit:

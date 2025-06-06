@@ -16,7 +16,6 @@
  */
 
 #include "PGLog.h"
-#include "include/unordered_map.h"
 #include "common/ceph_context.h"
 
 using std::make_pair;
@@ -225,7 +224,8 @@ void PGLog::proc_replica_log(
   pg_info_t &oinfo,
   const pg_log_t &olog,
   pg_missing_t& omissing,
-  pg_shard_t from) const
+  pg_shard_t from,
+  bool ec_optimizations_enabled) const
 {
   dout(10) << "proc_replica_log for osd." << from << ": "
 	   << oinfo << " " << olog << " " << omissing << dendl;
@@ -302,6 +302,7 @@ void PGLog::proc_replica_log(
     olog.get_can_rollback_to(),
     omissing,
     0,
+    ec_optimizations_enabled,
     this);
 
   if (lu < oinfo.last_update) {
@@ -334,7 +335,8 @@ void PGLog::proc_replica_log(
  */
 void PGLog::rewind_divergent_log(eversion_t newhead,
 				 pg_info_t &info, LogEntryHandler *rollbacker,
-				 bool &dirty_info, bool &dirty_big_info)
+				 bool &dirty_info, bool &dirty_big_info,
+				 bool ec_optimizations_enabled)
 {
   dout(10) << "rewind_divergent_log truncate divergent future " <<
     newhead << dendl;
@@ -363,6 +365,7 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
     original_crt,
     missing,
     rollbacker,
+    ec_optimizations_enabled,
     this);
 
   dirty_info = true;
@@ -370,8 +373,10 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
 }
 
 void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
-                      pg_info_t &info, LogEntryHandler *rollbacker,
-                      bool &dirty_info, bool &dirty_big_info)
+                      pg_info_t &info, const pg_pool_t &pool, pg_shard_t toosd,
+		      LogEntryHandler *rollbacker,
+                      bool &dirty_info, bool &dirty_big_info,
+		      bool ec_optimizations_enabled)
 {
   dout(10) << "merge_log " << olog << " from osd." << fromosd
            << " into " << log << dendl;
@@ -429,7 +434,8 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
 
   // do we have divergent entries to throw out?
   if (olog.head < log.head) {
-    rewind_divergent_log(olog.head, info, rollbacker, dirty_info, dirty_big_info);
+    rewind_divergent_log(olog.head, info, rollbacker,
+			 dirty_info, dirty_big_info, ec_optimizations_enabled);
     changed = true;
   }
 
@@ -466,7 +472,7 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
     for (auto &&oe: divergent) {
       dout(10) << "merge_log divergent " << oe << dendl;
     }
-    log.roll_forward_to(log.head, rollbacker);
+    log.roll_forward_to(log.head, &info, rollbacker);
 
     mempool::osd_pglog::list<pg_log_entry_t> new_entries;
     new_entries.splice(new_entries.end(), olog.log, from, to);
@@ -477,6 +483,8 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
       &log,
       missing,
       rollbacker,
+      pool,
+      toosd.shard,
       this);
 
     _merge_divergent_entries(
@@ -486,6 +494,7 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
       original_crt,
       missing,
       rollbacker,
+      ec_optimizations_enabled,
       this);
 
     info.last_update = log.head = olog.head;
@@ -1071,7 +1080,7 @@ void PGLog::rebuild_missing_set_with_deletes(
   set_missing_may_contain_deletes();
 }
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 
 namespace {
   struct FuturizedShardStoreLogReader {

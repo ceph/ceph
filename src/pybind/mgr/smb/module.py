@@ -20,7 +20,10 @@ from . import (
 )
 from .enums import (
     AuthMode,
+    InputPasswordFilter,
     JoinSourceType,
+    PasswordFilter,
+    ShowResults,
     SMBClustering,
     UserGroupSourceType,
 )
@@ -139,13 +142,49 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             self.get_module_option('internal_store_backend', ''),
         )
 
+    def _apply_res(
+        self,
+        resource_input: List[resources.SMBResource],
+        create_only: bool = False,
+        password_filter: InputPasswordFilter = InputPasswordFilter.NONE,
+        password_filter_out: Optional[PasswordFilter] = None,
+    ) -> results.ResultGroup:
+        in_pf = password_filter.to_password_filter()  # update enum type
+        # use the same filtering as the input unless expliclitly set
+        out_pf = password_filter_out if password_filter_out else in_pf
+        if in_pf is not PasswordFilter.NONE:
+            in_op = (in_pf, PasswordFilter.NONE)
+            log.debug('Password filtering for resource apply: %r', in_op)
+            resource_input = [r.convert(in_op) for r in resource_input]
+        all_results = self._handler.apply(
+            resource_input, create_only=create_only
+        )
+        if out_pf is not PasswordFilter.NONE:
+            # we need to apply the conversion filter to the output
+            # resources in the results - otherwise we would show raw
+            # passwords - this will be the inverse of the filter applied to
+            # the input
+            out_op = (PasswordFilter.NONE, out_pf)
+            log.debug('Password filtering for smb apply output: %r', in_op)
+            all_results = all_results.convert_results(out_op)
+        return all_results
+
     @cli.SMBCommand('apply', perm='rw')
-    def apply_resources(self, inbuf: str) -> results.ResultGroup:
+    def apply_resources(
+        self,
+        inbuf: str,
+        password_filter: InputPasswordFilter = InputPasswordFilter.NONE,
+        password_filter_out: Optional[PasswordFilter] = None,
+    ) -> results.ResultGroup:
         """Create, update, or remove smb configuration resources based on YAML
         or JSON specs
         """
         try:
-            return self._handler.apply(resources.load_text(inbuf))
+            return self._apply_res(
+                resources.load_text(inbuf),
+                password_filter=password_filter,
+                password_filter_out=password_filter_out,
+            )
         except resources.InvalidResourceError as err:
             # convert the exception into a result and return it as the only
             # item in the result group
@@ -172,6 +211,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         placement: Optional[str] = None,
         clustering: Optional[SMBClustering] = None,
         public_addrs: Optional[List[str]] = None,
+        password_filter: InputPasswordFilter = InputPasswordFilter.NONE,
+        password_filter_out: Optional[PasswordFilter] = None,
     ) -> results.Result:
         """Create an smb cluster"""
         domain_settings = None
@@ -282,13 +323,24 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             public_addrs=c_public_addrs,
         )
         to_apply.append(cluster)
-        return self._handler.apply(to_apply, create_only=True).squash(cluster)
+        return self._apply_res(
+            to_apply,
+            create_only=True,
+            password_filter=password_filter,
+            password_filter_out=password_filter_out,
+        ).squash(cluster)
 
     @cli.SMBCommand('cluster rm', perm='rw')
-    def cluster_rm(self, cluster_id: str) -> results.Result:
+    def cluster_rm(
+        self,
+        cluster_id: str,
+        password_filter: PasswordFilter = PasswordFilter.NONE,
+    ) -> results.Result:
         """Remove an smb cluster"""
         cluster = resources.RemovedCluster(cluster_id=cluster_id)
-        return self._handler.apply([cluster]).one()
+        return self._apply_res(
+            [cluster], password_filter_out=password_filter
+        ).one()
 
     @cli.SMBCommand('share ls', perm='r')
     def share_ls(self, cluster_id: str) -> List[str]:
@@ -324,7 +376,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 subvolume=subvolume,
             ),
         )
-        return self._handler.apply([share], create_only=True).one()
+        return self._apply_res([share], create_only=True).one()
 
     @cli.SMBCommand('share rm', perm='rw')
     def share_rm(self, cluster_id: str, share_id: str) -> results.Result:
@@ -332,10 +384,15 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         share = resources.RemovedShare(
             cluster_id=cluster_id, share_id=share_id
         )
-        return self._handler.apply([share]).one()
+        return self._apply_res([share]).one()
 
-    @cli.SMBCommand('show', perm='r')
-    def show(self, resource_names: Optional[List[str]] = None) -> Simplified:
+    @cli.SMBCommand("show", perm="r")
+    def show(
+        self,
+        resource_names: Optional[List[str]] = None,
+        results: ShowResults = ShowResults.COLLAPSED,
+        password_filter: PasswordFilter = PasswordFilter.NONE,
+    ) -> Simplified:
         """Show resources fetched from the local config store based on resource
         type or resource type and id(s).
         """
@@ -346,9 +403,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 resources = self._handler.matching_resources(resource_names)
             except handler.InvalidResourceMatch as err:
                 raise cli.InvalidInputValue(str(err)) from err
-        if len(resources) == 1:
+        if password_filter is not PasswordFilter.NONE:
+            op = (PasswordFilter.NONE, password_filter)
+            log.debug('Password filtering for smb show: %r', op)
+            resources = [r.convert(op) for r in resources]
+        if len(resources) == 1 and results is ShowResults.COLLAPSED:
             return resources[0].to_simplified()
-        return {'resources': [r.to_simplified() for r in resources]}
+        return {"resources": [r.to_simplified() for r in resources]}
 
     def submit_smb_spec(self, spec: SMBSpec) -> None:
         """Submit a new or updated smb spec object to ceph orchestration."""

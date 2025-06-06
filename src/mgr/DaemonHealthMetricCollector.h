@@ -1,9 +1,9 @@
 #pragma once
 
-#include <memory>
-#include <string>
-
 #include "DaemonHealthMetric.h"
+
+#include <memory>
+
 #include "DaemonKey.h"
 #include "mon/health_check.h"
 

@@ -1,11 +1,5 @@
 import { Injectable } from '@angular/core';
-import {
-  ActivatedRouteSnapshot,
-  CanActivate,
-  CanActivateChild,
-  Router,
-  RouterStateSnapshot
-} from '@angular/router';
+import { ActivatedRouteSnapshot, Router, RouterStateSnapshot } from '@angular/router';
 
 import { AuthStorageService } from './auth-storage.service';
 
@@ -16,7 +10,7 @@ import { AuthStorageService } from './auth-storage.service';
 @Injectable({
   providedIn: 'root'
 })
-export class ChangePasswordGuardService implements CanActivate, CanActivateChild {
+export class ChangePasswordGuardService {
   constructor(private router: Router, private authStorageService: AuthStorageService) {}
 
   canActivate(_route: ActivatedRouteSnapshot, state: RouterStateSnapshot) {
@@ -24,7 +18,7 @@ export class ChangePasswordGuardService implements CanActivate, CanActivateChild
     // are fulfilled:
     // - The user must be logged in.
     // - SSO must be disabled.
-    // - The flag 'User must change password at next logon' must be set.
+    // - The flag 'User must change password at next login' must be set.
     if (
       this.authStorageService.isLoggedIn() &&
       !this.authStorageService.isSSO() &&

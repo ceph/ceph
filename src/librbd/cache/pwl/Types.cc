@@ -4,6 +4,7 @@
 #include <iostream>
 #include "Types.h"
 #include "common/ceph_context.h"
+#include "common/Formatter.h"
 #include "include/Context.h"
 #include "include/stringify.h"
 

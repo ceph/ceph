@@ -148,7 +148,8 @@ public:
 
   void objects_read_async(
     const hobject_t &hoid,
-    const std::list<std::pair<ECCommon::ec_align_t,
+    uint64_t object_size,
+    const std::list<std::pair<ec_align_t,
 	       std::pair<ceph::buffer::list*, Context*> > > &to_read,
                Context *on_complete,
                bool fast_read = false) override;
@@ -440,8 +441,12 @@ private:
 
     ObjectStore::Transaction opt, localt;
     
-    RepModify() : committed(false), ackerosd(-1),
-		  epoch_started(0) {}
+    RepModify(uint64_t features)
+      : committed(false),
+        ackerosd(-1),
+        epoch_started(0),
+        localt(features) {
+    }
   };
   typedef std::shared_ptr<RepModify> RepModifyRef;
 
@@ -450,14 +455,20 @@ private:
   void repop_commit(RepModifyRef rm);
   bool auto_repair_supported() const override { return store->has_builtin_csum(); }
 
+  static inline const uint32_t scrub_fadvise_flags{
+      CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
+      CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE};
 
   int be_deep_scrub(
+    const Scrub::ScrubCounterSet& io_counters,
     const hobject_t &poid,
     ScrubMap &map,
     ScrubMapBuilder &pos,
     ScrubMap::object &o) override;
 
-  uint64_t be_get_ondisk_size(uint64_t logical_size) const final {
+  uint64_t be_get_ondisk_size(uint64_t logical_size,
+                              shard_id_t unused) const final {
     return logical_size;
   }
 };

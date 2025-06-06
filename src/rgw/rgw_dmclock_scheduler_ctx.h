@@ -8,6 +8,12 @@
 #include "common/config.h"
 #include "rgw_dmclock.h"
 
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
 namespace queue_counters {
 
   enum {
@@ -92,7 +98,7 @@ public:
 
   ClientInfo* operator()(client_id client);
 
-  const char** get_tracked_conf_keys() const override;
+  std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string>& changed) override;
 };

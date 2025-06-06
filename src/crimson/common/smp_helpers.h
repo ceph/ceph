@@ -146,15 +146,15 @@ public:
    */
 
   seq_t get_in_seq() const requires IS_ONE {
-    return in_controls.seq;
+    return in_controls.seq + 1;
   }
 
   seq_t get_in_seq() const requires IS_ONE_N {
-    return in_controls[seastar::this_shard_id()].seq;
+    return in_controls[seastar::this_shard_id()].seq + 1;
   }
 
   seq_t get_in_seq(core_id_t source_core) const requires IS_N_ONE {
-    return in_controls[source_core].seq;
+    return in_controls[source_core].seq + 1;
   }
 
   bool proceed_or_wait(seq_t seq) requires IS_ONE {

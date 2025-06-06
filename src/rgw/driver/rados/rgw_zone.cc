@@ -20,12 +20,14 @@ RGWMetaSyncStatusManager::~RGWMetaSyncStatusManager(){}
 
 struct RGWAccessKey;
 
+namespace rgw {
 /// Generate a random uuid for realm/period/zonegroup/zone ids
-static std::string gen_random_uuid()
+std::string gen_random_uuid()
 {
   uuid_d uuid;
   uuid.generate_random();
   return uuid.to_string();
+}
 }
 
 void RGWDefaultZoneGroupInfo::dump(Formatter *f) const {
@@ -41,77 +43,6 @@ void RGWDefaultZoneGroupInfo::decode_json(JSONObj *obj) {
   }
 }
 
-int RGWZoneGroup::create_default(const DoutPrefixProvider *dpp, optional_yield y, bool old_format)
-{
-  name = default_zonegroup_name;
-  api_name = default_zonegroup_name;
-  is_master = true;
-
-  RGWZoneGroupPlacementTarget placement_target;
-  placement_target.name = "default-placement";
-  placement_targets[placement_target.name] = placement_target;
-  default_placement.name = "default-placement";
-
-  RGWZoneParams zone_params(default_zone_name);
-
-  int r = zone_params.init(dpp, cct, sysobj_svc, y, false);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "create_default: error initializing zone params: " << cpp_strerror(-r) << dendl;
-    return r;
-  }
-
-  r = zone_params.create_default(dpp, y);
-  if (r < 0 && r != -EEXIST) {
-    ldpp_dout(dpp, 0) << "create_default: error in create_default  zone params: " << cpp_strerror(-r) << dendl;
-    return r;
-  } else if (r == -EEXIST) {
-    ldpp_dout(dpp, 10) << "zone_params::create_default() returned -EEXIST, we raced with another default zone_params creation" << dendl;
-    zone_params.clear_id();
-    r = zone_params.init(dpp, cct, sysobj_svc, y);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "create_default: error in init existing zone params: " << cpp_strerror(-r) << dendl;
-      return r;
-    }
-    ldpp_dout(dpp, 20) << "zone_params::create_default() " << zone_params.get_name() << " id " << zone_params.get_id()
-		   << dendl;
-  }
-  
-  RGWZone& default_zone = zones[zone_params.get_id()];
-  default_zone.name = zone_params.get_name();
-  default_zone.id = zone_params.get_id();
-  master_zone = default_zone.id;
-
-  // initialize supported zone features
-  default_zone.supported_features.insert(rgw::zone_features::supported.begin(),
-                                         rgw::zone_features::supported.end());
-  // enable default zonegroup features
-  enabled_features.insert(rgw::zone_features::enabled.begin(),
-                          rgw::zone_features::enabled.end());
-  
-  r = create(dpp, y);
-  if (r < 0 && r != -EEXIST) {
-    ldpp_dout(dpp, 0) << "error storing zone group info: " << cpp_strerror(-r) << dendl;
-    return r;
-  }
-
-  if (r == -EEXIST) {
-    ldpp_dout(dpp, 10) << "create_default() returned -EEXIST, we raced with another zonegroup creation" << dendl;
-    id.clear();
-    r = init(dpp, cct, sysobj_svc, y);
-    if (r < 0) {
-      return r;
-    }
-  }
-
-  if (old_format) {
-    name = id;
-  }
-
-  post_process_params(dpp, y);
-
-  return 0;
-}
-
 int RGWZoneGroup::equals(const string& other_zonegroup) const
 {
   if (is_master && other_zonegroup.empty())
@@ -120,237 +51,12 @@ int RGWZoneGroup::equals(const string& other_zonegroup) const
   return (id  == other_zonegroup);
 }
 
-int RGWZoneGroup::add_zone(const DoutPrefixProvider *dpp, 
-                           const RGWZoneParams& zone_params, bool *is_master, bool *read_only,
-                           const list<string>& endpoints, const string *ptier_type,
-                           bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm,
-                           string *predirect_zone, std::optional<int> bucket_index_max_shards,
-                           RGWSyncModulesManager *sync_mgr,
-                           const rgw::zone_features::set& enable_features,
-                           const rgw::zone_features::set& disable_features,
-			   optional_yield y)
-{
-  auto& zone_id = zone_params.get_id();
-  auto& zone_name = zone_params.get_name();
-
-  // check for duplicate zone name on insert
-  if (!zones.count(zone_id)) {
-    for (const auto& zone : zones) {
-      if (zone.second.name == zone_name) {
-        ldpp_dout(dpp, 0) << "ERROR: found existing zone name " << zone_name
-            << " (" << zone.first << ") in zonegroup " << get_name() << dendl;
-        return -EEXIST;
-      }
-    }
-  }
-
-  if (is_master) {
-    if (*is_master) {
-      if (!master_zone.empty() && master_zone != zone_id) {
-        ldpp_dout(dpp, 0) << "NOTICE: overriding master zone: " << master_zone << dendl;
-      }
-      master_zone = zone_id;
-    } else if (master_zone == zone_id) {
-      master_zone.clear();
-    }
-  }
-
-  RGWZone& zone = zones[zone_id];
-  zone.name = zone_name;
-  zone.id = zone_id;
-  if (!endpoints.empty()) {
-    zone.endpoints = endpoints;
-  }
-  if (read_only) {
-    zone.read_only = *read_only;
-  }
-  if (ptier_type) {
-    zone.tier_type = *ptier_type;
-    if (!sync_mgr->get_module(*ptier_type, nullptr)) {
-      ldpp_dout(dpp, 0) << "ERROR: could not found sync module: " << *ptier_type 
-                    << ",  valid sync modules: " 
-                    << sync_mgr->get_registered_module_names()
-                    << dendl;
-      return -ENOENT;
-    }
-  }
-
-  if (psync_from_all) {
-    zone.sync_from_all = *psync_from_all;
-  }
-
-  if (predirect_zone) {
-    zone.redirect_zone = *predirect_zone;
-  }
-
-  if (bucket_index_max_shards) {
-    zone.bucket_index_max_shards = *bucket_index_max_shards;
-  }
-
-  for (auto add : sync_from) {
-    zone.sync_from.insert(add);
-  }
-
-  for (auto rm : sync_from_rm) {
-    zone.sync_from.erase(rm);
-  }
-
-  zone.supported_features.insert(enable_features.begin(),
-                                 enable_features.end());
-
-  for (const auto& feature : disable_features) {
-    if (enabled_features.contains(feature)) {
-      lderr(cct) << "ERROR: Cannot disable zone feature \"" << feature
-          << "\" until it's been disabled in zonegroup " << name << dendl;
-      return -EINVAL;
-    }
-    auto i = zone.supported_features.find(feature);
-    if (i == zone.supported_features.end()) {
-      ldout(cct, 1) << "WARNING: zone feature \"" << feature
-          << "\" was not enabled in zone " << zone.name << dendl;
-      continue;
-    }
-    zone.supported_features.erase(i);
-  }
-
-  post_process_params(dpp, y);
-
-  return update(dpp,y);
-}
-
-
-int RGWZoneGroup::rename_zone(const DoutPrefixProvider *dpp, 
-                              const RGWZoneParams& zone_params,
-			      optional_yield y)
-{
-  RGWZone& zone = zones[zone_params.get_id()];
-  zone.name = zone_params.get_name();
-
-  return update(dpp, y);
-}
-
-void RGWZoneGroup::post_process_params(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  bool log_data = zones.size() > 1;
-
-  if (master_zone.empty()) {
-    auto iter = zones.begin();
-    if (iter != zones.end()) {
-      master_zone = iter->first;
-    }
-  }
-  
-  for (auto& item : zones) {
-    RGWZone& zone = item.second;
-    zone.log_data = log_data;
-
-    RGWZoneParams zone_params(zone.id, zone.name);
-    int ret = zone_params.init(dpp, cct, sysobj_svc, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "WARNING: could not read zone params for zone id=" << zone.id << " name=" << zone.name << dendl;
-      continue;
-    }
-
-    for (auto& pitem : zone_params.placement_pools) {
-      const string& placement_name = pitem.first;
-      if (placement_targets.find(placement_name) == placement_targets.end()) {
-        RGWZoneGroupPlacementTarget placement_target;
-        placement_target.name = placement_name;
-        placement_targets[placement_name] = placement_target;
-      }
-    }
-  }
-
-  if (default_placement.empty() && !placement_targets.empty()) {
-    default_placement.init(placement_targets.begin()->first, RGW_STORAGE_CLASS_STANDARD);
-  }
-}
-
-int RGWZoneGroup::remove_zone(const DoutPrefixProvider *dpp, const std::string& zone_id, optional_yield y)
-{
-  auto iter = zones.find(zone_id);
-  if (iter == zones.end()) {
-    ldpp_dout(dpp, 0) << "zone id " << zone_id << " is not a part of zonegroup "
-        << name << dendl;
-    return -ENOENT;
-  }
-
-  zones.erase(iter);
-
-  post_process_params(dpp, y);
-
-  return update(dpp, y);
-}
-
 void RGWDefaultSystemMetaObjInfo::dump(Formatter *f) const {
   encode_json("default_id", default_id, f);
 }
 
 void RGWDefaultSystemMetaObjInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("default_id", default_id, obj);
-}
-
-int RGWSystemMetaObj::rename(const DoutPrefixProvider *dpp, const string& new_name, optional_yield y)
-{
-  string new_id;
-  int ret = read_id(dpp, new_name, new_id, y);
-  if (!ret) {
-    return -EEXIST;
-  }
-  if (ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 0) << "Error read_id " << new_name << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  string old_name = name;
-  name = new_name;
-  ret = update(dpp, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "Error storing new obj info " << new_name << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  ret = store_name(dpp, true, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "Error storing new name " << new_name << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  /* delete old name */
-  rgw_pool pool(get_pool(cct));
-  string oid = get_names_oid_prefix() + old_name;
-  rgw_raw_obj old_name_obj(pool, oid);
-  auto sysobj = sysobj_svc->get_obj(old_name_obj);
-  ret = sysobj.wop().remove(dpp, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "Error delete old obj name  " << old_name << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  return ret;
-}
-
-int RGWSystemMetaObj::read(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  int ret = read_id(dpp, name, id, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return read_info(dpp, id, y);
-}
-
-int RGWZoneParams::create_default(const DoutPrefixProvider *dpp, optional_yield y, bool old_format)
-{
-  name = default_zone_name;
-
-  int r = create(dpp, y);
-  if (r < 0) {
-    return r;
-  }
-
-  if (old_format) {
-    name = id;
-  }
-
-  return r;
 }
 
 const string& RGWZoneParams::get_compression_type(const rgw_placement_rule& placement_rule) const
@@ -704,10 +410,10 @@ int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
                   RGWPeriod& info, std::ostream& error_stream,
                   bool force_if_stale)
 {
-  auto zone_svc = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone; // XXX
-
   ldpp_dout(dpp, 20) << __func__ << " realm " << realm.id
       << " period " << current_period.id << dendl;
+  auto zone_svc = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone; // XXX
+
   // gateway must be in the master zone to commit
   if (info.master_zone != zone_svc->get_zone_params().id) {
     error_stream << "Cannot commit period on zone "
@@ -1370,10 +1076,17 @@ int RGWZoneGroupPlacementTier::update_params(const JSONFormattable& config)
     }
   }
 
-  if (tier_type == "cloud-s3") {
+  if (is_tier_type_s3()) {
     r = t.s3.update_params(config);
   }
 
+  if (config.exists("restore_storage_class")) {
+    restore_storage_class = config["restore_storage_class"];
+  }
+
+  if (is_tier_type_s3_glacier()) {
+    r = s3_glacier.update_params(config);
+  }
   return r;
 }
 
@@ -1389,8 +1102,16 @@ int RGWZoneGroupPlacementTier::clear_params(const JSONFormattable& config)
     read_through_restore_days = DEFAULT_READ_THROUGH_RESTORE_DAYS;
   }
 
-  if (tier_type == "cloud-s3") {
+  if (is_tier_type_s3()) {
     t.s3.clear_params(config);
+  }
+
+  if (config.exists("restore_storage_class")) {
+    restore_storage_class = RGW_STORAGE_CLASS_STANDARD;
+  }
+
+  if (is_tier_type_s3_glacier()) {
+    s3_glacier.clear_params(config);
   }
 
   return 0;
@@ -1505,6 +1226,40 @@ int RGWZoneGroupPlacementTierS3::clear_params(const JSONFormattable& config)
       m.init(cc);
       acl_mappings.erase(m.source_id);
     }
+  }
+  return 0;
+}
+
+int RGWZoneGroupTierS3Glacier::update_params(const JSONFormattable& config)
+{
+  int r = -1;
+
+  if (config.exists("glacier_restore_days")) {
+    r = conf_to_uint64(config, "glacier_restore_days", &glacier_restore_days);
+    if (r < 0) {
+      glacier_restore_days = DEFAULT_GLACIER_RESTORE_DAYS;
+    }
+  }
+  if (config.exists("glacier_restore_tier_type")) {
+    string s;
+    s = config["glacier_restore_tier_type"];
+    if (s != "Expedited") {
+      glacier_restore_tier_type = Standard;
+    } else {
+      glacier_restore_tier_type = Expedited;
+    }
+  }
+  return 0;
+}
+
+int RGWZoneGroupTierS3Glacier::clear_params(const JSONFormattable& config)
+{
+  if (config.exists("glacier_restore_days")) {
+    glacier_restore_days = DEFAULT_GLACIER_RESTORE_DAYS;
+  }
+  if (config.exists("glacier_restore_tier_type")) {
+    /* default */
+    glacier_restore_tier_type = Standard;
   }
   return 0;
 }

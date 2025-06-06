@@ -13,6 +13,7 @@
 #include "common/ostream_temp.h"
 #include "include/interval_set.h"
 #include "crimson/net/Fwd.h"
+#include "messages/MOSDPGPCT.h"
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDOpReply.h"
 #include "os/Transaction.h"
@@ -21,6 +22,7 @@
 #include "crimson/osd/object_context.h"
 #include "osd/PeeringState.h"
 #include "osd/SnapMapper.h"
+#include "osd/DynamicPerfStats.h"
 
 #include "crimson/common/interruptible_future.h"
 #include "crimson/common/log.h"
@@ -64,7 +66,6 @@ namespace crimson::os {
 
 namespace crimson::osd {
 class OpsExecuter;
-class BackfillRecovery;
 class SnapTrimEvent;
 class PglogBasedRecovery;
 
@@ -308,7 +309,7 @@ public:
     LOG_PREFIX(PG::request_remote_recovery_reservation);
     SUBDEBUGDPP(
       osd, "priority {} on_grant {} on_preempt {}",
-      *this, on_grant->get_desc(), on_preempt->get_desc());
+      *this, priority, on_grant->get_desc(), on_preempt->get_desc());
     shard_services.remote_request_reservation(
       orderer,
       pgid,
@@ -477,6 +478,10 @@ public:
     void trim(const pg_log_entry_t &entry) override {
       // TODO
     }
+    void partial_write(pg_info_t *info, const pg_log_entry_t &entry) override {
+      // TODO
+      ceph_assert(entry.written_shards.empty() && info->partial_writes_last_complete.empty());
+    }
   };
   PGLog::LogEntryHandlerRef get_log_handler(
     ceph::os::Transaction &t) final {
@@ -560,6 +565,20 @@ public:
     return peering_state.get_primary();
   }
 
+  eversion_t get_last_complete() const {
+    return peering_state.get_info().last_complete;
+  }
+
+  void complete_write(eversion_t v, eversion_t lc) {
+    peering_state.complete_write(v, lc);
+  }
+
+  void update_peer_last_complete_ondisk(
+    pg_shard_t fromosd,
+    eversion_t lcod) {
+    peering_state.update_peer_last_complete_ondisk(fromosd, lcod);
+  }
+
   /// initialize created PG
   seastar::future<> init(
     int role,
@@ -578,6 +597,38 @@ public:
   void handle_advance_map(cached_map_t next_map, PeeringCtx &rctx);
   void handle_activate_map(PeeringCtx &rctx);
   void handle_initialize(PeeringCtx &rctx);
+
+  void start_split_stats(const std::set<spg_t>& childpgs, std::vector<object_stat_sum_t> *out) {
+    peering_state.start_split_stats(childpgs, out);
+  }
+
+  void finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction &t) {
+    peering_state.finish_split_stats(stats, t);
+  }
+
+  seastar::future<> split_colls(
+    spg_t child,
+    int split_bits,
+    int seed,
+    const pg_pool_t *pool,
+    ObjectStore::Transaction &t) {
+    coll_t target = coll_t(child);
+    create_pg_collection(t, child, split_bits);
+    coll_t parent_coll = coll_ref->get_cid();
+    t.split_collection(
+      parent_coll,
+      split_bits,
+      seed,
+      target);
+    init_pg_ondisk(t, child, pool);
+    return shard_services.get_store().do_transaction(
+      coll_ref, std::move(t));
+  }
+
+  void split_into(pg_t child_pgid, Ref<PG> child, unsigned split_bits) {
+    peering_state.split_into(child_pgid, &child->peering_state, split_bits);
+    child->snap_trimq = snap_trimq;
+  }
 
   static hobject_t get_oid(const hobject_t& hobj);
   static RWState::State get_lock_type(const OpInfo &op_info);
@@ -686,8 +737,9 @@ private:
   interruptible_future<MURef<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
 
 public:
-  interruptible_future<
-    std::tuple<interruptible_future<>, interruptible_future<>>>
+  using rep_op_fut_t = std::tuple<interruptible_future<>,
+                                  interruptible_future<>>;
+  interruptible_future<rep_op_fut_t>
   submit_transaction(
     ObjectContextRef&& obc,
     ObjectContextRef&& new_clone,
@@ -718,6 +770,9 @@ public:
   ShardServices& get_shard_services() final {
     return shard_services;
   }
+  DoutPrefixProvider& get_dpp() final {
+    return *this;
+  }
   seastar::future<> stop();
 private:
   class C_PG_FinishRecovery : public Context {
@@ -732,10 +787,15 @@ private:
   std::unique_ptr<PGRecovery> recovery_handler;
   C_PG_FinishRecovery *recovery_finisher;
 
-  PeeringState peering_state;
   eversion_t projected_last_update;
 
 public:
+  PeeringState peering_state;
+
+  interruptible_future<bool> do_recover_missing(
+    const hobject_t& soid,
+    const osd_reqid_t& reqid);
+
   // scrub state
 
   friend class ScrubScan;
@@ -765,8 +825,25 @@ public:
 
 private:
   std::optional<pg_stat_t> pg_stats;
+  DynamicPerfStats dp_stats;
 
 public:
+  void add_client_request_lat(
+    const ClientRequest& req,
+    size_t inb,
+    size_t outb,
+    const utime_t &lat) {
+    if (dp_stats.is_enabled()) {
+      dp_stats.add(pg_whoami.osd, get_info(), req, inb, outb, lat);
+    }
+  }
+  void set_dynamic_perf_stats_queries(
+    const std::list<OSDPerfMetricQuery> &queries) {
+    dp_stats.set_queries(queries);
+  }
+  void get_dynamic_perf_stats(DynamicPerfStats *stats) {
+    std::swap(dp_stats, *stats);
+  }
   OSDriver &get_osdriver() final {
     return osdriver;
   }
@@ -892,7 +969,7 @@ private:
   friend class RepRequest;
   friend class LogMissingRequest;
   friend class LogMissingRequestReply;
-  friend class BackfillRecovery;
+  friend class PGPCTRequest;
   friend struct PGFacade;
   friend class InternalClientRequest;
   friend class WatchTimeoutRequest;
@@ -921,6 +998,10 @@ private:
       !peering_state.get_missing_loc().readable_with_acting(
 	oid, get_actingset(), v);
   }
+
+  // check if any head or clone of this object is missing
+  bool is_missing_head_and_clones(const hobject_t &hoid);
+
   bool is_missing_on_peer(
     const pg_shard_t &peer,
     const hobject_t &soid) const {

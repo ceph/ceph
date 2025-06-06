@@ -14,7 +14,6 @@
 
 #include "crypto/openssl/openssl_crypto_accel.h"
 #include <openssl/evp.h>
-#include <openssl/engine.h>
 #include "common/debug.h"
 
 // -----------------------------------------------------------------------------

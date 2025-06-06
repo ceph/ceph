@@ -3,7 +3,9 @@
 
 #include "include/random.h"
 #include "include/Context.h"
+#include "common/async/spawn_throttle.h"
 #include "common/errno.h"
+#include "common/error_code.h"
 
 #include "rgw_cache.h"
 #include "svc_notify.h"
@@ -12,17 +14,13 @@
 
 #include "rgw_zone.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
 
 static string notify_oid_prefix = "notify";
-
-RGWSI_Notify::~RGWSI_Notify()
-{
-  shutdown();
-}
-
 
 class RGWWatcher : public DoutPrefixProvider , public librados::WatchCtx2 {
   CephContext *cct;
@@ -30,9 +28,8 @@ class RGWWatcher : public DoutPrefixProvider , public librados::WatchCtx2 {
   int index;
   rgw_rados_ref obj;
   uint64_t watch_handle;
-  int register_ret{0};
   bool unregister_done{false};
-  librados::AioCompletion *register_completion{nullptr};
+  uint64_t retries = 0;
 
   class C_ReinitWatch : public Context {
     RGWWatcher *watcher;
@@ -50,8 +47,11 @@ class RGWWatcher : public DoutPrefixProvider , public librados::WatchCtx2 {
   }
 
 public:
-  RGWWatcher(CephContext *_cct, RGWSI_Notify *s, int i, rgw_rados_ref& o)
-    : cct(_cct), svc(s), index(i), obj(o), watch_handle(0) {}
+  RGWWatcher(CephContext *_cct, RGWSI_Notify *s, int i, rgw_rados_ref o)
+    : cct(_cct), svc(s), index(i), obj(std::move(o)), watch_handle(0) {}
+
+  rgw_rados_ref& get_obj() { return obj; }
+
   void handle_notify(uint64_t notify_id,
 		     uint64_t cookie,
 		     uint64_t notifier_id,
@@ -86,22 +86,35 @@ public:
   }
 
   void reinit() {
+    if (retries > 100) {
+      lderr(cct) << "ERROR: Looping in attempt to reinit watch. Halting."
+		 << dendl;
+      abort();
+    }
     if(!unregister_done) {
-      int ret = unregister_watch();
+      int ret = unregister_watch(null_yield);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: unregister_watch() returned ret=" << ret << dendl;
+	if (-2 == ret) {
+	  // Going down there is no such watch.
+	  return;
+	} else {
+	  ++retries;
+	  svc->schedule_context(new C_ReinitWatch(this));
+	}
       }
     }
-    int ret = register_watch();
+    int ret = register_watch(null_yield);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: register_watch() returned ret=" << ret << dendl;
+      ++retries;
       svc->schedule_context(new C_ReinitWatch(this));
       return;
     }
   }
 
-  int unregister_watch() {
-    int r = svc->unwatch(obj, watch_handle);
+  int unregister_watch(optional_yield y) {
+    int r = svc->unwatch(this, obj, watch_handle, y);
     unregister_done = true;
     if (r < 0) {
       return r;
@@ -110,41 +123,8 @@ public:
     return 0;
   }
 
-  int register_watch_async() {
-    if (register_completion) {
-      register_completion->release();
-      register_completion = nullptr;
-    }
-    register_completion = librados::Rados::aio_create_completion(nullptr, nullptr);
-    register_ret = obj.aio_watch(register_completion, &watch_handle, this);
-    if (register_ret < 0) {
-      register_completion->release();
-      return register_ret;
-    }
-    return 0;
-  }
-
-  int register_watch_finish() {
-    if (register_ret < 0) {
-      return register_ret;
-    }
-    if (!register_completion) {
-      return -EINVAL;
-    }
-    register_completion->wait_for_complete();
-    int r = register_completion->get_return_value();
-    register_completion->release();
-    register_completion = nullptr;
-    if (r < 0) {
-      return r;
-    }
-    svc->add_watcher(index);
-    unregister_done = false;
-    return 0;
-  }
-
-  int register_watch() {
-    int r = obj.watch(&watch_handle, this);
+  int register_watch(optional_yield y) {
+    int r = obj.watch(this, &watch_handle, this, y);
     if (r < 0) {
       return r;
     }
@@ -154,6 +134,11 @@ public:
   }
 };
 
+RGWSI_Notify::RGWSI_Notify(CephContext *cct) : RGWServiceInstance(cct) {}
+RGWSI_Notify::~RGWSI_Notify()
+{
+  shutdown();
+}
 
 class RGWSI_Notify_ShutdownCB : public RGWSI_Finisher::ShutdownCB
 {
@@ -179,7 +164,7 @@ rgw_rados_ref RGWSI_Notify::pick_control_obj(const string& key)
   uint32_t r = ceph_str_hash_linux(key.c_str(), key.size());
 
   int i = r % num_watchers;
-  return notify_objs[i];
+  return watchers[i].get_obj();
 }
 
 int RGWSI_Notify::init_watch(const DoutPrefixProvider *dpp, optional_yield y)
@@ -191,11 +176,10 @@ int RGWSI_Notify::init_watch(const DoutPrefixProvider *dpp, optional_yield y)
   if (num_watchers <= 0)
     num_watchers = 1;
 
-  watchers = new RGWWatcher *[num_watchers];
-
-  int error = 0;
-
-  notify_objs.resize(num_watchers);
+  const size_t max_aio = cct->_conf.get_val<int64_t>("rgw_max_control_aio");
+  auto throttle = ceph::async::spawn_throttle{
+      y, max_aio, ceph::async::cancel_on_error::all};
+  watchers.reserve(num_watchers);
 
   for (int i=0; i < num_watchers; i++) {
     string notify_oid;
@@ -206,44 +190,41 @@ int RGWSI_Notify::init_watch(const DoutPrefixProvider *dpp, optional_yield y)
       notify_oid = notify_oid_prefix;
     }
 
+    rgw_rados_ref notify_obj;
     int r = rgw_get_rados_ref(dpp, rados, { control_pool, notify_oid },
-			      &notify_objs[i]);
+			      &notify_obj);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: notify_obj.open() returned r=" << r << dendl;
       return r;
     }
-    auto& notify_obj = notify_objs[i];
+    auto& watcher = watchers.emplace_back(cct, this, i, std::move(notify_obj));
 
-    librados::ObjectWriteOperation op;
-    op.create(false);
+    try {
+      throttle.spawn([dpp, &watcher] (boost::asio::yield_context yield) {
+            // create the object if it doesn't exist
+            librados::ObjectWriteOperation op;
+            op.create(false);
 
-    r = notify_obj.operate(dpp, &op, y);
-    if (r < 0 && r != -EEXIST) {
-      ldpp_dout(dpp, 0) << "ERROR: notify_obj.operate() returned r=" << r << dendl;
-      return r;
+            int r = watcher.get_obj().operate(dpp, std::move(op), yield);
+            if (r < 0 && r != -EEXIST) {
+              ldpp_dout(dpp, 0) << "ERROR: notify_obj.operate() returned r=" << r << dendl;
+              throw boost::system::system_error(ceph::to_error_code(r));
+            }
+
+            r = watcher.register_watch(yield);
+            if (r < 0) {
+              throw boost::system::system_error(ceph::to_error_code(r));
+            }
+          });
+    } catch (const boost::system::system_error& e) {
+      return ceph::from_error_code(e.code());
     }
+  } // for num_watchers
 
-    RGWWatcher *watcher = new RGWWatcher(cct, this, i, notify_obj);
-    watchers[i] = watcher;
-
-    r = watcher->register_watch_async();
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "WARNING: register_watch_aio() returned " << r << dendl;
-      error = r;
-      continue;
-    }
-  }
-
-  for (int i = 0; i < num_watchers; ++i) {
-    int r = watchers[i]->register_watch_finish();
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "WARNING: async watch returned " << r << dendl;
-      error = r;
-    }
-  }
-
-  if (error < 0) {
-    return error;
+  try {
+    throttle.wait();
+  } catch (const boost::system::system_error& e) {
+    return ceph::from_error_code(e.code());
   }
 
   return 0;
@@ -251,14 +232,20 @@ int RGWSI_Notify::init_watch(const DoutPrefixProvider *dpp, optional_yield y)
 
 void RGWSI_Notify::finalize_watch()
 {
+  const size_t max_aio = cct->_conf.get_val<int64_t>("rgw_max_control_aio");
+  auto throttle = ceph::async::spawn_throttle{
+      null_yield, max_aio, ceph::async::cancel_on_error::all};
   for (int i = 0; i < num_watchers; i++) {
-    RGWWatcher *watcher = watchers[i];
-    if (watchers_set.find(i) != watchers_set.end())
-      watcher->unregister_watch();
-    delete watcher;
+    if (!watchers_set.contains(i)) {
+      continue;
+    }
+    throttle.spawn([&watcher = watchers[i]] (boost::asio::yield_context yield) {
+          std::ignore = watcher.unregister_watch(yield);
+        });
   }
+  throttle.wait();
 
-  delete[] watchers;
+  watchers.clear();
 }
 
 int RGWSI_Notify::do_start(optional_yield y, const DoutPrefixProvider *dpp)
@@ -311,9 +298,10 @@ void RGWSI_Notify::shutdown()
   finalized = true;
 }
 
-int RGWSI_Notify::unwatch(rgw_rados_ref& obj, uint64_t watch_handle)
+int RGWSI_Notify::unwatch(const DoutPrefixProvider* dpp, rgw_rados_ref& obj,
+                          uint64_t handle, optional_yield y)
 {
-  int r = obj.unwatch(watch_handle);
+  int r = obj.unwatch(dpp, handle, y);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: rados->unwatch2() returned r=" << r << dendl;
     return r;

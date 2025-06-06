@@ -2,9 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "Replayer.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
+#include "common/perf_counters_collection.h"
 #include "common/perf_counters_key.h"
 #include "include/stringify.h"
 #include "common/Timer.h"
@@ -33,7 +35,9 @@
 #include "tools/rbd_mirror/image_replayer/snapshot/ApplyImageStateRequest.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/StateBuilder.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/Utils.h"
+
 #include <set>
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror

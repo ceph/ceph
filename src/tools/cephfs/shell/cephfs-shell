@@ -1664,6 +1664,22 @@ class CephFSShell(Cmd):
         except libcephfs.Error as e:
             set_exit_code_msg(msg=e)
 
+    removexattr_parser = argparse.ArgumentParser(
+        description='Remove extended attribute set for a file')
+    removexattr_parser.add_argument('path', type=str, action=path_to_bytes,
+                                    help='Name of the file')
+    removexattr_parser.add_argument('name', type=str, help='Extended attribute name')
+
+    @with_argparser(removexattr_parser)
+    def do_removexattr(self, args):
+        """
+        Remove extended attribute for a file
+        """
+        try:
+            poutput('{}'.format(cephfs.removexattr(args.path, to_bytes(args.name))))
+        except libcephfs.Error as e:
+            set_exit_code_msg(msg=e)
+
 
 #######################################################
 #

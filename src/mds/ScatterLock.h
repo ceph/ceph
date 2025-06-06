@@ -18,7 +18,9 @@
 
 #include "SimpleLock.h"
 
-#include "MDSContext.h"
+#include "include/xlist.h"
+
+class MDSContext;
 
 class ScatterLock : public SimpleLock {
 public:
@@ -171,7 +173,7 @@ public:
     encode(s, bl);
   }
 
-  void decode_state_rejoin(ceph::buffer::list::const_iterator& p, MDSContext::vec& waiters, bool survivor) {
+  void decode_state_rejoin(ceph::buffer::list::const_iterator& p, std::vector<MDSContext*>& waiters, bool survivor) {
     SimpleLock::decode_state_rejoin(p, waiters, survivor);
     if (is_flushing()) {
       set_dirty();

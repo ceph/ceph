@@ -12,6 +12,7 @@
 #include "rgw_cr_rest.h"
 #include "rgw_rest_conn.h"
 #include "rgw_rados.h"
+#include "rgw_data_sync.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
@@ -437,7 +438,7 @@ RGWRadosRemoveCR::RGWRadosRemoveCR(rgw::sal::RadosStore* store, const rgw_raw_ob
 int RGWRadosRemoveCR::send_request(const DoutPrefixProvider *dpp)
 {
   auto rados = store->getRados()->get_rados_handle();
-  int r = rados->ioctx_create(obj.pool.name.c_str(), ioctx);
+  int r = rgw_init_ioctx(dpp, rados, obj.pool, ioctx);
   if (r < 0) {
     lderr(cct) << "ERROR: failed to open pool (" << obj.pool.name << ") ret=" << r << dendl;
     return r;
@@ -674,6 +675,18 @@ int RGWAsyncPutBucketInstanceInfo::_send_request(const DoutPrefixProvider *dpp)
   return 0;
 }
 
+int RGWAsyncRemoveBucketInstanceInfo::_send_request(const DoutPrefixProvider *dpp)
+{
+  auto r = store->ctl()->bucket->remove_bucket_instance_info(bucket, bucket_info,
+						       null_yield, dpp);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to remove bucket instance info for "
+		      << bucket_info.bucket << dendl;
+    return r;
+  }
+  return 0;
+}
+
 RGWRadosBILogTrimCR::RGWRadosBILogTrimCR(
   const DoutPrefixProvider *dpp,
   rgw::sal::RadosStore* store,
@@ -704,6 +717,7 @@ int RGWRadosBILogTrimCR::send_request(const DoutPrefixProvider *dpp)
   encode(call, in);
 
   librados::ObjectWriteOperation op;
+  op.assert_exists();
   op.exec(RGW_CLASS, RGW_BI_LOG_TRIM, in);
 
   cn = stack->create_completion_notifier();
@@ -799,7 +813,8 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
   std::optional<uint64_t> bytes_transferred;
   const req_context rctx{dpp, null_yield, nullptr};
   int r = store->getRados()->fetch_remote_obj(obj_ctx,
-                       user_id.value_or(rgw_user()),
+                       NULL, /* uid */
+                       user_id ? &*user_id : nullptr, /* replication uid */
                        NULL, /* req_info */
                        source_zone,
                        dest_obj.get_obj(),
@@ -830,7 +845,8 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                        stat_dest_obj,
                        source_trace_entry,
                        &zones_trace,
-                       &bytes_transferred);
+                       &bytes_transferred,
+                       keep_tags);
 
   if (r < 0) {
     ldpp_dout(dpp, 0) << "store->fetch_remote_obj() returned r=" << r << dendl;
@@ -860,7 +876,6 @@ int RGWAsyncStatRemoteObj::_send_request(const DoutPrefixProvider *dpp)
 {
   RGWObjectCtx obj_ctx(store);
 
-  string user_id;
   char buf[16];
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->getRados()->instance_id());
 
@@ -869,7 +884,7 @@ int RGWAsyncStatRemoteObj::_send_request(const DoutPrefixProvider *dpp)
 
   int r = store->getRados()->stat_remote_obj(dpp,
                        obj_ctx,
-                       rgw_user(user_id),
+                       nullptr, /* user_id */
                        nullptr, /* req_info */
                        source_zone,
                        src_obj,
@@ -898,7 +913,7 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
 {
   ldpp_dout(dpp, 0) << __func__ << "(): deleting obj=" << obj << dendl;
 
-  obj->set_atomic();
+  obj->set_atomic(true);
 
   int ret = obj->load_obj_state(dpp, null_yield);
   if (ret < 0) {
@@ -912,9 +927,55 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
     return 0;
   }
 
-  RGWAccessControlPolicy policy;
+  RGWObjTags obj_tags;
+  bufferlist bl_tag;
+  if (obj->get_attr(RGW_ATTR_TAGS, bl_tag)) {
+    auto bliter = bl_tag.cbegin();
+    try {
+      obj_tags.decode(bliter);
+    } catch (buffer::error &err) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": caught buffer::error couldn't decode TagSet " << dendl;
+      return -EIO;
+    }
+  }
+
+  rgw_sync_pipe_params params;
+  if (!sync_pipe.info.handler.find_obj_params(obj->get_key(),
+                                              obj_tags.get_tags(),
+                                              &params)) {
+    return -ERR_PRECONDITION_FAILED;
+  }
+
+  if (params.mode == rgw_sync_pipe_params::MODE_USER) {
+    std::optional<RGWUserPermHandler> user_perms;
+    RGWUserPermHandler::Bucket dest_bucket_perms;
+
+    if (!params.user.has_value()) {
+      ldpp_dout(dpp, 20) << "ERROR: " << __func__ << ": user level sync but user param not set" << dendl;
+      return -EPERM;
+    }
+    user_perms.emplace(dpp, store, dpp->get_cct(), *params.user);
+
+    ret = user_perms->init();
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to init user perms for uid=" << *params.user << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    ret = user_perms->init_bucket(sync_pipe.dest_bucket_info, sync_pipe.dest_bucket_attrs, &dest_bucket_perms);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to init bucket perms for uid=" << *params.user << " bucket=" << bucket->get_key() << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    if (!dest_bucket_perms.verify_bucket_permission(obj->get_key(), rgw::IAM::s3ReplicateDelete)) {
+      ldpp_dout(dpp, 20) << "ERROR: " << __func__ << ": user does not have permission to delete object" << dendl;
+      return -EPERM;
+    }
+  }
 
   /* decode policy */
+  RGWAccessControlPolicy policy;
   bufferlist bl;
   if (obj->get_attr(RGW_ATTR_ACL, bl)) {
     auto bliter = bl.cbegin();
@@ -1002,7 +1063,7 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
 }
 
 RGWRadosTimelogAddCR::RGWRadosTimelogAddCR(const DoutPrefixProvider *_dpp, rgw::sal::RadosStore* _store, const string& _oid,
-                      const cls_log_entry& entry) : RGWSimpleCoroutine(_store->ctx()),
+                      const cls::log::entry& entry) : RGWSimpleCoroutine(_store->ctx()),
                                                 dpp(_dpp),
                                                 store(_store),
                                                 oid(_oid), cn(NULL)
@@ -1188,6 +1249,59 @@ int RGWDataPostNotifyCR::operate(const DoutPrefixProvider* dpp)
     if (retcode < 0) {
       return set_cr_error(retcode);
     }
+    return set_cr_done();
+  }
+  return 0;
+}
+  
+RGWStatRemoteBucketCR::RGWStatRemoteBucketCR(const DoutPrefixProvider *dpp,
+				    rgw::sal::RadosStore* const store,
+            const rgw_zone_id source_zone,
+            const rgw_bucket& bucket,
+            RGWHTTPManager* http,
+            std::vector<rgw_zone_id> zids,
+            std::vector<bucket_unordered_list_result>& peer_result)
+      : RGWCoroutine(store->ctx()), dpp(dpp), store(store),
+      source_zone(source_zone), bucket(bucket), http(http),
+      zids(std::move(zids)), peer_result(peer_result) {}
+  
+int RGWStatRemoteBucketCR::operate(const DoutPrefixProvider *dpp) {
+  reenter(this) {
+    yield {
+      auto result = peer_result.begin();
+      for (auto& zid : zids) {
+        auto& zone_conn_map = store->getRados()->svc.zone->get_zone_conn_map();
+        auto ziter = zone_conn_map.find(zid);
+        if (ziter == zone_conn_map.end()) {
+          ldpp_dout(dpp, 0) << "WARNING: no connection to zone " << ziter->first << dendl;
+          continue;
+        }
+        ldpp_dout(dpp, 20) << "query bucket from: " << ziter->first << dendl;
+        RGWRESTConn *conn = ziter->second;
+
+        rgw_http_param_pair pairs[] = { { "versions" , NULL },
+					{ "format" , "json" },
+					{ "objs-container" , "true" },
+          { "max-keys", "1" },
+          { "allow-unordered", "true"},
+          { "key-marker" , NULL },
+					{ "version-id-marker" , NULL },
+	                                { NULL, NULL } };
+        string p = string("/") + bucket.get_key(':', 0);
+        spawn(new RGWReadRESTResourceCR<bucket_unordered_list_result>(store->ctx(), &*conn, &*http, p, pairs, &*result), false);
+        ++result;
+      }
+    }
+
+    while (num_spawned()) {
+      yield wait_for_child();
+      collect(&child_ret, nullptr);
+      if (child_ret < 0) {
+        drain_all();
+        return set_cr_error(child_ret);
+      }
+    }
+
     return set_cr_done();
   }
   return 0;

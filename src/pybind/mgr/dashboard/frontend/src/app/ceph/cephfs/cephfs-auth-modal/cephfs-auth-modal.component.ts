@@ -83,6 +83,11 @@ export class CephfsAuthModalComponent extends CdForm implements OnInit, AfterVie
     this.directoryStore.loadDirectories(this.id, '/', 3);
     this.createForm();
     this.loadingReady();
+    if (this.directoryStore?.isLoading) {
+      this.form.get('directory').disable();
+    } else {
+      this.form.get('directory').disable();
+    }
   }
 
   createForm() {

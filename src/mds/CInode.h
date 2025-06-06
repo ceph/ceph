@@ -18,43 +18,50 @@
 #include <list>
 #include <map>
 #include <set>
+#include <sstream>
 #include <string_view>
+#include <vector>
 
 #include "common/config.h"
-#include "common/RefCountedObj.h"
+#include "common/ref.h" // for cref_t
 #include "include/compat.h"
+#include "include/Context.h" // for C_GatherBuilder
 #include "include/counter.h"
 #include "include/elist.h"
+#include "include/filepath.h"
 #include "include/types.h"
-#include "include/lru.h"
 #include "include/compact_set.h"
 
 #include "MDSCacheObject.h"
-#include "MDSContext.h"
 #include "flock.h"
+#include "inode_backtrace.h" // for inode_backtrace_t
 
-#include "BatchOp.h"
-#include "CDentry.h"
+#include "ScrubHeader.h"
 #include "SimpleLock.h"
 #include "ScatterLock.h"
 #include "LocalLockC.h"
 #include "Capability.h"
-#include "SnapRealm.h"
-#include "Mutation.h"
 
-#include "messages/MClientCaps.h"
+#include <boost/intrusive_ptr.hpp>
 
-#define dout_context g_ceph_context
-
+struct sr_t;
+class BatchOp;
 class Context;
+class CDentry;
 class CDir;
 class CInode;
 class MDCache;
+class MDSContext;
 class LogSegment;
 struct SnapRealm;
 class Session;
 struct ObjectOperation;
 class EMetaBlob;
+class MClientCaps;
+struct MutationImpl;
+struct MDRequestImpl;
+typedef boost::intrusive_ptr<MutationImpl> MutationRef;
+typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;
 
 struct cinode_lock_info_t {
   int lock;
@@ -66,8 +73,8 @@ public:
   CInodeCommitOperation(int prio, int64_t po)
     : pool(po), priority(prio) {
   }
-  CInodeCommitOperation(int prio, int64_t po, file_layout_t l, uint64_t f, std::string_view s)
-    : pool(po), priority(prio), _layout(l), _features(f), _symlink(s) {
+  CInodeCommitOperation(int prio, int64_t po, file_layout_t l, uint64_t f, std::string_view s, inodeno_t ri)
+    : pool(po), priority(prio), _layout(l), _features(f), _symlink(s), remote_inode(ri) {
       update_layout_symlink = true;
   }
 
@@ -81,6 +88,7 @@ private:
   file_layout_t _layout;
   uint64_t _features;
   std::string_view _symlink;
+  inodeno_t remote_inode;     // real inode of the referent inode
 };
 
 struct CInodeCommitOperations {
@@ -409,16 +417,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   // ---------------------------
   CInode() = delete;
   CInode(MDCache *c, bool auth=true, snapid_t f=2, snapid_t l=CEPH_NOSNAP);
-  ~CInode() override {
-    close_dirfrags();
-    close_snaprealm();
-    clear_file_locks();
-    ceph_assert(num_projected_srnodes == 0);
-    ceph_assert(num_caps_notable == 0);
-    ceph_assert(num_subtree_roots == 0);
-    ceph_assert(num_exporting_dirs == 0);
-    ceph_assert(batch_ops.empty());
-  }
+  ~CInode() override;
 
   std::map<int, std::unique_ptr<BatchOp>> batch_ops;
 
@@ -651,8 +650,10 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   // -- accessors --
 
   inodeno_t ino() const { return get_inode()->ino; }
+  inodeno_t get_remote_ino() const { return get_inode()->remote_ino; }
   vinodeno_t vino() const { return vinodeno_t(ino(), last); }
   int d_type() const { return IFTODT(get_inode()->mode); }
+  bool is_referent_remote() const { return get_remote_ino() != 0; }
   bool is_root() const { return ino() == CEPH_INO_ROOT; }
   bool is_stray() const { return MDS_INO_IS_STRAY(ino()); }
   mds_rank_t get_stray_owner() const {
@@ -667,9 +668,12 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_symlink() const { return get_inode()->is_symlink(); }
   bool is_dir() const     { return get_inode()->is_dir(); }
   bool is_quiesced() const;
-  bool will_block_for_quiesce(const MDRequestRef& mdr = MDRequestRef {});
+  bool will_block_for_quiesce(const MDRequestRef& mdr);
 
   bool is_head() const { return last == CEPH_NOSNAP; }
+
+  // set remote inode
+  void set_remote_ino(inodeno_t ino) { _get_inode()->remote_ino = ino; }
 
   // note: this overloads MDSCacheObject
   bool is_ambiguous_auth() const {
@@ -679,7 +683,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void set_ambiguous_auth() {
     state_set(STATE_AMBIGUOUSAUTH);
   }
-  void clear_ambiguous_auth(MDSContext::vec& finished);
+  void clear_ambiguous_auth(std::vector<MDSContext*>& finished);
   void clear_ambiguous_auth();
 
   const inode_const_ptr& get_inode() const {
@@ -773,12 +777,12 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void decode_store(ceph::buffer::list::const_iterator& bl);
 
   void add_dir_waiter(frag_t fg, MDSContext *c);
-  void take_dir_waiting(frag_t fg, MDSContext::vec& ls);
+  void take_dir_waiting(frag_t fg, std::vector<MDSContext*>& ls);
   bool is_waiting_for_dir(frag_t fg) {
     return waiting_on_dir.count(fg);
   }
   void add_waiter(uint64_t tag, MDSContext *c) override;
-  void take_waiting(uint64_t tag, MDSContext::vec& ls) override;
+  void take_waiting(uint64_t tag, std::vector<MDSContext*>& ls) override;
 
   // -- encode/decode helpers --
   void _encode_base(ceph::buffer::list& bl, uint64_t features);
@@ -788,7 +792,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void _encode_locks_state_for_replica(ceph::buffer::list& bl, bool need_recover);
   void _encode_locks_state_for_rejoin(ceph::buffer::list& bl, int rep);
   void _decode_locks_state_for_replica(ceph::buffer::list::const_iterator& p, bool is_new);
-  void _decode_locks_rejoin(ceph::buffer::list::const_iterator& p, MDSContext::vec& waiters,
+  void _decode_locks_rejoin(ceph::buffer::list::const_iterator& p, std::vector<MDSContext*>& waiters,
 			    std::list<SimpleLock*>& eval_locks, bool survivor);
 
   // -- import/export --
@@ -953,34 +957,15 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   /* Freeze the inode. auth_pin_allowance lets the caller account for any
    * auth_pins it is itself holding/responsible for. */
   bool freeze_inode(int auth_pin_allowance=0);
-  void unfreeze_inode(MDSContext::vec& finished);
+  void unfreeze_inode(std::vector<MDSContext*>& finished);
   void unfreeze_inode();
 
   void freeze_auth_pin();
   void unfreeze_auth_pin();
 
   // -- reference counting --
-  void bad_put(int by) override {
-    generic_dout(0) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref
-#ifdef MDS_REF_SET
-		    << " (" << ref_map << ")"
-#endif
-		    << dendl;
-#ifdef MDS_REF_SET
-    ceph_assert(ref_map[by] > 0);
-#endif
-    ceph_assert(ref > 0);
-  }
-  void bad_get(int by) override {
-    generic_dout(0) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref
-#ifdef MDS_REF_SET
-		    << " (" << ref_map << ")"
-#endif
-		    << dendl;
-#ifdef MDS_REF_SET
-    ceph_assert(ref_map[by] >= 0);
-#endif
-  }
+  void bad_put(int by) override;
+  void bad_get(int by) override;
   void first_get() override;
   void last_put() override;
   void _put() override;
@@ -1012,6 +997,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_parent_projected() const {
     return !projected_parent.empty();
   }
+
+  charmap_md_t<mempool::mds_co::pool_allocator> const* get_charmap() const;
 
   mds_rank_t get_export_pin(bool inherit=true) const;
   void check_pin_policy(mds_rank_t target);
@@ -1220,7 +1207,7 @@ protected:
   ceph_lock_state_t *flock_locks = nullptr;
 
   // -- waiting --
-  mempool::mds_co::compact_map<frag_t, MDSContext::vec > waiting_on_dir;
+  mempool::mds_co::compact_map<frag_t, std::vector<MDSContext*>> waiting_on_dir;
 
 
   // -- freezing inode --
@@ -1275,5 +1262,5 @@ std::ostream& operator<<(std::ostream& out, const CInode& in);
 
 extern cinode_lock_info_t cinode_lock_info[];
 extern int num_cinode_locks;
-#undef dout_context
+
 #endif

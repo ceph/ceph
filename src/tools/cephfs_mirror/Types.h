@@ -7,6 +7,7 @@
 #include <set>
 #include <iostream>
 #include <string_view>
+#include <variant>
 
 #include "include/rados/librados.hpp"
 #include "include/cephfs/libcephfs.h"
@@ -17,7 +18,7 @@ namespace mirror {
 
 static const std::string CEPHFS_MIRROR_OBJECT("cephfs_mirror");
 
-typedef boost::variant<bool, uint64_t, std::string> AttributeValue;
+typedef std::variant<bool, uint64_t, std::string> AttributeValue;
 typedef std::map<std::string, AttributeValue> Attributes;
 
 // distinct filesystem identifier

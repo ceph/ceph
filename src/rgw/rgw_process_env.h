@@ -18,6 +18,9 @@ namespace rgw::auth {
 namespace rgw::lua {
   class Background;
 }
+namespace rgw::dedup {
+  class Background;
+}
 namespace rgw::sal {
   class ConfigStore;
   class Driver;
@@ -42,7 +45,7 @@ struct RGWProcessEnv {
   rgw::sal::Driver* driver = nullptr;
   rgw::SiteConfig* site = nullptr;
   RGWREST *rest = nullptr;
-  OpsLogSink *olog = nullptr;
+  std::unique_ptr<OpsLogSink> olog;
   std::unique_ptr<rgw::auth::StrategyRegistry> auth_registry;
   ActiveRateLimiter* ratelimiting = nullptr;
 

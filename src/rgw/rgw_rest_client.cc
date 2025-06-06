@@ -47,7 +47,6 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
   unique_lock guard(out_headers_lock);
 
   char line[len + 1];
-
   char *s = (char *)ptr, *end = (char *)ptr + len;
   char *p = line;
   ldpp_dout(this, 30) << "receive_http_header" << dendl;
@@ -58,22 +57,27 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
       continue;
     }
     if (*s == '\n') {
+      if (p == line) {
+        // End of headers (empty line "\r\n")
+        ldpp_dout(this, 30) << "All headers received" << dendl;
+        return handle_headers(out_headers, http_status);
+      }
       *p = '\0';
-      ldpp_dout(this, 30) << "received header:" << line << dendl;
+      ldpp_dout(this, 30) << "received header: " << line << dendl;
       // TODO: fill whatever data required here
       char *l = line;
       char *tok = strsep(&l, " \t:");
       if (tok && l) {
         while (*l == ' ')
           l++;
- 
+
         if (strcmp(tok, "HTTP") == 0 || strncmp(tok, "HTTP/", 5) == 0) {
           http_status = atoi(l);
           if (http_status == 100) /* 100-continue response */
             continue;
           status = rgw_http_error_to_errno(http_status);
         } else {
-          /* convert header field name to upper case  */
+          /* convert header field name to upper case */
           char *src = tok;
           char buf[len + 1];
           size_t i;
@@ -93,10 +97,12 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
             return r;
         }
       }
+      p = line;
     }
     if (s != end)
       *p++ = *s++;
   }
+
   return 0;
 }
 
@@ -364,7 +370,8 @@ static void scope_from_api_name(const DoutPrefixProvider *dpp,
   }
 }
 
-int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, const req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service)
+auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, const req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service)
+  -> tl::expected<int, int>
 {
 
   string date_str;
@@ -410,7 +417,7 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const R
   int ret = sign_request(dpp, key, region, s, new_env, new_info, nullptr);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to sign request" << dendl;
-    return ret;
+    return tl::unexpected(ret);
   }
 
   if (s == "iam") {
@@ -452,13 +459,11 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const R
   method = new_info.method;
   url = new_url;
 
-  int r = process(dpp, y);
-  if (r < 0){
-    if (r == -EINVAL){
-      // curl_easy has errored, generally means the service is not available
-      r = -ERR_SERVICE_UNAVAILABLE;
-    }
-    return r;
+  std::ignore = process(dpp, y);
+
+  if (http_status == 0) {
+    // no http status, generally means the service is not available
+    return tl::unexpected(-ERR_SERVICE_UNAVAILABLE);
   }
 
   response.append((char)0); /* NULL terminate response */
@@ -467,7 +472,7 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const R
     *outbl = std::move(response);
   }
 
-  return status;
+  return http_status;
 }
 
 class RGWRESTStreamOutCB : public RGWGetDataCB {
@@ -990,6 +995,15 @@ int RGWHTTPStreamRWRequest::complete_request(const DoutPrefixProvider* dpp,
     *pheaders = std::move(out_headers);
   }
   return status;
+}
+
+int RGWHTTPStreamRWRequest::handle_headers(const map<string, string>& headers, int http_status)
+{
+  if (cb) {
+    return cb->handle_headers(headers, http_status);
+  }
+
+  return 0;
 }
 
 int RGWHTTPStreamRWRequest::handle_header(const string& name, const string& val)

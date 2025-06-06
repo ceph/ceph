@@ -19,7 +19,7 @@ describe('ModalService', () => {
   let service: ModalService;
   let ngbModal: NgbModal;
 
-  configureTestBed({ declarations: [MockComponent], imports: [NgbModalModule] }, [MockComponent]);
+  configureTestBed({ declarations: [MockComponent], imports: [NgbModalModule] });
 
   beforeEach(() => {
     service = TestBed.inject(ModalService);

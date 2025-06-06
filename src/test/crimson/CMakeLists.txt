@@ -2,11 +2,10 @@
 add_executable(unittest-crimson-backfill
   test_backfill.cc
   ${PROJECT_SOURCE_DIR}/src/auth/Crypto.cc
-  ${PROJECT_SOURCE_DIR}/src/crimson/osd/backfill_state.cc
-  ${PROJECT_SOURCE_DIR}/src/osd/recovery_types.cc)
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/backfill_state.cc)
 add_ceph_unittest(unittest-crimson-backfill
   --memory 256M --smp 1)
-target_link_libraries(unittest-crimson-backfill crimson GTest::Main)
+target_link_libraries(unittest-crimson-backfill crimson GTest::Main Boost::MPL)
 
 add_executable(unittest-seastar-buffer
   test_buffer.cc)
@@ -111,6 +110,12 @@ target_link_libraries(
 add_ceph_unittest(unittest-seastar-errorator
   --memory 256M --smp 1)
 
+add_executable(unittest-seastar-errorator-abort
+  test_errorator_abort.cc)
+target_link_libraries(
+  unittest-seastar-errorator-abort
+  crimson::gtest)
+
 add_executable(unittest-crimson-coroutine
   test_crimson_coroutine.cc)
 target_link_libraries(
@@ -123,6 +128,7 @@ add_executable(unittest-crimson-scrub
   test_crimson_scrub.cc
   ${PROJECT_SOURCE_DIR}/src/crimson/osd/scrub/scrub_machine.cc
   ${PROJECT_SOURCE_DIR}/src/crimson/osd/scrub/scrub_validator.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ECUtilL.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc)
 target_link_libraries(
   unittest-crimson-scrub

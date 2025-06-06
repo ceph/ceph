@@ -19,8 +19,9 @@
 #include "FSMap.h"
 #include "common/debug.h"
 #include "common/StackStringStream.h"
+#include "common/strtol.h" // for strict_strtoll()
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include "crimson/common/config_proxy.h"
 #else
 #include "common/config_proxy.h"
@@ -664,7 +665,7 @@ void FSMap::decode(bufferlist::const_iterator& p)
   struct_version = 0;
   DECODE_START(STRUCT_VERSION, p);
   DECODE_OLDEST(7);
-  struct_version = struct_v;
+  struct_version = struct_v.v;
   decode(epoch, p);
   decode(next_filesystem_id, p);
   decode(legacy_client_fscid, p);
@@ -737,7 +738,7 @@ int FSMap::parse_filesystem(std::string_view ns_str, Filesystem const** result) 
         return 0;
       }
     }
-    return -CEPHFS_ENOENT;
+    return -ENOENT;
   } else {
     *result = &get_filesystem(fscid);
     return 0;
@@ -1162,7 +1163,7 @@ int FSMap::parse_role(
     if (r >= 0) {
       ss << "Invalid file system";
     }
-    return -CEPHFS_ENOENT;
+    return -ENOENT;
   }
 
   return r;
@@ -1179,14 +1180,14 @@ int FSMap::parse_role(
   if (colon_pos == std::string::npos) {
     if (legacy_client_fscid == FS_CLUSTER_ID_NONE) {
       ss << "No filesystem selected";
-      return -CEPHFS_ENOENT;
+      return -ENOENT;
     }
     fs = &get_filesystem(legacy_client_fscid);
     rank_pos = 0;
   } else {
     if (parse_filesystem(role_str.substr(0, colon_pos), &fs) < 0) {
       ss << "Invalid filesystem";
-      return -CEPHFS_ENOENT;
+      return -ENOENT;
     }
     rank_pos = colon_pos+1;
   }
@@ -1197,14 +1198,14 @@ int FSMap::parse_role(
   long rank_i = strict_strtol(rank_str.c_str(), 10, &err);
   if (rank_i < 0 || !err.empty()) {
     ss << "Invalid rank '" << rank_str << "'";
-    return -CEPHFS_EINVAL;
+    return -EINVAL;
   } else {
     rank = rank_i;
   }
 
   if (fs->mds_map.in.count(rank) == 0) {
     ss << "Rank '" << rank << "' not found";
-    return -CEPHFS_ENOENT;
+    return -ENOENT;
   }
 
   *role = {fs->fscid, rank};

@@ -213,7 +213,7 @@ public:
   OSDMap osdmap;
 
   // config observer
-  const char** get_tracked_conf_keys() const override;
+  std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
     const std::set<std::string> &changed) override;
   // [leader]
@@ -741,6 +741,9 @@ public:
       std::stringstream &ss,
       ceph::Formatter *f);
 
+  int enable_pool_ec_optimizations(pg_pool_t &pool,
+                                   std::stringstream *ss,
+                                   bool enable);
   int prepare_command_pool_set(const cmdmap_t& cmdmap,
                                std::stringstream& ss);
 

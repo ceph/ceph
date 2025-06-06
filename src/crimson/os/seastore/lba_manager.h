@@ -20,6 +20,7 @@
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/lba_mapping.h"
+#include "crimson/os/seastore/logical_child_node.h"
 
 namespace crimson::os::seastore {
 
@@ -44,21 +45,10 @@ public:
    * lba value.
    */
   using get_mappings_iertr = base_iertr;
-  using get_mappings_ret = get_mappings_iertr::future<lba_pin_list_t>;
+  using get_mappings_ret = get_mappings_iertr::future<lba_mapping_list_t>;
   virtual get_mappings_ret get_mappings(
     Transaction &t,
     laddr_t offset, extent_len_t length) = 0;
-
-  /**
-   * Fetches mappings for a list of laddr_t in range [offset, offset + len)
-   *
-   * Future will not resolve until all pins have resolved (set_paddr called)
-   * For indirect lba mappings, get_mappings will always retrieve the original
-   * lba value.
-   */
-  virtual get_mappings_ret get_mappings(
-    Transaction &t,
-    laddr_list_t &&extent_lisk) = 0;
 
   /**
    * Fetches the mapping for laddr_t
@@ -69,7 +59,7 @@ public:
    */
   using get_mapping_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
-  using get_mapping_ret = get_mapping_iertr::future<LBAMappingRef>;
+  using get_mapping_ret = get_mapping_iertr::future<LBAMapping>;
   virtual get_mapping_ret get_mapping(
     Transaction &t,
     laddr_t offset) = 0;
@@ -82,19 +72,19 @@ public:
    * is called on the LBAMapping.
    */
   using alloc_extent_iertr = base_iertr;
-  using alloc_extent_ret = alloc_extent_iertr::future<LBAMappingRef>;
+  using alloc_extent_ret = alloc_extent_iertr::future<LBAMapping>;
   virtual alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
-    LogicalCachedExtent &nextent,
-    extent_ref_count_t refcount = EXTENT_DEFAULT_REF_COUNT) = 0;
+    LogicalChildNode &nextent,
+    extent_ref_count_t refcount) = 0;
 
   using alloc_extents_ret = alloc_extent_iertr::future<
-    std::vector<LBAMappingRef>>;
+    std::vector<LBAMapping>>;
   virtual alloc_extents_ret alloc_extents(
     Transaction &t,
     laddr_t hint,
-    std::vector<LogicalCachedExtentRef> extents,
+    std::vector<LogicalChildNodeRef> extents,
     extent_ref_count_t refcount) = 0;
 
   virtual alloc_extent_ret clone_mapping(
@@ -110,6 +100,7 @@ public:
     extent_len_t len) = 0;
 
   struct ref_update_result_t {
+    laddr_t direct_key;
     extent_ref_count_t refcount = 0;
     pladdr_t addr;
     extent_len_t length = 0;
@@ -119,37 +110,24 @@ public:
   using ref_ret = ref_iertr::future<ref_update_result_t>;
 
   /**
-   * Decrements ref count on extent
+   * Removes a mapping and deal with indirection
    *
    * @return returns resulting refcount
    */
-  virtual ref_ret decref_extent(
+  virtual ref_ret remove_mapping(
     Transaction &t,
     laddr_t addr) = 0;
 
-  /**
-   * Increments ref count on extent
-   *
-   * @return returns resulting refcount
-   */
-  virtual ref_ret incref_extent(
-    Transaction &t,
-    laddr_t addr) = 0;
-
-  struct remap_entry {
+  struct remap_entry_t {
     extent_len_t offset;
     extent_len_t len;
-    remap_entry(extent_len_t _offset, extent_len_t _len) {
+    remap_entry_t(extent_len_t _offset, extent_len_t _len) {
       offset = _offset;
       len = _len;
     }
   };
-  struct lba_remap_ret_t {
-    ref_update_result_t ruret;
-    std::vector<LBAMappingRef> remapped_mappings;
-  };
   using remap_iertr = ref_iertr;
-  using remap_ret = remap_iertr::future<lba_remap_ret_t>;
+  using remap_ret = remap_iertr::future<std::vector<LBAMapping>>;
 
   /**
    * remap_mappings
@@ -159,16 +137,16 @@ public:
    */
   virtual remap_ret remap_mappings(
     Transaction &t,
-    LBAMappingRef orig_mapping,
-    std::vector<remap_entry> remaps,
-    std::vector<LogicalCachedExtentRef> extents  // Required if and only
+    LBAMapping orig_mapping,
+    std::vector<remap_entry_t> remaps,
+    std::vector<LogicalChildNodeRef> extents  // Required if and only
 						 // if pin isn't indirect
     ) = 0;
 
   /**
    * Should be called after replay on each cached extent.
    * Implementation must initialize the LBAMapping on any
-   * LogicalCachedExtent's and may also read in any dependent
+   * LogicalChildNode's and may also read in any dependent
    * structures, etc.
    *
    * @return returns whether the extent is alive
@@ -179,8 +157,10 @@ public:
     Transaction &t,
     CachedExtentRef e) = 0;
 
+#ifdef UNIT_TESTS_BUILT
   using check_child_trackers_ret = base_iertr::future<>;
   virtual check_child_trackers_ret check_child_trackers(Transaction &t) = 0;
+#endif
 
   /**
    * Calls f for each mapping in [begin, end)
@@ -209,7 +189,7 @@ public:
   /**
    * update_mapping
    *
-   * update lba mapping for a delayed allocated extent
+   * update lba mapping for rewrite
    */
   using update_mapping_iertr = base_iertr;
   using update_mapping_ret = base_iertr::future<extent_ref_count_t>;
@@ -218,10 +198,7 @@ public:
     laddr_t laddr,
     extent_len_t prev_len,
     paddr_t prev_addr,
-    extent_len_t len,
-    paddr_t paddr,
-    uint32_t checksum,
-    LogicalCachedExtent *nextent) = 0;
+    LogicalChildNode& nextent) = 0;
 
   /**
    * update_mappings
@@ -230,9 +207,9 @@ public:
    */
   using update_mappings_iertr = update_mapping_iertr;
   using update_mappings_ret = update_mappings_iertr::future<>;
-  update_mappings_ret update_mappings(
+  virtual update_mappings_ret update_mappings(
     Transaction& t,
-    const std::list<LogicalCachedExtentRef>& extents);
+    const std::list<LogicalChildNodeRef>& extents) = 0;
 
   /**
    * get_physical_extent_if_live
@@ -253,12 +230,18 @@ public:
     laddr_t laddr,
     extent_len_t len) = 0;
 
+  using refresh_lba_mapping_iertr = base_iertr;
+  using refresh_lba_mapping_ret = refresh_lba_mapping_iertr::future<LBAMapping>;
+  virtual refresh_lba_mapping_ret refresh_lba_mapping(
+    Transaction &t,
+    LBAMapping mapping) = 0;
+
   virtual ~LBAManager() {}
 };
 using LBAManagerRef = std::unique_ptr<LBAManager>;
 
 class Cache;
-namespace lba_manager {
+namespace lba {
 LBAManagerRef create_lba_manager(Cache &cache);
 }
 

@@ -59,7 +59,9 @@ HTTP Response
 ~~~~~~~~~~~~~
 
 If the bucket name is unique, within constraints and unused, the operation will succeed.
-If a bucket with the same name already exists and the user is the bucket owner, the operation will succeed.
+If a bucket with the same name already exists and the user is the
+bucket owner, the operation will succeed unless non-default option
+``rgw_bucket_eexist_override`` is `true`.
 If the bucket name is already in use, the operation will fail.
 
 +---------------+-----------------------+----------------------------------------------------------+
@@ -788,7 +790,7 @@ Parameters are XML encoded in the body of the request, in the following format:
 | ``LoggingType``               | String    | The type of logging. Valid values are:                                               | No       |
 |                               |           | ``Standard`` (default) all bucket operations are logged after being perfomed.        |          |
 |                               |           | The log record will contain all fields.                                              |          |
-|                               |           | ``Journal`` only PUT, COPY, MULTI/DELETE and MPU operations are logged.              |          |
+|                               |           | ``Journal`` only operations that modify and object are logged.                       |          |
 |                               |           | Will record the minimum subset of fields in the log record that is needed            |          |
 |                               |           | for journaling.                                                                      |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
@@ -860,7 +862,8 @@ Syntax
 Response Entities
 ~~~~~~~~~~~~~~~~~
 
-Response is XML encoded in the body of the request, in the following format:
+Response header contains ``Last-Modified`` date/time of the logging configuration.
+Logging configuration is XML encoded in the body of the response, in the following format:
 
 ::
 

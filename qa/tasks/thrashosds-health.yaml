@@ -30,5 +30,11 @@ overrides:
       - out of quorum
       - noscrub
       - nodeep-scrub
+      - Degraded data redundancy
       - is down
       - osds down
+      - pg .*? is .*?degraded.*?, acting
+      - pg .*? is stuck inactive for .*?m, current state .*?degraded.*?, last acting
+      - pg degraded
+      - PG_BACKFILL_FULL
+      - Low space hindering backfill .*? backfill_toofull

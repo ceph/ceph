@@ -1,0 +1,31 @@
+tasks:
+- install:
+- ceph:
+- rgw:
+    client.0:
+      port: 8000
+    client.1:
+      port: 8001
+- rgw-cloudtier:
+    client.0:
+      cloud_storage_class: CLOUDTIER-CLIENT0
+      cloud_client: client.1
+      cloud_regular_storage_class: LUKEWARM
+      cloud_target_storage_class: FROZEN
+      cloud_retain_head_object: "true"
+      cloud_target_path: "teuthology-client0"
+      cloud_allow_read_through: "true"
+      cloud_read_through_restore_days: "1"
+      cloudtier_user:
+        # cloud-user creds to be created on cloud-client
+        cloud_secret: "abcefgh"
+        cloud_access_key: "12345678"
+- tox: [client.0]
+- s3tests:
+    client.0:
+      rgw_server: client.0
+      extra_attrs: ["cloud_restore"]
+      lc_debug_interval: 10
+      rgw_restore_debug_interval: 20
+      lifecycle_tests: True
+      cloudtier_tests: True

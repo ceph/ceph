@@ -2,118 +2,82 @@
 
 set -xe
 
-mydir=`dirname $0`
+mydir=$(dirname "$0")
 
-if [ $# -ne 2 ]
-then
-	echo "2 parameters are required!\n"
-	echo "Usage:"
-	echo "  fscrypt.sh <type> <testdir>"
-	echo "  type: should be any of 'none', 'unlocked' or 'locked'"
-	echo "  testdir: the test direcotry name"
-	exit 1
+# Assumes fscrypt_cli_setup.sh has been called by the YAML file used to execute this script
+
+if [ $# -ne 2 ]; then
+    echo "2 parameters are required!"
+    echo "Usage:"
+    echo "  fscrypt.sh <none|unlocked|locked> <testcase>"
+    echo "  testcase: the test workunit name"
+    exit 1
 fi
 
-fscrypt=$1
-testcase=$2
-testdir=fscrypt_test_${fscrypt}_${testcase}
-mkdir $testdir
+fscrypt_type=$1
+test_case=$2
+test_dir=fscrypt_test_${fscrypt_type}_${test_case}
 
-XFSPROGS_DIR='xfprogs-dev-dir'
-XFSTESTS_DIR='xfstest-dev-dir'
-export XFS_IO_PROG="$(type -P xfs_io)"
+# Ensure fscrypt CLI is installed and in PATH
+FSCRYPT_CLI="$(type -P fscrypt)"
+if [ -z "$FSCRYPT_CLI" ]; then
+    echo "fscrypt CLI not found after setup. Ensure it was installed correctly."
+    exit 1
+fi
 
-# Setup the xfstests env
-setup_xfstests_env()
-{
-	git clone https://git.ceph.com/xfstests-dev.git $XFSTESTS_DIR --depth 1
-	pushd $XFSTESTS_DIR
-	. common/encrypt
-	popd
-}
+# Initialize global fscrypt config
+sudo $FSCRYPT_CLI setup --force --verbose --all-users
 
-install_deps()
-{
-	local system_value=$(sudo lsb_release -is | awk '{print tolower($0)}')
-	case $system_value in
-		"centos" | "centosstream" | "fedora")
-			sudo yum install -y inih-devel userspace-rcu-devel \
-				libblkid-devel gettext libedit-devel \
-				libattr-devel device-mapper-devel libicu-devel
-			;;
-		"ubuntu" | "debian")
-			sudo apt-get install -y libinih-dev liburcu-dev \
-				libblkid-dev gettext libedit-dev libattr1-dev \
-				libdevmapper-dev libicu-dev pkg-config
-			;;
-		*)
-			echo "Unsupported distro $system_value"
-			exit 1
-			;;
-	esac
-}
+MOUNT_POINT=$(dirname "$(dirname "$(pwd)")")
+# Verify that the mount point exists
+if [ ! -d "$MOUNT_POINT" ]; then
+    echo "Error: Current working directory '$MOUNT_POINT' is not a valid directory."
+    exit 1
+fi
 
-# Install xfsprogs-dev from source to support "add_enckey" for xfs_io
-install_xfsprogs()
-{
-	local install_xfsprogs=0
+# Create the test directory
+test_dir="$MOUNT_POINT/$test_dir"
+mkdir "$test_dir"
 
-	xfs_io -c "help add_enckey" | grep -q 'not found' && install_xfsprogs=1
+# Check the fscrypt status for the mount point
+STATUS_OUTPUT=$(sudo $FSCRYPT_CLI status "$MOUNT_POINT" --verbose || true)
+if echo "$STATUS_OUTPUT" | grep -q "users can create fscrypt metadata on this filesystem"; then
+    echo "The mount point '$MOUNT_POINT' is already initialized with fscrypt."
+else
+    echo "The mount point '$MOUNT_POINT' is not properly initialized. Initializing now..."
 
-	if [ $install_xfsprogs -eq 1 ]; then
-		install_deps
+    # Initialize fscrypt on the mount point
+    if sudo $FSCRYPT_CLI setup "$MOUNT_POINT" --verbose --force --all-users; then
+        echo "Successfully initialized fscrypt on '$MOUNT_POINT'."
+    else
+        echo "Error: Failed to initialize fscrypt on '$MOUNT_POINT'."
+        exit 1
+    fi
+fi
 
-		git clone https://git.ceph.com/xfsprogs-dev.git $XFSPROGS_DIR --depth 1
-		pushd $XFSPROGS_DIR
-		make
-		sudo make install
-		popd
-	fi
-}
-
-clean_up()
-{
-	rm -rf $XFSPROGS_DIR
-	rm -rf $XFSTESTS_DIR
-	rm -rf $testdir
-}
-
-# For now will test the V2 encryption policy only as the
-# V1 encryption policy is deprecated
-
-install_xfsprogs
-setup_xfstests_env
-
-# Generate a fixed keying identifier
-raw_key=$(_generate_raw_encryption_key)
-keyid=$(_add_enckey $testdir "$raw_key" | awk '{print $NF}')
-
-case ${fscrypt} in
-	"none")
-		# do nothing for the test directory and will test it
-		# as one non-encrypted directory.
-		pushd $testdir
-		${mydir}/../suites/${testcase}.sh
-		popd
-		clean_up
-		;;
-	"unlocked")
-		# set encrypt policy with the key provided and then
-		# the test directory will be encrypted & unlocked
-		_set_encpolicy $testdir $keyid
-		pushd $testdir
-		${mydir}/../suites/${testcase}.sh
-		popd
-		clean_up
-		;;
-	"locked")
-		# remove the key, then the test directory will be locked
-		# and any modification will be denied by requiring the key
-		_rm_enckey $testdir $keyid
-		clean_up
-		;;
-	*)
-		clean_up
-		echo "Unknown parameter $1"
-		exit 1
+case ${fscrypt_type} in
+    "none")
+        # Test non-encrypted directory
+        pushd "$test_dir"
+        "${mydir}/../suites/${test_case}.sh"
+        popd
+        ;;
+    "unlocked")
+        # Encrypt but leave unlocked the test directory
+		printf "password\npassword\n" | sudo $FSCRYPT_CLI encrypt "$test_dir" --verbose --source=custom_passphrase  --name="test_secret"
+        pushd "$test_dir"
+        "${mydir}/../suites/${test_case}.sh"
+        popd
+        ;;
+    "locked")
+        # Encrypt and lock the directory
+        printf "password\npassword\n" | sudo $FSCRYPT_CLI encrypt --skip-unlock "$test_dir" --verbose --source=custom_passphrase  --name="test_secret"
+        pushd "$test_dir"
+        "${mydir}/../suites/${test_case}.sh"
+        popd
+        ;;
+    *)
+        echo "Unknown parameter $1"
+        exit 1
+        ;;
 esac

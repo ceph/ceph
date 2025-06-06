@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(ceph
-  VERSION 19.0.0
+  VERSION 20.0.0
   LANGUAGES CXX C ASM)
 
-foreach(policy CMP0127 CMP0135)
+foreach(policy CMP0127 CMP0135 CMP0175)
   if(POLICY ${policy})
     cmake_policy(SET ${policy} NEW)
   endif()
@@ -16,12 +16,15 @@ if(NOT CMAKE_BUILD_TYPE)
   if (EXISTS "${CMAKE_SOURCE_DIR}/.git")
     message(WARNING "CMAKE_BUILD_TYPE not specified, assuming CMAKE_BUILD_TYPE=Debug because .git exists.")
     set(default_build_type "Debug")
-    set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
-        STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
   else()
-    message(WARNING "CMAKE_BUILD_TYPE not specified, leaving unset because .git does NOT exist.")
+    message(WARNING "CMAKE_BUILD_TYPE not specified, setting to RelWithDebInfo because .git does NOT exist.")
+    set(default_build_type "RelWithDebInfo")
   endif()
+  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+  STRING "BUILD_TYPE is ${default_build_type}, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
 endif()
+message(STATUS "BUILD_TYPE is ${CMAKE_BUILD_TYPE}")
+set(CEPH_BUILD_TYPE ${CMAKE_BUILD_TYPE})
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
   set(LINUX ON)
@@ -517,6 +520,40 @@ if(WITH_JAEGER)
   set(HAVE_JAEGER TRUE)
 endif()
 
+# Catch2 C++ Unit Test support:
+# This needs to come before any tests using Catch2.
+option(WITH_CATCH2 "Enable Catch2 unit tests" ON)
+option(WITH_SYSTEM_CATCH2 "Enable Catch2 unit tests (require system packages)" OFF)
+
+if(WITH_CATCH2)
+  # Save pre-existing definitions (if any):
+  set(ORIG_CPM_LOCAL_PACKAGES_ONLY ${CPM_USE_LOCAL_PACKAGES_ONLY})
+
+    if(WITH_SYSTEM_CATCH2)
+   set(CPM_LOCAL_PACKAGES_ONLY ON)
+  endif()
+
+  include(${CMAKE_MODULE_PATH}/CPM.cmake)
+  CPMAddPackage("gh:catchorg/Catch2@3.8.1")
+
+  # Restore the original CPM settings in case someone else wants to use the module:
+  set(CPM_USE_LOCAL_PACKAGES_ONLY, ${ORIG_CPM_USE_LOCAL_PACKAGES_ONLY})
+
+  message("-- Enabled Catch2 support")
+endif()
+
+if(WIN32)
+    set(WITH_BREAKPAD_DEFAULT OFF)
+else()
+    set(WITH_BREAKPAD_DEFAULT ON)
+endif()
+
+option(WITH_BREAKPAD "Build with Google Breakpad crash reporter"  ${WITH_BREAKPAD_DEFAULT})
+if(WITH_BREAKPAD)
+  set(HAVE_BREAKPAD ON)
+  message("-- Enabled Google Breakpad crash reporter")
+endif()
+
 #option for RGW
 option(WITH_RADOSGW "RADOS Gateway is enabled" ON)
 option(WITH_RADOSGW_BEAST_OPENSSL "RADOS Gateway's Beast frontend uses OpenSSL" ON)
@@ -527,7 +564,7 @@ option(WITH_RADOSGW_DBSTORE "DBStore backend for RADOS Gateway" ON)
 option(WITH_RADOSGW_MOTR "CORTX-Motr backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_DAOS "DAOS backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_D4N "D4N wrapper for RADOS Gateway" ON)
-option(WITH_RADOSGW_POSIX "POSIX backend for Rados Gateway" ON)
+option(WITH_RADOSGW_POSIX "POSIX backend for RADOS Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
 option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)
 option(WITH_RADOSGW_BACKTRACE_LOGGING "Enable backtraces in rgw logs" OFF)
@@ -705,8 +742,8 @@ if (WITH_SYSTEM_ROCKSDB)
   find_package(RocksDB 5.14 REQUIRED)
 endif()
 
-option(WITH_SEASTAR "Build seastar components")
-set(HAVE_SEASTAR ${WITH_SEASTAR})
+option(WITH_CRIMSON "Build seastar components")
+set(HAVE_SEASTAR ${WITH_CRIMSON})
 
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
@@ -721,12 +758,17 @@ if(WITH_MGR)
   list(APPEND BOOST_COMPONENTS
     python${MGR_PYTHON_VERSION_MAJOR}${MGR_PYTHON_VERSION_MINOR})
 endif()
-if(WITH_SEASTAR)
+if(WITH_CRIMSON)
   list(APPEND BOOST_COMPONENTS timer)
 endif()
 
 if(WITH_RADOSGW AND WITH_RADOSGW_LUA_PACKAGES)
   list(APPEND BOOST_COMPONENTS filesystem)
+endif()
+
+if(WITH_LIBCEPHFS OR WITH_FUSE)
+  find_package(ICU REQUIRED COMPONENTS uc i18n)
+  list(APPEND BOOST_COMPONENTS locale)
 endif()
 
 set(Boost_USE_MULTITHREADED ON)
@@ -743,7 +785,7 @@ if(WITH_SYSTEM_BOOST)
   if(BOOST_ROOT AND CMAKE_LIBRARY_ARCHITECTURE)
     set(BOOST_LIBRARYDIR "${BOOST_ROOT}/lib/${CMAKE_LIBRARY_ARCHITECTURE}")
   endif()
-  find_package(Boost 1.85 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
+  find_package(Boost 1.87 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
   if(NOT ENABLE_SHARED)
     set_property(TARGET Boost::iostreams APPEND PROPERTY
       INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
@@ -757,7 +799,7 @@ else()
   set(BOOST_J ${DEFAULT_BOOST_J} CACHE STRING "max jobs for Boost build") # override w/-DBOOST_J=<n>
   set(Boost_USE_STATIC_LIBS ON)
   include(BuildBoost)
-  build_boost(1.85
+  build_boost(1.87
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
 endif()
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
@@ -830,3 +872,4 @@ add_tags(ctags
   EXCLUDE_OPTS ${CTAG_EXCLUDES}
   EXCLUDES "*.js" "*.css" ".tox" "python-common/build")
 add_custom_target(tags DEPENDS ctags)
+

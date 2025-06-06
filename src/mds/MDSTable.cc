@@ -13,16 +13,13 @@
  */
 
 #include "MDSTable.h"
-
+#include "MDSContext.h"
 #include "MDSRank.h"
-#include "MDLog.h"
 
-#include "osdc/Filer.h"
+#include "osdc/Objecter.h"
 
-#include "include/types.h"
-
-#include "common/config.h"
-#include "common/errno.h"
+#include "common/debug.h"
+#include "common/errno.h" // for cpp_strerror()
 #include "common/Finisher.h"
 
 #include "include/ceph_assert.h"
@@ -169,7 +166,7 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
 {
   ceph_assert(is_opening());
   state = STATE_ACTIVE;
-  if (r == -CEPHFS_EBLOCKLISTED) {
+  if (r == -EBLOCKLISTED) {
     mds->respawn();
     return;
   }
