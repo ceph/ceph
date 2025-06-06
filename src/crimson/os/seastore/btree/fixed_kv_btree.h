@@ -306,7 +306,7 @@ public:
       return leaf.pos;
     }
   private:
-    iterator() noexcept {}
+    iterator() = delete;
     iterator(depth_t depth, state_t state) noexcept
         : internal(depth - 1), state(state) {}
 
