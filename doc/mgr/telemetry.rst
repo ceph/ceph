@@ -320,14 +320,14 @@ Sending telemetry through a proxy
 ---------------------------------
 
 If the cluster cannot directly connect to the configured telemetry
-endpoint (default ``telemetry.ceph.com``), you can configure a HTTP/HTTPS
-proxy server with:
+endpoint (default: ``telemetry.ceph.com``), configure a HTTP/HTTPS
+proxy server by running a command of the following form:
 
 .. prompt:: bash #
 
    ceph config set mgr mgr/telemetry/proxy https://10.0.0.1:8080
 
-You can also include a ``user:pass`` if needed:
+Include a ``user:pass`` if needed by running a command of the following form:
 
 .. prompt:: bash #
 
@@ -337,8 +337,9 @@ You can also include a ``user:pass`` if needed:
 Contact and Description
 -----------------------
 
-A contact and description can be added to the report.  This is
-completely optional, and disabled by default:
+A contact and description can be added to the report. This is optional and is
+disabled by default. Run commands of the following forms to add contacts and
+descriptions:
 
 .. prompt:: bash #
 
@@ -357,8 +358,9 @@ To participate in a leaderboard in the `public dashboards
    ceph config set mgr mgr/telemetry/leaderboard true
 
 The leaderboard displays basic information about the cluster. This includes the
-total storage capacity and the number of OSDs. To add a description of the
-cluster, run a command of the following form: 
+cluster's total storage capacity and the number of OSDs. To add a description
+of the cluster so that it can more easily be identified on the leaderboard, run
+a command of the following form: 
 
 .. prompt:: bash #
 
@@ -366,4 +368,3 @@ cluster, run a command of the following form:
 
 If the ``ident`` channel is enabled, its details will not be displayed in the
 leaderboard.
-
