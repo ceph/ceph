@@ -61,12 +61,6 @@ class NFSService(CephService):
                         del rank_map[rank][gen]
                         self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
 
-    def config(self, spec: NFSServiceSpec) -> None:  # type: ignore
-        from nfs.cluster import create_ganesha_pool
-
-        assert self.TYPE == spec.service_type
-        create_ganesha_pool(self.mgr)
-
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
