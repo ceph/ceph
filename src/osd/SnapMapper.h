@@ -276,10 +276,11 @@ private:
   tl::expected<object_snaps, SnapMapReaderI::result_t> get_snaps_common(
     const hobject_t &hoid) const;
 
-  /// \returns vector with the first objects with @snap as a snap
+  /// returns vector with the first objects with @snap as a snap
   std::vector<hobject_t> get_objects_by_prefixes(
     snapid_t snap,
-    unsigned max);
+    unsigned max,
+    std::string& last_key);
 
   std::set<std::string>           prefixes;
   // maintain a current active prefix
@@ -348,7 +349,9 @@ private:
   /// Returns first object with snap as a snap
   std::optional<std::vector<hobject_t>> get_next_objects_to_trim(
     snapid_t snap,              ///< [in] snap to check
-    unsigned max                ///< [in] max to get
+    unsigned max,               ///< [in] max to get
+    std::string &last_key,      ///< [out] last trim key
+    std::set<std::string>& last_prefixes      ///< [out] last_prefixes to trim
     );  ///< @return nullopt if no more objects
 
   /// Remove mapping for oid

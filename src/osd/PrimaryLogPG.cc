@@ -15821,10 +15821,36 @@ boost::statechart::result PrimaryLogPG::NotTrimming::react(const KickTrim&)
   }
 }
 
+boost::statechart::result PrimaryLogPG::WaitReservation::react(const SleepTimerReady&) {
+  PrimaryLogPG *pg = context< SnapTrimmer >().pg;
+  wakeup = nullptr; 
+
+  pending = nullptr;
+  if (!context< SnapTrimmer >().can_trim()) {
+    post_event(KickTrim());
+    return transit< NotTrimming >();
+  }
+
+  context<Trimming>().snap_to_trim = pg->snap_trimq.range_start();
+  ldout(pg->cct, 10) << "NotTrimming: trimming " << pg->snap_trimq.range_start() << dendl;
+  return transit< AwaitAsyncWork >();
+}
+
 boost::statechart::result PrimaryLogPG::WaitReservation::react(const SnapTrimReserved&)
 {
   PrimaryLogPG *pg = context< SnapTrimmer >().pg;
   ldout(pg->cct, 10) << "WaitReservation react SnapTrimReserved" << dendl;
+
+  float osd_next_snap_trim_sleep = pg->osd->osd->get_osd_next_snap_trim_sleep();
+  if (osd_next_snap_trim_sleep > 0) {
+    std::lock_guard l(pg->osd->sleep_lock);
+    wakeup = pg->osd->sleep_timer.add_event_after(
+      osd_next_snap_trim_sleep,
+      new OnSleepTimer{pg, pg->get_osdmap_epoch()}
+    );
+    // keep state, wait SleepTimerReady
+    return discard_event();
+  }
 
   pending = nullptr;
   if (!context< SnapTrimmer >().can_trim()) {
@@ -15860,6 +15886,8 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
   snapid_t snap_to_trim = context<Trimming>().snap_to_trim;
   auto &in_flight = context<Trimming>().in_flight;
   ceph_assert(in_flight.empty());
+  auto &last_trim_key = context<Trimming>().last_trim_key;
+  auto &last_prefixes = context<Trimming>().last_prefixes;
 
   ceph_assert(pg->is_primary() && pg->is_active());
   if (!context< SnapTrimmer >().can_trim()) {
@@ -15875,8 +15903,9 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
   // the ENOENT below and erase snap_to_trim.
   ceph_assert(max > 0);
 
+  utime_t begin_get_trim_object_time = ceph_clock_now();
   auto to_trim =
-      pg->snap_mapper.get_next_objects_to_trim(snap_to_trim, max);
+      pg->snap_mapper.get_next_objects_to_trim(snap_to_trim, max, last_trim_key, last_prefixes);
   if (!to_trim.has_value()) {
     // Done!
     ldout(pg->cct, 10) << "no more entries to trim" << dendl;
@@ -15910,6 +15939,9 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
     pg->set_snaptrim_duration();
     return transit< NotTrimming >();
   }
+  // Record the delay of obtaining objects during the snaptrim process
+  utime_t lat = ceph_clock_now() - begin_get_trim_object_time;
+  pg->osd->logger->tinc(l_osd_snap_trim_get_raw_object_lat, lat);
 
   for (auto &&object: *to_trim) {
     // Get next
