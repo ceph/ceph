@@ -600,8 +600,25 @@ void shard_extent_map_t::pad_on_shards(const shard_extent_set_t &pad_to,
   }
 }
 
+void shard_extent_map_t::pad_on_shard(const extent_set &pad_to,
+                                       const shard_id_t shard) {
+
+  if (pad_to.size() == 0) {
+    return;
+  }
+  for (auto &[off, length] : pad_to) {
+    bufferlist bl;
+    bl.push_back(buffer::create_aligned(length, EC_ALIGN_SIZE));
+    insert_in_shard(shard, off, bl);
+  }
+}
+
 void shard_extent_map_t::pad_on_shards(const extent_set &pad_to,
                                        const shard_id_set &shards) {
+
+  if (pad_to.size() == 0) {
+    return;
+  }
   for (auto &shard : shards) {
     for (auto &[off, length] : pad_to) {
       bufferlist bl;
@@ -667,6 +684,8 @@ int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
 
   shard_id_set decode_set = shard_id_set::intersection(need_set, sinfo->get_data_shards());
   shard_id_set encode_set = shard_id_set::intersection(need_set, sinfo->get_parity_shards());
+  shard_extent_set_t read_mask(sinfo->get_k_plus_m());
+  sinfo->ro_size_to_read_mask(object_size, read_mask);
   int r = 0;
   if (!decode_set.empty()) {
     pad_on_shards(want, decode_set);
@@ -674,11 +693,11 @@ int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
      * shards are decoded. The get_min_available functions should have already
      * worked out what needs to be read for this.
      */
-    extent_set decode_for_parity;
     for (auto shard : encode_set) {
-      decode_for_parity.insert(want.at(shard));
+      extent_set decode_for_parity;
+      decode_for_parity.intersection_of(want.at(shard), read_mask.at(shard));
+      pad_on_shard(decode_for_parity, shard);
     }
-    pad_on_shards(decode_for_parity, decode_set);
     r = _decode(ec_impl, want_set, decode_set);
   }
   if (!r && !encode_set.empty()) {
