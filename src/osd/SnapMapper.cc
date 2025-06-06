@@ -97,7 +97,7 @@ int OSDriver::get_keys(
     reinterpret_cast<FuturizedStore::Shard::omap_values_t&>(*out) = std::move(vals);
     return 0;
   }, FuturizedStore::Shard::read_errorator::all_same_way([] (auto& e) {
-    assert(e.value() > 0);
+    ceph_assert(e.value() > 0);
     return -e.value();
   }))); // this requires seastar::thread
 }
@@ -118,7 +118,7 @@ int OSDriver::get_next(
       return -ENOENT;
     } else {
       CRIMSON_DEBUG("OSDriver::get_next returning next: {}, ", nit->first);
-      assert(nit->first > key);
+      ceph_assert(nit->first > key);
       *next = *nit;
       return 0;
     }
@@ -139,7 +139,7 @@ int OSDriver::get_next_or_current(
     ch, hoid, FuturizedStore::Shard::omap_keys_t{key}
   ).safe_then([&key, next_or_current] (FuturizedStore::Shard::omap_values_t&& vals) {
     CRIMSON_DEBUG("OSDriver::get_next_or_current returning {}", key);
-    assert(vals.size() == 1);
+    ceph_assert(vals.size() == 1);
     *next_or_current = std::make_pair(key, std::move(vals.begin()->second));
     return 0;
   }, FuturizedStore::Shard::read_errorator::all_same_way(
@@ -1022,9 +1022,9 @@ void SnapMapper::Scrubber::run()
                       __func__, mapping.hoid, mapping.snap, pool, begin, end)
                  << dendl;
       } else {
-        assert(mapping.snap >= begin);
-        assert(mapping.snap < end);
-        assert(mapping.hoid.pool == pool);
+        ceph_assert(mapping.snap >= begin);
+        ceph_assert(mapping.snap < end);
+        ceph_assert(mapping.hoid.pool == pool);
         // invalid
         dout(10) << fmt::format(
                       "{} stray {} snap {} in pool {} shard {} purged_snaps[{}, {})",
