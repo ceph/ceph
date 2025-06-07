@@ -1782,7 +1782,7 @@ options:
 - name: mon_warn_pg_not_deep_scrubbed_ratio
   type: float
   level: advanced
-  desc: Percentage of the deep scrub interval past the deep scrub interval to warn
+  desc: Percentage of the deep scrub interval past the deep scrub interval to warn - Set this configurable with the command "ceph config set mgr mon_warn_pg_not_deep_scrubbed_ratio <ratio_value>"
   default: 0.75
   see_also:
   - osd_deep_scrub_interval
