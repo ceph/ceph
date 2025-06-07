@@ -4749,8 +4749,8 @@ void RGWPutObj::execute(optional_yield y)
 
   if (compressor && compressor->is_compressed()) {
     bufferlist tmp;
-    RGWCompressionInfo cs_info;      
-    assert(plugin != nullptr);  
+    RGWCompressionInfo cs_info;
+    assert(plugin != nullptr);
     // plugin exists when the compressor does
     // coverity[dereference:SUPPRESS]
     cs_info.compression_type = plugin->get_type_name();
@@ -5743,11 +5743,12 @@ class RGWCopyObjDPF : public rgw::sal::DataProcessorFactory {
   DataProcessorFilter cb;
   RGWGetObj_Filter* filter{&cb};
   bool need_decompress{false};
-  RGWCompressionInfo cs_info;
+  RGWCompressionInfo decompress_info;
   boost::optional<RGWGetObj_Decompress> decompress;
   std::unique_ptr<RGWGetObj_Filter> decrypt;
   std::unique_ptr<rgw::sal::DataProcessor> encrypt;
   std::optional<RGWPutObj_Compress> compressor;
+  CompressorRef compressor_plugin;
   off_t ofs_x{0};
   off_t end_x = obj_size;
 
@@ -5783,17 +5784,17 @@ public:
   {
     /* RGWGetObj_Filter */
     // decompress
-    int ret = rgw_compression_info_from_attrset(s->src_object->get_attrs(), need_decompress, cs_info);
+    int ret = rgw_compression_info_from_attrset(s->src_object->get_attrs(), need_decompress, decompress_info);
     if (ret < 0) {
       return ret;
     }
 
     bool src_encrypted = s->src_object->get_attrs().count(RGW_ATTR_CRYPT_MODE);
     if (need_decompress && !src_encrypted) {
-      obj_size = cs_info.orig_size;
+      obj_size = decompress_info.orig_size;
       s->src_object->set_obj_size(obj_size);
       static constexpr bool partial_content = false;
-      decompress.emplace(s->cct, &cs_info, partial_content, filter);
+      decompress.emplace(s->cct, &decompress_info, partial_content, filter);
       filter = &*decompress;
       end_x = obj_size;
     }
@@ -5834,12 +5835,12 @@ public:
     const auto& compression_type = driver->get_compression_type(s->dest_placement);
     if (compression_type != "none" &&
         (encrypt == nullptr || compress_encrypted)) {
-      CompressorRef plugin = get_compressor_plugin(s, compression_type);
-      if (!plugin) {
+      compressor_plugin = get_compressor_plugin(s, compression_type);
+      if (!compressor_plugin) {
         ldpp_dout(s, 1) << "Cannot load plugin for compression type "
             << compression_type << dendl;
       } else {
-        compressor.emplace(s->cct, plugin, processor);
+        compressor.emplace(s->cct, compressor_plugin, processor);
         processor = &*compressor;
         // always send incompressible hint when rgw is itself doing compression
         s->object->set_compressed();
@@ -5874,6 +5875,29 @@ public:
 
   RGWGetObj_Filter* get_filter() override {
     return filter;
+  }
+
+  void finalize_attrs(rgw::sal::Attrs& attrs) override {
+    if (compressor && compressor->is_compressed()) {
+      bufferlist tmp;
+      RGWCompressionInfo cs_info;
+      assert(compressor_plugin != nullptr);
+      // plugin exists when the compressor does
+      // coverity[dereference:SUPPRESS]
+      cs_info.compression_type = compressor_plugin->get_type_name();
+      cs_info.orig_size = obj_size;
+      cs_info.compressor_message = compressor->get_compressor_message();
+      cs_info.blocks = std::move(compressor->get_compression_blocks());
+
+      encode(cs_info, tmp);
+      attrs[RGW_ATTR_COMPRESSION] = tmp;
+
+      ldpp_dout(s, 20) << "storing " << RGW_ATTR_COMPRESSION
+          << " with type=" << cs_info.compression_type
+          << ", orig_size=" << cs_info.orig_size
+          << ", compressor_message=" << cs_info.compressor_message
+          << ", blocks=" << cs_info.blocks.size() << dendl;
+    }
   }
 };
 
