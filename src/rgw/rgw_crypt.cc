@@ -1319,7 +1319,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
 int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
                            map<string, bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
-                           std::map<std::string, std::string>& crypt_http_responses)
+                           std::map<std::string, std::string>* crypt_http_responses)
 {
   const bool copy_source = s->src_object != nullptr;
 
@@ -1414,8 +1414,11 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
     aes->set_key(reinterpret_cast<const uint8_t*>(key_bin.c_str()), AES_256_CBC::AES_256_KEYSIZE);
     if (block_crypt) *block_crypt = std::move(aes);
 
-    crypt_http_responses["x-amz-server-side-encryption-customer-algorithm"] = "AES256";
-    crypt_http_responses["x-amz-server-side-encryption-customer-key-MD5"] = keymd5;
+    if (crypt_http_responses) {
+      crypt_http_responses->emplace("x-amz-server-side-encryption-customer-algorithm", "AES256");
+      crypt_http_responses->emplace("x-amz-server-side-encryption-customer-key-MD5", keymd5);
+    }
+
     return 0;
   }
 
@@ -1446,8 +1449,11 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
     actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
     if (block_crypt) *block_crypt = std::move(aes);
 
-    crypt_http_responses["x-amz-server-side-encryption"] = "aws:kms";
-    crypt_http_responses["x-amz-server-side-encryption-aws-kms-key-id"] = key_id;
+    if (crypt_http_responses) {
+      crypt_http_responses->emplace("x-amz-server-side-encryption", "aws:kms");
+      crypt_http_responses->emplace("x-amz-server-side-encryption-aws-kms-key-id", key_id);
+    }
+
     return 0;
   }
 
@@ -1516,7 +1522,10 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
     actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
     if (block_crypt) *block_crypt = std::move(aes);
 
-    crypt_http_responses["x-amz-server-side-encryption"] = "AES256";
+    if (crypt_http_responses) {
+      crypt_http_responses->emplace("x-amz-server-side-encryption", "AES256");
+    }
+
     return 0;
   }
 
