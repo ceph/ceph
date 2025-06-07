@@ -6179,6 +6179,8 @@ void RGWCopyObj::execute(optional_yield y)
     return;
   }
 
+  RGWCopyObjDPF copy_obj_dpf(driver, s, obj_size, crypt_http_responses);
+
   op_ret = s->src_object->copy_object(s->owner,
 	   s->user->get_id(),
 	   &s->info,
@@ -6204,6 +6206,7 @@ void RGWCopyObj::execute(optional_yield y)
 	   &s->req_id, /* use req_id as tag */
 	   &etag,
 	   copy_obj_progress_cb, (void *)this,
+	   &copy_obj_dpf,
 	   this,
 	   s->yield);
 
