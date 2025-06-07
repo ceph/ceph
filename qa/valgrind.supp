@@ -592,7 +592,7 @@
         rocksdb ObjectLibrary AddFactoryEntry centos 9 leak
         Memcheck:Leak
         match-leak-kinds: reachable
-        fun:_Znam
+        fun:_Zn*m
         fun:UnknownInlinedFun
         fun:UnknownInlinedFun
         fun:UnknownInlinedFun
@@ -601,7 +601,7 @@
         fun:UnknownInlinedFun
         fun:_ZN7rocksdb13ObjectLibrary15AddFactoryEntryEPKcOSt10unique_ptrINS0_5EntryESt14default_deleteIS4_EE
         fun:UnknownInlinedFun
-        fun:_Z41__static_initialization_and_destruction_0ii.constprop.60
+        fun:_Z41__static_initialization_and_destruction_0*
         fun:_sub_I_65535_0.0
         fun:__libc_start_main@@GLIBC_2.34
         fun:(below main)
