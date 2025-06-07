@@ -1541,6 +1541,7 @@ TEST_F(POSIXObjectTest, ObjectCopy)
 	   &tag,
 	   nullptr,
 	   nullptr,
+     nullptr,
 	   env->dpp,
 	   null_yield);
   EXPECT_EQ(ret, 0);
@@ -1849,6 +1850,7 @@ TEST_F(POSIXMPObjectTest, MPUploadCopy)
 	   &tag,
 	   nullptr,
 	   nullptr,
+     nullptr,
 	   env->dpp,
 	   null_yield);
   EXPECT_EQ(ret, 0);
@@ -2298,6 +2300,7 @@ TEST_F(POSIXVerObjectTest, ObjectCopy)
 	   &tag,
 	   nullptr,
 	   nullptr,
+     nullptr,
 	   env->dpp,
 	   null_yield);
   EXPECT_EQ(ret, 0);
@@ -2375,6 +2378,7 @@ TEST_F(POSIXVerObjectTest, CopyVersion)
 	   &tag,
 	   nullptr,
 	   nullptr,
+     nullptr,
 	   env->dpp,
 	   null_yield);
   EXPECT_EQ(ret, 0);
