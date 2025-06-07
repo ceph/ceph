@@ -351,7 +351,7 @@ TEST_F(D4NFilterFixture, CopyObjectNone) {
 			      &if_match, &if_nomatch, attrs_mod,
 			      false, attrs, category, olh_epoch,
 			      delete_at, NULL, &tag, &etag,
-			      NULL, NULL, dpp, null_yield), 0);
+			      NULL, NULL, nullptr, dpp, null_yield), 0);
 
   client.hgetall("rgw-object:test_object_CopyObjectNone:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
@@ -456,7 +456,7 @@ TEST_F(D4NFilterFixture, CopyObjectReplace) {
 			      &if_match, &if_nomatch, attrs_mod,
 			      false, attrs, category, olh_epoch,
 			      delete_at, NULL, &tag, &etag,
-			      NULL, NULL, dpp, null_yield), 0);
+			      NULL, NULL, nullptr, dpp, null_yield), 0);
 
   /* Ensure the original object is still in the cache */
   vector<string> keys;
@@ -581,7 +581,7 @@ TEST_F(D4NFilterFixture, CopyObjectMerge) {
 			      &if_match, &if_nomatch, attrs_mod,
 			      false, attrs, category, olh_epoch,
 			      delete_at, NULL, &tag, &etag,
-			      NULL, NULL, dpp, null_yield), 0);
+			      NULL, NULL, nullptr, dpp, null_yield), 0);
 
   /* Ensure the original object is still in the cache */
   vector<string> keys;
@@ -1176,7 +1176,7 @@ TEST_F(D4NFilterFixture, PrepareCopyObject) {
 			      &if_match, &if_nomatch, attrs_mod,
 			      false, attrs, category, olh_epoch,
 			      delete_at, NULL, &tag, &etag,
-			      NULL, NULL, dpp, null_yield), 0);
+			      NULL, NULL, nullptr, dpp, null_yield), 0);
 
   client.hgetall("rgw-object:test_object_PrepareCopyObject:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
