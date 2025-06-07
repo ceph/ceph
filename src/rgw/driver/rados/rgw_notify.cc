@@ -472,7 +472,14 @@ public:
       // start the worker threads to do the actual queue processing
       const std::string WORKER_THREAD_NAME = "notif-worker";
       for (auto worker_id = 0U; worker_id < worker_count; ++worker_id) {
-        workers.emplace_back([this]() {
+	const std::string thread_name = WORKER_THREAD_NAME+std::to_string(worker_id);
+        workers.emplace_back([this, thread_name]() {
+	  // set the current thread name
+	  if (const auto rc = ceph_pthread_setname(thread_name.c_str()); rc != 0) {
+	    ldpp_dout(this, 1) << "ERROR: failed to set notification manager "
+			       << "thread name to: " << thread_name
+			       << ". error: " << rc << dendl;
+	  }
           try {
             io_context.run(); 
           } catch (const std::exception& err) {
@@ -480,11 +487,6 @@ public:
             throw(err);
           }
         });
-        const std::string thread_name = WORKER_THREAD_NAME+std::to_string(worker_id);
-        if (const auto rc = ceph_pthread_setname(thread_name.c_str()); rc != 0) {
-           ldpp_dout(this, 1) << "ERROR: failed to set notification manager thread name to: " << thread_name
-             << ". error: " << rc << dendl;
-        }
       }
       ldpp_dout(this, 10) << "Started notification manager with: " << worker_count << " workers" << dendl;
     }
