@@ -1232,7 +1232,7 @@ int DaosObject::copy_object(
     RGWObjCategory category, uint64_t olh_epoch,
     boost::optional<ceph::real_time> delete_at, std::string* version_id,
     std::string* tag, std::string* etag, void (*progress_cb)(off_t, void*),
-    void* progress_data, const DoutPrefixProvider* dpp, optional_yield y) {
+    void* progress_data, rgw::sal::DataProcessorFactory* dp_factory, const DoutPrefixProvider* dpp, optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 

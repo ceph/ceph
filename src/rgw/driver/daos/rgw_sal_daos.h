@@ -614,8 +614,8 @@ class DaosObject : public StoreObject {
       RGWObjCategory category, uint64_t olh_epoch,
       boost::optional<ceph::real_time> delete_at, std::string* version_id,
       std::string* tag, std::string* etag, void (*progress_cb)(off_t, void*),
-      void* progress_data, const DoutPrefixProvider* dpp,
-      optional_yield y) override;
+      void* progress_data, rgw::sal::DataProcessorFactory* dp_factory,
+      const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
   virtual int set_acl(const RGWAccessControlPolicy& acl) override {
     acls = acl;

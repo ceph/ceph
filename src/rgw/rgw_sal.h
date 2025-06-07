@@ -1231,6 +1231,7 @@ class Object {
 	       boost::optional<ceph::real_time> delete_at,
                std::string* version_id, std::string* tag, std::string* etag,
                void (*progress_cb)(off_t, void *), void* progress_data,
+               DataProcessorFactory* dp_factory,
                const DoutPrefixProvider* dpp, optional_yield y) = 0;
 
     /** return logging subsystem */
