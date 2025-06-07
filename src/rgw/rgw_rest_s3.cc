@@ -783,44 +783,9 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
     return 0;
   }
 
-  std::unique_ptr<BlockCrypt> block_crypt;
-  int res = rgw_s3_prepare_decrypt(s, s->yield, attrs, &block_crypt,
-                                   crypt_http_responses);
-  if (res < 0) {
-    return res;
-  }
-  if (block_crypt == nullptr) {
-    return 0;
-  }
-
-  // in case of a multipart upload, we need to know the part lengths to
-  // correctly decrypt across part boundaries
-  std::vector<size_t> parts_len;
-
-  // for replicated objects, the original part lengths are preserved in an xattr
-  if (auto i = attrs.find(RGW_ATTR_CRYPT_PARTS); i != attrs.end()) {
-    try {
-      auto p = i->second.cbegin();
-      using ceph::decode;
-      decode(parts_len, p);
-    } catch (const buffer::error&) {
-      ldpp_dout(this, 1) << "failed to decode RGW_ATTR_CRYPT_PARTS" << dendl;
-      return -EIO;
-    }
-  } else if (manifest_bl) {
-    // otherwise, we read the part lengths from the manifest
-    res = RGWGetObj_BlockDecrypt::read_manifest_parts(this, *manifest_bl,
-                                                      parts_len);
-    if (res < 0) {
-      return res;
-    }
-  }
-
-  *filter = std::make_unique<RGWGetObj_BlockDecrypt>(
-      s, s->cct, cb, std::move(block_crypt),
-      std::move(parts_len), s->yield);
-  return 0;
+  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, &crypt_http_responses);
 }
+
 int RGWGetObj_ObjStore_S3::verify_requester(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y) 
 {
   int ret = -EINVAL;
@@ -3049,45 +3014,7 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
     map<string, bufferlist>& attrs,
     bufferlist* manifest_bl)
 {
-  std::map<std::string, std::string> crypt_http_responses_unused;
-
-  std::unique_ptr<BlockCrypt> block_crypt;
-  int res = rgw_s3_prepare_decrypt(s, s->yield, attrs, &block_crypt,
-                                   crypt_http_responses_unused);
-  if (res < 0) {
-    return res;
-  }
-  if (block_crypt == nullptr) {
-    return 0;
-  }
-
-  // in case of a multipart upload, we need to know the part lengths to
-  // correctly decrypt across part boundaries
-  std::vector<size_t> parts_len;
-
-  // for replicated objects, the original part lengths are preserved in an xattr
-  if (auto i = attrs.find(RGW_ATTR_CRYPT_PARTS); i != attrs.end()) {
-    try {
-      auto p = i->second.cbegin();
-      using ceph::decode;
-      decode(parts_len, p);
-    } catch (const buffer::error&) {
-      ldpp_dout(this, 1) << "failed to decode RGW_ATTR_CRYPT_PARTS" << dendl;
-      return -EIO;
-    }
-  } else if (manifest_bl) {
-    // otherwise, we read the part lengths from the manifest
-    res = RGWGetObj_BlockDecrypt::read_manifest_parts(this, *manifest_bl,
-                                                      parts_len);
-    if (res < 0) {
-      return res;
-    }
-  }
-
-  *filter = std::make_unique<RGWGetObj_BlockDecrypt>(
-      s, s->cct, cb, std::move(block_crypt),
-      std::move(parts_len), s->yield);
-  return 0;
+  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, nullptr);
 }
 
 int RGWPutObj_ObjStore_S3::get_encrypt_filter(
@@ -3107,7 +3034,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
       /* We are adding to existing object.
        * We use crypto mode that configured as if we were decrypting. */
       res = rgw_s3_prepare_decrypt(s, s->yield, obj->get_attrs(),
-                                   &block_crypt, crypt_http_responses);
+                                   &block_crypt, &crypt_http_responses);
       if (res == 0 && block_crypt != nullptr)
         filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
     }
@@ -4104,9 +4031,8 @@ int RGWGetObjAttrs_ObjStore_S3::get_decrypt_filter(
   // in the SSE-KMS and SSE-S3 cases, this unfortunately causes us to fetch
   // decryption keys which we don't need :(
   std::unique_ptr<BlockCrypt> block_crypt; // ignored
-  std::map<std::string, std::string> crypt_http_responses; // ignored
   return rgw_s3_prepare_decrypt(s, s->yield, attrs, &block_crypt,
-                                crypt_http_responses);
+                                nullptr);
 }
 
 void RGWGetObjAttrs_ObjStore_S3::send_response()
