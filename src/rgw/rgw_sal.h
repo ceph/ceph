@@ -262,7 +262,9 @@ struct TopicList {
 /** A list of key-value attributes */
   using Attrs = std::map<std::string, ceph::buffer::list>;
 
-/** * @brief A factory for DataProcessor instances
+/**
+ * @brief A factory for DataProcessor instances
+ *
  * This factory is used to create DataProcessor instances that can process data
  * in a streaming fashion. It is used by the RGWGetDataCB interface to allow
  * data to be processed as it is read from the backing store.
@@ -276,7 +278,6 @@ class DataProcessorFactory {
 
   virtual int set_writer(DataProcessor* writer,
                          Attrs& attrs,
-                         const rgw_placement_rule& dest_placement,
                          const DoutPrefixProvider *dpp,
                          optional_yield y) = 0;
   virtual RGWGetObj_Filter* get_filter() = 0;
