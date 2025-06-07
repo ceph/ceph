@@ -5269,6 +5269,10 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     return ret;
   }
 
+  if (dp_factory) {
+    dp_factory->finalize_attrs(attrs);
+  }
+
   string etag;
   auto iter = attrs.find(RGW_ATTR_ETAG);
   if (iter != attrs.end()) {

@@ -282,6 +282,7 @@ class DataProcessorFactory {
                          optional_yield y) = 0;
   virtual RGWGetObj_Filter* get_filter() = 0;
   virtual bool need_copy_data() = 0;
+  virtual void finalize_attrs(Attrs& attrs) { /* default implementation does nothing */ }
 };
 
 /**
