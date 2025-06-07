@@ -375,6 +375,38 @@ public:
   }
 };
 
+class DataProcessorFilter : public RGWGetObj_Filter
+{
+  rgw::sal::DataProcessor* processor;
+  off_t ofs = 0;
+
+public:
+  DataProcessorFilter() {}
+  explicit DataProcessorFilter(rgw::sal::DataProcessor* proc) : processor(proc) {}
+  ~DataProcessorFilter() override {}
+
+  void set_processor(rgw::sal::DataProcessor* proc) {
+    processor = proc;
+  }
+
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
+    // DataProcessor requires ownership of the entire bufferlist.
+    // RGWGetObj_Filter, however, may reuse the original bufferlist after this call.
+    // To avoid unintended side effects, we create a copy of the relevant portion.
+    bufferlist copy_bl;
+    bl.begin().copy(bl_len, copy_bl);
+
+    int ret = processor->process(std::move(copy_bl), ofs);
+    if (ret < 0) return ret;
+    ofs += bl_len;
+    return bl_len;
+  }
+
+  int flush() override {
+    return processor->process({}, ofs);
+  }
+};
+
 class RGWGetObj : public RGWOp {
 protected:
   const char *range_str;
