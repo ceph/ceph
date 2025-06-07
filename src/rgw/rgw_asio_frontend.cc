@@ -365,7 +365,7 @@ void handle_connection(boost::asio::io_context& context,
     // if we failed before reading the entire message, discard any remaining
     // bytes before reading the next
     while (!expect_continue && !parser.is_done()) {
-      static std::array<char, 1024> discard_buffer;
+      static std::array<char, 1024*1024> discard_buffer;
 
       auto& body = parser.get().body();
       body.size = discard_buffer.size();
