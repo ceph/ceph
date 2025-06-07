@@ -750,6 +750,10 @@ int RGWGetObj_BlockDecrypt::fixup_range(off_t& bl_ofs, off_t& bl_end) {
   }
   ldpp_dout(this->dpp, 20) << "fixup_range [" << inp_ofs << "," << inp_end
       << "] => [" << bl_ofs << "," << bl_end << "]" << dendl;
+
+  if (next)
+    return next->fixup_range(bl_ofs, bl_end);
+
   return 0;
 }
 
