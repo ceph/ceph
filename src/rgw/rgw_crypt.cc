@@ -826,8 +826,15 @@ int RGWGetObj_BlockDecrypt::flush() {
   // flush up to block boundaries, aligned or not
   if (cache.length() > 0) {
     res = process(cache, part_ofs, cache.length());
+    if (res < 0) {
+      return res;
+    }
   }
-  return res;
+
+  if (next)
+    return next->flush();
+
+  return 0;
 }
 
 RGWPutObj_BlockEncrypt::RGWPutObj_BlockEncrypt(const DoutPrefixProvider *dpp,
