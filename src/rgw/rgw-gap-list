@@ -400,8 +400,11 @@ BEGIN {
   f1_count++
   if(f2_eof==0) {
     if(test_lines()==2) {
-      while ($1>b[1]) {
+      while ($1>b[1] && !f2_eof) {
         advance_f2()
+      }
+      if (f2_eof) {
+        line_out()
       }
       test_lines()
     }
