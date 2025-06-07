@@ -3842,6 +3842,7 @@ int RadosObject::copy_object(const ACLOwner& owner,
 				     etag,
 				     progress_cb,
 				     progress_data,
+				     dp_factory,
 				     dpp,
 				     y,
                                      dest_object->get_trace());
