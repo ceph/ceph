@@ -381,7 +381,7 @@ The autoscaler attempts to satisfy the following conditions:
 
 - The number of PG replicas per OSD should be proportional to the amount of data in the
   pool.
-- There should by default 50-100 PGs per pool, taking into account the replication
+- There should by default be 50-100 PGs per pool, taking into account the replication
   overhead or erasure-coding fan-out of each PG's replicas across OSDs.
 
 Use of Placement Groups
@@ -600,7 +600,7 @@ Memory, CPU and network usage
 Every PG in the cluster imposes memory, network, and CPU demands upon OSDs and
 Monitors. These needs must be met at all times and are increased during recovery.
 Indeed, one of the main reasons PGs were developed was to decrease this overhead
-by aggregating RADOS objects into a sets of a manageable size.
+by aggregating RADOS objects into sets of a manageable size.
 
 For this reason, limiting the number of PGs saves significant resources.
 
