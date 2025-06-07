@@ -3892,6 +3892,9 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
     set_req_state_err(s, op_ret);
     dump_errno(s);
 
+    for (auto &it : crypt_http_responses)
+      dump_header(s, it.first, it.second);
+
     // Explicitly use chunked transfer encoding so that we can stream the result
     // to the user without having to wait for the full length of it.
     end_header(s, this, to_mime_type(s->format), CHUNKED_TRANSFER_ENCODING);

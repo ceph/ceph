@@ -1610,6 +1610,7 @@ protected:
   std::string_view copy_source;
   // Not actually required
   std::optional<std::string_view> md_directive;
+  std::map<std::string, std::string> crypt_http_responses;
 
   off_t ofs;
   off_t len;
