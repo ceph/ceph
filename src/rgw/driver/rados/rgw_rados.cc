@@ -8797,9 +8797,10 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
   return -ERR_BUSY_RESHARDING;
 }
 
+template <bool DeleteMarkerV>
 int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info,
                                     RGWObjState& olh_state, const rgw_obj& obj_instance,
-                                    bool delete_marker, const string& op_tag,
+                                    const string& op_tag,
                                     struct rgw_bucket_dir_entry_meta *meta,
                                     uint64_t olh_epoch,
                                     real_time unmod_since, bool high_precision_time,
@@ -8828,7 +8829,7 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
 		      op.assert_exists(); // bucket index shard must exist
 		      cls_rgw_guard_bucket_resharding(op, -ERR_BUSY_RESHARDING);
 		      cls_rgw_bucket_link_olh(op, key, olh_state.olh_tag,
-                                              delete_marker, op_tag, meta, olh_epoch,
+                                              DeleteMarkerV, op_tag, meta, olh_epoch,
 					      unmod_since, high_precision_time,
 					      log_data_change, zones_trace);
                       return rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), y);
@@ -9379,8 +9380,8 @@ int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
       // fail here to simulate the scenario of an unlinked object instance
       ret = -cct->_conf->rgw_debug_inject_set_olh_err;
     } else {
-      ret = bucket_index_link_olh(dpp, bucket_info, *state, target_obj,
-		                              DeleteMarkerV, op_tag, meta, olh_epoch, unmod_since,
+      ret = bucket_index_link_olh<DeleteMarkerV>(dpp, bucket_info, *state, target_obj,
+		                              op_tag, meta, olh_epoch, unmod_since,
 		                              high_precision_time, y, zones_trace, log_data_change);
     }
     if (ret < 0) {
