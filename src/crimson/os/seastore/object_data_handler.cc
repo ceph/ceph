@@ -963,7 +963,7 @@ ObjectDataHandler::clone_ret do_clone_range(
 			&src_first_mapping](auto pos) {
 	return ctx.tm.clone_mappings(
 	  ctx.t, src_base, dest_base, params.offset,
-	  params.len, std::move(pos), std::move(src_first_mapping), true);
+	  params.len, std::move(pos), std::move(src_first_mapping));
       });
       if (data.tailbl) {
 	tail_padding.append(*data.tailbl);
@@ -1101,7 +1101,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::do_rollback(
 	auto dst_base = d_object_data.get_reserved_data_base();
 	return ctx.tm.clone_mappings(
 	  ctx.t, src_base, dst_base, 0, len, std::move(pos),
-	  std::move(mapping), false);
+	  std::move(mapping));
       }).discard_result();
     }).handle_error_interruptible(
       clone_iertr::pass_further{},
