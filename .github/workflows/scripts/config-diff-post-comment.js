@@ -1,8 +1,33 @@
 module.exports = async ({ github, context, core, configDiff }) => {
   try {
+      const { owner, repo } = context.repo;
+      const issueNumber = context.payload.pull_request.number;
+
+      // List all the comments
+      const comments = await github.paginate(
+        github.rest.issues.listComments, {
+          owner,
+          repo,
+          issue_number: issueNumber,
+          per_page: 100,
+        }
+      );
+
+      const existingComment = comments.find(comment => comment.body.includes("### Config Diff Tool Output"));
+
       // Do not create comment if there are no configuration changes
       if (!configDiff) {
         core.info("No changes detected. Skipping comment creation.");
+
+        if (existingComment){
+          core.info("Existing config diff comment found. Deleting it...");
+          await github.rest.issues.deleteComment({
+              comment_id: existingComment.id,
+              owner,
+              repo,
+          });
+        }
+
         return;
       }
 
@@ -18,9 +43,6 @@ ${configDiff}
  
 The above configuration changes are found in the PR. Please update the relevant release documentation if necessary.
   `;
-
-      const { owner, repo } = context.repo;
-      const issueNumber = context.payload.pull_request.number;
 
       // List all files in the pull request
       core.info("Fetching list of files changed in the pull request...");
@@ -76,22 +98,14 @@ The above configuration changes are found in the PR. Please update the relevant 
         }
       });
 
-      // List all the comments
-      const comments = await github.paginate(
-        github.rest.issues.listComments, {
-          owner,
-          repo,
-          issue_number: issueNumber,
-          per_page: 100,
-        }
-      );
+
 
       // Set action summary
       core.summary.addRaw(commentBody);
       await core.summary.write()
-  
-      const existingComment = comments.find(comment => comment.body.includes("### Config Diff Tool Output"));
-  
+
+
+
       if (existingComment) {
         // There might have been new configuration changes made after posting
         // the first comment. Hence replace the old comment with the new updated
@@ -116,7 +130,7 @@ The above configuration changes are found in the PR. Please update the relevant 
         });
 
       }
-  
+
       // Set the status as FAILED if any configuration changes are detected
       core.setFailed("Configuration Changes Detected, Update release documents - if necessary");
     } catch (error) {
