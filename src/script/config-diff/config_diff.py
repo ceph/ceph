@@ -60,7 +60,9 @@ def git_show_yaml_files(hexsha: str, repo: Repo):
     return config_options
 
 
-def sparse_branch_checkout_remote_repo_skip_clone(remote_repo, ref_sha) -> Repo:
+def sparse_branch_checkout_remote_repo_skip_clone(
+    remote_repo, remote_branch_name, local_branch_name
+) -> Repo:
     repo = Repo(".", search_parent_directories=True)
     git_cmd = repo.git
 
@@ -68,9 +70,9 @@ def sparse_branch_checkout_remote_repo_skip_clone(remote_repo, ref_sha) -> Repo:
         branch.strip().lstrip("*").strip() for branch in git_cmd.branch("--list", "-r").splitlines()
     ]
 
-    branch_name = ref_sha.split(":")[1]
-    branch_present = any(branch_name in branch for branch in local_branches)
+    branch_present = any(local_branch_name in branch for branch in local_branches)
     if not branch_present:
+        ref_sha = remote_branch_name + ":" + local_branch_name
         git_cmd.remote("add", REMOTE_REPO_GIT_REMOTE_NAME, remote_repo)
         git_cmd.fetch(
             REMOTE_REPO_GIT_REMOTE_NAME,
@@ -78,14 +80,14 @@ def sparse_branch_checkout_remote_repo_skip_clone(remote_repo, ref_sha) -> Repo:
             "--depth=1",
         )
 
-    if not folder_exists_in_branch(branch_name, git_cmd, CEPH_CONFIG_OPTIONS_FOLDER_PATH):
+    if not folder_exists_in_branch(local_branch_name, git_cmd, CEPH_CONFIG_OPTIONS_FOLDER_PATH):
         git_cmd.sparse_checkout("add", CEPH_CONFIG_OPTIONS_FOLDER_PATH)
         git_cmd.checkout()
 
     return repo
 
 
-def sparse_branch_checkout_skip_clone(ref_sha) -> Repo:
+def sparse_branch_checkout_skip_clone(branch_name) -> Repo:
     repo = Repo(".", search_parent_directories=True)
     git_cmd = repo.git
 
@@ -93,10 +95,10 @@ def sparse_branch_checkout_skip_clone(ref_sha) -> Repo:
         branch.strip().lstrip("*").strip() for branch in git_cmd.branch("--list").splitlines()
     ]
 
-    branch_name = ref_sha.split(":")[0]
     branch_present = any(branch_name in branch for branch in local_branches)
 
     if not branch_present:
+        ref_sha = branch_name + ":" + branch_name
         git_cmd.fetch(
             "origin",
             ref_sha,
@@ -185,12 +187,12 @@ def print_diff_posix_format(diff_result: dict):
     # Handle added configurations
     for daemon, added_configs in diff_result.get("added", {}).items():
         for config in added_configs:
-            print(f"+ added: {config}")
+            print(f"+ added: {config} ({daemon})")
 
     # Handle deleted configurations
     for daemon, deleted_configs in diff_result.get("deleted", {}).items():
         for config in deleted_configs:
-            print(f"- removed: {config}")
+            print(f"- removed: {config} ({daemon})")
 
     # Handle modified configurations
     for daemon, modified_configs in diff_result.get("modified", {}).items():
@@ -198,8 +200,8 @@ def print_diff_posix_format(diff_result: dict):
             for key, change in changes.items():
                 before = change.get("before", "")
                 after = change.get("after", "")
-                print(f"! changed: {config}: old: {before}")
-                print(f"! changed: {config}: new: {after}")
+                print(f"! changed: {config}: old: {before} ({daemon})")
+                print(f"! changed: {config}: new: {after} ({daemon})")
 
 
 def get_daemons_config_names(daemons, daemon_configs):
@@ -377,10 +379,8 @@ def diff_branch(
     final_result = {}
 
     if skip_clone:
-        ref_sha = ref_branch + ":" + ref_branch
-        cmp_sha = cmp_branch + ":" + cmp_branch
-        ref_git_repo = sparse_branch_checkout_skip_clone(ref_sha)
-        cmp_git_repo = sparse_branch_checkout_skip_clone(cmp_sha)
+        ref_git_repo = sparse_branch_checkout_skip_clone(ref_branch)
+        cmp_git_repo = sparse_branch_checkout_skip_clone(cmp_branch)
         ref_config_dict = git_show_yaml_files(ref_branch, ref_git_repo)
         config_dict = git_show_yaml_files(cmp_branch, cmp_git_repo)
         final_result = diff_config(ref_config_dict, config_dict)
@@ -405,12 +405,6 @@ def diff_branch(
         print()
 
 
-"""
-ref_sha = "'refs/tags/" + ref_tag +  ":" + "refs/tags/" + ref_tag + "'"
-        cmp_sha = "'refs/tags/" + cmp_tag + ":" + "refs/tags/" + cmp_tag + "'"
-"""
-
-
 def diff_tags(ref_repo: str, ref_tag: str, cmp_tag: str, skip_clone: bool, format_type: str):
     """
     Perform a diff between two tags in the same repository.
@@ -425,15 +419,10 @@ def diff_tags(ref_repo: str, ref_tag: str, cmp_tag: str, skip_clone: bool, forma
     final_result = {}
 
     if skip_clone:
-        ref_sha_local_repo_name = "refs/tags/" + ref_tag + "'"
-        cmp_sha_local_repo_name = "refs/tags/" + cmp_tag + "'"
-        ref_sha = "'refs/tags/" + ref_tag + ":" + ref_sha_local_repo_name
-        cmp_sha = "'refs/tags/" + cmp_tag + ":" + cmp_sha_local_repo_name
-
-        ref_git_repo = sparse_branch_checkout_skip_clone(ref_sha)
-        cmp_git_repo = sparse_branch_checkout_skip_clone(cmp_sha)
-        ref_config_dict = git_show_yaml_files(ref_sha_local_repo_name, ref_git_repo)
-        config_dict = git_show_yaml_files(cmp_sha_local_repo_name, cmp_git_repo)
+        ref_git_repo = sparse_branch_checkout_skip_clone(ref_tag)
+        cmp_git_repo = sparse_branch_checkout_skip_clone(cmp_tag)
+        ref_config_dict = git_show_yaml_files(ref_tag, ref_git_repo)
+        config_dict = git_show_yaml_files(cmp_tag, cmp_git_repo)
         final_result = diff_config(ref_config_dict, config_dict)
 
         ref_git_repo.close()
@@ -477,16 +466,16 @@ def diff_branch_remote_repo(
     """
     final_result = {}
     if skip_clone:
-        ref_sha = ref_branch + ":" + ref_branch
-        cmp_sha_local_branch_name = REMOTE_REPO_GIT_REMOTE_NAME + "/" + cmp_branch
-        cmp_sha = cmp_branch + ":" + cmp_sha_local_branch_name
-        ref_git_repo = sparse_branch_checkout_skip_clone(ref_sha)
-        remote_git_repo = sparse_branch_checkout_remote_repo_skip_clone(remote_repo, cmp_sha)
+        cmp_branch_local_branch_name = REMOTE_REPO_GIT_REMOTE_NAME + "/" + cmp_branch
+        ref_git_repo = sparse_branch_checkout_skip_clone(ref_branch)
+        remote_git_repo = sparse_branch_checkout_remote_repo_skip_clone(
+            remote_repo, cmp_branch, cmp_branch_local_branch_name
+        )
         ref_config_dict = git_show_yaml_files(ref_branch, ref_git_repo)
 
         # To show the files from remote repo, you need to append the remote name
         # before the branch
-        config_dict = git_show_yaml_files(cmp_sha_local_branch_name, remote_git_repo)
+        config_dict = git_show_yaml_files(cmp_branch_local_branch_name, remote_git_repo)
 
         final_result = diff_config(ref_config_dict, config_dict)
 
