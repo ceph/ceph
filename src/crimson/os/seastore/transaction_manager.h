@@ -1378,59 +1378,70 @@ private:
       params.raw_begin,
       params.raw_end,
       first_mapping);
-    if (!first_mapping.is_indirect() && !first_mapping.is_data_stable()) {
-      // merge with existing pending extents
-      params.raw_begin = laddr_offset_t{first_mapping.get_key()};
-      return on_merge(first_mapping, true
-      ).si_then([first_mapping=first_mapping, &params,
-		&on_unaligned_edge]() mutable {
-	auto first_end =
-	  (first_mapping.get_key() + first_mapping.get_length()).checked_to_laddr();
-	if (params.raw_end < first_end) {
-	  return on_unaligned_edge(first_mapping, false);
+    return seastar::do_with(
+      std::move(first_mapping),
+      [&t, this, &params, &on_unaligned_edge,
+      &on_merge](auto &first_mapping) {
+      return lba_manager->refresh_lba_mapping(t, std::move(first_mapping)
+      ).si_then([&first_mapping, &params, &t, this,
+		&on_unaligned_edge, &on_merge](auto m) {
+	first_mapping = std::move(m);
+	if (!first_mapping.is_indirect() && !first_mapping.is_data_stable()) {
+	  // merge with existing pending extents
+	  params.raw_begin = laddr_offset_t{first_mapping.get_key()};
+	  return on_merge(first_mapping, true
+	  ).si_then([first_mapping=first_mapping, &params,
+		    &on_unaligned_edge]() mutable {
+	    auto first_end =
+	      (first_mapping.get_key() + first_mapping.get_length()
+	       ).checked_to_laddr();
+	    if (params.raw_end < first_end) {
+	      return on_unaligned_edge(first_mapping, false);
+	    }
+	    return punch_mappings_iertr::now();
+	  }).si_then([first_mapping=std::move(first_mapping),
+		      &t, this]() mutable {
+	    return remove(t, std::move(first_mapping));
+	  }).handle_error_interruptible(
+	    punch_mappings_iertr::pass_further{},
+	    crimson::ct_error::assert_all{
+	      "punch_first_mapping hit invalid error"
+	    }
+	  );
 	}
-	return punch_mappings_iertr::now();
-      }).si_then([first_mapping=std::move(first_mapping),
-		  &t, this]() mutable {
-	return remove(t, std::move(first_mapping));
-      }).handle_error_interruptible(
-	punch_mappings_iertr::pass_further{},
-	crimson::ct_error::assert_all{
-	  "punch_first_mapping hit invalid error"
+	auto fut = punch_mappings_iertr::now();
+	if (params.raw_begin.get_offset()) {
+	  // load the left padding
+	  fut = on_unaligned_edge(first_mapping, true);
 	}
-      );
-    }
-    auto fut = punch_mappings_iertr::now();
-    if (params.raw_begin.get_offset()) {
-      // load the left padding
-      fut = on_unaligned_edge(first_mapping, true);
-    }
-    return fut.si_then([first_mapping=std::move(first_mapping),
-			&params, &t, this]() mutable {
-      if (first_mapping.get_key() == params.get_aligned_begin()) {
-	return TransactionManager::remap_pin_iertr::make_ready_future<
-	  LBAMapping>(std::move(first_mapping));
-      }
-      auto first_key = first_mapping.get_key();
-      auto first_len = first_mapping.get_length();
-      return remap_mappings<T, 2>(
-	t,
-	std::move(first_mapping),
-	std::array{
-	  // from the start of the first_mapping to the offset of overwrite
-	  remap_entry_t{
-	    0,
-	    params.get_aligned_begin().template get_byte_distance<
-	      extent_len_t>(first_key)},
-	  // from the end of overwrite to the end of the first mapping
-	  remap_entry_t{
-	    params.get_aligned_begin().template get_byte_distance<
-	      extent_len_t>(first_key),
-	    params.get_aligned_begin().template get_byte_distance<
-		extent_len_t>(first_key + first_len)}}
-      ).si_then([](auto mappings) {
-	assert(mappings.size() == 2);
-	return std::move(mappings.back());
+	return fut.si_then([first_mapping=std::move(first_mapping),
+			    &params, &t, this]() mutable {
+	  if (first_mapping.get_key() == params.get_aligned_begin()) {
+	    return TransactionManager::remap_pin_iertr::make_ready_future<
+	      LBAMapping>(std::move(first_mapping));
+	  }
+	  auto first_key = first_mapping.get_key();
+	  auto first_len = first_mapping.get_length();
+	  return remap_mappings<T, 2>(
+	    t,
+	    std::move(first_mapping),
+	    std::array{
+	      // from the start of the first_mapping to the offset of overwrite
+	      remap_entry_t{
+		0,
+		params.get_aligned_begin().template get_byte_distance<
+		  extent_len_t>(first_key)},
+	      // from the end of overwrite to the end of the first mapping
+	      remap_entry_t{
+		params.get_aligned_begin().template get_byte_distance<
+		  extent_len_t>(first_key),
+		params.get_aligned_begin().template get_byte_distance<
+		    extent_len_t>(first_key + first_len)}}
+	  ).si_then([](auto mappings) {
+	    assert(mappings.size() == 2);
+	    return std::move(mappings.back());
+	  });
+	});
       });
     });
   }
