@@ -115,8 +115,7 @@ public:
     LBAMapping mapping,
     laddr_t laddr,
     extent_len_t offset,
-    extent_len_t len,
-    bool updateref) = 0;
+    extent_len_t len) = 0;
 
   struct move_mapping_ret_t {
     LBAMapping src;

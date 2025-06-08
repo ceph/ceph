@@ -1519,7 +1519,7 @@ ObjectDataHandler::do_clone_range(
 	  p2align(offset + len, ctx.tm.get_block_size()) - aligned_off;
 	return ctx.tm.clone_range(
 	  ctx.t, src_base, dest_base, aligned_off, aligned_len,
-	  std::move(*pos), std::move(src_first_mapping), true
+	  std::move(*pos), std::move(src_first_mapping)
 	).si_then([](auto mapping) {
 	  return std::make_optional<LBAMapping>(std::move(mapping));
 	});
@@ -1888,7 +1888,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::do_rollback(
 	auto dst_base = d_object_data.get_reserved_data_base();
 	return ctx.tm.clone_range(
 	  ctx.t, src_base, dst_base, 0, len, std::move(pos),
-	  std::move(mapping), false);
+	  std::move(mapping));
       }).discard_result();
     }).handle_error_interruptible(
       clone_iertr::pass_further{},
