@@ -420,14 +420,13 @@ BtreeLBAManager::clone_mapping(
   LBAMapping mapping,
   laddr_t laddr,
   extent_len_t offset,
-  extent_len_t len,
-  bool updateref)
+  extent_len_t len)
 {
   LOG_PREFIX(BtreeLBAManager::clone_mapping);
   assert(pos.is_viewable());
   assert(mapping.is_viewable());
-  DEBUGT("pos={}, mapping={}, laddr={}, {}~{} updateref={}",
-    t, pos, mapping, laddr, offset, len, updateref);
+  DEBUGT("pos={}, mapping={}, laddr={}, {}~{}",
+    t, pos, mapping, laddr, offset, len);
   assert(offset + len <= mapping.get_length());
   struct state_t {
     LBAMapping pos;
@@ -439,27 +438,22 @@ BtreeLBAManager::clone_mapping(
   auto c = get_context(t);
   return seastar::do_with(
     std::move(mapping),
-    [this, updateref, c](auto &mapping) {
-    if (updateref) {
-      auto fut = update_refcount_iertr::make_ready_future<
-	LBACursorRef>(mapping.direct_cursor);
-      if (!mapping.direct_cursor) {
-	fut = resolve_indirect_cursor(c, *mapping.indirect_cursor);
-      }
-      return fut.si_then([this, c, &mapping](auto cursor) {
-	mapping.direct_cursor = cursor;
-	assert(mapping.direct_cursor->is_viewable());
-	return update_refcount(c.trans, cursor.get(), 1, false
-	).si_then([&mapping](auto res) {
-	  assert(!res.result.mapping.is_indirect());
-	  mapping.direct_cursor = std::move(res.result.mapping.direct_cursor);
-	  return std::move(mapping);
-	});
-      });
-    } else {
-      return update_refcount_iertr::make_ready_future<
-	LBAMapping>(std::move(mapping));
+    [this, c](auto &mapping) {
+    auto fut = update_refcount_iertr::make_ready_future<
+      LBACursorRef>(mapping.direct_cursor);
+    if (!mapping.direct_cursor) {
+      fut = resolve_indirect_cursor(c, *mapping.indirect_cursor);
     }
+    return fut.si_then([this, c, &mapping](auto cursor) {
+      mapping.direct_cursor = cursor;
+      assert(mapping.direct_cursor->is_viewable());
+      return update_refcount(c.trans, cursor.get(), 1, false
+      ).si_then([&mapping](auto res) {
+	assert(!res.result.mapping.is_indirect());
+	mapping.direct_cursor = std::move(res.result.mapping.direct_cursor);
+	return std::move(mapping);
+      });
+    });
   }).si_then([c, this, pos=std::move(pos), len,
 	      offset, laddr](auto mapping) mutable {
     return seastar::do_with(
