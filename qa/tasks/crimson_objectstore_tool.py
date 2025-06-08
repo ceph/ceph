@@ -450,6 +450,33 @@ def test_crimson_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME):
                 except CommandFailedError as e:
                     log.warning("--get-omap failed with status {ret}".format(ret=e.exitstatus))
 
+                # Test remove-omap
+                log.info("Testing --remove-omap")
+                cmd = (prefix + "--remove-omap --pg {pg} --object {obj} --omap-key {key}").format(
+                    id=osdid, pg=test_pg, obj=test_object, key=test_key)
+                try:
+                    result = remote.sh(cmd, check_status=False)
+                    log.info("remove-omap completed for key {key}".format(key=test_key))
+                except CommandFailedError as e:
+                    log.warning("--remove-omap failed with status {ret}".format(ret=e.exitstatus))
+                    ERRORS += 1
+
+                # Test get-omap after remove (should be empty)
+                log.info("Testing --get-omap after remove-omap (should be empty)")
+                cmd = (prefix + "--get-omap --pg {pg} --object {obj} --omap-key {key}").format(
+                    id=osdid, pg=test_pg, obj=test_object, key=test_key)
+                try:
+                    omap_value = remote.sh(cmd, check_status=False)
+                    if omap_value.strip() == "":
+                        log.info("get-omap after remove verification PASSED: got empty string as expected")
+                    else:
+                        log.warning("get-omap after remove verification failed: expected empty, got {actual}".format(
+                            actual=omap_value.strip()))
+                        ERRORS += 1
+                except CommandFailedError as e:
+                    log.warning("--get-omap after remove-omap failed with status {ret}".format(ret=e.exitstatus))
+                    ERRORS += 1
+
                 # Test omap argument validation
                 log.info("Testing OMAP argument validation")
                 omap_invalid_cases = [

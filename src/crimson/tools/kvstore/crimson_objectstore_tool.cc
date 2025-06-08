@@ -57,6 +57,7 @@ struct objectstore_config_t {
   bool list_omap = false;
   bool get_omap = false;
   bool set_omap = false;
+  bool remove_omap = false;
 
   void populate_options(bpo::options_description &desc) {
     desc.add_options()
@@ -84,6 +85,9 @@ struct objectstore_config_t {
       ("set-omap",
        bpo::bool_switch(&set_omap),
        "set omap key-value for an object")
+      ("remove-omap",
+       bpo::bool_switch(&remove_omap),
+       "remove omap key from an object")
       ("pg",
        bpo::value<std::string>(&pg)->default_value(""),
        "pg name")
@@ -325,7 +329,8 @@ int main(int argc, const char* argv[])
           if (objectstore_config.list_objects ||
               objectstore_config.list_omap ||
               objectstore_config.get_omap ||
-              objectstore_config.set_omap) {
+              objectstore_config.set_omap ||
+              objectstore_config.remove_omap) {
             if (std::strcmp(objectstore_config.pg.c_str(), "meta") == 0) {
               coll = coll_t::meta();
             } else {
@@ -341,7 +346,8 @@ int main(int argc, const char* argv[])
 
             if (objectstore_config.list_omap ||
                 objectstore_config.get_omap ||
-                objectstore_config.set_omap) {
+                objectstore_config.set_omap ||
+                objectstore_config.remove_omap) {
               if (objectstore_config.object.empty()) {
                 fmt::print(std::cerr, "object name is empty, use pgmeta oid\n");
                 ghobj = pgid.make_pgmeta_oid();
@@ -463,6 +469,31 @@ int main(int argc, const char* argv[])
             } catch (const std::exception& e) {
               fmt::print(std::cerr,
                          "Error reading omap value: {}\n", e.what());
+              fmt::print(std::cerr,
+                         "This may indicate storage corruption or version mismatch\n");
+              return EXIT_FAILURE;
+            }
+          } else if (objectstore_config.remove_omap) {
+            fmt::print(std::cerr, "remove omap\n");
+            if (objectstore_config.omap_key.empty()) {
+              fmt::print(std::cerr, "omap-key is required for remove-omap\n");
+              return EXIT_FAILURE;
+            }
+            try {
+              bool success = st.remove_omap(coll, objectstore_config.shard_id, ghobj,
+                                          objectstore_config.omap_key).get();
+              if (success) {
+                fmt::print(std::cout,
+                          "remove omap success: key={}, namespace={}\n",
+                          objectstore_config.omap_key,
+                          objectstore_config.object_namespace);
+              } else {
+                fmt::print(std::cerr, "remove omap failed\n");
+                return EXIT_FAILURE;
+              }
+            } catch (const std::exception& e) {
+              fmt::print(std::cerr,
+                         "Error removing omap value: {}\n", e.what());
               fmt::print(std::cerr,
                          "This may indicate storage corruption or version mismatch\n");
               return EXIT_FAILURE;

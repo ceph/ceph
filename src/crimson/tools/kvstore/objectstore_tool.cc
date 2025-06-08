@@ -54,11 +54,14 @@ StoreTool::omap_get_values(
     shard_id,
     [this, cid, oid, start] {
       return store->get_sharded_store().open_collection(cid)
-        .handle_exception([this, cid](std::exception_ptr) {
-          // If collection doesn't exist, create it
-          return store->get_sharded_store().create_new_collection(cid);
+        .handle_exception([](std::exception_ptr) {
+          return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
         })
         .then([this, oid, start] (auto coll) {
+          if (!coll) {
+            fmt::print(std::cerr, "Failed to open collection: collection does not exist\n");
+            return seastar::make_ready_future<FuturizedStore::Shard::omap_values_t>(FuturizedStore::Shard::omap_values_t());
+          }
           return store->get_sharded_store().omap_get_values(coll, oid, start)
             .safe_then_unpack([](bool success, FuturizedStore::Shard::omap_values_t vals) {
                 if (!success) {
@@ -84,11 +87,14 @@ seastar::future<std::string> StoreTool::get_omap(
     shard_id,
     [this, cid, oid, key] {
       return store->get_sharded_store().open_collection(cid)
-        .handle_exception([this, cid](std::exception_ptr) {
-          // If collection doesn't exist, create it
-          return store->get_sharded_store().create_new_collection(cid);
+        .handle_exception([](std::exception_ptr) {
+          return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
         })
         .then([this, oid, key] (auto coll) {
+          if (!coll) {
+            fmt::print(std::cerr, "Failed to open collection: collection does not exist\n");
+            return seastar::make_ready_future<std::string>(std::string());
+          }
           return store->get_sharded_store().omap_get_values(coll, oid, std::nullopt)
             .safe_then_unpack([key](bool success, FuturizedStore::Shard::omap_values_t vals) {
                 if (!success) {
@@ -126,18 +132,55 @@ seastar::future<bool> StoreTool::set_omap(
     [this, cid_copy = std::move(cid_copy), oid_copy = std::move(oid_copy), 
      key_copy = std::move(key_copy), value_copy = std::move(value_copy)] () mutable {
       return store->get_sharded_store().open_collection(cid_copy)
-        .handle_exception([this, cid_copy](std::exception_ptr) {
-          // If collection doesn't exist, create it
-          return store->get_sharded_store().create_new_collection(cid_copy);
+        .handle_exception([](std::exception_ptr) {
+          return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
         })
         .then([this, cid_copy = std::move(cid_copy), oid_copy = std::move(oid_copy), 
                key_copy = std::move(key_copy), value_copy = std::move(value_copy)] (auto coll) mutable {
+          if (!coll) {
+            fmt::print(std::cerr, "Failed to open collection: collection does not exist\n");
+            return seastar::make_ready_future<bool>(false);
+          }
           ceph::os::Transaction txn;
           std::map<std::string, ceph::bufferlist> omap_values;
           ceph::bufferlist bl;
           bl.append(value_copy.c_str(), value_copy.length());
           omap_values[key_copy] = std::move(bl);
           txn.omap_setkeys(cid_copy, oid_copy, omap_values);
+          return store->get_sharded_store().do_transaction(coll, std::move(txn))
+            .then([] {
+                return true;
+            }).handle_exception([] (std::exception_ptr) {
+                return false;
+            });
+        });
+    }
+  );
+}
+
+seastar::future<bool> StoreTool::remove_omap(
+  const coll_t& cid,
+  unsigned int shard_id,
+  const ghobject_t& oid,
+  const std::string& key)
+{
+  coll_t cid_copy = cid;
+  ghobject_t oid_copy = oid;
+  std::string key_copy = key;
+  return seastar::smp::submit_to(
+    shard_id,
+    [this, cid_copy = std::move(cid_copy), oid_copy = std::move(oid_copy), key_copy = std::move(key_copy)] () mutable {
+      return store->get_sharded_store().open_collection(cid_copy)
+        .handle_exception([](std::exception_ptr) {
+          return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
+        })
+        .then([this, cid_copy = std::move(cid_copy), oid_copy = std::move(oid_copy), key_copy = std::move(key_copy)] (auto coll) mutable {
+          if (!coll) {
+            fmt::print(std::cerr, "Failed to open collection: collection does not exist\n");
+            return seastar::make_ready_future<bool>(false);
+          }
+          ceph::os::Transaction txn;
+          txn.omap_rmkey(cid_copy, oid_copy, key_copy);
           return store->get_sharded_store().do_transaction(coll, std::move(txn))
             .then([] {
                 return true;
