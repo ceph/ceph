@@ -609,22 +609,29 @@ void PG::kick_snap_trim()
   }, pg_ref, pg_ref->get_osdmap_epoch());
 }
 
-void PG::queue_snap_retrim(snapid_t snap)
+void PG::queue_snap_retrims(const std::vector<snapid_t>& snaps)
 {
-  logger().debug("{}: queue_snap_retrim snap={}", *this, snap);
+  logger().debug("{}: queue_snap_retrims snaps={}", *this, snaps);
   if (!peering_state.is_primary() || !peering_state.is_active()) {
-    logger().debug("{}: not primary or active, skipping snap retrim", *this);
-    return;
-  }
-  if (snap_trimq.contains(snap)) {
-    logger().debug("{}: snap {} already in trimq", *this, snap);
+    logger().debug("{}: not primary or active, skipping snap retrims", *this);
     return;
   }
 
-  logger().info("{}: queuing snap {} for retrim", *this, snap);
-  snap_trimq.insert(snap);
+  size_t new_snaps = 0;
+  for (auto snap : snaps) {
+    if (!snap_trimq.contains(snap)) {
+      logger().info("{}: queuing snap {} for retrim", *this, snap);
+      snap_trimq.insert(snap);
+      new_snaps++;
+    } else {
+      logger().debug("{}: snap {} already in trimq", *this, snap);
+    }
+  }
 
-  kick_snap_trim();
+  if (new_snaps > 0) {
+    logger().info("{}: queued {} new snaps for retrim", *this, new_snaps);
+    kick_snap_trim();
+  }
 }
 
 PG::interruptible_future<seastar::stop_iteration> PG::trim_snap(

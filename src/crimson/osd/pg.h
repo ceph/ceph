@@ -426,7 +426,7 @@ public:
   void set_ready_to_merge_source(eversion_t lu) final {}
 
   // seastar::future<> scrub_purged_snaps();
-  void queue_snap_retrim(snapid_t snap);
+  void queue_snap_retrims(const std::vector<snapid_t>& snaps);
   void kick_snap_trim();
 
   void on_active_actmap() final;

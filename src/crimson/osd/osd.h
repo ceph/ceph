@@ -178,7 +178,7 @@ public:
     return shard_services.local();
   }
   seastar::future<> scrub_purged_snaps();
-
+  seastar::future<> reset_purged_snaps_last();
   static ghobject_t make_purged_snaps_oid() {
     return ghobject_t(hobject_t(
       sobject_t(

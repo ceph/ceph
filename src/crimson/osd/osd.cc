@@ -833,6 +833,7 @@ seastar::future<> OSD::start_asok_admin()
     asok->register_command(
       make_asok_hook<DumpRecoveryReservationsHook>(get_shard_services()));
     asok->register_command(make_asok_hook<ScrubPurgedSnapsHook>(*this));
+    asok->register_command(make_asok_hook<ResetPurgedSnapsLastHook>(*this));
   });
 }
 
@@ -1174,68 +1175,92 @@ seastar::future<> OSD::scrub_purged_snaps()
   LOG_PREFIX(OSD::scrub_purged_snaps);
   DEBUG("starting purged_snaps scrub for all PGs");
 
-  pg_shard_manager.for_each_pgid([this, FNAME](auto &pgid) {
+  std::vector<seastar::future<>> scrub_futures;
+  pg_shard_manager.for_each_pgid([this, FNAME, &scrub_futures](auto &pgid) {
     clog->debug() << "purged_snaps scrub starts for pg " << pgid;
-    (void)pg_shard_manager.with_pg(pgid, [this, FNAME, pgid](auto &&pg) {
-      if (!pg) {
-        DEBUG("pg {} not found, skipping", pgid);
-        return;
-      }
-
-      SnapMapper::Scrubber scrubber(
-        &store.get_sharded_store(),
-        pg_shard_manager.get_meta_coll().collection(),
-        pg->get_collection_ref(),
-        make_purged_snaps_oid(),
-        pgid.make_snapmapper_oid());
-      seastar::async([&scrubber] {
-        scrubber.run();
-      }).get();
-
-      const auto stray_count = scrubber.stray.size();
-      DEBUG("pg {} scrub completed, found {} stray snaps", pgid, stray_count);
-
-      for (const auto& stray : scrubber.stray) {
-        const auto& [pool_id, snap, hash, shard] = stray;
-        const pg_pool_t *pool_info = osdmap->get_pg_pool(pool_id);
-        if (!pool_info) {
-          DEBUG("ignoring stray snap {} from non-existent pool {}", snap, pool_id);
-          continue;
+    scrub_futures.push_back(
+      pg_shard_manager.with_pg(pgid, [this, FNAME, pgid](auto &&pg) {
+        if (!pg) {
+          DEBUG("pg {} not found, skipping", pgid);
+          return seastar::now();
         }
-        DEBUG("queueing snap retrim for pg {} snap {}", pgid, snap);
-        pg->queue_snap_retrim(snap);
-      }
-    });
+
+        auto pg_ref = std::make_shared<boost::intrusive_ptr<crimson::osd::PG>>(std::move(pg));
+        return seastar::do_with(
+          SnapMapper::Scrubber(
+            store.get_sharded_store(),
+            pg_shard_manager.get_meta_coll().collection(),
+            (*pg_ref)->get_collection_ref(),
+            make_purged_snaps_oid(),
+            pgid.make_snapmapper_oid()),
+          [this, FNAME, pgid, pg_ref](auto &scrubber) {
+            return seastar::async([&scrubber] {
+              scrubber.run();
+            }).then([this, FNAME, pgid, pg_ref, &scrubber]() {
+              const auto stray_count = scrubber.stray.size();
+              DEBUG("pg {} scrub completed, found {} stray snaps", pgid, stray_count);
+
+              // 批量处理stray snaps
+              std::vector<snapid_t> snaps_to_retrim;
+              for (const auto& stray : scrubber.stray) {
+                const auto& [pool_id, snap, hash, shard] = stray;
+                const pg_pool_t *pool_info = osdmap->get_pg_pool(pool_id);
+                if (!pool_info) {
+                  WARN("ignoring stray snap {} from non-existent pool {}", snap, pool_id);
+                  continue;
+                }
+                snaps_to_retrim.push_back(snap);
+              }
+              
+              if (!snaps_to_retrim.empty()) {
+                DEBUG("queueing {} snap retrims for pg {}", snaps_to_retrim.size(), pgid);
+                auto target_shard = pg_shard_manager.get_pg_to_shard_mapping().get_pg_mapping(pgid);
+                return seastar::smp::submit_to(target_shard, [pg_ref, snaps_to_retrim=std::move(snaps_to_retrim)] {
+                  (*pg_ref)->queue_snap_retrims(snaps_to_retrim);
+                  return seastar::now();
+                });
+              }
+              return seastar::now();
+            });
+          });
+      })
+    );
   });
 
-  return seastar::now().then([this, FNAME]() {
-    if (pg_shard_manager.is_stopping()) {
-      DEBUG("OSD is stopping, skipping superblock update");
-      return seastar::make_ready_future<>();
-    }
+  return seastar::when_all_succeed(scrub_futures.begin(), scrub_futures.end())
+    .then([this, FNAME]() {
+      if (pg_shard_manager.is_stopping()) {
+        DEBUG("OSD is stopping, skipping superblock update");
+        return seastar::make_ready_future<>();
+      }
 
-    DEBUG("purged_snaps scrub completed, updating superblock");
-    ceph::os::Transaction txn;
-    superblock.last_purged_snaps_scrub = ceph_clock_now();
-    pg_shard_manager.get_meta_coll().store_superblock(txn, superblock);
-
-    return store.get_sharded_store().do_transaction(
-      pg_shard_manager.get_meta_coll().collection(),
-      std::move(txn)
-    ).then([this, FNAME]() {
-      DEBUG("superblock updated with latest purged_snaps scrub timestamp");
+      DEBUG("purged_snaps scrub completed, updating superblock");
+      superblock.last_purged_snaps_scrub = ceph_clock_now();
+      return pg_shard_manager.set_superblock(superblock).then([this] {
+        return _write_superblock(store, pg_shard_manager.get_meta_coll(), superblock);
+      }).then([this, FNAME]() {
+        DEBUG("superblock updated with latest purged_snaps scrub timestamp");
+        if (pg_shard_manager.is_active()) {
+          DEBUG("sending beacon after purged_snaps scrub completion");
+          return send_beacon();
+        }
+        return seastar::make_ready_future<>();
+      });
+    }).handle_exception([this, FNAME](std::exception_ptr ep) {
+      ERROR("purged_snaps scrub failed: {}", ep);
       if (pg_shard_manager.is_active()) {
-        DEBUG("sending beacon after purged_snaps scrub completion");
         return send_beacon();
       }
       return seastar::make_ready_future<>();
     });
-  }).handle_exception([this, FNAME](std::exception_ptr ep) {
-    ERROR("purged_snaps scrub failed: {}", ep);
-    if (pg_shard_manager.is_active()) {
-      return send_beacon();
-    }
-    return seastar::make_ready_future<>();
+}
+
+seastar::future<> OSD::reset_purged_snaps_last() {
+  LOG_PREFIX(OSD::reset_purged_snaps_last);
+  INFO("updating superblock");
+  superblock.purged_snaps_last = 0;
+  return pg_shard_manager.set_superblock(superblock).then([this] {
+    return _write_superblock(store, pg_shard_manager.get_meta_coll(), superblock);
   });
 }
 
@@ -1330,26 +1355,23 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
         superblock.clean_thru = last;
       }
       // record new purged_snaps
-      if (superblock.purged_snaps_last == start - 1) {
-        OSDriver osdriver{&store.get_sharded_store(),
-                          pg_shard_manager.get_meta_coll().collection(),
-                          make_purged_snaps_oid()};
-        auto cct = CephContext();
-        seastar::async([&] {
+      return seastar::async([this, &t, start, last, &purged_snaps, FNAME] {
+        if (superblock.purged_snaps_last == start - 1) {
+          OSDriver osdriver{&store.get_sharded_store(),
+                            pg_shard_manager.get_meta_coll().collection(),
+                            make_purged_snaps_oid()};
+          auto cct = CephContext();
           SnapMapper::record_purged_snaps(
             &cct,
             osdriver,
             osdriver.get_transaction(&t),
             purged_snaps);
-        }).get();
-        superblock.purged_snaps_last = last;
-      } else {
-        DEBUG("superblock purged_snaps_last is {}, not recording new purged_snaps", superblock.purged_snaps_last);
-      }
-      pg_shard_manager.get_meta_coll().store_superblock(t, superblock);
-      return pg_shard_manager.set_superblock(superblock).then(
-      [FNAME, this, &t] {
-        DEBUG("submitting transaction");
+          superblock.purged_snaps_last = last;
+        } else {
+          DEBUG("superblock purged_snaps_last is {}, not recording new purged_snaps", superblock.purged_snaps_last);
+        }
+      }).then([this, &t] {
+        pg_shard_manager.get_meta_coll().store_superblock(t, superblock);
         return store.get_sharded_store().do_transaction(
           pg_shard_manager.get_meta_coll().collection(),
           std::move(t));

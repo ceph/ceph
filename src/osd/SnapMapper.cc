@@ -1046,32 +1046,51 @@ int SnapMapper::Scrubber::OmapStore::omap_iterate(
   ObjectStore::omap_iter_seek_t start_from,
   std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> visitor)
 {
-  OmapIterator iterator;
-
-  try {
-    iterator.load(crimson_store, ch, hoid, start_from.seek_position).get();
-  } catch (...) {
-    return -EIO;
+  auto it = cache.find(ch->get_cid());
+  if (it == cache.end()) {
+    ceph_abort_msg("invalid collection handle in omap_iterate");
   }
+  auto& iterator = it->second;
 
-  iterator.seek(start_from.seek_position, start_from.seek_type);
-
-  while (iterator.valid()) {
-    std::string value_str = iterator.value().to_str();
-    auto ret = visitor(iterator.key(), std::string_view(value_str));
+  iterator->seek(start_from.seek_position, start_from.seek_type);
+  while (iterator->valid()) {
+    std::string value_str = iterator->value().to_str();
+    auto ret = visitor(iterator->key(), std::string_view(value_str));
     if (ret == ObjectStore::omap_iter_ret_t::STOP) {
       return 1;
     }
-    iterator.next();
+    iterator->next();
   }
-
   return 0;
+}
+
+// Avoid nested async calls by preloading cache data
+seastar::future<> SnapMapper::Scrubber::load_data_async() {
+  dout(10) << __func__ << dendl;
+
+  auto mapping_cache = std::make_unique<OmapIterator>();
+  auto purged_snaps_cache = std::make_unique<OmapIterator>();
+
+  auto fut1 = mapping_cache->load(store->crimson_store, ch_m, mapping_hoid, MAPPING_PREFIX);
+  auto fut2 = purged_snaps_cache->load(store->crimson_store, ch_p, purged_snaps_hoid, PURGED_SNAP_PREFIX);
+  
+  co_await seastar::when_all_succeed(std::move(fut1), std::move(fut2));
+  
+  store->cache.emplace(ch_m->get_cid(), std::move(mapping_cache));
+  store->cache.emplace(ch_p->get_cid(), std::move(purged_snaps_cache));
+  
+  dout(10) << __func__ << " cache loaded" << dendl;
+  co_return;
 }
 #endif
 
 void SnapMapper::Scrubber::run()
 {
   dout(10) << __func__ << dendl;
+
+#ifdef WITH_CRIMSON
+  load_data_async().get();
+#endif
 
   store->omap_iterate(
     ch_m, mapping_hoid,

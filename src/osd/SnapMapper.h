@@ -185,37 +185,34 @@ public:
       values_t values;
       values_t::const_iterator current;
       bool loaded;
-
     public:
       OmapIterator() {
         current = values.end();
         loaded = false;
       }
-
       seastar::future<> load(CrimsonStoreT* store, CollectionHandleT ch, 
                            const ghobject_t& hoid, const std::string& start_key);
-
       bool valid() const;
       const std::string& key() const;
       const ceph::buffer::list& value() const;
       void next();
-
       void seek(const std::string& seek_key, int seek_type);
     };
-
     struct OmapStore {
-      CrimsonStoreT *crimson_store;
+      CrimsonStoreT* crimson_store;
+      std::map<coll_t, std::unique_ptr<OmapIterator>> cache;
 
-      OmapStore(CrimsonStoreT *store) : crimson_store(store) {}
+      OmapStore(CrimsonStoreT* store) 
+        : crimson_store(std::move(store)) {}
 
       int omap_iterate(
         CollectionHandleT ch,
         const ghobject_t& hoid,
         ObjectStore::omap_iter_seek_t start_from,
-        std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> visitor
-      );
+        std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> visitor);
     };
     using ObjectStoreT = OmapStore;
+    seastar::future<> load_data_async();
 #else
     using ObjectStoreT = ObjectStore;
     using CollectionHandleT = ObjectStoreT::CollectionHandle;
@@ -254,13 +251,13 @@ public:
       ghobject_t purged_snaps_hoid,
       ghobject_t mapping_hoid)
       : store(new OmapStore(store)),
-    purged_snaps_hoid(std::move(purged_snaps_hoid)),
-    mapping_hoid(std::move(mapping_hoid)),
-    ch_p(std::move(ch_p)),
-    ch_m(std::move(ch_m)),
-    pool(-1),
-    begin(0), end(0),
-    shard(shard_id_t::NO_SHARD)
+        purged_snaps_hoid(std::move(purged_snaps_hoid)),
+        mapping_hoid(std::move(mapping_hoid)),
+        ch_p(std::move(ch_p)),
+        ch_m(std::move(ch_m)),
+        pool(-1),
+        begin(0), end(0),
+        shard(shard_id_t::NO_SHARD)
     {
       stray.reserve(256);
     }
