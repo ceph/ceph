@@ -46,8 +46,8 @@ libicuTag="release-76-1"
 libicuSrcDir="${depsSrcDir}/icu"
 libicuLibDir="${depsToolsetDir}/libicu"
 
-mingwLlvmUrl="https://github.com/mstorsjo/llvm-mingw/releases/download/20230320/llvm-mingw-20230320-ucrt-ubuntu-18.04-x86_64.tar.xz"
-mingwLlvmSha256Sum="bc367753dea829d219be32e2e64e2d15d03158ce8e700ae5210ca3d78e6a07ea"
+mingwLlvmUrl="https://github.com/mstorsjo/llvm-mingw/releases/download/20250528/llvm-mingw-20250528-ucrt-ubuntu-22.04-x86_64.tar.xz"
+mingwLlvmSha256Sum="b6a446193e65ef43ac393dd0767824e4a2c0a6a099505d990a5e56b867a47b40"
 mingwLlvmDir="${DEPS_DIR}/mingw-llvm"
 
 function _make() {
