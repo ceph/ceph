@@ -698,4 +698,24 @@ private:
 template std::unique_ptr<AdminSocketHook>
 make_asok_hook<ScrubPurgedSnapsHook>(crimson::osd::OSD& osd);
 
+class ResetPurgedSnapsLastHook : public AdminSocketHook {
+public:
+  explicit ResetPurgedSnapsLastHook(crimson::osd::OSD& osd) :
+    AdminSocketHook{"reset_purged_snaps_last", "", "Reset the superblock's purged_snaps_last to 0"},
+    osd(osd)
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&, std::string_view, ceph::bufferlist&&) const final {
+    logger().info("{}: resetting purged_snaps_last", __func__);
+    return osd.reset_purged_snaps_last().then([] {
+      ceph::bufferlist bl;
+      bl.append("purged_snaps_last reset to 0\n");
+      return seastar::make_ready_future<tell_result_t>(0, std::string{}, std::move(bl));
+    });
+  }
+private:
+  crimson::osd::OSD& osd;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<ResetPurgedSnapsLastHook>(crimson::osd::OSD& osd);
+
 } // namespace crimson::admin
