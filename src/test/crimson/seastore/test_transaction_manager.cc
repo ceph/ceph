@@ -738,8 +738,7 @@ struct transaction_manager_test_t :
 	std::move(mapping),
 	offset,
 	0,
-	len,
-	true);
+	len);
     }).unsafe_get().cloned_mapping;
     EXPECT_EQ(offset, pin.get_key());
     EXPECT_EQ(key, pin.get_intermediate_key());

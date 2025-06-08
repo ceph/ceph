@@ -126,9 +126,7 @@ public:
     laddr_t laddr,		// the new lba key of the cloned mapping
     extent_len_t offset,	// the offset of the part to be cloned,
 				// relative to the start of the mapping.
-    extent_len_t len,		// the length of the part to be cloned
-    bool updateref		// whether to update the refcount of the
-				// direct mapping
+    extent_len_t len		// the length of the part to be cloned
   ) = 0;
 
   struct move_mapping_ret_t {

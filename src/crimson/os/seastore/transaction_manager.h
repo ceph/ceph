@@ -594,29 +594,27 @@ public:
     LBAMapping mapping,
     laddr_t hint,
     extent_len_t offset,
-    extent_len_t len,
-    bool updateref) {
+    extent_len_t len) {
     LOG_PREFIX(TransactionManager::clone_pin);
-    SUBDEBUGT(seastore_tm, "{} clone to hint {} ... pos={}, updateref={}",
-      t, mapping, hint, pos, updateref);
+    SUBDEBUGT(seastore_tm, "{} clone to hint {} ... pos={}",
+      t, mapping, hint, pos);
     return seastar::do_with(
       std::move(pos),
       std::move(mapping),
-      [offset, len, FNAME, this, &t, hint, updateref](auto &pos, auto &mapping) {
+      [offset, len, FNAME, this, &t, hint](auto &pos, auto &mapping) {
       return pos.refresh(
       ).si_then([&pos, &mapping](auto m) {
 	pos = std::move(m);
 	return mapping.refresh();
       }).si_then([offset, len, FNAME, this, &pos,
-		  &t, hint, updateref](auto mapping) {
+		  &t, hint](auto mapping) {
 	return lba_manager->clone_mapping(
 	  t,
 	  std::move(pos),
 	  std::move(mapping),
 	  hint,
 	  offset,
-	  len,
-	  updateref
+	  len
 	).si_then([FNAME, &t](auto ret) {
 	  SUBDEBUGT(seastore_tm, "cloned as {}", t, ret.cloned_mapping);
 	  return ret;
@@ -634,29 +632,27 @@ public:
     extent_len_t offset,
     extent_len_t len,
     LBAMapping pos,
-    LBAMapping mapping,
-    bool updateref)
+    LBAMapping mapping)
   {
     LOG_PREFIX(TransactionManager::clone_range);
     SUBDEBUGT(seastore_tm,
-      "src_base={}, dst_base={}, {}~{}, mapping={}, pos={}, updateref={}",
-      t, src_base, dst_base, offset, len, mapping, pos, updateref);
+      "src_base={}, dst_base={}, {}~{}, mapping={}, pos={}",
+      t, src_base, dst_base, offset, len, mapping, pos);
     return seastar::do_with(
       std::move(pos),
       std::move(mapping),
       offset,
       len,
-      [&t, this, updateref, src_base, dst_base]
+      [&t, this, src_base, dst_base]
       (auto &pos, auto &mapping, auto &cloned_to, auto &left) {
       return pos.refresh().si_then([&pos, &mapping](auto s) {
         pos = std::move(s);
         return mapping.refresh();
-      }).si_then([this, &t, &pos, &mapping, src_base, updateref,
+      }).si_then([this, &t, &pos, &mapping, src_base,
                   &cloned_to, &left, dst_base](auto m) {
         mapping = std::move(m);
         return trans_intr::repeat(
-          [&t, this, &pos, &mapping, &cloned_to,
-          updateref, src_base, dst_base, &left]()
+          [&t, this, &pos, &mapping, &cloned_to, src_base, dst_base, &left]()
           -> clone_iertr::future<seastar::stop_iteration> {
           if (left == 0) {
             return clone_iertr::make_ready_future<
@@ -693,7 +689,7 @@ public:
           return clone_pin(
             t, std::move(pos), std::move(mapping),
             (dst_base + cloned_to).checked_to_laddr(),
-            clone_offset, clone_len, updateref
+            clone_offset, clone_len
           ).si_then([&cloned_to, clone_len, &pos, &mapping](auto ret) {
             cloned_to += clone_len;
             return ret.cloned_mapping.next(
