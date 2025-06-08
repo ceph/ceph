@@ -1,4 +1,4 @@
-name: TEST Check if any ceph configuration has been changed
+name: TEST ceph config
 on:
   pull_request:
     types:
