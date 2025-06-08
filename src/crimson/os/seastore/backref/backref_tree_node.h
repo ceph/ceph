@@ -173,7 +173,7 @@ public:
     Transaction &t,
     BackrefLeafNode &left,
     BackrefLeafNode &right,
-    bool prefer_left,
+    uint32_t pivot_idx,
     BackrefLeafNode &replacement_left,
     BackrefLeafNode &replacement_right) final {}
 
@@ -191,7 +191,7 @@ public:
     Transaction &t,
     BackrefLeafNode &left,
     BackrefLeafNode &right,
-    bool prefer_left,
+    uint32_t pivot_idx,
     BackrefLeafNode &replacement_left,
     BackrefLeafNode &replacement_right) final {}
   // backref leaf nodes don't have to resolve relative addresses
