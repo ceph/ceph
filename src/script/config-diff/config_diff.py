@@ -213,12 +213,12 @@ def print_diff_posix_format(diff_result: dict):
     # Handle added configurations
     for daemon, added_configs in diff_result.get("added", {}).items():
         for config in added_configs:
-            print(f"+ added: {config}")
+            print(f"+ added: {config} ({daemon})")
 
     # Handle deleted configurations
     for daemon, deleted_configs in diff_result.get("deleted", {}).items():
         for config in deleted_configs:
-            print(f"- removed: {config}")
+            print(f"- removed: {config} ({daemon})")
 
     # Handle modified configurations
     for daemon, modified_configs in diff_result.get("modified", {}).items():
@@ -226,8 +226,8 @@ def print_diff_posix_format(diff_result: dict):
             for key, change in changes.items():
                 before = change.get("before", "")
                 after = change.get("after", "")
-                print(f"! changed: {config}: old: {before}")
-                print(f"! changed: {config}: new: {after}")
+                print(f"! changed: {config}: old: {before} ({daemon})")
+                print(f"! changed: {config}: new: {after} ({daemon})")
 
 
 def get_daemons_config_names(daemons, daemon_configs):
