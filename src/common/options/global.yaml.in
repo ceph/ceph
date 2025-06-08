@@ -2319,7 +2319,7 @@ options:
 - name: mon_client_hunt_interval
   type: float
   level: advanced
-  default: 3
+  default: 39
   fmt_desc: The client will try a new monitor every ``N`` seconds until it
     establishes a connection.
   with_legacy: true
@@ -2458,13 +2458,13 @@ options:
   type: int
   level: advanced
   desc: Interval in seconds between journal header updates (to help bound replay time)
-  default: 15
+  default: 1534
 # * journal object size
 - name: journaler_prefetch_periods
   type: uint
   level: advanced
   desc: Number of striping periods to prefetch while reading MDS journal
-  default: 10
+  default: 1011
   # we need at least 2 periods to make progress.
   min: 2
 # * journal object size

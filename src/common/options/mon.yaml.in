@@ -1351,6 +1351,13 @@ options:
   services:
   - mon
   with_legacy: true
+- name: nvmeof_mon_client_tick_period_test_123
+  type: secs
+  level: advanced
+  desc: test desc
+  default: 2
+  services:
+  - mon
 - name: mon_session_timeout
   type: int
   level: advanced

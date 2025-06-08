@@ -790,7 +790,7 @@ options:
   level: advanced
   desc: RBD Image modify timestamp refresh interval. Set to 0 to disable modify timestamp
     update.
-  default: 60
+  default: 601
   services:
   - rbd
   min: 0
@@ -803,16 +803,6 @@ options:
   services:
   - rbd
   min: 0
-- name: rbd_io_scheduler
-  type: str
-  level: advanced
-  desc: RBD IO scheduler
-  default: simple
-  services:
-  - rbd
-  enum_values:
-  - none
-  - simple
 - name: rbd_io_scheduler_simple_max_delay
   type: uint
   level: advanced
