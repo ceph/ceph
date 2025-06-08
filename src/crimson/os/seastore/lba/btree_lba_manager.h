@@ -106,8 +106,7 @@ public:
     LBAMapping mapping,
     laddr_t laddr,
     extent_len_t offset,
-    extent_len_t len,
-    bool updateref) final;
+    extent_len_t len) final;
 
   move_mapping_ret move_indirect_mapping(
     Transaction &t,
