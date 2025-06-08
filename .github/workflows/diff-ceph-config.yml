@@ -41,12 +41,14 @@ jobs:
         env:
           REF_REPO: ${{ github.event.pull_request.base.repo.clone_url }}
           REF_BRANCH: ${{ github.event.pull_request.base.ref }}
+          REF_COMMIT_SHA: ${{ github.event.pull_request.base.sha }}
           REMOTE_REPO: ${{ github.event.pull_request.head.repo.clone_url }}
           REMOTE_BRANCH: ${{ github.event.pull_request.head.ref }}
+          REMOTE_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
         run:  |
           {
             echo 'DIFF_JSON<<EOF'
-            python3 ./src/script/config-diff/config_diff.py diff-branch-remote-repo --ref-branch $REF_BRANCH  --remote-repo $REMOTE_REPO --cmp-branch $REMOTE_BRANCH --format=posix-diff --skip-clone
+            python3 ./src/script/config-diff/config_diff.py diff-branch-remote-repo --ref-branch $REF_BRANCH --ref-commit-sha $REF_COMMIT_SHA --remote-repo $REMOTE_REPO --cmp-branch $REMOTE_BRANCH --cmp-commit-sha $REMOTE_COMMIT_SHA --format=posix-diff --skip-clone
             echo EOF
           } >> "$GITHUB_OUTPUT"
         working-directory: ceph
