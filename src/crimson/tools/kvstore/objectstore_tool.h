@@ -41,6 +41,11 @@ public:
     const ghobject_t& oid,
     const std::string& key,
     const std::string& value);
+  seastar::future<bool> remove_omap(
+    const coll_t& cid,
+    unsigned int shard_id,
+    const ghobject_t& oid,
+    const std::string& key);
 private:
   std::unique_ptr<crimson::os::FuturizedStore> store;
 };
