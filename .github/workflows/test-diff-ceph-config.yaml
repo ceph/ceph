@@ -71,7 +71,6 @@ jobs:
         run:  |
           {
             echo 'DIFF_JSON<<EOF'
-            echo $REF_COMMIT_SHA
             python3 ./src/script/config-diff/config_diff.py diff-branch-remote-repo --ref-branch $REF_BRANCH --ref-commit-sha $REF_COMMIT_SHA --remote-repo $REMOTE_REPO --cmp-branch $REMOTE_BRANCH --cmp-commit-sha $REMOTE_COMMIT_SHA --format=posix-diff --skip-clone
             echo EOF
           } >> "$GITHUB_OUTPUT"
