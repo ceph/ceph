@@ -1,10 +1,36 @@
 module.exports = async ({ github, context, core, configDiff }) => {
   try {
-      // Do not create comment if there are no configuration changes
-      if (!configDiff) {
-        console.log("No changes detected. Skipping comment creation.");
-        return;
+    const { owner, repo } = context.repo;
+    const issueNumber = context.payload.pull_request.number;
+
+    // List all the comments
+    const comments = await github.paginate(
+      github.rest.issues.listComments, {
+        owner,
+        repo,
+        issue_number: issueNumber,
+        per_page: 100,
       }
+    );
+
+    const existingComment = comments.find(comment => comment.body.includes("### Config Diff Tool Output"));
+
+    // Do not create comment if there are no configuration changes
+    if (!configDiff) {
+      core.info("No changes detected. Skipping comment creation.");
+
+      if (existingComment){
+        // Remove any outdated configuration diff comments
+        core.info("Existing config diff comment found. Deleting it...");
+        await github.rest.issues.deleteComment({
+            comment_id: existingComment.id,
+            owner,
+            repo,
+        });
+      }
+
+      return;
+    }
 
       const commentBody = `
 ### Config Diff Tool Output
@@ -19,21 +45,15 @@ ${configDiff}
 The above configuration changes are found in the PR. Please update the relevant release documentation if necessary.
   `;
 
-      core.summary.addRaw(commentBody);
-      await core.summary.write()
-
-      const { owner, repo } = context.repo;
-      const issueNumber = context.payload.pull_request.number;
-
       // List all files in the pull request
       core.info("Fetching list of files changed in the pull request...");
       const files = await github.paginate(
           github.rest.pulls.listFiles,
           {
-              owner,
-              repo,
-              pull_number: issueNumber,
-              per_page: 100,
+            owner,
+            repo,
+            pull_number: issueNumber,
+            per_page: 100,
           }
       );
 
@@ -42,33 +62,35 @@ The above configuration changes are found in the PR. Please update the relevant 
         // Only annotate the `yaml.in` files present in `src/common/options` folder
         if (file.filename.endsWith(".yaml.in") && file.filename.startsWith("src/common/options/")) {
             core.info(`Annotating file: ${file.filename}`);
+            // Show annotations only at the start of the file
             core.notice(
-                `Configuration changes detected in ${file.filename}. Please update the relevant release documentation if necessary.`,
+                `Configuration changes detected in ${file.filename}. Please update the release documentation if necessary.`,
                 {
-                    title: "Configuration Change Detected",
-                    file: file.filename,
-                    startLine: 1,
-                    endLine: 1,
+                  title: "Configuration Change Detected",
+                  file: file.filename,
+                  startLine: 1,
+                  endLine: 1,
                 }
             );
         }
-    });
+      });
 
-      
-      // List all the comments
-      const comments = await github.paginate(
-        github.rest.issues.listComments, {
+      core.summary.addRaw(commentBody);
+      await core.summary.write()
+
+      if (existingComment) {
+        // There might have been new configuration changes made after posting
+        // the first comment. Hence replace the old comment with the new updated
+        // changes
+        core.info("A config diff comment already exists, updating it...");
+
+        // Update the existing comment
+        await github.rest.issues.updateComment ({
+          comment_id: existingComment.id,
           owner,
           repo,
-          issue_number: issueNumber,
-          per_page: 100,
-        }
-      );
-  
-      const existingComment = comments.find(comment => comment.body.includes("### Config Diff Tool Output"));
-  
-      if (existingComment) {
-        core.info("A config diff comment already exists, deleting it...");
+          body: commentBody,
+        });
       } else {
         core.info("Creating a new config diff comment...");
         // Create a new comment
@@ -80,7 +102,7 @@ The above configuration changes are found in the PR. Please update the relevant 
         });
 
       }
-  
+
       // Set the status as FAILED if any configuration changes are detected
       core.setFailed("Configuration Changes Detected, Update release documents - if necessary");
     } catch (error) {
