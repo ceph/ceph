@@ -32,11 +32,9 @@ jobs:
             GITHUB_CONTEXT: ${{ toJSON(github) }}
         run: echo "$GITHUB_CONTEXT"
 
-      - name:  'Example - Get a list of changed files to process (fetching full PR commit history)'
+      - name:  'Get common ancestor before the PR forked'
         env:
-          branch_base: origin/${{ github.event.pull_request.base.ref }}
           branch_pr: origin/${{ github.event.pull_request.head.ref }}
-          refspec_base: +${{ github.event.pull_request.base.sha }}:remotes/origin/${{ github.event.pull_request.base.ref }}
           refspec_pr: +${{ github.event.pull_request.head.sha }}:remotes/origin/${{ github.event.pull_request.head.ref }}
         working-directory: ceph
         run: |
@@ -44,41 +42,11 @@ jobs:
           git fetch origin ${{ env.refspec_pr }} --depth=$(( ${{ github.event.pull_request.commits }} + 1 )) \
             --no-tags --prune --no-recurse-submodules
 
-          # `actions/checkout` fetched a specific commit, not a branch (ref), so that commit was checked out in a
-          # detached HEAD state. Depending on what you do, you may want to additionally switch to the branch
-          # the refspec assigned the commit to in the prior fetch command:
-          # git switch -c ${{ env.branch_pr }}
-
           # This should get the oldest commit in the local fetched history (which may not be the commit the PR branched from):
           COMMON_ANCESTOR=$( git rev-list --first-parent --max-parents=0 --max-count=1 ${{ env.branch_pr }} )
-          DATE=$( git log --date=iso8601 --format=%cd "${COMMON_ANCESTOR}" )
+          COMMON_ANCESTOR_SHA=$( git log --format=%H "${COMMON_ANCESTOR}" )
 
-          echo $DATE
-
-          # Get all commits since that commit date from the base branch (eg: master or main):
-          git fetch origin ${{ env.refspec_base }} --shallow-since="${DATE}" \
-            --no-tags --prune --no-recurse-submodules
-          
-          git remote -v
-
-          git branch -r -v 
-          
-
-
-          git checkout ${{ env.branch_base }}
-          git log --oneline
-
-          echo "----------------------------\n"
-
-          git checkout ${{ env.branch_pr }}
-          git log --oneline
-
-          # Example - Show only files from the PR with content filtered by specific git status (Added or Modified):
-          git diff-tree --name-only --diff-filter 'AM' -r \
-            --merge-base ${{ env.branch_base }} ${{ env.branch_pr }}
-
-          # Example - Show only files from the PR with content filtered by specific git status (Added or Modified):
-          git merge-base ${{ env.branch_base }} ${{ env.branch_pr }}
+          echo $COMMON_ANCESTOR_SHA
 
       - name: Setup Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 #v5.6.0
