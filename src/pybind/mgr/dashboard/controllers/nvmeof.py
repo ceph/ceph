@@ -376,7 +376,8 @@ else:
                 )
             },
         )
-        @NvmeofCLICommand("nvmeof ns add", model.NamespaceCreation)
+        @NvmeofCLICommand("nvmeof ns add", model.NamespaceCreation,
+                          size_params=['size', 'rbd_image_size'])
         @convert_to_model(model.NamespaceCreation)
         @handle_nvmeof_error
         def create(
@@ -385,8 +386,8 @@ else:
             rbd_image_name: str,
             rbd_pool: str = "rbd",
             create_image: Optional[bool] = False,
-            size: Optional[int] = 1024,
-            rbd_image_size: Optional[int] = None,
+            size: Optional[str] = 1024,
+            rbd_image_size: Optional[str] = None,
             trash_image: Optional[bool] = False,
             block_size: int = 512,
             load_balancing_group: Optional[int] = None,
@@ -402,7 +403,7 @@ else:
                     rbd_pool_name=rbd_pool,
                     block_size=block_size,
                     create_image=create_image,
-                    size=rbd_image_size or size,
+                    size=int(rbd_image_size or size),
                     trash_image=trash_image,
                     anagrpid=load_balancing_group,
                     force=force,
