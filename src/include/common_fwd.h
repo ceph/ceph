@@ -23,6 +23,7 @@ namespace TOPNSPC::common {
 namespace TOPNSPC::auth {
   class CryptoManager;
   class CryptoHandler;
+  class CryptoKeyHandler;
   class CryptoKey;
   class CryptoRandom;
 }
@@ -40,5 +41,6 @@ using TOPNSPC::common::RefCountedWaitObject;
 using TOPNSPC::common::ConfigProxy;
 using TOPNSPC::auth::CryptoManager;
 using TOPNSPC::auth::CryptoHandler;
+using TOPNSPC::auth::CryptoKeyHandler;
 using TOPNSPC::auth::CryptoKey;
 using TOPNSPC::auth::CryptoRandom;
