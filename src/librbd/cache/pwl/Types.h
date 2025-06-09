@@ -325,7 +325,7 @@ struct WriteLogCacheEntry {
   }
   #endif
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<WriteLogCacheEntry*>& ls);
+  static std::list<WriteLogCacheEntry> generate_test_instances();
 };
 
 struct WriteLogPoolRoot {
@@ -367,7 +367,7 @@ struct WriteLogPoolRoot {
   #endif
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<WriteLogPoolRoot*>& ls);
+  static std::list<WriteLogPoolRoot> generate_test_instances();
 };
 
 struct WriteBufferAllocation {

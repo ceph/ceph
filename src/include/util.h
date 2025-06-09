@@ -63,13 +63,15 @@ struct ceph_data_stats
     DECODE_FINISH(p);
   }
 
-  static void generate_test_instances(std::list<ceph_data_stats*>& ls) {
-    ls.push_back(new ceph_data_stats);
-    ls.push_back(new ceph_data_stats);
-    ls.back()->byte_total = 1024*1024;
-    ls.back()->byte_used = 512*1024;
-    ls.back()->byte_avail = 512*1024;
-    ls.back()->avail_percent = 50;
+  static std::list<ceph_data_stats> generate_test_instances() {
+    std::list<ceph_data_stats> ls;
+    ls.push_back(ceph_data_stats{});
+    ls.push_back(ceph_data_stats{});
+    ls.back().byte_total = 1024*1024;
+    ls.back().byte_used = 512*1024;
+    ls.back().byte_avail = 512*1024;
+    ls.back().avail_percent = 50;
+    return ls;
   }
 };
 typedef struct ceph_data_stats ceph_data_stats_t;

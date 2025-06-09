@@ -45,10 +45,12 @@ void frag_t::dump(ceph::Formatter *f) const {
   f->dump_unsigned("bits", bits());
 }
 
-void frag_t::generate_test_instances(std::list<frag_t*>& ls) {
-  ls.push_back(new frag_t);
-  ls.push_back(new frag_t(10, 2));
-  ls.push_back(new frag_t(11, 3));
+std::list<frag_t> frag_t::generate_test_instances() {
+  std::list<frag_t> ls;
+  ls.push_back(frag_t{});
+  ls.push_back(frag_t(10, 2));
+  ls.push_back(frag_t(11, 3));
+  return ls;
 }
 
 std::ostream& operator<<(std::ostream& out, const frag_t& hb)
@@ -185,9 +187,11 @@ void fragtree_t::dump(ceph::Formatter *f) const {
   f->close_section(); // splits
 }
 
-void fragtree_t::generate_test_instances(std::list<fragtree_t*>& ls) {
-  ls.push_back(new fragtree_t);
-  ls.push_back(new fragtree_t);
+std::list<fragtree_t> fragtree_t::generate_test_instances() {
+  std::list<fragtree_t> ls;
+  ls.push_back(fragtree_t{});
+  ls.push_back(fragtree_t{});
+  return ls;
 }
 
 std::ostream& operator<<(std::ostream& out, const fragtree_t& ft)

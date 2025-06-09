@@ -101,7 +101,6 @@ struct old_rgw_bucket {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<old_rgw_bucket*>& o);
 
   bool operator<(const old_rgw_bucket& b) const {
     return name.compare(b.name) < 0;

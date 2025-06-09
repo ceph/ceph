@@ -195,7 +195,7 @@ struct MgrCap {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<MgrCap*>& ls);
+  static std::list<MgrCap> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(MgrCap)
 

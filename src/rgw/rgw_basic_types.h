@@ -81,9 +81,11 @@ struct rgw_zone_id {
     f->dump_string("id", id);
   }
 
-  static void generate_test_instances(std::list<rgw_zone_id*>& o) {
-    o.push_back(new rgw_zone_id);
-    o.push_back(new rgw_zone_id("id"));
+  static std::list<rgw_zone_id> generate_test_instances() {
+    std::list<rgw_zone_id> o;
+    o.push_back(rgw_zone_id{});
+    o.push_back(rgw_zone_id("id"));
+    return o;
   }
 
   void clear() {
@@ -318,6 +320,6 @@ struct RGWUploadPartInfo {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWUploadPartInfo*>& o);
+  static std::list<RGWUploadPartInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWUploadPartInfo)

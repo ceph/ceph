@@ -143,15 +143,17 @@ void file_layout_t::decode_json(JSONObj *obj){
     JSONDecoder::decode_json("pool_ns", pool_ns, obj, true);
 }
 
-void file_layout_t::generate_test_instances(std::list<file_layout_t*>& o)
+std::list<file_layout_t> file_layout_t::generate_test_instances()
 {
-  o.push_back(new file_layout_t);
-  o.push_back(new file_layout_t);
-  o.back()->stripe_unit = 4096;
-  o.back()->stripe_count = 16;
-  o.back()->object_size = 1048576;
-  o.back()->pool_id = 3;
-  o.back()->pool_ns = "myns";
+  std::list<file_layout_t> o;
+  o.push_back(file_layout_t{});
+  o.push_back(file_layout_t{});
+  o.back().stripe_unit = 4096;
+  o.back().stripe_count = 16;
+  o.back().object_size = 1048576;
+  o.back().pool_id = 3;
+  o.back().pool_ns = "myns";
+  return o;
 }
 
 std::ostream& operator<<(std::ostream& out, const file_layout_t &layout)

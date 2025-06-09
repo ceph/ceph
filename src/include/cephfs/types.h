@@ -117,7 +117,7 @@ struct frag_info_t : public scatter_info_t {
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<frag_info_t*>& ls);
+  static std::list<frag_info_t>  generate_test_instances();
 
   // this frag
   utime_t mtime;
@@ -177,7 +177,7 @@ struct nest_info_t : public scatter_info_t {
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<nest_info_t*>& ls);
+  static std::list<nest_info_t> generate_test_instances();
 
   // this frag + children
   utime_t rctime;
@@ -212,9 +212,11 @@ struct vinodeno_t {
     decode(snapid, p);
   }
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<vinodeno_t*>& ls) {
-    ls.push_back(new vinodeno_t);
-    ls.push_back(new vinodeno_t(1, 2));
+  static std::list<vinodeno_t> generate_test_instances() {
+    std::list<vinodeno_t> ls;
+    ls.push_back(vinodeno_t{});
+    ls.push_back(vinodeno_t(1, 2));
+    return ls;
   }
   inodeno_t ino;
   snapid_t snapid;
@@ -338,7 +340,7 @@ struct quota_info_t
   }
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<quota_info_t *>& ls);
+  static std::list<quota_info_t> generate_test_instances();
 
   bool is_valid() const {
     return max_bytes >=0 && max_files >=0;
@@ -377,7 +379,7 @@ struct client_writeable_range_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<client_writeable_range_t*>& ls);
+  static std::list<client_writeable_range_t> generate_test_instances();
 
   byte_range_t range;
   snapid_t follows = 0;     // aka "data+metadata flushed thru"
@@ -442,7 +444,7 @@ public:
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<inline_data_t*>& ls);
+  static std::list<inline_data_t> generate_test_instances();
   version_t version = 1;
 
 private:
@@ -825,7 +827,7 @@ struct inode_t {
   static void client_ranges_cb(client_range_map& c, JSONObj *obj);
   static void old_pools_cb(compact_set<int64_t, std::less<int64_t>, Allocator<int64_t> >& c, JSONObj *obj);
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<inode_t*>& ls);
+  static std::list<inode_t> generate_test_instances();
   /**
    * Compare this inode_t with another that represent *the same inode*
    * at different points in time.
@@ -1129,12 +1131,14 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 }
 
 template<template<typename> class Allocator>
-void inode_t<Allocator>::generate_test_instances(std::list<inode_t*>& ls)
+auto inode_t<Allocator>::generate_test_instances() -> std::list<inode_t>
 {
-  ls.push_back(new inode_t<Allocator>);
-  ls.push_back(new inode_t<Allocator>);
-  ls.back()->ino = 1;
+  std::list<inode_t> ls;
+  ls.push_back(inode_t<Allocator>{});
+  ls.push_back(inode_t<Allocator>{});
+  ls.back().ino = 1;
   // i am lazy.
+  return ls;
 }
 
 template<template<typename> class Allocator>

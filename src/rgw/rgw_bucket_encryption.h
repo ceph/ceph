@@ -137,6 +137,6 @@ public:
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWBucketEncryptionConfig*>& o);
+  static std::list<RGWBucketEncryptionConfig> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWBucketEncryptionConfig)

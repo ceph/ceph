@@ -67,7 +67,7 @@ struct obj_version {
   }
 
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<obj_version*>& o);
+  static std::list<obj_version> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(obj_version)
 
@@ -112,12 +112,14 @@ struct obj_version_cond {
     f->dump_unsigned("cond", cond);
   }
 
-  static void generate_test_instances(std::list<obj_version_cond*>& o) {
-    o.push_back(new obj_version_cond);
-    o.push_back(new obj_version_cond);
-    o.back()->ver.ver = 1;
-    o.back()->ver.tag = "foo";
-    o.back()->cond = VER_COND_EQ;
+  static std::list<obj_version_cond> generate_test_instances() {
+    std::list<obj_version_cond> o;
+    o.push_back(obj_version_cond{});
+    o.push_back(obj_version_cond{});
+    o.back().ver.ver = 1;
+    o.back().ver.tag = "foo";
+    o.back().cond = VER_COND_EQ;
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(obj_version_cond)

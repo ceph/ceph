@@ -37,7 +37,7 @@ public:
   void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
   void replay(MDSRank *mds) override;
-  static void generate_test_instances(std::list<ELid*>& ls);
+  static std::list<ELid> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(ELid)
 

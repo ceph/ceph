@@ -105,10 +105,12 @@ void NotifyMessage::dump(Formatter *f) const {
   std::visit(DumpPayloadVisitor(f), payload);
 }
 
-void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
-  o.push_back(new NotifyMessage{ImageAddedPayload{
+std::list<NotifyMessage> NotifyMessage::generate_test_instances() {
+  std::list<NotifyMessage> o;
+  o.push_back(NotifyMessage{ImageAddedPayload{
     "id", {cls::rbd::TRASH_IMAGE_SOURCE_USER, "name", {}, {}}}});
-  o.push_back(new NotifyMessage{ImageRemovedPayload{"id"}});
+  o.push_back(NotifyMessage{ImageRemovedPayload{"id"}});
+  return o;
 }
 
 std::ostream &operator<<(std::ostream &out, const NotifyOp &op) {

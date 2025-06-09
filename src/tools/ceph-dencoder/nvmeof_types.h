@@ -40,7 +40,8 @@ class NVMeofGwMapDencoder {
     f->dump_stream("NVMeofGwMap") << m;
   }
 
-  static void generate_test_instances(std::list<NVMeofGwMapDencoder*>& ls) {
+  static std::list<NVMeofGwMapDencoder> generate_test_instances() {
+    std::list<NVMeofGwMapDencoder> ls;
     std::string pool = "pool1";
     std::string group = "grp1";
     auto group_key = std::make_pair(pool, group);
@@ -57,8 +58,8 @@ class NVMeofGwMapDencoder {
 
     m.created_gws[group_key]["GW2"].nonce_map[2] = new_nonces;
 
-    ls.push_back(new NVMeofGwMapDencoder(m));
-
+    ls.push_back(NVMeofGwMapDencoder(m));
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(NVMeofGwMapDencoder)
@@ -84,7 +85,8 @@ class MNVMeofGwMapDencoder {
     f->dump_stream("MNVMeofGwMap") << m;
   }
 
-  static void generate_test_instances(std::list<MNVMeofGwMapDencoder*>& ls) {
+  static std::list<MNVMeofGwMapDencoder> generate_test_instances() {
+    std::list<MNVMeofGwMapDencoder> ls;
     std::map<NvmeGroupKey, NvmeGwMonClientStates> map;
     std::string pool = "pool1";
     std::string group = "grp1";
@@ -114,8 +116,9 @@ class MNVMeofGwMapDencoder {
     pending_map.start_timer(gw_id, group_key, group, 30);
 
     m = MNVMeofGwMap(pending_map);
-    ls.push_back(new MNVMeofGwMapDencoder(m));
+    ls.push_back(MNVMeofGwMapDencoder(m));
 
+    return ls
   }
 };
 WRITE_CLASS_ENCODER(MNVMeofGwMapDencoder)
@@ -141,7 +144,8 @@ class MNVMeofGwBeaconDencoder {
     f->dump_stream("MNVMeofGwBeacon") << m;
   }
 
-  static void generate_test_instances(std::list<MNVMeofGwBeaconDencoder*>& ls) {
+  static std::list<MNVMeofGwBeaconDencoder> generate_test_instances() {
+    std::list<MNVMeofGwBeaconDencoder> ls;
     std::string gw_id = "GW";
     std::string gw_pool = "pool";
     std::string gw_group = "group";
@@ -162,8 +166,9 @@ class MNVMeofGwBeaconDencoder {
       osd_epoch,
       gwmap_epoch);
 
-    ls.push_back(new MNVMeofGwBeaconDencoder(m));
+    ls.push_back(MNVMeofGwBeaconDencoder(m));
 
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(MNVMeofGwBeaconDencoder)

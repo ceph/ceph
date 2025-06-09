@@ -72,18 +72,20 @@ void bloom_filter::dump(Formatter *f) const
   f->close_section();
 }
 
-void bloom_filter::generate_test_instances(std::list<bloom_filter*>& ls)
+std::list<bloom_filter> bloom_filter::generate_test_instances()
 {
-  ls.push_back(new bloom_filter(10, .5, 1));
-  ls.push_back(new bloom_filter(10, .5, 1));
-  ls.back()->insert("foo");
-  ls.back()->insert("bar");
-  ls.push_back(new bloom_filter(50, .5, 1));
-  ls.back()->insert("foo");
-  ls.back()->insert("bar");
-  ls.back()->insert("baz");
-  ls.back()->insert("boof");
-  ls.back()->insert("boogggg");
+  std::list<bloom_filter> ls;
+  ls.push_back(bloom_filter(10, .5, 1));
+  ls.push_back(bloom_filter(10, .5, 1));
+  ls.back().insert("foo");
+  ls.back().insert("bar");
+  ls.push_back(bloom_filter(50, .5, 1));
+  ls.back().insert("foo");
+  ls.back().insert("bar");
+  ls.back().insert("baz");
+  ls.back().insert("boof");
+  ls.back().insert("boogggg");
+  return ls;
 }
 
 
@@ -129,17 +131,19 @@ void compressible_bloom_filter::dump(Formatter *f) const
   f->close_section();
 }
 
-void compressible_bloom_filter::generate_test_instances(std::list<compressible_bloom_filter*>& ls)
+std::list<compressible_bloom_filter> compressible_bloom_filter::generate_test_instances()
 {
-  ls.push_back(new compressible_bloom_filter(10, .5, 1));
-  ls.push_back(new compressible_bloom_filter(10, .5, 1));
-  ls.back()->insert("foo");
-  ls.back()->insert("bar");
-  ls.push_back(new compressible_bloom_filter(50, .5, 1));
-  ls.back()->insert("foo");
-  ls.back()->insert("bar");
-  ls.back()->insert("baz");
-  ls.back()->insert("boof");
-  ls.back()->compress(20);
-  ls.back()->insert("boogggg");
+  std::list<compressible_bloom_filter> ls;
+  ls.push_back(compressible_bloom_filter(10, .5, 1));
+  ls.push_back(compressible_bloom_filter(10, .5, 1));
+  ls.back().insert("foo");
+  ls.back().insert("bar");
+  ls.push_back(compressible_bloom_filter(50, .5, 1));
+  ls.back().insert("foo");
+  ls.back().insert("bar");
+  ls.back().insert("baz");
+  ls.back().insert("boof");
+  ls.back().compress(20);
+  ls.back().insert("boogggg");
+  return ls;
 }

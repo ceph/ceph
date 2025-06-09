@@ -324,11 +324,13 @@ public:
     f->dump_unsigned("created_ino", created_ino);
     f->dump_stream("delegated_inos") << delegated_inos;
   }
-  static void generate_test_instances(std::list<openc_response_t*>& ls) {
-    ls.push_back(new openc_response_t);
-    ls.push_back(new openc_response_t);
-    ls.back()->created_ino = 1;
-    ls.back()->delegated_inos.insert(1, 10);
+  static std::list<openc_response_t> generate_test_instances() {
+    std::list<openc_response_t> ls;
+    ls.push_back(openc_response_t{});
+    ls.push_back(openc_response_t{});
+    ls.back().created_ino = 1;
+    ls.back().delegated_inos.insert(1, 10);
+    return ls;
   }
 } __attribute__ ((__may_alias__));
 WRITE_CLASS_ENCODER(openc_response_t)

@@ -72,7 +72,7 @@ struct resource_metadata {
   }
 
   void dump(ceph::Formatter* f) const;
-  static void generate_test_instances(std::list<resource_metadata*>& o);
+  static std::list<resource_metadata> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(resource_metadata);
 
