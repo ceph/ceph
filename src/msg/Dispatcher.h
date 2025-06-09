@@ -26,7 +26,6 @@
 
 class Messenger;
 class Connection;
-class CryptoKey;
 class KeyStore;
 
 class Dispatcher {
