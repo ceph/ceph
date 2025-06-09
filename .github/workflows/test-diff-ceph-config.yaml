@@ -56,6 +56,14 @@ jobs:
           # Get all commits since that commit date from the base branch (eg: master or main):
           git fetch origin ${{ env.refspec_base }} --shallow-since="${DATE}" \
             --no-tags --prune --no-recurse-submodules
+          
+          git remote -v
+
+          git branch -r -v
+
+          # Example - Show only files from the PR with content filtered by specific git status (Added or Modified):
+          git diff-tree --name-only --diff-filter 'AM' -r \
+            --merge-base ${{ env.branch_base }} ${{ env.branch_pr }}
 
           # Example - Show only files from the PR with content filtered by specific git status (Added or Modified):
           git merge-base ${{ env.branch_base }} ${{ env.branch_pr }}
