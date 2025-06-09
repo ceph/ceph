@@ -64,6 +64,13 @@ class FSPolicy:
     def schedule_action(self, dir_paths):
         self.dir_paths.extend(dir_paths)
 
+    def get_live_instance_ids(self):
+        watcher = self.instance_watcher
+        if watcher is None:
+            return None
+        with watcher.lock:
+            return frozenset(str(instance_id) for instance_id in watcher.instances)
+
     def init(self, dir_mapping, instances):
         with self.lock:
             self.policy.init(dir_mapping)
@@ -792,7 +799,8 @@ class FSSnapshotMirror:
                     ioctx = metrics_load.open_metadata_ioctx(
                         self.rados, self.fs_map, filesystem)
                     metrics, complete, dir_path = metrics_load.fetch_sync_stat_metrics(
-                        ioctx, filesystem, peers, mirrored_dir_path, peer_uuid)
+                        ioctx, filesystem, peers, mirrored_dir_path, peer_uuid,
+                        fspolicy.policy, fspolicy.get_live_instance_ids())
                     self.sync_stat_cache.store(
                         filesystem, metrics, complete, peer_uuid, dir_path)
                 else:
