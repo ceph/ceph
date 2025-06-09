@@ -3,7 +3,7 @@ overrides:
     conf:
       osd:
         # crimson's osd objectstore option
-        crimson osd objectstore: seastore
+        osd objectstore: seastore
         debug seastore: 20
         debug seastore onode: 20
         debug seastore odata: 20
