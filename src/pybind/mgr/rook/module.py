@@ -532,6 +532,10 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return num_replicas, leaf_type
 
     @handle_orch_error
+    def get_security_config(self) -> Dict[str, bool]:
+        return {}
+
+    @handle_orch_error
     def remove_service(self, service_name: str, force: bool = False) -> str:
         if service_name == 'rbd-mirror':
             return self.rook_cluster.rm_service('cephrbdmirrors', 'default-rbd-mirror')

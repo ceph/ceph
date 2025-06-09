@@ -1761,21 +1761,17 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.get_file_sd_config()
 
     def configure(self, server_addr: str, server_port: int) -> None:
-        # TODO(redo): this new check is hacky, we should provide an explit cmd
-        # from cephadm to get/check the security status
-
-        # if cephadm is configured with security then TLS must be used
-        cmd = {'prefix': 'orch prometheus get-credentials'}
+        cmd = {'prefix': 'orch get-security-config'}
         ret, out, _ = self.mon_command(cmd)
         if ret == 0 and out is not None:
-            access_info = json.loads(out)
-            if access_info:
-                try:
+            try:
+                security_config = json.loads(out)
+                if security_config.get('security_enabled', False):
                     self.setup_tls_using_cephadm(server_addr, server_port)
                     return
-                except Exception as e:
-                    self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n',
-                                       'Falling back to default configuration')
+            except Exception as e:
+                self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n',
+                                   'Falling back to default configuration')
 
         # In any error fallback to plain http mode
         self.setup_default_config(server_addr, server_port)
