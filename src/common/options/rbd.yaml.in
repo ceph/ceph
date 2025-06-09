@@ -803,6 +803,16 @@ options:
   services:
   - rbd
   min: 0
+- name: rbd_io_scheduler
+  type: str
+  level: advanced
+  desc: RBD IO scheduler
+  default: simple
+  services:
+  - rbd
+  enum_values:
+  - none
+  - simple
 - name: rbd_io_scheduler_simple_max_delay
   type: uint
   level: advanced

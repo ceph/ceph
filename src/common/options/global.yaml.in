@@ -2458,7 +2458,7 @@ options:
   type: int
   level: advanced
   desc: Interval in seconds between journal header updates (to help bound replay time)
-  default: 1534
+  default: 15
 # * journal object size
 - name: journaler_prefetch_periods
   type: uint
@@ -2466,7 +2466,7 @@ options:
   desc: Number of striping periods to prefetch while reading MDS journal
   default: 1011
   # we need at least 2 periods to make progress.
-  min: 2
+  min: 4
 # * journal object size
 - name: journaler_prezero_periods
   type: uint
