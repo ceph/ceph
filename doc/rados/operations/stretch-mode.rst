@@ -17,8 +17,9 @@ one-third to one-half of the total cluster).
 
 Ceph is designed with the expectation that all parts of its network and cluster
 will be reliable and that failures will be distributed randomly across the
-CRUSH map. Even if a switch goes down and causes the loss of many OSDs, Ceph is
-designed so that the remaining OSDs and monitors will route around such a loss. 
+CRUSH topology. When a host or network switch goes down, many OSDs will
+become unavailable. Ceph is designed so that the remaining OSDs and
+Monitors will maintain access to data.
 
 Sometimes this cannot be relied upon. If you have a "stretched-cluster"
 deployment in which much of your cluster is behind a single network component,
@@ -28,13 +29,13 @@ We will here consider two standard configurations: a configuration with two
 data centers (or, in clouds, two availability zones), and a configuration with
 three data centers (or, in clouds, three availability zones).
 
-In the two-site configuration, Ceph expects each of the sites to hold a copy of
-the data, and Ceph also expects there to be a third site that has a tiebreaker
-monitor. This tiebreaker monitor picks a winner if the network connection fails
-and both data centers remain alive.
+In the two-site configuration, Ceph arranges for each site to hold a copy of
+the data. A third site houses a tiebreaker (arbiter, witness)
+Monitor. This tiebreaker Monitor picks a winner when a network connection
+between sites fails and both data centers remain alive.
 
-The tiebreaker monitor can be a VM. It can also have high latency relative to
-the two main sites.
+The tiebreaker monitor can be a VM. It can also have higher network latency
+to the OSD site(s) than OSD site(s) can have to each other.
 
 The standard Ceph configuration is able to survive MANY network failures or
 data-center failures without ever compromising data availability. If enough
@@ -56,8 +57,8 @@ without operator intervention.
 
 Ceph does not permit the compromise of data integrity or data consistency, but
 there are situations in which *data availability* is compromised. These
-situations can occur even though there are enough clusters available to satisfy
-Ceph's consistency and sizing constraints. In some situations, you might
+situations can occur even though there are sufficient replicas of data available to satisfy
+consistency and sizing constraints. In some situations, you might
 discover that your cluster does not satisfy those constraints.
 
 The first category of these failures that we will discuss involves inconsistent
@@ -80,7 +81,6 @@ the PG might go active with two replicas in Data Center A and zero replicas in
 Data Center B. In a situation of this kind, the loss of Data Center A means
 that the data is lost and Ceph will not be able to operate on it. This
 situation is surprisingly difficult to avoid using only standard CRUSH rules.
-
 
 Stretch Mode
 ============
@@ -146,8 +146,8 @@ your CRUSH map. This procedure shows how to do this.
              step emit
      }
 
-   .. warning:: If a CRUSH rule is defined for a stretch mode cluster and the
-      rule has multiple "takes" in it, then ``MAX AVAIL`` for the pools
+   .. warning:: When a CRUSH rule is defined in a stretch mode cluster and the
+      rule has multiple ``take`` steps, ``MAX AVAIL`` for the pools
       associated with the CRUSH rule will report that the available size is all
       of the available space from the datacenter, not the available space for
       the pools associated with the CRUSH rule.
@@ -223,12 +223,12 @@ your CRUSH map. This procedure shows how to do this.
       ceph mon enable_stretch_mode e stretch_rule datacenter
 
 When stretch mode is enabled, PGs will become active only when they peer
-across data centers (or across whichever CRUSH bucket type was specified),
-assuming both are alive. Pools will increase in size from the default ``3`` to
-``4``, and two copies will be expected in each site. OSDs will be allowed to
-connect to monitors only if they are in the same data center as the monitors.
-New monitors will not be allowed to join the cluster if they do not specify a
-location.
+across CRUSH ``datacenter``s (or across whichever CRUSH bucket type was specified),
+assuming both are available. Pools will increase in size from the default ``3`` to
+``4``, and two replicas will be placed at each site. OSDs will be allowed to
+connect to Monitors only if they are in the same data center as the Monitors.
+New Monitors will not be allowed to join the cluster if they do not specify a
+CRUSH location.
 
 If all OSDs and monitors in one of the data centers become inaccessible at once,
 the surviving data center enters a "degraded stretch mode". A warning will be
@@ -262,22 +262,21 @@ To exit stretch mode, run the following command:
 
 .. describe:: {crush_rule}
 
-   The CRUSH rule that the user wants all pools to move back to. If this
-   is not specified, the pools will move back to the default CRUSH rule.
+   The non-stretch CRUSH rule to use for all pools. If this
+   is not specified, the pools will move to the default CRUSH rule.
 
    :Type: String
    :Required: No.
 
-The command will move the cluster back to normal mode,
-and the cluster will no longer be in stretch mode.
-All pools will move its ``size`` and ``min_size``
-back to the default values it started with.
-At this point the user is responsible for scaling down the cluster
-to the desired number of OSDs if they choose to operate with less number of OSDs.
+This command moves the cluster back to normal mode;
+the cluster will no longer be in stretch mode.
+All pools will be set with their prior ``size`` and ``min_size``
+values. At this point the user is responsible for scaling down the cluster
+to the desired number of OSDs if they choose to operate with fewer OSDs.
 
-Please note that the command will not execute when the cluster is in
-``recovery stretch mode``. The command will only execute when the cluster
-is in ``degraded stretch mode`` or ``healthy stretch mode``.
+Note that the command will not execute when the cluster is in
+recovery stretch mode. The command executes only when the cluster
+is in degraded stretch mode or healthy stretch mode.
 
 Limitations of Stretch Mode 
 ===========================
