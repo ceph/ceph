@@ -47,7 +47,7 @@ struct ConnectionReport {
   friend std::ostream& operator<<(std::ostream&o, const ConnectionReport& c);
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<ConnectionReport*>& o);
+  static std::list<ConnectionReport> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(ConnectionReport);
 
@@ -220,7 +220,7 @@ class ConnectionTracker {
   friend ConnectionReport *get_connection_reports(ConnectionTracker& ct);
   friend std::map<int,ConnectionReport> *get_peer_reports(ConnectionTracker& ct);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<ConnectionTracker*>& o);
+  static std::list<ConnectionTracker> generate_test_instances();
 };
 
 WRITE_CLASS_ENCODER(ConnectionTracker);
