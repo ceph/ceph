@@ -3,7 +3,6 @@ set(crimson_cflag_definitions "WITH_CRIMSON=1")
 
 set_target_properties(crimson::cflags PROPERTIES
   INTERFACE_COMPILE_DEFINITIONS "${crimson_cflag_definitions}"
-  INTERFACE_COMPILE_OPTIONS $<$<COMPILE_LANGUAGE:CXX>:-Wno-non-virtual-dtor>
   INTERFACE_LINK_LIBRARIES Seastar::seastar)
 
 set(crimson_common_srcs

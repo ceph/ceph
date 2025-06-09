@@ -485,6 +485,8 @@ if(WITH_CRIMSON)
   # target: Seastar exports this directory created at build-time
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen/include")
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen/src")
+  # required by any target that links to seastar
+  target_compile_options(seastar PUBLIC "-Wno-non-virtual-dtor")
   add_subdirectory(crimson)
 endif()
 
