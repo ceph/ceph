@@ -83,11 +83,12 @@ int RGWRealm::find_zone(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-void RGWRealm::generate_test_instances(list<RGWRealm*> &o)
+list<RGWRealm> RGWRealm::generate_test_instances()
 {
-  RGWRealm *z = new RGWRealm;
-  o.push_back(z);
-  o.push_back(new RGWRealm);
+  list<RGWRealm> o;
+  o.push_back(RGWRealm{});
+  o.push_back(RGWRealm{});
+  return o;
 }
 
 void RGWRealm::dump(Formatter *f) const

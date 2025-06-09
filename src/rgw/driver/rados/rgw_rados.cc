@@ -11574,15 +11574,17 @@ int RGWRados::delete_obj_aio(const DoutPrefixProvider *dpp, const rgw_obj& obj,
   return ret;
 } // delete_obj_aio
 
-void objexp_hint_entry::generate_test_instances(list<objexp_hint_entry*>& o)
+list<objexp_hint_entry> objexp_hint_entry::generate_test_instances()
 {
-  auto it = new objexp_hint_entry;
-  it->tenant = "tenant1";
-  it->bucket_name = "bucket1";
-  it->bucket_id = "1234";
-  it->obj_key = rgw_obj_key("obj");
-  o.push_back(it);
-  o.push_back(new objexp_hint_entry);
+  list<objexp_hint_entry> o;
+  objexp_hint_entry it;
+  it.tenant = "tenant1";
+  it.bucket_name = "bucket1";
+  it.bucket_id = "1234";
+  it.obj_key = rgw_obj_key("obj");
+  o.push_back(std::move(it));
+  o.push_back(objexp_hint_entry{});
+  return o;
 }
 
 void objexp_hint_entry::dump(Formatter *f) const
@@ -11597,12 +11599,14 @@ void objexp_hint_entry::dump(Formatter *f) const
   f->close_section();
 }
 
-void RGWOLHInfo::generate_test_instances(list<RGWOLHInfo*> &o)
+list<RGWOLHInfo> RGWOLHInfo::generate_test_instances()
 {
-  RGWOLHInfo *olh = new RGWOLHInfo;
-  olh->removed = false;
+  list<RGWOLHInfo> o;
+  RGWOLHInfo olh;
+  olh.removed = false;
   o.push_back(olh);
-  o.push_back(new RGWOLHInfo);
+  o.push_back(RGWOLHInfo{});
+  return o;
 }
 
 void RGWOLHInfo::dump(Formatter *f) const
@@ -11617,9 +11621,11 @@ void RGWOLHPendingInfo::dump(Formatter *f) const
   encode_json("time", ut, f);
 }
 
-void RGWOLHPendingInfo::generate_test_instances(list<RGWOLHPendingInfo*>& o)
+list<RGWOLHPendingInfo> RGWOLHPendingInfo::generate_test_instances()
 {
-  auto it = new RGWOLHPendingInfo;
-  it->time = ceph::real_clock::zero();
-  o.push_back(it);
+  list<RGWOLHPendingInfo> o;
+  RGWOLHPendingInfo it;
+  it.time = ceph::real_clock::zero();
+  o.push_back(std::move(it));
+  return o;
 }

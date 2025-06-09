@@ -40,13 +40,15 @@ void inode_backpointer_t::dump(ceph::Formatter *f) const
   f->dump_unsigned("version", version);
 }
 
-void inode_backpointer_t::generate_test_instances(std::list<inode_backpointer_t*>& ls)
+std::list<inode_backpointer_t> inode_backpointer_t::generate_test_instances()
 {
-  ls.push_back(new inode_backpointer_t);
-  ls.push_back(new inode_backpointer_t);
-  ls.back()->dirino = 1;
-  ls.back()->dname = "foo";
-  ls.back()->version = 123;
+  std::list<inode_backpointer_t> ls;
+  ls.push_back(inode_backpointer_t{});
+  ls.push_back(inode_backpointer_t{});
+  ls.back().dirino = 1;
+  ls.back().dname = "foo";
+  ls.back().version = 123;
+  return ls;
 }
 
 
@@ -105,18 +107,20 @@ void inode_backtrace_t::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-void inode_backtrace_t::generate_test_instances(std::list<inode_backtrace_t*>& ls)
+std::list<inode_backtrace_t> inode_backtrace_t::generate_test_instances()
 {
-  ls.push_back(new inode_backtrace_t);
-  ls.push_back(new inode_backtrace_t);
-  ls.back()->ino = 1;
-  ls.back()->ancestors.push_back(inode_backpointer_t());
-  ls.back()->ancestors.back().dirino = 123;
-  ls.back()->ancestors.back().dname = "bar";
-  ls.back()->ancestors.back().version = 456;
-  ls.back()->pool = 0;
-  ls.back()->old_pools.push_back(10);
-  ls.back()->old_pools.push_back(7);
+  std::list<inode_backtrace_t> ls;
+  ls.push_back(inode_backtrace_t{});
+  ls.push_back(inode_backtrace_t{});
+  ls.back().ino = 1;
+  ls.back().ancestors.push_back(inode_backpointer_t());
+  ls.back().ancestors.back().dirino = 123;
+  ls.back().ancestors.back().dname = "bar";
+  ls.back().ancestors.back().version = 456;
+  ls.back().pool = 0;
+  ls.back().old_pools.push_back(10);
+  ls.back().old_pools.push_back(7);
+  return ls;
 }
 
 int inode_backtrace_t::compare(const inode_backtrace_t& other,

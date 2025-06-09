@@ -2673,10 +2673,11 @@ RGWLC::LCWorker::~LCWorker()
   delete workpool;
 } /* ~LCWorker */
 
-void RGWLifecycleConfiguration::generate_test_instances(
-  list<RGWLifecycleConfiguration*>& o)
+list<RGWLifecycleConfiguration> RGWLifecycleConfiguration::generate_test_instances()
 {
-  o.push_back(new RGWLifecycleConfiguration);
+  list<RGWLifecycleConfiguration> o;
+  o.push_back(RGWLifecycleConfiguration{});
+  return o;
 }
 
 template<typename F>

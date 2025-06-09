@@ -25,14 +25,16 @@ class sstring_wrapper {
     f->dump_string("s1", s1.c_str());
     f->dump_string("s2", reinterpret_cast<const char*>(s2.c_str()));
   }
-  static void generate_test_instances(std::list<sstring_wrapper*>& ls) {
-    ls.push_back(new sstring_wrapper());
+  static std::list<sstring_wrapper> generate_test_instances() {
+    std::list<sstring_wrapper> ls;
+    ls.push_back(sstring_wrapper());
     // initialize sstrings that fit in internal storage
     constexpr auto cstr6 = "abcdef";
-    ls.push_back(new sstring_wrapper(sstring16{cstr6}, sstring24{cstr6}));
+    ls.push_back(sstring_wrapper(sstring16{cstr6}, sstring24{cstr6}));
     // initialize sstrings that overflow into external storage
     constexpr auto cstr26 = "abcdefghijklmnopqrstuvwxyz";
-    ls.push_back(new sstring_wrapper(sstring16{cstr26}, sstring24{cstr26}));
+    ls.push_back(sstring_wrapper(sstring16{cstr26}, sstring24{cstr26}));
+    return ls;
   }
 };
 WRITE_CLASS_DENC(sstring_wrapper)

@@ -183,7 +183,7 @@ public:
   }
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<utime_t*>& o);
+  static std::list<utime_t> generate_test_instances();
   
   void encode_timeval(struct ceph_timespec *t) const {
     t->tv_sec = tv.tv_sec;

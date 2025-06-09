@@ -47,7 +47,7 @@ public:
     else decode_new(bl);
   }
   void dump(Formatter *f) const override;
-  static void generate_test_instances(std::list<ESessions*>& ls);
+  static std::list<ESessions> generate_test_instances();
 
   void print(std::ostream& out) const override {
     out << "ESessions " << client_map.size() << " opens cmapv " << cmapv;

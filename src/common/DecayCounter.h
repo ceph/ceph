@@ -63,7 +63,7 @@ public:
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<DecayCounter*>& ls);
+  static std::list<DecayCounter> generate_test_instances();
 
   /**
    * reading

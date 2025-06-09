@@ -97,14 +97,16 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("status", status, obj);
 }
 
-void RGWMetadataLogData::generate_test_instances(std::list<RGWMetadataLogData *>& l) {
-  l.push_back(new RGWMetadataLogData{});
-  l.push_back(new RGWMetadataLogData);
-  l.back()->read_version = obj_version();
-  l.back()->read_version.tag = "read_tag";
-  l.back()->write_version = obj_version();
-  l.back()->write_version.tag = "write_tag";
-  l.back()->status = MDLOG_STATUS_WRITE;
+std::list<RGWMetadataLogData> RGWMetadataLogData::generate_test_instances() {
+  std::list<RGWMetadataLogData> l;
+  l.push_back(RGWMetadataLogData{});
+  l.push_back(RGWMetadataLogData{});
+  l.back().read_version = obj_version();
+  l.back().read_version.tag = "read_tag";
+  l.back().write_version = obj_version();
+  l.back().write_version.tag = "write_tag";
+  l.back().status = MDLOG_STATUS_WRITE;
+  return l;
 }
 
 class RGWMetadataTopHandler : public RGWMetadataHandler {

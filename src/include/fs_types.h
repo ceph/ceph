@@ -46,9 +46,11 @@ struct inodeno_t {
     decode(val, p);
   }
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<inodeno_t*>& ls) {
-    ls.push_back(new inodeno_t(1));
-    ls.push_back(new inodeno_t(123456789));
+  static std::list<inodeno_t> generate_test_instances() {
+    std::list<inodeno_t> ls;
+    ls.push_back(inodeno_t(1));
+    ls.push_back(inodeno_t(123456789));
+    return ls;
   }
 } __attribute__ ((__may_alias__));
 WRITE_CLASS_ENCODER(inodeno_t)
@@ -136,7 +138,7 @@ struct file_layout_t {
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<file_layout_t*>& o);
+  static std::list<file_layout_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(file_layout_t)
 

@@ -102,7 +102,7 @@ struct rgw_data_change {
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
-  static void generate_test_instances(std::list<rgw_data_change *>& l);
+  static std::list<rgw_data_change> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rgw_data_change)
 inline std::ostream& operator <<(std::ostream& m,
