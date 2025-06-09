@@ -53,13 +53,25 @@ jobs:
           COMMON_ANCESTOR=$( git rev-list --first-parent --max-parents=0 --max-count=1 ${{ env.branch_pr }} )
           DATE=$( git log --date=iso8601 --format=%cd "${COMMON_ANCESTOR}" )
 
+          echo $DATE
+
           # Get all commits since that commit date from the base branch (eg: master or main):
           git fetch origin ${{ env.refspec_base }} --shallow-since="${DATE}" \
             --no-tags --prune --no-recurse-submodules
           
           git remote -v
 
-          git branch -r -v
+          git branch -r -v 
+          
+
+
+          git checkout ${{ env.branch_base }}
+          git log --oneline
+
+          echo "----------------------------\n"
+
+          git checkout ${{ env.branch_pr }}
+          git log --oneline
 
           # Example - Show only files from the PR with content filtered by specific git status (Added or Modified):
           git diff-tree --name-only --diff-filter 'AM' -r \
