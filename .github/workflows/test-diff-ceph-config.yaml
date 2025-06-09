@@ -32,7 +32,7 @@ jobs:
             GITHUB_CONTEXT: ${{ toJSON(github) }}
         run: echo "$GITHUB_CONTEXT"
 
-      - name:  'Get common ancestor before the PR forked'
+      - name:  'Get common ancestor between PR and ceph upstream main branch'
         id: get_common_ancestor
         env:
           branch_pr: origin/${{ github.event.pull_request.head.ref }}
@@ -43,7 +43,7 @@ jobs:
           git fetch origin ${{ env.refspec_pr }} --depth=$(( ${{ github.event.pull_request.commits }} + 1 )) \
             --no-tags --prune --no-recurse-submodules
 
-          # This should get the oldest commit in the local fetched history (which may not be the commit the PR branched from):
+          # This should get the oldest commit in the local fetched history (the commit in ceph upstream from which PR branched from):
           COMMON_ANCESTOR=$( git rev-list --first-parent --max-parents=0 --max-count=1 ${{ env.branch_pr }} )
           COMMON_ANCESTOR_SHA=$( git log --format=%H "${COMMON_ANCESTOR}" )
 
