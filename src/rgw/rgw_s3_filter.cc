@@ -158,16 +158,90 @@ bool rgw_s3_key_value_filter::has_content() const {
   return !kvt.empty();
 }
 
+void rgw_s3_zone_filter::dump(Formatter *f) const {
+  if (!has_content()) {
+    return;
+  }
+  f->open_array_section("FilterRules");
+  for(const auto &zone: in_list){
+    f->open_object_section("");
+    ::encode_json("Name", zone, f);
+    ::encode_json("Type", "IN", f);
+    f->close_section();
+  }
+  for(const auto &zone: out_list){
+    f->open_object_section("");
+    ::encode_json("Name", zone, f);
+    ::encode_json("Type", "OUT", f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+bool rgw_s3_zone_filter::decode_xml(XMLObj *obj){
+  in_list.clear(); 
+  out_list.clear(); 
+  
+  XMLObjIter iter = obj->find("FilterRule");
+  XMLObj *o;
+
+  std::unordered_set<std::string> seen; 
+  const auto throw_if_missing = true;
+  std::string zone; 
+  std::string type; 
+
+  while ((o = iter.get_next())) {
+    RGWXMLDecoder::decode_xml("Name", zone, o, throw_if_missing);
+    if(!RGWXMLDecoder::decode_xml("Type", type, o, !throw_if_missing)) {
+      type = "IN";
+    }
+
+    if(seen.find(zone) != seen.end())
+      throw RGWXMLDecoder::err("duplicate zone filter rule: '" + zone + "'");
+    else 
+      seen.insert(zone);
+
+    if(type == "IN")
+      in_list.emplace_back(zone); 
+    else if (type == "OUT")
+      out_list.emplace_back(zone); 
+    else
+      throw RGWXMLDecoder::err("invalid zone filter rule type: '" + type + "'");
+  }
+  return true; 
+}
+
+void rgw_s3_zone_filter::dump_xml(Formatter *f) const {
+  for(const auto &zone: in_list){
+    f->open_object_section("FilterRule");
+    ::encode_xml("Name", zone, f);
+    ::encode_xml("Type", "IN", f);
+    f->close_section();
+  }
+  for(const auto &zone: out_list){
+    f->open_object_section("FilterRule");
+    ::encode_xml("Name", zone, f);
+    ::encode_xml("Type", "OUT", f);
+    f->close_section();
+  }
+}
+
+bool rgw_s3_zone_filter::has_content() const {
+  return !in_list.empty() || !out_list.empty();
+}
+
 void rgw_s3_filter::dump(Formatter *f) const {
   encode_json("S3Key", key_filter, f);
   encode_json("S3Metadata", metadata_filter, f);
   encode_json("S3Tags", tag_filter, f);
+  encode_json("Zones", zone_filter, f);
 }
 
 bool rgw_s3_filter::decode_xml(XMLObj* obj) {
   RGWXMLDecoder::decode_xml("S3Key", key_filter, obj);
   RGWXMLDecoder::decode_xml("S3Metadata", metadata_filter, obj);
   RGWXMLDecoder::decode_xml("S3Tags", tag_filter, obj);
+  RGWXMLDecoder::decode_xml("Zones", zone_filter, obj);
   return true;
 }
 
@@ -181,12 +255,16 @@ void rgw_s3_filter::dump_xml(Formatter *f) const {
   if (tag_filter.has_content()) {
     ::encode_xml("S3Tags", tag_filter, f);
   }
+  if (zone_filter.has_content()) {
+    ::encode_xml("Zones", zone_filter, f);
+  }
 }
 
 bool rgw_s3_filter::has_content() const {
   return key_filter.has_content()  ||
          metadata_filter.has_content() ||
-         tag_filter.has_content();
+         tag_filter.has_content() || 
+         zone_filter.has_content();
 }
 
 bool match(const rgw_s3_key_filter& filter, const std::string& key) {
@@ -268,6 +346,20 @@ bool match(const rgw_s3_key_value_filter& filter, const KeyMultiValueMap& kv) {
       return false;
     }
   }
+  return true;
+}
+
+bool match(const rgw_s3_zone_filter& filter, const std::string& zone) {
+  // zone must be in the in_list or not in the out_list
+  if(!filter.in_list.empty() && std::find(filter.in_list.begin(), filter.in_list.end(), zone) == filter.in_list.end()) {
+    // zone is not in the in list
+    return false;
+  }
+  if(!filter.out_list.empty() && std::find(filter.out_list.begin(), filter.out_list.end(), zone) != filter.out_list.end()){
+    // zone is in the out list
+    return false;
+  }
+  // zone is either in the in list or not in the out list
   return true;
 }
 

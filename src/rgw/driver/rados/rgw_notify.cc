@@ -1081,6 +1081,14 @@ static inline bool notification_match(reservation_t& res,
     }
   }
 
+  if (filter.s3_filter.zone_filter.has_content()) {
+    //zone filter exists
+    const std::string &zone_name = res.store->get_zone()->get_name();
+    if(!match(filter.s3_filter.zone_filter, zone_name)) {
+      return false;
+    }
+  }
+
   return true;
 }
 
