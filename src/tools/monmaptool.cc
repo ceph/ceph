@@ -18,6 +18,7 @@
 #include "common/errno.h"
 #include "common/strtol.h"
 
+#include "auth/Crypto.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "include/str_list.h"
@@ -44,6 +45,9 @@ void usage()
        << "        [--feature-set <value> [--optional|--persistent]]\n"
        << "        [--feature-unset <value> [--optional|--persistent]]\n"
        << "        [--set-min-mon-release <release-major-number>]\n"
+       << "        [--auth-service-cipher <cipher>]\n"
+       << "        [--auth-allowed-ciphers <cipher1,cipher2,...>]\n"
+       << "        [--auth-preferred-cipher <cipher>]\n"
        << "        <mapfilename>"
        << std::endl;
 }
@@ -211,6 +215,9 @@ int main(int argc, const char **argv)
   map<string,entity_addrvec_t> addv;
   list<string> rm;
   list<feature_op_t> features;
+  int auth_service_cipher = CEPH_CRYPTO_AES256KRB5;
+  std::vector<int> auth_allowed_ciphers = {CEPH_CRYPTO_AES256KRB5};
+  int auth_preferred_cipher = CEPH_CRYPTO_AES256KRB5;
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
@@ -312,6 +319,33 @@ int main(int argc, const char **argv)
         helpful_exit();
       }
       features.back().set_persistent();
+    } else if (ceph_argparse_witharg(args, i, &val, "--auth-service-cipher", (char*)NULL)) {
+      int c = CryptoManager::get_key_type(val);
+      if (c < 0) {
+        cerr << me << ": invalid cipher: " << val << std::endl;
+        helpful_exit();
+      }
+      auth_service_cipher = c;
+    } else if (ceph_argparse_witharg(args, i, &val, "--auth-allowed-ciphers", (char*)NULL)) {
+      std::vector<std::string> v;
+      std::vector<int> ciphers;
+      get_str_vec(val, ", ", v);
+      for (auto& cipher : v) {
+        int c = CryptoManager::get_key_type(cipher);
+        if (c < 0) {
+          cerr << me << ": invalid cipher: " << val << std::endl;
+          helpful_exit();
+        }
+        ciphers.push_back(c);
+      }
+      auth_allowed_ciphers = std::move(ciphers);
+    } else if (ceph_argparse_witharg(args, i, &val, "--auth-preferred-cipher", (char*)NULL)) {
+      int c = CryptoManager::get_key_type(val);
+      if (c < 0) {
+        cerr << me << ": invalid cipher: " << val << std::endl;
+        helpful_exit();
+      }
+      auth_preferred_cipher = c;
     } else {
       ++i;
     }
@@ -353,9 +387,9 @@ int main(int argc, const char **argv)
     monmap.epoch = 0;
     monmap.created = ceph_clock_now();
     monmap.last_changed = monmap.created;
-    monmap.auth_service_cipher = CEPH_CRYPTO_AES256KRB5;
-    monmap.auth_allowed_ciphers = {CEPH_CRYPTO_AES256KRB5};
-    monmap.auth_preferred_cipher = CEPH_CRYPTO_AES256KRB5;
+    monmap.auth_service_cipher = auth_service_cipher;
+    monmap.auth_allowed_ciphers = auth_allowed_ciphers;
+    monmap.auth_preferred_cipher = auth_preferred_cipher;
     srand(getpid() + time(0));
     if (g_conf().get_val<uuid_d>("fsid").is_zero()) {
       monmap.generate_fsid();
