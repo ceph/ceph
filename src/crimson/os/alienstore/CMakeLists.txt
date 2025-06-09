@@ -1,6 +1,7 @@
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rocksdb/include")
 
 set(crimson_alien_common_srcs
+  ${PROJECT_SOURCE_DIR}/src/auth/Crypto.cc
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket.cc
   ${PROJECT_SOURCE_DIR}/src/common/url_escape.cc
   ${PROJECT_SOURCE_DIR}/src/common/blkdev.cc
