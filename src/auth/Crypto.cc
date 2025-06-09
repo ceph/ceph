@@ -74,6 +74,8 @@ static bool getentropy_works()
   }
 }
 
+namespace TOPNSPC::auth {
+
 CryptoRandom::CryptoRandom() : fd(getentropy_works() ? -1 : open_urandom())
 {}
 
@@ -102,6 +104,8 @@ void CryptoRandom::get_bytes(char *buf, int len)
 #elif defined(_WIN32) // !HAVE_GETENTROPY
 
 #include <bcrypt.h>
+
+namespace TOPNSPC::auth {
 
 CryptoRandom::CryptoRandom() : fd(0) {}
 CryptoRandom::~CryptoRandom() = default;
@@ -1152,6 +1156,8 @@ bool CryptoManager::crypto_type_supported(int type) const
 {
   return supported_crypto_types.find(type) != supported_crypto_types.end();
 }
+
+} // namespace TOPNSPC::auth
 
 #pragma clang diagnostic pop
 #pragma GCC diagnostic pop
