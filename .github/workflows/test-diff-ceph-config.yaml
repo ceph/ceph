@@ -38,6 +38,7 @@ jobs:
           branch_pr: origin/${{ github.event.pull_request.head.ref }}
           refspec_base: +${{ github.event.pull_request.base.sha }}:remotes/origin/${{ github.event.pull_request.base.ref }}
           refspec_pr: +${{ github.event.pull_request.head.sha }}:remotes/origin/${{ github.event.pull_request.head.ref }}
+        working-directory: ceph
         run: |
           # Fetch enough history to find a common ancestor commit (aka merge-base):
           git fetch origin ${{ env.refspec_pr }} --depth=$(( ${{ github.event.pull_request.commits }} + 1 )) \
