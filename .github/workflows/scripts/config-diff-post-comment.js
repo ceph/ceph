@@ -77,38 +77,24 @@ The above configuration changes are found in the PR. Please update the relevant 
         if (file.patch) {
             core.info(`Patch content for ${file.filename}:\n${file.patch}`);
 
-            // A sample file.patch value looks like: "@@ -132,7 +132,7 @@ module Test @@ -1000,7 +1000,7 @@ module Test"
-            // Extract all line numbers from the patch using regex
-            const matches = [...file.patch.matchAll(/@@ -\d+,\d+ \+(\d+)(?:,(\d+))? @@/g)];
-            matches.forEach(match => {
-                const startLine = parseInt(match[1], 10); // Extracted start line
-                const lineCount = match[2] ? parseInt(match[2], 10) : 1; // Number of lines changed
-                const endLine = startLine + lineCount - 1; // Calculate the end line
-
-                core.info(`startLine: ${startLine}, endLine: ${endLine}, linecount: ${lineCount}`)
-
-                core.notice(
-                    `Configuration changes detected. Please update the release documentation if necessary.`,
-                    {
-                        title: "Configuration Change Detected",
-                        file: file.filename,
-                        startLine: startLine,
-                        endLine: endLine,
-                    }
-                );
-            });
+            // Show annotations only at the start of the file
+            core.notice(
+                `Configuration changes detected in ${file.filename}. Please update the release documentation if necessary.`,
+                {
+                    title: "Configuration Change Detected",
+                    file: file.filename,
+                    startLine: 1, // Annotation at the start of the file
+                    endLine: 1,   // Annotation at the start of the file
+                }
+            );
         } else {
             core.info(`No patch data available for file: ${file.filename}`);
         }
       });
 
-
-
       // Set action summary
       core.summary.addRaw(commentBody);
       await core.summary.write()
-
-
 
       if (existingComment) {
         // There might have been new configuration changes made after posting
