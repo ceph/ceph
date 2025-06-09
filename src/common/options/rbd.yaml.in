@@ -778,13 +778,6 @@ options:
         }
         return 0;
     }
-- name: rbd_discard_on_zeroed_write_same
-  type: bool
-  level: advanced
-  desc: discard data on zeroed write same instead of writing zero
-  default: true
-  services:
-  - rbd
 - name: rbd_mtime_update_interval
   type: uint
   level: advanced
