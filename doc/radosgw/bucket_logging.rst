@@ -153,13 +153,13 @@ has the following format:
 
 ::
 
-  <prefix><bucket owner>/<source region>/[tenant:]<bucket name>/<year>/<month>/<day>/<year-month-day-hour-minute-second>-<16 bytes unique-id>
+  <prefix><source bucket owner>/<zone group>/[tenant:]<source bucket name>/<year>/<month>/<day>/<year-month-day-hour-minute-second>-<16 bytes unique-id>
 
 For example:
 
 ::
 
-  fish/testid//all-log/2024/08/06/2024-08-06-10-11-18-0000000000000002
+  fish/testid/default/fish-bucket/2024/08/06/2024-08-06-10-11-18-0000000000000002
 
 Log Records
 ~~~~~~~~~~~
