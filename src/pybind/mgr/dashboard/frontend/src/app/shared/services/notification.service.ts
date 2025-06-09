@@ -77,9 +77,6 @@ export class NotificationService {
     const recent = this.dataSource.getValue();
     recent.push(notification);
     recent.sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1));
-    while (recent.length > 10) {
-      recent.pop();
-    }
     this.dataSource.next(recent);
     localStorage.setItem(this.KEY, JSON.stringify(recent));
   }
@@ -141,10 +138,6 @@ export class NotificationService {
   private showQueued() {
     this.getUnifiedTitleQueue().forEach((config) => {
       const notification = new CdNotification(config);
-
-      if (!notification.isFinishedTask) {
-        this.save(notification);
-      }
       this.showToasty(notification);
     });
   }
@@ -172,10 +165,15 @@ export class NotificationService {
   }
 
   private showToasty(notification: CdNotification) {
-    // Exit immediately if no toasty should be displayed.
-    if (this.hideToasties) {
+    // Always save the notification regardless of the system being used
+    this.save(notification);
+    
+    // Exit only if toasties are explicitly hidden or Do Not Disturb is on
+    if (this.hideToasties || this.doNotDisturb) {
       return;
     }
+
+    // Show toastr notifications regardless of which system is being used
     const toastrMethod = ['error', 'info', 'success'][notification.type] as keyof Pick<ToastrService, 'error' | 'info' | 'success'>;
     this.toastr[toastrMethod](
       (notification.message ? notification.message + '<br>' : '') +

@@ -48,12 +48,27 @@
       <cds-header-navigation>
         <cd-language-selector class="d-flex"></cd-language-selector>
       </cds-header-navigation>
+<<<<<<< Updated upstream
       <!-- Notifications -->
       <div class="cds--btn cds--btn--icon-only cds--header__action"
            (click)="notificationService.useCarbonNotificationPanel ? notificationService.toggleCarbonPanel() : notificationService.toggleSidebar()">
         <cd-notifications></cd-notifications>
       </div>
       <!-- Help icon -->
+=======
+      <!-- Original notification bell -->
+      <div class="cds--btn cds--btn--icon-only cds--header__action"
+           (click)="toggleSidebar()"
+           *ngIf="!useCarbonNotificationPanel">
+        <cd-notifications></cd-notifications>
+      </div>
+      <!-- New Carbon notification bell -->
+      <div class="cds--btn cds--btn--icon-only cds--header__action"
+           *ngIf="useCarbonNotificationPanel"
+           (click)="carbonNotificationPanel.togglePanel()">
+        <cds-icon icon="notification--filled" size="20"></cds-icon>
+      </div>
+>>>>>>> Stashed changes
       <div class="cds--btn cds--btn--icon-only cds--header__action">
         <cd-dashboard-help></cd-dashboard-help>
       </div>
@@ -369,4 +384,7 @@
       </cds-sidenav>
     </ng-container>
   </ng-template>
-  </div>
+  <!-- Add the Carbon notification panel -->
+  <cd-carbon-notification-panel #carbonNotificationPanel *ngIf="useCarbonNotificationPanel">
+  </cd-carbon-notification-panel>
+</div>

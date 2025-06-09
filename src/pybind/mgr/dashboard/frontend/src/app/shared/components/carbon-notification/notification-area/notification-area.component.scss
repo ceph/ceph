@@ -1,0 +1,71 @@
+@use '@carbon/styles/scss/type';
+@use '@carbon/styles/scss/spacing';
+@use '@carbon/styles/scss/theme';
+@use '@carbon/styles/scss/motion';
+
+.notification-header {
+  display: flex;
+  align-items: center;
+  gap: spacing.$spacing-03;
+  margin-bottom: spacing.$spacing-03;
+}
+
+.notification-title {
+  flex: 1;
+  @include type.type-style('heading-compact-01');
+}
+
+.notification-message {
+  margin: spacing.$spacing-03 0;
+  max-height: spacing.$spacing-13;
+  overflow: hidden;
+  transition: max-height motion.$duration-moderate-01 motion.$standard-easing;
+  @include type.type-style('body-long-01');
+
+  &.expanded {
+    max-height: none;
+  }
+}
+
+.notification-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: spacing.$spacing-03;
+}
+
+.notification-meta {
+  display: flex;
+  gap: spacing.$spacing-04;
+  align-items: center;
+  color: theme.$text-secondary;
+  @include type.type-style('helper-text-01');
+}
+
+.notification-actions {
+  display: flex;
+  gap: spacing.$spacing-03;
+}
+
+:host ::ng-deep {
+  cds-tile {
+    margin-bottom: spacing.$spacing-03;
+    transition: background-color motion.$duration-fast-01 motion.$standard-easing;
+  }
+
+  cds-tile.error {
+    border-left: 3px solid theme.$support-error;
+  }
+
+  cds-tile.success {
+    border-left: 3px solid theme.$support-success;
+  }
+
+  cds-tile.warning {
+    border-left: 3px solid theme.$support-warning;
+  }
+
+  cds-tile.info {
+    border-left: 3px solid theme.$support-info;
+  }
+} 

@@ -3,7 +3,7 @@ import { Component, Input, Output, EventEmitter } from '@angular/core';
 @Component({
   selector: 'cd-notification-header',
   template: `
-    <cds-header name="Notifications" class="cds--g10">
+    <cds-header name="Tasks & Notifications" class="cds--g10">
       <cds-header-global>
         <cds-header-action>
           <svg cdsIcon="notification--filled" size="20"></svg>
