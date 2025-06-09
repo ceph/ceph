@@ -64,7 +64,7 @@ public:
   }
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<SnapServer*>& ls);
+  static std::list<SnapServer> generate_test_instances();
 
   bool force_update(snapid_t last, snapid_t v2_since,
 		    std::map<snapid_t, SnapInfo>& _snaps);

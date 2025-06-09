@@ -750,7 +750,7 @@ public:
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<HashInfo*> &o);
+  static std::list<HashInfo> generate_test_instances();
 
   uint32_t get_chunk_hash(shard_id_t shard) const {
     ceph_assert(shard < cumulative_shard_hashes.size());

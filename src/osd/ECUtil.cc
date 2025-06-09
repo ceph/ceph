@@ -1156,8 +1156,9 @@ std::ostream &operator<<(std::ostream &out, const log_entry_t &rhs) {
 }
 }
 
-void ECUtil::HashInfo::generate_test_instances(list<HashInfo*> &o) {
-  o.push_back(new HashInfo(3));
+auto ECUtil::HashInfo::generate_test_instances() -> list<HashInfo> {
+  list<HashInfo> o;
+  o.push_back(HashInfo(3));
   {
     bufferlist bl;
     bl.append_zero(20);
@@ -1170,10 +1171,11 @@ void ECUtil::HashInfo::generate_test_instances(list<HashInfo*> &o) {
     buffers[shard_id_t(0)] = bp;
     buffers[shard_id_t(1)] = bp;
     buffers[shard_id_t(2)] = bp;
-    o.back()->append(0, buffers);
-    o.back()->append(20, buffers);
+    o.back().append(0, buffers);
+    o.back().append(20, buffers);
   }
-  o.push_back(new HashInfo(4));
+  o.push_back(HashInfo(4));
+  return o;
 }
 
 const string HINFO_KEY = "hinfo_key";
