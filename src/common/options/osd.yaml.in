@@ -489,8 +489,8 @@ options:
 - name: osd_deep_scrub_interval_cv
   type: float
   level: advanced
-  desc: determining the amount of variation in the deep scrub interval
-  long_desc: deep scrub intervals are varied by a random amount to prevent
+  desc: Determines the amount of variation in the deep scrub interval
+  long_desc: Deep scrub intervals are varied by a random amount to prevent
     stampedes. This parameter determines the amount of variation.
     Technically ``osd_deep_scrub_interval_cv`` is the coefficient of variation for
     the deep scrub interval.
