@@ -25,6 +25,8 @@
 class CryptoKeyContext;
 namespace ceph { class Formatter; }
 
+namespace TOPNSPC::auth {
+
 /*
  * Random byte stream generator suitable for cryptographic use
  */
@@ -235,6 +237,7 @@ inline std::ostream& operator<<(std::ostream& out, const CryptoKey& k)
  * To use these functions, you need to call ceph::crypto::init(), see
  * common/ceph_crypto.h. common_init_finish does this for you.
  */
+
 class CryptoHandler {
 public:
   virtual ~CryptoHandler() {}
@@ -252,6 +255,7 @@ public:
 
   static CryptoHandler *create(int type);
 };
+
 
 
 class CryptoManager {
@@ -273,6 +277,6 @@ public:
 
   std::shared_ptr<CryptoHandler> get_handler(int type);
 };
-
+} // namespace TOPNSPC::auth
 
 #endif
