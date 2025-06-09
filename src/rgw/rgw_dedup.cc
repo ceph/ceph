@@ -2284,8 +2284,6 @@ namespace rgw::dedup {
       d_ctl.started = true;
     }
     d_runner = std::thread(&Background::run, this);
-    const auto rc = ceph_pthread_setname("dedup_bg");
-    ldpp_dout(dpp, 5) << "dedup_bg start() = " << rc << dendl;
   }
 
   //------------------------- --------------------------------------------------
@@ -2467,6 +2465,9 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   void Background::run()
   {
+    const auto rc = ceph_pthread_setname("dedup_bg");
+    ldpp_dout(dpp, 5) << __func__ << "ceph_pthread_setname() ret=" << rc << dendl;
+
     // 256x8KB=2MB
     const uint64_t PER_SHARD_BUFFER_SIZE = DISK_BLOCK_COUNT *sizeof(disk_block_t);
     ldpp_dout(dpp, 20) <<__func__ << "::dedup::main loop" << dendl;
