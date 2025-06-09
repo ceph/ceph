@@ -22,7 +22,6 @@
 #include "include/buffer_fwd.h"  // for ceph::buffer::list
 
 class KeyServer;
-class CryptoKey;
 struct AuthCapsInfo;
 
 enum class global_id_status_t {
