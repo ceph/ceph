@@ -81,13 +81,15 @@ void CompatSet::dump(ceph::Formatter *f) const {
   f->close_section();
 }
 
-void CompatSet::generate_test_instances(std::list<CompatSet*>& o) {
-  o.push_back(new CompatSet);
-  o.push_back(new CompatSet);
-  o.back()->compat.insert(Feature(1, "one"));
-  o.back()->compat.insert(Feature(2, "two"));
-  o.back()->ro_compat.insert(Feature(4, "four"));
-  o.back()->incompat.insert(Feature(3, "three"));
+std::list<CompatSet> CompatSet::generate_test_instances() {
+  std::list<CompatSet> o;
+  o.push_back(CompatSet{});
+  o.push_back(CompatSet{});
+  o.back().compat.insert(Feature(1, "one"));
+  o.back().compat.insert(Feature(2, "two"));
+  o.back().ro_compat.insert(Feature(4, "four"));
+  o.back().incompat.insert(Feature(3, "three"));
+  return o;
 }
 
 std::ostream& operator<<(std::ostream& out, const CompatSet::Feature& f)

@@ -39,7 +39,7 @@ struct cls_timeindex_entry {
   }
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<cls_timeindex_entry*>& o);
+  static std::list<cls_timeindex_entry> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_timeindex_entry)
 

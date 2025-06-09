@@ -116,12 +116,14 @@ void MirrorInfo::dump(ceph::Formatter *f) const {
   f->close_section(); // peers
 }
 
-void MirrorInfo::generate_test_instances(std::list<MirrorInfo*>& ls) {
-  ls.push_back(new MirrorInfo());
-  ls.push_back(new MirrorInfo());
-  ls.back()->mirrored = true;
-  ls.back()->peers.insert(Peer());
-  ls.back()->peers.insert(Peer());
+std::list<MirrorInfo> MirrorInfo::generate_test_instances() {
+  std::list<MirrorInfo> ls;
+  ls.push_back(MirrorInfo());
+  ls.push_back(MirrorInfo());
+  ls.back().mirrored = true;
+  ls.back().peers.insert(Peer());
+  ls.back().peers.insert(Peer());
+  return ls;
 }
 
 void MirrorInfo::print(std::ostream& out) const {
@@ -195,23 +197,23 @@ FSMap &FSMap::operator=(const FSMap &rhs)
   return *this;
 }
 
-void FSMap::generate_test_instances(std::list<FSMap*>& ls)
+std::list<FSMap> FSMap::generate_test_instances()
 {
-  FSMap* fsmap = new FSMap();
+  std::list<FSMap> ls;
 
-  std::list<MDSMap*> mds_map_instances;
-  MDSMap::generate_test_instances(mds_map_instances);
+  FSMap fsmap;
 
   int k = 20;
-  for (auto& mdsmap : mds_map_instances) {
+  for (auto& mdsmap : MDSMap::generate_test_instances()) {
     auto fs = Filesystem();
     fs.fscid = k++;
-    fs.mds_map = *mdsmap;
-    fsmap->filesystems[fs.fscid] = fs;
-    delete mdsmap;
+    fs.mds_map = mdsmap;
+    fsmap.filesystems[fs.fscid] = fs;
   }
 
-  ls.push_back(fsmap);
+  ls.push_back(std::move(fsmap));
+
+  return ls;
 }
 
 void FSMap::print(ostream& out) const
