@@ -19,6 +19,14 @@ namespace TOPNSPC::common {
   class RefCountedWaitObject;
   class ConfigProxy;
 }
+
+namespace TOPNSPC::auth {
+  class CryptoManager;
+  class CryptoHandler;
+  class CryptoKey;
+  class CryptoRandom;
+}
+
 using TOPNSPC::common::CephContext;
 using TOPNSPC::common::PerfCounters;
 using TOPNSPC::common::PerfCountersBuilder;
@@ -30,3 +38,7 @@ using TOPNSPC::common::RefCountedObjectSafe;
 using TOPNSPC::common::RefCountedCond;
 using TOPNSPC::common::RefCountedWaitObject;
 using TOPNSPC::common::ConfigProxy;
+using TOPNSPC::auth::CryptoManager;
+using TOPNSPC::auth::CryptoHandler;
+using TOPNSPC::auth::CryptoKey;
+using TOPNSPC::auth::CryptoRandom;
