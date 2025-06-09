@@ -529,6 +529,12 @@ Parameters are XML encoded in the body of the request, in the following format:
                         <Type></Type>
                     </FilterRule>
                 </S3Tags>
+                <Zones>
+                    <FilterRule>
+                        <Name></Name>
+                        <Type></Type>
+                    </FilterRule>
+                </Zones>
             </Filter>
        </TopicConfiguration>
    </NotificationConfiguration>
@@ -577,8 +583,13 @@ Parameters are XML encoded in the body of the request, in the following format:
 | ``S3Tags.FilterRule``         | Container | Holding ``Name`` and ``Value`` entities. ``Name`` would be the tag key,              |  Yes     |
 |                               |           | and ``Value`` would be the tag value.                                                |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
-
-
+| ``Zones.FilterRule``          | Container | Holding ``Name`` and ``Type`` entities. ``Name`` would be the zone name, and ``Type` |  Yes     |
+|                               |           | would be the zone type. The zone type is one of: ``IN`` or ``OUT``. It defaults to   |          |
+|                               |           | ``IN`` if unspecified. The filter matches if the zone is in the list of ``IN`` zones |          |
+|                               |           | and not in the list of ``OUT`` zones. If no zones are defined, the filter matches    |          |
+|                               |           | all zones. If no zones are defined as ``OUT``, the filter only matches zones with    |          |
+|                               |           | type ``IN``.                                                                         |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
 HTTP Response
 ~~~~~~~~~~~~~
 
@@ -688,6 +699,12 @@ Response is XML encoded in the body of the request, in the following format:
                         <Type></Type>
                     </FilterRule>
                 </S3Tags>
+                <Zones>
+                    <FilterRule>
+                        <Name></Name>
+                        <Type></Type>
+                    </FilterRule>
+                </Zones>
             </Filter>
        </TopicConfiguration>
    </NotificationConfiguration>
