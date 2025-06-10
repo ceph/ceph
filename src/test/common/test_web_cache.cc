@@ -454,7 +454,7 @@ class WebCacheRandomizedTest : public WebCacheTest {
 
 TEST_F(WebCacheRandomizedTest, RandomCallMainOperations) {
   reset_cache_system_mode(1000);
-  const size_t ops = 10000;
+  const size_t ops = 100000;
   const auto num_threads = std::max(std::thread::hardware_concurrency(), 8U);
 
   std::vector<int> base(100);
@@ -472,6 +472,9 @@ TEST_F(WebCacheRandomizedTest, RandomCallMainOperations) {
 
   std::mutex mutex;
   std::vector<std::thread> threads;
+  std::atomic_int lookups;
+  std::atomic_int clears;
+  std::atomic_int expires;
   for (size_t i = 0; i < num_threads; ++i) {
     threads.emplace_back([&]() {
       for (size_t op_i = 0; op_i < ops / num_threads; ++op_i) {
@@ -487,12 +490,15 @@ TEST_F(WebCacheRandomizedTest, RandomCallMainOperations) {
         switch (op) {
           case 0: {  // lookup_or
             auto value = _uut->lookup_or(key, a_valptr);
+            lookups++;
           } break;
           case 1:  // clear cache
             _uut->clear();
+            clears++;;
             break;
           case 2:  // expire
             _uut->expire_erase();
+            expires++;
             break;
           default:
             ceph_abort("should not happen");
@@ -503,6 +509,13 @@ TEST_F(WebCacheRandomizedTest, RandomCallMainOperations) {
   for (auto& th : threads) {
     th.join();
   }
+  EXPECT_GT(lookups, 1);
+  EXPECT_GT(expires, 1);
+  EXPECT_GT(clears, 1);
+  std::cout << "lookups: " << lookups
+            << ", expires: " << expires
+            << ", clears: " << clears
+            << std::endl;
 }
 
 }  // namespace webcache

@@ -344,7 +344,9 @@ size_t WebCache<Key, Value>::clear() {
   std::lock_guard<std::shared_mutex> lock(_cache_mutex);
   perf_inc(Metric::clear);
   const size_t size_before = _sieve_queue.size();
-  _sieve_queue.clear();
+  _sieve_queue.clear_and_dispose([](auto*) {
+  });
+  _sieve_hand = nullptr;
   _lookup.clear();
   perf_set(Metric::size, 0);
   perf_set(Metric::hit, 0);
