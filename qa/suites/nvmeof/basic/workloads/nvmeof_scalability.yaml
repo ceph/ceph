@@ -38,5 +38,5 @@ tasks:
         - nvmeof/scalability_test.sh nvmeof.b,nvmeof.c,nvmeof.d
         - nvmeof/scalability_test.sh nvmeof.b,nvmeof.c
     env:
-      SCALING_DELAYS: '300'
+      SCALING_DELAYS: '400'
       RUNTIME: '1200'
