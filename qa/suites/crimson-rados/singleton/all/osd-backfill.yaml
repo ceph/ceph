@@ -11,8 +11,6 @@ openstack:
       count: 3
       size: 10 # GB
 tasks:
-- install:
-    flavor: crimson
 - ceph:
     pre-mgr-commands:
       - sudo ceph config set mgr mgr_pool false --force
