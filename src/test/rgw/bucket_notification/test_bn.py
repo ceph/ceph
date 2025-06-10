@@ -29,6 +29,7 @@ from . import(
     get_config_host,
     get_config_port,
     get_config_zonegroup,
+    get_config_zonename,
     get_config_cluster,
     get_access_key,
     get_secret_key
@@ -2688,7 +2689,6 @@ def key_negative_filter(endpoint_type, conn):
     found_in2 = []
     found_in3 = []
 
-    print('wait for the messages...')
     # check kafka or http receiver
     wait_for_queue_to_drain(topic_name, http_port=port)
     events = receiver.get_and_reset_events()
@@ -2724,6 +2724,97 @@ def key_negative_filter(endpoint_type, conn):
     # delete the bucket
     conn.delete_bucket(bucket_name)
 
+def test_zone_filter(endpoint_type, conn):
+    """ test notification of filtering zone, negative test """
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    zone = get_config_zonename()
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # start endpoint receiver
+    host = get_ip()
+    task = None
+    port = None
+    if endpoint_type == 'http':
+        # create random port for the http server
+        port = random.randint(10000, 20000)
+        # start an http server in a separate thread
+        receiver = HTTPServerWithEvents((host, port))
+        endpoint_address = 'http://'+host+':'+str(port)
+        endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    elif endpoint_type == 'kafka':
+        # start kafka receiver
+        task, receiver = create_kafka_receiver_thread(topic_name)
+        task.start()
+        endpoint_address = 'kafka://' + host
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&persistent=true'
+    else:
+        return SkipTest('Unknown endpoint type: ' + endpoint_type)
+
+    # create s3 topic
+    zonegroup = get_config_zonegroup()
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name+'_1',
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:*'],
+                        'Filter': {
+                          'Zones': {
+                            'FilterRules': [{'Name': zone, 'Type': 'IN'}]
+                          }
+                        }
+                       },
+                       {'Id': notification_name+'_2',
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:*'],
+                        'Filter': {
+                          'Zones': {
+                            'FilterRules': [{'Name': zone, 'Type': 'OUT'}]
+                          }
+                        }
+                       }]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    result, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # get all notifications
+    result, status = s3_notification_conf.get_config()
+    assert_equal(status/100, 2)
+
+    ##upload an object to the bucket
+    key_name = 'foo'
+    key = bucket.new_key(key_name)
+    key.set_contents_from_string('bar')
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+
+    # check kafka or http receiver
+    wait_for_queue_to_drain(topic_name, http_port=port)
+    events = receiver.get_and_reset_events()
+
+    ##only notif_1 should be triggered
+    assert(len(events) == 1)
+    ##check notification id matches expected event
+    notif_id = events[0]['Records'][0]['s3']['configurationId']
+    assert(notif_id == notification_name+'_1')
+
+     # delete objects
+    for key in bucket.list():
+        key.delete()
+    
+    # cleanup
+    receiver.close(task)
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+
 @attr('kafka_test')
 def test_negative_metadata_filter_kafka():
     """ test notification of negative filter for metadata, kafka endpoint """
@@ -2735,6 +2826,12 @@ def test_negative_key_filter_kafka():
     """ test notification of negative filter for object key, kafka endpoint """
     conn = connection()
     key_negative_filter('kafka', conn)
+
+@attr('kafka_test')
+def test_zone_filter_kafka():
+    """ test notification of filtering zone, kafka endpoint """
+    conn = connection()
+    test_zone_filter('kafka', conn)
 
 @attr('http_test')
 def test_negative_metadata_filter_http():
@@ -2748,6 +2845,11 @@ def test_negative_key_filter_http():
     conn = connection()
     key_negative_filter('http', conn)
 
+@attr('http_test')
+def test_zone_filter_http():
+    """ test notification of filtering zone, http endpoint """
+    conn = connection()
+    test_zone_filter('http', conn)
 
 @attr('amqp_test')
 def test_ps_s3_metadata_on_master():
