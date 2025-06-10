@@ -222,8 +222,12 @@
                     "shape":"S3TagsFilter",
                     "documentation":"<p/>",
                     "locationName":"S3Tags"
+                }, 
+                "Zones":{
+                    "shape":"ZonesFilter",
+                    "documentation":"<p/>",
+                    "locationName":"Zones"
                 }
-
             },
             "documentation":"<p>Specifies object key name filtering rules. For information about key name filtering, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html\">Configuring Event Notifications</a> in the <i>Amazon Simple Storage Service Developer Guide</i>.</p>"
         },
@@ -259,6 +263,16 @@
                 }
             },
             "documentation":"<p>A container for object tags filtering rules.</p>"
+        },
+        "ZonesFilter": {
+            "type":"structure",
+            "members":{
+                "FilterRules":{
+                    "shape":"FilterRuleList",
+                    "documentation":"<p/>",
+                    "locationName":"FilterRule"
+                }
+            }
         },
         "GetUsageStatsOutput": {
             "type": "structure",
