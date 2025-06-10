@@ -1,7 +1,3 @@
-overrides:
-  install:
-    ceph:
-      flavor: crimson
 tasks:
 - install:
 - ceph:
@@ -9,5 +5,4 @@ tasks:
     conf:
       osd:
         debug monc: 20
-    flavor: crimson
 - ssh_keys:
