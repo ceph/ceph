@@ -45,7 +45,7 @@ class RadosIo : public Model {
 
  public:
   RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
-          const std::string& pool, const std::string& oid,
+          const std::string& pool, const std::string& primary_oid, const std::string& secondary_oid,
           const std::optional<std::vector<int>>& cached_shard_order,
           uint64_t block_size, int seed, int threads, ceph::mutex& lock,
           ceph::condition_variable& cond, bool is_replicated_pool,

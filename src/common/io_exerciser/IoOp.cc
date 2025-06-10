@@ -11,6 +11,8 @@ using BarrierOp = ceph::io_exerciser::BarrierOp;
 using CreateOp = ceph::io_exerciser::CreateOp;
 using RemoveOp = ceph::io_exerciser::RemoveOp;
 using ConsistencyOp = ceph::io_exerciser::ConsistencyOp;
+using SwapOp = ceph::io_exerciser::SwapOp;
+using CopyOp = ceph::io_exerciser::CopyOp;
 using SingleReadOp = ceph::io_exerciser::SingleReadOp;
 using DoubleReadOp = ceph::io_exerciser::DoubleReadOp;
 using TripleReadOp = ceph::io_exerciser::TripleReadOp;
@@ -75,6 +77,22 @@ std::unique_ptr<RemoveOp> RemoveOp::generate() {
 }
 
 std::string RemoveOp::to_string(uint64_t block_size) const { return "Remove"; }
+
+SwapOp::SwapOp() : TestOp<OpType::Swap>() {}
+
+std::unique_ptr<SwapOp> SwapOp::generate() {
+  return std::make_unique<SwapOp>();
+}
+
+std::string SwapOp::to_string(uint64_t block_size) const { return "Swap"; }
+
+CopyOp::CopyOp() : TestOp<OpType::Copy>() {}
+
+std::unique_ptr<CopyOp> CopyOp::generate() {
+  return std::make_unique<CopyOp>();
+}
+
+std::string CopyOp::to_string(uint64_t block_size) const { return "Copy"; }
 
 template <OpType opType, int numIOs>
 ceph::io_exerciser::ReadWriteOp<opType, numIOs>::ReadWriteOp(

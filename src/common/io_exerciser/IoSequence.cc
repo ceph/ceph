@@ -56,6 +56,9 @@ std::ostream& ceph::io_exerciser::operator<<(std::ostream& os,
     case Sequence::SEQUENCE_SEQ14:
       os << "SEQUENCE_SEQ14";
       break;
+    case Sequence::SEQUENCE_SEQ15:
+      os << "SEQUENCE_SEQ15";
+      break;
     case Sequence::SEQUENCE_END:
       os << "SEQUENCE_END";
       break;
@@ -103,6 +106,8 @@ std::unique_ptr<IoSequence> IoSequence::generate_sequence(
       return std::make_unique<Seq13>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ14:
       return std::make_unique<Seq14>(obj_size_range, seed, check_consistency);
+    case Sequence::SEQUENCE_SEQ15:
+      return std::make_unique<Seq15>(obj_size_range, seed, check_consistency);
     default:
       break;
   }
@@ -120,6 +125,7 @@ IoSequence::IoSequence(std::pair<int, int> obj_size_range, int seed, bool check_
       consistency_in_progress(false),
       consistency_request_sent(false),
       check_consistency(check_consistency),
+      swap(false),
       obj_size(min_obj_size),
       step(-1),
       seed(seed) {
@@ -215,6 +221,10 @@ std::unique_ptr<IoOp> IoSequence::next() {
   }
   if (done) {
     return DoneOp::generate();
+  }
+  if (swap) {
+    swap = false;
+    return SwapOp::generate();
   }
   if (create) {
     create = false;
@@ -743,5 +753,110 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq14::_next() {
   if (offset >= target_obj_size) {
     barrier = true;
   }
+  return r;
+}
+
+ceph::io_exerciser::Seq15::Seq15(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency), offset(0) {
+      select_random_object_size();
+      if (obj_size < 4) {
+        obj_size = 4;
+      }
+      primary_size = obj_size;
+      secondary_size = primary_size - 3;
+    }
+
+Sequence ceph::io_exerciser::Seq15::get_id() const {
+  return Sequence::SEQUENCE_SEQ15;
+}
+
+std::string ceph::io_exerciser::Seq15::get_name() const {
+  return "Different permutations of writes to objects of different sizes, then copy, resize and read";
+}
+
+std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq15::_next() {
+  std::unique_ptr<IoOp> r = BarrierOp::generate();
+
+  using Stage = ceph::io_exerciser::Seq15::Stage;
+  auto next_stage = [this]() {
+    stage = static_cast<Stage>(static_cast<int>(stage)+1);
+  };
+  switch (stage) {
+    case Stage::WRITE_PRIMARY:
+      // Seq0 with writes instead of reads
+      length = 1 + rng(obj_size - 1);
+      if (offset >= obj_size) {
+        offset = 0;
+        next_stage();
+        break;
+      }
+      if (offset + length > obj_size) {
+        r = SingleWriteOp::generate(offset, obj_size - offset);
+      } else {
+        r = SingleWriteOp::generate(offset, length);
+      }
+      offset += length;
+      break;
+    case Stage::CREATE_SECONDARY:
+      obj_size = secondary_size;
+      create = true;
+      r = SwapOp::generate();
+      next_stage();
+      break;
+    case Stage::WRITE_SECONDARY:
+      // Seq9
+      if (!doneread) {
+        if (!donebarrier) {
+          donebarrier = true;
+          r = BarrierOp::generate();
+          break;
+        }
+        doneread = true;
+        barrier = true;
+        r = SingleReadOp::generate(0, obj_size);
+        break;
+      }
+      length++;
+      if (length > obj_size - offset) {
+        length = 1;
+        offset++;
+        if (offset >= obj_size) {
+          offset = 0;
+          next_stage();
+          break;
+        }
+      }
+      doneread = false;
+      donebarrier = false;
+      r = SingleWriteOp::generate(offset, length);
+      break;
+    case Stage::COPY_FROM_SECONDARY:
+      r = CopyOp::generate();
+      next_stage();
+      break;
+    case Stage::READ_SECONDARY:
+      r = SingleReadOp::generate(0, obj_size);
+      next_stage();
+      break;
+    case Stage::SWAP_TO_PRIMARY:
+      r = SwapOp::generate();
+      next_stage();
+      break;
+    case Stage::TRUNCATE_PRIMARY:
+      obj_size = obj_size + 2;
+      r = TruncateOp::generate(obj_size);
+      next_stage();
+      break;
+    case Stage::READ_PRIMARY:
+      r = SingleReadOp::generate(0, obj_size);
+      next_stage();
+      break;
+    case Stage::DONE:
+      [[fallthrough]];
+    default:
+      done = true;
+      break;
+  }
+
   return r;
 }
