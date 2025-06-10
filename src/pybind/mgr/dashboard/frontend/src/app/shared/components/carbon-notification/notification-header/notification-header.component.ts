@@ -11,7 +11,7 @@ import { Component, Input, Output, EventEmitter } from '@angular/core';
         </cds-header-action>
         <cds-header-action>
           <cds-toggle
-            [label]="'Do Not Disturb'"
+            [label]="'Mute Notifications'"
             [hideLabel]="false"
             [checked]="doNotDisturb"
             (checkedChange)="doNotDisturbChange.emit($event)">
