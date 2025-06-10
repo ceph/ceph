@@ -8,13 +8,16 @@
   <cd-carbon-notification-panel
     *ngIf="notificationService.useCarbonNotificationPanel"
     [notifications]="notificationService.data$ | async"
+    [executingTasks]="summaryData?.executing_tasks || []"
     [unreadCount]="(notificationService.data$ | async)?.length || 0"
     [doNotDisturb]="notificationService.doNotDisturb"
     [showCarbonPanel]="notificationService.showCarbonPanel"
     (doNotDisturbChange)="notificationService.setDoNotDisturb($event)"
     (dismissNotification)="notificationService.remove($event)"
     (retryNotification)="notificationService.retryNotification($event)"
+    (toggleAlert)="notificationService.toggleAlert($event)"
     (viewAllNotifications)="notificationService.viewAllNotifications()"
+    (clearAllNotifications)="notificationService.removeAll()"
     (openSettings)="notificationService.openSettings()">
   </cd-carbon-notification-panel>
 

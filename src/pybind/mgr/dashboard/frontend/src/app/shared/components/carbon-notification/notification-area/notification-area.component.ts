@@ -1,10 +1,45 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CdNotification } from '~/app/shared/models/cd-notification';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { ExecutingTask } from '~/app/shared/models/executing-task';
 
 @Component({
   selector: 'cd-notification-area',
   template: `
+    <!-- Clear all button -->
+    <cds-grid *ngIf="notifications.length > 0">
+      <cds-row>
+        <cds-col>
+          <button cdsButton="ghost" class="w-100" (click)="clearAll.emit()">
+            <svg cdsIcon="trash-can" size="16"></svg>
+            Clear notifications
+          </button>
+        </cds-col>
+      </cds-row>
+    </cds-grid>
+
+    <hr *ngIf="notifications.length > 0" class="my-3">
+
+    <!-- Executing tasks -->
+    <cds-grid *ngIf="executingTasks.length > 0">
+      <cds-row *ngFor="let task of executingTasks">
+        <cds-col>
+          <cds-tile class="info">
+            <div class="notification-header">
+              <svg cdsIcon="in-progress" size="16"></svg>
+              <span class="notification-title">{{ task.description }}</span>
+            </div>
+            <div class="notification-footer">
+              <div class="notification-meta">
+                <span>In Progress</span>
+              </div>
+            </div>
+          </cds-tile>
+        </cds-col>
+      </cds-row>
+    </cds-grid>
+
+    <!-- Notifications -->
     <cds-grid>
       <cds-row *ngFor="let notification of notifications; let i = index">
         <cds-col>
@@ -23,10 +58,7 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
                 <span class="notification-timestamp">{{notification.timestamp | date:'short'}}</span>
                 <span *ngIf="notification.application" class="notification-application">
                   {{notification.application}}
-                </span>
-                <span *ngIf="notification.duration" class="notification-duration">
-                  Duration: {{notification.duration}}
-                </span>
+                </span>             
               </div>
               <div class="notification-actions">
                 <button *ngIf="notification.message?.length > 100"
@@ -53,14 +85,21 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
         </cds-col>
       </cds-row>
     </cds-grid>
+
+    <!-- Empty state -->
+    <div *ngIf="notifications.length === 0 && executingTasks.length === 0" class="text-center p-4">
+      There are no notifications.
+    </div>
   `,
   styleUrls: ['./notification-area.component.scss']
 })
 export class NotificationAreaComponent {
   @Input() notifications: CdNotification[] = [];
+  @Input() executingTasks: ExecutingTask[] = [];
   @Output() dismiss = new EventEmitter<number>();
   @Output() retry = new EventEmitter<CdNotification>();
   @Output() toggleAlert = new EventEmitter<CdNotification>();
+  @Output() clearAll = new EventEmitter<void>();
 
   expandedMessages: boolean[] = [];
   NotificationType = NotificationType;
