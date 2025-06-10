@@ -342,7 +342,7 @@ void JournalTrimmerImpl::config_t::validate() const
 {
   ceph_assert(max_journal_bytes <= DEVICE_OFF_MAX);
   ceph_assert(max_journal_bytes > target_journal_dirty_bytes);
-  ceph_assert(target_journal_dirty_bytes >= min_journal_bytes);
+  ceph_assert(target_journal_dirty_bytes >= min_journal_dirty_bytes);
   ceph_assert(target_journal_dirty_bytes > rewrite_dirty_bytes_per_cycle);
   ceph_assert(max_journal_bytes > target_journal_alloc_bytes);
   ceph_assert(rewrite_dirty_bytes_per_trans > 0);
@@ -358,16 +358,16 @@ JournalTrimmerImpl::config_t::get_default(
   assert(roll_size);
   std::size_t target_dirty_bytes = 0;
   std::size_t target_alloc_bytes = 0;
-  std::size_t min_journal_bytes = 0;
+  std::size_t min_dirty_bytes = 0;
   std::size_t max_journal_bytes = 0;
   if (type == backend_type_t::SEGMENTED) {
-    min_journal_bytes = 12 * roll_size;
+    min_dirty_bytes = 12 * roll_size;
     target_alloc_bytes = 2 * roll_size;
     target_dirty_bytes = 14 * roll_size;
     max_journal_bytes = 16 * roll_size;
   } else {
     assert(type == backend_type_t::RANDOM_BLOCK);
-    min_journal_bytes = roll_size / 4;
+    min_dirty_bytes = roll_size / 4;
     target_alloc_bytes = roll_size / 4;
     target_dirty_bytes = roll_size / 3;
     max_journal_bytes = roll_size / 2;
@@ -375,7 +375,7 @@ JournalTrimmerImpl::config_t::get_default(
   return config_t{
     target_dirty_bytes,
     target_alloc_bytes,
-    min_journal_bytes,
+    min_dirty_bytes,
     max_journal_bytes,
     1<<26,// rewrite_dirty_bytes_per_cycle, 64MB
     1<<17,// rewrite_dirty_bytes_per_trans, 128KB
@@ -390,16 +390,16 @@ JournalTrimmerImpl::config_t::get_test(
   assert(roll_size);
   std::size_t target_dirty_bytes = 0;
   std::size_t target_alloc_bytes = 0;
-  std::size_t min_journal_bytes = 0;
+  std::size_t min_dirty_bytes = 0;
   std::size_t max_journal_bytes = 0;
   if (type == backend_type_t::SEGMENTED) {
-    min_journal_bytes = 2 * roll_size;
+    min_dirty_bytes = 2 * roll_size;
     target_alloc_bytes = 2 * roll_size;
     target_dirty_bytes = 3 * roll_size;
     max_journal_bytes = 4 * roll_size;
   } else {
     assert(type == backend_type_t::RANDOM_BLOCK);
-    min_journal_bytes = roll_size / 36;
+    min_dirty_bytes = roll_size / 36;
     target_alloc_bytes = roll_size / 4;
     target_dirty_bytes = roll_size / 24;
     max_journal_bytes = roll_size / 2;
@@ -407,7 +407,7 @@ JournalTrimmerImpl::config_t::get_test(
   return config_t{
     target_dirty_bytes,
     target_alloc_bytes,
-    min_journal_bytes,
+    min_dirty_bytes,
     max_journal_bytes,
     (target_dirty_bytes > 1<<26)
       ? 1<<25
@@ -535,7 +535,7 @@ journal_seq_t JournalTrimmerImpl::get_dirty_tail_min_target() const
   assert(background_callback->is_ready());
   auto ret = journal_head.add_offset(
       backend_type,
-      -static_cast<device_off_t>(config.min_journal_bytes),
+      -static_cast<device_off_t>(config.min_journal_dirty_bytes),
       roll_start,
       roll_size);
   return ret;

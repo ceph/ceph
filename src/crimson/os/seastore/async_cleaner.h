@@ -503,14 +503,14 @@ class JournalTrimmerImpl : public JournalTrimmer {
 public:
   struct config_t {
     /// Number of minimum bytes to start trimming dirty,
-    //	this must be larger than or equal to min_journal_bytes,
+    //	this must be larger than or equal to min_journal_dirty_bytes,
     //	otherwise trim_dirty may never happen.
     std::size_t target_journal_dirty_bytes = 0;
     /// Number of minimum bytes to stop trimming allocation
     /// (having the corresponding backrefs unmerged)
     std::size_t target_journal_alloc_bytes = 0;
     /// Number of minimum dirty bytes of the journal.
-    std::size_t min_journal_bytes = 0;
+    std::size_t min_journal_dirty_bytes = 0;
     /// Number of maximum bytes to block user transactions.
     std::size_t max_journal_bytes = 0;
     /// Number of bytes to rewrite dirty per cycle
@@ -667,10 +667,10 @@ private:
   }
   std::size_t get_max_dirty_bytes_to_trim() const {
     auto journal_dirty_bytes = get_journal_dirty_bytes();
-    if (journal_dirty_bytes <= config.min_journal_bytes) {
+    if (journal_dirty_bytes <= config.min_journal_dirty_bytes) {
       return 0;
     }
-    return journal_dirty_bytes - config.min_journal_bytes;
+    return journal_dirty_bytes - config.min_journal_dirty_bytes;
   }
   std::size_t get_dirty_bytes_to_trim() const {
     return std::min(get_max_dirty_bytes_to_trim(),
