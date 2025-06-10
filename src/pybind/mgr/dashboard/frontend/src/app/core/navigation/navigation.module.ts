@@ -28,11 +28,9 @@ import { DashboardHelpComponent } from './dashboard-help/dashboard-help.componen
 import { IdentityComponent } from './identity/identity.component';
 import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
-<<<<<<< Updated upstream
+
 import { CarbonNotificationModule } from '~/app/shared/components/carbon-notification/carbon-notification.module';
-=======
-import { CarbonNotificationPanelModule } from '~/app/shared/components/carbon-notification-panel/carbon-notification-panel.module';
->>>>>>> Stashed changes
+
 
 // Icons
 import UserFilledIcon from '@carbon/icons/es/user--filled/20';
@@ -73,14 +71,12 @@ import CloseIcon from '@carbon/icons/es/close/16';
     DialogModule,
     GridModule,
     BreadcrumbModule,
-<<<<<<< Updated upstream
+
     ButtonModule,
     HeaderModule,
     SideNavModule,
     CarbonNotificationModule
-=======
-    CarbonNotificationPanelModule
->>>>>>> Stashed changes
+
   ],
   declarations: [
     AboutComponent,
