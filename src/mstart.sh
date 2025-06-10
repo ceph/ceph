@@ -74,7 +74,10 @@ if [ $? -ne 0 ]; then
 fi
 
 pos=`echo $pos | cut -d: -f1`
-base_port=$((6800+pos*20))
+
+CEPH_BASE_PORT=${CEPH_BASE_PORT:-6800}
+
+base_port=$((CEPH_BASE_PORT+pos*20))
 rgw_port=$((8000+pos*1))
 
 [ -z "$VSTART_DEST" ] && export VSTART_DEST=$RUN_ROOT_PATH/$instance
