@@ -10703,8 +10703,11 @@ TEST_P(StoreTest, BluestorePerPoolOmapFixOnMount)
     t.omap_setheader(cid, oid, h);
     t.touch(cid, oid2);
     t.omap_setheader(cid, oid2, h);
+    C_SaferCond c;
+    t.register_on_commit(&c);
     int r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
+    c.wait();
   }
 
   // inject legacy omaps
