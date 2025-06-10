@@ -248,22 +248,21 @@ Where:
 .. glossary:: 
 
         NAME
-                Collection name; prefix indicates the channel the collection
-                belongs to.
+                Collection name. The prefix indicates the channel to which the
+                collection belongs.
 
         STATUS
-                Indicates whether the collection metrics are reported; this is
-                determined by the status (enabled / disabled) of the channel
-                the collection belongs to, along with the enrollment status of
-                the collection (whether the user is opted-in to this
-                collection).
+                Indicates whether the collection metrics are reported. This is
+                determined by the status (``enabled`` or ``disabled``) to which
+                the channel of the collection belongs, along with the
+                enrollment status of the collection (whether the user is
+                opted-in to this collection).
 
         DESC
                 General description of the collection.
 
-To print the diff that displays the differences between (1) the collections you
-are enrolled to and (2) the new, available collections, run the following
-command:
+To display any difference between the currenty-enrolled collections and any new
+or available collections, run the following command:
 
 .. prompt:: bash #
 
@@ -275,8 +274,8 @@ To enroll to the most recent collections, run the following command:
 
    ceph telemetry on
 
-Enable a new channel that is disabled by running a command of the following
-form:
+Enable a new channel that is currently disabled by running a command of the
+following form:
 
 .. prompt:: bash #
 
@@ -305,14 +304,16 @@ the following form:
 Manually sending telemetry
 --------------------------
 
-To ad hoc [fixme] send telemetry data:
+To send an ansynchronous, one-time set of telemetry data, run the following
+command:
 
 .. prompt:: bash #
 
    ceph telemetry send
 
-In case telemetry is not enabled (with ``ceph telemetry on``), you need to add
-``--license sharing-1-0`` to the ``ceph telemetry send`` command.
+If telemetry has not been enabled (by running the command ``ceph telemetry
+on``), you need to add ``--license sharing-1-0`` to the ``ceph telemetry send``
+command.
 
 Sending telemetry through a proxy
 ---------------------------------
