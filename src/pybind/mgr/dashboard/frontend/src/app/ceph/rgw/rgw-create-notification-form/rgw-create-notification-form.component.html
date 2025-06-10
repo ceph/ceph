@@ -17,30 +17,33 @@
         <div cdsRow
              class="form-item form-item-append">
           <div cdsCol>
-            <cds-text-label labelInputID="id"
-                            cdRequiredField="Name"
-                            i18n-placeholder
-                            [invalid]="!notificationForm.controls.id.valid && notificationForm.controls.id.dirty"
-                            [invalidText]="idError"
-                            [helperText]="idHelper"
-                            i18n>
-              Name
-              <input cdsText
-                     type="text"
-                     id="id"
-                     placeholder="Enter a unique notification name"
-                     i18n-placeholder
-                     maxlength="255"
-                     formControlName="id"/>
+            <cds-text-label labelInputID="name"
+                  i18n
+                  i18n-helperText
+                  cdRequiredField="Name"
+                  [invalid]="notificationForm.controls.id.invalid && notificationForm.controls.id.dirty"
+                  [invalidText]="nameError"
+                  [helperText]="helpertext">Topic Name
+            <input cdsText
+                  type="text"
+                  placeholder="Name..."
+                  i18n-placeholder
+                  id="name"
+                  autoFocus
+                  formControlName="id"
+                  [invalid]="notificationForm.controls.id.invalid && notificationForm.controls.id.dirty"/>
             </cds-text-label>
-            <ng-template #idHelper>
+            <ng-template #helpertext>
               <span i18n>Enter a unique notification name</span>
             </ng-template>
-            <ng-template #idError>
+            <ng-template #nameError>
               <span *ngIf="notificationForm.showError('id', formDir, 'required')"
                     class="invalid-feedback">
                 <ng-container i18n>This field is required.</ng-container>
               </span>
+              <span class="invalid-feedback"
+                    *ngIf="notificationForm.showError('id', formDir, 'duplicate')"
+                    i18n>The name is already in use. Please choose a different one</span> 
             </ng-template>
           </div>
           <!-- Topic -->
@@ -287,4 +290,4 @@
                         [form]="notificationForm"
                         [submitText]="editing ? actionLabels.EDIT : actionLabels.CREATE"
                         [modalForm]="true"> </cd-form-button-panel>
-</cds-modal>
+  </cds-modal>

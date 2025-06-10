@@ -4,7 +4,7 @@ export interface Destination {
   push_endpoint: string;
   push_endpoint_args: string;
   push_endpoint_topic: string;
-  stored_secret: boolean;
+  stored_secret: string;
   persistent: boolean;
   persistent_queue: string;
   time_to_live: number;
@@ -22,6 +22,26 @@ export interface Topic {
   subscribed_buckets: any[];
 }
 
+export interface TopicDetails {
+  owner: string;
+  name: string;
+  push_endpoint: string;
+  opaque_data: string;
+  persistent?: string;
+  time_to_live?: string;
+  max_retries?: string;
+  retry_sleep_duration?: string;
+  policy: {} | string;
+  verify_ssl?: boolean;
+  cloud_events?: string;
+  ca_location?: string;
+  amqp_exchange?: string;
+  amqp_ack_level?: string;
+  use_ssl?: boolean;
+  kafka_ack_level?: string;
+  kafka_brokers?: string;
+  mechanism?: string;
+}
 export interface CreateTopic {
   owner: string;
   name: string;
@@ -50,6 +70,7 @@ export const KAFKA_MECHANISM = {
   GSSAPI: 'GSSAPI',
   OAUTHBEARER: 'OAUTHBEARER'
 };
+
 export const END_POINT_TYPE = {
   Select: 'Select Endpoint Type',
   HTTP: 'HTTP',

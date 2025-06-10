@@ -1,5 +1,11 @@
 import { Component, Inject, OnInit, Optional, ChangeDetectorRef } from '@angular/core';
-import { FormArray, Validators, AbstractControl, FormGroup } from '@angular/forms';
+import {
+  FormArray,
+  Validators,
+  AbstractControl,
+  FormGroup,
+  ValidationErrors
+} from '@angular/forms';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -30,6 +36,7 @@ export class RgwCreateNotificationFormComponent extends CdForm implements OnInit
   topics: Partial<Topic[]> = [];
   topicArn: string[] = [];
   notification_id: string;
+  notificationList: any;
   constructor(
     @Inject('bucket') public bucket: Bucket,
     @Optional() @Inject('selectedNotification') public selectedNotification: TopicConfiguration,
@@ -46,11 +53,20 @@ export class RgwCreateNotificationFormComponent extends CdForm implements OnInit
   }
 
   ngOnInit() {
+    this.notificationList = this.rgwBucketService
+      .getBucketNotificationList(this.bucket.bucket)
+      .subscribe({
+        next: (notificationList: TopicConfiguration[]) => {
+          this.notificationList = notificationList;
+        }
+      });
+
     this.skeyFilterValue = Object.values(S3KEYFILTERVALUE);
     this.createNotificationForm();
     this.getTopicName().then(() => {
       if (this.editing && this.selectedNotification) {
         this.notification_id = this.selectedNotification.Id;
+        this.notificationForm.get('id').disable();
         this.patchNotificationForm(this.selectedNotification);
       }
     });
@@ -96,7 +112,7 @@ export class RgwCreateNotificationFormComponent extends CdForm implements OnInit
 
   createNotificationForm() {
     this.notificationForm = this.fb.group({
-      id: [null, [Validators.required]],
+      id: [null, [Validators.required, this.duplicateNotificationId.bind(this)]],
       topic: [null, [Validators.required]],
       event: [[], []],
       filter: this.fb.group({
@@ -105,6 +121,20 @@ export class RgwCreateNotificationFormComponent extends CdForm implements OnInit
         s3Tags: this.fb.array([this.createNameValueGroup()])
       })
     });
+  }
+
+  duplicateNotificationId(control: AbstractControl): ValidationErrors | null {
+    const currentId = control.value?.trim();
+    if (!currentId) return null;
+    if (Array.isArray(this.notificationList)) {
+      const duplicateFound = this.notificationList.some(
+        (notification: TopicConfiguration) => notification.Id === currentId
+      );
+
+      return duplicateFound ? { duplicate: true } : null;
+    }
+
+    return null;
   }
 
   private createNameValueGroup(): CdFormGroup {

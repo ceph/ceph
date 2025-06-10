@@ -175,7 +175,7 @@ describe('RgwCreateTopicFormComponent', () => {
 
     expect(component.topicForm.get('name')?.value).toBe('Test Topic');
     expect(component.topicForm.get('owner')?.value).toBe('dashboard');
-    expect(component.topicForm.get('push_endpoint')?.value).toBe('http://localhost:8000');
+    expect(component.topicForm.get('push_endpoint')?.value).toBe('http://localhost:80');
   });
 
   it('should handle select change and update endpoint', () => {
