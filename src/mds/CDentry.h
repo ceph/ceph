@@ -28,6 +28,7 @@
 #include "MDSCacheObject.h"
 #include "SimpleLock.h"
 #include "LocalLockC.h"
+#include "LogSegmentRef.h"
 
 class filepath;
 class BatchOp;
@@ -263,8 +264,8 @@ public:
   mds_authority_t authority() const override;
 
   version_t pre_dirty(version_t min=0);
-  void _mark_dirty(LogSegment *ls);
-  void mark_dirty(version_t pv, LogSegment *ls);
+  void _mark_dirty(LogSegmentRef const& ls);
+  void mark_dirty(version_t pv, LogSegmentRef const& ls);
   void mark_clean();
 
   void mark_new();
@@ -302,7 +303,7 @@ public:
   void abort_export() {
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(ceph::buffer::list::const_iterator& blp, LogSegment *ls) {
+  void decode_import(ceph::buffer::list::const_iterator& blp, LogSegmentRef const& ls) {
     DECODE_START(1, blp);
     decode(first, blp);
     __u32 nstate;

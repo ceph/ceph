@@ -41,6 +41,7 @@
 #include "ScatterLock.h"
 #include "LocalLockC.h"
 #include "Capability.h"
+#include "LogSegmentRef.h"
 
 #include <boost/intrusive_ptr.hpp>
 
@@ -512,7 +513,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   projected_inode project_inode(const MutationRef& mut,
 				bool xattr = false, bool snap = false);
 
-  void pop_and_dirty_projected_inode(LogSegment *ls, const MutationRef& mut);
+  void pop_and_dirty_projected_inode(LogSegmentRef const& ls, const MutationRef& mut);
 
   version_t get_projected_version() const {
     if (projected_nodes.empty())
@@ -736,8 +737,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   version_t get_version() const { return get_inode()->version; }
 
   version_t pre_dirty();
-  void _mark_dirty(LogSegment *ls);
-  void mark_dirty(LogSegment *ls);
+  void _mark_dirty(LogSegmentRef const& ls);
+  void mark_dirty(LogSegmentRef const& ls);
   void mark_clean();
 
   void store(MDSContext *fin);
@@ -765,7 +766,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void _stored_backtrace(int r, version_t v, Context *fin);
   void fetch_backtrace(Context *fin, ceph::buffer::list *backtrace);
 
-  void mark_dirty_parent(LogSegment *ls, bool dirty_pool=false);
+  void mark_dirty_parent(LogSegmentRef const& ls, bool dirty_pool=false);
   void clear_dirty_parent();
   void verify_diri_backtrace(ceph::buffer::list &bl, int err);
   bool is_dirty_parent() { return state_test(STATE_DIRTYPARENT); }
@@ -804,7 +805,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     state_clear(STATE_EXPORTINGCAPS);
     put(PIN_EXPORTINGCAPS);
   }
-  void decode_import(ceph::buffer::list::const_iterator& p, LogSegment *ls);
+  void decode_import(ceph::buffer::list::const_iterator& p, LogSegmentRef const& ls);
   
   // for giving to clients
   int encode_inodestat(ceph::buffer::list& bl, Session *session, SnapRealm *realm,

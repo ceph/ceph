@@ -49,6 +49,8 @@
 #include "include/buffer_fwd.h"
 #include "include/utime.h"
 
+#include "LogSegmentRef.h"
+
 #include <map>
 #include <memory>
 #include <ostream>
@@ -117,8 +119,7 @@ public:
   virtual EMetaBlob *get_metablob() { return NULL; }
 
 protected:
-  LogSegment* get_segment() { return _segment; }
-  LogSegment const* get_segment() const { return _segment; }
+  LogSegmentRef const& get_segment() const { return _segment; }
 
   utime_t stamp;
 
@@ -129,7 +130,7 @@ private:
 
   EventType _type = 0;
   uint64_t _start_off = 0;
-  LogSegment *_segment = nullptr;
+  LogSegmentRef _segment = nullptr;
 };
 
 #endif
