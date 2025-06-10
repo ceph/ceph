@@ -52,7 +52,7 @@
 
 constexpr size_t SMALL_CACHE = 100;
 constexpr size_t LARGE_CACHE = 1000;
-constexpr size_t CACHE_OP_COUNT = 100000;
+constexpr size_t CACHE_OP_COUNT = 1000000;
 constexpr size_t THREADS_SINGLE = 1;
 constexpr size_t THREADS_LOTS = 128;
 constexpr size_t RAND_KEY_LEN = 16;
@@ -128,6 +128,7 @@ struct CacheAdapter {
   virtual void cache(const std::string& key, const std::string& value) = 0;
 
   virtual double hit_miss_ratio() { return -23.42; };
+  virtual bool reset() { return false; };
 };
 
 // Shared LRU {{{
@@ -152,6 +153,13 @@ struct SharedLRUAdapter : public CacheAdapter {
   double hit_miss_ratio() override {
     return static_cast<double>(hits) /
            (static_cast<double>(hits) + static_cast<double>(misses));
+  }
+
+  bool reset() override {
+    _cache.clear();
+    hits = 0;
+    misses = 0;
+    return true;
   }
 };
 
@@ -260,6 +268,11 @@ struct WebCacheAdapter : public CacheAdapter {
             static_cast<double>(
                 _cache.perf()->get(static_cast<int>(webcache::Metric::miss))));
   }
+
+  bool reset() override {
+    _cache.clear();
+    return true;
+  }
 };
 
 struct WebCacheLookupOrAdapter : public CacheAdapter {
@@ -288,6 +301,10 @@ struct WebCacheLookupOrAdapter : public CacheAdapter {
                 _cache.perf()->get(static_cast<int>(webcache::Metric::hit))) +
             static_cast<double>(
                 _cache.perf()->get(static_cast<int>(webcache::Metric::miss))));
+  }
+  bool reset() override {
+    _cache.clear();
+    return true;
   }
 };
 
@@ -340,6 +357,10 @@ struct WebCacheLookupOrAsyncAdapter : public CacheAdapter {
             static_cast<double>(
                 _cache.perf()->get(static_cast<int>(webcache::Metric::miss))));
   }
+  bool reset() override {
+    _cache.clear();
+    return true;
+  }
 };
 
 /// }}}
@@ -353,9 +374,17 @@ void BM_UniqueAdd(benchmark::State& state) {
     cache = new C(state.range(0));
   }
   for (auto _ : state) {
+    state.PauseTiming();
+    state.counters["Resetted"] = cache->reset();
+    state.ResumeTiming();
     for (int i = 0; i < state.range(1) / state.threads(); ++i) {
       cache->cache(random_key(), random_value());
     }
+    state.counters["KeysProcessed"] = benchmark::Counter(
+        state.range(1) / state.threads(), benchmark::Counter::kIsRate);
+    state.counters["KeysProcessedInv"] = benchmark::Counter(
+        state.range(1) / state.threads(),
+        benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
   }
   if (state.thread_index() == 0) {
     state.counters["hit/miss"] = cache->hit_miss_ratio();
@@ -374,13 +403,17 @@ void BM_Pareto(benchmark::State& state) {
   }
   for (auto _ : state) {
     state.PauseTiming();
+    state.counters["Resetted"] = cache->reset();
     const auto keys = workload(pool, state.range(1) / state.threads());
     ceph_assert(keys.size() > 10);
-    state.counters["keys"] = keys.size();
     state.ResumeTiming();
     for (auto key : keys) {
       cache->cache(std::string(key), "some_value");
     }
+    state.counters["KeysProcessed"] =
+        benchmark::Counter(keys.size(), benchmark::Counter::kIsRate);
+    state.counters["KeysProcessedInv"] = benchmark::Counter(
+        keys.size(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
   }
   if (state.thread_index() == 0) {
     state.counters["hit/miss"] = cache->hit_miss_ratio();
