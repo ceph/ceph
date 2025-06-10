@@ -302,7 +302,7 @@ options:
   level: advanced
   desc: whether to daemonize (background) after startup
   default: false
-  daemon_default: true
+  daemon_default: false
   tags:
   - service
   services:
@@ -4779,7 +4779,7 @@ options:
     state) media
   fmt_desc: Default value of ``bluestore compression max blob size``
     for non-rotational (SSD, NVMe) media.
-  default: 64_K
+  default: 64_GB
   see_also:
   - bluestore_compression_max_blob_size
   flags:

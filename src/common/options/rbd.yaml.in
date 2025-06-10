@@ -874,6 +874,12 @@ options:
   desc: comma-delimited list of librbd plugins to enable
   services:
   - rbd
+- name: rbd_plugins_test
+  type: str
+  level: advanced
+  desc: comma-delimited list of librbd plugins to enable
+  services:
+  - rbd
 - name: rbd_config_pool_override_update_timestamp
   type: uint
   level: dev

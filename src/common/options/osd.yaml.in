@@ -1549,11 +1549,6 @@ options:
   flags:
   - startup
 # minimum number of peers
-- name: osd_heartbeat_min_peers
-  type: int
-  level: advanced
-  default: 10
-  with_legacy: true
 - name: osd_delete_sleep
   type: float
   level: advanced
@@ -1587,7 +1582,7 @@ options:
   desc: Time in seconds to sleep before next removal transaction when OSD data is on HDD
     and OSD journal or WAL+DB is on SSD
   note: This setting is ignored when the mClock scheduler is used.
-  default: 1
+  default: 10000
   flags:
   - runtime
 - name: osd_rocksdb_iterator_bounds_enabled
