@@ -306,6 +306,8 @@ following forms:
     ceph auth del {user}
 
 
+.. _rados_renaming_a_pool:
+
 Renaming a Pool
 ===============
 
