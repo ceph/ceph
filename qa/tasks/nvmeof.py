@@ -369,8 +369,8 @@ class NvmeofThrasher(Thrasher, Greenlet):
                 for d in self.daemons:
                     random_gateway_host = d.remote
                     d.remote.sh(d.status_cmd, check_status=False)
-                random_gateway_host.run(args=['ceph', 'orch', 'ls', '--refresh'])
-                random_gateway_host.run(args=['ceph', 'orch', 'ps', '--daemon-type', 'nvmeof', '--refresh'])
+                random_gateway_host.run(args=['ceph', 'orch', 'ls'])
+                random_gateway_host.run(args=['ceph', 'orch', 'ps', '--daemon-type', 'nvmeof'])
                 random_gateway_host.run(args=['ceph', 'health', 'detail'])
                 random_gateway_host.run(args=['ceph', '-s'])
                 random_gateway_host.run(args=['ceph', 'nvme-gw', 'show', 'mypool', 'mygroup0'])
