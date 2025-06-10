@@ -1137,6 +1137,8 @@ class CephadmServe:
             # deployment of an individual daemon
             msg = (f"Failed while placing {daemon_names} "
                    f"on {hostname}: {e}")
+            self.mgr.log.error(msg)
+            return (False, set(), [msg])
         for daemon_name, msg in failures.items():
             # these are failures specific to a particular daemon
             daemon_spec = [d for d in to_deploy if d.name() == daemon_name][0]
