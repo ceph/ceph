@@ -18,8 +18,9 @@ one-third to one-half of the total cluster).
 
 Ceph is designed with the expectation that all parts of its network and cluster
 will be reliable and that failures will be distributed randomly across the
-CRUSH topology. If a host or network switch goes down and causes the loss of many OSDs, Ceph is
-designed so that the remaining OSDs and monitors will route around such a loss. 
+CRUSH topology. When a host or network switch goes down, many OSDs will
+become unavailable. Ceph is designed so that the remaining OSDs and
+Monitors will maintain access to data.
 
 Sometimes this cannot be relied upon. If you have a "stretched-cluster"
 deployment in which much of your cluster is behind a single network component,
@@ -30,12 +31,12 @@ data centers (or, in clouds, two availability zones), and a configuration with
 three data centers.
 
 In the two-site configuration, Ceph arranges for each site to hold a copy of
-the data, with a third site that has a tiebreaker (arbiter, witness)
-monitor. This tiebreaker monitor picks a winner when a network connection
+the data. A third site houses a tiebreaker (arbiter, witness)
+Monitor. This tiebreaker Monitor picks a winner when a network connection
 between sites fails and both data centers remain alive.
 
 The tiebreaker monitor can be a VM. It can also have higher network latency
-to the two main sites.
+to the OSD site(s) than OSD site(s) can have to each other.
 
 The standard Ceph configuration is able to survive many network failures or
 data-center failures without compromising data availability. When enough
@@ -57,7 +58,7 @@ without human intervention.
 
 Ceph does not permit the compromise of data integrity or data consistency, but
 there are situations in which *data availability* is compromised. These
-situations can occur even though there are sufficient replias of data available to satisfy
+situations can occur even though there are sufficient replicas of data available to satisfy
 consistency and sizing constraints. In some situations, you might
 discover that your cluster does not satisfy those constraints.
 
@@ -87,8 +88,7 @@ Individual Stretch Pools
 ========================
 Setting individual ``stretch pool`` attributes allows for
 specific pools to be distributed across two or more data centers.
-This is done by executing the ``ceph osd pool stretch set`` command on each desired pool,
-contrasted with a cluster-wide strategy with *stretch mode*.
+This is done by executing the ``ceph osd pool stretch set`` command on each desired pool.
 See :ref:`setting_values_for_a_stretch_pool`
 
 Use stretch mode when you have exactly two data centers and require a uniform
@@ -185,8 +185,8 @@ with the CRUSH topology.
              step emit
      }
 
-   .. warning:: If a CRUSH rule is defined in stretch mode cluster and the
-      rule has multiple ``take`` steps, then ``MAX AVAIL`` for the pools
+   .. warning:: When a CRUSH rule is defined in a stretch mode cluster and the
+      rule has multiple ``take`` steps, ``MAX AVAIL`` for the pools
       associated with the CRUSH rule will report that the available size is all
       of the available space from the datacenter, not the available space for
       the pools associated with the CRUSH rule.
@@ -264,7 +264,7 @@ with the CRUSH topology.
 When stretch mode is enabled, PGs will become active only when they peer
 across CRUSH ``datacenter``s (or across whichever CRUSH bucket type was specified),
 assuming both are available. Pools will increase in size from the default ``3`` to
-``4``, and two replicas will be place at each site. OSDs will be allowed to
+``4``, and two replicas will be placed at each site. OSDs will be allowed to
 connect to Monitors only if they are in the same data center as the Monitors.
 New Monitors will not be allowed to join the cluster if they do not specify a
 CRUSH location.
@@ -302,20 +302,20 @@ To exit stretch mode, run the following command:
 
 .. describe:: {crush_rule}
 
-   The CRUSH rule to now use for all pools. If this
+   The non-stretch CRUSH rule to use for all pools. If this
    is not specified, the pools will move to the default CRUSH rule.
 
    :Type: String
    :Required: No.
 
-This command will move the cluster back to normal mode;
+This command moves the cluster back to normal mode;
 the cluster will no longer be in stretch mode.
 All pools will be set with their prior ``size`` and ``min_size``
 values. At this point the user is responsible for scaling down the cluster
 to the desired number of OSDs if they choose to operate with fewer OSDs.
 
-Please note that the command will not execute when the cluster is in
-recovery stretch mode. The command will only execute when the cluster
+Note that the command will not execute when the cluster is in
+recovery stretch mode. The command executes only when the cluster
 is in degraded stretch mode or healthy stretch mode.
 
 Limitations of Stretch Mode 
