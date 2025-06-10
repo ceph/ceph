@@ -19,6 +19,7 @@
 #include <atomic>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/executor_work_guard.hpp>
+#include <chrono>
 #include <initializer_list>
 #include <iterator>
 #include <numeric>
@@ -36,6 +37,7 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "include/expected.hpp"
+#include "include/uuid.h"
 
 
 // Cache implementations in the Ceph codebase:
@@ -48,15 +50,6 @@
 // ❌ intrusive_lru: lru implementation with embedded map and list hook (not concurrent)
 // ❌ include/lru.h LRU - (not concurrent)
 
-// Config
-
-constexpr size_t SMALL_CACHE = 100;
-constexpr size_t LARGE_CACHE = 1000;
-constexpr size_t CACHE_OP_COUNT = 1000000;
-constexpr size_t THREADS_SINGLE = 1;
-constexpr size_t THREADS_LOTS = 128;
-constexpr size_t RAND_KEY_LEN = 16;
-constexpr size_t RAND_VALUE_LEN = 32;
 
 // Workload Generator Helper
 //
@@ -68,12 +61,31 @@ constexpr size_t RAND_VALUE_LEN = 32;
 
 namespace {
 
+// Config
+
+constexpr size_t SMALL_CACHE = 100;
+constexpr size_t LARGE_CACHE = 1000;
+constexpr size_t CACHE_OP_COUNT = 1000000;
+constexpr size_t THREADS_SINGLE = 1;
+constexpr size_t THREADS_LOTS = 128;
+constexpr size_t RAND_VALUE_LEN = 32;
+constexpr size_t PARETO_KEY_POOL_SIZE = 1000;
+
 std::string random_key() {
-  return gen_rand_alphanumeric_plain(g_ceph_context, RAND_KEY_LEN);
+  uuid_d uuid;
+  uuid.generate_random();
+  return uuid.to_string();
 }
 
 std::string random_value() {
-  return gen_rand_alphanumeric(g_ceph_context, RAND_VALUE_LEN);
+  std::string result(RAND_VALUE_LEN, '0');
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<uint16_t> dist(0, 0xFF);
+  for (size_t i=0; i< RAND_VALUE_LEN; ++i) {
+    result[i] = static_cast<char>(dist(gen));
+  }
+  return result;
 }
 
 std::vector<std::string> key_pool(int len) {
@@ -286,7 +298,9 @@ struct WebCacheLookupOrAdapter : public CacheAdapter {
   explicit WebCacheLookupOrAdapter(size_t size)
       : _cache(g_ceph_context, "benchmark", size) {}
 
-  ~WebCacheLookupOrAdapter() override { _cache.perf()->reset(); }
+  ~WebCacheLookupOrAdapter() override {
+    _cache.perf()->reset();
+  }
 
   void cache(const std::string& key, const std::string& value) override {
     std::shared_ptr<CacheValue> cache_value =
@@ -308,116 +322,73 @@ struct WebCacheLookupOrAdapter : public CacheAdapter {
   }
 };
 
-// Run io context event loops in a thread per hardware concurrency.
-// cache() by spawn'ing coroutine doing lookup_or and retrieving
-// result using ceph::async::call_once()
-struct WebCacheLookupOrAsyncAdapter : public CacheAdapter {
-  using CacheResult = tl::expected<std::string, int>;
-  using CacheValue = ceph::async::once_result<CacheResult>;
-  using Cache = webcache::WebCache<std::string, CacheValue>;
-
-  Cache _cache;
-
-  boost::asio::io_context _context;
-  std::vector<std::jthread> _threads;
-  boost::asio::executor_work_guard<boost::asio::io_context::executor_type>
-      _guard;
-
-  explicit WebCacheLookupOrAsyncAdapter(size_t size)
-      : _cache(g_ceph_context, "bechmark", size),
-        _context(),
-        _guard(boost::asio::make_work_guard(_context)) {
-    _threads.reserve(std::thread::hardware_concurrency());
-    for (int i = 0; i < std::thread::hardware_concurrency(); ++i) {
-      _threads.emplace_back([&]() { _context.run(); });
-    }
-  }
-
-  ~WebCacheLookupOrAsyncAdapter() override {
-    _guard.reset();
-    _cache.perf()->reset();
-  }
-
-  void cache(const std::string& key, const std::string& value) override {
-    boost::asio::spawn(
-        _context,
-        [this, key, value](boost::asio::yield_context yield) {
-          std::shared_ptr<CacheValue> cache_value =
-              _cache.lookup_or(key, std::make_shared<CacheValue>());
-          auto result = call_once(
-              *cache_value, yield, [&]() -> CacheResult { return value; });
-        },
-        boost::asio::detached);
-  }
-  double hit_miss_ratio() override {
-    return static_cast<double>(
-               _cache.perf()->get(static_cast<int>(webcache::Metric::hit))) /
-           (static_cast<double>(
-                _cache.perf()->get(static_cast<int>(webcache::Metric::hit))) +
-            static_cast<double>(
-                _cache.perf()->get(static_cast<int>(webcache::Metric::miss))));
-  }
-  bool reset() override {
-    _cache.clear();
-    return true;
-  }
-};
-
 /// }}}
 
 // Benchmarks {{{
 
-template <class C>
-void BM_UniqueAdd(benchmark::State& state) {
-  static C* cache = nullptr;
-  if (state.thread_index() == 0) {
-    cache = new C(state.range(0));
-  }
-  for (auto _ : state) {
-    state.PauseTiming();
-    state.counters["Resetted"] = cache->reset();
-    state.ResumeTiming();
-    for (int i = 0; i < state.range(1) / state.threads(); ++i) {
-      cache->cache(random_key(), random_value());
+template <typename C>
+class CacheFixture : public benchmark::Fixture {
+ public:
+  std::unique_ptr<C> cache;
+  void SetUp(::benchmark::State& state) override {
+    if (state.thread_index() == 0) {
+      cache = std::make_unique<C>(state.range(0));
     }
-    state.counters["KeysProcessed"] = benchmark::Counter(
-        state.range(1) / state.threads(), benchmark::Counter::kIsRate);
-    state.counters["KeysProcessedInv"] = benchmark::Counter(
-        state.range(1) / state.threads(),
-        benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
   }
-  if (state.thread_index() == 0) {
-    state.counters["hit/miss"] = cache->hit_miss_ratio();
-    delete cache;
+
+  void TearDown(::benchmark::State& state) override {
+    if (state.thread_index() == 0) {
+      state.counters["hit/miss"] = cache->hit_miss_ratio();
+    }
+  }
+};
+
+template <typename C>
+class ParetoFixture : public CacheFixture<C> {
+ public:
+  std::vector<std::string> pool;
+  std::array<std::vector<std::string_view>, THREADS_LOTS> pareto_keys;
+
+  ParetoFixture() : pool(key_pool(PARETO_KEY_POOL_SIZE)) {}
+
+  void SetUp(::benchmark::State& state) override {
+    if (state.thread_index() == 0) {
+      this->cache = std::make_unique<C>(state.range(0));
+      state.counters["Key Pool"] = pool.size();
+    }
+    pareto_keys[state.thread_index()] =
+        workload(pool, state.range(1) / state.threads());
+    state.counters["Keys/Thread"] = benchmark::Counter(
+        pareto_keys[state.thread_index()].size(),
+        benchmark::Counter::kAvgThreads);
+    ceph_assert(pareto_keys[state.thread_index()].size() > 1000);
+  }
+};
+
+BENCHMARK_TEMPLATE_METHOD_F(CacheFixture, BM_UniqueAdd)(
+    benchmark::State& state) {
+  for (auto _ : state) {
+    const size_t ops = state.range(1) / state.threads();
+    for (int i = 0; i < ops; ++i) {
+      this->cache->cache(random_key(), random_value());
+    }
+    state.counters["KeysProcessed"] =
+        benchmark::Counter(ops, benchmark::Counter::kIsRate);
+    state.counters["KeysProcessedInv"] = benchmark::Counter(
+        ops, benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
   }
 }
 
-template <class C>
-void BM_Pareto(benchmark::State& state) {
-  static C* cache = nullptr;
-  static const auto pool = key_pool(1000);
-
-  if (state.thread_index() == 0) {
-    state.counters["key_pool_size"] = pool.size();
-    cache = new C(state.range(0));
-  }
+BENCHMARK_TEMPLATE_METHOD_F(ParetoFixture, BM_Pareto)(benchmark::State& state) {
   for (auto _ : state) {
-    state.PauseTiming();
-    state.counters["Resetted"] = cache->reset();
-    const auto keys = workload(pool, state.range(1) / state.threads());
-    ceph_assert(keys.size() > 10);
-    state.ResumeTiming();
+    const auto keys = this->pareto_keys[state.thread_index()];
     for (auto key : keys) {
-      cache->cache(std::string(key), "some_value");
+      this->cache->cache(std::string(key), "some_value");
     }
     state.counters["KeysProcessed"] =
         benchmark::Counter(keys.size(), benchmark::Counter::kIsRate);
     state.counters["KeysProcessedInv"] = benchmark::Counter(
         keys.size(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
-  }
-  if (state.thread_index() == 0) {
-    state.counters["hit/miss"] = cache->hit_miss_ratio();
-    delete cache;
   }
 }
 
@@ -425,29 +396,25 @@ void BM_Pareto(benchmark::State& state) {
 
 // Benchmark Run Configuration {{{
 
-void register_benchmarks() {
-  for (const auto& [name, test] : {
-           std::make_pair("UNIQUE shared", BM_UniqueAdd<SharedLRUAdapter>),
-           std::make_pair("UNIQUE simple", BM_UniqueAdd<SimpleLRUAdapter>),
-           std::make_pair("UNIQUE cohort", BM_UniqueAdd<CohortLRUAdapter>),
-           std::make_pair("UNIQUE web   ", BM_UniqueAdd<WebCacheAdapter>),
-           std::make_pair("UNIQUE web-O", BM_UniqueAdd<WebCacheLookupOrAdapter>),
-           std::make_pair("UNIQUE web-A ", BM_UniqueAdd<WebCacheLookupOrAsyncAdapter>),
-           std::make_pair("PARETO shared", BM_Pareto<SharedLRUAdapter>),
-           std::make_pair("PARETO simple", BM_Pareto<SimpleLRUAdapter>),
-           std::make_pair("PARETO cohort", BM_Pareto<CohortLRUAdapter>),
-           std::make_pair("PARETO web   ", BM_Pareto<WebCacheAdapter>),
-           std::make_pair("PARETO web-O ", BM_Pareto<WebCacheLookupOrAdapter>),
-           std::make_pair("PARETO web-A ", BM_Pareto<WebCacheLookupOrAsyncAdapter>),
-       }) {
-    auto* bench = benchmark::RegisterBenchmark(name, test);
-    bench->Args({SMALL_CACHE, CACHE_OP_COUNT})
-        ->Args({LARGE_CACHE, CACHE_OP_COUNT})
-        ->Threads(THREADS_SINGLE)
-        ->Threads(std::thread::hardware_concurrency())
-        ->Threads(THREADS_LOTS);
-  }
+void DefaultArgs(benchmark::internal::Benchmark* bench) {
+  bench->Args({SMALL_CACHE, CACHE_OP_COUNT})
+      ->Args({LARGE_CACHE, CACHE_OP_COUNT})
+      ->Threads(THREADS_SINGLE)
+      ->Threads(std::thread::hardware_concurrency())
+      ->Threads(THREADS_LOTS);
 }
+
+BENCHMARK_TEMPLATE_INSTANTIATE_F(CacheFixture, BM_UniqueAdd, SharedLRUAdapter)			->Name("UNIQUE shared")->Apply(DefaultArgs);
+BENCHMARK_TEMPLATE_INSTANTIATE_F(CacheFixture, BM_UniqueAdd, SimpleLRUAdapter)			->Name("UNIQUE simple")->Apply(DefaultArgs);
+BENCHMARK_TEMPLATE_INSTANTIATE_F(CacheFixture, BM_UniqueAdd, CohortLRUAdapter)			->Name("UNIQUE cohort")->Apply(DefaultArgs);
+BENCHMARK_TEMPLATE_INSTANTIATE_F(CacheFixture, BM_UniqueAdd, WebCacheAdapter)			->Name("UNIQUE web   ")->Apply(DefaultArgs);
+BENCHMARK_TEMPLATE_INSTANTIATE_F(CacheFixture, BM_UniqueAdd, WebCacheLookupOrAdapter)		->Name("UNIQUE web-O ")->Apply(DefaultArgs);
+BENCHMARK_TEMPLATE_INSTANTIATE_F(ParetoFixture, BM_Pareto, SharedLRUAdapter)			->Name("PARETO shared")->Apply(DefaultArgs);
+BENCHMARK_TEMPLATE_INSTANTIATE_F(ParetoFixture, BM_Pareto, SimpleLRUAdapter)			->Name("PARETO simple")->Apply(DefaultArgs);
+BENCHMARK_TEMPLATE_INSTANTIATE_F(ParetoFixture, BM_Pareto, CohortLRUAdapter)			->Name("PARETO cohort")->Apply(DefaultArgs);
+BENCHMARK_TEMPLATE_INSTANTIATE_F(ParetoFixture, BM_Pareto, WebCacheAdapter)			->Name("PARETO web   ")->Apply(DefaultArgs);
+BENCHMARK_TEMPLATE_INSTANTIATE_F(ParetoFixture, BM_Pareto, WebCacheLookupOrAdapter)		->Name("PARETO web-O ")->Apply(DefaultArgs);
+
 // }}}
 
 }  // namespace
@@ -465,7 +432,6 @@ int main(int argc, char** argv) {
     argc = 1;
     argv = &args_default;
   }
-  register_benchmarks();
   ::benchmark::Initialize(&argc, argv);
   ::benchmark::RunSpecifiedBenchmarks();
   ::benchmark::Shutdown();
