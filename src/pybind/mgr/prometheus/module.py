@@ -1790,7 +1790,6 @@ class Module(MgrModule, OrchestratorClientMixin):
                      port=server_port, path='/'))
 
     def setup_tls_using_cephadm(self, server_addr: str, server_port: int) -> None:
-        from mgr_util import verify_tls_files
         cmd = {'prefix': 'orch certmgr generate-certificates',
                'module_name': 'prometheus',
                'format': 'json'}
@@ -1810,7 +1809,6 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.key_file.write(cert_key['key'].encode('utf-8'))
         self.key_file.flush()  # pkey_tmp must not be gc'ed
 
-        verify_tls_files(self.cert_file.name, self.key_file.name)
         cert_file_path, key_file_path = self.cert_file.name, self.key_file.name
 
         cherrypy.config.update({
