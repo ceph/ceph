@@ -2232,7 +2232,7 @@
                "step": 200
             }
          ],
-         "title": "RADOS Object Count",
+         "title": "OSD Type Count",
          "type": "timeseries"
       },
       {
