@@ -241,9 +241,16 @@ void lua_state_guard::runtime_hook(lua_State* L, lua_Debug* ar) {
       std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
 
   if (elapsed > max_runtime) {
-    std::string err = "Lua runtime limit exceeded: total elapsed time is " +
-                      std::to_string(elapsed.count()) + " ms";
-    luaL_error(L, "%s", err.c_str());
+    // +1 for max digit, +1 for null terminator
+    constexpr size_t max_digits = std::numeric_limits<decltype(elapsed)::rep>::digits10 + 2;
+    char elapsed_str[max_digits] = {};
+    auto [ptr, ec] = std::to_chars(std::begin(elapsed_str), std::end(elapsed_str), elapsed.count());
+    // buffer too small, should never happen though
+    assert(ec == std::errc{});
+    *ptr = '\0';
+    // luaL_error() never returns, so we have to format the number in the hard way instead of
+    // using std::to_string or fmt::to_string
+    luaL_error(L, "Lua runtime limit exceeded: total elapsed time is %s ms", elapsed_str);
   }
 }
 
