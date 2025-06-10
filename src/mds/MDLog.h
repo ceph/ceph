@@ -53,6 +53,7 @@ enum {
 #include "LogSegment.h"
 #include "MDSMap.h"
 #include "SegmentBoundary.h"
+#include "LogSegmentRef.h"
 
 #include <list>
 #include <map>
@@ -70,7 +71,7 @@ public:
   MDLog(MDSRank *m);
   ~MDLog();
 
-  const std::set<LogSegment*> &get_expiring_segments() const
+  const std::set<LogSegmentRef> &get_expiring_segments() const
   {
     return expiring_segments;
   }
@@ -78,21 +79,23 @@ public:
   void create_logger();
   void set_write_iohint(unsigned iohint_flags);
 
-  LogSegment *peek_current_segment() {
-    return segments.empty() ? NULL : segments.rbegin()->second;
+  LogSegmentRef const& peek_current_segment() {
+    static LogSegmentRef const nullsegment = nullptr;
+    return segments.empty() ? nullsegment : segments.rbegin()->second;
   }
 
-  LogSegment *get_current_segment() { 
+  LogSegmentRef const& get_current_segment() { 
     ceph_assert(!segments.empty());
     return segments.rbegin()->second;
   }
 
-  LogSegment *get_segment(LogSegment::seq_t seq) {
+  LogSegmentRef const& get_segment(LogSegment::seq_t seq) {
+    static LogSegmentRef const nullsegment = nullptr;
     auto it = segments.find(seq);
     if (it != segments.end()) {
       return it->second;
     } else {
-      return nullptr;
+      return nullsegment;
     }
   }
 
@@ -237,13 +240,12 @@ protected:
 
   void _submit_thread();
 
-  LogSegment *get_oldest_segment() {
+  LogSegmentRef const& get_oldest_segment() {
     return segments.begin()->second;
   }
   void remove_oldest_segment() {
-    std::map<uint64_t, LogSegment*>::iterator p = segments.begin();
-    delete p->second;
-    segments.erase(p);
+    ceph_assert(!segments.empty());
+    segments.erase(segments.begin());
   }
 
   uint64_t num_events = 0; // in events
@@ -265,7 +267,7 @@ protected:
   MDSContext::vec waitfor_replay;
 
   // -- segments --
-  std::map<uint64_t,LogSegment*> segments;
+  std::map<uint64_t,LogSegmentRef> segments;
   std::size_t pre_segments_size = 0;            // the num of segments when the mds finished replay-journal, to calc the num of segments growing
   LogSegment::seq_t event_seq = 0;
   uint64_t expiring_events = 0;
@@ -282,14 +284,14 @@ private:
   friend class C_OFT_Committed;
 
   void try_to_commit_open_file_table(uint64_t last_seq);
-  LogSegment* _start_new_segment(SegmentBoundary* sb);
+  LogSegmentRef const& _start_new_segment(SegmentBoundary* sb);
   void _segment_upkeep();
   LogSegment::seq_t _submit_entry(LogEvent* e, MDSLogContextBase* c);
 
-  void try_expire(LogSegment *ls, int op_prio);
-  void _maybe_expired(LogSegment *ls, int op_prio);
-  void _expired(LogSegment *ls);
   void _trim_expired_segments();
+  void try_expire(LogSegmentRef const& ls, int op_prio);
+  void _maybe_expired(LogSegmentRef const& ls, int op_prio);
+  void _expired(LogSegmentRef const& ls);
   void write_head(MDSContext *onfinish);
 
   void trim();
@@ -306,8 +308,8 @@ private:
   bool skip_unbounded_events;
 
   std::set<uint64_t> major_segments;
-  std::set<LogSegment*> expired_segments;
-  std::set<LogSegment*> expiring_segments;
+  std::set<LogSegmentRef> expired_segments;
+  std::set<LogSegmentRef> expiring_segments;
   uint64_t minor_segments_since_last_major_segment = 0;
   double log_warn_factor;
 
