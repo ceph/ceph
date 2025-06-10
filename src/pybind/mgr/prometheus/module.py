@@ -1774,28 +1774,27 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.set_uri(build_url(scheme='http', host=self.get_server_addr(),
                      port=server_port, path='/'))
 
-    def setup_cephadm_tls_config(self, server_addr: str, server_port: int) -> None:
-        from cephadm.ssl_cert_utils import SSLCerts
-        # the ssl certs utils uses a NamedTemporaryFile for the cert files
-        # generated with generate_cert_files function. We need the SSLCerts
-        # object to not be cleaned up in order to have those temp files not
-        # be cleaned up, so making it an attribute of the module instead
-        # of just a standalone object
-        self.cephadm_monitoring_tls_ssl_certs = SSLCerts()
-        host = self.get_mgr_ip()
-        try:
-            old_cert = self.get_store('root/cert')
-            old_key = self.get_store('root/key')
-            if not old_cert or not old_key:
-                raise Exception('No old credentials for mgr-prometheus endpoint')
-            self.cephadm_monitoring_tls_ssl_certs.load_root_credentials(old_cert, old_key)
-        except Exception:
-            self.cephadm_monitoring_tls_ssl_certs.generate_root_cert(host)
-            self.set_store('root/cert', self.cephadm_monitoring_tls_ssl_certs.get_root_cert())
-            self.set_store('root/key', self.cephadm_monitoring_tls_ssl_certs.get_root_key())
+    def setup_tls_using_cephadm(self, server_addr: str, server_port: int) -> None:
+        cmd = {'prefix': 'orch certmgr generate-certificates',
+               'module_name': 'prometheus',
+               'format': 'json'}
+        ret, out, err = self.mon_command(cmd)
+        if ret != 0:
+            self.log.error(f'mon command to generate-certificates failed: {err}')
+            return
+        elif out is None:
+            self.log.error('mon command to generate-certificates failed to generate certificates')
+            return
 
-        cert_file_path, key_file_path = self.cephadm_monitoring_tls_ssl_certs.generate_cert_files(
-            self.get_hostname(), host)
+        cert_key = json.loads(out)
+        self.cert_file = tempfile.NamedTemporaryFile()
+        self.cert_file.write(cert_key['cert'].encode('utf-8'))
+        self.cert_file.flush()  # cert_tmp must not be gc'ed
+        self.key_file = tempfile.NamedTemporaryFile()
+        self.key_file.write(cert_key['key'].encode('utf-8'))
+        self.key_file.flush()  # pkey_tmp must not be gc'ed
+
+        cert_file_path, key_file_path = self.cert_file.name, self.key_file.name
 
         cherrypy.config.update({
             'server.socket_host': server_addr,
