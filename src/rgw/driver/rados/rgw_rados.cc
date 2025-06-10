@@ -802,16 +802,9 @@ struct complete_op_data {
   AioCompletion *rados_completion{nullptr};
   int manager_shard_id{-1};
   RGWIndexCompletionManager *manager{nullptr};
+  std::function<void(librados::ObjectWriteOperation& o)> bi_update;
   rgw_obj obj;
-  RGWModifyOp op;
-  string tag;
-  rgw_bucket_entry_ver ver;
-  cls_rgw_obj_key key;
-  rgw_bucket_dir_entry_meta dir_meta;
-  list<cls_rgw_obj_key> remove_objs;
   bool log_op;
-  uint16_t bilog_op;
-  rgw_zone_set zones_trace;
 
   bool stopped{false};
 
@@ -880,15 +873,8 @@ public:
     stop();
   }
 
-  void create_completion(const rgw_obj& obj,
-                         RGWModifyOp op, string& tag,
-                         rgw_bucket_entry_ver& ver,
-                         const cls_rgw_obj_key& key,
-                         rgw_bucket_dir_entry_meta& dir_meta,
-                         list<cls_rgw_obj_key> *remove_objs, bool log_op,
-                         uint16_t bilog_op,
-                         rgw_zone_set *zones_trace,
-                         complete_op_data **result);
+  complete_op_data* create_completion(const rgw_obj& obj,
+                                      std::function<void(librados::ObjectWriteOperation& o)> bi_update);
 
   bool handle_completion(completion_t cb, complete_op_data *arg);
 
@@ -931,7 +917,7 @@ void RGWIndexCompletionManager::process()
     for (auto c : comps) {
       std::unique_ptr<complete_op_data> up{c};
 
-      ldpp_dout(&dpp, 20) << __func__ << "(): handling completion for key=" << c->key << dendl;
+      ldpp_dout(&dpp, 20) << __func__ << "(): handling completion for key=" << c->obj.key << dendl;
 
       RGWRados::BucketShard bs(store);
       RGWBucketInfo bucket_info;
@@ -948,16 +934,13 @@ void RGWIndexCompletionManager::process()
 			       const bool bitx = ctx()->_conf->rgw_bucket_index_transaction_instrumentation;
 			       ldout_bitx(bitx, &dpp, 10) <<
 				 "ENTERING " << __func__ << ": bucket-shard=" << bs <<
-				 " obj=" << c->obj << " tag=" << c->tag <<
-				 " op=" << c->op << ", remove_objs=" << c->remove_objs << dendl_bitx;
+				 " obj=" << c->obj << dendl_bitx;
 			       ldout_bitx(bitx, &dpp, 25) <<
 				 "BACKTRACE: " << __func__ << ": " << ClibBackTrace(1) << dendl_bitx;
 
 			       librados::ObjectWriteOperation o;
 			       o.assert_exists();
-			       cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
-			       cls_rgw_bucket_complete_op(o, c->op, c->tag, c->ver, c->key, c->dir_meta, &c->remove_objs,
-							  c->log_op, c->bilog_op, &c->zones_trace);
+             c->bi_update(o);
 			       int ret = bs->bucket_obj.operate(&dpp, std::move(o), null_yield);
 			       ldout_bitx(bitx, &dpp, 10) <<
 				 "EXITING " << __func__ << ": ret=" << dendl_bitx;
@@ -981,50 +964,36 @@ void RGWIndexCompletionManager::process()
   }
 }
 
-void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
-                                                  RGWModifyOp op, string& tag,
-                                                  rgw_bucket_entry_ver& ver,
-                                                  const cls_rgw_obj_key& key,
-                                                  rgw_bucket_dir_entry_meta& dir_meta,
-                                                  list<cls_rgw_obj_key> *remove_objs, bool log_op,
-                                                  uint16_t bilog_op,
-                                                  rgw_zone_set *zones_trace,
-                                                  complete_op_data **result)
+static std::list<cls_rgw_obj_key>
+maybe_copy_remove_objs(std::list<cls_rgw_obj_key>* const remove_objs)
 {
-  complete_op_data *entry = new complete_op_data;
+  if (remove_objs) {
+    std::list<cls_rgw_obj_key> copy;
+    std::copy(std::begin(*remove_objs), std::end(*remove_objs),
+              std::back_inserter(copy));
+    return copy;
+  } else {
+    return {};
+  }
+}
 
-  int shard_id = next_shard();
+complete_op_data* RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
+                                                               std::function<void(librados::ObjectWriteOperation& o)> bi_update)
+{
+  auto* const entry = new complete_op_data;
+  const int shard_id = next_shard();
 
   entry->manager_shard_id = shard_id;
   entry->manager = this;
   entry->obj = obj;
-  entry->op = op;
-  entry->tag = tag;
-  entry->ver = ver;
-  entry->key = key;
-  entry->dir_meta = dir_meta;
-  entry->log_op = log_op;
-  entry->bilog_op = bilog_op;
-
-  if (remove_objs) {
-    for (auto iter = remove_objs->begin(); iter != remove_objs->end(); ++iter) {
-      entry->remove_objs.push_back(*iter);
-    }
-  }
-
-  if (zones_trace) {
-    entry->zones_trace = *zones_trace;
-  } else {
-    entry->zones_trace.insert(store->svc.zone->get_zone().id, obj.bucket.get_key());
-  }
-
-  *result = entry;
+  entry->bi_update = std::move(bi_update);
 
   entry->rados_completion = librados::Rados::aio_create_completion(entry, obj_complete_cb);
 
   std::lock_guard l{locks[shard_id]};
   const auto ok = completions[shard_id].insert(entry).second;
   ceph_assert(ok);
+  return entry;
 }
 
 void RGWIndexCompletionManager::add_completion(complete_op_data *completion) {
@@ -1045,7 +1014,6 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
 
     auto iter = comps.find(arg);
     if (iter == comps.end()) {
-      ldout(arg->manager->ctx(), 0) << __func__ << "(): cannot find completion for obj=" << arg->key << dendl;
       return true;
     }
 
@@ -1056,11 +1024,11 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
   if (r != -ERR_BUSY_RESHARDING) {
     ldout(arg->manager->ctx(), 20) << __func__ << "(): completion " << 
       (r == 0 ? "ok" : "failed with " + to_string(r)) << 
-      " for obj=" << arg->key << dendl;
+      " for obj=" << arg->obj.key << dendl;
     return true;
   }
   add_completion(arg);
-  ldout(arg->manager->ctx(), 20) << __func__ << "(): async completion added for obj=" << arg->key << dendl;
+  ldout(arg->manager->ctx(), 20) << __func__ << "(): async completion added for obj=" << arg->obj.key << dendl;
   return false;
 }
 
@@ -10372,29 +10340,34 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, string& t
     ", log_op=" << log_op << dendl_bitx;
   ldout_bitx_c(bitx, cct, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
 
+  rgw_zone_set zones_trace;
+  if (_zones_trace) {
+    zones_trace = *_zones_trace;
+  }
+  zones_trace.insert(svc.zone->get_zone().id, bs.bucket.get_key());
+
   return with_bilog<CLSRGWBucketModifyOpT>(
     [&, this] (auto bi_updater) {
       ObjectWriteOperation o;
       rgw_bucket_dir_entry_meta dir_meta;
       dir_meta = ent.meta;
       dir_meta.category = category;
-
-      rgw_zone_set zones_trace;
-      if (_zones_trace) {
-        zones_trace = *_zones_trace;
-      }
-      zones_trace.insert(svc.zone->get_zone().id, bs.bucket.get_key());
-
       rgw_bucket_entry_ver ver;
       ver.pool = pool;
       ver.epoch = epoch;
-      cls_rgw_obj_key key(ent.key.name, ent.key.instance);
       cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
-      cls_rgw_bucket_complete_op(o, CLSRGWBucketModifyOpT::get_bilog_op_type(), tag, ver, key, dir_meta, remove_objs,
-                                 svc.zone->get_zone().log_data, bilog_flags, &zones_trace);
-      complete_op_data *arg;
-      index_completion_manager->create_completion(obj, CLSRGWBucketModifyOpT::get_bilog_op_type(), tag, ver, key, dir_meta, remove_objs,
-                                                  svc.zone->get_zone().log_data, bilog_flags, &zones_trace, &arg);
+      bi_updater.complete_op(o, ver, dir_meta, remove_objs, bi_updater.key.name); // is it ok to substitute rgw_obj_index_key name in place of locator?
+      auto* const arg = index_completion_manager->create_completion(
+        obj,
+        [ bi_updater = std::move(bi_updater),
+          ver,
+          dir_meta,
+          remove_objs = maybe_copy_remove_objs(remove_objs),
+          this
+        ] (librados::ObjectWriteOperation& o) {
+          cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
+          bi_updater.complete_op(o, ver, dir_meta, &remove_objs, bi_updater.key.name);
+        });
       librados::AioCompletion *completion = arg->rados_completion;
       int ret = bs.bucket_obj.aio_operate(arg->rados_completion, &o);
       completion->release(); /* can't reference arg here, as it might have already been released */
@@ -10402,7 +10375,7 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, string& t
     },
     cls_rgw_obj_key { ent.key.name, ent.key.instance },
     tag,
-    _zones_trace,
+    &zones_trace,
     bilog_flags);
 }
 
