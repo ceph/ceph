@@ -118,8 +118,7 @@ TEST(ErasureCodePlugin, parity_delta_write) {
     ASSERT_EQ(*(uint32_t*)coding[s].c_str(), *(uint32_t*)coding2[s].c_str());
   }
 
-  data.erase(shard_id_t(4));
-  data.emplace(shard_id_t(4), (char*)malloc(4096), 4096);
+  data[shard_id_t(4)] = create_bufferptr(4096);
   shard_id_set want;
   want.insert_range(shard_id_t(0), 5);
   decode_in[shard_id_t(0)] = data[shard_id_t(0)];
