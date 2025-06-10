@@ -319,6 +319,8 @@ To rename a pool, run a command of the following form:
 
 If you rename a pool for which an authenticated user has per-pool capabilities,
 you must update the user's capabilities ("caps") to refer to the new pool name.
+See :ref:`Modifying User Capabilities<modify-user-capabilities>` for
+instructions on updating a user's capabilities.
 
 
 Showing Pool Statistics
