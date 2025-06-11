@@ -619,18 +619,23 @@ class CephadmServe:
         self.mgr.apply_spec_fails = []
         hosts_altered: Set[str] = set()
         all_conflicting_daemons: List[orchestrator.DaemonDescription] = []
+        all_daemons_needing_fencing: List[orchestrator.DaemonDescription] = []
         all_daemons_to_deploy: List[CephadmDaemonDeploySpec] = []
         all_daemons_to_remove: List[orchestrator.DaemonDescription] = []
+        services_in_need_of_fencing: List[Tuple[ServiceSpec, Dict[int, Dict[int, Optional[str]]]]] = []
         for spec in specs:
             try:
                 # this will populate daemon deploy/removal queue for this service spec
                 rank_map = self._apply_service(spec)
                 # this finalizes what to deploy for this service
-                conflicting_daemons, daemons_to_deploy, daemons_to_remove = self.prepare_daemons_to_add_and_remove_by_service(spec, rank_map)
+                conflicting_daemons, daemons_to_deploy, daemons_to_remove, daemons_to_fence, service_needs_fencing = self.prepare_daemons_to_add_and_remove_by_service(spec, rank_map)
                 # compiles all these lists so we can split on host instead of service
                 all_conflicting_daemons.extend(conflicting_daemons)
+                all_daemons_needing_fencing.extend(daemons_to_fence)
                 all_daemons_to_deploy.extend(daemons_to_deploy)
                 all_daemons_to_remove.extend(daemons_to_remove)
+                if service_needs_fencing and rank_map is not None:
+                    services_in_need_of_fencing.append((spec, rank_map))
             except Exception as e:
                 msg = f'Failed to apply {spec.service_name()} spec {spec}: {str(e)}'
                 self.log.exception(msg)
@@ -653,11 +658,16 @@ class CephadmServe:
 
         async def _parallel_deploy_and_remove(
             hostname: str,
+            to_fence: List[orchestrator.DaemonDescription],
             conflicts: List[orchestrator.DaemonDescription],
             to_deploy: List[CephadmDaemonDeploySpec],
             to_remove: List[orchestrator.DaemonDescription]
         ) -> Tuple[bool, Set[str], List[str]]:
             r: bool = False
+            removed_fencing_daemons, fencing_hosts_altered = await self.remove_given_daemons(to_fence)
+            if removed_fencing_daemons:
+                r = True
+                hosts_altered.update(fencing_hosts_altered)
             removed_conflict_daemons, conflict_hosts_altered = await self.remove_given_daemons(conflicts)
             if removed_conflict_daemons:
                 r = True
@@ -673,6 +683,7 @@ class CephadmServe:
             return (r, hosts_altered, daemon_place_fails)
 
         async def _deploy_and_remove_all(
+            all_needing_fencing: List[orchestrator.DaemonDescription],
             all_conflicts: List[orchestrator.DaemonDescription],
             all_to_deploy: List[CephadmDaemonDeploySpec],
             all_to_remove: List[orchestrator.DaemonDescription]
@@ -680,17 +691,22 @@ class CephadmServe:
             futures = []
 
             for host in self.mgr.cache.get_hosts():
+                need_fencing_daemons = [dd for dd in all_needing_fencing if dd.hostname == host]
                 conflicting_daemons = [dd for dd in all_conflicts if dd.hostname == host]
                 daemons_to_deploy = [dd for dd in all_to_deploy if dd.host == host]
                 daemons_to_remove = [dd for dd in all_to_remove if dd.hostname == host]
-                futures.append(_parallel_deploy_and_remove(host, conflicting_daemons, daemons_to_deploy, daemons_to_remove))
+                futures.append(_parallel_deploy_and_remove(host, need_fencing_daemons, conflicting_daemons, daemons_to_deploy, daemons_to_remove))
 
             return await gather(*futures)
 
         deploy_names = [d.name() for d in all_daemons_to_deploy]
-        rm_names = [d.name() for d in all_conflicting_daemons] + [d.name() for d in all_daemons_to_remove]
+        rm_names = (
+            [d.name() for d in all_daemons_needing_fencing]
+            + [d.name() for d in all_conflicting_daemons]
+            + [d.name() for d in all_daemons_to_remove]
+        )
         with self.mgr.async_timeout_handler(cmd=f'cephadm deploying ({deploy_names} and removing {rm_names} daemons)'):
-            results = self.mgr.wait_async(_deploy_and_remove_all(all_conflicting_daemons, all_daemons_to_deploy, all_daemons_to_remove))
+            results = self.mgr.wait_async(_deploy_and_remove_all(all_daemons_needing_fencing, all_conflicting_daemons, all_daemons_to_deploy, all_daemons_to_remove))
 
         if any(res[0] for res in results):
             changed = True
@@ -702,6 +718,11 @@ class CephadmServe:
         placement_failures: List[str] = []
         for place_failures in [res[2] for res in results]:
             placement_failures.extend(place_failures)
+
+        for spec, ranking_map in services_in_need_of_fencing:
+            daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
+            svc = service_registry.get_service(spec.service_type)
+            svc.fence_old_ranks(spec, ranking_map, len(daemons))
 
         if placement_failures:
             self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(placement_failures)} daemon(s)', len(
@@ -976,13 +997,17 @@ class CephadmServe:
                     break
         return conflict_daemons
 
-    def handle_slot_names_and_rank_map_for_service(self, spec: ServiceSpec, rank_map: Optional[Dict[int, Dict[int, Optional[str]]]]) -> List[DaemonPlacement]:
-        service_type = spec.service_type
+    def handle_slot_names_and_rank_map_for_service(
+        self,
+        spec: ServiceSpec,
+        rank_map: Optional[Dict[int, Dict[int, Optional[str]]]]
+    ) -> Tuple[bool, List[DaemonPlacement], List[orchestrator.DaemonDescription]]:
         service_name = spec.service_name()
         slots_to_add = self.mgr.daemon_deploy_queue.get_queued_daemon_placements_by_service(spec.service_name())
         daemons_to_remove = self.mgr.daemon_removal_queue.get_queued_daemon_descriptions_by_service(spec.service_name())
-        svc = service_registry.get_service(service_type)
         daemons = self.mgr.cache.get_daemons_by_service(service_name)
+        daemons_to_fence: List[orchestrator.DaemonDescription] = []
+        needs_fencing: bool = False
         # assign names
         for i in range(len(slots_to_add)):
             slot = slots_to_add[i]
@@ -1007,16 +1032,13 @@ class CephadmServe:
             # next mgr will clean up.
             self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
 
-            # remove daemons now, since we are going to fence them anyway
-            for d in daemons_to_remove:
-                assert d.hostname is not None
-                self.mgr.wait_async(self._remove_daemon([d.name()], d.hostname))
-            daemons_to_remove = []
+            # record daemons as needing to be fenced if this service
+            # has a rank map and daemons to fence
+            if daemons_to_remove:
+                daemons_to_fence = daemons_to_remove
+                needs_fencing = True
 
-            # fence them
-            svc.fence_old_ranks(spec, rank_map, len(slots_to_add) + len(daemons))
-
-        return slots_to_add
+        return needs_fencing, slots_to_add, daemons_to_fence
 
     def build_ok_for_removal_list_by_service(self, spec: ServiceSpec) -> List[orchestrator.DaemonDescription]:
         service_type = spec.service_type
@@ -1152,7 +1174,7 @@ class CephadmServe:
         self,
         spec: ServiceSpec,
         rank_map: Optional[Dict[int, Dict[int, Optional[str]]]]
-    ) -> Tuple[List[orchestrator.DaemonDescription], List[CephadmDaemonDeploySpec], List[orchestrator.DaemonDescription]]:
+    ) -> Tuple[List[orchestrator.DaemonDescription], List[CephadmDaemonDeploySpec], List[orchestrator.DaemonDescription], List[orchestrator.DaemonDescription], bool]:
         service_type = spec.service_type
         service_name = spec.service_name()
         svc = service_registry.get_service(service_type)
@@ -1164,11 +1186,11 @@ class CephadmServe:
         final_count = len(daemons) + len(slots_to_add) - len(daemons_to_remove)
         if service_type in ['mon', 'mgr'] and final_count < 1:
             self.log.debug('cannot scale mon|mgr below 1)')
-            return ([], [], [])
+            return ([], [], [], [], False)
 
         try:
             # assign names
-            slots_to_add = self.handle_slot_names_and_rank_map_for_service(spec, rank_map)
+            needs_fencing, slots_to_add, daemons_to_fence = self.handle_slot_names_and_rank_map_for_service(spec, rank_map)
 
             # create daemons
             conflicting_daemons = self.gather_conflicting_daemons_for_service(spec)
@@ -1195,7 +1217,14 @@ class CephadmServe:
             self.mgr.log.error(f'Hit an exception preparing daemons for creation/removal: {str(e)}')
             raise
 
-        return conflicting_daemons, daemon_specs_to_deploy, daemons_to_remove
+        # verify no two lists contain the same daemon
+        # prioritize fencing > conflicts > general daemon to remove
+        fencing_names = [d.name() for d in daemons_to_fence]
+        conflicting_daemons = [d for d in conflicting_daemons if d.name() not in fencing_names]
+        conflicting_names = [d.name() for d in conflicting_daemons]
+        daemons_to_remove = [d for d in daemons_to_remove if d.name() not in (fencing_names + conflicting_names)]
+
+        return conflicting_daemons, daemon_specs_to_deploy, daemons_to_remove, daemons_to_fence, needs_fencing
 
     def _find_orphans_to_remove(self) -> List[orchestrator.DaemonDescription]:
         daemons = self.mgr.cache.get_daemons()
