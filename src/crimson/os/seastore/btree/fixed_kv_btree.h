@@ -291,15 +291,17 @@ public:
       }
     }
 
-    depth_t check_split() const {
+    using check_split_iertr = base_iertr;
+    using check_split_ret = check_split_iertr::template future<depth_t>;
+    check_split_ret check_split() const {
       if (!leaf.node->at_max_capacity()) {
-	return 0;
+	return check_split_iertr::make_ready_future<depth_t>(0);
       }
       for (depth_t split_from = 1; split_from < get_depth(); ++split_from) {
 	if (!get_internal(split_from + 1).node->at_max_capacity())
-	  return split_from;
+	  return check_split_iertr::make_ready_future<depth_t>(split_from);
       }
-      return get_depth();
+      return check_split_iertr::make_ready_future<depth_t>(get_depth());
     }
   };
 
@@ -1749,124 +1751,125 @@ private:
   {
     LOG_PREFIX(FixedKVBtree::handle_split);
 
-    depth_t split_from = iter.check_split();
+    return iter.check_split(
+    ).si_then([FNAME, c, &iter, this](auto split_from) {
+      SUBTRACET(seastore_fixedkv_tree, "split_from {}, depth {}", c.trans, split_from, iter.get_depth());
 
-    SUBTRACET(seastore_fixedkv_tree, "split_from {}, depth {}", c.trans, split_from, iter.get_depth());
+      if (split_from == iter.get_depth()) {
+        auto nroot = c.cache.template alloc_new_non_data_extent<internal_node_t>(
+          c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
+        fixed_kv_node_meta_t<node_key_t> meta{
+          min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, iter.get_depth() + 1};
+        nroot->set_meta(meta);
+        nroot->range = meta;
+        nroot->journal_insert(
+          nroot->begin(),
+          min_max_t<node_key_t>::min,
+          get_root().get_location(),
+          nullptr);
+        iter.internal.push_back({nroot, 0});
 
-    if (split_from == iter.get_depth()) {
-      auto nroot = c.cache.template alloc_new_non_data_extent<internal_node_t>(
-        c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
-      fixed_kv_node_meta_t<node_key_t> meta{
-        min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, iter.get_depth() + 1};
-      nroot->set_meta(meta);
-      nroot->range = meta;
-      nroot->journal_insert(
-        nroot->begin(),
-        min_max_t<node_key_t>::min,
-        get_root().get_location(),
-        nullptr);
-      iter.internal.push_back({nroot, 0});
+        get_tree_stats<self_type>(c.trans).depth = iter.get_depth();
+        get_tree_stats<self_type>(c.trans).extents_num_delta++;
 
-      get_tree_stats<self_type>(c.trans).depth = iter.get_depth();
-      get_tree_stats<self_type>(c.trans).extents_num_delta++;
-
-      root_block = c.cache.duplicate_for_write(
-        c.trans, root_block)->template cast<RootBlock>();
-      get_root().set_location(nroot->get_paddr());
-      get_root().set_depth(iter.get_depth());
-      ceph_assert(get_root().get_depth() <= MAX_DEPTH);
-      set_root_node(nroot);
-    }
-
-    /* pos may be either node_position_t<leaf_node_t> or
-     * node_position_t<internal_node_t> */
-    auto split_level = [&](auto &parent_pos, auto &pos) {
-      LOG_PREFIX(FixedKVBtree::handle_split);
-      auto [left, right, pivot] = pos.node->make_split_children(c);
-
-      auto parent_node = parent_pos.node;
-      auto parent_iter = parent_pos.get_iter();
-
-      parent_node->update(
-        parent_iter,
-        left->get_paddr(),
-        left.get());
-      parent_node->insert(
-        parent_iter + 1,
-        pivot,
-        right->get_paddr(),
-        right.get());
-
-      SUBTRACET(
-        seastore_fixedkv_tree,
-        "splitted {} into left: {}, right: {}",
-        c.trans,
-        *pos.node,
-        *left,
-        *right);
-      c.cache.retire_extent(c.trans, pos.node);
-
-      get_tree_stats<self_type>(c.trans).extents_num_delta++;
-      return std::make_pair(left, right);
-    };
-
-    for (; split_from > 0; --split_from) {
-      auto &parent_pos = iter.get_internal(split_from + 1);
-      if (!parent_pos.node->is_mutable()) {
-        parent_pos.node = c.cache.duplicate_for_write(
-          c.trans, parent_pos.node
-        )->template cast<internal_node_t>();
+        root_block = c.cache.duplicate_for_write(
+          c.trans, root_block)->template cast<RootBlock>();
+        get_root().set_location(nroot->get_paddr());
+        get_root().set_depth(iter.get_depth());
+        ceph_assert(get_root().get_depth() <= MAX_DEPTH);
+        set_root_node(nroot);
       }
 
-      if (split_from > 1) {
-        auto &pos = iter.get_internal(split_from);
+      /* pos may be either node_position_t<leaf_node_t> or
+       * node_position_t<internal_node_t> */
+      auto split_level = [&](auto &parent_pos, auto &pos) {
+        LOG_PREFIX(FixedKVBtree::handle_split);
+        auto [left, right, pivot] = pos.node->make_split_children(c);
+
+        auto parent_node = parent_pos.node;
+        auto parent_iter = parent_pos.get_iter();
+
+        parent_node->update(
+          parent_iter,
+          left->get_paddr(),
+          left.get());
+        parent_node->insert(
+          parent_iter + 1,
+          pivot,
+          right->get_paddr(),
+          right.get());
+
         SUBTRACET(
           seastore_fixedkv_tree,
-          "splitting internal {} at depth {}, parent: {} at pos: {}",
+          "splitted {} into left: {}, right: {}",
           c.trans,
           *pos.node,
-          split_from,
-          *parent_pos.node,
-          parent_pos.pos);
-        auto [left, right] = split_level(parent_pos, pos);
+          *left,
+          *right);
+        c.cache.retire_extent(c.trans, pos.node);
 
-        if (pos.pos < left->get_size()) {
-          pos.node = left;
-        } else {
-          pos.node = right;
-          pos.pos -= left->get_size();
+        get_tree_stats<self_type>(c.trans).extents_num_delta++;
+        return std::make_pair(left, right);
+      };
 
-          parent_pos.pos += 1;
+      for (; split_from > 0; --split_from) {
+        auto &parent_pos = iter.get_internal(split_from + 1);
+        if (!parent_pos.node->is_mutable()) {
+          parent_pos.node = c.cache.duplicate_for_write(
+            c.trans, parent_pos.node
+          )->template cast<internal_node_t>();
         }
-      } else {
-        auto &pos = iter.leaf;
-        SUBTRACET(
-          seastore_fixedkv_tree,
-          "splitting leaf {}, parent: {} at pos: {}",
-          c.trans,
-          *pos.node,
-          *parent_pos.node,
-          parent_pos.pos);
-        auto [left, right] = split_level(parent_pos, pos);
 
-        /* right->get_node_meta().begin == pivot == right->begin()->get_key()
-         * Thus, if pos.pos == left->get_size(), we want iter to point to
-         * left with pos.pos at the end rather than right with pos.pos = 0
-         * since the insertion would be to the left of the first element
-         * of right and thus necessarily less than right->get_node_meta().begin.
-         */
-        if (pos.pos <= left->get_size()) {
-          pos.node = left;
+        if (split_from > 1) {
+          auto &pos = iter.get_internal(split_from);
+          SUBTRACET(
+            seastore_fixedkv_tree,
+            "splitting internal {} at depth {}, parent: {} at pos: {}",
+            c.trans,
+            *pos.node,
+            split_from,
+            *parent_pos.node,
+            parent_pos.pos);
+          auto [left, right] = split_level(parent_pos, pos);
+
+          if (pos.pos < left->get_size()) {
+            pos.node = left;
+          } else {
+            pos.node = right;
+            pos.pos -= left->get_size();
+
+            parent_pos.pos += 1;
+          }
         } else {
-          pos.node = right;
-          pos.pos -= left->get_size();
+          auto &pos = iter.leaf;
+          SUBTRACET(
+            seastore_fixedkv_tree,
+            "splitting leaf {}, parent: {} at pos: {}",
+            c.trans,
+            *pos.node,
+            *parent_pos.node,
+            parent_pos.pos);
+          auto [left, right] = split_level(parent_pos, pos);
 
-          parent_pos.pos += 1;
+          /* right->get_node_meta().begin == pivot == right->begin()->get_key()
+           * Thus, if pos.pos == left->get_size(), we want iter to point to
+           * left with pos.pos at the end rather than right with pos.pos = 0
+           * since the insertion would be to the left of the first element
+           * of right and thus necessarily less than right->get_node_meta().begin.
+           */
+          if (pos.pos <= left->get_size()) {
+            pos.node = left;
+          } else {
+            pos.node = right;
+            pos.pos -= left->get_size();
+
+            parent_pos.pos += 1;
+          }
         }
       }
-    }
 
-    return seastar::now();
+      return seastar::now();
+    });
   }
 
 
