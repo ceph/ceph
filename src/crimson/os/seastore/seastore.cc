@@ -2008,7 +2008,12 @@ SeaStore::Shard::_touch(
   internal_context_t &ctx,
   Onode &onode)
 {
-  return tm_iertr::now();
+  auto objhandler = ObjectDataHandler(max_object_size);
+  co_await objhandler.touch(ObjectDataHandler::context_t{
+    *transaction_manager,
+    *ctx.transaction,
+    onode
+  });
 }
 
 SeaStore::Shard::tm_ret
