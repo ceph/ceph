@@ -450,7 +450,8 @@ public:
       chunk_mapping(complete_chunk_mapping(std::vector<shard_id_t>(), k + m)),
       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)),
+      all_shards(calc_all_shards(k + m)) {
     ceph_assert(stripe_width != 0);
     ceph_assert(stripe_width % k == 0);
   }
@@ -743,57 +744,6 @@ public:
       ECUtil::shard_extent_set_t &shard_extent_set) const;
 };
 
-class HashInfo {
-  uint64_t total_chunk_size = 0;
-  std::vector<uint32_t> cumulative_shard_hashes;
-
-public:
-  HashInfo() {}
-
-  explicit HashInfo(unsigned num_chunks) :
-    cumulative_shard_hashes(num_chunks, -1) {}
-
-  void append(uint64_t old_size, shard_id_map<bufferptr> &to_append);
-
-  void clear() {
-    total_chunk_size = 0;
-    cumulative_shard_hashes = std::vector<uint32_t>(
-      cumulative_shard_hashes.size(),
-      -1);
-  }
-
-  void encode(ceph::buffer::list &bl) const;
-  void decode(ceph::buffer::list::const_iterator &bl);
-  void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<HashInfo*> &o);
-
-  uint32_t get_chunk_hash(shard_id_t shard) const {
-    ceph_assert(shard < cumulative_shard_hashes.size());
-    return cumulative_shard_hashes[int(shard)];
-  }
-
-  uint64_t get_total_chunk_size() const {
-    return total_chunk_size;
-  }
-
-  void set_total_chunk_size_clear_hash(uint64_t new_chunk_size) {
-    cumulative_shard_hashes.clear();
-    total_chunk_size = new_chunk_size;
-  }
-
-  bool has_chunk_hash() const {
-    return !cumulative_shard_hashes.empty();
-  }
-
-  void update_to(const HashInfo &rhs) {
-    *this = rhs;
-  }
-
-  friend std::ostream &operator<<(std::ostream &out, const HashInfo &hi);
-};
-
-typedef std::shared_ptr<HashInfo> HashInfoRef;
-
 class shard_extent_map_t {
   static const uint64_t invalid_offset = std::numeric_limits<uint64_t>::max();
 
@@ -940,8 +890,7 @@ public:
   void append_zeros_to_ro_offset(uint64_t ro_offset);
   void insert_ro_extent_map(const extent_map &host_extent_map);
   extent_set get_extent_superset() const;
-  int encode(const ErasureCodeInterfaceRef &ec_impl, const HashInfoRef &hinfo,
-             uint64_t before_ro_size);
+  int encode(const ErasureCodeInterfaceRef &ec_impl);
   int _encode(const ErasureCodeInterfaceRef &ec_impl);
   int encode_parity_delta(const ErasureCodeInterfaceRef &ec_impl,
                           shard_extent_map_t &old_sem);
@@ -1082,7 +1031,5 @@ struct log_entry_t {
 
 bool is_hinfo_key_string(const std::string &key);
 const std::string &get_hinfo_key();
-
-WRITE_CLASS_ENCODER(ECUtil::HashInfo)
 }
 

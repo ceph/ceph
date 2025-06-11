@@ -216,7 +216,7 @@ int do_encode(const std::vector<const char*> &args) {
 
   sinfo->ro_range_to_shard_extent_map(0, input_data.length(), input_data, encoded_data);
   encoded_data.insert_parity_buffers();
-  r = encoded_data.encode(ec_impl, nullptr, encoded_data.get_ro_end());
+  r = encoded_data.encode(ec_impl);
   if (r < 0) {
     std::cerr << "failed to encode: " << cpp_strerror(r) << std::endl;
     return 1;
