@@ -274,6 +274,9 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
     assert(!is_indirect());
     return val->checksum;
   }
+  bool contains(laddr_t laddr) const {
+    return get_laddr() <= laddr && get_laddr() + get_length() > laddr;
+  }
   extent_ref_count_t get_refcount() const {
     assert(!is_end());
     assert(!is_indirect());
