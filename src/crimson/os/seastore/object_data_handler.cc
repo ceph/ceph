@@ -392,8 +392,9 @@ ObjectDataHandler::clone_ret do_clonerange(
     data.merge_tail(ctx.tm.get_block_size());
     auto extents = co_await ctx.tm.alloc_data_extents<ObjectDataBlock>(
       ctx.t,
-      (overwrite_range.aligned_end - ctx.tm.get_block_size()
-       ).checked_to_laddr(),
+      laddr_hint_t::create_as_fixed(
+	(overwrite_range.aligned_end - ctx.tm.get_block_size()
+	 ).checked_to_laddr()),
       ctx.tm.get_block_size(),
       std::move(write_pos)
     ).handle_error_interruptible(
@@ -1355,6 +1356,16 @@ ObjectDataHandler::zero_ret ObjectDataHandler::zero(
 	);
       });
     });
+}
+
+ObjectDataHandler::touch_ret
+ObjectDataHandler::touch(context_t ctx)
+{
+  return with_object_data(ctx, [this, ctx](auto &obj_data) {
+    return prepare_data_reservation(
+      ctx, obj_data, max_object_size
+    ).discard_result();
+  });
 }
 
 ObjectDataHandler::write_ret ObjectDataHandler::write(
