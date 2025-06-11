@@ -464,14 +464,22 @@ seastar::future<> Client::load_keyring()
   }
 }
 
+seastar::future<> Client::_check_auth_tickets()
+{
+  return seastar::when_all_succeed(
+    active_con->renew_tickets(),
+    active_con->renew_rotating_keyring()).then_unpack([] {
+      logger().info("_check_auth_tickets: renewed tickets");
+  });
+}
+
 void Client::tick()
 {
   gates.dispatch_in_background(__func__, *this, [this] {
     if (active_con) {
       return seastar::when_all_succeed(wait_for_send_log(),
                                        active_con->get_conn()->send_keepalive(),
-                                       active_con->renew_tickets(),
-                                       active_con->renew_rotating_keyring()).discard_result();
+                                       _check_auth_tickets()).discard_result();
     } else {
       assert(is_hunting());
       logger().info("{} continuing the hunt", __func__);
@@ -793,11 +801,7 @@ seastar::future<> Client::handle_monmap(crimson::net::Connection &conn,
   if (monmap.get_addr_name(peer_addr, cur_mon)) {
     if (active_con) {
       logger().info("handle_monmap: renewing tickets");
-      return seastar::when_all_succeed(
-	active_con->renew_tickets(),
-	active_con->renew_rotating_keyring()).then_unpack([] {
-	  logger().info("handle_mon_map: renewed tickets");
-	});
+      return _check_auth_tickets();
     } else {
       return seastar::now();
     }
@@ -826,9 +830,7 @@ seastar::future<> Client::handle_auth_reply(crimson::net::Connection &conn,
     return (*found)->handle_auth_reply(m);
   } else if (active_con) {
     return active_con->handle_auth_reply(m).then([this] {
-      return seastar::when_all_succeed(
-        active_con->renew_rotating_keyring(),
-        active_con->renew_tickets()).discard_result();
+      return _check_auth_tickets();
     });
   } else {
     logger().error("unknown auth reply from {}", conn.get_peer_addr());
