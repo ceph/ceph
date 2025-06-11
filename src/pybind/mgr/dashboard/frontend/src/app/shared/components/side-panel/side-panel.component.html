@@ -1,0 +1,26 @@
+<div class="overlay"
+     (click)="close()"
+     *ngIf="expanded && overlay"></div>
+
+<cds-panel [expanded]="expanded"
+           [attr.panel-size]="size">
+  <cds-icon-button
+    kind="ghost"
+    class="float-end"
+    title="Close"
+    (click)="close()">
+    <svg
+      class="cds--btn__icon"
+      cdsIcon="close"></svg>
+  </cds-icon-button>
+
+  <div
+    class="panel-header spacing-03"
+    *ngIf="headerText">
+      {{ headerText }}
+  </div>
+
+  <div class="spacing-03">
+    <ng-content select=".panel-content"></ng-content>
+  </div>
+</cds-panel>
