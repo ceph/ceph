@@ -464,6 +464,73 @@ public:
     return view->is_data_stable();
   }
 
+  get_extent_iertr::future<> maybe_wait_accessible(
+    Transaction &t,
+    CachedExtent &extent) final {
+    // as of now, only lba tree nodes can go in here,
+    // so it must be fully loaded.
+    assert(extent.is_valid());
+    assert(extent.is_fully_loaded());
+    const auto t_src = t.get_src();
+    auto ext_type = extent.get_type();
+    assert(!is_retired_placeholder_type(ext_type));
+    cache_access_stats_t& access_stats = get_by_ext(
+      get_by_src(stats.access_by_src_ext, t_src),
+      ext_type);
+    if (extent.is_stable()) {
+      // stable from trans-view
+      bool needs_touch = false, needs_step_2 = false;
+      assert(!extent.is_pending_in_trans(t.get_trans_id()));
+      auto ret = t.maybe_add_to_read_set(&extent);
+      if (ret.added) {
+	if (extent.is_stable_dirty()) {
+	  ++access_stats.cache_dirty;
+	  ++stats.access.cache_dirty;
+	} else {
+	  ++access_stats.cache_lru;
+	  ++stats.access.cache_lru;
+	}
+	if (ret.is_paddr_known) {
+	  touch_extent(extent, &t_src, t.get_cache_hint());
+	} else {
+	  needs_touch = true;
+	}
+      } else {
+	// already exists
+	if (extent.is_stable_dirty()) {
+	  ++access_stats.trans_dirty;
+	  ++stats.access.trans_dirty;
+	} else {
+	  ++access_stats.trans_lru;
+	  ++stats.access.trans_lru;
+	}
+      }
+      // step 2 maybe reordered after wait_io(),
+      // always try step 2 if paddr unknown
+      needs_step_2 = !ret.is_paddr_known;
+
+      return trans_intr::make_interruptible(
+	extent.wait_io()
+      ).then_interruptible([&extent, needs_touch,
+			    needs_step_2, &t, this, t_src] {
+	if (needs_step_2) {
+	  t.maybe_add_to_read_set_step_2(&extent);
+	}
+	if (needs_touch) {
+	  touch_extent(extent, &t_src, t.get_cache_hint());
+	}
+	return get_extent_iertr::now();
+      });
+    } else {
+      assert(extent.is_mutable());
+      assert(!extent.is_pending_io());
+      assert(extent.is_pending_in_trans(t.get_trans_id()));
+      ++access_stats.trans_pending;
+      ++stats.access.trans_pending;
+      return get_extent_iertr::now();
+    }
+  }
+
   get_extent_iertr::future<CachedExtentRef>
   get_extent_viewable_by_trans(
     Transaction &t,
