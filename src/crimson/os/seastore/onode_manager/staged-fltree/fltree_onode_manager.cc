@@ -183,10 +183,26 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
       return crimson::ct_error::enoent::make();
     }
     auto val = OnodeRef(new FLTreeOnode(hoid.hobj, cursor.value()));
+    assert(val->get_clone_prefix());
     return get_onode_iertr::make_ready_future<OnodeRef>(
       val
     );
   });
+}
+
+namespace {
+struct ghobj_cmp_t {
+  bool same_object;
+  bool equal;
+};
+ghobj_cmp_t compare_ghobj(ghobject_t &identity, const ghobject_t &base) {
+  auto snap_bak = identity.hobj.snap;
+  identity.hobj.snap = base.hobj.snap;
+  bool same_object = (identity == base);
+  bool equal = same_object && (snap_bak == base.hobj.snap);
+  identity.hobj.snap = snap_bak;
+  return {same_object, equal};
+}
 }
 
 FLTreeOnodeManager::get_or_create_onode_ret
@@ -195,19 +211,56 @@ FLTreeOnodeManager::get_or_create_onode(
   const ghobject_t &hoid)
 {
   LOG_PREFIX(FLTreeOnodeManager::get_or_create_onode);
-  return tree.insert(
+  auto [cursor, created] = co_await tree.insert(
     trans, hoid,
-    OnodeTree::tree_value_config_t{sizeof(onode_layout_t)}
-  ).si_then([&trans, &hoid, FNAME](auto p)
-              -> get_or_create_onode_ret {
-    auto [cursor, created] = std::move(p);
-    auto onode = new FLTreeOnode(hoid.hobj, cursor.value());
-    if (created) {
-      DEBUGT("created onode for entry for {}", trans, hoid);
-      onode->create_default_layout(trans);
-    }
-    return get_or_create_onode_iertr::make_ready_future<OnodeRef>(onode);
-  });
+    OnodeTree::tree_value_config_t{sizeof(onode_layout_t)});
+
+  auto flonode = new FLTreeOnode(hoid.hobj, cursor.value());
+  if (!created) {
+    DEBUGT("onode exists for {}", trans, hoid);
+    assert(flonode->get_clone_prefix());
+    co_return flonode;
+  }
+  assert(!cursor.is_end());
+  // new onode created
+  DEBUGT("created onode for entry for {}", trans, hoid);
+  flonode->create_default_layout(trans);
+
+  // handle object id from sibling
+  auto onode = OnodeRef(flonode);
+  if (!hoid.hobj.is_head()) {
+    // cur onode is not head, move to next onode to check if it's
+    // the clone sibling under the same object.
+    auto next_cursor = co_await tree.get_next(trans, cursor);
+    if (!next_cursor.is_end()) {
+      auto nxt_oid = next_cursor.get_ghobj();
+      auto ret = compare_ghobj(nxt_oid, hoid);
+      assert(!ret.equal);
+      if (ret.same_object) {
+        auto nxt_onode = next_cursor.value();
+        auto prefix = nxt_onode.get_clone_prefix();
+        auto object_id = prefix->get_local_object_id();
+        onode->set_sibling_object_id(object_id);
+        co_return onode;
+      } // not same object, fallthrough to search prev onode
+    } // is end, fallthrough to search prev onode
+  } // is head, fallthrough to search prev onode
+
+  auto hint = hoid;
+  hint.hobj.snap = 0;
+  auto prev_cursor = co_await tree.lower_bound(trans, hint);
+
+  assert(!prev_cursor.is_end());
+  auto prv_oid = prev_cursor.get_ghobj();
+  auto ret = compare_ghobj(prv_oid, hoid);
+  if (!ret.equal && ret.same_object) {
+    // sibling clone onode exists
+    auto prv_onode = prev_cursor.value();
+    auto prefix = prv_onode.get_clone_prefix();
+    auto object_id = prefix->get_local_object_id();
+    onode->set_sibling_object_id(object_id);
+  } // else sibling clone onode not found, hoid is the first clone
+  co_return onode;
 }
 
 FLTreeOnodeManager::get_or_create_onodes_ret
