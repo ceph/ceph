@@ -376,8 +376,8 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   }
 
   dout(20) << __func__ << ": oid=" << op.hoid << dendl;
-  dout(30) << __func__ << "EC_DEBUG_BUFFERS: "
-           << op.returned_data->debug_string(2048, 8)
+  dout(20) << __func__ << "EC_DEBUG_BUFFERS: "
+           << op.returned_data->debug_string(2048, 0)
            << dendl;
 
   continue_recovery_op(op, m);
@@ -493,6 +493,14 @@ void ECBackend::RecoveryBackend::dispatch_recovery_messages(
 
 #if 1
   if (!replies.empty()) {
+    dout(20) << __func__ << " recovery_transactions=";
+    Formatter *f = Formatter::create("json");
+    f->open_object_section("t");
+    m.t.dump(f);
+    f->close_section();
+    f->flush(*_dout);
+    delete f;
+    *_dout << dendl;
     commit_txn_send_replies(std::move(m.t), std::move(replies));
   }
 #endif
@@ -613,10 +621,11 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
 		 << ", after_progress=" << after_progress
 		 << ", pop.data.length()=" << pop.data.length()
 		 << ", size=" << op.obc->obs.oi.size << dendl;
-        if (pop.data.length())
+        if (pop.data.length()) {
           pop.data_included.union_insert(
             op.returned_data->get_shard_first_offset(pg_shard.shard),
             pop.data.length());
+        }
         if (op.recovery_progress.first) {
           if (sinfo.is_nonprimary_shard(pg_shard.shard)) {
             if (pop.version == op.recovery_info.oi.version) {
@@ -993,6 +1002,18 @@ void ECBackend::handle_sub_write(
   tls.reserve(2);
   tls.push_back(std::move(op.t));
   tls.push_back(std::move(localt));
+  dout(20) << __func__ << " queue_transactions=";
+  Formatter *f = Formatter::create("json");
+  f->open_array_section("tls");
+  for (ObjectStore::Transaction t: tls) {
+    f->open_object_section("t");
+    t.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->flush(*_dout);
+  delete f;
+  *_dout << dendl;
   get_parent()->queue_transactions(tls, msg);
   dout(30) << __func__ << " missing after" << get_parent()->get_log().
                                                             get_missing().
