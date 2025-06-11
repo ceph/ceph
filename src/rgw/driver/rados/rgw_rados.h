@@ -1414,7 +1414,7 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   int olh_init_modification(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, std::string *op_tag, optional_yield y);
   int olh_init_modification_impl(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, std::string *op_tag, optional_yield y);
   template <class CLSRGWBucketModifyOpT, class F, class... Args>
-  int with_bilog(F&& on_flushed, Args&&... args);
+  int with_bilog(F&& on_flushed, const RGWBucketInfo& bucket_info, Args&&... args);
   template <bool DeleteMarkerV>
   int bucket_index_link_olh(const DoutPrefixProvider *dpp,
                             RGWBucketInfo& bucket_info, RGWObjState& olh_state,
@@ -1540,16 +1540,16 @@ public:
   int cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs, RGWModifyOp op, std::string& tag, rgw_obj& obj,
                          optional_yield y);
   template <class CLSRGWBucketModifyOpT>
-  int cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, std::string& tag, int64_t pool, uint64_t epoch,
+  int cls_obj_complete_op(const RGWBucketInfo& bucket_info, BucketShard& bs, const rgw_obj& obj, std::string& tag, int64_t pool, uint64_t epoch,
                           rgw_bucket_dir_entry& ent, RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs,
                           uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
-  int cls_obj_complete_add(BucketShard& bs, const rgw_obj& obj, std::string& tag, int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
+  int cls_obj_complete_add(const RGWBucketInfo& bucket_info, BucketShard& bs, const rgw_obj& obj, std::string& tag, int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
                            RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags,
                            rgw_zone_set *zones_trace = nullptr, bool log_op = true);
-  int cls_obj_complete_del(BucketShard& bs, std::string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj,
+  int cls_obj_complete_del(const RGWBucketInfo& bucket_info, BucketShard& bs, std::string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj,
                            ceph::real_time& removed_mtime, std::list<rgw_obj_index_key> *remove_objs,
                            uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
-  int cls_obj_complete_cancel(BucketShard& bs, std::string& tag, rgw_obj& obj,
+  int cls_obj_complete_cancel(const RGWBucketInfo& bucket_info, BucketShard& bs, std::string& tag, rgw_obj& obj,
                               std::list<rgw_obj_index_key> *remove_objs,
                               uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
 
