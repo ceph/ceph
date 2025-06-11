@@ -300,14 +300,15 @@ Sending telemetry through a proxy
 ---------------------------------
 
 If the cluster cannot directly connect to the configured telemetry
-endpoint (default ``telemetry.ceph.com``), you can configure a HTTP/HTTPS
-proxy server with:
+endpoint (default: ``telemetry.ceph.com``), configure an HTTP/HTTPS
+proxy server by running a command of the following form:
 
 .. prompt:: bash #
 
    ceph config set mgr mgr/telemetry/proxy https://10.0.0.1:8080
 
-You can also include a ``user:pass`` if needed:
+Include a colon-separated user and password (``user:pass``) if needed by
+running a command of the following form:
 
 .. prompt:: bash #
 
