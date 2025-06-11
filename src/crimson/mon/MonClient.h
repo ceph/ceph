@@ -188,6 +188,8 @@ private:
   seastar::future<> load_keyring();
   seastar::future<> authenticate();
 
+  seastar::future<> _wipe_secrets_and_tickets();
+
   bool is_hunting() const;
   // @param rank, rank of the monitor to be connected, if it is less than 0,
   //              try to connect to all monitors in monmap, until one of them
