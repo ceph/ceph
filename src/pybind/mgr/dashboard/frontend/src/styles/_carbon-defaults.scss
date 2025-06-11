@@ -87,7 +87,8 @@ Overflow menu
 /******************************************
 Forms
 ******************************************/
-.form-header {
+.form-header,
+.panel-header {
   @include type.type-style('heading-04');
   margin-bottom: 40px;
 }
