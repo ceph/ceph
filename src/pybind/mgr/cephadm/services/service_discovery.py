@@ -93,7 +93,7 @@ class ServiceDiscovery:
     def configure_tls(self, server: Server) -> None:
         addr = self.mgr.get_mgr_ip()
         host = self.mgr.get_hostname()
-        cert, key = self.mgr.cert_mgr.generate_cert(host, addr)
+        cert, key = self.mgr.cert_mgr.generate_cert(host, addr, duration_in_days = (365 * 5))
         self.cert_file = tempfile.NamedTemporaryFile()
         self.cert_file.write(cert.encode('utf-8'))
         self.cert_file.flush()  # cert_tmp must not be gc'ed
