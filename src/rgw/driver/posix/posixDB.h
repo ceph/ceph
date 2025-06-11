@@ -115,15 +115,17 @@ class POSIXUserDB : public SQLiteDB {
 
   public:
     POSIXUserDB(std::string db_name, CephContext *_cct) : SQLiteDB(db_name, _cct),
-    db_name(db_name),
-    user_table(db_name+"_user_table"),
-    cct(_cct),
-    dp(_cct, ceph_subsys_rgw, "rgw POSIXUserDBStore backend: ")
-    {}
+		db_name(db_name),
+		user_table(db_name+"_user_table"),
+		cct(_cct),
+		dp(_cct, ceph_subsys_rgw, "rgw POSIXUserDBStore backend: ")
+                { DB::set_context(cct); }
     /* POSIXUserDB() {}*/
 
     int Initialize(std::string logfile, int loglevel);
     int Destroy(const DoutPrefixProvider *dpp);
+
+    CephContext* ctx() { return this->cct; }
 
     virtual int InitPrepareParams(const DoutPrefixProvider *dpp,
                                   DBOpPrepareParams &p_params,
