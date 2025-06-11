@@ -88,6 +88,8 @@ import { UpgradableComponent } from './upgradable/upgradable.component';
 import { ProgressComponent } from './progress/progress.component';
 import { TearsheetComponent } from './tearsheet/tearsheet.component';
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
+import { SidePanelComponent } from './side-panel/side-panel.component';
+
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
 import CopyIcon from '@carbon/icons/es/copy/32';
@@ -185,6 +187,7 @@ import { ChartsModule } from '@carbon/charts-angular';
     IconComponent,
     TearsheetComponent,
     TearsheetStepComponent,
+    SidePanelComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -227,6 +230,7 @@ import { ChartsModule } from '@carbon/charts-angular';
     IconComponent,
     TearsheetComponent,
     TearsheetStepComponent,
+    SidePanelComponent
   ]
 })
 export class ComponentsModule {
