@@ -481,8 +481,8 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
     extent_map result;
     if (res.r == 0) {
       ceph_assert(res.errors.empty());
-      dout(30) << __func__ << ": before decode: "
-               << res.buffers_read.debug_string(2048, 8)
+      dout(20) << __func__ << ": before decode: "
+               << res.buffers_read.debug_string(2048, 0)
                << dendl;
       /* Decode any missing buffers */
       int r = res.buffers_read.decode(read_pipeline.ec_impl,
@@ -490,8 +490,8 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
                                   req.object_size,
                                   read_pipeline.get_parent()->get_dpp());
       ceph_assert( r == 0 );
-      dout(30) << __func__ << ": after decode: "
-               << res.buffers_read.debug_string(2048, 8)
+      dout(20) << __func__ << ": after decode: "
+               << res.buffers_read.debug_string(2048, 0)
                << dendl;
 
       for (auto &&read: req.to_read) {
@@ -843,7 +843,7 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
   dout(20) << __func__ << " op=" << *op << dendl;
 
   if (op->on_all_commit) {
-    dout(10) << __func__ << " Calling on_all_commit on " << op << dendl;
+    dout(10) << __func__ << " Calling on_all_commit on " << *op << dendl;
     op->on_all_commit->complete(0);
     op->on_all_commit = nullptr;
     op->trace.event("ec write all committed");
