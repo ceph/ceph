@@ -205,6 +205,10 @@ public:
     }
     return std::nullopt;
   }
+  void set_sibling_object_id(local_object_id_t id) {
+    assert(!sibling_object_id);
+    sibling_object_id = id;
+  }
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };
 
