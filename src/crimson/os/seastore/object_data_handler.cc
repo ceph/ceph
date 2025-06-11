@@ -1410,8 +1410,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
 	  d_object_data.get_reserved_data_base(),
 	  d_object_data.get_reserved_data_len());
 	return ctx.tm.remove(ctx.t, std::move(*mapping));
-      }).si_then([mapping=mapping.duplicate(),
-		  &d_object_data, ctx](auto pos) mutable {
+      }).si_then([mapping, &d_object_data, ctx](auto pos) mutable {
 	auto base = d_object_data.get_reserved_data_base();
 	auto len = d_object_data.get_reserved_data_len();
 	return ctx.tm.clone_range(
