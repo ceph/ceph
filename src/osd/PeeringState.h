@@ -1585,6 +1585,25 @@ public:
 
   void update_heartbeat_peers();
   void query_unfound(Formatter *f, std::string state);
+  void apply_pwlc(const std::pair<eversion_t, eversion_t> pwlc,
+		  const pg_shard_t &shard,
+		  pg_info_t &info,
+		  pg_log_t *log1,
+		  PGLog *log2);
+  void apply_pwlc(const std::pair<eversion_t, eversion_t> pwlc,
+		  const pg_shard_t &shard,
+		  pg_info_t &info,
+		  pg_log_t *log)
+  {
+    apply_pwlc(pwlc, shard, info, log, nullptr);
+  }
+  void apply_pwlc(const std::pair<eversion_t, eversion_t> pwlc,
+		  const pg_shard_t &shard,
+		  pg_info_t &info,
+		  PGLog *log = nullptr)
+  {
+    apply_pwlc(pwlc, shard, info, nullptr, log);
+  }
   void update_peer_info(const pg_shard_t &from, const pg_info_t &oinfo);
   bool proc_replica_notify(const pg_shard_t &from, const pg_notify_t &notify);
   void remove_down_peer_info(const OSDMapRef &osdmap);
