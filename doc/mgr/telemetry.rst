@@ -312,8 +312,7 @@ command:
    ceph telemetry send
 
 If telemetry has not been enabled (by running the command ``ceph telemetry
-on``), you need to add ``--license sharing-1-0`` to the ``ceph telemetry send``
-command.
+on``), add ``--license sharing-1-0`` to the ``ceph telemetry send`` command.
 
 Sending telemetry through a proxy
 ---------------------------------
