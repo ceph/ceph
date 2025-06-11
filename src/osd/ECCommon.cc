@@ -307,17 +307,18 @@ int ECCommon::ReadPipeline::get_remaining_shards(
     read_result_t &read_result,
     read_request_t &read_request,
     const bool for_recovery,
-    const bool fast_read) {
-  shard_id_map<pg_shard_t> shards(sinfo.get_k_plus_m());
+    bool want_attrs) {
   set<pg_shard_t> error_shards;
   for (auto &shard: std::views::keys(read_result.errors)) {
     error_shards.insert(shard);
   }
 
+  /* fast-reads should already have scheduled reads to everything, so
+   * this function is irrelevant. */
   const int r = get_min_avail_to_read_shards(
     hoid,
     for_recovery,
-    fast_read,
+    false,
     read_request,
     error_shards);
 
@@ -326,6 +327,8 @@ int ECCommon::ReadPipeline::get_remaining_shards(
 	    << " read result was " << read_result << dendl;
     return -EIO;
   }
+
+  bool need_attr_request = want_attrs;
 
   // Rather than repeating whole read, we can remove everything we already have.
   for (auto iter = read_request.shard_reads.begin();
@@ -343,7 +346,33 @@ int ECCommon::ReadPipeline::get_remaining_shards(
     if (do_erase) {
       iter = read_request.shard_reads.erase(iter);
     } else {
+      if (need_attr_request && !sinfo.is_nonprimary_shard(shard_id)) {
+        // We have a suitable candidate for attr requests.
+        need_attr_request = false;
+      }
       ++iter;
+    }
+  }
+
+  if (need_attr_request) {
+    // This happens if we got an error from the shard where we were requesting
+    // the attributes from and the recovery does not require any non primary
+    // shards. The example seen in test was a 2+1 EC being recovered. shards 0
+    // and 2 were being requested and read as part of recovery. Shard was reading
+    // the attributes and failed. The recovery required shard 1, but that does
+    // not have valid attributes on it, so the attribute read failed.
+    // This is a pretty obscure case, so no need to optimise that much. Do an
+    // empty read!
+    shard_id_set have;
+    shard_id_map<pg_shard_t> pg_shards(sinfo.get_k_plus_m());
+    get_all_avail_shards(hoid, have, pg_shards, for_recovery, error_shards);
+    for (auto shard : have) {
+      if (!sinfo.is_nonprimary_shard(shard)) {
+        shard_read_t shard_read;
+        shard_read.pg_shard = pg_shards[shard];
+        read_request.shard_reads.insert(shard, shard_read_t());
+        break;
+      }
     }
   }
 
