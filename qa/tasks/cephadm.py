@@ -1253,6 +1253,8 @@ def cephfs_setup(ctx, config):
     if len(mdss) > 0:
         log.info('Setting up CephFS filesystem(s)...')
         cephfs_config = config.get('cephfs', {})
+        ctx.cephfs_config = deepcopy(cephfs_config)
+        ctx.subvols = deepcopy(config.get('subvols', None))
         fs_configs =  cephfs_config.pop('fs', [{'name': 'cephfs'}])
         set_allow_multifs = len(fs_configs) > 1
 
