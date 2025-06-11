@@ -90,10 +90,9 @@ ECBackend::ECBackend(
     rmw_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(),
                  *this, ec_extent_cache_lru),
     recovery_backend(cct, switcher->coll, ec_impl, this->sinfo, read_pipeline,
-                     unstable_hashinfo_registry, get_parent(), this),
+                      get_parent(), this),
     ec_impl(ec_impl),
-    sinfo(ec_impl, &(get_parent()->get_pool()), stripe_width),
-    unstable_hashinfo_registry(cct, ec_impl) {
+    sinfo(ec_impl, &(get_parent()->get_pool()), stripe_width) {
 
   /* EC makes some assumptions about how the plugin organises the *data* shards:
    * - The chunk size is constant for a particular profile.
@@ -113,7 +112,6 @@ ECBackend::RecoveryBackend::RecoveryBackend(
   ceph::ErasureCodeInterfaceRef ec_impl,
   const ECUtil::stripe_info_t &sinfo,
   ReadPipeline &read_pipeline,
-  UnstableHashInfoRegistry &unstable_hashinfo_registry,
   ECListener *parent,
   ECBackend *ecbackend)
   : cct(cct),
@@ -121,7 +119,6 @@ ECBackend::RecoveryBackend::RecoveryBackend(
     ec_impl(std::move(ec_impl)),
     sinfo(sinfo),
     read_pipeline(read_pipeline),
-    unstable_hashinfo_registry(unstable_hashinfo_registry),
     parent(parent),
     ecbackend(ecbackend) {}
 
@@ -334,17 +331,6 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
       ceph_assert(op.obc);
       op.recovery_info.size = op.obc->obs.oi.size;
       op.recovery_info.oi = op.obc->obs.oi;
-    }
-
-    if (sinfo.get_is_hinfo_required()) {
-      ECUtil::HashInfo hinfo(sinfo.get_k_plus_m());
-      if (op.obc->obs.oi.size > 0) {
-        ceph_assert(op.xattrs.count(ECUtil::get_hinfo_key()));
-        auto bp = op.xattrs[ECUtil::get_hinfo_key()].cbegin();
-        decode(hinfo, bp);
-      }
-      op.hinfo = unstable_hashinfo_registry.maybe_put_hash_info(
-        hoid, std::move(hinfo));
     }
   }
   ceph_assert(op.xattrs.size());
@@ -561,29 +547,6 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
 
       if (op.recovery_progress.first && op.obc) {
         op.xattrs = op.obc->attr_cache;
-        if (sinfo.get_is_hinfo_required()) {
-          if (auto [r, attrs, size] = ecbackend->get_attrs_n_size_from_disk(
-              op.hoid);
-            r >= 0 || r == -ENOENT) {
-            op.hinfo = unstable_hashinfo_registry.get_hash_info(
-              op.hoid, false, attrs, size);
-          } else {
-            derr << __func__ << ": can't stat-or-getattr on " << op.hoid <<
-          dendl;
-          }
-          if (!op.hinfo) {
-            derr << __func__ << ": " << op.hoid << " has inconsistent hinfo"
-               << dendl;
-            ceph_assert(recovery_ops.count(op.hoid));
-            eversion_t v = recovery_ops[op.hoid].v;
-            recovery_ops.erase(op.hoid);
-            // TODO: not in crimson yet
-            get_parent()->on_failed_pull({get_parent()->whoami_shard()},
-                                         op.hoid, v);
-            return;
-          }
-          encode(*(op.hinfo), op.xattrs[ECUtil::get_hinfo_key()]);
-        }
       }
 
       read_request_t read_request(std::move(want),
@@ -674,6 +637,12 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
           } else {
             dout(10) << __func__ << ": push all attrs (not nonprimary)" << dendl;
             pop.attrset = op.xattrs;
+          }
+
+          // Following an upgrade, or turning of overwrites, we can take this
+          // opportunity to clean up hinfo.
+          if (pop.attrset.contains(ECUtil::get_hinfo_key())) {
+            pop.attrset.erase(ECUtil::get_hinfo_key());
           }
         }
         pop.recovery_info = op.recovery_info;
@@ -1100,53 +1069,6 @@ void ECBackend::handle_sub_read(
           << bl.length() << dendl;
         reply->buffers_read[hoid].push_back(make_pair(offset, bl));
       }
-
-      if (!sinfo.supports_ec_overwrites()) {
-        // This shows that we still need deep scrub because large enough files
-        // are read in sections, so the digest check here won't be done here.
-        // Do NOT check osd_read_eio_on_bad_digest here.  We need to report
-        // the state of our chunk in case other chunks could substitute.
-        ECUtil::HashInfoRef hinfo;
-        map<string, bufferlist, less<>> attrs;
-        struct stat st;
-        int r = object_stat(hoid, &st);
-        if (r >= 0) {
-          dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
-          r = switcher->objects_get_attrs_with_hinfo(hoid, &attrs);
-        }
-        if (r >= 0) {
-          hinfo = unstable_hashinfo_registry.get_hash_info(
-            hoid, false, attrs, st.st_size);
-        } else {
-          derr << __func__ << ": access (attrs) on " << hoid << " failed: "
-	       << cpp_strerror(r) << dendl;
-        }
-        if (!hinfo) {
-          r = -EIO;
-          get_parent()->clog_error() << "Corruption detected: object "
-            << hoid << " is missing hash_info";
-          dout(5) << __func__ << ": No hinfo for " << hoid << dendl;
-          goto error;
-        }
-        ceph_assert(hinfo->has_chunk_hash());
-        if ((bl.length() == hinfo->get_total_chunk_size()) &&
-          (offset == 0)) {
-          dout(20) << __func__ << ": Checking hash of " << hoid << dendl;
-          bufferhash h(-1);
-          h << bl;
-          if (h.digest() != hinfo->get_chunk_hash(shard)) {
-            get_parent()->clog_error() << "Bad hash for " << hoid <<
-              " digest 0x"
-              << hex << h.digest() << " expected 0x" << hinfo->
-              get_chunk_hash(shard) << dec;
-            dout(5) << __func__ << ": Bad hash for " << hoid << " digest 0x"
-		    << hex << h.digest() << " expected 0x"
-                    << hinfo->get_chunk_hash(shard) << dec << dendl;
-            r = -EIO;
-            goto error;
-          }
-        }
-      }
     }
     continue;
   error:
@@ -1229,9 +1151,8 @@ void ECBackend::handle_sub_read_reply(
          ++i) {
       if (ECInject::test_read_error0(
         ghobject_t(i->first, ghobject_t::NO_GEN, op.from.shard))) {
-        dout(0) << __func__ << " Error inject - EIO error for shard " << op.from
-                                                                           .shard
- << dendl;
+        dout(0) << __func__ << " Error inject - EIO error for shard "
+                << op.from.shard << dendl;
         op.buffers_read.erase(i->first);
         op.attrs_read.erase(i->first);
         op.errors[i->first] = -EIO;
@@ -1513,14 +1434,6 @@ std::tuple<
   return {0, real_attrs, st.st_size};
 }
 
-ECUtil::HashInfoRef ECBackend::get_hinfo_from_disk(hobject_t oid) {
-  auto [r, attrs, size] = get_attrs_n_size_from_disk(oid);
-  ceph_assert(r >= 0 || r == -ENOENT);
-  ECUtil::HashInfoRef hinfo = unstable_hashinfo_registry.get_hash_info(
-    oid, true, attrs, size);
-  return hinfo;
-}
-
 std::optional<object_info_t> ECBackend::get_object_info_from_obc(
     ObjectContextRef &obc) {
   std::optional<object_info_t> ret;
@@ -1578,21 +1491,12 @@ void ECBackend::submit_transaction(
   op->t->safe_create_traverse(
     [&](std::pair<const hobject_t, PGTransaction::ObjectOperation> &i) {
       const auto &[oid, inner_op] = i;
-      ECUtil::HashInfoRef shinfo;
       auto &obc = obc_map.at(oid);
       object_info_t oi = obc->obs.oi;
       std::optional<object_info_t> soi;
-      ECUtil::HashInfoRef hinfo;
-
-      if (!sinfo.supports_ec_overwrites()) {
-        hinfo = get_hinfo_from_disk(oid);
-      }
 
       hobject_t source;
       if (inner_op.has_source(&source)) {
-        if (!sinfo.supports_ec_overwrites()) {
-          shinfo = get_hinfo_from_disk(source);
-        }
         if (!inner_op.is_rename()) {
           soi = get_object_info_from_obc(obc_map.at(source));
         }
@@ -1619,8 +1523,7 @@ void ECBackend::submit_transaction(
       ECTransaction::WritePlanObj plan(oid, inner_op, sinfo, readable_shards,
                                        writable_shards,
                                        object_in_cache, old_object_size,
-                                       oi, soi, std::move(hinfo),
-                                       std::move(shinfo),
+                                       oi, soi,
                                        rmw_pipeline.ec_pdw_write_mode);
 
       if (plan.to_read) plans.want_read = true;
@@ -1857,53 +1760,7 @@ int ECBackend::be_deep_scrub(
     return -EINPROGRESS;
   }
 
-  if (!sinfo.get_is_hinfo_required()) {
-    o.digest = 0;
-    o.digest_present = true;
-    o.omap_digest = -1;
-    o.omap_digest_present = true;
-    return 0;
-  }
-
-  ECUtil::HashInfoRef hinfo = unstable_hashinfo_registry.get_hash_info(
-    poid, false, o.attrs, o.size);
-  if (!hinfo) {
-    dout(0) << "_scan_list  " << poid << " could not retrieve hash info" << dendl;
-    o.read_error = true;
-    o.digest_present = false;
-    return 0;
-  }
-  if (!hinfo->has_chunk_hash()) {
-    dout(0) << "_scan_list  " << poid << " got invalid hash info" << dendl;
-    o.ec_size_mismatch = true;
-    return 0;
-  }
-  if (hinfo->get_total_chunk_size() != (unsigned)pos.data_pos) {
-    dout(0) << "_scan_list  " << poid << " got incorrect size on read 0x"
-	    << std::hex << pos
-	    << " expected 0x" << hinfo->get_total_chunk_size() << std::dec
-	    << dendl;
-    o.ec_size_mismatch = true;
-    return 0;
-  }
-
-  if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) !=
-    pos.data_hash.digest()) {
-    dout(0) << "_scan_list  " << poid << " got incorrect hash on read 0x"
-	    << std::hex << pos.data_hash.digest() << " !=  expected 0x"
-	    << hinfo->get_chunk_hash(get_parent()->whoami_shard().shard)
-	    << std::dec << dendl;
-    o.ec_hash_mismatch = true;
-    return 0;
-  }
-
-  /* We checked above that we match our own stored hash.  We cannot
-   * send a hash of the actual object, so instead we simply send
-   * our locally stored hash of shard 0 on the assumption that if
-   * we match our chunk hash and our recollection of the hash for
-   * chunk 0 matches that of our peers, there is likely no corruption.
-   */
-  o.digest = hinfo->get_chunk_hash(shard_id_t(0));
+  o.digest = 0;
   o.digest_present = true;
   o.omap_digest = -1;
   o.omap_digest_present = true;
