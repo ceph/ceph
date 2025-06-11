@@ -1168,7 +1168,7 @@ private:
     auto v = pin.get_logical_extent(t);
     if (v.has_child()) {
       return v.get_child_fut(
-      ).si_then([pin=pin.duplicate()](auto extent) {
+      ).si_then([pin](auto extent) {
 #ifndef NDEBUG
         auto lextent = extent->template cast<LogicalChildNode>();
         auto pin_laddr = pin.get_intermediate_base();
@@ -1201,7 +1201,7 @@ private:
         return ext;
       });
     } else {
-      return pin_to_extent_by_type(t, pin.duplicate(), v.get_child_pos(), type);
+      return pin_to_extent_by_type(t, pin, v.get_child_pos(), type);
     }
   }
 
@@ -1279,14 +1279,14 @@ private:
 				    original_len](auto newpin) {
 	  pin = std::move(newpin);
 	  if (full_extent_integrity_check) {
-	    return read_pin<T>(t, pin.duplicate()
+	    return read_pin<T>(t, pin
             ).si_then([](auto maybe_indirect_extent) {
               assert(!maybe_indirect_extent.is_indirect());
               assert(!maybe_indirect_extent.is_clone);
               return maybe_indirect_extent.extent;
             });
 	  } else {
-	    auto ret = get_extent_if_linked<T>(t, pin.duplicate());
+	    auto ret = get_extent_if_linked<T>(t, pin);
 	    if (ret.index() == 1) {
 	      return std::get<1>(ret
 	      ).si_then([](auto extent) {
@@ -1426,7 +1426,7 @@ private:
 	maybe_init(extent);
 	extent.set_seen_by_users();
       }
-    ).si_then([FNAME, &t, pin=pin.duplicate(), this](auto ref) mutable -> ret {
+    ).si_then([FNAME, &t, pin=pin, this](auto ref) mutable -> ret {
       if (ref->is_fully_loaded()) {
         auto crc = ref->calc_crc32c();
         SUBTRACET(
@@ -1498,7 +1498,7 @@ private:
         // No change to extent::seen_by_user because this path is only
         // for background cleaning.
       }
-    ).si_then([FNAME, &t, pin=pin.duplicate(), this](auto ref) {
+    ).si_then([FNAME, &t, pin=pin, this](auto ref) {
       auto crc = ref->calc_crc32c();
       SUBTRACET(
 	seastore_tm,
