@@ -1262,7 +1262,7 @@ TEST(ECCommon, encode)
     bl.append_zero(i>=k?4096:2048);
     semap.insert_in_shard(i, 12*1024, bl);
   }
-  semap.encode(ec_impl, nullptr, 0);
+  semap.encode(ec_impl);
 }
 
 TEST(ECCommon, decode)
