@@ -182,7 +182,7 @@ private:
   seastar::future<> handle_config(Ref<MConfig> m);
 
   seastar::future<> on_session_opened();
-private:
+
   seastar::future<> load_keyring();
   seastar::future<> authenticate();
 
