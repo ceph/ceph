@@ -14,6 +14,7 @@
  */
 
 #include "rgw_perf_counters.h"
+#include <boost/redis/config.hpp>
 #include "rgw_sal_d4n.h"
 
 namespace rgw { namespace sal {
@@ -80,6 +81,12 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   cacheDriver->initialize(dpp);
   policyDriver->get_cache_policy()->init(cct, dpp, io_context, next);
 
+  //setting the connection pool size and other parameters
+  rgw::d4n::RedisPool* redis_pool = new rgw::d4n::RedisPool(&io_context,cfg,384);
+  objDir->set_redis_pool(redis_pool);
+  blockDir->set_redis_pool(redis_pool);
+  bucketDir->set_redis_pool(redis_pool);
+  
   return 0;
 }
 

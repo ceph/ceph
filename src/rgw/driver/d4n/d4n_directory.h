@@ -4,8 +4,72 @@
 
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
+#include <condition_variable>
+#include <deque>
 
 namespace rgw { namespace d4n {
+
+using boost::redis::connection;
+class RedisPool {
+public:
+    RedisPool(boost::asio::io_context* ioc, const boost::redis::config& cfg, std::size_t size)
+        :  m_ioc(ioc),m_cfg(cfg) {
+        for (std::size_t i = 0; i < size; ++i) {
+            // Each connection gets its own strand
+            auto strand = boost::asio::make_strand(*m_ioc);
+            auto conn = std::make_shared<connection>(strand);
+            m_pool.push_back(conn);
+        }
+    }
+
+    std::shared_ptr<connection> acquire() {
+        std::unique_lock<std::mutex> lock(m_aquire_release_mtx);
+
+	if (!m_is_pool_connected) {
+		for(auto& it:m_pool) {
+	    		auto conn = it;
+	    		conn->async_run(m_cfg, {}, boost::asio::consign(boost::asio::detached, conn));
+		}
+	    m_is_pool_connected = true;
+	}
+
+        if (m_pool.empty()) {
+		//wait until m_pool is not empty
+		m_cond_var.wait(lock, [this] { return !m_pool.empty(); });
+        } 
+        auto conn = m_pool.front();
+        m_pool.pop_front();
+        return conn;
+    }
+
+    void release(std::shared_ptr<connection> conn) {
+        std::unique_lock<std::mutex> lock(m_aquire_release_mtx);
+        m_pool.push_back(conn);
+	// Notify one waiting thread that a connection is available
+	m_cond_var.notify_one();
+    }
+
+    int current_pool_size() const {
+        std::unique_lock<std::mutex> lock(m_aquire_release_mtx);
+        return m_pool.size();
+    }
+
+    void cancel_all() {
+        std::unique_lock<std::mutex> lock(m_aquire_release_mtx);
+	for(auto& conn : m_pool) {
+		conn->cancel();
+        }
+    }
+
+private:
+    boost::asio::io_context* m_ioc;
+    boost::redis::config m_cfg;
+    std::deque<std::shared_ptr<connection>> m_pool;
+    mutable std::mutex m_aquire_release_mtx;
+    std::condition_variable m_cond_var;
+    bool m_is_pool_connected{false};
+};
+
 
 namespace net = boost::asio;
 using boost::redis::config;
@@ -67,6 +131,10 @@ struct CacheBlock {
 
 class Directory {
   public:
+	RedisPool* redis_pool{nullptr}; // Redis connection pool
+    	void set_redis_pool(RedisPool* pool) {
+      	redis_pool = pool;
+    }	
     Directory() {}
 };
 
