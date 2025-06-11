@@ -975,15 +975,15 @@ $CCLIENTDEBUG
         ; rgw lc debug interval = 10
         $(format_conf "${extra_conf}")
 EOF
-    if [ "$rgw_store" == "dbstore" ] ; then
-        do_rgw_dbstore_conf
-    elif [ "$rgw_store" == "posix" ] ; then
+    #if [ "$rgw_store" == "dbstore" ] ; then
+        #do_rgw_dbstore_conf
+    if [ "$rgw_store" == "posix" ] ; then
         # use dbstore as the backend and posix as the filter
         do_rgw_dbstore_conf
         posix_dir="$CEPH_DEV_DIR/rgw/posix"
         prun mkdir -p $posix_dir/root $posix_dir/lmdb
         wconf <<EOF
-        rgw filter = posix
+        rgw backend store = posix
         rgw posix base path = $posix_dir/root
         rgw posix database root = $posix_dir/lmdb
 

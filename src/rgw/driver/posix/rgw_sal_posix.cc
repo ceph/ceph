@@ -22,8 +22,6 @@
 #include "include/scope_guard.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
-#include "driver/dbstore/common/dbstore.h"
-#include "rgw_sal_dbstore.h"
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -1865,24 +1863,98 @@ int VersionedDirectory::remove_symlink(const DoutPrefixProvider *dpp, optional_y
   return 0;
 }
 
+bool POSIXZoneGroup::placement_target_exists(std::string& target) const {
+  return !!group->placement_targets.count(target);
+}
+
+void POSIXZoneGroup::get_placement_target_names(std::set<std::string>& names) const {
+  for (const auto& target : group->placement_targets) {
+    names.emplace(target.second.name);
+  }
+}
+
+ZoneGroup& POSIXZone::get_zonegroup() {
+  return *zonegroup;
+}
+
+const RGWZoneParams& POSIXZone::get_rgw_params() {
+  return *zone_params;
+}
+
+const std::string& POSIXZone::get_id() {
+  return zone_params->get_id();
+}
+
+const std::string& POSIXZone::get_name() const {
+  return zone_params->get_name();
+}
+
+bool POSIXZone::is_writeable() {
+  return true;
+}
+
+bool POSIXZone::get_redirect_endpoint(std::string* endpoint) {
+  return false;
+}
+
+const std::string& POSIXZone::get_current_period_id() {
+  return current_period->get_id();
+}
+
+const RGWAccessKey& POSIXZone::get_system_key() {
+  return zone_params->system_key;
+}
+
+const std::string& POSIXZone::get_realm_name() {
+  return realm->get_name();
+}
+
+const std::string& POSIXZone::get_realm_id() {
+  return realm->get_id();
+}
+
+RGWBucketSyncPolicyHandlerRef POSIXZone::get_sync_policy_handler() {
+  return nullptr;
+}
+
+int POSIXLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
+{
+  return -ENOENT;
+}
+
+int POSIXLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script)
+{
+  return -ENOENT;
+}
+
+int POSIXLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key)
+{
+  return -ENOENT;
+}
+
+int POSIXLuaManager::add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name)
+{
+  return -ENOENT;
+}
+
+int POSIXLuaManager::remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name)
+{
+  return -ENOENT;
+}
+
+int POSIXLuaManager::list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages)
+{
+  return -ENOENT;
+}
+
+int POSIXLuaManager::reload_packages(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  return -ENOENT;
+}
+
 int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
-  FilterDriver::initialize(cct, dpp);
-
   int ret = -1;
-  const static std::string tenant = "default_ns";
-  const auto& db_path = g_conf().get_val<std::string>("dbstore_db_dir");
-  const auto& db_name = g_conf().get_val<std::string>("dbstore_db_name_prefix") + "-" + tenant;
-  auto db_full_path = std::filesystem::path(db_path) / db_name;
-
-  userDB = new POSIXUserDB(db_full_path.string(), cct); 
-
-  if ((ret = userDB->Initialize("", -1)) < 0) {
-    ldout(cct, 0) << "User DB initialization failed for tenant("<<tenant<<")" << dendl;
-    delete userDB;
-    return ret;
-  }
-
   base_path = g_conf().get_val<std::string>("rgw_posix_base_path");
 
   ldpp_dout(dpp, 20) << "Initializing POSIX driver: " << base_path << dendl;
@@ -1977,6 +2049,21 @@ int POSIXDriver::get_user_by_swift(const DoutPrefixProvider* dpp, const std::str
   return -ENOTSUP;
 }
 
+int POSIXDriver::load_owner_by_email(const DoutPrefixProvider* dpp,
+				    optional_yield y,
+				    std::string_view email,
+				    rgw_owner& owner)
+{
+  RGWUserInfo uinfo;
+  int ret = get_user_db()->get_user(dpp, "email", std::string{email},
+				   uinfo, nullptr, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+  owner = std::move(uinfo.user_id);
+  return 0;
+}
+
 std::unique_ptr<Object> POSIXDriver::get_object(const rgw_obj_key& k)
 {
   return std::make_unique<POSIXObject>(this, k);
@@ -2005,6 +2092,34 @@ std::string POSIXDriver::zone_unique_trans_id(const uint64_t unique_num)
 
   return std::string(buf);
 }
+
+int POSIXDriver::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zg)
+{
+  /* XXX: for now only one zonegroup supported */
+  std::unique_ptr<RGWZoneGroup> rzg =
+      std::make_unique<RGWZoneGroup>("default", "default");
+  rzg->api_name = "default";
+  rzg->is_master = true;
+  ZoneGroup* group = new POSIXZoneGroup(this, std::move(rzg));
+  if (!group)
+    return -ENOMEM;
+
+  zg->reset(group);
+  return 0;
+}
+
+int POSIXDriver::list_all_zones(const DoutPrefixProvider* dpp,
+			    std::list<std::string>& zone_ids)
+{
+  zone_ids.push_back(zone.get_id());
+  return 0;
+}
+
+int POSIXDriver::cluster_stat(RGWClusterStat& stats)
+{
+  return 0;
+}
+
 std::unique_ptr<Writer> POSIXDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* _head_obj,
@@ -2014,12 +2129,7 @@ std::unique_ptr<Writer> POSIXDriver::get_append_writer(const DoutPrefixProvider 
 				  uint64_t position,
 				  uint64_t *cur_accounted_size)
 {
-  std::unique_ptr<Writer> writer = next->get_append_writer(dpp, y, _head_obj,
-							   owner, ptail_placement_rule,
-							   unique_tag, position,
-							   cur_accounted_size);
-
-  return std::make_unique<FilterWriter>(std::move(writer), std::move(_head_obj));
+  return nullptr;
 }
 
 std::unique_ptr<Writer> POSIXDriver::get_atomic_writer(const DoutPrefixProvider *dpp,
@@ -2034,19 +2144,8 @@ std::unique_ptr<Writer> POSIXDriver::get_atomic_writer(const DoutPrefixProvider 
   return std::make_unique<POSIXAtomicWriter>(dpp, y, _head_obj, this, owner, ptail_placement_rule, olh_epoch, unique_tag);
 }
 
-void POSIXDriver::finalize(void)
-{
-  next->finalize();
-}
-
-void POSIXDriver::register_admin_apis(RGWRESTMgr* mgr)
-{
-  return next->register_admin_apis(mgr);
-}
-
-bool POSIXDriver::process_expired_objects(const DoutPrefixProvider *dpp,
-	       				                          optional_yield y) {
-  return next->process_expired_objects(dpp, y);
+const std::string& POSIXDriver::get_compression_type(const rgw_placement_rule& rule) {
+  return zone.get_rgw_params().get_compression_type(rule);
 }
 
 std::unique_ptr<Notification> POSIXDriver::get_notification(rgw::sal::Object* obj,
@@ -2054,7 +2153,8 @@ std::unique_ptr<Notification> POSIXDriver::get_notification(rgw::sal::Object* ob
 			      rgw::notify::EventType event_type, optional_yield y,
 			      const std::string* object_name)
 {
-  return next->get_notification(obj, src_obj, s, event_type, y, object_name);
+  rgw::notify::EventTypeList event_types = {event_type};
+  return std::make_unique<POSIXNotification>(obj, src_obj, event_types);
 }
 
 std::unique_ptr<Notification> POSIXDriver::get_notification(
@@ -2067,8 +2167,7 @@ std::unique_ptr<Notification> POSIXDriver::get_notification(
     std::string& _user_tenant,
     std::string& _req_id,
     optional_yield y) {
-  return next->get_notification(dpp, obj, src_obj, event_types, _bucket,
-                                _user_id, _user_tenant, _req_id, y);
+  return std::make_unique<POSIXNotification>(obj, src_obj, event_types);
 }
 
 // TODO: marker and other params
@@ -2276,25 +2375,56 @@ int POSIXDriver::mint_listing_entry(const std::string &bname,
 
     return ret;
 }
-int POSIXBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
-			    fill_cache_cb_t& cb)
+
+std::unique_ptr<LuaManager> POSIXDriver::get_lua_manager(const std::string& luarocks_path)
 {
-  return dir->fill_cache(dpp, y, cb);
+  return std::make_unique<POSIXLuaManager>(this);
+}
+
+std::unique_ptr<RGWRole> POSIXDriver::get_role(std::string name,
+    std::string tenant,
+    rgw_account_id account_id,
+    std::string path,
+    std::string trust_policy,
+    std::string description,
+    std::string max_session_duration_str,
+    std::multimap<std::string,std::string> tags)
+{
+  RGWRole* p = nullptr;
+  return std::unique_ptr<RGWRole>(p);
+}
+
+std::unique_ptr<RGWRole> POSIXDriver::get_role(std::string id)
+{
+  RGWRole* p = nullptr;
+  return std::unique_ptr<RGWRole>(p);
+}
+
+std::unique_ptr<RGWRole> POSIXDriver::get_role(const RGWRoleInfo& info)
+{
+  RGWRole* p = nullptr;
+  return std::unique_ptr<RGWRole>(p);
+}
+
+int POSIXBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
+			  fill_cache_cb_t& cb)
+{
+return dir->fill_cache(dpp, y, cb);
 }
 
 int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
-		      int max, ListResults& results, optional_yield y)
+		    int max, ListResults& results, optional_yield y)
 {
-  int count{0};
-  bool in_prefix{false};
-  // Names in the cache are in OID format
-  rgw_obj_key marker_key(params.marker);
-  params.marker = marker_key.get_oid();
-  {
-    rgw_obj_key key(params.prefix);
-    params.prefix = key.name;
-  }
-  if (max <= 0) {
+int count{0};
+bool in_prefix{false};
+// Names in the cache are in OID format
+rgw_obj_key marker_key(params.marker);
+params.marker = marker_key.get_oid();
+{
+  rgw_obj_key key(params.prefix);
+  params.prefix = key.name;
+}
+if (max <= 0) {
     return 0;
   }
 
@@ -4209,9 +4339,18 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 
 extern "C" {
 
-rgw::sal::Driver* newPOSIXDriver(rgw::sal::Driver* next)
+rgw::sal::Driver* newPOSIXDriver(CephContext *cct)
 {
-  rgw::sal::POSIXDriver* driver = new rgw::sal::POSIXDriver(next);
+  rgw::sal::POSIXDriver* driver = new rgw::sal::POSIXDriver(cct);
+
+  int ret = -1;
+  const static std::string tenant = "default_ns";
+  if ((ret = driver->get_user_db()->Initialize("", -1)) < 0) {
+    ldout(cct, 0) << "User DB initialization failed for tenant("<<tenant<<")" << dendl;
+    return nullptr;
+  }
+
+  driver->set_context(cct);
 
   return driver;
 }
