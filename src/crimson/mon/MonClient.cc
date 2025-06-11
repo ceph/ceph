@@ -83,6 +83,7 @@ public:
   bool is_my_peer(const entity_addr_t& addr) const;
   AuthAuthorizer* get_authorizer(entity_type_t peer) const;
   KeyStore& get_keys();
+  void _wipe_secrets_and_tickets();
   seastar::future<> renew_tickets();
   seastar::future<> renew_rotating_keyring();
 
@@ -149,6 +150,12 @@ seastar::future<> Connection::renew_tickets()
     logger().debug("{}: don't need new tickets", __func__);
     return seastar::now();
   }
+}
+
+void Connection::_wipe_secrets_and_tickets() {
+  logger().info("{}: wiping rotating secrets and invalidating tickets", __func__);
+  rotating_keyring->wipe();
+  auth->invalidate_all_tickets();
 }
 
 seastar::future<> Connection::renew_rotating_keyring()
@@ -949,6 +956,16 @@ seastar::future<> Client::authenticate()
     }
   });
 }
+
+seastar::future<> Client::_wipe_secrets_and_tickets()
+{
+  logger().info("{} wiping rotating secrets and invalidating tickets", __func__);
+  if (active_con) {
+    active_con->_wipe_secrets_and_tickets();
+  }
+  return _check_auth_tickets();
+}
+
 
 seastar::future<> Client::stop()
 {
