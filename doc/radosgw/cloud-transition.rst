@@ -119,7 +119,7 @@ Cloud Transition Specific Configurables
   If ``true``, the metadata of the object transitioned to the cloud service is retained.
   If ``false`` (default), the object is deleted after the transition.
   This option is ignored for current-versioned objects. For more details,
-  refer to the "Versioned Objects" section below.
+  refer to the :ref:`Versioned Objects<versioned_objects>` section below.
 
 
 S3 Specific Configurables
@@ -403,6 +403,7 @@ Below is the object name format::
 
   s3://<target_path>/<source_bucket_name>/<source_object_name>(-<source_object_version_id>)
 
+.. _versioned_objects:
 
 Versioned Objects
 ~~~~~~~~~~~~~~~~~
