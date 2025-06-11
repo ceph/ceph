@@ -53,6 +53,18 @@ namespace crimson::mon {
 
 using crimson::common::local_conf;
 
+/* Used by both Client and Connection. */
+static int handle_auth_failure()
+{
+  int ecode =
+    crimson::common::local_conf().get_val<int64_t>("auth_exit_on_failure");
+  if (ecode >= 0) {
+    logger().info("{}: exiting with {}", __func__, ecode);
+    _exit(ecode);
+  }
+  return -EACCES;
+}
+
 class Connection : public seastar::enable_shared_from_this<Connection> {
 public:
   Connection(const AuthRegistry& auth_registry,
@@ -622,12 +634,12 @@ int Client::handle_auth_request(crimson::net::Connection &conn,
                                 ceph::bufferlist *reply)
 {
   if (payload.length() == 0) {
-    return -EACCES;
+    return handle_auth_failure();
   }
   auth_meta.auth_mode = payload[0];
   if (auth_meta.auth_mode < AUTH_MODE_AUTHORIZER ||
       auth_meta.auth_mode > AUTH_MODE_AUTHORIZER_MAX) {
-    return -EACCES;
+    return handle_auth_failure();
   }
   AuthAuthorizeHandler* ah = get_auth_authorize_handler(conn.get_peer_type(),
                                                         auth_method);
@@ -670,7 +682,7 @@ int Client::handle_auth_request(crimson::net::Connection &conn,
     return 0;
   } else {
     logger().info("bad authorizer on {}", conn);
-    return -EACCES;
+    return handle_auth_failure();
   }
 }
 
@@ -762,7 +774,7 @@ int Client::handle_auth_done(crimson::net::Connection &conn,
     auto p = bl.begin();
     if (!auth_meta.authorizer->verify_reply(p, &auth_meta.connection_secret)) {
       logger().error("failed verifying authorizer reply");
-      return -EACCES;
+      return handle_auth_failure();
     }
     auth_meta.session_key = auth_meta.authorizer->session_key;
     return 0;
@@ -793,7 +805,7 @@ int Client::handle_auth_bad_method(crimson::net::Connection &conn,
     // huh...
     logger().info("hmm, they didn't like {} result {}",
                   old_auth_method, cpp_strerror(result));
-    return -EACCES;
+    return handle_auth_failure();
   }
 }
 
