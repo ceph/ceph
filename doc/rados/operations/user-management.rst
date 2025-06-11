@@ -752,11 +752,11 @@ results to a keyring file, and then import the keyring into your main
 Key rotation
 ------------
 
-To rotate the secret for an entity, use:
+To rotate the secret for an entity, run a command of the following form:
 
 .. prompt:: bash #
 
-    ceph auth rotate <entity>
+   ceph auth rotate <entity>
 
 This avoids the need to delete and recreate the entity when its key is
 compromised, lost, or scheduled for rotation.
