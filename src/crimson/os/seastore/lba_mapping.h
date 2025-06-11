@@ -155,18 +155,6 @@ public:
   get_child_ret_t<lba::LBALeafNode, LogicalChildNode>
   get_logical_extent(Transaction &t) const;
 
-  LBAMapping duplicate() const {
-    assert(!is_null());
-    auto dup_iter = [](const LBACursorRef &iter) -> LBACursorRef {
-      if (iter) {
-	return iter->duplicate();
-      } else {
-	return nullptr;
-      }
-    };
-    return LBAMapping(dup_iter(direct_cursor), dup_iter(indirect_cursor));
-  }
-
   using refresh_iertr = LBACursor::base_iertr;
   refresh_iertr::future<LBAMapping> refresh();
 

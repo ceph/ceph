@@ -639,7 +639,7 @@ struct transaction_manager_test_t :
     auto addr = pin.get_key();
     auto im_addr = pin.get_intermediate_base();
     auto ext = with_trans_intr(*(t.t), [&](auto& trans) {
-      return tm->read_pin<TestBlock>(trans, pin.duplicate());
+      return tm->read_pin<TestBlock>(trans, pin);
     }).safe_then([](auto ret) {
       return ertr::make_ready_future<TestBlockRef>(ret.extent);
     }).handle_error(
@@ -1205,7 +1205,7 @@ struct transaction_manager_test_t :
     EXPECT_EQ(pin->get_length(), new_len);
     EXPECT_EQ(pin->get_key(), o_laddr + new_offset);
 
-    auto extent = try_read_pin(t, pin->duplicate());
+    auto extent = try_read_pin(t, *pin);
     if (extent) {
       if (!pin->is_indirect()) {
 	test_mappings.alloced(pin->get_key(), *extent, t.mapping_delta);
@@ -1368,7 +1368,7 @@ struct transaction_manager_test_t :
       EXPECT_EQ(lpin->get_key(), o_laddr);
       EXPECT_EQ(lpin->get_val(), o_paddr);
       EXPECT_EQ(lpin->get_length(), new_offset);
-      auto lext = try_read_pin(t, lpin->duplicate());
+      auto lext = try_read_pin(t, *lpin);
       if (lext) {
         test_mappings.alloced(lpin->get_key(), *lext, t.mapping_delta);
         EXPECT_TRUE(lext->is_exist_clean());
@@ -1385,7 +1385,7 @@ struct transaction_manager_test_t :
       EXPECT_EQ(rpin->get_val(), o_paddr.add_offset(new_offset)
         .add_offset(new_len));
       EXPECT_EQ(rpin->get_length(), o_len - new_offset - new_len);
-      auto rext = try_read_pin(t, rpin->duplicate());
+      auto rext = try_read_pin(t, *rpin);
       if (rext) {
         test_mappings.alloced(rpin->get_key(), *rext, t.mapping_delta);
         EXPECT_TRUE(rext->is_exist_clean());
@@ -1714,7 +1714,7 @@ struct transaction_manager_test_t :
 	    }
 
             auto empty_transaction = true;
-            auto last_rpin = pin0->duplicate();
+            auto last_rpin = *pin0;
 	    ASSERT_TRUE(!split_points.empty());
             while(!split_points.empty()) {
               // new overwrite area: start_off ~ end_off
@@ -1738,7 +1738,7 @@ struct transaction_manager_test_t :
               bufferlist bl;
               bl.append(ceph::bufferptr(ceph::buffer::create(new_len, 0)));
               auto [lpin, ext, rpin] = overwrite_pin(
-                t, last_rpin.duplicate(), new_off, new_len, bl);
+                t, std::move(last_rpin), new_off, new_len, bl);
 	      if (!ext) {
 		conflicted++;
 		return;
@@ -2213,7 +2213,7 @@ TEST_P(tm_single_device_test_t, invalid_lba_mapping_detect)
       assert(pin.is_viewable());
       std::ignore = alloc_extent(t, get_laddr_hint((LEAF_NODE_CAPACITY + 1) * 4096), 4096, 'a');
       assert(!pin.is_viewable());
-      pin = refresh_lba_mapping(t, pin.duplicate());
+      pin = refresh_lba_mapping(t, pin);
       auto extent2 = with_trans_intr(*(t.t), [&pin](auto& trans) {
         auto v = pin.get_logical_extent(trans);
         assert(v.has_child());
