@@ -58,11 +58,12 @@ else:
             if root_ca_cert:
                 client_key = NvmeofGatewaysConfig.get_client_key(service_name)
                 client_cert = NvmeofGatewaysConfig.get_client_cert(service_name)
+                server_cert = NvmeofGatewaysConfig.get_server_cert(service_name)
 
             if root_ca_cert and client_key and client_cert:
                 logger.info('Securely connecting to: %s', self.gateway_addr)
                 credentials = grpc.ssl_channel_credentials(
-                    root_certificates=root_ca_cert,
+                    root_certificates=server_cert,
                     private_key=client_key,
                     certificate_chain=client_cert,
                 )
