@@ -704,9 +704,11 @@ struct transaction_manager_test_t :
   LBAMapping clone_pin(
     test_transaction_t &t,
     laddr_t offset,
-    const LBAMapping &mapping) {
-    auto pin = with_trans_intr(*(t.t), [&](auto &trans) {
-      return tm->clone_pin(trans, offset, mapping);
+    LBAMapping mapping) {
+    auto pin = with_trans_intr(
+      *(t.t),
+      [this, offset, mapping=std::move(mapping)](auto &trans) mutable {
+      return tm->clone_pin(trans, offset, std::move(mapping));
     }).unsafe_get();
     EXPECT_EQ(offset, pin.get_key());
     EXPECT_EQ(mapping.get_key(), pin.get_intermediate_key());
@@ -1461,9 +1463,10 @@ struct transaction_manager_test_t :
 	auto t = create_transaction();
         auto lpin = get_pin(t, l_offset);
         auto rpin = get_pin(t, r_offset);
-	auto l_clone_pin = clone_pin(t, l_clone_offset, lpin);
-	auto r_clone_pin = clone_pin(t, r_clone_offset, rpin);
+	auto l_clone_pin = clone_pin(t, l_clone_offset, std::move(lpin));
+	auto r_clone_pin = clone_pin(t, r_clone_offset, std::move(rpin));
         //split left
+	l_clone_pin = refresh_lba_mapping(t, std::move(l_clone_pin));
         auto pin1 = remap_pin(t, std::move(l_clone_pin), 0, 16 << 10);
         ASSERT_TRUE(pin1);
         auto pin2 = remap_pin(t, std::move(*pin1), 0, 8 << 10);
@@ -1474,6 +1477,7 @@ struct transaction_manager_test_t :
         EXPECT_EQ('l', lext->get_bptr().c_str()[0]);
 
         //split right
+	r_clone_pin = refresh_lba_mapping(t, std::move(r_clone_pin));
         auto pin4 = remap_pin(t, std::move(r_clone_pin), 16 << 10, 16 << 10);
         ASSERT_TRUE(pin4);
         auto pin5 = remap_pin(t, std::move(*pin4), 8 << 10, 8 << 10);

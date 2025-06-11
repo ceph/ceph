@@ -108,7 +108,24 @@ public:
     laddr_t offset) {
     LOG_PREFIX(TransactionManager::get_pin);
     SUBDEBUGT(seastore_tm, "{} ...", t, offset);
-    return lba_manager->get_mapping(t, offset
+    return lba_manager->get_mapping(t, offset, false
+    ).si_then([FNAME, &t](LBAMapping pin) {
+      SUBDEBUGT(seastore_tm, "got {}", t, pin);
+      return pin;
+    });
+  }
+
+  /**
+   * get_containing_pin
+   *
+   * Get the logical pin containing laddr
+   */
+  get_pin_ret get_containing_pin(
+    Transaction &t,
+    laddr_t laddr) {
+    LOG_PREFIX(TransactionManager::get_containing_pin);
+    SUBDEBUGT(seastore_tm, "{} ...", t, laddr);
+    return lba_manager->get_mapping(t, laddr, true
     ).si_then([FNAME, &t](LBAMapping pin) {
       SUBDEBUGT(seastore_tm, "got {}", t, pin);
       return pin;
@@ -349,6 +366,10 @@ public:
     Transaction &t,
     laddr_t offset);
 
+  ref_iertr::future<LBAMapping> remove(
+    Transaction &t,
+    LBAMapping mapping);
+
   /// remove refcount for list of offset
   using refs_ret = ref_iertr::future<std::vector<unsigned>>;
   refs_ret remove(
@@ -410,33 +431,59 @@ public:
     Transaction &t,
     laddr_t laddr_hint,
     extent_len_t len,
+    std::optional<LBAMapping> pos = std::nullopt,
     placement_hint_t placement_hint = placement_hint_t::HOT) {
     static_assert(is_data_type(T::TYPE));
     LOG_PREFIX(TransactionManager::alloc_data_extents);
     SUBDEBUGT(seastore_tm, "{} hint {}~0x{:x} phint={} ...",
               t, T::TYPE, laddr_hint, len, placement_hint);
-    auto exts = cache->alloc_new_data_extents<T>(
-      t,
-      len,
-      placement_hint,
-      INIT_GENERATION);
-    // user must initialize the logical extent themselves
-    assert(is_user_transaction(t.get_src()));
-    for (auto& ext : exts) {
-      ext->set_seen_by_users();
-    }
-    return lba_manager->alloc_extents(
-      t,
-      laddr_hint,
-      std::vector<LogicalChildNodeRef>(
-	exts.begin(), exts.end()),
-      EXTENT_DEFAULT_REF_COUNT
-    ).si_then([exts=std::move(exts), &t, FNAME](auto &&) mutable {
-      for (auto &ext : exts) {
-	SUBDEBUGT(seastore_tm, "allocated {}", t, *ext);
+    return seastar::do_with(
+      cache->alloc_new_data_extents<T>(
+	t,
+	len,
+	placement_hint,
+	INIT_GENERATION),
+      [pos=std::move(pos), this, &t,
+      FNAME, laddr_hint](auto &exts) mutable {
+      // user must initialize the logical extent themselves
+      assert(is_user_transaction(t.get_src()));
+      for (auto& ext : exts) {
+	ext->set_seen_by_users();
       }
-      return alloc_extent_iertr::make_ready_future<
-	std::vector<TCachedExtentRef<T>>>(std::move(exts));
+      if (pos) {
+	// laddr_hint is determined
+	auto off = laddr_hint;
+	for (auto &extent : exts) {
+	  extent->set_laddr(off);
+	  off = (off + extent->get_length()).checked_to_laddr();
+	}
+      }
+      auto fut = alloc_extents_iertr::make_ready_future<
+	std::vector<LBAMapping>>();
+      if (pos) {
+	fut = pos->refresh(
+	).si_then([&t, &exts, this](auto pos) {
+	  return lba_manager->alloc_extents(
+	    t,
+	    std::move(pos),
+	    std::vector<LogicalChildNodeRef>(
+	      exts.begin(), exts.end()));
+	});
+      } else {
+	fut = lba_manager->alloc_extents(
+	  t,
+	  laddr_hint,
+	  std::vector<LogicalChildNodeRef>(
+	    exts.begin(), exts.end()),
+	  EXTENT_DEFAULT_REF_COUNT);
+      }
+      return fut.si_then([&exts, &t, FNAME](auto &&) mutable {
+	for (auto &ext : exts) {
+	  SUBDEBUGT(seastore_tm, "allocated {}", t, *ext);
+	}
+	return alloc_extent_iertr::make_ready_future<
+	  std::vector<TCachedExtentRef<T>>>(std::move(exts));
+      });
     });
   }
 
@@ -485,6 +532,7 @@ public:
     // must be user-oriented required by (the potential) maybe_init
     assert(is_user_transaction(t.get_src()));
 
+    LOG_PREFIX(TransactionManager::remap_pin);
 #ifndef NDEBUG
     std::sort(remaps.begin(), remaps.end(),
       [](remap_entry_t x, remap_entry_t y) {
@@ -512,23 +560,31 @@ public:
 #endif
 
     return seastar::do_with(
-      std::vector<LogicalChildNodeRef>(),
       std::move(pin),
       std::move(remaps),
-      [&t, this](auto &extents, auto &pin, auto &remaps) {
-      laddr_t original_laddr = pin.get_key();
-      extent_len_t original_len = pin.get_length();
-      paddr_t original_paddr = pin.get_val();
-      LOG_PREFIX(TransactionManager::remap_pin);
-      SUBDEBUGT(seastore_tm, "{}~0x{:x} {} into {} remaps ... {}",
-                t, original_laddr, original_len, original_paddr, remaps.size(), pin);
+      [FNAME, &t, this](auto &pin, auto &remaps) {
       // The according extent might be stable or pending.
       auto fut = base_iertr::now();
-      if (!pin.is_indirect()) {
+      if (pin.is_indirect()) {
+	SUBDEBUGT(seastore_tm, "{} into {} remaps ...",
+	  t, pin, remaps.size());
+	fut = lba_manager->refresh_lba_mapping(t, std::move(pin)
+	).si_then([this, &pin, &t](auto mapping) {
+	  return lba_manager->complete_indirect_lba_mapping(
+	    t, std::move(mapping)
+	  ).si_then([&pin](auto mapping) {
+	    pin = std::move(mapping);
+	  });
+	});
+      } else {
+	laddr_t original_laddr = pin.get_key();
+	extent_len_t original_len = pin.get_length();
+	paddr_t original_paddr = pin.get_val();
+	SUBDEBUGT(seastore_tm, "{}~0x{:x} {} into {} remaps ... {}",
+	  t, original_laddr, original_len, original_paddr, remaps.size(), pin);
         ceph_assert(!pin.is_clone());
-	fut = fut.si_then([this, &t, &pin]() mutable {
-	  return lba_manager->refresh_lba_mapping(t, std::move(pin));
-	}).si_then([this, &t, &pin, original_paddr, original_len](auto newpin) {
+	fut = lba_manager->refresh_lba_mapping(t, std::move(pin)
+	).si_then([this, &t, &pin, original_paddr, original_len](auto newpin) {
 	  pin = std::move(newpin);
 	  if (full_extent_integrity_check) {
 	    return read_pin<T>(t, pin.duplicate()
@@ -555,8 +611,7 @@ public:
 	    }
 	  }
 	}).si_then([this, &t, &remaps, original_paddr,
-			    original_laddr, original_len,
-			    &extents, FNAME](auto ext) mutable {
+		    original_laddr, original_len, FNAME](auto ext) mutable {
 	  ceph_assert(full_extent_integrity_check
 	      ? (ext && ext->is_fully_loaded())
 	      : true);
@@ -593,16 +648,15 @@ public:
 	      original_bptr);
 	    // user must initialize the logical extent themselves.
 	    extent->set_seen_by_users();
-	    extents.emplace_back(std::move(extent));
+	    remap.extent = extent.get();
 	  }
 	});
       }
-      return fut.si_then([this, &t, &pin, &remaps, &extents, FNAME] {
+      return fut.si_then([this, &t, &pin, &remaps, FNAME] {
 	return lba_manager->remap_mappings(
 	  t,
 	  std::move(pin),
-	  std::vector<remap_entry_t>(remaps.begin(), remaps.end()),
-	  std::move(extents)
+	  std::vector<remap_entry_t>(remaps.begin(), remaps.end())
 	).si_then([FNAME, &t](auto ret) {
 	  SUBDEBUGT(seastore_tm, "remapped {} pins", t, ret.size());
 	  return Cache::retire_extent_iertr::make_ready_future<
@@ -635,6 +689,27 @@ public:
     });
   }
 
+  reserve_extent_ret reserve_region(
+    Transaction &t,
+    LBAMapping pos,
+    laddr_t hint,
+    extent_len_t len) {
+    LOG_PREFIX(TransactionManager::reserve_region);
+    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
+    return pos.refresh(
+    ).si_then([FNAME, this, &t, hint, len](auto pos) {
+      return lba_manager->reserve_region(
+	t,
+	std::move(pos),
+	hint,
+	len
+      ).si_then([FNAME, &t](auto pin) {
+	SUBDEBUGT(seastore_tm, "reserved {}", t, pin);
+	return pin;
+      });
+    });
+  }
+
   /*
    * clone_mapping
    *
@@ -648,27 +723,30 @@ public:
   clone_extent_ret clone_pin(
     Transaction &t,
     laddr_t hint,
-    const LBAMapping &mapping) {
-    auto intermediate_key =
-      mapping.is_indirect()
-	? mapping.get_intermediate_key()
-	: mapping.get_key();
-    auto intermediate_base =
-      mapping.is_indirect()
-        ? mapping.get_intermediate_base()
-        : mapping.get_key();
-
+    LBAMapping mapping) {
     LOG_PREFIX(TransactionManager::clone_pin);
     SUBDEBUGT(seastore_tm, "{} clone to hint {} ...", t, mapping, hint);
-    return lba_manager->clone_mapping(
-      t,
-      hint,
-      mapping.get_length(),
-      intermediate_key,
-      intermediate_base
-    ).si_then([FNAME, &t](auto pin) {
-      SUBDEBUGT(seastore_tm, "cloned as {}", t, pin);
-      return pin;
+    return lba_manager->refresh_lba_mapping(t, std::move(mapping)
+    ).si_then([FNAME, this, &t, hint](auto mapping) {
+      auto intermediate_key =
+	mapping.is_indirect()
+	  ? mapping.get_intermediate_key()
+	  : mapping.get_key();
+      auto intermediate_base =
+	mapping.is_indirect()
+	  ? mapping.get_intermediate_base()
+	  : mapping.get_key();
+
+      return lba_manager->clone_mapping(
+	t,
+	hint,
+	mapping.get_length(),
+	intermediate_key,
+	intermediate_base
+      ).si_then([FNAME, &t](auto pin) {
+	SUBDEBUGT(seastore_tm, "cloned as {}", t, pin);
+	return pin;
+      });
     });
   }
 
