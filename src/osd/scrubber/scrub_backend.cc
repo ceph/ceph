@@ -13,6 +13,7 @@
 #include "include/utime_fmt.h"
 #include "messages/MOSDRepScrubMap.h"
 #include "osd/ECUtil.h"
+#include "osd/ECUtilL.h"
 #include "osd/OSD.h"
 #include "osd/PG.h"
 #include "osd/PrimaryLogPG.h"
@@ -664,7 +665,7 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
   }
 
   if (m_pg.get_is_hinfo_required()) {
-    auto k = smap_obj.attrs.find(ECUtil::get_hinfo_key());
+    auto k = smap_obj.attrs.find(ECLegacy::ECUtilL::get_hinfo_key());
     if (dup_error_cond(err,
                        false,
                        (k == smap_obj.attrs.end()),
@@ -673,7 +674,7 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
                        "candidate had a missing hinfo key"sv,
                        errstream)) {
       const bufferlist& hk_bl = k->second;
-      ECUtil::HashInfo hi;
+      ECLegacy::ECUtilL::HashInfo hi;
       try {
         auto bliter = hk_bl.cbegin();
         decode(hi, bliter);
@@ -1310,11 +1311,11 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
     if (!shard_result.has_hinfo_missing() &&
         !shard_result.has_hinfo_corrupted()) {
 
-      auto can_hi = candidate.attrs.find(ECUtil::get_hinfo_key());
+      auto can_hi = candidate.attrs.find(ECLegacy::ECUtilL::get_hinfo_key());
       ceph_assert(can_hi != candidate.attrs.end());
       const bufferlist& can_bl = can_hi->second;
 
-      auto auth_hi = auth.attrs.find(ECUtil::get_hinfo_key());
+      auto auth_hi = auth.attrs.find(ECLegacy::ECUtilL::get_hinfo_key());
       ceph_assert(auth_hi != auth.attrs.end());
       const bufferlist& auth_bl = auth_hi->second;
 
