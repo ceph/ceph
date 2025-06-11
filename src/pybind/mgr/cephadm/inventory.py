@@ -1709,9 +1709,9 @@ class NodeProxyCache:
                 else:
                     state = 'ok'
                 _result[host]['status'][component] = state
-        _result[host]['sn'] = data['sn']
-        _result[host]['host'] = data['host']
-        _result[host]['status']['firmwares'] = data['firmwares']
+            _result[host]['sn'] = data['sn']
+            _result[host]['host'] = data['host']
+            _result[host]['status']['firmwares'] = data['firmwares']
         return _result
 
     def common(self, endpoint: str, **kw: Any) -> Dict[str, Any]:
