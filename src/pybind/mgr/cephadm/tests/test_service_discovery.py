@@ -52,6 +52,10 @@ class FakeServiceSpec:
     def __init__(self, port):
         self.monitor_port = port
 
+    def metrics_exporter_port(self):
+        # TODO: for smb only
+        return 9922
+
 
 class FakeSpecDescription:
     def __init__(self, port):
