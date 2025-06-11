@@ -13,7 +13,7 @@ last_split_info_t last_split = {};
 // XXX: branchless allocation
 eagain_ifuture<InternalNodeImpl::fresh_impl_t>
 InternalNodeImpl::allocate(
-    context_t c, laddr_t hint, field_type_t type, bool is_level_tail, level_t level)
+    context_t c, laddr_hint_t hint, field_type_t type, bool is_level_tail, level_t level)
 {
   if (type == field_type_t::N0) {
     return InternalNode0::allocate(c, hint, is_level_tail, level);
@@ -30,7 +30,7 @@ InternalNodeImpl::allocate(
 
 eagain_ifuture<LeafNodeImpl::fresh_impl_t>
 LeafNodeImpl::allocate(
-    context_t c, laddr_t hint, field_type_t type, bool is_level_tail)
+    context_t c, laddr_hint_t hint, field_type_t type, bool is_level_tail)
 {
   if (type == field_type_t::N0) {
     return LeafNode0::allocate(c, hint, is_level_tail, 0);
