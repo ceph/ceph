@@ -491,31 +491,38 @@ public:
 
   iterator make_partial_iter(
     op_context_t c,
+    cursor_t &cursor)
+  {
+    return make_partial_iter(
+      c,
+      cursor.parent->template cast<leaf_node_t>(),
+      cursor.key,
+      cursor.pos);
+  }
+
+  std::unique_ptr<cursor_t> get_cursor(
+    op_context_t c,
+    TCachedExtentRef<leaf_node_t> leaf,
+    node_key_t key)
+  {
+    auto it = leaf->lower_bound(key);
+    assert(it != leaf->end());
+    return new cursor_t(
+      c, leaf, leaf->modifications,
+      key, it.get_val(), it.get_offset());
+  }
+
+  boost::intrusive_ptr<cursor_t> get_cursor(
+    op_context_t c,
     TCachedExtentRef<leaf_node_t> leaf,
     node_key_t key,
     uint16_t pos)
   {
-    assert(leaf->is_valid());
-    assert(leaf->is_viewable_by_trans(c.trans).first);
-
-    auto depth = get_root().get_depth();
-#ifndef NDEBUG
-    auto ret = iterator(
-      depth,
-      depth == 1
-        ? iterator::state_t::FULL
-        : iterator::state_t::PARTIAL);
-#else
-    auto ret = iterator(depth);
-#endif
-    ret.leaf.node = leaf;
-    ret.leaf.pos = pos;
-    if (ret.is_end()) {
-      ceph_assert(key == min_max_t<node_key_t>::max);
-    } else {
-      ceph_assert(key == ret.get_key());
-    }
-    return ret;
+    assert(leaf->get_size() != pos);
+    auto it = leaf->iter_idx(pos);
+    assert(it.get_key() == key);
+    return std::make_unique<cursor_t>(
+      c, leaf, leaf->modifications, key, it.get_val(), pos);
   }
 
   /**
@@ -1357,6 +1364,35 @@ public:
 
 private:
   RootBlockRef root_block;
+
+  iterator make_partial_iter(
+    op_context_t c,
+    TCachedExtentRef<leaf_node_t> leaf,
+    node_key_t key,
+    uint16_t pos)
+  {
+    assert(leaf->is_valid());
+    assert(leaf->is_viewable_by_trans(c.trans).first);
+
+    auto depth = get_root().get_depth();
+#ifndef NDEBUG
+    auto ret = iterator(
+      depth,
+      depth == 1
+        ? iterator::state_t::FULL
+        : iterator::state_t::PARTIAL);
+#else
+    auto ret = iterator(depth);
+#endif
+    ret.leaf.node = leaf;
+    ret.leaf.pos = pos;
+    if (ret.is_end()) {
+      ceph_assert(key == min_max_t<node_key_t>::max);
+    } else {
+      ceph_assert(key == ret.get_key());
+    }
+    return ret;
+  }
 
   template <typename T>
   using node_position_t = typename iterator::template node_position_t<T>;

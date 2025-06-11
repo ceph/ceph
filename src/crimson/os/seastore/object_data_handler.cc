@@ -1737,7 +1737,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
 	    if (pin.get_val().is_zero()) {
 	      return ctx.tm.reserve_region(ctx.t, addr, pin.get_length());
 	    } else {
-	      return ctx.tm.clone_pin(ctx.t, addr, pin);
+	      return ctx.tm.clone_pin(ctx.t, addr, pin.duplicate());
 	    }
 	  }).si_then(
 	    [&pin, &last_pos, offset](auto) {

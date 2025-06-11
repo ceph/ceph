@@ -30,9 +30,11 @@ public:
   }
 
   static LBAMapping create_direct(LBACursorRef direct) {
+    assert(!direct->is_indirect());
     return LBAMapping(std::move(direct), nullptr);
   }
 
+  LBAMapping() = delete;
   LBAMapping(const LBAMapping &) = delete;
   LBAMapping(LBAMapping &&) = default;
   LBAMapping &operator=(const LBAMapping &) = delete;
@@ -150,7 +152,7 @@ private:
   }
 
   bool is_null() const {
-    return !indirect_cursor && !direct_cursor;
+    return !direct_cursor && !indirect_cursor;
   }
 
   bool is_complete_indirect() const {
