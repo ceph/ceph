@@ -70,7 +70,7 @@ void ECTransaction::Generate::encode_and_write() {
     to_write.pad_with_other(plan.will_write, *read_sem);
     r = to_write.encode_parity_delta(ec_impl, *read_sem);
   } else {
-    r = to_write.encode(ec_impl, plan.hinfo, plan.orig_size);
+    r = to_write.encode(ec_impl);
   }
   ceph_assert(r == 0);
   // Remove any unnecessary writes.
@@ -124,14 +124,10 @@ ECTransaction::WritePlanObj::WritePlanObj(
     uint64_t orig_size,
     const std::optional<object_info_t> &oi,
     const std::optional<object_info_t> &soi,
-    const ECUtil::HashInfoRef &&hinfo,
-    const ECUtil::HashInfoRef &&shinfo,
-    const unsigned pdw_write_mode
+    unsigned pdw_write_mode
   ) :
   hoid(hoid),
   will_write(sinfo.get_k_plus_m()),
-  hinfo(hinfo),
-  shinfo(shinfo),
   orig_size(orig_size), // On-disk object sizes are rounded up to the next page.
   projected_size(soi?soi->size:(oi?oi->size:0))
 {
@@ -369,8 +365,6 @@ void ECTransaction::Generate::delete_first() {
         ghobject_t(oid, ghobject_t::NO_GEN, shard));
     }
   }
-  if (plan.hinfo)
-    plan.hinfo->clear();
 }
 
 void ECTransaction::Generate::process_init() {
@@ -400,10 +394,6 @@ void ECTransaction::Generate::process_init() {
           ghobject_t(oid, ghobject_t::NO_GEN, shard));
       }
 
-      if (plan.hinfo && plan.shinfo) {
-        plan.hinfo->update_to(*plan.shinfo);
-      }
-
       if (obc) {
         auto cobciter = t.obc_map.find(cop.source);
         ceph_assert(cobciter != t.obc_map.end());
@@ -420,9 +410,7 @@ void ECTransaction::Generate::process_init() {
           coll_t(spg_t(pgid, shard)),
           ghobject_t(oid, ghobject_t::NO_GEN, shard));
       }
-      if (plan.hinfo && plan.shinfo) {
-        plan.hinfo->update_to(*plan.shinfo);
-      }
+
       if (obc) {
         auto cobciter = t.obc_map.find(rop.source);
         ceph_assert(cobciter == t.obc_map.end());
@@ -519,12 +507,6 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     entry->mod_desc.update_snaps(op.updated_snaps->first);
   }
 
-  bufferlist old_hinfo;
-  if (plan.hinfo) {
-    encode(*(plan.hinfo), old_hinfo);
-    xattr_rollback[ECUtil::get_hinfo_key()] = old_hinfo;
-  }
-
   if (op.is_none() && op.truncate && op.truncate->first == 0) {
     zero_truncate_to_delete();
   }
@@ -571,17 +553,8 @@ ECTransaction::Generate::Generate(PGTransaction &t,
 
   written_map->emplace(oid, std::move(to_write));
 
-  if (entry && plan.hinfo) {
-    plan.hinfo->set_total_chunk_size_clear_hash(
-      sinfo.ro_offset_to_next_stripe_ro_offset(plan.projected_size));
-  }
-
   if (entry && plan.orig_size < plan.projected_size) {
     entry->mod_desc.append(ECUtil::align_next(plan.orig_size));
-  }
-
-  if (op.is_delete()) {
-    handle_deletes();
   }
 
   // On a size change, we want to update OI on all shards
@@ -994,23 +967,6 @@ void ECTransaction::Generate::attr_updates() {
     } // Else: Unwritten shard - Don't update any attributes
   }
   ceph_assert(!xattr_rollback.empty());
-}
-
-void ECTransaction::Generate::handle_deletes() {
-  bufferlist hbuf;
-  if (plan.hinfo) {
-    encode(*plan.hinfo, hbuf);
-    for (auto &&[shard, t]: transactions) {
-      if (!sinfo.is_nonprimary_shard(shard)) {
-        shard_written(shard);
-        t.setattr(
-          coll_t(spg_t(pgid, shard)),
-          ghobject_t(oid, ghobject_t::NO_GEN, shard),
-          ECUtil::get_hinfo_key(),
-          hbuf);
-      }
-    }
-  }
 }
 
 void ECTransaction::generate_transactions(
