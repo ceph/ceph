@@ -249,6 +249,8 @@ public:
       return ext->template cast<T>();
     });
   }
+  virtual get_child_iertr::future<> maybe_wait_accessible(
+    Transaction &, CachedExtent&) = 0;
   virtual bool is_viewable_extent_data_stable(Transaction &, CachedExtentRef) = 0;
   virtual bool is_viewable_extent_stable(Transaction &, CachedExtentRef) = 0;
   virtual ~ExtentTransViewRetriever() {}
