@@ -237,7 +237,7 @@ public:
   int decode_chunks(const shard_id_set &want_to_read,
                     shard_id_map<bufferptr> &in, shard_id_map<bufferptr> &out) override
   {
-    if (in.size() < data_chunk_count) {
+    if (std::cmp_less(in.size(), data_chunk_count)) {
       ADD_FAILURE();
     }
     uint64_t len = 0;
@@ -1189,7 +1189,7 @@ TEST(ECCommon, get_remaining_shards)
       ECCommon::shard_read_t shard_read;
       shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents.insert(0,4096);
-      unsigned int shard_id = i==missing_shard?parity_shard:i;
+      unsigned int shard_id = std::cmp_equal(i, missing_shard) ? parity_shard : i;
       shard_read.pg_shard = pg_shard_t(shard_id, shard_id_t(shard_id));
       ref.shard_reads[shard_id_t(shard_id)] = shard_read;
     }
