@@ -8,7 +8,8 @@
    notice.
 
    The upstream Ceph community strongly advises against deploying new cache
-   tiers.
+   tiers. The upstream Ceph community also recommends migrating from legacy
+   deployments.
 
 A cache tier provides Ceph Clients with better I/O performance for a subset of
 the data stored in a backing storage tier. Cache tiering involves creating a
