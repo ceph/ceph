@@ -165,6 +165,8 @@ private:
 			     const std::vector<uint32_t>& allowed_modes) final;
 
 private:
+  seastar::future<> _check_auth_tickets();
+
   void tick();
 
   std::optional<seastar::future<>> ms_dispatch(crimson::net::ConnectionRef conn,
