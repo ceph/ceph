@@ -68,6 +68,8 @@
 
 >=19.0.0
 
+* cephx: key rotation is now possible using `ceph auth rotate`. Previously,
+  this was only possible by deleting and then recreating the key.
 * The cephfs-shell utility is now packaged for RHEL 9 / CentOS 9 as required
   python dependencies are now available in EPEL9.
 * RGW: S3 multipart uploads using Server-Side Encryption now replicate correctly in
