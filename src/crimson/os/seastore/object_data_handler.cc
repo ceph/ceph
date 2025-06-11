@@ -1131,6 +1131,16 @@ ObjectDataHandler::zero_ret ObjectDataHandler::zero(
     });
 }
 
+ObjectDataHandler::touch_ret
+ObjectDataHandler::touch(context_t ctx)
+{
+  return with_object_data(ctx, [this, ctx](auto &obj_data) {
+    return prepare_data_reservation(
+      ctx, obj_data, max_object_size
+    ).discard_result();
+  });
+}
+
 ObjectDataHandler::write_ret ObjectDataHandler::write(
   context_t ctx,
   objaddr_t offset,
