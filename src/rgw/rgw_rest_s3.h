@@ -215,7 +215,7 @@ public:
   ~RGWGetBucketWebsite_ObjStore_S3() override {}
 
   void send_response() override;
-  virtual std::string canonical_name() const override { return fmt::format("WEBSITE.{}.BUCKET_WEBSITE", s->info.method); }
+  virtual std::string canonical_name() const override { return fmt::format("REST.{}.WEBSITE", s->info.method); }
 };
 
 class RGWSetBucketWebsite_ObjStore_S3 : public RGWSetBucketWebsite {
@@ -225,7 +225,7 @@ public:
 
   int get_params(optional_yield y) override;
   void send_response() override;
-  virtual std::string canonical_name() const override { return fmt::format("WEBSITE.{}.BUCKET_WEBSITE", s->info.method); }
+  virtual std::string canonical_name() const override { return fmt::format("REST.{}.WEBSITE", s->info.method); }
 };
 
 class RGWDeleteBucketWebsite_ObjStore_S3 : public RGWDeleteBucketWebsite {
@@ -234,7 +234,7 @@ public:
   ~RGWDeleteBucketWebsite_ObjStore_S3() override {}
 
   void send_response() override;
-  virtual std::string canonical_name() const override { return fmt::format("WEBSITE.{}.BUCKET_WEBSITE", s->info.method); }
+  virtual std::string canonical_name() const override { return fmt::format("REST.{}.WEBSITE", s->info.method); }
 };
 
 class RGWStatBucket_ObjStore_S3 : public RGWStatBucket_ObjStore {
