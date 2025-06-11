@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "crimson/os/seastore/lba_mapping.h"
+#include "crimson/os/seastore/lba/btree_lba_manager.h"
 
 namespace crimson::os::seastore {
 
@@ -74,6 +75,31 @@ bool LBAMapping::is_data_stable() const {
     direct_cursor->ctx,
     direct_cursor->pos,
     direct_cursor->key);
+}
+
+LBAMapping::refresh_iertr::future<LBAMapping> LBAMapping::refresh()
+{
+  if (is_viewable()) {
+    return refresh_iertr::make_ready_future<LBAMapping>(*this);
+  }
+  return seastar::do_with(
+    direct_cursor,
+    indirect_cursor,
+    [](auto &direct_cursor, auto &indirect_cursor) {
+    return seastar::futurize_invoke([&direct_cursor] {
+      if (direct_cursor) {
+	return direct_cursor->refresh();
+      }
+      return refresh_iertr::now();
+    }).si_then([&indirect_cursor] {
+      if (indirect_cursor) {
+	return indirect_cursor->refresh();
+      }
+      return refresh_iertr::now();
+    }).si_then([&direct_cursor, &indirect_cursor] {
+      return LBAMapping(direct_cursor, indirect_cursor);
+    });
+  });
 }
 
 } // namespace crimson::os::seastore
