@@ -680,8 +680,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 	false) {
 	pending_map.created_gws[group_key][gw_id].performed_full_startup = true;
 	pending_map.gw_performed_startup(gw_id, group_key, gw_propose);
-	pending_map.created_gws[group_key][gw_id].addr_vect =
-	    entity_addrvec_t(con->get_peer_addr());
+	pending_map.set_addr_vect(gw_id, group_key, con->get_peer_addr());
       }
       LastBeacon lb = {gw_id, group_key};
       last_beacon[lb] = now; //Update last beacon
@@ -730,8 +729,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
     dout(4) << "Warning: entity addr need to set for GW client " << gw_id
       << " was " <<  pending_map.created_gws[group_key][gw_id].addr_vect
       << " now " << entity_addrvec_t(con->get_peer_addr()) << dendl;
-    pending_map.created_gws[group_key][gw_id].addr_vect =
-      entity_addrvec_t(con->get_peer_addr());
+    pending_map.set_addr_vect(gw_id, group_key, con->get_peer_addr());
     gw_propose = true;
   }
   // deep copy the whole nonce map of this GW

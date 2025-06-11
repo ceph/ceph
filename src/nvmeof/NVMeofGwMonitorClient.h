@@ -45,6 +45,9 @@ private:
   epoch_t     gwmap_epoch;  // last received gw map epoch
   std::chrono::time_point<std::chrono::steady_clock>
               last_map_time; // used to panic on disconnect
+  std::chrono::time_point<std::chrono::steady_clock>
+                reset_timestamp; // used to bypass some validations
+
   bool first_beacon = true;
   // init gw ssl opts
   void init_gw_ssl_opts();

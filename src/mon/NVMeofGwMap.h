@@ -87,6 +87,8 @@ public:
        const NvmeGroupKey& group_key, bool &map_modified);
   void gw_performed_startup(const NvmeGwId &gw_id,
        const NvmeGroupKey& group_key, bool &propose_pending);
+  void set_addr_vect(const NvmeGwId &gw_id,
+      const NvmeGroupKey& group_key, const entity_addr_t &addr_vect);
   void skip_failovers_for_group(const NvmeGroupKey& group_key);
 private:
   int  do_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);

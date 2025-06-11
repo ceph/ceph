@@ -111,6 +111,13 @@ options:
   default: 15_min
   services:
   - mon
+- name: mon_nvmeofgw_wrong_map_ignore_sec
+  type: uint
+  level: advanced
+  desc: Period in seconds from MonClient startup to ignore wrong maps from Monitor
+  default: 15
+  services:
+  - mon
 - name: mon_mgr_inactive_grace
   type: int
   level: advanced
