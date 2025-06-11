@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import cherrypy
 from orchestrator import OrchestratorError
@@ -386,8 +386,8 @@ else:
             rbd_image_name: str,
             rbd_pool: str = "rbd",
             create_image: Optional[bool] = False,
-            size: Optional[str] = 1024,
-            rbd_image_size: Optional[str] = None,
+            size: Optional[Union[str, int]] = 1024,
+            rbd_image_size: Optional[Union[str, int]] = None,
             trash_image: Optional[bool] = False,
             block_size: int = 512,
             load_balancing_group: Optional[int] = None,
