@@ -453,6 +453,8 @@ seastar::future<> Client::start() {
         std::chrono::duration<double>(
           local_conf().get_val<double>("mon_client_ping_interval")));
     timer.arm_periodic(interval);
+    // TODO: register rotate-key and wipe-rotating-secrets
+    //       asock commands
   });
 }
 
