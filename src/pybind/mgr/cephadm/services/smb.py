@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 @register_cephadm_service
 class SMBService(CephService):
     TYPE = 'smb'
-    DEFAULT_EXPORTER_PORT = 9922
     smb_pool = '.smb'  # minor layering violation. try to clean up later.
 
     def config(self, spec: ServiceSpec) -> None:
@@ -107,11 +106,11 @@ class SMBService(CephService):
         config_blobs['metrics_image'] = (
             self.mgr.container_image_samba_metrics
         )
-        config_blobs['metrics_port'] = SMBService.DEFAULT_EXPORTER_PORT
         if 'cephfs-proxy' in smb_spec.features:
             config_blobs['proxy_image'] = self.mgr.get_container_image(
                 '', force_ceph_image=True
             )
+        config_blobs['service_ports'] = smb_spec.service_ports()
 
         logger.debug('smb generate_config: %r', config_blobs)
         self._configure_cluster_meta(smb_spec, daemon_spec)
