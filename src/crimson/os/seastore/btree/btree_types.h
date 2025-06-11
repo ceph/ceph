@@ -279,9 +279,15 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
     assert(!is_indirect());
     return val->refcount;
   }
+
   std::unique_ptr<LBACursor> duplicate() const {
     return std::make_unique<LBACursor>(*this);
   }
+
+  using base_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  using base_iertr = trans_iertr<base_ertr>;
+  base_iertr::future<> refresh();
 };
 using LBACursorRef = std::unique_ptr<LBACursor>;
 

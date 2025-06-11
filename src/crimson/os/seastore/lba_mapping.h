@@ -130,6 +130,10 @@ public:
     };
     return LBAMapping(dup_iter(direct_cursor), dup_iter(indirect_cursor));
   }
+
+  using refresh_iertr = LBACursor::base_iertr;
+  refresh_iertr::future<LBAMapping> refresh();
+
 private:
   friend lba::BtreeLBAManager;
   friend class TransactionManager;
