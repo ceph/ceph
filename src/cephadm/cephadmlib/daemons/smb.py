@@ -70,6 +70,21 @@ class ClusterPublicIP(NamedTuple):
         return cls(address, destinations)
 
 
+class Ports(enum.Enum):
+    SMB = 445
+    SMBMETRICS = 9922
+    CTDB = 4379
+
+    def customized(self, service_ports: Dict[str, int]) -> int:
+        """Return a custom port value if it is present in service_ports or the
+        default port value if it is not present.
+        """
+        port = service_ports.get(self.name.lower())
+        if port:
+            return int(port)
+        return int(self.value)
+
+
 @dataclasses.dataclass(frozen=True)
 class Config:
     identity: DaemonIdentity
@@ -211,7 +226,7 @@ class SMBDContainer(SambaContainerCommon):
     def container_args(self) -> List[str]:
         cargs = []
         if self.cfg.smb_port:
-            cargs.append(f'--publish={self.cfg.smb_port}:{self.cfg.smb_port}')
+            cargs.append(f'--publish={self.cfg.smb_port}:{Ports.SMB.value}')
         if self.cfg.metrics_port:
             metrics_port = self.cfg.metrics_port
             cargs.append(f'--publish={metrics_port}:{metrics_port}')
@@ -404,9 +419,6 @@ class SMB(ContainerDaemonForm):
         self._config_keyring = context_getters.get_config_and_keyring(ctx)
         self._cached_layout: Optional[ContainerLayout] = None
         self._rank_info = context_getters.fetch_rank_info(ctx) or (-1, -1)
-        self.smb_port = 445
-        self.ctdb_port = 4379
-        self.metrics_port = 9922
         self._network_mapper = _NetworkMapper(ctx)
         logger.debug('Created SMB ContainerDaemonForm instance')
 
@@ -446,7 +458,7 @@ class SMB(ContainerDaemonForm):
         ceph_config_entity = configs.get('config_auth_entity', '')
         vhostname = configs.get('virtual_hostname', '')
         metrics_image = configs.get('metrics_image', '')
-        metrics_port = int(configs.get('metrics_port', '0'))
+        service_ports = configs.get('service_ports', {})
         proxy_image = configs.get('proxy_image', '')
         cluster_meta_uri = configs.get('cluster_meta_uri', '')
         cluster_lock_uri = configs.get('cluster_lock_uri', '')
@@ -492,12 +504,12 @@ class SMB(ContainerDaemonForm):
             custom_dns=custom_dns,
             domain_member=Features.DOMAIN.value in instance_features,
             clustered=Features.CLUSTERED.value in instance_features,
-            smb_port=self.smb_port,
-            ctdb_port=self.ctdb_port,
+            smb_port=Ports.SMB.customized(service_ports),
+            ctdb_port=Ports.CTDB.customized(service_ports),
             ceph_config_entity=ceph_config_entity,
             vhostname=vhostname,
             metrics_image=metrics_image,
-            metrics_port=metrics_port,
+            metrics_port=Ports.SMBMETRICS.customized(service_ports),
             rank=rank,
             rank_generation=rank_gen,
             cluster_meta_uri=cluster_meta_uri,
@@ -720,15 +732,15 @@ class SMB(ContainerDaemonForm):
     def customize_container_endpoints(
         self, endpoints: List[EndPoint], deployment_type: DeploymentType
     ) -> None:
-        if not any(ep.port == self.smb_port for ep in endpoints):
-            endpoints.append(EndPoint('0.0.0.0', self.smb_port))
+        if not any(ep.port == self._cfg.smb_port for ep in endpoints):
+            endpoints.append(EndPoint('0.0.0.0', self._cfg.smb_port))
         if self._cfg.clustered and not any(
-            ep.port == self.ctdb_port for ep in endpoints
+            ep.port == self._cfg.ctdb_port for ep in endpoints
         ):
-            endpoints.append(EndPoint('0.0.0.0', self.ctdb_port))
-        if self.metrics_port > 0:
-            if not any(ep.port == self.metrics_port for ep in endpoints):
-                endpoints.append(EndPoint('0.0.0.0', self.metrics_port))
+            endpoints.append(EndPoint('0.0.0.0', self._cfg.ctdb_port))
+        if self._cfg.metrics_port > 0:
+            if not any(ep.port == self._cfg.metrics_port for ep in endpoints):
+                endpoints.append(EndPoint('0.0.0.0', self._cfg.metrics_port))
 
     def prepare_data_dir(self, data_dir: str, uid: int, gid: int) -> None:
         self.validate()
@@ -764,6 +776,8 @@ class SMB(ContainerDaemonForm):
         }
         if self._cfg.ctdb_log_level:
             stub_config['ctdb']['log_level'] = self._cfg.ctdb_log_level
+        if self._cfg.ctdb_port != Ports.CTDB.value:
+            stub_config['ctdb']['ctdb_port'] = self._cfg.ctdb_port
         with file_utils.write_new(path) as fh:
             json.dump(stub_config, fh)
 
