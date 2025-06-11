@@ -370,6 +370,10 @@ if(WITH_RADOSGW_DBSTORE)
   target_link_libraries(rgw_common PRIVATE global dbstore)
 endif()
 
+if(WITH_RADOSGW_POSIX)
+  target_link_libraries(rgw_common PRIVATE global dbstore)
+endif()
+
 if(WITH_RADOSGW_MOTR)
   find_package(motr REQUIRED)
   target_link_libraries(rgw_common PRIVATE motr::motr)
