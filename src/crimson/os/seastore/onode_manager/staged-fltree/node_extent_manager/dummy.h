@@ -89,7 +89,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
   }
 
   alloc_iertr::future<NodeExtentRef> alloc_extent(
-      Transaction& t, laddr_t hint, extent_len_t len) override {
+      Transaction& t, laddr_hint_t hint, extent_len_t len) override {
     SUBTRACET(seastore_onode, "allocating {}B with hint {} ...", t, len, hint);
     if constexpr (SYNC) {
       return alloc_extent_sync(t, len);
