@@ -226,26 +226,6 @@ class WebCache {
 };
 
 template <typename Key, typename Value>
-std::jthread make_ttl_reaper(
-    WebCache<Key, Value>& cache, std::chrono::seconds ttl) {
-  return std::jthread([&cache, ttl](std::stop_token stop) {
-    const std::string thread_name = fmt::format("{}-ttl-reaper", cache.name());
-    ceph_pthread_setname(thread_name.c_str());
-    std::mutex mutex;
-    std::condition_variable cond;
-
-    std::stop_callback on_stop(stop, [&cond]() { cond.notify_all(); });
-
-    while (!stop.stop_requested()) {
-      cache.expire_erase();
-
-      std::unique_lock<std::mutex> lock(mutex);
-      cond.wait_for(lock, ttl, [&stop] { return stop.stop_requested(); });
-    }
-  });
-}
-
-template <typename Key, typename Value>
 WebCache<Key, Value>::Node* WebCache<Key, Value>::sieve_evict() {
   if (_sieve_queue.empty()) {
     return nullptr;
