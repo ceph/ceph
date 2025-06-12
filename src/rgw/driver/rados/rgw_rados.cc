@@ -23,6 +23,7 @@
 #include "common/BackTrace.h"
 #include "common/ceph_time.h"
 #include "common/async/blocked_completion.h"
+#include "cls_fifo_legacy.h"
 
 #include "rgw_asio_thread.h"
 #include "rgw_cksum.h"
@@ -8767,26 +8768,39 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
 }
 
 struct BILogUpdateBatchFIFO {
-  BILogUpdateBatchFIFO();
+  static constexpr char BILOG_FIFO_SUFFIX[] = ".bilog_fifo";
+  std::unique_ptr<rgw::cls::fifo::FIFO> fifo;
+
+  BILogUpdateBatchFIFO(RGWRados& store, const RGWBucketInfo& bucket_info);
 
   template <class CLSRGWBucketModifyOpT, class F, class... Args>
   int add_maybe_flush(F&& on_flushed,
                       CLSRGWBucketModifyOpT&& bi_updater,
                       Args&&... args)
   {
-    // 2. add to batch
-    // 3. flush
+    // FIXME: CLSRGWBucketModifyOpT::get_bilog_entry...
+    ceph::bufferlist bl{};
+    fifo->push(std::move(bl), null_yield /* FIXME */);
     return std::move(on_flushed)(std::move(bi_updater));
   }
 };
 
-BILogUpdateBatchFIFO::BILogUpdateBatchFIFO() {
-    // 1. create fifo instance
+BILogUpdateBatchFIFO::BILogUpdateBatchFIFO(RGWRados& store,
+                                           const RGWBucketInfo& bucket_info) {
+  RGWSI_RADOS::Pool index_pool;
+  std::string bucket_oid;
+  int r = store.svc.bi_rados->open_bucket_index(bucket_info, &index_pool, &bucket_oid);
+
+  rgw::cls::fifo::FIFO::create(index_pool.ioctx(),
+                               bucket_oid + BILOG_FIFO_SUFFIX,
+                               &fifo,
+                               null_yield /* FIXME */);
 }
 
-static BILogUpdateBatchFIFO get_or_create_fifo_bilog_op(const RGWBucketInfo& binfo)
+static BILogUpdateBatchFIFO get_or_create_fifo_bilog_op(RGWRados& store,
+                                                        const RGWBucketInfo& binfo)
 {
-  return {};
+  return { store, binfo };
 }
 
 template <class CLSRGWBucketModifyOpT, class F, class... Args>
@@ -8799,12 +8813,13 @@ int RGWRados::with_bilog(F&& on_flushed, const RGWBucketInfo& bucket_info, Args&
         svc.zone->get_zone().log_data, std::forward<Args>(args)...});
   } else {
     return get_or_create_fifo_bilog_op(
-      RGWBucketInfo{}
+      *this,
+      bucket_info
     ).add_maybe_flush(
       std::move(on_flushed),
       CLSRGWBucketModifyOpT{
-        svc.zone->get_zone().log_data, std::forward<Args>(args)...},
-      std::forward<Args>(args)...
+        svc.zone->get_zone().log_data, args...},
+      args...
     );
   }
 }
