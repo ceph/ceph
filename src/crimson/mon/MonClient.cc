@@ -819,22 +819,18 @@ seastar::future<> Client::handle_monmap(crimson::net::Connection &conn,
                  monmap.epoch, cur_mon, monmap.get_rank(cur_mon));
   sub.got("monmap", monmap.get_epoch());
 
-  if (monmap.get_addr_name(peer_addr, cur_mon)) {
-    if (active_con) {
-      logger().info("handle_monmap: renewing tickets");
-      return _check_auth_tickets();
-    } else {
-      return seastar::now();
-    }
-  } else {
+  if (monmap.get_addr_name(peer_addr, cur_mon) == false) {
     logger().warn("mon.{} went away", cur_mon);
-    return reopen_session(-1).then([this](bool opened) {
-      if (opened) {
-        return on_session_opened();
-      } else {
-        return seastar::now();
-      }
-    });
+    bool opened = co_await reopen_session(-1);
+    if (opened) {
+      co_await on_session_opened();
+    }
+  }
+
+  // TODO: we can probably renew tickets only if the session was reopened
+  if (active_con) {
+    logger().info("handle_monmap: renewing tickets");
+    co_await _check_auth_tickets();
   }
 }
 
