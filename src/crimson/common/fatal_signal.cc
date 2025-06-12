@@ -95,6 +95,13 @@ void FatalSignal::install_oneshot_signal_handler()
   // about e.g. sigreturn(2) calling; see the man page).
   constexpr std::size_t FRAMES_TO_SKIP = 3 + 1;
 
+  // Let's inform regarding the abort before getting the stacktrace
+  GENERIC_ERROR("Aborting {} on shard {} - Stopping all shards",
+    cause,
+    seastar::engine_is_ready() ? std::to_string(seastar::this_shard_id()) : "no shard");
+
+  seastar::engine().exit(1);
+
   std::string backtrace = fmt::format("{} on shard {}  \nBacktrace:\n {}",
     cause,
     seastar::engine_is_ready() ? std::to_string(seastar::this_shard_id()) : "no shard",
