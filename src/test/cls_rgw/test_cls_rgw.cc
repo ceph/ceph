@@ -1023,6 +1023,27 @@ auto gen_usage_log_info(std::string payer, std::string bucket, int total_usage_e
   return info;
 }
 
+static int cls_rgw_usage_log_trim(IoCtx& io_ctx,
+                                  const string& oid,
+                                  const string& user,
+                                  const string& bucket,
+                                  uint64_t start_epoch,
+                                  uint64_t end_epoch)
+{
+  bool done = false;
+  do {
+    ObjectWriteOperation op;
+    cls_rgw_usage_log_trim(op, user, bucket, start_epoch, end_epoch);
+    if (int r = io_ctx.operate(oid, &op); r == -ENODATA) {
+      done = true;
+    } else if (r < 0) {
+      return r;
+    }
+  } while (!done);
+
+  return 0;
+}
+
 TEST_F(cls_rgw, usage_basic)
 {
   string oid="usage.1";
