@@ -916,7 +916,8 @@ HTTP Response
 Flush Bucket Logging
 --------------------
 
-Flushes all logging objects for a given source bucket (logging bucket are written lazily).
+Flushes logging object for a given source bucket (if not flushed, the logging objects are written lazily to the log bucket).
+Returns the name of the object that was flushed. An empty name will be returned if no object needs to be flushed.
 
 Syntax
 ~~~~~~
@@ -925,6 +926,16 @@ Syntax
 
     POST /{bucket}?logging HTTP/1.1
 
+Response Entities
+~~~~~~~~~~~~~~~~~
+
+Response is XML encoded in the body of the request, in the following format:
+
+::
+
+  <PostBucketLoggingOutput xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <FlushedLoggingObject>string</FlushedLoggingObject>
+  </PostBucketLoggingOutput>
 
 HTTP Response
 ~~~~~~~~~~~~~
@@ -932,7 +943,7 @@ HTTP Response
 +---------------+-----------------------+----------------------------------------------------------+
 | HTTP Status   | Status Code           | Description                                              |
 +===============+=======================+==========================================================+
-| ``201``       | Created               | Flushed all logging objects successfully                 |
+| ``201``       | Created               | Flushed pending logging object successfully              |
 +---------------+-----------------------+----------------------------------------------------------+
 | ``404``       | NoSuchBucket          | The bucket does not exist                                |
 +---------------+-----------------------+----------------------------------------------------------+

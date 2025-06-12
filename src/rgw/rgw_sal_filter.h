@@ -693,8 +693,8 @@ public:
       RGWObjVersionTracker* objv_tracker) override {
     return next->remove_logging_object_name(prefix, y, dpp, objv_tracker);
   }
-  int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp)override {
-    return next->commit_logging_object(obj_name, y, dpp);
+  int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp, const std::string& prefix, std::string* last_committed) override {
+    return next->commit_logging_object(obj_name, y, dpp, prefix, last_committed);
   }
   int remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) override {
     return next->remove_logging_object(obj_name, y, dpp);

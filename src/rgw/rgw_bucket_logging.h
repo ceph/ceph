@@ -172,6 +172,7 @@ int log_record(rgw::sal::Driver* driver,
 // commit the pending log objec to the log bucket
 // and create a new pending log object
 // if "must_commit" is "false" the function will return success even if the pending log object was not committed
+// if "last_committed" is not null, it will be set to the name of the last committed object
 int rollover_logging_object(const configuration& conf,
     const std::unique_ptr<rgw::sal::Bucket>& bucket,
     std::string& obj_name,
@@ -180,24 +181,29 @@ int rollover_logging_object(const configuration& conf,
     const std::unique_ptr<rgw::sal::Bucket>& source_bucket,
     optional_yield y,
     bool must_commit,
-    RGWObjVersionTracker* objv_tracker);
+    RGWObjVersionTracker* objv_tracker,
+    std::string* last_committed);
 
 // commit the pending log object to the log bucket
 // use this for cleanup, when new pending object is not needed
 // and target bucket is known
+// if "last_committed" is not null, it will be set to the name of the last committed object
 int commit_logging_object(const configuration& conf,
     const std::unique_ptr<rgw::sal::Bucket>& target_bucket,
     const DoutPrefixProvider *dpp,
-    optional_yield y);
+    optional_yield y,
+    std::string* last_committed);
 
 // commit the pending log object to the log bucket
 // use this for cleanup, when new pending object is not needed
 // and target bucket shoud be loaded based on the configuration
+// if "last_committed" is not null, it will be set to the name of the last committed object
 int commit_logging_object(const configuration& conf,
     const DoutPrefixProvider *dpp,
     rgw::sal::Driver* driver,
     const std::string& tenant_name,
-    optional_yield y);
+    optional_yield y,
+    std::string* last_committed);
 
 // return the oid of the object holding the name of the temporary logging object
 // bucket - log bucket
