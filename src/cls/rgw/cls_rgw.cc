@@ -196,10 +196,15 @@ static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id,
   key.append(id);
 }
 
-static int log_index_operation(cls_method_context_t hctx, const cls_rgw_obj_key& obj_key,
-                               RGWModifyOp op, const string& tag, real_time timestamp,
-                               const rgw_bucket_entry_ver& ver, uint64_t index_ver,
-                               string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name, rgw_zone_set *zones_trace)
+
+static int log_index_operation(cls_method_context_t hctx,
+                               const cls_rgw_obj_key& obj_key,
+                               RGWModifyOp op,
+                               const string& tag,
+                               real_time& timestamp,
+                               rgw_bucket_entry_ver& ver, uint64_t index_ver,
+                               string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name,
+                               const rgw_zone_set *zones_trace)
 {
   bufferlist bl;
 
@@ -221,7 +226,7 @@ static int log_index_operation(cls_method_context_t hctx, const cls_rgw_obj_key&
     entry.owner_display_name = *owner_display_name;
   }
   if (zones_trace) {
-    entry.zones_trace = std::move(*zones_trace);
+    entry.zones_trace = *zones_trace;
   }
 
   string key;
@@ -884,8 +889,10 @@ int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, buffer
   return write_bucket_header(hctx, &header);
 }
 
-static int read_key_entry(cls_method_context_t hctx, const cls_rgw_obj_key& key,
-			  string *idx, rgw_bucket_dir_entry *entry,
+static int read_key_entry(cls_method_context_t hctx,
+                          const cls_rgw_obj_key& key,
+                          string *idx,
+                          rgw_bucket_dir_entry *entry,
                           bool special_delete_marker_name = false);
 
 static std::string modify_op_str(RGWModifyOp op) {
@@ -1073,8 +1080,10 @@ static int read_index_entry(cls_method_context_t hctx, string& name, T* entry)
   return 0;
 }
 
-static int read_key_entry(cls_method_context_t hctx, const cls_rgw_obj_key& key,
-			  string *idx, rgw_bucket_dir_entry *entry,
+static int read_key_entry(cls_method_context_t hctx,
+                          const cls_rgw_obj_key& key,
+                          string *idx,
+                          rgw_bucket_dir_entry *entry,
                           bool special_delete_marker_name)
 {
   encode_obj_index_key(key, idx);
@@ -1133,6 +1142,20 @@ static int complete_remove_obj(cls_method_context_t hctx,
   return ret;
 }
 
+static std::pair<int, rgw_cls_obj_complete_op>
+decode_complete_op(const ceph::bufferlist* in)
+{
+  rgw_cls_obj_complete_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to decode request\n");
+    return { -EINVAL, {} };
+  }
+  return {0, std::move(op) };
+}
+
 int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   const ConfigProxy& conf = cls_get_config(hctx);
@@ -1146,13 +1169,9 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 	       __func__, oi.soid.oid.name.c_str(), oi.soid.get_key().c_str());
 
   // decode request
-  rgw_cls_obj_complete_op op;
-  auto iter = in->cbegin();
-  try {
-    decode(op, iter);
-  } catch (ceph::buffer::error& err) {
-    CLS_LOG_BITX(bitx_inst, 1, "ERROR: %s: failed to decode request", __func__);
-    return -EINVAL;
+  auto [ decode_ret, op ] = decode_complete_op(in);
+  if (decode_ret < 0) {
+    return decode_ret;
   }
 
   CLS_LOG_BITX(bitx_inst, 1,
@@ -1305,7 +1324,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     // unaccount overwritten entry
     unaccount_entry(header, entry);
 
-    rgw_bucket_dir_entry_meta& meta = op.meta;
+    const rgw_bucket_dir_entry_meta& meta = op.meta;
     rgw_bucket_category_stats& stats = header.stats[meta.category];
     entry.meta = meta;
     entry.key = op.key;
@@ -1389,7 +1408,7 @@ static int read_olh(cls_method_context_t hctx,cls_rgw_obj_key& obj_key, rgw_buck
 }
 
 static void update_olh_log(rgw_bucket_olh_entry& olh_data_entry, OLHLogOp op, const string& op_tag,
-                           cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch)
+                           const cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch)
 {
   vector<rgw_bucket_olh_log_entry>& log = olh_data_entry.pending_log[olh_data_entry.epoch];
   rgw_bucket_olh_log_entry log_entry;
@@ -1473,7 +1492,7 @@ public:
     return instance_entry;
   }
 
-  void init_as_delete_marker(rgw_bucket_dir_entry_meta& meta) {
+  void init_as_delete_marker(const rgw_bucket_dir_entry_meta& meta) {
     /* a deletion marker, need to initialize it, there's no instance entry for it yet */
     instance_entry.key = key;
     instance_entry.flags = rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
@@ -1651,7 +1670,7 @@ public:
     return olh_data_entry;
   }
 
-  void update(cls_rgw_obj_key& key, bool delete_marker) {
+  void update(const cls_rgw_obj_key& key, bool delete_marker) {
     olh_data_entry.delete_marker = delete_marker;
     olh_data_entry.key = key;
   }
@@ -1667,7 +1686,7 @@ public:
     return 0;
   }
 
-  void update_log(OLHLogOp op, const string& op_tag, cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch = 0) {
+  void update_log(OLHLogOp op, const string& op_tag, const cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch = 0) {
     if (epoch == 0) {
       epoch = olh_data_entry.epoch;
     }
@@ -1770,6 +1789,21 @@ static RGWModifyOp link_olh_get_bilog_op_type(bool delete_marker)
     return CLSRGWLinkOLH<false>::get_bilog_op_type();
   }
 }
+
+static std::pair<int, rgw_cls_link_olh_op>
+decode_link_olh_op(const ceph::bufferlist* in)
+{
+  rgw_cls_link_olh_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: rgw_bucket_link_olh_op(): failed to decode request\n");
+    return { -EINVAL, {} };
+  }
+  return { 0, std::move(op) };
+}
+
 /*
  * Link an object version to an olh, update the relevant index
  * entries. It will also handle the deletion marker case. We have a
@@ -1793,13 +1827,9 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   string instance_idx;
 
   // decode request
-  rgw_cls_link_olh_op op;
-  auto iter = in->cbegin();
-  try {
-    decode(op, iter);
-  } catch (ceph::buffer::error& err) {
-    CLS_LOG(0, "ERROR: rgw_bucket_link_olh_op(): failed to decode request\n");
-    return -EINVAL;
+  const auto [ decode_ret, op ] = decode_link_olh_op(in);
+  if (decode_ret < 0) {
+    return decode_ret;
   }
 
   struct rgw_bucket_dir_header header;
@@ -2006,6 +2036,20 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   return write_bucket_header(hctx, &header); /* updates header version */
 }
 
+static std::pair<int, rgw_cls_unlink_instance_op>
+decode_unlink_instance_op(const ceph::bufferlist* in)
+{
+  rgw_cls_unlink_instance_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: rgw_bucket_rm_obj_instance_op(): failed to decode request\n");
+    return { -EINVAL, {} };
+  }
+  return { 0, std::move(op) };
+}
+
 static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
@@ -2013,13 +2057,9 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   string instance_idx;
 
   // decode request
-  rgw_cls_unlink_instance_op op;
-  auto iter = in->cbegin();
-  try {
-    decode(op, iter);
-  } catch (ceph::buffer::error& err) {
-    CLS_LOG(0, "ERROR: rgw_bucket_rm_obj_instance_op(): failed to decode request\n");
-    return -EINVAL;
+  const auto [ decode_ret, op ] = decode_unlink_instance_op(in);
+  if (decode_ret < 0) {
+    return decode_ret;
   }
 
   cls_rgw_obj_key dest_key = op.key;
