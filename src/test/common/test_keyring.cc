@@ -10,8 +10,10 @@ namespace ceph {
 class LinuxKeyringTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    if (!LinuxKeyringSecret::supported()) {
-      GTEST_SKIP() << "Linux Keyring is unsupported. Skipping test";
+    std::error_code ec;
+    if (!LinuxKeyringSecret::supported(&ec)) {
+      GTEST_SKIP() << "Linux Keyring is unsupported. " << ec
+                   << ". Skipping test";
     }
   }
 };

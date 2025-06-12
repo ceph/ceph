@@ -71,16 +71,25 @@ tl::expected<LinuxKeyringSecret, std::error_code> LinuxKeyringSecret::add(
   return LinuxKeyringSecret(serial, secret.size());
 }
 
-bool LinuxKeyringSecret::supported() noexcept {
+bool LinuxKeyringSecret::supported(std::error_code* ec) noexcept {
   auto secret = LinuxKeyringSecret::add("ceph_test_keyring_support", "ceph");
   if (!secret) {
+    if (ec != nullptr) {
+      *ec = secret.error();
+    }
     return false;
   }
   std::string out;
-  if (auto err = secret.value().read(out); !err) {
+  if (auto err = secret.value().read(out); err) {
+    if (ec != nullptr) {
+      *ec = err;
+    }
     return false;
   }
-  if (auto err = secret.value().reset(); !err) {
+  if (auto err = secret.value().reset(); err) {
+    if (ec != nullptr) {
+      *ec = err;
+    }
     return false;
   }
   return true;
