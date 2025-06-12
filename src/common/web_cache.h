@@ -132,10 +132,17 @@ class WebCache {
   Node* sieve_evict();
 
   // sieve_expire_erase_unmutexed removes all expired nodes from the
-  // sieve_queue in place. It writes the expired nodes to out_expired
+  // sieve_queue in place. It writes the expired nodes to out_expired.
+  // Updates the sieve hand
   static void sieve_expire_erase_unmutexed(
-      SieveQueue& sieve_queue, ceph::real_time eviction_cutoff,
-      std::vector<Node*>& out_expired);
+      SieveQueue& sieve_queue, Node* sieve_hand,
+      ceph::real_time eviction_cutoff, std::vector<Node*>& out_expired);
+
+  using SieveRemoveRet = std::pair<typename SieveQueue::iterator, Node*>;
+  // sieve_remove_unmutexed removes a node from sieve_queue and
+  // returns an iterator to next (or end()) and an updated sieve hand
+  static SieveRemoveRet sieve_remove_unmutexed(
+      SieveQueue& sieve_queue, Node* sieve_hand, const Node& node);
 
   static PerfCounters* initialize_perf_counters(
       CephContext* cct, const std::string& name);
@@ -180,10 +187,15 @@ class WebCache {
   // ceph::async::call_once to add cache stampede mitigation
   ValuePtr lookup_or(const Key& key, ValuePtr new_val);
 
-  // update_expiration_if updates an entry's TTL if its value matches val.
+  // update_ttl_if updates an entry's TTL if its value matches val.
   // Return true if we updated an entry. False otherwise.
   bool update_ttl_if(
       const Key& key, const ValuePtr& val_ptr, ceph::timespan new_ttl);
+
+  // remove_if removes an entry if it finds an entry where its values
+  // matches expected_val. return true if we removed an entry, false
+  // otherwise
+  bool remove_if(const Key& key, const ValuePtr& expected_val);
 
   size_t size() const;
   size_t clear();
@@ -223,6 +235,7 @@ class WebCache {
   friend class WebCacheTest_ExpireEraseAll_Test;
   friend class WebCacheTest_ExpireEraseEmpty_Test;
   friend class WebCacheTest_ExpireEraseUpdatedTTLs_Test;
+  friend class WebCacheTest_SieveRemoveHand_Test;
 };
 
 template <typename Key, typename Value>
@@ -402,6 +415,21 @@ bool WebCache<Key, Value>::update_ttl_if(
 }
 
 template <typename Key, typename Value>
+bool WebCache<Key, Value>::remove_if(
+    const Key& key, const ValuePtr& expected_val) {
+  std::lock_guard<std::shared_mutex> lock(_cache_mutex);
+  if (auto search = _lookup.find(key);
+      (search != _lookup.end() && search->second.value == expected_val)) {
+    auto [_, hand_moved] =
+        sieve_remove_unmutexed(_sieve_queue, _sieve_hand, search->second);
+    _lookup.erase(search);
+    _sieve_hand = hand_moved;
+    return true;
+  }
+  return false;
+}
+
+template <typename Key, typename Value>
 std::optional<typename WebCache<Key, Value>::ValuePtr>
 WebCache<Key, Value>::lookup_unmutexed(const Key& key) {
   if (auto search = _lookup.find(key); search != _lookup.end()) {  // cache hit
@@ -436,6 +464,24 @@ ceph::real_time WebCache<Key, Value>::insert_unmutexed(
 }
 
 template <typename Key, typename Value>
+WebCache<Key, Value>::SieveRemoveRet
+WebCache<Key, Value>::sieve_remove_unmutexed(
+    SieveQueue& sieve_queue, Node* sieve_hand, const Node& node) {
+  const bool was_hand = &node == sieve_hand;
+  const auto node_it = sieve_queue.iterator_to(node);
+  auto it = sieve_queue.erase(node_it);
+  if (sieve_queue.empty()) {
+    return {sieve_queue.end(), nullptr};
+  }
+  if (was_hand) {
+    return {
+        it,
+        (it == sieve_queue.begin()) ? &sieve_queue.back() : &(*std::prev(it))};
+  }
+  return {it, sieve_hand};
+}
+
+template <typename Key, typename Value>
 std::optional<typename WebCache<Key, Value>::ValuePtr>
 WebCache<Key, Value>::lookup(const Key& key) {
   std::shared_lock<std::shared_mutex> lock(_cache_mutex);
@@ -450,7 +496,7 @@ WebCache<Key, Value>::lookup(const Key& key) {
 
 template <typename Key, typename Value>
 void WebCache<Key, Value>::sieve_expire_erase_unmutexed(
-    SieveQueue& sieve_queue, ceph::real_time eviction_cutoff,
+    SieveQueue& sieve_queue, Node* sieve_hand, ceph::real_time eviction_cutoff,
     std::vector<Node*>& out_expired) {
   // The sieve queue is ordered by ascending insertion time which
   // would allow for efficient epiration by finding the first not
@@ -460,9 +506,11 @@ void WebCache<Key, Value>::sieve_expire_erase_unmutexed(
     Node& node = (*it);
     const bool expired = node.expires_at <= eviction_cutoff;
     if (expired) {
-      out_expired.emplace_back(
-          &node);  // double chek this. need to get it out of the queue first?
-      it = sieve_queue.erase(it);
+      auto [next_it, next_hand] =
+          sieve_remove_unmutexed(sieve_queue, sieve_hand, node);
+      out_expired.emplace_back(&node);
+      it = next_it;
+      sieve_hand = next_hand;
     } else {
       ++it;
     }
@@ -475,7 +523,8 @@ size_t WebCache<Key, Value>::expire_erase() {
   const auto expiration_cutoff = ceph::real_clock::now();
   const auto lookup_size_before = _lookup.size();
   std::vector<Node*> expired;
-  sieve_expire_erase_unmutexed(_sieve_queue, expiration_cutoff, expired);
+  sieve_expire_erase_unmutexed(
+      _sieve_queue, _sieve_hand, expiration_cutoff, expired);
   for (auto node : expired) {
     _lookup.erase(*(node->key));
   }
