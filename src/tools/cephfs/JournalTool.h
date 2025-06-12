@@ -12,17 +12,17 @@
  * Foundation.  See file COPYING.
  */
 
-#include "MDSUtility.h"
-#include "RoleSelector.h"
 #include <vector>
 
-#include "mds/mdstypes.h"
+#include "include/rados/librados.hpp"
 #include "mds/LogEvent.h"
 #include "mds/events/EMetaBlob.h"
-
-#include "include/rados/librados.hpp"
+#include "mds/mdstypes.h"
 
 #include "JournalFilter.h"
+#include "MDSUtility.h"
+#include "ProgressTracker.h"
+#include "RoleSelector.h"
 
 class JournalScanner;
 
@@ -34,6 +34,7 @@ class JournalScanner;
 class JournalTool : public MDSUtility
 {
   private:
+    std::unique_ptr<ProgressTracker> progress_tracker;
     MDSRoleSelector role_selector;
     // Bit hacky, use this `rank` member to control behaviour of the
     // various main_ functions.
@@ -97,8 +98,13 @@ class JournalTool : public MDSUtility
                                    const std::string &command);
   public:
     static void usage();
+
     JournalTool() :
-      rank(0), other_pool(false) {}
+      rank(0), other_pool(false)
+    {
+      progress_tracker =
+          std::make_unique<ProgressTracker>("Journal processing");
+    }
     int main(std::vector<const char*> &argv);
 };
 

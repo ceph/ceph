@@ -1,6 +1,7 @@
 set(cephfs_journal_tool_srcs
   cephfs-journal-tool.cc
   JournalTool.cc
+  ProgressTracker.cc
   JournalFilter.cc
   JournalScanner.cc
   EventOutput.cc
@@ -11,8 +12,8 @@ set(cephfs_journal_tool_srcs
 add_executable(cephfs-journal-tool ${cephfs_journal_tool_srcs})
 target_link_libraries(cephfs-journal-tool
   legacy-option-headers
-  librados mds osdc global
-  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+  ceph-common librados mds osdc global uring::uring
+  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} Boost::filesystem)
 
 set(cephfs-meta-injection_srcs
   cephfs-meta-injection.cc
@@ -22,28 +23,30 @@ set(cephfs-meta-injection_srcs
 add_executable(cephfs-meta-injection ${cephfs-meta-injection_srcs})
 target_link_libraries(cephfs-meta-injection
   legacy-option-headers
-  librados mds osdc global
+        ceph-common librados mds osdc global uring::uring
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
 set(cephfs_table_tool_srcs
   cephfs-table-tool.cc
   TableTool.cc
+  ProgressTracker.cc
   RoleSelector.cc
   MDSUtility.cc)
 add_executable(cephfs-table-tool ${cephfs_table_tool_srcs})
-target_link_libraries(cephfs-table-tool librados mds osdc global
-  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+target_link_libraries(cephfs-table-tool ceph-common librados mds osdc global uring::uring
+  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} Boost::filesystem)
 
 set(cephfs_data_scan_srcs
   cephfs-data-scan.cc
   DataScan.cc
+  ProgressTracker.cc
   RoleSelector.cc
   PgFiles.cc
   MDSUtility.cc)
 add_executable(cephfs-data-scan ${cephfs_data_scan_srcs})
-target_link_libraries(cephfs-data-scan librados cephfs mds osdc global
+target_link_libraries(cephfs-data-scan ceph-common librados cephfs mds osdc global uring::uring
   cls_cephfs_client
-  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} Boost::filesystem)
 
 install(TARGETS
   cephfs-journal-tool
