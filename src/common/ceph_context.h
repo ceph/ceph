@@ -150,8 +150,10 @@ public:
   ConfigProxy _conf;
   ceph::logging::Log *_log;
 #ifdef HAVE_BREAKPAD
+#warning HAS BREAKPAD
   std::unique_ptr<google_breakpad::ExceptionHandler> _ex_handler;
 #else
+#warning NO BREAKPAD
   std::unique_ptr<size_t> _ex_handler;
 #endif
 
