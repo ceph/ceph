@@ -152,7 +152,7 @@ public:
 #ifdef HAVE_BREAKPAD
   std::unique_ptr<google_breakpad::ExceptionHandler> _ex_handler;
 #endif
-
+//empty line
   /* init ceph::crypto */
   void init_crypto();
 
