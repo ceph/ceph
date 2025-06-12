@@ -52,6 +52,8 @@ python3 config_diff.py <mode> [options]
     - `--cmp-branch`: The branch to compare.
     - `--remote-repo`: The remote repository URL for the branch to compare.
     - `--ref-repo`: (Optional) The repository URL for the reference branch. Defaults to the Ceph upstream repository.
+    - `--ref-commit-sha`: (Optional) The commit sha for the reference branch that is used for reference
+    - `--cmp-commit-sha`: (Optional) The commit sha of the comparing branch
     - `--skip-clone`: (Optional) Skips cloning repositories for diff. **Note**: When using this flag, the script must be run from a valid Ceph upstream repository or a forked repository that has access to the branches present in the upstream repository or already contains those branches.
     - `--format`: (Optional) Specify the output format for the configuration diff. Options are `json` or `posix-diff`. Default is `json`.
 
