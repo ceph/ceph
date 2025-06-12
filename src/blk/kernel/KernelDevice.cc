@@ -294,6 +294,7 @@ int KernelDevice::open(const string& p)
       this->devname = devname;
       // check if any extended block device plugin recognizes this device
       // detect_vdo has moved into the VDO plugin
+      dout(10) << __func__ << " check if any extended block device plugin recognizes this device " << dendl;
       int rc = extblkdev::detect_device(cct, devname, ebd_impl);
       if (rc != 0) {
 	dout(20) << __func__ << " no plugin volume maps to " << devname << dendl;
