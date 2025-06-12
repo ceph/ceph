@@ -1409,22 +1409,12 @@ test_group_with_clone_image()
   group_image_add "${primary_cluster}" "${pool}/${group}" "${pool}/other_image1"
   group_image_add "${primary_cluster}" "${pool}/${group}" "${pool}/child_image"
 
-  # next command fails with the following message
+  # command fails with the following message now
   #  2025-01-30T16:34:25.359+0000 7fc1a79bfb40 -1 librbd::api::Mirror: image_enable: mirroring is not enabled for the parent
   #  2025-01-30T16:34:25.359+0000 7fc1a79bfb40 -1 librbd::api::Mirror: group_enable: failed enabling image: child_image: (22) Invalid argument
-  mirror_group_enable_try "${primary_cluster}" "${pool}/${group}" || :
-  test 0 = "$(grep -c "interrupted" "$CMD_STDERR")" || fail "unexpected output"
-
-  # next command appears to succeed
-  mirror_group_disable "${primary_cluster}" "${pool}/${group}"
-
-  # another attempt at enable fails with a strange message 
-  #  2025-01-30T17:17:34.421+0000 7f9ad0d74b40 -1 librbd::api::Mirror: group_enable: enabling mirroring for group test-group0 either in progress or was interrupted
-  mirror_group_enable_try "${primary_cluster}" "${pool}/${group}" || :
-  test 0 = "$(grep -c "interrupted" "$CMD_STDERR")" || fail "unexpected output"
+  expect_failure "failed enabling image" rbd --cluster=${primary_cluster} mirror group enable ${pool}/${group}
 
   # tidy up
-  mirror_group_disable "${primary_cluster}" "${pool}/${group}"
   group_remove "${primary_cluster}" "${pool}/${group}"
 
   wait_for_group_not_present "${primary_cluster}" "${pool}" "${group}"
@@ -1544,34 +1534,16 @@ test_images_different_pools()
   local image_prefix=$6
 
   group_create "${primary_cluster}" "${pool0}/${group}"
-  mirror_group_enable "${primary_cluster}" "${pool0}/${group}"
-
-  wait_for_group_present "${secondary_cluster}" "${pool0}" "${group}" 0
-  wait_for_group_replay_started "${secondary_cluster}" "${pool0}"/"${group}" 0
-  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool0}"/"${group}" 'up+replaying' 0
-  if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
-    wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool0}"/"${group}" 'down+unknown' 0
-  fi
-
   image_create "${primary_cluster}" "${pool0}/${image_prefix}0"
   group_image_add "${primary_cluster}" "${pool0}/${group}" "${pool0}/${image_prefix}0"
-  image_create "${primary_cluster}" "${pool1}/${image_prefix}1" 
-  group_image_add "${primary_cluster}" "${pool0}/${group}" "${pool1}/${image_prefix}1" 
+  image_create "${primary_cluster}" "${pool1}/${image_prefix}1"
+  group_image_add "${primary_cluster}" "${pool0}/${group}" "${pool1}/${image_prefix}1"
 
-  if [ -n "${RBD_MIRROR_NEW_IMPLICIT_BEHAVIOUR}" ]; then
-    # check secondary cluster sees 0 images
-    wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool0}"/"${group}" 'up+replaying' 0
-    mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool0}"/"${group}"
-  fi
+  # command fails with the following message now
+  #  2025-06-12T17:33:25.241+0530 7fe40ccfbd00 -1 librbd::api::Mirror: prepare_group_images: cannot enable mirroring: image is in a different pool
+  expect_failure "cannot enable mirroring: image is in a different pool" rbd --cluster=${primary_cluster} mirror group enable ${pool0}/${group}
 
-  wait_for_group_present "${secondary_cluster}" "${pool0}" "${group}" 2
-  wait_for_group_replay_started "${secondary_cluster}" "${pool0}"/"${group}" 2
-  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool0}"/"${group}" 'up+replaying' 2
-
-  if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
-    wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool0}"/"${group}" 'down+unknown' 0
-  fi
-
+  # tidy up
   group_remove "${primary_cluster}" "${pool0}/${group}"
 
   wait_for_group_not_present "${primary_cluster}" "${pool0}" "${group}"
@@ -3704,8 +3676,8 @@ run_all_tests()
   # This next also requires dynamic groups - TODO enable
   # run_test_all_scenarios test_create_group_mirror_then_add_images
   run_test_all_scenarios test_create_group_with_images_then_mirror
-  # next test is not MVP - TODO
-  # run_test_all_scenarios test_images_different_pools
+  # TODO: add the capabilty to have image from different pool in the mirror group
+  run_test_all_scenarios test_images_different_pools
   run_test_all_scenarios test_create_group_with_images_then_mirror_with_regular_snapshots
   run_test_all_scenarios test_create_group_with_large_image
   run_test_all_scenarios test_create_group_with_multiple_images_do_io
@@ -3719,8 +3691,8 @@ run_all_tests()
   run_test_all_scenarios test_create_group_with_image_remove_then_repeat
   run_test_all_scenarios test_enable_disable_repeat
   run_test_all_scenarios test_empty_group_omap_keys
-  # TODO next test is disabled waiting for fix to issue 28
-  #run_test_all_scenarios test_group_with_clone_image
+  # TODO: add the capabilty to have clone images support in the mirror group
+  run_test_all_scenarios test_group_with_clone_image
   run_test_all_scenarios test_multiple_mirror_group_snapshot_unlink_time
   run_test_all_scenarios test_force_promote_delete_group
   run_test_all_scenarios test_create_group_stop_daemon_then_recreate
