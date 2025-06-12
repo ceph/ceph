@@ -1357,11 +1357,11 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
   auto result = call_once(*value, y, [&]() -> KMSContext::CacheResult {
     std::string secret;
     const int ret = fetch(secret);
-    ldpp_dout(dpp, 20) << "kms-cache: " << cache_key
+    ldpp_dout(dpp, 20) << "KMS Cache: " << cache_key
                        << " call_once fetched with ret " << ret << dendl;
 
     if (ret == -ENOENT) {  // key does not exists, treat as permanent error
-      ldpp_dout(dpp, 15) << "kms-cache: " << cache_key
+      ldpp_dout(dpp, 15) << "KMS Cache: " << cache_key
                          << " key does not exists. treating as permanent error "
                          << dendl;
       cache.update_ttl_if(
@@ -1371,7 +1371,7 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
       perfcounter->inc(l_rgw_kms_error_permanent);
       return tl::unexpected(ret);
     } else if (ret < 0) {  // treat other errors as transient
-      ldpp_dout(dpp, 15) << "kms-cache: " << cache_key << " fetch error ("
+      ldpp_dout(dpp, 15) << "KMS Cache: " << cache_key << " fetch error ("
                          << ret << ") " << std::strerror(ret)
                          << " treating as transient error " << dendl;
       cache.update_ttl_if(
@@ -1386,9 +1386,9 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
     auto keyring_secret = LinuxKeyringSecret::add(cache_key, secret);
     ceph::crypto::zeroize_for_security(secret.data(), secret.length());
     if (!keyring_secret) {
-      ldpp_dout(dpp, 15) << "kms-cache: " << cache_key << " keyring error ("
-                         << ret << ") " << std::strerror(ret)
-                         << "  treating as transient error " << dendl;
+      ldpp_dout(dpp, 15) << "KMS Cache: " << cache_key << " keyring error ("
+			 << ret << ") " << keyring_secret.error()
+			 << "  treating as transient error " << dendl;
       // TODO(irq0) disable cache? global fail counter -> then disable cache completely?
       cache.update_ttl_if(
           cache_key, value,
@@ -1402,7 +1402,7 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
   });
 
   ldpp_dout(dpp, 20) << fmt::format(
-                            "kms-cache: {} -> {}/{}", cache_key,
+                            "KMS Cache: {} -> {}/{}", cache_key,
                             result && result.has_value()
                                 ? fmt::format("{}", *result.value())
                                 : "-",
