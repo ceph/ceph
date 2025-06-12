@@ -1161,6 +1161,10 @@ class KMSContext : public SSEContext {
         boost::asio::detached);
   }
 
+  // secrets_cache lazy initializes the KMS cache on first call. It
+  // always initializes, but may choose to disable the cache in case
+  // something goes wrong (via config). This allows us to toggle the
+  // cache at runtime without worrying about its life cycle.
   static KMSSecretCache& secrets_cache(CephContext* cct, optional_yield y) {
     static std::once_flag initialized;
     static std::unique_ptr<KMSSecretCache> instance;
@@ -1179,6 +1183,14 @@ class KMSContext : public SSEContext {
           cct, "kms-cache", cct->_conf->rgw_crypt_s3_kms_cache_max_size,
           std::chrono::seconds(
               cct->_conf->rgw_crypt_s3_kms_cache_positive_ttl));
+      std::error_code ec;
+      if (!LinuxKeyringSecret::supported(&ec)) {
+        ldout(cct, 1) << "KMS Cache: Linux Kernel Key Retention Service "
+                         "unsupported (error "
+                      << ec << "). Disabling Cache." << dendl;
+        cct->_conf->rgw_crypt_s3_kms_cache_enabled = false;
+      }
+
       const auto min_ttl_secs = std::min(
           {cct->_conf->rgw_crypt_s3_kms_cache_positive_ttl,
            cct->_conf->rgw_crypt_s3_kms_cache_negative_ttl,
