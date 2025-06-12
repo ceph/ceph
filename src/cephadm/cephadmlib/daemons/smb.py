@@ -225,11 +225,17 @@ class SMBDContainer(SambaContainerCommon):
 
     def container_args(self) -> List[str]:
         cargs = []
-        if self.cfg.smb_port:
-            cargs.append(f'--publish={self.cfg.smb_port}:{Ports.SMB.value}')
-        if self.cfg.metrics_port:
-            metrics_port = self.cfg.metrics_port
-            cargs.append(f'--publish={metrics_port}:{metrics_port}')
+        if not self.cfg.clustered:
+            # if we are not clustered we use container networking (vs. host
+            # networking) and need to publish ports via podman/docker.
+            # All published ports happen at the primary container.
+            if self.cfg.smb_port:
+                cargs.append(
+                    f'--publish={self.cfg.smb_port}:{Ports.SMB.value}'
+                )
+            if self.cfg.metrics_port:
+                metrics_port = self.cfg.metrics_port
+                cargs.append(f'--publish={metrics_port}:{metrics_port}')
         cargs.extend(_container_dns_args(self.cfg))
         return cargs
 
