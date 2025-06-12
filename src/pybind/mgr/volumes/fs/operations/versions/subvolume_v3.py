@@ -200,21 +200,11 @@ class SubvolumeV3(SubvolumeV2):
         else:
             return not listdir(self.fs, self.mnt_dir)
 
-    def are_there_other_incarnations(self):
-        if len(listdir(self.fs, self.roots_dir)) > 1:
-            return True
-        elif len(listdir(self.fs, self.roots_dir)) == 1:
-            return False
-        else:
-            raise RuntimeError('self.roots_dir can\'t have zero or less than '
-                               'zero directories in it')
-
     def trash_subvol_dir(self):
         create_trashcan(self.fs, self.vol_spec)
 
-        if not self.are_there_other_incarnations():
-            with open_trashcan(self.fs, self.vol_spec) as trashcan:
-                trashcan.dump(self.subvol_dir)
+        with open_trashcan(self.fs, self.vol_spec) as trashcan:
+            trashcan.dump(self.subvol_dir)
 
     # TODO: base dir should be deleted in subvol v3 too when no snaps are
     # retained on any incarnation, right?
@@ -280,7 +270,7 @@ class SubvolumeV3(SubvolumeV2):
         uuid = self.get_incar_uuid_for_snap(snap_name)
         if uuid == None:
             raise VolumeException(errno.ENOENT,
-                                  f'subvolume \'{snap_name}\' does not exists')
+                                  f'snapshot \'{snap_name}\' does not exists')
 
         super(SubvolumeV3, self).remove_snapshot(snap_name, force=force,
                                                  uuid=uuid)
@@ -346,6 +336,10 @@ class SubvolumeV3(SubvolumeV2):
             raise VolumeException(-e.args[0], e.args[1])
 
         return snap_path
+
+    @property
+    def purgeable(self):
+        return False if not self.retained or self.list_snapshots() else True
 
     def list_snapshots(self):
         '''
