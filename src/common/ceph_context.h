@@ -151,8 +151,10 @@ public:
   ceph::logging::Log *_log;
 #ifdef HAVE_BREAKPAD
   std::unique_ptr<google_breakpad::ExceptionHandler> _ex_handler;
+#else
+  std::unique_ptr<size_t> _ex_handler;
 #endif
-//empty line
+
   /* init ceph::crypto */
   void init_crypto();
 
