@@ -5,6 +5,7 @@
 #include <include/expected.hpp>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <random>
 #include <system_error>
@@ -70,6 +71,15 @@ class WebCacheTest : public ::testing::Test {
     return std::distance(
         _uut->_sieve_queue.begin(),
         _uut->_sieve_queue.iterator_to(*_uut->_sieve_hand));
+  }
+  std::optional<std::string> sieve_hand_key() {
+    if (_uut->size() == 0) {
+      return std::nullopt;
+    }
+    if (_uut->_sieve_hand == nullptr) {
+      return *_uut->_sieve_queue.back().key;
+    }
+    return *_uut->_sieve_hand->key;
   }
 };
 
@@ -169,6 +179,52 @@ TEST_F(WebCacheTest, LookupOrAddsToCache) {
   ASSERT_EQ("test", *_uut->lookup(a_key).value());
 }
 
+TEST_F(WebCacheTest, SieveRemoveHand) {
+  std::array<WebCache<std::string, std::string>::Node, 3> store{
+      WebCache<std::string, std::string>::Node{
+          std::make_shared<std::string>("a"), ceph::real_clock::from_time_t(1)},
+      WebCache<std::string, std::string>::Node{
+          std::make_shared<std::string>("b"), ceph::real_clock::from_time_t(2)},
+      WebCache<std::string, std::string>::Node{
+          std::make_shared<std::string>("c"), ceph::real_clock::from_time_t(3)},
+  };
+  WebCache<std::string, std::string>::SieveQueue nodes;
+  for (auto& node : store) {
+    nodes.push_back(node);
+  }
+  // SIEVE QUEUE: a b c
+  WebCache<std::string, std::string>::Node* hand = &store[2];
+  lderr(_cct.get()) << "NODES: " << &store[0] << ", " << &store[1] << ", "
+                    << &store[2] << dendl;
+  lderr(_cct.get()) << "HAND: " << hand << dendl;
+  {
+    auto [it, hand_moved] =
+        WebCache<std::string, std::string>::sieve_remove_unmutexed(
+            nodes, hand, store[2]);
+    ASSERT_EQ(&*nodes.end(), &*it);        // we removed the last element
+    ASSERT_EQ(hand_moved, &nodes.back());  // hand pointed to the last element
+    ASSERT_EQ(hand_moved, &store[1]);
+    hand = hand_moved;
+  }
+
+  {
+    auto [it, hand_moved] =
+        WebCache<std::string, std::string>::sieve_remove_unmutexed(
+            nodes, hand, store[0]);
+    ASSERT_EQ(*it->value, "b");
+    ASSERT_EQ(hand_moved, &store[1]);
+    hand = hand_moved;
+  }
+
+  {
+    auto [it, hand_moved] =
+        WebCache<std::string, std::string>::sieve_remove_unmutexed(
+            nodes, hand, store[1]);
+    ASSERT_EQ(&*nodes.end(), &*it);
+    ASSERT_EQ(hand_moved, nullptr);
+  }
+}
+
 TEST_F(WebCacheTest, ExpireEraseOne) {
   WebCache<std::string, std::string>::Node alive_node(
       a_valptr, ceph::real_clock::from_time_t(301));
@@ -177,6 +233,7 @@ TEST_F(WebCacheTest, ExpireEraseOne) {
   WebCache<std::string, std::string>::SieveQueue nodes;
   nodes.push_back(alive_node);
   nodes.push_back(expired_node);
+  WebCache<std::string, std::string>::Node* hand = nullptr;
 
   lderr(_cct.get()) << "NODES:         " << &alive_node << ":" << alive_node
                     << ", " << &expired_node << ":" << expired_node << dendl;
@@ -186,11 +243,12 @@ TEST_F(WebCacheTest, ExpireEraseOne) {
   const auto expiration_cutoff = ceph::real_clock::from_time_t(300);
   std::vector<WebCache<std::string, std::string>::Node*> expired;
   WebCache<std::string, std::string>::sieve_expire_erase_unmutexed(
-      nodes, expiration_cutoff, expired);
+      nodes, hand, expiration_cutoff, expired);
   lderr(_cct.get()) << "AFTER EXPIRE:  " << alive_node << ", " << expired_node
                     << dendl;
   lderr(_cct.get()) << "EXPIRED:       " << expired << dendl;
   EXPECT_EQ(1, nodes.size());
+  EXPECT_EQ(nullptr, hand);
   ASSERT_EQ(1, expired.size());
   EXPECT_EQ(expired[0], &expired_node);
 }
@@ -203,6 +261,7 @@ TEST_F(WebCacheTest, ExpireEraseAll) {
   WebCache<std::string, std::string>::SieveQueue nodes;
   nodes.push_back(expired_node_1);
   nodes.push_back(expired_node_2);
+  WebCache<std::string, std::string>::Node* hand = nullptr;
   lderr(_cct.get()) << "NODES:         " << &expired_node_1 << ":"
                     << expired_node_1 << ", " << &expired_node_2 << ":"
                     << expired_node_2 << dendl;
@@ -212,11 +271,12 @@ TEST_F(WebCacheTest, ExpireEraseAll) {
   const auto expiration_cutoff = ceph::real_clock::from_time_t(300);
   std::vector<WebCache<std::string, std::string>::Node*> expired;
   WebCache<std::string, std::string>::sieve_expire_erase_unmutexed(
-      nodes, expiration_cutoff, expired);
+      nodes, hand, expiration_cutoff, expired);
   lderr(_cct.get()) << "AFTER EXPIRE:  " << expired_node_1 << ", "
                     << expired_node_2 << dendl;
   lderr(_cct.get()) << "EXPIRED:       " << expired << dendl;
   EXPECT_EQ(0, nodes.size());
+  EXPECT_EQ(nullptr, hand);
   ASSERT_EQ(2, expired.size());
   ASSERT_THAT(
       expired, ::testing::ElementsAre(&expired_node_1, &expired_node_2));
@@ -245,10 +305,12 @@ TEST_F(WebCacheTest, ExpireEraseEmpty) {
   WebCache<std::string, std::string>::SieveQueue nodes;
   const auto expiration_cutoff = ceph::real_clock::from_time_t(42);
   std::vector<WebCache<std::string, std::string>::Node*> expired;
+  WebCache<std::string, std::string>::Node* hand = nullptr;
   WebCache<std::string, std::string>::sieve_expire_erase_unmutexed(
-      nodes, expiration_cutoff, expired);
+      nodes, hand, expiration_cutoff, expired);
   ASSERT_EQ(0, nodes.size());
   ASSERT_EQ(0, expired.size());
+  EXPECT_EQ(nullptr, hand);
 }
 
 TEST_F(WebCacheTest, CacheHasSizeZeroAfterClear) {
@@ -313,6 +375,66 @@ TEST_F(WebCacheTest, SieveExample) {
       sieve_queue_keys(),
       ::testing::ElementsAre("j", "i", "h", "g", "d", "b", "a"));
   ASSERT_EQ(sieve_hand_pos(), 3);
+}
+
+TEST_F(WebCacheTest, RemoveIfNonExistingReturnsFalse) {
+  ASSERT_FALSE(_uut->remove_if("h", a_valptr));
+}
+
+TEST_F(WebCacheTest, RemoveIfExistingDifferentValueReturnsFalseDoesNothing) {
+  _uut->add("a", a_valptr);
+  ASSERT_FALSE(
+      _uut->remove_if("a", std::make_shared<std::string>("someothervalue")));
+  ASSERT_THAT(sieve_queue_keys(), ::testing::ElementsAre("a"));
+}
+
+TEST_F(WebCacheTest, RemoveIfExampleHandMovement) {
+  // Start with the example from https://cachemon.github.io/SIEVE-website/
+  _uut->add("a", a_valptr);
+  _uut->add("b", a_valptr);
+  _uut->add("c", a_valptr);
+  _uut->add("d", a_valptr);
+  _uut->add("e", a_valptr);
+  _uut->add("f", a_valptr);
+  _uut->add("g", a_valptr);
+  _uut->add("a", a_valptr);
+  _uut->add("b", a_valptr);
+  _uut->add("g", a_valptr);
+  _uut->add("h", a_valptr);
+  ASSERT_THAT(
+      sieve_queue_keys(),
+      ::testing::ElementsAre("h", "g", "f", "e", "d", "b", "a"));
+  ASSERT_EQ(sieve_hand_key(), "d");
+
+  ASSERT_TRUE(_uut->remove_if("h", a_valptr));
+  ASSERT_THAT(
+      sieve_queue_keys(), ::testing::ElementsAre("g", "f", "e", "d", "b", "a"));
+  ASSERT_EQ(sieve_hand_key(), "d");
+
+  ASSERT_TRUE(_uut->remove_if("d", a_valptr));
+  ASSERT_THAT(
+      sieve_queue_keys(), ::testing::ElementsAre("g", "f", "e", "b", "a"));
+  ASSERT_EQ(sieve_hand_key(), "e");
+
+  ASSERT_TRUE(_uut->remove_if("a", a_valptr));
+  ASSERT_THAT(sieve_queue_keys(), ::testing::ElementsAre("g", "f", "e", "b"));
+  ASSERT_EQ(sieve_hand_key(), "e");
+
+  ASSERT_TRUE(_uut->remove_if("f", a_valptr));
+  ASSERT_THAT(sieve_queue_keys(), ::testing::ElementsAre("g", "e", "b"));
+  ASSERT_EQ(sieve_hand_key(), "e");
+
+  ASSERT_TRUE(_uut->remove_if("e", a_valptr));
+  ASSERT_THAT(sieve_queue_keys(), ::testing::ElementsAre("g", "b"));
+  ASSERT_EQ(sieve_hand_key(), "g");
+
+  ASSERT_TRUE(_uut->remove_if("b", a_valptr));
+  ASSERT_THAT(sieve_queue_keys(), ::testing::ElementsAre("g"));
+  ASSERT_EQ(sieve_hand_key(), "g");
+
+  ASSERT_TRUE(_uut->remove_if("g", a_valptr));
+  ASSERT_THAT(0, _uut->size());
+  ASSERT_FALSE(sieve_hand_key().has_value());
 }
 
 TEST_F(WebCacheTest, SieveAllVisited) {
