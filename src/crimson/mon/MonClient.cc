@@ -812,6 +812,8 @@ int Client::handle_auth_bad_method(crimson::net::Connection &conn,
 seastar::future<> Client::handle_monmap(crimson::net::Connection &conn,
                                         Ref<MMonMap> m)
 {
+  const auto old_auth_epoch = monmap.auth_epoch;
+
   monmap.decode(m->monmapbl);
   const auto peer_addr = conn.get_peer_addr();
   auto cur_mon = monmap.get_name(peer_addr);
@@ -825,6 +827,12 @@ seastar::future<> Client::handle_monmap(crimson::net::Connection &conn,
     if (opened) {
       co_await on_session_opened();
     }
+  }
+
+  if (old_auth_epoch < monmap.auth_epoch) {
+    logger().warn("mon.{} auth epoch has changed: "
+                  "invalidating tickets and rotating secrets", cur_mon);
+    co_await _wipe_secrets_and_tickets();
   }
 
   // TODO: we can probably renew tickets only if the session was reopened
