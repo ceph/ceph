@@ -53,7 +53,7 @@ class LinuxKeyringSecret {
 
   static tl::expected<LinuxKeyringSecret, std::error_code> add(
       const std::string& key, const std::string& secret) noexcept;
-  static bool supported() noexcept;
+  static bool supported(std::error_code* ec = nullptr) noexcept;
   [[nodiscard]] std::error_code read(std::string& out) const;
   [[nodiscard]] std::error_code remove() const;
   [[nodiscard]] bool initialized() const;
