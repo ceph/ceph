@@ -202,6 +202,7 @@ int ceph_pthread_setname(const char* name);
 int pipe_cloexec(int pipefd[2], int flags);
 char *ceph_strerror_r(int errnum, char *buf, size_t buflen);
 unsigned get_page_size();
+unsigned long long get_physical_memory_size();
 // On success, returns the number of bytes written to the buffer. On
 // failure, returns -1.
 ssize_t get_self_exe_path(char* path, int buff_length);
