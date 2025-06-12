@@ -53,10 +53,15 @@ int TableTool::apply_role_fn(std::function<int(mds_role_t, Formatter *)> fptr, F
   ceph_assert(f != NULL);
 
   int r = 0;
+  auto roles = role_selector.get_roles();
+  // Start progress tracking for multiple ranks (if more than 1)
+  if (roles.size() > 1) {
+    progress_tracker->start(roles.size());
+  }
 
   f->open_object_section("ranks");
 
-  for (auto role : role_selector.get_roles()) {
+  for (auto role : roles) {
     std::ostringstream rank_str;
     rank_str << role.rank;
     f->open_object_section(rank_str.str().c_str());
@@ -68,11 +73,24 @@ int TableTool::apply_role_fn(std::function<int(mds_role_t, Formatter *)> fptr, F
 
     f->dump_int("result", rank_r);
     f->close_section();
-
-    
+    // Update progress after processing each rank (only if multiple ranks)
+    if (roles.size() > 1) {
+      progress_tracker->increment();
+      progress_tracker->display_progress();
+    }
   }
 
   f->close_section();
+  
+  // Display final summary at the end (only if multiple ranks)
+  if (roles.size() > 1) {
+    progress_tracker->display_final_summary();
+  }
+
+  // Display final summary at the end (only if multiple ranks)
+  if (roles.size() > 1) {
+    progress_tracker->display_final_summary();
+  }
 
   return r;
 }
