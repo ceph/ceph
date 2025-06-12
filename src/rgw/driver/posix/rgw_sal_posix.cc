@@ -351,6 +351,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
       return -ret;
     }
   }
+  closedir(dir);
 
   ret = unlinkat(parent_fd, dname, AT_REMOVEDIR);
   if (ret < 0) {
@@ -899,6 +900,13 @@ int Directory::for_each(const DoutPrefixProvider* dpp, const F& func)
     /* Limit reached */
     ret = 0;
   }
+
+  closedir(dir);
+  // closedir() closes the fd, so we need to invalidate it
+  fd = -1;
+  // closedir() closes fd, but succeeding calls might assume that fd is still valid.
+  // so let's reopen it.
+  open(dpp);
   return ret;
 }
 
