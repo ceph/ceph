@@ -759,12 +759,13 @@ uint64_t DataScan::get_pool_objects(const std::vector<librados::IoCtx*>& data_io
   std::list<std::string> pool_names;
   
   for (auto ioctx : data_ios) {
-    if (!ioctx) continue;
+    if (!ioctx) 
+      continue;
     pool_names.push_back(ioctx->get_pool_name());
   }
 
   librados::stats_map stats;
-  int ret = this->rados.get_pool_stats(pool_names, stats);
+  int ret = rados.get_pool_stats(pool_names, stats);
   if (ret < 0) {
     dout(1) << "Failed to get pool stats: " << cpp_strerror(ret) << dendl;
     return 0;
@@ -801,7 +802,6 @@ void DataScan::display_progress()
             << "ETA: " << eta_seconds/60 << "m" << eta_seconds%60
             << "s"
             << std::flush;
-  std::cout << std::endl; // End progress display with newline
 }
 
 int DataScan::scan_inodes()
@@ -1082,6 +1082,12 @@ int DataScan::scan_inodes()
                      "appear to be corrupt" << dendl;
         }
       }
+    }
+
+    // Update progress after each object
+    processed_objects++;
+    if (processed_objects.load() % 100 == 0) {
+      display_progress();
     }
 
     return r;
@@ -1609,6 +1615,12 @@ int DataScan::scan_links()
 
 int DataScan::scan_frags()
 {
+  total_objects = get_pool_objects({&metadata_io});
+  if (total_objects == 0) {
+    dout(4) << "No objects found in data pool" << dendl;
+    return 0;
+  }
+
   bool roots_present;
   int r = driver->check_roots(&roots_present);
   if (r != 0) {
