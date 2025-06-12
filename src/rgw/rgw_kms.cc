@@ -26,6 +26,9 @@
 #include <rapidjson/writer.h>
 #include <algorithm>
 #include <boost/asio/associated_executor.hpp>
+#include <boost/asio/error.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <chrono>
 #include <optional>
@@ -1111,14 +1114,61 @@ class KMSContext : public SSEContext {
   explicit KMSContext(CephContext* _cct) : cct{_cct} {};
   ~KMSContext() override = default;
 
-  static KMSSecretCache& secrets_cache(CephContext* cct) {
+  static std::jthread make_ttl_reaper_thread(
+      CephContext* cct, KMSSecretCache& cache, std::chrono::seconds ttl) {
+    return std::jthread([cct, &cache, ttl](std::stop_token stop) {
+      const std::string thread_name =
+          fmt::format("{}-ttl-reaper", cache.name());
+      ceph_pthread_setname(thread_name.c_str());
+      std::mutex mutex;
+      std::condition_variable cond;
+      std::stop_callback on_stop(stop, [&cond]() { cond.notify_all(); });
+      ldout(cct, 10) << "KMS Cache: Starting TTL reaper thread " << thread_name
+                     << "/" << std::hex << std::this_thread::get_id() << std::dec << ", running every "
+                     << ttl << dendl;
+      while (!stop.stop_requested()) {
+        const auto expired_count = cache.expire_erase();
+        ldout(cct, 20) << "KMS Cache: TTL reaper thread expired "
+                       << expired_count << " entries" << dendl;
+        std::unique_lock<std::mutex> lock(mutex);
+        cond.wait_for(lock, ttl, [&stop] { return stop.stop_requested(); });
+      }
+    });
+  }
+
+  static void make_ttl_reaper_async(
+      CephContext* cct, KMSSecretCache& cache, std::chrono::seconds ttl,
+      boost::asio::yield_context& yield) {
+    boost::asio::spawn(
+        make_strand(yield.get_executor()),
+        [cct, &cache, ttl](const asio::yield_context& yield) {
+          ldout(cct, 10)
+              << "KMS Cache: Starting async TTL reaper, running every " << ttl
+              << dendl;
+          asio::steady_timer timer(yield.get_executor());
+          while (true) {
+            const auto expired_count = cache.expire_erase();
+            ldout(cct, 20) << "KMS Cache: Async TTL reaper expired "
+                           << expired_count << " entries" << dendl;
+            timer.expires_after(ttl);
+            boost::system::error_code ec;
+            timer.async_wait(yield[ec]);
+            if (ec == asio::error::operation_aborted) {
+              break;
+            }
+          }
+        },
+        boost::asio::detached);
+  }
+
+  static KMSSecretCache& secrets_cache(CephContext* cct, optional_yield y) {
     static std::once_flag initialized;
     static std::unique_ptr<KMSSecretCache> instance;
     static std::jthread ttl_reaper;
     std::call_once(initialized, [&]() {
       ldout(cct, 10)
           << fmt::format(
-                 "KMS Cache. Initializing size:{} TTL pos:{} "
+                 "KMS Cache: Initializing size:{} TTL pos:{} "
                  "neg:{} err:{}",
                  cct->_conf->rgw_crypt_s3_kms_cache_max_size,
                  cct->_conf->rgw_crypt_s3_kms_cache_positive_ttl,
@@ -1133,13 +1183,13 @@ class KMSContext : public SSEContext {
           {cct->_conf->rgw_crypt_s3_kms_cache_positive_ttl,
            cct->_conf->rgw_crypt_s3_kms_cache_negative_ttl,
            cct->_conf->rgw_crypt_s3_kms_cache_transient_error_ttl});
-      ttl_reaper = webcache::make_ttl_reaper(
-          *instance, std::chrono::seconds(min_ttl_secs));
-      if (!LinuxKeyringSecret::supported()) {
-        ldout(cct, 1) << "KMS Cache: Linux Kernel Key Retention Service "
-                         "unsupported. Disabling Cache."
-                      << dendl;
-        cct->_conf->rgw_crypt_s3_kms_cache_enabled = false;
+      if (y) {
+        make_ttl_reaper_async(
+            cct, *instance, std::chrono::seconds(min_ttl_secs),
+            y.get_yield_context());
+      } else {
+        ttl_reaper = make_ttl_reaper_thread(
+            cct, *instance, std::chrono::seconds(min_ttl_secs));
       }
     });
     return *instance;
@@ -1154,7 +1204,7 @@ class KMSContext : public SSEContext {
   }
 
   void clear_cache() {
-    secrets_cache(cct).clear();
+    secrets_cache(cct, null_yield).clear();
   }
 
   const std::string & backend() override {
@@ -1282,7 +1332,7 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  auto& cache = kctx.secrets_cache(dpp->get_cct());
+  auto& cache = kctx.secrets_cache(dpp->get_cct(), y);
   static std::string_view key_prefix("rgw_sse_kms_");
   std::string cache_key;
   cache_key.reserve(key_prefix.size() + kms_backend.size() + 1 + key_id.size());
