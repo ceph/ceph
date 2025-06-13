@@ -1179,7 +1179,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 	       __func__,
 	       modify_op_str(op.op).c_str(), op.key.to_string().c_str(),
 	       (unsigned long)op.ver.pool, (unsigned long long)op.ver.epoch,
-	       op.tag.c_str());
+	       op.op_tag.c_str());
 
   rgw_bucket_dir_header header;
   int rc = read_bucket_header(hctx, &header);
@@ -1217,21 +1217,21 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
    * marker */
   entry.flags &= rgw_bucket_dir_entry::FLAG_VER;
 
-  if (op.tag.size()) {
-    auto pinter = entry.pending_map.find(op.tag);
+  if (op.op_tag.size()) {
+    auto pinter = entry.pending_map.find(op.op_tag);
     if (pinter == entry.pending_map.end()) {
       CLS_LOG_BITX(bitx_inst, 1,
 		   "ERROR: %s: couldn't find tag for pending operation with tag %s",
-		   __func__, op.tag.c_str());
+		   __func__, op.op_tag.c_str());
       return -EINVAL;
     }
     CLS_LOG_BITX(bitx_inst, 20,
 		 "INFO: %s: removing tag %s from pending map",
-		   __func__, op.tag.c_str());
+		   __func__, op.op_tag.c_str());
     entry.pending_map.erase(pinter);
   }
 
-  if (op.tag.size() && op.op == CLS_RGW_OP_CANCEL) {
+  if (op.op_tag.size() && op.op == CLS_RGW_OP_CANCEL) {
     CLS_LOG_BITX(bitx_inst, 20, "INFO: %s: op is cancel", __func__);
   } else if (op.ver.pool == entry.ver.pool &&
              op.ver.epoch && op.ver.epoch <= entry.ver.epoch) {
@@ -1248,7 +1248,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   entry.ver = op.ver;
   if (op.op == CLS_RGW_OP_CANCEL) {
     log_op = false; // don't log cancelation
-    if (op.tag.size()) {
+    if (op.op_tag.size()) {
       if (!entry.exists && entry.pending_map.empty()) {
         // a racing delete succeeded, and we canceled the last pending op
         CLS_LOG_BITX(bitx_inst, 20,
@@ -1329,7 +1329,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     entry.meta = meta;
     entry.key = op.key;
     entry.exists = true;
-    entry.tag = op.tag;
+    entry.tag = op.op_tag;
     // account for new entry
     stats.num_entries++;
     stats.total_size += meta.accounted_size;
@@ -1348,7 +1348,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   } // CLS_RGW_OP_ADD
 
   if (log_op) {
-    rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime,
+    rc = log_index_operation(hctx, op.key, op.op, op.op_tag, entry.meta.mtime,
 			     entry.ver, header.ver,
 			     header.max_marker, op.bilog_flags, NULL, NULL,
 			     &op.zones_trace);

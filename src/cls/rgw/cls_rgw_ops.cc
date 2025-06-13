@@ -152,7 +152,7 @@ list<rgw_cls_obj_complete_op> rgw_cls_obj_complete_op::generate_test_instances()
   op.locator = "locator";
   op.ver.pool = 2;
   op.ver.epoch = 100;
-  op.tag = "tag";
+  op.op_tag = "tag";
 
   list<rgw_bucket_dir_entry_meta> l = rgw_bucket_dir_entry_meta::generate_test_instances();
   auto iter = l.begin();
@@ -175,7 +175,7 @@ void rgw_cls_obj_complete_op::dump(Formatter *f) const
   f->open_object_section("meta");
   meta.dump(f);
   f->close_section();
-  f->dump_string("tag", tag);
+  f->dump_string("tag", op_tag);
   f->dump_bool("log_op", log_op);
   f->dump_int("bilog_flags", bilog_flags);
   encode_json("zones_trace", zones_trace, f);

@@ -107,7 +107,7 @@ void CLSRGWCompleteModifyOpBase::complete_op(librados::ObjectWriteOperation& o,
   bufferlist in;
   rgw_cls_obj_complete_op call;
   call.op = this->op_type;
-  call.tag = this->op_tag;
+  call.op_tag = this->op_tag;
   call.key = this->key;
   call.ver = ver;
   call.locator = obj_locator;
