@@ -502,6 +502,7 @@ void OSDMonitor::handle_conf_change(const ConfigProxy& conf,
   }
   if (changed.count("mon_memory_target") ||
       changed.count("rocksdb_cache_size")) {
+    _set_cache_autotuning();
     int r = _update_mon_cache_settings();
     if (r < 0) {
       derr << __func__ << " mon_memory_target:"
