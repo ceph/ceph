@@ -71,7 +71,6 @@ import contextlib
 import enum
 import glob
 import hashlib
-import functools
 import json
 import logging
 import os
@@ -93,6 +92,12 @@ except ImportError:
     class StrEnum(str, enum.Enum):
         def __str__(self):
             return self.value
+
+
+try:
+    from functools import cache as ftcache
+except ImportError:
+    ftcache = lambda f: f
 
 
 class DistroKind(StrEnum):
@@ -251,7 +256,7 @@ def _git_command(ctx, args):
 
 # Assume that the git version will not be changing after the 1st time
 # the command is run.
-@functools.cache
+@ftcache
 def _git_current_branch(ctx):
     cmd = _git_command(ctx, ["rev-parse", "--abbrev-ref", "HEAD"])
     res = _run(cmd, check=True, capture_output=True)
@@ -268,7 +273,7 @@ def _git_current_sha(ctx, short=True):
     return res.stdout.decode("utf8").strip()
 
 
-@functools.cache
+@ftcache
 def _hash_sources(bsize=4096):
     hh = hashlib.sha256()
     buf = bytearray(bsize)
@@ -698,7 +703,20 @@ def bc_make_source_rpm(ctx):
 
 def _glob_search(ctx, pattern):
     overlay = ctx.overlay()
-    return glob.glob(pattern, root_dir=overlay.upper if overlay else None)
+    try:
+        return glob.glob(pattern, root_dir=overlay.upper if overlay else None)
+    except TypeError:
+        log.info("glob with root_dir failed... falling back to chdir")
+    try:
+        prev_dir = os.getcwd()
+        if overlay:
+            os.chdir(overlay.upper)
+            log.debug("chdir %s -> %s", prev_dir, overlay.upper)
+        result = glob.glob(pattern)
+    finally:
+        if overlay:
+            os.chdir(prev_dir)
+    return result
 
 
 @Builder.set(Steps.RPM)
