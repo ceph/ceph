@@ -510,10 +510,15 @@ static int decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, 
       // string representation sort in the opposite direction and to decrease string length - to speed up
       // the lexicographical comparison; hence +2 (1 for the value indicator and one for the range prefix);
       string err;
-      const char *s = val.c_str() + 2;
-      *ver = strict_strtoull(s, 10, &err);
-      if (!err.empty()) {
-        CLS_LOG(0, "ERROR: %s: bad index_key (%s): could not parse val (v=%s)", __func__, escape_str(index_key).c_str(), s);
+      if (val.size() > 2) {
+        const char *s = val.c_str() + 2;
+        *ver = strict_strtoull(s, 10, &err);
+        if (!err.empty()) {
+          CLS_LOG(0, "ERROR: %s: bad index_key (%s): could not parse val (v=%s)", __func__, escape_str(index_key).c_str(), s);
+          return -EIO;
+        }
+      } else {
+        CLS_LOG(0, "ERROR: %s: bad index_key (%s): empty val", __func__, escape_str(index_key).c_str());
         return -EIO;
       }
     }
@@ -1914,7 +1919,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 
   const uint64_t prev_epoch = olh.get_epoch();
 
-  auto mtime=obj.mtime();
+  auto mtime = obj.mtime();
   if (!olh.start_modify(op.olh_epoch, &mtime)) {
     ret = obj.write(op.olh_epoch, false, header);
     if (ret < 0) {
