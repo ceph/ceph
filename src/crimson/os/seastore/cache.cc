@@ -1312,7 +1312,7 @@ record_t Cache::prepare_record(
       // the existing extents should be added into Cache
       // during complete_commit to sync with gc transaction.
       commit_replace_extent(t, i, i->prior_instance);
-    } // Note, else, add_extent() below
+    } // Note, else(is_exist_mutation_pending), add_extent() atomically
     // Note, i->state become DIRTY in complete_commit()
 
     assert(i->get_version() > 0);
@@ -1530,12 +1530,15 @@ record_t Cache::prepare_record(
     }
     assert(i->state == CachedExtent::extent_state_t::DIRTY);
     assert(i->version > 0);
+    assert(i->pending_for_transaction == TRANS_ID_NULL);
+    assert(!i->prior_instance);
     remove_from_dirty(i, &trans_src);
     // set the version to zero because the extent state is now clean
     // in order to handle this transparently
     i->version = 0;
     i->dirty_from = JOURNAL_SEQ_MIN;
-    // no set_io_wait()
+    // no set_io_wait(), skip complete_commit()
+    assert(!i->is_pending_io());
     i->state = CachedExtent::extent_state_t::CLEAN;
     assert(i->is_logical());
     i->clear_modified_region();
@@ -1557,7 +1560,11 @@ record_t Cache::prepare_record(
     }
 
     if (i->is_exist_clean()) {
-      // no set_io_wait()
+      assert(i->version == 0);
+      assert(!i->prior_instance);
+      // no set_io_wait(), skip complete_commit()
+      assert(!i->is_pending_io());
+      i->pending_for_transaction = TRANS_ID_NULL;
       i->state = CachedExtent::extent_state_t::CLEAN;
     } else {
       assert(i->is_exist_mutation_pending());
