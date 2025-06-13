@@ -148,7 +148,7 @@ class WebCache {
       CephContext* cct, const std::string& name);
 
   std::optional<ValuePtr> lookup_unmutexed(const Key& key);
-  ceph::real_time insert_unmutexed(const Key& key, ValuePtr value);
+  Node& insert_or_existing_unmutexed(const Key& key, ValuePtr value);
 
   void perf_tinc(Metric metric, ceph::timespan elapsed) {
     if (_perf != nullptr) {
@@ -368,18 +368,10 @@ ceph::real_time WebCache<Key, Value>::add(const Key& key, ValuePtr value) {
       return search->second.expires_at;
     }
   }
+  // miss, take unique lock
   {
     std::lock_guard<std::shared_mutex> lock(_cache_mutex);
-    if (auto search = _lookup.find(key); search != _lookup.end()) {
-      // cache hit - under write lock
-      perf_inc(Metric::hit);
-      search->second.visited = true;
-      return search->second.expires_at;
-    }
-
-    // cache miss
-    perf_inc(Metric::miss);
-    return insert_unmutexed(key, value);
+    return insert_or_existing_unmutexed(key, value).expires_at;
   }
 }
 
@@ -396,18 +388,9 @@ WebCache<Key, Value>::ValuePtr WebCache<Key, Value>::lookup_or(
   }
 
   // miss, take unique lock
-  // check again or insert new val
   {
     std::lock_guard<std::shared_mutex> lock(_cache_mutex);
-    auto maybe_value = lookup_unmutexed(key);
-    if (maybe_value.has_value()) {
-      perf_inc(Metric::hit);
-      return maybe_value.value();
-    }
-
-    perf_inc(Metric::miss);
-    insert_unmutexed(key, new_val);
-    return new_val;
+    return insert_or_existing_unmutexed(key, new_val).value;
   }
 }
 
@@ -450,26 +433,33 @@ WebCache<Key, Value>::lookup_unmutexed(const Key& key) {
 }
 
 template <typename Key, typename Value>
-ceph::real_time WebCache<Key, Value>::insert_unmutexed(
+WebCache<Key, Value>::Node& WebCache<Key, Value>::insert_or_existing_unmutexed(
     const Key& key, ValuePtr value) {
-  // cache full? -> evict
-  if (_sieve_queue.size() >= _capacity) {
-    const auto node = sieve_evict();
-    if (node != nullptr) {
-      _lookup.erase(*(node->key));
-    }
-  }
-
-  // cache insert
   const auto& [it, took_place] = _lookup.emplace(
       std::piecewise_construct, std::forward_as_tuple(key),
       std::forward_as_tuple(std::move(value), _ttl));
-  perf_set(Metric::size, _lookup.size());
-  ceph_assert(took_place);
-  auto& [stored_key, node] = *it;
-  node.key = &stored_key;
-  _sieve_queue.push_front(node);
-  return node.expires_at;
+
+  if (took_place) {  // cache miss
+    perf_inc(Metric::miss);
+
+    ceph_assert(_lookup.size() == _sieve_queue.size() + 1);
+    // cache full? -> evict
+    if (_sieve_queue.size() >= _capacity) {
+      const auto node = sieve_evict();
+      if (node != nullptr) {
+        _lookup.erase(*(node->key));
+      }
+    }
+    auto& [stored_key, node] = *it;
+    node.key = &stored_key;
+    _sieve_queue.push_front(node);
+    perf_set(Metric::size, _lookup.size());
+    return node;
+  } else {  // cache hit
+    perf_inc(Metric::hit);
+    it->second.visited = true;
+    return it->second;
+  }
 }
 
 template <typename Key, typename Value>
