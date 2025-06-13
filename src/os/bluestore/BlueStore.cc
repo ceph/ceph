@@ -17726,7 +17726,7 @@ int BlueStore::_do_write_v2_compressed(
     disk_for_raw = p2roundup(i.offset + i.length, au_size) - p2align(i.offset, au_size);
     BlueStore::Writer wr(this, txc, &wctx, o);
     if (disk_for_compressed < disk_for_raw) {
-      wr.do_write_with_blobs(i.offset, i.offset + i.length, i.offset + i.length, bd);
+      wr.do_write_with_blobs(i.offset, i.offset + i.length, i.offset, i.offset + i.length, bd);
     } else {
       wr.do_write(i.offset, data_bl);
     }

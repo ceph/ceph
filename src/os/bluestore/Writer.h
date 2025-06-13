@@ -68,8 +68,9 @@ public:
   );
 
   void do_write_with_blobs(
-    uint32_t location,
+    uint32_t data_begin,
     uint32_t data_end,
+    uint32_t ref_begin,
     uint32_t ref_end,
     blob_vec& blobs
   );
@@ -196,26 +197,30 @@ private:
     bufferlist& object_data);
 
   void _try_reuse_allocated_l(
-    exmp_it after_punch_it,   // hint, we could have found it ourselves
-    uint32_t& logical_offset, // will fix value if something consumed
-    uint32_t ref_end_offset,  // useful when data is padded
-    blob_data_t& bd);           // modified when consumed
+    exmp_it after_punch_it, // hint, we could have found it ourselves
+    uint32_t& data_begin,   // will fix value if something consumed
+    uint32_t& ref_begin,    // TODO explain me
+    uint32_t ref_end,       // useful when data is padded
+    blob_data_t& bd);       // modified when consumed
 
   void _try_reuse_allocated_r(
     exmp_it after_punch_it,   // hint, we could have found it ourselves
-    uint32_t& end_offset,     // will fix value if something consumed
-    uint32_t ref_end_offset,  // useful when data is padded
+    uint32_t& data_end,     // will fix value if something consumed
+    uint32_t ref_begin,
+    uint32_t& ref_end,  // useful when data is padded
     blob_data_t& bd);           // modified when consumed
 
   void _try_put_data_on_allocated(
-  uint32_t& logical_offset, 
-  uint32_t& end_offset,
-  uint32_t& ref_end_offset,
+  uint32_t& data_begin,
+  uint32_t& data_end,
+  uint32_t& ref_begin,
+  uint32_t& ref_end,
   blob_vec& bd,
   exmp_it after_punch_it);
 
   void _do_put_new_blobs(
-    uint32_t logical_offset, 
+    uint32_t logical_offset,
+    uint32_t ref_begin_offset,
     uint32_t ref_end_offset,
     blob_vec::iterator& bd_it,
     blob_vec::iterator bd_end);
@@ -223,6 +228,7 @@ private:
   void _do_put_blobs(
     uint32_t logical_offset, 
     uint32_t data_end_offset,
+    uint32_t ref_begin_offset,
     uint32_t ref_end_offset,
     blob_vec& bd,
     exmp_it after_punch_it);
