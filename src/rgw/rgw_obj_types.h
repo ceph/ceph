@@ -80,10 +80,15 @@ struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
   }
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(2, 1, bl);
+    /* only encode snap_id if it's set. This saves some space. */
+    int v = (!snap_id.is_set() ? 1 : 2);
+
+    ENCODE_START(v, 1, bl);
     encode(name, bl);
     encode(instance, bl);
-    encode(snap_id, bl);
+    if (v >= 2) {
+      encode(snap_id, bl);
+    }
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
@@ -98,7 +103,9 @@ struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
   void dump(ceph::Formatter *f) const {
     encode_json("name", name, f);
     encode_json("instance", instance, f);
-    encode_json("snap_id", snap_id, f);
+    if (snap_id.is_set()) {
+      encode_json("snap_id", snap_id, f);
+    }
   }
   void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<rgw_obj_index_key*>& ls) {
@@ -459,11 +466,14 @@ struct rgw_obj_key {
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    int v = (!snap_id.is_set() ? 2 : 3);
+    ENCODE_START(v, 1, bl);
     encode(name, bl);
     encode(instance, bl);
     encode(ns, bl);
-    encode(snap_id, bl);
+    if (v >= 3) {
+      encode(snap_id, bl);
+    }
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
