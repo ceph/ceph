@@ -3,6 +3,7 @@
 
 #include <boost/intrusive/list.hpp>
 #include "common/ceph_argparse.h"
+#include "common/keyring.h"
 #include "global/global_init.h"
 #include "global/signal_handler.h"
 #include "common/config.h"
@@ -106,6 +107,10 @@ int main(int argc, char *argv[])
 
   DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
   rgw::AppMain main(&dp);
+
+  if (g_conf()->rgw_crypt_s3_kms_cache_enabled) {
+    LinuxKeyringSecret::initialize_process_keyring();
+  }
 
   main.init_frontends1(false /* nfs */);
   main.init_numa();
