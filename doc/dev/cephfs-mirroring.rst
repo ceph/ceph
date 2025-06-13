@@ -17,7 +17,7 @@ Key Idea
 --------
 
 For a given snapshot pair in a directory, `cephfs-mirror` daemon will rely on
-`CephFS Snapdiff Feature` to identify changes in a directory tree. The diffs
+`CephFS Snapdiff Feature`_ to identify changes in a directory tree. The diffs
 are applied to directory in the remote file system thereby only synchronizing
 files that have changed between two snapshots.
 
@@ -93,7 +93,7 @@ Using snapshot names to infer the point-of-continuation would result in the
 "new" snapshot (incarnation) never getting picked up for synchronization.
 
 Snapshots on the secondary file system stores the snap-id of the snapshot it
-was synchronized from. This metadata is stored in `SnapInfo` structure on the
+was synchronized from. This metadata is stored in ``SnapInfo`` structure on the
 MDS.
 
 Interfaces
@@ -112,7 +112,7 @@ mirroring. The module is implemented as a Ceph Manager plugin. The mirroring
 module does not manage the spawning of (and terminating of) the mirror
 daemons. `systemctl(1)` is the preferred way to start and stop mirror daemons.
 In the future, mirror daemons will be deployed and managed by `cephadm`
-(Tracker: http://tracker.ceph.com/issues/47261).
+(tracker: http://tracker.ceph.com/issues/47261).
 
 The manager module is responsible for assigning directories to mirror daemons
 for synchronization. Multiple mirror daemons can be spawned to achieve
@@ -177,7 +177,7 @@ To remove a peer, run a command of the following form:
 
    ceph fs snapshot mirror peer_remove <fs_name> <peer_uuid>
 
-.. note:: See the `Mirror Daemon Status` section on how to figure out Peer
+.. note:: See the `Mirror Daemon Status`_ section on how to figure out Peer
    UUID.
 
 To list the file system mirror peers, run a command of the following form:
@@ -186,7 +186,7 @@ To list the file system mirror peers, run a command of the following form:
 
    ceph fs snapshot mirror peer_list <fs_name>
 
-To configure a directory for mirroring, run a command of the following form: 
+To configure a directory for mirroring, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -232,7 +232,7 @@ directories are not allowed to be added for mirroring:
    Error EINVAL: /d0/d1/d2/d3 is a subtree of tracked path /d0/d1/d2
 
 Commands for checking directory mapping (to mirror daemons) and directory
-distribution are detailed in the `Mirror Daemon Status` section.
+distribution are detailed in the `Mirror Daemon Status`_ section.
 
 Bootstrap Peers
 ---------------
@@ -280,7 +280,7 @@ Mirror Daemon Status
 Mirror daemons are asynchronously notified about changes in
 file-system-mirroring status and peer updates.
 
-The CephFS mirroring module provides the ``mirror daemon status`` interface for 
+The CephFS mirroring module provides the ``mirror daemon status`` interface for
 checking the status of the mirror daemon. Run the following command to check
 the status of the mirror daemon:
 
@@ -348,7 +348,7 @@ command:
 Commands that have the ``fs mirror status`` prefix provide mirror status for
 mirror-enabled file systems. Note that ``cephfs@360`` has the format
 ``filesystem-name@filesystem-id``. This format is required because mirror
-daemons are asynchronously notified of file-system mirror status (A file
+daemons are asynchronously notified of file-system mirror status (a file
 system can be deleted and recreated with the same name).
 
 Currently (May 2025), the command provides minimal information regarding mirror
@@ -410,11 +410,11 @@ mirror daemons are deployed), when a directory is reassigned to another mirror
 daemon.
 
 
-A directory can be in one of the following states::
+A directory can be in one of the following states:
 
-  - `idle`: The directory is currently not being synchronized
-  - `syncing`: The directory is currently being synchronized
-  - `failed`: The directory has hit upper limit of consecutive failures
+- `idle`: The directory is currently not being synchronized
+- `syncing`: The directory is currently being synchronized
+- `failed`: The directory has hit upper limit of consecutive failures
 
 When a directory hits a configured number of consecutive synchronization
 failures, the mirror daemon marks it as ``failed``. Synchronization for these
@@ -458,7 +458,7 @@ status:
 This allows a user to add a non-existent directory for synchronization. The
 mirror daemon marks the directory as failed and retries (less frequently).
 When the directory comes into existence, the mirror daemons notice the
-successful snapshot synchronization and unmark the failed state. 
+successful snapshot synchronization and unmark the failed state.
 
 When mirroring is disabled, the ``fs mirror status`` command for the file
 system will not show up in command help.
@@ -505,7 +505,7 @@ Re-adding Peers
 When re-adding (reassigning) a peer to a file system in another cluster, ensure
 that all mirror daemons have stopped synchronizing with the peer. This can be
 checked via the  ``fs mirror status`` admin socket command (the ``Peer UUID``
-should not show up in the command output). We recommend purging 
+should not show up in the command output). We recommend purging
 synchronized directories from the peer before re-adding them to another file
 system (especially those directories which might exist in the new primary file
 system). This is not required if you re-add a peer to the same primary file
@@ -515,6 +515,6 @@ Feature Status
 --------------
 
 The ``cephfs-mirror`` daemon is built by default. It follows the
-``WITH_CEPHFS`` CMake rule).
+``WITH_CEPHFS`` CMake rule.
 
 .. _CephFS Snapdiff Feature: https://croit.io/blog/cephfs-snapdiff-feature
