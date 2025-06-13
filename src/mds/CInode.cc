@@ -4768,6 +4768,7 @@ void InodeStore::generate_test_instances(std::list<InodeStore*> &ls)
 {
   InodeStore *populated = new InodeStore;
   populated->get_inode()->ino = 0xdeadbeef;
+  populated->get_inode()->mode = S_IFLNK | 0777;
   populated->symlink = "rhubarb";
   ls.push_back(populated);
 }
@@ -4776,6 +4777,7 @@ void InodeStoreBare::generate_test_instances(std::list<InodeStoreBare*> &ls)
 {
   InodeStoreBare *populated = new InodeStoreBare;
   populated->get_inode()->ino = 0xdeadbeef;
+  populated->get_inode()->mode = S_IFLNK | 0777;
   populated->symlink = "rhubarb";
   ls.push_back(populated);
 }
