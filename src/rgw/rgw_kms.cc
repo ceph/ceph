@@ -1386,15 +1386,12 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
     auto keyring_secret = LinuxKeyringSecret::add(cache_key, secret);
     ceph::crypto::zeroize_for_security(secret.data(), secret.length());
     if (!keyring_secret) {
-      ldpp_dout(dpp, 15) << "KMS Cache: " << cache_key << " keyring error ("
-			 << ret << ") " << keyring_secret.error()
-			 << "  treating as transient error " << dendl;
-      // TODO(irq0) disable cache? global fail counter -> then disable cache completely?
-      cache.update_ttl_if(
-          cache_key, value,
-          std::chrono::seconds(
-              dpp->get_cct()
-                  ->_conf->rgw_crypt_s3_kms_cache_transient_error_ttl));
+      ldpp_dout(dpp, 5) << "KMS Cache: " << cache_key << " keyring add error ("
+			<< keyring_secret.error()
+			<< "). removing from cache. disabling cache." << dendl;
+      cache.remove_if(cache_key, value);
+      kctx.disable_cache();
+      perfcounter->inc(l_rgw_kms_error_transient);
       return tl::unexpected(-ERR_INTERNAL_ERROR);
     }
     return std::make_shared<LinuxKeyringSecret>(
@@ -1411,6 +1408,12 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
 
   if (result) {
     if (auto ret = result.value()->read(actual_key); ret.value() != 0) {
+      ldpp_dout(dpp, 5) << "KMS Cache: " << cache_key << " keyring read error ("
+			<< ret
+			<< "). removing from cache. disabling cache." << dendl;
+      cache.remove_if(cache_key, value);
+      kctx.disable_cache();
+      perfcounter->inc(l_rgw_kms_error_transient);
       return -ERR_INTERNAL_ERROR;
     }
     return 0;
