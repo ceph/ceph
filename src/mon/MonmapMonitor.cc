@@ -125,6 +125,12 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
   mon.notify_new_monmap(true);
 }
 
+void MonmapMonitor::init()
+{
+  /* init relevant Monitor state */
+  mon.notify_new_monmap(false, false);
+}
+
 void MonmapMonitor::create_pending()
 {
   pending_map = *mon.monmap;
