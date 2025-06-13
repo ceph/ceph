@@ -65,7 +65,7 @@ and other parameters that help the project develop a better understanding of
 the way Ceph is used.
 
 Data is sent secured to
-`https://telemetry.ceph.com<https://telemetry.ceph.com>`_.
+`https://telemetry.ceph.com <https://telemetry.ceph.com>`_.
 
 Individual channels can be enabled or disabled by running the following
 commands:

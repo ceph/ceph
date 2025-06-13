@@ -387,6 +387,7 @@ status. Commands of this kind take the form ``filesystem-name@filesystem-id peer
 .. prompt:: bash $
 
    ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
+
 ::
 
   {
@@ -432,6 +433,7 @@ status:
 
    ceph fs snapshot mirror add cephfs /f0
    ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
+
 ::
 
   {
@@ -470,6 +472,7 @@ mapped to use, run a command of the following form:
 .. prompt:: bash $
 
    ceph fs snapshot mirror dirmap cephfs /d0/d1/d2
+
 ::
 
   {
@@ -489,6 +492,7 @@ If no mirror daemons are running, the same command shows the following:
 .. prompt:: bash $
 
    ceph fs snapshot mirror dirmap cephfs /d0/d1/d2
+
 ::
 
   {
