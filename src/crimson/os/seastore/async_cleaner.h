@@ -1746,7 +1746,9 @@ public:
     // TODO: implement allocation strategy (dirty metadata and multiple devices)
     auto rbs = rb_group->get_rb_managers();
     auto paddr = rbs[0]->alloc_extent(length);
-    stats.used_bytes += length;
+    if (paddr != P_ADDR_NULL) {
+      stats.used_bytes += length;
+    }
     return paddr;
   }
 
@@ -1754,7 +1756,9 @@ public:
     // TODO: implement allocation strategy (dirty metadata and multiple devices)
     auto rbs = rb_group->get_rb_managers();
     auto ret = rbs[0]->alloc_extents(length);
-    stats.used_bytes += length;
+    if (!ret.empty()) {
+      stats.used_bytes += length;
+    }
     return ret;
   }
 
