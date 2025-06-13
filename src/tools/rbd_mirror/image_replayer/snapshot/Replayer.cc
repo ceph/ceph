@@ -337,6 +337,22 @@ bool Replayer<I>::get_replay_status(std::string* description,
 }
 
 template <typename I>
+bool Replayer<I>::is_resync_required() {
+auto remote_image_ctx = m_state_builder->remote_image_ctx;
+  for (auto snap_info_it = remote_image_ctx->snap_info.rbegin();
+      snap_info_it != remote_image_ctx->snap_info.rend(); ++snap_info_it) {
+    const auto& snap_ns = snap_info_it->second.snap_namespace;
+    auto mirror_ns = std::get_if<
+      cls::rbd::MirrorSnapshotNamespace>(&snap_ns);
+    if (mirror_ns != nullptr) {
+      return m_state_builder->local_image_meta->resync_requested &&
+             mirror_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY;
+    }
+  }
+  return false;
+}
+
+template <typename I>
 void Replayer<I>::load_local_image_meta() {
   dout(10) << dendl;
 
@@ -380,49 +396,19 @@ void Replayer<I>::handle_load_local_image_meta(int r) {
     return;
   }
 
-  if (r >= 0 && m_state_builder->local_image_meta->resync_requested &&
-      m_state_builder->is_remote_primary()) {
-    m_resync_requested = true;
-
-    dout(10) << "local image resync requested" << dendl;
-    handle_replay_complete(0, "resync requested");
-    return;
-  }
-
-  refresh_local_image();
-}
-
-template <typename I>
-void Replayer<I>::refresh_local_image() {
-  if (!m_state_builder->local_image_ctx->state->is_refresh_required()) {
-    refresh_remote_image();
-    return;
-  }
-
-  dout(10) << dendl;
-  auto ctx = create_context_callback<
-    Replayer<I>, &Replayer<I>::handle_refresh_local_image>(this);
-  m_state_builder->local_image_ctx->state->refresh(ctx);
-}
-
-template <typename I>
-void Replayer<I>::handle_refresh_local_image(int r) {
-  dout(10) << "r=" << r << dendl;
-
-  if (r < 0) {
-    derr << "failed to refresh local image: " << cpp_strerror(r) << dendl;
-    handle_replay_complete(r, "failed to refresh local image");
-    return;
-  }
-
   refresh_remote_image();
 }
 
 template <typename I>
 void Replayer<I>::refresh_remote_image() {
   if (!m_state_builder->remote_image_ctx->state->is_refresh_required()) {
-    std::unique_lock locker{m_lock};
-    scan_local_mirror_snapshots(&locker);
+    if (is_resync_required()) {
+      m_resync_requested = true;
+      dout(10) << "local image resync requested" << dendl;
+      handle_replay_complete(0, "resync requested");
+      return;
+    }
+    refresh_local_image();
     return;
   }
 
@@ -439,6 +425,40 @@ void Replayer<I>::handle_refresh_remote_image(int r) {
   if (r < 0) {
     derr << "failed to refresh remote image: " << cpp_strerror(r) << dendl;
     handle_replay_complete(r, "failed to refresh remote image");
+    return;
+  }
+
+  if (is_resync_required()) {
+    m_resync_requested = true;
+    dout(10) << "local image resync requested" << dendl;
+    handle_replay_complete(0, "resync requested");
+    return;
+  }
+
+  refresh_local_image();
+}
+
+template <typename I>
+void Replayer<I>::refresh_local_image() {
+  if (!m_state_builder->local_image_ctx->state->is_refresh_required()) {
+    std::unique_lock locker{m_lock};
+    scan_local_mirror_snapshots(&locker);
+    return;
+  }
+
+  dout(10) << dendl;
+  auto ctx = create_context_callback<
+    Replayer<I>, &Replayer<I>::handle_refresh_local_image>(this);
+  m_state_builder->local_image_ctx->state->refresh(ctx);
+}
+
+template <typename I>
+void Replayer<I>::handle_refresh_local_image(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "failed to refresh local image: " << cpp_strerror(r) << dendl;
+    handle_replay_complete(r, "failed to refresh local image");
     return;
   }
 
