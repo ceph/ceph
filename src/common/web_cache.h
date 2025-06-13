@@ -535,7 +535,7 @@ size_t WebCache<Key, Value>::expire_erase() {
   expired.clear_and_dispose(
       [&](const Node* node) { _lookup.erase(*node->key); });
   ceph_assert((lookup_size_before - expired_size) == _lookup.size());
-  perf_inc(Metric::expired, expired.size());
+  perf_inc(Metric::expired, expired_size);
   perf_set(Metric::size, _lookup.size());
   return expired.size();
 }
