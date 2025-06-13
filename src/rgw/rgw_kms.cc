@@ -36,6 +36,7 @@
 #include <thread>
 #include "rapidjson/error/error.h"
 #include "rapidjson/error/en.h"
+#include "rgw_string.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -1346,12 +1347,8 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
 
   auto& cache = kctx.secrets_cache(dpp->get_cct(), y);
   static std::string_view key_prefix("rgw_sse_kms_");
-  std::string cache_key;
-  cache_key.reserve(key_prefix.size() + kms_backend.size() + 1 + key_id.size());
-  cache_key.append(key_prefix);
-  cache_key.append(kms_backend);
-  cache_key.append("_");
-  cache_key.append(key_id);
+  const std::string cache_key =
+      string_cat_reserve(key_prefix, kms_backend, "_", key_id);
   std::shared_ptr<KMSContext::CacheValue> value =
       cache.lookup_or(key_id, std::make_shared<KMSContext::CacheValue>());
   auto result = call_once(*value, y, [&]() -> KMSContext::CacheResult {
