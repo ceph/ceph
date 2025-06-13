@@ -1051,6 +1051,8 @@ void coll_t::decode(ceph::buffer::list::const_iterator& bl)
 	type = TYPE_PG;
       }
       removal_seq = 0;
+      // recalculate _str, which is not encoded by v1
+      calc_str();
     }
     break;
 
@@ -1063,6 +1065,8 @@ void coll_t::decode(ceph::buffer::list::const_iterator& bl)
       decode(snap, bl);
       type = (type_t)_type;
       removal_seq = 0;
+      // recalculate _str, which is not encoded by v2
+      calc_str();
     }
     break;
 
