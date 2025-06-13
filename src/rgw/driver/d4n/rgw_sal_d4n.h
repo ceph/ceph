@@ -62,8 +62,8 @@ class D4NFilterDriver : public FilterDriver {
     boost::asio::io_context& io_context;
 
     // Redis connection pool
-    //std::shared_ptr<RedisPool> redis_pool;
-    rgw::d4n::RedisPool* redis_pool;
+    std::shared_ptr<rgw::d4n::RedisPool> redis_pool;
+    //rgw::d4n::RedisPool* redis_pool;
 
   public:
     D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context);
@@ -89,6 +89,7 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::BucketDirectory* get_bucket_dir() { return bucketDir.get(); }
     rgw::d4n::PolicyDriver* get_policy_driver() { return policyDriver.get(); }
     std::shared_ptr<connection> get_conn() { return conn; }
+    std::shared_ptr<rgw::d4n::RedisPool> get_redis_pool() { return redis_pool; }
     void shutdown() override;
 };
 

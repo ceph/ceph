@@ -82,10 +82,10 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   policyDriver->get_cache_policy()->init(cct, dpp, io_context, next);
 
   //setting the connection pool size and other parameters
-  rgw::d4n::RedisPool* redis_pool = new rgw::d4n::RedisPool(&io_context,cfg,384);
-  objDir->set_redis_pool(redis_pool);
-  blockDir->set_redis_pool(redis_pool);
-  bucketDir->set_redis_pool(redis_pool);
+  redis_pool = std::make_shared<rgw::d4n::RedisPool>(&io_context,cfg,384);
+  objDir->set_redis_pool(redis_pool.get());
+  blockDir->set_redis_pool(redis_pool.get());
+  bucketDir->set_redis_pool(redis_pool.get());
   
   return 0;
 }
@@ -1192,7 +1192,8 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
     //dirty objects
     if (dirty) {
       auto redis_conn = this->driver->get_conn();
-      rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn);
+      auto redis_pool = this->driver->get_redis_pool();
+      rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn, redis_pool.get());
       p.start();
       auto ret = blockDir->set(dpp, &block, y, &p);
       if (ret < 0) {
@@ -1240,7 +1241,8 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
       if (ret == -ENOENT) {
         if (!(this->get_bucket()->versioned())) {
           auto redis_conn = this->driver->get_conn();
-          rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn);
+          auto redis_pool = this->driver->get_redis_pool();
+          rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn, redis_pool.get());
           p.start();
           //we can explore pipelining to send the two 'HSET' commands together
           ret = blockDir->set(dpp, &block, y, &p);
@@ -1273,7 +1275,8 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
            and versioned and non-versioned buckets dirty objects */
         if (!(this->get_bucket()->versioned())) {
           auto redis_conn = this->driver->get_conn();
-          rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn);
+          auto redis_pool = this->driver->get_redis_pool();
+          rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn, redis_pool.get());
           p.start();
           ret = blockDir->set(dpp, &block, y, &p);
           if (ret < 0) {
