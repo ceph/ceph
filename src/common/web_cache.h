@@ -136,7 +136,7 @@ class WebCache {
   // Updates the sieve hand
   static void sieve_expire_erase_unmutexed(
       SieveQueue& sieve_queue, Node* sieve_hand,
-      ceph::real_time eviction_cutoff, std::vector<Node*>& out_expired);
+      ceph::real_time eviction_cutoff, SieveQueue& out_expired);
 
   using SieveRemoveRet = std::pair<typename SieveQueue::iterator, Node*>;
   // sieve_remove_unmutexed removes a node from sieve_queue and
@@ -506,7 +506,7 @@ WebCache<Key, Value>::lookup(const Key& key) {
 template <typename Key, typename Value>
 void WebCache<Key, Value>::sieve_expire_erase_unmutexed(
     SieveQueue& sieve_queue, Node* sieve_hand, ceph::real_time eviction_cutoff,
-    std::vector<Node*>& out_expired) {
+    SieveQueue& out_expired) {
   // The sieve queue is ordered by ascending insertion time which
   // would allow for efficient epiration by finding the first not
   // expired element. BUT, since we allow updating TTLs this property
@@ -517,7 +517,8 @@ void WebCache<Key, Value>::sieve_expire_erase_unmutexed(
     if (expired) {
       auto [next_it, next_hand] =
           sieve_remove_unmutexed(sieve_queue, sieve_hand, node);
-      out_expired.emplace_back(&node);
+      ceph_assert(!node.is_linked());
+      out_expired.push_back(node);
       it = next_it;
       sieve_hand = next_hand;
     } else {
@@ -531,13 +532,13 @@ size_t WebCache<Key, Value>::expire_erase() {
   std::lock_guard<std::shared_mutex> lock(_cache_mutex);
   const auto expiration_cutoff = ceph::real_clock::now();
   const auto lookup_size_before = _lookup.size();
-  std::vector<Node*> expired;
+  SieveQueue expired;
   sieve_expire_erase_unmutexed(
       _sieve_queue, _sieve_hand, expiration_cutoff, expired);
-  for (auto node : expired) {
-    _lookup.erase(*(node->key));
-  }
-  ceph_assert((lookup_size_before - expired.size()) == _lookup.size());
+  const auto expired_size = expired.size();
+  expired.clear_and_dispose(
+      [&](const Node* node) { _lookup.erase(*node->key); });
+  ceph_assert((lookup_size_before - expired_size) == _lookup.size());
   perf_inc(Metric::expired, expired.size());
   perf_set(Metric::size, _lookup.size());
   return expired.size();
