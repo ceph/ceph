@@ -45,6 +45,9 @@ namespace rados {
                              const std::string& cookie, const std::string& tag,
                              const std::string& new_cookie);
 
+// allow targets to hide the synchronous IoCtx overloads to force the
+// use of async-enabled ObjectOperation overloads
+#ifndef CLS_CLIENT_HIDE_IOCTX
       extern int lock(librados::IoCtx *ioctx,
 		      const std::string& oid,
 		      const std::string& name, ClsLockType type,
@@ -65,6 +68,7 @@ namespace rados {
 			       const std::string& name,
 			       std::map<locker_id_t, locker_info_t> *lockers,
 			       ClsLockType *type, std::string *tag);
+#endif // !CLS_CLIENT_HIDE_IOCTX
 
       class Lock {
 	std::string name;
@@ -122,6 +126,7 @@ namespace rados {
 	void break_lock(librados::ObjectWriteOperation *ioctx,
 			const entity_name_t& locker);
 
+#ifndef CLS_CLIENT_HIDE_IOCTX
 	/* IoCtx */
 	int lock_shared(librados::IoCtx *ioctx, const std::string& oid);
 	int lock_exclusive(librados::IoCtx *ioctx, const std::string& oid);
@@ -132,6 +137,7 @@ namespace rados {
 	int unlock(librados::IoCtx *ioctx, const std::string& oid);
 	int break_lock(librados::IoCtx *ioctx, const std::string& oid,
 		       const entity_name_t& locker);
+#endif // !CLS_CLIENT_HIDE_IOCTX
       };
 
     } // namespace lock
