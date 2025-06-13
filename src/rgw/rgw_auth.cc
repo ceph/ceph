@@ -280,6 +280,10 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
       return type;
     }
 
+    std::optional<rgw::ARN> get_caller_identity() const override {
+      return std::nullopt;
+    }
+
     string get_acct_name() const override {
       return {};
     }
