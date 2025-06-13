@@ -298,6 +298,7 @@ target_link_libraries(rgw_common
     legacy-option-headers
     global
     cls_rgw_client
+    keyring
     rt
     ICU::uc
     OATH::OATH

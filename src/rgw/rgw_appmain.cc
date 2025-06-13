@@ -56,6 +56,7 @@
 #include "rgw_process.h"
 #include "rgw_frontend.h"
 #include "rgw_http_client_curl.h"
+#include "rgw_kms.h"
 #include "rgw_kmip_client.h"
 #include "rgw_kmip_client_impl.h"
 #include "rgw_perf_counters.h"
