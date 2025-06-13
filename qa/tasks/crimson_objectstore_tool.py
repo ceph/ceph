@@ -8,10 +8,8 @@ import logging
 import os
 import tempfile
 import time
-from tasks import ceph_manager
 from tasks.util.rados import (rados, create_replicated_pool)
 from teuthology import misc as teuthology
-from teuthology.orchestra import run
 from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
