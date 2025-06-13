@@ -13,6 +13,12 @@
 
 using crimson::os::FuturizedStore;
 
+namespace crimson {
+namespace tools {
+namespace kvstore {
+
+extern seastar::logger logger;
+
 class StoreTool
 {
 public:
@@ -49,3 +55,7 @@ public:
 private:
   std::unique_ptr<crimson::os::FuturizedStore> store;
 };
+
+} // namespace kvstore
+} // namespace tools
+} // namespace crimson
