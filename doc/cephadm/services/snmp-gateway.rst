@@ -2,10 +2,10 @@
 SNMP Gateway Service
 ====================
 
-SNMP_ is still a widely used protocol, to monitor distributed systems and devices across a variety of hardware
-and software platforms. Ceph's SNMP integration focuses on forwarding alerts from its Prometheus Alertmanager
+`SNMP`_ is a widely used protocol for monitoring distributed systems and devices.
+Ceph's SNMP integration focuses on forwarding alerts from its Prometheus Alertmanager
 cluster to a gateway daemon. The gateway daemon transforms the alert into an SNMP Notification and sends
-it on to a designated SNMP management platform. The gateway daemon is from the ``snmp_notifier``_ project,
+it on to a designated SNMP management platform. The gateway daemon is from the `snmp_notifier`_ project,
 which provides SNMP V2c and V3 support (authentication and encryption).
 
 Ceph's SNMP gateway service deploys one instance of the gateway by default. You may increase this
@@ -159,13 +159,13 @@ with a credentials file of the following form:
 AlertManager Integration
 ========================
 When an SNMP gateway service is deployed or updated, the Prometheus Alertmanager configuration is automatically updated to forward any
-alert that has an OID_ label to the SNMP gateway daemon for processing.
+alert that has an `OID`_ label to the SNMP gateway daemon for processing.
 
 .. _OID: https://en.wikipedia.org/wiki/Object_identifier
 
 Implementing the MIB
 ======================
 To make sense of SNMP notifications and traps, you'll need to apply the MIB to your SNMP management platform. The MIB (``CEPH-MIB.txt``) can
-downloaded from the main Ceph GitHub repository_
+downloaded from the main Ceph GitHub `repository`_
 
 .. _repository: https://github.com/ceph/ceph/tree/master/monitoring/snmp
