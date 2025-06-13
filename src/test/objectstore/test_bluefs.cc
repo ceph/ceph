@@ -1137,7 +1137,7 @@ TEST(BlueFS, test_wal_migrate) {
   gen_debugable(70000, bl1);
   fs.append_try_flush(writer, bl1.c_str(), bl1.length());
   fs.fsync(writer);
-
+  fs.close_writer(writer);
   // WAL files don't update internal extents while writing to save memory, only on _replay
   fs.umount();
   fs.mount();
@@ -1435,6 +1435,7 @@ TEST(BlueFS, test_wal_read_after_rollback_to_v1) {
   gen_debugable(70000, bl1);
   fs.append_try_flush(writer, bl1.c_str(), bl1.length());
   fs.fsync(writer);
+  fs.close_writer(writer);
 
   g_ceph_context->_conf.set_val("bluefs_wal_envelope_mode", "false");
   fs.umount();
@@ -1454,6 +1455,7 @@ TEST(BlueFS, test_wal_read_after_rollback_to_v1) {
     ASSERT_EQ(0, fs.open_for_write(dir_db, wal_file, &writer, false));
     ASSERT_NE(nullptr, writer);
     ASSERT_EQ(writer->file->fnode.encoding, bluefs_node_encoding::PLAIN);
+    fs.close_writer(writer);
   }
   fs.umount();
 }
@@ -1671,6 +1673,7 @@ TEST(BlueFS, truncate_fsync) {
         fs.fsync(h);
         fs.close_writer(h);
       }
+      fs.umount();
     }
     {
       //this was broken due to https://tracker.ceph.com/issues/55307
@@ -1703,7 +1706,7 @@ TEST(BlueFS, test_shared_alloc) {
                       size, shared_alloc_unit, "test shared allocator"),
     shared_alloc_unit);
   shared_alloc.a->init_add_free(0, size);
-
+  auto sg = make_scope_guard([&shared_alloc] { delete shared_alloc.a; });
   BlueFS fs(g_ceph_context);
   // DB device is fully utilized
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_db.path, false));
@@ -1787,6 +1790,7 @@ TEST(BlueFS, test_shared_alloc_sparse) {
   for(uint64_t i = 5 * bluefs_alloc_unit; i < size; i += 2 * main_unit) {
     shared_alloc.a->init_add_free(i, main_unit);
   }
+  auto sg = make_scope_guard([&shared_alloc] { delete shared_alloc.a; });
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_slow.path, false,
@@ -1863,6 +1867,7 @@ TEST(BlueFS, test_4k_shared_alloc) {
                       size, main_unit, "test shared allocator"),
     main_unit);
   shared_alloc.a->init_add_free(bluefs_alloc_unit, size - bluefs_alloc_unit);
+  auto sg = make_scope_guard([&shared_alloc] { delete shared_alloc.a; });
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_slow.path, false,
@@ -2125,6 +2130,7 @@ TEST(BlueFS, test_log_runway) {
   utime_t mtime;
   fs.stat("dir", "file", &file_size, &mtime);
   ASSERT_EQ(file_size, 9);
+  fs.umount();
 }
 
 TEST(BlueFS, test_log_runway_2) {
@@ -2182,6 +2188,7 @@ TEST(BlueFS, test_log_runway_2) {
   std::vector<std::string> ls_longdir;
   fs.readdir(longdir, &ls_longdir);
   ASSERT_EQ(ls_longdir.front(), longfile);
+  fs.umount();
 }
 
 TEST(BlueFS, test_log_runway_3) {
@@ -2242,6 +2249,7 @@ TEST(BlueFS, test_log_runway_3) {
     fs.stat(longdir, longfile, &file_size, &mtime);
     ASSERT_EQ(file_size, 6);
   }
+  fs.umount();
 }
 
 TEST(BlueFS, test_log_runway_advance_seq) {
@@ -2266,6 +2274,7 @@ TEST(BlueFS, test_log_runway_advance_seq) {
   std::string longdir(max_log_runway*2, 'A');
   ASSERT_EQ(fs.mkdir(longdir), 0);
   fs.compact_log();
+  fs.umount();
 }
 
 TEST(BlueFS, test_69481_truncate_corrupts_log) {
