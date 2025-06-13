@@ -57,6 +57,7 @@ static const std::vector<std::pair<entity_type_t, std::string>> STR_TO_ENTITY_TY
 
 void EntityName::dump(ceph::Formatter *f) const {
   f->dump_int("type", type);
+  f->dump_string("type_str", get_type_name());
   f->dump_string("id", id);
 }
 
