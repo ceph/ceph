@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include "common/async/call_once.h"
 #include "common/ceph_crypto.h"
+#include "common/dout_fmt.h"
 #include "common/keyring.h"
 #include "common/perf_counters.h"
 #include "common/web_cache.h"
@@ -1395,13 +1396,10 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
         std::move(keyring_secret.value()));
   });
 
-  ldpp_dout(dpp, 20) << fmt::format(
-                            "KMS Cache: {} -> {}/{}", cache_key,
-                            result && result.has_value()
-                                ? fmt::format("{}", *result.value())
-                                : "-",
-                            !result ? result.error() : 0)
-                     << dendl;
+  ldpp_dout_fmt(
+      dpp, 20, "KMS Cache: {} -> {}/{}", cache_key,
+      result && result.has_value() ? fmt::format("{}", *result.value()) : "-",
+      !result ? result.error() : 0);
 
   if (result) {
     if (auto ret = result.value()->read(actual_key); ret.value() != 0) {
