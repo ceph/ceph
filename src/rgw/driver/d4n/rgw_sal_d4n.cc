@@ -1199,7 +1199,8 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
     //dirty objects
     if (dirty) {
       auto redis_conn = this->driver->get_conn();
-      rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn);
+      auto redis_pool = this->driver->get_redis_pool();
+      rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn, redis_pool);
       p.start();
       auto ret = blockDir->set(dpp, &block, y, &p);
       if (ret < 0) {
@@ -1247,7 +1248,8 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
       if (ret == -ENOENT) {
         if (!(this->get_bucket()->versioned())) {
           auto redis_conn = this->driver->get_conn();
-          rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn);
+          auto redis_pool = this->driver->get_redis_pool();
+          rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn, redis_pool);
           p.start();
           //we can explore pipelining to send the two 'HSET' commands together
           ret = blockDir->set(dpp, &block, y, &p);
@@ -1280,7 +1282,8 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
            and versioned and non-versioned buckets dirty objects */
         if (!(this->get_bucket()->versioned())) {
           auto redis_conn = this->driver->get_conn();
-          rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn);
+          auto redis_pool = this->driver->get_redis_pool();
+          rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn, redis_pool);
           p.start();
           ret = blockDir->set(dpp, &block, y, &p);
           if (ret < 0) {
