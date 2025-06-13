@@ -213,6 +213,10 @@ public:
   uint32_t get_identity_type() const override {
     return TYPE_RGW;
   }
+
+  std::optional<rgw::ARN> get_caller_identity() const override {
+    return std::nullopt;
+  }
 };
 
 class PolicyTest : public ::testing::Test {
