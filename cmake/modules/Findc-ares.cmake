@@ -30,9 +30,6 @@ if(c-ares_FOUND)
       IMPORTED_LOCATION "${c-ares_LIBRARY}")
   endif()
 
-  # to be compatible with old Seastar
-  add_library(c-ares::c-ares ALIAS c-ares::cares)
-
   if(NOT TARGET c-ares::c-ares)
     add_library(c-ares::c-ares ALIAS c-ares::cares)
   endif()
