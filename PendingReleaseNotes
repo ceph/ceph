@@ -21,6 +21,8 @@
   Related trackers:
    - https://tracker.ceph.com/issues/67179
    - https://tracker.ceph.com/issues/66867
+* RGW: IAM policy evaluation now supports conditions ArnEquals and ArnLike, along
+  with their Not and IfExists variants.
 
 >=18.2.4
 --------
