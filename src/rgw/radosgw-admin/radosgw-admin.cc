@@ -5337,7 +5337,7 @@ int main(int argc, const char **argv)
 	} else {
           ret = writer->write(dpp(), null_yield, realm);
 	  if (ret < 0) {
-	    cerr << "ERROR: couldn't driver realm info: " << cpp_strerror(-ret) << std::endl;
+	    cerr << "ERROR: couldn't write realm info: " << cpp_strerror(-ret) << std::endl;
 	    return 1;
 	  }
 	}
