@@ -469,7 +469,6 @@ public:
     out << "CachedExtent(addr=" << this
 	<< ", type=" << get_type()
 	<< ", trans=" << pending_for_transaction
-	<< ", pending_io=" << is_pending_io()
 	<< ", version=" << version
 	<< ", dirty_from=" << dirty_from
 	<< ", modify_time=" << sea_time_point_printer_t{modify_time}
@@ -481,7 +480,13 @@ public:
 	<< ", last_committed_crc=" << last_committed_crc
 	<< ", refcount=" << use_count()
 	<< ", user_hint=" << user_hint
-	<< ", rewrite_gen=" << rewrite_gen_printer_t{rewrite_generation};
+	<< ", rewrite_gen=" << rewrite_gen_printer_t{rewrite_generation}
+	<< ", pending_io=";
+    if (is_pending_io()) {
+      out << io_wait->from_state;
+    } else {
+      out << "N/A";
+    }
     if (is_valid() && is_fully_loaded() && !is_stable_clean_pending()) {
       print_detail(out);
     }
@@ -655,7 +660,7 @@ public:
   }
 
   bool is_pending_io() const {
-    return !!io_wait_promise;
+    return io_wait.has_value();
   }
 
   /// Return journal location of oldest relevant delta, only valid while DIRTY
@@ -897,25 +902,30 @@ private:
   /// relative address before ool write, used to update mapping
   std::optional<paddr_t> prior_poffset = std::nullopt;
 
-  /// used to wait while in-progress commit completes
-  std::optional<seastar::shared_promise<>> io_wait_promise;
+  struct io_wait_t {
+    seastar::shared_promise<> pr;
+    extent_state_t from_state;
+  };
+  std::optional<io_wait_t> io_wait;
 
-  void set_io_wait() {
-    ceph_assert(!io_wait_promise);
-    io_wait_promise = seastar::shared_promise<>();
+  void set_io_wait(extent_state_t new_state) {
+    ceph_assert(!io_wait);
+    io_wait.emplace(seastar::shared_promise<>(), state);
+    state = new_state;
+    assert(is_data_stable());
   }
 
   void complete_io() {
-    ceph_assert(io_wait_promise);
-    io_wait_promise->set_value();
-    io_wait_promise = std::nullopt;
+    ceph_assert(io_wait.has_value());
+    io_wait->pr.set_value();
+    io_wait = std::nullopt;
   }
 
   seastar::future<> wait_io() {
-    if (!io_wait_promise) {
+    if (!io_wait) {
       return seastar::now();
     } else {
-      return io_wait_promise->get_shared_future();
+      return io_wait->pr.get_shared_future();
     }
   }
 
@@ -1479,7 +1489,6 @@ protected:
   virtual void logical_on_delta_write() {}
 
   void on_delta_write(paddr_t record_block_offset) final {
-    assert(is_exist_mutation_pending() || get_prior_instance());
     logical_on_delta_write();
   }
 
