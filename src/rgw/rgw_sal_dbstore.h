@@ -33,7 +33,7 @@ public:
   LCDBSerializer(DBStore* store, const std::string& oid, const std::string& lock_name, const std::string& cookie) {}
 
   virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override { return 0; }
-  virtual int unlock() override {
+  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override {
     return 0;
   }
 };
@@ -619,7 +619,7 @@ protected:
     MPDBSerializer(const DoutPrefixProvider *dpp, DBStore* store, DBObject* obj, const std::string& lock_name) {}
 
     virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override {return 0; }
-    virtual int unlock() override { return 0;}
+    virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override { return 0;}
   };
 
   class DBAtomicWriter : public StoreWriter {
