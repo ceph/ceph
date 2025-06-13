@@ -227,6 +227,16 @@ class WebCache {
     return os;
   }
 
+  friend std::ostream& operator<<(std::ostream& os, const SieveQueue& nodes) {
+    for (const auto& node : nodes) {
+      os << node;
+      if (&node != &nodes.back()) {
+        os << ", ";
+      }
+    }
+    return os;
+  }
+
   friend class WebCacheTest;
   friend class WebCacheConcurrencyTest;
   friend class WebCacheRandomizedTest;
