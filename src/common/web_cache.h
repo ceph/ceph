@@ -36,23 +36,29 @@
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
 
+// Web Cache
 // A cache for data living on other systems like Key Management Systems
 // Goals/Features
 // (1) Thread safe, bias towards handling highly concurrent lookups
 // (2) Expire entries by ttl
 // (3) Cache replacement tuned to "web" workloads
-
-// Cache Stampedes
-// TODO(irq0) document problem and call_once or probabilistic solution
-
-// Algorithm
 //
-// The implementation is based on SIEVE [0] with an additional TTL
-// reaper that leverages SIEVE's FIFO insertion order
+// Algorithm
+// The implementation is based on SIEVE [0] with additional TTL
+// expiration support
 //
 // Data Structures
-// - SIEVE FIFO
-// - key lookup table: key -> value ptr
+// - key lookup table: key -> Node{value ptr, metadata) (owns nodes)
+// - SIEVE FIFO + hand intrusive list on lookup's nodes + pointer
+//
+// Cache Stampedes
+//
+// Occurs when numerous threads simultaneously request the same data
+// that is not yet in the cache. This can lead to many redundant,
+// costly requests, that may overwhelm external systems. Although
+// WebCache does not have built-in stampede mitigation, the lookup_or
+// function is designed to be used with additional logic, such as
+// ceph::async::call_once / std::call_once.
 //
 // [0] Zhang, Yazhuo, et al. "{SIEVE} is Simpler than {LRU}: an Efficient
 // {Turn-Key} Eviction Algorithm for Web Caches." 21st USENIX
