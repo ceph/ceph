@@ -616,13 +616,7 @@ int ObjectDirectory::zadd(const DoutPrefixProvider* dpp, CacheObj* object, doubl
       req.push("ZADD", key, "CH", std::to_string(score), member);
 
       response<std::string> resp;
-      if(!redis_pool)[[unlikely]]
-      {
-          redis_exec(conn, ec, req, resp, y);
-          ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() Using connection: " << conn.get() << dendl;
-      } 
-      else[[likely]]
-          redis_exec_cp(redis_pool, ec, req, resp, y);
+      redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
 
       if (ec) {
         ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -926,13 +920,7 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, option
       request req;
       req.push_range("HSET", key, redisValues);
 
-      if(!redis_pool)[[unlikely]]
-      {
-          redis_exec(conn, ec, req, resp, y);
-          ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() Using connection: " << conn.get() << dendl;
-      } 
-      else[[likely]]
-          redis_exec_cp(redis_pool, ec, req, resp, y);
+      redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
       if (ec) {
         ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
         return -ec.value();
@@ -965,7 +953,7 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
   try {
     boost::system::error_code ec;
     boost::redis::generic_response resp;
-    redis_exec(conn, ec, req, resp, y);
+    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
     if (ec) {
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
       return -ec.value();
@@ -1346,13 +1334,7 @@ int BlockDirectory::del(const DoutPrefixProvider* dpp, CacheBlock* block, option
     request req;
     req.push("DEL", key);
     response<int> resp;
-    if(!redis_pool)[[unlikely]]
-    {
-        redis_exec(conn, ec, req, resp, y);
-        ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() Using connection: " << conn.get() << dendl;
-    } 
-    else[[likely]]
-        redis_exec_cp(redis_pool, ec, req, resp, y);
+    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
     if (!std::get<0>(resp).value()) {
       ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): No values deleted for key=" << key << dendl;
       return -ENOENT;
@@ -1626,7 +1608,7 @@ int Pipeline::execute(const DoutPrefixProvider* dpp, optional_yield y)
   try {
     boost::system::error_code ec;
     pipeline_mode = false;
-    redis_exec(conn, ec, req, resp, y);
+    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "Directory::" << __func__ << "() ERROR: " << ec.what() << dendl;
