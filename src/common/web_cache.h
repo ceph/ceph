@@ -453,7 +453,7 @@ ceph::real_time WebCache<Key, Value>::insert_unmutexed(
   // cache insert
   const auto& [it, took_place] = _lookup.emplace(
       std::piecewise_construct, std::forward_as_tuple(key),
-      std::forward_as_tuple(std::forward<ValuePtr>(value), _ttl));
+      std::forward_as_tuple(std::move(value), _ttl));
   perf_set(Metric::size, _lookup.size());
   ceph_assert(took_place);
   auto& [stored_key, node] = *it;
