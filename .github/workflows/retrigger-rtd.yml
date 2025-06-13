@@ -1,0 +1,25 @@
+name: Retrigger RTD build on PR comment
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  retrigger-rtd:
+    if: github.event.issue.pull_request &&
+        (contains(github.event.comment.body, 'jenkins test docs') || 
+         contains(github.event.comment.body, 'jenkins rebuild docs') || 
+         contains(github.event.comment.body, 'jenkins retrigger docs'))
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Read the Docs build
+        run: |
+          curl -X POST \
+            "https://readthedocs.org/api/v3/projects/ceph/versions/${{ github.event.issue.number }}/builds/" \
+            -H "Authorization: Token ${{ secrets.READTHEDOCS_API_TOKEN }}" \
+            -H "Content-Type: application/json"
