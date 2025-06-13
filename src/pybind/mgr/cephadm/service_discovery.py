@@ -228,7 +228,7 @@ class Root(Server):
                     addr = self.mgr.inventory.get_addr(dd.hostname)
                     srv_entries.append({
                         'targets': [f"{build_url(host=addr, port=spec.monitor_port).lstrip('/')}"],
-                        'labels': {'instance': dd.service_name()}
+                        'labels': {'ingress': dd.service_name(), 'instance': dd.hostname}
                     })
         return srv_entries
 
