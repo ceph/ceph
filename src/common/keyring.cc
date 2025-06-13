@@ -39,6 +39,9 @@ bool LinuxKeyringSecret::supported() noexcept {
   return false;
 }
 
+void LinuxKeyringSecret::initialize_process_keyring() noexcept {
+}
+
 [[nodiscard]] std::error_code LinuxKeyringSecret::read(std::string& out) const {
   return {-ENOSYS, std::system_category()};
 }
@@ -64,7 +67,7 @@ tl::expected<LinuxKeyringSecret, std::error_code> LinuxKeyringSecret::add(
     const std::string& key, const std::string& secret) noexcept {
   const auto serial = add_key(
       "user", key.c_str(), secret.c_str(), secret.size(),
-      KEY_SPEC_SESSION_KEYRING);
+      KEY_SPEC_PROCESS_KEYRING);
   if (serial == -1) {
     return tl::unexpected(std::error_code(errno, std::system_category()));
   }
@@ -93,6 +96,10 @@ bool LinuxKeyringSecret::supported(std::error_code* ec) noexcept {
     return false;
   }
   return true;
+}
+
+void LinuxKeyringSecret::initialize_process_keyring() noexcept {
+  keyctl_get_keyring_ID(KEY_SPEC_PROCESS_KEYRING, 1);
 }
 
 [[nodiscard]] std::error_code LinuxKeyringSecret::read(std::string& out) const {
