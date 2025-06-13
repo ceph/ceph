@@ -241,7 +241,7 @@ TEST_F(WebCacheTest, ExpireEraseOne) {
                     << dendl;
   EXPECT_EQ(2, nodes.size());
   const auto expiration_cutoff = ceph::real_clock::from_time_t(300);
-  std::vector<WebCache<std::string, std::string>::Node*> expired;
+  WebCache<std::string, std::string>::SieveQueue expired;
   WebCache<std::string, std::string>::sieve_expire_erase_unmutexed(
       nodes, hand, expiration_cutoff, expired);
   lderr(_cct.get()) << "AFTER EXPIRE:  " << alive_node << ", " << expired_node
@@ -250,7 +250,7 @@ TEST_F(WebCacheTest, ExpireEraseOne) {
   EXPECT_EQ(1, nodes.size());
   EXPECT_EQ(nullptr, hand);
   ASSERT_EQ(1, expired.size());
-  EXPECT_EQ(expired[0], &expired_node);
+  EXPECT_EQ(&*expired.begin(), &expired_node);
 }
 
 TEST_F(WebCacheTest, ExpireEraseAll) {
@@ -269,7 +269,7 @@ TEST_F(WebCacheTest, ExpireEraseAll) {
                     << expired_node_2 << dendl;
   EXPECT_EQ(2, nodes.size());
   const auto expiration_cutoff = ceph::real_clock::from_time_t(300);
-  std::vector<WebCache<std::string, std::string>::Node*> expired;
+  WebCache<std::string, std::string>::SieveQueue expired;
   WebCache<std::string, std::string>::sieve_expire_erase_unmutexed(
       nodes, hand, expiration_cutoff, expired);
   lderr(_cct.get()) << "AFTER EXPIRE:  " << expired_node_1 << ", "
@@ -278,8 +278,8 @@ TEST_F(WebCacheTest, ExpireEraseAll) {
   EXPECT_EQ(0, nodes.size());
   EXPECT_EQ(nullptr, hand);
   ASSERT_EQ(2, expired.size());
-  ASSERT_THAT(
-      expired, ::testing::ElementsAre(&expired_node_1, &expired_node_2));
+  ASSERT_EQ(&*expired.begin(), &expired_node_1);
+  ASSERT_EQ(&expired.back(), &expired_node_2);
 }
 
 TEST_F(WebCacheTest, ExpireEraseUpdatedTTLs) {
@@ -304,7 +304,7 @@ TEST_F(WebCacheTest, ExpireEraseUpdatedTTLs) {
 TEST_F(WebCacheTest, ExpireEraseEmpty) {
   WebCache<std::string, std::string>::SieveQueue nodes;
   const auto expiration_cutoff = ceph::real_clock::from_time_t(42);
-  std::vector<WebCache<std::string, std::string>::Node*> expired;
+  WebCache<std::string, std::string>::SieveQueue expired;
   WebCache<std::string, std::string>::Node* hand = nullptr;
   WebCache<std::string, std::string>::sieve_expire_erase_unmutexed(
       nodes, hand, expiration_cutoff, expired);
