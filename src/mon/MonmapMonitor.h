@@ -37,6 +37,8 @@ class MonmapMonitor : public PaxosService {
   }
   MonMap pending_map; //the pending map awaiting passage
 
+  void init() override;
+
   void create_initial() override;
 
   void update_from_paxos(bool *need_bootstrap) override;
