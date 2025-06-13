@@ -184,6 +184,18 @@ TEST(IECStrToLL, WithUnits) {
   units["Ti"] = 40;
   units["Pi"] = 50;
   units["Ei"] = 60;
+  units["KB"] = 10;
+  units["MB"] = 20;
+  units["GB"] = 30;
+  units["TB"] = 40;
+  units["PB"] = 50;
+  units["EB"] = 60;
+  units["KiB"] = 10;
+  units["MiB"] = 20;
+  units["GiB"] = 30;
+  units["TiB"] = 40;
+  units["PiB"] = 50;
+  units["EiB"] = 60;
 
   for (std::map<std::string,int>::iterator p = units.begin();
        p != units.end(); ++p) {
@@ -255,6 +267,21 @@ TEST(StrictIECCast, Error) {
   {
     std::string err;
     (void)strict_iec_cast<int>("1T", &err);
+    ASSERT_NE(err, "");
+  }
+  {
+    std::string err;
+    (void)strict_iec_cast<int64_t>("1GT", &err);
+    ASSERT_NE(err, "");
+  }
+  {
+    std::string err;
+    (void)strict_iec_cast<int64_t>("1TG", &err);
+    ASSERT_NE(err, "");
+  }
+  {
+    std::string err;
+    (void)strict_iec_cast<int64_t>("1KD", &err);
     ASSERT_NE(err, "");
   }
   {
