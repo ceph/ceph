@@ -1306,14 +1306,13 @@ record_t Cache::prepare_record(
     i->prepare_commit();
 
     if (i->is_mutation_pending()) {
-      i->set_io_wait();
+      i->set_io_wait(CachedExtent::extent_state_t::DIRTY);
       // extent with EXIST_MUTATION_PENDING doesn't have
       // prior_instance field so skip these extents.
       // the existing extents should be added into Cache
       // during complete_commit to sync with gc transaction.
       commit_replace_extent(t, i, i->prior_instance);
     } // Note, else(is_exist_mutation_pending), add_extent() atomically
-    // Note, i->state become DIRTY in complete_commit()
 
     assert(i->get_version() > 0);
     auto final_crc = i->calc_crc32c();
@@ -1493,7 +1492,7 @@ record_t Cache::prepare_record(
 	  i->get_length(),
 	  i->get_type()));
     }
-    i->set_io_wait();
+    i->set_io_wait(CachedExtent::extent_state_t::CLEAN);
     // Note, paddr is known until complete_commit(),
     // so add_extent() later.
   }
@@ -1519,7 +1518,7 @@ record_t Cache::prepare_record(
 	  i->get_length(),
 	  i->get_type()));
     }
-    i->set_io_wait();
+    i->set_io_wait(CachedExtent::extent_state_t::CLEAN);
     // Note, paddr is (can be) known until complete_commit(),
     // so add_extent() later.
   }
@@ -1568,8 +1567,7 @@ record_t Cache::prepare_record(
       i->state = CachedExtent::extent_state_t::CLEAN;
     } else {
       assert(i->is_exist_mutation_pending());
-      i->set_io_wait();
-      // Note, i->state become DIRTY in complete_commit()
+      i->set_io_wait(CachedExtent::extent_state_t::DIRTY);
     }
 
     // exist mutation pending extents must be in t.mutated_block_list
@@ -1815,8 +1813,6 @@ void Cache::complete_commit(
 #endif
     i->pending_for_transaction = TRANS_ID_NULL;
     i->on_initial_write();
-
-    i->state = CachedExtent::extent_state_t::CLEAN;
     i->reset_prior_instance();
     DEBUGT("add extent as fresh, inline={} -- {}",
 	   t, is_inline, *i);
@@ -1865,12 +1861,14 @@ void Cache::complete_commit(
     if (!i->is_valid()) {
       continue;
     }
-    assert(i->is_exist_mutation_pending() ||
-	   i->prior_instance);
+    assert(i->has_delta());
+    assert(i->is_pending_io());
+    assert(i->io_wait->from_state == CachedExtent::extent_state_t::EXIST_MUTATION_PENDING
+           || (i->io_wait->from_state == CachedExtent::extent_state_t::MUTATION_PENDING
+               && i->prior_instance));
     i->on_delta_write(final_block_start);
     i->pending_for_transaction = TRANS_ID_NULL;
     i->reset_prior_instance();
-    i->state = CachedExtent::extent_state_t::DIRTY;
     assert(i->version > 0);
     if (i->version == 1 || is_root_type(i->get_type())) {
       i->dirty_from = start_seq;

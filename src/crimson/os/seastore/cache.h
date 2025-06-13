@@ -1941,7 +1941,7 @@ private:
     assert(is_aligned(offset, get_block_size()));
     assert(is_aligned(length, get_block_size()));
     assert(extent->get_paddr().is_absolute());
-    extent->set_io_wait();
+    extent->set_io_wait(extent->state);
     auto old_length = extent->get_loaded_length();
     load_ranges_t to_read = extent->load_ranges(offset, length);
     auto new_length = extent->get_loaded_length();
