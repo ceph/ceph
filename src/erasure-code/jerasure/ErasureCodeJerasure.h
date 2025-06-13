@@ -92,7 +92,7 @@ public:
                     ceph::bufferptr *delta_maybe_in_place);
 
   void apply_delta(const shard_id_map<ceph::bufferptr> &in,
-                           shard_id_map<ceph::bufferptr> &out) = 0;
+                   shard_id_map<ceph::bufferptr> &out) = 0;
 
   int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
 
