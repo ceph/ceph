@@ -795,6 +795,10 @@ do_rgw_dbstore_conf() {
         exit 1
     fi
 
+    if [ "$new" -eq 1 ]; then
+        prun rm -rf "$CEPH_DEV_DIR/rgw/dbstore"
+    fi
+
     prun mkdir -p "$CEPH_DEV_DIR/rgw/dbstore"
     wconf <<EOF
         rgw backend store = dbstore
