@@ -239,7 +239,7 @@ class VersionStatusUpdater(DaemonStatusUpdater):
                 'alertmanager',
                 'node-exporter',
                 'loki',
-                'promtail',
+                'alloy',
             ]:
                 version = Monitoring.get_version(
                     ctx, container_id, daemon_type
