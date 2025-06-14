@@ -55,13 +55,19 @@ class NvmeofGatewaysConfig(object):
         config = cls.get_gateways_config()
 
         if name in config.get('gateways', {}):
-            existing_gateways = config['gateways'][name]
-            for gateway in existing_gateways:
-                if 'daemon_name' not in gateway:
-                    gateway['daemon_name'] = daemon_name
-                    break
-                if gateway['service_url'] == service_url:
-                    return
+            # the nvmeof dashboard config used in v19.2.0 saves the below
+            # to a dict. Converting that to a list so that the upgrade
+            # properly migrate it to the newer format, and also keep it empty.
+            if isinstance(config['gateways'][name], dict):
+                config['gateways'][name] = []
+            else:
+                existing_gateways = config['gateways'][name]
+                for gateway in existing_gateways:
+                    if 'daemon_name' not in gateway:
+                        gateway['daemon_name'] = daemon_name
+                        break
+                    if gateway['service_url'] == service_url:
+                        return
 
         new_gateway = {
             'service_url': service_url,
