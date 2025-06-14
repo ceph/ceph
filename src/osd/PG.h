@@ -1137,7 +1137,7 @@ protected:
 
   void update_object_snap_mapping(
     ObjectStore::Transaction *t, const hobject_t &soid,
-    const std::set<snapid_t> &snaps);
+    const std::vector<snapid_t> &snaps);
   void clear_object_snap_mapping(
     ObjectStore::Transaction *t, const hobject_t &soid);
   void remove_snap_mapped_object(
