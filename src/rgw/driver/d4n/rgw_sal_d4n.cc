@@ -82,7 +82,13 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   policyDriver->get_cache_policy()->init(cct, dpp, io_context, next);
 
   //setting the connection pool size and other parameters
-  rgw::d4n::RedisPool* redis_pool = new rgw::d4n::RedisPool(&io_context,cfg,384);
+  uint64_t rgw_redis_connection_pool_size = dpp->get_cct()->_conf->rgw_redis_connection_pool_size;
+  rgw::d4n::RedisPool* redis_pool = nullptr;
+  if(rgw_redis_connection_pool_size>0){
+      redis_pool = new rgw::d4n::RedisPool(&io_context,cfg,rgw_redis_connection_pool_size);
+      ldpp_dout(dpp, 10) << "redis connection pool created with " << rgw_redis_connection_pool_size << " connections "  << dendl;
+  }
+
   objDir->set_redis_pool(redis_pool);
   blockDir->set_redis_pool(redis_pool);
   bucketDir->set_redis_pool(redis_pool);
