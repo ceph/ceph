@@ -3765,6 +3765,11 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
   auto obj_lock_mode_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_MODE");
   auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
   auto obj_legal_hold_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
+  int ret = get_encryption_defaults(s);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << __func__ << "(): get_encryption_defaults() returned ret=" << ret << dendl;
+    return ret;
+  }
   if (obj_lock_mode_str && obj_lock_date_str) {
     boost::optional<ceph::real_time> date = ceph::from_iso_8601(obj_lock_date_str);
     if (boost::none == date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
@@ -3875,6 +3880,9 @@ void RGWCopyObj_ObjStore_S3::send_response()
 {
   if (!sent_header)
     send_partial_response(0);
+
+  for (auto &it : crypt_http_responses)
+    dump_header(s, it.first, it.second);
 
   if (op_ret == 0) {
     dump_time_exact_seconds(s, "LastModified", mtime);
