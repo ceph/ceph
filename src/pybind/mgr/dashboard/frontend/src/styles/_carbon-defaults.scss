@@ -147,6 +147,7 @@ cd-dashboard {
 /******************************************
 Code snippet
 ******************************************/
+
 .cds--snippet {
   width: fit-content;
 }
@@ -172,4 +173,55 @@ Tabs
 ******************************************/
 .cds--tab-content {
   background: var(--cds-layer-01);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin {
+  animation: spin 2s linear infinite;
+  transform-origin: center;
+}
+
+.cds-success-color {
+  fill: theme.$support-success;
+}
+
+.cds-danger-color {
+  fill: theme.$support-error;
+}
+
+.cds-info-color {
+  fill: theme.$support-info;
+}
+
+.cds-warning-color {
+  fill: theme.$support-caution-major;
+}
+
+.cds--btn__icon {
+  vertical-align: text-bottom !important;
+}
+
+.cds-white {
+  fill: theme.$icon-on-color;
+}
+
+.cds-mb-4 {
+  margin-bottom: layout.$spacing-02;
+}
+
+.cds-size-32 {
+  height: layout.$spacing-07;
+  width: layout.$spacing-07;
+}
+
+.icon-size {
+  display: block;
+  height: layout.$spacing-10;
+  margin: auto;
+  width: layout.$spacing-10;
 }
