@@ -16,6 +16,7 @@ from ..constants import DEFAULT_IMAGE
 from ..context import CephadmContext
 from ..deployment_utils import to_deployment_container
 from ..exceptions import Error
+from ..call_wrappers import call_throws
 from ..file_utils import (
     make_run_dir,
     pathify,
@@ -196,6 +197,40 @@ class Ceph(ContainerDaemonForm):
         self, ctx: CephadmContext, args: List[str]
     ) -> None:
         args.append(ctx.container_engine.unlimited_pids_option)
+        config_json = fetch_configs(ctx)
+        qat_conf: Union[str, Dict[str, Any]] = config_json.get('qat', {})
+        qat_config: Dict[str, Any] = qat_conf if isinstance(qat_conf, dict) else {}
+
+        if self.identity.daemon_type != 'rgw' or qat_config.get('compression') != 'hw':
+            return
+
+        try:
+            out, _, _ = call_throws(ctx, ['ls', '-1', '/dev/vfio/devices'])
+            devices = [d for d in out.split('\n') if d]
+        except Exception as e:
+            logger.info(f'[QAT] Could not list /dev/vfio/devices: {e}')
+            devices = []
+
+        args.extend([
+            '--cap-add=SYS_ADMIN',
+            '--cap-add=SYS_PTRACE',
+            '--cap-add=IPC_LOCK',
+            '--security-opt', 'seccomp=unconfined',
+            '--ulimit', 'memlock=209715200:209715200',
+            '--device=/dev/qat_adf_ctl:/dev/qat_adf_ctl',
+            '--device=/dev/vfio/vfio:/dev/vfio/vfio',
+            '-v', '/dev:/dev',
+            '--volume=/etc/sysconfig/qat:/etc/sysconfig/qat:ro'
+        ])
+
+        for dev in devices:
+            args.append(f'--device=/dev/vfio/devices/{dev}:/dev/vfio/devices/{dev}')
+
+        os.makedirs('/etc/sysconfig', exist_ok=True)
+        with open('/etc/sysconfig/qat', 'w') as f:
+            f.write('ServicesEnabled=dc\nPOLICY=8\nQAT_USER=ceph\n')
+
+        logger.info(f'[QAT] Successfully injected container args for {self.identity.daemon_name}')
 
     def customize_process_args(
         self, ctx: CephadmContext, args: List[str]
