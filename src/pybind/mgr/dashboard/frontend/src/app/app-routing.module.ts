@@ -446,7 +446,7 @@ const routes: Routes = [
                 uiApiPath: 'smb',
                 redirectTo: 'error',
                 header: 'SMB module is not enabled',
-                button_to_enable_module: 'smb',
+                button_to_enable_module: 'SMB',
                 navigate_to: 'cephfs/smb'
               },
               breadcrumbs: 'File/SMB'
