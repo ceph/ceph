@@ -13,31 +13,31 @@
  */
 
 
+#include <boost/asio/append.hpp>
+#include <boost/asio/async_result.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/steady_timer.hpp>
+
 #include <boost/system/error_code.hpp>
 
 #include <gtest/gtest.h>
 
-#include "common/async/bind_handler.h"
 #include "common/async/blocked_completion.h"
-#include "common/async/forward_handler.h"
-
 using namespace std::literals;
 
-namespace ba = boost::asio;
-namespace bs = boost::system;
-namespace ca = ceph::async;
+namespace asio = boost::asio;
+namespace sys = boost::system;
+namespace async = ceph::async;
 
 class context_thread {
-  ba::io_context c;
-  ba::executor_work_guard<ba::io_context::executor_type> guard;
+  asio::io_context c;
+  asio::executor_work_guard<asio::io_context::executor_type> guard;
   std::thread th;
 
 public:
   context_thread() noexcept
-    : guard(ba::make_work_guard(c)),
+    : guard(asio::make_work_guard(c)),
       th([this]() noexcept { c.run();}) {}
 
   ~context_thread() {
@@ -45,11 +45,11 @@ public:
     th.join();
   }
 
-  ba::io_context& io_context() noexcept {
+  asio::io_context& io_context() noexcept {
     return c;
   }
 
-  ba::io_context::executor_type get_executor() noexcept {
+  asio::io_context::executor_type get_executor() noexcept {
     return c.get_executor();
   }
 };
@@ -71,53 +71,53 @@ template<typename Executor, typename CompletionToken, typename... Args>
 auto id(const Executor& executor, CompletionToken&& token,
 	Args&& ...args)
 {
-  ba::async_completion<CompletionToken, void(Args...)> init(token);
-  boost::asio::post(ca::forward_handler(
-		  ca::bind_handler(std::move(init.completion_handler),
-				   std::forward<Args>(args)...)));
-  return init.result.get();
+  return asio::async_initiate<CompletionToken, void(Args...)>(
+    []<typename ...Args2>(auto handler, Args2&& ...args2) mutable {
+      asio::post(asio::append(std::move(handler),
+			      std::forward<Args2>(args2)...));
+    }, token, std::forward<Args>(args)...);
 }
 
 TEST(BlockedCompletion, Void)
 {
   context_thread t;
 
-  ba::post(t.get_executor(), ca::use_blocked);
+  asio::post(t.get_executor(), async::use_blocked);
 }
 
 TEST(BlockedCompletion, Timer)
 {
   context_thread t;
-  ba::steady_timer timer(t.io_context(), 50ms);
-  timer.async_wait(ca::use_blocked);
+  asio::steady_timer timer(t.io_context(), 50ms);
+  timer.async_wait(async::use_blocked);
 }
 
 TEST(BlockedCompletion, NoError)
 {
   context_thread t;
-  ba::steady_timer timer(t.io_context(), 1s);
-  bs::error_code ec;
+  asio::steady_timer timer(t.io_context(), 1s);
+  sys::error_code ec;
 
-  EXPECT_NO_THROW(id(t.get_executor(), ca::use_blocked, bs::error_code{}));
-  EXPECT_NO_THROW(id(t.get_executor(), ca::use_blocked[ec], bs::error_code{}));
+  EXPECT_NO_THROW(id(t.get_executor(), async::use_blocked, sys::error_code{}));
+  EXPECT_NO_THROW(id(t.get_executor(), async::use_blocked[ec], sys::error_code{}));
   EXPECT_FALSE(ec);
 
   int i;
-  EXPECT_NO_THROW(i = id(t.get_executor(), ca::use_blocked,
-			 bs::error_code{}, 5));
+  EXPECT_NO_THROW(i = id(t.get_executor(), async::use_blocked,
+			 sys::error_code{}, 5));
   ASSERT_EQ(5, i);
-  EXPECT_NO_THROW(i = id(t.get_executor(), ca::use_blocked[ec],
-			 bs::error_code{}, 7));
+  EXPECT_NO_THROW(
+      i = id(t.get_executor(), async::use_blocked[ec], sys::error_code{}, 7));
   EXPECT_FALSE(ec);
   ASSERT_EQ(7, i);
 
   float j;
 
-  EXPECT_NO_THROW(std::tie(i, j) = id(t.get_executor(), ca::use_blocked, 9,
+  EXPECT_NO_THROW(std::tie(i, j) = id(t.get_executor(), async::use_blocked, 9,
 				      3.5));
   ASSERT_EQ(9, i);
   ASSERT_EQ(3.5, j);
-  EXPECT_NO_THROW(std::tie(i, j) = id(t.get_executor(), ca::use_blocked[ec],
+  EXPECT_NO_THROW(std::tie(i, j) = id(t.get_executor(), async::use_blocked[ec],
 				      11, 2.25));
   EXPECT_FALSE(ec);
   ASSERT_EQ(11, i);
@@ -127,111 +127,111 @@ TEST(BlockedCompletion, NoError)
 TEST(BlockedCompletion, AnError)
 {
   context_thread t;
-  ba::steady_timer timer(t.io_context(), 1s);
-  bs::error_code ec;
+  asio::steady_timer timer(t.io_context(), 1s);
+  sys::error_code ec;
 
-  EXPECT_THROW(id(t.get_executor(), ca::use_blocked,
-		  bs::error_code{EDOM, bs::system_category()}),
-	       bs::system_error);
-  EXPECT_NO_THROW(id(t.get_executor(), ca::use_blocked[ec],
-		     bs::error_code{EDOM, bs::system_category()}));
-  EXPECT_EQ(bs::error_code(EDOM, bs::system_category()), ec);
+  EXPECT_THROW(id(t.get_executor(), async::use_blocked,
+		  sys::error_code{EDOM, sys::system_category()}),
+	       sys::system_error);
+  EXPECT_NO_THROW(id(t.get_executor(), async::use_blocked[ec],
+		     sys::error_code{EDOM, sys::system_category()}));
+  EXPECT_EQ(sys::error_code(EDOM, sys::system_category()), ec);
 
-  EXPECT_THROW(id(t.get_executor(), ca::use_blocked,
-		  bs::error_code{EDOM, bs::system_category()}, 5),
-	       bs::system_error);
-  EXPECT_NO_THROW(id(t.get_executor(), ca::use_blocked[ec],
-		     bs::error_code{EDOM, bs::system_category()}, 5));
-  EXPECT_EQ(bs::error_code(EDOM, bs::system_category()), ec);
+  EXPECT_THROW(id(t.get_executor(), async::use_blocked,
+		  sys::error_code{EDOM, sys::system_category()}, 5),
+	       sys::system_error);
+  EXPECT_NO_THROW(id(t.get_executor(), async::use_blocked[ec],
+		     sys::error_code{EDOM, sys::system_category()}, 5));
+  EXPECT_EQ(sys::error_code(EDOM, sys::system_category()), ec);
 
-  EXPECT_THROW(id(t.get_executor(), ca::use_blocked,
-		  bs::error_code{EDOM, bs::system_category()}, 5, 3),
-	       bs::system_error);
-  EXPECT_NO_THROW(id(t.get_executor(), ca::use_blocked[ec],
-		     bs::error_code{EDOM, bs::system_category()}, 5, 3));
-  EXPECT_EQ(bs::error_code(EDOM, bs::system_category()), ec);
+  EXPECT_THROW(id(t.get_executor(), async::use_blocked,
+		  sys::error_code{EDOM, sys::system_category()}, 5, 3),
+	       sys::system_error);
+  EXPECT_NO_THROW(id(t.get_executor(), async::use_blocked[ec],
+		     sys::error_code{EDOM, sys::system_category()}, 5, 3));
+  EXPECT_EQ(sys::error_code(EDOM, sys::system_category()), ec);
 }
 
 TEST(BlockedCompletion, MoveOnly)
 {
   context_thread t;
-  ba::steady_timer timer(t.io_context(), 1s);
-  bs::error_code ec;
+  asio::steady_timer timer(t.io_context(), 1s);
+  sys::error_code ec;
 
 
-  EXPECT_NO_THROW(id(t.get_executor(), ca::use_blocked,
-			 bs::error_code{}, move_only{}));
-  EXPECT_NO_THROW(id(t.get_executor(), ca::use_blocked[ec],
-		     bs::error_code{}, move_only{}));
+  EXPECT_NO_THROW(id(t.get_executor(), async::use_blocked,
+			 sys::error_code{}, move_only{}));
+  EXPECT_NO_THROW(id(t.get_executor(), async::use_blocked[ec],
+		     sys::error_code{}, move_only{}));
   EXPECT_FALSE(ec);
 
   {
-    auto [i, j] = id(t.get_executor(), ca::use_blocked, move_only{}, 5);
+    auto [i, j] = id(t.get_executor(), async::use_blocked, move_only{}, 5);
     EXPECT_EQ(j, 5);
   }
   {
-    auto [i, j] = id(t.get_executor(), ca::use_blocked[ec], move_only{}, 5);
+    auto [i, j] = id(t.get_executor(), async::use_blocked[ec], move_only{}, 5);
     EXPECT_EQ(j, 5);
   }
   EXPECT_FALSE(ec);
 
 
-  EXPECT_THROW(id(t.get_executor(), ca::use_blocked,
-		  bs::error_code{EDOM, bs::system_category()}, move_only{}),
-	       bs::system_error);
-  EXPECT_NO_THROW(id(t.get_executor(), ca::use_blocked[ec],
-		     bs::error_code{EDOM, bs::system_category()}, move_only{}));
-  EXPECT_EQ(bs::error_code(EDOM, bs::system_category()), ec);
+  EXPECT_THROW(id(t.get_executor(), async::use_blocked,
+		  sys::error_code{EDOM, sys::system_category()}, move_only{}),
+	       sys::system_error);
+  EXPECT_NO_THROW(id(t.get_executor(), async::use_blocked[ec],
+		     sys::error_code{EDOM, sys::system_category()}, move_only{}));
+  EXPECT_EQ(sys::error_code(EDOM, sys::system_category()), ec);
 
-  EXPECT_THROW(id(t.get_executor(), ca::use_blocked,
-		  bs::error_code{EDOM, bs::system_category()}, move_only{}, 3),
-	       bs::system_error);
-  EXPECT_NO_THROW(id(t.get_executor(), ca::use_blocked[ec],
-		     bs::error_code{EDOM, bs::system_category()},
+  EXPECT_THROW(id(t.get_executor(), async::use_blocked,
+		  sys::error_code{EDOM, sys::system_category()}, move_only{}, 3),
+	       sys::system_error);
+  EXPECT_NO_THROW(id(t.get_executor(), async::use_blocked[ec],
+		     sys::error_code{EDOM, sys::system_category()},
 		     move_only{}, 3));
-  EXPECT_EQ(bs::error_code(EDOM, bs::system_category()), ec);
+  EXPECT_EQ(sys::error_code(EDOM, sys::system_category()), ec);
 }
 
 TEST(BlockedCompletion, DefaultLess)
 {
   context_thread t;
-  ba::steady_timer timer(t.io_context(), 1s);
-  bs::error_code ec;
+  asio::steady_timer timer(t.io_context(), 1s);
+  sys::error_code ec;
 
 
   {
-    auto l = id(t.get_executor(), ca::use_blocked, bs::error_code{}, defaultless{5});
+    auto l = id(t.get_executor(), async::use_blocked, sys::error_code{}, defaultless{5});
     EXPECT_EQ(5, l.a);
   }
   {
-    auto l = id(t.get_executor(), ca::use_blocked[ec], bs::error_code{}, defaultless{7});
+    auto l = id(t.get_executor(), async::use_blocked[ec], sys::error_code{}, defaultless{7});
     EXPECT_EQ(7, l.a);
   }
 
   {
-    auto [i, j] = id(t.get_executor(), ca::use_blocked, defaultless{3}, 5);
+    auto [i, j] = id(t.get_executor(), async::use_blocked, defaultless{3}, 5);
     EXPECT_EQ(i.a, 3);
     EXPECT_EQ(j, 5);
   }
   {
-    auto [i, j] = id(t.get_executor(), ca::use_blocked[ec], defaultless{3}, 5);
+    auto [i, j] = id(t.get_executor(), async::use_blocked[ec], defaultless{3}, 5);
     EXPECT_EQ(i.a, 3);
     EXPECT_EQ(j, 5);
   }
   EXPECT_FALSE(ec);
 
-  EXPECT_THROW(id(t.get_executor(), ca::use_blocked,
-		  bs::error_code{EDOM, bs::system_category()}, move_only{}),
-	       bs::system_error);
-  EXPECT_NO_THROW(id(t.get_executor(), ca::use_blocked[ec],
-		     bs::error_code{EDOM, bs::system_category()}, move_only{}));
-  EXPECT_EQ(bs::error_code(EDOM, bs::system_category()), ec);
+  EXPECT_THROW(id(t.get_executor(), async::use_blocked,
+		  sys::error_code{EDOM, sys::system_category()}, move_only{}),
+	       sys::system_error);
+  EXPECT_NO_THROW(id(t.get_executor(), async::use_blocked[ec],
+		     sys::error_code{EDOM, sys::system_category()}, move_only{}));
+  EXPECT_EQ(sys::error_code(EDOM, sys::system_category()), ec);
 
-  EXPECT_THROW(id(t.get_executor(), ca::use_blocked,
-		  bs::error_code{EDOM, bs::system_category()}, move_only{}, 3),
-	       bs::system_error);
-  EXPECT_NO_THROW(id(t.get_executor(), ca::use_blocked[ec],
-		     bs::error_code{EDOM, bs::system_category()},
+  EXPECT_THROW(id(t.get_executor(), async::use_blocked,
+		  sys::error_code{EDOM, sys::system_category()}, move_only{}, 3),
+	       sys::system_error);
+  EXPECT_NO_THROW(id(t.get_executor(), async::use_blocked[ec],
+		     sys::error_code{EDOM, sys::system_category()},
 		     move_only{}, 3));
-  EXPECT_EQ(bs::error_code(EDOM, bs::system_category()), ec);
+  EXPECT_EQ(sys::error_code(EDOM, sys::system_category()), ec);
 }

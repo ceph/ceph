@@ -16,60 +16,80 @@
 #ifndef CEPH_COMMON_ASYNC_BLOCKED_COMPLETION_H
 #define CEPH_COMMON_ASYNC_BLOCKED_COMPLETION_H
 
-#include <atomic>
 #include <condition_variable>
 #include <mutex>
 #include <optional>
-#include <type_traits>
 
 #include <boost/asio/async_result.hpp>
+#include <boost/asio/redirect_error.hpp>
 
 #include <boost/system/error_code.hpp>
-#include <boost/system/system_error.hpp>
+
+#include <common/async/concepts.h>
 
 namespace ceph::async {
 
 namespace bs = boost::system;
 
 class use_blocked_t {
-  use_blocked_t(bs::error_code* ec) : ec(ec) {}
 public:
   use_blocked_t() = default;
 
-  use_blocked_t operator [](bs::error_code& _ec) const {
-    return use_blocked_t(&_ec);
+  auto operator [](bs::error_code& ec) const {
+    return boost::asio::redirect_error(use_blocked_t{}, ec);
   }
-
-  bs::error_code* ec = nullptr;
 };
 
 inline constexpr use_blocked_t use_blocked;
 
 namespace detail {
-
-template<typename... Ts>
+// Obnoxiously repetitive, but it cuts down on the amount of
+// copying/moving/splicing/concatenating of tuples I need to do.
+template<typename ...Ts>
 struct blocked_handler
 {
-  blocked_handler(use_blocked_t b) noexcept : ec(b.ec) {}
+  blocked_handler(std::optional<std::tuple<Ts...>>* vals, std::mutex* m,
+		  std::condition_variable* cv, bool* done)
+    : vals(vals), m(m), cv(cv), done(done) {
+  }
 
-  void operator ()(Ts... values) noexcept {
+  template<typename ...Args>
+  void operator ()(Args&& ...args) noexcept {
+    static_assert(sizeof...(Ts) == sizeof...(Args));
     std::scoped_lock l(*m);
-    *ec = bs::error_code{};
-    *value = std::forward_as_tuple(std::move(values)...);
+    *vals = std::tuple<Ts...>(std::forward<Args>(args)...);
     *done = true;
     cv->notify_one();
   }
 
-  void operator ()(bs::error_code ec, Ts... values) noexcept {
+  //private:
+  std::optional<std::tuple<Ts...>>* vals;
+  std::mutex* m = nullptr;
+  std::condition_variable* cv = nullptr;
+  bool* done = nullptr;
+};
+
+template<boost::asio::disposition D, typename ...Ts>
+struct blocked_handler<D, Ts...>
+{
+  blocked_handler(D* dispo, std::optional<std::tuple<Ts...>>* vals,
+		  std::mutex* m, std::condition_variable* cv, bool* done)
+    : dispo(dispo), vals(vals), m(m), cv(cv), done(done) {
+  }
+
+  template<typename Arg0, typename... Args>
+  void operator ()(Arg0&& arg0, Args&& ...args) noexcept {
+    static_assert(sizeof...(Ts) == sizeof...(Args));
     std::scoped_lock l(*m);
-    *this->ec = ec;
-    *value = std::forward_as_tuple(std::move(values)...);
+    *dispo = std::move(arg0);
+    *vals = std::tuple<Ts...>(std::forward<Args>(args)...);
     *done = true;
     cv->notify_one();
   }
 
-  bs::error_code* ec;
-  std::optional<std::tuple<Ts...>>* value = nullptr;
+  //private:
+  D* dispo;
+  std::optional<std::tuple<Ts...>>* vals;
   std::mutex* m = nullptr;
   std::condition_variable* cv = nullptr;
   bool* done = nullptr;
@@ -78,27 +98,44 @@ struct blocked_handler
 template<typename T>
 struct blocked_handler<T>
 {
-  blocked_handler(use_blocked_t b) noexcept : ec(b.ec) {}
+  blocked_handler(std::optional<T>* val, std::mutex* m,
+		  std::condition_variable* cv, bool* done)
+    : val(val), m(m), cv(cv), done(done) {}
 
-  void operator ()(T value) noexcept {
+  template<typename Arg>
+  void operator ()(Arg&& arg) noexcept {
     std::scoped_lock l(*m);
-    *ec = bs::error_code();
-    *this->value = std::move(value);
-    *done = true;
-    cv->notify_one();
-  }
-
-  void operator ()(bs::error_code ec, T value) noexcept {
-    std::scoped_lock l(*m);
-    *this->ec = ec;
-    *this->value = std::move(value);
+    *val = std::forward<Arg>(arg);
     *done = true;
     cv->notify_one();
   }
 
   //private:
-  bs::error_code* ec;
-  std::optional<T>* value;
+  std::optional<T>* val;
+  std::mutex* m = nullptr;
+  std::condition_variable* cv = nullptr;
+  bool* done = nullptr;
+};
+
+template<boost::asio::disposition D, typename T>
+struct blocked_handler<D, T>
+{
+  blocked_handler(D* dispo, std::optional<T>* val, std::mutex* m,
+		  std::condition_variable* cv, bool* done)
+    : dispo(dispo), val(val), m(m), cv(cv), done(done) {}
+
+  template<typename Arg0, typename Arg>
+  void operator ()(Arg0&& arg0, Arg&& arg) noexcept {
+    std::scoped_lock l(*m);
+    *dispo = std::move(arg0);
+    *val = std::move(arg);
+    *done = true;
+    cv->notify_one();
+  }
+
+  //private:
+  D* dispo;
+  std::optional<T>* val;
   std::mutex* m = nullptr;
   std::condition_variable* cv = nullptr;
   bool* done = nullptr;
@@ -107,23 +144,37 @@ struct blocked_handler<T>
 template<>
 struct blocked_handler<void>
 {
-  blocked_handler(use_blocked_t b) noexcept : ec(b.ec) {}
+  blocked_handler(std::mutex* m, std::condition_variable* cv, bool* done)
+    : m(m), cv(cv), done(done) {}
 
   void operator ()() noexcept {
     std::scoped_lock l(*m);
-    *ec = bs::error_code{};
     *done = true;
     cv->notify_one();
   }
 
-  void operator ()(bs::error_code ec) noexcept {
+  std::mutex* m = nullptr;
+  std::condition_variable* cv = nullptr;
+  bool* done = nullptr;
+};
+
+template<boost::asio::disposition D>
+struct blocked_handler<D>
+{
+  blocked_handler(D* dispo, std::mutex* m,
+		  std::condition_variable* cv, bool* done)
+    : dispo(dispo), m(m), cv(cv), done(done) {}
+
+  template<typename Arg0>
+  void operator ()(Arg0&& arg0) noexcept {
     std::scoped_lock l(*m);
-    *this->ec = ec;
+    *dispo = std::move(arg0);
     *done = true;
     cv->notify_one();
   }
 
-  bs::error_code* ec;
+  //private:
+  D* dispo;
   std::mutex* m = nullptr;
   std::condition_variable* cv = nullptr;
   bool* done = nullptr;
@@ -136,35 +187,65 @@ public:
   using completion_handler_type = blocked_handler<Ts...>;
   using return_type = std::tuple<Ts...>;
 
-  explicit blocked_result(completion_handler_type& h) noexcept {
-    std::scoped_lock l(m);
-    out_ec = h.ec;
-    if (!out_ec) h.ec = &ec;
-    h.value = &value;
-    h.m = &m;
-    h.cv = &cv;
-    h.done = &done;
-  }
+  template<typename Initiation, typename... Args>
+  static return_type initiate(Initiation&& init,
+			      use_blocked_t,
+			      Args&& ...args) {
+    using ttype = std::tuple<Ts...>;
+    std::optional<ttype> vals;
+    std::mutex m;
+    std::condition_variable cv;
+    bool done = false;
+    static_assert(std::tuple_size_v<ttype> > 1);
 
-  return_type get() {
+    std::move(init)(completion_handler_type(&vals, &m, &cv, &done),
+		    std::forward<Args>(args)...);
+
     std::unique_lock l(m);
-    cv.wait(l, [this]() { return done; });
-    if (!out_ec && ec) throw bs::system_error(ec);
-    return std::move(*value);
+    cv.wait(l, [&done]() { return done; });
+    return std::move(*vals);
   }
 
   blocked_result(const blocked_result&) = delete;
   blocked_result& operator =(const blocked_result&) = delete;
   blocked_result(blocked_result&&) = delete;
   blocked_result& operator =(blocked_result&&) = delete;
+};
 
-private:
-  bs::error_code* out_ec;
-  bs::error_code ec;
-  std::optional<return_type> value;
-  std::mutex m;
-  std::condition_variable cv;
-  bool done = false;
+template<boost::asio::disposition D, typename... Ts>
+class blocked_result<D, Ts...>
+{
+public:
+  using completion_handler_type = blocked_handler<D, Ts...>;
+  using return_type = std::tuple<Ts...>;
+
+  template<typename Initiation, typename... Args>
+  static return_type initiate(Initiation&& init,
+			      use_blocked_t,
+			      Args&& ...args) {
+    using ttype = std::tuple<Ts...>;
+    std::optional<ttype> vals;
+    D dispo;
+    std::mutex m;
+    std::condition_variable cv;
+    bool done = false;
+    static_assert(std::tuple_size_v<ttype> > 1);
+
+    std::move(init)(completion_handler_type(&dispo, &vals, &m, &cv, &done),
+		    std::forward<Args>(args)...);
+
+    std::unique_lock l(m);
+    cv.wait(l, [&done]() { return done; });
+    if (dispo != boost::asio::no_error) {
+      boost::asio::disposition_traits<D>::throw_exception(dispo);
+    }
+    return std::move(*vals);
+  }
+
+  blocked_result(const blocked_result&) = delete;
+  blocked_result& operator =(const blocked_result&) = delete;
+  blocked_result(blocked_result&&) = delete;
+  blocked_result& operator =(blocked_result&&) = delete;
 };
 
 template<typename T>
@@ -174,35 +255,61 @@ public:
   using completion_handler_type = blocked_handler<T>;
   using return_type = T;
 
-  explicit blocked_result(completion_handler_type& h) noexcept {
-    std::scoped_lock l(m);
-    out_ec = h.ec;
-    if (!out_ec) h.ec = &ec;
-    h.value = &value;
-    h.m = &m;
-    h.cv = &cv;
-    h.done = &done;
-  }
+  template<typename Initiation, typename... Args>
+  static return_type initiate(Initiation&& init,
+			      use_blocked_t,
+			      Args&& ...args) {
+    std::optional<T> val;
+    std::mutex m;
+    std::condition_variable cv;
+    bool done = false;
 
-  return_type get() {
+    std::move(init)(completion_handler_type(&val, &m, &cv, &done),
+		    std::forward<Args>(args)...);
+
     std::unique_lock l(m);
-    cv.wait(l, [this]() { return done; });
-    if (!out_ec && ec) throw bs::system_error(ec);
-    return std::move(*value);
+    cv.wait(l, [&done]() { return done; });
+    return std::move(*val);
   }
 
   blocked_result(const blocked_result&) = delete;
   blocked_result& operator =(const blocked_result&) = delete;
   blocked_result(blocked_result&&) = delete;
   blocked_result& operator =(blocked_result&&) = delete;
+};
 
-private:
-  bs::error_code* out_ec;
-  bs::error_code ec;
-  std::optional<return_type> value;
-  std::mutex m;
-  std::condition_variable cv;
-  bool done = false;
+template<boost::asio::disposition D, typename T>
+class blocked_result<D, T>
+{
+public:
+  using completion_handler_type = blocked_handler<D, T>;
+  using return_type = T;
+
+  template<typename Initiation, typename... Args>
+  static return_type initiate(Initiation&& init,
+			      use_blocked_t,
+			      Args&& ...args) {
+    D dispo;
+    std::optional<T> val;
+    std::mutex m;
+    std::condition_variable cv;
+    bool done = false;
+
+    std::move(init)(completion_handler_type(&dispo, &val, &m, &cv, &done),
+		    std::forward<Args>(args)...);
+
+    std::unique_lock l(m);
+    cv.wait(l, [&done]() { return done; });
+    if (dispo != boost::asio::no_error) {
+      boost::asio::disposition_traits<D>::throw_exception(dispo);
+    }
+    return std::move(*val);
+  }
+
+  blocked_result(const blocked_result&) = delete;
+  blocked_result& operator =(const blocked_result&) = delete;
+  blocked_result(blocked_result&&) = delete;
+  blocked_result& operator =(blocked_result&&) = delete;
 };
 
 template<>
@@ -212,78 +319,101 @@ public:
   using completion_handler_type = blocked_handler<void>;
   using return_type = void;
 
-  explicit blocked_result(completion_handler_type& h) noexcept {
-    std::scoped_lock l(m);
-    out_ec = h.ec;
-    if (!out_ec) h.ec = &ec;
-    h.m = &m;
-    h.cv = &cv;
-    h.done = &done;
-  }
+  template<typename Initiation, typename... Args>
+  static return_type initiate(Initiation&& init,
+			      use_blocked_t,
+			      Args&& ...args) {
+    std::mutex m;
+    std::condition_variable cv;
+    bool done = false;
 
-  void get() {
+    std::move(init)(completion_handler_type(&m, &cv, &done),
+		    std::forward<Args>(args)...);
+
     std::unique_lock l(m);
-    cv.wait(l, [this]() { return done; });
-    if (!out_ec && ec) throw bs::system_error(ec);
+    cv.wait(l, [&done]() { return done; });
+    return;
   }
 
   blocked_result(const blocked_result&) = delete;
   blocked_result& operator =(const blocked_result&) = delete;
   blocked_result(blocked_result&&) = delete;
   blocked_result& operator =(blocked_result&&) = delete;
-
-private:
-  bs::error_code* out_ec;
-  bs::error_code ec;
-  std::mutex m;
-  std::condition_variable cv;
-  bool done = false;
 };
+
+
+template<boost::asio::disposition D>
+class blocked_result<D>
+{
+public:
+  using completion_handler_type = blocked_handler<D>;
+  using return_type = void;
+
+  template<typename Initiation, typename... Args>
+  static return_type initiate(Initiation&& init,
+			      use_blocked_t,
+			      Args&& ...args) {
+    D dispo;
+    std::mutex m;
+    std::condition_variable cv;
+    bool done = false;
+
+    std::move(init)(completion_handler_type(&dispo, &m, &cv, &done),
+		    std::forward<Args>(args)...);
+
+    std::unique_lock l(m);
+    cv.wait(l, [&done]() { return done; });
+    if (dispo != boost::asio::no_error) {
+      boost::asio::disposition_traits<D>::throw_exception(dispo);
+    }
+    return;
+  }
+
+  blocked_result(const blocked_result&) = delete;
+  blocked_result& operator =(const blocked_result&) = delete;
+  blocked_result(blocked_result&&) = delete;
+  blocked_result& operator =(blocked_result&&) = delete;
+};
+
 } // namespace detail
 } // namespace ceph::async
 
 
 namespace boost::asio {
-template<typename ReturnType>
-class async_result<ceph::async::use_blocked_t, ReturnType()>
+template<typename R>
+class async_result<ceph::async::use_blocked_t, R()>
   : public ceph::async::detail::blocked_result<void>
 {
-public:
-  explicit async_result(typename ceph::async::detail::blocked_result<void>
-			::completion_handler_type& h)
-    : ceph::async::detail::blocked_result<void>(h) {}
 };
 
-template<typename ReturnType, typename... Args>
-class async_result<ceph::async::use_blocked_t, ReturnType(Args...)>
-  : public ceph::async::detail::blocked_result<std::decay_t<Args>...>
+template<typename R, disposition D>
+class async_result<ceph::async::use_blocked_t, R(D)>
+  : public ceph::async::detail::blocked_result<D>
 {
-public:
-  explicit async_result(
-    typename ceph::async::detail::blocked_result<std::decay_t<Args>...>::completion_handler_type& h)
-    : ceph::async::detail::blocked_result<std::decay_t<Args>...>(h) {}
 };
 
-template<typename ReturnType>
-class async_result<ceph::async::use_blocked_t,
-		   ReturnType(boost::system::error_code)>
-  : public ceph::async::detail::blocked_result<void>
+template<typename R, typename Arg>
+class async_result<ceph::async::use_blocked_t, R(Arg)>
+  : public ceph::async::detail::blocked_result<Arg>
 {
-public:
-  explicit async_result(
-    typename ceph::async::detail::blocked_result<void>::completion_handler_type& h)
-    : ceph::async::detail::blocked_result<void>(h) {}
 };
 
-template<typename ReturnType, typename... Args>
-class async_result<ceph::async::use_blocked_t,
-		   ReturnType(boost::system::error_code, Args...)>
-  : public ceph::async::detail::blocked_result<std::decay_t<Args>...>
+template<typename R, disposition D, typename Arg>
+class async_result<ceph::async::use_blocked_t, R(D, Arg)>
+  : public ceph::async::detail::blocked_result<D, Arg>
 {
-public:
-  explicit async_result(
-    typename ceph::async::detail::blocked_result<std::decay_t<Args>...>::completion_handler_type& h)
-    : ceph::async::detail::blocked_result<std::decay_t<Args>...>(h) {}
+};
+
+template<typename R, typename... Args>
+class async_result<ceph::async::use_blocked_t, R(Args...)>
+  : public ceph::async::detail::blocked_result<Args...>
+{
+};
+
+template<typename R, disposition D, typename... Args>
+class async_result<ceph::async::use_blocked_t, R(D, Args...)>
+  : public ceph::async::detail::blocked_result<D, Args...>
+{
 };
 }
 
