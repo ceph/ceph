@@ -177,7 +177,7 @@ def url(issue):
 def set_backport(issue):
     for field in issue['custom_fields']:
         if field['name'] == 'Backport' and field['value'] != 0:
-            issue['backports'] = set(re.findall('\w+', field['value']))
+            issue['backports'] = set(re.findall(r'\w+', field['value']))
             logging.debug("backports for " + str(issue['id']) +
                           " is " + str(field['value']) + " " +
                           str(issue['backports']))
