@@ -40,7 +40,7 @@ tasks:
       - ceph -s
       - ceph health detail
       # check that there are two different versions found for mgr daemon (which implies we upgraded one)
-      - ceph versions | jq -e '.mgr | length == 2'
+      - time timeout 60 bash -c "until ceph versions | jq -e '.mgr | length == 2'; do sleep 2; done"
       - ceph mgr fail
       - sleep 180
       # now try upgrading the other mgr
@@ -60,7 +60,7 @@ tasks:
       - ceph -s
       - ceph health detail
       # now that both mgrs should have been redeployed with the new version, we should be back on only 1 version for the mgrs
-      - ceph versions | jq -e '.mgr | length == 1'
+      - time timeout 60 bash -c "until ceph versions | jq -e '.mgr | length == 1'; do sleep 2; done"
       - ceph mgr fail
       - sleep 180
       # debugging info
@@ -72,12 +72,12 @@ tasks:
       - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mgr
       - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
       # verify only one version found for mgrs and that their version hash matches what we are upgrading to
-      - ceph versions | jq -e '.mgr | length == 1'
-      - ceph versions | jq -e '.mgr | keys' | grep $sha1
+      - time timeout 60 bash -c "until ceph versions | jq -e '.mgr | length == 1'; do sleep 2; done"
+      - time timeout 60 bash -c "until ceph versions | jq -e '.mgr | keys' | grep $sha1; do sleep 2; done"
       # verify overall we still see two versions, basically to make sure --daemon-types wasn't ignored and all daemons upgraded
-      - ceph versions | jq -e '.overall | length == 2'
+      - time timeout 60 bash -c "until ceph versions | jq -e '.overall | length == 2'; do sleep 2; done"
       # check that exactly two daemons have been upgraded to the new image (our 2 mgr daemons)
-      - ceph orch upgrade check quay.ceph.io/ceph-ci/ceph:$sha1 | jq -e '.up_to_date | length == 2'
+      - time timeout 60 bash -c "until ceph orch upgrade check quay.ceph.io/ceph-ci/ceph:$sha1 | jq -e '.up_to_date | length == 2'; do sleep 2; done"
       - ceph orch upgrade status
       - ceph health detail
       # upgrade only the mons on one of the two hosts
@@ -85,7 +85,7 @@ tasks:
       - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
       - ceph orch ps
       # verify two different version seen for mons
-      - ceph versions | jq -e '.mon | length == 2'
+      - time timeout 60 bash -c "until ceph versions | jq -e '.mon | length == 2'; do sleep 2; done"
       - ceph orch upgrade status
       - ceph health detail
       # upgrade mons on the other hosts
@@ -93,10 +93,10 @@ tasks:
       - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
       - ceph orch ps
       # verify all mons now on same version and version hash matches what we are upgrading to
-      - ceph versions | jq -e '.mon | length == 1'
-      - ceph versions | jq -e '.mon | keys' | grep $sha1
+      - time timeout 60 bash -c "until ceph versions | jq -e '.mon | length == 1'; do sleep 2; done"
+      - time timeout 60 bash -c "until ceph versions | jq -e '.mon | keys' | grep $sha1; do sleep 2; done"
       # verify exactly 5 daemons are now upgraded (2 mgrs, 3 mons)
-      - ceph orch upgrade check quay.ceph.io/ceph-ci/ceph:$sha1 | jq -e '.up_to_date | length == 5'
+      - time timeout 60 bash -c "until ceph orch upgrade check quay.ceph.io/ceph-ci/ceph:$sha1 | jq -e '.up_to_date | length == 5'; do sleep 2; done"
       - ceph orch upgrade status
       - ceph health detail
       # upgrade exactly 2 osd daemons
@@ -104,18 +104,18 @@ tasks:
       - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
       - ceph orch ps
       # verify two different versions now seen for osds
-      - ceph versions | jq -e '.osd | length == 2'
+      - time timeout 60 bash -c "until ceph versions | jq -e '.osd | length == 2'; do sleep 2; done"
       # verify exactly 7 daemons have been upgraded (2 mgrs, 3 mons, 2 osds)
-      - ceph orch upgrade check quay.ceph.io/ceph-ci/ceph:$sha1 | jq -e '.up_to_date | length == 7'
+      - time timeout 60 bash -c "until ceph orch upgrade check quay.ceph.io/ceph-ci/ceph:$sha1 | jq -e '.up_to_date | length == 7'; do sleep 2; done"
       - ceph orch upgrade status
       - ceph health detail
       # upgrade one more osd
       - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types crash,osd --limit 1
       - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
       - ceph orch ps
-      - ceph versions | jq -e '.osd | length == 2'
+      - time timeout 60 bash -c "until ceph versions | jq -e '.osd | length == 2'; do sleep 2; done"
       # verify now 8 daemons have been upgraded
-      - ceph orch upgrade check quay.ceph.io/ceph-ci/ceph:$sha1 | jq -e '.up_to_date | length == 8'
+      - time timeout 60 bash -c "until ceph orch upgrade check quay.ceph.io/ceph-ci/ceph:$sha1 | jq -e '.up_to_date | length == 8'; do sleep 2; done"
       # upgrade the rest of the osds
       - ceph orch upgrade status
       - ceph health detail
@@ -123,7 +123,7 @@ tasks:
       - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
       - ceph orch ps
       # verify all osds are now on same version and version hash matches what we are upgrading to
-      - ceph versions | jq -e '.osd | length == 1'
+      - time timeout 60 bash -c "until ceph versions | jq -e '.osd | length == 1'; do sleep 2; done"
       - ceph versions | jq -e '.osd | keys' | grep $sha1
       - ceph orch upgrade status
       - ceph health detail
