@@ -1919,7 +1919,8 @@ static int send_to_remote_gateway(RGWRESTConn* conn, req_info& info,
 
   ceph::bufferlist response;
   rgw_user user;
-  auto result = conn->forward(dpp(), user, info, MAX_REST_RESPONSE, &in_data, &response, null_yield);
+  auto result = conn->forward(dpp(), user, info, MAX_REST_RESPONSE,
+                              param_vec_t{}, &in_data, &response, null_yield);
   if (!result) {
     return result.error();
   }
@@ -5565,7 +5566,7 @@ int main(int argc, const char **argv)
         zonegroup.name = zonegroup_name;
         zonegroup.is_master = is_master;
         zonegroup.realm_id = realm.get_id();
-        zonegroup.endpoints = endpoints;
+        zonegroup.endpoints.assign(endpoints.begin(), endpoints.end());
         zonegroup.api_name = (api_name.empty() ? zonegroup_name : api_name);
 
         zonegroup.enabled_features = enable_features;
@@ -5717,7 +5718,7 @@ int main(int argc, const char **argv)
         }
 
         if (!endpoints.empty()) {
-          zonegroup.endpoints = endpoints;
+          zonegroup.endpoints.assign(endpoints.begin(), endpoints.end());
           need_update = true;
         }
 
