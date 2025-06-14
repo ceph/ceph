@@ -1185,6 +1185,7 @@ struct error_code;
 
     void write_stream(std::ostream &out) const;
     void hexdump(std::ostream &out, bool trailing_newline = true) const;
+    std::string hexdump();
     ssize_t pread_file(const char *fn, uint64_t off, uint64_t len, std::string *error);
     int read_file(const char *fn, std::string *error);
     ssize_t read_fd(int fd, size_t len);
