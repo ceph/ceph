@@ -30,6 +30,7 @@ from io import StringIO
 from threading import Thread, Event
 from pathlib import Path
 from configparser import ConfigParser
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from cephadmlib.constants import (
     # default images
@@ -2908,6 +2909,8 @@ def get_deployment_type(
 @deprecated_command
 def command_deploy(ctx):
     # type: (CephadmContext) -> None
+    lock = FileLock(ctx, ctx.fsid)
+    lock.acquire()
     try:
         _common_deploy(ctx)
     except DaemonStartException:
@@ -2947,26 +2950,48 @@ def apply_deploy_config_to_ctx(
     logger.debug('Determined image: %r', ctx.image)
 
 
-def command_deploy_from(ctx: CephadmContext) -> None:
+def command_deploy_from(base_ctx: CephadmContext) -> None:
     """The deploy-from command is similar to deploy but sources nearly all
     configuration parameters from an input JSON configuration file.
     """
-    config_data = read_configuration_source(ctx)
+    config_data = read_configuration_source(base_ctx)
     logger.debug('Loaded deploy configuration: %r', config_data)
-    apply_deploy_config_to_ctx(config_data, ctx)
-    try:
-        _common_deploy(ctx)
-    except DaemonStartException:
-        sys.exit(DAEMON_FAILED_ERROR)
+    results: Dict[str, int] = {}  # individual rc for each daemon deployment
+    lock = FileLock(base_ctx, base_ctx.fsid)
+    lock.acquire()
+
+    def _deploy_daemon(ctx: CephadmContext) -> Tuple[str, int]:
+        rc: int = 0
+        try:
+            _common_deploy(ctx)
+        except DaemonStartException:
+            rc = DAEMON_FAILED_ERROR
+        except Exception:
+            # TODO: better rc based on exception?
+            rc = -1
+        return (ctx.name, rc)
+
+    daemon_ctxs: List[CephadmContext] = []
+    for config in config_data:
+        ctx = CephadmContext()
+        ctx._conf = base_ctx._conf
+        ctx._args = base_ctx._args
+        apply_deploy_config_to_ctx(config, ctx)
+        daemon_ctxs.append(ctx)
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        deploy_futures = {executor.submit(_deploy_daemon, daemon_ctx): daemon_ctx for daemon_ctx in daemon_ctxs}
+        for future in as_completed(deploy_futures):
+            daemon_name, rc = future.result()
+            results[daemon_name] = rc
+
+    print(json.dumps(results))
 
 
 def _common_deploy(ctx: CephadmContext) -> None:
     ident = DaemonIdentity.from_context(ctx)
     if ident.daemon_type not in get_supported_daemons():
         raise Error('daemon type %s not recognized' % ident.daemon_type)
-
-    lock = FileLock(ctx, ctx.fsid)
-    lock.acquire()
 
     deployment_type = get_deployment_type(ctx, ident)
 
@@ -3828,11 +3853,57 @@ def _stop_and_disable(ctx, unit_name):
 ##################################
 
 
+def apply_rm_daemon_config_to_ctx(
+    config_data: Dict[str, Any],
+    ctx: CephadmContext,
+) -> None:
+    """Apply args for removal of a daemon to a CephadmContext object"""
+    ctx.name = config_data['name']
+    ctx.tcp_ports = config_data['tcp_ports']
+
+
+def command_rm_daemon_from(base_ctx: CephadmContext) -> None:
+    config_data = read_configuration_source(base_ctx)
+    logger.debug('Loaded deploy configuration: %r', config_data)
+    results: Dict[str, int] = {}  # individual rc for each daemon removal
+    lock = FileLock(base_ctx, base_ctx.fsid)
+    lock.acquire()
+
+    def _remove_daemon(ctx: CephadmContext) -> Tuple[str, int]:
+        rc: int = 0
+        try:
+            _rm_daemon(ctx)
+        except Exception:
+            # TODO: better rc based on exception?
+            rc = -1
+        return (ctx.name, rc)
+
+    daemon_ctxs: List[CephadmContext] = []
+    for config in config_data:
+        ctx = CephadmContext()
+        ctx._conf = base_ctx._conf
+        ctx._args = base_ctx._args
+        apply_rm_daemon_config_to_ctx(config, ctx)
+        daemon_ctxs.append(ctx)
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        rm_daemon_futures = {executor.submit(_remove_daemon, daemon_ctx): daemon_ctx for daemon_ctx in daemon_ctxs}
+        for future in as_completed(rm_daemon_futures):
+            daemon_name, rc = future.result()
+            results[daemon_name] = rc
+
+    print(json.dumps(results))
+
+
 def command_rm_daemon(ctx):
     # type: (CephadmContext) -> None
     lock = FileLock(ctx, ctx.fsid)
     lock.acquire()
 
+    _rm_daemon(ctx)
+
+
+def _rm_daemon(ctx: CephadmContext) -> None:
     ident = DaemonIdentity.from_context(ctx)
     try:
         # attempt a fast-path conversion that maps the fsid+name to
@@ -5071,6 +5142,21 @@ def _get_parser():
         '--fsid',
         help='cluster FSID')
     parser_deploy_from.add_argument(
+        'source',
+        default='-',
+        nargs='?',
+        help='Configuration input source file',
+    )
+
+    parser_rm_daemon_from = subparsers_orch.add_parser(
+        'rm-daemons', help='remove daemons')
+    parser_rm_daemon_from.set_defaults(func=command_rm_daemon_from)
+    # currently cephadm mgr module passes an fsid option on the CLI too
+    # TODO: remove this and always source fsid from the JSON?
+    parser_rm_daemon_from.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_rm_daemon_from.add_argument(
         'source',
         default='-',
         nargs='?',
