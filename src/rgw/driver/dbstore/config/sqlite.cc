@@ -27,7 +27,7 @@
 #include "common/random_string.h"
 #include "rgw_realm_watcher.h"
 
-#include "driver/rados/rgw_zone.h" // FIXME: subclass dependency
+#include "rgw/rgw_zone.h"
 
 #include "common/connection_pool.h"
 #include "sqlite/connection.h"
