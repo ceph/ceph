@@ -320,12 +320,49 @@ public:
     return legacy.get_ec_data_chunk_count();
   }
 
-  int get_ec_stripe_chunk_size() const override
-  {
+  bool get_ec_supports_crc_encode_decode() const override {
     if (is_optimized()) {
-      return optimized.get_ec_stripe_chunk_size();
+      return optimized.get_ec_supports_crc_encode_decode();
     }
-    return legacy.get_ec_stripe_chunk_size();
+    return legacy.get_ec_supports_crc_encode_decode();
+  }
+
+  bool ec_can_decode(const shard_id_set &available_shards) const override {
+    if (is_optimized()) {
+      return optimized.ec_can_decode(available_shards);
+    }
+
+    return false;
+  }
+
+  shard_id_map<bufferlist> ec_encode_acting_set(
+      const bufferlist &in_bl) const override {
+    if (is_optimized()) {
+      return optimized.ec_encode_acting_set(in_bl);
+    }
+
+    ceph_abort_msg("This interface is not supported by legacy EC");
+    return {0};
+  }
+
+  shard_id_map<bufferlist> ec_decode_acting_set(
+      const shard_id_map<bufferlist> &shard_map,
+      int chunk_size) const override {
+    if (is_optimized()) {
+      return optimized.ec_decode_acting_set(shard_map, chunk_size);
+    }
+
+    ceph_abort_msg("This interface is not supported by legacy EC");
+    return {0};
+  }
+
+  ECUtil::stripe_info_t ec_get_sinfo() const {
+    if (is_optimized()) {
+      return optimized.ec_get_sinfo();
+    }
+
+    ceph_abort_msg("This interface is not supported by legacy EC");
+    return {0, 0, 0};
   }
 
   int objects_get_attrs(
@@ -358,5 +395,20 @@ public:
     }
     return legacy.object_size_to_shard_size(size);
     // All shards are the same size.
+  }
+  bool get_is_nonprimary_shard(shard_id_t shard) const final {
+    if (is_optimized()) {
+      return optimized.get_is_nonprimary_shard(shard);
+    }
+    return false;
+  }
+  bool get_is_hinfo_required() const final {
+    if (is_optimized()) {
+      return optimized.get_is_hinfo_required();
+    }
+    return true;
+  }
+  bool get_is_ec_optimized() const final {
+    return is_optimized();
   }
 };
