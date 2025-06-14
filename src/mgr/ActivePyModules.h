@@ -46,6 +46,7 @@ class ActivePyModules
 {
   // module class instances not yet created
   std::set<std::string, std::less<>> pending_modules;
+  Context *recheck_modules_start = nullptr;
   // module class instances already created
   std::map<std::string, std::shared_ptr<ActivePyModule>> modules;
   PyModuleConfig &module_config;
@@ -251,5 +252,6 @@ public:
 
   bool inject_python_on() const;
   void update_cache_metrics();
+  void check_all_modules_started(Context *modules_start_complete);
 };
 
