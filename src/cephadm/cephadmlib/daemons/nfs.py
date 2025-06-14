@@ -1,7 +1,6 @@
 import logging
 import os
 import re
-
 from typing import Dict, List, Optional, Tuple, Union
 
 from ..call_wrappers import call, CallVerbosity
@@ -177,10 +176,23 @@ class NFSGanesha(ContainerDaemonForm):
 
         # create the ganesha conf dir
         config_dir = os.path.join(data_dir, 'etc/ganesha')
+        kmip_dir = os.path.join(data_dir, 'etc/ganesha/kmip')
         makedirs(config_dir, uid, gid, 0o755)
+        makedirs(kmip_dir, uid, gid, 0o755)
 
+        config_files = {
+            fname: content
+            for fname, content in self.files.items()
+            if fname.endswith('.conf')
+        }
+        kmip_files = {
+            fname: content
+            for fname, content in self.files.items()
+            if fname.startswith('kmip')
+        }
         # populate files from the config-json
-        populate_files(config_dir, self.files, uid, gid)
+        populate_files(config_dir, config_files, uid, gid)
+        populate_files(kmip_dir, kmip_files, uid, gid)
 
         # write the RGW keyring
         if self.rgw:
