@@ -18,6 +18,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "BLAKE3/c/blake3.h"
+#include "include/encoding.h"
+#include "include/buffer.h"
 
 namespace rgw { namespace digest {
 
@@ -30,6 +32,12 @@ class Blake3 {
 
     Blake3() { Restart(); }
 
+    Blake3(ceph::bufferlist& bl) {
+	Restart();
+	const char *p = bl.c_str();
+	memcpy((char*)&h, p, bl.length());
+    }
+
     void Restart() { blake3_hasher_init(&h); }
 
     void Update(const unsigned char *data, uint64_t len) {
@@ -38,6 +46,11 @@ class Blake3 {
 
     void Final(unsigned char* digest) {
 	blake3_hasher_finalize(&h, digest, digest_size);
+    }
+
+    void Serialize(ceph::bufferlist& bl) {
+	const char *p = (const char *)&h;
+	bl.append(p, sizeof(blake3_hasher));
     }
 }; /* Blake3 */
 
