@@ -1,6 +1,8 @@
+#include <common/dout.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <deque>
+#include <iostream>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -2347,7 +2349,7 @@ void pool_io_callback(completion_t cb, void *arg /* Actually AioCompletion* */)
     ASSERT_EQ(0, info->c->wait_for_complete());
   }
   int r = info->c->get_return_value();
-  //cout << "finish " << i << " r = " << r << std::endl;
+  cout << "finish " << i << " r = " << r << std::endl;
 
   std::scoped_lock l(my_lock);
   inflight.erase(i);
@@ -2369,8 +2371,9 @@ TEST(LibRadosAio, PoolEIOFlag) {
   bufferlist bl;
   bl.append("some data");
   std::thread *t = nullptr;
+  std::atomic<bool> missed_eio{false};
   
-  unsigned max = 100;
+  unsigned max = 1000;
   unsigned timeout = max * 10;
   unsigned long i = 1;
   my_lock.lock();
@@ -2385,19 +2388,23 @@ TEST(LibRadosAio, PoolEIOFlag) {
     //cout << "start " << i << " r = " << r << std::endl;
 
     if (i == max / 2) {
-      cout << "setting pool EIO" << std::endl;
-      t = new std::thread(
-	[&] {
-	  bufferlist empty;
-	  ASSERT_EQ(0, test_data.m_cluster.mon_command(
-	    fmt::format(R"({{
-	                "prefix": "osd pool set",
-	                "pool": "{}",
-	                "var": "eio",
-	                "val": "true"
-	                }})", test_data.m_pool_name),
-	    empty, nullptr, nullptr));
-	});
+      t = new std::thread([&] {
+        bufferlist empty;
+        cout << "sending pool EIO time: " << ceph_clock_now() << std::endl;
+        ASSERT_EQ(0, test_data.m_cluster.mon_command(
+          fmt::format(R"({{
+            "prefix": "osd pool set",
+            "pool": "{}",
+            "var": "eio",
+            "val": "true"
+            }})", test_data.m_pool_name),
+       empty, nullptr, nullptr));
+
+        {
+          std::scoped_lock lk(my_lock);
+          missed_eio = (!min_failed && max_success == max);
+        }
+      });
     }
 
     std::this_thread::sleep_for(10ms);
@@ -2418,6 +2425,10 @@ TEST(LibRadosAio, PoolEIOFlag) {
     my_lock.lock();
   }
 
+  if (!missed_eio) {
+    GTEST_SKIP() << "eio flag missed all ios that already completed";
+    my_lock.unlock();
+  }
   cout << "max_success " << max_success << ", min_failed " << min_failed << std::endl;
   ASSERT_TRUE(max_success + 1 == min_failed);
   my_lock.unlock();
