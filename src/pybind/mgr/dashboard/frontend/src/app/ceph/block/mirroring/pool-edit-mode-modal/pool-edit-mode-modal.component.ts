@@ -35,7 +35,7 @@ export class PoolEditModeModalComponent extends BaseModal implements OnInit, OnD
   mirrorModes: Array<{ id: string; name: string }> = [
     { id: 'disabled', name: $localize`Disabled` },
     { id: 'pool', name: $localize`Pool` },
-    { id: 'image', name: $localize`Image` }
+    { id: 'image', name: $localize`Volume` }
   ];
 
   constructor(
