@@ -1,11 +1,14 @@
 import os
 import uuid
 import logging
+import stat
 from contextlib import contextmanager
+from collections import deque
 
 import cephfs
 
 from .template import GroupTemplate
+from ..fs_util import listdir
 from ..exception import VolumeException
 
 log = logging.getLogger(__name__)
@@ -59,31 +62,27 @@ class Trash(GroupTemplate):
         :praram should_cancel: callback to check if the purge should be aborted
         :return: None
         """
-        def rmtree(root_path):
-            log.debug("rmtree {0}".format(root_path))
-            try:
-                with self.fs.opendir(root_path) as dir_handle:
-                    d = self.fs.readdir(dir_handle)
-                    while d and not should_cancel():
-                        if d.d_name not in (b".", b".."):
-                            d_full = os.path.join(root_path, d.d_name)
-                            if d.is_dir():
-                                rmtree(d_full)
-                            else:
-                                self.fs.unlink(d_full)
-                        d = self.fs.readdir(dir_handle)
-            except cephfs.ObjectNotFound:
-                return
-            except cephfs.Error as e:
-                raise VolumeException(-e.args[0], e.args[1])
-            # remove the directory only if we were not asked to cancel
-            # (else we would fail to remove this anyway)
-            if not should_cancel():
-                self.fs.rmdir(root_path)
-
-        # catch any unlink errors
+        log.debug(f'rmtree trashpath = {trashpath}')
         try:
-            rmtree(trashpath)
+            stack = deque([trashpath, ])
+            while stack and not should_cancel():
+                x = stack[len(stack) - 1]
+                stx_buf = self.fs.statx(x, cephfs.CEPH_STATX_MODE,
+                                        cephfs.AT_SYMLINK_NOFOLLOW)
+
+                if stat.S_ISREG(stx_buf['mode']):
+                    self.fs.unlink(x)
+                    stack.pop()
+                elif stat.S_ISDIR(stx_buf['mode']):
+                    file_list = listdir(self.fs, x, filter_files=False)
+                    if file_list:
+                        for i in file_list:
+                            stack.append(os.path.join(x, i))
+                    else:
+                        self.fs.rmdir(x)
+                        stack.pop()
+        except cephfs.ObjectNotFound:
+            return
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
