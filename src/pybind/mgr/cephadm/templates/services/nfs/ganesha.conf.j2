@@ -13,6 +13,9 @@ NFS_CORE_PARAM {
 {% if haproxy_hosts %}
         HAProxy_Hosts = {{ haproxy_hosts|join(", ") }};
 {% endif %}
+{% if monitoring_addr %}
+	Monitoring_Addr = {{ monitoring_addr }};
+{% endif %}
         Monitoring_Port = {{ monitoring_port }};
 }
 
