@@ -18049,15 +18049,11 @@ int BlueStore::_setattr(TransContext *txc,
 	   << " " << name << " (" << val.length() << " bytes)"
 	   << dendl;
   int r = 0;
+  val.rebuild_if_saves_space();
   if (!val.length()) {
     auto& b = o->onode.attrs[name.c_str()] = bufferptr("", 0);
     b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
-  } else if (!val.is_contiguous()) {
-    val.rebuild();
-    auto& b = o->onode.attrs[name.c_str()] = val.front();
-    b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
-  } else if (val.front().is_partial()) {
-    val.rebuild();
+  } else {
     auto& b = o->onode.attrs[name.c_str()] = val.front();
     b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
   }
