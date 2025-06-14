@@ -509,18 +509,21 @@ Parameters are XML encoded in the body of the request, in the following format:
                    <FilterRule>
                        <Name></Name>
                        <Value></Value>
+                       <Type></Type>
                    </FilterRule>
         	    </S3Key>
                 <S3Metadata>
                     <FilterRule>
                         <Name></Name>
                         <Value></Value>
+                        <Type></Type>
                     </FilterRule>
                 </S3Metadata>
                 <S3Tags>
                     <FilterRule>
                         <Name></Name>
                         <Value></Value>
+                        <Type></Type>
                     </FilterRule>
                 </S3Tags>
             </Filter>
@@ -556,16 +559,23 @@ Parameters are XML encoded in the body of the request, in the following format:
 |                               |           | All filter rules in the list must match the tags defined on the object. However,     |          |
 |                               |           | the object still match it it has other tags not listed in the filter.                |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
-| ``S3Key.FilterRule``          | Container | Holding ``Name`` and ``Value`` entities. ``Name`` would  be: ``prefix``, ``suffix``  | Yes      |
-|                               |           | or ``regex``. The ``Value`` would hold the key prefix, key suffix or a regular       |          |
-|                               |           | expression for matching the key, accordingly.                                        |          |
+| ``S3Key.FilterRule``          | Container | Holding ``Name``, ``Value`` and ``Type`` entities. ``Name`` would  be: ``prefix``,   | Yes      |
+|                               |           | ``suffix``, or ``regex``. The ``Value`` would hold the key prefix, key suffix        |          |
+|                               |           | or a regular expression for matching the key, accordingly. The ``Type`` entity is    |          |
+|                               |           | optional, and can hold ``IN`` or ``OUT``. It defaults to ``IN`` when not specified.  |          |
+|                               |           | ``IN`` means the key must match the rule, ``OUT`` means the key must not match the   |          |
+|                               |           | rule.                                                                                |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
-| ``S3Metadata.FilterRule``     | Container | Holding ``Name`` and ``Value`` entities. ``Name`` would be the name of the metadata  | Yes      |
-|                               |           | attribute (e.g. ``x-amz-meta-xxx``). The ``Value`` would be the expected value for   |          | 
-|                               |           | this attribute.                                                                      |          |
+| ``S3Metadata.FilterRule``     | Container | Holding ``Name``, ``Value`` and ``Type`` entities. ``Name`` would be the name of     | Yes      |
+|                               |           | the metadata attribute (e.g., ``x-amz-meta-xxx``). The ``Value`` would be the        |          |
+|                               |           | expected value for this attribute. The ``Type`` entity is optional, and can hold     |          |
+|                               |           | ``IN`` or ``OUT``. It defaults to ``IN`` when not specified. ``IN`` means the        |          |
+|                               |           | metadata must match the rule, ``OUT`` means the metadata must not match the rule.    |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
-| ``S3Tags.FilterRule``         | Container | Holding ``Name`` and ``Value`` entities. ``Name`` would be the tag key,              |  Yes     |
-|                               |           | and ``Value`` would be the tag value.                                                |          | 
+| ``S3Tags.FilterRule``         | Container | Holding ``Name``, ``Value`` and ``Type`` entities. ``Name`` would be the tag key,    | Yes      |
+|                               |           | and ``Value`` would be the tag value. The ``Type`` entity is optional, and can hold  |          |
+|                               |           | ``IN`` or ``OUT``. It defaults to ``IN`` when not specified. ``IN`` means the tag    |          |
+|                               |           | must match the rule, ``OUT`` means the tag must not match the rule.                  |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
 
 
@@ -661,18 +671,21 @@ Response is XML encoded in the body of the request, in the following format:
                    <FilterRule>
                        <Name></Name>
                        <Value></Value>
+                       <Type></Type>
                    </FilterRule>
         	    </S3Key>
                 <S3Metadata>
                     <FilterRule>
                         <Name></Name>
                         <Value></Value>
+                        <Type></Type>
                     </FilterRule>
                 </S3Metadata>
                 <S3Tags>
                     <FilterRule>
                         <Name></Name>
                         <Value></Value>
+                        <Type></Type>
                     </FilterRule>
                 </S3Tags>
             </Filter>
