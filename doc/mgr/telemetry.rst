@@ -55,9 +55,11 @@ the per-channel setting has no effect.)
     - troubleshoot issues with latency, throttling, memory management, etc.
     - monitor cluster performance by daemon
 
-The reported data does *not* contain any sensitive data. This means that the
-reported data does not include pool names, object names, object contents,
-hostnames, or device serial numbers.
+The reported data does *not* contain any sensitive data[Does the reported data
+include IP addresses? --asked by Anthony D'Atri on 05 June 2025 and repeated
+here by Zac Dover on 06 June 2025]. This means that the reported data does not
+include pool names, object names, object contents, hostnames, or device serial
+numbers.
 
 The reported data contains counters and statistics pertaining to how the
 cluster has been deployed, the version of Ceph, the distribution of the hosts,
