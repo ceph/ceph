@@ -194,6 +194,8 @@ class Share(_RBase):
     name: str = ''
     readonly: bool = False
     browseable: bool = True
+    comment: str = ''
+    max_connections: int = 0
     cephfs: Optional[CephFSStorage] = None
     custom_smb_share_options: Optional[Dict[str, str]] = None
     login_control: Optional[List[LoginAccessEntry]] = None
@@ -215,6 +217,12 @@ class Share(_RBase):
         if self.intent != Intent.PRESENT:
             raise ValueError('Share must have present intent')
         # currently only cephfs is supported
+        if self.max_connections < 0:
+            raise ValueError(
+                'max_connections must be 0 or a non-negative integer'
+            )
+        if '\n' in self.comment:
+            raise ValueError('Comment cannot contain newlines')
         if self.cephfs is None:
             raise ValueError('a cephfs configuration is required')
         validation.check_custom_options(self.custom_smb_share_options)
