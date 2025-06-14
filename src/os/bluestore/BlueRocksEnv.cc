@@ -36,7 +36,7 @@ std::pair<std::string_view, std::string_view>
 split(const std::string &fn)
 {
   size_t slash = fn.rfind('/');
-  assert(slash != fn.npos);
+  ceph_assert(slash != fn.npos);
   size_t file_begin = slash + 1;
   while (slash && fn[slash - 1] == '/')
     --slash;

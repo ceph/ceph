@@ -2905,7 +2905,7 @@ const std::vector<int> OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
       std::vector<int> result;
       int primaryshard = 0;
       int nonprimaryshard = pool.size - pool.nonprimary_shards.size();
-      assert(acting.size() == pool.size);
+      ceph_assert(acting.size() == pool.size);
       for (auto shard = 0; shard < pool.size; shard++) {
 	if (pool.is_nonprimary_shard(shard_id_t(shard))) {
 	  result.emplace_back(acting[nonprimaryshard++]);
@@ -7888,7 +7888,7 @@ void OSDMap::get_random_up_osds_by_subtree(int n,     // whoami
 float OSDMap::pool_raw_used_rate(int64_t poolid) const
 {
   const pg_pool_t *pool = get_pg_pool(poolid);
-  assert(pool != nullptr);
+  ceph_assert(pool != nullptr);
 
   switch (pool->get_type()) {
   case pg_pool_t::TYPE_REPLICATED:
