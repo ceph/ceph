@@ -132,10 +132,6 @@ bool DamageTable::notify_dentry(
     inodeno_t ino, frag_t frag,
     snapid_t snap_id, std::string_view dname, std::string_view path)
 {
-  if (oversized()) {
-    return true;
-  }
-
   // Special cases: damage to these dirfrags is considered fatal to
   // the MDS rank that owns them.
   if (
@@ -144,7 +140,14 @@ bool DamageTable::notify_dentry(
       (MDS_INO_IS_STRAY(ino) && MDS_INO_STRAY_OWNER(ino) == rank)
      ) {
     derr << "Damage to dentries in fragment " << frag << " of ino " << ino
-         << "is fatal because it is a system directory for this rank" << dendl;
+         << " is fatal because it is a system directory for this rank" << dendl;
+    return true;
+  }
+
+  if (oversized()) {
+    derr << "Damage to dentries in fragment " << frag << " of ino " << ino
+         << " is fatal because maximum number of damage table entries "
+         << " has been reached" << dendl;
     return true;
   }
 
@@ -172,6 +175,9 @@ bool DamageTable::notify_dirfrag(inodeno_t ino, frag_t frag,
   }
 
   if (oversized()) {
+    derr << "Damage to fragment " << frag << " of ino " << ino
+         << " is fatal because maximum number of damage table entries"
+         << " has been reached" << dendl;
     return true;
   }
 
@@ -188,6 +194,9 @@ bool DamageTable::notify_dirfrag(inodeno_t ino, frag_t frag,
 bool DamageTable::notify_remote_damaged(inodeno_t ino, std::string_view path)
 {
   if (oversized()) {
+    derr << "Damage to remote " << path << " of ino " << ino
+         << " is fatal because maximum number of damage table entries"
+         << " has been reached" << dendl;
     return true;
   }
 
