@@ -7,6 +7,21 @@
 #include "rgw_xml.h"
 #include "rgw_common.h"
 
+class RGWMultiDelObject : public XMLObj
+{
+  std::string key;
+  std::string version_id;
+  ceph::real_time last_mod_time;
+public:
+  RGWMultiDelObject() {}
+  ~RGWMultiDelObject() override {}
+  bool xml_end(const char *el) override;
+
+  const std::string& get_key() const { return key; }
+  const std::string& get_version_id() const { return version_id; }
+  const ceph::real_time& get_last_mod_time() const { return last_mod_time; }
+};
+
 class RGWMultiDelDelete : public XMLObj
 {
 public:
@@ -14,7 +29,7 @@ public:
   ~RGWMultiDelDelete() override {}
   bool xml_end(const char *el) override;
 
-  std::vector<rgw_obj_key> objects;
+  std::vector<RGWMultiDelObject> objects;
   bool quiet;
   bool is_quiet() { return quiet; }
 };
@@ -24,19 +39,6 @@ class RGWMultiDelQuiet : public XMLObj
 public:
   RGWMultiDelQuiet() {}
   ~RGWMultiDelQuiet() override {}
-};
-
-class RGWMultiDelObject : public XMLObj
-{
-  std::string key;
-  std::string version_id;
-public:
-  RGWMultiDelObject() {}
-  ~RGWMultiDelObject() override {}
-  bool xml_end(const char *el) override;
-
-  const std::string& get_key() { return key; }
-  const std::string& get_version_id() { return version_id; }
 };
 
 class RGWMultiDelKey : public XMLObj
@@ -51,6 +53,13 @@ class RGWMultiDelVersionId : public XMLObj
 public:
   RGWMultiDelVersionId() {}
   ~RGWMultiDelVersionId() override {}
+};
+
+class RGWMultiDelDate : public XMLObj
+{
+public:
+  RGWMultiDelDate() {}
+  ~RGWMultiDelDate() override {}
 };
 
 class RGWMultiDelXMLParser : public RGWXMLParser
