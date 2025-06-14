@@ -923,6 +923,13 @@ void MDSDaemon::suicide()
   // to wait for us to go laggy. Only do this if we're actually in the MDSMap,
   // because otherwise the MDSMonitor will drop our message.
   beacon.set_want_state(*mdsmap, MDSMap::STATE_DNE);
+
+  /* Unlock the mds_lock while waiting for beacon ACK to avoid a
+   * deadlock with the dispatcher thread which may try to acquire
+   * mds_lock, preventing it from receiving the beacon ACK.
+   */
+  mds_lock.unlock();
+
   if (!mdsmap->is_dne_gid(mds_gid_t(monc->get_global_id()))) {
     beacon.send_and_wait(1);
   }
@@ -932,9 +939,11 @@ void MDSDaemon::suicide()
     mgrc.shutdown();
 
   if (mds_rank) {
+    mds_lock.lock();
     mds_rank->shutdown();
   } else {
     timer.shutdown();
+    mds_lock.lock();
 
     monc->shutdown();
     messenger->shutdown();
