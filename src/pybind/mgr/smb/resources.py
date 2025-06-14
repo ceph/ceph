@@ -412,6 +412,7 @@ class Cluster(_RBase):
     # control if the cluster is really a cluster
     clustering: Optional[SMBClustering] = None
     public_addrs: Optional[List[ClusterPublicIPAssignment]] = None
+    custom_ports: Optional[Dict[str, int]] = None
 
     def validate(self) -> None:
         if not self.cluster_id:
@@ -438,6 +439,7 @@ class Cluster(_RBase):
                     'domain settings not supported for user auth mode'
                 )
         validation.check_custom_options(self.custom_smb_global_options)
+        validation.check_custom_ports(self.custom_ports)
 
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
