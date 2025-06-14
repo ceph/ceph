@@ -6,8 +6,12 @@
 #include <ranges>
 
 #include "DataGenerator.h"
+#include "IoOp.h"
 #include "common/ceph_json.h"
 #include "common/json/OSDStructures.h"
+#include "librados/librados_asio.h"
+
+#include <boost/asio/io_context.hpp>
 
 using RadosIo = ceph::io_exerciser::RadosIo;
 
