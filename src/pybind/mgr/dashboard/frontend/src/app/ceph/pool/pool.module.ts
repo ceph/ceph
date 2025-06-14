@@ -14,6 +14,7 @@ import { ErasureCodeProfileFormModalComponent } from './erasure-code-profile-for
 import { PoolDetailsComponent } from './pool-details/pool-details.component';
 import { PoolFormComponent } from './pool-form/pool-form.component';
 import { PoolListComponent } from './pool-list/pool-list.component';
+import { UnsavedChangesGuard } from '~/app/shared/services/unsaved-changes-guard.service';
 
 @NgModule({
   imports: [
@@ -42,16 +43,19 @@ const routes: Routes = [
   {
     path: URLVerbs.CREATE,
     component: PoolFormComponent,
+    canDeactivate: [UnsavedChangesGuard],
     data: { breadcrumbs: ActionLabels.CREATE }
   },
   {
     path: `${URLVerbs.EDIT}/:name`,
     component: PoolFormComponent,
+    canDeactivate: [UnsavedChangesGuard],
     data: { breadcrumbs: ActionLabels.EDIT }
   }
 ];
 
 @NgModule({
-  imports: [PoolModule, RouterModule.forChild(routes)]
+  imports: [PoolModule, RouterModule.forChild(routes)],
+  providers: [UnsavedChangesGuard]
 })
 export class RoutedPoolModule {}

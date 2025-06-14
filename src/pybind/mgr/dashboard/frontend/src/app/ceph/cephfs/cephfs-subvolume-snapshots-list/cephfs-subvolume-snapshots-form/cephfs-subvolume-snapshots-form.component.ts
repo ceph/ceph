@@ -4,7 +4,7 @@ import moment from 'moment';
 import { Observable } from 'rxjs';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { CephfsSubvolume } from '~/app/shared/models/cephfs-subvolume.model';
@@ -16,7 +16,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
   templateUrl: './cephfs-subvolume-snapshots-form.component.html',
   styleUrls: ['./cephfs-subvolume-snapshots-form.component.scss']
 })
-export class CephfsSubvolumeSnapshotsFormComponent extends CdForm implements OnInit {
+export class CephfsSubvolumeSnapshotsFormComponent extends CdFormCanDeactivate implements OnInit {
   subVolumeGroups: string[];
 
   snapshotForm: CdFormGroup;
@@ -46,6 +46,11 @@ export class CephfsSubvolumeSnapshotsFormComponent extends CdForm implements OnI
 
     this.subVolumes$ = this.cephFsSubvolumeService.get(this.fsName, this.subVolumeGroupName, false);
     this.loadingReady();
+  }
+
+
+  getFormGroup(): CdFormGroup {
+    return this.snapshotForm;
   }
 
   createForm() {
