@@ -87,6 +87,9 @@ public:
   /* Identity Type: RGW/ LDAP/ Keystone */
   virtual uint32_t get_identity_type() const = 0;
 
+  /* Identity ARN */
+  virtual std::optional<rgw::ARN> get_caller_identity() const = 0;
+
   /* Name of Account */
   virtual std::string get_acct_name() const = 0;
 
@@ -504,6 +507,10 @@ public:
     return TYPE_WEB;
   }
 
+  std::optional<rgw::ARN> get_caller_identity() const override {
+    return std::nullopt;
+  }
+
   std::string get_acct_name() const override {
     return this->user_name;
   }
@@ -679,6 +686,11 @@ public:
   void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
   void write_ops_log_entry(rgw_log_entry& entry) const override;
   uint32_t get_identity_type() const override { return info.acct_type; }
+
+  std::optional<rgw::ARN> get_caller_identity() const override {
+    return std::nullopt;
+  }
+
   std::string get_acct_name() const override { return info.acct_name; }
   std::string get_subuser() const override { return {}; }
   const std::string& get_tenant() const override {
@@ -749,6 +761,19 @@ public:
   auto load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User> override; /* out */
   void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
   uint32_t get_identity_type() const override { return user_info.type; }
+
+  std::optional<rgw::ARN> get_caller_identity() const override {
+    bool has_account_id = !user_info.account_id.empty();
+    std::string acct = has_account_id ? user_info.account_id : user_info.user_id.tenant;
+    if(user_info.type == TYPE_ROOT) {
+      return rgw::ARN("", "root", acct, true);
+    }
+
+    std::string username = has_account_id ? user_info.display_name : user_info.user_id.id;
+    std::string path = user_info.path.empty() ? "/" : user_info.path;
+    return rgw::ARN(string_cat_reserve(path, username), "user", acct, true);
+  }
+
   std::string get_acct_name() const override { return {}; }
   std::string get_subuser() const override { return subuser; }
   const std::string& get_tenant() const override {
@@ -828,6 +853,16 @@ public:
   void to_str(std::ostream& out) const override;
   auto load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User> override; /* out */
   uint32_t get_identity_type() const override { return TYPE_ROLE; }
+
+  std::optional<rgw::ARN> get_caller_identity() const override {
+    rgw::Partition partition = rgw::Partition::aws;
+    rgw::Service service = rgw::Service::sts;
+    std::string acct = role.account->id.empty() ? role.tenant : role.account->id;
+    std::string resource = "assumed-role/" + role.name + "/" + token_attrs.role_session_name;
+
+    return rgw::ARN(partition, service, "", acct, resource);
+  }
+
   std::string get_acct_name() const override { return {}; }
   std::string get_subuser() const override { return {}; }
   const std::string& get_tenant() const override { return role.tenant; }
@@ -884,6 +919,10 @@ public:
 
   uint32_t get_identity_type() const override {
     return TYPE_RGW;
+  }
+
+  std::optional<rgw::ARN> get_caller_identity() const override {
+    return std::nullopt;
   }
 
   std::string get_acct_name() const override {
