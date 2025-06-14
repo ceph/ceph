@@ -310,7 +310,11 @@ class VolumeClient(CephfsClient["Module"]):
             if ve.errno == -errno.EAGAIN and not force:
                 ve = VolumeException(ve.errno, ve.error_str + " (use --force to override)")
                 ret = self.volume_exception_to_retval(ve)
-            elif not (ve.errno == -errno.ENOENT and force):
+            elif ve.errno == -errno.ENOENT and force:
+                # keep return value zero so that "subvolume rm --force" command
+                # is idempotent.
+                pass
+            else:
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
