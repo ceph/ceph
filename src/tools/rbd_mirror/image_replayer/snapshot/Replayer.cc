@@ -380,14 +380,6 @@ void Replayer<I>::handle_load_local_image_meta(int r) {
     return;
   }
 
-  if (r >= 0 && m_state_builder->local_image_meta->resync_requested) {
-    m_resync_requested = true;
-
-    dout(10) << "local image resync requested" << dendl;
-    handle_replay_complete(0, "resync requested");
-    return;
-  }
-
   refresh_local_image();
 }
 
@@ -744,6 +736,15 @@ void Replayer<I>::scan_remote_mirror_snapshots(
     dout(10) << "restarting snapshot scan due to remote update notification"
              << dendl;
     load_local_image_meta();
+    return;
+  }
+
+  if (m_state_builder->local_image_meta->resync_requested &&
+      m_remote_mirror_snap_ns.state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY ) {
+    m_resync_requested = true;
+
+    dout(10) << "local image resync requested" << dendl;
+    handle_replay_complete(locker, 0, "resync requested");
     return;
   }
 
