@@ -326,6 +326,7 @@ placement:
     pattern_type: regex
 ---
 service_type: rgw
+certificate_source: cephadm-signed
 service_id: default-rgw-realm.eu-central-1.1
 service_name: rgw.default-rgw-realm.eu-central-1.1
 placement:
@@ -356,6 +357,8 @@ spec:
     model: NVME-QQQQ-987
 ---
 service_type: alertmanager
+certificate_source: cephadm-signed
+ssl: true
 service_name: alertmanager
 spec:
   port: 1234
@@ -364,6 +367,8 @@ spec:
     - foo
 ---
 service_type: grafana
+certificate_source: cephadm-signed
+ssl: true
 service_name: grafana
 spec:
   anonymous_access: true
@@ -371,6 +376,8 @@ spec:
   protocol: https
 ---
 service_type: grafana
+certificate_source: cephadm-signed
+ssl: true
 service_name: grafana
 spec:
   anonymous_access: true
@@ -379,6 +386,7 @@ spec:
   protocol: https
 ---
 service_type: ingress
+certificate_source: cephadm-signed
 service_id: rgw.foo
 service_name: ingress.rgw.foo
 placement:
@@ -406,6 +414,7 @@ spec:
   port: 1234
 ---
 service_type: iscsi
+certificate_source: cephadm-signed
 service_id: iscsi
 service_name: iscsi.iscsi
 networks:
@@ -491,6 +500,8 @@ spec:
   snmp_version: V3
 ---
 service_type: grafana
+certificate_source: cephadm-signed
+ssl: true
 service_name: grafana
 placement:
   count: 1
