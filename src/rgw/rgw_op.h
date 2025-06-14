@@ -481,6 +481,12 @@ public:
   virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) = 0;
 
   const char* name() const override { return "get_obj"; }
+  std::string canonical_name() const override {
+    if (get_torrent) {
+      return fmt::format("REST.{}.TORRENT", s->info.method);
+    }
+    return fmt::format("REST.{}.OBJECT", s->info.method);
+  }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   virtual bool need_object_expiration() { return false; }
@@ -522,6 +528,7 @@ class RGWGetObjTags : public RGWOp {
 
   virtual void send_response_data(bufferlist& bl) = 0;
   const char* name() const override { return "get_obj_tags"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT_TAGGING", s->info.method); }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_TAGGING; }
 
@@ -537,6 +544,7 @@ class RGWPutObjTags : public RGWOp {
   virtual void send_response() override = 0;
   virtual int get_params(optional_yield y) = 0;
   const char* name() const override { return "put_obj_tags"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT_TAGGING", s->info.method); }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ_TAGGING; }
 
@@ -549,6 +557,7 @@ class RGWDeleteObjTags: public RGWOp {
   void execute(optional_yield y) override;
 
   const char* name() const override { return "delete_obj_tags"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT_TAGGING", s->info.method); }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
   RGWOpType get_type() override { return RGW_OP_DELETE_OBJ_TAGGING;}
 };
@@ -564,6 +573,7 @@ public:
 
   virtual void send_response_data(bufferlist& bl) = 0;
   const char* name() const override { return "get_bucket_tags"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.TAGGING", s->info.method); }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_TAGGING; }
 };
@@ -579,6 +589,7 @@ public:
   virtual void send_response() override = 0;
   virtual int get_params(const DoutPrefixProvider *dpp, optional_yield y) = 0;
   const char* name() const override { return "put_bucket_tags"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.TAGGING", s->info.method); }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_TAGGING; }
 };
@@ -604,6 +615,7 @@ public:
 
   virtual void send_response_data() = 0;
   const char* name() const override { return "get_bucket_replication"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.REPLICATION", s->info.method); }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_REPLICATION; }
 };
@@ -619,6 +631,7 @@ public:
   virtual void send_response() override = 0;
   virtual int get_params(optional_yield y) = 0;
   const char* name() const override { return "put_bucket_replication"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.REPLICATION", s->info.method); }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_REPLICATION; }
 };
@@ -632,6 +645,7 @@ public:
   void execute(optional_yield y) override;
 
   const char* name() const override { return "delete_bucket_replication"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.REPLICATION", s->info.method); }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
   RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET_REPLICATION;}
 };
@@ -707,6 +721,7 @@ public:
   void send_response() override = 0;
 
   const char* name() const override { return "bulk_delete"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BULK_DELETE", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_BULK_DELETE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
@@ -778,6 +793,7 @@ public:
   void execute(optional_yield y) override;
 
   const char* name() const override { return "bulk_upload"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BULK_UPLOAD", s->info.method); }
 
   RGWOpType get_type() override {
     return RGW_OP_BULK_UPLOAD;
@@ -900,6 +916,7 @@ public:
   virtual bool supports_account_metadata() { return false; }
 
   const char* name() const override { return "list_buckets"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKETS", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKETS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 }; // class RGWListBuckets
@@ -984,6 +1001,7 @@ public:
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
   const char* name() const override { return "list_bucket"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKET", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   virtual bool need_container_stats() { return false; }
@@ -998,6 +1016,7 @@ public:
 
   void send_response() override = 0;
   const char* name() const override { return "get_bucket_location"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.LOCATION", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_LOCATION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -1016,6 +1035,7 @@ public:
 
   void send_response() override = 0;
   const char* name() const override { return "get_bucket_versioning"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.VERSIONING", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_VERSIONING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -1044,6 +1064,7 @@ public:
 
   void send_response() override = 0;
   const char* name() const override { return "set_bucket_versioning"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.VERSIONING", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_SET_BUCKET_VERSIONING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1058,6 +1079,7 @@ public:
 
   void send_response() override = 0;
   const char* name() const override { return "get_bucket_website"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.WEBSITE", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_WEBSITE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -1077,6 +1099,7 @@ public:
 
   void send_response() override = 0;
   const char* name() const override { return "set_bucket_website"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.WEBSITE", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_SET_BUCKET_WEBSITE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1091,6 +1114,7 @@ public:
 
   void send_response() override = 0;
   const char* name() const override { return "delete_bucket_website"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.WEBSITE", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_SET_BUCKET_WEBSITE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1140,6 +1164,7 @@ class RGWCreateBucket : public RGWOp {
   virtual int get_params(optional_yield y) { return 0; }
   void send_response() override = 0;
   const char* name() const override { return "create_bucket"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKET", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_CREATE_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1157,6 +1182,7 @@ public:
 
   void send_response() override = 0;
   const char* name() const override { return "delete_bucket"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKET", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
 };
@@ -1326,6 +1352,10 @@ public:
   virtual int get_data(bufferlist& bl) = 0;
   void send_response() override = 0;
   const char* name() const override { return "put_obj"; }
+  std::string canonical_name() const override {
+    const bool multipart = !multipart_upload_id.empty();
+    return fmt::format("REST.{}.{}", s->info.method, multipart ? "PART" : "OBJECT");
+  }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
@@ -1378,6 +1408,7 @@ public:
   virtual int get_data(ceph::bufferlist& bl, bool& again) = 0;
   void send_response() override = 0;
   const char* name() const override { return "post_obj"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_POST_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
@@ -1484,6 +1515,7 @@ public:
 
   void send_response() override = 0;
   const char* name() const override { return "restore_obj"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.RESTORE", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_RESTORE_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1518,6 +1550,7 @@ public:
   virtual int get_params(optional_yield y) { return 0; }
   void send_response() override = 0;
   const char* name() const override { return "delete_obj"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_DELETE_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
   virtual bool need_object_expiration() { return false; }
@@ -1615,6 +1648,7 @@ public:
   virtual void send_partial_response(off_t ofs) {}
   void send_response() override = 0;
   const char* name() const override { return "copy_obj"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_COPY_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
@@ -1633,6 +1667,7 @@ public:
 
   void send_response() override = 0;
   const char* name() const override { return "get_acls"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.ACL", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_GET_ACLS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -1654,6 +1689,7 @@ public:
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
   const char* name() const override { return "put_acls"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.ACL", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_PUT_ACLS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1698,6 +1734,7 @@ public:
   void execute(optional_yield y) override;
   void send_response() override = 0;
   const char* name() const override { return "get_obj_attrs"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT_ATTRIBUTES", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_ATTRS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 }; /* RGWGetObjAttrs */
@@ -1715,6 +1752,7 @@ public:
 
   void send_response() override = 0;
   const char* name() const override { return "get_lifecycle"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.LIFECYCLE", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_GET_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -1747,6 +1785,7 @@ public:
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
   const char* name() const override { return "put_lifecycle"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.LIFECYCLE", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_PUT_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1760,6 +1799,7 @@ public:
 
   void send_response() override = 0;
   const char* name() const override { return "delete_lifecycle"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.LIFECYCLE", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_DELETE_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1775,6 +1815,7 @@ public:
 
   void send_response() override = 0;
   const char* name() const override { return "get_cors"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.CORS", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_GET_CORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -1794,6 +1835,7 @@ public:
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
   const char* name() const override { return "put_cors"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.CORS", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_PUT_CORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1809,6 +1851,7 @@ public:
 
   void send_response() override = 0;
   const char* name() const override { return "delete_cors"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.CORS", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_DELETE_CORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1845,6 +1888,7 @@ public:
   int verify_permission(optional_yield y) override;
   void execute(optional_yield y) override;
   const char* name() const override { return "put_bucket_encryption"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.ENCRYPTION", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_ENCRYPTION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1859,6 +1903,7 @@ public:
   int verify_permission(optional_yield y) override;
   void execute(optional_yield y) override;
   const char* name() const override { return "get_bucket_encryption"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.ENCRYPTION", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_ENCRYPTION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -1873,6 +1918,7 @@ public:
   int verify_permission(optional_yield y) override;
   void execute(optional_yield y) override;
   const char* name() const override { return "delete_bucket_encryption"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.ENCRYPTION", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET_ENCRYPTION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1890,6 +1936,7 @@ public:
 
   void send_response() override = 0;
   const char* name() const override { return "get_request_payment"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.REQUEST_PAYMENT", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_GET_REQUEST_PAYMENT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -1909,6 +1956,7 @@ public:
 
   void send_response() override = 0;
   const char* name() const override { return "set_request_payment"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.REQUEST_PAYMENT", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_SET_REQUEST_PAYMENT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1937,6 +1985,7 @@ public:
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
   const char* name() const override { return "init_multipart"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.UPLOADS", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_INIT_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   virtual int prepare_encryption(std::map<std::string, bufferlist>& attrs) { return 0; }
@@ -1970,6 +2019,7 @@ public:
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
   const char* name() const override { return "complete_multipart"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.UPLOAD", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_COMPLETE_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   bool always_do_bucket_logging() const override { return false; }
@@ -1987,6 +2037,7 @@ public:
 
   void send_response() override = 0;
   const char* name() const override { return "abort_multipart"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.UPLOAD", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_ABORT_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
 };
@@ -2016,6 +2067,7 @@ public:
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
   const char* name() const override { return "list_multipart"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.UPLOAD", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_LIST_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -2055,6 +2107,7 @@ public:
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
   const char* name() const override { return "list_bucket_multiparts"; }
+  virtual std::string canonical_name() const override { return fmt::format("REST.{}.UPLOADS", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKET_MULTIPARTS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -2146,6 +2199,7 @@ public:
                                      int ret) = 0;
   virtual void end_response() = 0;
   const char* name() const override { return "multi_object_delete"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.DELETE_MULTI_OBJECT", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_DELETE_MULTI_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
 
@@ -2457,6 +2511,7 @@ public:
   void execute(optional_yield y) override;
   int get_params(optional_yield y);
   const char* name() const override { return "put_bucket_policy"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKETPOLICY", s->info.method); }
   RGWOpType get_type() override {
     return RGW_OP_PUT_BUCKET_POLICY;
   }
@@ -2473,6 +2528,7 @@ public:
   }
   void execute(optional_yield y) override;
   const char* name() const override { return "get_bucket_policy"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKETPOLICY", s->info.method); }
   RGWOpType get_type() override {
     return RGW_OP_GET_BUCKET_POLICY;
   }
@@ -2489,6 +2545,7 @@ public:
   void execute(optional_yield y) override;
   int get_params(optional_yield y);
   const char* name() const override { return "delete_bucket_policy"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKETPOLICY", s->info.method); }
   RGWOpType get_type() override {
     return RGW_OP_DELETE_BUCKET_POLICY;
   }
@@ -2508,6 +2565,7 @@ public:
   virtual void send_response() override = 0;
   virtual int get_params(optional_yield y) = 0;
   const char* name() const override { return "put_bucket_object_lock"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT_LOCK", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_OBJ_LOCK; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -2519,6 +2577,7 @@ public:
   void execute(optional_yield y) override;
   virtual void send_response() override = 0;
   const char* name() const override {return "get_bucket_object_lock"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT_LOCK", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_OBJ_LOCK; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -2537,6 +2596,7 @@ public:
   virtual void send_response() override = 0;
   virtual int get_params(optional_yield y) = 0;
   const char* name() const override { return "put_obj_retention"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.RETENTION", s->info.method); }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ_RETENTION; }
 };
@@ -2550,6 +2610,7 @@ public:
   void execute(optional_yield y) override;
   virtual void send_response() override = 0;
   const char* name() const override {return "get_obj_retention"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.RETENTION", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_RETENTION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -2565,6 +2626,7 @@ public:
   virtual void send_response() override = 0;
   virtual int get_params(optional_yield y) = 0;
   const char* name() const override { return "put_obj_legal_hold"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.LEGAL_HOLD", s->info.method); }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ_LEGAL_HOLD; }
 };
@@ -2578,6 +2640,7 @@ public:
   void execute(optional_yield y) override;
   virtual void send_response() override = 0;
   const char* name() const override {return "get_obj_legal_hold"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.LEGAL_HOLD", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_LEGAL_HOLD; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -2662,6 +2725,7 @@ public:
   int verify_permission(optional_yield y) override;
   const char* name() const override { return "put_bucket_public_access_block";}
   virtual RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.PUBLIC_ACCESS_BLOCK", s->info.method); }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   int get_params(optional_yield y);
   void execute(optional_yield y) override;
@@ -2674,6 +2738,7 @@ protected:
 public:
   int verify_permission(optional_yield y) override;
   const char* name() const override { return "get_bucket_public_access_block";}
+  std::string canonical_name() const override { return fmt::format("REST.{}.PUBLIC_ACCESS_BLOCK", s->info.method); }
   virtual RGWOpType get_type() override { return RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   int get_params(optional_yield y);
@@ -2687,6 +2752,7 @@ protected:
 public:
   int verify_permission(optional_yield y) override;
   const char* name() const override { return "delete_bucket_public_access_block";}
+  std::string canonical_name() const override { return fmt::format("REST.{}.PUBLIC_ACCESS_BLOCK", s->info.method); }
   virtual RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   int get_params(optional_yield y);
