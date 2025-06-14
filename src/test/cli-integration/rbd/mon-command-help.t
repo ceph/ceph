@@ -1,6 +1,15 @@
   $ ceph rbd -h | sed -n '/^ Monitor commands: $/,$p'
    Monitor commands: 
    =================
+  rbd mirror group snapshot schedule add  Add rbd mirror group snapshot schedule
+   <level_spec> <interval> [<start_time>] 
+  rbd mirror group snapshot schedule      List rbd mirror group snapshot schedules
+   list [<level_spec>]                    
+  rbd mirror group snapshot schedule      Remove rbd mirror group snapshot 
+   remove <level_spec> [<interval>]        schedule
+   [<start_time>]                         
+  rbd mirror group snapshot schedule      Show rbd mirror group snapshot schedule 
+   status [<level_spec>]                   status
   rbd mirror snapshot schedule add        Add rbd mirror snapshot schedule
    <level_spec> <interval> [<start_time>] 
   rbd mirror snapshot schedule list       List rbd mirror snapshot schedule
