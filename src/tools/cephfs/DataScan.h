@@ -243,6 +243,15 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
 
 class DataScan : public MDSUtility, public MetadataTool
 {
+  private:
+    std::atomic<uint64_t> processed_objects{0};
+    std::atomic<uint64_t> total_objects{0};
+    std::chrono::time_point<ceph::coarse_mono_clock> start_time;
+    librados::Rados rados;
+    
+    uint64_t get_pool_objects(const std::vector<librados::IoCtx*>& data_ios);
+    void display_progress();
+    
   protected:
     RecoveryDriver *driver;
     fs_cluster_id_t fscid;
