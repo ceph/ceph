@@ -55,8 +55,8 @@ public:
       ectx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free),
       nonce(nonce), initial_nonce(nonce), used_initial_nonce(false),
       new_nonce_format(new_nonce_format) {
-    ceph_assert_always(ectx);
-    ceph_assert_always(key.size() * CHAR_BIT == 128);
+    ceph_assert(ectx);
+    ceph_assert(key.size() * CHAR_BIT == 128);
 
     if (1 != EVP_EncryptInit_ex(ectx.get(), EVP_aes_128_gcm(),
 			        nullptr, nullptr, nullptr)) {
@@ -128,7 +128,7 @@ void AES128GCM_OnWireTxHandler::authenticated_encrypt_update(
 	plainbuf.length())) {
       throw std::runtime_error("EVP_EncryptUpdate failed");
     }
-    ceph_assert_always(update_len >= 0);
+    ceph_assert(update_len >= 0);
     ceph_assert(static_cast<unsigned>(update_len) == plainbuf.length());
     filler.advance(update_len);
   }
@@ -150,7 +150,7 @@ ceph::bufferlist AES128GCM_OnWireTxHandler::authenticated_encrypt_final()
 	&final_len)) {
     throw std::runtime_error("EVP_EncryptFinal_ex failed");
   }
-  ceph_assert_always(final_len == 0);
+  ceph_assert(final_len == 0);
 
   static_assert(AESGCM_BLOCK_LEN == AESGCM_TAG_LEN);
   if(1 != EVP_CIPHER_CTX_ctrl(ectx.get(),
@@ -180,8 +180,8 @@ public:
 			    bool new_nonce_format)
     : ectx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free),
       nonce(nonce), new_nonce_format(new_nonce_format) {
-    ceph_assert_always(ectx);
-    ceph_assert_always(key.size() * CHAR_BIT == 128);
+    ceph_assert(ectx);
+    ceph_assert(key.size() * CHAR_BIT == 128);
 
     if (1 != EVP_DecryptInit_ex(ectx.get(), EVP_aes_128_gcm(),
 			        nullptr, nullptr, nullptr)) {
@@ -238,7 +238,7 @@ void AES128GCM_OnWireRxHandler::authenticated_decrypt_update(
     if (1 != EVP_DecryptUpdate(ectx.get(), p, &update_len, p, buf.length())) {
       throw std::runtime_error("EVP_DecryptUpdate failed");
     }
-    ceph_assert_always(update_len >= 0);
+    ceph_assert(update_len >= 0);
     ceph_assert(static_cast<unsigned>(update_len) == buf.length());
   }
 }
@@ -271,7 +271,7 @@ void AES128GCM_OnWireRxHandler::authenticated_decrypt_update_final(
     if (0 >= EVP_DecryptFinal_ex(ectx.get(), nullptr, &final_len)) {
       throw MsgAuthError();
     }
-    ceph_assert_always(final_len == 0);
+    ceph_assert(final_len == 0);
     ceph_assert(bl.length() + AESGCM_TAG_LEN == orig_len);
   }
 }
@@ -283,7 +283,7 @@ ceph::crypto::onwire::rxtx_t ceph::crypto::onwire::rxtx_t::create_handler_pair(
   bool crossed)
 {
   if (auth_meta.is_mode_secure()) {
-    ceph_assert_always(auth_meta.connection_secret.length() >= \
+    ceph_assert(auth_meta.connection_secret.length() >= \
       sizeof(key_t) + 2 * sizeof(nonce_t));
     const char* secbuf = auth_meta.connection_secret.c_str();
 
