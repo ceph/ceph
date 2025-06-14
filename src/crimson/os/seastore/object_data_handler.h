@@ -226,21 +226,41 @@ public:
   using clone_ret = clone_iertr::future<>;
   clone_ret clone(context_t ctx);
 
+  clone_ret clone_range(
+    context_t ctx,
+    extent_len_t srcoff,
+    extent_len_t len,
+    extent_len_t destoff);
+
 private:
   /// Updates region [_offset, _offset + bl.length) to bl
-  write_ret overwrite(
+  /*write_ret overwrite(
     context_t ctx,        ///< [in] ctx
     laddr_t data_base,    ///< [in] data base laddr
     objaddr_t offset,     ///< [in] write offset
     extent_len_t len,     ///< [in] len to write, len == bl->length() if bl
     std::optional<bufferlist> &&bl, ///< [in] buffer to write, empty for zeros
     lba_mapping_list_t &&pins ///< [in] set of pins overlapping above region
-  );
+  );*/
+
+  write_ret overwrite(
+    context_t ctx,
+    laddr_t data_base,
+    objaddr_t offset,
+    extent_len_t len,
+    std::optional<bufferlist> &&bl,
+    LBAMapping first_mapping);
 
   /// Ensures object_data reserved region is prepared
-  write_ret prepare_data_reservation(
+  write_iertr::future<LBAMapping> prepare_data_reservation(
     context_t ctx,
     object_data_t &object_data,
+    extent_len_t size);
+
+  write_iertr::future<LBAMapping> prepare_shared_region(
+    context_t ctx,
+    Onode &onode,
+    laddr_t hint,
     extent_len_t size);
 
   /// Trims data past size
@@ -254,6 +274,16 @@ private:
     object_data_t &object_data,
     lba_mapping_list_t &pins,
     laddr_t data_base);
+
+  clone_ret do_rollback(
+    context_t ctx,
+    object_data_t &object_data,
+    object_data_t &d_object_data);
+
+  clone_ret do_clone(
+    context_t ctx,
+    object_data_t &object_data,
+    object_data_t &d_object_data);
 
 private:
   /**
