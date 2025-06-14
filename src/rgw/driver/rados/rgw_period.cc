@@ -94,11 +94,12 @@ int RGWPeriod::update_sync_status(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-void RGWPeriod::generate_test_instances(list<RGWPeriod*> &o)
+list<RGWPeriod> RGWPeriod::generate_test_instances()
 {
-  RGWPeriod *z = new RGWPeriod;
-  o.push_back(z);
-  o.push_back(new RGWPeriod);
+  list<RGWPeriod> o;
+  o.push_back(RGWPeriod{});
+  o.push_back(RGWPeriod{});
+  return o;
 }
 
 

@@ -559,7 +559,7 @@ public:
 
   Session* get_or_add_session(const entity_inst_t& i);
 
-  static void generate_test_instances(std::list<SessionMapStore*>& ls);
+  static std::list<SessionMapStore> generate_test_instances();
   void reset_state()
   {
     session_map.clear();

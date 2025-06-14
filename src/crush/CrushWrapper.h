@@ -1659,7 +1659,7 @@ public:
   }
   void dump_tree(ceph::Formatter *f,
 		 const CrushTreeDumper::name_map_t& ws) const;
-  static void generate_test_instances(std::list<CrushWrapper*>& o);
+  static std::list<CrushWrapper> generate_test_instances();
 
   int get_osd_pool_default_crush_replicated_rule(CephContext *cct);
 
