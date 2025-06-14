@@ -224,7 +224,7 @@ int RGWObjectExpirer::garbage_single_object(const DoutPrefixProvider *dpp, objex
   }
 
   std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(key);
-  obj->set_atomic();
+  obj->set_atomic(true);
   ret = obj->delete_object(dpp, null_yield, rgw::sal::FLAG_LOG_OP, nullptr, nullptr);
 
   return ret;

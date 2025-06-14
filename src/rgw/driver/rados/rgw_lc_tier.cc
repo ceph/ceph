@@ -772,7 +772,7 @@ static int cloud_tier_plain_transfer(RGWLCCloudTierCtx& tier_ctx) {
 
   rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
 
-  tier_ctx.obj->set_atomic();
+  tier_ctx.obj->set_atomic(true);
 
   /* Prepare Read from source */
   /* TODO: Define readf, writef as stack variables. For some reason,
@@ -816,7 +816,7 @@ static int cloud_tier_send_multipart_part(RGWLCCloudTierCtx& tier_ctx,
 
   rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
 
-  tier_ctx.obj->set_atomic();
+  tier_ctx.obj->set_atomic(true);
 
   /* TODO: Define readf, writef as stack variables. For some reason,
    * when used as stack variables (esp., readf), the transition seems to
