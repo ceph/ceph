@@ -1,0 +1,11 @@
+release-notes:
+  header:
+    - |
+      .. _i71270: https://tracker.ceph.com/issues/71270
+  section:
+    mds:
+      name: MDS
+      notes:
+        - |
+          The MDS now logs expanded error messages when entering a damaged state.
+          See `i71270`_ for more information.
