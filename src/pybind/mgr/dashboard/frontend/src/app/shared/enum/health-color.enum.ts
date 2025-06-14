@@ -1,5 +1,5 @@
 export enum HealthColor {
-  HEALTH_ERR = 'health-color-error',
-  HEALTH_WARN = 'health-color-warning',
-  HEALTH_OK = 'health-color-healthy'
+  HEALTH_ERR = 'cds-danger-color',
+  HEALTH_WARN = 'cds-warning-color',
+  HEALTH_OK = 'cds-success-color'
 }
