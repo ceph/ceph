@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { SmbClusterFormComponent } from './smb-cluster-form.component';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
@@ -11,10 +11,15 @@ import { AUTHMODE } from '../smb.model';
 import { FOO_USERSGROUPS } from '../smb-usersgroups-form/smb-usersgroups-form.component.spec';
 import { of } from 'rxjs';
 import { By } from '@angular/platform-browser';
+import { FormHelper } from '~/testing/unit-test-helper';
+import { SmbService } from '~/app/shared/api/smb.service';
+import { DUE_TIMER } from '~/app/shared/forms/cd-validators';
 
 describe('SmbClusterFormComponent', () => {
   let component: SmbClusterFormComponent;
   let fixture: ComponentFixture<SmbClusterFormComponent>;
+  let smbService: SmbService;
+  let formHelper: FormHelper;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -35,6 +40,9 @@ describe('SmbClusterFormComponent', () => {
 
     fixture = TestBed.createComponent(SmbClusterFormComponent);
     component = fixture.componentInstance;
+    component.ngOnInit();
+    smbService = TestBed.inject(SmbService);
+    formHelper = new FormHelper(component.smbForm);
     fixture.detectChanges();
   });
 
@@ -102,5 +110,18 @@ describe('SmbClusterFormComponent', () => {
       expect(options[0].nativeElement.value).toBe('foo');
       expect(options[0].nativeElement.textContent).toBe('foo');
     });
+  });
+
+  describe('Cluster id validation', () => {
+    it('should validate that cluster_id is required', () => {
+      formHelper.expectErrorChange('cluster_id', '', 'required', true);
+    });
+
+    it('should validate that cluster_id is invalid', fakeAsync(() => {
+      spyOn(smbService, 'getCluster').and.returnValue(of('foo'));
+      formHelper.setValue('cluster_id', 'foo', true);
+      tick(DUE_TIMER);
+      formHelper.expectError('cluster_id', 'notUnique');
+    }));
   });
 });
