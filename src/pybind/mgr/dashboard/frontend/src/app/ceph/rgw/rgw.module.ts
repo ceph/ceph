@@ -2,7 +2,6 @@ import { CommonModule, TitleCasePipe } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
-
 import {
   NgbNavModule,
   NgbPopoverModule,
@@ -98,6 +97,9 @@ import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-
 import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
 import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
+import { RgwCreateTopicFormComponent } from './rgw-create-topic-form/rgw-create-topic-form.component';
+import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
+import { RgwCreateNotificationFormComponent } from './rgw-create-notification-form/rgw-create-notification-form.component';
 
 @NgModule({
   imports: [
@@ -127,14 +129,14 @@ import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.
     InputModule,
     AccordionModule,
     CheckboxModule,
-    SelectModule,
     NumberModule,
     TabsModule,
     TagModule,
     TooltipModule,
     ComboBoxModule,
     ToggletipModule,
-    RadioModule
+    RadioModule,
+    SelectModule
   ],
   exports: [
     RgwDaemonDetailsComponent,
@@ -197,7 +199,11 @@ import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.
     RgwBucketLifecycleListComponent,
     RgwRateLimitDetailsComponent,
     RgwTopicListComponent,
-    RgwTopicDetailsComponent
+    RgwTopicDetailsComponent,
+    RgwCreateTopicFormComponent,
+    RgwBucketNotificationListComponent,
+    RgwCreateNotificationFormComponent,
+    RgwCreateTopicFormComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -400,7 +406,19 @@ const routes: Routes = [
   {
     path: 'topic',
     data: { breadcrumbs: 'Topic' },
-    children: [{ path: '', component: RgwTopicListComponent }]
+    children: [
+      { path: '', component: RgwTopicListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: RgwCreateTopicFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:name`,
+        component: RgwCreateTopicFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      }
+    ]
   }
 ];
 
