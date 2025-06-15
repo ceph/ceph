@@ -74,7 +74,10 @@ function TEST_scrub_test() {
       local anotherosd="2"
     fi
 
-    objectstore_tool $dir $anotherosd obj1 set-bytes /etc/fstab
+    CORRUPT_DATA="corrupt-data.$$"
+    dd if=/dev/urandom of=$CORRUPT_DATA bs=512 count=1
+    objectstore_tool $dir $anotherosd obj1 set-bytes $CORRUPT_DATA
+    rm -f $CORRUPT_DATA
 
     local pgid="${poolid}.0"
     pg_deep_scrub "$pgid" || return 1
