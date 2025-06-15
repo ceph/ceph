@@ -1,4 +1,7 @@
 @use './src/styles/vendor/variables' as vv;
+@use '@carbon/styles/scss/theme';
+@use '@carbon/styles/scss/spacing';
+@use '@carbon/styles/scss/type';
 
 .running i {
   color: vv.$primary;
@@ -23,5 +26,48 @@ a {
   &:hover .dot {
     background-color: vv.$white;
     border-color: vv.$primary-500;
+  }
+}
+
+:host {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.notification-icon-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notification-count {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background-color: theme.$support-error;
+  color: theme.$text-on-color;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  @include type.type-style('label-01');
+}
+
+.running {
+  svg {
+    animation: spin 2s linear infinite;
+  }
+}
+
+@keyframes spin {
+  100% {
+    transform: rotate(360deg);
   }
 }

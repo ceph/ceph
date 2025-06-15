@@ -2,12 +2,14 @@
    title="Tasks and Notifications"
    [ngClass]="{ 'running': hasRunningTasks }"
    (click)="toggleNotifications(); $event.preventDefault()">
-  <svg [cdsIcon]="notificationService.showCarbonPanel ? 'notification--filled' : 'notification'"
-       size="20"
-       title="notification"></svg>
-  <span class="dot"
-        *ngIf="hasNotifications">
-  </span>
+  <div class="notification-icon-wrapper">
+    <svg [cdsIcon]="notificationService.useCarbonNotificationPanel ? 'notification--filled' : 'notification'"
+         size="20"
+         title="notification"></svg>
+    <span class="notification-count" *ngIf="(notificationService.data$ | async)?.length">
+      {{ (notificationService.data$ | async)?.length }}
+    </span>
+  </div>
   <span class="d-md-none"
         i18n>Tasks and Notifications</span>
 </a>

@@ -68,4 +68,22 @@
   cds-tile.info {
     border-left: 3px solid theme.$support-info;
   }
+
+  // Reduce spacing between structured list rows
+  cds-structured-list {
+    margin-bottom: spacing.$spacing-03;
+
+    cds-list-row {
+      margin-bottom: 0;
+      border-bottom: 1px solid theme.$border-subtle-01;
+
+      &:last-child {
+        border-bottom: none;
+      }
+    }
+
+    cds-list-column {
+      padding: spacing.$spacing-03;
+    }
+  }
 } 

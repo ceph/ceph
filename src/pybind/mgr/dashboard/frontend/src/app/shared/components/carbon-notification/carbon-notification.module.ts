@@ -10,7 +10,8 @@ import {
   TagModule,
   LinkModule,
   GridModule,
-  HeaderModule
+  HeaderModule,
+  StructuredListModule
 } from 'carbon-components-angular';
 
 import { NotificationHeaderComponent } from './notification-header/notification-header.component';
@@ -35,7 +36,8 @@ import { CarbonNotificationPanelComponent } from './carbon-notification-panel/ca
     TagModule,
     LinkModule,
     GridModule,
-    HeaderModule
+    HeaderModule,
+    StructuredListModule
   ],
   exports: [
     CarbonNotificationPanelComponent

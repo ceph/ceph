@@ -21,9 +21,9 @@ import { ExecutingTask } from '~/app/shared/models/executing-task';
     <hr *ngIf="notifications.length > 0" class="my-3">
 
     <!-- Executing tasks -->
-    <cds-grid *ngIf="executingTasks.length > 0">
-      <cds-row *ngFor="let task of executingTasks">
-        <cds-col>
+    <cds-structured-list *ngIf="executingTasks.length > 0">
+      <cds-list-row *ngFor="let task of executingTasks">
+        <cds-list-column>
           <cds-tile class="info">
             <div class="notification-header">
               <svg cdsIcon="in-progress" size="16"></svg>
@@ -35,14 +35,14 @@ import { ExecutingTask } from '~/app/shared/models/executing-task';
               </div>
             </div>
           </cds-tile>
-        </cds-col>
-      </cds-row>
-    </cds-grid>
+        </cds-list-column>
+      </cds-list-row>
+    </cds-structured-list>
 
     <!-- Notifications -->
-    <cds-grid>
-      <cds-row *ngFor="let notification of notifications; let i = index">
-        <cds-col>
+    <cds-structured-list>
+      <cds-list-row *ngFor="let notification of notifications; let i = index">
+        <cds-list-column>
           <cds-tile [class]="getNotificationClass(notification)">
             <div class="notification-header">
               <svg [cdsIcon]="getNotificationIcon(notification)" size="16"></svg>
@@ -82,9 +82,9 @@ import { ExecutingTask } from '~/app/shared/models/executing-task';
               </div>
             </div>
           </cds-tile>
-        </cds-col>
-      </cds-row>
-    </cds-grid>
+        </cds-list-column>
+      </cds-list-row>
+    </cds-structured-list>
 
     <!-- Empty state -->
     <div *ngIf="notifications.length === 0 && executingTasks.length === 0" class="text-center p-4">
