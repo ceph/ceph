@@ -1354,7 +1354,10 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(bluestore_shared_blob_t, bluestore_shared_blob_t,
 
 void bluestore_shared_blob_t::dump(Formatter *f) const
 {
-  f->dump_int("sbid", sbid);
+  // Skip dumping sbid field since it's not persisted to disk.
+  // This field is always set during instance construction, so including
+  // it in dumps would cause ceph-dencoder verification failures when
+  // comparing original and re-encoded value
   f->dump_object("ref_map", ref_map);
 }
 
