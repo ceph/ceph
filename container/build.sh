@@ -174,7 +174,7 @@ if [[ ${CI_CONTAINER} == "true" ]] ; then
     podman tag ${image_id} ${branch_repo_tag}
     podman tag ${image_id} ${sha1_repo_tag}
 
-    if [[ ${FLAVOR} == "crimson" && ${ARCH} == "x86_64" ]] ; then
+    if [[ (${FLAVOR} == "crimson-debug" || ${FLAVOR} == "crimson-release") && ${ARCH} == "x86_64" ]] ; then
         sha1_flavor_repo_tag=${sha1_repo_tag}-${FLAVOR}
         podman tag ${image_id} ${sha1_flavor_repo_tag}
         if [[ -z "${NO_PUSH}" ]] ; then

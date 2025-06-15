@@ -1,7 +1,3 @@
-overrides:
-  install:
-    ceph:
-      flavor: crimson
 tasks:
 - install:
 - ceph:
@@ -15,4 +11,3 @@ tasks:
         mon osdmap full prune min: 15
         mon osdmap full prune interval: 2
         mon osdmap full prune txsize: 2
-    flavor: crimson
