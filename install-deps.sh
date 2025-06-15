@@ -381,6 +381,12 @@ else
 	# Put this before any other invocation of apt so it can clean
 	# up in a broken case.
         clean_boost_on_ubuntu
+
+        # update the local package index before installing any packages from the
+        # official repo
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update \
+            -y -o Acquire::Languages=none -o Acquire::Translation=none || true
+
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
             if ! $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES ; then
                 # try again. ported over from run-make.sh (orignally e278295)
