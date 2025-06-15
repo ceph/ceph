@@ -1190,7 +1190,7 @@ void inode_t<Allocator>::dump(ceph::Formatter *f) const
   f->dump_unsigned("time_warp_seq", time_warp_seq);
   f->dump_unsigned("change_attr", change_attr);
   f->dump_int("export_pin", export_pin);
-  f->dump_int("export_ephemeral_random_pin", export_ephemeral_random_pin);
+  f->dump_float("export_ephemeral_random_pin", export_ephemeral_random_pin);
   f->dump_bool("export_ephemeral_distributed_pin", get_ephemeral_distributed_pin());
   f->dump_bool("quiesce_block", get_quiesce_block());
 
