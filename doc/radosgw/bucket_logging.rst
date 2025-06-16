@@ -26,8 +26,9 @@ in different objects in the log bucket.
     - Source and log bucket must be in the same zonegroup
     - Source and log buckets may belong to different accounts (with proper bucket policy set)
     - The log bucket may have object lock enabled with default retention period
-    - The 16 bit unique ID part of the log object name is an incrementing counter, or a random,
-      alphanumeric string if the counter is not available
+    - The 16 byte unique ID part of the log object name is a lexicographically ordered random string,
+      that consists of a 10 bytes counter, and a 6 bytes random alphanumeric string.
+      or a random, alphanumeric string if the counter is not available
 
 
 .. toctree::
@@ -84,12 +85,17 @@ The following operation are supported in journal mode:
 | ``DeleteObjectTagging``       | ``REST.DELETE.OBJECT_TAGGING``      | No              |
 +-------------------------------+-------------------------------------+-----------------+
 
+Multisite
+`````````
+In a multi-zone deployment, each zone will use its own log object before the log object is added to the log bucket.
+After the log object is added to the log bucket (e.g after being flushed) it will be replicated to other zones.
+This means that for a given time period there could be more than one log object holding relevant log records.
 
 Bucket Logging Policy
 ---------------------
 On the source bucket, only its owner is allowed to enable or disable bucket logging.
 For a bucket to be used as a log bucket, it must have bucket policy that allows that (even if the source bucket and the log bucket are owned by the same user or account).
-The bucket policy must allow the `s3:PutObject` action for the log bucket, to be perfomed by the `logging.s3.amazonaws.com` service principal.
+The bucket policy must allow the `s3:PutObject` action for the log bucket, to be performed by the `logging.s3.amazonaws.com` service principal.
 It should also specify the source bucket and account that are expected to write logs to it. For example:
 
 ::
@@ -145,7 +151,7 @@ For example:
 
 ::
 
-  fish/2024-08-06-09-40-09-TI9ROKN05DD4HPQF
+  fish/2024-08-06-09-40-09-0000000002AGQ6W1
 
 Partitioned
 ```````````
@@ -159,7 +165,7 @@ For example:
 
 ::
 
-  fish/testid/default/fish-bucket/2024/08/06/2024-08-06-10-11-18-0000000000000002
+  fish/testid/default/fish-bucket/2024/08/06/2024-08-06-10-11-18-0000000011D1FGPA
 
 Log Records
 ~~~~~~~~~~~
