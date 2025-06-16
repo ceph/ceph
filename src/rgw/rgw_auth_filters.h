@@ -97,6 +97,10 @@ public:
     return get_decoratee().get_identity_type();
   }
 
+  std::optional<rgw::ARN> get_caller_identity() const override {
+    return get_decoratee().get_caller_identity();
+  }
+
   std::string get_acct_name() const override {
     return get_decoratee().get_acct_name();
   }
