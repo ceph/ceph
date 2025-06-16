@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from io import StringIO
 
+import sys
 import json
 
 from .conn import get_gateway_connection, get_gateway_iam_connection, get_gateway_secure_connection, get_gateway_s3_client, get_gateway_sns_client, get_gateway_sts_connection, get_gateway_temp_s3_client
@@ -77,6 +78,7 @@ class SystemObject:
         s, r = self.command(cluster, cmd, args or [], **kwargs)
         if r == 0:
             data = json.loads(s)
+            # To show the entire command: json.dump(data, sys.stdout)
             self.load_from_json(data)
             self.data = data
         return self.data, r
