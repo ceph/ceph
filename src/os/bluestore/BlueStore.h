@@ -241,12 +241,15 @@ enum {
 using bptr_c_it_t = buffer::ptr::const_iterator;
 
 extern const std::vector<uint64_t> bdev_label_positions;
+class BlueStore_debug;
 
 class BlueStore : public ObjectStore,
 		  public md_config_obs_t {
   // -----------------------------------------------------
   // types
 public:
+  friend class BlueStore_debug;
+  BlueStore_debug& debug();
   // config observer
   std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
