@@ -146,43 +146,54 @@ T strict_iec_cast(std::string_view str, std::string *err)
   if (u != std::string_view::npos) {
     n = str.substr(0, u);
     unit = str.substr(u, str.length() - u);
+    // handling cases when prefixes entered as KB, MB, ...
+    // and KiB, MiB, ....
+    if (unit.length() > 1 && unit.back() == 'B') {
+      unit = unit.substr(0, unit.length() - 1);
+    }
     // we accept both old si prefixes as well as the proper iec prefixes
     // i.e. K, M, ... and Ki, Mi, ...
-    if (unit.back() == 'i') {
-      if (unit.front() == 'B') {
-        *err = "strict_iecstrtoll: illegal prefix \"Bi\"";
-        return 0;
-      }
-    }
     if (unit.length() > 2) {
       *err = "strict_iecstrtoll: illegal prefix (length > 2)";
       return 0;
     }
-    switch(unit.front()) {
-      case 'K':
-        m = 10;
-        break;
-      case 'M':
-        m = 20;
-        break;
-      case 'G':
-        m = 30;
-        break;
-      case 'T':
-        m = 40;
-        break;
-      case 'P':
-        m = 50;
-        break;
-      case 'E':
-        m = 60;
-        break;
-      case 'B':
-        break;
-      default:
-        *err = "strict_iecstrtoll: unit prefix not recognized";
-        return 0;
+    if ((unit.back() == 'i') || (unit.length() == 1)) {
+      if (unit.back() == 'i') {
+        if (unit.front() == 'B') {
+          *err = "strict_iecstrtoll: illegal prefix \"Bi\"";
+          return 0;
+        }
+      }
+      switch(unit.front()) {
+        case 'K':
+          m = 10;
+          break;
+        case 'M':
+          m = 20;
+          break;
+        case 'G':
+          m = 30;
+          break;
+        case 'T':
+          m = 40;
+          break;
+        case 'P':
+          m = 50;
+          break;
+        case 'E':
+          m = 60;
+          break;
+        case 'B':
+          break;
+        default:
+          *err = ("strict_iecstrtoll: unit prefix not recognized '" + std::string{unit} + "' ");
+          return 0;
+      }
     }
+    else {
+      *err = ("strict_iecstrtoll: illegal prefix '" + std::string{unit} + "' ");
+      return 0;
+    }   
   }
 
   long long ll = strict_strtoll(n, 10, err);
