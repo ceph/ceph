@@ -1600,6 +1600,26 @@ def created_pool(ctx, config):
             ctx.managers['ceph'].pools[new_pool] = ctx.managers['ceph'].get_pool_int_property(
                 new_pool, 'pg_num')
 
+def perf_counter_check(ctx,config):
+   """
+    Do a sanity check on the number of full maps received by an osd
+    if its a greater than a certain threshold then flag an error 
+    """
+    ceph_manager=ctx.managers['ceph']
+    for osd in ceph_manager.live_osds:
+      full,inc=ceph_manager.do_dump_perf_counter(osd)
+      if full==None and inc==None:
+        ceph_manager.log("could not get map data for this osd, look at the log files for do_dump_perf_counter, maybe osd is down")
+        continue 
+      tot=full+inc
+      if tot=0:
+        ceph_manager.log("Received no maps")
+      else:
+        if full<=0.3*tot:
+          ceph_manager.log("full maps within acceptable range")
+        else:
+          ceph_manager.log("might need to investigate, more than 30 percent of the maps received were full maps")
+  
 
 @contextlib.contextmanager
 def suppress_mon_health_to_clog(ctx, config):
