@@ -114,6 +114,7 @@ class CertMgr:
     CEPHADM_ROOT_CA_KEY = 'cephadm_root_ca_key'
     CEPHADM_CERTMGR_HEALTH_ERR = 'CEPHADM_CERT_ERROR'
     CEPHADM_SIGNED = 'cephadm-signed'
+    LABEL_SEPARATOR = "__"
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
@@ -137,18 +138,30 @@ class CertMgr:
     def is_cephadm_signed_entity(self, entity: str) -> bool:
         return entity.startswith(self.CEPHADM_SIGNED)
 
-    def self_signed_cert(self, service_name: str) -> str:
-        return f'{self.CEPHADM_SIGNED}_{service_name}_cert'
+    def self_signed_cert(self, service_name: str, label: Optional[str] = None) -> str:
+        if label:
+            return f'{self.CEPHADM_SIGNED}_{service_name}{self.LABEL_SEPARATOR}{label}_cert'
+        else:
+            return f'{self.CEPHADM_SIGNED}_{service_name}_cert'
 
-    def self_signed_key(self, service_name: str) -> str:
-        return f'{self.CEPHADM_SIGNED}_{service_name}_key'
+
+    def self_signed_key(self, service_name: str, label: Optional[str] = None) -> str:
+        if label:
+            return f'{self.CEPHADM_SIGNED}_{service_name}{self.LABEL_SEPARATOR}{label}_key'
+        else:
+            return f'{self.CEPHADM_SIGNED}_{service_name}_key'
 
     def service_name_from_cert(self, cert_name: str) -> str:
         prefix = f'{self.CEPHADM_SIGNED}_'
         suffix = '_cert'
         if cert_name.startswith(prefix) and cert_name.endswith(suffix):
-            return cert_name[len(prefix):-len(suffix)]
-        return 'unkown-service'
+            middle = cert_name[len(prefix):-len(suffix)]
+            if self.LABEL_SEPARATOR in middle:
+                service_name, _ = middle.split(self.LABEL_SEPARATOR, 1)
+            else:
+                service_name, _ = middle, None
+            return service_name
+        return 'unknown-service'
 
     def init_tlsobject_store(self) -> None:
         self.cert_store = TLSObjectStore(self.mgr, Cert, self.known_certs, self.is_cephadm_signed_entity)
@@ -177,14 +190,16 @@ class CertMgr:
     def get_root_ca(self) -> str:
         return self.ssl_certs.get_root_cert()
 
-    def register_self_signed_cert_key_pair(self, service_name: str) -> None:
+    def register_self_signed_cert_key_pair(self, service_name: str, label: Optional[str] = None) -> None:
         """
         Registers a self-signed certificate/key for a given service under host scope.
 
         :param service_name: The name of the service.
         """
-        self.cert_store.add_entity(self.self_signed_cert(service_name), TLSObjectScope.HOST)
-        self.key_store.add_entity(self.self_signed_key(service_name), TLSObjectScope.HOST)
+        logger.info(f'redo: registering {self.self_signed_cert(service_name, label)}')
+        self.cert_store.add_entity(self.self_signed_cert(service_name, label), TLSObjectScope.HOST)
+        self.key_store.add_entity(self.self_signed_key(service_name, label), TLSObjectScope.HOST)
+        logger.info(f'redo: done registering {self.self_signed_cert(service_name, label)}')
 
     def register_cert_key_pair(self, entity: str, cert_name: str, key_name: str, scope: TLSObjectScope) -> None:
         """
@@ -264,9 +279,9 @@ class CertMgr:
         key_obj = cast(PrivKey, self.key_store.get_tlsobject(key_name, service_name, host))
         return key_obj.key if key_obj else None
 
-    def get_self_signed_cert_key_pair(self, service_name: str, hostname: str) -> Tuple[Optional[str], Optional[str]]:
-        cert_obj = cast(Cert, self.cert_store.get_tlsobject(self.self_signed_cert(service_name), host=hostname))
-        key_obj = cast(PrivKey, self.key_store.get_tlsobject(self.self_signed_key(service_name), host=hostname))
+    def get_self_signed_cert_key_pair(self, service_name: str, hostname: str, label: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
+        cert_obj = cast(Cert, self.cert_store.get_tlsobject(self.self_signed_cert(service_name, label), host=hostname))
+        key_obj = cast(PrivKey, self.key_store.get_tlsobject(self.self_signed_key(service_name, label), host=hostname))
         cert = cert_obj.cert if cert_obj else None
         key = key_obj.key if key_obj else None
         return cert, key
@@ -277,9 +292,9 @@ class CertMgr:
     def save_key(self, key_name: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False, editable: bool = False) -> None:
         self.key_store.save_tlsobject(key_name, key, service_name, host, user_made, editable)
 
-    def save_self_signed_cert_key_pair(self, service_name: str, cert: str, key: str, host: str) -> None:
-        ss_cert_name = self.self_signed_cert(service_name)
-        ss_key_name = self.self_signed_key(service_name)
+    def save_self_signed_cert_key_pair(self, service_name: str, cert: str, key: str, host: str, label: Optional[str] = None) -> None:
+        ss_cert_name = self.self_signed_cert(service_name, label)
+        ss_key_name = self.self_signed_key(service_name, label)
         self.cert_store.save_tlsobject(ss_cert_name, cert, host=host, user_made=False)
         self.key_store.save_tlsobject(ss_key_name, key, host=host, user_made=False)
 
@@ -289,9 +304,9 @@ class CertMgr:
     def rm_key(self, key_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
         self.key_store.rm_tlsobject(key_name, service_name, host)
 
-    def rm_self_signed_cert_key_pair(self, service_name: str, host: str) -> None:
-        self.rm_cert(self.self_signed_cert(service_name), service_name, host)
-        self.rm_key(self.self_signed_key(service_name), service_name, host)
+    def rm_self_signed_cert_key_pair(self, service_name: str, host: str, label: Optional[str] = None) -> None:
+        self.rm_cert(self.self_signed_cert(service_name, label), service_name, host)
+        self.rm_key(self.self_signed_key(service_name, label), service_name, host)
 
     def cert_ls(self, filter_by: str = '',
                 include_datails: bool = False,
@@ -437,7 +452,7 @@ class CertMgr:
             elif cert_info.is_close_to_expiration:
                 expiring_count += 1
 
-        # Generate a short description with a summery of all the detected issues
+        # Generate a short description with a summary of all the detected issues
         issues = [
             f'{invalid_count} {CertStatus.INVALID.value}' if invalid_count > 0 else '',
             f'{expired_count} {CertStatus.EXPIRED.value}' if expired_count > 0 else '',
@@ -625,7 +640,7 @@ class CertMgr:
                 else:
                     logger.error(f'Cannot find the service associated with the certificate {cert_info.cert_name}')
 
-        # Clear previously reported issues as we are newly checking all the certifiactes
+        # Clear previously reported issues as we are newly checking all the certificates
         self.certificates_health_report = []
 
         # All problematic certificates have been processed. certs_with_issues now only

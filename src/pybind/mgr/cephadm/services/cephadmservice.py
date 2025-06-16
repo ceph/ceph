@@ -305,6 +305,17 @@ class CephadmService(metaclass=ABCMeta):
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
 
+    def get_self_signed_certificates_with_label(self, svc_spec: ServiceSpec, daemon_spec: CephadmDaemonDeploySpec, label: str) -> Tuple[str, str]:
+        svc_name = svc_spec.service_name()
+        ip = self.mgr.inventory.get_addr(daemon_spec.host)
+        host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
+        cert, key = self.mgr.cert_mgr.get_self_signed_cert_key_pair(svc_name, host_fqdn, label)
+        if not (cert and key):
+            cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, ip)
+            if cert and key:
+                self.mgr.cert_mgr.save_self_signed_cert_key_pair(svc_name, cert, key, host=daemon_spec.host, label=label)
+        return cert, key
+
     def get_certificates(self,
                          daemon_spec: CephadmDaemonDeploySpec,
                          ips: List[str] = [],
