@@ -1108,7 +1108,8 @@ void BlueStore::Writer::_do_put_blobs(
   uint32_t ref_begin_offset,
   uint32_t ref_end_offset,
   blob_vec& bd,
-  exmp_it after_punch_it)
+  exmp_it after_punch_it,
+  bool allow_blob_reuse)
 {
   Collection* coll = onode->c;
   extent_map_t& emap = onode->extent_map.extent_map;
@@ -1119,7 +1120,7 @@ void BlueStore::Writer::_do_put_blobs(
   uint32_t left_bound = p2align(logical_offset, blob_size);
   uint32_t right_bound = p2roundup(logical_offset, blob_size);
   // Try to put first data pack to already existing blob
-  if (!bd_it->is_compressed()) {
+  if (!bd_it->is_compressed() && allow_blob_reuse) {
     // it is thinkable to put the data to some blob
     exmp_it left_b = _find_mutable_blob_left(
       after_punch_it, left_bound, right_bound,
@@ -1148,7 +1149,7 @@ void BlueStore::Writer::_do_put_blobs(
       // can blob before punch_hole be different then blob after punch_hole ?
     }
   }
-  if (bd_it != bd.end()) {
+  if (bd_it != bd.end() && allow_blob_reuse) {
     // still something to process
     auto back_it = bd.end() - 1;
     if (!back_it->is_compressed()) {
@@ -1453,12 +1454,46 @@ void BlueStore::Writer::do_write(
   do_write_with_blobs(location, data_end, location, ref_end, bd);
 }
 
+// Special variant of Writer::do_write that does not try to read before writing.
+// The only useful case for this function is when reading causes -EIO.
+void BlueStore::Writer::write_no_read(
+  uint32_t location,
+  bufferlist& data)
+{
+  do_deferred = false;
+  disk_allocs.it = allocated.end();
+  disk_allocs.pos = 0;
+  dout(20) << __func__ << " 0x" << std::hex << location << "~" << data.length() << dendl;
+  dout(25) << "on: " << onode->print(pp_mode) << dendl;
+  blob_vec bd;
+  uint32_t ref_begin = location;
+  uint32_t ref_end = location + data.length();
+  uint32_t au_size = bstore->min_alloc_size;
+  uint32_t head = p2phase(location, au_size);
+  if (head != 0) {
+    bufferlist tmp;
+    tmp.append_zero(head);
+    tmp.claim_append(data);
+    data.swap(tmp);
+    location -= head;
+  }
+  uint32_t tail = p2nphase(ref_end, au_size);
+  if (tail != 0) {
+    data.append_zero(tail);
+  }
+  uint32_t data_end = location + data.length();
+  _split_data(location, data, bd);
+
+  do_write_with_blobs(location, data_end, ref_begin, ref_end, bd, false);
+}
+
 void BlueStore::Writer::do_write_with_blobs(
   uint32_t data_begin,
   uint32_t data_end,
   uint32_t ref_begin,
   uint32_t ref_end,
-  blob_vec& bd)
+  blob_vec& bd,
+  bool allow_blob_reuse)
 {
   dout(20) << "blobs to put:" << blob_data_printer(bd, data_begin) << dendl;
   statfs_delta.stored() += ref_end - ref_begin;
@@ -1490,7 +1525,7 @@ void BlueStore::Writer::do_write_with_blobs(
   ceph_assert(pos == data_end);
 
   uint32_t au_size = bstore->min_alloc_size;
-  if (au_size != bstore->block_size) {
+  if (au_size != bstore->block_size && allow_blob_reuse) {
     _try_put_data_on_allocated(data_begin, data_end, ref_begin, ref_end, bd, after_punch_it);
   }
   if (data_begin != data_end) {
@@ -1507,7 +1542,7 @@ void BlueStore::Writer::do_write_with_blobs(
       location_tmp = location_end;
     }
     _defer_or_allocate(need_size);
-    _do_put_blobs(data_begin, data_end, ref_begin, ref_end, bd, after_punch_it);
+    _do_put_blobs(data_begin, data_end, ref_begin, ref_end, bd, after_punch_it, allow_blob_reuse);
   } else {
     // Unlikely, but we just put everything.
     ceph_assert(bd.size() == 0);
