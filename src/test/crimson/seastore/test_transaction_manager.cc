@@ -585,13 +585,13 @@ struct transaction_manager_test_t :
 
   TestBlockRef try_read_pin(
     test_transaction_t &t,
-    LBAMapping &&pin) {
+    const LBAMapping pin) {
     using ertr = with_trans_ertr<TransactionManager::base_iertr>;
     bool indirect = pin.is_indirect();
     auto addr = pin.get_key();
     auto im_addr = pin.get_intermediate_base();
     auto ext = with_trans_intr(*(t.t), [&](auto& trans) {
-      return tm->read_pin<TestBlock>(trans, std::move(pin));
+      return tm->read_pin<TestBlock>(trans, pin.duplicate());
     }).safe_then([](auto ret) {
       return ertr::make_ready_future<TestBlockRef>(ret.extent);
     }).handle_error(
@@ -655,16 +655,29 @@ struct transaction_manager_test_t :
 
   LBAMapping clone_pin(
     test_transaction_t &t,
-    laddr_t offset,
-    const LBAMapping &mapping) {
+    LBAMapping pos,
+    LBAMapping mapping,
+    laddr_t offset) {
+    auto key = mapping.get_key();
     auto pin = with_trans_intr(*(t.t), [&](auto &trans) {
-      return tm->clone_pin(trans, offset, mapping);
-    }).unsafe_get();
+      return tm->clone_pin(
+	trans,
+	std::move(pos),
+	std::move(mapping),
+	offset,
+	true);
+    }).unsafe_get().cloned_mapping;
     EXPECT_EQ(offset, pin.get_key());
-    EXPECT_EQ(mapping.get_key(), pin.get_intermediate_key());
-    EXPECT_EQ(mapping.get_key(), pin.get_intermediate_base());
+    EXPECT_EQ(key, pin.get_intermediate_key());
+    EXPECT_EQ(key, pin.get_intermediate_base());
     test_mappings.inc_ref(pin.get_intermediate_key(), t.mapping_delta);
     return pin;
+  }
+
+  LBAMapping get_end(test_transaction_t &t) {
+    return with_trans_intr(*(t.t), [&](auto &trans) {
+      return lba_manager->get_end_mapping(trans);
+    }).unsafe_get();
   }
 
   std::optional<LBAMapping> try_get_pin(
@@ -1412,10 +1425,11 @@ struct transaction_manager_test_t :
       {
 	auto t = create_transaction();
         auto lpin = get_pin(t, l_offset);
-        auto rpin = get_pin(t, r_offset);
-	auto l_clone_pin = clone_pin(t, l_clone_offset, lpin);
-	auto r_clone_pin = clone_pin(t, r_clone_offset, rpin);
+	auto l_clone_pos = get_end(t);
+	auto l_clone_pin = clone_pin(
+	  t, std::move(l_clone_pos), std::move(lpin), l_clone_offset);
         //split left
+	l_clone_pin = refresh_lba_mapping(t, std::move(l_clone_pin));
         auto pin1 = remap_pin(t, std::move(l_clone_pin), 0, 16 << 10);
         ASSERT_TRUE(pin1);
         auto pin2 = remap_pin(t, std::move(*pin1), 0, 8 << 10);
@@ -1425,7 +1439,12 @@ struct transaction_manager_test_t :
         auto lext = read_pin(t, std::move(*pin3));
         EXPECT_EQ('l', lext->get_bptr().c_str()[0]);
 
+        auto rpin = get_pin(t, r_offset);
+	auto r_clone_pos = get_end(t);
+	auto r_clone_pin = clone_pin(
+	  t, std::move(r_clone_pos), std::move(rpin), r_clone_offset);
         //split right
+	r_clone_pin = refresh_lba_mapping(t, std::move(r_clone_pin));
         auto pin4 = remap_pin(t, std::move(r_clone_pin), 16 << 10, 16 << 10);
         ASSERT_TRUE(pin4);
         auto pin5 = remap_pin(t, std::move(*pin4), 8 << 10, 8 << 10);
@@ -1556,30 +1575,29 @@ struct transaction_manager_test_t :
 	    }
 
 	    auto t = create_transaction();
-            auto pin0 = try_get_pin(t, offset);
-	    if (!pin0 || pin0->get_length() != length) {
+            auto last_pin = try_get_pin(t, offset);
+	    if (!last_pin || last_pin->get_length() != length) {
 	      early_exit++;
 	      return;
 	    }
 
-            auto last_pin = pin0->duplicate();
 	    ASSERT_TRUE(!split_points.empty());
 	    for (auto off : split_points) {
 	      if (off == 0 || off >= 255) {
 		continue;
 	      }
               auto new_off = get_laddr_hint(off << 10)
-		  .get_byte_distance<extent_len_t>(last_pin.get_key());
-              auto new_len = last_pin.get_length() - new_off;
+		  .get_byte_distance<extent_len_t>(last_pin->get_key());
+              auto new_len = last_pin->get_length() - new_off;
               //always remap right extent at new split_point
-	      auto pin = remap_pin(t, std::move(last_pin), new_off, new_len);
+	      auto pin = remap_pin(t, std::move(*last_pin), new_off, new_len);
               if (!pin) {
 		conflicted++;
 		return;
 	      }
-              last_pin = pin->duplicate();
+              last_pin = std::move(pin);
 	    }
-            auto last_ext = try_get_extent(t, last_pin.get_key());
+            auto last_ext = try_get_extent(t, last_pin->get_key());
             if (!last_ext) {
               conflicted++;
               return;
@@ -1691,7 +1709,7 @@ struct transaction_manager_test_t :
 	        }
               }
               ASSERT_TRUE(rpin);
-              last_rpin = rpin->duplicate();
+              last_rpin = std::move(*rpin);
 	    }
             auto last_rext = try_get_extent(t, last_rpin.get_key());
             if (!last_rext) {
