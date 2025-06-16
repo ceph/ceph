@@ -1314,10 +1314,9 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
 int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
                            map<string, bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
-                           std::map<std::string, std::string>* crypt_http_responses)
+                           std::map<std::string, std::string>* crypt_http_responses,
+                           bool copy_source)
 {
-  const bool copy_source = s->src_object != nullptr;
-
   int res = 0;
   std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
   ldpp_dout(s, 15) << "Encryption mode: " << stored_mode << dendl;
