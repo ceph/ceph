@@ -306,7 +306,7 @@ int execute_info(const po::variables_map &vm,
   std::string group_id;
   r = rbd.group_get_id(io_ctx, group_name.c_str(), &group_id);
   if (r < 0) {
-    std::cout << "rbd: failed to get info for group " << group_name << " : "
+    std::cout << "rbd: failed to get ID of group " << group_name << ": "
               << cpp_strerror(r) << std::endl;
     return r;
   }
@@ -315,7 +315,9 @@ int execute_info(const po::variables_map &vm,
   mirror_group_info.state = RBD_MIRROR_GROUP_DISABLED;
   r = rbd.mirror_group_get_info(io_ctx, group_name.c_str(), &mirror_group_info,
                                 sizeof(mirror_group_info));
-  if (r < 0) {
+  if (r < 0 && r != -EOPNOTSUPP) {
+    std::cout << "rbd: failed to get mirror info for group " << group_name
+              << ": " << cpp_strerror(r) << std::endl;
     return r;
   }
 
@@ -343,15 +345,13 @@ int execute_info(const po::variables_map &vm,
       std::cout << "\tmirroring state: "
                 << utils::mirror_group_state(mirror_group_info.state)
                 << std::endl;
-      if (mirror_group_info.state != RBD_MIRROR_GROUP_DISABLED) {
-	std::cout << "\tmirroring mode: "
-                  << utils::mirror_image_mode(mirror_group_info.mirror_image_mode)
-                  << std::endl
-                  << "\tmirroring global id: " << mirror_group_info.global_id
-                  << std::endl
-                  << "\tmirroring primary: "
-                  << (mirror_group_info.primary ? "true" : "false") <<std::endl;
-      }
+      std::cout << "\tmirroring mode: "
+                << utils::mirror_image_mode(mirror_group_info.mirror_image_mode)
+                << std::endl
+                << "\tmirroring global id: " << mirror_group_info.global_id
+                << std::endl
+                << "\tmirroring primary: "
+                << (mirror_group_info.primary ? "true" : "false") <<std::endl;
     }
   }
 
