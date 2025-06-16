@@ -1,8 +1,8 @@
 <a i18n-title
    title="Tasks and Notifications"
    [ngClass]="{ 'running': hasRunningTasks }"
-   >
-  <svg cdsIcon="notification"
+   (click)="toggleNotifications(); $event.preventDefault()">
+  <svg [cdsIcon]="notificationService.showCarbonPanel ? 'notification--filled' : 'notification'"
        size="20"
        title="notification"></svg>
   <span class="dot"
