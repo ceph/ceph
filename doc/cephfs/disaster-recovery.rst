@@ -59,3 +59,53 @@ Note that this command acts as a normal CephFS client to find all the
 files in the file system and read their layouts, so the MDS must be
 up and running.
 
+Using first-damage.py
+---------------------
+
+#. Unmount all clients.
+
+#. Flush the journal if possible:
+
+   .. prompt:: bash #
+      
+      ceph tell mds.<fs_name>:0 flush journal
+
+#. Fail the file system:
+
+   .. prompt:: bash #
+
+      ceph fs fail <fs_name>
+
+#. Recover dentries from the journal. If the MDS flushed the journal
+   successfully, this will be a no-op:
+
+   .. prompt:: bash #
+
+      cephfs-journal-tool --rank=<fs_name>:0 event recover_dentries summary
+
+#. Reset the journal:
+   
+   .. prompt:: bash #
+
+      cephfs-journal-tool --rank=<fs_name>:0 journal reset --yes-i-really-mean-it
+
+#. Run ``first-damage.py`` to list damaged dentries:
+
+   .. prompt:: bash #
+
+      python3 first-damage.py --memo run.1 <pool>
+
+#. Optionally, remove the damaged dentries:
+
+   .. prompt:: bash #
+
+      python3 first-damage.py --memo run.2 --remove <pool>
+
+   .. note:: use ``--memo`` to specify a different file to save objects that
+      have already been traversed. This makes it possible to separate data made
+      during different, independent runs.
+
+      This command has the effect of removing a dentry from the snapshot or
+      head (in the current hierarchy). The inode's linkage will be lost. The
+      inode may however be recoverable in ``lost+found`` during a future
+      data-scan recovery.
