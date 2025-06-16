@@ -133,7 +133,7 @@ describe('NvmeofService', () => {
         .deleteListener(mockNQN, mockGroupName, request.host_name, request.traddr, request.trsvcid)
         .subscribe();
       const req = httpTesting.expectOne(
-        `${API_PATH}/subsystem/${mockNQN}/listener/${request.host_name}/${request.traddr}?gw_group=${mockGroupName}&trsvcid=${request.trsvcid}`
+        `${API_PATH}/subsystem/${mockNQN}/listener/${request.host_name}/${request.traddr}?gw_group=${mockGroupName}&trsvcid=${request.trsvcid}&force=true`
       );
       expect(req.request.method).toBe('DELETE');
     });
