@@ -764,6 +764,18 @@ ostream& operator <<(ostream& m, const MaskedIP& ip) {
   return m;
 }
 
+// Case-sensitive matching of the ARN. Each of the six colon-delimited
+// components of the ARN is checked separately and each can include multi-
+// character match wildcards (*) or single-character match wildcards (?).
+static bool arn_like(const std::string& input, const std::string& pattern)
+{
+  constexpr auto delim = [] (char c) { return c == ':'; };
+  if (std::count_if(input.begin(), input.end(), delim) != 5) {
+    return false;
+  }
+  return match_policy(pattern, input, MATCH_POLICY_ARN);
+}
+
 bool Condition::eval(const Environment& env) const {
   std::vector<std::string> runtime_vals;
   auto i = env.find(key);
@@ -904,11 +916,14 @@ bool Condition::eval(const Environment& env) const {
       return true;
     }
 
-#if 0
-    // Amazon Resource Names! (Does S3 need this?)
-    TokenID::ArnEquals, TokenID::ArnNotEquals, TokenID::ArnLike,
-      TokenID::ArnNotLike,
-#endif
+    // Amazon Resource Names!
+    // The ArnEquals and ArnLike condition operators behave identically.
+  case TokenID::ArnEquals:
+  case TokenID::ArnLike:
+    return orrible(arn_like, itr, isruntime? runtime_vals : vals);
+  case TokenID::ArnNotEquals:
+  case TokenID::ArnNotLike:
+    return orrible(std::not_fn(arn_like), itr, isruntime? runtime_vals : vals);
 
   default:
     return false;
