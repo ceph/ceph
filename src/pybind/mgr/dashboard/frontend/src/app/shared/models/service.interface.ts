@@ -68,5 +68,5 @@ export interface CephServicePlacement {
   count?: number;
   placement?: string;
   hosts?: string[];
-  label?: string;
+  label?: string | string[];
 }

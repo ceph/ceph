@@ -1,8 +1,9 @@
+import _ from 'lodash';
 import { Component, OnInit } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { ListenerRequest, NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { GatewayGroup, ListenerRequest, NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -15,7 +16,7 @@ import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { HostService } from '~/app/shared/api/host.service';
 import { map } from 'rxjs/operators';
 import { forkJoin } from 'rxjs';
-import { CephServiceSpec } from '~/app/shared/models/service.interface';
+import { Host } from '~/app/shared/models/host.interface';
 
 @Component({
   selector: 'cd-nvmeof-listeners-form',
@@ -51,26 +52,42 @@ export class NvmeofListenersFormComponent implements OnInit {
     this.pageURL = 'block/nvmeof/subsystems';
   }
 
+  filterHostsByLabel(allHosts: Host[], gwNodesLabel: string | string[]) {
+    return allHosts.filter((host: Host) => {
+      const hostLabels: string[] = host?.labels;
+      if (typeof gwNodesLabel === 'string') {
+        return hostLabels.includes(gwNodesLabel);
+      }
+      return hostLabels?.length === gwNodesLabel?.length && _.isEqual(hostLabels, gwNodesLabel);
+    });
+  }
+
+  filterHostsByHostname(allHosts: Host[], gwNodes: string[]) {
+    return allHosts.filter((host: Host) => gwNodes.includes(host.hostname));
+  }
+
+  getGwGroupPlacement(gwGroups: GatewayGroup[][]) {
+    return (
+      gwGroups?.[0]?.find((gwGroup: GatewayGroup) => gwGroup?.spec?.group === this.group)
+        ?.placement || { hosts: [], label: [] }
+    );
+  }
+
   setHosts() {
     forkJoin({
       gwGroups: this.nvmeofService.listGatewayGroups(),
-      hosts: this.hostService.getAllHosts()
+      allHosts: this.hostService.getAllHosts()
     })
       .pipe(
-        map(({ gwGroups, hosts }) => {
-          // Find the gateway hosts in current group
-          const selectedGwGroup: CephServiceSpec = gwGroups?.[0]?.find(
-            (gwGroup: CephServiceSpec) => gwGroup?.spec?.group === this.group
-          );
-          const gatewayHosts: string[] = selectedGwGroup?.placement?.hosts;
-          // Return the gateway hosts in current group with their metadata
-          return gatewayHosts
-            ? hosts.filter((host: any) => gatewayHosts.includes(host.hostname))
-            : [];
+        map(({ gwGroups, allHosts }) => {
+          const { hosts, label } = this.getGwGroupPlacement(gwGroups);
+          if (hosts?.length) return this.filterHostsByHostname(allHosts, hosts);
+          else if (label?.length) return this.filterHostsByLabel(allHosts, label);
+          return [];
         })
       )
-      .subscribe((nvmeofHosts: any[]) => {
-        this.hosts = nvmeofHosts.map((h) => ({ hostname: h.hostname, addr: h.addr }));
+      .subscribe((nvmeofGwNodes: Host[]) => {
+        this.hosts = nvmeofGwNodes.map((h) => ({ hostname: h.hostname, addr: h.addr }));
       });
   }
 
