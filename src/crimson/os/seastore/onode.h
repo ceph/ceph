@@ -16,7 +16,7 @@ namespace crimson::os::seastore {
 
 struct onode_layout_t {
   // The expected decode size of object_info_t without oid.
-  static constexpr int MAX_OI_LENGTH = 232;
+  static constexpr int MAX_OI_LENGTH = 236;
   // We might want to move the ss field out of onode_layout_t.
   // The reason is that ss_attr may grow to relative large, as
   // its clone_overlap may grow to a large size, if applications
