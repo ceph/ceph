@@ -172,7 +172,7 @@ public:
   }
   std::pair<uint64_t, uint64_t> offset_length_to_data_chunk_indices(
     uint64_t off, uint64_t len) const {
-    assert(chunk_size > 0);
+    ceph_assert(chunk_size > 0);
     const auto first_chunk_idx = (off / chunk_size);
     const auto last_chunk_idx = (chunk_size - 1 + off + len) / chunk_size;
     return {first_chunk_idx, last_chunk_idx};
@@ -182,7 +182,7 @@ public:
     if (len == 0) {
       return true;
     }
-    assert(chunk_size > 0);
+    ceph_assert(chunk_size > 0);
     const auto first_stripe_idx = off / stripe_width;
     const auto last_inc_stripe_idx = (off + len - 1) / stripe_width;
     return first_stripe_idx == last_inc_stripe_idx;
