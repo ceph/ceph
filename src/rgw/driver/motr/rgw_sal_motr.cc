@@ -1238,7 +1238,7 @@ int MotrObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, op
   if (r < 0) {
     return r;
   }
-  set_atomic();
+  set_atomic(true);
   state.attrset[attr_name] = attr_val;
   return set_obj_attrs(dpp, &state.attrset, nullptr, y, rgw::sal::FLAG_LOG_OP);
 }
@@ -1249,7 +1249,7 @@ int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
   Attrs rmattr;
   bufferlist bl;
 
-  set_atomic();
+  set_atomic(true);
   rmattr[attr_name] = bl;
   return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
 }
