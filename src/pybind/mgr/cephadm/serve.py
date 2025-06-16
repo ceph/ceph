@@ -108,8 +108,14 @@ class CephadmServe:
                     if self.mgr.migration.is_migration_ongoing():
                         continue
 
-                    if self._apply_all_services():
-                        continue  # did something, refresh
+                    try:
+                        if self._apply_all_services():
+                            continue  # did something, refresh
+                    except Exception:
+                        # guarantee we don't leave things in the deploy/removal queue
+                        self.mgr.daemon_deploy_queue.clear_queued_daemons()
+                        self.mgr.daemon_removal_queue.clear_queued_daemons()
+                        raise
 
                     self._check_daemons()
 
