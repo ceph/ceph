@@ -613,13 +613,12 @@ public:
     return state == extent_state_t::DIRTY;
   }
 
-  // Returs true if extent is stable and clean
+  /// Returns iff extent is CLEAN
   bool is_stable_clean() const {
-    ceph_assert(is_valid());
     return state == extent_state_t::CLEAN;
   }
 
-  // Returns true if the buffer is still loading
+  /// Returns iff extent is CLEAN and pending
   bool is_stable_clean_pending() const {
     return is_stable_clean() && is_pending_io();
   }
