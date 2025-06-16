@@ -2319,7 +2319,7 @@ int Mirror<I>::image_status_summary(librados::IoCtx& io_ctx,
   r = cls_client::mirror_image_status_get_summary(&io_ctx, mirror_peers,
                                                   &states_);
   if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "failed to get mirror status summary: "
+    lderr(cct) << "failed to get mirror image status summary: "
                << cpp_strerror(r) << dendl;
     return r;
   }
@@ -3585,7 +3585,10 @@ int Mirror<I>::group_status_list(librados::IoCtx& io_ctx,
   r = librbd::cls_client::mirror_group_status_list(&io_ctx, start_id, max,
                                                    &groups_internal,
                                                    &statuses_internal);
-  if (r < 0 && r != -ENOENT) {
+  if (r == -EOPNOTSUPP) {
+    ldout(cct, 5) << "group mirroring not supported by OSD" << dendl;
+    return r;
+  } else if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to list mirror group statuses: "
                << cpp_strerror(r) << dendl;
     return r;
@@ -3664,8 +3667,11 @@ int Mirror<I>::group_status_summary(librados::IoCtx& io_ctx,
   std::map<cls::rbd::MirrorGroupStatusState, int32_t> states_internal;
   r = cls_client::mirror_group_status_get_summary(&io_ctx, mirror_peers,
                                                   &states_internal);
-  if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "failed to get mirror status summary: "
+  if (r == -EOPNOTSUPP) {
+    ldout(cct, 5) << "group mirroring not supported by OSD" << dendl;
+    return r;
+  } else if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to get mirror group status summary: "
                << cpp_strerror(r) << dendl;
     return r;
   }
