@@ -392,7 +392,7 @@ bool Replayer<I>::add_local_journal_listener(
              << dendl;
     handle_replay_complete(locker, r, "error parsing resync state");
     return false;
-  } else if (resync_requested) {
+  } else if (resync_requested && m_state_builder->is_remote_primary()) {
     dout(10) << "local image resync requested" << dendl;
     handle_replay_complete(locker, 0, "resync requested");
     return false;
@@ -1192,8 +1192,10 @@ void Replayer<I>::handle_resync_image() {
   dout(10) << dendl;
 
   std::unique_lock locker{m_lock};
-  m_resync_requested = true;
-  handle_replay_complete(locker, 0, "resync requested");
+  if (m_state_builder->is_remote_primary()) {
+    m_resync_requested = true;
+    handle_replay_complete(locker, 0, "resync requested");
+  }
 }
 
 template <typename I>
@@ -1253,7 +1255,8 @@ int Replayer<I>::validate_remote_client_state(
       remote_client.state != cls::journal::CLIENT_STATE_CONNECTED) {
     dout(5) << "client flagged disconnected, stopping image replay" << dendl;
     if (local_image_ctx->config.template get_val<bool>(
-          "rbd_mirroring_resync_after_disconnect")) {
+          "rbd_mirroring_resync_after_disconnect") &&
+        m_state_builder->is_remote_primary()) {
       dout(10) << "disconnected: automatic resync" << dendl;
       *resync_requested = true;
       *error = "disconnected: automatic resync";

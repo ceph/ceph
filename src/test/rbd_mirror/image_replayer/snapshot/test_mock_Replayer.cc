@@ -363,6 +363,8 @@ struct StateBuilder<librbd::MockTestImageCtx> {
 
   librbd::mirror::snapshot::ImageMeta<librbd::MockTestImageCtx>*
     local_image_meta = nullptr;
+
+  MOCK_METHOD0(is_remote_primary, bool());
 };
 
 ApplyImageStateRequest<librbd::MockTestImageCtx>* ApplyImageStateRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
@@ -467,6 +469,12 @@ public:
           mock_image_meta.resync_requested = resync_requested;
           m_threads->work_queue->queue(ctx, r);
         }));
+  }
+
+  void expect_is_remote_primary(MockStateBuilder &mock_state_builder,
+                                bool is_primary) {
+    EXPECT_CALL(mock_state_builder, is_remote_primary())
+      .WillOnce(Return(is_primary));
   }
 
   void expect_is_refresh_required(librbd::MockTestImageCtx& mock_image_ctx,
@@ -1790,6 +1798,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ResyncRequested) {
 
   // idle
   expect_load_image_meta(mock_image_meta, true, 0);
+  expect_is_remote_primary(mock_state_builder, true);
 
   // wake-up replayer
   update_watch_ctx->handle_notify();
@@ -1802,6 +1811,70 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ResyncRequested) {
                                         mock_local_image_ctx,
                                         mock_remote_image_ctx));
 }
+
+TEST_F(TestMockImageReplayerSnapshotReplayer, ResyncRequestedRemoteNotPrimary) {
+  librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx};
+  librbd::MockTestImageCtx mock_remote_image_ctx{*m_remote_image_ctx};
+
+  MockThreads mock_threads(m_threads);
+  expect_work_queue_repeatedly(mock_threads);
+
+  MockReplayerListener mock_replayer_listener;
+  expect_notification(mock_threads, mock_replayer_listener);
+
+  InSequence seq;
+
+  MockInstanceWatcher mock_instance_watcher;
+  MockImageMeta mock_image_meta;
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_image_ctx,
+                                      mock_image_meta);
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
+  m_pool_meta_cache.set_remote_pool_meta(
+    m_remote_io_ctx.get_id(),
+    {"remote mirror uuid", "remote mirror peer uuid"});
+
+  librbd::UpdateWatchCtx* update_watch_ctx = nullptr;
+
+  // init
+  expect_register_update_watcher(mock_local_image_ctx, &update_watch_ctx, 123,
+                                  0);
+  expect_register_update_watcher(mock_remote_image_ctx, &update_watch_ctx, 234,
+                                  0);
+  // during init, image meta indicates a resync is requested
+  // but remote is not primary, so no resync should occur
+  expect_load_image_meta(mock_image_meta, true, 0);
+  expect_is_remote_primary(mock_state_builder, false);
+  expect_is_refresh_required(mock_local_image_ctx, false);
+  expect_is_refresh_required(mock_remote_image_ctx, false);
+
+  C_SaferCond init_ctx;
+  mock_replayer.init(&init_ctx);
+  ASSERT_EQ(0, init_ctx.wait());
+
+  ASSERT_EQ(0, wait_for_notification(2));
+
+  // idle
+  expect_load_image_meta(mock_image_meta, true, 0);
+  expect_is_remote_primary(mock_state_builder, false);
+  expect_is_refresh_required(mock_local_image_ctx, false);
+  expect_is_refresh_required(mock_remote_image_ctx, false);
+
+  // wake-up replayer
+  update_watch_ctx->handle_notify();
+
+  // expect that replayer is still replaying (i.e. replay not
+  // complete) which would mean that it hasn't performed resync
+  ASSERT_EQ(0, wait_for_notification(1));
+  ASSERT_TRUE(mock_replayer.is_replaying());
+
+  ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
+                                        mock_local_image_ctx,
+                                        mock_remote_image_ctx));
+}
+
 
 TEST_F(TestMockImageReplayerSnapshotReplayer, RegisterLocalUpdateWatcherError) {
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx};
@@ -3137,6 +3210,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ImageNameUpdated) {
 
   // idle
   expect_load_image_meta(mock_image_meta, true, 0);
+  expect_is_remote_primary(mock_state_builder, true);
 
   // wake-up replayer
   update_watch_ctx->handle_notify();
