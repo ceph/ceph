@@ -1106,6 +1106,17 @@ class CephadmServe:
             if service_type == 'rgw':
                 self.mgr.rgw_service.set_realm_zg_zone(cast(RGWSpec, spec))
 
+            if service_type == 'ingress':
+                ingress_spec = cast(IngressSpec, spec)
+                if slot.daemon_type == 'keepalived' and not ingress_spec.keepalive_only:
+                    if not self.mgr.cache.get_daemons_by_service(spec.service_name()):
+                        # prepare_create for keepalive will fail in this case as
+                        # we need to deploy haproxy daemons first in order to have targets
+                        # for keepalive to check the health of. For that reason,
+                        # we'll skip the keepalive daemon(s) and deploy them once
+                        # the serve loop comes back around after deploying haproxy
+                        continue
+
             # deploy new daemon
             daemon_id = slot.name
 
