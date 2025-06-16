@@ -10,7 +10,7 @@ import { Subject, throwError as observableThrowError } from 'rxjs';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { ComponentsModule } from '~/app/shared/components/components.module';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, USER } from '~/app/shared/constants/app.constants';
 import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -120,7 +120,7 @@ describe('RbdSnapshotListComponent', () => {
       rbdService = new RbdService(null, null);
       notificationService = new NotificationService(null, null, null);
       authStorageService = new AuthStorageService();
-      authStorageService.set('user', { 'rbd-image': ['create', 'read', 'update', 'delete'] });
+      authStorageService.set(USER, { 'rbd-image': ['create', 'read', 'update', 'delete'] });
       component = new RbdSnapshotListComponent(
         authStorageService,
         null,
