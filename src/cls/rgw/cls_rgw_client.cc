@@ -523,15 +523,13 @@ int cls_rgw_get_dir_header_async(IoCtx& io_ctx, const string& oid,
   return 0;
 }
 
-int cls_rgw_usage_log_read(IoCtx& io_ctx, const string& oid, const string& user, const string& bucket,
-                           uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
-                           string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage,
-                           bool *is_truncated)
+void cls_rgw_usage_log_read(librados::ObjectReadOperation& op,
+                            const std::string& user, const std::string& bucket,
+                            uint64_t start_epoch, uint64_t end_epoch,
+                            uint32_t max_entries, const std::string& read_iter,
+                            bufferlist& out, int& rval)
 {
-  if (is_truncated)
-    *is_truncated = false;
-
-  bufferlist in, out;
+  bufferlist in;
   rgw_cls_usage_log_read_op call;
   call.start_epoch = start_epoch;
   call.end_epoch = end_epoch;
@@ -540,9 +538,15 @@ int cls_rgw_usage_log_read(IoCtx& io_ctx, const string& oid, const string& user,
   call.bucket = bucket;
   call.iter = read_iter;
   encode(call, in);
-  int r = io_ctx.exec(oid, RGW_CLASS, RGW_USER_USAGE_LOG_READ, in, out);
-  if (r < 0)
-    return r;
+  op.exec(RGW_CLASS, RGW_USER_USAGE_LOG_READ, in, &out, &rval);
+}
+
+int cls_rgw_usage_log_read_decode(const bufferlist& out, string& read_iter,
+                                  map<rgw_user_bucket, rgw_usage_log_entry>& usage,
+                                  bool *is_truncated)
+{
+  if (is_truncated)
+    *is_truncated = false;
 
   try {
     rgw_cls_usage_log_read_ret result;
@@ -552,7 +556,7 @@ int cls_rgw_usage_log_read(IoCtx& io_ctx, const string& oid, const string& user,
     if (is_truncated)
       *is_truncated = result.truncated;
 
-    usage = result.usage;
+    usage = std::move(result.usage);
   } catch (ceph::buffer::error& e) {
     return -EINVAL;
   }
