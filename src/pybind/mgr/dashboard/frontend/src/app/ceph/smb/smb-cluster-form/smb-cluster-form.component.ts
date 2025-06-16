@@ -37,6 +37,7 @@ import { CephServicePlacement } from '~/app/shared/models/service.interface';
 import { UpperFirstPipe } from '~/app/shared/pipes/upper-first.pipe';
 import { CLUSTER_PATH } from '../smb-cluster-list/smb-cluster-list.component';
 import { USERSGROUPS_PATH } from '../smb-usersgroups-list/smb-usersgroups-list.component';
+import { Host } from '~/app/shared/models/host.interface';
 
 @Component({
   selector: 'cd-smb-cluster-form',
@@ -95,7 +96,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       labels: this.hostService.getLabels()
     }).pipe(
       map(({ hosts, labels }) => ({
-        hosts: hosts.map((host: any) => ({ content: host['hostname'] })),
+        hosts: hosts.map((host: Host) => ({ content: host['hostname'] })),
         labels: labels.map((label: string) => ({ content: label }))
       }))
     );
@@ -169,7 +170,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
         labels: this.hostService.getLabels()
       }).pipe(
         map(({ hosts, labels }) => ({
-          hosts: hosts.map((host: any) => ({ content: host['hostname'] })),
+          hosts: hosts.map((host: Host) => ({ content: host['hostname'] })),
           labels: labels.map((label: string) => ({ content: label }))
         }))
       );
