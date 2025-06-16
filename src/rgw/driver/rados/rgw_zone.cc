@@ -1264,49 +1264,59 @@ int RGWZoneGroupTierS3Glacier::clear_params(const JSONFormattable& config)
   return 0;
 }
 
-void rgw_meta_sync_info::generate_test_instances(list<rgw_meta_sync_info*>& o)
+list<rgw_meta_sync_info> rgw_meta_sync_info::generate_test_instances()
 {
-  auto info = new rgw_meta_sync_info;
-  info->state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
-  info->period = "periodid";
-  info->realm_epoch = 5;
-  o.push_back(info);
-  o.push_back(new rgw_meta_sync_info);
+  list<rgw_meta_sync_info> o;
+  rgw_meta_sync_info info;
+  info.state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
+  info.period = "periodid";
+  info.realm_epoch = 5;
+  o.push_back(std::move(info));
+  o.push_back(rgw_meta_sync_info{});
+  return o;
 }
 
-void rgw_meta_sync_marker::generate_test_instances(list<rgw_meta_sync_marker*>& o)
+list<rgw_meta_sync_marker> rgw_meta_sync_marker::generate_test_instances()
 {
-  auto marker = new rgw_meta_sync_marker;
-  marker->state = rgw_meta_sync_marker::IncrementalSync;
-  marker->marker = "01234";
-  marker->realm_epoch = 5;
-  o.push_back(marker);
-  o.push_back(new rgw_meta_sync_marker);
+  list<rgw_meta_sync_marker> o;
+  rgw_meta_sync_marker marker;
+  marker.state = rgw_meta_sync_marker::IncrementalSync;
+  marker.marker = "01234";
+  marker.realm_epoch = 5;
+  o.push_back(std::move(marker));
+  o.push_back(rgw_meta_sync_marker{});
+  return o;
 }
 
-void rgw_meta_sync_status::generate_test_instances(list<rgw_meta_sync_status*>& o)
+list<rgw_meta_sync_status> rgw_meta_sync_status::generate_test_instances()
 {
-  o.push_back(new rgw_meta_sync_status);
+  list<rgw_meta_sync_status> o;
+  o.push_back(rgw_meta_sync_status{});
+  return o;
 }
 
-void RGWZoneParams::generate_test_instances(list<RGWZoneParams*> &o)
+list<RGWZoneParams> RGWZoneParams::generate_test_instances()
 {
-  o.push_back(new RGWZoneParams);
-  o.push_back(new RGWZoneParams);
+  list<RGWZoneParams> o;
+  o.push_back(RGWZoneParams{});
+  o.push_back(RGWZoneParams{});
+  return o;
 }
 
-void RGWPeriodLatestEpochInfo::generate_test_instances(list<RGWPeriodLatestEpochInfo*> &o)
+list<RGWPeriodLatestEpochInfo> RGWPeriodLatestEpochInfo::generate_test_instances()
 {
-  RGWPeriodLatestEpochInfo *z = new RGWPeriodLatestEpochInfo;
-  o.push_back(z);
-  o.push_back(new RGWPeriodLatestEpochInfo);
+  list<RGWPeriodLatestEpochInfo> o;
+  o.push_back(RGWPeriodLatestEpochInfo{});
+  o.push_back(RGWPeriodLatestEpochInfo{});
+  return o;
 }
 
-void RGWZoneGroup::generate_test_instances(list<RGWZoneGroup*>& o)
+list<RGWZoneGroup> RGWZoneGroup::generate_test_instances()
 {
-  RGWZoneGroup *r = new RGWZoneGroup;
-  o.push_back(r);
-  o.push_back(new RGWZoneGroup);
+  list<RGWZoneGroup> o;
+  o.push_back(RGWZoneGroup{});
+  o.push_back(RGWZoneGroup{});
+  return o;
 }
 
 void RGWPeriodLatestEpochInfo::dump(Formatter *f) const {
@@ -1325,10 +1335,12 @@ void RGWNameToId::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("obj_id", obj_id, obj);
 }
 
-void RGWNameToId::generate_test_instances(list<RGWNameToId*>& o) {
-  RGWNameToId *n = new RGWNameToId;
-  n->obj_id = "id";
-  o.push_back(n);
-  o.push_back(new RGWNameToId);
+list<RGWNameToId> RGWNameToId::generate_test_instances() {
+  list<RGWNameToId> o;
+  RGWNameToId n;
+  n.obj_id = "id";
+  o.push_back(std::move(n));
+  o.push_back(RGWNameToId{});
+  return o;
 }
 
