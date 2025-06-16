@@ -739,7 +739,7 @@ void Cache::add_extent(CachedExtentRef ref)
 void Cache::mark_dirty(CachedExtentRef ref)
 {
   assert(ref->get_paddr().is_absolute());
-  if (ref->has_delta()) {
+  if (ref->is_stable_dirty()) {
     assert(ref->primary_ref_list_hook.is_linked());
     return;
   }
@@ -753,15 +753,13 @@ void Cache::add_to_dirty(
     CachedExtentRef ref,
     const Transaction::src_t* p_src)
 {
-  assert(ref->has_delta());
+  assert(ref->is_stable_dirty());
   assert(!ref->primary_ref_list_hook.is_linked());
   ceph_assert(ref->get_modify_time() != NULL_TIME);
   assert(ref->is_fully_loaded());
   assert(ref->get_paddr().is_absolute() ||
          ref->get_paddr().is_root());
 
-  // Note: next might not be at extent_state_t::DIRTY,
-  // also see CachedExtent::is_stable_writting()
   intrusive_ptr_add_ref(&*ref);
   dirty.push_back(*ref);
 
@@ -785,7 +783,7 @@ void Cache::remove_from_dirty(
     CachedExtentRef ref,
     const Transaction::src_t* p_src)
 {
-  assert(ref->has_delta());
+  assert(ref->is_stable_dirty());
   ceph_assert(ref->primary_ref_list_hook.is_linked());
   assert(ref->is_fully_loaded());
   assert(ref->get_paddr().is_absolute() ||
@@ -817,13 +815,11 @@ void Cache::replace_dirty(
     CachedExtentRef prev,
     const Transaction::src_t& src)
 {
-  assert(prev->has_delta());
+  assert(prev->is_stable_dirty());
   ceph_assert(prev->primary_ref_list_hook.is_linked());
   assert(prev->is_fully_loaded());
 
-  // Note: next might not be at extent_state_t::DIRTY,
-  // also see CachedExtent::is_stable_writting()
-  assert(next->has_delta());
+  assert(next->is_stable_dirty());
   assert(!next->primary_ref_list_hook.is_linked());
   ceph_assert(next->get_modify_time() != NULL_TIME);
   assert(next->is_fully_loaded());
@@ -849,7 +845,7 @@ void Cache::clear_dirty()
 {
   for (auto i = dirty.begin(); i != dirty.end(); ) {
     auto ptr = &*i;
-    assert(ptr->has_delta());
+    assert(ptr->is_stable_dirty());
     ceph_assert(ptr->primary_ref_list_hook.is_linked());
     assert(ptr->is_fully_loaded());
 
@@ -873,7 +869,7 @@ void Cache::remove_extent(
   assert(ref->is_valid());
   assert(ref->get_paddr().is_absolute() ||
          ref->get_paddr().is_root());
-  if (ref->has_delta()) {
+  if (ref->is_stable_dirty()) {
     remove_from_dirty(ref, p_src);
   } else if (!ref->is_placeholder()) {
     assert(ref->get_paddr().is_absolute());
@@ -907,12 +903,12 @@ void Cache::commit_replace_extent(
   if (is_root_type(prev->get_type())) {
     assert(prev->is_stable_clean()
       || prev->primary_ref_list_hook.is_linked());
-    if (prev->has_delta()) {
+    if (prev->is_stable_dirty()) {
       // add the new dirty root to front
       remove_from_dirty(prev, nullptr/* exclude root */);
     }
     add_to_dirty(next, nullptr/* exclude root */);
-  } else if (prev->has_delta()) {
+  } else if (prev->is_stable_dirty()) {
     replace_dirty(next, prev, t_src);
   } else {
     lru.remove_from_lru(*prev);
@@ -1573,7 +1569,7 @@ record_t Cache::prepare_record(
     // exist mutation pending extents must be in t.mutated_block_list
     add_extent(i);
     const auto t_src = t.get_src();
-    if (i->has_delta()) {
+    if (i->is_stable_dirty()) {
       add_to_dirty(i, &t_src);
     } else {
       touch_extent(*i, &t_src, t.get_cache_hint());
@@ -1818,10 +1814,10 @@ void Cache::complete_commit(
 	   t, is_inline, *i);
     i->invalidate_hints();
     add_extent(i);
-    assert(!i->has_delta());
     const auto t_src = t.get_src();
     touch_extent(*i, &t_src, t.get_cache_hint());
     i->complete_io();
+    assert(i->is_stable_clean());
     epm.commit_space_used(i->get_paddr(), i->get_length());
 
     // Note: commit extents and backref allocations in the same place
@@ -1861,7 +1857,7 @@ void Cache::complete_commit(
     if (!i->is_valid()) {
       continue;
     }
-    assert(i->has_delta());
+    assert(i->is_stable_dirty());
     assert(i->is_pending_io());
     assert(i->io_wait->from_state == CachedExtent::extent_state_t::EXIST_MUTATION_PENDING
            || (i->io_wait->from_state == CachedExtent::extent_state_t::MUTATION_PENDING

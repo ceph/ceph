@@ -222,7 +222,7 @@ public:
       ceph_assert(ret->get_type() == type);
 
       if (ret->is_stable()) {
-        if (ret->has_delta()) {
+        if (ret->is_stable_dirty()) {
           ++access_stats.trans_dirty;
           ++stats.access.trans_dirty;
         } else {
@@ -278,7 +278,7 @@ public:
 
     ceph_assert(ret->get_type() == type);
 
-    if (ret->has_delta()) {
+    if (ret->is_stable_dirty()) {
       ++access_stats.cache_dirty;
       ++stats.access.cache_dirty;
     } else {
@@ -505,7 +505,7 @@ public:
         assert(!p_extent->is_pending_in_trans(t.get_trans_id()));
         auto ret = t.maybe_add_to_read_set(p_extent);
         if (ret.added) {
-          if (p_extent->has_delta()) {
+          if (p_extent->is_stable_dirty()) {
             ++access_stats.cache_dirty;
             ++stats.access.cache_dirty;
           } else {
@@ -519,7 +519,7 @@ public:
           }
         } else {
           // already exists
-          if (p_extent->has_delta()) {
+          if (p_extent->is_stable_dirty()) {
             ++access_stats.trans_dirty;
             ++stats.access.trans_dirty;
           } else {
@@ -1295,7 +1295,7 @@ public:
 
     // journal replay should has been finished at this point,
     // Cache::root should have been inserted to the dirty list
-    assert(root->has_delta());
+    assert(root->is_stable_dirty());
     std::vector<CachedExtentRef> _dirty;
     for (auto &e : extents_index) {
       _dirty.push_back(CachedExtentRef(&e));

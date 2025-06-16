@@ -299,7 +299,7 @@ class CachedExtent
   uint32_t last_committed_crc = 0;
 
   // Points at the prior stable version while in state MUTATION_PENDING
-  // or is rewriting (in state INITIAL_PENDING).
+  // or is rewriting (in state INITIAL_WRITE_PENDING).
   CachedExtentRef prior_instance;
 
   // time of the last modification
@@ -573,7 +573,7 @@ public:
   }
 
   bool is_stable_writting() const {
-    // mutated/INITIAL_PENDING and under-io extents are already
+    // mutated/INITIAL_WRITE_PENDING and under-io extents are already
     // stable and visible, see prepare_record().
     //
     // XXX: It might be good to mark this case as DIRTY/CLEAN from the definition,
@@ -608,19 +608,9 @@ public:
     return state == extent_state_t::INITIAL_WRITE_PENDING;
   }
 
-  /// Returns iff extent has deltas on disk or pending
-  bool has_delta() const {
-    ceph_assert(is_valid());
-    if (state == extent_state_t::INITIAL_WRITE_PENDING
-        || state == extent_state_t::CLEAN
-        || state == extent_state_t::EXIST_CLEAN) {
-      return false;
-    } else {
-      assert(state == extent_state_t::MUTATION_PENDING
-             || state == extent_state_t::DIRTY
-             || state == extent_state_t::EXIST_MUTATION_PENDING);
-      return true;
-    }
+  /// Returns iff extent is DIRTY
+  bool is_stable_dirty() const {
+    return state == extent_state_t::DIRTY;
   }
 
   // Returs true if extent is stable and clean
@@ -665,7 +655,7 @@ public:
 
   /// Return journal location of oldest relevant delta, only valid while DIRTY
   auto get_dirty_from() const {
-    ceph_assert(has_delta());
+    ceph_assert(is_stable_dirty());
     return dirty_from;
   }
 
@@ -726,7 +716,8 @@ public:
     return loaded_length;
   }
 
-  /// Returns version, get_version() == 0 iff !has_delta()
+  /// Returns version, get_version() == 0
+  /// iff CLEAN/EXIST_CLEAN/INITIAL_WRITE_PENDING
   extent_version_t get_version() const {
     return version;
   }
