@@ -1780,7 +1780,7 @@ int RGWRados::read_usage(const DoutPrefixProvider *dpp, const rgw_user& user, co
     map<rgw_user_bucket, rgw_usage_log_entry> ret_usage;
     map<rgw_user_bucket, rgw_usage_log_entry>::iterator iter;
 
-    int ret =  cls_obj_usage_log_read(dpp, hash, user_str, bucket_name, start_epoch, end_epoch, num,
+    int ret =  cls_obj_usage_log_read(dpp, null_yield, hash, user_str, bucket_name, start_epoch, end_epoch, num,
                                     usage_iter.read_iter, ret_usage, is_truncated);
     if (ret == -ENOENT)
       goto next;
@@ -11105,7 +11105,8 @@ int RGWRados::cls_obj_usage_log_add(const DoutPrefixProvider *dpp, const string&
   return r;
 }
 
-int RGWRados::cls_obj_usage_log_read(const DoutPrefixProvider *dpp, const string& oid, const string& user, const string& bucket,
+int RGWRados::cls_obj_usage_log_read(const DoutPrefixProvider *dpp, optional_yield y,
+                                     const string& oid, const string& user, const string& bucket,
                                      uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
                                      string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage,
 				     bool *is_truncated)
@@ -11120,10 +11121,19 @@ int RGWRados::cls_obj_usage_log_read(const DoutPrefixProvider *dpp, const string
 
   *is_truncated = false;
 
-  r = cls_rgw_usage_log_read(ref.ioctx, ref.obj.oid, user, bucket, start_epoch, end_epoch,
-			     max_entries, read_iter, usage, is_truncated);
-
-  return r;
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  int rval = 0;
+  cls_rgw_usage_log_read(op, user, bucket, start_epoch, end_epoch,
+                         max_entries, read_iter, bl, rval);
+  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), nullptr, y);
+  if (r < 0) {
+    return r;
+  }
+  if (rval < 0) {
+    return rval;
+  }
+  return cls_rgw_usage_log_read_decode(bl, read_iter, usage, is_truncated);
 }
 
 static int cls_rgw_usage_log_trim_repeat(const DoutPrefixProvider *dpp, rgw_rados_ref ref, const string& user, const string& bucket, uint64_t start_epoch, uint64_t end_epoch, optional_yield y)

@@ -232,13 +232,13 @@ void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, ceph::buff
 void cls_rgw_suggest_changes(librados::ObjectWriteOperation& o, ceph::buffer::list& updates);
 
 /* usage logging */
-// these overloads which call io_ctx.operate() should not be called in the rgw.
-// rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
-#ifndef CLS_CLIENT_HIDE_IOCTX
-int cls_rgw_usage_log_read(librados::IoCtx& io_ctx, const std::string& oid, const std::string& user, const std::string& bucket,
-                           uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries, std::string& read_iter,
-			   std::map<rgw_user_bucket, rgw_usage_log_entry>& usage, bool *is_truncated);
-#endif
+void cls_rgw_usage_log_read(librados::ObjectReadOperation& op,
+                            const std::string& user, const std::string& bucket,
+                            uint64_t start_epoch, uint64_t end_epoch,
+                            uint32_t max_entries, const std::string& read_iter,
+                            bufferlist& bl, int& rval);
+int cls_rgw_usage_log_read_decode(const bufferlist& bl, std::string& read_iter,
+                                  std::map<rgw_user_bucket, rgw_usage_log_entry>& usage, bool *is_truncated);
 
 void cls_rgw_usage_log_trim(librados::ObjectWriteOperation& op, const std::string& user, const std::string& bucket, uint64_t start_epoch, uint64_t end_epoch);
 
