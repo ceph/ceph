@@ -2166,11 +2166,10 @@ TEST_P(BlueStoreWriteFixture, expand_lr)
   struct zero_reader: BlueStore::Writer::read_divertor {
     ~zero_reader() {};
     uint32_t read_cnt = 0;
-    bufferlist read(uint32_t offset, uint32_t length) override {
+    int read(uint32_t offset, uint32_t length, bufferlist& res) override {
       ++read_cnt;
-      bufferlist tmp;
-      tmp.append_zero(length);
-      return tmp;
+      res.append_zero(length);
+      return 0;
     }
   };
   store->debug_set_block_size(block_size);
@@ -2237,11 +2236,10 @@ TEST_P(BlueStoreWriteFixture, buffer_check)
     ~ref_reader() {};
     uint32_t read_cnt = 0;
     char* ref_data = nullptr;
-    bufferlist read(uint32_t offset, uint32_t length) override {
+    int read(uint32_t offset, uint32_t length, bufferlist& res) override {
       ++read_cnt;
-      bufferlist tmp;
-      tmp.append(std::string(ref_data + offset, length));
-      return tmp;
+      res.append(std::string(ref_data + offset, length));
+      return 0;
     }
   };
   store->debug_set_block_size(block_size);
@@ -2345,10 +2343,9 @@ TEST_P(BlueStoreWriteFixture, deferred_check)
   };
   struct ref_reader: BlueStore::Writer::read_divertor {
     ~ref_reader() {};
-    bufferlist read(uint32_t offset, uint32_t length) override {
-      bufferlist tmp;
-      tmp.append_zero(length);
-      return tmp;
+    int read(uint32_t offset, uint32_t length, bufferlist& res) override {
+      res.append_zero(length);
+      return 0;
     }
   };
   store->debug_set_block_size(block_size);
@@ -2405,10 +2402,9 @@ TEST_P(BlueStoreWriteFixture, statfs_zero)
   };
   struct ref_reader: BlueStore::Writer::read_divertor {
     ~ref_reader() {};
-    bufferlist read(uint32_t offset, uint32_t length) override {
-      bufferlist tmp;
-      tmp.append_zero(length);
-      return tmp;
+    int read(uint32_t offset, uint32_t length, bufferlist& res) override {
+      res.append_zero(length);
+      return 0;
     }
   };
   store->debug_set_block_size(block_size);

@@ -800,24 +800,26 @@ inline void BlueStore::Writer::_schedule_io(
  *
  * If \ref Writer::test_read_divertor is set it overrides default.
  */
-inline bufferlist BlueStore::Writer::_read_self(
+inline int BlueStore::Writer::_read_self(
   uint32_t position,
-  uint32_t length)
+  uint32_t length,
+  bufferlist& result)
 {
   if (test_read_divertor == nullptr) {
-    bufferlist result;
     int r;
     r = bstore->_do_read(onode->c, onode, position, length, result);
-    ceph_assert(r >= 0 && r <= (int)length);
+    if (r < 0 || r > (int)length) {
+      return -EIO;
+    }
     size_t zlen = length - r;
     if (zlen) {
       result.append_zero(zlen);
       bstore->logger->inc(l_bluestore_write_pad_bytes, zlen);
     }
     bstore->logger->inc(l_bluestore_write_small_pre_read);
-    return result;
+    return 0;
   } else {
-    return test_read_divertor->read(position, length);
+    return test_read_divertor->read(position, length, result);
   }
 }
 
@@ -1378,7 +1380,9 @@ void BlueStore::Writer::_split_data(
   }
 }
 
-void BlueStore::Writer::_align_to_disk_block(
+// true = all padded / read properly
+// false = -EIO on reading object
+bool BlueStore::Writer::_align_to_disk_block(
   uint32_t& location,
   uint32_t& data_end,
   blob_vec& blobs)
@@ -1400,7 +1404,10 @@ void BlueStore::Writer::_align_to_disk_block(
           tmp.append_zero(location - left_location);
           bstore->logger->inc(l_bluestore_write_pad_bytes, location - left_location);
         } else {
-          tmp = _read_self(left_location, location - left_location);
+          int r = _read_self(left_location, location - left_location, tmp);
+          if (r != 0) {
+            return false;
+          }
         }
         tmp.claim_append(first_blob.disk_data);
         first_blob.disk_data.swap(tmp);
@@ -1423,7 +1430,10 @@ void BlueStore::Writer::_align_to_disk_block(
           bstore->logger->inc(l_bluestore_write_pad_bytes, right_location - data_end);
         } else {
           bufferlist tmp;
-          tmp = _read_self(data_end, right_location - data_end);
+          int r = _read_self(data_end, right_location - data_end, tmp);
+          if (r != 0) {
+            return false;
+          }
           last_blob.disk_data.append(tmp);
         }
         last_blob.real_length += right_location - data_end;
@@ -1431,6 +1441,7 @@ void BlueStore::Writer::_align_to_disk_block(
       data_end = right_location;
     }
   }
+  return true;
 }
 
 // Writes uncompressed data.
