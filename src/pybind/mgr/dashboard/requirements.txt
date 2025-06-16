@@ -11,8 +11,11 @@ pyyaml
 natsort
 setuptools
 jsonpatch
-grpcio==1.46.5
-grpcio-tools==1.46.5
+grpcio==1.46.5 ; python_version < '3.12'
+grpcio-tools==1.46.5 ; python_version < '3.12'
+grpcio ; python_version > '3.11'
+grpcio-tools ; python_version > '3.11'
 jmespath
-lxml==4.8.0  # to fix https://github.com/xmlsec/python-xmlsec/issues/320
+lxml==4.8.0 ; python_version < '3.12' # to fix https://github.com/xmlsec/python-xmlsec/issues/320
+lxml ; python_version > '3.11'
 xmltodict
