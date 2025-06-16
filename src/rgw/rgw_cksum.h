@@ -60,6 +60,7 @@ namespace rgw { namespace cksum {
   public:
     const Type type;
     const char* name;
+    const char* name_uc;
     const uint16_t digest_size;
     const uint16_t armored_size;
     const uint16_t flags;
@@ -68,9 +69,9 @@ namespace rgw { namespace cksum {
       return sz / 3 * 4 + 4;
     }
 
-    constexpr Desc(Type _type, const char* _name, uint16_t _size,
-		   uint16_t _flags)
-      : type(_type), name(_name),
+    constexpr Desc(Type _type, const char* _name, const char* _name_uc,
+		   uint16_t _size, uint16_t _flags)
+      : type(_type), name(_name), name_uc(_name_uc),
 	digest_size(_size),
 	armored_size(to_armored_size(digest_size)),
 	flags(_flags)
@@ -87,15 +88,15 @@ namespace rgw { namespace cksum {
   public:
     static constexpr std::array<Desc, 9> checksums =
     {
-      Desc(Type::none, "none", 0, FLAG_NONE),
-      Desc(Type::crc32, "crc32", 4, FLAG_AWS_CKSUM|FLAG_CRC),
-      Desc(Type::crc32c, "crc32c", 4, FLAG_AWS_CKSUM|FLAG_CRC),
-      Desc(Type::xxh3, "xxh3", 8, FLAG_NONE),
-      Desc(Type::sha1, "sha1", 20, FLAG_AWS_CKSUM),
-      Desc(Type::sha256, "sha256", 32, FLAG_AWS_CKSUM),
-      Desc(Type::sha512, "sha512", 64, FLAG_NONE),
-      Desc(Type::blake3, "blake3", 32, FLAG_NONE),
-      Desc(Type::crc64nvme, "crc64nvme", 8, FLAG_AWS_CKSUM|FLAG_CRC),
+      Desc(Type::none, "none", "NONE", 0, FLAG_NONE),
+      Desc(Type::crc32, "crc32", "CRC32", 4, FLAG_AWS_CKSUM|FLAG_CRC),
+      Desc(Type::crc32c, "crc32c", "CRC32C", 4, FLAG_AWS_CKSUM|FLAG_CRC),
+      Desc(Type::xxh3, "xxh3", "XXH3", 8, FLAG_NONE),
+      Desc(Type::sha1, "sha1", "SHA1", 20, FLAG_AWS_CKSUM),
+      Desc(Type::sha256, "sha256", "SHA256", 32, FLAG_AWS_CKSUM),
+      Desc(Type::sha512, "sha512", "SHA512", 64, FLAG_NONE),
+      Desc(Type::blake3, "blake3", "BLAKE3", 32, FLAG_NONE),
+      Desc(Type::crc64nvme, "crc64nvme", "CRC64NVME", 8, FLAG_AWS_CKSUM|FLAG_CRC),
     };
 
     static constexpr uint16_t max_digest_size = 64;
@@ -148,6 +149,10 @@ namespace rgw { namespace cksum {
       return (Cksum::checksums[uint16_t(type)]).name;
     }
 
+    const char* uc_type_string() const {
+      return (Cksum::checksums[uint16_t(type)]).name_uc;
+    }
+
     const bool aws() const {
       return (Cksum::checksums[uint16_t(type)]).aws();
     }
@@ -187,8 +192,7 @@ namespace rgw { namespace cksum {
     }
 
     std::string element_name() const {
-      std::string ts{type_string()};
-      return fmt::format("Checksum{}", boost::to_upper_copy(ts));
+      return fmt::format("Checksum{}", uc_type_string());
     }
 
     std::string_view raw() const {
@@ -285,9 +289,14 @@ namespace rgw { namespace cksum {
   static inline const std::optional<rgw::cksum::Cksum> no_cksum{std::nullopt};
 
   /* XXX would like std::string view */
-  static inline std::string to_string(const Type type) {
+  static inline std::string_view to_string(const Type type) {
     const auto& ckd = Cksum::checksums[uint16_t(type)];
     return ckd.name;
+  }
+
+  static inline std::string_view to_uc_string(const Type type) {
+    const auto& ckd = Cksum::checksums[uint16_t(type)];
+    return ckd.name_uc;
   }
 
   static inline Type parse_cksum_type(const char* name)

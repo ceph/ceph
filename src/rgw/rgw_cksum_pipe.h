@@ -19,7 +19,7 @@
 #include <utility>
 #include <tuple>
 #include <cstring>
-#include <boost/algorithm/string/case_conv.hpp>
+#include "common/split.h"
 #include "rgw_cksum.h"
 #include "rgw_cksum_digest.h"
 #include "rgw_common.h"
@@ -78,6 +78,29 @@ namespace rgw::putobj {
 	return cksum_hdr_t(hk, hv);
       }
     }
+    /* look for a trailing checksum */
+    auto hv = env.get("HTTP_X_AMZ_TRAILER");
+    if (hv) {
+      auto kv = ceph::split(hv, ",");
+      for (auto k = kv.begin(); k != kv.end(); k = std::next(k)) {
+	/* a checksum trailer resembles "x-amz-checksum-crc32" and
+	 * we need "CRC32", for known checksum types */
+	auto type = cksum::parse_cksum_type_hdr(*k);
+	if (type != cksum::Type::none) {
+	  return cksum_hdr_t("HTTP_X_AMZ_CHECKSUM_ALGORITHM",
+			     cksum::to_uc_string(type).data());
+	}
+      }
+    }
+    /* for requests not sending a trailer, we could just have (golang sdk v2)
+     * a checksum header and payload */
+    for (const auto& ck_desc : cksum::Cksum::checksums) {
+      auto aws_hdr_name = fmt::format("HTTP_X_AMZ_CHECKSUM_{}", ck_desc.name_uc);
+      auto hv = env.get(aws_hdr_name.c_str());
+      if (hv) {
+	return cksum_hdr_t("HTTP_X_AMZ_CHECKSUM_ALGORITHM", ck_desc.name_uc);
+      }
+    }
     return cksum_hdr_t(nullptr, nullptr);
   } /* cksum_algorithm_hdr */
 
@@ -122,8 +145,7 @@ namespace rgw::putobj {
     for (int16_t ix = int16_t(cksum::Type::crc32);
 	 ix <= uint16_t(cksum::Type::blake3); ++ix) {
       cksum_type = cksum::Type(ix);
-      auto hk = fmt::format("HTTP_X_AMZ_CHECKSUM_{}",
-			    boost::to_upper_copy(to_string(cksum_type)));
+      auto hk = fmt::format("HTTP_X_AMZ_CHECKSUM_{}", to_uc_string(cksum_type));
       auto hv = env.get(hk.c_str());
       if (hv) {
 	return
