@@ -18,6 +18,7 @@
 
 .custom-checkbox {
   @extend .form-check;
+
   padding-top: 7px;
 
   .custom-control-label {
@@ -27,6 +28,7 @@
 
 .custom-radio {
   @extend .form-check;
+
   padding-top: 5px;
 }
 
@@ -111,6 +113,7 @@ Form Controls
 ******************************************/
 .form-item {
   @extend .cds--form-item;
+
   display: block;
   margin-bottom: 32px;
   margin-top: 32px;
