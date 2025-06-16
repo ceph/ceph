@@ -73,6 +73,20 @@ class IngressService(CephService):
             return self.keepalived_generate_config(daemon_spec)
         assert False, "unexpected daemon type"
 
+    def get_daemon_deployment_ordering(self, daemons: List[CephadmDaemonDeploySpec]) -> Dict[int, List[CephadmDaemonDeploySpec]]:
+        if not daemons:
+            return {}
+        dtype = daemons[0].daemon_type
+        if not any(d.daemon_type != dtype for d in daemons):
+            # if all the daemons we got are the same type we can
+            # just deploy them in parallel
+            return {0: daemons}
+        # if we got here, we should have both haproxy and keepalived daemons
+        ordering: Dict[int, List[CephadmDaemonDeploySpec]] = {}
+        ordering[0] = [d for d in daemons if d.daemon_type == 'haproxy']
+        ordering[1] = [d for d in daemons if d.daemon_type == 'keepalived']
+        return ordering
+
     def haproxy_prepare_create(
             self,
             daemon_spec: CephadmDaemonDeploySpec,
