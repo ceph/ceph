@@ -51,9 +51,28 @@ int RGWSI_Cls::MFA::check_mfa(const DoutPrefixProvider *dpp, const rgw_user& use
     return r;
   }
 
-  rados::cls::otp::otp_check_t result;
+  constexpr size_t TOKEN_LEN = 16;
+  std::string token = gen_rand_alphanumeric(cct, TOKEN_LEN);
+  {
+    librados::ObjectWriteOperation op;
+    rados::cls::otp::check(op, otp_id, pin, token);
 
-  r = rados::cls::otp::OTP::check(cct, ref.ioctx, ref.obj.oid, otp_id, pin, &result);
+    r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), y);
+    if (r < 0)
+      return r;
+  }
+
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  int rval = 0;
+  rados::cls::otp::check_result(op, std::move(token), bl, rval);
+
+  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), nullptr, y);
+  if (r < 0)
+    return r;
+
+  rados::cls::otp::otp_check_t result;
+  r = rados::cls::otp::check_result_decode(bl, result);
   if (r < 0)
     return r;
 
