@@ -4,10 +4,23 @@ import { HttpClient } from '@angular/common/http';
 import _ from 'lodash';
 import { Observable, of as observableOf } from 'rxjs';
 import { catchError, mapTo } from 'rxjs/operators';
+import { CephServiceSpec } from '../models/service.interface';
 
 export const MAX_NAMESPACE = 1024;
 
-export interface ListenerRequest {
+export type GatewayGroup = CephServiceSpec;
+
+export type GroupsComboboxItem = {
+  content: string;
+  serviceName?: string;
+  selected?: boolean;
+};
+
+type NvmeofRequest = {
+  gw_group: string;
+};
+
+export type ListenerRequest = NvmeofRequest & {
   host_name: string;
   traddr: string;
   trsvcid: number;
@@ -35,6 +48,11 @@ const UI_API_PATH = 'ui-api/nvmeof';
 })
 export class NvmeofService {
   constructor(private http: HttpClient) {}
+
+  // Gateway groups
+  listGatewayGroups() {
+    return this.http.get<GatewayGroup[][]>(`${API_PATH}/gateway/group`);
+  }
 
   // Gateways
   listGateways() {
