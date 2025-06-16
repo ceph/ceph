@@ -835,7 +835,7 @@ int get_mirror_group_status(
     MirrorHealth* mirror_group_health) {
   librbd::RBD rbd;
   int r = rbd.mirror_group_status_summary(io_ctx, mirror_group_states);
-  if (r < 0) {
+  if (r < 0 && r != -EOPNOTSUPP) {
     std::cerr << "rbd: failed to get status summary for mirrored groups: "
 	      << cpp_strerror(r) << std::endl;
     return r;
@@ -1774,7 +1774,7 @@ int execute_status(const po::variables_map &vm,
 
     std::map<std::string, librbd::mirror_group_global_status_t> mirror_groups;
     r = rbd.mirror_group_global_status_list(io_ctx, "", 1024, &mirror_groups);
-    if (r < 0) {
+    if (r < 0 && r != -EOPNOTSUPP) {
       std::cerr << "rbd: failed to get group status list: "
                 << cpp_strerror(r) << std::endl;
       return r;
