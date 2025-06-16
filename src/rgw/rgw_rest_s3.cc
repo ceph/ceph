@@ -2946,6 +2946,9 @@ void RGWPutObj_ObjStore_S3::send_response()
 
     string expires = get_s3_expiration_header(s, mtime);
 
+    for (auto &it : crypt_http_responses)
+      dump_header(s, it.first, it.second);
+
     if (copy_source.empty()) {
       dump_errno(s);
       dump_etag(s, etag);
@@ -2956,8 +2959,6 @@ void RGWPutObj_ObjStore_S3::send_response()
 	dump_header(s, "x-amz-checksum-type", "FULL_OBJECT");
 	dump_header(s, cksum->header_name(), cksum->to_armor());
       }
-      for (auto &it : crypt_http_responses)
-        dump_header(s, it.first, it.second);
     } else {
       dump_errno(s);
       dump_header_if_nonempty(s, "x-amz-version-id", version_id);
