@@ -614,7 +614,7 @@ class CephadmServe:
             # and not dependant on other daemon's placements in any way
             specs = [s for s in _specs if not s.placement.count] + [s for s in _specs if s.placement.count]
 
-        for name in ['CEPHADM_APPLY_SPEC_FAIL', 'CEPHADM_DAEMON_PLACE_FAIL']:
+        for name in ['CEPHADM_APPLY_SPEC_FAIL', 'CEPHADM_DAEMON_PLACE_FAIL', 'CEPHADM_DAEMON_PREPARE_CREATE_FAIL']:
             self.mgr.remove_health_warning(name)
         self.mgr.apply_spec_fails = []
         hosts_altered: Set[str] = set()
