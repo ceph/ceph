@@ -328,6 +328,14 @@ public:
                                       std::string_view format,
                                       ceph::bufferlist&& input) const final
   {
+    ceph_assert(cmdmap != nullptr);
+    INFO("cmdmap(): {})", cmdmap);
+    ceph_assert(input.empty());
+    INFO("input: {})", input );
+    ceph_assert( !format.empty() && format != "none" &&
+                format != "text" && format != "json");
+    INFO("format(): {})", format);
+
     std::unique_ptr<Formatter> fref{Formatter::create(format, "json-pretty", "json-pretty")};
     auto *f = fref.get();
     std::string prefix;
