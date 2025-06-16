@@ -54,7 +54,7 @@ public:
   };
   struct read_divertor {
     virtual ~read_divertor() = default;
-    virtual bufferlist read(uint32_t object_offset, uint32_t object_length) = 0;
+    virtual int read(uint32_t object_offset, uint32_t object_length, bufferlist& result) = 0;
   };
   Writer(BlueStore* bstore, TransContext* txc, WriteContext* wctx, OnodeRef o)
     :left_shard_bound(0), right_shard_bound(OBJECT_MAX_SIZE)
@@ -144,9 +144,10 @@ private:
     uint32_t length,
     PExtentVector& dst);
 
-  inline bufferlist _read_self(
+  inline int _read_self(
     uint32_t offset,
-    uint32_t length);
+    uint32_t length,
+    bufferlist& result);
 
   inline void _maybe_expand_blob(
     Blob* blob,
@@ -162,7 +163,7 @@ private:
     bufferlist& data,
     blob_vec& bd);
 
-  void _align_to_disk_block(
+  bool _align_to_disk_block(
     uint32_t& location,
     uint32_t& ref_end,
     blob_vec& blobs);
