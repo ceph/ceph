@@ -2079,7 +2079,6 @@ void buffer::list::write_stream(std::ostream &out) const
   }
 }
 
-
 void buffer::list::hexdump(std::ostream &out, bool trailing_newline) const
 {
   if (!length())
@@ -2163,6 +2162,13 @@ void buffer::list::hexdump(std::ostream &out, bool trailing_newline) const
   out.flags(original_flags);
 }
 
+
+std::string buffer::list::hexdump()
+{
+  std::stringstream s;
+  hexdump(s, false);
+  return s.str();
+}
 
 buffer::list buffer::list::static_from_mem(char* c, size_t l) {
   list bl;

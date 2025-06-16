@@ -949,6 +949,12 @@ public:
   }
   /// Set an xattr of an object
   void setattr(const coll_t& cid, const ghobject_t& oid, const std::string& s, ceph::buffer::list& val) {
+    // DELETE ME DEBUG
+    if (s == OI_ATTR) {
+      object_info_t oi_decode(val);
+      ceph_assert(oi_decode.soid == oid.hobj);
+    }
+    // END DELETE ME DEBUG
     using ceph::encode;
     Op* _op = _get_next_op();
     _op->op = OP_SETATTR;
@@ -962,6 +968,14 @@ public:
   void setattrs(const coll_t& cid,
 		const ghobject_t& oid,
 		const std::map<std::string,ceph::buffer::ptr,std::less<>>& attrset) {
+    // DELETE ME DEBUG
+    if (attrset.contains(OI_ATTR)) {
+      bufferlist bl;
+      bl.append(attrset.at(OI_ATTR));
+      object_info_t oi_decode(bl);
+      ceph_assert(oi_decode.soid == oid.hobj);
+    }
+    // END DELETE ME DEBUG
     using ceph::encode;
     Op* _op = _get_next_op();
     _op->op = OP_SETATTRS;
@@ -974,6 +988,13 @@ public:
   void setattrs(const coll_t& cid,
 		const ghobject_t& oid,
 		const std::map<std::string,ceph::buffer::list,std::less<>>& attrset) {
+
+    // DELETE ME DEBUG
+    if (attrset.contains(OI_ATTR)) {
+      object_info_t oi_decode(attrset.at(OI_ATTR));
+      ceph_assert(oid.hobj.snap.val > 0x1000000 || oi_decode.soid == oid.hobj);
+    }
+    // END DELETE ME DEBUG
     using ceph::encode;
     Op* _op = _get_next_op();
     _op->op = OP_SETATTRS;

@@ -161,7 +161,7 @@ void ECUtil::stripe_info_t::trim_shard_extent_set_for_ro_offset(
       ro_offset, raw_shard_id_t(0));
     for (auto &&iter = shard_extent_set.begin(); iter != shard_extent_set.end()
          ;) {
-      iter->second.erase_after(align_page_next(shard_offset));
+      iter->second.erase_after(align_next(shard_offset));
       if (iter->second.empty()) iter = shard_extent_set.erase(iter);
       else ++iter;
     }
@@ -179,7 +179,7 @@ void ECUtil::stripe_info_t::ro_size_to_stripe_aligned_read_mask(
 void ECUtil::stripe_info_t::ro_size_to_read_mask(
     uint64_t ro_size,
     shard_extent_set_t &shard_extent_set) const {
-  ro_range_to_shard_extent_set_with_parity(0, align_page_next(ro_size),
+  ro_range_to_shard_extent_set_with_parity(0, align_next(ro_size),
                                            shard_extent_set);
 }
 
@@ -187,9 +187,9 @@ void ECUtil::stripe_info_t::ro_size_to_zero_mask(
     uint64_t ro_size,
     shard_extent_set_t &shard_extent_set) const {
   // There should never be any zero padding on the parity.
-  ro_range_to_shard_extent_set(align_page_next(ro_size),
+  ro_range_to_shard_extent_set(align_next(ro_size),
                                ro_offset_to_next_stripe_ro_offset(ro_size) -
-                               align_page_next(ro_size),
+                               align_next(ro_size),
                                shard_extent_set);
   trim_shard_extent_set_for_ro_offset(ro_size, shard_extent_set);
 }
@@ -206,12 +206,11 @@ void shard_extent_map_t::erase_after_ro_offset(uint64_t ro_offset) {
                                       ro_to_erase);
   for (auto &&[shard, eset] : ro_to_erase) {
     if (extent_maps.contains(shard)) {
-      extent_maps[shard].erase(eset.range_start(), eset.range_end());
-    }
-
-    // If the result is empty, delete the extent map.
-    if (extent_maps[shard].empty()) {
-      extent_maps.erase(shard);
+      auto &emap = extent_maps.at(shard);
+      emap.erase(eset.range_start(), eset.range_end());
+      if (emap.empty()) {
+        extent_maps.erase(shard);
+      }
     }
   }
 
@@ -355,7 +354,7 @@ void shard_extent_map_t::insert_in_shard(shard_id_t shard, uint64_t off,
   extent_maps[shard].insert(off, bl.length(), bl);
   raw_shard_id_t raw_shard = sinfo->get_raw_shard(shard);
 
-  if (raw_shard > sinfo->get_k()) {
+  if (raw_shard >= sinfo->get_k()) {
     return;
   }
 
@@ -470,7 +469,7 @@ void shard_extent_map_t::insert_parity_buffers() {
           continue;
       }
       bufferlist bl;
-      bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
+      bl.push_back(buffer::create_aligned(length, EC_ALIGN_SIZE));
       extent_maps[shard].insert(offset, length, bl);
     }
   }
@@ -503,7 +502,7 @@ int shard_extent_map_t::_encode(const ErasureCodeInterfaceRef &ec_impl) {
   }
 
   if (rebuild_req) {
-    pad_and_rebuild_to_page_align();
+    pad_and_rebuild_to_ec_align();
     return _encode(ec_impl);
   }
 
@@ -513,27 +512,8 @@ int shard_extent_map_t::_encode(const ErasureCodeInterfaceRef &ec_impl) {
 /* Encode parity chunks, using the encode_chunks interface into the
  * erasure coding. This generates all parity using full stripe writes.
  */
-int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
-                               const HashInfoRef &hinfo,
-                               uint64_t before_ro_size) {
-  int r = _encode(ec_impl);
-
-  if (!r && hinfo && ro_start >= before_ro_size) {
-    /* NEEDS REVIEW:  The following calculates the new hinfo CRCs. This is
-     *                 currently considering ALL the buffers, including the
-     *                 parity buffers.  Is this really right?
-     *                 Also, does this really belong here? Its convenient
-     *                 because have just built the buffer list...
-     */
-    shard_id_set full_set;
-    full_set.insert_range(shard_id_t(0), sinfo->get_k_plus_m());
-    for (auto iter = begin_slice_iterator(full_set); !iter.is_end(); ++iter) {
-      ceph_assert(ro_start == before_ro_size);
-      hinfo->append(iter.get_offset(), iter.get_in_bufferptrs());
-    }
-  }
-
-  return r;
+int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl) {
+  return _encode(ec_impl);
 }
 
 /* Encode parity chunks, using the parity delta write interfaces on plugins
@@ -544,8 +524,8 @@ int shard_extent_map_t::encode_parity_delta(
     shard_extent_map_t &old_sem) {
   shard_id_set out_set = sinfo->get_parity_shards();
 
-  pad_and_rebuild_to_page_align();
-  old_sem.pad_and_rebuild_to_page_align();
+  pad_and_rebuild_to_ec_align();
+  old_sem.pad_and_rebuild_to_ec_align();
 
   for (auto data_shard : sinfo->get_data_shards()) {
     shard_extent_map_t s(sinfo);
@@ -568,9 +548,9 @@ int shard_extent_map_t::encode_parity_delta(
       shard_id_map<bufferptr> &parity_shards = iter.get_out_bufferptrs();
 
       unsigned int size = iter.get_length();
-      ceph_assert(size % 4096 == 0);
+      ceph_assert(size % EC_ALIGN_SIZE == 0);
       ceph_assert(size > 0);
-      bufferptr delta = buffer::create_aligned(size, CEPH_PAGE_SIZE);
+      bufferptr delta = buffer::create_aligned(size, EC_ALIGN_SIZE);
 
       if (data_shards[shard_id_t(0)].length() != 0 && data_shards[shard_id_t(1)]
         .length() != 0) {
@@ -595,18 +575,35 @@ void shard_extent_map_t::pad_on_shards(const shard_extent_set_t &pad_to,
     }
     for (auto &[off, length] : pad_to.at(shard)) {
       bufferlist bl;
-      bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
+      bl.push_back(buffer::create_aligned(length, EC_ALIGN_SIZE));
       insert_in_shard(shard, off, bl);
     }
   }
 }
 
+void shard_extent_map_t::pad_on_shard(const extent_set &pad_to,
+                                       const shard_id_t shard) {
+
+  if (pad_to.size() == 0) {
+    return;
+  }
+  for (auto &[off, length] : pad_to) {
+    bufferlist bl;
+    bl.push_back(buffer::create_aligned(length, EC_ALIGN_SIZE));
+    insert_in_shard(shard, off, bl);
+  }
+}
+
 void shard_extent_map_t::pad_on_shards(const extent_set &pad_to,
                                        const shard_id_set &shards) {
+
+  if (pad_to.size() == 0) {
+    return;
+  }
   for (auto &shard : shards) {
     for (auto &[off, length] : pad_to) {
       bufferlist bl;
-      bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
+      bl.push_back(buffer::create_aligned(length, EC_ALIGN_SIZE));
       insert_in_shard(shard, off, bl);
     }
   }
@@ -668,6 +665,8 @@ int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
 
   shard_id_set decode_set = shard_id_set::intersection(need_set, sinfo->get_data_shards());
   shard_id_set encode_set = shard_id_set::intersection(need_set, sinfo->get_parity_shards());
+  shard_extent_set_t read_mask(sinfo->get_k_plus_m());
+  sinfo->ro_size_to_read_mask(object_size, read_mask);
   int r = 0;
   if (!decode_set.empty()) {
     pad_on_shards(want, decode_set);
@@ -675,11 +674,11 @@ int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
      * shards are decoded. The get_min_available functions should have already
      * worked out what needs to be read for this.
      */
-    extent_set decode_for_parity;
     for (auto shard : encode_set) {
-      decode_for_parity.insert(want.at(shard));
+      extent_set decode_for_parity;
+      decode_for_parity.intersection_of(want.at(shard), read_mask.at(shard));
+      pad_on_shard(decode_for_parity, shard);
     }
-    pad_on_shards(decode_for_parity, decode_set);
     r = _decode(ec_impl, want_set, decode_set);
   }
   if (!r && !encode_set.empty()) {
@@ -719,7 +718,7 @@ int shard_extent_map_t::_decode(const ErasureCodeInterfaceRef &ec_impl,
   }
 
   if (rebuild_req) {
-    pad_and_rebuild_to_page_align();
+    pad_and_rebuild_to_ec_align();
     return _decode(ec_impl, want_set, need_set);
   }
 
@@ -728,7 +727,7 @@ int shard_extent_map_t::_decode(const ErasureCodeInterfaceRef &ec_impl,
   return 0;
 }
 
-void shard_extent_map_t::pad_and_rebuild_to_page_align() {
+void shard_extent_map_t::pad_and_rebuild_to_ec_align() {
   bool resized = false;
   for (auto &&[shard, emap] : extent_maps) {
     extent_map aligned;
@@ -742,21 +741,21 @@ void shard_extent_map_t::pad_and_rebuild_to_page_align() {
       uint64_t start = i.get_off();
       uint64_t end = start + i.get_len();
 
-      if ((start & ~CEPH_PAGE_MASK) != 0) {
-        bl.prepend_zero(start - (start & CEPH_PAGE_MASK));
-        start = start & CEPH_PAGE_MASK;
+      if ((start & ~EC_ALIGN_MASK) != 0) {
+        bl.prepend_zero(start - (start & EC_ALIGN_MASK));
+        start = start & EC_ALIGN_MASK;
         resized_i = true;
       }
-      if ((end & ~CEPH_PAGE_MASK) != 0) {
-        bl.append_zero((end & CEPH_PAGE_MASK) + CEPH_PAGE_SIZE - end);
-        end = (end & CEPH_PAGE_MASK) + CEPH_PAGE_SIZE;
+      if ((end & ~EC_ALIGN_MASK) != 0) {
+        bl.append_zero((end & EC_ALIGN_MASK) + EC_ALIGN_SIZE - end);
+        end = (end & EC_ALIGN_MASK) + EC_ALIGN_SIZE;
         resized_i = true;
       }
 
       // Perhaps we can get away without page aligning here and only SIMD
       // align. However, typical workloads are actually page aligned already,
       // so this should not cause problems on any sensible workload.
-      if (bl.rebuild_aligned_size_and_memory(bl.length(), CEPH_PAGE_SIZE) ||
+      if (bl.rebuild_aligned_size_and_memory(bl.length(), EC_ALIGN_SIZE) ||
         resized_i) {
         // We are not permitted to modify the emap while iterating.
         aligned.insert(start, end - start, bl);
@@ -1071,39 +1070,58 @@ void shard_extent_set_t::insert(const shard_extent_set_t &other) {
 }
 }
 
-void ECUtil::HashInfo::append(uint64_t old_size,
-                              shard_id_map<bufferptr> &to_append) {
-  ceph_assert(old_size == total_chunk_size);
-  uint64_t size_to_append = to_append.begin()->second.length();
-  if (has_chunk_hash()) {
-    ceph_assert(to_append.size() == cumulative_shard_hashes.size());
-    for (auto &&[shard, ptr] : to_append) {
-      ceph_assert(size_to_append == ptr.length());
-      ceph_assert(shard < static_cast<int>(cumulative_shard_hashes.size()));
-      cumulative_shard_hashes[int(shard)] =
-          ceph_crc32c(cumulative_shard_hashes[int(shard)],
-                      (unsigned char*)ptr.c_str(), ptr.length());
-    }
-  }
-  total_chunk_size += size_to_append;
+void ECUtil::HashInfo::append(ECUtil::shard_extent_map_t &to_append, uint64_t old_ro_size) {
+  // We might be deleting all of this.... so just ignore the appends for now.
+
+  // if (!has_chunk_hash() || to_append.empty()) {
+  //   return;
+  // }
+
+  // // A zero-sized total_chunk_size indicates that the stat-size should be used
+  // // to check for a full-stripe write.
+  // // If non-zero, then zero-padding should be applied, as the hinfo was written
+  // // by old-EC.
+  // unused_total_chunk_size = 0;
+  // const stripe_info_t *sinfo = to_append.sinfo;
+  // shard_extent_set_t zero_mask(sinfo->get_k_plus_m());
+  // uint64_t old_stripe_end = sinfo->ro_offset_to_next_stripe_ro_offset(old_ro_size);
+  // ceph_assert(to_append.ro_start >= old_stripe_end);
+  // if (to_append.ro_start > old_stripe_end) {
+  //   sinfo->ro_range_to_shard_extent_set_with_parity(old_stripe_end, to_append.ro_start, zero_mask);
+  //   for (auto &&[shard, eset] : zero_mask) {
+  //     bufferlist bl;
+  //     bl.append_zero(eset.size());
+  //     cumulative_shard_hashes[int(shard)] =
+  //       ceph_crc32c(cumulative_shard_hashes[int(shard)],
+  //                   (unsigned char*)bl.c_str(), bl.length());
+  //   }
+  // }
+  //
+  // for (auto iter = to_append.begin_slice_iterator(to_append.sinfo->get_all_shards());
+  //     !iter.is_end(); ++iter) {
+  //   for (auto &&[shard, ptr] : iter.get_out_bufferptrs()) {
+  //     cumulative_shard_hashes[int(shard)] =
+  //       ceph_crc32c(cumulative_shard_hashes[int(shard)],
+  //                   (unsigned char*)ptr.c_str(), ptr.length());
+  //   }
+  // }
 }
 
 void ECUtil::HashInfo::encode(bufferlist &bl) const {
   ENCODE_START(1, 1, bl);
-  encode(total_chunk_size, bl);
+  encode(unused_total_chunk_size, bl);
   encode(cumulative_shard_hashes, bl);
   ENCODE_FINISH(bl);
 }
 
 void ECUtil::HashInfo::decode(bufferlist::const_iterator &bl) {
   DECODE_START(1, bl);
-  decode(total_chunk_size, bl);
+  decode(unused_total_chunk_size, bl);
   decode(cumulative_shard_hashes, bl);
   DECODE_FINISH(bl);
 }
 
 void ECUtil::HashInfo::dump(Formatter *f) const {
-  f->dump_unsigned("total_chunk_size", total_chunk_size);
   f->open_array_section("cumulative_shard_hashes");
   for (unsigned i = 0; i != cumulative_shard_hashes.size(); ++i) {
     f->open_object_section("hash");
@@ -1120,7 +1138,7 @@ std::ostream &operator<<(std::ostream &out, const HashInfo &hi) {
   for (auto hash : hi.cumulative_shard_hashes) {
     hashes << " " << hex << hash;
   }
-  return out << "tcs=" << hi.total_chunk_size << hashes.str();
+  return out << "hi_crcs=" << hashes.str();
 }
 
 std::ostream &operator<<(std::ostream &out, const shard_extent_map_t &rhs) {
@@ -1162,16 +1180,17 @@ void ECUtil::HashInfo::generate_test_instances(list<HashInfo*> &o) {
     bufferlist bl;
     bl.append_zero(20);
 
-    bufferptr bp = bl.begin().get_current_ptr();
-
     // We don't have the k+m here, but this is not critical performance, so
     // create an oversized map.
-    shard_id_map<bufferptr> buffers(128);
-    buffers[shard_id_t(0)] = bp;
-    buffers[shard_id_t(1)] = bp;
-    buffers[shard_id_t(2)] = bp;
-    o.back()->append(0, buffers);
-    o.back()->append(20, buffers);
+    stripe_info_t tmp_sinfo(2,1,3 * 20);
+    shard_extent_map_t buffers(&tmp_sinfo);
+    buffers.insert_in_shard(shard_id_t(0), 0, bl);
+    buffers.insert_in_shard(shard_id_t(1), 0, bl);
+    buffers.insert_in_shard(shard_id_t(2), 0, bl);
+    buffers.insert_in_shard(shard_id_t(0), 20, bl);
+    buffers.insert_in_shard(shard_id_t(1), 20, bl);
+    buffers.insert_in_shard(shard_id_t(2), 20, bl);
+    o.back()->append(buffers, 0);
   }
   o.push_back(new HashInfo(4));
 }

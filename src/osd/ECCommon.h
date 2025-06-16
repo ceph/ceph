@@ -181,7 +181,8 @@ struct ECCommon {
       } else {
         os << ", noattrs";
       }
-      os << ", buffers_read=" << buffers_read << ")";
+      os << ", buffers_read=" << buffers_read;
+      os << ", processed_read_requests=" << processed_read_requests << ")";
     }
   };
 
@@ -384,7 +385,7 @@ struct ECCommon {
         read_result_t &read_result,
         read_request_t &read_request,
         bool for_recovery,
-        bool fast_read);
+        bool want_attrs);
 
     void get_all_avail_shards(
         const hobject_t &hoid,
@@ -531,7 +532,7 @@ struct ECCommon {
             << " temp_cleared=" << temp_cleared
             << " remote_read_result=" << remote_shard_extent_map
             << " pending_commits=" << pending_commits
-            << " plan.to_read=" << plan
+            << " plans=" << plan
             << ")";
       }
     };

@@ -1032,3 +1032,108 @@ TEST(ECUtil, slice)
     ASSERT_EQ(slice_map, sem);
   }
 }
+
+TEST(ECUtil, insert_parity_buffer_into_sem) {
+  int k=2;
+  int m=2;
+  int chunk_size = 4096;
+  stripe_info_t sinfo(k, m, k*chunk_size);
+
+  buffer::list bl1k;
+  buffer::list bl4k;
+  bl1k.append_zero(1024);
+  bl4k.append_zero(4096);
+
+  {
+    shard_extent_map_t sem(&sinfo);
+    sem.insert_in_shard(shard_id_t(2), 0, bl1k);
+    ASSERT_EQ(-1, sem.ro_start);
+    ASSERT_EQ(-1, sem.ro_end);
+  }
+
+  {
+    shard_extent_map_t sem(&sinfo);
+    sem.insert_in_shard(shard_id_t(0), 0, bl4k);
+    ASSERT_EQ(0, sem.ro_start);
+    ASSERT_EQ(4096, sem.ro_end);
+    sem.insert_in_shard(shard_id_t(2), 0, bl4k);
+    ASSERT_EQ(0, sem.ro_start);
+    ASSERT_EQ(4096, sem.ro_end);
+  }
+
+  {
+    shard_extent_map_t sem(&sinfo);
+    sem.insert_in_shard(shard_id_t(1), 0, bl4k);
+    ASSERT_EQ(4096, sem.ro_start);
+    ASSERT_EQ(8192, sem.ro_end);
+    sem.insert_in_shard(shard_id_t(2), 0, bl4k);
+    ASSERT_EQ(4096, sem.ro_start);
+    ASSERT_EQ(8192, sem.ro_end);
+  }
+
+  {
+    shard_extent_map_t sem(&sinfo);
+    sem.insert_in_shard(shard_id_t(1), 0, bl4k);
+    ASSERT_EQ(4096, sem.ro_start);
+    ASSERT_EQ(8192, sem.ro_end);
+    sem.insert_in_shard(shard_id_t(3), 0, bl4k);
+    ASSERT_EQ(4096, sem.ro_start);
+    ASSERT_EQ(8192, sem.ro_end);
+  }
+}
+
+static void randomize_bl(buffer::list &bl) {
+  auto d = bl.c_str();
+  for (int i=0; i < bl.length(); i++) {
+    d[i] = rand() % 256;
+  }
+}
+
+// TEST(ECUtil, hinfo_append_sequential) {
+//   int k=2;
+//   int m=1;
+//   int chunk_size = 8192;
+//   stripe_info_t sinfo(k, m, k*chunk_size);
+//   HashInfo hinfo(sinfo.get_k_plus_m());
+//
+//   vector<shard_id_t> s;
+//   vector<bufferhash> hs = {};
+//   for (int i=0; i < k + m; i++) {
+//     s.emplace_back(i);
+//     hs.emplace_back(-1);
+//   }
+//
+//   for (int i=0; i < k + m; i++) {
+//     ASSERT_EQ(-1, hinfo.get_chunk_hash(s[i]));
+//   }
+//   // Full stripe
+//   shard_extent_map_t full_stripe(&sinfo);
+//   for (int i=0; i < k + m; i++) {
+//     bufferlist bl;
+//     bl.append_zero(chunk_size);
+//     randomize_bl(bl);
+//     hs[i] << bl;
+//     full_stripe.insert_in_shard(s[i], 0, bl);
+//   }
+//
+//   hinfo.append(full_stripe, 0);
+//   for (int i=0; i < k + m; i++) {
+//     bufferhash h(-1);
+//     ASSERT_EQ(hs[i].digest(), hinfo.get_chunk_hash(s[i]));
+//   }
+//
+//   shard_extent_map_t full_stripe2(&sinfo);
+//   for (int i=0; i < k + m; i++) {
+//     bufferlist bl;
+//     bl.append_zero(chunk_size);
+//     randomize_bl(bl);
+//     hs[i] << bl;
+//     full_stripe2.insert_in_shard(s[i], chunk_size, bl);
+//   }
+//
+//   hinfo.append(full_stripe2, chunk_size * 2);
+//   for (int i=0; i < k + m; i++) {
+//     bufferhash h(-1);
+//     ASSERT_EQ(hs[i].digest(), hinfo.get_chunk_hash(s[i]));
+//   }
+// }
