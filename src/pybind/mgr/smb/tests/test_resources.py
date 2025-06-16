@@ -46,6 +46,8 @@ from smb import enums
                     'name': 'myshare1',
                     'browseable': False,
                     'readonly': False,
+                    'comment': '',
+                    'max_connections': 0,
                     'cephfs': {
                         'volume': 'cephfs',
                         'path': '/',
@@ -777,6 +779,8 @@ login_control:
                     },
                     'browseable': True,
                     'readonly': False,
+                    'comment': '',
+                    'max_connections': 0,
                 }
             ],
         },
@@ -802,6 +806,8 @@ cephfs: {volume: zippy, path: /}
                     },
                     'browseable': True,
                     'readonly': False,
+                    'comment': '',
+                    'max_connections': 0,
                 }
             ],
         },
