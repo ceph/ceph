@@ -600,7 +600,7 @@ options:
   desc: Duration before issuing a cluster-log warning
   long_desc: Waiting too long for a replica to respond (after at least half of the
     replicas have responded).
-  default: 2200
+  default: 22000
   min: 500
   see_also:
   - osd_scrub_reservation_timeout
@@ -613,7 +613,7 @@ options:
   desc: Duration before aborting the scrub session
   long_desc: Waiting too long for some replicas to respond to
     scrub reservation requests.
-  default: 5000
+  default: 50000
   min: 2000
   see_also:
   - osd_scrub_slow_reservation_response

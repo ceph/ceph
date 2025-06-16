@@ -151,7 +151,7 @@ sc::result ReservingReplicas::react(const ReservationTimeout&)
   scrbr->get_clog()->warn()
     << "osd." << scrbr->get_whoami()
     << " PgScrubber: " << scrbr->get_spgid()
-    << " timeout on reserving replicsa (since " << entered_at
+    << " timeout on reserving replicas (since " << entered_at
     << ")";
 
   scrbr->on_replica_reservation_timeout();
