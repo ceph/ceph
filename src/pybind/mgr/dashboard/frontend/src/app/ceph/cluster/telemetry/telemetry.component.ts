@@ -9,7 +9,7 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { TelemetryService } from '~/app/shared/api/telemetry.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -20,7 +20,7 @@ import { TelemetryNotificationService } from '~/app/shared/services/telemetry-no
   templateUrl: './telemetry.component.html',
   styleUrls: ['./telemetry.component.scss']
 })
-export class TelemetryComponent extends CdForm implements OnInit {
+export class TelemetryComponent extends CdFormCanDeactivate implements OnInit {
   configForm: CdFormGroup;
   licenseAgrmt = false;
   moduleEnabled: boolean;
@@ -82,6 +82,10 @@ export class TelemetryComponent extends CdForm implements OnInit {
         this.loadingError();
       }
     );
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.configForm;
   }
 
   private createConfigForm() {
