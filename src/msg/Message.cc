@@ -91,6 +91,7 @@
 #include "messages/MOSDPGLeaseAck.h"
 #include "messages/MOSDScrub2.h"
 #include "messages/MOSDScrubReserve.h"
+#include "messages/MOSDScrubReschedule.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDRepScrubMap.h"
 #include "messages/MOSDForceRecovery.h"
@@ -610,6 +611,9 @@ Message *decode_message(CephContext *cct,
     break;
   case MSG_OSD_SCRUB_RESERVE:
     m = make_message<MOSDScrubReserve>();
+    break;
+  case MSG_OSD_SCRUB_RESCHEDULE:
+    m = make_message<MOSDScrubReschedule>();
     break;
   case MSG_REMOVE_SNAPS:
     m = make_message<MRemoveSnaps>();
