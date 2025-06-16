@@ -9,6 +9,7 @@ import re
 import errno
 import random
 
+from copy import deepcopy
 from io import BytesIO, StringIO
 from errno import EBUSY
 
@@ -561,7 +562,28 @@ class FilesystemBase(MDSClusterBase):
         self.data_pool_name = None
         self.data_pools = None
         self.fs_config = fs_config
-        self.ec_profile = fs_config.get('ec_profile')
+        if fs_config:
+            log.debug(f"Filesystem init - using passed config={self.fs_config} for fsname={self.name}")
+        elif self.name:
+            # construct fs_config from config stored in context
+            log.debug(f"Filesystem init - using context cephfs_config={ctx.cephfs_config} for fsname={self.name}")
+            log.debug(f"Filesystem init - using context subvols={ctx.subvols} for fsname={self.name}")
+            temp_cephfs_config = deepcopy(ctx.cephfs_config)
+            subvols = deepcopy(ctx.subvols)
+            fs_configs =  temp_cephfs_config.pop('fs', [{'name': 'cephfs'}])
+            for fs_config in fs_configs:
+                assert isinstance(fs_config, dict)
+                fs_name = fs_config.pop('name')
+                if fs_name == self.name:
+                    misc.deep_merge(temp_cephfs_config, fs_config)
+                    if subvols:
+                        misc.deep_merge(temp_cephfs_config, {'subvols': subvols})
+                    self.fs_config = temp_cephfs_config
+            log.debug(f"Filesystem init - constructed from context - cephfs_config {self.fs_config} for {self.name}")
+        else:
+            log.debug("Filesystem init - no fs_config and fsname - instance is not used for fs create")
+
+        self.ec_profile = self.fs_config.get('ec_profile')
 
         client_list = list(misc.all_roles_of_type(self._ctx.cluster, 'client'))
         self.client_id = client_list[0]
