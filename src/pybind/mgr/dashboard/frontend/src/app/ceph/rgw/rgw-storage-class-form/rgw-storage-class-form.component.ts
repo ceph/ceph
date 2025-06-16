@@ -49,6 +49,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   retainHeadObjectText: string;
   storageClassInfo: StorageClass;
   tierTargetInfo: TierTarget;
+  allowReadThroughText: string;
+  allowReadThrough: boolean = false;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -81,6 +83,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       "To view or copy your secret key, go to your cloud service's user management or credentials section, find your user profile, and locate the access key. You can view and copy the key by following the instructions provided.";
     this.retainHeadObjectText =
       'Retain object metadata after transition to the cloud (default: false).';
+    this.allowReadThroughText =
+      'Enables fetching objects from remote cloud S3 if not found locally (default: false).';
     this.createForm();
     this.loadingReady();
     this.loadZoneGroup();
@@ -118,8 +122,14 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
           this.storageClassForm
             .get('multipart_min_part_size')
             .setValue(response.multipart_min_part_size || '');
+          this.storageClassForm
+            .get('allow_read_through')
+            .setValue(this.tierTargetInfo?.val?.allow_read_through || false);
         });
     }
+    this.storageClassForm.get('allow_read_through').valueChanges.subscribe((value) => {
+      this.onAllowReadThroughChange({ target: { checked: value } });
+    });
   }
 
   createForm() {
@@ -144,9 +154,10 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       target_path: new FormControl('', {
         validators: [Validators.required]
       }),
-      retain_head_object: new FormControl(false),
+      retain_head_object: new FormControl(true),
       multipart_sync_threshold: new FormControl(33554432),
-      multipart_min_part_size: new FormControl(33554432)
+      multipart_min_part_size: new FormControl(33554432),
+      allow_read_through: new FormControl(false)
     });
   }
 
@@ -245,11 +256,22 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     return tierTarget;
   }
 
+  onAllowReadThroughChange(event: any): void {
+    this.allowReadThrough = event.target.checked;
+    if (this.allowReadThrough) {
+      this.storageClassForm.get('retain_head_object')?.setValue(true);
+      this.storageClassForm.get('retain_head_object')?.disable();
+    } else {
+      this.storageClassForm.get('retain_head_object')?.enable();
+    }
+  }
+
   buildRequest() {
     const rawFormValue = _.cloneDeep(this.storageClassForm.value);
     const zoneGroup = this.storageClassForm.get('zonegroup').value;
     const storageClass = this.storageClassForm.get('storage_class').value;
     const placementId = this.storageClassForm.get('placement_target').value;
+    const headObject = this.storageClassForm.get('retain_head_object').value;
     const requestModel: RequestModel = {
       zone_group: zoneGroup,
       placement_targets: [
@@ -263,7 +285,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             access_key: rawFormValue.access_key,
             secret: rawFormValue.secret_key,
             target_path: rawFormValue.target_path,
-            retain_head_object: rawFormValue.retain_head_object,
+            retain_head_object: headObject,
+            allow_read_through: rawFormValue.allow_read_through,
             region: rawFormValue.region,
             multipart_sync_threshold: rawFormValue.multipart_sync_threshold,
             multipart_min_part_size: rawFormValue.multipart_min_part_size
