@@ -60,7 +60,7 @@ namespace crimson {
 
     static_assert(
       std::is_same<bool,
-      typename std::result_of<C(const T&,const T&)>::type>::value,
+      typename std::invoke_result<C, const T&,const T&>::type>::value,
       "class C must define operator() to take two const T& and return a bool");
 
     static_assert(K >= 2, "K (degree of branching) must be at least 2");
