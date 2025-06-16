@@ -2041,6 +2041,7 @@ private:
   float get_osd_recovery_sleep_degraded();
   float get_osd_delete_sleep();
   float get_osd_snap_trim_sleep();
+  float get_osd_next_snap_trim_sleep();
 
   int get_recovery_max_active();
   void maybe_override_max_osd_capacity_for_qos();
