@@ -336,7 +336,7 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
       op.recovery_info.oi = op.obc->obs.oi;
     }
 
-    if (sinfo.require_hinfo()) {
+    if (sinfo.get_is_hinfo_required()) {
       ECUtil::HashInfo hinfo(sinfo.get_k_plus_m());
       if (op.obc->obs.oi.size > 0) {
         ceph_assert(op.xattrs.count(ECUtil::get_hinfo_key()));
@@ -545,7 +545,7 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
 
       if (op.recovery_progress.first && op.obc) {
         op.xattrs = op.obc->attr_cache;
-        if (sinfo.require_hinfo()) {
+        if (sinfo.get_is_hinfo_required()) {
           if (auto [r, attrs, size] = ecbackend->get_attrs_n_size_from_disk(
               op.hoid);
             r >= 0 || r == -ENOENT) {
@@ -1722,6 +1722,57 @@ void ECBackend::objects_read_async(
          on_complete)));
 }
 
+bool ECBackend::ec_can_decode(const shard_id_set &available_shards) const {
+  if (sinfo.supports_sub_chunks()) {
+    ceph_abort_msg("Interface does not support subchunks");
+    return false;
+  }
+
+  mini_flat_map<shard_id_t, std::vector<std::pair<int, int>>>
+      minimum_sub_chunks{ec_impl->get_chunk_count()};
+  shard_id_set want_to_read = sinfo.get_all_shards();
+  shard_id_set available(available_shards);
+  shard_id_set minimum_set;
+
+  int r = ec_impl->minimum_to_decode(want_to_read, available, minimum_set,
+                                     &minimum_sub_chunks);
+  return (r == 0);
+}
+
+shard_id_map<bufferlist> ECBackend::ec_encode_acting_set(
+    const bufferlist &in_bl) const {
+  shard_id_set want_to_encode;
+  for (raw_shard_id_t raw_shard_id;raw_shard_id < ec_impl->get_chunk_count();
+       ++raw_shard_id) {
+    want_to_encode.insert(sinfo.get_shard(raw_shard_id));
+  }
+  shard_id_map<bufferlist> encoded{ec_impl->get_chunk_count()};
+  ec_impl->encode(want_to_encode, in_bl, &encoded);
+  return encoded;
+}
+
+shard_id_map<bufferlist> ECBackend::ec_decode_acting_set(
+    const shard_id_map<bufferlist> &shard_map, int chunk_size) const {
+  shard_id_set want_to_read;
+  for (raw_shard_id_t raw_shard_id; raw_shard_id < ec_impl->get_chunk_count();
+       ++raw_shard_id) {
+    shard_id_t shard_id = sinfo.get_shard(raw_shard_id);
+    if (!shard_map.contains(shard_id)) want_to_read.insert(shard_id);
+  }
+
+  shard_id_map<bufferlist> decoded_buffers(ec_impl->get_chunk_count());
+  ec_impl->decode(want_to_read, shard_map, &decoded_buffers, chunk_size);
+
+  shard_id_map<bufferlist> decoded_buffer_map{ec_impl->get_chunk_count()};
+  for (auto &[shard_id, bl] : decoded_buffers) {
+    decoded_buffer_map[shard_id] = bl;
+  }
+
+  return decoded_buffer_map;
+}
+
+ECUtil::stripe_info_t ECBackend::ec_get_sinfo() const { return sinfo; }
+
 void ECBackend::objects_read_and_reconstruct(
   const map<hobject_t, std::list<ec_align_t>> &reads,
   bool fast_read,
@@ -1806,13 +1857,6 @@ int ECBackend::be_deep_scrub(
     o.read_error = true;
     return 0;
   }
-  if (bl.length() % sinfo.get_chunk_size()) {
-    dout(20) << __func__ << "  " << poid << " got "
-	     << r << " on read, not chunk size " << sinfo.get_chunk_size() << " aligned"
-	     << dendl;
-    o.read_error = true;
-    return 0;
-  }
   if (r > 0) {
     pos.data_hash << bl;
   }
@@ -1822,56 +1866,60 @@ int ECBackend::be_deep_scrub(
     return -EINPROGRESS;
   }
 
+  if (!sinfo.get_is_hinfo_required()) {
+    o.digest = 0;
+    o.digest_present = true;
+    o.omap_digest = -1;
+    o.omap_digest_present = true;
+    return 0;
+  }
+
   ECUtil::HashInfoRef hinfo = unstable_hashinfo_registry.get_hash_info(
     poid, false, o.attrs, o.size);
+  if (sinfo.supports_encode_decode_crcs()) {
+    // HInfo most likely does not exist when ec optimisations are enabled
+    // Instead, we just pass the calculated digest
+    // This will be used along with the plugin to verify data consistency
+    o.digest = pos.data_hash.digest();
+  }
   if (!hinfo) {
     dout(0) << "_scan_list  " << poid << " could not retrieve hash info" << dendl;
     o.read_error = true;
     o.digest_present = false;
     return 0;
-  } else {
-    if (!sinfo.supports_ec_overwrites()) {
-      if (!hinfo->has_chunk_hash()) {
-        dout(0) << "_scan_list  " << poid << " got invalid hash info" << dendl;
-        o.ec_size_mismatch = true;
-        return 0;
-      }
-      if (hinfo->get_total_chunk_size() != (unsigned)pos.data_pos) {
-        dout(0) << "_scan_list  " << poid << " got incorrect size on read 0x"
-		<< std::hex << pos
-		<< " expected 0x" << hinfo->get_total_chunk_size() << std::dec
-		<< dendl;
-        o.ec_size_mismatch = true;
-        return 0;
-      }
-
-      if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) !=
-        pos.data_hash.digest()) {
-        dout(0) << "_scan_list  " << poid << " got incorrect hash on read 0x"
-		<< std::hex << pos.data_hash.digest() << " !=  expected 0x"
-		<< hinfo->get_chunk_hash(get_parent()->whoami_shard().shard)
-		<< std::dec << dendl;
-        o.ec_hash_mismatch = true;
-        return 0;
-      }
-
-      /* We checked above that we match our own stored hash.  We cannot
-       * send a hash of the actual object, so instead we simply send
-       * our locally stored hash of shard 0 on the assumption that if
-       * we match our chunk hash and our recollection of the hash for
-       * chunk 0 matches that of our peers, there is likely no corruption.
-       */
-      o.digest = hinfo->get_chunk_hash(shard_id_t(0));
-      o.digest_present = true;
-    } else {
-      /* Hack! We must be using partial overwrites, and partial overwrites
-       * don't support deep-scrub yet
-       */
-      o.digest = 0;
-      o.digest_present = true;
-    }
+  }
+  if (!hinfo->has_chunk_hash()) {
+    dout(0) << "_scan_list  " << poid << " got invalid hash info" << dendl;
+    o.ec_size_mismatch = true;
+    return 0;
+  }
+  if (hinfo->get_total_chunk_size() != (unsigned)pos.data_pos) {
+    dout(0) << "_scan_list  " << poid << " got incorrect size on read 0x"
+	    << std::hex << pos
+	    << " expected 0x" << hinfo->get_total_chunk_size() << std::dec
+	    << dendl;
+    o.ec_size_mismatch = true;
+    return 0;
   }
 
+  if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) !=
+    pos.data_hash.digest()) {
+    dout(0) << "_scan_list  " << poid << " got incorrect hash on read 0x"
+	    << std::hex << pos.data_hash.digest() << " !=  expected 0x"
+	    << hinfo->get_chunk_hash(get_parent()->whoami_shard().shard)
+	    << std::dec << dendl;
+    o.ec_hash_mismatch = true;
+    return 0;
+  }
+
+  /* We checked above that we match our own stored hash.  We cannot
+   * send a hash of the actual object, so instead we simply send
+   * our locally stored hash of shard 0 on the assumption that if
+   * we match our chunk hash and our recollection of the hash for
+   * chunk 0 matches that of our peers, there is likely no corruption.
+   */
+  o.digest = hinfo->get_chunk_hash(shard_id_t(0));
+  o.digest_present = true;
   o.omap_digest = -1;
   o.omap_digest_present = true;
   return 0;
