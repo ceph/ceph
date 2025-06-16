@@ -100,6 +100,25 @@ static int get_topic_stats(const DoutPrefixProvider* dpp, optional_yield y,
   return cls_2pc_queue_get_topic_stats_result(bl, count, size);
 }
 
+static int list_reservations(const DoutPrefixProvider* dpp, optional_yield y,
+                             librados::IoCtx& ioctx, const std::string& oid,
+                             cls_2pc_reservations& reservations)
+{
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  int rval = 0;
+  cls_2pc_queue_list_reservations(op, &bl, &rval);
+
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
+  if (ret < 0) {
+    return ret;
+  }
+  if (rval < 0) {
+    return rval;
+  }
+  return cls_2pc_queue_list_reservations_result(bl, reservations);
+}
+
 class Manager : public DoutPrefixProvider {
   using Executor = boost::asio::io_context::executor_type;
   bool shutdown = false;
@@ -1344,9 +1363,8 @@ int publish_abort(reservation_t& res) {
 int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &rados_ioctx,
                                const std::string &queue_name, rgw_topic_stats &stats, optional_yield y)
 {
-  // TODO: use optional_yield instead calling rados_ioctx.operate() synchronously
   cls_2pc_reservations reservations;
-  auto ret = cls_2pc_queue_list_reservations(rados_ioctx, queue_name, reservations);
+  int ret = list_reservations(dpp, y, rados_ioctx, queue_name, reservations);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to read queue list reservation: " << ret << dendl;
     return ret;
