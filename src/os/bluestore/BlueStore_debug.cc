@@ -14,6 +14,10 @@
 #include <cstdint>
 #include <ostream>
 #include "BlueStore.h"
+#include "BlueStore_debug.h"
+#include "common/dout.h"
+
+using namespace std;
 
 static const std::string transition_table[26] = {
 "bcdfghjklmnprstuvxyz", //a
@@ -288,4 +292,78 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Onode::printer &p)
     }
   }
   return out;
+}
+
+#define dout_context cct
+#define dout_subsys ceph_subsys_bluestore
+
+BlueStore_debug& BlueStore::debug() {
+  static_assert(sizeof(BlueStore_debug) == sizeof(BlueStore));
+  return *static_cast<BlueStore_debug*>(this);
+}
+
+
+BlueStore::TransContext*
+  BlueStore_debug::create_TransContext(
+    CollectionHandle& ch,
+    Context* on_commit)
+{
+  list<Context *> on_commits;
+  if (on_commit) on_commits.push_back(on_commit);
+  Collection *c = static_cast<Collection*>(ch.get());
+  OpSequencer *osr = c->osr.get();
+  dout(10) << __func__ << " ch " << c << " " << c->cid << dendl;
+  TransContext *txc = _txc_create(
+    static_cast<Collection*>(ch.get()), osr, &on_commits, nullptr);
+  return txc;
+}
+
+void BlueStore_debug::exec_TransContext(
+  TransContext* txc)
+{
+  _txc_exec(txc, nullptr);
+}
+
+void BlueStore_debug::add_Transaction(
+  TransContext* txc,
+  Transaction* t)
+{
+  _txc_add_transaction(txc, t);
+}
+
+void BlueStore_debug::get_used_disk(
+  coll_t cid,
+  ghobject_t oid,
+  interval_set<uint64_t, std::map, false>& disk_used)
+{
+  CollectionRef c = _get_collection(cid);
+  std::unique_lock l(c->lock);
+  OnodeRef o = c->get_onode(oid, true, false);
+  o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+  for (const auto& it : o->extent_map.extent_map) {
+    for (const auto& ex : it.blob->get_blob().get_extents()) {
+      if (ex.is_valid()) {
+        disk_used.insert(ex.offset, ex.length);
+      }
+    }
+  }
+}
+
+void BlueStore_debug::write_no_read(
+  TransContext* txc,
+  coll_t cid,
+  ghobject_t oid,
+  uint32_t fadvise_flags,
+  uint32_t location,
+  bufferlist& data)
+{
+  CollectionRef c = _get_collection(cid);
+  std::unique_lock l(c->lock);
+  OnodeRef o = c->get_onode(oid, true, false);
+  WriteContext wctx;
+  _choose_write_options(c, o, fadvise_flags, &wctx);
+  BlueStore::Writer wr(this, txc, &wctx, o);
+  wr.write_no_read(location, data);
+  o->extent_map.dirty_range(0, OBJECT_MAX_SIZE);
+  txc->write_onode(o);
 }
