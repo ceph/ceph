@@ -4,11 +4,10 @@ NFS
 
 .. versionadded:: Jewel
 
-.. note:: Only the NFSv4 protocol is supported when using a cephadm or rook based deployment.
+.. note:: Only the NFSv4 protocol is supported when using a cephadm or Rook based deployment.
 
-Ceph Object Gateway namespaces can be exported over the file-based
-NFSv4 protocols, alongside traditional HTTP access
-protocols (S3 and Swift).
+Ceph Object Gateway namespaces can be exported via NFSv4,
+alongside the traditional HTTP access protocols (S3 and Swift).
 
 In particular, the Ceph Object Gateway can now be configured to
 provide file-based access when embedded in the NFS-Ganesha NFS server.
@@ -19,11 +18,11 @@ is using ``ceph nfs ...`` commands. See :doc:`/mgr/nfs` for more details.
 librgw
 ======
 
-The librgw.so shared library (Unix) provides a loadable interface to
+The ``librgw`` library provides a loadable interface to
 Ceph Object Gateway services, and instantiates a full Ceph Object Gateway
 instance on initialization.
 
-In turn, librgw.so exports rgw_file, a stateful API for file-oriented
+In turn, ``librgw`` exports ``rgw_file``, a stateful API for file-oriented
 access to RGW buckets and objects.  The API is general, but its design
 is strongly influenced by the File System Abstraction Layer (FSAL) API
 of NFS-Ganesha, for which it has been primarily designed.
