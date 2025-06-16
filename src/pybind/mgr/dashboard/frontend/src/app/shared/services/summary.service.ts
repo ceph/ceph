@@ -2,8 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
-import { BehaviorSubject, Observable, Subscription } from 'rxjs';
-import { filter, first } from 'rxjs/operators';
+import { BehaviorSubject, Observable, of, Subscription } from 'rxjs';
+import { catchError, filter, first } from 'rxjs/operators';
 
 import { ExecutingTask } from '../models/executing-task';
 import { Summary } from '../models/summary.model';
@@ -32,7 +32,11 @@ export class SummaryService {
   }
 
   private retrieveSummaryObservable(): Observable<Summary> {
-    return this.http.get<Summary>('api/summary');
+    return this.http.get<Summary>('api/summary').pipe(
+      catchError((_) => {
+        return of(null);
+      })
+    );
   }
 
   private retrieveSummaryObserver(): (data: Summary) => void {
