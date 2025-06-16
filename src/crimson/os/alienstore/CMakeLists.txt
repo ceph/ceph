@@ -38,7 +38,8 @@ endif()
 
 add_library(alien::cflags INTERFACE IMPORTED)
 set_target_properties(alien::cflags PROPERTIES
-  INTERFACE_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:Seastar::seastar,INTERFACE_INCLUDE_DIRECTORIES>)
+  INTERFACE_COMPILE_OPTIONS $<$<COMPILE_LANGUAGE:CXX>:-Wno-non-virtual-dtor>
+  INTERFACE_LINK_LIBRARIES Seastar::seastar)
 
 set(alien_store_srcs
   alien_store.cc
@@ -84,5 +85,4 @@ target_link_libraries(crimson-alienstore
     crimson-alien-common
     ${BLKID_LIBRARIES}
     ${UDEV_LIBRARIES}
-    seastar
     blk)
