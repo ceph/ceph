@@ -620,7 +620,7 @@ class CephadmServe:
         hosts_altered: Set[str] = set()
         all_conflicting_daemons: List[orchestrator.DaemonDescription] = []
         all_daemons_needing_fencing: List[orchestrator.DaemonDescription] = []
-        all_daemons_to_deploy: List[CephadmDaemonDeploySpec] = []
+        all_daemons_to_deploy: Dict[int, List[CephadmDaemonDeploySpec]] = {}
         all_daemons_to_remove: List[orchestrator.DaemonDescription] = []
         services_in_need_of_fencing: List[Tuple[ServiceSpec, Dict[int, Dict[int, Optional[str]]]]] = []
         for spec in specs:
@@ -632,7 +632,12 @@ class CephadmServe:
                 # compiles all these lists so we can split on host instead of service
                 all_conflicting_daemons.extend(conflicting_daemons)
                 all_daemons_needing_fencing.extend(daemons_to_fence)
-                all_daemons_to_deploy.extend(daemons_to_deploy)
+                svc = service_registry.get_service(spec.service_type)
+                service_deploy_ordering = svc.get_daemon_deployment_ordering(daemons_to_deploy)
+                for tier, daemons_of_tier in service_deploy_ordering.items():
+                    if tier not in all_daemons_to_deploy:
+                        all_daemons_to_deploy[tier] = []
+                    all_daemons_to_deploy[tier].extend(daemons_of_tier)
                 all_daemons_to_remove.extend(daemons_to_remove)
                 if service_needs_fencing and rank_map is not None:
                     services_in_need_of_fencing.append((spec, rank_map))
@@ -699,14 +704,20 @@ class CephadmServe:
 
             return await gather(*futures)
 
-        deploy_names = [d.name() for d in all_daemons_to_deploy]
         rm_names = (
             [d.name() for d in all_daemons_needing_fencing]
             + [d.name() for d in all_conflicting_daemons]
             + [d.name() for d in all_daemons_to_remove]
         )
-        with self.mgr.async_timeout_handler(cmd=f'cephadm deploying ({deploy_names} and removing {rm_names} daemons)'):
-            results = self.mgr.wait_async(_deploy_and_remove_all(all_daemons_needing_fencing, all_conflicting_daemons, all_daemons_to_deploy, all_daemons_to_remove))
+        for tier in sorted(all_daemons_to_deploy.keys()):
+            all_daemons_in_tier_to_deploy = all_daemons_to_deploy[tier]
+            deploy_names = [d.name() for d in all_daemons_in_tier_to_deploy]
+            if tier == 0:
+                with self.mgr.async_timeout_handler(cmd=f'cephadm deploying ({deploy_names} and removing {rm_names} daemons)'):
+                    results = self.mgr.wait_async(_deploy_and_remove_all(all_daemons_needing_fencing, all_conflicting_daemons, all_daemons_in_tier_to_deploy, all_daemons_to_remove))
+            else:
+                with self.mgr.async_timeout_handler(cmd=f'cephadm deploying ({deploy_names} daemons)'):
+                    results = self.mgr.wait_async(_deploy_and_remove_all([], [], all_daemons_in_tier_to_deploy, []))
 
         if any(res[0] for res in results):
             changed = True
