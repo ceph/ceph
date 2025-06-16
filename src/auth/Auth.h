@@ -166,6 +166,8 @@ struct AuthTicket {
     }
     decode(created, bl);
     decode(expires, bl);
+    // recalculate renew_after, which is not encoded
+    init_timestamps(created, double(expires - created));
     decode(caps, bl);
     decode(flags, bl);
   }
