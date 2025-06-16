@@ -378,7 +378,7 @@ int Group<I>::remove(librados::IoCtx& io_ctx, const char *group_name)
   }
 
   r = Mirror<I>::group_disable(io_ctx, group_name, false);
-  if (r < 0) {
+  if (r < 0 && r != -EOPNOTSUPP) {
     lderr(cct) << "failed to disable mirroring: " << cpp_strerror(r) << dendl;
     return r;
   }
