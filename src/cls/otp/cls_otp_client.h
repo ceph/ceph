@@ -28,10 +28,18 @@ namespace rados {
         static int get(librados::ObjectReadOperation *op,
                        librados::IoCtx& ioctx, const std::string& oid,
                        const std::list<std::string> *ids, bool get_all, std::list<otp_info_t> *result);
-        static int check(CephContext *cct, librados::IoCtx& ioctx, const std::string& oid,
-                         const std::string& id, const std::string& val, otp_check_t *result);
 #endif
       };
+
+      // perform a check
+      void check(librados::ObjectWriteOperation& op, std::string id,
+                 std::string val, std::string token);
+      // read the result of a check
+      void check_result(librados::ObjectReadOperation& op, std::string token,
+                        bufferlist& bl, int& rval);
+      // decode the check result
+      int check_result_decode(const bufferlist& bl,
+                              otp_check_t& result);
 
       void get_current_time(librados::ObjectReadOperation& op,
                             bufferlist& bl, int& rval);
