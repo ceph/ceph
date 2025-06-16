@@ -2377,7 +2377,7 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
 
     } else {
       int32_t dur_seconds =
-	  duration_cast<seconds>(m_fsm->get_time_scrubbing()).count();
+	  ceil<seconds>(m_fsm->get_time_scrubbing()).count();
       return pg_scrubbing_status_t{
 	  utime_t{},
 	  dur_seconds,
