@@ -286,7 +286,7 @@ public:
         }
 
         if (op_ret < 0) {
-          if (op_ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+          if (op_ret == -ERR_INTERNAL_ERROR && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
             ldpp_dout(dpp, 20) << "failed to fetch remote datalog shard info. retry. shard_id=" << shard_id << dendl;
             continue;
           } else {
@@ -389,7 +389,7 @@ public:
         }
 
         if (op_ret < 0) {
-          if (op_ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+          if (op_ret == -ERR_INTERNAL_ERROR && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
             ldpp_dout(dpp, 20) << "failed to read remote datalog shard. retry. shard_id=" << shard_id << dendl;
             continue;
           } else {
