@@ -1275,6 +1275,49 @@ TEST_F(BlueFS_wal, wal_v2_simulate_crash)
   fs.umount();
 }
 
+TEST_F(BlueFS_wal, wal_v2_recovery_from_dirty_allocated)
+{
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_alloc_size", "4096");
+  conf.SetVal("bluefs_shared_alloc_size", "4096");
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.ApplyChanges();
+
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+  std::string dir = "dir";
+  std::string file = "wal.log";
+  int r = fs.mkdir(dir);
+  ASSERT_TRUE(r == 0 || r == -EEXIST);
+  BlueFS::FileWriter *writer;
+  ASSERT_EQ(0, fs.open_for_write(dir, file, &writer, false));
+  ASSERT_NE(nullptr, writer);
+  bufferlist content;
+
+  //preallocate and write "0xae" so ENVELOPE_MODE recovery will see length=0xaeaeaeaeaeaeaeae
+  fs.preallocate(writer->file, 0, 4096 * 2);
+  bluefs_extent_t ext = writer->file->fnode.extents[0];
+  BlockDevice* x = fs.get_block_device(ext.bdev);
+  ASSERT_EQ(ext.length, 4096 * 2);
+  bufferlist filler;
+  filler.append(string(4096 * 2, 0xae));
+  x->write(ext.offset, filler, false);
+  x->flush();
+
+  many_small_writes(writer, content, 4096 / (48 + 8 + 8) * 48, 48, 48, 0);
+  delete writer; //close without orderly shutdown, simulate failure
+  fs.umount();
+  fs.mount();
+  bufferlist read_content;
+  BlueFS::FileReader *h;
+  ASSERT_EQ(0, fs.open_for_read(dir, file, &h));
+  bufferlist bl;
+  ASSERT_EQ(0, fs.read(h, 0xea01020304050607, 1, &bl, NULL)); // no read but no failure
+  delete h;
+  fs.umount();
+}
+
 TEST_F(BlueFS_wal, support_wal_v2_and_v1)
 {
   ConfSaver conf(g_ceph_context->_conf);
