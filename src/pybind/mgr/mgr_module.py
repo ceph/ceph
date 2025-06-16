@@ -15,7 +15,7 @@ from typing import (
     TYPE_CHECKING,
     Tuple,
     Union,
-    cast,
+    cast
 )
 if TYPE_CHECKING:
     import sys
@@ -46,7 +46,7 @@ from ceph_argparse import CephArgtype
 from mgr_util import profile_method
 
 if sys.version_info >= (3, 8):
-    from typing import get_args, get_origin
+    from typing import get_args, get_origin, get_type_hints
 else:
     def get_args(tp: Any) -> Any:
         if tp is Generic:
@@ -56,6 +56,10 @@ else:
 
     def get_origin(tp: Any) -> Any:
         return getattr(tp, '__origin__', None)
+    
+    def get_type_hints(tp: Any):
+        return get_attr(tp, '__annotations__', {})
+
 
 
 ERROR_MSG_EMPTY_INPUT_FILE = 'Empty input file'
@@ -428,7 +432,11 @@ class CLICommand(object):
         f, extra_args = _extract_target_func(f)
         desc = (inspect.getdoc(f) or '').replace('\n', ' ')
         full_argspec = inspect.getfullargspec(f)
-        arg_spec = full_argspec.annotations
+        arg_spec_old = full_argspec.annotations
+        # we have to still use 'full_argspec.annotations' as our baseline 
+        # since some functions are being decorated with typing's no_type_check
+        # which contradicts how get_type_hints works and make it miss fields
+        arg_spec = full_argspec.annotations | get_type_hints(f)
         first_default = len(arg_spec)
         if full_argspec.defaults:
             first_default -= len(full_argspec.defaults)
@@ -446,7 +454,7 @@ class CLICommand(object):
                 continue
             if (
                 arg == 'format'
-                or arg_spec[arg] is Optional[bool]
+                or get_origin(arg_spec[arg]) is Optional and get_args(arg_spec[arg])[0] is bool
                 or arg_spec[arg] is bool
             ):
                 # implicit switch to non-positional on any
@@ -455,7 +463,10 @@ class CLICommand(object):
             assert arg in arg_spec, \
                 f"'{arg}' is not annotated for {f}: {full_argspec}"
             has_default = index >= first_default
-            args.append(CephArgtype.to_argdesc(arg_spec[arg],
+            if get_origin(arg_spec[arg]) is Union:
+                arg_spec[arg] = get_args(arg_spec[arg])[0]
+            tp = arg_spec[arg]
+            args.append(CephArgtype.to_argdesc(tp,
                                                dict(name=arg),
                                                has_default,
                                                positional))
