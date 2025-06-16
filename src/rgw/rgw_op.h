@@ -48,6 +48,7 @@
 #include "rgw_sal.h"
 #include "rgw_compression_types.h"
 #include "rgw_log.h"
+#include "rgw_http_client.h"
 
 #include "rgw_lc.h"
 #include "rgw_tag.h"
@@ -75,7 +76,7 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw_owner& effective_owner,
                                   bufferlist* indata, JSONParser* jp,
                                   const req_info& req, rgw_err& err,
-                                  optional_yield y);
+                                  optional_yield y, param_vec_t params = {});
 
 int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
                                        CephContext *cct,

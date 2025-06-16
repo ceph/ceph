@@ -241,7 +241,7 @@ struct RGWZoneGroup {
   std::string id;
   std::string name;
   std::string api_name;
-  std::list<std::string> endpoints;
+  std::vector<std::string> endpoints;
   bool is_master = false;
 
   rgw_zone_id master_zone;
@@ -278,9 +278,6 @@ struct RGWZoneGroup {
   RGWZoneGroup(): is_master(false){}
   RGWZoneGroup(const std::string &_id, const std::string &_name):id(_id), name(_name) {}
   explicit RGWZoneGroup(const std::string &_name):name(_name) {}
-  RGWZoneGroup(const std::string &_name, bool _is_master, const std::string& _realm_id,
-               const std::list<std::string>& _endpoints)
-    : name(_name), endpoints(_endpoints), is_master(_is_master), realm_id(_realm_id) {}
 
   const std::string& get_name() const { return name; }
   const std::string& get_id() const { return id; }
