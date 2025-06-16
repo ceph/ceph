@@ -1,35 +1,13 @@
-@use './src/styles/vendor/variables' as vv;
+@use '@carbon/type';
 
-.bg-info {
-  background-color: vv.$primary !important;
-}
-
-.bg-warning {
-  background-color: vv.$warning !important;
-}
-
-.bg-danger {
-  background-color: vv.$danger !important;
-}
-
-.bg-freespace {
-  background-color: vv.$gray-400 !important;
-}
-
-.progress {
-  height: 20px;
-  margin-bottom: 0;
-  position: relative;
-
-  div.progress-bar {
-    position: static;
+::ng-deep {
+  .cds--cc--chart-wrapper text.meter-title {
+    @include type.type-style('heading-01');
   }
 
-  span {
-    color: vv.$white;
-    display: block;
+  .cds--cc--chart-wrapper text.percent-value {
+    @include type.type-style('heading-01');
+    font-family: inherit;
     font-weight: normal;
-    position: absolute;
-    width: 100%;
   }
 }
