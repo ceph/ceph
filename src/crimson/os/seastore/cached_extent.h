@@ -549,7 +549,7 @@ public:
   }
 
   /// Returns true if extent can be mutated in an open transaction,
-  /// normally equivalent to !is_data_stable.
+  /// equivalent to !is_data_stable.
   bool is_mutable() const {
     return state == extent_state_t::INITIAL_WRITE_PENDING ||
       state == extent_state_t::MUTATION_PENDING ||
@@ -557,40 +557,9 @@ public:
   }
 
   /// Returns true if extent is part of an open transaction,
-  /// normally equivalent to !is_stable.
+  /// equivalent to !is_stable.
   bool is_pending() const {
     return is_mutable() || state == extent_state_t::EXIST_CLEAN;
-  }
-
-  bool is_rewrite() {
-    return is_initial_pending() && get_prior_instance();
-  }
-
-  /// Returns true if extent is stable, written and shared among transactions
-  bool is_stable_written() const {
-    return state == extent_state_t::CLEAN
-           || state == extent_state_t::DIRTY;
-  }
-
-  bool is_stable_writting() const {
-    // mutated/INITIAL_WRITE_PENDING and under-io extents are already
-    // stable and visible, see prepare_record().
-    //
-    // XXX: It might be good to mark this case as DIRTY/CLEAN from the definition,
-    // which probably can make things simpler.
-    return (has_mutation() || is_initial_pending()) && is_pending_io();
-  }
-
-  /// Returns true if extent is stable and shared among transactions,
-  /// normally equivalent to !is_pending
-  bool is_stable() const {
-    return is_stable_written() || is_stable_writting();
-  }
-
-  /// Returns true if extent can not be mutated,
-  /// normally equivalent to !is_mutable.
-  bool is_data_stable() const {
-    return is_stable() || is_exist_clean();
   }
 
   /// Returns true if extent has a pending delta
@@ -608,19 +577,8 @@ public:
     return state == extent_state_t::INITIAL_WRITE_PENDING;
   }
 
-  /// Returns iff extent is DIRTY
-  bool is_stable_dirty() const {
-    return state == extent_state_t::DIRTY;
-  }
-
-  /// Returns iff extent is CLEAN
-  bool is_stable_clean() const {
-    return state == extent_state_t::CLEAN;
-  }
-
-  /// Returns iff extent is CLEAN and pending
-  bool is_stable_clean_pending() const {
-    return is_stable_clean() && is_pending_io();
+  bool is_rewrite() {
+    return is_initial_pending() && get_prior_instance();
   }
 
   /// Ruturns true if data is persisted while metadata isn't
@@ -631,6 +589,39 @@ public:
   /// Returns true if the extent with EXTIST_CLEAN is modified
   bool is_exist_mutation_pending() const {
     return state == extent_state_t::EXIST_MUTATION_PENDING;
+  }
+
+  /// Returns true iff extent is stable (shared among transactions),
+  /// equivalent to !is_pending()
+  bool is_stable() const {
+    return state == extent_state_t::CLEAN
+        || state == extent_state_t::DIRTY;
+  }
+
+  /// Returns true iff extent is stable and not io-pending
+  bool is_stable_ready() const {
+    return is_stable() && !is_pending_io();
+  }
+
+  /// Returns true if extent can not be mutated,
+  /// equivalent to !is_mutable.
+  bool is_data_stable() const {
+    return is_stable() || is_exist_clean();
+  }
+
+  /// Returns iff extent is DIRTY
+  bool is_stable_dirty() const {
+    return state == extent_state_t::DIRTY;
+  }
+
+  /// Returns iff extent is CLEAN
+  bool is_stable_clean() const {
+    return state == extent_state_t::CLEAN;
+  }
+
+  /// Returns iff extent is CLEAN and io-pending
+  bool is_stable_clean_pending() const {
+    return is_stable_clean() && is_pending_io();
   }
 
   /// Returns true if extent has not been superceded or retired

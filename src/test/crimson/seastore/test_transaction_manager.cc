@@ -1150,7 +1150,7 @@ struct transaction_manager_test_t :
 	test_mappings.alloced(pin->get_key(), *extent, t.mapping_delta);
 	EXPECT_TRUE(extent->is_exist_clean());
       } else {
-	EXPECT_TRUE(extent->is_stable_written());
+	EXPECT_TRUE(extent->is_stable_ready());
       }
     } else {
       ceph_assert(t.t->is_conflicted());
