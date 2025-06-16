@@ -783,7 +783,8 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
     return 0;
   }
 
-  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, &crypt_http_responses);
+  static constexpr bool copy_source = false;
+  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, &crypt_http_responses, copy_source);
 }
 
 int RGWGetObj_ObjStore_S3::verify_requester(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y) 
@@ -3014,7 +3015,8 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
     map<string, bufferlist>& attrs,
     bufferlist* manifest_bl)
 {
-  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, nullptr);
+  static constexpr bool copy_source = true;
+  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, nullptr, copy_source);
 }
 
 int RGWPutObj_ObjStore_S3::get_encrypt_filter(
@@ -3033,8 +3035,9 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
       std::unique_ptr<BlockCrypt> block_crypt;
       /* We are adding to existing object.
        * We use crypto mode that configured as if we were decrypting. */
+      static constexpr bool copy_source = false;
       res = rgw_s3_prepare_decrypt(s, s->yield, obj->get_attrs(),
-                                   &block_crypt, &crypt_http_responses);
+                                   &block_crypt, &crypt_http_responses, copy_source);
       if (res == 0 && block_crypt != nullptr)
         filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
     }
@@ -4033,9 +4036,9 @@ int RGWGetObjAttrs_ObjStore_S3::get_decrypt_filter(
   //
   // in the SSE-KMS and SSE-S3 cases, this unfortunately causes us to fetch
   // decryption keys which we don't need :(
-  std::unique_ptr<BlockCrypt> block_crypt; // ignored
-  return rgw_s3_prepare_decrypt(s, s->yield, attrs, &block_crypt,
-                                nullptr);
+  static constexpr bool copy_source = false;
+  return rgw_s3_prepare_decrypt(s, s->yield, attrs, nullptr,
+                                nullptr, copy_source);
 }
 
 void RGWGetObjAttrs_ObjStore_S3::send_response()

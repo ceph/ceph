@@ -5802,9 +5802,10 @@ public:
     // decrypt
     if (src_encrypted) {
       auto attr_iter = s->src_object->get_attrs().find(RGW_ATTR_MANIFEST);
+      static constexpr bool copy_source = true;
       ret = get_decrypt_filter(&decrypt, filter, s, s->src_object->get_attrs(),
                                attr_iter != s->src_object->get_attrs().end() ? &attr_iter->second : nullptr,
-                               nullptr);
+                               nullptr, copy_source);
       if (ret < 0) {
         return ret;
       }
@@ -9962,11 +9963,12 @@ int get_decrypt_filter(
   req_state* s,
   std::map<std::string, bufferlist>& attrs,
   bufferlist* manifest_bl,
-  std::map<std::string, std::string>* crypt_http_responses)
+  std::map<std::string, std::string>* crypt_http_responses,
+  bool copy_source)
 {
   std::unique_ptr<BlockCrypt> block_crypt;
   int res = rgw_s3_prepare_decrypt(s, s->yield, attrs, &block_crypt,
-                                   crypt_http_responses);
+                                   crypt_http_responses, copy_source);
   if (res < 0) {
     return res;
   }

@@ -2906,4 +2906,5 @@ int get_decrypt_filter(
   req_state* s,
   std::map<std::string, bufferlist>& attrs,
   bufferlist* manifest_bl,
-  std::map<std::string, std::string>* crypt_http_responses);
+  std::map<std::string, std::string>* crypt_http_responses,
+  bool copy_source);
