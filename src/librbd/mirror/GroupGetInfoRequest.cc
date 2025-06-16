@@ -116,8 +116,12 @@ void GroupGetInfoRequest<I>::handle_get_info(int r) {
     return;
   }
   if (r < 0) {
-    lderr(cct) << "failed to get mirror info of group '" << m_group_id
-               << "': " << cpp_strerror(r) << dendl;
+    if (r == -EOPNOTSUPP) {
+      ldout(cct, 5) << "group mirroring not supported by OSD" << dendl;
+    } else {
+      lderr(cct) << "failed to get mirror info of group '" << m_group_id
+                 << "': " << cpp_strerror(r) << dendl;
+    }
     finish(r);
     return;
   }
