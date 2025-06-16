@@ -234,6 +234,9 @@ void RGWOp_Bucket_Remove::execute(optional_yield y)
   const bool is_forwarded = s->info.args.exists(RGW_SYS_PARAM_PREFIX "zonegroup");
 
   op_ret = RGWBucketAdminOp::remove_bucket(driver, *s->penv.site, op_state, y, s, bypass_gc, true, is_forwarded);
+  if (op_ret == -ENOENT) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+  }
 }
 
 class RGWOp_Set_Bucket_Quota : public RGWRESTOp {
