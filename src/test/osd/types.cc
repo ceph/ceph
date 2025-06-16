@@ -19,8 +19,9 @@
 #include "osd/osd_types.h"
 #include "osd/OSDMap.h"
 #include "gtest/gtest.h"
-#include "include/coredumpctl.h"
 #include "common/Thread.h"
+#include "include/coredumpctl.h"
+#include "include/scope_guard.h"
 #include "include/stringify.h"
 #include "osd/ReplicatedBackend.h"
 
@@ -106,6 +107,12 @@ TEST(pg_pool_t, encodeDecode)
     std::list<pg_pool_t*> pools;
 
     p.generate_test_instances(pools);
+    auto free_pools = make_scope_guard([&pools] {
+      for (auto& pool : pools) {
+          delete pool;
+      }
+    });
+
     for(auto p1 : pools){
       bufferlist bl;
       p1->encode(bl, features);
@@ -122,6 +129,12 @@ TEST(pg_pool_t, encodeDecode)
     pg_pool_t p;
     std::list<pg_pool_t*> pools;
     p.generate_test_instances(pools);
+    auto free_pools = make_scope_guard([&pools] {
+      for (auto& pool : pools) {
+          delete pool;
+      }
+    });
+
     for(auto p1 : pools){
       bufferlist bl;
       p1->encode(bl, features|CEPH_FEATUREMASK_SERVER_REEF);
