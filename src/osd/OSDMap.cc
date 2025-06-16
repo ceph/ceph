@@ -1644,14 +1644,35 @@ void OSDMap::get_out_of_subnet_osd_counts(CephContext *cct,
 {
   unreachable->clear();
   for (int i = 0; i < max_osd; i++) {
-    if (exists(i) && is_up(i)) {
-      if (const auto& addrs = get_addrs(i).v; addrs.size() >= 2) {
-        if (!is_addr_in_subnet(cct, public_network, addrs[0])) {
-          unreachable->emplace(i);
-        }
-        if (!is_addr_in_subnet(cct, public_network, addrs[1])) {
-          unreachable->emplace(i);
-        }
+    if (!exists(i) || !is_in(i)) {
+      continue;
+    }
+    const auto& addr_vec = get_addrs(i).v;
+    if (addr_vec.empty()) {
+      continue;
+    }
+    bool found_inside = false;
+    bool found_outside = false;
+
+    for (const auto& addr : addr_vec) {
+      if (is_addr_in_subnet(cct, public_network, addr)) {
+        found_inside = true;
+      } else {
+        found_outside = true;
+      }
+    }
+    if (found_inside && found_outside) {
+      unreachable->emplace(i);
+      ldout(cct, 10) << "OSD " << i << " is in and out of subnet "
+                     << public_network << dendl;
+      break;
+    } else {
+      if (found_inside) {
+        ldout(cct, 20) << "OSD " << i << " is in subnet "
+                       << public_network << dendl;
+      } else if (found_outside) {
+        ldout(cct, 20) << "OSD " << i << " is out of subnet "
+                       << public_network << dendl;
       }
     }
   }
