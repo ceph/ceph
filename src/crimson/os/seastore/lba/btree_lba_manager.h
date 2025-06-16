@@ -507,7 +507,11 @@ private:
     laddr_t offset,
     extent_len_t length);
 
-  using resolve_indirect_cursor_ret = get_mappings_iertr::future<LBACursorRef>;
+  trim_pin_ret try_trim_indirect_pin(
+  Transaction& t,
+  trim_action_t& arg
+  );
+
   resolve_indirect_cursor_ret resolve_indirect_cursor(
     op_context_t c,
     LBABtree& btree,
@@ -526,6 +530,16 @@ private:
     op_context_t c,
     LBABtree &btree,
     LBACursor &cursor);
+
+public:
+  std::list<trim_action_t> trim_actions;
+  std::optional<seastar::promise<>> maybe_trim_activator;
+  std::optional<seastar::promise<>>& get_trim_activator() override {
+    return maybe_trim_activator;
+  };
+  std::list<trim_action_t>& get_trim_actions() override {
+    return trim_actions;
+  }
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 
