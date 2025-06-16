@@ -67,12 +67,18 @@ public:
     bufferlist& data
   );
 
+  void write_no_read(
+    uint32_t location,
+    bufferlist& data
+  );
+
   void do_write_with_blobs(
     uint32_t data_begin,
     uint32_t data_end,
     uint32_t ref_begin,
     uint32_t ref_end,
-    blob_vec& blobs
+    blob_vec& blobs,
+    bool allow_blob_reuse = true
   );
 
   void debug_iterate_buffers(
@@ -231,7 +237,8 @@ private:
     uint32_t ref_begin_offset,
     uint32_t ref_end_offset,
     blob_vec& bd,
-    exmp_it after_punch_it);
+    exmp_it after_punch_it,
+    bool allow_blob_reuse);
 
   std::pair<bool, uint32_t> _write_expand_l(
     uint32_t logical_offset);
