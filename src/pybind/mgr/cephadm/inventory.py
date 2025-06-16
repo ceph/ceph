@@ -66,6 +66,52 @@ class OrchSecretNotFound(OrchestratorError):
         self.hostname = hostname
 
 
+class CoredumpctlOverrides:
+    """
+    Class to track supported coredumpctl override parameters
+    """
+
+    _known_fields = [
+        'max_coredump_size'
+    ]
+
+    def __init__(self, max_coredump_size: Optional[int] = 32) -> None:
+        self.max_coredump_size = max_coredump_size
+
+    def to_json(self) -> Dict[str, Union[str, int]]:
+        return {
+            'max_coredump_size': self.max_coredump_size or 32
+        }
+
+    @classmethod
+    def from_json(cls, data: Dict[str, int]) -> "CoredumpctlOverrides":
+        # Note: currently the typing of data only shows an int as a possible
+        # value while the type to_json returns has a union of str and int
+        # This is just because we currently only have an integer value and
+        # mypy gets upset if we say the dict could have str values when the
+        # __init__ function only takes arguments of type int. If/when we add
+        # a new setting that's a str, the type signature of data should be updated
+        for k in data.keys():
+            if k not in cls._known_fields:
+                raise OrchestratorError(f'CoredumpctlOverrides got unknown field "{k}"')
+        return cls(**data)
+
+    def to_args(self) -> List[str]:
+        return [
+            f'--coredump-max-size={self.max_coredump_size}G'
+        ]
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, CoredumpctlOverrides):
+            for attr in [
+                'max_coredump_size'
+            ]:
+                if getattr(self, attr, None) != getattr(other, attr, None):
+                    return False
+            return True
+        return NotImplemented
+
+
 class Inventory:
     """
     The inventory stores a HostSpec for all hosts persistently.
@@ -781,6 +827,7 @@ class HostCache():
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
         self.last_device_change = {}   # type: Dict[str, datetime.datetime]
         self.last_tuned_profile_update = {}  # type: Dict[str, datetime.datetime]
+        self.last_coredumpctl_override = {}  # type: Dict[str, CoredumpctlOverrides]
         self.daemon_refresh_queue = []  # type: List[str]
         self.device_refresh_queue = []  # type: List[str]
         self.network_refresh_queue = []  # type: List[str]
@@ -848,6 +895,8 @@ class HostCache():
                 if 'last_tuned_profile_update' in j:
                     self.last_tuned_profile_update[host] = str_to_datetime(
                         j['last_tuned_profile_update'])
+                if 'last_coredumpctl_override' in j:
+                    self.last_coredumpctl_override[host] = CoredumpctlOverrides.from_json(j['last_coredumpctl_override'])
                 self.registry_login_queue.add(host)
                 self.scheduled_daemon_actions[host] = j.get('scheduled_daemon_actions', {})
                 self.metadata_up_to_date[host] = j.get('metadata_up_to_date', False)
@@ -1045,6 +1094,8 @@ class HostCache():
             j['last_device_change'] = datetime_to_str(self.last_device_change[host])
         if host in self.last_tuned_profile_update:
             j['last_tuned_profile_update'] = datetime_to_str(self.last_tuned_profile_update[host])
+        if host in self.last_coredumpctl_override:
+            j['last_coredumpctl_override'] = self.last_coredumpctl_override[host].to_json()
         if host in self.daemons:
             for name, dd in self.daemons[host].items():
                 j['daemons'][name] = dd.to_json()
@@ -1166,6 +1217,8 @@ class HostCache():
             del self.last_device_change[host]
         if host in self.last_tuned_profile_update:
             del self.last_tuned_profile_update[host]
+        if host in self.last_coredumpctl_override:
+            del self.last_coredumpctl_override[host]
         if host in self.daemon_config_deps:
             del self.daemon_config_deps[host]
         if host in self.scheduled_daemon_actions:
@@ -1442,6 +1495,43 @@ class HostCache():
         if self.last_tuned_profile_update[host] < last_profile_update:
             return True
         return False
+
+    def host_needs_coredumpctl_overrides(self, host: str, settings: CoredumpctlOverrides) -> bool:
+        # Unlike some of the other things we use this "host_needs..."
+        # setup for, we only store and check against the values we are
+        # setting for the overrides
+        if not self.mgr.set_coredump_overrides:
+            return False
+        if host in self.mgr.offline_hosts:
+            logger.debug(f'Host "{host}" marked as offline. Cannot update coredumpctl overrides')
+            return False
+        if host not in self.last_coredumpctl_override:
+            return True
+        if self.last_coredumpctl_override[host] != settings:
+            return True
+        return False
+
+    def host_needs_coredumpctl_overrides_removal(self, host: str) -> bool:
+        # Unlike some of the other things we use this "host_needs..."
+        # setup for, we only store and check against the values we are
+        # setting for the overrides
+        if self.mgr.set_coredump_overrides:
+            return False
+        if host in self.mgr.offline_hosts:
+            logger.debug(f'Host "{host}" marked as offline. Cannot remove coredumpctl overrides')
+            return False
+        if host in self.last_coredumpctl_override:
+            return True
+        return False
+
+    def update_last_coredumpctl_overrides(self, host: str, settings: CoredumpctlOverrides) -> None:
+        self.last_coredumpctl_override[host] = settings
+        self.save_host(host)
+
+    def clear_last_max_coredumpctl_overrides(self, host: str) -> None:
+        if host in self.last_coredumpctl_override:
+            del self.last_coredumpctl_override[host]
+        self.save_host(host)
 
     def host_had_daemon_refresh(self, host: str) -> bool:
         """
