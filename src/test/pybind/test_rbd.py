@@ -2678,6 +2678,11 @@ class TestMirroring(object):
         self.image.mirror_image_disable(True)
         info = self.image.mirror_image_get_info()
         self.check_info(info, '', RBD_MIRROR_IMAGE_DISABLED, False)
+        assert_raises(InvalidArgument, self.image.mirror_image_get_mode)
+        assert_raises(InvalidArgument, self.image.mirror_image_promote, False)
+        assert_raises(InvalidArgument, self.image.mirror_image_promote, True)
+        assert_raises(InvalidArgument, self.image.mirror_image_demote)
+        assert_raises(InvalidArgument, self.image.mirror_image_resync)
 
         self.image.mirror_image_enable()
         info = self.image.mirror_image_get_info()
@@ -2835,15 +2840,37 @@ class TestMirroring(object):
         peer_uuid = self.rbd.mirror_peer_add(ioctx, "cluster", "client")
         self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
         self.image.mirror_image_disable(False)
-        self.image.mirror_image_enable(RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
 
+        # this is a list so that the local cb() can modify it
+        info = [123]
+        def cb(_, _info):
+            info[0] = _info
+
+        comp = self.image.aio_mirror_image_get_info(cb)
+        comp.wait_for_complete_and_cb()
+        assert_not_equal(info[0], None)
+        eq(comp.get_return_value(), 0)
+        eq(sys.getrefcount(comp), 2)
+        info = info[0]
+        self.check_info(info, "", RBD_MIRROR_IMAGE_DISABLED, False)
+
+        mode = [123]
+        def cb(_, _mode):
+            mode[0] = _mode
+
+        comp = self.image.aio_mirror_image_get_mode(cb)
+        comp.wait_for_complete_and_cb()
+        eq(comp.get_return_value(), -errno.EINVAL)
+        eq(sys.getrefcount(comp), 2)
+        eq(mode[0], None)
+
+        self.image.mirror_image_enable(RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
         snaps = list(self.image.list_snaps())
         eq(1, len(snaps))
         snap = snaps[0]
         eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
         eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
 
-        # this is a list so that the local cb() can modify it
         info = [None]
         def cb(_, _info):
             info[0] = _info
