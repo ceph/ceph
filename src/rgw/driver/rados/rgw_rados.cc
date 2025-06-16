@@ -4415,15 +4415,15 @@ int RGWRados::stat_remote_obj(const DoutPrefixProvider *dpp,
   constexpr bool get_op = true;
   constexpr bool rgwx_stat = true;
   constexpr bool sync_manifest = true;
-  constexpr bool skip_decrypt = true;
   constexpr bool sync_cloudtiered = true;
+  const string decrypt_mode = "skip";
 
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
   for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
     int ret = conn->get_obj(dpp, user_id, nullptr, info, src_obj, pmod, unmod_ptr,
                             dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
                             prepend_meta, get_op, rgwx_stat,
-                            sync_manifest, skip_decrypt, nullptr, sync_cloudtiered,
+                            sync_manifest, decrypt_mode, nullptr, sync_cloudtiered,
                             true, &cb, &in_stream_req);
     if (ret < 0) {
       return ret;
@@ -4666,6 +4666,10 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   obj_time_weight dest_mtime_weight;
   rgw_zone_set_entry dst_zone_trace(svc.zone->get_zone().id, dest_bucket_info.bucket.get_key());
 
+  // AES256 needs to be decrypted so that the target zone can re-encrypt with destination bucket's key
+  const string decrypt_mode = src_obj.bucket.match(dest_bucket_info.bucket) ?
+                              "skip" : "skip-except-sse-s3";
+
   if (copy_if_newer) {
     /* need to get mtime for destination */
     ret = get_obj_state(rctx.dpp, &dest_obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, stat_follow_olh, rctx.y);
@@ -4682,14 +4686,13 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   static constexpr bool get_op = true;
   static constexpr bool rgwx_stat = false;
   static constexpr bool sync_manifest = true;
-  static constexpr bool skip_decrypt = true;
   static constexpr bool sync_cloudtiered = true;
 
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
   for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
     ret = conn->get_obj(rctx.dpp, user_id, perm_check_uid, info, src_obj, pmod, unmod_ptr,
                         dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver, prepend_meta, get_op, rgwx_stat,
-                        sync_manifest, skip_decrypt, &dst_zone_trace,
+                        sync_manifest, decrypt_mode, &dst_zone_trace,
                         sync_cloudtiered, true,
                         &cb, &in_stream_req);
     if (ret < 0) {

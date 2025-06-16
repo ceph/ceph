@@ -296,7 +296,7 @@ int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_owner *uid,
                          const real_time *mod_ptr, const real_time *unmod_ptr,
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
                          bool prepend_metadata, bool get_op, bool rgwx_stat,
-                         bool sync_manifest, bool skip_decrypt,
+                         bool sync_manifest, const string& decrypt_mode,
                          rgw_zone_set_entry *dst_zone_trace, bool sync_cloudtiered,
                          bool send, RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req)
 {
@@ -310,7 +310,7 @@ int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_owner *uid,
   params.get_op = get_op;
   params.rgwx_stat = rgwx_stat;
   params.sync_manifest = sync_manifest;
-  params.skip_decrypt = skip_decrypt;
+  params.decrypt_mode = decrypt_mode;
   params.sync_cloudtiered = sync_cloudtiered;
   params.dst_zone_trace = dst_zone_trace;
   params.cb = cb;
@@ -341,8 +341,8 @@ int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_obj& obj, cons
   if (in_params.sync_cloudtiered) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "sync-cloudtiered", ""));
   }
-  if (in_params.skip_decrypt) {
-    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "skip-decrypt", ""));
+  if (!in_params.decrypt_mode.empty()) {
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "decrypt-mode", in_params.decrypt_mode));
   }
   if (in_params.dst_zone_trace) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "if-not-replicated-to", in_params.dst_zone_trace->to_str()));

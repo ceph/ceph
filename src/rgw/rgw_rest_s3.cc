@@ -304,7 +304,12 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
   // multisite sync requests should fetch encrypted data, along with the
   // attributes needed to support decryption on the other zone
   if (s->system_request) {
+    decrypt_mode = s->info.args.get(RGW_SYS_PARAM_PREFIX "decrypt-mode");
+    // @todo backwards compatibility - remove this in T+2 release.
     skip_decrypt = s->info.args.exists(RGW_SYS_PARAM_PREFIX "skip-decrypt");
+    if (skip_decrypt) {
+      decrypt_mode = "skip";
+    }
   }
 
   // multisite sync requests should fetch cloudtiered objects
@@ -779,19 +784,23 @@ send_data:
 
 int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> *filter, RGWGetObj_Filter* cb, bufferlist* manifest_bl)
 {
-  if (skip_decrypt) { // bypass decryption for multisite sync requests
+  if (decrypt_mode == "skip-except-sse-s3") {
     auto crypt_mode = attrs.find(RGW_ATTR_CRYPT_MODE);
     if (crypt_mode != attrs.end()) {
       if (crypt_mode->second.to_str() != "AES256") {
-        // AES256 needs to be decrypted so that the target zone can re-encrypt with destination bucket's key
+        skip_decrypt = true;
         return 0;
-      } else {
-        skip_decrypt = false; // so the data can also be decompressed
       }
     } else {
       // no encryption, nothing to decrypt
       return 0;
     }
+  }
+  if (decrypt_mode == "skip" ||
+      skip_decrypt /* @todo backward compatibility - drop on T+2 release */) {
+    // skip decryption for multisite sync requests
+    skip_decrypt = true;
+    return 0;
   }
 
   static constexpr bool copy_source = false;
