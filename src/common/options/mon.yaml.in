@@ -1402,3 +1402,14 @@ options:
   default: 2
   services:
   - mon
+- name: enable_availability_tracking
+  type: bool
+  level: advanced
+  desc: Calculate and store availablity score for each pool in the 
+    cluster at regular intervals
+  default: true
+  services :
+  - mon
+  flags:
+  - runtime
+ 
