@@ -1622,7 +1622,7 @@ else
     debug echo "** going verbose **"
     CMONDEBUG='
         debug osd = 20
-        debug mon = 20
+        debug mon = 30
         debug osd = 20
         debug paxos = 20
         debug auth = 20
