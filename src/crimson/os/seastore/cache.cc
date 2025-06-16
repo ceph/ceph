@@ -901,12 +901,10 @@ void Cache::commit_replace_extent(
 
   const auto t_src = t.get_src();
   if (is_root_type(prev->get_type())) {
-    assert(prev->is_stable_clean()
-      || prev->primary_ref_list_hook.is_linked());
-    if (prev->is_stable_dirty()) {
-      // add the new dirty root to front
-      remove_from_dirty(prev, nullptr/* exclude root */);
-    }
+    assert(prev->is_stable_dirty());
+    assert(prev->primary_ref_list_hook.is_linked());
+    // add the new dirty root to front
+    remove_from_dirty(prev, nullptr/* exclude root */);
     add_to_dirty(next, nullptr/* exclude root */);
   } else if (prev->is_stable_dirty()) {
     replace_dirty(next, prev, t_src);
@@ -1795,6 +1793,7 @@ void Cache::complete_commit(
       return;
     }
 
+    assert(i->is_stable_clean_pending());
     bool is_inline = false;
     if (i->is_inline()) {
       is_inline = true;
@@ -1817,7 +1816,6 @@ void Cache::complete_commit(
     const auto t_src = t.get_src();
     touch_extent(*i, &t_src, t.get_cache_hint());
     i->complete_io();
-    assert(i->is_stable_clean());
     epm.commit_space_used(i->get_paddr(), i->get_length());
 
     // Note: commit extents and backref allocations in the same place

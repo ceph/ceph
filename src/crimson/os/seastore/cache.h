@@ -226,6 +226,7 @@ public:
           ++access_stats.trans_dirty;
           ++stats.access.trans_dirty;
         } else {
+          assert(ret->is_stable_clean());
           ++access_stats.trans_lru;
           ++stats.access.trans_lru;
         }
@@ -282,6 +283,7 @@ public:
       ++access_stats.cache_dirty;
       ++stats.access.cache_dirty;
     } else {
+      assert(ret->is_stable_clean());
       ++access_stats.cache_lru;
       ++stats.access.cache_lru;
     }
@@ -395,7 +397,7 @@ public:
 	      t, T::TYPE, offset, length);
     const auto t_src = t.get_src();
     auto f = [&t, this, t_src](CachedExtent &ext) {
-      // FIXME: assert(ext.is_stable_clean());
+      // XXX: is_stable_dirty() may not be linked in lba tree
       assert(ext.is_stable());
       assert(T::TYPE == ext.get_type());
       cache_access_stats_t& access_stats = get_by_ext(
@@ -509,6 +511,7 @@ public:
             ++access_stats.cache_dirty;
             ++stats.access.cache_dirty;
           } else {
+            assert(p_extent->is_stable_clean());
             ++access_stats.cache_lru;
             ++stats.access.cache_lru;
           }
@@ -523,6 +526,7 @@ public:
             ++access_stats.trans_dirty;
             ++stats.access.trans_dirty;
           } else {
+            assert(p_extent->is_stable_clean());
             ++access_stats.trans_lru;
             ++stats.access.trans_lru;
           }
@@ -897,7 +901,7 @@ private:
 	      t, type, offset, length, laddr);
     const auto t_src = t.get_src();
     auto f = [&t, this, t_src](CachedExtent &ext) {
-      // FIXME: assert(ext.is_stable_clean());
+      // XXX: is_stable_dirty() may not be linked in lba tree
       assert(ext.is_stable());
       cache_access_stats_t& access_stats = get_by_ext(
         get_by_src(stats.access_by_src_ext, t_src),
@@ -1641,7 +1645,8 @@ private:
         double seconds) const;
 
     void remove_from_lru(CachedExtent &extent) {
-      assert(extent.is_stable_clean() && !extent.is_placeholder());
+      assert(extent.is_stable_clean());
+      assert(!extent.is_placeholder());
 
       if (extent.primary_ref_list_hook.is_linked()) {
         do_remove_from_lru(extent, nullptr);
@@ -1651,7 +1656,8 @@ private:
     void move_to_top(
         CachedExtent &extent,
         const Transaction::src_t* p_src) {
-      assert(extent.is_stable_clean() && !extent.is_placeholder());
+      assert(extent.is_stable_clean());
+      assert(!extent.is_placeholder());
 
       auto extent_loaded_length = extent.get_loaded_length();
       if (extent.primary_ref_list_hook.is_linked()) {
@@ -1688,7 +1694,8 @@ private:
       assert(extent.is_data_stable());
 
       if (extent.primary_ref_list_hook.is_linked()) {
-        assert(extent.is_stable_clean() && !extent.is_placeholder());
+        assert(extent.is_stable_clean());
+        assert(!extent.is_placeholder());
         // present, increase size
         assert(lru.size() > 0);
         current_size += increased_length;
