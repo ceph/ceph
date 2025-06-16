@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 
 import { SmbJoinAuthFormComponent } from './smb-join-auth-form.component';
 import { ToastrModule } from 'ngx-toastr';
@@ -10,6 +10,8 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { JOIN_AUTH_RESOURCE } from '../smb.model';
 import { of } from 'rxjs';
+import { FormHelper } from '~/testing/unit-test-helper';
+import { DUE_TIMER } from '~/app/shared/forms/cd-validators';
 
 export const FOO_JOIN_AUTH = {
   auth_id: 'foo',
@@ -25,6 +27,7 @@ describe('SmbJoinAuthFormComponent', () => {
   let fixture: ComponentFixture<SmbJoinAuthFormComponent>;
   let createJoinAuth: jasmine.Spy;
   let getJoinAuth: jasmine.Spy;
+  let formHelper: FormHelper;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -38,6 +41,7 @@ describe('SmbJoinAuthFormComponent', () => {
     component.ngOnInit();
     createJoinAuth = spyOn(TestBed.inject(SmbService), 'createJoinAuth');
     getJoinAuth = spyOn(TestBed.inject(SmbService), 'getJoinAuth');
+    formHelper = new FormHelper(component.form);
     fixture.detectChanges();
   });
 
@@ -80,5 +84,18 @@ describe('SmbJoinAuthFormComponent', () => {
         linkedToCluster: undefined
       });
     });
+  });
+
+  describe('Auth id validation', () => {
+    it('should validate that authId is required', () => {
+      formHelper.expectErrorChange('authId', '', 'required', true);
+    });
+
+    it('should validate that authId is invalid', fakeAsync(() => {
+      getJoinAuth.and.returnValue(of(FOO_JOIN_AUTH));
+      formHelper.setValue('authId', 'foo', true);
+      tick(DUE_TIMER);
+      formHelper.expectError('authId', 'notUnique');
+    }));
   });
 });
