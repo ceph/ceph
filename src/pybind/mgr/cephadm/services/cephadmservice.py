@@ -355,6 +355,14 @@ class CephadmService(metaclass=ABCMeta):
         """
         pass
 
+    def get_daemon_deployment_ordering(self, daemons: List[CephadmDaemonDeploySpec]) -> Dict[int, List[CephadmDaemonDeploySpec]]:
+        # for services that need to deploy their daemons in a certain order
+        # this will return a dict of ints (the integers are arbitrary and just count up)
+        # to a list of daemons it is okay to deploy in parallel. The expectation being
+        # we'll deploy all the daemons in the "0" entry, then all in "1" etc.
+        # The default behavior will just be to put all daemons in the "0" entry
+        return {0: daemons}
+
     def daemon_check_post(self, daemon_descrs: List[DaemonDescription]) -> None:
         """The post actions needed to be done after daemons are checked"""
         if self.mgr.config_dashboard:
