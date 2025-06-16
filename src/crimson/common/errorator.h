@@ -21,6 +21,9 @@ class parallel_for_each_state;
 template <typename, typename>
 class interruptible_future_detail;
 
+template <typename InterruptCond>
+struct interruptor;
+
 }
 
 namespace crimson {
@@ -862,10 +865,15 @@ private:
     auto _then(Func&& func) {
       return base_t::then(std::forward<Func>(func));
     }
+    base_t to_future() {
+      return static_cast<base_t&&>(std::move(*this));
+    }
     template <class T>
     auto _forward_to(T&& pr) {
       return base_t::forward_to(std::forward<T>(pr));
     }
+    template <typename InterruptCond>
+    friend struct ::crimson::interruptible::interruptor;
     template<typename Iterator, typename AsyncAction>
     friend inline auto ::crimson::do_for_each(Iterator begin,
                                               Iterator end,
@@ -1351,6 +1359,7 @@ struct is_errorated_future<
 };
 template <typename T>
 constexpr bool is_errorated_future_v = is_errorated_future<T>::value;
+
 
 } // namespace crimson
 
