@@ -2123,6 +2123,18 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_data_log_recovery_interval
+  type: int
+  level: advanced
+  desc: How often to run the datalog recovery process
+  long_desc: The data log keeps a collection of per-bucketshard
+    semaphores for crash recovery. Recovery runs at startup. If
+    desires, it can run periodically.
+  fmt_desc: The recovery interval in seconds, 0 to disable except at startup.
+  default: 0
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_data_sync_poll_interval
   type: int
   level: dev
