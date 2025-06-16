@@ -62,7 +62,7 @@ export class IscsiComponent implements OnInit {
         prop: 'pool'
       },
       {
-        name: $localize`Image`,
+        name: $localize`Volume`,
         prop: 'image'
       },
       {
