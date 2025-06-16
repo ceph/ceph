@@ -201,6 +201,7 @@ public:
   bool enable_dedup;
   std::string chunk_algo;
   std::string chunk_size;
+  bool timestamp;
 
   RadosTestContext(const std::string &pool_name,
 		   int max_in_flight,
@@ -213,6 +214,7 @@ public:
 		   bool write_fadvise_dontneed,
 		   const std::string &low_tier_pool_name,
 		   bool enable_dedup,
+		   bool timestamp,
 		   std::string chunk_algo,
 		   std::string chunk_size,
 		   size_t max_attr_len,
@@ -236,7 +238,8 @@ public:
     snapname_num(0),
     enable_dedup(enable_dedup),
     chunk_algo(chunk_algo),
-    chunk_size(chunk_size)
+    chunk_size(chunk_size),
+    timestamp(timestamp)
   {
   }
 
@@ -353,7 +356,7 @@ public:
 	for (auto i = inflight.begin();
 	     i != inflight.end();) {
 	  if ((*i)->finished()) {
-	    std::cout << (*i)->num << ": done (" << (inflight.size()-1) << " left)" << std::endl;
+	    cout_prefix() << (*i)->num << ": done (" << (inflight.size()-1) << " left)" << std::endl;
 	    delete *i;
 	    inflight.erase(i++);
 	  } else {
@@ -362,7 +365,7 @@ public:
 	}
 
 	if (inflight.size() >= (unsigned) max_in_flight || (!next && !inflight.empty())) {
-	  std::cout << " waiting on " << inflight.size() << std::endl;
+	  cout_prefix() << " waiting on " << inflight.size() << std::endl;
 	  wait_cond.wait(state_locker);
 	} else {
 	  break;
@@ -495,7 +498,7 @@ public:
       if (j != i->second.end()) {
 	if (version)
 	  j->second.version = version;
-	std::cout << __func__ << " oid " << oid
+	cout_prefix() << __func__ << " oid " << oid
 		  << " v " << version << " " << j->second.most_recent()
 		  << " " << (j->second.dirty ? "dirty" : "clean")
 		  << " " << (j->second.exists ? "exists" : "dne")
@@ -612,7 +615,7 @@ public:
 	continue;
       std::map<std::string,ObjectDesc>::iterator j = i->second.find(oid);
       if (j != i->second.end() && !j->second.flushed) {
-	std::cout << __func__ << " oid " << oid
+	cout_prefix() << __func__ << " oid " << oid
 		  << " v " << j->second.version << " " << j->second.most_recent()
 		  << " " << (j->second.flushed ? "flushed" : "unflushed")
 		  << " " << i->first << std::endl;
@@ -704,10 +707,27 @@ public:
     bool has_snap = false;
     if (snap_set.clones.size()) {
       has_snap = true;
-      std::cout << __func__ << " has snap true " << std::endl;
+      cout_prefix() << __func__ << " has snap true " << std::endl;
     }
     io_ctx.snap_set_read(0);
     return has_snap;
+  }
+ public:
+  std::string timestamp_string() {
+    if (timestamp) {
+      ceph::logging::log_clock clock;
+      clock.coarsen();
+      auto t = clock.now();
+      constexpr int buflen = 128;
+      char buf[buflen];
+      ceph::logging::append_time(t, buf, buflen);
+      return std::string(buf) + " ";
+    }
+    return std::string();
+  }
+
+  std::ostream &cout_prefix() {
+    return std::cout << timestamp_string();
   }
 };
 
@@ -977,7 +997,7 @@ public:
     std::map<uint64_t, uint64_t> ranges;
 
     cont_gen->get_ranges_map(cont, ranges);
-    std::cout << num << ":  seq_num " << context->seq_num << " ranges " << ranges << std::endl;
+    context->cout_prefix() << num << ":  seq_num " << context->seq_num << " ranges " << ranges << std::endl;
     context->seq_num++;
 
     waiting_on = ranges.size();
@@ -989,7 +1009,7 @@ public:
       bufferlist to_write = gen_pos.gen_bl_advance(len);
       ceph_assert(to_write.length() == len);
       ceph_assert(to_write.length() > 0);
-      std::cout << num << ":  writing " << context->prefix+oid
+      context->cout_prefix() << num << ":  writing " << context->prefix+oid
 		<< " from " << offset
 		<< " to " << len + offset << " tid " << tid << std::endl;
       auto cb_arg =
@@ -1049,7 +1069,7 @@ public:
     std::lock_guard state_locker{context->state_lock};
     uint64_t tid = info->id;
 
-    std::cout << num << ":  finishing write tid " << tid << " to " << context->prefix + oid << std::endl;
+    context->cout_prefix() << num << ":  finishing write tid " << tid << " to " << context->prefix + oid << std::endl;
 
     if (tid <= last_acked_tid) {
       std::cerr << "Error: finished tid " << tid
@@ -1070,11 +1090,11 @@ public:
           ceph_abort();
 	}
 	if ((*i)->get_version64() > version) {
-          std::cout << num << ":  oid " << oid << " updating version " << version
+          context->cout_prefix() << num << ":  oid " << oid << " updating version " << version
                     << " to " << (*i)->get_version64() << std::endl;
 	  version = (*i)->get_version64();
         } else {
-          std::cout << num << ":  oid " << oid << " version " << version
+          context->cout_prefix() << num << ":  oid " << oid << " version " << version
                     << " is already newer than " << (*i)->get_version64() << std::endl;
         }
 	(*i)->release();
@@ -1097,9 +1117,9 @@ public:
 	ObjectDesc old_value;
 	ceph_assert(context->find_object(oid, &old_value, -1));
 	if (old_value.deleted())
-	  std::cout << num << ":  left oid " << oid << " deleted" << std::endl;
+	  context->cout_prefix() << num << ":  left oid " << oid << " deleted" << std::endl;
 	else
-	  std::cout << num << ":  left oid " << oid << " "
+	  context->cout_prefix() << num << ":  left oid " << oid << " "
 		    << old_value.most_recent() << std::endl;
       }
 
@@ -1164,7 +1184,7 @@ public:
     std::map<uint64_t, uint64_t> ranges;
 
     cont_gen->get_ranges_map(cont, ranges);
-    std::cout << num << ":  seq_num " << context->seq_num << " ranges " << ranges << std::endl;
+    context->cout_prefix() << num << ":  seq_num " << context->seq_num << " ranges " << ranges << std::endl;
     context->seq_num++;
 
     waiting_on = ranges.size();
@@ -1176,7 +1196,7 @@ public:
       bufferlist to_write = gen_pos.gen_bl_advance(len);
       ceph_assert(to_write.length() == len);
       ceph_assert(to_write.length() > 0);
-      std::cout << num << ":  writing " << context->prefix+oid
+      context->cout_prefix() << num << ":  writing " << context->prefix+oid
 		<< " from " << offset
 		<< " to " << offset + len << " tid " << tid << std::endl;
       auto cb_arg =
@@ -1231,7 +1251,7 @@ public:
     std::lock_guard state_locker{context->state_lock};
     uint64_t tid = info->id;
 
-    std::cout << num << ":  finishing writesame tid " << tid << " to " << context->prefix + oid << std::endl;
+    context->cout_prefix() << num << ":  finishing writesame tid " << tid << " to " << context->prefix + oid << std::endl;
 
     if (tid <= last_acked_tid) {
       std::cerr << "Error: finished tid " << tid
@@ -1252,11 +1272,11 @@ public:
           ceph_abort();
 	}
 	if ((*i)->get_version64() > version) {
-          std::cout << "oid " << oid << "updating version " << version
+          context->cout_prefix() << "oid " << oid << "updating version " << version
                     << "to " << (*i)->get_version64() << std::endl;
 	  version = (*i)->get_version64();
         } else {
-          std::cout << "oid " << oid << "version " << version
+          context->cout_prefix() << "oid " << oid << "version " << version
                     << "is already newer than " << (*i)->get_version64() << std::endl;
         }
 	(*i)->release();
@@ -1279,9 +1299,9 @@ public:
 	ObjectDesc old_value;
 	ceph_assert(context->find_object(oid, &old_value, -1));
 	if (old_value.deleted())
-	  std::cout << num << ":  left oid " << oid << " deleted" << std::endl;
+	  context->cout_prefix() << num << ":  left oid " << oid << " deleted" << std::endl;
 	else
-	  std::cout << num << ":  left oid " << oid << " "
+	  context->cout_prefix() << num << ":  left oid " << oid << " "
 		    << old_value.most_recent() << std::endl;
       }
 
@@ -1473,7 +1493,7 @@ public:
     } else {
       snap = -1;
     }
-    std::cout << num << ": read oid " << oid << " snap " << snap << std::endl;
+    context->cout_prefix() << num << ": read oid " << oid << " snap " << snap << std::endl;
     done = 0;
     for (uint32_t i = 0; i < 3; i++) {
       completions[i] = context->rados.aio_create_completion((void *) this, &read_callback);
@@ -1483,9 +1503,9 @@ public:
     context->oid_not_in_use.erase(oid);
     ceph_assert(context->find_object(oid, &old_value, snap));
     if (old_value.deleted())
-      std::cout << num << ":  expect deleted" << std::endl;
+      context->cout_prefix() << num << ":  expect deleted" << std::endl;
     else
-      std::cout << num << ":  expect " << old_value.most_recent() << std::endl;
+      context->cout_prefix() << num << ":  expect " << old_value.most_recent() << std::endl;
 
     TestWatchContext *ctx = context->get_watch_context(oid);
     state_locker.unlock();
@@ -1601,10 +1621,10 @@ public:
 	xattrs.erase(iter);
       }
       if (old_value.deleted()) {
-	std::cout << num << ":  expect deleted" << std::endl;
+	context->cout_prefix() << num << ":  expect deleted" << std::endl;
 	ceph_abort_msg("expected deleted");
       } else {
-	std::cout << num << ":  expect " << old_value.most_recent() << std::endl;
+	context->cout_prefix() << num << ":  expect " << old_value.most_recent() << std::endl;
       }
       if (old_value.has_contents()) {
 	ContDesc to_check;
@@ -1950,7 +1970,7 @@ public:
       roll_back_to);
 
 
-    std::cout << "rollback oid " << oid << " to " << roll_back_to << std::endl;
+    context->cout_prefix() << "rollback oid " << oid << " to " << roll_back_to << std::endl;
 
     bool existed_before = context->object_existed_at(oid);
     bool existed_after = context->object_existed_at(oid, roll_back_to);
@@ -2008,7 +2028,7 @@ public:
   {
     std::lock_guard l{context->state_lock};
     uint64_t tid = info->id;
-    std::cout << num << ":  finishing rollback tid " << tid
+    context->cout_prefix() << num << ":  finishing rollback tid " << tid
 	 << " to " << context->prefix + oid << std::endl;
     ceph_assert((int)(info->id) > last_finished);
     last_finished = info->id;
@@ -2120,10 +2140,10 @@ public:
     if (info->id == 0) {
       // copy_from
       ceph_assert(comp->is_complete());
-      std::cout << num << ":  finishing copy_from to " << context->prefix + oid << std::endl;
+      context->cout_prefix() << num << ":  finishing copy_from to " << context->prefix + oid << std::endl;
       if ((r = comp->get_return_value())) {
 	if (r == -ENOENT && src_value.deleted()) {
-	  std::cout << num << ":  got expected ENOENT (src dne)" << std::endl;
+	  context->cout_prefix() << num << ":  got expected ENOENT (src dne)" << std::endl;
 	} else {
 	  std::cerr << "Error: oid " << oid << " copy_from " << oid_src << " returned error code "
 	       << r << std::endl;
@@ -2137,7 +2157,7 @@ public:
     } else if (info->id == 1) {
       // racing read
       ceph_assert(comp_racing_read->is_complete());
-      std::cout << num << ":  finishing copy_from racing read to " << context->prefix + oid << std::endl;
+      context->cout_prefix() << num << ":  finishing copy_from racing read to " << context->prefix + oid << std::endl;
       if ((r = comp_racing_read->get_return_value())) {
 	if (!(r == -ENOENT && src_value.deleted())) {
 	  std::cerr << "Error: oid " << oid << " copy_from " << oid_src << " returned error code "
@@ -2217,7 +2237,7 @@ public:
   {}
 
   void _do_read(librados::ObjectReadOperation& read_op, uint32_t offset, uint32_t length, int index) {
-    std::cout << __func__ << ":" << __LINE__ << std::endl;
+    context->cout_prefix() << __func__ << ":" << __LINE__ << std::endl;
     read_op.read(offset,
 		 length,
 		 &results[index],
@@ -2234,7 +2254,7 @@ public:
   void _begin() override
   {
     context->state_lock.lock();
-    std::cout << num << ": chunk read oid " << oid << " snap " << snap << std::endl;
+    context->cout_prefix() << num << ": chunk read oid " << oid << " snap " << snap << std::endl;
     done = 0;
     for (uint32_t i = 0; i < 2; i++) {
       completions[i] = context->rados.aio_create_completion((void *) this, &read_callback);
@@ -2243,7 +2263,7 @@ public:
     context->find_object(oid, &old_value);
 
     if (old_value.chunk_info.size() == 0) {
-      std::cout << ":  no chunks" << std::endl;
+      context->cout_prefix() << ":  no chunks" << std::endl;
       context->kick();
       context->state_lock.unlock();
       done = true;
@@ -2253,9 +2273,9 @@ public:
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
     if (old_value.deleted()) {
-      std::cout << num << ":  expect deleted" << std::endl;
+      context->cout_prefix() << num << ":  expect deleted" << std::endl;
     } else {
-      std::cout << num << ":  expect " << old_value.most_recent() << std::endl;
+      context->cout_prefix() << num << ":  expect " << old_value.most_recent() << std::endl;
     }
 
     int rand_index = rand() % old_value.chunk_info.size();
@@ -2273,7 +2293,7 @@ public:
     tgt_offset = iter->second.offset + offset - iter->first;
     tgt_oid = iter->second.oid;
 
-    std::cout << num << ": ori offset " << iter->first << " req offset " << offset 
+    context->cout_prefix() << num << ": ori offset " << iter->first << " req offset " << offset
 	      << " ori length " << iter->second.length << " req length " << length
 	      << " ori tgt_offset " << iter->second.offset << " req tgt_offset " << tgt_offset 
 	      << " tgt_oid " << tgt_oid << std::endl;
@@ -2329,7 +2349,7 @@ public:
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     int retval = completions[0]->get_return_value();
-    std::cout << ":  finish!! ret: " << retval << std::endl;
+    context->cout_prefix() << ":  finish!! ret: " << retval << std::endl;
     context->find_object(tgt_oid, &tgt_value);
 
     for (int i = 0; i < 2; i++) {
@@ -2351,10 +2371,10 @@ public:
 
     if (!retval) {
       if (old_value.deleted()) {
-	std::cout << num << ":  expect deleted" << std::endl;
+	context->cout_prefix() << num << ":  expect deleted" << std::endl;
 	ceph_abort_msg("expected deleted");
       } else {
-	std::cout << num << ":  expect " << old_value.most_recent() << std::endl;
+	context->cout_prefix() << num << ":  expect " << old_value.most_recent() << std::endl;
       }
       if (tgt_value.has_contents()) {
 	uint32_t checksum[2] = {0};
@@ -2435,7 +2455,7 @@ public:
     context->find_object(oid_src, &src_value); 
     op.copy_from(src.c_str(), context->io_ctx, src_value.version, 0);
 
-    std::cout << "copy op oid " << oid_src << " to " << oid << " tgt_pool_name " << tgt_pool_name <<  std::endl;
+    context->cout_prefix() << "copy op oid " << oid_src << " to " << oid << " tgt_pool_name " << tgt_pool_name <<  std::endl;
 
     std::pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new std::pair<TestOp*, TestOp::CallbackInfo*>(this,
@@ -2454,7 +2474,7 @@ public:
 
     if (info->id == 0) {
       ceph_assert(comp->is_complete());
-      std::cout << num << ":  finishing copy op to oid " << oid << std::endl;
+      context->cout_prefix() << num << ":  finishing copy op to oid " << oid << std::endl;
       if ((r = comp->get_return_value())) {
 	std::cerr << "Error: oid " << oid << " write returned error code "
 		  << r << std::endl;
@@ -2573,7 +2593,7 @@ public:
       target_oid = context->prefix+oid_tgt;
     }
 
-    std::cout << num << ": " << "set_chunk oid " << oid << " offset: " << offset
+    context->cout_prefix() << num << ": " << "set_chunk oid " << oid << " offset: " << offset
 	  << " length: " << length <<  " target oid " << target_oid
 	  << " offset: " << tgt_offset << " snap " << snap << std::endl;
 
@@ -2598,17 +2618,17 @@ public:
 
     if (info->id == 0) {
       ceph_assert(comp->is_complete());
-      std::cout << num << ":  finishing set_chunk to oid " << oid << std::endl;
+      context->cout_prefix() << num << ":  finishing set_chunk to oid " << oid << std::endl;
       if ((r = comp->get_return_value())) {
 	if (r == -ENOENT && src_value.deleted()) {
-	  std::cout << num << ":  got expected ENOENT (src dne)" << std::endl;
+	  context->cout_prefix() << num << ":  got expected ENOENT (src dne)" << std::endl;
 	} else if (r == -ENOENT && context->oid_set_chunk_tgt_pool.find(oid_tgt) != 
 		  context->oid_set_chunk_tgt_pool.end()) {
-	  std::cout << num << ": get expected ENOENT tgt oid " << oid_tgt << std::endl;
+	  context->cout_prefix() << num << ": get expected ENOENT tgt oid " << oid_tgt << std::endl;
 	} else if (r == -ERANGE && src_value.deleted()) {
-	  std::cout << num << ":  got expected ERANGE (src dne)" << std::endl;
+	  context->cout_prefix() << num << ":  got expected ERANGE (src dne)" << std::endl;
 	} else if (r == -EOPNOTSUPP) {
-	  std::cout << "Range is overlapped: oid " << oid << " set_chunk " << oid_tgt << " returned error code "
+	  context->cout_prefix() << "Range is overlapped: oid " << oid << " set_chunk " << oid_tgt << " returned error code "
 		<< r << " offset: " << offset << " length: " << length <<  std::endl;
 	  context->update_object_version(oid, comp->get_version64());
 	} else {
@@ -2763,10 +2783,10 @@ public:
 
     if (info->id == 0) {
       ceph_assert(comp->is_complete());
-      std::cout << num << ":  finishing set_redirect to oid " << oid << std::endl;
+      context->cout_prefix() << num << ":  finishing set_redirect to oid " << oid << std::endl;
       if ((r = comp->get_return_value())) {
 	if (r == -ENOENT && src_value.deleted()) {
-	  std::cout << num << ":  got expected ENOENT (src dne)" << std::endl;
+	  context->cout_prefix() << num << ":  got expected ENOENT (src dne)" << std::endl;
 	} else {
 	  std::cerr << "Error: oid " << oid << " set_redirect " << oid_tgt << " returned error code "
 	       << r << std::endl;
@@ -2905,11 +2925,11 @@ public:
     ObjectDesc oid_value;
     context->find_object(oid, &oid_value);
     int r = completion->get_return_value();
-    std::cout << num << ":  got " << cpp_strerror(r) << std::endl;
+    context->cout_prefix() << num << ":  got " << cpp_strerror(r) << std::endl;
     if (r == 0) {
       // sucess
     } else if (r == -ENOENT && src_value.deleted()) {
-      std::cout << num << ":  got expected ENOENT (src dne)" << std::endl;
+      context->cout_prefix() << num << ":  got expected ENOENT (src dne)" << std::endl;
     } else {
       ceph_abort_msg("shouldn't happen");
     }
@@ -2966,7 +2986,7 @@ public:
       snap = -1;
     }
 
-    std::cout << num << ": tier_flush oid " << oid << " snap " << snap << std::endl;
+    context->cout_prefix() << num << ": tier_flush oid " << oid << " snap " << snap << std::endl;
 
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
@@ -2999,7 +3019,7 @@ public:
     ceph_assert(completion->is_complete());
 
     int r = completion->get_return_value();
-    std::cout << num << ":  got " << cpp_strerror(r) << std::endl;
+    context->cout_prefix() << num << ":  got " << cpp_strerror(r) << std::endl;
 
     if (r == 0) {
       // sucess
@@ -3011,10 +3031,10 @@ public:
     } else if (r == -ENOENT) {
       // could fail if object is removed
       if (src_value.deleted()) {
-	std::cout << num << ":  got expected ENOENT (src dne)" << std::endl;
+	context->cout_prefix() << num << ":  got expected ENOENT (src dne)" << std::endl;
       } else {
 	if (context->has_snapshot(oid)) {
-	  std::cout << num << ":  got expected ENOENT \
+	  context->cout_prefix() << num << ":  got expected ENOENT \
 	    -- adjacent snapshot might not be recovered yet" << std::endl;
 	} else {
 	  std::cerr << num << ": got unexpected ENOENT" << std::endl;
@@ -3078,7 +3098,7 @@ public:
       snap = -1;
     }
 
-    std::cout << num << ": tier_evict oid " << oid << " snap " << snap << std::endl;
+    context->cout_prefix() << num << ": tier_evict oid " << oid << " snap " << snap << std::endl;
 
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
@@ -3111,7 +3131,7 @@ public:
     ceph_assert(completion->is_complete());
 
     int r = completion->get_return_value();
-    std::cout << num << ":  got " << cpp_strerror(r) << std::endl;
+    context->cout_prefix() << num << ":  got " << cpp_strerror(r) << std::endl;
     if (r == 0) {
       // ok
     } else if (r == -EINVAL) {
@@ -3121,7 +3141,7 @@ public:
     } else if (r == -ENOENT) {
       // could fail if object is removed
       if (src_value.deleted()) {
-	std::cout << num << ":  got expected ENOENT (src dne)" << std::endl;
+	context->cout_prefix() << num << ":  got expected ENOENT (src dne)" << std::endl;
       } else {
 	std::cerr << num << ": got unexpected ENOENT" << std::endl;
 	ceph_abort();
@@ -3200,7 +3220,7 @@ public:
 	HitSet hitset;
 	auto p = bl.cbegin();
 	decode(hitset, p);
-	std::cout << num << ": got hitset of type " << hitset.get_type_name()
+	context->cout_prefix() << num << ": got hitset of type " << hitset.get_type_name()
 		  << " size " << bl.length()
 		  << std::endl;
       } else {
@@ -3310,7 +3330,7 @@ public:
     } else {
       snap = -1;
     }
-    std::cout << num << ": is_dirty oid " << oid << " snap " << snap
+    context->cout_prefix() << num << ": is_dirty oid " << oid << " snap " << snap
 	      << std::endl;
 
     std::pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
@@ -3349,11 +3369,11 @@ public:
 
     int r = completion->get_return_value();
     if (r == 0) {
-      std::cout << num << ":  " << (dirty ? "dirty" : "clean") << std::endl;
+      context->cout_prefix() << num << ":  " << (dirty ? "dirty" : "clean") << std::endl;
       ceph_assert(!old_value.deleted());
       ceph_assert(dirty == old_value.dirty);
     } else {
-      std::cout << num << ":  got " << r << std::endl;
+      context->cout_prefix() << num << ":  got " << r << std::endl;
       ceph_assert(r == -ENOENT);
       ceph_assert(old_value.deleted());
     }
@@ -3413,7 +3433,7 @@ public:
     // FIXME: we could fail if we've ever removed a snap due to
     // the async snap trimming.
     can_fail = true;
-    std::cout << num << ": " << (blocking ? "cache_flush" : "cache_try_flush")
+    context->cout_prefix() << num << ": " << (blocking ? "cache_flush" : "cache_try_flush")
 	 << " oid " << oid << " snap " << snap << std::endl;
 
     if (snap >= 0) {
@@ -3453,7 +3473,7 @@ public:
     context->oid_flushing.erase(oid);
     context->oid_not_flushing.insert(oid);
     int r = completion->get_return_value();
-    std::cout << num << ":  got " << cpp_strerror(r) << std::endl;
+    context->cout_prefix() << num << ":  got " << cpp_strerror(r) << std::endl;
     if (r == 0) {
       context->update_object_version(oid, 0, snap);
     } else if (r == -EBUSY) {
@@ -3507,7 +3527,7 @@ public:
     } else {
       snap = -1;
     }
-    std::cout << num << ": cache_evict oid " << oid << " snap " << snap << std::endl;
+    context->cout_prefix() << num << ": cache_evict oid " << oid << " snap " << snap << std::endl;
 
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
@@ -3538,7 +3558,7 @@ public:
     ceph_assert(completion->is_complete());
 
     int r = completion->get_return_value();
-    std::cout << num << ":  got " << cpp_strerror(r) << std::endl;
+    context->cout_prefix() << num << ":  got " << cpp_strerror(r) << std::endl;
     if (r == 0) {
       // yay!
     } else if (r == -EBUSY) {
