@@ -2103,6 +2103,8 @@ void MDSRank::active_start()
 {
   dout(1) << "active_start" << dendl;
 
+  m_is_active = true;
+
   if (last_state == MDSMap::STATE_CREATING ||
       last_state == MDSMap::STATE_STARTING) {
     mdcache->open_root();
