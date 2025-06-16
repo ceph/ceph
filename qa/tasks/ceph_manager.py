@@ -1426,20 +1426,17 @@ class OSDThrasher(Thrasher):
                                      check_status=False, timeout=30, stdout=DEVNULL)
             gevent.sleep(0)
   def do_dump_perf_counter(self,osd_id):
-    """
-      gets the full and incremental map counters for a specific osd 
-    """
-      try:
-        out=self.ceph_manager.osd_admin_socket(osd_id,['perf','dump'])
-        py_dic_output=json.loads(out)
-        full_map_count=py_dic_output['osd']['full_map_received']
-        inc_map_count=py_dic_output['osd']['inc_map_received']
-        res="For the osd"+osd_id+"full maps is"+str(full_map_count)+"inc maps is"+str(inc_map_count)
-        self.log(res)
-        return full_map_count,inc_map_count
-      except Exception as e:
-        output="failed to get counters because of"+str(e)
-        self.log(output)
+    try:
+      out=self.ceph_manager.osd_admin_socket(osd_id,['perf','dump'])
+      py_dic_output=json.loads(out)
+      full_map_count=py_dic_output['osd']['full_map_received']
+      inc_map_count=py_dic_output['osd']['inc_map_received']
+      res="For the osd"+osd_id+"full maps is"+str(full_map_count)+"inc maps is"+str(inc_map_count)
+      self.log(res)
+      return full_map_count,inc_map_count
+    except Exception as e:
+      output="failed to get counters because of"+str(e)
+      self.log(output)
       
 
 
