@@ -913,7 +913,7 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
 {
   ldpp_dout(dpp, 0) << __func__ << "(): deleting obj=" << obj << dendl;
 
-  obj->set_atomic();
+  obj->set_atomic(true);
 
   int ret = obj->load_obj_state(dpp, null_yield);
   if (ret < 0) {

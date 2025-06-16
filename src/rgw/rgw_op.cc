@@ -665,7 +665,7 @@ int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     return -ERR_NO_SUCH_BUCKET;
   }
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
   if (prefetch_data) {
     s->object->set_prefetch_data();
   }
@@ -676,7 +676,7 @@ int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
 }
 
 static int rgw_iam_remove_objtags(const DoutPrefixProvider *dpp, req_state* s, rgw::sal::Object* object, bool has_existing_obj_tag, bool has_resource_tag) {
-  object->set_atomic();
+  object->set_atomic(true);
   int op_ret = object->get_obj_attrs(s->yield, dpp);
   if (op_ret < 0)
     return op_ret;
@@ -752,7 +752,7 @@ static int rgw_iam_add_tags_from_bl(req_state* s, bufferlist& bl, bool has_exist
 }
 
 static int rgw_iam_add_objtags(const DoutPrefixProvider *dpp, req_state* s, rgw::sal::Object* object, bool has_existing_obj_tag, bool has_resource_tag) {
-  object->set_atomic();
+  object->set_atomic(true);
   int op_ret = object->get_obj_attrs(s->yield, dpp);
   if (op_ret < 0)
     return op_ret;
@@ -950,12 +950,13 @@ void handle_replication_status_header(
   auto attr_iter = attrs.find(RGW_ATTR_OBJ_REPLICATION_STATUS);
   if (attr_iter != attrs.end() && attr_iter->second.to_str() == "PENDING") {
     if (s->object->is_sync_completed(dpp, y, obj_mtime)) {
-      s->object->set_atomic();
+      s->object->set_atomic(true);
       rgw::sal::Attrs setattrs, rmattrs;
       bufferlist bl;
       bl.append("COMPLETED");
       setattrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = bl;
       int ret = s->object->set_obj_attrs(dpp, &setattrs, &rmattrs, y, 0);
+      s->object->set_atomic(false);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: failed to set object replication status to COMPLETED ret=" << ret << dendl;
         return;
@@ -1125,7 +1126,7 @@ void rgw_bucket_object_pre_exec(req_state *s)
 
 int RGWGetObj::verify_permission(optional_yield y)
 {
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   if (prefetch_data()) {
     s->object->set_prefetch_data();
@@ -1251,7 +1252,7 @@ void RGWGetObjTags::execute(optional_yield y)
 {
   rgw::sal::Attrs attrs;
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   op_ret = s->object->get_obj_attrs(y, this);
 
@@ -1294,7 +1295,7 @@ void RGWPutObjTags::execute(optional_yield y)
     return;
   }
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
   op_ret = s->object->modify_obj_attrs(RGW_ATTR_TAGS, tags_bl, y, this);
   if (op_ret == -ECANCELED){
     op_ret = -ERR_TAG_CONFLICT;
@@ -1838,7 +1839,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
   ldpp_dout(this, 20) << "reading obj=" << part << " ofs=" << cur_ofs
       << " end=" << cur_end << dendl;
 
-  part->set_atomic();
+  part->set_atomic(true);
   part->set_prefetch_data();
 
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op = part->get_read_op();
@@ -4088,7 +4089,7 @@ int RGWPutObj::verify_permission(optional_yield y)
     auto cs_bucket = driver->get_bucket(copy_source_bucket_info);
     auto cs_object = cs_bucket->get_object(rgw_obj_key(copy_source_object_name,
                                                        copy_source_version_id));
-    cs_object->set_atomic();
+    cs_object->set_atomic(true);
     cs_object->set_prefetch_data();
 
     /* check source object permissions */
@@ -5311,7 +5312,7 @@ void RGWPutMetadataObject::execute(optional_yield y)
 {
   rgw::sal::Attrs attrs, rmattrs;
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   op_ret = get_params(y);
   if (op_ret < 0) {
@@ -5384,7 +5385,7 @@ void RGWRestoreObj::execute(optional_yield y)
     return;
   }
   
-  s->object->set_atomic();
+  s->object->set_atomic(true);
   int op_ret = s->object->get_obj_attrs(y, this);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to fetch get_obj_attrs op ret = " << op_ret << dendl;
@@ -5582,7 +5583,7 @@ void RGWDeleteObj::execute(optional_yield y)
       return;
     }
 
-    s->object->set_atomic();
+    s->object->set_atomic(true);
     
     bool ver_restored = false;
     op_ret = s->object->swift_versioning_restore(s->owner, s->user->get_id(),
@@ -5742,7 +5743,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
 
   /* get buckets info (source and dest) */
   if (s->local_source &&  source_zone.empty()) {
-    s->src_object->set_atomic();
+    s->src_object->set_atomic(true);
     s->src_object->set_prefetch_data();
 
     rgw_placement_rule src_placement;
@@ -5794,7 +5795,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
 
   RGWAccessControlPolicy dest_bucket_policy;
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   /* check dest bucket permissions */
   op_ret = read_bucket_policy(this, driver, s, s->bucket->get_info(),
@@ -5907,8 +5908,8 @@ void RGWCopyObj::execute(optional_yield y)
     s->object->gen_rand_obj_instance_name();
   }
 
-  s->src_object->set_atomic();
-  s->object->set_atomic();
+  s->src_object->set_atomic(true);
+  s->object->set_atomic(true);
 
   encode_delete_at_attr(delete_at, attrs);
 
@@ -6321,7 +6322,7 @@ void RGWPutACLs::execute(optional_yield y)
   map<string, bufferlist> attrs;
 
   if (!rgw::sal::Object::empty(s->object.get())) {
-    s->object->set_atomic();
+    s->object->set_atomic(true);
     //if instance is empty, we should modify the latest object
     op_ret = s->object->modify_obj_attrs(RGW_ATTR_ACL, bl, s->yield, this);
   } else {
@@ -7522,7 +7523,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
     return;
   }
 
-  obj->set_atomic();
+  obj->set_atomic(true);
 
   std::string version_id; // empty
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
@@ -7689,7 +7690,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
 
     bucket_owner.id = bucket->get_info().owner;
     std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(path.obj_key);
-    obj->set_atomic();
+    obj->set_atomic(true);
 
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
     del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
@@ -8302,7 +8303,7 @@ ssize_t RGWBulkUploadOp::AlignedStreamGetter::get_exactly(const size_t want,
 
 int RGWGetAttrs::verify_permission(optional_yield y)
 {
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s);
     if (has_s3_existing_tag || has_s3_resource_tag)
@@ -8330,7 +8331,7 @@ void RGWGetAttrs::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   op_ret = s->object->get_obj_attrs(s->yield, this);
   if (op_ret < 0) {
@@ -8386,7 +8387,7 @@ void RGWRMAttrs::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   op_ret = s->object->set_obj_attrs(this, nullptr, &attrs, y, rgw::sal::FLAG_LOG_OP);
   if (op_ret < 0) {
