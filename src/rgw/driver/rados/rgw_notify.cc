@@ -81,6 +81,25 @@ void publish_commit_completion(rados_completion_t completion, void* arg) {
   }
 };
 
+static int get_topic_stats(const DoutPrefixProvider* dpp, optional_yield y,
+                           librados::IoCtx& ioctx, const std::string& oid,
+                           uint32_t& count, uint64_t& size)
+{
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  int rval = 0;
+  cls_2pc_queue_get_topic_stats(op, &bl, &rval);
+
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
+  if (ret < 0) {
+    return ret;
+  }
+  if (rval < 0) {
+    return rval;
+  }
+  return cls_2pc_queue_get_topic_stats_result(bl, count, size);
+}
+
 class Manager : public DoutPrefixProvider {
   using Executor = boost::asio::io_context::executor_type;
   bool shutdown = false;
@@ -652,7 +671,8 @@ private:
       // updating perfcounters with topic stats
       uint64_t entries_size;
       uint32_t entries_number;
-      const auto ret = cls_2pc_queue_get_topic_stats(rados_ioctx, queue_name, entries_number, entries_size);
+      int ret = get_topic_stats(this, yield, rados_ioctx, queue_name,
+                                entries_number, entries_size);
       if (ret < 0) {
         ldpp_dout(this, 1) << "ERROR: topic stats for topic: " << queue_name << ". error: " << ret << dendl;
       } else {
@@ -1366,7 +1386,7 @@ int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &r
     stats.queue_reservations += reservations.size();
     shard_entries = 0; 
     shard_size = 0; 
-    ret = cls_2pc_queue_get_topic_stats(rados_ioctx, shard_name, shard_entries, shard_size);
+    ret = get_topic_stats(dpp, y, rados_ioctx, shard_name, shard_entries, shard_size);
     stats.queue_size += shard_size; 
     stats.queue_entries += shard_entries;
     if (ret < 0) {
