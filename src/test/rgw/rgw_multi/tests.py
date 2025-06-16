@@ -2069,6 +2069,40 @@ def test_replication_status():
     bilog = bilog_list(zone.zone, bucket.name)
     assert(len(bilog) == 0)
 
+def test_assume_role_after_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    access_key = 'abcd'
+    secret_key = 'efgh'
+    tenant = 'testx'
+    uid = 'test'
+    cmd = ['user', 'create', '--tenant', tenant, '--uid', uid, '--access-key', access_key, '--secret-key', secret_key, '--display-name', 'tenanted-user']
+    zonegroup_conns.master_zone.zone.cluster.admin(cmd)
+    credentials = Credentials(access_key, secret_key)
+
+    role_name = gen_role_name()
+    log.info('create role zone=%s name=%s', zonegroup_conns.master_zone.name, role_name)
+    policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"arn:aws:iam::testx:user/test\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
+    role = zonegroup_conns.master_zone.create_role("/", role_name, policy_document, "")
+    policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Resource\":\"*\",\"Action\":\"s3:*\"}]}"
+    zonegroup_conns.master_zone.put_role_policy(role_name, "Policy1", policy_document)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    for zone in zonegroup_conns.zones:
+        log.info(f'checking if zone: {zone.name} has role: {role_name}')
+        assert(zone.has_role(role_name))
+        log.info(f'success, zone: {zone.name} has role: {role_name}')
+    
+    for zone in zonegroup_conns.zones:
+        if zone == zonegroup_conns.master_zone:
+            log.info(f'creating bucket in primary zone')
+            bucket = "bucket1"
+            zone.assume_role_create_bucket(bucket, role['Role']['Arn'], "primary", credentials)
+        if zone != zonegroup_conns.master_zone:
+            log.info(f'creating bucket in secondary zone')
+            bucket = "bucket2"
+            zone.assume_role_create_bucket(bucket, role['Role']['Arn'], "secondary", credentials)
 
 @attr('fails_with_rgw')
 @attr('data_sync_init')

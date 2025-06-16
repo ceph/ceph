@@ -70,9 +70,10 @@ class STSAuthStrategy : public rgw::auth::Strategy,
   aplptr_t create_apl_role(CephContext* const cct,
                             const req_state* const s,
                             RoleApplier::Role role,
-                            RoleApplier::TokenAttrs token_attrs) const override {
+                            RoleApplier::TokenAttrs token_attrs,
+                            bool is_system_request) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
-      rgw::auth::RoleApplier(cct, std::move(role), std::move(token_attrs)));
+      rgw::auth::RoleApplier(cct, std::move(role), std::move(token_attrs), is_system_request));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
