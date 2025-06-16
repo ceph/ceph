@@ -10,6 +10,7 @@ import os
 import threading
 import time
 import uuid
+import requests
 from enum import Enum
 from typing import TYPE_CHECKING, Optional, Type, TypedDict
 
@@ -141,6 +142,8 @@ class JwtManager(object):
 
     @classmethod
     def decode(cls, message, secret):
+        if mgr.SSO_DB.protocol == AuthType.OAUTH2: #TODO: ADD FLAG FOR M2M ONLY
+            return cls.decodeM2M(message)
         oauth2_sso_protocol = mgr.SSO_DB.protocol == AuthType.OAUTH2
         split_message = message.split(".")
         base64_header = split_message[0]
@@ -166,6 +169,34 @@ class JwtManager(object):
         decoded_message = decode_jwt_segment(base64_message)
         if oauth2_sso_protocol:
             decoded_message['username'] = decoded_message['sub']
+        now = int(time.time())
+        if decoded_message['exp'] < now:
+            raise ExpiredSignatureError()
+
+        return decoded_message
+
+    @classmethod
+    def decodeM2M(cls, token):
+        base64_header, base64_message, _ = token.split('.')
+
+
+        decoded_header = decode_jwt_segment(base64_header)
+
+        if decoded_header['alg'] != 'RS256':
+            raise InvalidAlgorithmError()
+
+        # TODO: GET FROM NEW CEPHADM SERVICE
+        jwks = requests.get("http://localhost:8080/realms/master/protocol/openid-connect/certs").json()
+
+        if decoded_header['kid'] != jwks['keys'][0]['kid']:
+            raise InvalidTokenError()
+
+        # TODO: VERIFY SIGNATURE WITHOUT CRIPTOGRAPHY PACKAGE
+        #if base64_secret != incoming_secret:
+         #   raise InvalidTokenError()
+
+        decoded_message = decode_jwt_segment(base64_message)
+        decoded_message['username'] = decoded_message['sub']
         now = int(time.time())
         if decoded_message['exp'] < now:
             raise ExpiredSignatureError()
@@ -199,10 +230,6 @@ class JwtManager(object):
     @classmethod
     # pylint: disable=protected-access
     def get_token(cls, request: cherrypy._ThreadLocalProxy):
-        if mgr.SSO_DB.protocol == AuthType.OAUTH2:
-            # Avoids circular import
-            from .oauth2 import OAuth2
-            return OAuth2.get_token(request)
         auth_cookie_name = 'token'
         try:
             # use cookie
@@ -315,7 +342,12 @@ class AuthManagerTool(cherrypy.Tool):
         JwtManager.reset_user()
         token = JwtManager.get_token(cherrypy.request)
         if token:
-            user = JwtManager.get_user(token)
+            if mgr.SSO_DB.protocol == AuthType.OAUTH2: #TODO: ADD FLAG FOR M2M ONLY
+                # Avoids circular import
+                from .oauth2 import OAuth2
+                user = OAuth2.get_user(token)
+            else:
+                user = JwtManager.get_user(token)
             if user:
                 self._check_authorization(user.username)
                 return
