@@ -415,6 +415,62 @@ run on the host.
   profiles with the same name are not overwritten.
 
 
+Custom Logrotate Configs
+========================
+
+Cephadm can write out custom logrotate configs for either the
+cephadm.log or the cluster logs to all hosts in the cluster. It's
+recommended to take the existing logrotate file and then add fields
+to it. The cluster log in particular makes use of certain template
+fields to generate the name of the directory in which to rotate the
+logs and for the postrotate actions
+
+In order to have cephadm write out the custom logrotate config
+use a command of the following form:
+
+.. prompt:: bash #
+
+   ceph orch write-custom-logrotate <type> -i <logrotate-file>
+
+where <type> should be either ``cephadm`` or ``cluster`` depending on
+whether you are overwriting the logrotate file for the cluster logs
+or the cephadm.log. For example
+
+.. prompt:: bash #
+
+  [ceph: root@vm-00 /]# cat cluster-logrotate-config
+  # created by cephadm
+  /var/log/ceph/{{ fsid }}/*.log {
+      rotate 20
+      size 1G
+      daily
+      compress
+      sharedscripts
+      postrotate
+          killall -q -1 {{ targets|join(' ') }} || pkill -1 -x '{{ targets|join('|') }}' || true
+      endscript
+      missingok
+      notifempty
+      su root root
+  }
+
+  [ceph: root@vm-00 /]# ceph orch write-custom-logrotate cluster -i cluster-logrotate-config
+
+  .. note:: 
+
+    When the command to write the custom logrotate file is run, it only schedules
+    the logrotate configs to be written. If cephadm is busy with other operations
+    such as deploying daemons or an upgrade, there could be a notable delay in the
+    logrotate configs being written out.
+
+  .. note:: 
+
+    Cephadm will only attempt to write the logrotate config out to each host once
+    and will not repeatedly check the config in each host to make sure it's "correct".
+    If you want to re-trigger the operation to write the logrotate configs either
+    rerun the ``write-custom-logrotate`` command or restart the mgr daemon.
+
+
 Viewing Profiles
 ----------------
 
