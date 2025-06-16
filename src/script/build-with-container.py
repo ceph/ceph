@@ -68,6 +68,7 @@ the executable build steps with short descriptions of what they do.
 
 import argparse
 import contextlib
+import datetime
 import enum
 import glob
 import hashlib
@@ -286,6 +287,7 @@ class Steps(StrEnum):
     DEBS = "debs"
     PACKAGES = "packages"
     INTERACTIVE = "interactive"
+    PRUNE = "prune"
 
 
 class ImageSource(StrEnum):
@@ -333,9 +335,12 @@ class Context:
         return self._engine
 
     @property
+    def image_repo(self):
+        return self.cli.image_repo or "ceph-build"
+
+    @property
     def image_name(self):
-        base = self.cli.image_repo or "ceph-build"
-        return f"{base}:{self.target_tag()}"
+        return f"{self.image_repo}:{self.target_tag()}"
 
     def target_tag(self):
         suffix = ""
@@ -524,7 +529,6 @@ def build_container(ctx):
         "-t",
         ctx.image_name,
         f"--label=io.ceph.build-with-container.src={_hash_sources()}",
-        f"--build-arg=JENKINS_HOME={ctx.cli.homedir}",
         f"--build-arg=CEPH_BASE_BRANCH={ctx.base_branch()}",
     ]
     if ctx.cli.distro:
@@ -572,6 +576,32 @@ def _check_cached_image(ctx):
         return True, True
     log.info("Container sources do not match: %s", curr_hash)
     return True, False
+
+
+def _image_match(ctx, *filter_args):
+    list_cmd = [
+        ctx.container_engine,
+        "images",
+        "--format={{.Id}}|{{.CreatedAt}}",
+    ]
+    for keyword, value in filter_args:
+        list_cmd.append(f"--filter={keyword}={value}")
+    res = _run(list_cmd, check=False, capture_output=True)
+    if res.returncode != 0:
+        return []
+    values = (
+        line.strip().split("|", 1)
+        for line in res.stdout.decode("utf8").splitlines()
+    )
+    return [
+        (img, datetime.datetime.strptime(cdate, "%Y-%m-%d %H:%M:%S %z %Z"))
+        for img, cdate in values
+    ]
+
+
+def _image_rm(ctx, image):
+    cmd = [ctx.container_engine, "rmi", image]
+    _run(cmd, check=True)
 
 
 @Builder.set(Steps.CONTAINER)
@@ -832,6 +862,24 @@ def bc_interactive(ctx):
         _run(cmd, check=False, ctx=ctx)
 
 
+@Builder.set(Steps.PRUNE)
+def bc_prune(ctx):
+    """Prune old container images from local host."""
+    # podman images --format='{{.Id}}|{{.CreatedAt}}' --filter=reference=ceph-build
+    # d2 = datetime.datetime.strptime(t2, "%Y-%m-%d %H:%M:%S %z %Z")
+    # datetime.datetime.now(datetime.UTC) - d2
+    images = _image_match(ctx, ("reference", ctx.image_repo))
+    now = datetime.datetime.now(datetime.UTC)
+    age = datetime.timedelta(days=ctx.cli.prune_days)
+    old_images = [img for img, cdate in images if now - cdate > age]
+    for image_id in old_images:
+        log.info("image %s is older than %s days", image_id, ctx.cli.prune_days)
+    if ctx.cli.dry_run:
+        return
+    for image_id in old_images:
+        _image_rm(ctx, image_id)
+
+
 class ArgumentParser(argparse.ArgumentParser):
     def parse_my_args(self, args=None, namespace=None):
         """Parse argument up to the '--' term and then stop parsing.
@@ -995,6 +1043,12 @@ def parse_cli(build_step_names):
         "--env-file",
         type=pathlib.Path,
         help="Use this environment file when building",
+    )
+    parser.add_argument(
+        "--prune-days",
+        type=int,
+        default=15,
+        help="Number of days old an image needs to be for it to be pruned",
     )
     parser.add_argument(
         "--dry-run",
