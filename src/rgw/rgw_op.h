@@ -496,6 +496,7 @@ public:
   int get_lua_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
       RGWGetObj_Filter* cb);
 
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT", s->info.method); }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
 };
 
@@ -524,6 +525,7 @@ class RGWGetObjTags : public RGWOp {
   const char* name() const override { return "get_obj_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_TAGGING; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT_TAGGING", s->info.method); }
 
 };
 
@@ -539,6 +541,7 @@ class RGWPutObjTags : public RGWOp {
   const char* name() const override { return "put_obj_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ_TAGGING; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT_TAGGING", s->info.method); }
 
 };
 
@@ -551,6 +554,7 @@ class RGWDeleteObjTags: public RGWOp {
   const char* name() const override { return "delete_obj_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
   RGWOpType get_type() override { return RGW_OP_DELETE_OBJ_TAGGING;}
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT_TAGGING", s->info.method); }
 };
 
 class RGWGetBucketTags : public RGWOp {
@@ -566,6 +570,7 @@ public:
   const char* name() const override { return "get_bucket_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_TAGGING; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKET_TAGGING", s->info.method); }
 };
 
 class RGWPutBucketTags : public RGWOp {
@@ -581,6 +586,7 @@ public:
   const char* name() const override { return "put_bucket_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_TAGGING; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKET_TAGGING", s->info.method); }
 };
 
 class RGWDeleteBucketTags : public RGWOp {
@@ -902,6 +908,7 @@ public:
   const char* name() const override { return "list_buckets"; }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKETS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKETS", s->info.method); }
 }; // class RGWListBuckets
 
 class RGWGetUsage : public RGWOp {
@@ -931,6 +938,7 @@ public:
 
   const char* name() const override { return "get_self_usage"; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.USER_USAGE", s->info.method); }
 };
 
 class RGWStatAccount : public RGWOp {
@@ -948,6 +956,7 @@ public:
   const char* name() const override { return "stat_account"; }
   RGWOpType get_type() override { return RGW_OP_STAT_ACCOUNT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.ACCOUNT_STATUS", s->info.method); }
 };
 
 class RGWListBucket : public RGWOp {
@@ -987,6 +996,7 @@ public:
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   virtual bool need_container_stats() { return false; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKET", s->info.method); }
 };
 
 class RGWGetBucketLocation : public RGWOp {
@@ -1060,6 +1070,7 @@ public:
   const char* name() const override { return "get_bucket_website"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_WEBSITE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  std::string canonical_name() const override { return fmt::format("WEBSITE.{}.BUCKET_WEBSITE", s->info.method); }
 };
 
 class RGWSetBucketWebsite : public RGWOp {
@@ -1079,6 +1090,7 @@ public:
   const char* name() const override { return "set_bucket_website"; }
   RGWOpType get_type() override { return RGW_OP_SET_BUCKET_WEBSITE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  std::string canonical_name() const override { return fmt::format("WEBSITE.{}.BUCKET_WEBSITE", s->info.method); }
 };
 
 class RGWDeleteBucketWebsite : public RGWOp {
@@ -1093,6 +1105,7 @@ public:
   const char* name() const override { return "delete_bucket_website"; }
   RGWOpType get_type() override { return RGW_OP_SET_BUCKET_WEBSITE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  std::string canonical_name() const override { return fmt::format("WEBSITE.{}.BUCKET_WEBSITE", s->info.method); }
 };
 
 class RGWStatBucket : public RGWOp {
@@ -1110,6 +1123,7 @@ public:
   const char* name() const override { return "stat_bucket"; }
   RGWOpType get_type() override { return RGW_OP_STAT_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKET_STATUS", s->info.method); }
 };
 
 class RGWCreateBucket : public RGWOp {
@@ -1142,6 +1156,7 @@ class RGWCreateBucket : public RGWOp {
   const char* name() const override { return "create_bucket"; }
   RGWOpType get_type() override { return RGW_OP_CREATE_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKET", s->info.method); }
 };
 
 class RGWDeleteBucket : public RGWOp {
@@ -1159,6 +1174,7 @@ public:
   const char* name() const override { return "delete_bucket"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKET", s->info.method); }
 };
 
 struct rgw_slo_entry {
@@ -1328,6 +1344,10 @@ public:
   const char* name() const override { return "put_obj"; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  std::string canonical_name() const override {
+    const bool multipart = !multipart_upload_id.empty();
+    return fmt::format("REST.{}.{}", s->info.method, multipart ? "PART" : "OBJECT");
+  }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
   bool always_do_bucket_logging() const override { return false; }
 };
@@ -1467,6 +1487,7 @@ public:
   RGWOpType get_type() override { return RGW_OP_PUT_METADATA_OBJECT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   virtual bool need_object_expiration() { return false; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT_METADATA", s->info.method); }
 };
 
 class RGWRestoreObj : public RGWOp {
@@ -1486,6 +1507,7 @@ public:
   const char* name() const override { return "restore_obj"; }
   RGWOpType get_type() override { return RGW_OP_RESTORE_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT", s->info.method); }
 };
 
 class RGWDeleteObj : public RGWOp {
@@ -1521,6 +1543,7 @@ public:
   RGWOpType get_type() override { return RGW_OP_DELETE_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
   virtual bool need_object_expiration() { return false; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT", s->info.method); }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
 };
 
@@ -1617,6 +1640,7 @@ public:
   const char* name() const override { return "copy_obj"; }
   RGWOpType get_type() override { return RGW_OP_COPY_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT", s->info.method); }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
 };
 
@@ -1635,6 +1659,7 @@ public:
   const char* name() const override { return "get_acls"; }
   RGWOpType get_type() override { return RGW_OP_GET_ACLS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.ACL", s->info.method); }
 };
 
 class RGWPutACLs : public RGWOp {
@@ -1656,6 +1681,7 @@ public:
   const char* name() const override { return "put_acls"; }
   RGWOpType get_type() override { return RGW_OP_PUT_ACLS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.ACL", s->info.method); }
 };
 
 class RGWGetObjAttrs : public RGWGetObj {
@@ -1717,6 +1743,7 @@ public:
   const char* name() const override { return "get_lifecycle"; }
   RGWOpType get_type() override { return RGW_OP_GET_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.LIFECYCLE", s->info.method); }
 };
 
 class RGWPutLC : public RGWOp {
@@ -1749,6 +1776,7 @@ public:
   const char* name() const override { return "put_lifecycle"; }
   RGWOpType get_type() override { return RGW_OP_PUT_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.LIFECYCLE", s->info.method); }
 };
 
 class RGWDeleteLC : public RGWOp {
@@ -1761,6 +1789,7 @@ public:
   void send_response() override = 0;
   const char* name() const override { return "delete_lifecycle"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_LC; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.LIFECYCLE", s->info.method); }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 
@@ -1777,6 +1806,7 @@ public:
   const char* name() const override { return "get_cors"; }
   RGWOpType get_type() override { return RGW_OP_GET_CORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.CORS", s->info.method); }
 };
 
 class RGWPutCORS : public RGWOp {
@@ -2539,6 +2569,7 @@ public:
   const char* name() const override { return "put_obj_retention"; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ_RETENTION; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.RETENTION", s->info.method); }
 };
 
 class RGWGetObjRetention : public RGWOp {
@@ -2567,6 +2598,7 @@ public:
   const char* name() const override { return "put_obj_legal_hold"; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ_LEGAL_HOLD; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.LEGAL_HOLD", s->info.method); }
 };
 
 class RGWGetObjLegalHold : public RGWOp {
@@ -2597,6 +2629,7 @@ public:
   const char* name() const override { return "config_bucket_meta_search"; }
   virtual RGWOpType get_type() override { return RGW_OP_CONFIG_BUCKET_META_SEARCH; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKET_MDSEARCH", s->info.method); }
 };
 
 class RGWGetBucketMetaSearch : public RGWOp {
@@ -2610,6 +2643,7 @@ public:
   const char* name() const override { return "get_bucket_meta_search"; }
   virtual RGWOpType get_type() override { return RGW_OP_GET_BUCKET_META_SEARCH; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKET_MDSEARCH", s->info.method); }
 };
 
 class RGWDelBucketMetaSearch : public RGWOp {
@@ -2623,6 +2657,7 @@ public:
   const char* name() const override { return "delete_bucket_meta_search"; }
   virtual RGWOpType delete_type() { return RGW_OP_DEL_BUCKET_META_SEARCH; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.BUCKET_MDSEARCH", s->info.method); }
 };
 
 class RGWGetClusterStat : public RGWOp {
