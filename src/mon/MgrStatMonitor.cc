@@ -66,6 +66,14 @@ void MgrStatMonitor::create_initial()
   encode(service_map, pending_service_map_bl, CEPH_FEATURES_ALL);
 }
 
+void MgrStatMonitor::clear_pool_availability(int64_t poolid)
+{
+  dout(20) << __func__ << dendl;
+  pool_availability.erase(poolid);
+  pool_availability.insert({poolid, PoolAvailability()});
+  dout(20) << __func__ << " cleared availability score for pool: " << poolid << dendl;
+}
+
 void MgrStatMonitor::calc_pool_availability()
 {
   dout(20) << __func__ << dendl;
