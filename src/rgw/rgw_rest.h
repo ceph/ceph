@@ -888,8 +888,7 @@ inline std::string compute_domain_uri(const req_state *s) {
   std::string uri = (!s->info.domain.empty()) ? s->info.domain :
     [&s]() -> std::string {
     RGWEnv const &env(*(s->info.env));
-    std::string uri =
-    env.get("SERVER_PORT_SECURE") ? "https://" : "http://";
+    std::string uri = rgw_transport_is_secure(s->cct, env) ? "https://" : "http://";
     if (env.exists("SERVER_NAME")) {
       uri.append(env.get("SERVER_NAME", "<SERVER_NAME>"));
     } else {
