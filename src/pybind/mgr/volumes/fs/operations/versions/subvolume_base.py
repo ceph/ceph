@@ -442,6 +442,32 @@ class SubvolumeBase(object):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
+    def _get_clone_source_info(self):
+        try:
+            src_vol_name = self.metadata_mgr.get_option('source', 'volume')
+            src_subvol_name = self.metadata_mgr.get_option('source', 'subvolume')
+            src_snap_name = self.metadata_mgr.get_option('source', 'snapshot')
+            clone_src_info = {'volume': src_vol_name, 'subvolume': src_subvol_name,
+                              'snapshot': src_snap_name}
+
+            try:
+                src_group_name = self.metadata_mgr.get_option('source', 'group')
+                clone_src_info['group'] = src_group_name
+            except MetadataMgrException as e:
+                if e.errno == -errno.ENOENT:
+                    # group name won't be saved in .meta file in case it's
+                    # default group
+                    clone_src_info['group'] = '_nogroup'
+                else:
+                    raise
+        except MetadataMgrException as e:
+            if e.errno == -errno.ENOENT:
+                clone_src_info = {}
+            else:
+                raise
+
+        return clone_src_info
+
     def info(self):
         subvolpath = (self.metadata_mgr.get_global_option(
                       MetadataManager.GLOBAL_META_KEY_PATH))
@@ -494,7 +520,8 @@ class SubvolumeBase(object):
         except cephfs.NoData:
             casesensitive = True
 
-        return {'path': subvolpath,
+        subvol_info = {
+                'path': subvolpath,
                 'type': etype.value,
                 'uid': int(st["uid"]),
                 'gid': int(st["gid"]),
@@ -516,6 +543,22 @@ class SubvolumeBase(object):
                 'normalization': normalization,
                 'casesensitive': casesensitive,
         }
+
+        subvol_src_info = self._get_clone_source_info()
+        if subvol_src_info:
+            subvol_info['source'] = subvol_src_info
+        else:
+            # it could be that the clone was created in previous release of Ceph
+            # where its source info used to deleted after cloning finishes.
+            # print "N/A" for such cases.
+            if self.subvol_type == SubvolumeTypes.TYPE_CLONE:
+                subvol_info['source'] = 'N/A'
+            else:
+                # only clones can have a source subvol, therefore don't even
+                # print "N/A" for source info if subvolume is not a clone.
+                pass
+
+        return subvol_info
 
     def set_user_metadata(self, keyname, value):
         try:
