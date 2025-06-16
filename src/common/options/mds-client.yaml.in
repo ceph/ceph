@@ -598,3 +598,12 @@ options:
   services:
   - mds_client
   min: 1
+- name: client_inject_write_delay_secs
+  type: secs
+  level: dev
+  desc: induce delay in write operation for testing
+  long_desc: Inject a delay in write operation after grabbing required cap references (Fb caps in this case). This config is disabled by default (value of 0) and is to be used for the purpose of validating a race case bug with concurrent fsync.
+  default: 0
+  services:
+  - mds_client
+  min: 0

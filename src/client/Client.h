@@ -681,6 +681,7 @@ public:
                             Context *onfinish = nullptr,
                             bufferlist *blp = nullptr,
                             bool do_fsync = false, bool syncdataonly = false);
+  int64_t nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinish);
   loff_t ll_lseek(Fh *fh, loff_t offset, int whence);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
@@ -1345,6 +1346,10 @@ protected:
   struct mount_state_t mount_state;
   struct initialize_state_t initialize_state;
 
+  int get_injected_write_delay_secs() const {
+    return injected_write_delay_secs;
+  }
+
 private:
   class C_Read_Finisher : public Context {
   public:
@@ -1779,7 +1784,7 @@ private:
                       int64_t offset, bool write, Context *onfinish = nullptr,
                       bufferlist *blp = nullptr);
   int _flush(Fh *fh);
-  void nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinish);
+
   int _fsync(Fh *fh, bool syncdataonly);
   int _fsync(Inode *in, bool syncdataonly);
   int _sync_fs();
@@ -1963,6 +1968,7 @@ private:
 
   ceph::coarse_mono_time last_auto_reconnect;
   std::chrono::seconds caps_release_delay, mount_timeout;
+  int injected_write_delay_secs;
   // trace generation
   std::ofstream traceout;
 
