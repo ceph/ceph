@@ -13,6 +13,7 @@ import { Daemon } from '../models/daemon.interface';
 import { CdDevice } from '../models/devices';
 import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
+import { Host } from '../models/host.interface';
 
 @Injectable({
   providedIn: 'root'
@@ -163,7 +164,7 @@ export class HostService extends ApiClient {
     );
   }
 
-  getAllHosts(): Observable<object[]> {
-    return this.http.get<object[]>(`${this.baseUIURL}/list`);
+  getAllHosts(): Observable<Host[]> {
+    return this.http.get<Host[]>(`${this.baseUIURL}/list`);
   }
 }
