@@ -177,12 +177,20 @@ int RGWSI_Cls::MFA::otp_get_current_time(const DoutPrefixProvider *dpp, const rg
     return r;
   }
 
-  r = rados::cls::otp::OTP::get_current_time(ref.ioctx, ref.obj.oid, result);
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  int rval = 0;
+  rados::cls::otp::get_current_time(op, bl, rval);
+
+  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), nullptr, y);
   if (r < 0) {
     return r;
   }
+  if (rval < 0) {
+    return rval;
+  }
 
-  return 0;
+  return rados::cls::otp::get_current_time_decode(bl, *result);
 }
 
 int RGWSI_Cls::MFA::set_mfa(const DoutPrefixProvider *dpp, const string& oid, const list<rados::cls::otp::otp_info_t>& entries,

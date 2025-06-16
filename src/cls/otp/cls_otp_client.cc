@@ -159,23 +159,18 @@ namespace rados {
         return get(op, ioctx, oid, nullptr, true, result);
       }
 
-      int OTP::get_current_time(librados::IoCtx& ioctx, const string& oid,
-                                ceph::real_time *result) {
+      void get_current_time(librados::ObjectReadOperation& rop,
+                            bufferlist& out, int& op_ret)
+      {
         cls_otp_get_current_time_op op;
         bufferlist in;
-        bufferlist out;
-        int op_ret;
         encode(op, in);
-        ObjectReadOperation rop;
         rop.exec("otp", "get_current_time", in, &out, &op_ret);
-        int r = ioctx.operate(oid, &rop, nullptr);
-        if (r < 0) {
-          return r;
-        }
-        if (op_ret < 0) {
-          return op_ret;
-        }
+      }
 
+      int get_current_time_decode(const bufferlist& out,
+                                  ceph::real_time& result)
+      {
         cls_otp_get_current_time_reply ret;
         auto iter = out.cbegin();
         try {
@@ -184,7 +179,7 @@ namespace rados {
 	  return -EBADMSG;
         }
 
-        *result = ret.time;
+        result = ret.time;
 
         return 0;
       }
