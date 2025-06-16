@@ -10123,10 +10123,12 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
 
   // TODO: consider per-bucket sync policy here?
   const bool is_multisite = svc.zone->need_to_log_data();
+  const bool is_versioned = bucket_info.versioned();
 
-  quota_handler->check_bucket_shards(dpp, max_objs_per_shard, num_source_shards,
-				     num_objs, is_multisite, need_resharding,
-				     &suggested_num_shards);
+  quota_handler->check_bucket_shards(dpp, max_objs_per_shard,
+				     num_source_shards, num_objs,
+				     is_multisite, is_versioned,
+				     need_resharding, &suggested_num_shards);
   if (! need_resharding) {
     return 0;
   }
