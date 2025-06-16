@@ -887,7 +887,7 @@ protected:
       assert(dynamic_cast<CachedExtent*>(child)->is_logical());
       assert(
 	dynamic_cast<CachedExtent*>(child)->is_pending_in_trans(t.get_trans_id())
-	|| me.is_stable_written());
+	|| me.is_stable_ready());
       if (data_only) {
 	return etvr.is_viewable_extent_data_stable(
 	  t, dynamic_cast<CachedExtent*>(child));

@@ -489,9 +489,9 @@ public:
     if (extent->is_stable()) {
       p_extent = extent->get_transactional_view(t);
       if (p_extent != extent.get()) {
-        assert(!extent->is_stable_writting());
+        assert(!extent->is_pending_io());
         assert(p_extent->is_pending_in_trans(t.get_trans_id()));
-        assert(!p_extent->is_stable_writting());
+        assert(!p_extent->is_pending_io());
         ++access_stats.trans_pending;
         ++stats.access.trans_pending;
         if (p_extent->is_mutable()) {
@@ -536,7 +536,7 @@ public:
         needs_step_2 = !ret.is_paddr_known;
       }
     } else {
-      assert(!extent->is_stable_writting());
+      assert(!extent->is_pending_io());
       assert(extent->is_pending_in_trans(t.get_trans_id()));
       ++access_stats.trans_pending;
       ++stats.access.trans_pending;

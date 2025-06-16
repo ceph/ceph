@@ -490,7 +490,7 @@ public:
         }
       }
       if (ret == Transaction::get_extent_ret::PRESENT) {
-        if (child_node->is_stable_written()) {
+        if (child_node->is_stable_ready()) {
           assert(child_node->is_valid());
           auto cnode = child_node->template cast<child_node_t>();
           assert(cnode->has_parent_tracker());
