@@ -4686,6 +4686,30 @@ int RGWCompleteMultipart_ObjStore_S3::get_params(optional_yield y)
 
   map_qs_metadata(s, true);
 
+  // get encrypt headers to reflect from multipart upload
+  // mostly to verify sse-c here
+  std::unique_ptr<rgw::sal::MultipartUpload> upload =
+    s->bucket->get_multipart_upload(s->object->get_name(),
+        upload_id);
+  std::unique_ptr<rgw::sal::Object> obj = upload->get_meta_obj();
+  obj->set_in_extra_data(true);
+  int res = obj->get_obj_attrs(s->yield, this);
+  if (res < 0 && res != -ENOENT) {
+    ldpp_dout(this, 0) << "ERROR: " << __func__ << " failed to get object attrs for "
+                      << s->object->get_name() << ": " << cpp_strerror(res) << dendl;
+    return res;
+  }
+
+  // if we found attrs, populate crypt_http_responses
+  if (res == 0) {
+    static constexpr bool copy_source = false;
+    res = rgw_s3_prepare_decrypt(s, s->yield, obj->get_attrs(),
+                                nullptr, &crypt_http_responses, copy_source);
+    if (res < 0) {
+      return res;
+    }
+  }
+
   return do_aws4_auth_completion();
 }
 
@@ -4695,6 +4719,8 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   dump_errno(s);
   dump_header_if_nonempty(s, "x-amz-version-id", version_id);
+  for (auto &it : crypt_http_responses)
+    dump_header(s, it.first, it.second);
   end_header(s, this, to_mime_type(s->format));
   if (op_ret == 0) {
     dump_start(s);
