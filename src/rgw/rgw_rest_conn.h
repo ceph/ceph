@@ -168,7 +168,7 @@ public:
     bool sync_manifest{false};
     bool sync_cloudtiered{false};
 
-    bool skip_decrypt{true};
+    std::string decrypt_mode;
     RGWHTTPStreamRWRequest::ReceiveCB *cb{nullptr};
 
     bool range_is_set{false};
@@ -185,7 +185,7 @@ public:
               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
-              bool skip_decrypt, rgw_zone_set_entry *dst_zone_trace, bool sync_cloudtiered,
+              const std::string& decrypt_mode, rgw_zone_set_entry *dst_zone_trace, bool sync_cloudtiered,
               bool send, RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req);
   int complete_request(const DoutPrefixProvider* dpp,
                        RGWRESTStreamRWRequest *req,
