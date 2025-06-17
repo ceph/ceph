@@ -1,7 +1,5 @@
-find_program(GPERF gperf)
-if(NOT GPERF)
-  message(FATAL_ERROR "Can't find gperf")
-endif()
+find_program(GPERF gperf
+  REQUIRED)
 
 if(WITH_RADOSGW_BACKTRACE_LOGGING)
   add_definitions(-D_BACKTRACE_LOGGING)
