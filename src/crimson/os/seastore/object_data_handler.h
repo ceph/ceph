@@ -89,12 +89,13 @@ struct overwrite_range_t {
   overwrite_range_t(
     objaddr_t unaligned_len,
     laddr_offset_t unaligned_begin,
-    laddr_offset_t unaligned_end)
+    laddr_offset_t unaligned_end,
+    extent_len_t block_size)
     : unaligned_len(unaligned_len),
       unaligned_begin(unaligned_begin),
       unaligned_end(unaligned_end),
-      aligned_begin(unaligned_begin.get_aligned_laddr()),
-      aligned_end(unaligned_end.get_roundup_laddr()),
+      aligned_begin(unaligned_begin.get_aligned_laddr(block_size)),
+      aligned_end(unaligned_end.get_roundup_laddr(block_size)),
       aligned_len(
 	aligned_end.template get_byte_distance<
 	  extent_len_t>(aligned_begin))
