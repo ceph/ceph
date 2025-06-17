@@ -26,6 +26,7 @@ overrides:
         osd class load list: "*"
         osd class default list: "*"
 tasks:
+- perf_counter_check:
 - workunit:
     clients:
       client.0:
