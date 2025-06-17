@@ -1005,19 +1005,21 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
   assert(!bl.has_value() || bl->length() == len);
   auto unaligned_begin = data_base + offset;
   auto unaligned_end = data_base + offset + len;
-  assert(first_mapping.get_key() <= unaligned_begin.get_aligned_laddr());
+  assert(first_mapping.get_key() <= unaligned_begin.get_aligned_laddr(
+    ctx.tm.get_block_size()));
   DEBUGT(
     "data_base={}, offset=0x{:x}, len=0x{:x}, "
     "aligned_begin={}, aligned_end={}",
     ctx.t, data_base, offset, len,
-    unaligned_begin.get_aligned_laddr(),
-    unaligned_end.get_roundup_laddr());
+    unaligned_begin.get_aligned_laddr(ctx.tm.get_block_size()),
+    unaligned_end.get_roundup_laddr(ctx.tm.get_block_size()));
   return seastar::do_with(
     data_t{std::nullopt, std::move(bl), std::nullopt},
     overwrite_range_t{
       len,
       unaligned_begin,
-      unaligned_end},
+      unaligned_end,
+      ctx.tm.get_block_size()},
     [first_mapping=std::move(first_mapping),
     this, ctx](auto &data, auto &overwrite_range) {
     if (overwrite_range.is_range_in_mapping(first_mapping)) {
@@ -1168,9 +1170,10 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
       laddr_offset_t l_start =
         object_data.get_reserved_data_base() + obj_offset;
       laddr_offset_t l_end = l_start + len;
-      laddr_t aligned_start = l_start.get_aligned_laddr();
+      laddr_t aligned_start = l_start.get_aligned_laddr(
+	ctx.tm.get_block_size());
       loffset_t aligned_length =
-	  l_end.get_roundup_laddr().get_byte_distance<
+	  l_end.get_roundup_laddr(ctx.tm.get_block_size()).get_byte_distance<
 	    loffset_t>(aligned_start);
       return ctx.tm.get_pins(
         ctx.t,
@@ -1192,7 +1195,8 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
             extent_len_t read_start;
             extent_len_t read_start_aligned;
             if (l_current == l_start) { // first pin may skip head
-              ceph_assert(l_current.get_aligned_laddr() >= pin_start);
+              ceph_assert(l_current.get_aligned_laddr(
+		ctx.tm.get_block_size()) >= pin_start);
               read_start = l_current.template
                 get_byte_distance<extent_len_t>(pin_start);
               read_start_aligned = p2align(read_start, ctx.tm.get_block_size());
@@ -1225,7 +1229,8 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
             }
 
             // non-zero pin
-            laddr_t l_current_end_aligned = l_current_end.get_roundup_laddr();
+            laddr_t l_current_end_aligned =
+	      l_current_end.get_roundup_laddr(ctx.tm.get_block_size());
             extent_len_t read_len_aligned =
               l_current_end_aligned.get_byte_distance<extent_len_t>(pin_start);
             read_len_aligned -= read_start_aligned;
@@ -1300,9 +1305,10 @@ ObjectDataHandler::fiemap_ret ObjectDataHandler::fiemap(
       laddr_offset_t l_start =
         object_data.get_reserved_data_base() + obj_offset;
       laddr_offset_t l_end = l_start + len;
-      laddr_t aligned_start = l_start.get_aligned_laddr();
+      laddr_t aligned_start = l_start.get_aligned_laddr(
+	ctx.tm.get_block_size());
       loffset_t aligned_length =
-	  l_end.get_roundup_laddr().get_byte_distance<
+	  l_end.get_roundup_laddr(ctx.tm.get_block_size()).get_byte_distance<
 	    loffset_t>(aligned_start);
       return ctx.tm.get_pins(
         ctx.t,
