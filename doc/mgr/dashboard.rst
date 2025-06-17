@@ -780,6 +780,14 @@ the following logout_url: `https://<host_name>|<IP_address>/ /oauth2/sign_out`
 Again, from the IDP, we will need a user with a valid role, this user will be the one to perform
 authorization against, we can create a role like: 'administator' to give admin level access to the user.
 
+Make certain that the ``enable_auth`` flag has been included in the ``ceph orch
+apply mgmt-gateway`` command and that it has been set to ``true`` by running a
+command of the following form:
+
+.. prompt:: bash $
+
+   ceph orch apply mgmt-gateway --enable_auth=true --placement=<ceph-node-02>
+
 To disable SSO:
 
 .. prompt:: bash $
