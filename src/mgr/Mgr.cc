@@ -173,8 +173,11 @@ void Mgr::background_init(Context *completion)
     init();
     py_module_registry->check_all_modules_started(
 	new LambdaContext([this, completion](int){
-	initializing = false;
-	initialized = true;
+	  {
+	    std::lock_guard l(lock);
+	    initializing = false;
+	    initialized = true;
+	  }
 	completion->complete(0);
       }));
   }));
