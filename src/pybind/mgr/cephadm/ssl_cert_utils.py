@@ -209,8 +209,10 @@ class SSLCerts:
         _hosts: Union[str, List[str]],
         _addrs: Union[str, List[str]],
         custom_san_list: Optional[List[str]] = None,
+        duration_in_days: Optional[int] = None,
     ) -> Tuple[str, str]:
 
+        cert_duration_in_days = duration_in_days or self.certificate_duration_days
         addrs = [_addrs] if isinstance(_addrs, str) else _addrs
         hosts = [_hosts] if isinstance(_hosts, str) else _hosts
 
@@ -228,7 +230,7 @@ class SSLCerts:
         builder = builder.subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, addrs[0]), ]))
         builder = builder.issuer_name(self.get_root_issuer_name())
         builder = builder.not_valid_before(datetime.now())
-        builder = builder.not_valid_after(datetime.now() + timedelta(days=self.certificate_duration_days))
+        builder = builder.not_valid_after(datetime.now() + timedelta(days=cert_duration_in_days))
         builder = builder.serial_number(x509.random_serial_number())
         builder = builder.public_key(public_key)
 
