@@ -353,7 +353,7 @@ void MetaTool::inode_meta_t::encode(::ceph::bufferlist& bl, uint64_t features)
 int MetaTool::_amend_meta(string& k, inode_meta_t& inode_meta, const string& fn, meta_op& op)
 {
   JSONParser parser;
-  if (!parser.parse(fn.c_str())) {
+  if (!parser.parse(fn)) {
     cout << "Error parsing create user response" << std::endl;
     return -1;
   }
@@ -478,7 +478,7 @@ int MetaTool::amend_fn(meta_op &op)
 int MetaTool::_amend_fn(const string& fn, bool confirm)
 {
   JSONParser parser;
-  if (!parser.parse(fn.c_str())) {
+  if (!parser.parse(fn)) {
     cout << "Error parsing create user response : " << fn << std::endl;
     return -1;
   }
