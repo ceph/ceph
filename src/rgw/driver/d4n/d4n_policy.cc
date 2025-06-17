@@ -973,7 +973,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	erase_dirty_object(dpp, e->key, null_yield);
       }
     } else if (diff < interval) { //end-if std::difftime(time(NULL), e->creationTime) > interval
-      std::this_thread::sleep_for(std::chrono::seconds(interval - diff));
+      cond.wait_for(l, std::chrono::seconds(interval - diff), []{ return quit.load(); });
     }
   } //end-while true
 }
