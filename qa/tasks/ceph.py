@@ -2017,6 +2017,7 @@ def task(ctx, config):
         try:
             if config.get('wait-for-healthy', True):
                 healthy(ctx=ctx, config=dict(cluster=config['cluster']))
+    perf_counter_check(ctx,config)
 
             yield
         finally:
