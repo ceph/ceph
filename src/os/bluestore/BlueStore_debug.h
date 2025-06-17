@@ -57,6 +57,10 @@ class BlueStore_debug : public BlueStore
     ghobject_t oid,
     interval_set<uint64_t, std::map, false>& disk_used); // appends, does not clear
 
+  BlockDevice* get_bdev() {
+    return bdev;
+  }
+
 };
 
 #endif

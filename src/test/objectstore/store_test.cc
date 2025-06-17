@@ -30,6 +30,7 @@
 #include "os/ObjectStore.h"
 #if defined(WITH_BLUESTORE)
 #include "os/bluestore/BlueStore.h"
+#include "os/bluestore/BlueStore_debug.h"
 #include "os/bluestore/BlueFS.h"
 #endif
 #include "include/Context.h"
@@ -220,7 +221,7 @@ class MultiLabelTest : public StoreTestDeferredSetup {
   bool bdev_supports_label() {
     BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
     if (!bstore) return false;
-    auto bdev = bstore->get_bdev();
+    auto bdev = bstore->debug().get_bdev();
     if (!bdev) return false;
     return bdev->supported_bdev_label();
   }

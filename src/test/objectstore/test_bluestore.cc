@@ -326,7 +326,7 @@ TEST_F(OnBlueStore, test_write_on_corrupted)
   interval_set<uint64_t, std::map, false> disk_used;
   debug().get_used_disk(cid, oid, disk_used);
   for (auto& it : disk_used) {
-    auto bdev = bs().get_bdev();
+    auto bdev = debug().get_bdev();
     bufferlist bl;
     bl.append(std::string(it.second,'b'));
     bdev->write(it.first, bl, false);
