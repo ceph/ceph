@@ -626,7 +626,7 @@ def task(ctx, config):
         sha1 = config.get('sha1')
         flavor = config.get('flavor', 'default')
         if sha1:
-            if flavor == "crimson":
+            if flavor == "crimson-debug" or flavor == "crimson-release":
                 ctx.rook[cluster_name].image = container_image_name + ':' + sha1 + '-' + flavor
             else:
                 ctx.rook[cluster_name].image = container_image_name + ':' + sha1
