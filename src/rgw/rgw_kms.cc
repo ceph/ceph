@@ -1129,11 +1129,11 @@ class KMSContext : public SSEContext {
                      << "/" << std::hex << std::this_thread::get_id() << std::dec << ", running every "
                      << ttl << dendl;
       while (!stop.stop_requested()) {
+        std::unique_lock<std::mutex> lock(mutex);
+        cond.wait_for(lock, ttl, [&stop] { return stop.stop_requested(); });
         const auto expired_count = cache.expire_erase();
         ldout(cct, 20) << "KMS Cache: TTL reaper thread expired "
                        << expired_count << " entries" << dendl;
-        std::unique_lock<std::mutex> lock(mutex);
-        cond.wait_for(lock, ttl, [&stop] { return stop.stop_requested(); });
       }
     });
   }
@@ -1149,15 +1149,15 @@ class KMSContext : public SSEContext {
               << dendl;
           asio::steady_timer timer(yield.get_executor());
           while (true) {
-            const auto expired_count = cache.expire_erase();
-            ldout(cct, 20) << "KMS Cache: Async TTL reaper expired "
-                           << expired_count << " entries" << dendl;
             timer.expires_after(ttl);
             boost::system::error_code ec;
             timer.async_wait(yield[ec]);
             if (ec == asio::error::operation_aborted) {
               break;
             }
+            const auto expired_count = cache.expire_erase();
+            ldout(cct, 20) << "KMS Cache: Async TTL reaper expired "
+                           << expired_count << " entries" << dendl;
           }
         },
         boost::asio::detached);
