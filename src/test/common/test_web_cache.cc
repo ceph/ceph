@@ -8,7 +8,6 @@
 #include <optional>
 #include <queue>
 #include <random>
-#include <system_error>
 #include <thread>
 
 #include "common/ceph_context.h"
@@ -18,7 +17,6 @@
 #include "gtest/gtest.h"
 #include "include/ceph_assert.h"
 #include "include/msgr.h"
-#include "include/types.h"
 #include "include/uuid.h"
 #include "log/Log.h"
 
