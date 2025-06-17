@@ -2,6 +2,7 @@
 # -*- makefile -*-
 export DH_VERBOSE=1
 export DESTDIR=$(CURDIR)/debian/tmp
+export systemdsystemunitdir = $(shell pkg-config --variable=systemdsystemunitdir systemd | sed s,^/,,)
 
 include /usr/share/dpkg/default.mk
 

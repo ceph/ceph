@@ -1,2 +1,2 @@
-lib/systemd/system/ceph-exporter*
+${systemdsystemunitdir}/ceph-exporter*
 usr/bin/ceph-exporter
