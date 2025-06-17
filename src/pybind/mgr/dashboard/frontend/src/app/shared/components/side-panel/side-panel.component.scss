@@ -1,0 +1,30 @@
+@use './src/styles/vendor/variables' as vv;
+
+:host ::ng-deep cds-panel {
+  &[panel-size='sm'] .cds--header-panel--expanded {
+    inline-size: 20rem;
+  }
+
+  &[panel-size='md'] .cds--header-panel--expanded {
+    inline-size: 30rem;
+  }
+
+  &[panel-size='lg'] .cds--header-panel--expanded {
+    inline-size: 40rem;
+  }
+
+  .cds--header-panel--expanded {
+    background-color: vv.$white;
+    max-inline-size: 100%;
+  }
+}
+
+.overlay {
+  background-color: vv.$side-panel-overlay-bg;
+  bottom: 0;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
