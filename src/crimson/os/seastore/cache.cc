@@ -913,7 +913,6 @@ void Cache::commit_replace_extent(
     add_to_dirty(next, &t_src);
   }
 
-  next->on_replace_prior();
   invalidate_extent(t, *prev);
 }
 
@@ -1300,13 +1299,9 @@ record_t Cache::prepare_record(
     i->prepare_commit();
 
     if (i->is_mutation_pending()) {
-      i->set_io_wait(CachedExtent::extent_state_t::DIRTY);
-      // extent with EXIST_MUTATION_PENDING doesn't have
-      // prior_instance field so skip these extents.
-      // the existing extents should be added into Cache
-      // during complete_commit to sync with gc transaction.
-      commit_replace_extent(t, i, i->prior_instance);
-    } // Note, else(is_exist_mutation_pending), add_extent() atomically
+      i->on_replace_prior();
+    } // else, is_exist_mutation_pending():
+      // - it doesn't have prior_instance to replace
 
     assert(i->get_version() > 0);
     auto final_crc = i->calc_crc32c();
@@ -1373,6 +1368,24 @@ record_t Cache::prepare_record(
     // phase if they are rewritten.
     e->prepare_commit();
   });
+
+  /*
+   * We can only update extent states after the logical linked tree is
+   * resolved:
+   * - on_replace_prior()
+   * - prepare_commit()
+   */
+  for (auto &i: t.mutated_block_list) {
+    if (i->is_valid()) {
+      if (i->is_mutation_pending()) {
+        i->set_io_wait(CachedExtent::extent_state_t::DIRTY);
+        commit_replace_extent(t, i, i->prior_instance);
+      } // else, is_exist_mutation_pending():
+        // - it doesn't have prior_instance to replace
+        // - and add_extent() atomically below
+        // - set_io_wait(DIRTY) atomically below
+    }
+  }
 
   // Transaction is now a go, set up in-memory cache state
   // invalidate now invalid blocks
