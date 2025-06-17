@@ -62,11 +62,12 @@ static void decode_placement_targets(map<string, RGWZoneGroupPlacementTarget>& t
   targets[t.name] = t;
 }
 
-void RGWZone::generate_test_instances(list<RGWZone*> &o)
+list<RGWZone> RGWZone::generate_test_instances()
 {
-  RGWZone *z = new RGWZone;
-  o.push_back(z);
-  o.push_back(new RGWZone);
+  list<RGWZone> o;
+  o.push_back(RGWZone{});
+  o.push_back(RGWZone{});
+  return o;
 }
 
 void RGWZone::dump(Formatter *f) const
@@ -355,15 +356,17 @@ void RGWZonePlacementInfo::dump(Formatter *f) const
    * rather not clutter the output */
 }
 
-void RGWZonePlacementInfo::generate_test_instances(list<RGWZonePlacementInfo*>& o)
+list<RGWZonePlacementInfo> RGWZonePlacementInfo::generate_test_instances()
 {
-  o.push_back(new RGWZonePlacementInfo);
-  o.push_back(new RGWZonePlacementInfo);
-  o.back()->index_pool = rgw_pool("rgw.buckets.index");
+  list<RGWZonePlacementInfo> o;
+  o.push_back(RGWZonePlacementInfo{});
+  o.push_back(RGWZonePlacementInfo{});
+  o.back().index_pool = rgw_pool("rgw.buckets.index");
   
-  o.back()->data_extra_pool = rgw_pool("rgw.buckets.non-ec");
-  o.back()->index_type = rgw::BucketIndexType::Normal;
-  o.back()->inline_data = false;
+  o.back().data_extra_pool = rgw_pool("rgw.buckets.non-ec");
+  o.back().index_type = rgw::BucketIndexType::Normal;
+  o.back().inline_data = false;
+  return o;
 }
 
 void RGWZonePlacementInfo::decode_json(JSONObj *obj)
@@ -427,9 +430,11 @@ void RGWZoneStorageClasses::dump(Formatter *f) const
   }
 }
 
-void RGWZoneStorageClasses::generate_test_instances(list<RGWZoneStorageClasses*>& o)
+list<RGWZoneStorageClasses> RGWZoneStorageClasses::generate_test_instances()
 {
-  o.push_back(new RGWZoneStorageClasses);
+  list<RGWZoneStorageClasses> o;
+  o.push_back(RGWZoneStorageClasses{});
+  return o;
 }
 
 void RGWZoneStorageClasses::decode_json(JSONObj *obj)
@@ -512,12 +517,14 @@ void RGWZoneStorageClass::dump(Formatter *f) const
   }
 }
 
-void RGWZoneStorageClass::generate_test_instances(list<RGWZoneStorageClass*>& o)
+list<RGWZoneStorageClass> RGWZoneStorageClass::generate_test_instances()
 {
-  o.push_back(new RGWZoneStorageClass);
-  o.push_back(new RGWZoneStorageClass);
-  o.back()->data_pool = rgw_pool("pool1");
-  o.back()->compression_type = "zlib";
+  list<RGWZoneStorageClass> o;
+  o.push_back(RGWZoneStorageClass{});
+  o.push_back(RGWZoneStorageClass{});
+  o.back().data_pool = rgw_pool("pool1");
+  o.back().compression_type = "zlib";
+  return o;
 }
 
 void RGWZoneStorageClass::decode_json(JSONObj *obj)

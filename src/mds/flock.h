@@ -123,7 +123,7 @@ public:
   void encode(ceph::bufferlist& bl) const;
   void decode(ceph::bufferlist::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<ceph_lock_state_t*>& ls);
+  static std::list<ceph_lock_state_t> generate_test_instances();
   bool empty() const {
     return held_locks.empty() && waiting_locks.empty() &&
 	   client_held_lock_counts.empty() &&
