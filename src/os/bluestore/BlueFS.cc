@@ -4695,7 +4695,6 @@ void BlueFS::_drain_writer(FileWriter *h)
     if (bdev[i]) {
       if (h->iocv[i]) {
 	h->iocv[i]->aio_wait();
-	delete h->iocv[i];
       }
     }
   }
