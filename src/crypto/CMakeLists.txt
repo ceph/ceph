@@ -1,4 +1,5 @@
-add_custom_target(crypto_plugins)
+# crypto plugins are loaded at runtime by rgw_crypt.cc
+add_custom_target(crypto_plugins ALL)
 set(crypto_plugin_dir ${CEPH_INSTALL_PKGLIBDIR}/crypto)
 
 add_subdirectory(openssl)

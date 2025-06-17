@@ -41,8 +41,6 @@ if(WITH_JAEGER)
     PRIVATE jaeger_base)
 endif()
 
-add_dependencies(os crypto_plugins)
-
 if(WITH_BLUESTORE)
   add_executable(ceph-bluestore-tool
     bluestore/bluestore_tool.cc)
