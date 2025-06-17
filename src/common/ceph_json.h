@@ -308,7 +308,8 @@ public:
   }
 
   bool parse(ceph::buffer::list& bl) {
-	return parse(bl.c_str(), bl.length());
+	// JFW: return parse(bl.c_str(), bl.length());
+	return parse(bl.to_str());
   }
 
   [[deprecated("this may not be reliable")]] bool parse_file(const std::filesystem::path file_name); 
