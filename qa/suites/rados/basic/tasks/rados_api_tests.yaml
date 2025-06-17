@@ -26,7 +26,6 @@ overrides:
         osd class load list: "*"
         osd class default list: "*"
 tasks:
-- ceph:
 - perf_counter_check:
 - workunit:
     clients:
