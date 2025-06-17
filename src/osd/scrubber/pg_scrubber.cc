@@ -2760,18 +2760,19 @@ void PgScrubber::update_scrub_stats(ceph::coarse_real_clock::time_point now_is)
 
   /// \todo use the date library (either the one included in Arrow or directly)
   /// to get the formatting of the time_points.
-
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 25>()) {
     // will only create the debug strings if required
-    char buf[50];
-    auto printable_last = fmt::localtime(clock::to_time_t(m_last_stat_upd));
-    strftime(buf, sizeof(buf), "%Y-%m-%dT%T", &printable_last);
-    dout(20) << fmt::format("{}: period: {}/{}-> {} last:{}",
+    std::time_t time = clock::to_time_t(m_last_stat_upd);
+    std::tm tm_local;
+    if (!localtime_r(&time, &tm_local)) {
+      throw fmt::format_error("time_t value out of range");
+    }
+    dout(20) << fmt::format("{}: period: {}/{}-> {} last:{:%FT%T}",
 			    __func__,
 			    period_active,
 			    period_inactive,
 			    period,
-			    buf)
+			    tm_local)
 	     << dendl;
   }
 
