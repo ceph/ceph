@@ -21,6 +21,7 @@
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager/seastore.h"
 #include "crimson/os/seastore/backref/backref_tree_node.h"
 #include "test/crimson/seastore/test_block.h"
+#include "crimson/os/seastore/logstore/log_node.h"
 
 using std::string_view;
 
@@ -1114,6 +1115,12 @@ CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
     return CachedExtentRef();
   case extent_types_t::TEST_BLOCK_PHYSICAL:
     return alloc_new_non_data_extent<TestBlockPhysical>(t, length, hint, gen);
+  case extent_types_t::LOG_NODE:
+    return alloc_new_non_data_extent<logstore_manager::LogNode>(
+      t, length, hint, gen);
+  case extent_types_t::LOG_LEAF:
+    return alloc_new_non_data_extent<logstore_manager::LogLeafNode>(
+      t, length, hint, gen);
   case extent_types_t::NONE: {
     ceph_assert(0 == "NONE is an invalid extent type");
     return CachedExtentRef();
@@ -2314,6 +2321,18 @@ Cache::do_get_caching_extent_by_type(
         offset, length, std::move(extent_init_func), std::move(on_cache), p_src
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::LOG_NODE:
+      return do_get_caching_extent<logstore_manager::LogNode>(
+        offset, length, std::move(extent_init_func), std::move(on_cache), p_src
+      ).safe_then([](auto extent) {
+        return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::LOG_LEAF:
+      return do_get_caching_extent<logstore_manager::LogLeafNode>(
+        offset, length, std::move(extent_init_func), std::move(on_cache), p_src
+      ).safe_then([](auto extent) {
+        return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::NONE: {
       ceph_assert(0 == "NONE is an invalid extent type");
