@@ -163,8 +163,10 @@ private:
     bufferlist& data,
     blob_vec& bd);
 
-  bool _align_to_disk_block(
+  bool _expand_to_disk_block(
     uint32_t& location,
+    uint32_t& data_end,
+    uint32_t& ref_begin,
     uint32_t& ref_end,
     blob_vec& blobs);
 

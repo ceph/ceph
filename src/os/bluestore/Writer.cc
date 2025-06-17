@@ -1382,11 +1382,14 @@ void BlueStore::Writer::_split_data(
 
 // true = all padded / read properly
 // false = -EIO on reading object
-bool BlueStore::Writer::_align_to_disk_block(
+bool BlueStore::Writer::_expand_to_disk_block(
   uint32_t& location,
   uint32_t& data_end,
+  uint32_t& ref_begin,
+  uint32_t& ref_end,
   blob_vec& blobs)
 {
+  bool result = true;
   ceph_assert(!blobs.empty());
   uint32_t au_size = bstore->min_alloc_size;
   bool left_do_pad;
@@ -1402,11 +1405,15 @@ bool BlueStore::Writer::_align_to_disk_block(
         bufferlist tmp;
         if (left_do_pad) {
           tmp.append_zero(location - left_location);
+          ref_begin = left_location;
           bstore->logger->inc(l_bluestore_write_pad_bytes, location - left_location);
         } else {
           int r = _read_self(left_location, location - left_location, tmp);
-          if (r != 0) {
-            return false;
+          if (r == 0) {
+            ref_begin = left_location;
+          } else {
+            tmp.append_zero(location - left_location);
+            result = false;
           }
         }
         tmp.claim_append(first_blob.disk_data);
@@ -1431,8 +1438,13 @@ bool BlueStore::Writer::_align_to_disk_block(
         } else {
           bufferlist tmp;
           int r = _read_self(data_end, right_location - data_end, tmp);
-          if (r != 0) {
-            return false;
+          if (r == 0) {
+            if (ref_end < onode->onode.size) {
+              ref_end = std::min<uint32_t>(right_location, onode->onode.size);
+            }
+          } else {
+            last_blob.disk_data.append_zero(right_location - data_end);
+            result = false;
           }
           last_blob.disk_data.append(tmp);
         }
@@ -1441,7 +1453,7 @@ bool BlueStore::Writer::_align_to_disk_block(
       data_end = right_location;
     }
   }
-  return true;
+  return result;
 }
 
 // Writes uncompressed data.
@@ -1455,14 +1467,16 @@ void BlueStore::Writer::do_write(
   dout(20) << __func__ << " 0x" << std::hex << location << "~" << data.length() << dendl;
   dout(25) << "on: " << onode->print(pp_mode) << dendl;
   blob_vec bd;
+  uint32_t ref_begin = location;
   uint32_t ref_end = location + data.length();
   uint32_t data_end = location + data.length();
   _split_data(location, data, bd);
-  _align_to_disk_block(location, data_end, bd);
-  if (ref_end < onode->onode.size) {
-    ref_end = std::min<uint32_t>(data_end, onode->onode.size);
+  bool expand_result = _expand_to_disk_block(location, data_end, ref_begin, ref_end, bd);
+  do_write_with_blobs(location, data_end, ref_begin, ref_end, bd, expand_result);
+  if (!expand_result) {
+    derr << "Writing to object " << onode->oid << " range "
+      << bluestore_pextent_t(ref_begin, ref_end) << " OK" << dendl;
   }
-  do_write_with_blobs(location, data_end, location, ref_end, bd);
 }
 
 // Special variant of Writer::do_write that does not try to read before writing.
