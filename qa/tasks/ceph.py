@@ -2019,8 +2019,10 @@ def task(ctx, config):
                 healthy(ctx=ctx, config=dict(cluster=config['cluster']))
 
             yield
-            perf_counter_check(ctx,config)
+           
         finally:
+            if config.get("perf_counter_check", True):
+                perf_counter_check(ctx, config)
             # set pg_num_targets back to actual pg_num, so we don't have to
             # wait for pending merges (which can take a while!)
             if not config.get('skip_stop_pg_num_changes', True):
