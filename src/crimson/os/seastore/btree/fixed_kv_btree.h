@@ -1894,72 +1894,72 @@ private:
     return seastar::do_with(
       depth_t{1},
       [FNAME, this, c, &iter](auto &to_merge) {
-        return trans_intr::repeat(
-          [FNAME, this, c, &iter, &to_merge] {
+      return trans_intr::repeat(
+        [FNAME, this, c, &iter, &to_merge] {
+        SUBTRACET(
+          seastore_fixedkv_tree,
+          "merging depth {}",
+          c.trans,
+          to_merge);
+        auto &parent_pos = iter.get_internal(to_merge + 1);
+        auto merge_fut = handle_merge_iertr::now();
+        if (to_merge > 1) {
+          auto &pos = iter.get_internal(to_merge);
+          merge_fut = merge_level(c, to_merge, parent_pos, pos);
+        } else {
+          auto &pos = iter.leaf;
+          merge_fut = merge_level(c, to_merge, parent_pos, pos);
+        }
+
+        return merge_fut.si_then([FNAME, this, c, &iter, &to_merge] {
+          ++to_merge;
+          auto &pos = iter.get_internal(to_merge);
+          if (to_merge == iter.get_depth()) {
+            if (pos.node->get_size() == 1) {
+              SUBTRACET(seastore_fixedkv_tree, "collapsing root", c.trans);
+              c.cache.retire_extent(c.trans, pos.node);
+              assert(pos.pos == 0);
+              auto node_iter = pos.get_iter();
+              iter.internal.pop_back();
+              get_tree_stats<self_type>(c.trans).depth = iter.get_depth();
+              get_tree_stats<self_type>(c.trans).extents_num_delta--;
+
+              root_block = c.cache.duplicate_for_write(
+                c.trans, root_block
+              )->template cast<RootBlock>();
+              get_root().set_location(
+                node_iter->get_val().maybe_relative_to(pos.node->get_paddr()));
+              get_root().set_depth(iter.get_depth());
+              if (iter.get_depth() > 1) {
+                auto root_node = iter.get_internal(iter.get_depth()).node;
+                set_root_node(root_node);
+              } else {
+                set_root_node(iter.leaf.node);
+              }
+            } else {
+              SUBTRACET(seastore_fixedkv_tree, "no need to collapse root", c.trans);
+            }
+            return seastar::stop_iteration::yes;
+          } else if (pos.node->below_min_capacity()) {
             SUBTRACET(
               seastore_fixedkv_tree,
-              "merging depth {}",
+              "continuing, next node {} depth {} at min",
               c.trans,
+              *pos.node,
               to_merge);
-            auto &parent_pos = iter.get_internal(to_merge + 1);
-            auto merge_fut = handle_merge_iertr::now();
-            if (to_merge > 1) {
-              auto &pos = iter.get_internal(to_merge);
-              merge_fut = merge_level(c, to_merge, parent_pos, pos);
-            } else {
-              auto &pos = iter.leaf;
-              merge_fut = merge_level(c, to_merge, parent_pos, pos);
-            }
-
-            return merge_fut.si_then([FNAME, this, c, &iter, &to_merge] {
-              ++to_merge;
-              auto &pos = iter.get_internal(to_merge);
-              if (to_merge == iter.get_depth()) {
-                if (pos.node->get_size() == 1) {
-                  SUBTRACET(seastore_fixedkv_tree, "collapsing root", c.trans);
-                  c.cache.retire_extent(c.trans, pos.node);
-                  assert(pos.pos == 0);
-                  auto node_iter = pos.get_iter();
-                  iter.internal.pop_back();
-                  get_tree_stats<self_type>(c.trans).depth = iter.get_depth();
-                  get_tree_stats<self_type>(c.trans).extents_num_delta--;
-
-                  root_block = c.cache.duplicate_for_write(
-                    c.trans, root_block
-                  )->template cast<RootBlock>();
-                  get_root().set_location(
-                    node_iter->get_val().maybe_relative_to(pos.node->get_paddr()));
-                  get_root().set_depth(iter.get_depth());
-                  if (iter.get_depth() > 1) {
-                    auto root_node = iter.get_internal(iter.get_depth()).node;
-                    set_root_node(root_node);
-                  } else {
-                    set_root_node(iter.leaf.node);
-                  }
-                } else {
-                  SUBTRACET(seastore_fixedkv_tree, "no need to collapse root", c.trans);
-                }
-                return seastar::stop_iteration::yes;
-              } else if (pos.node->below_min_capacity()) {
-                SUBTRACET(
-                  seastore_fixedkv_tree,
-                  "continuing, next node {} depth {} at min",
-                  c.trans,
-                  *pos.node,
-                  to_merge);
-                return seastar::stop_iteration::no;
-              } else {
-                SUBTRACET(
-                  seastore_fixedkv_tree,
-                  "complete, next node {} depth {} not min",
-                  c.trans,
-                  *pos.node,
-                  to_merge);
-                return seastar::stop_iteration::yes;
-              }
-            });
-          });
+            return seastar::stop_iteration::no;
+          } else {
+            SUBTRACET(
+              seastore_fixedkv_tree,
+              "complete, next node {} depth {} not min",
+              c.trans,
+              *pos.node,
+              to_merge);
+            return seastar::stop_iteration::yes;
+          }
+        });
       });
+    });
   }
 
   template <typename NodeType,
