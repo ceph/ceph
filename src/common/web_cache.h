@@ -26,12 +26,9 @@
 #include <optional>
 #include <ostream>
 #include <shared_mutex>
-#include <thread>
-#include <tuple>
 #include <unordered_map>
 #include <utility>
 
-#include "common/ceph_context.h"
 #include "common/ceph_time.h"
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
