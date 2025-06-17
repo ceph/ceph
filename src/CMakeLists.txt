@@ -290,10 +290,8 @@ endif()
 
 option(ENABLE_COVERAGE "Coverage is enabled" OFF)
 if(${ENABLE_COVERAGE})
-  find_program(HAVE_GCOV gcov)
-  if(NOT HAVE_GCOV)
-    message(FATAL_ERROR "Coverage Enabled but gcov Not Found")
-  endif()
+  find_program(HAVE_GCOV gcov
+    REQUIRED)
   add_compile_options(
     --coverage
     -O0)
@@ -1000,7 +998,8 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
 
   set(_REFLECTION grpc++_reflection)
   if(CMAKE_CROSSCOMPILING)
-    find_program(_PROTOBUF_PROTOC protoc)
+    find_program(_PROTOBUF_PROTOC protoc
+      REQUIRED)
   else()
     set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
   endif()
@@ -1011,7 +1010,8 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
   message(STATUS "Using gRPC ${gRPC_VERSION}")
   set(_GRPC_GRPCPP gRPC::grpc++)
   if(CMAKE_CROSSCOMPILING)
-    find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin)
+    find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin
+      REQUIRED)
   else()
     set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
   endif()
