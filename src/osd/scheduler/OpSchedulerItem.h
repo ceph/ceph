@@ -242,11 +242,20 @@ public:
 
   op_scheduler_class get_scheduler_class() const final {
     auto type = op->get_req()->get_type();
-    if (type == CEPH_MSG_OSD_OP ||
-	type == CEPH_MSG_OSD_BACKOFF) {
-      return op_scheduler_class::client;
-    } else {
-      return op_scheduler_class::immediate;
+    switch (type) {
+      case CEPH_MSG_OSD_OP:
+      case CEPH_MSG_OSD_BACKOFF:
+      case MSG_OSD_EC_READ:
+      case MSG_OSD_EC_WRITE: {
+        auto priority = op->get_req()->get_priority();
+        if (priority <= PeeringState::recovery_msg_priority_t::BEST_EFFORT) {
+          return op_scheduler_class::background_best_effort;
+        } else {
+          return op_scheduler_class::client;
+        }
+      }
+      default:
+        return op_scheduler_class::immediate;
     }
   }
 
