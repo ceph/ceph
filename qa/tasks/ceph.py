@@ -2017,9 +2017,9 @@ def task(ctx, config):
         try:
             if config.get('wait-for-healthy', True):
                 healthy(ctx=ctx, config=dict(cluster=config['cluster']))
-    perf_counter_check(ctx,config)
 
             yield
+            perf_counter_check(ctx,config)
         finally:
             # set pg_num_targets back to actual pg_num, so we don't have to
             # wait for pending merges (which can take a while!)
