@@ -898,10 +898,24 @@ int FSCryptFDataDenc::decrypt_bl(uint64_t off, uint64_t len, uint64_t pos, const
   while (pos < target_end) {
     bool has_hole = false;
 
+    /*
+     * Check to see if cur_block is part of a
+     * hole. We expect holes to ordered by offset.
+     *
+     * There is four states it can be in
+     * 1. If position is before hole offset, it cannot be part of a hole
+     * 2. If hole end is less than position, hole occurs completely before
+     * 3. If hole starts after target_end, hole occurs completely after
+     * 4. No conditionals are met, is a hole
+     */
+
     while (hiter != holes.end()) {
       uint64_t hofs = hiter->first;
       uint64_t hlen = hiter->second;
       uint64_t hend = hofs + hlen - 1;
+
+      if (pos < hofs)
+	break;
 
       if (hend < pos) {
         ++hiter;
