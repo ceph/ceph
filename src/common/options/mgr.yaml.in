@@ -164,7 +164,9 @@ options:
   type: millisecs
   level: dev
   default: 0
-  desc: Amount of seconds a mgr module delays loading. For testing purposes only.
+  desc: Amount of milliseconds a mgr module delays loading. For testing purposes only.
+  flags:
+  - runtime
   services:
   - mgr
 - name: mgr_module_load_delay_name
