@@ -188,12 +188,11 @@ int32_t Estimator::split_and_compress(
   uint32_t size = data_bl.length();
   ceph_assert(size > 0);
   uint32_t blobs = (size + wctx->target_blob_size - 1) / wctx->target_blob_size;
-  uint32_t blob_size = p2roundup(size / blobs, au_size);
-  std::vector<uint32_t> blob_sizes(blobs);
-  for (auto& i: blob_sizes) {
-    i = std::min(size, blob_size);
-    size -= i;
-  }
+  uint32_t blob_size = p2roundup((size + blobs - 1) / blobs, au_size);
+  // dividing 'size' to 'blobs'
+  // blobs[*] = blob_size; blobs[last] = whatever remains from 'size'
+  std::vector<uint32_t> blob_sizes(blobs, blob_size);
+  blob_sizes.back() = size - blob_size * (blobs - 1);
   int32_t disk_needed = 0;
   uint32_t bl_src_off = 0;
   for (auto& i: blob_sizes) {
