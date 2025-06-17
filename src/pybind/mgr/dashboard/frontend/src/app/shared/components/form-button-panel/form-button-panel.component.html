@@ -5,7 +5,7 @@
                     [name]="cancelText"></cd-back-button>
     <cd-submit-button *ngIf="showSubmit"
                       (submitAction)="submitAction()"
-                      [disabled]="disabled"
+                      [disabled]="disabled || form.pending || form.invalid"
                       [form]="form"
                       [ariaLabel]="submitText"
                       data-testid="submitBtn"
