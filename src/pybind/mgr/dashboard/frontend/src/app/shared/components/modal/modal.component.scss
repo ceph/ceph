@@ -2,12 +2,14 @@
 
 .modal-header {
   @include mixins.hf;
+
   border-radius: 5px 5px 0 0;
 }
 
 ::ng-deep cd-modal {
   .modal-footer {
     @include mixins.hf;
+
     border-radius: 0 0 5px 5px;
   }
 
