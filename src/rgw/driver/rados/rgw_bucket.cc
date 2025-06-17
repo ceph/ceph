@@ -604,6 +604,7 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+// Move this function over to RGWRados
 /**
  * Loops over all olh entries in a bucket shard and finds ones with
  * exists=false and pending_removal=true. If the pending log is empty on
@@ -680,7 +681,7 @@ static int check_index_olh(rgw::sal::RadosStore* const rados_store,
             continue;
           }
 	  RGWObjState& state = static_cast<rgw::sal::RadosObject*>(object.get())->get_state();
-          ret = store->update_olh(dpp, obj_ctx, &state, bucket->get_info(), obj, y);
+          ret = store->update_olh(dpp, obj_ctx, &state, bucket->get_info(), obj, get_bilog_handler(bucket->get_info()), y);
           if (ret < 0) {
             ldpp_dout(dpp, -1) << "ERROR failed to update olh for: " << olh_entry.key.name << " update_olh(): " << cpp_strerror(-ret) << dendl;
             continue;
