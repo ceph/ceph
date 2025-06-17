@@ -157,6 +157,8 @@ class SMBService(CephService):
                 '', force_ceph_image=True
             )
         config_blobs['service_ports'] = smb_spec.service_ports()
+        if smb_spec.bind_addrs:
+            config_blobs['bind_networks'] = smb_spec.bind_networks()
 
         logger.debug('smb generate_config: %r', config_blobs)
         self._configure_cluster_meta(smb_spec, daemon_spec)
