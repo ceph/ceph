@@ -175,7 +175,7 @@ CORO_TEST_F(NeoRadosWatchNotify, WatchNotifyTimeout, NeoRadosWatchNotifyTest) {
 CORO_TEST_F(NeoRadosWatchNotifyPoll, WatchNotify, NeoRadosTest) {
   static constexpr auto oid = "obj"sv;
   co_await create_obj(oid);
-  auto handle = co_await rados().watch(oid, pool(), asio::use_awaitable);
+  auto handle = co_await rados().watch(oid, pool(), asio::use_awaitable, 300s);
   EXPECT_TRUE(rados().check_watch(handle));
   std::vector<neorados::ObjWatcher> watchers;
   co_await execute(oid, ReadOp{}.list_watchers(&watchers));
@@ -183,7 +183,7 @@ CORO_TEST_F(NeoRadosWatchNotifyPoll, WatchNotify, NeoRadosTest) {
   auto notify = [](neorados::RADOS& r, neorados::IOContext ioc)
     -> asio::awaitable<void> {
     auto [reply_map, missed_set]
-      = co_await r.notify(oid, ioc, {}, {}, asio::use_awaitable);
+      = co_await r.notify(oid, ioc, {}, 300s, asio::use_awaitable);
 
     EXPECT_EQ(1u, reply_map.size());
     EXPECT_EQ(5u, reply_map.begin()->second.length());
