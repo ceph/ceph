@@ -303,7 +303,71 @@ TEST_F(OnBlueStore, test_write_no_read_intense)
   }
 }
 
+TEST_F(OnBlueStore, test_write_on_corrupted)
+{
+  int r;
+  coll_t cid;
+  ghobject_t oid(hobject_t(sobject_t("a_corrupted_object", CEPH_NOSNAP)));
+  auto ch = store->create_new_collection(cid);
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.touch(cid, oid);
+    bufferlist bl;
+    bl.append(std::string(0x4567, 'a'));
+    t.write(cid, oid, 0, 0x4567, bl);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  // corrupt data on disk
+  interval_set<uint64_t, std::map, false> disk_used;
+  debug().get_used_disk(cid, oid, disk_used);
+  for (auto& it : disk_used) {
+    auto bdev = bs().get_bdev();
+    bufferlist bl;
+    bl.append(std::string(it.second,'b'));
+    bdev->write(it.first, bl, false);
+  }
 
+  ch.reset();
+  EXPECT_EQ(store->umount(), 0);
+  EXPECT_EQ(store->mount(), 0);
+  ch = store->open_collection(cid);
+  {
+    bufferlist read_data;
+    r = store->read(ch, oid, 0x1234, 0x1000, read_data);
+    EXPECT_EQ(r, -EIO);
+  }
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append(std::string(0x1000, 'c'));
+    t.write(cid, oid, 0x1234, 0x1000, bl);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  {
+    bufferlist read_data;
+    r = store->read(ch, oid, 0x1234, 0x1000, read_data);
+    EXPECT_EQ(r, 0x1000);
+    bufferlist expected_data;
+    expected_data.append(std::string(0x1000, 'c'));
+    EXPECT_TRUE(bl_eq(expected_data, read_data));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, oid);
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
 
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
@@ -338,6 +402,7 @@ int main(int argc, char **argv) {
 
   g_ceph_context->_conf.set_val_or_die("bdev_debug_aio", "true");
   g_ceph_context->_conf.set_val_or_die("log_max_recent", "10000");
+  g_ceph_context->_conf.set_val_or_die("bluestore_write_v2", "true");
 
   g_ceph_context->_conf.set_val_or_die(
     "enable_experimental_unrecoverable_data_corrupting_features", "*");
