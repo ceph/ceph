@@ -17,14 +17,14 @@ replication, fragmentation) while suppressing the balancing policies using Lua.
 Mantle is based on [1] but the current implementation does *NOT* have the
 following features from that paper:
 
-1. Balancing API: in the paper, the user fills in when, where, how much, and
+#. Balancing API: in the paper, the user fills in when, where, how much, and
    load calculation policies. Currently, Mantle requires only that Lua policies
    return a table of target loads (for example, how much load to send to each
    MDS)
-2. The "how much" hook: in the paper, there was a hook that allowed the user to
+#. The "how much" hook: in the paper, there was a hook that allowed the user to
    control the "fragment selector policy". Currently, Mantle does not have this
    hook.
-3. "Instantaneous CPU utilization" as a metric.
+#. "Instantaneous CPU utilization" as a metric.
 
 [1] Supercomputing '15 Paper:
 http://sc15.supercomputing.org/schedule/event_detail-evid=pap168.html
@@ -58,9 +58,9 @@ metadata load:
 Mantle with `vstart.sh`
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-1. Start Ceph and tune the logging so we can see migrations happen:
+#. Start Ceph and tune the logging so we can see migrations happen:
 
-::
+   ::
 
     cd build
     ../src/vstart.sh -n -l
@@ -71,37 +71,37 @@ Mantle with `vstart.sh`
     done
 
 
-2. Put the balancer into RADOS:
+#. Put the balancer into RADOS:
 
-::
+   ::
 
     bin/rados put --pool=cephfs_metadata_a greedyspill.lua ../src/mds/balancers/greedyspill.lua
 
 
-3. Activate Mantle:
+#. Activate Mantle:
 
-::
+   ::
 
     bin/ceph fs set cephfs max_mds 5
     bin/ceph fs set cephfs_a balancer greedyspill.lua
 
 
-4. Mount CephFS in another window:
+#. Mount CephFS in another window:
 
-::
+   ::
 
-     bin/ceph-fuse /cephfs -o allow_other &
-     tail -f out/mds.a.log
+    bin/ceph-fuse /cephfs -o allow_other &
+    tail -f out/mds.a.log
 
 
    Note that if you look at the last MDS (which could be a, b, or c -- it's
    random), you will see an attempt to index a nil value. This is because the
    last MDS tries to check the load of its neighbor, which does not exist.
 
-5. Run a simple benchmark. In our case, we use the Docker mdtest image to
+#. Run a simple benchmark. In our case, we use the Docker mdtest image to
    create load:
 
-::
+   ::
 
     for i in 0 1 2; do
       docker run -d \
@@ -112,9 +112,9 @@ Mantle with `vstart.sh`
     done
 
 
-6. When you are done, you can kill all the clients with:
+#. When you are done, you can kill all the clients with:
 
-::
+   ::
 
     for i in 0 1 2 3; do docker rm -f client$i; done
 
@@ -166,7 +166,7 @@ Implementation Details
 Most of the implementation is in MDBalancer. Metrics are passed to the balancer
 policies via the Lua stack and a list of loads is returned back to MDBalancer.
 It sits alongside the current balancer implementation and it's enabled with a
-Ceph CLI command ("ceph fs set cephfs balancer mybalancer.lua"). If the Lua policy
+Ceph CLI command (``ceph fs set cephfs balancer mybalancer.lua``). If the Lua policy
 fails (for whatever reason), we fall back to the original metadata load
 balancer. The balancer is stored in the RADOS metadata pool and a string in the
 MDSMap tells the MDSs which balancer to use.
@@ -193,19 +193,19 @@ at the Ceph source code to see which metrics are exposed. We figure that the
 Mantle developer will be in touch with MDS internals anyways.
 
 The metrics exposed to the Lua policy are the same ones that are already stored
-in mds_load_t: auth.meta_load(), all.meta_load(), req_rate, queue_length,
-cpu_load_avg.
+in ``mds_load_t``: ``auth.meta_load()``, ``all.meta_load()``, ``req_rate``,
+``queue_length``, ``cpu_load_avg``.
 
 Compile/Execute the Balancer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Here we use `lua_pcall` instead of `lua_call` because we want to handle errors
+Here we use ``lua_pcall`` instead of ``lua_call`` because we want to handle errors
 in the MDBalancer. We do not want the error propagating up the call chain. The
 cls_lua class wants to handle the error itself because it must fail gracefully.
 For Mantle, we don't care if a Lua error crashes our balancer -- in that case,
 we will fall back to the original balancer.
 
-The performance improvement of using `lua_call` over `lua_pcall` would not be
+The performance improvement of using ``lua_call`` over ``lua_pcall`` would not be
 leveraged here because the balancer is invoked every 10 seconds by default. 
 
 Returning Policy Decision to C++
@@ -220,7 +220,7 @@ Lua side.
 Iterating through tables returned by Lua is done through the stack. In Lua
 jargon: a dummy value is pushed onto the stack and the next iterator replaces
 the top of the stack with a (k, v) pair. After reading each value, pop that
-value but keep the key for the next call to `lua_next`. 
+value but keep the key for the next call to ``lua_next``.
 
 Reading from RADOS
 ~~~~~~~~~~~~~~~~~~
@@ -254,16 +254,16 @@ the cls logging interface:
     BAL_LOG(0, "this is a log message")
 
 
-It is implemented by passing a function that wraps the `dout` logging framework
-(`dout_wrapper`) to Lua with the `lua_register()` primitive. The Lua code is
-actually calling the `dout` function in C++.
+It is implemented by passing a function that wraps the ``dout`` logging framework
+(``dout_wrapper``) to Lua with the ``lua_register()`` primitive. The Lua code is
+actually calling the ``dout`` function in C++.
 
 Warning and Info messages are centralized using the clog/Beacon. Successful
 messages are only sent on version changes by the first MDS to avoid spamming
-the `ceph -w` utility. These messages are used for the integration tests.
+the ``ceph -w`` utility. These messages are used for the integration tests.
 
 Testing
 ~~~~~~~
 
-Testing is done with the ceph-qa-suite (tasks.cephfs.test_mantle). We do not
+Testing is done with the ``ceph-qa-suite`` (``tasks.cephfs.test_mantle``). We do not
 test invalid balancer logging and loading the actual Lua VM.

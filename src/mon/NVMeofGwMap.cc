@@ -264,6 +264,25 @@ void  NVMeofGwMap::gw_performed_startup(const NvmeGwId &gw_id,
   }
 }
 
+void NVMeofGwMap::set_addr_vect(const NvmeGwId &gw_id,
+    const NvmeGroupKey& group_key, const entity_addr_t &addr) {
+  entity_addrvec_t addrvec(addr);
+  for (auto& gws_states: created_gws[group_key]) {
+     auto &state = gws_states.second;
+     auto &gw_found = gws_states.first;
+     if (state.addr_vect == addrvec && gw_found != gw_id) {
+      /* This can happen when several GWs restart simultaneously and
+       * they got entity_addr that differ from the previous one
+       */
+       entity_addr_t a;
+       state.addr_vect = entity_addrvec_t(a);// cleanup duplicated address
+       dout(4) << "found duplicated addr vect in gw " << gw_found << dendl;
+     }
+  }
+  created_gws[group_key][gw_id].addr_vect = addrvec;
+  dout(10) << "Set addr vect " << addrvec << " for gw " << gw_id << dendl;
+}
+
 void NVMeofGwMap::increment_gw_epoch(const NvmeGroupKey& group_key)
 {
   if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOFHAMAP)) {

@@ -1,13 +1,17 @@
 # -*- coding: utf-8 -*-
 import errno
 import json
-from typing import Any, Dict, Optional
+from abc import ABC, abstractmethod
+from typing import Annotated, Any, Dict, List, NamedTuple, Optional, Type, \
+    Union, get_args, get_origin, get_type_hints
 
 import yaml
 from mgr_module import CLICheckNonemptyFileInput, CLICommand, CLIReadCommand, \
     CLIWriteCommand, HandleCommandResult, HandlerFuncType
+from prettytable import PrettyTable
 
 from ..exceptions import DashboardException
+from ..model.nvmeof import CliFlags, CliHeader
 from ..rest_client import RequestException
 from .nvmeof_conf import ManagedByOrchestratorException, \
     NvmeofGatewayAlreadyExists, NvmeofGatewaysConfig
@@ -51,7 +55,154 @@ def remove_nvmeof_gateway(_, name: str, daemon_name: str = ''):
         return -errno.EINVAL, '', str(ex)
 
 
+def convert_from_bytes(num_in_bytes):
+    units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+    size = float(num_in_bytes)
+    unit_index = 0
+
+    while size >= 1024 and unit_index < len(units) - 1:
+        size /= 1024
+        unit_index += 1
+
+    # Round to no decimal if it's an integer, otherwise show 1 decimal place
+    if size.is_integer():
+        size_str = f"{int(size)}"
+    else:
+        size_str = f"{size:.1f}"
+
+    return f"{size_str}{units[unit_index]}"
+
+
+class OutputFormatter(ABC):
+    @abstractmethod
+    def format_output(self, data, model):
+        """Format the given data for output."""
+        raise NotImplementedError()
+
+
+class AnnotatedDataTextOutputFormatter(OutputFormatter):
+    def _snake_case_to_title(self, s):
+        return s.replace('_', ' ').title()
+
+    def _create_table(self, field_names):
+        table = PrettyTable(border=True)
+        titles = [self._snake_case_to_title(field) for field in field_names]
+        table.field_names = titles
+        table.align = 'l'
+        table.padding_width = 0
+        return table
+
+    def _get_text_output(self, data):
+        if isinstance(data, list):
+            return self._get_list_text_output(data)
+        return self._get_object_text_output(data)
+
+    def _get_list_text_output(self, data):
+        columns = list(dict.fromkeys([key for obj in data for key in obj.keys()]))
+        table = self._create_table(columns)
+        for d in data:
+            row = []
+            for col in columns:
+                row.append(str(d.get(col)))
+            table.add_row(row)
+        return table.get_string()
+
+    def _get_object_text_output(self, data):
+        columns = [k for k in data.keys() if k not in ["status", "error_message"]]
+        table = self._create_table(columns)
+        row = []
+        for col in columns:
+            row.append(str(data.get(col)))
+        table.add_row(row)
+        return table.get_string()
+
+    def _is_list_of_complex_type(self, value):
+        if not isinstance(value, list):
+            return False
+
+        if not value:
+            return None
+
+        primitives = (int, float, str, bool, bytes)
+
+        return not isinstance(value[0], primitives)
+
+    def _select_list_field(self, data: Dict) -> Optional[str]:
+        for key, value in data.items():
+            if self._is_list_of_complex_type(value):
+                return key
+        return None
+
+    def is_namedtuple_type(self, obj):
+        return isinstance(obj, type) and issubclass(obj, tuple) and hasattr(obj, '_fields')
+
+    # pylint: disable=too-many-branches
+    def process_dict(self, input_dict: dict,
+                     nt_class: Type[NamedTuple],
+                     is_top_level: bool) -> Union[Dict, str, List]:
+        result: Dict = {}
+        if not input_dict:
+            return result
+        hints = get_type_hints(nt_class, include_extras=True)
+
+        for field, type_hint in hints.items():
+            if field not in input_dict:
+                continue
+
+            value = input_dict[field]
+            origin = get_origin(type_hint)
+
+            actual_type = type_hint
+            annotations = []
+            output_name = field
+            skip = False
+
+            if origin is Annotated:
+                actual_type, *annotations = get_args(type_hint)
+                for annotation in annotations:
+                    if annotation == CliFlags.DROP:
+                        skip = True
+                        break
+                    if isinstance(annotation, CliHeader):
+                        output_name = annotation.label
+                    elif is_top_level and annotation == CliFlags.EXCLUSIVE_LIST:
+                        assert get_origin(actual_type) == list
+                        assert len(get_args(actual_type)) == 1
+                        return [self.process_dict(item, get_args(actual_type)[0],
+                                                  False) for item in value]
+                    elif is_top_level and annotation == CliFlags.EXCLUSIVE_RESULT:
+                        return f"Failure: {input_dict.get('error_message')}" if bool(
+                            input_dict[field]) else "Success"
+                    elif annotation == CliFlags.SIZE:
+                        value = convert_from_bytes(int(input_dict[field]))
+
+            if skip:
+                continue
+
+            # If it's a nested namedtuple and value is a dict, recurse
+            if self.is_namedtuple_type(actual_type) and isinstance(value, dict):
+                result[output_name] = self.process_dict(value, actual_type, False)
+            else:
+                result[output_name] = value
+
+        return result
+
+    def _convert_to_text_output(self, data, model):
+        data = self.process_dict(data, model, True)
+        if isinstance(data, str):
+            return data
+        return self._get_text_output(data)
+
+    def format_output(self, data, model):
+        return self._convert_to_text_output(data, model)
+
+
 class NvmeofCLICommand(CLICommand):
+    def __init__(self, prefix, model: Type[NamedTuple], perm='rw', poll=False):
+        super().__init__(prefix, perm, poll)
+        self._output_formatter = AnnotatedDataTextOutputFormatter()
+        self._model = model
+
     def __call__(self, func) -> HandlerFuncType:  # type: ignore
         # pylint: disable=useless-super-delegation
         """
@@ -69,16 +220,14 @@ class NvmeofCLICommand(CLICommand):
         try:
             ret = super().call(mgr, cmd_dict, inbuf)
             out_format = cmd_dict.get('format')
-            if out_format == 'json' or not out_format:
-                if ret is None:
-                    out = ''
-                else:
-                    out = json.dumps(ret)
+            if ret is None:
+                out = ''
+            if out_format == 'plain' or not out_format:
+                out = self._output_formatter.format_output(ret, self._model)
+            elif out_format == 'json':
+                out = json.dumps(ret)
             elif out_format == 'yaml':
-                if ret is None:
-                    out = ''
-                else:
-                    out = yaml.dump(ret)
+                out = yaml.dump(ret)
             else:
                 return HandleCommandResult(-errno.EINVAL, '',
                                            f"format '{out_format}' is not implemented")

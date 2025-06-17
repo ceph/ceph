@@ -196,8 +196,7 @@ TEST_F(cache_test_t, test_dirty_extent)
 	  *t,
 	  reladdr,
 	  TestBlockPhysical::SIZE).unsafe_get();
-	ASSERT_TRUE(extent->is_clean());
-	ASSERT_TRUE(extent->is_pending());
+	ASSERT_TRUE(extent->is_initial_pending());
 	ASSERT_TRUE(extent->get_paddr().is_relative());
 	ASSERT_EQ(extent->get_version(), 0);
 	ASSERT_EQ(csum, extent->calc_crc32c());
@@ -239,8 +238,7 @@ TEST_F(cache_test_t, test_dirty_extent)
 	  *t2,
 	  addr,
 	  TestBlockPhysical::SIZE).unsafe_get();
-	ASSERT_TRUE(extent->is_clean());
-	ASSERT_FALSE(extent->is_pending());
+	ASSERT_FALSE(extent->is_initial_pending());
 	ASSERT_EQ(addr, extent->get_paddr());
 	ASSERT_EQ(extent->get_version(), 0);
 	ASSERT_EQ(csum, extent->calc_crc32c());
@@ -251,15 +249,14 @@ TEST_F(cache_test_t, test_dirty_extent)
 	  *t,
 	  addr,
 	  TestBlockPhysical::SIZE).unsafe_get();
-	ASSERT_TRUE(extent->is_dirty());
-	ASSERT_TRUE(extent->is_pending());
+	ASSERT_TRUE(extent->is_mutation_pending());
 	ASSERT_EQ(addr, extent->get_paddr());
 	ASSERT_EQ(extent->get_version(), 1);
 	ASSERT_EQ(csum2, extent->calc_crc32c());
       }
       // submit transaction
       submit_transaction(std::move(t)).get();
-      ASSERT_TRUE(extent->is_dirty());
+      ASSERT_TRUE(extent->has_delta());
       ASSERT_EQ(addr, extent->get_paddr());
       ASSERT_EQ(extent->get_version(), 1);
       ASSERT_EQ(extent->calc_crc32c(), csum2);
@@ -271,7 +268,7 @@ TEST_F(cache_test_t, test_dirty_extent)
 	*t,
 	addr,
 	TestBlockPhysical::SIZE).unsafe_get();
-      ASSERT_TRUE(extent->is_dirty());
+      ASSERT_TRUE(extent->has_delta());
       ASSERT_EQ(addr, extent->get_paddr());
       ASSERT_EQ(extent->get_version(), 1);
       ASSERT_EQ(csum2, extent->calc_crc32c());

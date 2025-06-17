@@ -309,6 +309,8 @@ public:
   virtual const char* name() const = 0;
   virtual RGWOpType get_type() { return RGW_OP_UNKNOWN; }
   virtual std::string canonical_name() const { return fmt::format("REST.{}.{}", s->info.method, name()); }
+  // by default we log all bucket operations
+  virtual bool always_do_bucket_logging() const { return s->bucket != nullptr; }
 
   virtual uint32_t op_mask() { return 0; }
 
@@ -1327,6 +1329,7 @@ public:
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
+  bool always_do_bucket_logging() const override { return false; }
 };
 
 class RGWPostObj : public RGWOp {
@@ -1969,6 +1972,7 @@ public:
   const char* name() const override { return "complete_multipart"; }
   RGWOpType get_type() override { return RGW_OP_COMPLETE_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  bool always_do_bucket_logging() const override { return false; }
 };
 
 class RGWAbortMultipart : public RGWOp {

@@ -65,7 +65,7 @@
 	url = https://github.com/JuliaStrings/utf8proc
 [submodule "src/jaegertracing/opentelemetry-cpp"]
 	path = src/jaegertracing/opentelemetry-cpp
-	url = https://github.com/open-telemetry/opentelemetry-cpp.git
+	url = https://github.com/ceph/opentelemetry-cpp.git
 [submodule "src/qatlib"]
 	path = src/qatlib
 	url = https://github.com/intel/qatlib.git
@@ -79,3 +79,9 @@
 	path = src/nvmeof/gateway
 	url = https://github.com/ceph/ceph-nvmeof.git
 	fetchRecurseSubmodules = false
+[submodule "src/breakpad"]
+	path = src/breakpad
+	url = https://chromium.googlesource.com/breakpad/breakpad
+[submodule "src/lss"]
+	path = src/lss
+	url = https://chromium.googlesource.com/linux-syscall-support

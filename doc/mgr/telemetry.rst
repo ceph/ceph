@@ -4,26 +4,27 @@ Telemetry Module
 ================
 
 The telemetry module sends anonymous data about the cluster back to the Ceph
-developers to help understand how Ceph is used and what problems users may
-be experiencing.
+developers to report how Ceph is used and to report problems experienced by
+users. 
 
-This data is visualized on `public dashboards <https://telemetry-public.ceph.com/>`_
-that allow the community to quickly see summary statistics on how many clusters
-are reporting, their total capacity and OSD count, and version distribution
-trends.
+This data is visualized on `public dashboards
+<https://telemetry-public.ceph.com/>`_ that allow the community to see a
+summary of statistics including how many clusters are reporting, their total
+capacity and OSD count, and version distribution trends.
 
 Channels
 --------
 
 The telemetry report is broken down into several "channels", each with
-a different type of information.  Assuming telemetry has been enabled,
-individual channels can be turned on and off.  (If telemetry is off,
+a different type of information. If telemetry has been enabled,
+individual channels can be turned on and off. (If telemetry is off,
 the per-channel setting has no effect.)
 
 * **basic** (default: on): Basic information about the cluster
 
     - capacity of the cluster
-    - number of monitors, managers, OSDs, MDSs, object gateways, or other daemons
+    - number of monitors, managers, OSDs, MDSs, object gateways, or other
+      daemons
     - software version currently being used
     - number and types of RADOS pools and CephFS file systems
     - names of configuration options that have been changed from their
@@ -34,7 +35,7 @@ the per-channel setting has no effect.)
     - type of daemon
     - version of the daemon
     - operating system (OS distribution, kernel version)
-    - stack trace identifying where in the Ceph code the crash occurred
+    - stack trace, identifying where in the Ceph code the crash occurred
 
 * **device** (default: on): Information about device metrics, including
 
@@ -46,53 +47,68 @@ the per-channel setting has no effect.)
     - cluster description
     - contact email address
 
-* **perf** (default: off): Various performance metrics of a cluster, which can be used to
+* **perf** (default: off): Various performance metrics of a cluster, which can
+  be used to
 
     - reveal overall cluster health
     - identify workload patterns
     - troubleshoot issues with latency, throttling, memory management, etc.
     - monitor cluster performance by daemon
 
-The data being reported does *not* contain any sensitive
-data like pool names, object names, object contents, hostnames, or device
-serial numbers.
+The reported data does *not* contain any sensitive data. This means that the
+reported data does not include pool names, object names, object contents,
+hostnames, or device serial numbers.
 
-It contains counters and statistics on how the cluster has been
-deployed, the version of Ceph, the distribution of the hosts and other
-parameters which help the project to gain a better understanding of
+The reported data contains counters and statistics pertaining to how the
+cluster has been deployed, the version of Ceph, the distribution of the hosts,
+and other parameters that help the project develop a better understanding of
 the way Ceph is used.
 
-Data is sent secured to *https://telemetry.ceph.com*.
+Data is sent secured to
+`https://telemetry.ceph.com <https://telemetry.ceph.com>`_.
 
-Individual channels can be enabled or disabled with::
+Individual channels can be enabled or disabled by running the following
+commands:
 
-  ceph telemetry enable channel basic
-  ceph telemetry enable channel crash
-  ceph telemetry enable channel device
-  ceph telemetry enable channel ident
-  ceph telemetry enable channel perf
+.. prompt:: bash #
 
-  ceph telemetry disable channel basic
-  ceph telemetry disable channel crash
-  ceph telemetry disable channel device
-  ceph telemetry disable channel ident
-  ceph telemetry disable channel perf
+   ceph telemetry enable channel basic
+   ceph telemetry enable channel crash
+   ceph telemetry enable channel device
+   ceph telemetry enable channel ident
+   ceph telemetry enable channel perf
+  
+   ceph telemetry disable channel basic
+   ceph telemetry disable channel crash
+   ceph telemetry disable channel device
+   ceph telemetry disable channel ident
+   ceph telemetry disable channel perf
 
-Multiple channels can be enabled or disabled with::
+Multiple channels can be enabled or disabled at the same time by running the
+following commands:
 
-  ceph telemetry enable channel basic crash device ident perf
-  ceph telemetry disable channel basic crash device ident perf
+.. prompt:: bash #
 
-Channels can be enabled or disabled all at once with::
+   ceph telemetry enable channel basic crash device ident perf
+   ceph telemetry disable channel basic crash device ident perf
 
-  ceph telemetry enable channel all
-  ceph telemetry disable channel all
+All channels can be enabled or disabled at once by running the following
+commands:
 
-Please note that telemetry should be on for these commands to take effect.
+.. prompt:: bash #
 
-List all channels with::
+   ceph telemetry enable channel all
+   ceph telemetry disable channel all
+
+Note that telemetry must be on for these commands to take effect.
+
+List all channels with:
+
+.. prompt:: bash #
 
   ceph telemetry channel ls
+
+::
 
   NAME      ENABLED    DEFAULT    DESC
   basic     ON         ON         Share basic cluster information (size, version)
@@ -105,83 +121,112 @@ List all channels with::
 Enabling Telemetry
 ------------------
 
-To allow the *telemetry* module to start sharing data::
+To allow the *telemetry* module to share data, run the following command:
 
-  ceph telemetry on
+.. prompt:: bash #
 
-Please note: Telemetry data is licensed under the Community Data License
-Agreement - Sharing - Version 1.0 (https://cdla.io/sharing-1-0/). Hence,
-telemetry module can be enabled only after you add '--license sharing-1-0' to
-the 'ceph telemetry on' command.
-Once telemetry is on, please consider enabling channels which are off by
-default, such as the 'perf' channel. 'ceph telemetry on' output will list the
-exact command to enable these channels.
+   ceph telemetry on
 
-Telemetry can be disabled at any time with::
+Please note: Telemetry data is licensed under the `Community Data License
+Agreement - Sharing - Version 1.0 <https://cdla.io/sharing-1-0/>`_.  This means
+that telemetry module can be enabled only after you add ``--license
+sharing-1-0`` to the ``ceph telemetry on`` command. After telemetry is on,
+consider enabling channels which are off by default, such as the
+``perf`` channel.  ``ceph telemetry on`` output will list the exact command to
+enable these channels.
 
-  ceph telemetry off
+Telemetry can be disabled at any time by running the following command:
+
+.. prompt:: bash #
+
+   ceph telemetry off
 
 Sample report
 -------------
 
-You can look at what data is reported at any time with the command::
+Show reported data by running the following command: 
 
-  ceph telemetry show
+.. prompt:: bash #
 
-If telemetry is off, you can preview a sample report with::
+   ceph telemetry show
 
-  ceph telemetry preview
+If telemetry is disabled, run the following command to preview a sample report:
 
-Generating a sample report might take a few moments in big clusters (clusters
-with hundreds of OSDs or more).
+.. prompt:: bash #
 
-To protect your privacy, device reports are generated separately, and data such
-as hostname and device serial number is anonymized. The device telemetry is
-sent to a different endpoint and does not associate the device data with a
-particular cluster. To see a preview of the device report use the command::
+   ceph telemetry preview
 
-  ceph telemetry show-device
+The generation of a sample report for larger clusters might take some time.
 
-If telemetry is off, you can preview a sample device report with::
+To protect sensitive information, device reports are generated separately. Data
+including  hostnames and device serial numbers are anonymized. The device
+telemetry is sent to a different endpoint and does not associate the device
+data with a particular cluster. To see a preview of the device report, run the
+following command: 
 
-  ceph telemetry preview-device
+.. prompt:: bash #
 
-Please note: In order to generate the device report we use Smartmontools
-version 7.0 and up, which supports JSON output. 
-If you have any concerns about privacy with regard to the information included in
-this report, please contact the Ceph developers.
+   ceph telemetry show-device
 
-In case you prefer to have a single output of both reports, and telemetry is on, use::
+If telemetry is disabled, run the following command to preview a sample device
+report:
 
-  ceph telemetry show-all
+.. prompt:: bash #
 
-If you would like to view a single output of both reports, and telemetry is off, use::
+   ceph telemetry preview-device
 
-  ceph telemetry preview-all
+.. note:: ``smartmontools`` version 7.0 or later must be installed so that JSON
+   output can be specified and parsed. If you have any concerns about privacy
+   with regard to the information included in this report, contact the Ceph
+   developers.
+
+When telemetry is enabled, run the following command to generate both reports
+in a single output: 
+
+.. prompt:: bash #
+
+   ceph telemetry show-all
+
+When telemetry is disabled, run the following command to view both reports in a
+single output:
+
+.. prompt:: bash #
+
+   ceph telemetry preview-all
 
 **Sample report by channel**
 
-When telemetry is on you can see what data is reported by channel with::
+Run the following command when telemetry is enabled to show the data reported
+by a specified channel:
 
-  ceph telemetry show <channel_name>
+.. prompt:: bash #
 
-Please note: If telemetry is on, and <channel_name> is disabled, the command
-above will output a sample report by that channel, according to the collections
-the user is enrolled to. However this data is not reported, since the channel
-is disabled.
+   ceph telemetry show <channel_name>
 
-If telemetry is off you can preview a sample report by channel with::
+Please note: If telemetry is on, and ``<channel_name>`` is disabled, the
+command above will output a sample report by that channel, according to the
+collections the user is enrolled to. However this data is not reported, since
+the channel is disabled.
+
+If telemetry is off you can preview a sample report by channel with:
+
+.. prompt:: bash #
 
   ceph telemetry preview <channel_name>
 
 Collections
 -----------
 
-Collections represent different aspects of data that we collect within a channel.
+Collections represent different aspects of data collected within a
+channel.
 
-List all collections with::
+To list all collections, run the following command:
 
-  ceph telemetry collection ls
+.. prompt:: bash #
+
+   ceph telemetry collection ls
+
+::
 
   NAME                            STATUS                                               DESC
   basic_base                      NOT REPORTING: NOT OPTED-IN                          Basic information about the cluster (capacity, number and type of daemons, version, etc.)
@@ -200,76 +245,106 @@ List all collections with::
 
 Where:
 
-**NAME**: Collection name; prefix indicates the channel the collection belongs to.
+.. glossary:: 
 
-**STATUS**: Indicates whether the collection metrics are reported; this is
-determined by the status (enabled / disabled) of the channel the collection
-belongs to, along with the enrollment status of the collection (whether the user
-is opted-in to this collection).
+        NAME
+                Collection name. The prefix indicates the channel to which the
+                collection belongs.
 
-**DESC**: General description of the collection.
+        STATUS
+                Indicates whether the collection metrics are reported. This is
+                determined by the status (``enabled`` or ``disabled``) to which
+                the channel of the collection belongs, along with the
+                enrollment status of the collection (whether the user is
+                opted-in to this collection).
 
-See the diff between the collections you are enrolled to, and the new,
-available collections with::
+        DESC
+                General description of the collection.
 
-  ceph telemetry diff
+To display any difference between the currenty-enrolled collections and any new
+or available collections, run the following command:
 
-Enroll to the most recent collections with::
+.. prompt:: bash #
 
-  ceph telemetry on
+   ceph telemetry diff
 
-Then enable new channels that are off with::
+To enroll to the most recent collections, run the following command:
 
-  ceph telemetry enable channel <channel_name>
+.. prompt:: bash #
+
+   ceph telemetry on
+
+Enable a new channel that is currently disabled by running a command of the
+following form:
+
+.. prompt:: bash #
+
+   ceph telemetry enable channel <channel_name>
 
 Interval
 --------
 
-The module compiles and sends a new report every 24 hours by default.
-You can adjust this interval with::
+The telemetry module compiles and sends a new report every 24 hours by default.
+Adjust this interval by running a command of the following form:
 
-  ceph config set mgr mgr/telemetry/interval 72    # report every three days
+.. prompt:: bash #
+
+   ceph config set mgr mgr/telemetry/interval 72    # report every three days
 
 Status
 --------
 
-The see the current configuration::
+To print the current configuration of the telemetry module, run a command of
+the following form:
 
-  ceph telemetry status
+.. prompt:: bash #
+
+   ceph telemetry status
 
 Manually sending telemetry
 --------------------------
 
-To ad hoc send telemetry data::
+To send an ansynchronous, one-time set of telemetry data, run the following
+command:
 
-  ceph telemetry send
+.. prompt:: bash #
 
-In case telemetry is not enabled (with 'ceph telemetry on'), you need to add
-'--license sharing-1-0' to 'ceph telemetry send' command.
+   ceph telemetry send
+
+If telemetry has not been enabled (by running the command ``ceph telemetry
+on``), add ``--license sharing-1-0`` to the ``ceph telemetry send`` command.
 
 Sending telemetry through a proxy
 ---------------------------------
 
 If the cluster cannot directly connect to the configured telemetry
-endpoint (default *telemetry.ceph.com*), you can configure a HTTP/HTTPS
-proxy server with::
+endpoint (default: ``telemetry.ceph.com``), configure an HTTP/HTTPS
+proxy server by running a command of the following form:
 
-  ceph config set mgr mgr/telemetry/proxy https://10.0.0.1:8080
+.. prompt:: bash #
 
-You can also include a *user:pass* if needed::
+   ceph config set mgr mgr/telemetry/proxy https://10.0.0.1:8080
 
-  ceph config set mgr mgr/telemetry/proxy https://ceph:telemetry@10.0.0.1:8080
+Include a colon-separated user and password (``user:pass``) if needed by
+running a command of the following form:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/telemetry/proxy https://ceph:telemetry@10.0.0.1:8080
 
 
 Contact and Description
 -----------------------
 
-A contact and description can be added to the report.  This is
-completely optional, and disabled by default.::
+A contact and description can be added to the report. This is optional and is
+disabled by default. Run commands of the following forms to add contacts and
+descriptions:
 
-  ceph config set mgr mgr/telemetry/contact 'John Doe <john.doe@example.com>'
-  ceph config set mgr mgr/telemetry/description 'My first Ceph cluster'
-  ceph config set mgr mgr/telemetry/channel_ident true
+.. prompt:: bash #
+
+   ceph config set mgr mgr/telemetry/contact 'John Doe <john.doe@example.com>'
+   ceph config set mgr mgr/telemetry/description 'My first Ceph cluster'
+   ceph config set mgr mgr/telemetry/channel_ident true
 
 Leaderboard
 -----------
@@ -277,18 +352,18 @@ Leaderboard
 To participate in a leaderboard in the `public dashboards
 <https://telemetry-public.ceph.com/>`_, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set mgr mgr/telemetry/leaderboard true
 
 The leaderboard displays basic information about the cluster. This includes the
-total storage capacity and the number of OSDs. To add a description of the
-cluster, run a command of the following form: 
+cluster's total storage capacity and the number of OSDs. To add a description
+of the cluster so that it can more easily be identified on the leaderboard, run
+a command of the following form: 
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set mgr mgr/telemetry/leaderboard_description 'Ceph cluster for Computational Biology at the University of XYZ'
 
 If the ``ident`` channel is enabled, its details will not be displayed in the
 leaderboard.
-

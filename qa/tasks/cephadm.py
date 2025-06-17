@@ -2352,7 +2352,7 @@ def task(ctx, config):
         flavor = config.get('flavor', 'default')
 
         if sha1:
-            if flavor == "crimson":
+            if flavor == "crimson-debug" or flavor == "crimson-release":
                 ctx.ceph[cluster_name].image = container_image_name + ':' + sha1 + '-' + flavor
             else:
                 ctx.ceph[cluster_name].image = container_image_name + ':' + sha1

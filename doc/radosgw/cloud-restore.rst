@@ -24,8 +24,8 @@ API can be used to restore the object temporarily.
 Cloud Storage Class Tier Configuration
 --------------------------------------
 
-The `tier configuration <https://docs.ceph.com/en/latest/radosgw/cloud-transition/#cloud-storage-class-configuration>`_
-of the cloud storage class configured for data transition is used to restore
+The :ref:`radosgw_cloud_tier_configuration`
+of the storage class configured for data transition is used to restore
 objects as well::
 
     {
@@ -48,7 +48,7 @@ The below options have been added to the tier configuration to facilitate object
 
 * ``restore_storage_class`` (string)
 
-The storage class to which object data is to be restored. Default value is ``STANDARD``.
+  The storage class to which object data is to be restored. Default value is ``STANDARD``.
 
 
 Read-through Specific Configurables
@@ -56,12 +56,12 @@ Read-through Specific Configurables
 
 * ``allow_read_through`` (``true`` | ``false``)
 
-If true, enables ``read-through``. Objects can then be restored using the ``S3 GetObject`` API.
+  If ``true``, enables ``read-through``. Objects can then be restored using the ``S3 GetObject`` API.
 
 * ``read_through_restore_days`` (integer)
 
-The duration for which objects restored via ``read-through`` are retained.
-Default value is 1 day.
+  The duration for which objects restored via ``read-through`` are retained.
+  Default value is ``1`` day.
 
 For example:
 
@@ -90,12 +90,12 @@ the following configurables should be set accordingly:
 
 * ``glacier_restore_days`` (integer)
 
-The duration for which the objects are to be restored on the remote cloud service.
+  The duration for which the objects are to be restored on the remote cloud service.
 
 * ``glacier_restore_tier_type`` (``Standard`` | ``Expedited``)
 
-The type of retrieval within the cloud service, which may represent different
-pricing. Supported options are ``Standard`` and ``Expedited``.
+  The type of retrieval within the cloud service, which may represent different
+  pricing. Supported options are ``Standard`` and ``Expedited``.
 
 
 For example:
@@ -167,7 +167,7 @@ Examples of Restore Objects
 Using the S3 RestoreObject CLI
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Th `S3 restore-object <https://docs.aws.amazon.com/cli/latest/reference/s3api/restore-object.html>`_
+The `S3 restore-object <https://awscli.amazonaws.com/v2/documentation/api/latest/reference/s3api/restore-object.html>`_
 CLI supports these options:
 
 .. prompt:: bash $
@@ -180,7 +180,7 @@ CLI supports these options:
                               }
 
 
-Note: ``Days`` is optional and if not provided, the object is restored permanently.
+.. note:: The parameter ``Days`` is optional and if not provided, the object is restored permanently.
 
 Example 1:
 
@@ -219,8 +219,8 @@ Example 3:
 
 This will restore the object ``doc3.rtf`` for ``read_through_restore_days`` days.
 
-Note: The above CLI command may time out if object restoration takes too long.
-You can verify the restore status before reissuing the command.
+.. note:: The above CLI command may time out if object restoration takes too long.
+          You can verify the restore status before reissuing the command.
 
 
 Verifying the Restoration Status
@@ -242,7 +242,7 @@ details.
 
 Example:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    radosgw-admin object stat --bucket bucket1 --object doc1.rtf
 
@@ -255,8 +255,8 @@ Storage
 ~~~~~~~
 Objects are restored to the storage class configured via ``restore_storage_class``
 in the tier-config. However, as
-per `<https://docs.aws.amazon.com/cli/latest/reference/s3api/restore-object.html>`_
-the storage class of restored objects should remain unchanged. Therefore, for
+per `S3 RestoreObject <https://docs.aws.amazon.com/AmazonS3/latest/API/API_RestoreObject.html>`_
+API the storage class of restored objects should remain unchanged. Therefore, for
 temporary copies, the ``x-amz-storage-class`` will continue to reflect the
 original cloud-tier storage class.
 
@@ -269,7 +269,7 @@ The ``mtime`` of the transitioned and restored objects should remain unchanged.
 Lifecycle
 ~~~~~~~~~
 ``Temporary`` copies are not subject to transition to the cloud. However, as is the
-case with cloud-transitioned objects, they can be deleted via regular LC (Life Cycle)
+case with cloud-transitioned objects, they can be deleted via regular lifecycle (LC)
 expiration rules or an external S3 ``delete`` request.
 
 ``Permanent`` copies are treated as regular objects and are subject to applicable LC

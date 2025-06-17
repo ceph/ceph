@@ -126,6 +126,7 @@ public:
     add_present_to_retired_set(ref);
   }
 
+  using extent_cmp_t = read_set_item_t<Transaction>::extent_cmp_t;
   void add_present_to_retired_set(CachedExtentRef ref) {
     assert(ref->get_paddr().is_real_location());
     assert(!is_weak());
@@ -147,9 +148,10 @@ public:
       write_set.erase(*ref);
       assert(ref->prior_instance);
       retired_set.emplace(ref->prior_instance, trans_id);
-      assert(read_set.count(ref->prior_instance->get_paddr()));
-      ref->prior_instance.reset();
+      assert(read_set.count(ref->prior_instance->get_paddr(), extent_cmp_t{}));
+      ref->reset_prior_instance();
     } else {
+      assert(ref->is_stable_written());
       // && retired_set.count(ref->get_paddr()) == 0
       // If it's already in the set, insert here will be a noop,
       // which is what we want.
@@ -158,21 +160,34 @@ public:
   }
 
   // Returns true if added, false if already added or weak
-  bool maybe_add_to_read_set(CachedExtentRef ref) {
-    assert(ref->get_paddr().is_absolute());
+  struct maybe_add_readset_ret {
+    bool added;
+    bool is_paddr_known;
+  };
+  maybe_add_readset_ret maybe_add_to_read_set(CachedExtentRef ref) {
+    assert(ref->get_paddr().is_absolute()
+           || ref->get_paddr().is_record_relative());
     if (is_weak()) {
-      return false;
+      return {false, true /* meaningless */};
     }
-    return do_add_to_read_set(ref);
+    if (ref->get_paddr().is_absolute()) {
+      // paddr is known
+      bool added = do_add_to_read_set(ref);
+      return {added, true};
+    } else {
+      // paddr is unknown until wait_io() finished
+      // to call maybe_add_to_read_set_step_2(ref)
+      ceph_assert(ref->get_paddr().is_record_relative());
+      bool added = maybe_add_to_read_set_step_1(ref);
+      return {added, false};
+    }
   }
 
   bool is_in_read_set(CachedExtentRef extent) const {
-    return lookup_read_set(extent).first;
+    return lookup_trans_from_read_extent(extent).first;
   }
 
   void add_to_read_set(CachedExtentRef ref) {
-    assert(ref->get_paddr().is_absolute()
-           || ref->get_paddr().is_root());
     if (is_weak()) {
       return;
     }
@@ -269,17 +284,19 @@ public:
     assert(ref->get_paddr().is_absolute() ||
            ref->get_paddr().is_root());
     assert(ref->is_exist_mutation_pending() ||
-	   read_set.count(ref->prior_instance->get_paddr()));
+	   read_set.count(ref->prior_instance->get_paddr(), extent_cmp_t{}));
     mutated_block_list.push_back(ref);
-    if (!ref->is_exist_mutation_pending()) {
+    if (ref->is_mutation_pending()) {
       write_set.insert(*ref);
     } else {
+      assert(ref->is_exist_mutation_pending());
       // already added as fresh extent in write_set
       assert(write_set.exists(*ref));
     }
   }
 
   void replace_placeholder(CachedExtent& placeholder, CachedExtent& extent) {
+    LOG_PREFIX(Transaction::replace_placeholder);
     ceph_assert(!is_weak());
 
     assert(is_retired_placeholder_type(placeholder.get_type()));
@@ -288,12 +305,28 @@ public:
     assert(extent.get_paddr() == placeholder.get_paddr());
     assert(extent.get_paddr().is_absolute());
     {
-      auto where = read_set.find(placeholder.get_paddr());
-      assert(where != read_set.end());
-      assert(where->ref.get() == &placeholder);
+      auto where = read_set.find(placeholder.get_paddr(), extent_cmp_t{});
+      if (unlikely(where == read_set.end())) {
+	SUBERRORT(seastore_t,
+	  "unable to find placeholder {}", *this, placeholder);
+	ceph_abort();
+      }
+      if (unlikely(where->ref.get() != &placeholder)) {
+	SUBERRORT(seastore_t,
+	  "inconsistent placeholder, current: {}; should-be: {}",
+	  *this, *where->ref.get(), placeholder);
+	ceph_abort();
+      }
+      placeholder.read_transactions.erase(
+	read_trans_set_t<Transaction>::s_iterator_to(*where));
       where = read_set.erase(where);
-      auto it = read_set.emplace_hint(where, this, &extent);
+      // Note, the retired-placeholder is not removed from read_items after replace.
+      read_items.emplace_back(this, &extent);
+      auto it = read_set.insert_before(where, read_items.back());
       extent.read_transactions.insert(const_cast<read_set_item_t<Transaction>&>(*it));
+#ifndef NDEBUG
+      num_replace_placeholder++;
+#endif
     }
     {
       auto where = retired_set.find(&placeholder);
@@ -428,7 +461,7 @@ public:
     root.reset();
     offset = 0;
     delayed_temp_offset = 0;
-    read_set.clear();
+    clear_read_set();
     fresh_backref_extents = 0;
     invalidate_clear_write_set();
     mutated_block_list.clear();
@@ -571,6 +604,15 @@ private:
   friend class Cache;
   friend Ref make_test_transaction();
 
+  void clear_read_set() {
+    read_items.clear();
+    assert(read_set.empty());
+#ifndef NDEBUG
+    num_replace_placeholder = 0;
+#endif
+    // Automatically unlink this transaction from CachedExtent::read_transactions
+  }
+
   std::pair<get_extent_ret, CachedExtentRef> do_get_extent(paddr_t addr) {
     LOG_PREFIX(Transaction::do_get_extent);
     // it's possible that both write_set and retired_set contain
@@ -587,7 +629,7 @@ private:
     } else if (retired_set.count(addr)) {
       return {get_extent_ret::RETIRED, nullptr};
     } else if (
-      auto iter = read_set.find(addr);
+      auto iter = read_set.find(addr, extent_cmp_t{});
       iter != read_set.end()) {
       auto ret = iter->ref;
       SUBTRACET(seastore_cache, "{} is present in read_set -- {}",
@@ -598,8 +640,8 @@ private:
     }
   }
 
-  auto lookup_read_set(CachedExtentRef ref) const
-      -> std::pair<bool, read_trans_set_t<Transaction>::const_iterator> {
+  std::pair<bool, read_trans_set_t<Transaction>::iterator>
+  lookup_trans_from_read_extent(CachedExtentRef ref) const {
     assert(ref->is_valid());
     assert(!is_weak());
     auto it = ref->read_transactions.lower_bound(
@@ -609,18 +651,67 @@ private:
     return std::make_pair(exists, it);
   }
 
-  bool do_add_to_read_set(CachedExtentRef ref) {
+  bool maybe_add_to_read_set_step_1(CachedExtentRef ref) {
     assert(!is_weak());
     assert(ref->is_stable());
-    auto [exists, it] = lookup_read_set(ref);
+    auto [exists, it] = lookup_trans_from_read_extent(ref);
     if (exists) {
+      // not added
       return false;
     }
 
-    auto [iter, inserted] = read_set.emplace(this, ref);
-    ceph_assert(inserted);
+    // step 1: create read_item and attach transaction to extent
+    // so that transaction invalidation can populate
+    assert(!read_set.count(ref->get_paddr(), extent_cmp_t{}));
+    read_items.emplace_back(this, ref);
     ref->read_transactions.insert_before(
-      it, const_cast<read_set_item_t<Transaction>&>(*iter));
+      it, read_items.back());
+
+    // added
+    return true;
+  }
+
+  void maybe_add_to_read_set_step_2(CachedExtentRef ref) {
+    // paddr must be known for read_set
+    ceph_assert(ref->get_paddr().is_absolute());
+    if (is_weak()) {
+      return;
+    }
+    auto [exists, it] = lookup_trans_from_read_extent(ref);
+    // step 1 must be complete
+    assert(exists);
+    // step 2 may be reordered after wait_io(),
+    // so the extent may already be attached to the transaction.
+    if (it->is_extent_attached_to_trans()) {
+      assert(read_set.count(ref->get_paddr(), extent_cmp_t{}));
+      return;
+    }
+
+    // step 2: attach extent to transaction to become visible
+    assert(!read_set.count(ref->get_paddr(), extent_cmp_t{}));
+    auto [iter, inserted] = read_set.insert(*it);
+    assert(inserted);
+  }
+
+  bool do_add_to_read_set(CachedExtentRef ref) {
+    assert(!is_weak());
+    assert(ref->is_stable());
+    // paddr must be known for read_set
+    assert(ref->get_paddr().is_absolute()
+           || ref->get_paddr().is_root());
+
+    if (!maybe_add_to_read_set_step_1(ref)) {
+      // step 2 must be complete if exist
+      assert(read_set.count(ref->get_paddr(), extent_cmp_t{}));
+      // not added
+      return false;
+    }
+
+    // step 2: attach extent to transaction to become visible
+    auto [iter, inserted] = read_set.insert(read_items.back());
+    assert(inserted);
+
+    // added
     return true;
   }
 
@@ -652,6 +743,10 @@ private:
    * invalidate *this.
    */
   read_extent_set_t<Transaction> read_set; ///< set of extents read by paddr
+  std::list<read_set_item_t<Transaction>> read_items;
+#ifndef NDEBUG
+  size_t num_replace_placeholder = 0;
+#endif
 
   uint64_t fresh_backref_extents = 0; // counter of new backref extents
 

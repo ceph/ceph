@@ -18,16 +18,16 @@ Enabling
 
 To enable the module, use the following command:
 
-::
+.. prompt:: bash #
 
-    ceph mgr module enable telegraf
+   ceph mgr module enable telegraf
 
 If you wish to subsequently disable the module, you can use the corresponding
-*disable* command:
+``disable`` command:
 
-::
+.. prompt:: bash #
 
-    ceph mgr module disable telegraf
+   ceph mgr module disable telegraf
 
 -------------
 Configuration 
@@ -38,24 +38,24 @@ required to configure the address to send the statistics to.
 
 Set configuration values using the following command:
 
-::
+.. prompt:: bash #
 
-    ceph telegraf config-set <key> <value>
+   ceph telegraf config-set <key> <value>
 
 
 The most important settings are ``address`` and ``interval``.
 
 For example, a typical configuration might look like this:
 
-::
+.. prompt:: bash #
 
-    ceph telegraf config-set address udp://:8094
-    ceph telegraf config-set interval 10
+   ceph telegraf config-set address udp://:8094
+   ceph telegraf config-set interval 10
     
 The default values for these configuration keys are:
 
-- address: unixgram:///tmp/telegraf.sock
-- interval: 15
+- ``address``: ``unixgram:///tmp/telegraf.sock``
+- ``interval``: ``15``
 
 ----------------
 Socket Listener

@@ -29,7 +29,6 @@
   $button-tertiary-hover: darken(vv.$primary, 5%),
   $button-tertiary-active: darken(vv.$primary, 10%)
 );
-
 @use '@carbon/styles';
 @use '@carbon/type';
 
@@ -87,8 +86,10 @@ Overflow menu
 /******************************************
 Forms
 ******************************************/
-.form-header {
+.form-header,
+.panel-header {
   @include type.type-style('heading-04');
+
   margin-bottom: 40px;
 }
 
@@ -96,6 +97,7 @@ Forms
   @extend .pb-1;
   @extend .mt-4;
   @extend .mb-4;
+
   @include type.type-style('heading-03');
 }
 

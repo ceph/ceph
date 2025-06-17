@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22.1)
 
 project(ceph
   VERSION 20.0.0
@@ -540,6 +540,18 @@ if(WITH_CATCH2)
   set(CPM_USE_LOCAL_PACKAGES_ONLY, ${ORIG_CPM_USE_LOCAL_PACKAGES_ONLY})
 
   message("-- Enabled Catch2 support")
+endif()
+
+if(WIN32)
+    set(WITH_BREAKPAD_DEFAULT OFF)
+else()
+    set(WITH_BREAKPAD_DEFAULT ON)
+endif()
+
+option(WITH_BREAKPAD "Build with Google Breakpad crash reporter"  ${WITH_BREAKPAD_DEFAULT})
+if(WITH_BREAKPAD)
+  set(HAVE_BREAKPAD ON)
+  message("-- Enabled Google Breakpad crash reporter")
 endif()
 
 #option for RGW

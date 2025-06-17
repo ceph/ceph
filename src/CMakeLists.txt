@@ -325,6 +325,66 @@ if (WITH_BLKIN)
   add_subdirectory(blkin/blkin-lib)
 endif(WITH_BLKIN)
 
+## breakpad
+if(WITH_BREAKPAD)
+  include(FindMake)
+  find_make("MAKE_EXECUTABLE" "make_cmd")
+
+  set(breakpad_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/breakpad)
+  set(lss_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/lss)
+
+  ExternalProject_Add(
+    breakpad_project
+    SOURCE_DIR "${breakpad_SOURCE_DIR}"
+    PATCH_COMMAND ${CMAKE_COMMAND} -E create_symlink ${lss_SOURCE_DIR} ${breakpad_SOURCE_DIR}/src/third_party/lss
+    # the minidump processor is used when processing the minidump, we only
+    # use the breakpad's client for generating the minidump at this moment.
+    #
+    # also cancel the -Werror used by breakpad, as new compilers are more
+    # picky, and might fail the build because of warnings.
+    CONFIGURE_COMMAND ${breakpad_SOURCE_DIR}/configure --disable-processor --disable-tools --prefix=<INSTALL_DIR>
+            "CC=${CMAKE_C_COMPILER}"
+            "CFLAGS=${CMAKE_C_FLAGS} -fPIC"
+            "CXX=${CMAKE_CXX_COMPILER}"
+            "CXXFLAGS=${CMAKE_CXX_FLAGS} -fPIC -Wno-error"
+    BUILD_COMMAND ${make_cmd}
+    # Install this library to ensure headers are included with proper prefixed paths
+    # (e.g., "breakpad/client/linux/handler/minidump_descriptor.h") rather than
+    # unprefixed paths (e.g., "client/linux/handler/minidump_descriptor.h").
+    # Prefixed paths make the library dependency explicit and avoid ambiguity.
+    #
+    # Note: DESTDIR is unset to prevent Debian packaging from overriding install
+    # paths, which would break header/library discovery during build. This is safe
+    # since breakpad artifacts are not redistributed in the final package.
+    INSTALL_COMMAND ${CMAKE_COMMAND} -E env --unset=DESTDIR ${make_cmd} install
+    UPDATE_DISCONNECTED ON
+    BUILD_BYPRODUCTS "<INSTALL_DIR>/lib/libbreakpad_client.a")
+
+  ExternalProject_Get_Property(breakpad_project INSTALL_DIR)
+  # create the directory so cmake won't complain when looking at the imported
+  # target
+  file(MAKE_DIRECTORY ${INSTALL_DIR}/include/breakpad)
+
+  add_library(Breakpad::client STATIC IMPORTED GLOBAL)
+  add_dependencies(Breakpad::client breakpad_project)
+  set_target_properties(Breakpad::client PROPERTIES
+    # unfortunately, breakpad's public headers use internal include paths
+    # (e.g., "client/linux/..." rather than the installed include path
+    # (e.g., "breakpad/client/linux/..."), because the library's source
+    # structure differs between build time and install time. so we have to
+    # add ${INSTALL_DIR}/include/breakpad as well.
+    INTERFACE_INCLUDE_DIRECTORIES "${INSTALL_DIR}/include;${INSTALL_DIR}/include/breakpad"
+    IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
+    IMPORTED_LOCATION "${INSTALL_DIR}/lib/libbreakpad_client.a")
+
+  # for header-only library
+  add_library(Breakpad::breakpad INTERFACE IMPORTED GLOBAL)
+  add_dependencies(Breakpad::breakpad breakpad_project)
+  set_target_properties(Breakpad::breakpad PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${INSTALL_DIR}/include"
+    IMPORTED_LINK_INTERFACE_LANGUAGES "CXX")
+endif(WITH_BREAKPAD)
+
 if(WITH_JAEGER)
   find_package(thrift 0.13.0 REQUIRED)
   include(BuildOpentelemetry)
@@ -404,7 +464,6 @@ if(WITH_CRIMSON)
     endif()
   endmacro ()
   set(Seastar_API_LEVEL "6" CACHE STRING "" FORCE)
-  set(Seastar_HWLOC OFF CACHE BOOL "" FORCE)
   set(Seastar_IO_URING OFF CACHE BOOL "" FORCE)
   set(Seastar_DEPRECATED_OSTREAM_FORMATTERS OFF CACHE BOOL "" FORCE)
   if(Seastar_DPDK)
@@ -570,6 +629,10 @@ if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
   endif()
 endif()
 
+if(WITH_BREAKPAD)
+  list(APPEND ceph_common_deps Breakpad::client)
+endif()
+
 add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common
   ${ceph_common_deps}
@@ -595,6 +658,10 @@ target_link_libraries(ceph-common legacy-option-headers)
 
 if(WITH_JAEGER)
 add_dependencies(ceph-common jaeger_base)
+endif()
+
+if(WITH_BREAKPAD)
+add_dependencies(ceph-common breakpad_project)
 endif()
 
 # appease dpkg-shlibdeps
@@ -688,12 +755,16 @@ if(NOT CEPH_BUILD_VIRTUALENV)
   set(CEPH_BUILD_VIRTUALENV ${CMAKE_BINARY_DIR})
 endif()
 
+option(WITH_CEPHADM "Flag to determine if cephadm should be built" ON)
+
 if(NOT WIN32)
 add_subdirectory(pybind)
 add_subdirectory(ceph-volume)
 add_subdirectory(ceph-node-proxy)
 add_subdirectory(python-common)
-add_subdirectory(cephadm)
+  if(WITH_CEPHADM)
+    add_subdirectory(cephadm)
+  endif()
 endif(NOT WIN32)
 
 # Monitor

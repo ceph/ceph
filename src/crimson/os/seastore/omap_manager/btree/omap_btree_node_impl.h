@@ -76,19 +76,29 @@ struct OMapInnerNode
   }
 
   void prepare_commit() final {
-    this->parent_node_t::prepare_commit();
-    if (is_rewrite() && !is_btree_root()) {
+    if (unlikely(!is_seen_by_users())) {
+      ceph_assert(is_rewrite());
       auto &prior = *get_prior_instance()->template cast<OMapInnerNode>();
-      if (prior.base_child_t::has_parent_tracker()) {
-        assert(prior.is_seen_by_users());
+      if (!prior.is_seen_by_users()) {
+	return;
+      }
+      set_seen_by_users();
+    }
+    this->parent_node_t::prepare_commit();
+    if (is_rewrite()) {
+      auto &prior = *get_prior_instance()->template cast<OMapInnerNode>();
+      assert(prior.is_seen_by_users());
+      // Chances are that this transaction is in parallel with another
+      // user transaction that set the prior's root to true, so we need
+      // to do this.
+      set_root(prior.is_btree_root());
+      if (!is_btree_root()) {
+	assert(prior.base_child_t::has_parent_tracker());
+	assert(prior.is_seen_by_users());
 	// unlike fixed-kv nodes, rewriting child nodes of the omap tree
 	// won't affect parent nodes, so we have to manually take prior
 	// instances' parent trackers here.
 	this->child_node_t::take_parent_from_prior();
-      } else {
-        // dirty omap extent may not be accessed yet during rewrite,
-        // this means the extent may not be initalized yet as linked.
-        assert(!prior.is_seen_by_users());
       }
     }
   }
@@ -179,7 +189,7 @@ struct OMapInnerNode
     omap_context_t oc, OMapNodeRef right) final;
 
   make_balanced_ret make_balanced(
-    omap_context_t oc, OMapNodeRef right) final;
+    omap_context_t oc, OMapNodeRef right, uint32_t pivot_idx) final;
 
   using make_split_insert_iertr = base_iertr; 
   using make_split_insert_ret = make_split_insert_iertr::future<mutation_result_t>;
@@ -240,8 +250,7 @@ struct OMapInnerNode
   }
 
   ~OMapInnerNode() {
-    if (this->is_valid()
-	&& !this->is_pending()
+    if (this->is_stable()
 	&& !this->is_btree_root()
 	// dirty omap extent may not be accessed/linked yet
 	&& this->base_child_t::has_parent_tracker()) {
@@ -249,6 +258,20 @@ struct OMapInnerNode
     }
   }
 private:
+  merge_entry_ret do_merge(
+    omap_context_t oc,
+    internal_const_iterator_t liter,
+    internal_const_iterator_t riter,
+    OMapNodeRef l,
+    OMapNodeRef r);
+
+  merge_entry_ret do_balance(
+    omap_context_t oc,
+    internal_const_iterator_t liter,
+    internal_const_iterator_t riter,
+    OMapNodeRef l,
+    OMapNodeRef r);
+
   using get_child_node_iertr = OMapNode::base_iertr;
   using get_child_node_ret = get_child_node_iertr::future<OMapNodeRef>;
   get_child_node_ret get_child_node(
@@ -292,18 +315,28 @@ struct OMapLeafNode
   }
 
   void prepare_commit() final {
-    if (is_rewrite() && !is_btree_root()) {
+    if (unlikely(!is_seen_by_users())) {
+      ceph_assert(is_rewrite());
       auto &prior = *get_prior_instance()->template cast<OMapLeafNode>();
-      if (prior.base_child_t::has_parent_tracker()) {
-        assert(prior.is_seen_by_users());
+      if (!prior.is_seen_by_users()) {
+	return;
+      }
+      set_seen_by_users();
+    }
+    if (is_rewrite()) {
+      auto &prior = *get_prior_instance()->template cast<OMapLeafNode>();
+      assert(prior.is_seen_by_users());
+      // Chances are that this transaction is in parallel with another
+      // user transaction that set the prior's root to true, so we need
+      // to do this.
+      set_root(prior.is_btree_root());
+      if (!is_btree_root()) {
+	assert(prior.base_child_t::has_parent_tracker());
+	assert(prior.is_seen_by_users());
 	// unlike fixed-kv nodes, rewriting child nodes of the omap tree
 	// won't affect parent nodes, so we have to manually take prior
 	// instances' parent trackers here.
 	this->child_node_t::take_parent_from_prior();
-      } else {
-        // dirty omap extent may not be accessed yet during rewrite,
-        // this means the extent may not be initalized yet as linked.
-        assert(!prior.is_seen_by_users());
       }
     }
   }
@@ -318,8 +351,7 @@ struct OMapLeafNode
   }
 
   ~OMapLeafNode() {
-    if (this->is_valid()
-	&& !this->is_pending()
+    if (this->is_stable()
 	&& !this->is_btree_root()
 	// dirty omap extent may not be accessed/linked yet
 	&& this->base_child_t::has_parent_tracker()) {
@@ -402,7 +434,8 @@ struct OMapLeafNode
 
   make_balanced_ret make_balanced(
     omap_context_t oc,
-    OMapNodeRef _right) final;
+    OMapNodeRef _right,
+    uint32_t pivot_idx) final;
 
   static constexpr extent_types_t TYPE = extent_types_t::OMAP_LEAF;
   extent_types_t get_type() const final {

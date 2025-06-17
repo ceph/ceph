@@ -37,12 +37,12 @@ namespace async = ceph::async;
 
 TEST(CoroSucc, AioComplete)
 {
-  auto lrc = librados::Rados::aio_create_completion();
+  std::unique_ptr<librados::AioCompletion> lrc{librados::Rados::aio_create_completion()};
   asio::io_context c;
   asio::co_spawn(c.get_executor(),
                  []() -> asio::awaitable<void> {
                    co_return;
-                 }(), lrc);
+                 }(), lrc.get());
   c.run();
   lrc->wait_for_complete();
   auto r = lrc->get_return_value();
@@ -51,13 +51,13 @@ TEST(CoroSucc, AioComplete)
 
 TEST(CoroExcept, AioComplete)
 {
-  auto lrc = librados::Rados::aio_create_completion();
+  std::unique_ptr<librados::AioCompletion> lrc{librados::Rados::aio_create_completion()};
   asio::io_context c;
   asio::co_spawn(c.get_executor(),
                  []() -> asio::awaitable<void> {
                    throw sys::system_error{ENOENT, sys::generic_category()};
                    co_return;
-                 }(), lrc);
+                 }(), lrc.get());
   c.run();
   lrc->wait_for_complete();
   auto r = lrc->get_return_value();
@@ -66,13 +66,13 @@ TEST(CoroExcept, AioComplete)
 
 TEST(CoroUnknownExcept, AioComplete)
 {
-  auto lrc = librados::Rados::aio_create_completion();
+  std::unique_ptr<librados::AioCompletion> lrc{librados::Rados::aio_create_completion()};
   asio::io_context c;
   asio::co_spawn(c.get_executor(),
                  []() -> asio::awaitable<void> {
                    throw std::exception{};
                    co_return;
-                 }(), lrc);
+                 }(), lrc.get());
   c.run();
   lrc->wait_for_complete();
   auto r = lrc->get_return_value();
@@ -81,12 +81,12 @@ TEST(CoroUnknownExcept, AioComplete)
 
 TEST(Int, AioComplete)
 {
-  auto lrc = librados::Rados::aio_create_completion();
+  std::unique_ptr<librados::AioCompletion> lrc{librados::Rados::aio_create_completion()};
   asio::io_context c;
   async::async_dispatch(c.get_executor(),
                         []() {
                          return -42;
-                       }, lrc);
+                       }, lrc.get());
   c.run();
   lrc->wait_for_complete();
   auto r = lrc->get_return_value();
@@ -95,13 +95,13 @@ TEST(Int, AioComplete)
 
 TEST(EC, AioComplete)
 {
-  auto lrc = librados::Rados::aio_create_completion();
+  std::unique_ptr<librados::AioCompletion> lrc{librados::Rados::aio_create_completion()};
   asio::io_context c;
   async::async_dispatch(c.get_executor(),
                         []() {
                           return sys::error_code(ENOENT,
                                                  sys::generic_category());
-                        }, lrc);
+                        }, lrc.get());
   c.run();
   lrc->wait_for_complete();
   auto r = lrc->get_return_value();

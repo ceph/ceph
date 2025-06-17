@@ -198,9 +198,14 @@ def main():
 
     out = exec_cmd("dd status=none if=%s of=/dev/stdout bs=1M skip=4 | sha1sum | awk '{ print $1 }'" % (outfile))
     org_object_sha1 = get_cmd_output(out)
-    log.debug("SHA1 of original file is: %s", org_object_sha1)
+    log.debug("SHA1 of cached part in original file is: %s", org_object_sha1)
+    out = exec_cmd("dd status=none if=%s of=/dev/stdout bs=1M skip=4 | sha1sum | awk '{ print $1 }'" % (get_file_path))
+    download_object_sha1 = get_cmd_output(out)
+    log.debug("SHA1 of cached part in downloaded file is: %s", download_object_sha1)
 
-    assert(cached_object_sha1 == org_object_sha1)  # Datacache test failed if sha1 of cached object does not match original object sha1"
+    assert((cached_object_sha1 == org_object_sha1) or (org_object_sha1 == download_object_sha1 and chk_cache_dir > 0))
+    # (cached_object_sha1 == org_object_sha1) test fails if "stripe_size" is not exactly 4MiB(4194304),
+    # in that case fall back to checking the sha1 of the downloaded file
     log.debug("RGW Datacache test SUCCESS")
 
     # remove datacache dir

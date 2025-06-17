@@ -46,6 +46,14 @@ void RGWOp_Bucket_Info::execute(optional_yield y)
   RESTArgs::get_string(s, "bucket", bucket, &bucket);
   RESTArgs::get_bool(s, "stats", false, &fetch_stats);
 
+  uint32_t max_entries;
+  std::string marker;
+  RESTArgs::get_uint32(s, "max-entries", 0, &max_entries);
+  RESTArgs::get_string(s, "marker", marker, &marker);
+
+  op_state.max_entries = max_entries;
+  op_state.marker = marker;
+
   op_state.set_user_id(uid);
   op_state.set_bucket_name(bucket);
   op_state.set_fetch_stats(fetch_stats);

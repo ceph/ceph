@@ -60,10 +60,18 @@ cd $releasedir
 perl -ni -e 'print if(!(/^Package: .*-dbg$/../^$/))' ceph-$vers/debian/control
 perl -pi -e 's/--dbg-package.*//' ceph-$vers/debian/rules
 
+# For cache hit consistency, allow CI builds to use a build directory whose name
+# does not contain version information
+if [ "${CEPH_BUILD_NORMALIZE_PATHS}" = 'true' ]; then
+    mv ceph-$vers ceph
+    cd ceph
+else
+    cd ceph-$vers
+fi
+
 #
 # update the changelog to match the desired version
 #
-cd ceph-$vers
 chvers=$(head -1 debian/changelog | perl -ne 's/.*\(//; s/\).*//; print')
 if [ "$chvers" != "$dvers" ]; then
    DEBEMAIL="contact@ceph.com" dch -D $VERSION_CODENAME --force-distribution -b -v "$dvers" "new version"

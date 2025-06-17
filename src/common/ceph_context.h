@@ -46,6 +46,12 @@
 
 #include "crush/CrushLocation.h"
 
+#ifdef HAVE_BREAKPAD
+namespace google_breakpad {
+  class ExceptionHandler;
+}
+#endif
+
 class AdminSocket;
 class AdminSocketHook;
 class CryptoHandler;
@@ -143,6 +149,9 @@ public:
 
   ConfigProxy _conf;
   ceph::logging::Log *_log;
+#ifdef HAVE_BREAKPAD
+  std::unique_ptr<google_breakpad::ExceptionHandler> _ex_handler;
+#endif
 
   /* init ceph::crypto */
   void init_crypto();

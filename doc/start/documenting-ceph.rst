@@ -253,43 +253,45 @@ To scan for the reachability of external links, execute:
 
 	admin/build-doc linkcheck
 
-Executing ``admin/build-doc`` will create a ``build-doc`` directory under
+Running ``admin/build-doc`` creates a ``build-doc`` directory under
 ``ceph``.  You may need to create a directory under ``ceph/build-doc`` for
-output of Javadoc files:
+Javadoc file output:
 
 .. prompt:: bash $
 
 	mkdir -p output/html/api/libcephfs-java/javadoc
 
-The build script ``build-doc`` will produce an output of errors and warnings.
-You MUST fix errors in documents you modified before committing a change, and
-you SHOULD fix warnings that are related to syntax you modified.
+The build script ``build-doc`` produces output partially consisting of errors
+and warnings.  You MUST fix errors in documents you modified before committing
+a change, and you SHOULD fix warnings that are related to syntax you modified.
 
 .. important:: You must validate ALL HYPERLINKS. If a hyperlink is broken,
    it automatically breaks the build!
 
-Once you build the documentation set, you may start an HTTP server at
-``http://localhost:8080/`` to view it:
+After you have built the documentation set, you may start an HTTP server at
+``http://localhost:8080/`` to view it by running the following command:
 
 .. prompt:: bash $
 
 	admin/serve-doc
 
 You can also navigate to ``build-doc/output`` to inspect the built documents.
-There should be an ``html`` directory and a ``man`` directory containing
-documentation in HTML and manpage formats respectively.
+Within ``build-doc/output`` is an ``html`` directory and a ``man`` directory
+containing documentation in HTML and manpage formats respectively.
 
 Build the Source (First Time)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Ceph uses Python Sphinx, which is generally distribution agnostic. The first
-time you build Ceph documentation, it will generate a doxygen XML tree, which
-is a bit time consuming.
+Ceph uses Python Sphinx, which is distribution agnostic. The first time you
+build the Ceph documentation, a doxygen XML tree is generated. This can be time
+-consuming.
 
-Python Sphinx does have some dependencies that vary across distributions. The
-first time you build the documentation, the script will notify you if you do not
-have the dependencies installed. To run Sphinx and build documentation successfully,
-the following packages are required:
+Some of Python Sphinx's dependencies vary across distributions. The first time
+you build the documentation, the build script notifies you of uninstalled
+dependencies. 
+
+To run Sphinx and build documentation successfully, the following packages are
+required:
 
 .. raw:: html
 
@@ -350,14 +352,14 @@ the following packages are required:
 
 
 Install each dependency that is not installed on your host. For Debian/Ubuntu
-distributions, execute the following:
+distributions, run the following commands:
 
 .. prompt:: bash $
 
 	sudo apt-get install gcc python-dev python3-pip libxml2-dev libxslt-dev doxygen graphviz ant ditaa
 	sudo apt-get install python3-sphinx python3-venv cython3
 
-For Fedora distributions, execute the following:
+For Fedora distributions, run the following commands:
 
 .. prompt:: bash $
 
@@ -366,25 +368,26 @@ For Fedora distributions, execute the following:
    sudo yum install python-jinja2 python-pygments python-docutils python-sphinx
    sudo yum install jericho-html ditaa
 
-For CentOS/RHEL distributions, it is recommended to have ``epel`` (Extra
-Packages for Enterprise Linux) repository as it provides some extra packages
-which are not available in the default repository. To install ``epel``, execute
-the following:
+For CentOS/RHEL distributions, it is recommended to enable the ``epel`` (Extra
+Packages for Enterprise Linux) repository, because it provides extra packages
+not available in the default repository. To install ``epel``, run the following
+command:
 
 .. prompt:: bash $
 
-        sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+   sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 
-For CentOS/RHEL distributions, execute the following:
+For CentOS/RHEL distributions, run the following commands:
 
 .. prompt:: bash $
 
-	sudo yum install gcc python-devel python-pip libxml2-devel libxslt-devel doxygen graphviz ant
-	sudo pip install html2text
+   sudo yum install gcc python-devel python-pip libxml2-devel libxslt-devel doxygen graphviz ant
+   sudo pip install html2text
 
-For CentOS/RHEL distributions, the remaining python packages are not available
-in the default and ``epel`` repositories. So, use http://rpmfind.net/ to find
-the packages. Then, download them from a mirror and install them. For example:
+For CentOS/RHEL distributions, the remaining Python packages are not available
+in the default repositories or  the ``epel`` repositories. Use
+http://rpmfind.net/ to find the packages. Then download them from a mirror and
+install them. For example:
 
 .. prompt:: bash $
 
@@ -397,19 +400,19 @@ the packages. Then, download them from a mirror and install them. For example:
 	wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/python-sphinx-1.1.3-11.el7.noarch.rpm
 	sudo yum install python-sphinx-1.1.3-11.el7.noarch.rpm
 
-Ceph documentation makes extensive use of `ditaa`_, which is not presently built
-for CentOS/RHEL7. You must install ``ditaa`` if you are making changes to
-``ditaa`` diagrams so that you can verify that they render properly before you
-commit new or modified ``ditaa`` diagrams. You may retrieve compatible required
-packages for CentOS/RHEL distributions and install them manually. To run
-``ditaa`` on CentOS/RHEL7, following dependencies are required:
+Ceph documentation makes extensive use of `ditaa`_, which is not built for
+CentOS/RHEL. If you make changes to ``ditaa`` diagrams, you must install
+``ditaa`` to verify that they render properly before you commit your changes.
+You may retrieve compatible required packages for CentOS/RHEL distributions and
+install them manually. To run ``ditaa`` on CentOS/RHEL, following dependencies
+are required:
 
 - jericho-html
 - jai-imageio-core
 - batik
 
-Use http://rpmfind.net/ to find compatible ``ditaa`` and the dependencies.
-Then, download them from a mirror and install them. For example:
+Use http://rpmfind.net/ to find compatible ``ditaa`` and its dependencies.
+Then download them from a mirror and install them. For example:
 
 .. prompt:: bash $
 
@@ -422,8 +425,8 @@ Then, download them from a mirror and install them. For example:
 	wget http://rpmfind.net/linux/fedora/linux/releases/22/Everything/x86_64/os/Packages/d/ditaa-0.9-13.r74.fc21.noarch.rpm
 	sudo yum install ditaa-0.9-13.r74.fc21.noarch.rpm
 
-Once you have installed all these packages, build the documentation by following
-the steps given in `Build the Source`_.
+After you have installed these packages, build the documentation by following
+the steps in `Build the Source`_.
 
 
 Commit the Change

@@ -171,7 +171,10 @@ BtreeOMapManager::omap_set_key(
   const ceph::bufferlist &value)
 {
   LOG_PREFIX(BtreeOMapManager::omap_set_key);
-  DEBUGT("{} -> {}", t, key, value);
+  DEBUGT("{} -> 0x{:x} value", t, key, value.length());
+  // #FIXME: heap buffer overflow during logging if value is long (e.g. 1020B)
+  // https://tracker.ceph.com/issues/71524
+  // DEBUGT("{} -> {}", t, key, value);
   return get_omap_root(
     get_omap_context(t, omap_root),
     omap_root

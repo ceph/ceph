@@ -269,8 +269,28 @@ Example: specifying services and using limit:
 .. note::
 
    Cephadm strictly enforces an order to the upgrade of daemons that is still present
-   in staggered upgrade scenarios. The current upgrade ordering is
-   ``mgr -> mon -> crash -> osd -> mds -> rgw -> rbd-mirror -> cephfs-mirror -> iscsi -> nfs``.
+   in staggered upgrade scenarios. The current upgrade ordering is:
+
+   * ``mgr``
+   * ``mon``
+   * ``crash``
+   * ``osd``
+   * ``mds``
+   * ``rgw``
+   * ``rbd-mirror``
+   * ``cephfs-mirror``
+   * ``ceph-exporter``
+   * ``iscsi``
+   * ``nfs``
+   * ``nvmeof``
+   * ``smb``
+   * ``node-exporter``
+   * ``prometheus``
+   * ``alertmanager``
+   * ``grafana``
+   * ``loki``
+   * ``promtail``
+
    If you specify parameters that would upgrade daemons out of order, the upgrade
    command will block and note which daemons will be missed if you proceed.
 

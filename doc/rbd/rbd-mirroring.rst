@@ -66,6 +66,9 @@ These pool configuration steps should be performed on both peer clusters. These
 procedures assume that both clusters, named "site-a" and "site-b", are accessible
 from a single host for clarity.
 
+The pool must have the same name on both peer clusters. See :ref:`Renaming a
+Pool<rados_renaming_a_pool>` for instructions on renaming pools.
+
 See the `rbd`_ manpage for additional details of how to connect to different
 Ceph clusters.
 

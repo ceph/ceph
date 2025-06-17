@@ -1,0 +1,36 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+tasks:
+- ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr_pool false --force
+    log-ignorelist:
+      - but it is still running
+      - overall HEALTH_
+      - \(PG_
+    conf:
+      osd:
+        osd min pg log entries: 5
+        crimson alien thread cpu cores: 6-7
+      osd.0:
+        crimson seastar cpu cores: 0-1
+      osd.1:
+        crimson seastar cpu cores: 2-3
+      osd.2:
+        crimson seastar cpu cores: 4-5
+      global:
+- workunit:
+    clients:
+      client.0:
+        - rados/test_pg_splitting.sh

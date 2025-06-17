@@ -496,12 +496,12 @@ public:
           assert(cnode->has_parent_tracker());
           if (node->is_pending()) {
             auto &n = node->get_stable_for_key(i->get_key());
-            assert(cnode->get_parent_node().get() == &n);
+            assert(cnode->peek_parent_node().get() == &n);
             auto pos = n.lower_bound(i->get_key()).get_offset();
             assert(pos < n.get_size());
             assert(n.children[pos] == cnode.get());
           } else {
-            assert(cnode->get_parent_node().get() == node.get());
+            assert(cnode->peek_parent_node().get() == node.get());
             assert(node->children[i->get_offset()] == cnode.get());
           }
         } else if (child_node->is_pending()) {
@@ -509,14 +509,14 @@ public:
             auto &prior = (child_node_t &)*child_node->get_prior_instance();
             assert(prior.is_valid());
             assert(prior.is_parent_valid());
-            if (node->is_mutation_pending()) {
+            if (node->is_pending()) {
               auto &n = node->get_stable_for_key(i->get_key());
-              assert(prior.get_parent_node().get() == &n);
+              assert(prior.peek_parent_node().get() == &n);
               auto pos = n.lower_bound(i->get_key()).get_offset();
               assert(pos < n.get_size());
               assert(n.children[pos] == &prior);
             } else {
-              assert(prior.get_parent_node().get() == node.get());
+              assert(prior.peek_parent_node().get() == node.get());
               assert(node->children[i->get_offset()] == &prior);
             }
           } else {
@@ -567,9 +567,9 @@ public:
         } else {
           auto c = static_cast<child_node_t*>(child);
           assert(c->has_parent_tracker());
-          assert(c->get_parent_node().get() == node.get()
+          assert(c->peek_parent_node().get() == node.get()
             || (node->is_pending() && c->is_stable()
-                && c->get_parent_node().get() == &node->get_stable_for_key(
+                && c->peek_parent_node().get() == &node->get_stable_for_key(
                   i->get_key())));
         }
       } else {
@@ -1192,7 +1192,7 @@ private:
                           parent_pos=std::move(parent_pos)]
                           (internal_node_t &node) {
       using tree_root_linker_t = TreeRootLinker<RootBlock, internal_node_t>;
-      assert(!node.is_pending());
+      assert(node.is_stable());
       assert(!node.is_linked());
       node.range = fixed_kv_node_meta_t<node_key_t>{begin, end, depth};
       if (parent_pos) {
@@ -1205,7 +1205,7 @@ private:
           auto &stable_root = (RootBlockRef&)*root_block->get_prior_instance();
           tree_root_linker_t::link_root(stable_root, &node);
         } else {
-          assert(!root_block->is_pending());
+          assert(root_block->is_stable());
           tree_root_linker_t::link_root(root_block, &node);
         }
       }
@@ -1236,10 +1236,8 @@ private:
         *ret);
       // This can only happen during init_cached_extent
       // or when backref extent being rewritten by gc space reclaiming
-      if (!ret->is_pending() && !ret->is_linked()) {
-        assert(ret->is_dirty()
-          || (is_backref_node(ret->get_type())
-            && ret->is_clean()));
+      if (ret->is_stable() && !ret->is_linked()) {
+        assert(ret->has_delta() || is_backref_node(ret->get_type()));
         init_internal(*ret);
       }
       auto meta = ret->get_meta();
@@ -1278,7 +1276,7 @@ private:
                       parent_pos=std::move(parent_pos)]
                       (leaf_node_t &node) {
       using tree_root_linker_t = TreeRootLinker<RootBlock, leaf_node_t>;
-      assert(!node.is_pending());
+      assert(node.is_stable());
       assert(!node.is_linked());
       node.range = fixed_kv_node_meta_t<node_key_t>{begin, end, 1};
       if (parent_pos) {
@@ -1291,7 +1289,7 @@ private:
           auto &stable_root = (RootBlockRef&)*root_block->get_prior_instance();
           tree_root_linker_t::link_root(stable_root, &node);
         } else {
-          assert(!root_block->is_pending());
+          assert(root_block->is_stable());
           tree_root_linker_t::link_root(root_block, &node);
         }
       }
@@ -1321,10 +1319,8 @@ private:
         *ret);
       // This can only happen during init_cached_extent
       // or when backref extent being rewritten by gc space reclaiming
-      if (!ret->is_pending() && !ret->is_linked()) {
-        assert(ret->is_dirty()
-          || (is_backref_node(ret->get_type())
-            && ret->is_clean()));
+      if (ret->is_stable() && !ret->is_linked()) {
+        assert(ret->has_delta() || is_backref_node(ret->get_type()));
         init_leaf(*ret);
       }
       auto meta = ret->get_meta();

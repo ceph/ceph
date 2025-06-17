@@ -563,7 +563,7 @@ private:
   struct {
     ceph::mutex lock = ceph::make_mutex("BlueFS::log.lock");
     uint64_t seq_live = 1;   //seq that log is currently writing to; mirrors dirty.seq_live
-    FileWriter *writer = 0;
+    FileWriter *writer = nullptr;
     bluefs_transaction_t t;
     bool uses_envelope_mode = false; // true if any file is in envelope mode
   } log;

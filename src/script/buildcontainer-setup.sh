@@ -5,6 +5,7 @@ install_container_deps() {
     # set JENKINS_HOME in order to have the build container look as much
     # like an existing jenkins build environment as possible
     export JENKINS_HOME=/ceph
+    export WITH_CRIMSON=true
     prepare
 }
 

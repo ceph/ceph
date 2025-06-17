@@ -46,7 +46,7 @@ status_checks() {
 
         diff=$((num_namespaces - expected_avg_ns))
         if [[ $diff -lt -1 || $diff -gt 1 ]]; then
-            echo "Gateway $gw_id has num-namespaces ($num_namespaces), expected around $expected_ns. Indicates a problem in ns load-balancing."
+            echo "Gateway $gw_id has num-namespaces ($num_namespaces), expected around $expected_ns_count. Indicates a problem in ns load-balancing."
             exit 1
         fi
     done
