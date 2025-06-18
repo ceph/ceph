@@ -19,6 +19,7 @@
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/linked_tree_node.h"
+#include "crimson/os/seastore/extent_pinboard.h"
 
 namespace crimson::os::seastore::backref {
 class BtreeBackrefManager;
@@ -1573,7 +1574,7 @@ public:
   }
 
 private:
-  /// Update lru for access to ref
+  /// Update extent pinboard for access to ref
   void touch_extent(
       CachedExtent &ext,
       const Transaction::src_t* p_src,
@@ -1584,7 +1585,7 @@ private:
       return;
     }
     if (ext.is_stable_clean() && !ext.is_placeholder()) {
-      lru.move_to_top(ext, p_src);
+      pinboard->move_to_top(ext, p_src);
     }
   }
 
@@ -1641,159 +1642,7 @@ private:
   friend class crimson::os::seastore::backref::BtreeBackrefManager;
   friend class crimson::os::seastore::BackrefManager;
 
-  /**
-   * lru
-   *
-   * holds references to recently used extents
-   */
-  class LRU {
-    // max size (bytes)
-    const size_t capacity = 0;
-
-    // current size (bytes)
-    size_t current_size = 0;
-
-    counter_by_extent_t<cache_size_stats_t> sizes_by_ext;
-    cache_io_stats_t overall_io;
-    counter_by_src_t<counter_by_extent_t<cache_io_stats_t> >
-      trans_io_by_src_ext;
-
-    mutable cache_io_stats_t last_overall_io;
-    mutable cache_io_stats_t last_trans_io;
-    mutable counter_by_src_t<counter_by_extent_t<cache_io_stats_t> >
-      last_trans_io_by_src_ext;
-
-    CachedExtent::primary_ref_list lru;
-
-    void do_remove_from_lru(
-        CachedExtent &extent,
-        const Transaction::src_t* p_src) {
-      assert(extent.is_stable_clean() && !extent.is_placeholder());
-      assert(extent.primary_ref_list_hook.is_linked());
-      assert(lru.size() > 0);
-      auto extent_loaded_length = extent.get_loaded_length();
-      assert(current_size >= extent_loaded_length);
-
-      lru.erase(lru.s_iterator_to(extent));
-      current_size -= extent_loaded_length;
-      get_by_ext(sizes_by_ext, extent.get_type()).account_out(extent_loaded_length);
-      overall_io.out_sizes.account_in(extent_loaded_length);
-      if (p_src) {
-        get_by_ext(
-          get_by_src(trans_io_by_src_ext, *p_src),
-          extent.get_type()
-        ).out_sizes.account_in(extent_loaded_length);
-      }
-      intrusive_ptr_release(&extent);
-    }
-
-    void trim_to_capacity(
-        const Transaction::src_t* p_src) {
-      while (current_size > capacity) {
-        do_remove_from_lru(lru.front(), p_src);
-      }
-    }
-
-  public:
-    LRU(size_t capacity) : capacity(capacity) {}
-
-    size_t get_capacity_bytes() const {
-      return capacity;
-    }
-
-    size_t get_current_size_bytes() const {
-      return current_size;
-    }
-
-    size_t get_current_num_extents() const {
-      return lru.size();
-    }
-
-    void get_stats(
-        cache_stats_t &stats,
-        bool report_detail,
-        double seconds) const;
-
-    void remove_from_lru(CachedExtent &extent) {
-      assert(extent.is_stable_clean());
-      assert(!extent.is_placeholder());
-
-      if (extent.primary_ref_list_hook.is_linked()) {
-        do_remove_from_lru(extent, nullptr);
-      }
-    }
-
-    void move_to_top(
-        CachedExtent &extent,
-        const Transaction::src_t* p_src) {
-      assert(extent.is_stable_clean());
-      assert(!extent.is_placeholder());
-
-      auto extent_loaded_length = extent.get_loaded_length();
-      if (extent.primary_ref_list_hook.is_linked()) {
-        // present, move to top (back)
-        assert(lru.size() > 0);
-        assert(current_size >= extent_loaded_length);
-        lru.erase(lru.s_iterator_to(extent));
-        lru.push_back(extent);
-      } else {
-        // absent, add to top (back)
-        if (extent_loaded_length > 0) {
-          current_size += extent_loaded_length;
-          overall_io.in_sizes.account_in(extent_loaded_length);
-          if (p_src) {
-            get_by_ext(
-              get_by_src(trans_io_by_src_ext, *p_src),
-              extent.get_type()
-            ).in_sizes.account_in(extent_loaded_length);
-          }
-        } // else: the extent isn't loaded upon touch_extent()/on_cache(),
-          //       account the io later in increase_cached_size() upon read_extent()
-	get_by_ext(sizes_by_ext, extent.get_type()).account_in(extent_loaded_length);
-        intrusive_ptr_add_ref(&extent);
-        lru.push_back(extent);
-
-        trim_to_capacity(p_src);
-      }
-    }
-
-    void increase_cached_size(
-      CachedExtent &extent,
-      extent_len_t increased_length,
-      const Transaction::src_t* p_src) {
-      assert(extent.is_data_stable());
-
-      if (extent.primary_ref_list_hook.is_linked()) {
-        assert(extent.is_stable_clean());
-        assert(!extent.is_placeholder());
-        // present, increase size
-        assert(lru.size() > 0);
-        current_size += increased_length;
-        get_by_ext(sizes_by_ext, extent.get_type()).account_parital_in(increased_length);
-        overall_io.in_sizes.account_in(increased_length);
-        if (p_src) {
-          get_by_ext(
-            get_by_src(trans_io_by_src_ext, *p_src),
-            extent.get_type()
-          ).in_sizes.account_in(increased_length);
-        }
-
-        trim_to_capacity(nullptr);
-      }
-    }
-
-    void clear() {
-      LOG_PREFIX(Cache::LRU::clear);
-      for (auto iter = lru.begin(); iter != lru.end();) {
-	SUBDEBUG(seastore_cache, "clearing {}", *iter);
-	do_remove_from_lru(*(iter++), nullptr);
-      }
-    }
-
-    ~LRU() {
-      clear();
-    }
-  } lru;
+  ExtentPinboardRef pinboard;
 
   struct query_counters_t {
     uint64_t access = 0;
@@ -2023,7 +1872,7 @@ private:
     load_ranges_t to_read = extent->load_ranges(offset, length);
     auto new_length = extent->get_loaded_length();
     assert(new_length > old_length);
-    lru.increase_cached_size(*extent, new_length - old_length, p_src);
+    pinboard->increase_cached_size(*extent, new_length - old_length, p_src);
     return seastar::do_with(to_read.ranges, [extent, this, FNAME](auto &read_ranges) {
       return ExtentPlacementManager::read_ertr::parallel_for_each(
           read_ranges, [extent, this, FNAME](auto &read_range) {
