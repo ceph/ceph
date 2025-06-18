@@ -21,7 +21,7 @@
 #include "rgw_cr_rados.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
-#include "driver/rados/rgw_zone.h"
+#include "rgw/rgw_zone.h"
 #include "rgw_sal_config.h"
 
 #include "gtest/gtest.h"
