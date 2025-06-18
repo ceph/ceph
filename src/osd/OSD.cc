@@ -4890,8 +4890,9 @@ int OSD::update_crush_location()
     }
     snprintf(weight, sizeof(weight), "%.4lf",
 	     std::max(.00001,
+                      g_conf().get_val<double>("osd_crush_scaling_factor") *
 		      double(st.total) /
-		      double(1ull << 40 /* TB */)));
+		      double(1ull << 40 /* TiB */)));
   }
 
   dout(10) << __func__ << " crush location is " << cct->crush_location << dendl;
