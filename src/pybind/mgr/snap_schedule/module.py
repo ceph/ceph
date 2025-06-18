@@ -8,12 +8,14 @@ import json
 import sqlite3
 from typing import Any, Dict, Optional, Tuple, Union
 from .fs.schedule_client import SnapSchedClient
-from mgr_module import MgrModule, CLIReadCommand, CLIWriteCommand, Option
+from mgr_module import MgrModule, CLIReadCommand, CLIWriteCommand, Option, NotifyType
 from mgr_util import CephfsConnectionException
 from threading import Event
 
 
 class Module(MgrModule):
+    NOTIFY_TYPES = [NotifyType.fs_map]
+
     MODULE_OPTIONS = [
         Option(
             'allow_m_granularity',
@@ -36,6 +38,21 @@ class Module(MgrModule):
         super(Module, self).__init__(*args, **kwargs)
         self._initialized = Event()
         self.client = SnapSchedClient(self)
+
+    def notify(self, notify_type: NotifyType, notify_id: str) -> None:
+        if notify_type != NotifyType.fs_map:
+            return
+        fs_map = self.get('fs_map')
+        if not fs_map:
+            return
+
+        # we don't know for which fs config has been changed
+        fs_names = set()
+        for fs in fs_map['filesystems']:
+            fs_name = fs['mdsmap']['fs_name']
+            fs_names.add(fs_name)
+
+        self.client.delete_references_to_unavailable_fs(fs_names)
 
     def _subvolume_exist(self, fs: str, subvol: Union[str, None], group: Union[str, None]) -> bool:
         rc, subvolumes, err = self.remote('volumes', 'subvolume_ls', fs, group)

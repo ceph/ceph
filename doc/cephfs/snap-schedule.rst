@@ -197,6 +197,15 @@ this happens, the next snapshot will be schedule as if the previous one was not
 delayed, i.e. one or more delayed snapshots will not cause drift in the overall
 schedule.
 
+If a volume is deleted while snapshot schedules are active on the volume, then
+there might be cases when Python Tracebacks are seen in the log file or on the
+command-line when commands are executed on such volumes. Although measures have
+been taken to take note of the fs_map changes and delete active timers and
+close database connections to avoid Python Tracebacks, it is not possible to
+completely mute the tracebacks due to the inherent nature of problem. In the
+event that such tracebacks are seen, the only solution to get the system to a
+stable state is the disable and re-enable the snap_schedule Manager Module.
+
 In order to somewhat limit the overall number of snapshots in a file system, the
 module will only keep a maximum of 50 snapshots per directory. If the retention
 policy results in more then 50 retained snapshots, the retention list will be
