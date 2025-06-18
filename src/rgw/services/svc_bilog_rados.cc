@@ -18,7 +18,7 @@ RGWSI_BILog_RADOS::RGWSI_BILog_RADOS(CephContext *cct) : RGWServiceInstance(cct)
 {
 }
 
-void RGWSI_BILog_RADOS::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
+void RGWSI_BILog_RADOS_InIndex::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
 {
   svc.bi = bi_rados_svc;
 }
@@ -52,7 +52,7 @@ struct TrimWriter : rgwrados::shard_io::RadosWriter {
   }
 };
 
-int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp, optional_yield y,
+int RGWSI_BILog_RADOS_InIndex::log_trim(const DoutPrefixProvider *dpp, optional_yield y,
 				const RGWBucketInfo& bucket_info,
 				const rgw::bucket_log_layout_generation& log_layout,
 				int shard_id,
@@ -112,7 +112,7 @@ struct StartWriter : rgwrados::shard_io::RadosWriter {
   }
 };
 
-int RGWSI_BILog_RADOS::log_start(const DoutPrefixProvider *dpp, optional_yield y,
+int RGWSI_BILog_RADOS_InIndex::log_start(const DoutPrefixProvider *dpp, optional_yield y,
                                  const RGWBucketInfo& bucket_info,
                                  const rgw::bucket_log_layout_generation& log_layout,
                                  int shard_id)
@@ -155,7 +155,7 @@ struct StopWriter : rgwrados::shard_io::RadosWriter {
   }
 };
 
-int RGWSI_BILog_RADOS::log_stop(const DoutPrefixProvider *dpp, optional_yield y,
+int RGWSI_BILog_RADOS_InIndex::log_stop(const DoutPrefixProvider *dpp, optional_yield y,
                                 const RGWBucketInfo& bucket_info,
                                 const rgw::bucket_log_layout_generation& log_layout,
                                 int shard_id)
@@ -254,7 +254,7 @@ static int bilog_list(const DoutPrefixProvider* dpp, optional_yield y,
   return ceph::from_error_code(ec);
 }
 
-int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp, optional_yield y,
+int RGWSI_BILog_RADOS_InIndex::log_list(const DoutPrefixProvider *dpp, optional_yield y,
 				const RGWBucketInfo& bucket_info,
 				const rgw::bucket_log_layout_generation& log_layout,
 				int shard_id, string& marker, uint32_t max,
@@ -350,7 +350,7 @@ int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp, optional_yield y,
   return 0;
 }
 
-int RGWSI_BILog_RADOS::get_log_status(const DoutPrefixProvider *dpp,
+int RGWSI_BILog_RADOS_InIndex::get_log_status(const DoutPrefixProvider *dpp,
                                       const RGWBucketInfo& bucket_info,
 				      const rgw::bucket_log_layout_generation& log_layout, 
                                       int shard_id,

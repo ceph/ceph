@@ -41,7 +41,7 @@ class RGWSI_BILog_RADOS;
 
 class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
 {
-  friend class RGWSI_BILog_RADOS;
+  friend class RGWSI_BILog_RADOS_InIndex;
 
   int open_pool(const DoutPrefixProvider *dpp,
                 const rgw_pool& pool,
