@@ -563,6 +563,7 @@ option(WITH_RADOSGW_RADOS "RADOS backend for Rados Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
 option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)
 option(WITH_RADOSGW_BACKTRACE_LOGGING "Enable backtraces in rgw logs" OFF)
+option(WITH_RADOSGW_FDB "Enable FoundationDB for RADOS Gateway" OFF)
 
 option(WITH_SYSTEM_ARROW "Use system-provided arrow" OFF)
 option(WITH_SYSTEM_UTF8PROC "Use system-provided utf8proc" OFF)
@@ -619,6 +620,11 @@ if(WITH_RADOSGW)
   message(STATUS "ssl soname: ${LIBSSL_SONAME}")
   message(STATUS "crypto soname: ${LIBCRYPTO_SONAME}")
 endif (WITH_RADOSGW)
+
+if(WITH_RADOSGW_FDB)
+ message(STATUS "FoundationDB support for RADOS gateway enabled.")
+ set(HAVE_RADOSGW_FDB)
+endif()
 
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
