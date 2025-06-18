@@ -13,6 +13,13 @@ module.exports = async ({ github, context, core, configDiff }) => {
       }
     );
 
+    // Check if any comment contains `/config check ok`
+    const configCheckOkComment = comments.find(comment => comment.body.includes("/config check ok"));
+    if (configCheckOkComment) {
+      core.info("Found '/config check ok' comment. Returning with success.");
+      return;
+    }
+
     const existingComment = comments.find(comment => comment.body.includes("### Config Diff Tool Output"));
 
     // Do not create comment if there are no configuration changes
@@ -42,8 +49,8 @@ ${configDiff}
 \`\`\`
 
  
-The above configuration changes are found in the PR. Please update the relevant release documentation if necessary.
-  `;
+The above configuration changes are found in the PR. Please update the relevant release documentation if necessary.  
+Ignore this comment if docs are already updated. To make the "Check ceph config changes" CI check pass, please comment \`/config check ok\` and re-run the test.  `;
 
       // List all files in the pull request
       core.info("Fetching list of files changed in the pull request...");
@@ -64,7 +71,7 @@ The above configuration changes are found in the PR. Please update the relevant 
             core.info(`Annotating file: ${file.filename}`);
             // Show annotations only at the start of the file
             core.notice(
-                `Configuration changes detected in ${file.filename}. Please update the release documentation if necessary.`,
+                `Configuration changes detected in ${file.filename}. Please update the release documentation if necessary. Ignore if already done`,
                 {
                   title: "Configuration Change Detected",
                   file: file.filename,
