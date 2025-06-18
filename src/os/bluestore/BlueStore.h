@@ -3333,7 +3333,7 @@ private:
     uint32_t op_flags = 0,
     uint64_t retry_count = 0);
 
-  void _do_read_and_pad(
+  bool _do_read_and_pad(
     Collection* c,
     OnodeRef& o,
     uint32_t offset,

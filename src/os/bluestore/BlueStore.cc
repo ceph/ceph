@@ -12936,7 +12936,12 @@ int BlueStore::_do_read(
   return r;
 }
 
-void inline BlueStore::_do_read_and_pad(
+// Reads object data from [offset~length] region.
+// Pads with zeros if some portion of the region sticks outside object length.
+// Returns:
+// true -  region successfully retrieved
+// false - region contains corrupted, unreadable bytes
+bool inline BlueStore::_do_read_and_pad(
   Collection* c,
   OnodeRef& o,
   uint32_t offset,
@@ -12944,12 +12949,15 @@ void inline BlueStore::_do_read_and_pad(
   ceph::buffer::list& bl)
 {
   int r = _do_read(c, o, offset, length, bl, 0);
-  ceph_assert(r >= 0 && r <= (int)length);
+  if (r < 0 || r > (int)length) {
+    return false;
+  }
   size_t zlen = length - r;
   if (zlen > 0) {
     bl.append_zero(zlen);
     logger->inc(l_bluestore_write_pad_bytes, zlen);
   }
+  return true;
 }
 
 int BlueStore::_verify_csum(OnodeRef& o,
@@ -17703,24 +17711,36 @@ int BlueStore::_do_write_v2_compressed(
   }
   *_dout << std::dec << dendl;
   for (const auto& i : regions) {
+    BlueStore::Writer wr(this, txc, &wctx, o);
     ceph::buffer::list data_bl;
     if (i.offset <= offset && offset < i.offset + i.length) {
       // the starting point is withing the region, so the end must too
       ceph_assert(offset + length <= i.offset + i.length);
       if (i.offset < offset) {
-        _do_read_and_pad(c.get(), o, i.offset, offset - i.offset, data_bl);
+        bool read_ok = _do_read_and_pad(c.get(), o, i.offset, offset - i.offset, data_bl);
+        if (!read_ok) {
+          wr.do_write(offset, input_bl); // initial write will fail, but fallback will succeed
+          continue;
+        }
       }
       data_bl.claim_append(input_bl);
       if (offset + length < i.offset + i.length) {
         ceph::buffer::list right_bl;
-        _do_read_and_pad(c.get(), o, offset + length,
+        bool read_ok = _do_read_and_pad(c.get(), o, offset + length,
           i.offset + i.length - (offset + length), right_bl);
+        if (!read_ok) {
+          wr.do_write(i.offset, data_bl); // initial write will fail, but fallback will succeed
+          continue;
+        }
         data_bl.claim_append(right_bl);
       }
     } else {
       // the starting point is not within region, so the end is not allowed either
       ceph_assert(offset + length < i.offset || offset + length >= i.offset + i.length);
-      _do_read_and_pad(c.get(), o, i.offset, i.length, data_bl);
+      bool read_ok = _do_read_and_pad(c.get(), o, i.offset, i.length, data_bl);
+      if (!read_ok) {
+        continue; // this is additional region to recompress, we can skip it
+      }
     }
     ceph_assert(data_bl.length() == i.length);
     Writer::blob_vec bd;
@@ -17729,7 +17749,6 @@ int BlueStore::_do_write_v2_compressed(
     uint32_t au_size = min_alloc_size;
     disk_for_compressed = estimator->split_and_compress(data_bl, bd);
     disk_for_raw = p2roundup(i.offset + i.length, au_size) - p2align(i.offset, au_size);
-    BlueStore::Writer wr(this, txc, &wctx, o);
     if (disk_for_compressed < disk_for_raw) {
       wr.do_write_with_blobs(i.offset, i.offset + i.length, i.offset, i.offset + i.length, bd);
     } else {
