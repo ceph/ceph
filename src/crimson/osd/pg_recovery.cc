@@ -431,6 +431,8 @@ void PGRecovery::on_global_recover (
   pg->get_peering_state().object_recovered(soid, stat_diff);
   pg->publish_stats_to_osd();
   auto& recovery_waiter = pg->get_recovery_backend()->get_recovering(soid);
+  if (!is_delete)
+    recovery_waiter.obc->drop_recovery_read();
   recovery_waiter.set_recovered();
   pg->get_recovery_backend()->remove_recovering(soid);
   pg->get_recovery_backend()->found_and_remove(soid);
@@ -514,13 +516,13 @@ PGRecovery::recover_object_with_throttle(
   eversion_t need)
 {
   LOG_PREFIX(PGRecovery::recover_object_with_throttle);
-  DEBUGDPP("{} {}", pg->get_dpp(), soid, need);
+  DEBUGDPP("{} {}", *pg->get_dpp(), soid, need);
   auto releaser = co_await interruptor::make_interruptible(
     pg->get_shard_services().get_throttle(
       crimson::osd::scheduler::params_t{
 	1, 0, crimson::osd::scheduler::scheduler_class_t::background_best_effort
       }));
-  DEBUGDPP("got throttle: {} {}", pg->get_dpp(), soid, need);
+  DEBUGDPP("got throttle: {} {}", *pg->get_dpp(), soid, need);
   co_await pg->get_recovery_backend()->recover_object(soid, need);
   co_return;
 }
@@ -710,4 +712,13 @@ void PGRecovery::on_backfill_reserved()
   // (but stopped one).
   backfill_state->process_event(
     BackfillState::Triggered{}.intrusive_from_this());
+}
+
+hobject_t PGRecovery::get_temp_recovery_object(
+    const hobject_t& target,
+    eversion_t version)
+{
+  return pg->get_recovery_backend()->get_temp_recovery_object(
+    target,
+    version);
 }
