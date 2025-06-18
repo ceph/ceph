@@ -45,7 +45,7 @@ add_subdirectory(allocsim)
 add_executable(ceph_test_keyvaluedb
   test_kv.cc)
 target_link_libraries(ceph_test_keyvaluedb
-  os
+  kv
   ceph-common
   ${UNITTEST_LIBS}
   global
