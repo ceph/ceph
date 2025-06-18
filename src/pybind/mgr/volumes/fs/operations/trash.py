@@ -69,6 +69,47 @@ class Trash(GroupTemplate):
         """
         log.debug(f'purge(): trashpath = {trashpath}')
 
+        class Dir:
+            '''
+            A class to hold relative path and handle for the directory being
+            traversed. Besides, it holds a boolean value to indicate whether
+            a exception had occurred while calling readdir() for this dir handle
+            and list of dir entries for which unlink()/rmdir() failed.
+            '''
+
+            TRASH_PATH = trashpath
+            fs = self.fs
+
+            def __init__(self, path):
+                # relative path to the directory. Join it with trashpath to get
+                # absolute path.
+                self.path = path
+                self.d_name = os.path.basename(self.path)
+
+                self.handle = self.fs.opendir(os.path.join(self.TRASH_PATH,
+                                                           self.path))
+
+                # list of dir entries to be ignored instead of calling rmdir()
+                # or unlink() for them.
+                self.de_ignore_list = []
+
+                # bool for storing whether an error occured during call to
+                # readdir()
+                self.readdir_error = False
+
+            def add_to_de_ignore_list(self, d_name):
+                self.de_ignore_list.append(d_name)
+
+            def set_readdir_error(self):
+                self.readdir_error = True
+
+            def should_skip_d_name(self, d_name):
+                return d_name in self.de_ignore_list
+
+            def has_readdir_failed(self):
+                return self.readdir_error or \
+                        self.d_name in self.de_ignore_list
+
         # XXX: add trailing '/' since its absence will produce relative path
         # with leading '/' which will misguide os.path.join() to produce
         # unexpected results.
@@ -79,51 +120,69 @@ class Trash(GroupTemplate):
             trashpath += b'/'
 
         try:
-            # each stack member is tuple containing path to a directory and
-            # handle for that directory.
-            #
-            # The path here is a relative path (relative to trash path) instead
-            # of absolute path. This is to minimize the memory consumption and
-            # thereby also minimize the chance of running out of memory.
-            #
-            # The directory handle is also stored on stack to avoid repetitive
-            # calls to fs.opendir().
-            stack = deque([(b'', self.fs.opendir(trashpath)), ])
+            # stack needed for traversing file heirarchy under trashpath in
+            # depth-first, non-recursive fashion. each stack member is an
+            # instance of class Dir (declared above, inside this method).
+            stack = deque([Dir(b"."),])
+
             while stack and not should_cancel():
-                last_index = len(stack) - 1
-                curr_dir_path = os.path.join(trashpath, stack[last_index][0])
-                curr_dir_handle = stack[last_index][1]
+                curr_dir = stack[-1]
 
                 # assuming True for now, if it's not empty upcoming loop will
                 # set it to False.
                 is_curr_dir_empty = True
 
                 # de = directory entry
-                de = self.fs.readdir(curr_dir_handle)
+                de = self.fs.readdir(curr_dir.handle)
                 while de and not should_cancel():
                     if de.d_name in (b'.', b'..'):
-                        de = self.fs.readdir(curr_dir_handle)
+                        de = self.fs.readdir(curr_dir.handle)
                         continue
 
                     is_curr_dir_empty = False
-                    de_path = os.path.join(curr_dir_path, de.d_name)
+                    if de.d_name in curr_dir.de_ignore_list:
+                        continue
+
+                    de_path = os.path.join(trashpath, curr_dir.path, de.d_name)
                     if de.is_dir():
                         try:
                             self.fs.rmdir(de_path)
                         except cephfs.ObjectNotEmpty:
-                            de_rel_path = de_path.replace(trashpath, b'')
-                            stack.append((de_rel_path, self.fs.opendir(de_path)))
-                            break
+                            try:
+                                stack.append(Dir(os.path.join(curr_dir.path, de.d_name)))
+                                break
+                            except cephfs.Error as e:
+                                log.error(f'Exception occured: "{e}"')
+                                curr_dir.add_to_de_ignore_list(de.d_name)
+                        except cephfs.Error as e:
+                            log.error(f'Exception occured: "{e}"')
+                            curr_dir.add_to_de_ignore_list(de.d_name)
                     else:
-                        self.fs.unlink(de_path)
+                        try:
+                            self.fs.unlink(de_path)
+                        except cephfs.Error as e:
+                            log.error(f'Exception occured: "{e}"')
+                            curr_dir.add_to_de_ignore_list(de.d_name)
 
-                    de = self.fs.readdir(curr_dir_handle)
+                    try:
+                        de = self.fs.readdir(curr_dir.handle)
+                    except cephfs.Error as e:
+                        # this is the tricky one: it's an error on this
+                        # directory, not a d_name in this directory
+                        log.error(f'Exception occured: "{e}"')
+                        curr_dir.set_readdir_error()
 
                 if is_curr_dir_empty:
+                    if curr_dir.has_readdir_failed():
+                        # notify parent dir
+                        try:
+                            stack[-2].add_to_de_ignore_list(curr_dir.d_name)
+                        except IndexError:
+                            pass
+
                     stack.pop()
                 else:
-                    curr_dir_handle.rewinddir()
-                    continue
+                    curr_dir.handle.rewinddir()
 
             self.fs.rmdir(trashpath)
         except cephfs.ObjectNotFound:
