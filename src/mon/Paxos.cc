@@ -873,7 +873,7 @@ void Paxos::commit_start()
   logger->inc(l_paxos_commit);
   logger->inc(l_paxos_commit_keys, t->get_keys());
   logger->inc(l_paxos_commit_bytes, t->get_bytes());
-  commit_start_stamp = ceph_clock_now();
+  commit_start_stamp = ceph::coarse_mono_clock::now();
 
   get_store()->queue_transaction(t, new C_Committed(this));
 
@@ -895,8 +895,8 @@ void Paxos::commit_start()
 void Paxos::commit_finish()
 {
   dout(20) << __func__ << " " << (last_committed+1) << dendl;
-  utime_t end = ceph_clock_now();
-  logger->tinc(l_paxos_commit_latency, end - commit_start_stamp);
+  auto end = ceph::coarse_mono_clock::now();
+  logger->tinc(l_paxos_commit_latency, to_timespan(end - commit_start_stamp));
 
   ceph_assert(g_conf()->paxos_kill_at != 8);
 
