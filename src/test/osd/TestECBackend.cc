@@ -1320,6 +1320,7 @@ void test_decode(unsigned int k, unsigned int m, uint64_t chunk_size, uint64_t o
     }
   }
 
+  semap.add_zero_padding_for_decode(read_request.zeros_for_decode);
   ASSERT_EQ(0, semap.decode(ec_impl, want, object_size, nullptr, true));
 }
 
