@@ -1054,16 +1054,9 @@ public:
     }
   }
 
-  bool add_zero_padding_for_decode(uint64_t object_size, shard_id_set &exclude_set) {
-    shard_extent_set_t zeros(sinfo->get_k_plus_m());
-    sinfo->ro_size_to_zero_mask(object_size, zeros);
-    extent_set superset = get_extent_superset();
+  void add_zero_padding_for_decode(ECUtil::shard_extent_set_t &zeros) {
     bool changed = false;
     for (auto &&[shard, z] : zeros) {
-      if (exclude_set.contains(shard)) {
-        continue;
-      }
-      z.intersection_of(superset);
       for (auto [off, len] : z) {
         changed = true;
         bufferlist bl;
@@ -1075,8 +1068,6 @@ public:
     if (changed) {
       compute_ro_range();
     }
-
-    return changed;
   }
 
   template <typename IntervalSetT> requires is_interval_set_v<IntervalSetT>

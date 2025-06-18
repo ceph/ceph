@@ -329,7 +329,7 @@ class ECBackend : public ECCommon {
         ECUtil::shard_extent_map_t &&buffers_read,
         std::optional<std::map<std::string, ceph::buffer::list, std::less<>>>
           attrs,
-        const ECUtil::shard_extent_set_t &want_to_read,
+        read_request_t &req,
         RecoveryMessages *m);
     void handle_recovery_push(
         const PushOp &op,

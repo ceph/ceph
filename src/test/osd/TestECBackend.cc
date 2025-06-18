@@ -158,12 +158,12 @@ public:
       // for each missing shard.
       for (auto a : available) {
         minimum_set.insert(a);
-        if (minimum_set.size() == data_chunk_count) {
+        if (std::cmp_equal(minimum_set.size(), data_chunk_count)) {
           break;
         }
       }
 
-      if (minimum_set.size() != data_chunk_count) {
+      if (std::cmp_not_equal(minimum_set.size(), data_chunk_count)) {
         minimum_set.clear();
         return -EIO; // Cannot recover.
       }
@@ -174,7 +174,6 @@ public:
     }
     return 0;
   }
-
   [[deprecated]]
   int minimum_to_decode(const std::set<int> &want_to_read,
     const std::set<int> &available,
@@ -1320,7 +1319,8 @@ void test_decode(unsigned int k, unsigned int m, uint64_t chunk_size, uint64_t o
     }
   }
 
-  ASSERT_EQ(0, semap.decode(ec_impl, want, object_size, nullptr, true));
+  semap.add_zero_padding_for_decode(read_request.zeros_for_decode);
+  ASSERT_EQ(0, semap.decode(ec_impl, want, object_size));
 }
 
 TEST(ECCommon, decode) {
