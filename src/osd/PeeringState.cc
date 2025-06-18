@@ -7484,7 +7484,9 @@ boost::statechart::result PeeringState::GetLog::react(const GotLog&)
       // Our log was behind that of the auth_log_shard which was a non-primary
       // with a sparse log. We have just got a log from a primary shard to
       // catch up and now need to recheck if we need to rollback the log to
-      // the auth_log_shard
+      // the auth_log_shard. Discard the received missing log as this does
+      // may not be consistent with the authorative log
+      ps->peer_missing.erase(auth_log_shard);
       psdout(10) << "repeating auth_log_shard selection" << dendl;
       post_event(RepeatGetLog());
       return discard_event();
