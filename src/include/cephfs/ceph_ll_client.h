@@ -110,6 +110,9 @@ struct ceph_statx {
  * others in the future, we disallow setting any that aren't recognized.
  */
 #define CEPH_REQ_FLAG_MASK		(AT_SYMLINK_NOFOLLOW|AT_STATX_DONT_SYNC)
+#if defined(__linux__) && defined(AT_EMPTY_PATH)
+#define CEPH_AT_EMPTY_PATH		(CEPH_REQ_FLAG_MASK|AT_EMPTY_PATH)
+#endif
 
 /* fallocate mode flags */
 #ifndef FALLOC_FL_KEEP_SIZE
