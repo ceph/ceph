@@ -165,6 +165,7 @@ public:
     bool is_paddr_known;
   };
   maybe_add_readset_ret maybe_add_to_read_set(CachedExtentRef ref) {
+    assert(ref->is_stable());
     assert(ref->get_paddr().is_absolute()
            || ref->get_paddr().is_record_relative());
     if (is_weak()) {
@@ -177,6 +178,7 @@ public:
     } else {
       // paddr is unknown until wait_io() finished
       // to call maybe_add_to_read_set_step_2(ref)
+      assert(ref->is_pending_io());
       ceph_assert(ref->get_paddr().is_record_relative());
       bool added = maybe_add_to_read_set_step_1(ref);
       return {added, false};
@@ -673,6 +675,7 @@ private:
 
   void maybe_add_to_read_set_step_2(CachedExtentRef ref) {
     // paddr must be known for read_set
+    assert(ref->is_stable_ready());
     ceph_assert(ref->get_paddr().is_absolute());
     if (is_weak()) {
       return;
