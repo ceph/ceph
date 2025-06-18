@@ -245,8 +245,8 @@ public:
     switch (type) {
       case CEPH_MSG_OSD_OP:
       case CEPH_MSG_OSD_BACKOFF:
-      case MSG_OSD_EC_READ:
-      case MSG_OSD_EC_WRITE: {
+        return op_scheduler_class::client;
+      case MSG_OSD_EC_READ: {
         auto priority = op->get_req()->get_priority();
         if (priority <= PeeringState::recovery_msg_priority_t::BEST_EFFORT) {
           return op_scheduler_class::background_best_effort;
