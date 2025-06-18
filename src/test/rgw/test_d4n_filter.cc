@@ -188,7 +188,7 @@ class D4NFilterFixture: public ::testing::Test {
       /* DBStore does not provide the RGW_ATTR_ID_TAG attr, so it is being manually written
          here since D4N cache backend versioning relies on it. */
       rgw::sal::Attrs attrs{{RGW_ATTR_ID_TAG, std::move(bl)}};
-      bl.append("test_etag");
+      bl.append("test_etag\0", 10);
       attrs.insert({RGW_ATTR_ETAG, std::move(bl)});
 
       bl.append("test data", 9);
@@ -225,7 +225,7 @@ class D4NFilterFixture: public ::testing::Test {
       buffer::list bl;
       bl.append("test_version\0", 13);
       rgw::sal::Attrs attrs{{RGW_ATTR_ID_TAG, std::move(bl)}};
-      bl.append("test_etag");
+      bl.append("test_etag\0", 10);
       attrs.insert({RGW_ATTR_ETAG, std::move(bl)});
 
       bl.append("test data", 9);
@@ -260,7 +260,7 @@ class D4NFilterFixture: public ::testing::Test {
       buffer::list bl;
       bl.append("test_version\0", 13);
       rgw::sal::Attrs attrs{{RGW_ATTR_ID_TAG, std::move(bl)}};
-      bl.append("test_etag");
+      bl.append("test_etag\0", 10);
       attrs.insert({RGW_ATTR_ETAG, std::move(bl)});
 
       bl.append("test data", 9);
