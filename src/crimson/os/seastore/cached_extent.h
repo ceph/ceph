@@ -1011,6 +1011,7 @@ protected:
   }
 
   friend class Cache;
+  friend class ExtentPinboardLRU;
   template <typename T, typename... Args>
   static TCachedExtentRef<T> make_cached_extent_ref(
     Args&&... args) {
