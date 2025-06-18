@@ -103,6 +103,11 @@ void MgrStatMonitor::create_initial()
 
 void MgrStatMonitor::calc_pool_availability()
 {
+  // only update pool_availability within leader mon
+  if (!mon.is_leader()) {
+    return; 
+  }
+
   dout(20) << __func__ << dendl;
   std::scoped_lock l(lock);
 
@@ -194,7 +199,7 @@ void MgrStatMonitor::calc_pool_availability()
       }
     }
   }
-  pending_pool_availability.swap(pool_availability);
+  pending_pool_availability = pool_availability;
 }
 
 void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
