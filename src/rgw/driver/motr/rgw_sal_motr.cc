@@ -3335,6 +3335,11 @@ std::unique_ptr<Lifecycle> MotrStore::get_lifecycle(void)
   return 0;
 }
 
+std::unique_ptr<Restore> MotrStore::get_restore(const int n_objs,
+			const std::vector<std::string_view>& obj_names) {
+  return 0;
+}
+
 bool MotrStore::process_expired_objects(const DoutPrefixProvider *dpp,
 	       				optional_yield y)
 {

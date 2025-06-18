@@ -41,6 +41,8 @@ struct RGWZoneParams {
 
   JSONFormattable tier_config;
 
+  rgw_pool restore_pool;
+
   RGWZoneParams() {}
   explicit RGWZoneParams(const std::string& _name) : name(_name){}
   RGWZoneParams(const rgw_zone_id& _id, const std::string& _name) : id(_id.id), name(_name) {}
@@ -59,7 +61,7 @@ struct RGWZoneParams {
   const std::string& get_compression_type(const rgw_placement_rule& placement_rule) const;
   
   void encode(bufferlist& bl) const {
-    ENCODE_START(15, 1, bl);
+    ENCODE_START(16, 1, bl);
     encode(domain_root, bl);
     encode(control_pool, bl);
     encode(gc_pool, bl);
@@ -95,11 +97,12 @@ struct RGWZoneParams {
     encode(topics_pool, bl);
     encode(account_pool, bl);
     encode(group_pool, bl);
+    encode(restore_pool, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(15, bl);
+    DECODE_START(16, bl);
     decode(domain_root, bl);
     decode(control_pool, bl);
     decode(gc_pool, bl);
@@ -183,6 +186,11 @@ struct RGWZoneParams {
       topics_pool = name + ".rgw.meta:topics";
       account_pool = name + ".rgw.meta:accounts";
       group_pool = name + ".rgw.meta:groups";
+    }
+    if (struct_v >= 16) {
+      decode(restore_pool, bl);
+    } else {
+      restore_pool = log_pool.name + ":restore";
     }
     DECODE_FINISH(bl);
   }
