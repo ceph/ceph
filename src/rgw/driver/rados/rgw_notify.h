@@ -47,17 +47,19 @@ struct reservation_t {
   struct topic_t {
     topic_t(const std::string& _configurationId, const rgw_pubsub_topic& _cfg,
             cls_2pc_reservation::id_t _res_id,
-            rgw::notify::EventType _event_type)
+            rgw::notify::EventType _event_type, uint64_t shard_id)
         : configurationId(_configurationId),
           cfg(_cfg),
           res_id(_res_id),
-          event_type(_event_type) {}
+          event_type(_event_type),
+          shard_id(shard_id){}
 
     const std::string configurationId;
     const rgw_pubsub_topic cfg;
     // res_id is reset after topic is committed/aborted
     cls_2pc_reservation::id_t res_id;
     rgw::notify::EventType event_type;
+    uint64_t shard_id; 
   };
 
   const DoutPrefixProvider* const dpp;
@@ -132,7 +134,7 @@ int publish_commit(rgw::sal::Object* obj,
 int publish_abort(reservation_t& reservation);
 
 int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &rados_ioctx,
-                               const std::string &queue_name, rgw_topic_stats &stats, optional_yield y);
+                               ShardNamesView shards, rgw_topic_stats &stats, optional_yield y);
 
 }
 
