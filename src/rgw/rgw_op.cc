@@ -17,6 +17,7 @@
 
 #include "common/dout.h"
 #include "include/scope_guard.h"
+#include "include/random.h"
 #include "common/Clock.h"
 #include "common/armor.h"
 #include "common/async/spawn_throttle.h"
@@ -148,7 +149,7 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw_owner& effective_owner,
                                   bufferlist* indata, JSONParser* jp,
                                   const req_info& req, rgw_err& err,
-                                  optional_yield y)
+                                  optional_yield y, param_vec_t params)
 {
   const auto& period = site.get_period();
   if (!period) {
@@ -179,8 +180,8 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                           creds, site.get_zonegroup().id, zg->second.api_name};
   bufferlist outdata;
   constexpr size_t max_response_size = 128 * 1024; // we expect a very small response
-  auto result = conn.forward(dpp, effective_owner, req,
-                             max_response_size, indata, &outdata, y);
+  auto result = conn.forward(dpp, effective_owner, req, max_response_size,
+                             std::move(params), indata, &outdata, y);
   if (!result) {
     return result.error();
   }
@@ -512,6 +513,46 @@ static int get_swift_owner_account_acl(const DoutPrefixProvider* dpp,
   return ret;
 }
 
+// return a random endpoint from the requested zone
+static int zone_local_bucket_redirect(const DoutPrefixProvider* dpp,
+                                      const RGWZoneGroup& zonegroup,
+                                      const std::string& zone_id,
+                                      const std::string& bucket_name,
+                                      std::string& error_message,
+                                      std::string& endpoint)
+{
+  auto zone = zonegroup.zones.find(zone_id);
+  if (zone == zonegroup.zones.end()) {
+    // the requested zone is no longer in the zonegroup
+    error_message = fmt::format(
+        "The requested zone-local bucket {} belongs to zone id {} which "
+        "is no longer in the bucket's zonegroup {}. If the zone was removed "
+        "permanently, the bucket metadata must be removed by admin.",
+        bucket_name, zone_id, zonegroup.id);
+    ldpp_dout(dpp, 0) << "ERROR: " << error_message << dendl;
+    return -ERR_REDIRECT_ZONE_GONE; // 410 Gone
+  }
+
+  const size_t count = zone->second.endpoints.size();
+  if (!count) {
+    // the requested zone has no endpoints for redirect
+    error_message = fmt::format(
+        "The requested zone-local bucket {} belongs to zone id {} which "
+        "has no endpoints configured, so cannot be redirected.",
+        bucket_name, zone_id);
+    ldpp_dout(dpp, 0) << "ERROR: " << error_message << dendl;
+    return -ERR_SERVICE_UNAVAILABLE; // 503 Service Unavailable
+  }
+
+  // select an endpoint at random
+  const size_t index = ceph::util::generate_random_number(0, count - 1);
+  endpoint = zone->second.endpoints[index];
+
+  ldpp_dout(dpp, 4) << "Redirecting request for non-replicated bucket "
+      << bucket_name << " to zone id " << zone_id << " " << endpoint << dendl;
+  return -ERR_PERMANENT_REDIRECT; // 301 Permanent Redirect
+}
+
 /**
  * Get the AccessControlPolicy for an user, bucket or object off of disk.
  * s: The req_state to draw information from.
@@ -598,6 +639,19 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
           rgw::sal::Object::empty(s->object.get())) {
         return -ERR_PERMANENT_REDIRECT;
       }
+    }
+
+    // non-replicated buckets only reside on a single zone. redirect to a zone
+    // endpoint unless the request was forwarded to the metdata master zone
+    const std::string& local_zone_id = s->bucket->get_info().local_zone_id;
+    const RGWZoneParams& local_zone_params = s->penv.site->get_zone_params();
+    const bool forwarded = s->penv.site->is_meta_master() && s->system_request;
+    if (!local_zone_id.empty() &&
+        local_zone_id != local_zone_params.id &&
+        !forwarded) {
+      return zone_local_bucket_redirect(dpp, zonegroup, local_zone_id,
+                                        s->bucket->get_name(), s->err.message,
+                                        s->zonegroup_endpoint);
     }
 
     /* init dest placement */
@@ -1523,6 +1577,12 @@ void RGWPutBucketReplication::execute(optional_yield y) {
   }
 
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
+    // TODO: validate destination buckets too
+    if (!s->bucket->get_info().local_zone_id.empty()) {
+      s->err.message = "Cannot set replication policy on zone-local buckets.";
+      return -ERR_INVALID_BUCKET_STATE;
+    }
+
     auto sync_policy = (s->bucket->get_info().sync_policy ? *s->bucket->get_info().sync_policy : rgw_sync_policy_info());
 
     for (auto& group : sync_policy_groups) {
@@ -3841,9 +3901,16 @@ void RGWCreateBucket::execute(optional_yield y)
 
   if (!driver->is_meta_master()) {
     // apply bucket creation on the master zone first
+    param_vec_t params;
+    if (!createparams.local_zone_id.empty()) {
+      // zone-local buckets must forward their own zone id
+      params.emplace_back(RGW_SYS_PARAM_PREFIX "local-zone-id",
+                          createparams.local_zone_id);
+    }
     JSONParser jp;
     op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                           &in_data, &jp, s->info, s->err, y);
+                                           &in_data, &jp, s->info, s->err,
+                                           y, std::move(params));
     if (op_ret < 0) {
       return;
     }
@@ -4720,17 +4787,20 @@ void RGWPutObj::execute(optional_yield y)
     }
   }
 
-  RGWBucketSyncPolicyHandlerRef policy_handler;
-  op_ret = driver->get_sync_policy_handler(this, std::nullopt, s->bucket->get_key(), &policy_handler, s->yield);
+  // set replication status for replicated buckets
+  if (s->bucket->get_info().local_zone_id.empty()) {
+    RGWBucketSyncPolicyHandlerRef policy_handler;
+    op_ret = driver->get_sync_policy_handler(this, std::nullopt, s->bucket->get_key(), &policy_handler, s->yield);
 
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "failed to read sync policy for bucket: " << s->bucket << dendl;
-    return;
-  }
-  if (policy_handler && policy_handler->bucket_exports_object(s->object->get_name(), obj_tags)) {
-    bufferlist repl_bl;
-    repl_bl.append("PENDING");
-    emplace_attr(RGW_ATTR_OBJ_REPLICATION_STATUS, std::move(repl_bl));
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "failed to read sync policy for bucket: " << s->bucket << dendl;
+      return;
+    }
+    if (policy_handler && policy_handler->bucket_exports_object(s->object->get_name(), obj_tags)) {
+      bufferlist repl_bl;
+      repl_bl.append("PENDING");
+      emplace_attr(RGW_ATTR_OBJ_REPLICATION_STATUS, std::move(repl_bl));
+    }
   }
 
   if (slo_info) {

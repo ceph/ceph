@@ -885,6 +885,7 @@ class Bucket {
     struct CreateParams {
       rgw_owner owner;
       std::string zonegroup_id;
+      std::string local_zone_id; //< id for zone-local buckets
       rgw_placement_rule placement_rule;
       // zone placement is optional on buckets created for another zonegroup
       const RGWZonePlacementInfo* zone_placement = nullptr;
