@@ -18049,18 +18049,13 @@ int BlueStore::_setattr(TransContext *txc,
 	   << " " << name << " (" << val.length() << " bytes)"
 	   << dendl;
   int r = 0;
-  if (!val.length()) {
-    auto& b = o->onode.attrs[name.c_str()] = bufferptr("", 0);
-    b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
-  } else if (!val.is_contiguous()) {
+
+  if (!val.is_contiguous() || val.front().is_partial()) {
     val.rebuild();
-    auto& b = o->onode.attrs[name.c_str()] = val.front();
-    b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
-  } else if (val.front().is_partial()) {
-    val.rebuild();
-    auto& b = o->onode.attrs[name.c_str()] = val.front();
-    b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
   }
+  auto& b = o->onode.attrs[name.c_str()] = val.front();
+  b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
+
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " (" << val.length() << " bytes)"
@@ -21213,4 +21208,4 @@ int BlueStore::commit_to_real_manager()
 }
 
 //================================================================================================================
-//================================================================================================================
+//========================================================================================

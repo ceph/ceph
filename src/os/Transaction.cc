@@ -159,6 +159,14 @@ void Transaction::dump(ceph::Formatter *f)
 	f->dump_stream("oid") << oid;
 	f->dump_string("name", name);
 	f->dump_unsigned("length", bl.length());
+        // DELETE ME DEBUG
+        if (name == OI_ATTR) {
+          object_info_t oi_decode(bl);
+          f->open_object_section("oi");
+          oi_decode.dump(f);
+          f->close_section();
+        }
+        // END DELETE ME DEBUG
       }
       break;
       
@@ -175,6 +183,16 @@ void Transaction::dump(ceph::Formatter *f)
 	for (map<string,bufferptr>::iterator p = aset.begin();
 	    p != aset.end(); ++p) {
 	  f->dump_unsigned(p->first.c_str(), p->second.length());
+	  // DELETE ME DEBUG
+	  if (p->first == OI_ATTR) {
+	    bufferlist bl;
+	    f->open_object_section("oi");
+	    bl.append(p->second);
+	    object_info_t oi_decode(bl);
+	    oi_decode.dump(f);
+	    f->close_section();
+	  }
+	  // END DELETE ME DEBUG
 	}
 	f->close_section();
       }

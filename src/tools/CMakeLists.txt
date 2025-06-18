@@ -5,7 +5,7 @@ set(rados_srcs
   rados/PoolDump.cc
   ${PROJECT_SOURCE_DIR}/src/common/util.cc
   ${PROJECT_SOURCE_DIR}/src/common/obj_bencher.cc
-  ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc)
+  ${PROJECT_SOURCE_DIR}/src/osd/ECUtilL.cc)
 if(WIN32)
   list(APPEND rados_srcs ../common/win32/code_page.rc)
 endif()

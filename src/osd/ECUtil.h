@@ -28,6 +28,10 @@
 
 #include "osd_types.h"
 
+// Must be a power of 2.
+static inline constexpr uint64_t EC_ALIGN_SIZE = 4096;
+static inline constexpr uint64_t EC_ALIGN_MASK = ~(EC_ALIGN_SIZE - 1);
+
 /// If someone wants these types, but not ExtentCache, move to another file
 struct bl_split_merge {
   ceph::buffer::list split(
@@ -133,6 +137,16 @@ class slice_iterator {
           if (emap_iter == input[shard].end()) {
             erase = true;
           } else {
+            if (out_set.contains(shard)) {
+              bufferlist bl = emap_iter.get_val();
+              bl.invalidate_crc();
+            } else {
+              // FAIL REVIEW - debug code.
+              // Calculating the CRC checks that the CRC cache is either valid
+              // or wrong. This relies on another fail review change inside crc32c
+              emap_iter.get_val().crc32c(-1);
+              // END FAIL REVIEW
+            }
             iters.at(shard).second = emap_iter.get_val().begin();
           }
         }
@@ -190,14 +204,14 @@ public:
   bool is_page_aligned() const {
     for (auto &&[_, ptr] : in) {
       uintptr_t p = (uintptr_t)ptr.c_str();
-      if (p & ~CEPH_PAGE_MASK) return false;
-      if ((p + ptr.length()) & ~CEPH_PAGE_MASK) return false;
+      if (p & ~EC_ALIGN_MASK) return false;
+      if ((p + ptr.length()) & ~EC_ALIGN_MASK) return false;
     }
 
     for (auto &&[_, ptr] : out) {
       uintptr_t p = (uintptr_t)ptr.c_str();
-      if (p & ~CEPH_PAGE_MASK) return false;
-      if ((p + ptr.length()) & ~CEPH_PAGE_MASK) return false;
+      if (p & ~EC_ALIGN_MASK) return false;
+      if ((p + ptr.length()) & ~EC_ALIGN_MASK) return false;
     }
 
     return true;
@@ -208,10 +222,6 @@ public:
     return *this;
   }
 };
-
-// Setting to 1 turns on very large amounts of level 0 debug containing the
-// contents of buffers. Even on level 20 this is not really wanted.
-#define DEBUG_EC_BUFFERS 1
 
 namespace ECUtil {
 class shard_extent_map_t;
@@ -314,7 +324,9 @@ struct shard_extent_set_t {
   /** return the sum of extent_set.size */
   uint64_t size() const {
     uint64_t size = 0;
-    for (auto &&[_, e] : map) size += e.size();
+    for (auto &&[_, e] : map) {
+      size += e.size();
+    }
 
     return size;
   }
@@ -330,17 +342,12 @@ struct shard_extent_set_t {
   }
 };
 
-inline uint64_t page_mask() {
-  static const uint64_t page_mask = ((uint64_t)CEPH_PAGE_SIZE) - 1;
-  return page_mask;
+inline uint64_t align_next(uint64_t val) {
+  return p2roundup(val, EC_ALIGN_SIZE);
 }
 
-inline uint64_t align_page_next(uint64_t val) {
-  return p2roundup(val, (uint64_t)CEPH_PAGE_SIZE);
-}
-
-inline uint64_t align_page_prev(uint64_t val) {
-  return p2align(val, (uint64_t)CEPH_PAGE_SIZE);
+inline uint64_t align_prev(uint64_t val) {
+  return p2align(val, EC_ALIGN_SIZE);
 }
 
 class stripe_info_t {
@@ -357,6 +364,7 @@ class stripe_info_t {
   const std::vector<raw_shard_id_t> chunk_mapping_reverse;
   const shard_id_set data_shards;
   const shard_id_set parity_shards;
+  const shard_id_set all_shards;
 
 private:
   void ro_range_to_shards(
@@ -409,6 +417,13 @@ private:
     return data_shards;
   }
 
+  static shard_id_set calc_all_shards(int k_plus_m) {
+    shard_id_set all_shards;
+    all_shards.insert_range(shard_id_t(), k_plus_m);
+    return all_shards;
+  }
+
+
 public:
   stripe_info_t(const ErasureCodeInterfaceRef &ec_impl, const pg_pool_t *pool,
                 uint64_t stripe_width
@@ -423,7 +438,8 @@ public:
         complete_chunk_mapping(ec_impl->get_chunk_mapping(), k + m)),
       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)),
+      all_shards(calc_all_shards(k + m)) {
     ceph_assert(stripe_width != 0);
     ceph_assert(stripe_width % k == 0);
   }
@@ -440,7 +456,8 @@ public:
       chunk_mapping(complete_chunk_mapping(std::vector<shard_id_t>(), k + m)),
       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)),
+      all_shards(calc_all_shards(k + m)) {
     ceph_assert(stripe_width != 0);
     ceph_assert(stripe_width % k == 0);
   }
@@ -511,7 +528,7 @@ public:
       }
       shard_size += remainder;
     }
-    return ECUtil::align_page_next(shard_size);
+    return align_next(shard_size);
   }
 
   uint64_t ro_offset_to_shard_offset(uint64_t ro_offset,
@@ -535,17 +552,9 @@ public:
     return pool->is_nonprimary_shard(shard);
   }
 
-  bool supports_ec_overwrites() const {
-    return pool->allows_ecoverwrites();
-  }
-
   bool supports_sub_chunks() const {
     return (plugin_flags &
       ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS) != 0;
-  }
-
-  bool require_hinfo() const {
-    return !supports_ec_overwrites();
   }
 
   bool supports_partial_reads() const {
@@ -599,6 +608,11 @@ public:
   auto get_parity_shards() const {
     return parity_shards;
   }
+
+  auto get_all_shards() const {
+    return all_shards;
+  }
+
 
   uint64_t ro_offset_to_prev_chunk_offset(uint64_t offset) const {
     return (offset / stripe_width) * chunk_size;
@@ -727,57 +741,6 @@ public:
       uint64_t ro_size,
       ECUtil::shard_extent_set_t &shard_extent_set) const;
 };
-
-class HashInfo {
-  uint64_t total_chunk_size = 0;
-  std::vector<uint32_t> cumulative_shard_hashes;
-
-public:
-  HashInfo() {}
-
-  explicit HashInfo(unsigned num_chunks) :
-    cumulative_shard_hashes(num_chunks, -1) {}
-
-  void append(uint64_t old_size, shard_id_map<bufferptr> &to_append);
-
-  void clear() {
-    total_chunk_size = 0;
-    cumulative_shard_hashes = std::vector<uint32_t>(
-      cumulative_shard_hashes.size(),
-      -1);
-  }
-
-  void encode(ceph::buffer::list &bl) const;
-  void decode(ceph::buffer::list::const_iterator &bl);
-  void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<HashInfo*> &o);
-
-  uint32_t get_chunk_hash(shard_id_t shard) const {
-    ceph_assert(shard < cumulative_shard_hashes.size());
-    return cumulative_shard_hashes[int(shard)];
-  }
-
-  uint64_t get_total_chunk_size() const {
-    return total_chunk_size;
-  }
-
-  void set_total_chunk_size_clear_hash(uint64_t new_chunk_size) {
-    cumulative_shard_hashes.clear();
-    total_chunk_size = new_chunk_size;
-  }
-
-  bool has_chunk_hash() const {
-    return !cumulative_shard_hashes.empty();
-  }
-
-  void update_to(const HashInfo &rhs) {
-    *this = rhs;
-  }
-
-  friend std::ostream &operator<<(std::ostream &out, const HashInfo &hi);
-};
-
-typedef std::shared_ptr<HashInfo> HashInfoRef;
 
 class shard_extent_map_t {
   static const uint64_t invalid_offset = std::numeric_limits<uint64_t>::max();
@@ -925,8 +888,7 @@ public:
   void append_zeros_to_ro_offset(uint64_t ro_offset);
   void insert_ro_extent_map(const extent_map &host_extent_map);
   extent_set get_extent_superset() const;
-  int encode(const ErasureCodeInterfaceRef &ec_impl, const HashInfoRef &hinfo,
-             uint64_t before_ro_size);
+  int encode(const ErasureCodeInterfaceRef &ec_impl);
   int _encode(const ErasureCodeInterfaceRef &ec_impl);
   int encode_parity_delta(const ErasureCodeInterfaceRef &ec_impl,
                           shard_extent_map_t &old_sem);
@@ -935,6 +897,8 @@ public:
                      const shard_id_set &shards);
   void pad_on_shards(const extent_set &pad_to,
                      const shard_id_set &shards);
+  void pad_on_shard(const extent_set &pad_to,
+                    const shard_id_t shard);
   void trim(const shard_extent_set_t &trim_to);
   int decode(const ErasureCodeInterfaceRef &ec_impl,
              const shard_extent_set_t &want,
@@ -965,7 +929,7 @@ public:
   bool contains(shard_id_t shard) const;
   bool contains(std::optional<shard_extent_set_t> const &other) const;
   bool contains(shard_extent_set_t const &other) const;
-  void pad_and_rebuild_to_page_align();
+  void pad_and_rebuild_to_ec_align();
   uint64_t size();
   void clear();
   uint64_t get_start_offset() const { return start_offset; }
@@ -1065,6 +1029,5 @@ struct log_entry_t {
 
 bool is_hinfo_key_string(const std::string &key);
 const std::string &get_hinfo_key();
-
-WRITE_CLASS_ENCODER(ECUtil::HashInfo)
 }
+

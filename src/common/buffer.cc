@@ -2014,12 +2014,14 @@ __u32 buffer::list::crc32c(__u32 crc) const
   int cache_misses = 0;
   int cache_hits = 0;
   int cache_adjusts = 0;
+  __u32 check_crc = crc;
 
   for (const auto& node : _buffers) {
     if (node.length()) {
       raw* const r = node._raw;
       pair<size_t, size_t> ofs(node.offset(), node.offset() + node.length());
       pair<uint32_t, uint32_t> ccrc;
+      check_crc = ceph_crc32c(check_crc, (unsigned char*)node.c_str(), node.length());
       if (r->get_crc(ofs, &ccrc)) {
 	if (ccrc.first == crc) {
 	  // got it already
@@ -2045,6 +2047,8 @@ __u32 buffer::list::crc32c(__u32 crc) const
       }
     }
   }
+
+  ceph_assert(crc == check_crc);
 
   if (buffer_track_crc) {
     if (cache_adjusts)
