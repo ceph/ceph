@@ -116,7 +116,7 @@ class D4NFilterFixture: public ::testing::Test {
       DriverManager::Config cfg = DriverManager::get_config(true, g_ceph_context);
       cfg.store_name = "dbstore";
       cfg.filter_name = "d4n";
-      auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+      auto config_store_type = "dbstore";
       auto cfgstore = DriverManager::create_config_store(env->dpp, config_store_type);
 
       auto filterDriver = DriverManager::get_raw_storage(env->dpp, g_ceph_context,
