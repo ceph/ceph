@@ -3019,7 +3019,7 @@ TEST_P(StoreTest, SimpleAttrTest) {
   int r;
   coll_t cid;
   ghobject_t hoid(hobject_t(sobject_t("attr object 1", CEPH_NOSNAP)));
-  bufferlist val, val2, val_exactly_10;
+  bufferlist val, val2, val_exactly_10, empty_bl;
   val.append("value");
   val.append("value2");
   bufferptr bp = bufferptr("0123456789abcdef", 0x10);
@@ -3054,6 +3054,7 @@ TEST_P(StoreTest, SimpleAttrTest) {
     t.setattr(cid, hoid, "foo", val);
     t.setattr(cid, hoid, "bar", val2);
     t.setattr(cid, hoid, "tiramisu", val_exactly_10);
+    t.setattr(cid, hoid, "empty", empty_bl);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -3080,10 +3081,42 @@ TEST_P(StoreTest, SimpleAttrTest) {
     bl1.append(bp);
     ASSERT_TRUE(bl_eq(val_exactly_10, bl1));
 
+    r = store->getattr(ch, hoid, "empty", bp);
+    ASSERT_EQ(0, r);
+    EXPECT_EQ(bp.length(), 0);
+
     map<string,bufferptr,less<>> bm;
     r = store->getattrs(ch, hoid, bm);
     ASSERT_EQ(0, r);
+  }
+  ch.reset();
+  EXPECT_EQ(store->umount(), 0);
+  EXPECT_EQ(store->mount(), 0);
+  ch = store->open_collection(cid);
+  {
+    bufferptr bp;
+    r = store->getattr(ch, hoid, "nofoo", bp);
+    ASSERT_EQ(-ENODATA, r);
 
+    r = store->getattr(ch, hoid, "foo", bp);
+    ASSERT_EQ(0, r);
+    bufferlist bl;
+    bl.append(bp);
+    ASSERT_TRUE(bl_eq(val, bl));
+
+    r = store->getattr(ch, hoid, "tiramisu", bp);
+    ASSERT_EQ(0, r);
+    bufferlist bl1;
+    bl1.append(bp);
+    ASSERT_TRUE(bl_eq(val_exactly_10, bl1));
+
+    r = store->getattr(ch, hoid, "empty", bp);
+    ASSERT_EQ(0, r);
+    EXPECT_EQ(bp.length(), 0);
+
+    map<string,bufferptr,less<>> bm;
+    r = store->getattrs(ch, hoid, bm);
+    ASSERT_EQ(0, r);
   }
   {
     ObjectStore::Transaction t;
