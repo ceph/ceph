@@ -3,6 +3,7 @@
 
 #include "rgw_realm_reloader.h"
 
+#include "rgw_asio_thread.h"
 #include "rgw_auth_registry.h"
 #include "rgw_bucket.h"
 #include "rgw_log.h"
@@ -32,12 +33,12 @@ RGWRealmReloader::RGWRealmReloader(RGWProcessEnv& env,
                                    const rgw::auth::ImplicitTenants& implicit_tenants,
                                    std::map<std::string, std::string>& service_map_meta,
                                    Pauser* frontends,
-				   boost::asio::io_context& io_context)
+				   ceph::async::io_context_pool& context_pool)
   : env(env),
     implicit_tenants(implicit_tenants),
     service_map_meta(service_map_meta),
     frontends(frontends),
-    io_context(io_context),
+    context_pool(context_pool),
     timer(env.driver->ctx(), mutex, USE_SAFE_TIMER_CALLBACKS),
     mutex(ceph::make_mutex("RGWRealmReloader")),
     reload_scheduled(nullptr)
@@ -98,6 +99,8 @@ void RGWRealmReloader::reload()
   rgw_log_usage_finalize();
 
   env.driver->shutdown();
+  // Let tasks finish before we destroy stuff
+  context_pool.finish();
   // destroy the existing driver
   DriverManager::close_storage(env.driver);
   env.driver = nullptr;
@@ -110,6 +113,13 @@ void RGWRealmReloader::reload()
     reload_scheduled = nullptr;
   }
 
+  // Start running stuff again!
+  context_pool.start(cct->_conf->rgw_thread_pool_size,
+		     [] {
+		       // request warnings on synchronous librados
+		       // calls in this thread
+		       is_asio_thread = true;
+		     });
 
   while (!env.driver) {
     // reload the new configuration from ConfigStore
@@ -121,7 +131,7 @@ void RGWRealmReloader::reload()
       DriverManager::Config cfg;
       cfg.store_name = "rados";
       cfg.filter_name = "none";
-      env.driver = DriverManager::get_storage(&dp, cct, cfg, io_context,
+      env.driver = DriverManager::get_storage(&dp, cct, cfg, context_pool,
 	  *env.site,
           cct->_conf->rgw_enable_gc_threads,
           cct->_conf->rgw_enable_lc_threads,
