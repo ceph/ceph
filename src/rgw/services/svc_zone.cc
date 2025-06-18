@@ -427,11 +427,6 @@ const RGWZone& RGWSI_Zone::get_zone() const
   return *zone_public_config;
 }
 
-const RGWZoneGroup& RGWSI_Zone::get_zonegroup() const
-{
-  return *zonegroup;
-}
-
 int RGWSI_Zone::get_zonegroup(const string& id, RGWZoneGroup& zg) const
 {
   int ret = 0;
@@ -514,11 +509,6 @@ bool RGWSI_Zone::need_to_sync() const
   return !(zonegroup->master_zone.empty() ||
 	   !rest_master_conn ||
 	   current_period->get_id().empty());
-}
-
-bool RGWSI_Zone::need_to_log_data() const
-{
-  return (zone_public_config->log_data && sync_module_exports_data());
 }
 
 bool RGWSI_Zone::is_meta_master() const

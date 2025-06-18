@@ -34,26 +34,6 @@ endfunction()
 find_package(ICU 52.0 COMPONENTS uc REQUIRED)
 
 set(librgw_common_srcs
-  services/svc_finisher.cc
-  services/svc_bi_rados.cc
-  services/svc_bilog_rados.cc
-  services/svc_bucket.cc
-  services/svc_bucket_sobj.cc
-  services/svc_bucket_sync_sobj.cc
-  services/svc_cls.cc
-  services/svc_config_key_rados.cc
-  services/svc_mdlog.cc
-  services/svc_notify.cc
-  services/svc_quota.cc
-  services/svc_sync_modules.cc
-  services/svc_sys_obj.cc
-  services/svc_sys_obj_cache.cc
-  services/svc_sys_obj_core.cc
-  services/svc_tier_rados.cc
-  services/svc_user.cc
-  services/svc_user_rados.cc
-  services/svc_zone.cc
-  services/svc_zone_utils.cc
   spdk/crc64.c
   madler/crc64nvme.c
   madler/crc32iso_hdlc.c
@@ -164,76 +144,97 @@ set(librgw_common_srcs
   rgw_dedup_cluster.cc
   rgw_data_access.cc
   rgw_realm_watcher.cc
-  driver/rados/account.cc
-  driver/rados/buckets.cc
   rgw_bucket_logging.cc
   rgw_rest_bucket_logging.cc
-  driver/rados/group.cc
-  driver/rados/groups.cc
-  driver/rados/rgw_bucket.cc
-  driver/rados/rgw_bucket_sync.cc
-  driver/rados/rgw_cr_rados.cc
-  driver/rados/rgw_cr_tools.cc
-  driver/rados/rgw_d3n_datacache.cc
-  driver/rados/rgw_datalog.cc
-  driver/rados/rgw_datalog_notify.cc
-  driver/rados/rgw_data_sync.cc
-  driver/rados/rgw_etag_verifier.cc
-  driver/rados/rgw_gc.cc
-  driver/rados/rgw_gc_log.cc
-  driver/rados/rgw_lc_tier.cc
-  driver/rados/rgw_log_backing.cc
-  driver/rados/rgw_metadata.cc
-  driver/rados/rgw_notify.cc
-  driver/rados/rgw_obj_manifest.cc
-  driver/rados/rgw_object_expirer_core.cc
-  driver/rados/rgw_otp.cc
-  driver/rados/rgw_period.cc
-  driver/rados/rgw_pubsub_push.cc
-  driver/rados/rgw_putobj_processor.cc
-  driver/rados/rgw_rados.cc
-  driver/rados/rgw_reshard.cc
-  driver/rados/rgw_rest_bucket.cc
-  driver/rados/rgw_rest_log.cc
-  driver/rados/rgw_rest_realm.cc
-  driver/rados/rgw_rest_user.cc
-  driver/rados/rgw_sal_rados.cc
-  driver/rados/rgw_service.cc
-  driver/rados/rgw_sync.cc
-  driver/rados/rgw_sync_counters.cc
-  driver/rados/rgw_sync_error_repo.cc
-  driver/rados/rgw_sync_module.cc
-  driver/rados/rgw_sync_module_aws.cc
-  driver/rados/rgw_sync_module_es.cc
-  driver/rados/rgw_sync_module_es_rest.cc
-  driver/rados/rgw_sync_module_log.cc
-  driver/rados/rgw_sync_trace.cc
-  driver/rados/rgw_tools.cc
-  driver/rados/rgw_trim_bilog.cc
-  driver/rados/rgw_trim_datalog.cc
-  driver/rados/rgw_trim_mdlog.cc
-  driver/rados/rgw_user.cc
-  driver/rados/rgw_zone.cc
-  driver/rados/role.cc
-  driver/rados/roles.cc
-  driver/rados/sync_fairness.cc
-  driver/rados/topic.cc
-  driver/rados/topic_migration.cc
-  driver/rados/topics.cc
-  driver/rados/users.cc)
+  rgw_bucket_sync.cc)
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
-  driver/json_config/store.cc
-  driver/rados/config/impl.cc
-  driver/rados/config/period.cc
-  driver/rados/config/period_config.cc
-  driver/rados/config/realm.cc
-  driver/rados/config/realm_watcher.cc
-  driver/rados/config/store.cc
-  driver/rados/config/zone.cc
-  driver/rados/config/zonegroup.cc)
+  driver/json_config/store.cc)
 
+if(WITH_RADOSGW_RADOS)
+  list(APPEND librgw_common_srcs
+          services/svc_finisher.cc
+          services/svc_bi_rados.cc
+          services/svc_bilog_rados.cc
+          services/svc_bucket.cc
+          services/svc_bucket_sobj.cc
+          services/svc_bucket_sync_sobj.cc
+          services/svc_cls.cc
+          services/svc_config_key_rados.cc
+          services/svc_mdlog.cc
+          services/svc_notify.cc
+          services/svc_quota.cc
+          services/svc_sync_modules.cc
+          services/svc_sys_obj.cc
+          services/svc_sys_obj_cache.cc
+          services/svc_sys_obj_core.cc
+          services/svc_tier_rados.cc
+          services/svc_user.cc
+          services/svc_user_rados.cc
+          services/svc_zone.cc
+          services/svc_zone_utils.cc
+          driver/rados/account.cc
+          driver/rados/buckets.cc
+          driver/rados/group.cc
+          driver/rados/groups.cc
+          driver/rados/rgw_bucket.cc
+          driver/rados/rgw_cr_rados.cc
+          driver/rados/rgw_cr_tools.cc
+          driver/rados/rgw_d3n_datacache.cc
+          driver/rados/rgw_datalog.cc
+          driver/rados/rgw_datalog_notify.cc
+          driver/rados/rgw_data_sync.cc
+          driver/rados/rgw_etag_verifier.cc
+          driver/rados/rgw_gc.cc
+          driver/rados/rgw_gc_log.cc
+          driver/rados/rgw_lc_tier.cc
+          driver/rados/rgw_log_backing.cc
+          driver/rados/rgw_metadata.cc
+          driver/rados/rgw_notify.cc
+          driver/rados/rgw_obj_manifest.cc
+          driver/rados/rgw_object_expirer_core.cc
+          driver/rados/rgw_otp.cc
+          driver/rados/rgw_pubsub_push.cc
+          driver/rados/rgw_putobj_processor.cc
+          driver/rados/rgw_rados.cc
+          driver/rados/rgw_reshard.cc
+          driver/rados/rgw_rest_bucket.cc
+          driver/rados/rgw_rest_log.cc
+          driver/rados/rgw_rest_realm.cc
+          driver/rados/rgw_rest_user.cc
+          driver/rados/rgw_sal_rados.cc
+          driver/rados/rgw_service.cc
+          driver/rados/rgw_sync.cc
+          driver/rados/rgw_sync_counters.cc
+          driver/rados/rgw_sync_error_repo.cc
+          driver/rados/rgw_sync_module.cc
+          driver/rados/rgw_sync_module_aws.cc
+          driver/rados/rgw_sync_module_es.cc
+          driver/rados/rgw_sync_module_es_rest.cc
+          driver/rados/rgw_sync_module_log.cc
+          driver/rados/rgw_sync_trace.cc
+          driver/rados/rgw_tools.cc
+          driver/rados/rgw_trim_bilog.cc
+          driver/rados/rgw_trim_datalog.cc
+          driver/rados/rgw_trim_mdlog.cc
+          driver/rados/rgw_user.cc
+          driver/rados/role.cc
+          driver/rados/roles.cc
+          driver/rados/sync_fairness.cc
+          driver/rados/topic.cc
+          driver/rados/topic_migration.cc
+          driver/rados/topics.cc
+          driver/rados/users.cc
+          driver/rados/config/impl.cc
+          driver/rados/config/period.cc
+          driver/rados/config/period_config.cc
+          driver/rados/config/realm.cc
+          driver/rados/config/realm_watcher.cc
+          driver/rados/config/store.cc
+          driver/rados/config/zone.cc
+          driver/rados/config/zonegroup.cc)
+endif()
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
 endif()
@@ -410,10 +411,13 @@ set(rgw_a_srcs
   rgw_signal.cc
   rgw_swift_auth.cc
   rgw_usage.cc
-  rgw_sts.cc
-  driver/rados/rgw_rest_bucket.cc
-  driver/rados/rgw_rest_log.cc
-  driver/rados/rgw_rest_realm.cc)
+  rgw_sts.cc)
+
+if(WITH_RADOSGW_RADOS)
+  list(APPEND rgw_a_srcs driver/rados/rgw_rest_bucket.cc
+          driver/rados/rgw_rest_log.cc
+          driver/rados/rgw_rest_realm.cc)
+endif()
 
 gperf_generate(${CMAKE_SOURCE_DIR}/src/rgw/rgw_iam_policy_keywords.gperf
   rgw_iam_policy_keywords.frag.cc)
@@ -510,6 +514,7 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   list(APPEND radosgw_admin_srcs rgw_flight.cc)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
+if(WITH_RADOSGW_RADOS)
 add_executable(radosgw-admin ${radosgw_admin_srcs})
 target_link_libraries(radosgw-admin
   legacy-option-headers
@@ -520,6 +525,7 @@ target_link_libraries(radosgw-admin
   global ${LIB_RESOLV}
   OATH::OATH
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+endif()
 
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
@@ -527,7 +533,9 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   target_link_libraries(radosgw-admin ${ARROW_LIBRARIES} ${ARROW_FLIGHT_LIBRARIES})
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
+if(WITH_RADOSGW_RADOS)
 install(TARGETS radosgw-admin DESTINATION bin)
+endif()
 
 set(radosgw_es_srcs
   rgw_es_main.cc)
@@ -549,6 +557,7 @@ target_link_libraries(radosgw-token
   global)
 install(TARGETS radosgw-token DESTINATION bin)
 
+if(WITH_RADOSGW_RADOS)
 set(radosgw_object_expirer_srcs
   rgw_object_expirer.cc)
 add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs})
@@ -559,6 +568,7 @@ target_link_libraries(radosgw-object-expirer ${rgw_libs} librados
   global ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
 install(TARGETS radosgw-object-expirer DESTINATION bin)
+endif()
 
 set(radosgw_polparser_srcs
   rgw_polparser.cc)
