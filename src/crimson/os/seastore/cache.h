@@ -555,7 +555,7 @@ public:
 
     return trans_intr::make_interruptible(
       p_extent->wait_io()
-    ).then_interruptible([p_extent, needs_touch, needs_step_2, &t, this, &t_src] {
+    ).then_interruptible([p_extent, needs_touch, needs_step_2, &t, this, t_src] {
       if (needs_step_2) {
 	t.maybe_add_to_read_set_step_2(p_extent);
       }
