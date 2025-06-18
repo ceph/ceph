@@ -113,7 +113,7 @@ class GrafanaService(CephadmService):
         # in case security is enabled we have to reconfig when prom user/pass changes
         prometheus_user, prometheus_password = mgr._get_prometheus_credentials()
         if security_enabled and prometheus_user and prometheus_password:
-            deps.append(f'{utils.md5_hash(prometheus_user + prometheus_password)}')
+            deps.append(f'cred:{utils.md5_hash(prometheus_user + prometheus_password)}')
 
         # adding a dependency for mgmt-gateway because the usage of url_prefix relies on its presence.
         # another dependency is added for oauth-proxy as Grafana login is delegated to this service when enabled.
@@ -314,7 +314,7 @@ class AlertmanagerService(CephadmService):
         if security_enabled:
             alertmanager_user, alertmanager_password = mgr._get_alertmanager_credentials()
             if alertmanager_user and alertmanager_password:
-                alertmgr_cred_hash = f'{utils.md5_hash(alertmanager_user + alertmanager_password)}'
+                alertmgr_cred_hash = f'cred:{utils.md5_hash(alertmanager_user + alertmanager_password)}'
                 deps.append(alertmgr_cred_hash)
 
         if not mgmt_gw_enabled:
@@ -661,9 +661,9 @@ class PrometheusService(CephadmService):
             alertmanager_user, alertmanager_password = mgr._get_alertmanager_credentials()
             prometheus_user, prometheus_password = mgr._get_prometheus_credentials()
             if prometheus_user and prometheus_password:
-                deps.append(f'{utils.md5_hash(prometheus_user + prometheus_password)}')
+                deps.append(f'prom-cred:{utils.md5_hash(prometheus_user + prometheus_password)}')
             if alertmanager_user and alertmanager_password:
-                deps.append(f'{utils.md5_hash(alertmanager_user + alertmanager_password)}')
+                deps.append(f'alert-cred:{utils.md5_hash(alertmanager_user + alertmanager_password)}')
 
         # Adding other services as deps (with corresponding justification):
         # ceph-exporter: scraping target
