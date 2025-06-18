@@ -1378,6 +1378,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  enable_auth: bool = False,
                  state_update_notify: Optional[bool] = True,
                  state_update_interval_sec: Optional[int] = 5,
+                 break_update_interval_sec: Optional[int] = 25,
                  enable_spdk_discovery_controller: Optional[bool] = False,
                  encryption_key: Optional[str] = None,
                  rebalance_period_sec: Optional[int] = 7,
@@ -1432,6 +1433,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  tgt_cmd_extra_args: Optional[str] = None,
                  iobuf_options: Optional[Dict[str, int]] = None,
                  qos_timeslice_in_usecs: Optional[int] = 0,
+                 notifications_interval: Optional[int] = 60,
                  discovery_addr: Optional[str] = None,
                  discovery_addr_map: Optional[Dict[str, str]] = None,
                  discovery_port: Optional[int] = None,
@@ -1483,6 +1485,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.state_update_notify = state_update_notify
         #: ``state_update_interval_sec`` number of seconds to check for updates in OMAP
         self.state_update_interval_sec = state_update_interval_sec
+        #: ``break_update_interval_sec`` break updates longet than this interval to yield CPU
+        self.break_update_interval_sec = break_update_interval_sec
         #: ``enable_spdk_discovery_controller`` SPDK or ceph-nvmeof discovery service
         self.enable_spdk_discovery_controller = enable_spdk_discovery_controller
         #: ``encryption_key`` gateway encryption key
@@ -1597,6 +1601,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.iobuf_options: Optional[Dict[str, int]] = iobuf_options
         #: ``qos_timeslice_in_usecs`` timeslice for QOS code, in micro seconds
         self.qos_timeslice_in_usecs = qos_timeslice_in_usecs
+        #: ``notifications_interval`` read SPDK notifications interval, in seconds
+        self.notifications_interval = notifications_interval
         #: ``discovery_addr`` address of the discovery service
         self.discovery_addr = discovery_addr
         #: ``discovery_addr_map`` per node address map of the discovery service
@@ -1691,6 +1697,7 @@ class NvmeofServiceSpec(ServiceSpec):
                     ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'NOTICE'])
         self.verify_spdk_ceph_connection_allocation()
         verify_non_negative_int(self.qos_timeslice_in_usecs, "QOS timeslice")
+        verify_non_negative_int(self.notifications_interval, "SPDK notifications interval")
 
         verify_non_negative_number(self.spdk_ping_interval_in_seconds, "SPDK ping interval")
         if (
@@ -1708,6 +1715,7 @@ class NvmeofServiceSpec(ServiceSpec):
             raise SpecValidationError("Allowed consecutive SPDK ping failures should be at least 1")
 
         verify_non_negative_int(self.state_update_interval_sec, "State update interval")
+        verify_non_negative_int(self.break_update_interval_sec, "Break long updates interval")
         verify_non_negative_int(self.rebalance_period_sec, "Rebalance period")
         verify_non_negative_int(self.max_gws_in_grp, "Max gateways in group")
         verify_non_negative_int(self.max_ns_to_change_lb_grp,
