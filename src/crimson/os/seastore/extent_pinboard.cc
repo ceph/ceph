@@ -7,6 +7,36 @@
 SET_SUBSYS(seastore_cache);
 
 namespace crimson::os::seastore {
+enum class extent_2q_state_t {
+  Fresh = 0,
+  WarmIn,
+  Hot,
+  Max
+};
+} // namespace crimson::os::seastore
+
+template <>
+struct fmt::formatter<crimson::os::seastore::extent_2q_state_t>
+    : public fmt::formatter<std::string_view> {
+  using State = crimson::os::seastore::extent_2q_state_t;
+  auto format(const State &s, auto &ctx) const {
+    switch (s) {
+    case State::Fresh:
+      return fmt::format_to(ctx.out(), "Fresh");
+    case State::WarmIn:
+      return fmt::format_to(ctx.out(), "WarmIn");
+    case State::Hot:
+      return fmt::format_to(ctx.out(), "Hot");
+    case State::Max:
+      return fmt::format_to(ctx.out(), "Max");
+    default:
+      __builtin_unreachable();
+      return ctx.out();
+    }
+  }
+};
+
+namespace crimson::os::seastore {
 
 class ExtentQueue {
   // max size (bytes)
@@ -139,6 +169,18 @@ public:
       }
 
       trim_to_capacity(nullptr);
+    }
+  }
+
+  template <typename Func>
+  void for_each_to_be_trimmed_extent(size_t size, Func &&func) {
+    auto fake_cur_size = current_size + size;
+    auto iter = list.begin();
+    // keep consistent with do_remove_from_queue()
+    while (fake_cur_size > capacity) {
+      func(*iter);
+      fake_cur_size -= iter->get_loaded_length();
+      iter++;
     }
   }
 
@@ -333,8 +375,268 @@ public:
   }
 };
 
+namespace {
+extent_2q_state_t get_2q_state(CachedExtent &extent) {
+  auto s = extent.get_cache_state();
+  assert(s <= static_cast<uint8_t>(extent_2q_state_t::Max));
+  return static_cast<extent_2q_state_t>(s);
+}
+void set_2q_state(CachedExtent &extent, extent_2q_state_t s) {
+  assert(s != extent_2q_state_t::Max);
+  extent.set_cache_state(static_cast<uint8_t>(s));
+}
+}
+
+// For A1_out queue in 2q algorithm
+class IndexedFifoQueue {
+public:
+  explicit IndexedFifoQueue(size_t capacity)
+      : capacity(capacity), current_size(0) {}
+
+  ~IndexedFifoQueue() {
+    clear();
+  }
+
+  bool remove_if_contains(laddr_t laddr) {
+    auto iter = index.find(laddr);
+    if (iter == index.end()) {
+      return false;
+    }
+    remove(&*iter);
+    return true;
+  }
+
+  void add(laddr_t laddr, extent_len_t length, extent_types_t type) noexcept {
+    // assume the allocation won't fail
+    auto e = new entry_t(laddr, length, type);
+    current_size += length;
+    queue.push_back(*e);
+    index.insert(*e);
+    trim_to(capacity);
+  }
+
+  void clear() {
+    trim_to(0);
+  }
+
+private:
+  struct entry_t :
+      boost::intrusive::list_base_hook<>,
+      boost::intrusive::set_base_hook<> {
+    entry_t(laddr_t laddr, extent_len_t length, extent_types_t type)
+	: laddr(laddr), length(length), type(type) {}
+
+    laddr_t laddr;
+    extent_len_t length;
+    extent_types_t type;
+
+    struct key_t {
+      using type = laddr_t;
+      const type &operator()(const entry_t &e) const {
+	return e.laddr;
+      }
+    };
+  };
+
+  using entry_queue_t = boost::intrusive::list<entry_t>;
+  using entry_index_t = boost::intrusive::set<
+    entry_t, boost::intrusive::key_of_value<entry_t::key_t>>;
+
+  void remove(entry_t *e) {
+    current_size -= e->length;
+    queue.erase(queue.s_iterator_to(*e));
+    index.erase(index.s_iterator_to(*e));
+    delete e;
+  }
+
+  void trim_to(size_t target) {
+    while (current_size > target && !queue.empty()) {
+      remove(&queue.front());
+    }
+  }
+
+  const size_t capacity;
+  size_t current_size;
+  entry_queue_t queue;
+  entry_index_t index;
+};
+
+class ExtentPinboardTwoQ : public ExtentPinboard {
+public:
+  ExtentPinboardTwoQ(
+    size_t warm_in_capacity,
+    size_t warm_out_capacity,
+    size_t hot_capacity)
+      : warm_in(warm_in_capacity),
+	warm_out(warm_out_capacity),
+	hot(hot_capacity)
+  {
+    LOG_PREFIX(ExtentPinboardTwoQ::ExtentPinboardTwoQ);
+    INFO("created, warm_in_capacity=0x{:x}B, "
+	 "warm_out_capacity=0x{:x}B, hot_capacity=0x{:x}B",
+	 warm_in_capacity, warm_out_capacity, hot_capacity);
+  }
+
+  size_t get_capacity_bytes() const {
+    return warm_in.get_capacity_bytes() + hot.get_capacity_bytes();
+  }
+
+  size_t get_current_size_bytes() const {
+    return warm_in.get_current_size_bytes() + hot.get_current_size_bytes();
+  }
+
+  size_t get_current_num_extents() const {
+    return warm_in.get_current_num_extents() + hot.get_current_num_extents();
+  }
+
+  void register_metrics() final {
+    namespace sm = seastar::metrics;
+    metrics.add_group(
+      "cache",
+      {
+        sm::make_counter(
+          "cache_2q_size_bytes",
+          [this] {
+            return get_current_size_bytes();
+          },
+          sm::description("total bytes pinned by the 2q")
+        ),
+        sm::make_counter(
+          "cache_2q_num_extents",
+          [this] {
+            return get_current_num_extents();
+          },
+          sm::description("total extents pinned by the 2q")
+        ),
+      }
+    );
+  }
+
+  void get_stats(
+    cache_stats_t &stats,
+    bool report_detail,
+    double seconds) const final {
+    hot.get_stats("Hot", stats, report_detail, seconds);
+    cache_stats_t warm;
+    warm_in.get_stats("WarmIn", warm, report_detail, seconds);
+    stats.add(warm);
+  }
+
+  void remove(CachedExtent &extent) final {
+    auto s = get_2q_state(extent);
+    if (extent.primary_ref_list_hook.is_linked()) {
+      if (s == extent_2q_state_t::WarmIn) {
+	warm_in.remove(extent);
+      } else {
+	ceph_assert(s == extent_2q_state_t::Hot);
+	hot.remove(extent);
+      }
+    }
+  }
+
+  void move_to_top(
+    CachedExtent &extent,
+    const Transaction::src_t* p_src) final {
+    auto state = get_2q_state(extent);
+    if (extent.primary_ref_list_hook.is_linked()) {
+      if (state == extent_2q_state_t::Hot) {
+	hot.move_to_top(extent, p_src);
+      } else {
+	ceph_assert(state == extent_2q_state_t::WarmIn);
+	// warm_in is a FIFO queue, do nothing here
+      }
+    } else if (!is_logical_type(extent.get_type())) {
+      // put physical extents to hot queue directly
+      ceph_assert(state == extent_2q_state_t::Hot ||
+		  state == extent_2q_state_t::Fresh);
+      set_2q_state(extent, extent_2q_state_t::Hot);
+      hot.move_to_top(extent, p_src);
+    } else { // not in two queue
+      ceph_assert(state == extent_2q_state_t::Fresh);
+      auto queue = &warm_in;
+      auto new_state = extent_2q_state_t::WarmIn;
+      auto lext = extent.cast<LogicalCachedExtent>();
+      if (warm_out.remove_if_contains(lext->get_laddr())) {
+	queue = &hot;
+	new_state = extent_2q_state_t::Hot;
+	on_update_hot(extent.get_loaded_length());
+      } else {
+	on_update_warm_out(extent.get_loaded_length());
+      }
+      queue->move_to_top(extent, p_src);
+      set_2q_state(extent, new_state);
+    }
+  }
+
+  void increase_cached_size(
+    CachedExtent &extent,
+    extent_len_t increased_length,
+    const Transaction::src_t* p_src) final {
+    if (extent.primary_ref_list_hook.is_linked()) {
+      auto state = get_2q_state(extent);
+      if (state == extent_2q_state_t::WarmIn) {
+	on_update_warm_out(increased_length);
+	warm_in.increase_cached_size(extent, increased_length, p_src);
+      } else {
+	ceph_assert(state == extent_2q_state_t::Hot);
+	on_update_hot(increased_length);
+	hot.increase_cached_size(extent, increased_length, p_src);
+      }
+    }
+  }
+
+  void clear() final {
+    warm_in.clear();
+    warm_out.clear();
+    hot.clear();
+  }
+
+  ~ExtentPinboardTwoQ() {
+    clear();
+  }
+private:
+  void on_update_hot(size_t size) {
+    hot.for_each_to_be_trimmed_extent(size, [](CachedExtent &extent) {
+      set_2q_state(extent, extent_2q_state_t::Fresh);
+    });
+  }
+  void on_update_warm_out(size_t size) {
+    warm_in.for_each_to_be_trimmed_extent(
+      size,
+      [this](CachedExtent &extent) {
+	ceph_assert(is_logical_type(extent.get_type()));
+	set_2q_state(extent, extent_2q_state_t::Fresh);
+	auto lext = extent.cast<LogicalCachedExtent>();
+	warm_out.add(
+	  lext->get_laddr(),
+	  lext->get_loaded_length(),
+	  lext->get_type());
+      });
+  }
+  ExtentQueue warm_in;
+  IndexedFifoQueue warm_out;
+  ExtentQueue hot;
+  seastar::metrics::metric_group metrics;
+};
+
 ExtentPinboardRef create_extent_pinboard(std::size_t capacity) {
-  return std::make_unique<ExtentPinboardLRU>(capacity);
+  using crimson::common::get_conf;
+  auto algorithm = get_conf<std::string>("seastore_extent_pinboard_algorithm");
+  if (algorithm == "LRU") {
+    return std::make_unique<ExtentPinboardLRU>(capacity);
+  } else if (algorithm == "TwoQ") {
+    auto warm_in_ratio = get_conf<double>("seastore_extent_pinboard_2q_in_ratio");
+    auto warm_out_ratio = get_conf<double>("seastore_extent_pinboard_2q_out_ratio");
+    ceph_assert(0 < warm_in_ratio && warm_in_ratio < 1);
+    ceph_assert(0 < warm_out_ratio && warm_out_ratio < 1);
+    return std::make_unique<ExtentPinboardTwoQ>(
+      capacity * warm_in_ratio,
+      capacity * warm_out_ratio,
+      capacity * (1 - warm_in_ratio));
+  } else {
+    ceph_abort("invalid seastore_extent_pinboard_algorithm (LRU or TwoQ)");
+    return nullptr;
+  }
 }
 
 } // namespace crimson::os::seastore

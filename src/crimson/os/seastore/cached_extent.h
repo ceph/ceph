@@ -832,6 +832,14 @@ public:
   std::pair<bool, viewable_state_t>
   is_viewable_by_trans(Transaction &t);
 
+  uint8_t get_cache_state() const {
+    return cache_state;
+  }
+
+  void set_cache_state(uint8_t state) {
+    cache_state = state;
+  }
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -930,6 +938,9 @@ private:
   // or the rewrite generation for the fresh write
   rewrite_gen_t rewrite_generation = NULL_GENERATION;
 
+  // opaque state of CachedExtent, used by ExtentPinboard
+  uint8_t cache_state = 0;
+
 protected:
   trans_view_set_t mutation_pending_extents;
   trans_view_set_t retired_transactions;
@@ -1021,6 +1032,7 @@ protected:
 
   friend class Cache;
   friend class ExtentQueue;
+  friend class ExtentPinboardTwoQ;
   template <typename T, typename... Args>
   static TCachedExtentRef<T> make_cached_extent_ref(
     Args&&... args) {
