@@ -872,7 +872,7 @@ private:
    */
 
 
-  utime_t commit_start_stamp;
+  ceph::coarse_mono_time commit_start_stamp = ceph::coarse_mono_clock::zero();
   friend struct C_Committed;
 
   /**
