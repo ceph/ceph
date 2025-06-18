@@ -1400,7 +1400,7 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectRead)
 TEST_F(D4NFilterFixture, PutObjectWrite)
 {
   env->cct->_conf->d4n_writecache_enabled = true;
-  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0.5;
+  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
   const std::string testName = "PutObjectWrite";
   const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
   std::string version;
@@ -1948,7 +1948,7 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
 TEST_F(D4NFilterFixture, DeleteObjectWrite)
 {
   env->cct->_conf->d4n_writecache_enabled = true;
-  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0.5;
+  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
   const std::string testName = "DeleteObjectWrite";
   std::string version;
  
@@ -2029,7 +2029,7 @@ TEST_F(D4NFilterFixture, DeleteObjectWrite)
 TEST_F(D4NFilterFixture, PutVersionedObjectWrite)
 {
   env->cct->_conf->d4n_writecache_enabled = true;
-  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0.5;
+  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
   const std::string testName = "PutVersionedObjectWrite";
   const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
   std::string version, instance;
@@ -2994,7 +2994,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
 TEST_F(D4NFilterFixture, DeleteVersionedObjectWrite)
 {
   env->cct->_conf->d4n_writecache_enabled = true;
-  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0.5;
+  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
   const std::string testName = "DeleteVersionedObjectRead";
   const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
   std::string version, instance;
@@ -3099,7 +3099,7 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectWrite)
 TEST_F(D4NFilterFixture, SimpleDeleteBeforeCleaning)
 {
   env->cct->_conf->d4n_writecache_enabled = true;
-  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0.5;
+  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
   const std::string testName = "SimpleDeleteBeforeCleaning";
   const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
   std::vector<std::string> instances;
@@ -3183,7 +3183,7 @@ TEST_F(D4NFilterFixture, SimpleDeleteBeforeCleaning)
 TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
 {
   env->cct->_conf->d4n_writecache_enabled = true;
-  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0.5;
+  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
   const std::string testName = "VersionedDeleteBeforeCleaning";
   const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
   std::vector<std::string> instances;
@@ -3294,7 +3294,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
 TEST_F(D4NFilterFixture, SimpleDeleteAfterCleaning)
 {
   env->cct->_conf->d4n_writecache_enabled = true;
-  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0.5;
+  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
   const std::string testName = "SimpleDeleteAfterCleaning";
   const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
   std::vector<std::string> instances;
@@ -3346,7 +3346,7 @@ TEST_F(D4NFilterFixture, SimpleDeleteAfterCleaning)
 TEST_F(D4NFilterFixture, VersionedDeleteAfterCleaning)
 {
   env->cct->_conf->d4n_writecache_enabled = true;
-  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0.5;
+  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
   const std::string testName = "VersionedDeleteAfterCleaning";
   const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
   std::vector<std::string> instances;
@@ -3442,7 +3442,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteAfterCleaning)
 TEST_F(D4NFilterFixture, ListObjectVersions)
 {
   env->cct->_conf->d4n_writecache_enabled = true;
-  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0.5;
+  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
   const std::string testName = "ListObjectVersions";
   const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
   std::string instance;
