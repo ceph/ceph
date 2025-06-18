@@ -147,7 +147,7 @@ options:
   level: advanced
   desc: Max size in bytes that an extent can be, 0 to disable
   default: 0
-- name: seastore_cache_lru_size
+- name: seastore_cachepin_size_pershard
   type: size
   level: advanced
   desc: Size in bytes of extents to keep in cache (per reactor).
