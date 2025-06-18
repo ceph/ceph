@@ -9505,7 +9505,7 @@ int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
           return ret;
         }
 
-    ret = olh_init_modification(dpp, bucket_info, *state, olh_obj, &op_issuer.op_tag, y);
+    ret = olh_init_modification(dpp, bucket_info, *state, olh_obj, &op_issuer.get_op_tag_ref(), y);
     if (ret < 0) {
       ldpp_dout(dpp, 20) << "olh_init_modification() target_obj=" << target_obj << " delete_marker=" << (int)DeleteMarkerV << " returned " << ret << dendl;
       if (ret == -ECANCELED) {
