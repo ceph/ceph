@@ -352,6 +352,22 @@ void rgw_pubsub_dest::decode_json(JSONObj* f) {
   JSONDecoder::decode_json("retry_sleep_duration", sleep_dur, f);
   retry_sleep_duration = sleep_dur == DEFAULT_CONFIG ? DEFAULT_GLOBAL_VALUE
                                                      : std::stoul(sleep_dur);
+
+}
+
+std::vector<std::string>  rgw_pubsub_dest::get_queue_names() const {
+  
+  std::vector<std::string> q_names; 
+  if(!persistent) {
+    return q_names; 
+  }
+    //first shard to be named as persistent_queue to ensure older rgws can enqueue and dequeue in a mixed cluster
+  q_names.emplace_back(persistent_queue);
+  for(uint64_t i = 1; i < num_shards; i++){
+    q_names.emplace_back(string_cat_reserve(persistent_queue, ".", std::to_string(i)));
+  }
+
+  return q_names; 
 }
 
 RGWPubSub::RGWPubSub(rgw::sal::Driver* _driver,
@@ -897,12 +913,16 @@ int RGWPubSub::remove_topic_v2(const DoutPrefixProvider* dpp,
   const rgw_pubsub_dest& dest = topic.dest;
   if (!dest.push_endpoint.empty() && dest.persistent &&
       !dest.persistent_queue.empty()) {
-    ret = driver->remove_persistent_topic(dpp, y, dest.persistent_queue);
-    if (ret < 0 && ret != -ENOENT) {
-      ldpp_dout(dpp, 1) << "ERROR: failed to remove queue for "
-          "persistent topic: " << cpp_strerror(ret) << dendl;
-      return ret;
+
+    for(const auto &q: dest.get_queue_names()) {
+      ret = driver->remove_persistent_topic(dpp, y, q);
+      if (ret < 0 && ret != -ENOENT) {
+        ldpp_dout(dpp, 1) << "ERROR: failed to remove shards for "
+            "persistent topic: " << cpp_strerror(ret) << dendl;
+        return ret;
+      }
     }
+    ldpp_dout(dpp, 20) << "Successfully removed " <<dest.num_shards<<" shards for topic: " + name<<dendl;
   }
 
   ret = driver->remove_topic_v2(name, tenant, objv_tracker, y, dpp);
@@ -943,12 +963,15 @@ int RGWPubSub::remove_topic(const DoutPrefixProvider *dpp, const std::string& na
   }
   if (!t->second.dest.push_endpoint.empty() && t->second.dest.persistent &&
       !t->second.dest.persistent_queue.empty()) {
-    ret = driver->remove_persistent_topic(dpp, y, t->second.dest.persistent_queue);
-    if (ret < 0 && ret != -ENOENT) {
-      ldpp_dout(dpp, 1) << "ERROR: failed to remove queue for "
-          "persistent topic: " << cpp_strerror(ret) << dendl;
-      return ret;
-    }
+      for(const auto &q: t->second.dest.get_queue_names()) {
+        ret = driver->remove_persistent_topic(dpp, y, q);
+        if (ret < 0 && ret != -ENOENT) {
+          ldpp_dout(dpp, 1) << "ERROR: failed to remove shards for "
+              "persistent topic: " << cpp_strerror(ret) << dendl;
+          return ret;
+        }
+      }
+      ldpp_dout(dpp, 20) << "Successfully removed " <<t->second.dest.num_shards<<" shards for topic: " + name<<dendl;
   }
   topics.topics.erase(t);
 
