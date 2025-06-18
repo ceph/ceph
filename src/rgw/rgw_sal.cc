@@ -32,6 +32,10 @@
 #include "rgw_sal_dbstore.h"
 #include "driver/dbstore/config/store.h"
 #endif
+#ifdef WITH_RADOSGW_POSIX
+#include "driver/posix/rgw_sal_posix.h"
+#include "driver/dbstore/config/store.h"
+#endif
 #ifdef WITH_RADOSGW_D4N
 #include "driver/d4n/rgw_sal_d4n.h" 
 #endif
@@ -52,14 +56,14 @@ extern rgw::sal::Driver* newRadosStore(boost::asio::io_context* io_context);
 #ifdef WITH_RADOSGW_DBSTORE
 extern rgw::sal::Driver* newDBStore(CephContext *cct);
 #endif
+#ifdef WITH_RADOSGW_POSIX
+extern rgw::sal::Driver* newPOSIXDriver(CephContext *cct);
+#endif
 #ifdef WITH_RADOSGW_MOTR
 extern rgw::sal::Driver* newMotrStore(CephContext *cct);
 #endif
 #ifdef WITH_RADOSGW_DAOS
 extern rgw::sal::Driver* newDaosStore(CephContext *cct);
-#endif
-#ifdef WITH_RADOSGW_POSIX
-extern rgw::sal::Driver* newPOSIXDriver(rgw::sal::Driver* next);
 #endif
 extern rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next);
 #ifdef WITH_RADOSGW_D4N
@@ -163,6 +167,17 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   }
 #endif
 
+#ifdef WITH_RADOSGW_POSIX
+  else if (cfg.store_name.compare("posix") == 0) {
+    driver = newPOSIXDriver(cct);
+
+    if (driver->initialize(cct, dpp) < 0) {
+      delete driver;
+      return nullptr;
+    }
+  }
+#endif
+
 #ifdef WITH_RADOSGW_MOTR
   else if (cfg.store_name.compare("motr") == 0) {
     driver = newMotrStore(cct);
@@ -215,19 +230,6 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
     }
   }
 #endif
-#ifdef WITH_RADOSGW_POSIX
-  else if (cfg.filter_name.compare("posix") == 0) {
-    rgw::sal::Driver* next = driver;
-    ldpp_dout(dpp, 20) << "Creating POSIX driver" << dendl;
-    driver = newPOSIXDriver(next);
-
-    if (driver->initialize(cct, dpp) < 0) {
-      delete driver;
-      delete next;
-      return nullptr;
-    }
-  }
-#endif
 
   return driver;
 }
@@ -264,6 +266,17 @@ rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvi
     driver = newDBStore(cct);
 
     if ((*(rgw::sal::DBStore*)driver).initialize(cct, dpp) < 0) {
+      delete driver;
+      return nullptr;
+    }
+#else
+    driver = nullptr;
+#endif
+  } else if (cfg.store_name.compare("posix") == 0) {
+#ifdef WITH_RADOSGW_POSIX
+    driver = newPOSIXDriver(cct);
+
+    if (driver->initialize(cct, dpp) < 0) {
       delete driver;
       return nullptr;
     }
@@ -340,6 +353,11 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
     cfg.store_name = "dbstore";
   }
 #endif
+#ifdef WITH_RADOSGW_POSIX
+  else if (config_store == "posix") {
+    cfg.store_name = "posix";
+  }
+#endif
 #ifdef WITH_RADOSGW_MOTR
   else if (config_store == "motr") {
     cfg.store_name = "motr";
@@ -356,8 +374,6 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
   const auto& config_filter = g_conf().get_val<std::string>("rgw_filter");
   if (config_filter == "base") {
     cfg.filter_name = "base";
-  } else if (config_filter == "posix") {
-    cfg.filter_name = "posix";
   }
 #ifdef WITH_RADOSGW_D4N
   else if (config_filter == "d4n") {
@@ -377,6 +393,11 @@ auto DriverManager::create_config_store(const DoutPrefixProvider* dpp,
       return rgw::rados::create_config_store(dpp);
 #ifdef WITH_RADOSGW_DBSTORE
     } else if (type == "dbstore") {
+      const auto uri = g_conf().get_val<std::string>("dbstore_config_uri");
+      return rgw::dbstore::create_config_store(dpp, uri);
+#endif
+#ifdef WITH_RADOSGW_POSIX
+    } else if (type == "posix") {
       const auto uri = g_conf().get_val<std::string>("dbstore_config_uri");
       return rgw::dbstore::create_config_store(dpp, uri);
 #endif
