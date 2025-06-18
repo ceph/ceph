@@ -674,7 +674,11 @@ int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
        */
       decode_set.insert(decode_for_parity_shards);
       need_set.insert(decode_for_parity_shards);
-      extent_set decode_for_parity = get_extent_superset();
+      extent_set decode_for_parity;
+
+      for (auto shard : encode_set) {
+        decode_for_parity.insert(want.at(shard));
+      }
 
       for (auto shard : decode_for_parity_shards) {
         extent_set parity_pad;
