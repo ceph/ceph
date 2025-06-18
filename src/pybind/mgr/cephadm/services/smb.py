@@ -311,11 +311,14 @@ class SMBService(CephService):
 
         from smb import clustermeta
 
+        addr_src = (
+            AddressPool.from_spec(smb_spec) if smb_spec.bind_addrs else None
+        )
         smb_dmap: clustermeta.DaemonMap = {}
         for dd in daemons:
             assert dd.daemon_type and dd.daemon_id
             assert dd.hostname
-            host_ip = dd.ip or self.mgr.inventory.get_addr(dd.hostname)
+            host_ip = self._ctdb_node_ip(dd, addr_src)
             smb_dmap[dd.name()] = {
                 'daemon_type': dd.daemon_type,
                 'daemon_id': dd.daemon_id,
@@ -324,9 +327,7 @@ class SMBService(CephService):
                 # specific ctdb_ip? (someday?)
             }
         if daemon_spec:
-            host_ip = daemon_spec.ip or self.mgr.inventory.get_addr(
-                daemon_spec.host
-            )
+            host_ip = self._ctdb_node_ip(daemon_spec, addr_src)
             smb_dmap[daemon_spec.name()] = {
                 'daemon_type': daemon_spec.daemon_type,
                 'daemon_id': daemon_spec.daemon_id,
@@ -337,6 +338,28 @@ class SMBService(CephService):
         logger.debug("smb daemon map: %r", smb_dmap)
         with clustermeta.rados_object(self.mgr, uri) as cmeta:
             cmeta.sync_ranks(rank_map, smb_dmap)
+
+    def _ctdb_node_ip(
+        self, daemon: Any, addr_src: Optional['AddressPool'] = None
+    ) -> str:
+        if isinstance(daemon, CephadmDaemonDeploySpec):
+            ip = daemon.ip
+            hostname = daemon.host or ''
+        elif isinstance(daemon, DaemonDescription):
+            ip = daemon.ip
+            hostname = daemon.hostname or ''
+        else:
+            raise ValueError('unexpected deamon type: {daemon!r}')
+        logger.debug('_ctdb_node_ip: ip=%r, hostname=%r', ip, hostname)
+        if not ip:
+            assert hostname, 'no hostname available'
+            ip = self.mgr.inventory.get_addr(hostname)
+        assert ip, "failed to assign ip"
+        if addr_src and ip not in addr_src:
+            raise ValueError(
+                f'{ip} for host {hostname} does not match bind_addrs'
+            )
+        return ip
 
 
 Network = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
