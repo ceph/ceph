@@ -12,6 +12,8 @@
 
 #include "drivers/shared/d4n_data.h"
 
+#include "../shared/d4n_data.h"
+
 namespace rgw { namespace d4n {
 
 template<typename T>

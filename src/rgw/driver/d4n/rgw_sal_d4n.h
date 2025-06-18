@@ -24,6 +24,10 @@
 #include "driver/ssd/rgw_ssd_driver.h"
 #include "driver/redis/rgw_redis_driver.h"
 
+#include "driver/ssd/rgw_ssd_driver.h"
+#include "driver/redis/rgw_redis_driver.h"
+
+#include "driver/shared/d4n_data.h"
 #include "driver/d4n/d4n_directory.h"
 #include "driver/d4n/d4n_policy.h"
 
