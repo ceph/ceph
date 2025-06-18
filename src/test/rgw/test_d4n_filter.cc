@@ -3160,7 +3160,7 @@ TEST_F(D4NFilterFixture, SimpleDeleteBeforeCleaning)
 
   io.run_for(std::chrono::seconds(2)); // Allow cleaning cycle to complete
 
-  net::spawn(io, [this, &testName, &bucketName, &deleteMarker, &location] (net::yield_context yield) {
+  net::spawn(io, [this] (net::yield_context yield) {
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});
 
     std::unique_ptr<rgw::sal::Object::ReadOp> read_op(objEnabled->get_read_op());
@@ -3420,7 +3420,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteAfterCleaning)
 
   io.run_for(std::chrono::seconds(2));
 
-  net::spawn(io, [this, &testName, &bucketName, &instances] (net::yield_context yield) {
+  net::spawn(io, [this] (net::yield_context yield) {
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});
 
     /* TODO: Cleaning method removes head object, so delete_obj calls after a cleaning cycle will not find the head object and will immediately call the backend's delete_obj,
