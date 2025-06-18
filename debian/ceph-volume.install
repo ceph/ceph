@@ -1,4 +1,4 @@
-lib/systemd/system/ceph-volume@.service
+{usr/,}lib/systemd/system/ceph-volume@.service
 usr/lib/python*/dist-packages/ceph_volume/*
 usr/lib/python*/dist-packages/ceph_volume-*
 usr/sbin/ceph-volume
