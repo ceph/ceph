@@ -1,5 +1,5 @@
 etc/init.d/ceph
-lib/systemd/system/ceph-crash.service
+{usr/,}lib/systemd/system/ceph-crash.service
 usr/bin/ceph-crash
 usr/bin/ceph-debugpack
 usr/bin/ceph-run
