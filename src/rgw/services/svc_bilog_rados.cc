@@ -35,7 +35,7 @@ struct TrimWriter : rgwrados::shard_io::RadosWriter {
     : RadosWriter(dpp, std::move(ex), ioctx), start(start), end(end)
   {}
   void prepare_write(int shard, librados::ObjectWriteOperation& op) override {
-    cls_rgw_bilog_trim(op, start.get(shard, ""), end.get(shard, ""));
+    cls_rgw_bilog_trim(op,  start.get(shard, ""), end.get(shard, ""));
   }
   Result on_complete(int, boost::system::error_code ec) override {
     // continue trimming until -ENODATA or other error
@@ -56,7 +56,6 @@ int RGWSI_BILog_RADOS_InIndex::log_trim(const DoutPrefixProvider *dpp, optional_
 				const RGWBucketInfo& bucket_info,
 				const rgw::bucket_log_layout_generation& log_layout,
 				int shard_id,
-				std::string_view start_marker,
 				std::string_view end_marker)
 {
   librados::IoCtx index_pool;
@@ -71,7 +70,8 @@ int RGWSI_BILog_RADOS_InIndex::log_trim(const DoutPrefixProvider *dpp, optional_
     return r;
   }
 
-  r = start_marker_mgr.from_string(start_marker, shard_id);
+  // empty string since the introduction of cls fifo
+  r = start_marker_mgr.from_string(std::string_view{}, shard_id);
   if (r < 0) {
     return r;
   }

@@ -10896,12 +10896,25 @@ next:
       return -ret;
     }
 
+    if (!start_marker.empty()) {
+      std::cerr << "start-marker not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      if (marker.empty()) {
+	marker = end_marker;
+      } else {
+	std::cerr << "end-marker and marker not both allowed." << std::endl;
+	return -EINVAL;
+      }
+    }
+
     if (!gen) {
       gen = 0;
     }
     ret = bilog_trim(dpp(), null_yield, static_cast<rgw::sal::RadosStore*>(driver),
 		     bucket->get_info(), *gen,
-		     shard_id, start_marker, end_marker);
+		     shard_id, marker);
     if (ret < 0) {
       cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;

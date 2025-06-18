@@ -1174,11 +1174,10 @@ static int bilog_list(librados::IoCtx& ioctx, const std::string& oid,
 }
 
 static int bilog_trim(librados::IoCtx& ioctx, const std::string& oid,
-                      const std::string& start_marker,
-                      const std::string& end_marker)
+                      const std::string& marker)
 {
   librados::ObjectWriteOperation op;
-  cls_rgw_bilog_trim(op, start_marker, end_marker);
+  cls_rgw_bilog_trim(op, marker);
   return ioctx.operate(oid, &op);
 }
 
@@ -1224,46 +1223,15 @@ TEST_F(cls_rgw, bi_log_trim)
   }
   // trim front of bilog
   {
-    const std::string from = "";
     const std::string to = bilog1[0].id;
-    ASSERT_EQ(0, bilog_trim(ioctx, bucket_oid, from, to));
+    ASSERT_EQ(0, bilog_trim(ioctx, bucket_oid, to));
     cls_rgw_bi_log_list_ret bilog;
     ASSERT_EQ(0, bilog_list(ioctx, bucket_oid, &bilog));
     EXPECT_EQ(19u, bilog.entries.size());
     EXPECT_EQ(bilog1[1].id, bilog.entries.begin()->id);
-    ASSERT_EQ(-ENODATA, bilog_trim(ioctx, bucket_oid, from, to));
+    ASSERT_EQ(-ENODATA, bilog_trim(ioctx, bucket_oid, to));
   }
-  // trim back of bilog
-  {
-    const std::string from = bilog1[18].id;
-    const std::string to = "9";
-    ASSERT_EQ(0, bilog_trim(ioctx, bucket_oid, from, to));
-    cls_rgw_bi_log_list_ret bilog;
-    ASSERT_EQ(0, bilog_list(ioctx, bucket_oid, &bilog));
-    EXPECT_EQ(18u, bilog.entries.size());
-    EXPECT_EQ(bilog1[18].id, bilog.entries.rbegin()->id);
-    ASSERT_EQ(-ENODATA, bilog_trim(ioctx, bucket_oid, from, to));
-  }
-  // trim middle of bilog
-  {
-    const std::string from = bilog1[13].id;
-    const std::string to = bilog1[14].id;
-    ASSERT_EQ(0, bilog_trim(ioctx, bucket_oid, from, to));
-    cls_rgw_bi_log_list_ret bilog;
-    ASSERT_EQ(0, bilog_list(ioctx, bucket_oid, &bilog));
-    EXPECT_EQ(17u, bilog.entries.size());
-    ASSERT_EQ(-ENODATA, bilog_trim(ioctx, bucket_oid, from, to));
-  }
-  // trim full bilog
-  {
-    const std::string from = "";
-    const std::string to = "9";
-    ASSERT_EQ(0, bilog_trim(ioctx, bucket_oid, from, to));
-    cls_rgw_bi_log_list_ret bilog;
-    ASSERT_EQ(0, bilog_list(ioctx, bucket_oid, &bilog));
-    EXPECT_EQ(0u, bilog.entries.size());
-    ASSERT_EQ(-ENODATA, bilog_trim(ioctx, bucket_oid, from, to));
-  }
+
   // bi list should be the same
   {
     list<rgw_cls_bi_entry> entries;

@@ -40,8 +40,7 @@ public:
                const RGWBucketInfo& bucket_info,
                const rgw::bucket_log_layout_generation& log_layout,
                int shard_id,
-               std::string_view start_marker,
-               std::string_view end_marker) = 0;
+               std::string_view marker) = 0;
   virtual int log_list(const DoutPrefixProvider *dpp, optional_yield y,
                const RGWBucketInfo& bucket_info,
                const rgw::bucket_log_layout_generation& log_layout,
@@ -83,8 +82,7 @@ public:
                const RGWBucketInfo& bucket_info,
                const rgw::bucket_log_layout_generation& log_layout,
                int shard_id,
-               std::string_view start_marker,
-               std::string_view end_marker) override;
+               std::string_view marker) override;
   int log_list(const DoutPrefixProvider *dpp, optional_yield y,
                const RGWBucketInfo& bucket_info,
                const rgw::bucket_log_layout_generation& log_layout,
