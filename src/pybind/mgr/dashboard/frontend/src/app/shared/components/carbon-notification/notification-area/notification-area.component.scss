@@ -47,7 +47,57 @@
   gap: spacing.$spacing-03;
 }
 
+// Date separator styles
+.date-separator {
+  margin: spacing.$spacing-01 0;
+  background-color: theme.$layer-accent-01;
+  border-bottom: 1px solid theme.$border-subtle-01;
+  height: 1.5rem;
+  line-height: 1;
+}
+
+.separator-content {
+  display: flex;
+  align-items: center;
+  gap: spacing.$spacing-02;
+  padding: 0 spacing.$spacing-04;
+  height: 2rem;
+  max-height: 2rem;
+}
+
+.separator-label {
+  @include type.type-style('label-01');
+  color: theme.$text-secondary;
+  line-height: 1;
+  padding: 0;
+  margin: 0;
+}
+
 :host ::ng-deep {
+  cds-tile.date-separator {
+    padding: 0;
+    margin: 1;
+    min-height: unset;
+    height: 2rem;
+    background: none;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2rem;
+      background-color: theme.$layer-accent-01;
+      z-index: 0;
+    }
+
+    .separator-content {
+      position: relative;
+      z-index: 1;
+    }
+  }
+
   cds-tile {
     margin-bottom: spacing.$spacing-03;
     transition: background-color motion.$duration-fast-01 motion.$standard-easing;

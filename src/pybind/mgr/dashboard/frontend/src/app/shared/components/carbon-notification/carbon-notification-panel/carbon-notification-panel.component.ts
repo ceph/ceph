@@ -9,7 +9,9 @@ import { ExecutingTask } from '~/app/shared/models/executing-task';
       <cd-notification-header
         [unreadCount]="unreadCount"
         [doNotDisturb]="doNotDisturb"
+        [hasNotifications]="notifications.length > 0"
         (doNotDisturbChange)="doNotDisturbChange.emit($event)"
+        (clearAll)="clearAllNotifications.emit()"
         (close)="showCarbonPanel = false">
       </cd-notification-header>
 
