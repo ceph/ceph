@@ -3076,13 +3076,13 @@ def wait_for_queue_to_drain(topic_name, tenant=None, account=None, http_port=Non
         entries = parsed_result['Topic Stats']['Entries']
         retries += 1
         time_diff = time.time() - start_time
-        log.info('queue %s has %d entries after %ds', topic_name, entries, time_diff)
-        if retries > 30:
-            log.warning('queue %s still has %d entries after %ds', topic_name, entries, time_diff)
+        log.info('shards for %s has %d entries after %ds', topic_name, entries, time_diff)
+        if retries > 100:
+            log.warning('shards for %s still has %d entries after %ds', topic_name, entries, time_diff)
             assert_equal(entries, 0)
         time.sleep(5)
     time_diff = time.time() - start_time
-    log.info('waited for %ds for queue %s to drain', time_diff, topic_name)
+    log.info('waited for %ds for shards of %s to drain', time_diff, topic_name)
 
 
 def persistent_topic_stats(conn, endpoint_type):
