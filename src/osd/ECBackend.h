@@ -217,7 +217,6 @@ class ECBackend : public ECCommon {
     ceph::ErasureCodeInterfaceRef ec_impl;
     const ECUtil::stripe_info_t &sinfo;
     ReadPipeline &read_pipeline;
-    UnstableHashInfoRegistry &unstable_hashinfo_registry;
     // TODO: lay an interface down here
     ECListener *parent;
     ECBackend *ecbackend;
@@ -244,7 +243,6 @@ class ECBackend : public ECCommon {
                     ceph::ErasureCodeInterfaceRef ec_impl,
                     const ECUtil::stripe_info_t &sinfo,
                     ReadPipeline &read_pipeline,
-                    UnstableHashInfoRegistry &unstable_hashinfo_registry,
                     ECListener *parent,
                     ECBackend *ecbackend);
 
@@ -252,7 +250,7 @@ class ECBackend : public ECCommon {
       hobject_t hoid;
       eversion_t v;
       std::set<pg_shard_t> missing_on;
-      std::set<shard_id_t> missing_on_shards;
+      shard_id_set missing_on_shards;
 
       ObjectRecoveryInfo recovery_info;
       ObjectRecoveryProgress recovery_progress;
@@ -278,7 +276,6 @@ class ECBackend : public ECCommon {
       // must be filled if state == WRITING
       std::optional<ECUtil::shard_extent_map_t> returned_data;
       std::map<std::string, ceph::buffer::list, std::less<>> xattrs;
-      ECUtil::HashInfoRef hinfo;
       ObjectContextRef obc;
       std::set<pg_shard_t> waiting_on_pushes;
 
@@ -352,12 +349,10 @@ class ECBackend : public ECCommon {
                       ceph::ErasureCodeInterfaceRef ec_impl,
                       const ECUtil::stripe_info_t &sinfo,
                       ReadPipeline &read_pipeline,
-                      UnstableHashInfoRegistry &unstable_hashinfo_registry,
                       PGBackend::Listener *parent,
                       ECBackend *ecbackend)
       : RecoveryBackend(cct, coll, std::move(ec_impl), sinfo, read_pipeline,
-                        unstable_hashinfo_registry, parent->get_eclistener(),
-                        ecbackend),
+                        parent->get_eclistener(), ecbackend),
         parent(parent) {}
 
     void commit_txn_send_replies(
@@ -473,16 +468,11 @@ class ECBackend : public ECCommon {
 
   const ECUtil::stripe_info_t sinfo;
 
-  ECCommon::UnstableHashInfoRegistry unstable_hashinfo_registry;
-
-
   std::tuple<
     int,
     std::map<std::string, ceph::bufferlist, std::less<>>,
     size_t
   > get_attrs_n_size_from_disk(const hobject_t &hoid);
-
-  ECUtil::HashInfoRef get_hinfo_from_disk(hobject_t oid);
 
   std::optional<object_info_t> get_object_info_from_obc(
       ObjectContextRef &obc_map

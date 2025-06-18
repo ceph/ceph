@@ -26,10 +26,8 @@ class WritePlanObj {
   const hobject_t hoid;
   std::optional<ECUtil::shard_extent_set_t> to_read;
   ECUtil::shard_extent_set_t will_write;
-  const ECUtil::HashInfoRef hinfo;
-  const ECUtil::HashInfoRef shinfo;
   const uint64_t orig_size;
-  uint64_t projected_size;
+  const uint64_t projected_size;
   bool invalidates_cache;
   bool do_parity_delta_write = false;
 
@@ -43,19 +41,17 @@ class WritePlanObj {
       uint64_t orig_size,
       const std::optional<object_info_t> &oi,
       const std::optional<object_info_t> &soi,
-      const ECUtil::HashInfoRef &&hinfo,
-      const ECUtil::HashInfoRef &&shinfo,
-      const unsigned pdw_write_mode);
+      unsigned pdw_write_mode);
 
   void print(std::ostream &os) const {
-    os << "to_read: " << to_read
+    os << "{hoid: " << hoid
+       << " to_read: " << to_read
        << " will_write: " << will_write
-       << " hinfo: " << hinfo
-       << " shinfo: " << shinfo
        << " orig_size: " << orig_size
        << " projected_size: " << projected_size
        << " invalidates_cache: " << invalidates_cache
-       << " do_pdw: " << do_parity_delta_write;
+       << " do_pdw: " << do_parity_delta_write
+       << "}";
   }
 };
 
@@ -64,7 +60,7 @@ struct WritePlan {
   std::list<WritePlanObj> plans;
 
   void print(std::ostream &os) const {
-    os << " { plans : ";
+    os << " plans: [";
     bool first = true;
     for (auto && p : plans) {
       if (first) {
@@ -72,9 +68,9 @@ struct WritePlan {
       } else {
         os << ", ";
       }
-      os << p;
+      os << "{" << p << "}";
     }
-    os << "}";
+   os << "]";
   }
 };
 
@@ -97,6 +93,7 @@ class Generate {
   std::vector<std::pair<uint64_t, uint64_t>> rollback_extents;
   std::vector<shard_id_set> rollback_shards;
   uint32_t fadvise_flags = 0;
+  bool written_shards_final{false};
 
   void all_shards_written();
   void shard_written(const shard_id_t shard);
@@ -110,7 +107,6 @@ class Generate {
   void appends_and_clone_ranges();
   void written_and_present_shards();
   void attr_updates();
-  void handle_deletes();
 
  public:
   Generate(PGTransaction &t,

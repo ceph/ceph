@@ -38,7 +38,7 @@
 #include "osd/PGLog.h"
 #include "osd/OSD.h"
 #include "osd/PG.h"
-#include "osd/ECUtil.h"
+#include "osd/ECUtilL.h"
 
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
@@ -438,7 +438,8 @@ static int get_fd_data(int fd, bufferlist &bl)
 
 int get_log(CephContext *cct, ObjectStore *fs, __u8 struct_ver,
 	    spg_t pgid, const pg_info_t &info,
-	    PGLog::IndexedLog &log, pg_missing_t &missing)
+	    PGLog::IndexedLog &log, pg_missing_t &missing,
+	    bool ec_optimizations_enabled)
 {
   try {
     auto ch = fs->open_collection(coll_t(pgid));
@@ -453,7 +454,8 @@ int get_log(CephContext *cct, ObjectStore *fs, __u8 struct_ver,
       pgid.make_pgmeta_oid(),
       info, log, missing,
       oss,
-      g_ceph_context->_conf->osd_ignore_stale_divergent_priors);
+      g_ceph_context->_conf->osd_ignore_stale_divergent_priors,
+      ec_optimizations_enabled);
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
   }
@@ -1173,6 +1175,7 @@ int expand_log(
       info,
       oss,
       cct->_conf->osd_ignore_stale_divergent_priors,
+      pool_info->allows_ecoptimizations(),
       cct->_conf->osd_debug_verify_missing_on_start);
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
@@ -1183,7 +1186,7 @@ int expand_log(
     for (; e <= target_version; e.version++) {
       entry.version = e;
       std::cout << "adding " << e << std::endl;
-      log.add(entry, true);
+      log.add(entry);
     }
     info.last_complete = target_version;
     info.last_update = target_version;
@@ -1246,7 +1249,17 @@ int ObjectStoreTool::do_export(
 
   cerr << "Exporting " << pgid << " info " << info << std::endl;
 
-  int ret = get_log(cct, fs, struct_ver, pgid, info, log, missing);
+  bufferlist bl;
+  OSDMap osdmap;
+  int ret = get_osdmap(fs, info.last_update.epoch, osdmap, bl);
+  if (ret < 0) {
+    std::cerr << "Can't find latest local OSDMap " << info.last_update.epoch << std::endl;
+    return ret;
+  }
+  ceph_assert(osdmap.have_pg_pool(info.pgid.pool()));
+  auto pool_info = osdmap.get_pg_pool(info.pgid.pool());
+  ret = get_log(cct, fs, struct_ver, pgid, info, log, missing,
+		pool_info->allows_ecoptimizations());
   if (ret > 0)
       return ret;
 
@@ -2897,9 +2910,9 @@ int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter
     }
   }
   bufferlist hattr;
-  gr = store->getattr(ch, ghobj, ECUtil::get_hinfo_key(), hattr);
+  gr = store->getattr(ch, ghobj, ECLegacy::ECUtilL::get_hinfo_key(), hattr);
   if (gr == 0) {
-    ECUtil::HashInfo hinfo;
+    ECLegacy::ECUtilL::HashInfo hinfo;
     auto hp = hattr.cbegin();
     try {
       decode(hinfo, hp);
@@ -4763,7 +4776,17 @@ int main(int argc, char **argv)
     } else if (op == "log") {
       PGLog::IndexedLog log;
       pg_missing_t missing;
-      ret = get_log(cct.get(), fs.get(), struct_ver, pgid, info, log, missing);
+      bufferlist bl;
+      OSDMap osdmap;
+      int ret = get_osdmap(fs.get(), info.last_update.epoch, osdmap, bl);
+      if (ret < 0) {
+	std::cerr << "Can't find latest local OSDMap " << info.last_update.epoch << std::endl;
+	goto out;
+      }
+      ceph_assert(osdmap.have_pg_pool(info.pgid.pool()));
+      auto pool_info = osdmap.get_pg_pool(info.pgid.pool());
+      ret = get_log(cct.get(), fs.get(), struct_ver, pgid, info, log, missing,
+		    pool_info->allows_ecoptimizations());
       if (ret < 0)
           goto out;
 
