@@ -4068,6 +4068,8 @@ int OSD::init()
   maybe_override_options_for_qos();
   maybe_override_max_osd_capacity_for_qos();
 
+  check_crush_weight();
+
   return 0;
 
 out:
@@ -4865,6 +4867,46 @@ int OSD::mon_cmd_maybe_osd_create(string &&cmd)
       return r;
     }
     break;
+  }
+
+  return 0;
+}
+
+int OSD::check_crush_weight()
+{
+  OSDMapRef osdmap = get_osdmap();
+
+  if (!osdmap->crush->item_exists(whoami)) {
+    dout(1) << "osd." << whoami << " is not in CRUSH map" << dendl;
+    return 0;
+  }
+
+  // 1. Current weight from the CRUSH map
+  double crush_weight = osdmap->crush->get_item_weightf(whoami);
+
+  // 2. Correct weight based on total size (TiB) and scaling factor
+  struct store_statfs_t st;
+  osd_alert_list_t alerts;
+  int r = store->statfs(&st, &alerts);
+  if (r < 0) {
+    derr << "statfs: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  double expected_weight = std::max(.00001,
+                g_conf().get_val<double>("osd_crush_scaling_factor") *
+                double(st.total) /
+                double(1ull << 40 /* TiB */));
+
+  // 3. Compare with limited precision (to avoid float noise)
+  if (std::abs(crush_weight - expected_weight) > 0.0001) {
+    dout(1) << "osd." << whoami << " CRUSH weight mismatch: "
+            << "CRUSH = " << crush_weight
+            << ", expected = " << expected_weight << dendl;
+  } else {
+    dout(2) << "osd." << whoami << " CRUSH weight matches: "
+             << "CRUSH = " << crush_weight
+             << ", expected = " << expected_weight << dendl;
   }
 
   return 0;
