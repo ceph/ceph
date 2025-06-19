@@ -1611,8 +1611,8 @@ def perf_counter_check(ctx, config):
         if full==None and inc==None:
             ceph_manager.log("could not get map data for this osd, look at the log files for do_dump_perf_counter, maybe osd is down")
             continue 
-        ceph_manager.log("shreya output full map "+str(full))
-        ceph_manager.log("shreya output inc map "+str(inc))
+        ceph_manager.log(f"shreya output full map {full}")
+        ceph_manager.log(f"shreya output inc map {inc}")
 
 @contextlib.contextmanager
 def suppress_mon_health_to_clog(ctx, config):

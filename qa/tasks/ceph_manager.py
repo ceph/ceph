@@ -2661,11 +2661,11 @@ class CephManager:
             py_dic_output=json.loads(proc.stdout.getvalue())
             full_map_count=py_dic_output['osd']['full_map_received']
             inc_map_count=py_dic_output['osd']['inc_map_received']
-            res="For the osd"+str(osd_id)+"full maps is"+str(full_map_count)+"inc maps is"+str(inc_map_count)
+            res = f"For the osd : {osd_id} full maps = {full_map_count} inc maps = {inc_map_count}"
             self.log(res)
             return full_map_count,inc_map_count
         except Exception as e:
-            output="failed to get counters because of"+str(e)
+            output = f"failed to get counters because of {e}"
             self.log(output)
 
     def get_osd_metadata(self):
