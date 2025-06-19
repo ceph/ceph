@@ -326,27 +326,24 @@ template <typename I>
 void Replayer<I>::load_local_group_snapshots() {
   dout(10) << "m_local_group_id=" << m_local_group_id << dendl;
 
-  {
-    std::unique_lock locker{m_lock};
-    if (is_replay_interrupted(&locker)) {
-      return;
-    }
-
-    if (m_state != STATE_COMPLETE) {
-      m_state = STATE_REPLAYING;
-    }
-
-    if (m_stop_requested) {
-      return;
-    } else if (is_rename_requested()) {
-      dout(10) << "remote group renamed" << dendl;
-      locker.unlock();
-      handle_replay_complete(0, "remote group renamed");
-      return;
-    }
+  std::unique_lock locker{m_lock};
+  if (is_replay_interrupted(&locker)) {
+    return;
   }
 
-  //FIXME: This is not accessed under a lock
+  if (m_state != STATE_COMPLETE) {
+    m_state = STATE_REPLAYING;
+  }
+
+  if (m_stop_requested) {
+    return;
+  } else if (is_rename_requested()) {
+    dout(10) << "remote group renamed" << dendl;
+    locker.unlock();
+    handle_replay_complete(0, "remote group renamed");
+    return;
+  }
+
   if (!m_local_group_snaps.empty()) {
     for (auto &local_snap : m_local_group_snaps) {
       // skip validation for already complete snapshots
@@ -363,11 +360,10 @@ void Replayer<I>::load_local_group_snapshots() {
       }
 
       // validate incomplete non-primary mirror or regular snapshots
-      validate_image_snaps_sync_complete(local_snap.id);
+      validate_image_snaps_sync_complete(locker, local_snap);
     }
   }
 
-  std::unique_lock locker{m_lock};
   m_in_flight_op_tracker.start_op();
   m_local_group_snaps.clear();
 
@@ -543,12 +539,9 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
 
 template <typename I>
 void Replayer<I>::validate_image_snaps_sync_complete(
-    const std::string &group_snap_id) {
-  std::unique_lock locker{m_lock};
-  if (is_replay_interrupted(&locker)) {
-    return;
-  }
-  dout(10) << "group snap_id: " << group_snap_id << dendl;
+    std::unique_lock<ceph::mutex> &locker,
+    const cls::rbd::GroupSnapshot &local_snap) {
+  dout(10) << "group snap_id: " << local_snap.id << dendl;
 
   if (m_snapshot_start.is_zero()) {
     // The mirror group snapshot's start time being zero and the group snapshot
@@ -559,136 +552,25 @@ void Replayer<I>::validate_image_snaps_sync_complete(
     m_snapshot_start = ceph_clock_now();
   }
 
-  auto itr = std::find_if(
-      m_remote_group_snaps.begin(), m_remote_group_snaps.end(),
-      [group_snap_id](const cls::rbd::GroupSnapshot &s) {
-      return s.id == group_snap_id;
-      });
-
-  if (itr == m_remote_group_snaps.end()) {
-    return;
-  }
-
-  auto itl = std::find_if(
-      m_local_group_snaps.begin(), m_local_group_snaps.end(),
-      [group_snap_id](const cls::rbd::GroupSnapshot &s) {
-      return s.id == group_snap_id;
-      });
-  if (itl == m_local_group_snaps.end()) {
-    return;
-  }
-
-  int r;
   auto snap_type = cls::rbd::get_group_snap_namespace_type(
-      itl->snapshot_namespace);
-  if (snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER) {
-    locker.unlock();
+      local_snap.snapshot_namespace);
+  int r;
+  if (snap_type != cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR) {
     C_SaferCond *ctx = new C_SaferCond;
-    regular_snapshot_complete(group_snap_id, ctx);
+    regular_snapshot_complete(local_snap.id, ctx);
     r = ctx->wait();
     if (r < 0) {
       m_retry_validate_snap = true;
     }
-    return;
-  }
-
-  // FIXME: get the latest image spec added to a different pool,
-  // for now searching only in the local pool.
-
-  // 1. Get remote image_id
-  // 2. Translate to local image id
-  // 3. get the image spec
-  if (itr->snaps.size() == 0) {
-    dout(5) << "Image list is empty!!" << dendl;
+  } else {
     C_SaferCond *ctx = new C_SaferCond;
-    mirror_snapshot_complete(group_snap_id, nullptr, ctx);
+    mirror_snapshot_complete(local_snap.id, locker, ctx);
     r = ctx->wait();
     if (r < 0) {
       m_retry_validate_snap = true;
     }
-    return;
   }
-
-  std::vector<cls::rbd::GroupImageStatus> local_images;
-  r = local_group_image_list_by_id(&local_images);
-  if (r < 0) {
-    derr << "failed group image list: " << cpp_strerror(r) << dendl;
-    return;
-  }
-  locker.unlock();
-
-  std::vector<cls::rbd::ImageSnapshotSpec> image_snap_spec;
-  for (auto& image : local_images) {
-    std::unique_lock locker{m_lock};
-    bool image_snap_complete = false;
-    std::string image_header_oid = librbd::util::header_name(
-        image.spec.image_id);
-    ::SnapContext snapc;
-    int r = librbd::cls_client::get_snapcontext(&m_local_io_ctx,
-        image_header_oid, &snapc);
-    if (r < 0) {
-      derr << "get snap context failed: " << cpp_strerror(r) << dendl;
-      return;
-    }
-
-    // stored in reverse order
-    for (auto snap_id : snapc.snaps) {
-      cls::rbd::SnapshotInfo snap_info;
-      r = librbd::cls_client::snapshot_get(&m_local_io_ctx, image_header_oid,
-          snap_id, &snap_info);
-      if (r < 0) {
-        derr << "failed getting snap info for snap id: " << snap_id
-          << ", : " << cpp_strerror(r) << dendl;
-        return;
-      }
-      auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
-          &snap_info.snapshot_namespace);
-      if (!mirror_ns) {
-        continue;
-      }
-      // Makesure the image snapshot is COMPLETE
-      if (mirror_ns->group_snap_id == group_snap_id && mirror_ns->complete) {
-        image_snap_complete = true;
-        cls::rbd::ImageSnapshotSpec snap_spec;
-        snap_spec.pool = image.spec.pool_id;
-        snap_spec.image_id = image.spec.image_id;
-        snap_spec.snap_id = snap_info.id;
-        auto it = std::find_if(
-          itl->snaps.begin(), itl->snaps.end(),
-          [&snap_spec](const cls::rbd::ImageSnapshotSpec &s) {
-            return snap_spec.pool == s.pool && snap_spec.image_id == s.image_id;
-          });
-        if (it == itl->snaps.end()) {
-          image_snap_spec.push_back(snap_spec);
-        }
-        continue;
-      } else {
-        dout(10) << "remote group snap id: " << group_snap_id
-                 << ", local reflected in the image snap: "
-                 << mirror_ns->group_snap_id << dendl;
-      }
-    }
-    locker.unlock();
-
-    // In case if the image replayer is not yet updated with the limits, do it here
-    if (!image_snap_complete) {
-      set_image_replayer_limits(image.spec.image_id, &(*itr));
-    }
-    image_snap_complete = false; // reset
-  }
-
-  if (itr->snaps.size() == image_snap_spec.size()) {
-    std::unique_lock locker{m_lock};
-    for (auto &spec : image_snap_spec) {
-      C_SaferCond *ctx = new C_SaferCond;
-      mirror_snapshot_complete(group_snap_id, &spec, ctx);
-      r = ctx->wait();
-      if (r < 0) {
-        m_retry_validate_snap = true;
-      }
-    }
-    locker.unlock();
-  }
+  return;
 }
 
 
@@ -992,38 +874,113 @@ void Replayer<I>::handle_create_mirror_snapshot(
 template <typename I>
 void Replayer<I>::mirror_snapshot_complete(
     const std::string &group_snap_id,
-    cls::rbd::ImageSnapshotSpec *spec,
+    std::unique_lock<ceph::mutex> &locker,
     Context *on_finish) {
-
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
-
+  auto itl = std::find_if(
+      m_local_group_snaps.begin(), m_local_group_snaps.end(),
+      [group_snap_id](const cls::rbd::GroupSnapshot &s) {
+      return s.id == group_snap_id;
+      });
+  if (itl == m_local_group_snaps.end()) {
+    on_finish->complete(0);
+    return;
+  }
   auto itr = std::find_if(
       m_remote_group_snaps.begin(), m_remote_group_snaps.end(),
       [group_snap_id](const cls::rbd::GroupSnapshot &s) {
       return s.id == group_snap_id;
       });
 
-  ceph_assert(itr != m_remote_group_snaps.end());
-  auto itl = std::find_if(
-      m_local_group_snaps.begin(), m_local_group_snaps.end(),
-      [group_snap_id](const cls::rbd::GroupSnapshot &s) {
-      return s.id == group_snap_id;
-      });
-  if (itr->snaps.size() != 0) {
-    // update the group snap with snap spec
-    itl->snaps.push_back(*spec);
-  }
+  std::vector<cls::rbd::ImageSnapshotSpec> local_image_snap_specs;
+  if (itr != m_remote_group_snaps.end()) {
+    local_image_snap_specs.reserve(itr->snaps.size());
+    std::vector<cls::rbd::GroupImageStatus> local_images;
+    int r = local_group_image_list_by_id(&local_images);
+    if (r < 0) {
+      derr << "failed group image list: " << cpp_strerror(r) << dendl;
+      on_finish->complete(r);
+      return;
+    }
 
-  if (itr->snaps.size() == itl->snaps.size()) {
+    locker.unlock();
+    for (auto& image : local_images) {
+      locker.lock();
+      bool image_snap_complete = false;
+      std::string image_header_oid = librbd::util::header_name(
+          image.spec.image_id);
+      ::SnapContext snapc;
+      int r = librbd::cls_client::get_snapcontext(&m_local_io_ctx,
+          image_header_oid, &snapc);
+      if (r < 0) {
+        derr << "get snap context failed: " << cpp_strerror(r) << dendl;
+        on_finish->complete(r);
+        return;
+      }
+
+      // stored in reverse order
+      for (auto snap_id : snapc.snaps) {
+        cls::rbd::SnapshotInfo snap_info;
+        r = librbd::cls_client::snapshot_get(&m_local_io_ctx, image_header_oid,
+            snap_id, &snap_info);
+        if (r < 0) {
+          derr << "failed getting snap info for snap id: " << snap_id
+            << ", : " << cpp_strerror(r) << dendl;
+          on_finish->complete(r);
+          return;
+        }
+        auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+            &snap_info.snapshot_namespace);
+        if (!mirror_ns) {
+          continue;
+        }
+        // Makesure the image snapshot is COMPLETE
+        if (mirror_ns->group_snap_id == group_snap_id && mirror_ns->complete) {
+          image_snap_complete = true;
+          cls::rbd::ImageSnapshotSpec snap_spec;
+          snap_spec.pool = image.spec.pool_id;
+          snap_spec.image_id = image.spec.image_id;
+          snap_spec.snap_id = snap_info.id;
+          auto it = std::find_if(
+            itl->snaps.begin(), itl->snaps.end(),
+            [&snap_spec](const cls::rbd::ImageSnapshotSpec &s) {
+              return snap_spec.pool == s.pool && snap_spec.image_id == s.image_id;
+            });
+          if (it == itl->snaps.end()) {
+            local_image_snap_specs.push_back(snap_spec);
+          }
+          continue;
+        } else {
+          dout(10) << "remote group snap id: " << group_snap_id
+                   << ", local reflected in the image snap: "
+                   << mirror_ns->group_snap_id << dendl;
+        }
+      }
+      locker.unlock();
+
+      // In case if the image replayer is not yet updated with the limits, do it here
+      if (!image_snap_complete) {
+        set_image_replayer_limits(image.spec.image_id, &(*itr));
+      }
+      image_snap_complete = false; // reset
+    }
+  } else {
+    derr << "remote group snapshot doesnt exist: " << group_snap_id << dendl;
+    on_finish->complete(-ENOENT);
+    return;
+  }
+  locker.lock();
+
+  if (itr->snaps.size() == local_image_snap_specs.size()) {
+    itl->snaps = local_image_snap_specs;
     itl->state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+    librados::ObjectWriteOperation op;
+    librbd::cls_client::group_snap_set(&op, *itl);
 
     auto comp = create_rados_callback(
         new LambdaContext([this, group_snap_id, on_finish](int r) {
           handle_mirror_snapshot_complete(r, group_snap_id, on_finish);
           }));
-
-    librados::ObjectWriteOperation op;
-    librbd::cls_client::group_snap_set(&op, *itl);
     int r = m_local_io_ctx.aio_operate(
         librbd::util::group_header_name(m_local_group_id), comp, &op);
     ceph_assert(r == 0);
@@ -1323,7 +1280,7 @@ template <typename I>
 void Replayer<I>::regular_snapshot_complete(
     const std::string &group_snap_id,
     Context *on_finish) {
-  std::unique_lock locker{m_lock};
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
   auto itl = std::find_if(
       m_local_group_snaps.begin(), m_local_group_snaps.end(),
       [group_snap_id](const cls::rbd::GroupSnapshot &s) {
@@ -1359,10 +1316,7 @@ void Replayer<I>::regular_snapshot_complete(
       on_finish->complete(r);
       return;
     }
-    locker.unlock();
     for (auto& image : local_images) {
-      std::unique_lock locker{m_lock};
-      bool image_snap_complete = false;
       std::string image_header_oid = librbd::util::header_name(
           image.spec.image_id);
       ::SnapContext snapc;
@@ -1390,7 +1344,6 @@ void Replayer<I>::regular_snapshot_complete(
         auto ns = std::get_if<cls::rbd::ImageSnapshotNamespaceGroup>(
             &snap_info.snapshot_namespace);
         if (ns != nullptr && ns->group_snapshot_id == group_snap_id) {
-          image_snap_complete = true;
           cls::rbd::ImageSnapshotSpec snap_spec;
           snap_spec.pool = image.spec.pool_id;
           snap_spec.image_id = image.spec.image_id;
@@ -1399,16 +1352,14 @@ void Replayer<I>::regular_snapshot_complete(
           local_image_snap_specs.push_back(snap_spec);
         }
       }
-      locker.unlock();
-      // In case if the image replayer is not yet updated with the limits, do it here
-      if (!image_snap_complete) {
-        set_image_replayer_limits(image.spec.image_id, &(*itr));
-      }
-      image_snap_complete = false; // reset
     }
+  } else {
+    derr << "remote group snapshot doesnt exist: " << group_snap_id << dendl;
+    on_finish->complete(-ENOENT);
+    return;
   }
+
   if (itr->snaps.size() == local_image_snap_specs.size()) {
-    locker.lock();
     itl->snaps = local_image_snap_specs;
     itl->state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
     librados::ObjectWriteOperation op;
@@ -1421,18 +1372,19 @@ void Replayer<I>::regular_snapshot_complete(
     int r = m_local_io_ctx.aio_operate(
         librbd::util::group_header_name(m_local_group_id), comp, &op);
     ceph_assert(r == 0);
-    locker.unlock();
     comp->release();
-
-    dout(10) << "local group snap info: "
-      << "id: " << itl->id
-      << ", name: " << itl->name
-      << ", state: " << itl->state
-      << ", snaps.size: " << itl->snaps.size()
-      << dendl;
   } else {
     on_finish->complete(0);
   }
+
+  dout(10) << "local group snap info: "
+    << "id: " << itl->id
+    << ", name: " << itl->name
+    << ", state: " << itl->state
+    << ", snaps.size: " << itl->snaps.size()
+    << dendl;
+
+  return;
 }
 
 template <typename I>
