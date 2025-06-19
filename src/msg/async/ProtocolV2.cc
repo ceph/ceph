@@ -1894,6 +1894,7 @@ CtPtr ProtocolV2::handle_auth_done(ceph::bufferlist &payload)
 }
 
 CtPtr ProtocolV2::finish_client_auth() {
+  ldout(cct, 20) << __func__ << dendl;
   if (HAVE_MSGR2_FEATURE(peer_supported_features, COMPRESSION)) {
     return send_compression_request();
   }
@@ -1902,6 +1903,7 @@ CtPtr ProtocolV2::finish_client_auth() {
 }
 
 CtPtr ProtocolV2::finish_server_auth() {
+  ldout(cct, 20) << __func__ << dendl;
   // server had sent AuthDone and client responded with correct pre-auth
   // signature. 
   // We can start conditioanl msgr protocol
@@ -1918,10 +1920,12 @@ CtPtr ProtocolV2::finish_server_auth() {
 
 CtPtr ProtocolV2::start_session_connect() {
   if (!server_cookie) {
+    ldout(cct, 20) << __func__ << " starting a new session" << dendl;
     ceph_assert(connect_seq == 0);
     state = SESSION_CONNECTING;
     return send_client_ident();
   } else {  // reconnecting to previous session
+    ldout(cct, 20) << __func__ << " reconnecting to session" << dendl;
     state = SESSION_RECONNECTING;
     ceph_assert(connect_seq > 0);
     return send_reconnect();
@@ -2671,6 +2675,19 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
     return WRITE(wait, "wait", read_frame);
   }
 
+  if (exproto->server_cookie && exproto->client_cookie &&
+      exproto->client_cookie != client_cookie) {
+    // Found previous session
+    // peer has reseted and we're going to reuse the existing connection
+    // by replacing the communication socket
+    ldout(cct, 1) << __func__ << " found previous session existing=" << existing
+                  << ", peer must have reseted." << dendl;
+    if (connection->policy.resetcheck) {
+      exproto->reset_session();
+    }
+    return reuse_connection(existing, exproto);
+  }
+
   if (exproto->peer_global_seq > peer_global_seq) {
     ldout(cct, 1) << __func__ << " this is a stale connection, peer_global_seq="
                   << peer_global_seq
@@ -2691,19 +2708,6 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
     existing->dispatch_queue->queue_reset(existing.get());
     l.unlock();
     return send_server_ident();
-  }
-
-  if (exproto->server_cookie && exproto->client_cookie &&
-      exproto->client_cookie != client_cookie) {
-    // Found previous session
-    // peer has reseted and we're going to reuse the existing connection
-    // by replacing the communication socket
-    ldout(cct, 1) << __func__ << " found previous session existing=" << existing
-                  << ", peer must have reseted." << dendl;
-    if (connection->policy.resetcheck) {
-      exproto->reset_session();
-    }
-    return reuse_connection(existing, exproto);
   }
 
   if (exproto->client_cookie == client_cookie) {
