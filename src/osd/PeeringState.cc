@@ -3417,13 +3417,17 @@ void PeeringState::proc_master_log(
 
 void PeeringState::proc_replica_log(
   pg_info_t &oinfo,
-  const pg_log_t &olog,
+  pg_log_t &olog,
   pg_missing_t&& omissing,
   pg_shard_t from)
 {
   psdout(10) << "proc_replica_log for osd." << from << ": "
 	     << oinfo << " " << olog << " " << omissing << dendl;
 
+  if (info.partial_writes_last_complete.contains(from.shard)) {
+    apply_pwlc(info.partial_writes_last_complete[from.shard], from, oinfo,
+	       &olog);
+  }
   pg_log.proc_replica_log(oinfo, olog, omissing, from, pool.info.allows_ecoptimizations());
 
   peer_info[from] = oinfo;
