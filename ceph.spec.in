@@ -158,16 +158,9 @@
 %endif
 %endif
 
-# gcc-toolset-13 seems to trigger a linker bug resulting in a segfault in SafeTimer
-# and perhaps elsewhere.  For now, let's just disable it.  See
-# ceph bug https://tracker.ceph.com/issues/63867
-# and
-# gcc bug https://bugzilla.redhat.com/show_bug.cgi?id=2241339
-# for details.
-#
-# Also disable lto on systems that do not support symver attribute
+# Disable lto on systems that do not support symver attribute
 # See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200 for details
-%if 0%{?gts_version} == 13 || (0%{?rhel} && 0%{?rhel} < 9)  || ( 0%{?suse_version} && 0%{?suse_version} <= 1500 )
+%if (0%{?rhel} && 0%{?rhel} < 9) || ( 0%{?suse_version} && 0%{?suse_version} <= 1500 )
 %define _lto_cflags %{nil}
 %endif
 
@@ -267,7 +260,17 @@ BuildRequires:	gcc-c++ >= 11
 BuildRequires: gcc11-c++
 %endif
 %if 0%{?gts_version} > 0
+%if 0%{?gts_version} == 13
+# Before 13.3, an lto bug resulted in a segfault in SafeTimer and perhaps
+# elsewhere. Require the fixed version so we can reenable lto. See
+# ceph bug https://tracker.ceph.com/issues/63867
+# and
+# gcc bug https://bugzilla.redhat.com/show_bug.cgi?id=2241339
+# for details.
+BuildRequires:	gcc-toolset-%{gts_version}-gcc-c++ >= 13.3
+%else
 BuildRequires:	gcc-toolset-%{gts_version}-gcc-c++
+%endif
 %if 0%{?gts_version} >= 12
 BuildRequires:	gcc-toolset-%{gts_version}-runtime
 %else
