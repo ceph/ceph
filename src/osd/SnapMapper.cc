@@ -90,7 +90,7 @@ int OSDriver::get_keys(
 {
   CRIMSON_DEBUG("OSDriver::{}", __func__);
   using crimson::os::FuturizedStore;
-  return interruptor::green_get(os->omap_get_values(
+  return os->omap_get_values(
     ch, hoid, keys
   ).safe_then([out] (FuturizedStore::Shard::omap_values_t&& vals) {
     // just the difference in comparator (`std::less<>` in omap_values_t`)
@@ -99,7 +99,7 @@ int OSDriver::get_keys(
   }, FuturizedStore::Shard::read_errorator::all_same_way([] (auto& e) {
     assert(e.value() > 0);
     return -e.value();
-  }))); // this requires seastar::thread
+  })).get(); // this requires seastar::thread
 }
 
 int OSDriver::get_next(
@@ -108,7 +108,7 @@ int OSDriver::get_next(
 {
   CRIMSON_DEBUG("OSDriver::{} key {}", __func__, key);
   using crimson::os::FuturizedStore;
-  return interruptor::green_get(os->omap_get_values(
+  return os->omap_get_values(
     ch, hoid, key
   ).safe_then_unpack([&key, next] (bool, FuturizedStore::Shard::omap_values_t&& vals) {
     CRIMSON_DEBUG("OSDriver::get_next key {} got omap values", key);
@@ -125,7 +125,7 @@ int OSDriver::get_next(
   }, FuturizedStore::Shard::read_errorator::all_same_way([] {
     CRIMSON_DEBUG("OSDriver::get_next saw error returning EINVAL");
     return -EINVAL;
-  }))); // this requires seastar::thread
+  })).get(); // this requires seastar::thread
 }
 
 int OSDriver::get_next_or_current(
@@ -135,19 +135,25 @@ int OSDriver::get_next_or_current(
   CRIMSON_DEBUG("OSDriver::{} key {}", __func__, key);
   using crimson::os::FuturizedStore;
   // let's try to get current first
-  return interruptor::green_get(os->omap_get_values(
+  int r = os->omap_get_values(
     ch, hoid, FuturizedStore::Shard::omap_keys_t{key}
   ).safe_then([&key, next_or_current] (FuturizedStore::Shard::omap_values_t&& vals) {
+    if (vals.size() != 1) {
+      return -ENOENT;
+    }
     CRIMSON_DEBUG("OSDriver::get_next_or_current returning {}", key);
-    assert(vals.size() == 1);
     *next_or_current = std::make_pair(key, std::move(vals.begin()->second));
     return 0;
   }, FuturizedStore::Shard::read_errorator::all_same_way(
-    [next_or_current, &key, this] {
-    CRIMSON_DEBUG("OSDriver::get_next_or_current no current, try next {}", key);
+    [] {
+    return -ENOENT;
+  })).get(); // this requires seastar::thread
+  if (r == -ENOENT) {
     // no current, try next
+    CRIMSON_DEBUG("OSDriver::get_next_or_current no current, try next {}", key);
     return get_next(key, next_or_current);
-  }))); // this requires seastar::thread
+  }
+  return r;
 }
 #else
 int OSDriver::get_keys(
@@ -280,11 +286,6 @@ std::pair<snapid_t, hobject_t> SnapMapper::from_raw(
 bool SnapMapper::is_mapping(const string &to_test)
 {
   return to_test.substr(0, MAPPING_PREFIX.size()) == MAPPING_PREFIX;
-}
-
-bool SnapMapper::is_purged(const string &to_test)
-{
-  return to_test.substr(0, strlen(PURGED_SNAP_PREFIX)) == PURGED_SNAP_PREFIX;
 }
 
 string SnapMapper::to_object_key(const hobject_t &hoid) const
