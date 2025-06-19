@@ -68,15 +68,6 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
                               std::string* bucket_obj, int* shard_id);
 
 public:
-
-  int cls_bucket_head(const DoutPrefixProvider *dpp,
-		      const RGWBucketInfo& bucket_info,
-                      const rgw::bucket_index_layout_generation& idx_layout,
-                      int shard_id,
-                      std::vector<rgw_bucket_dir_header> *headers,
-                      std::map<int, std::string> *bucket_instance_ids,
-                      optional_yield y);
-
   librados::Rados* rados{nullptr};
 
   struct Svc {
@@ -193,4 +184,12 @@ public:
                         librados::IoCtx* index_pool,
                         std::map<int, std::string> *bucket_objs,
                         std::map<int, std::string> *bucket_instance_ids);
+
+  int cls_bucket_head(const DoutPrefixProvider *dpp,
+		      const RGWBucketInfo& bucket_info,
+                      const rgw::bucket_index_layout_generation& idx_layout,
+                      int shard_id,
+                      std::vector<rgw_bucket_dir_header> *headers,
+                      std::map<int, std::string> *bucket_instance_ids,
+                      optional_yield y) override;
 };

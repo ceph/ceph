@@ -46,4 +46,12 @@ public:
                                const RGWBucketInfo& info,
                                const RGWBucketInfo& orig_info,
                                optional_yield y) = 0;
+
+  virtual int cls_bucket_head(const DoutPrefixProvider *dpp,
+		      const RGWBucketInfo& bucket_info,
+                      const rgw::bucket_index_layout_generation& idx_layout,
+                      int shard_id,
+                      std::vector<rgw_bucket_dir_header> *headers,
+                      std::map<int, std::string> *bucket_instance_ids,
+                      optional_yield y) = 0;
 };

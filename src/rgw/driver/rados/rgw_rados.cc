@@ -11498,6 +11498,15 @@ int RGWRados::cls_bucket_head_async(const DoutPrefixProvider *dpp, const RGWBuck
                                     const rgw::bucket_index_layout_generation& idx_layout, int shard_id,
                                     boost::intrusive_ptr<RGWGetDirHeader_CB> cb, int *num_aio)
 {
+
+  /* revisit this
+    return svc.bi->cls_bucket_head(bucket_info,
+                                 shard_id,
+                                 &headers,
+                                 bucket_instance_ids,
+                                 null_yield // the impl. ignores that);
+  */
+
   librados::IoCtx index_pool;
   map<int, string> bucket_objs;
   int r = svc.bi_rados->open_bucket_index(dpp, bucket_info, shard_id, idx_layout, &index_pool, &bucket_objs, nullptr);
