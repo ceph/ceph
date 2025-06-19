@@ -1,7 +1,6 @@
 set(libos_srcs
   ObjectStore.cc
   Transaction.cc
-  DBObjectMap.cc
   memstore/MemStore.cc
   kstore/KStore.cc
   kstore/kstore_types.cc
@@ -28,6 +27,9 @@ if(WITH_BLUESTORE)
     bluestore/Btree2Allocator.cc
     bluestore/HybridAllocator.cc
     bluestore/Writer.cc
+    bluestore/Compression.cc
+    bluestore/BlueAdmin.cc
+    bluestore/BlueEnv.cc
   )
 endif(WITH_BLUESTORE)
 
@@ -47,6 +49,7 @@ target_link_libraries(os
   blk
   ${FMT_LIB})
 
+target_compile_definitions(os PRIVATE -DWITH_KSTORE)
 target_link_libraries(os heap_profiler kv)
 
 if(WITH_BLUEFS)

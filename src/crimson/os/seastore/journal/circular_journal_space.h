@@ -148,7 +148,7 @@ class CircularJournalSpace : public JournalAllocator {
     return convert_paddr_to_abs_addr(seq.offset);
   }
   void set_written_to(journal_seq_t seq) {
-    rbm_abs_addr addr = convert_paddr_to_abs_addr(seq.offset);
+    [[maybe_unused]] rbm_abs_addr addr = convert_paddr_to_abs_addr(seq.offset);
     assert(addr >= get_records_start());
     assert(addr < get_journal_end());
     written_to = seq;

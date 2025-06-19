@@ -9,6 +9,12 @@ export class PoolFormData {
   crushInfo = false;
   applications: any;
 
+  readonly APP_LABELS: Record<string, string> = {
+    cephfs: 'Filesystem',
+    rbd: 'Block',
+    rgw: 'Object'
+  };
+
   constructor() {
     this.poolTypes = ['erasure', 'replicated'];
     this.applications = {
@@ -26,7 +32,7 @@ export class PoolFormData {
           pattern: $localize`Allowed characters '_a-zA-Z0-9'`,
           maxlength: $localize`Maximum length is 128 characters`
         },
-        filter: $localize`Filter or add applications'`,
+        filter: $localize`Filter or add applications`,
         add: $localize`Add application`
       })
     };

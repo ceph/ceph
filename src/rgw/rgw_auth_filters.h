@@ -73,12 +73,16 @@ public:
     return get_decoratee().get_perms_from_aclspec(dpp, aclspec);
   }
 
-  bool is_admin_of(const rgw_owner& o) const override {
-    return get_decoratee().is_admin_of(o);
+  bool is_admin() const override {
+    return get_decoratee().is_admin();
   }
 
   bool is_owner_of(const rgw_owner& o) const override {
     return get_decoratee().is_owner_of(o);
+  }
+
+  bool is_root() const override {
+    return get_decoratee().is_root();
   }
 
   bool is_anonymous() const override {
@@ -236,7 +240,8 @@ class SysReqApplier : public DecoratedApplier<T> {
   CephContext* const cct;
   rgw::sal::Driver* driver;
   const RGWHTTPArgs& args;
-  mutable boost::tribool is_system;
+  mutable boost::tribool is_system = boost::logic::indeterminate;
+  mutable bool is_impersonating;
   mutable std::optional<ACLOwner> effective_owner;
   mutable std::optional<std::string> effective_tenant;
 
@@ -245,12 +250,17 @@ public:
   SysReqApplier(CephContext* const cct,
 		rgw::sal::Driver* driver,
                 const req_state* const s,
-                U&& decoratee)
+                U&& decoratee,
+                bool is_impersonating = false)
     : DecoratedApplier<T>(std::forward<T>(decoratee)),
       cct(cct),
       driver(driver),
       args(s->info.args),
-      is_system(boost::logic::indeterminate) {
+      is_impersonating(is_impersonating) {
+    if (is_impersonating) {
+      // we only accept impersonated requests from a system user
+      is_system = true;
+    }
   }
 
   void to_str(std::ostream& out) const override;
@@ -271,6 +281,13 @@ public:
     return DecoratedApplier<T>::get_tenant();
   }
 
+  bool is_admin() const override {
+    if (is_system && !is_impersonating) {
+      return true;
+    }
+
+    return DecoratedApplier<T>::is_admin();
+  }
 };
 
 template <typename T>
@@ -288,8 +305,13 @@ template <typename T>
 auto SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User>
 {
   std::unique_ptr<rgw::sal::User> user = DecoratedApplier<T>::load_acct_info(dpp);
-  is_system = user->get_info().system;
 
+  // skip loading the account info if we already have it through impersonation
+  if (is_impersonating) {
+    return user;
+  }
+
+  is_system = user->get_info().system;
   if (is_system) {
     //ldpp_dout(dpp, 20) << "system request" << dendl;
 
@@ -316,7 +338,7 @@ auto SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp) const -> st
           throw -EACCES;
         }
         effective_tenant = info.tenant;
-     }
+      }
     }
   }
   return user;
@@ -340,8 +362,9 @@ template <typename T> static inline
 SysReqApplier<T> add_sysreq(CephContext* const cct,
 			    rgw::sal::Driver* driver,
                             const req_state* const s,
-                            T&& t) {
-  return SysReqApplier<T>(cct, driver, s, std::forward<T>(t));
+                            T&& t,
+                            bool is_impersonating = false) {
+  return SysReqApplier<T>(cct, driver, s, std::forward<T>(t), is_impersonating);
 }
 
 } /* namespace auth */

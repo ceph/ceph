@@ -155,6 +155,10 @@ enum AttrsMod {
 static constexpr uint32_t FLAG_LOG_OP = 0x0001;
 static constexpr uint32_t FLAG_PREVENT_VERSIONING = 0x0002;
 
+// if cannot do all elements of op, do as much as possible (e.g.,
+// delete object where head object is missing)
+static constexpr uint32_t FLAG_FORCE_OP = 0x0004;
+
 enum RGWRestoreStatus : uint8_t {
   None  = 0,
   RestoreAlreadyInProgress = 1,
@@ -678,6 +682,9 @@ class Driver {
     /** Check to see if this placement rule is valid */
     virtual bool valid_placement(const rgw_placement_rule& rule) = 0;
 
+    /** Shut down background tasks, to be called while Asio is running. */
+    virtual void shutdown(void) { };
+
     /** Clean up a driver for termination */
     virtual void finalize(void) = 0;
 
@@ -901,7 +908,7 @@ class Bucket {
     /** Load this bucket from the backing store.  Requires the key to be set, fills other fields. */
     virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Read the bucket stats from the backing Store, synchronous */
-    virtual int read_stats(const DoutPrefixProvider *dpp,
+    virtual int read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			   const bucket_index_layout_generation& idx_layout,
 			   int shard_id, std::string* bucket_ver, std::string* master_ver,
 			   std::map<RGWObjCategory, RGWStorageStats>& stats,
@@ -943,11 +950,13 @@ class Bucket {
     /** Remove objects from the bucket index of this bucket.  May be removed from API */
     virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink) = 0;
     /** Check the state of the bucket index, and get stats from it.  May be removed from API */
-    virtual int check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) = 0;
+    virtual int check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                            std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
+                            std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) = 0;
     /** Rebuild the bucket index.  May be removed from API */
-    virtual int rebuild_index(const DoutPrefixProvider *dpp) = 0;
+    virtual int rebuild_index(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     /** Set a timeout on the check_index() call.  May be removed from API */
-    virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) = 0;
+    virtual int set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y, uint64_t timeout) = 0;
     /** Remove this specific bucket instance from the backing store.  May be removed from API */
     virtual int purge_instance(const DoutPrefixProvider* dpp, optional_yield y) = 0;
 
@@ -1029,8 +1038,10 @@ class Bucket {
         optional_yield y,
         const DoutPrefixProvider *dpp,
         RGWObjVersionTracker* objv_tracker) = 0;
-    /** Move the pending bucket logging object into the bucket */
-    virtual int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    /** Move the pending bucket logging object into the bucket
+     if "last_committed" is not null, it will be set to the name of the last committed object
+     * */
+    virtual int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp, const std::string& prefix, std::string* last_committed) = 0;
     //** Remove the pending bucket logging object */
     virtual int remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) = 0;
     /** Write a record to the pending bucket logging object */
@@ -1192,7 +1203,7 @@ class Object {
     /** Set the ACL for this object */
     virtual int set_acl(const RGWAccessControlPolicy& acl) = 0;
     /** Mark further operations on this object as being atomic */
-    virtual void set_atomic() = 0;
+    virtual void set_atomic(bool atomic) = 0;
     /** Check if this object is atomic */
     virtual bool is_atomic() = 0;
     /** Pre-fetch data when reading */
@@ -1205,7 +1216,8 @@ class Object {
     virtual bool is_compressed() = 0;
     /** Check if object is synced */
     virtual bool is_sync_completed(const DoutPrefixProvider* dpp,
-      const ceph::real_time& obj_mtime) = 0;
+                                   optional_yield y,
+                                   const ceph::real_time& obj_mtime) = 0;
     /** Invalidate cached info about this object, except atomic, prefetch, and
      * compressed */
     virtual void invalidate() = 0;
@@ -1257,7 +1269,6 @@ class Object {
 			   rgw_bucket_dir_entry& o,
 			   CephContext* cct,
          		   RGWObjTier& tier_config,
-			   real_time& mtime,
 			   uint64_t olh_epoch,
 		           std::optional<uint64_t> days,
 			   const DoutPrefixProvider* dpp,
@@ -1459,7 +1470,11 @@ public:
   //object lock
   std::optional<RGWObjectRetention> obj_retention = std::nullopt;
   std::optional<RGWObjectLegalHold> obj_legal_hold = std::nullopt;
+
   rgw::cksum::Type cksum_type = rgw::cksum::Type::none;
+
+  // only a few (currently CRC) checksums are not composite
+  uint16_t cksum_flags{rgw::cksum::Cksum::FLAG_COMPOSITE};
 
   MultipartUpload() = default;
   virtual ~MultipartUpload() = default;
@@ -1720,10 +1735,16 @@ public:
 
   /** Get the type of this tier */
   virtual const std::string& get_tier_type() = 0;
+  /** Is the type of this tier cloud-s3/cloud-s3-glacier */
+  virtual bool is_tier_type_s3() = 0;
   /** Get the storage class of this tier */
   virtual const std::string& get_storage_class() = 0;
   /** Should we retain the head object when transitioning */
   virtual bool retain_head_object() = 0;
+  /** Is read_through allowed */
+  virtual bool allow_read_through() = 0;
+  /** Get read_through restore_days */
+  virtual uint64_t get_read_through_restore_days() = 0;
   /** Get the placement rule associated with this tier */
 };
 
@@ -1867,7 +1888,10 @@ public:
 				      bool quota_threads,
 				      bool run_sync_thread,
 				      bool run_reshard_thread,
-				      bool run_notification_thread, optional_yield y,
+				      bool run_notification_thread,
+				      bool background_tasks,
+				      optional_yield y,
+              rgw::sal::ConfigStore* cfgstore,
 				      bool use_cache = true,
 				      bool use_gc = true) {
     rgw::sal::Driver* driver = init_storage_provider(dpp, cct, cfg, io_context,
@@ -1877,18 +1901,21 @@ public:
 						   quota_threads,
 						   run_sync_thread,
 						   run_reshard_thread,
-                                                   run_notification_thread,
-						   use_cache, use_gc, y);
+               run_notification_thread,
+						   use_cache, use_gc,
+						   background_tasks, y, cfgstore);
     return driver;
   }
   /** Get a stripped down driver by service name */
   static rgw::sal::Driver* get_raw_storage(const DoutPrefixProvider* dpp,
 					  CephContext* cct, const Config& cfg,
 					  boost::asio::io_context& io_context,
-					  const rgw::SiteConfig& site_config) {
+					  const rgw::SiteConfig& site_config,
+            rgw::sal::ConfigStore* cfgstore) {
     rgw::sal::Driver* driver = init_raw_storage_provider(dpp, cct, cfg,
 							 io_context,
-							 site_config);
+							 site_config,
+               cfgstore);
     return driver;
   }
   /** Initialize a new full Driver */
@@ -1902,15 +1929,17 @@ public:
 						bool quota_threads,
 						bool run_sync_thread,
 						bool run_reshard_thread,
-                                                bool run_notification_thread,
+            bool run_notification_thread,
 						bool use_metadata_cache,
-						bool use_gc, optional_yield y);
+						bool use_gc, bool background_tasks,
+						optional_yield y, rgw::sal::ConfigStore* cfgstore);
   /** Initialize a new raw Driver */
   static rgw::sal::Driver* init_raw_storage_provider(const DoutPrefixProvider* dpp,
 						    CephContext* cct,
 						    const Config& cfg,
 						    boost::asio::io_context& io_context,
-						    const rgw::SiteConfig& site_config);
+						    const rgw::SiteConfig& site_config,
+                rgw::sal::ConfigStore* cfgstore);
   /** Close a Driver when it's no longer needed */
   static void close_storage(rgw::sal::Driver* driver);
 

@@ -2,13 +2,20 @@
 // vim: ts=8 sw=2 smarttab
 #pragma once
 
+#include <iosfwd>
+#include <set>
+#include <string>
+#include <string_view>
+
 #include <fmt/ranges.h>
 #include "common/ceph_time.h"
 #include "common/fmt_common.h"
 #include "common/scrub_types.h"
+#include "include/random.h" // for ceph::util::generate_random_number()
 #include "include/types.h"
 #include "messages/MOSDScrubReserve.h"
 #include "os/ObjectStore.h"
+#include "osd/osd_perf_counters.h" // for osd_counter_idx_t
 
 #include "OpRequest.h"
 
@@ -117,23 +124,13 @@ enum class schedule_result_t {
 };
 
 /// a collection of the basic scheduling information of a scrub target:
-/// target time to scrub, the 'not before' time, and a deadline.
+/// target time to scrub, and the 'not before'.
 struct scrub_schedule_t {
   /**
    * the time at which we are allowed to start the scrub. Never
    * decreasing after 'scheduled_at' is set.
    */
   utime_t not_before{utime_t::max()};
-
-  /**
-   * the 'deadline' is the time by which we expect the periodic scrub to
-   * complete. It is determined by the SCRUB_MAX_INTERVAL pool configuration
-   * and by osd_scrub_max_interval;
-   * Once passed, the scrub will be allowed to run even if the OSD is
-   * overloaded.It would also have higher priority than other
-   * auto-scheduled scrubs.
-   */
-  utime_t deadline{utime_t::max()};
 
   /**
    * the 'scheduled_at' is the time at which we intended the scrub to be scheduled.
@@ -152,18 +149,11 @@ struct scrub_schedule_t {
   {
     // when compared - the 'not_before' is ignored, assuming
     // we never compare jobs with different eligibility status.
-    auto cmp1 = scheduled_at <=> rhs.scheduled_at;
-    if (cmp1 != 0) {
-      return cmp1;
-    }
-    return deadline <=> rhs.deadline;
+    return scheduled_at <=> rhs.scheduled_at;
   };
+
   bool operator==(const scrub_schedule_t& rhs) const = default;
 };
-
-
-/// rescheduling param: should we delay jobs already ready to execute?
-enum class delay_ready_t : bool { delay_ready = true, no_delay = false };
 
 }  // namespace Scrub
 
@@ -186,8 +176,7 @@ struct formatter<Scrub::OSDRestrictions> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const Scrub::OSDRestrictions& conds, FormatContext& ctx) const
-  {
+  auto format(const Scrub::OSDRestrictions& conds, FormatContext& ctx) const {
     return fmt::format_to(
 	ctx.out(), "<{}.{}.{}.{}.{}>",
 	conds.max_concurrency_reached ? "max-scrubs" : "",
@@ -202,11 +191,9 @@ template <>
 struct formatter<Scrub::scrub_schedule_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
   template <typename FormatContext>
-  auto format(const Scrub::scrub_schedule_t& sc, FormatContext& ctx) const
-  {
+  auto format(const Scrub::scrub_schedule_t& sc, FormatContext& ctx) const {
     return fmt::format_to(
-	ctx.out(), "nb:{:s}(at:{:s},dl:{:s})", sc.not_before,
-        sc.scheduled_at, sc.deadline);
+	ctx.out(), "nb:{:s}(at:{:s})", sc.not_before, sc.scheduled_at);
   }
 };
 
@@ -276,10 +263,50 @@ struct PgScrubBeListener {
   virtual const pg_info_t& get_pg_info(ScrubberPasskey) const = 0;
 
   // query the PG backend for the on-disk size of an object
-  virtual uint64_t logical_to_ondisk_size(uint64_t logical_size) const = 0;
+  virtual uint64_t logical_to_ondisk_size(uint64_t logical_size,
+                                 shard_id_t shard_id) const = 0;
 
   // used to verify our "cleanliness" before scrubbing
   virtual bool is_waiting_for_unreadable_object() const = 0;
+
+  // A non-primary shard is one which can never become primary. It may
+  // have an old version and cannot be considered authoritative.
+  virtual bool get_is_nonprimary_shard(const pg_shard_t &pg_shard) const = 0;
+
+  // hinfo objects are not used for some EC configurations. Do not raise scrub
+  // errors on hinfo if they should not exist.
+  virtual bool get_is_hinfo_required() const = 0;
+
+  // If true, the EC optimisations have been enabled.
+  virtual bool get_is_ec_optimized() const = 0;
+};
+
+// defining a specific subset of performance counters. Each of the members
+// is set to (the index of) the corresponding performance counter.
+// Separate sets are used for replicated and erasure-coded pools.
+struct ScrubCounterSet {
+  osd_counter_idx_t getattr_cnt; ///< get_attr calls count
+  osd_counter_idx_t stats_cnt;  ///< stats calls count
+  osd_counter_idx_t read_cnt;   ///< read calls count
+  osd_counter_idx_t read_bytes;  ///< total bytes read
+  osd_counter_idx_t omapgetheader_cnt; ///< omap get header calls count
+  osd_counter_idx_t omapgetheader_bytes;  ///< bytes read by omap get header
+  osd_counter_idx_t omapget_cnt;  ///< omap get calls count
+  osd_counter_idx_t omapget_bytes;  ///< total bytes read by omap get
+  osd_counter_idx_t started_cnt; ///< the number of times we started a scrub
+  osd_counter_idx_t active_started_cnt; ///< scrubs that got past reservation
+  osd_counter_idx_t successful_cnt; ///< successful scrubs count
+  osd_counter_idx_t successful_elapsed; ///< time to complete a successful scrub
+  osd_counter_idx_t failed_cnt; ///< failed scrubs count
+  osd_counter_idx_t failed_elapsed; ///< time from start to failure
+  // reservation process related:
+  osd_counter_idx_t rsv_successful_cnt; ///< completed reservation processes
+  osd_counter_idx_t rsv_successful_elapsed; ///< time to all-reserved
+  osd_counter_idx_t rsv_aborted_cnt; ///< failed due to an abort
+  osd_counter_idx_t rsv_rejected_cnt; ///< 'rejected' response
+  osd_counter_idx_t rsv_skipped_cnt; ///< high-priority. No reservation
+  osd_counter_idx_t rsv_failed_elapsed; ///< time for reservation to fail
+  osd_counter_idx_t rsv_secondaries_num; ///< number of replicas (EC or rep)
 };
 
 }  // namespace Scrub
@@ -487,7 +514,7 @@ struct ScrubPgIF {
    *
    * Dequeues the scrub job, and re-queues it with the new schedule.
    */
-  virtual void update_scrub_job(Scrub::delay_ready_t delay_ready) = 0;
+  virtual void update_scrub_job() = 0;
 
   virtual scrub_level_t scrub_requested(
       scrub_level_t scrub_level,

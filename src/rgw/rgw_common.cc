@@ -112,6 +112,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_METHOD_NOT_ALLOWED, {405, "MethodNotAllowed" }},
     { ETIMEDOUT, {408, "RequestTimeout" }},
     { EEXIST, {409, "BucketAlreadyExists" }},
+    { ERR_BUCKET_EXISTS, {409, "BucketAlreadyExists" }},
     { ERR_USER_EXIST, {409, "UserAlreadyExists" }},
     { ERR_EMAIL_EXIST, {409, "EmailExists" }},
     { ERR_KEY_EXIST, {409, "KeyExists"}},
@@ -139,7 +140,10 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_SUCH_BUCKET_ENCRYPTION_CONFIGURATION, {404, "ServerSideEncryptionConfigurationNotFoundError"}},
     { ERR_NO_SUCH_PUBLIC_ACCESS_BLOCK_CONFIGURATION, {404, "NoSuchPublicAccessBlockConfiguration"}},
     { ERR_ACCOUNT_EXISTS, {409, "AccountAlreadyExists"}},
+    { ERR_RESTORE_ALREADY_IN_PROGRESS, {409, "RestoreAlreadyInProgress"}},
     { ECANCELED, {409, "ConcurrentModification"}},
+    { EDQUOT, {507, "InsufficientCapacity"}},
+    { ENOSPC, {507, "InsufficientCapacity"}},
 });
 
 rgw_http_errors rgw_http_swift_errors({
@@ -334,6 +338,9 @@ void set_req_state_err(struct rgw_err& err,	/* out */
     err_no = -err_no;
 
   err.ret = -err_no;
+  if (!err.err_code.empty()) { // request already set the error
+    return;
+  }
 
   if (prot_flags & RGW_REST_SWIFT) {
     if (search_err(rgw_http_swift_errors, err_no, err.http_ret, err.err_code))
@@ -1138,12 +1145,12 @@ struct perm_state_from_req_state : public perm_state_base {
 };
 
 Effect eval_or_pass(const DoutPrefixProvider* dpp,
-		    const boost::optional<Policy>& policy,
-		    const rgw::IAM::Environment& env,
-		    boost::optional<const rgw::auth::Identity&> id,
-		    const uint64_t op,
-		    const ARN& resource,
-				boost::optional<rgw::IAM::PolicyPrincipal&> princ_type=boost::none) {
+                    const boost::optional<Policy>& policy,
+                    const rgw::IAM::Environment& env,
+                    boost::optional<const rgw::auth::Identity&> id,
+                    const uint64_t op,
+                    const ARN& resource,
+                    boost::optional<rgw::IAM::PolicyPrincipal&> princ_type=boost::none) {
   if (!policy)
     return Effect::Pass;
   else
@@ -1326,14 +1333,14 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
   return verify_user_permission_no_policy(dpp, &ps, s->user_acl, perm);
 }
 
-bool verify_requester_payer_permission(struct perm_state_base *s)
+bool verify_requester_payer_permission(const perm_state_base *s)
 {
   if (!s->bucket_info.requester_pays)
     return true;
 
   if (s->identity->is_owner_of(s->bucket_info.owner))
     return true;
-  
+
   if (s->identity->is_anonymous()) {
     return false;
   }
@@ -1347,7 +1354,7 @@ bool verify_requester_payer_permission(struct perm_state_base *s)
 }
 
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
-                              struct perm_state_base * const s,
+                              const perm_state_base * const s,
                               const rgw::ARN& arn,
                               bool account_root,
                               const RGWAccessControlPolicy& user_acl,
@@ -1364,6 +1371,15 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 16) << __func__ << ": policy: " << bucket_policy.get()
 		       << " resource: " << arn << dendl;
   }
+
+  // If RestrictPublicBuckets is enabled and the bucket policy allows public access,
+  // deny the request if the requester is not in the bucket owner account
+  const bool restrict_public_buckets = s->bucket_access_conf && s->bucket_access_conf->restrict_public_buckets();
+  if (restrict_public_buckets && bucket_policy && rgw::IAM::is_public(*bucket_policy) && !s->identity->is_owner_of(s->bucket_info.owner)) {
+    ldpp_dout(dpp, 10) << __func__ << ": public policies are blocked by the RestrictPublicBuckets block public access setting" << dendl;
+    return false;
+  }
+
   const auto effect = evaluate_iam_policies(
       dpp, s->env, *s->identity, account_root, op, arn,
       bucket_policy, identity_policies, session_policies);
@@ -1422,7 +1438,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                                   session_policies, op);
 }
 
-bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct perm_state_base * const s,
+bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, const perm_state_base * const s,
 					const RGWAccessControlPolicy& user_acl,
 					const RGWAccessControlPolicy& bucket_acl,
 					const int perm)
@@ -1512,6 +1528,14 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
 {
   if (!verify_requester_payer_permission(s))
     return false;
+
+  // If RestrictPublicBuckets is enabled and the bucket policy allows public access,
+  // deny the request if the requester is not in the bucket owner account
+  const bool restrict_public_buckets = s->bucket_access_conf && s->bucket_access_conf->restrict_public_buckets();
+  if (restrict_public_buckets && bucket_policy && rgw::IAM::is_public(*bucket_policy) && !s->identity->is_owner_of(s->bucket_info.owner)) {
+    ldpp_dout(dpp, 10) << __func__ << ": public policies are blocked by the RestrictPublicBuckets block public access setting" << dendl;
+    return false;
+  }
 
   const auto effect = evaluate_iam_policies(
       dpp, s->env, *s->identity, account_root, op, ARN(obj),
@@ -2186,17 +2210,13 @@ int rgw_parse_op_type_list(const string& str, uint32_t *perm)
 bool match_policy(const std::string& pattern, const std::string& input,
                   uint32_t flag)
 {
-  const uint32_t flag2 = flag & (MATCH_POLICY_ACTION|MATCH_POLICY_ARN) ?
+  const uint32_t flag2 = (flag & MATCH_POLICY_ACTION) ?
       MATCH_CASE_INSENSITIVE : 0;
-  const bool colonblocks = !(flag & (MATCH_POLICY_RESOURCE |
-				     MATCH_POLICY_STRING));
 
-  const auto npos = std::string_view::npos;
   std::string_view::size_type last_pos_input = 0, last_pos_pattern = 0;
   while (true) {
-    auto cur_pos_input = colonblocks ? input.find(":", last_pos_input) : npos;
-    auto cur_pos_pattern =
-      colonblocks ? pattern.find(":", last_pos_pattern) : npos;
+    auto cur_pos_input = input.find(":", last_pos_input);
+    auto cur_pos_pattern = pattern.find(":", last_pos_pattern);
 
     auto substr_input = input.substr(last_pos_input, cur_pos_input);
     auto substr_pattern = pattern.substr(last_pos_pattern, cur_pos_pattern);
@@ -2204,9 +2224,9 @@ bool match_policy(const std::string& pattern, const std::string& input,
     if (!match_wildcards(substr_pattern, substr_input, flag2))
       return false;
 
-    if (cur_pos_pattern == npos)
-      return cur_pos_input == npos;
-    if (cur_pos_input == npos)
+    if (cur_pos_pattern == pattern.npos)
+      return cur_pos_input == input.npos;
+    if (cur_pos_input == input.npos)
       return false;
 
     last_pos_pattern = cur_pos_pattern + 1;
@@ -2598,6 +2618,7 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   int rs;
   JSONDecoder::decode_json("reshard_status", rs, obj);
   reshard_status = (cls_rgw_reshard_status)rs;
+
   rgw_sync_policy_info sp;
   JSONDecoder::decode_json("sync_policy", sp, obj);
   if (!sp.empty()) {

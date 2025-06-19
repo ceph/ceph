@@ -48,7 +48,9 @@
 //#define dout_context g_ceph_context
 
 extern "C" {
+#ifdef WITH_RADOSGW_RADOS
 extern rgw::sal::Driver* newRadosStore(boost::asio::io_context* io_context);
+#endif
 #ifdef WITH_RADOSGW_DBSTORE
 extern rgw::sal::Driver* newDBStore(CephContext *cct);
 #endif
@@ -77,13 +79,16 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 						     bool quota_threads,
 						     bool run_sync_thread,
 						     bool run_reshard_thread,
-                                                     bool run_notification_thread,
+                 bool run_notification_thread,
 						     bool use_cache,
-						     bool use_gc, optional_yield y)
+						     bool use_gc,
+						     bool background_tasks,
+						    optional_yield y, rgw::sal::ConfigStore* cfgstore)
 {
   rgw::sal::Driver* driver{nullptr};
 
   if (cfg.store_name.compare("rados") == 0) {
+#ifdef WITH_RADOSGW_RADOS
     driver = newRadosStore(&io_context);
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(driver)->getRados();
 
@@ -96,7 +101,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
                 .set_run_sync_thread(run_sync_thread)
                 .set_run_reshard_thread(run_reshard_thread)
                 .set_run_notification_thread(run_notification_thread)
-                .init_begin(cct, dpp, site_config) < 0) {
+	              .init_begin(cct, dpp, background_tasks, site_config, cfgstore) < 0) {
       delete driver;
       return nullptr;
     }
@@ -104,11 +109,13 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
       delete driver;
       return nullptr;
     }
-    if (rados->init_complete(dpp, y) < 0) {
+    if (rados->init_complete(dpp, y, cfgstore) < 0) {
       delete driver;
       return nullptr;
     }
+#endif
   }
+#ifdef WITH_RADOSGW_RADOS
   else if (cfg.store_name.compare("d3n") == 0) {
     driver = new rgw::sal::RadosStore(io_context);
     RGWRados* rados = new D3nRGWDataCache<RGWRados>;
@@ -123,7 +130,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
                 .set_run_sync_thread(run_sync_thread)
                 .set_run_reshard_thread(run_reshard_thread)
                 .set_run_notification_thread(run_notification_thread)
-                .init_begin(cct, dpp, site_config) < 0) {
+	              .init_begin(cct, dpp, background_tasks, site_config, cfgstore) < 0) {
       delete driver;
       return nullptr;
     }
@@ -131,7 +138,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
       delete driver;
       return nullptr;
     }
-    if (rados->init_complete(dpp, y) < 0) {
+    if (rados->init_complete(dpp, y, cfgstore) < 0) {
       delete driver;
       return nullptr;
     }
@@ -149,6 +156,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
     lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_eviction_policy=" <<
       cct->_conf->rgw_d3n_l1_eviction_policy << dendl;
   }
+#endif
 #ifdef WITH_RADOSGW_DBSTORE
   else if (cfg.store_name.compare("dbstore") == 0) {
     driver = newDBStore(cct);
@@ -232,10 +240,11 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 
 rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct,
 							   const Config& cfg, boost::asio::io_context& io_context,
-							   const rgw::SiteConfig& site_config)
+							   const rgw::SiteConfig& site_config, rgw::sal::ConfigStore* cfgstore)
 {
   rgw::sal::Driver* driver = nullptr;
   if (cfg.store_name.compare("rados") == 0) {
+#ifdef WITH_RADOSGW_RADOS
     driver = newRadosStore(&io_context);
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(driver)->getRados();
 
@@ -246,7 +255,7 @@ rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvi
       return nullptr;
     }
 
-    int ret = rados->init_svc(true, dpp, site_config);
+    int ret = rados->init_svc(true, dpp, false, site_config, cfgstore);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
       delete driver;
@@ -257,6 +266,7 @@ rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvi
       delete driver;
       return nullptr;
     }
+#endif
   } else if (cfg.store_name.compare("dbstore") == 0) {
 #ifdef WITH_RADOSGW_DBSTORE
     driver = newDBStore(cct);
@@ -318,6 +328,7 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
   // Get the store backend
   const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
   if (config_store == "rados") {
+#ifdef WITH_RADOSGW_RADOS
     cfg.store_name = "rados";
 
     /* Check to see if d3n is configured, but only for non-admin */
@@ -332,6 +343,7 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
 	cfg.store_name = "d3n";
       }
     }
+#endif
   }
 #ifdef WITH_RADOSGW_DBSTORE
   else if (config_store == "dbstore") {
@@ -371,14 +383,18 @@ auto DriverManager::create_config_store(const DoutPrefixProvider* dpp,
   -> std::unique_ptr<rgw::sal::ConfigStore>
 {
   try {
+#ifdef WITH_RADOSGW_RADOS
     if (type == "rados") {
       return rgw::rados::create_config_store(dpp);
+    }
+#endif
 #ifdef WITH_RADOSGW_DBSTORE
-    } else if (type == "dbstore") {
+    if (type == "dbstore") {
       const auto uri = g_conf().get_val<std::string>("dbstore_config_uri");
       return rgw::dbstore::create_config_store(dpp, uri);
+    }
 #endif
-    } else if (type == "json") {
+    if (type == "json") {
       auto filename = g_conf().get_val<std::string>("rgw_json_config");
       return rgw::sal::create_json_config_store(dpp, filename);
     } else {

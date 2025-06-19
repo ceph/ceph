@@ -5,13 +5,16 @@
 
 #include <boost/statechart/custom_reaction.hpp>
 #include <boost/statechart/event.hpp>
-#include <boost/statechart/simple_state.hpp>
 #include <boost/statechart/state.hpp>
 #include <boost/statechart/state_machine.hpp>
 #include <boost/statechart/transition.hpp>
 #include <boost/statechart/event_base.hpp>
 #include <string>
 #include <atomic>
+#include <map>
+#include <optional>
+#include <ostream>
+#include <vector>
 
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
@@ -20,13 +23,16 @@
 #include "PGStateUtils.h"
 #include "PGPeeringEvent.h"
 #include "osd_types.h"
-#include "osd_types_fmt.h"
 #include "os/ObjectStore.h"
 #include "OSDMap.h"
 #include "MissingLoc.h"
-#include "osd/osd_perf_counters.h"
+#include "msg/Message.h"
+#include "msg/MessageRef.h"
+#include "common/ceph_mutex.h"
 #include "common/config_cacher.h"
-#include "common/ostream_temp.h"
+#include "common/snap_types.h" // for class SnapContext
+
+class OstreamTemp;
 
 struct PGPool {
   epoch_t cached_epoch;
@@ -79,7 +85,7 @@ struct PeeringCtx;
 
 // [primary only] content recovery state
 struct BufferedRecoveryMessages {
-#if defined(WITH_SEASTAR)
+#ifdef WITH_CRIMSON
   std::map<int, std::vector<MessageURef>> message_map;
 #else
   std::map<int, std::vector<MessageRef>> message_map;
@@ -287,7 +293,7 @@ public:
     virtual uint64_t get_snap_trimq_size() const = 0;
 
     /// Send cluster message to osd
-    #if defined(WITH_SEASTAR)
+    #ifdef WITH_CRIMSON
     virtual void send_cluster_message(
       int osd, MessageURef m, epoch_t epoch, bool share_map_update=false) = 0;
     #else
@@ -552,6 +558,7 @@ public:
   TrivialEvent(MakeStray)
   TrivialEvent(NeedActingChange)
   TrivialEvent(IsIncomplete)
+  TrivialEvent(RepeatGetLog)
   TrivialEvent(IsDown)
 
   TrivialEvent(AllReplicasRecovered)
@@ -1190,6 +1197,7 @@ public:
     std::set<pg_shard_t>::const_iterator remote_recovery_reservation_it;
     explicit WaitRemoteRecoveryReserved(my_context ctx);
     boost::statechart::result react(const RemoteRecoveryReserved &evt);
+    boost::statechart::result react(const AdvMap& ev);
     void exit();
   };
 
@@ -1201,6 +1209,7 @@ public:
     explicit WaitLocalRecoveryReserved(my_context ctx);
     void exit();
     boost::statechart::result react(const RecoveryTooFull &evt);
+    boost::statechart::result react(const AdvMap& ev);
   };
 
   struct Activating : boost::statechart::state< Activating, Active >, NamedState {
@@ -1306,6 +1315,7 @@ public:
 
   struct GetLog : boost::statechart::state< GetLog, Peering >, NamedState {
     pg_shard_t auth_log_shard;
+    bool repeat_getlog = false;
     boost::intrusive_ptr<MOSDPGLog> msg;
 
     explicit GetLog(my_context ctx);
@@ -1318,7 +1328,8 @@ public:
       boost::statechart::custom_reaction< GotLog >,
       boost::statechart::custom_reaction< AdvMap >,
       boost::statechart::transition< NeedActingChange, WaitActingChange >,
-      boost::statechart::transition< IsIncomplete, Incomplete >
+      boost::statechart::transition< IsIncomplete, Incomplete >,
+      boost::statechart::transition< RepeatGetLog, GetLog>
       > reactions;
     boost::statechart::result react(const AdvMap&);
     boost::statechart::result react(const QueryState& q);
@@ -1437,6 +1448,7 @@ public:
 
   /// union of acting, recovery, and backfill targets
   std::set<pg_shard_t> acting_recovery_backfill;
+  shard_id_set acting_recovery_backfill_shard_id_set;
 
   std::vector<HeartbeatStampsRef> hb_stamps;
 
@@ -1553,6 +1565,7 @@ public:
   std::set<pg_shard_t> peer_activated;
 
   std::set<pg_shard_t> backfill_targets;       ///< osds to be backfilled
+  shard_id_set backfill_target_shard_id_set;
   std::set<pg_shard_t> async_recovery_targets; ///< osds to be async recovered
 
   /// osds which might have objects on them which are unfound on the primary
@@ -1574,6 +1587,7 @@ public:
 
   void update_heartbeat_peers();
   void query_unfound(Formatter *f, std::string state);
+  void update_peer_info(const pg_shard_t &from, const pg_info_t &oinfo);
   bool proc_replica_notify(const pg_shard_t &from, const pg_notify_t &notify);
   void remove_down_peer_info(const OSDMapRef &osdmap);
   void check_recovery_sources(const OSDMapRef& map);
@@ -1659,6 +1673,7 @@ private:
   std::map<pg_shard_t, pg_info_t>::const_iterator find_best_info(
     const std::map<pg_shard_t, pg_info_t> &infos,
     bool restrict_to_up_acting,
+    bool exclude_nonprimary_shards,
     bool *history_les_bound) const;
 
   static void calc_ec_acting(
@@ -1731,6 +1746,7 @@ private:
   bool choose_acting(pg_shard_t &auth_log_shard,
 		     bool restrict_to_up_acting,
 		     bool *history_les_bound,
+		     bool *repeat_getlog,
 		     bool request_pg_temp_change_only = false);
 
   bool search_for_missing(
@@ -1750,6 +1766,7 @@ private:
     pg_log_t&& olog, pg_shard_t from);
 
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
+  void consider_rollback_pwlc(eversion_t last_complete);
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo,
 		       pg_log_t&& olog, pg_missing_t&& omissing,
 		       pg_shard_t from);
@@ -1973,7 +1990,7 @@ public:
 
   /// Update missing set to reflect e (TODOSAM: not sure why this is needed)
   void add_local_next_event(const pg_log_entry_t& e) {
-    pg_log.missing_add_next_entry(e);
+    pg_log.missing_add_next_entry(e, pool.info, pg_whoami.shard);
   }
 
   /// Update log trim boundary
@@ -2242,7 +2259,7 @@ public:
   }
   static bool has_shard(bool ec, const std::vector<int>& v, pg_shard_t osd) {
     if (ec) {
-      return v.size() > (unsigned)osd.shard && v[osd.shard] == osd.osd;
+      return v.size() > (unsigned)osd.shard && v[static_cast<int>(osd.shard)] == osd.osd;
     } else {
       return std::find(v.begin(), v.end(), osd.osd) != v.end();
     }
@@ -2290,6 +2307,10 @@ public:
   const std::set<pg_shard_t> &get_backfill_targets() const {
     return backfill_targets;
   }
+  const shard_id_set &get_backfill_target_shard_id_set() const
+  {
+    return backfill_target_shard_id_set;
+  }
   bool is_async_recovery_target(pg_shard_t peer) const {
     return async_recovery_targets.count(peer);
   }
@@ -2298,6 +2319,9 @@ public:
   }
   const std::set<pg_shard_t> &get_acting_recovery_backfill() const {
     return acting_recovery_backfill;
+  }
+  const shard_id_set &get_acting_recovery_backfill_shard_id_set() const {
+    return acting_recovery_backfill_shard_id_set;
   }
 
   const PGLog &get_pg_log() const {
@@ -2434,6 +2458,10 @@ public:
   }
   unsigned int get_num_missing() const {
     return pg_log.get_missing().num_missing();
+  }
+  bool is_missing_any_head_or_clone_of(const hobject_t &hoid) {
+    const auto& missing = pg_log.get_missing();
+    return missing.is_missing_any_head_or_clone_of(hoid);
   }
 
   const MissingLoc &get_missing_loc() const {

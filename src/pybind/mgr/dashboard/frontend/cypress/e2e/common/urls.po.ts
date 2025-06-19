@@ -43,6 +43,10 @@ export class UrlsCollection extends PageHelper {
 
     // CephFS
     cephfs: { url: '#/cephfs/fs', id: 'cd-cephfs-list' },
-    'create cephfs': { url: '#/cephfs/fs/create', id: 'cd-cephfs-form' }
+    'create cephfs': { url: '#/cephfs/fs/create', id: 'cd-cephfs-form' },
+
+    // Pools
+    pools: { url: '/#pool', id: 'cd-pool-list' },
+    'create pool': { url: '#/pool/create', id: 'cd-pool-form' }
   };
 }

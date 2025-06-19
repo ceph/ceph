@@ -18,6 +18,7 @@
 #define CEPH_COMMON_PERF_COUNTERS_H
 
 #include <functional>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -305,7 +306,7 @@ private:
 
   int prio_adjust = 0;
 
-#if !defined(WITH_SEASTAR) || defined(WITH_ALIEN)
+#ifndef WITH_CRIMSON
   const std::string m_lock_name;
   /** Protects m_data */
   ceph::mutex m_lock;

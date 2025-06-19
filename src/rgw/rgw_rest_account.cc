@@ -75,7 +75,7 @@ void RGWOp_Account_Create::execute(optional_yield y)
     bufferlist data;
     JSONParser parser;
     op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                           &data, &parser, s->info, y);
+                                           &data, &parser, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
@@ -116,7 +116,7 @@ void RGWOp_Account_Modify::execute(optional_yield y)
 {
   bufferlist data;
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                         &data, nullptr, s->info, y);
+                                         &data, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -205,7 +205,7 @@ void RGWOp_Account_Delete::execute(optional_yield y)
 {
   bufferlist data;
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                         &data, nullptr, s->info, y);
+                                         &data, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;

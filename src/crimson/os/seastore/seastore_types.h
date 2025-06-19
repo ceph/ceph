@@ -74,7 +74,14 @@ inline depth_le_t init_depth_le(uint32_t i) {
 }
 
 using checksum_t = uint32_t;
+using checksum_le_t = ceph_le32;
 constexpr checksum_t CRC_NULL = 0;
+
+// XXX: It happens to be true that the width of node
+// 	index in lba and omap tree are the same.
+using btreenode_pos_t = uint16_t;
+constexpr auto BTREENODE_POS_MAX = std::numeric_limits<btreenode_pos_t>::max();
+constexpr auto BTREENODE_POS_NULL = BTREENODE_POS_MAX;
 
 // Immutable metadata for seastore to set at mkfs time
 struct seastore_meta_t {
@@ -565,10 +572,6 @@ public:
     return static_cast<device_id_t>(internal_paddr >> DEVICE_OFF_BITS);
   }
 
-  paddr_types_t get_addr_type() const {
-    return device_id_to_paddr_type(get_device_id());
-  }
-
   paddr_t add_offset(device_off_t o) const;
 
   paddr_t add_relative(paddr_t o) const;
@@ -648,22 +651,42 @@ public:
   }
 
   /**
-   * is_real
+   * is_absolute()
    *
-   * indicates whether addr reflects a physical location, absolute, relative,
-   * or delayed.  FAKE segments also count as real so as to reflect the way in
-   * which unit tests use them.
+   * indicates whether addr reflects an absolute location
+   * which can be found on disk.
+   *
+   * Note, fake paddrs should work like the absolute ones.
    */
-  bool is_real() const {
-    return !is_zero() && !is_null() && !is_root();
+  bool is_absolute() const {
+#ifdef UNIT_TESTS_BUILT
+    return get_addr_type() != paddr_types_t::RESERVED ||
+           is_fake();
+#else
+    return get_addr_type() != paddr_types_t::RESERVED;
+#endif
   }
 
-  bool is_absolute() const {
-    return get_addr_type() != paddr_types_t::RESERVED;
+  bool is_absolute_random_block() const {
+    return get_addr_type() == paddr_types_t::RANDOM_BLOCK;
+  }
+
+  bool is_absolute_segmented() const {
+    return get_addr_type() == paddr_types_t::SEGMENT;
   }
 
   bool is_fake() const {
     return get_device_id() == DEVICE_ID_FAKE;
+  }
+
+  /**
+   * is_real_location
+   *
+   * indicates whether addr reflects a real location (valid in lba) --
+   * absolute, record-relative, or delayed.
+   */
+  bool is_real_location() const {
+    return is_absolute() || is_delayed() || is_record_relative();
   }
 
   auto operator<=>(const paddr_t &) const = default;
@@ -694,7 +717,7 @@ private:
               encode_device_off(offset)) {
     assert(offset >= DEVICE_OFF_MIN);
     assert(offset <= DEVICE_OFF_MAX);
-    assert(get_addr_type() != paddr_types_t::SEGMENT);
+    assert(!is_absolute_segmented());
   }
 
   paddr_t(internal_paddr_t val);
@@ -703,6 +726,10 @@ private:
   constexpr paddr_t(device_id_t d_id, device_off_t offset, const_construct_t)
     : internal_paddr((static_cast<internal_paddr_t>(d_id) << DEVICE_OFF_BITS) |
                      static_cast<u_device_off_t>(offset)) {}
+
+  paddr_types_t get_addr_type() const {
+    return device_id_to_paddr_type(get_device_id());
+  }
 
   friend struct paddr_le_t;
   friend struct pladdr_le_t;
@@ -820,22 +847,22 @@ inline paddr_t make_delayed_temp_paddr(device_off_t off) {
 }
 
 inline const seg_paddr_t& paddr_t::as_seg_paddr() const {
-  assert(get_addr_type() == paddr_types_t::SEGMENT);
+  assert(is_absolute_segmented());
   return *static_cast<const seg_paddr_t*>(this);
 }
 
 inline seg_paddr_t& paddr_t::as_seg_paddr() {
-  assert(get_addr_type() == paddr_types_t::SEGMENT);
+  assert(is_absolute_segmented());
   return *static_cast<seg_paddr_t*>(this);
 }
 
 inline const blk_paddr_t& paddr_t::as_blk_paddr() const {
-  assert(get_addr_type() == paddr_types_t::RANDOM_BLOCK);
+  assert(is_absolute_random_block());
   return *static_cast<const blk_paddr_t*>(this);
 }
 
 inline blk_paddr_t& paddr_t::as_blk_paddr() {
-  assert(get_addr_type() == paddr_types_t::RANDOM_BLOCK);
+  assert(is_absolute_random_block());
   return *static_cast<blk_paddr_t*>(this);
 }
 
@@ -1002,18 +1029,15 @@ private:
     }
     using ret_t = std::pair<device_off_t, segment_id_t>;
     auto to_pair = [](const paddr_t &addr) -> ret_t {
-      if (addr.get_addr_type() == paddr_types_t::SEGMENT) {
+      if (addr.is_absolute_segmented()) {
 	auto &seg_addr = addr.as_seg_paddr();
 	return ret_t(seg_addr.get_segment_off(), seg_addr.get_segment_id());
-      } else if (addr.get_addr_type() == paddr_types_t::RANDOM_BLOCK) {
+      } else if (addr.is_absolute_random_block()) {
 	auto &blk_addr = addr.as_blk_paddr();
 	return ret_t(blk_addr.get_device_off(), MAX_SEG_ID);
-      } else if (addr.get_addr_type() == paddr_types_t::RESERVED) {
+      } else {
         auto &res_addr = addr.as_res_paddr();
         return ret_t(res_addr.get_device_off(), MAX_SEG_ID);
-      } else {
-	assert(0 == "impossible");
-	return ret_t(0, MAX_SEG_ID);
       }
     };
     auto left = to_pair(offset);
@@ -1793,7 +1817,7 @@ enum class omap_type_t : uint8_t {
   XATTR = 0,
   OMAP,
   LOG,
-  NUM_TYPES
+  NONE
 };
 std::ostream &operator<<(std::ostream &out, const omap_type_t &type);
 
@@ -1802,7 +1826,7 @@ struct omap_root_t {
   depth_t depth = 0;
   laddr_t hint = L_ADDR_MIN;
   bool mutated = false;
-  omap_type_t type = omap_type_t::NUM_TYPES;
+  omap_type_t type = omap_type_t::NONE;
 
   omap_root_t() = default;
   omap_root_t(laddr_t addr, depth_t depth, laddr_t addr_min, omap_type_t type)
@@ -1853,7 +1877,7 @@ std::ostream &operator<<(std::ostream &out, const omap_root_t &root);
 class __attribute__((packed)) omap_root_le_t {
   laddr_le_t addr = laddr_le_t(L_ADDR_NULL);
   depth_le_t depth = init_depth_le(0);
-  omap_type_t type = omap_type_t::NUM_TYPES;
+  omap_type_t type = omap_type_t::NONE;
 
 public: 
   omap_root_le_t() = default;
@@ -2195,6 +2219,10 @@ std::ostream &operator<<(std::ostream &os, transaction_type_t type);
 
 constexpr bool is_valid_transaction(transaction_type_t type) {
   return type < transaction_type_t::MAX;
+}
+
+constexpr bool is_user_transaction(transaction_type_t type) {
+  return type <= transaction_type_t::READ;
 }
 
 constexpr bool is_background_transaction(transaction_type_t type) {
@@ -2853,6 +2881,10 @@ struct cache_size_stats_t {
     ++num_extents;
   }
 
+  void account_parital_in(extent_len_t sz) {
+    size += sz;
+  }
+
   void account_out(extent_len_t sz) {
     assert(size >= sz);
     assert(num_extents > 0);
@@ -2962,7 +2994,7 @@ std::ostream& operator<<(std::ostream&, const dirty_io_stats_printer_t&);
  *   get_caching_extent() -- test only
  *   get_caching_extent_by_type() -- test only
  */
-struct extent_access_stats_t {
+struct cache_access_stats_t {
   uint64_t trans_pending = 0;
   uint64_t trans_dirty = 0;
   uint64_t trans_lru = 0;
@@ -2980,19 +3012,19 @@ struct extent_access_stats_t {
     return cache_dirty + cache_lru;
   }
 
-  uint64_t get_estimated_cache_access() const {
+  uint64_t get_cache_access() const {
     return get_cache_hit() + load_absent;
   }
 
-  uint64_t get_estimated_total_access() const {
-    return get_trans_hit() + get_cache_hit() + load_absent;
+  uint64_t get_total_access() const {
+    return get_trans_hit() + get_cache_access();
   }
 
   bool is_empty() const {
-    return get_estimated_total_access() == 0;
+    return get_total_access() == 0;
   }
 
-  void add(const extent_access_stats_t& o) {
+  void add(const cache_access_stats_t& o) {
     trans_pending += o.trans_pending;
     trans_dirty += o.trans_dirty;
     trans_lru += o.trans_lru;
@@ -3002,7 +3034,7 @@ struct extent_access_stats_t {
     load_present += o.load_present;
   }
 
-  void minus(const extent_access_stats_t& o) {
+  void minus(const cache_access_stats_t& o) {
     trans_pending -= o.trans_pending;
     trans_dirty -= o.trans_dirty;
     trans_lru -= o.trans_lru;
@@ -3020,43 +3052,6 @@ struct extent_access_stats_t {
     cache_lru /= d;
     load_absent /= d;
     load_present /= d;
-  }
-};
-struct extent_access_stats_printer_t {
-  double seconds;
-  const extent_access_stats_t& stats;
-};
-std::ostream& operator<<(std::ostream&, const extent_access_stats_printer_t&);
-
-struct cache_access_stats_t {
-  extent_access_stats_t s;
-  uint64_t cache_absent = 0;
-
-  uint64_t get_cache_access() const {
-    return s.get_cache_hit() + cache_absent;
-  }
-
-  uint64_t get_total_access() const {
-    return s.get_trans_hit() + get_cache_access();
-  }
-
-  bool is_empty() const {
-    return get_total_access() == 0;
-  }
-
-  void add(const cache_access_stats_t& o) {
-    s.add(o.s);
-    cache_absent += o.cache_absent;
-  }
-
-  void minus(const cache_access_stats_t& o) {
-    s.minus(o.s);
-    cache_absent -= o.cache_absent;
-  }
-
-  void divide_by(unsigned d) {
-    s.divide_by(d);
-    cache_absent /= d;
   }
 };
 struct cache_access_stats_printer_t {

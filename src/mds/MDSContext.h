@@ -16,12 +16,13 @@
 #ifndef MDS_CONTEXT_H
 #define MDS_CONTEXT_H
 
-#include <vector>
 #include <deque>
+#include <ostream>
+#include <string>
+#include <vector>
 
 #include "include/Context.h"
 #include "include/elist.h"
-#include "include/spinlock.h"
 #include "common/ceph_time.h"
 
 class MDSRank;
@@ -44,7 +45,7 @@ template<template<typename> class A>
   using que_alloc = std::deque<MDSContext*, A<MDSContext*>>;
   using que = que_alloc<std::allocator>;
 
-  void complete(int r) override;
+  void finish(int r) override;
   virtual MDSRank *get_mds() = 0;
 };
 

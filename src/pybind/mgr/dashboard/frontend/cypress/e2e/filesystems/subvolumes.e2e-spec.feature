@@ -37,7 +37,7 @@ Feature: CephFS Subvolume management
         And I go to the "Subvolumes" tab
         When I select a row "test_subvolume" in the expanded row
         And I click on "Remove" button from the table actions in the expanded row
-        And I check the tick box in carbon modal
+        And I confirm the resource "test_subvolume"
         And I click on "Remove Subvolume" button
         Then I should not see a row with "test_subvolume" in the expanded row
 
@@ -46,6 +46,6 @@ Feature: CephFS Subvolume management
         And I select a row "test_cephfs"
         And I click on "Remove" button from the table actions
         Then I should see the carbon modal
-        And I check the tick box in carbon modal
+        And I confirm the resource "test_cephfs"
         And I click on "Remove File System" button
         Then I should not see a row with "test_cephfs_edit"

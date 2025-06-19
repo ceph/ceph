@@ -630,7 +630,7 @@ void PG::on_active_actmap()
       publish_stats_to_osd();
     });
   } else {
-    logger().debug("{}: pg not clean, skipping snap trim");
+    logger().debug("pg not clean, skipping snap trim");
     ceph_assert(!peering_state.state_test(PG_STATE_SNAPTRIM));
   }
 }
@@ -657,6 +657,69 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
     logger().info("{}: {} new removed snaps {}, snap_trimq now{}",
                   *this, __func__, it->second, snap_trimq);
     assert(!bad || !local_conf().get_val<bool>("osd_debug_verify_cached_snaps"));
+  }
+}
+
+PG::interruptible_future<bool> PG::do_recover_missing(
+  const hobject_t& soid,
+  const osd_reqid_t& reqid)
+{
+  LOG_PREFIX(PG::do_recover_missing);
+  DEBUGDPP(
+    "reqid {} check for recovery, {}",
+    *this, reqid, soid);
+  assert(is_primary());
+  eversion_t ver;
+  auto &missing_loc = peering_state.get_missing_loc();
+  bool needs_recovery_or_backfill = false;
+
+  if (is_unreadable_object(soid)) {
+    DEBUGDPP(
+      "reqid {}, {} is unreadable",
+      *this, reqid, soid);
+    ceph_assert(missing_loc.needs_recovery(soid, &ver));
+    needs_recovery_or_backfill = true;
+  }
+
+  if (is_degraded_or_backfilling_object(soid)) {
+    DEBUGDPP(
+      "reqid {}, {} is degraded or backfilling",
+      *this, reqid, soid);
+    if (missing_loc.needs_recovery(soid, &ver)) {
+      needs_recovery_or_backfill = true;
+    }
+  }
+
+  if (!needs_recovery_or_backfill) {
+    DEBUGDPP(
+      "reqid {} nothing to recover {}",
+      *this, reqid, soid);
+    co_return false;
+  }
+
+  if (peering_state.get_missing_loc().is_unfound(soid)) {
+    co_return true;
+  }
+  DEBUGDPP(
+    "reqid {} need to wait for recovery, {} version {}",
+    *this, reqid, soid);
+  if (recovery_backend->is_recovering(soid)) {
+    DEBUGDPP(
+      "reqid {} object {} version {}, already recovering",
+      *this, reqid, soid, ver);
+    co_await PG::interruptor::make_interruptible(
+      recovery_backend->get_recovering(
+	soid).wait_for_recovered());
+    co_return false;
+  } else {
+    DEBUGDPP(
+      "reqid {} object {} version {}, starting recovery",
+      *this, reqid, soid, ver);
+    auto [op, fut] =
+      shard_services.start_operation<UrgentRecovery>(
+        soid, ver, this, shard_services, get_osdmap_epoch());
+    co_await PG::interruptor::make_interruptible(std::move(fut));
+    co_return false;
   }
 }
 
@@ -730,7 +793,8 @@ seastar::future<> PG::init(
         t.touch(coll_ref->get_cid(), pgid.make_snapmapper_oid());
       }
     },
-    ::crimson::ct_error::assert_all{"unexpected eio"}
+    ::crimson::ct_error::assert_all{fmt::format(
+      "{} {} unexpected eio", *this, __func__).c_str()}
   );
 }
 
@@ -1029,8 +1093,26 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
     log_entries, t, peering_state.get_pg_trim_to(),
     peering_state.get_pg_committed_to());
 
-
   set<pg_shard_t> waiting_on;
+
+  waiting_on.insert(pg_whoami);
+
+  // preapre log_entry_update_waiting_on prior to sending requests
+  for (const auto &peer: get_acting_recovery_backfill()) {
+    if (peer == pg_whoami) {
+      continue;
+    }
+    ceph_assert(peering_state.get_peer_missing().count(peer));
+    ceph_assert(peering_state.has_peer_info(peer));
+    waiting_on.insert(peer);
+  }
+
+  DEBUGDPP("inserting rep_tid {} waiting on {}", *this, rep_tid, waiting_on);
+  log_entry_update_waiting_on.insert(
+    std::make_pair(rep_tid,
+                   log_update_t{std::move(waiting_on)}));
+
+  // Send missing_requests to peers
   for (const auto &peer: get_acting_recovery_backfill()) {
     if (peer == pg_whoami) {
       continue;
@@ -1046,7 +1128,6 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
       rep_tid,
       peering_state.get_pg_trim_to(),
       peering_state.get_pg_committed_to());
-    waiting_on.insert(peer);
 
     DEBUGDPP("sending log missing_request (rep_tid: {} entries: {}) to osd {}",
 	     *this, rep_tid, log_entries, peer.osd);
@@ -1056,11 +1137,7 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
 	std::move(log_m),
 	get_osdmap_epoch()));
   }
-  waiting_on.insert(pg_whoami);
-  DEBUGDPP("inserting rep_tid {}", *this, rep_tid);
-  log_entry_update_waiting_on.insert(
-    std::make_pair(rep_tid,
-		   log_update_t{std::move(waiting_on)}));
+
   co_await interruptor::make_interruptible(
     shard_services.get_store().do_transaction(
       get_collection_ref(), std::move(t)
@@ -1221,8 +1298,10 @@ PG::handle_rep_op_fut PG::handle_rep_op(Ref<MOSDRepOp> req)
   DEBUGDPP("{}", *this, *req);
 
   ceph::os::Transaction txn;
-  auto encoded_txn = req->get_data().cbegin();
-  decode(txn, encoded_txn);
+  auto encoded_txn_p = req->get_middle().cbegin();
+  auto encoded_txn_d = req->get_data().cbegin();
+  txn.decode(req->get_middle().length() != 0 ? encoded_txn_p : encoded_txn_d,
+             encoded_txn_d);
   auto p = req->logbl.cbegin();
   std::vector<pg_log_entry_t> log_entries;
   decode(log_entries, p);
@@ -1315,9 +1394,10 @@ void PG::log_operation(
 void PG::replica_clear_repop_obc(
   const std::vector<pg_log_entry_t> &logv) {
   LOG_PREFIX(PG::replica_clear_repop_obc);
-  DEBUGDPP("clearing obc for {} log entries", logv.size());
+  DEBUGDPP("clearing obc for {} log entries", *this, logv.size());
   for (auto &&e: logv) {
     DEBUGDPP("clearing entry for {} from: {} to: {}",
+	     *this,
 	     e.soid,
 	     e.soid.get_object_boundary(),
 	     e.soid.get_head());
@@ -1404,8 +1484,9 @@ PG::interruptible_future<> PG::do_update_log_missing_reply(
       log_entry_update_waiting_on.erase(it);
     }
   } else {
-    logger().error("{} : {} got reply {} on unknown tid {}",
-      __func__, peering_state.get_info().pgid, *m, m->get_tid());
+   ceph_abort_msg(fmt::format(
+     "{} : {} got reply {} on unknown tid {}",
+     __func__, peering_state.get_info().pgid, *m, m->get_tid()));
   }
   return seastar::now();
 }
@@ -1457,6 +1538,7 @@ seastar::future<> PG::stop()
   cancel_remote_recovery_reservation();
   check_readable_timer.cancel();
   renew_lease_timer.cancel();
+  backend->on_actingset_changed(false);
   return osdmap_gate.stop().then([this] {
     return wait_for_active_blocker.stop();
   }).then([this] {
@@ -1508,6 +1590,10 @@ void PG::context_registry_on_change() {
   for (auto &watcher : watchers) {
     watcher->discard_state();
   }
+}
+
+bool PG::is_missing_head_and_clones(const hobject_t &hoid) {
+  return peering_state.is_missing_any_head_or_clone_of(hoid);
 }
 
 bool PG::can_discard_op(const MOSDOp& m) const {

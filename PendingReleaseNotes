@@ -1,5 +1,7 @@
 >=20.0.0
 
+* RADOS: lead Monitor and stretch mode status are now included in the `ceph status` output.
+  Related Tracker: https://tracker.ceph.com/issues/70406
 * RGW: The User Account feature introduced in Squid provides first-class support for
   IAM APIs and policy. Our preliminary STS support was instead based on tenants, and
   exposed some IAM APIs to admins only. This tenant-level IAM functionality is now
@@ -14,6 +16,13 @@
 * RGW: For compatibility with AWS S3, LastModified timestamps are now truncated
   to the second. Note that during upgrade, users may observe these timestamps
   moving backwards as a result.
+* RGW: IAM policy evaluation now supports conditions ArnEquals and ArnLike, along
+  with their Not and IfExists variants.
+* RGW: Adding missing quotes to the ETag values returned by S3 CopyPart,
+  PostObject and CompleteMultipartUpload responses.
+* RGW: Added support for S3 GetObjectAttributes.
+* RGW: Added BEAST frontend option 'so_reuseport' which facilitates running multiple
+        RGW instances on the same host by sharing a single TCP port.
 
 * RBD: All Python APIs that produce timestamps now return "aware" `datetime`
   objects instead of "naive" ones (i.e. those including time zone information
@@ -47,6 +56,13 @@
 * MGR: The Ceph Manager's always-on modulues/plugins can now be force-disabled.
   This can be necessary in cases where we wish to prevent the manager from being
   flooded by module commands when Ceph services are down or degraded.
+
+* CephFS: It is now possible to pause the threads that asynchronously purge
+  the deleted subvolumes by using the config option
+  "mgr/volumes/pause_purging".
+* CephFS: It is now possible to pause the threads that asynchronously clone
+  the subvolume snapshots by using the config option
+  "mgr/volumes/pause_cloning".
 
 * CephFS: Modifying the setting "max_mds" when a cluster is
   unhealthy now requires users to pass the confirmation flag
@@ -90,6 +106,56 @@
   redistribution. In contrast, a stretch rule with a single-take configuration
   will not cause any data movement during the upgrade process.
 
+* RGW: The `x-amz-confirm-remove-self-bucket-access` header is now supported by
+  `PutBucketPolicy`. Additionally, the root user will always have access to modify
+  the bucket policy, even if the current policy explicitly denies access.
+
+* CephFS: The ``ceph fs subvolume snapshot getpath`` command now allows users
+  to get the path of a snapshot of a subvolume. If the snapshot is not present
+  ``ENOENT`` is returned.
+
+* CephFS: The ``ceph fs volume create`` command now allows users to pass
+  metadata and data pool names to be used for creating the volume. If either
+  is not passed or if either is a non-empty pool, the command will abort.
+
+* RADOS: A new command, `ceph osd rm-pg-upmap-primary-all`, has been added that allows
+  users to clear all pg-upmap-primary mappings in the osdmap when desired.
+  Related trackers:
+   - https://tracker.ceph.com/issues/67179
+   - https://tracker.ceph.com/issues/66867
+
+* RADOS: The default plugin for erasure coded pools has been changed
+  from Jerasure to ISA-L. Clusters created on T or later releases will
+  use ISA-L as the default plugin when creating a new pool. Clusters that upgrade
+  to the T release will continue to use their existing default values.
+  The default values can be overriden by creating a new erasure code profile and
+  selecting it when creating a new pool.
+  ISA-L is recommended for new pools because the Jerasure library is
+  no longer maintained.
+
+* RGW: Added support for the `RestrictPublicBuckets` property of the S3 `PublicAccessBlock`
+  configuration.
+
+* RBD: Moving an image that is a member of a group to trash is no longer
+  allowed.  `rbd trash mv` command now behaves the same way as `rbd rm` in this
+  scenario.
+
+* RGW: Replication policies now validate permissions using `s3:ReplicateObject`,
+  `s3:ReplicateDelete`, and `s3:ReplicateTags` for destination buckets. For source
+  buckets, both `s3:GetObjectVersionForReplication` and `s3:GetObject(Version)`
+  are supported. Actions like `s3:GetObjectAcl`, `s3:GetObjectLegalHold`, and
+  `s3:GetObjectRetention` are also considered when fetching the source object.
+  Replication of tags is controlled by the `s3:GetObject(Version)Tagging` permission.
+
+* RADOS: A new command, `ceph osd pool availability-status`, has been added that allows
+  users to view the availability score for each pool in a cluster. A pool is considered 
+  unavailable if any PG in the pool is not in active state or if there are unfound 
+  objects. Otherwise the pool is considered available. The score is updated every 
+  5 seconds. The feature is on by default. A new config option `enable_availability_tracking`
+  can be used to turn off the feature if required. This feature is in tech preview. 
+  Related trackers:
+   - https://tracker.ceph.com/issues/67777
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
@@ -98,6 +164,11 @@
   an empty string can be assigned to it. Additionally, commands
   `ceph fs subvolume earmark set`, `ceph fs subvolume earmark get` and
   `ceph fs subvolume earmark rm` have been added to set, get and remove earmark from a given subvolume.
+* RADOS: Add ``messenger dump`` command to retrieve runtime information
+  on connections, sockets, and kernel TCP stats from the messenger.
+* RGW: deleted buckets are automatically cleaned up as part of trimming process.
+  DeleteBucket will start returning 409 BucketNotEmpty errors until empty
+  on all zones when sync policy is enabled.
 
 * RADOS: A performance botteneck in the balancer mgr module has been fixed.
   Related Tracker: https://tracker.ceph.com/issues/68657

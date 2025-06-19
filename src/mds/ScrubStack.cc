@@ -13,10 +13,18 @@
  */
 
 #include "ScrubStack.h"
-#include "common/Finisher.h"
+#include "CDir.h"
+#include "RetryMessage.h"
+#include "SnapRealm.h"
+#include "common/debug.h"
+#include "common/Formatter.h"
+#include "mds/MDLog.h"
 #include "mds/MDSRank.h"
 #include "mds/MDCache.h"
 #include "mds/MDSContinuation.h"
+#include "mds/SnapRealm.h"
+#include "messages/MMDSScrub.h"
+#include "messages/MMDSScrubStats.h"
 #include "osdc/Objecter.h"
 
 #define dout_context g_ceph_context
@@ -521,7 +529,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *done)
       }
       if (dnl->is_primary()) {
 	_enqueue(dnl->get_inode(), header, false);
-      } else if (dnl->is_remote()) {
+      } else if (dnl->is_remote() || dnl->is_referent_remote()) {
 	// TODO: check remote linkage
       }
     }
@@ -1374,7 +1382,9 @@ void ScrubStack::uninline_data(CInode *in, Context *fin)
   mdr->snapid = CEPH_NOSNAP;
   mdr->no_early_reply = true;
   mdr->internal_op_finish = fin;
+  mdr->in[0] = in;
 
+  in->auth_pin(this);
   in->mdcache->dispatch_request(mdr);
 }
 

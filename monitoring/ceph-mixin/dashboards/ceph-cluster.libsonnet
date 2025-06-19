@@ -974,7 +974,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.addRowSchema(collapse=false, showTitle=true, title='OBJECTS') + { gridPos: { x: 0, y: 31, w: 24, h: 1 } },
 
       $.timeSeriesPanel(
-        title='OSD Type Count',
+        title='RADOS Object Count',
         datasource='$datasource',
         gridPosition={ h: 12, w: 6, x: 0, y: 32 },
         fillOpacity=10,

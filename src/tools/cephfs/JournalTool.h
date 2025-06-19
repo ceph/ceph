@@ -79,6 +79,9 @@ class JournalTool : public MDSUtility
     void encode_fullbit_as_inode(
         const EMetaBlob::fullbit &fb,
         bufferlist *out_bl);
+    void encode_remotebit_as_referent_inode(
+        const EMetaBlob::remotebit &rb,
+        bufferlist *out_bl);
     int consume_inos(const std::set<inodeno_t> &inos);
 
     //validate type

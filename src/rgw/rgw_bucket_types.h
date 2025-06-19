@@ -192,6 +192,18 @@ struct rgw_bucket {
 };
 WRITE_CLASS_ENCODER(rgw_bucket)
 
+namespace std {
+template<>
+struct hash<rgw_bucket>
+{
+  std::size_t operator ()(const rgw_bucket& b) const noexcept {
+    return ((std::hash<decltype(b.tenant)>{}(b.tenant) << 2) ^
+	    (std::hash<decltype(b.name)>{}(b.name) << 1) ^
+	    std::hash<decltype(b.bucket_id)>{}(b.bucket_id));
+  }
+};
+}
+
 inline std::ostream& operator<<(std::ostream& out, const rgw_bucket &b) {
   out << b.tenant << ":" << b.name << "[" << b.bucket_id << "])";
   return out;
@@ -230,6 +242,17 @@ struct rgw_bucket_shard {
             shard_id == b.shard_id);
   }
 }; /* rgw_bucket_shard */
+
+namespace std {
+template<>
+struct hash<rgw_bucket_shard>
+{
+  std::size_t operator ()(const rgw_bucket_shard& bs) const noexcept {
+    return ((std::hash<decltype(bs.bucket)>{}(bs.bucket) << 1) ^
+	    std::hash<decltype(bs.shard_id)>{}(bs.shard_id));
+  }
+};
+}
 
 void encode(const rgw_bucket_shard& b, bufferlist& bl, uint64_t f=0);
 void decode(rgw_bucket_shard& b, bufferlist::const_iterator& bl);

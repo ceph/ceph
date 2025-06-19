@@ -39,9 +39,9 @@ using CephContext = ceph::common::CephContext;
 extern "C" {
 #endif
 
-#define LIBCEPHFS_VER_MAJOR 10
+#define LIBCEPHFS_VER_MAJOR 11
 #define LIBCEPHFS_VER_MINOR 0
-#define LIBCEPHFS_VER_EXTRA 3
+#define LIBCEPHFS_VER_EXTRA 0
 
 #define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
@@ -648,6 +648,71 @@ struct ceph_snapdiff_info
                                    // doesn't exist in the second snapshot
 };
 
+struct ceph_file_blockdiff_result;
+
+// blockdiff stream handle
+struct ceph_file_blockdiff_info
+{
+  struct ceph_mount_info* cmount;
+  struct ceph_file_blockdiff_result* blockp;
+};
+
+// set of file block diff's
+struct cblock
+{
+  uint64_t offset;
+  uint64_t len;
+};
+struct ceph_file_blockdiff_changedblocks
+{
+  uint64_t num_blocks;
+  struct cblock *b;
+};
+
+/**
+ * Initialize blockdiff stream to get file block deltas.
+ *
+ * @param cmount the ceph mount handle to use for snapdiff retrieval.
+ * @param root_path  root path for snapshots-in-question
+ * @param rel_path subpath under the root to build delta for
+ * @param snap1 the first snapshot name
+ * @param snap2 the second snapshot name
+ * @param out_info resulting blockdiff stream handle to be used for blokdiff results
+                   retrieval via ceph_file_blockdiff().
+ * @returns 0 on success and negative error code otherwise
+ */
+int ceph_file_blockdiff_init(struct ceph_mount_info* cmount,
+                             const char* root_path,
+                             const char* rel_path,
+                             const char* snap1,
+                             const char* snap2,
+                             struct ceph_file_blockdiff_info* out_info);
+
+/**
+ * Get a set of file blockdiff's
+ *
+ * @param info blockdiff stream handle
+ * @param blocks next set of file blockdiff's (offset, length)
+ * @returns 0 or 1 on success and negative error code otherwise
+ */
+int ceph_file_blockdiff(struct ceph_file_blockdiff_info* info,
+                        struct ceph_file_blockdiff_changedblocks* blocks);
+/**
+ * Free blockdiff buffer
+ *
+ * @param blocks file block diff's from ceph_file_blockdiff()
+ * @returns None
+ */
+void ceph_free_file_blockdiff_buffer(struct ceph_file_blockdiff_changedblocks* blocks);
+
+/**
+ * Close blockdiff stream
+ *
+ * @param info blockdiff stream handle
+ * @returns 0 on success and negative error code otherwise
+ */
+int ceph_file_blockdiff_finish(struct ceph_file_blockdiff_info* info);
+
 /**
  * Opens snapdiff stream to get snapshots delta (aka snapdiff).
  *
@@ -1083,7 +1148,7 @@ int ceph_chmodat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
  * @param gid the group id to set on the file/directory.
  * @returns 0 on success or negative error code on failure.
  */
-int ceph_chown(struct ceph_mount_info *cmount, const char *path, int uid, int gid);
+int ceph_chown(struct ceph_mount_info *cmount, const char *path, uid_t uid, gid_t gid);
 
 /**
  * Change the ownership of a file from an open file descriptor.
@@ -1094,7 +1159,7 @@ int ceph_chown(struct ceph_mount_info *cmount, const char *path, int uid, int gi
  * @param gid the group id to set on the file/directory.
  * @returns 0 on success or negative error code on failure.
  */
-int ceph_fchown(struct ceph_mount_info *cmount, int fd, int uid, int gid);
+int ceph_fchown(struct ceph_mount_info *cmount, int fd, uid_t uid, gid_t gid);
 
 /**
  * Change the ownership of a file/directory, don't follow symlinks.
@@ -1105,7 +1170,7 @@ int ceph_fchown(struct ceph_mount_info *cmount, int fd, int uid, int gid);
  * @param gid the group id to set on the file/directory.
  * @returns 0 on success or negative error code on failure.
  */
-int ceph_lchown(struct ceph_mount_info *cmount, const char *path, int uid, int gid);
+int ceph_lchown(struct ceph_mount_info *cmount, const char *path, uid_t uid, gid_t gid);
 
 /**
  * Change the ownership of a file/directory releative to a file descriptor.
@@ -1929,6 +1994,7 @@ int ceph_ll_lookup_root(struct ceph_mount_info *cmount,
 int ceph_ll_lookup(struct ceph_mount_info *cmount, Inode *parent,
 		   const char *name, Inode **out, struct ceph_statx *stx,
 		   unsigned want, unsigned flags, const UserPerm *perms);
+void ceph_ll_get(struct ceph_mount_info *cmount, struct Inode *in);
 int ceph_ll_put(struct ceph_mount_info *cmount, struct Inode *in);
 int ceph_ll_forget(struct ceph_mount_info *cmount, struct Inode *in,
 		   int count);
@@ -2220,6 +2286,23 @@ int ceph_get_snap_info(struct ceph_mount_info *cmount,
  * @param snap_info snapshot info struct (fetched via call to ceph_get_snap_info()).
  */
 void ceph_free_snap_info_buffer(struct snap_info *snap_info);
+
+/**
+ * perf counters via libcephfs API.
+ */
+
+/**
+ * Get a json string of performance counters
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param perf_dump buffer holding the perf dump
+ *
+ * Returns 0 success with the performance counters populated in the
+ * passed in perf_dump buffer. Caller is responsible for freeing the
+ * @perf_dump buffer using free().
+ */
+int ceph_get_perf_counters(struct ceph_mount_info *cmount, char **perf_dump);
+
 #ifdef __cplusplus
 }
 #endif

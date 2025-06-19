@@ -146,7 +146,7 @@ public:
     }
 
     void decode(ceph::buffer::list::const_iterator &bl) {
-      DECODE_START(1, bl);
+      DECODE_START(2, bl);
       decode(name, bl);
       decode(can_run, bl);
       decode(error_string, bl);

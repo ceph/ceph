@@ -9,7 +9,6 @@
 #include "librbd/journal/TypeTraits.h"
 #include <map>
 #include <string>
-#include <boost/variant/static_visitor.hpp>
 
 struct Context;
 namespace journal { class Journaler; }
@@ -72,7 +71,7 @@ private:
 
   typedef std::map<uint64_t, uint64_t> SnapSeqs;
 
-  class PreprocessEventVisitor : public boost::static_visitor<int> {
+  class PreprocessEventVisitor {
   public:
     EventPreprocessor *event_preprocessor;
 

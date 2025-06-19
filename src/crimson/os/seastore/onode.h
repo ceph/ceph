@@ -16,7 +16,7 @@ namespace crimson::os::seastore {
 
 struct onode_layout_t {
   // The expected decode size of object_info_t without oid.
-  static constexpr int MAX_OI_LENGTH = 232;
+  static constexpr int MAX_OI_LENGTH = 236;
   // We might want to move the ss field out of onode_layout_t.
   // The reason is that ss_attr may grow to relative large, as
   // its clone_overlap may grow to a large size, if applications
@@ -26,7 +26,8 @@ struct onode_layout_t {
   // snapshots.
   // TODO: implement flexible-sized onode value to store inline ss_attr
   // effectively.
-  static constexpr int MAX_SS_LENGTH = 1;
+  // The expected decode size of SnapSet when there's no snapshot
+  static constexpr int MAX_SS_LENGTH = 35;
 
   ceph_le32 size{0};
   ceph_le32 oi_size{0};
@@ -49,7 +50,7 @@ struct onode_layout_t {
     } else if (type == omap_type_t::OMAP) {
       return omap_root;
     } else {
-      ceph_assert(type == omap_type_t::LOG);
+      assert(type == omap_type_t::LOG);
       return log_root;
     }
   }
@@ -104,6 +105,9 @@ public:
   }
   laddr_t get_data_hint() const {
     return get_hint();
+  }
+  const omap_root_le_t& get_root(omap_type_t type) const {
+    return get_layout().get_root(type);
   }
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };

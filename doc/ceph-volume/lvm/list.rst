@@ -22,10 +22,13 @@ means that all devices and logical volumes found in the system will be
 displayed.
 
 Full ``pretty`` reporting for two OSDs, one with a lv as a journal, and another
-one with a physical device may look similar to::
+one with a physical device may look similar to:
 
-    # ceph-volume lvm list
+.. prompt:: bash #
 
+   ceph-volume lvm list
+
+::
 
     ====== osd.1 =======
 
@@ -88,10 +91,13 @@ Single reporting can consume both devices and logical volumes as input
 name as well as the logical volume name.
 
 For example the ``data-lv2`` logical volume, in the ``test_group`` volume group
-can be listed in the following way::
+can be listed in the following way:
 
-    # ceph-volume lvm list test_group/data-lv2
+.. prompt:: bash #
 
+   ceph-volume lvm list test_group/data-lv2
+
+::
 
     ====== osd.1 =======
 
@@ -114,11 +120,13 @@ can be listed in the following way::
 
 
 For plain disks, the full path to the device is required. For example, for
-a device like ``/dev/sdd1`` it can look like::
+a device like ``/dev/sdd1`` it can look like:
 
+.. prompt:: bash #
 
-    # ceph-volume lvm list /dev/sdd1
+   ceph-volume lvm list /dev/sdd1
 
+::
 
     ====== osd.0 =======
 
@@ -138,9 +146,14 @@ information is presented as-is. Full output as well as single devices can be
 listed.
 
 For brevity, this is how a single logical volume would look with ``json``
-output (note how tags aren't modified)::
+output (note how tags aren't modified):
 
-    # ceph-volume lvm list --format=json test_group/data-lv1
+.. prompt:: bash #
+
+   ceph-volume lvm list --format=json test_group/data-lv1
+
+::
+
     {
         "0": [
             {

@@ -118,7 +118,7 @@ TYPE(bluestore_blob_use_tracker_t)
 // approach.
 // TYPE_FEATUREFUL(bluestore_blob_t)
 TYPE(bluestore_shared_blob_t)
-TYPE(bluestore_onode_t)
+TYPE_FEATUREFUL(bluestore_onode_t)
 TYPE(bluestore_onode_t::shard_info)
 using shard_info = bluestore_onode_t::shard_info;
 TYPE(shard_info)
@@ -170,6 +170,7 @@ TYPE(mon_feature_t)
 TYPE_FEATUREFUL(DataStats)
 TYPE_FEATUREFUL(ProgressEvent)
 TYPE(FeatureMap)
+TYPE(PoolAvailability)
 
 #include "mon/CreatingPGs.h"
 TYPE_FEATUREFUL(creating_pgs_t)
@@ -199,10 +200,6 @@ TYPE(ConnectionTracker);
 #include "mon/health_check.h"
 TYPE(health_check_t)
 TYPE(health_check_map_t)
-
-#include "os/DBObjectMap.h"
-TYPE(DBObjectMap::_Header)
-TYPE(DBObjectMap::State)
 
 #include "os/kstore/kstore_types.h"
 TYPE(kstore_cnode_t)

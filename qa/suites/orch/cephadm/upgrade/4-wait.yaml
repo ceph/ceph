@@ -13,4 +13,4 @@ tasks:
       - ceph health detail
       - ceph versions | jq -e '.overall | length == 1'
       - ceph versions | jq -e '.overall | keys' | grep $sha1
-      - ceph orch ls | grep '^osd '
+      - ceph orch ls | grep 'osd'

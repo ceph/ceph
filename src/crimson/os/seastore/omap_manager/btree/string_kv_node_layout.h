@@ -440,7 +440,7 @@ public:
     }
 
   public:
-    uint16_t get_index() const {
+    uint16_t get_offset() const {
       return index;
     }
 
@@ -504,7 +504,7 @@ public:
     inner_remove(iter);
   }
 
-  StringKVInnerNodeLayout() : buf(nullptr) {}
+  StringKVInnerNodeLayout(char *buf) : buf(buf) {}
 
   void set_layout_buf(char *_buf) {
     assert(buf == nullptr);
@@ -738,21 +738,14 @@ public:
     set_meta(omap_node_meta_t::merge_from(left.get_meta(), right.get_meta()));
   }
 
-  /**
-   * balance_into_new_nodes
-   *
-   * Takes the contents of left and right and copies them into
-   * replacement_left and replacement_right such that
-   * the size of replacement_left just >= 1/2 of (left + right)
-   */
-  static std::string balance_into_new_nodes(
+  static std::optional<uint32_t> get_balance_pivot_idx(
     const StringKVInnerNodeLayout &left,
-    const StringKVInnerNodeLayout &right,
-    StringKVInnerNodeLayout &replacement_left,
-    StringKVInnerNodeLayout &replacement_right)
+    const StringKVInnerNodeLayout &right)
   {
-    uint32_t left_size = omap_inner_key_t(left.get_node_key_ptr()[left.get_size()-1]).key_off;
-    uint32_t right_size = omap_inner_key_t(right.get_node_key_ptr()[right.get_size()-1]).key_off;
+    uint32_t left_size = omap_inner_key_t(
+      left.get_node_key_ptr()[left.get_size()-1]).key_off;
+    uint32_t right_size = omap_inner_key_t(
+      right.get_node_key_ptr()[right.get_size()-1]).key_off;
     uint32_t total = left_size + right_size;
     uint32_t pivot_size = total / 2;
     uint32_t pivot_idx = 0;
@@ -762,7 +755,7 @@ public:
         auto node_key = ite->get_node_key();
         size += node_key.key_len;
         if (size >= pivot_size){
-          pivot_idx = ite.get_index();
+          pivot_idx = ite.get_offset();
           break;
         }
       }
@@ -773,11 +766,35 @@ public:
         auto node_key = ite->get_node_key();
         size += node_key.key_len;
         if (size >= more_size){
-          pivot_idx = ite.get_index() + left.get_size();
+          pivot_idx = ite.get_offset() + left.get_size();
           break;
         }
       }
     }
+    return pivot_idx == left.get_size()
+      ? std::nullopt
+      : std::make_optional<uint32_t>(pivot_idx);
+  }
+
+  /**
+   * balance_into_new_nodes
+   *
+   * Takes the contents of left and right and copies them into
+   * replacement_left and replacement_right such that
+   * the size of replacement_left just >= 1/2 of (left + right)
+   */
+  static std::string balance_into_new_nodes(
+    const StringKVInnerNodeLayout &left,
+    const StringKVInnerNodeLayout &right,
+    uint32_t pivot_idx,
+    StringKVInnerNodeLayout &replacement_left,
+    StringKVInnerNodeLayout &replacement_right)
+  {
+    ceph_assert(!(left.below_min() && right.below_min()));
+    uint32_t left_size = omap_inner_key_t(left.get_node_key_ptr()[left.get_size()-1]).key_off;
+    uint32_t right_size = omap_inner_key_t(right.get_node_key_ptr()[right.get_size()-1]).key_off;
+    uint32_t total = left_size + right_size;
+    uint32_t pivot_size = total / 2;
 
     auto replacement_pivot = pivot_idx >= left.get_size() ?
       right.iter_idx(pivot_idx - left.get_size())->get_key() :
@@ -1056,7 +1073,7 @@ public:
     }
 
   public:
-    uint16_t get_index() const {
+    uint16_t get_offset() const {
       return index;
     }
 
@@ -1363,21 +1380,14 @@ public:
     set_meta(omap_node_meta_t::merge_from(left.get_meta(), right.get_meta()));
   }
 
-  /**
-   * balance_into_new_nodes
-   *
-   * Takes the contents of left and right and copies them into
-   * replacement_left and replacement_right such that
-   * the size of replacement_left side just >= 1/2 of the total size (left + right).
-   */
-  static std::string balance_into_new_nodes(
+  static std::optional<uint32_t> get_balance_pivot_idx(
     const StringKVLeafNodeLayout &left,
-    const StringKVLeafNodeLayout &right,
-    StringKVLeafNodeLayout &replacement_left,
-    StringKVLeafNodeLayout &replacement_right)
+    const StringKVLeafNodeLayout &right)
   {
-    uint32_t left_size = omap_leaf_key_t(left.get_node_key_ptr()[left.get_size()-1]).key_off;
-    uint32_t right_size = omap_leaf_key_t(right.get_node_key_ptr()[right.get_size()-1]).key_off;
+    uint32_t left_size = omap_leaf_key_t(
+      left.get_node_key_ptr()[left.get_size()-1]).key_off;
+    uint32_t right_size = omap_leaf_key_t(
+      right.get_node_key_ptr()[right.get_size()-1]).key_off;
     uint32_t total = left_size + right_size;
     uint32_t pivot_size = total / 2;
     uint32_t pivot_idx = 0;
@@ -1387,7 +1397,7 @@ public:
         auto node_key = ite->get_node_key();
         size += node_key.key_len + node_key.val_len;
         if (size >= pivot_size){
-          pivot_idx = ite.get_index();
+          pivot_idx = ite.get_offset();
           break;
         }
       }
@@ -1398,11 +1408,34 @@ public:
         auto node_key = ite->get_node_key();
         size += node_key.key_len + node_key.val_len;
         if (size >= more_size){
-          pivot_idx = ite.get_index() + left.get_size();
+          pivot_idx = ite.get_offset() + left.get_size();
           break;
         }
       }
     }
+    return pivot_idx == left.get_size()
+      ? std::nullopt
+      : std::make_optional<uint32_t>(pivot_idx);
+  }
+
+  /**
+   * balance_into_new_nodes
+   *
+   * Takes the contents of left and right and copies them into
+   * replacement_left and replacement_right such that
+   * the size of replacement_left side just >= 1/2 of the total size (left + right).
+   */
+  static std::string balance_into_new_nodes(
+    const StringKVLeafNodeLayout &left,
+    const StringKVLeafNodeLayout &right,
+    uint32_t pivot_idx,
+    StringKVLeafNodeLayout &replacement_left,
+    StringKVLeafNodeLayout &replacement_right)
+  {
+    uint32_t left_size = omap_leaf_key_t(left.get_node_key_ptr()[left.get_size()-1]).key_off;
+    uint32_t right_size = omap_leaf_key_t(right.get_node_key_ptr()[right.get_size()-1]).key_off;
+    uint32_t total = left_size + right_size;
+    uint32_t pivot_size = total / 2;
 
     auto replacement_pivot = pivot_idx >= left.get_size() ?
       right.iter_idx(pivot_idx - left.get_size())->get_key() :

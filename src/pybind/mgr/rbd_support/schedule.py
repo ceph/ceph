@@ -510,19 +510,21 @@ class Schedules:
 
     def remove(self,
                level_spec: LevelSpec,
-               interval: Optional[str],
-               start_time: Optional[str]) -> None:
+               interval_str: Optional[str],
+               start_time_str: Optional[str]) -> None:
+        # from_string() may raise, so call it before popping the schedule (and
+        # unconditionally to ensure that invalid interval or start time always
+        # leads to an error)
+        interval = Interval.from_string(interval_str) if interval_str else None
+        start_time = StartTime.from_string(start_time_str)
         schedule = self.schedules.pop(level_spec.id, None)
         if schedule:
             if interval is None:
                 schedule = None
             else:
-                try:
-                    schedule.remove(Interval.from_string(interval),
-                                    StartTime.from_string(start_time))
-                finally:
-                    if schedule:
-                        self.schedules[level_spec.id] = schedule
+                schedule.remove(interval, start_time)
+                if schedule:
+                    self.schedules[level_spec.id] = schedule
             if not schedule:
                 del self.level_specs[level_spec.id]
         self.save(level_spec, schedule)

@@ -77,18 +77,13 @@ seastar::future<> BackgroundRecoveryT<T>::start()
       std::chrono::milliseconds(std::lround(delay * 1000)));
   }
   return maybe_delay.then([ref, this] {
-    return this->template with_blocking_event<OperationThrottler::BlockingEvent>(
-      [ref, this] (auto&& trigger) {
-      return ss.with_throttle_while(
-        std::move(trigger),
-        this, get_scheduler_params(), [this] {
-          return interruptor::with_interruption([this] {
-            return do_recovery();
-          }, [](std::exception_ptr) {
-            return seastar::make_ready_future<bool>(false);
-          }, pg, epoch_started);
-        });
-      });
+    return seastar::repeat([ref, this] {
+      return interruptor::with_interruption([this] {
+       return do_recovery();
+      }, [](std::exception_ptr) {
+       return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
+      }, pg, epoch_started);
+    });
   });
 }
 
@@ -104,22 +99,23 @@ UrgentRecovery::UrgentRecovery(
 {
 }
 
-UrgentRecovery::interruptible_future<bool>
+UrgentRecovery::interruptible_future<seastar::stop_iteration>
 UrgentRecovery::do_recovery()
 {
   LOG_PREFIX(UrgentRecovery::do_recovery);
   DEBUGDPPI("{}: {}", *pg, __func__, *this);
   if (pg->has_reset_since(epoch_started)) {
-    return seastar::make_ready_future<bool>(false);
+    return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
   }
 
   return pg->find_unfound(epoch_started
   ).then_interruptible([this] {
     return with_blocking_event<RecoveryBackend::RecoveryBlockingEvent,
 			       interruptor>([this] (auto&& trigger) {
-      return pg->get_recovery_handler()->recover_missing(trigger, soid, need);
+      return pg->get_recovery_handler()->recover_missing(
+	trigger, soid, need, false);
     }).then_interruptible([] {
-      return seastar::make_ready_future<bool>(false);
+      return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
     });
   });
 }
@@ -155,13 +151,13 @@ PglogBasedRecovery::PglogBasedRecovery(
       delay)
 {}
 
-PglogBasedRecovery::interruptible_future<bool>
+PglogBasedRecovery::interruptible_future<seastar::stop_iteration>
 PglogBasedRecovery::do_recovery()
 {
   LOG_PREFIX(PglogBasedRecovery::do_recovery);
   DEBUGDPPI("{}: {}", *pg, __func__, *this);
   if (pg->has_reset_since(epoch_started)) {
-    return seastar::make_ready_future<bool>(false);
+    return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
   }
   return pg->find_unfound(epoch_started
   ).then_interruptible([this] {

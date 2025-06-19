@@ -8,22 +8,27 @@
 #include "mon/PGMap.h"
 #include "mgr/ServiceMap.h"
 
-class MgrStatMonitor : public PaxosService {
+ class MgrStatMonitor : public PaxosService, 
+                        public md_config_obs_t {
   // live version
   version_t version = 0;
   PGMapDigest digest;
   ServiceMap service_map;
   std::map<std::string,ProgressEvent> progress_events;
+  std::map<uint64_t, PoolAvailability> pool_availability;
 
   // pending commit
   PGMapDigest pending_digest;
   health_check_map_t pending_health_checks;
   std::map<std::string,ProgressEvent> pending_progress_events;
   ceph::buffer::list pending_service_map_bl;
+  std::map<uint64_t, PoolAvailability> pending_pool_availability;
 
 public:
   MgrStatMonitor(Monitor &mn, Paxos &p, const std::string& service_name);
   ~MgrStatMonitor() override;
+
+  ceph::mutex lock = ceph::make_mutex("MgrStatMonitor::lock");
 
   void init() override {}
   void on_shutdown() override {}
@@ -49,6 +54,10 @@ public:
   bool preprocess_getpoolstats(MonOpRequestRef op);
   bool preprocess_statfs(MonOpRequestRef op);
 
+  void calc_pool_availability();
+  bool enable_availability_tracking = g_conf().get_val<bool>("enable_availability_tracking"); ///< tracking availability score feature 
+  std::optional<utime_t> reset_availability_last_uptime_downtime_val;
+  
   void check_sub(Subscription *sub);
   void check_subs();
   void send_digests();
@@ -83,6 +92,10 @@ public:
     return digest;
   }
 
+  const std::map<uint64_t, PoolAvailability>& get_pool_availability() {
+    return pool_availability;
+  }
+
   ceph_statfs get_statfs(OSDMap& osdmap,
 			 std::optional<int64_t> data_pool) const {
     return digest.get_statfs(osdmap, data_pool);
@@ -106,4 +119,9 @@ public:
 		       bool verbose) const {
     digest.dump_pool_stats_full(osdm, ss, f, verbose);
   }
+
+  // config observer 
+  std::vector<std::string> get_tracked_keys() const noexcept override;
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set <std::string> &changed) override;
 };

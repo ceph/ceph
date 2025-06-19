@@ -54,15 +54,20 @@ only use implicit tenants, and the other protocol will
 never use implicit tenants.  Some older versions of ceph
 only supported implicit tenants with swift.
 
-Ocata (and later)
+Ocata (and Later)
 -----------------
 
 Keystone itself needs to be configured to point to the Ceph Object Gateway as an
-object-storage endpoint::
+object-storage endpoint:
 
-  openstack service create --name=swift \
-                           --description="Swift Service" \
-                           object-store
+.. prompt:: bash #
+
+   openstack service create --name=swift \
+                              --description="Swift Service" \
+                              object-store
+
+::
+
   +-------------+----------------------------------+
   | Field       | Value                            |
   +-------------+----------------------------------+
@@ -73,11 +78,16 @@ object-storage endpoint::
   | type        | object-store                     |
   +-------------+----------------------------------+
 
-  openstack endpoint create --region RegionOne \
-       --publicurl   "http://radosgw.example.com:8080/swift/v1" \
-       --adminurl    "http://radosgw.example.com:8080/swift/v1" \
-       --internalurl "http://radosgw.example.com:8080/swift/v1" \
-       swift
+.. prompt:: bash #
+
+   openstack endpoint create --region RegionOne \
+                               --publicurl   "http://radosgw.example.com:8080/swift/v1" \
+                               --adminurl    "http://radosgw.example.com:8080/swift/v1" \
+                               --internalurl "http://radosgw.example.com:8080/swift/v1" \
+                               swift
+
+::
+
   +--------------+------------------------------------------+
   | Field        | Value                                    |
   +--------------+------------------------------------------+
@@ -91,7 +101,12 @@ object-storage endpoint::
   | service_type | object-store                             |
   +--------------+------------------------------------------+
 
-  $ openstack endpoint show object-store
+.. prompt:: bash #
+
+   openstack endpoint show object-store
+
+::
+
   +--------------+------------------------------------------+
   | Field        | Value                                    |
   +--------------+------------------------------------------+
@@ -131,13 +146,18 @@ In order to let a project (earlier called a 'tenant') access buckets belonging t
 
    rgw swift account in url = true
 
-The Keystone object-store endpoint must accordingly be configured to include the AUTH_%(project_id)s suffix::
+The Keystone object-store endpoint must accordingly be configured to include the ``AUTH_%(project_id)s`` suffix:
+
+.. prompt:: bash #
 
    openstack endpoint create --region RegionOne \
-       --publicurl   "http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s" \
-       --adminurl    "http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s" \
-       --internalurl "http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s" \
-       swift
+                               --publicurl   "http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s" \
+                               --adminurl    "http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s" \
+                               --internalurl "http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s" \
+                               swift
+
+::
+
   +--------------+--------------------------------------------------------------+
   | Field        | Value                                                        |
   +--------------+--------------------------------------------------------------+
@@ -151,7 +171,7 @@ The Keystone object-store endpoint must accordingly be configured to include the
   | service_type | object-store                                                 |
   +--------------+--------------------------------------------------------------+
 
-Keystone integration with the S3 API
+Keystone Integration with the S3 API
 ------------------------------------
 
 It is possible to use Keystone for authentication even when using the
@@ -159,7 +179,7 @@ S3 API (with AWS-like access and secret keys), if the ``rgw s3 auth
 use keystone`` option is set. For details, see
 :doc:`s3/authentication`.
 
-Service token support
+Service Token Support
 ---------------------
 
 Service tokens can be enabled to support RadosGW Keystone integration
@@ -173,7 +193,7 @@ The ``rgw keystone expired token cache expiration`` option can be used to tune t
 expiration for an expired token allowed with a service token, please note that this must
 be lower than the ``[token]/allow_expired_window`` option in the Keystone configuration.
 
-Enabling this will cause an expired token given in the X-Auth-Token header to be allowed
-if coupled with a X-Service-Token header that contains a valid token with the accepted
-roles. This can allow long running processes using a user token in X-Auth-Token to function
+Enabling this will cause an expired token given in the ``X-Auth-Token`` header to be allowed
+if coupled with a ``X-Service-Token`` header that contains a valid token with the accepted
+roles. This can allow long running processes using a user token in ``X-Auth-Token`` to function
 beyond the expiration of the token.

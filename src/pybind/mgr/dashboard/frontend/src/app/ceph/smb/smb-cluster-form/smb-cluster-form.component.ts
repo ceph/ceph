@@ -34,8 +34,9 @@ import { SmbService } from '~/app/shared/api/smb.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SmbDomainSettingModalComponent } from '../smb-domain-setting-modal/smb-domain-setting-modal.component';
 import { CephServicePlacement } from '~/app/shared/models/service.interface';
-import { USERSGROUPS_URL } from '../smb-usersgroups-list/smb-usersgroups-list.component';
 import { UpperFirstPipe } from '~/app/shared/pipes/upper-first.pipe';
+import { CLUSTER_PATH } from '../smb-cluster-list/smb-cluster-list.component';
+import { USERSGROUPS_PATH } from '../smb-usersgroups-list/smb-usersgroups-list.component';
 
 @Component({
   selector: 'cd-smb-cluster-form',
@@ -82,7 +83,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   ngOnInit() {
     this.action = this.actionLabels.CREATE;
     this.usersGroups$ = this.smbService.listUsersGroups();
-    if (this.router.url.startsWith(`/cephfs/smb/${URLVerbs.EDIT}`)) {
+    if (this.router.url.startsWith(`/${CLUSTER_PATH}/${URLVerbs.EDIT}`)) {
       this.isEdit = true;
     }
     this.smbService.modalData$.subscribe((data: DomainSettings) => {
@@ -217,8 +218,8 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   }
 
   multiSelector(event: any, field: 'label' | 'hosts') {
-    if (field === PLACEMENT.host) this.selectedLabels = event.map((label: any) => label.content);
-    else this.selectedHosts = event.map((host: any) => host.content);
+    if (field === PLACEMENT.host) this.selectedHosts = event.map((host: any) => host.content);
+    else this.selectedLabels = event.map((label: any) => label.content);
   }
 
   onAuthModeChange() {
@@ -297,18 +298,17 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
 
   handleTaskRequest(urlVerb: string) {
     const requestModel = this.buildRequest();
-    const BASE_URL = 'smb/cluster';
     const component = this;
     const cluster_id = this.smbForm.get('cluster_id').value;
 
     this.taskWrapperService
       .wrapTaskAroundCall({
-        task: new FinishedTask(`${BASE_URL}/${urlVerb}`, { cluster_id }),
+        task: new FinishedTask(`${CLUSTER_PATH}/${urlVerb}`, { cluster_id }),
         call: this.smbService.createCluster(requestModel)
       })
       .subscribe({
         complete: () => {
-          this.router.navigate([`cephfs/smb`]);
+          this.router.navigate([CLUSTER_PATH]);
         },
         error: () => {
           component.smbForm.setErrors({ cdSubmitButton: true });
@@ -439,7 +439,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   }
 
   navigateCreateUsersGroups() {
-    this.router.navigate([`${USERSGROUPS_URL}/${URLVerbs.CREATE}`]);
+    this.router.navigate([`${USERSGROUPS_PATH}/${URLVerbs.CREATE}`]);
   }
 
   addCustomDns() {

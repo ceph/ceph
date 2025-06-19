@@ -8,6 +8,7 @@
 #include "crimson/osd/osd_operations/background_recovery.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
+#include "crimson/osd/osd_operations/pgpct_request.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operations/recovery_subrequest.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
@@ -334,6 +335,14 @@ struct EventBackendRegistry<osd::LogMissingRequestReply> {
     return {/* no extenral backends */};
   }
 };
+
+template <>
+struct EventBackendRegistry<osd::PGPCTRequest> {
+  static std::tuple<> get_backends() {
+    return {/* no extenral backends */};
+  }
+};
+
 
 template <>
 struct EventBackendRegistry<osd::RecoverySubRequest> {

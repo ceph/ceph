@@ -10,7 +10,8 @@ overrides:
       osd:
         crimson osd obc lru size: 10
         debug ms: 20
-    flavor: crimson
+        seastore cache lru size: 64M
+        seastore max concurrent transactions: 8
   workunit:
     env:
       CRIMSON_COMPAT: '1'

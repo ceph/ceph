@@ -722,3 +722,109 @@ def test_show_cluster_without_shares(tmodule):
 }
     """.strip()
     )
+
+
+def test_show_password_filter_hidden(tmodule):
+    _example_cfg_1(tmodule)
+    out = tmodule.show(password_filter=smb.enums.PasswordFilter.HIDDEN)
+    assert 'resources' in out
+    res = out['resources']
+    assert len(res) == 4
+    ja = [r for r in res if r['resource_type'] == 'ceph.smb.join.auth']
+    assert ja
+    join_auth = ja[0]
+    assert join_auth['auth']['username'] == 'testadmin'
+    assert join_auth['auth']['password'] == '****************'
+
+
+def test_show_password_filter_b64(tmodule):
+    _example_cfg_1(tmodule)
+    out = tmodule.show(password_filter=smb.enums.PasswordFilter.BASE64)
+    assert 'resources' in out
+    res = out['resources']
+    assert len(res) == 4
+    ja = [r for r in res if r['resource_type'] == 'ceph.smb.join.auth']
+    assert ja
+    join_auth = ja[0]
+    assert join_auth['auth']['username'] == 'testadmin'
+    assert join_auth['auth']['password'] == 'UGFzc3cwcmQ='
+
+
+def test_apply_password_filter(tmodule):
+    _example_cfg_1(tmodule)
+
+    txt = json.dumps(
+        {
+            'resource_type': 'ceph.smb.usersgroups',
+            'users_groups_id': 'ug1',
+            'intent': 'present',
+            'values': {
+                'users': [
+                    {'username': 'foo', 'password': 'YWJyYWNhZGFicmE='},
+                    {'username': 'bar', 'password': 'eHl6enk='},
+                ],
+                'groups': [],
+            },
+        }
+    )
+
+    rg = tmodule.apply_resources(
+        txt, password_filter=smb.enums.InputPasswordFilter.BASE64
+    )
+    assert rg.success, rg.to_simplified()
+    ts = rg.to_simplified()
+    assert len(ts['results']) == 1
+    r = ts['results'][0]['resource']
+    assert r['resource_type'] == 'ceph.smb.usersgroups'
+    assert len(r['values']['users']) == 2
+    # filtered passwords of command output should match input by default
+    assert r['values']['users'][0]['password'] == 'YWJyYWNhZGFicmE='
+    assert r['values']['users'][1]['password'] == 'eHl6enk='
+
+    # get unfiltered object
+    out = tmodule.show(['ceph.smb.usersgroups.ug1'])
+    assert out['resource_type'] == 'ceph.smb.usersgroups'
+    assert len(out['values']['users']) == 2
+    assert out['values']['users'][0]['password'] == 'abracadabra'
+    assert out['values']['users'][1]['password'] == 'xyzzy'
+
+
+def test_apply_password_filter_in_out(tmodule):
+    _example_cfg_1(tmodule)
+
+    txt = json.dumps(
+        {
+            'resource_type': 'ceph.smb.usersgroups',
+            'users_groups_id': 'ug1',
+            'intent': 'present',
+            'values': {
+                'users': [
+                    {'username': 'foo', 'password': 'YWJyYWNhZGFicmE='},
+                    {'username': 'bar', 'password': 'eHl6enk='},
+                ],
+                'groups': [],
+            },
+        }
+    )
+
+    rg = tmodule.apply_resources(
+        txt,
+        password_filter=smb.enums.InputPasswordFilter.BASE64,
+        password_filter_out=smb.enums.PasswordFilter.HIDDEN,
+    )
+    assert rg.success, rg.to_simplified()
+    ts = rg.to_simplified()
+    assert len(ts['results']) == 1
+    r = ts['results'][0]['resource']
+    assert r['resource_type'] == 'ceph.smb.usersgroups'
+    assert len(r['values']['users']) == 2
+    # filtered passwords of command output should match input by default
+    assert r['values']['users'][0]['password'] == '****************'
+    assert r['values']['users'][1]['password'] == '****************'
+
+    # get unfiltered object
+    out = tmodule.show(['ceph.smb.usersgroups.ug1'])
+    assert out['resource_type'] == 'ceph.smb.usersgroups'
+    assert len(out['values']['users']) == 2
+    assert out['values']['users'][0]['password'] == 'abracadabra'
+    assert out['values']['users'][1]['password'] == 'xyzzy'

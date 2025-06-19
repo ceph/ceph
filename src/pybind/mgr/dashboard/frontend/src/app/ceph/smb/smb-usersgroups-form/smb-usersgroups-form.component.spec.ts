@@ -86,7 +86,7 @@ describe('SmbUsersgroupsFormComponent', () => {
 
     it('should get resource data and set form fields with it', () => {
       expect(getUsersGroups).toHaveBeenCalled();
-      expect(component.form.value).toEqual({
+      expect(component.form.getRawValue()).toEqual({
         usersGroupsId: 'foo',
         users: [
           {

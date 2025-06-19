@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <chrono>
 #include <stdio.h>
 #include <string.h>
 #include <iostream>
@@ -11,6 +12,8 @@
 #include <thread>
 #include <stack>
 #include <gtest/gtest.h>
+#include "common/dout.h"
+#include "common/debug.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "include/stringify.h"
@@ -18,6 +21,7 @@
 #include "common/errno.h"
 
 #include "os/bluestore/Allocator.h"
+#include "os/bluestore/bluefs_types.h"
 #include "os/bluestore/bluestore_common.h"
 #include "os/bluestore/BlueFS.h"
 
@@ -41,10 +45,17 @@ public:
   TempBdev(uint64_t size)
     : path{get_temp_bdev(size)}
   {}
-  ~TempBdev() {
-    rm_temp_bdev(path);
+  TempBdev()
+  {}
+  void Init(uint64_t size) {
+    path = get_temp_bdev(size);
   }
-  const std::string path;
+  ~TempBdev() {
+    if (!path.empty()) {
+      rm_temp_bdev(path);
+    }
+  }
+  std::string path;
 private:
   static string get_temp_bdev(uint64_t size)
   {
@@ -112,8 +123,8 @@ TEST(BlueFS, mkfs_mount) {
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
   ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
-  ASSERT_EQ(fs.get_total(BlueFS::BDEV_DB), size - SUPER_RESERVED);
-  ASSERT_LT(fs.get_free(BlueFS::BDEV_DB), size - SUPER_RESERVED);
+  ASSERT_EQ(fs.get_block_device_size(BlueFS::BDEV_DB), size);
+  ASSERT_LT(fs.get_free(BlueFS::BDEV_DB), size);
   fs.umount();
 }
 
@@ -891,6 +902,563 @@ TEST(BlueFS, test_tracker_50965) {
   fs.umount();
 }
 
+// borrowed from store_test
+static bool bl_eq(bufferlist& expected, bufferlist& actual) {
+  if (expected.contents_equal(actual))
+    return true;
+
+  unsigned first = 0;
+  if(expected.length() != actual.length()) {
+    cout << "--- buffer lengths mismatch " << std::hex
+         << "expected 0x" << expected.length() << " != actual 0x"
+         << actual.length() << std::dec << std::endl;
+  }
+  auto len = std::min(expected.length(), actual.length());
+  while ( first<len && expected[first] == actual[first])
+    ++first;
+  unsigned last = len;
+  while (last > 0 && expected[last-1] == actual[last-1])
+    --last;
+  if(len > 0) {
+    cout << "--- buffer mismatch between offset 0x" << std::hex << first
+         << " and 0x" << last << ", total 0x" << len << std::dec
+         << std::endl;
+    cout << "--- expected:\n";
+    expected.hexdump(cout);
+    cout << "--- actual:\n";
+    actual.hexdump(cout);
+  }
+  return false;
+}
+
+TEST(BlueFS, test_wal_write) {
+  uint64_t size_wal = 1048576 * 64;
+  TempBdev bdev_wal{size_wal};
+  uint64_t size_db = 1048576 * 128;
+  TempBdev bdev_db{size_db};
+  uint64_t size_slow = 1048576 * 256;
+  TempBdev bdev_slow{size_slow};
+
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.ApplyChanges();
+
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_WAL,  bdev_wal.path,  false));
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB,   bdev_db.path,   false));
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, true, true }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, true, true }));
+
+  string dir_db = "db.wal";
+  ASSERT_EQ(0, fs.mkdir(dir_db));
+
+  string wal_file = "wal1.log";
+  BlueFS::FileWriter *writer;
+  ASSERT_EQ(0, fs.open_for_write(dir_db, wal_file, &writer, false));
+  ASSERT_NE(nullptr, writer);
+
+  bufferlist bl1;
+  auto gen_debugable = [](size_t amount, bufferlist& bl) {
+    for (size_t i = 0; i < amount; i++) {
+      bl.append('a');
+    }
+  };
+  gen_debugable(70000, bl1);
+  fs.append_try_flush(writer, bl1.c_str(), bl1.length());
+  fs.fsync(writer);
+  fs.close_writer(writer);
+
+  // WAL files don't update internal extents while writing to save memory, only on _replay
+  fs.umount();
+  fs.mount();
+
+  BlueFS::FileReader *reader;
+  ASSERT_EQ(0, fs.open_for_read(dir_db, wal_file, &reader));
+  bufferlist read_bl;
+  fs.read(reader, 0, 70000, &read_bl, NULL);
+  ASSERT_TRUE(bl_eq(bl1, read_bl));
+  delete reader;
+  fs.umount();
+
+}
+
+
+class BlueFS_wal : virtual public ::testing::Test {
+public:
+  BlueFS fs;
+  explicit BlueFS_wal() :
+    fs(g_ceph_context)
+  {}
+  void SetUp() override {};
+  void TearDown() override {};
+  void Create(uint64_t slow, uint64_t db, uint64_t wal) {
+    if (slow > 0) {
+      bdev_slow.Init(slow);
+      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false));
+    }
+    if (db > 0) {
+      bdev_db.Init(db);
+      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_db.path, false));
+    }
+    if (wal > 0) {
+      bdev_wal.Init(wal);
+      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_WAL, bdev_wal.path,  false));
+    }
+    ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, true, true }));
+  }
+  TempBdev bdev_wal;
+  TempBdev bdev_db;
+  TempBdev bdev_slow;
+  uuid_d fsid;
+  void many_small_writes(
+    const std::string& dir,
+    const std::string& file,
+    bufferlist& content,
+    uint32_t min_size = 10000,
+    uint32_t chunk_from = 1,
+    uint32_t chunk_to = 10,
+    uint32_t chunk_step = 1)
+  {
+    int r = fs.mkdir(dir);
+    ASSERT_TRUE(r == 0 || r == -EEXIST);
+    BlueFS::FileWriter *writer;
+    ASSERT_EQ(0, fs.open_for_write(dir, file, &writer, false));
+    ASSERT_NE(nullptr, writer);
+    many_small_writes(writer, content, min_size,
+      chunk_from, chunk_to, chunk_step);
+    fs.close_writer(writer);
+    //delete writer;
+  }
+
+  void many_small_writes(
+    BlueFS::FileWriter *writer,
+    bufferlist& content,
+    uint32_t min_size = 10000,
+    uint32_t chunk_from = 1,
+    uint32_t chunk_to = 10,
+    uint32_t chunk_step = 1)
+  {
+    uint32_t c = chunk_from;
+    uint8_t v = 0;
+    ASSERT_NE(nullptr, writer);
+    do {
+      std::string data(c, v);
+      fs.append_try_flush(writer, data.c_str(), data.length());
+      fs.fsync(writer);
+      content.append(data);
+      v++;
+      c += chunk_step;
+      if (c > chunk_to) {
+        c = chunk_from;
+      }
+    } while (content.length() < min_size);
+    //delete writer;
+  }
+
+  void many_small_reads(
+    const std::string& dir,
+    const std::string& file,
+    bufferlist& content,
+    uint32_t min_size = 10000,
+    uint32_t chunk_from = 1,
+    uint32_t chunk_to = 10,
+    uint32_t chunk_step = 1)
+  {
+    content.clear();
+    BlueFS::FileReader *reader;
+    ASSERT_EQ(0, fs.open_for_read(dir, file, &reader));
+    many_small_reads(reader, content, min_size,
+      chunk_from, chunk_to, chunk_step);
+    delete reader;
+  }
+
+  void many_small_reads(
+    BlueFS::FileReader *reader,
+    bufferlist& content,
+    uint32_t min_size = 10000,
+    uint32_t chunk_from = 1,
+    uint32_t chunk_to = 10,
+    uint32_t chunk_step = 1)
+  {
+    uint32_t c = chunk_from;
+    uint32_t pos = 0;
+    do {
+      bufferlist read_bl;
+      int r = fs.read(reader, pos, c, &read_bl, nullptr);
+      if (r <= 0) break;
+      content.append(read_bl);
+      pos = pos + c;
+      c += chunk_step;
+      if (c > chunk_to) {
+        c = chunk_from;
+      }
+    } while (content.length() < min_size);
+  }
+};
+
+TEST(BlueFS, test_wal_migrate) {
+  uint64_t size_wal = 1048576 * 64;
+  TempBdev bdev_wal{size_wal};
+  uint64_t size_db = 1048576 * 128;
+  TempBdev bdev_db{size_db};
+  uint64_t size_slow = 1048576 * 256;
+  TempBdev bdev_slow{size_slow};
+
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.ApplyChanges();
+
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_WAL,  bdev_wal.path,  false));
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB,   bdev_db.path,   false));
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, true, true }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, true, true }));
+
+  string dir_db = "db.wal";
+  ASSERT_EQ(0, fs.mkdir(dir_db));
+
+  string wal_file = "wal1.log";
+  BlueFS::FileWriter *writer;
+  ASSERT_EQ(0, fs.open_for_write(dir_db, wal_file, &writer, false));
+  ASSERT_NE(nullptr, writer);
+
+  bufferlist bl1;
+  auto gen_debugable = [](size_t amount, bufferlist& bl) {
+    for (size_t i = 0; i < amount; i++) {
+      bl.append('a');
+    }
+  };
+  gen_debugable(70000, bl1);
+  fs.append_try_flush(writer, bl1.c_str(), bl1.length());
+  fs.fsync(writer);
+
+  // WAL files don't update internal extents while writing to save memory, only on _replay
+  fs.umount();
+  fs.mount();
+  fs.revert_wal_to_plain();
+
+  BlueFS::FileReader *reader;
+  ASSERT_EQ(0, fs.open_for_read(dir_db, wal_file, &reader));
+  ASSERT_EQ(reader->file->fnode.encoding, bluefs_node_encoding::PLAIN);
+  ASSERT_EQ(reader->file->envelope_mode(), false);
+
+  bufferlist read_bl;
+  fs.read(reader, 0, 70000, &read_bl, NULL);
+  ASSERT_TRUE(bl_eq(bl1, read_bl));
+  delete reader;
+  fs.umount();
+}
+
+
+TEST_F(BlueFS_wal, wal_v2_check)
+{
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.ApplyChanges();
+
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+
+  bufferlist content;
+  many_small_writes("db.wal", "wal1.log", content, 10);
+  fs.umount();
+  fs.mount();
+  bufferlist read_content;
+  many_small_reads("db.wal", "wal1.log", read_content, 10);
+  ASSERT_EQ(content, read_content);
+  fs.umount();
+}
+
+TEST_F(BlueFS_wal, wal_v2_check_feature)
+{
+  SKIP_JENKINS();
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.ApplyChanges();
+
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+  mono_clock::time_point t0, t1;
+  bufferlist content;
+  uint32_t cnt = 125;
+  t1 = mono_clock::now();
+  double d_w1, d_w2;
+  // calibrate cnt to run more than 1s
+  do
+  {
+    content.clear();
+    cnt = cnt * 2;
+    fs.unlink("db.wal", "wal.log");
+    t0 = mono_clock::now();
+    many_small_writes("db.wal", "wal.log", content, cnt, 1, 1, 1);
+    t1 = mono_clock::now();
+    d_w2 = std::chrono::duration<double>(t1 - t0).count();
+  } while (d_w2 < 1.0);
+  cout << "time wal envelope_mode=" << d_w2 << std::endl;
+
+  t0 = mono_clock::now();
+  content.clear();
+  many_small_writes("db.wal", "not-wal.xxx", content, cnt, 1, 1, 1);
+  t1 = mono_clock::now();
+  d_w1 = std::chrono::duration<double>(t1 - t0).count();
+  cout << "time wal basic=" << d_w1 << std::endl;
+  fs.umount();
+  //if not 20% faster, its not working
+  EXPECT_LT(d_w2 * 1.2, d_w1);
+}
+
+TEST_F(BlueFS_wal, wal_v2_truncate)
+{
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.ApplyChanges();
+
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+  std::string dir = "dir";
+  std::string file = "wal.log";
+  int r = fs.mkdir(dir);
+  ASSERT_TRUE(r == 0 || r == -EEXIST);
+  BlueFS::FileWriter *writer;
+  ASSERT_EQ(0, fs.open_for_write(dir, file, &writer, false));
+  ASSERT_NE(nullptr, writer);
+  bufferlist content;
+  many_small_writes(writer, content, 10);
+  uint64_t size;
+  fs.stat(dir, file, &size, nullptr);
+  EXPECT_EQ(size, content.length());
+  fs.truncate(writer, content.length());
+  fs.close_writer(writer);
+  fs.umount();
+  fs.mount();
+  fs.stat(dir, file, &size, nullptr);
+  EXPECT_EQ(size, content.length());
+  bufferlist read_content;
+  many_small_reads(dir, file, read_content, 10);
+  ASSERT_EQ(content, read_content);
+  fs.umount();
+}
+
+TEST_F(BlueFS_wal, wal_v2_simulate_crash)
+{
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.ApplyChanges();
+
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+  std::string dir = "dir";
+  std::string file = "wal.log";
+  int r = fs.mkdir(dir);
+  ASSERT_TRUE(r == 0 || r == -EEXIST);
+  BlueFS::FileWriter *writer;
+  ASSERT_EQ(0, fs.open_for_write(dir, file, &writer, false));
+  ASSERT_NE(nullptr, writer);
+  bufferlist content;
+  many_small_writes(writer, content, 100);
+  delete writer; //close without orderly shutdown, simulate failure
+  fs.umount();
+  fs.mount();
+  bufferlist read_content;
+  many_small_reads(dir, file, read_content, 100);
+  ASSERT_EQ(content, read_content);
+  fs.umount();
+}
+
+TEST_F(BlueFS_wal, wal_v2_recovery_from_dirty_allocated)
+{
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_alloc_size", "4096");
+  conf.SetVal("bluefs_shared_alloc_size", "4096");
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.ApplyChanges();
+
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+  std::string dir = "dir";
+  std::string file = "wal.log";
+  int r = fs.mkdir(dir);
+  ASSERT_TRUE(r == 0 || r == -EEXIST);
+  BlueFS::FileWriter *writer;
+  ASSERT_EQ(0, fs.open_for_write(dir, file, &writer, false));
+  ASSERT_NE(nullptr, writer);
+  bufferlist content;
+
+  //preallocate and write "0xae" so ENVELOPE_MODE recovery will see length=0xaeaeaeaeaeaeaeae
+  fs.preallocate(writer->file, 0, 4096 * 2);
+  bluefs_extent_t ext = writer->file->fnode.extents[0];
+  BlockDevice* x = fs.get_block_device(ext.bdev);
+  ASSERT_EQ(ext.length, 4096 * 2);
+  bufferlist filler;
+  filler.append(string(4096 * 2, 0xae));
+  x->write(ext.offset, filler, false);
+  x->flush();
+
+  many_small_writes(writer, content, 4096 / (48 + 8 + 8) * 48, 48, 48, 0);
+  delete writer; //close without orderly shutdown, simulate failure
+  fs.umount();
+  fs.mount();
+  bufferlist read_content;
+  BlueFS::FileReader *h;
+  ASSERT_EQ(0, fs.open_for_read(dir, file, &h));
+  bufferlist bl;
+  ASSERT_EQ(0, fs.read(h, 0xea01020304050607, 1, &bl, NULL)); // no read but no failure
+  delete h;
+  fs.umount();
+}
+
+TEST_F(BlueFS_wal, support_wal_v2_and_v1)
+{
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.ApplyChanges();
+
+  std::string dir = "dir";
+  std::string file_v2 = "wal-v2.log";
+  std::string file_v1 = "wal-v1.log";
+  bufferlist content_v2;
+  bufferlist content_v1;
+  int r;
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+  r = fs.mkdir(dir);
+  ASSERT_TRUE(r == 0 || r == -EEXIST);
+  many_small_writes(dir, file_v2, content_v2, 100);
+  fs.umount();
+  // switch to v1
+  g_ceph_context->_conf.set_val("bluefs_wal_envelope_mode", "false");
+  ASSERT_EQ(0, fs.mount());
+  r = fs.mkdir(dir);
+  ASSERT_TRUE(r == 0 || r == -EEXIST);
+  many_small_writes(dir, file_v1, content_v1, 100);
+  fs.umount();
+
+  fs.mount();
+  bufferlist read_content;
+  BlueFS::FileReader *reader;
+  many_small_reads(dir, file_v2, read_content, 100);
+  EXPECT_EQ(content_v2, read_content);
+  ASSERT_EQ(0, fs.open_for_read(dir, file_v2, &reader));
+  EXPECT_EQ(reader->file->envelope_mode(), true);
+  delete reader;
+  reader = nullptr;
+
+  many_small_reads(dir, file_v1, read_content, 100);
+  EXPECT_EQ(content_v1, read_content);
+  ASSERT_EQ(0, fs.open_for_read(dir, file_v1, &reader));
+  EXPECT_EQ(reader->file->envelope_mode(), false);
+  delete reader;
+
+  fs.umount();
+}
+
+TEST_F(BlueFS_wal, wal_v2_read_after_write)
+{
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.ApplyChanges();
+
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+  std::string dir = "dir";
+  std::string file = "wal.log";
+  int r = fs.mkdir(dir);
+  ASSERT_TRUE(r == 0 || r == -EEXIST);
+  BlueFS::FileWriter *writer;
+  ASSERT_EQ(0, fs.open_for_write(dir, file, &writer, false));
+  ASSERT_NE(nullptr, writer);
+  bufferlist content;
+  many_small_writes(writer, content, 10);
+  uint64_t size;
+  fs.stat(dir, file, &size, nullptr);
+  EXPECT_EQ(size, content.length());
+  fs.close_writer(writer);
+  fs.stat(dir, file, &size, nullptr);
+  EXPECT_EQ(size, content.length());
+  bufferlist read_content;
+  many_small_reads(dir, file, read_content, 10);
+  ASSERT_EQ(content, read_content);
+  fs.umount();
+}
+
+TEST(BlueFS, test_wal_read_after_rollback_to_v1) {
+  // test whether we still read with v2 version even though new files will be v1
+  uint64_t size_wal = 1048576 * 64;
+  TempBdev bdev_wal{size_wal};
+  uint64_t size_db = 1048576 * 128;
+  TempBdev bdev_db{size_db};
+  uint64_t size_slow = 1048576 * 256;
+  TempBdev bdev_slow{size_slow};
+
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.ApplyChanges();
+
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_WAL,  bdev_wal.path,  false));
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB,   bdev_db.path,   false));
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, true, true }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, true, true }));
+
+  string dir_db = "db.wal";
+  ASSERT_EQ(0, fs.mkdir(dir_db));
+
+  string wal_file = "wal1.log";
+  BlueFS::FileWriter *writer;
+  ASSERT_EQ(0, fs.open_for_write(dir_db, wal_file, &writer, false));
+  ASSERT_EQ(writer->file->fnode.encoding, bluefs_node_encoding::ENVELOPE);
+  ASSERT_NE(nullptr, writer);
+
+  bufferlist bl1;
+  auto gen_debugable = [](size_t amount, bufferlist& bl) {
+    for (size_t i = 0; i < amount; i++) {
+      bl.append('a');
+    }
+  };
+  gen_debugable(70000, bl1);
+  fs.append_try_flush(writer, bl1.c_str(), bl1.length());
+  fs.fsync(writer);
+
+  g_ceph_context->_conf.set_val("bluefs_wal_envelope_mode", "false");
+  fs.umount();
+  fs.mount();
+
+  BlueFS::FileReader *reader;
+  ASSERT_EQ(0, fs.open_for_read(dir_db, wal_file, &reader));
+  bufferlist read_bl;
+  fs.read(reader, 0, 70000, &read_bl, NULL);
+  ASSERT_TRUE(bl_eq(bl1, read_bl));
+  delete reader;
+
+  {
+    // open another file to ensure v1 is set correctly
+    string wal_file = "wal2.log";
+    BlueFS::FileWriter *writer;
+    ASSERT_EQ(0, fs.open_for_write(dir_db, wal_file, &writer, false));
+    ASSERT_NE(nullptr, writer);
+    ASSERT_EQ(writer->file->fnode.encoding, bluefs_node_encoding::PLAIN);
+  }
+  fs.umount();
+}
+
+
 TEST(BlueFS, test_truncate_stable_53129) {
 
   ConfSaver conf(g_ceph_context->_conf);
@@ -1475,12 +2043,22 @@ TEST(BlueFS, truncate_drops_allocations) {
     TempBdev bdev_db{s.db_size};
     TempBdev bdev_slow{s.slow_size};
 
+    bluefs_shared_alloc_context_t shared_alloc;
+    uint64_t shared_alloc_unit = s.slow_alloc_size;
+    shared_alloc.set(
+      Allocator::create(g_ceph_context, g_ceph_context->_conf->bluefs_allocator,
+                        s.slow_size ? s.slow_size : s.db_size,
+                        shared_alloc_unit, "test shared allocator"),
+      shared_alloc_unit);
+    shared_alloc.a->init_add_free(0, s.slow_size ? s.slow_size : s.db_size);
+
     BlueFS fs(g_ceph_context);
     if (s.db_size != 0) {
-      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_db.path, false, 0));
+      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_db.path, false,
+      s.slow_size > 0 ? nullptr : &shared_alloc));
     }
     if (s.slow_size != 0) {
-      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false, 0));
+      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false, &shared_alloc));
     }
 
     ASSERT_EQ(0, fs.mkfs(fsid, {BlueFS::BDEV_DB, false, false}));
@@ -1501,6 +2079,7 @@ TEST(BlueFS, truncate_drops_allocations) {
     EXPECT_EQ(pre, post - s.allocated_after_truncate);
 
     fs.umount();
+    delete shared_alloc.a;
   }
 }
 
@@ -1772,6 +2351,297 @@ TEST(BlueFS, test_69481_truncate_asserts) {
   fs.close_writer(f);
 
   fs.umount();
+}
+
+TEST(bluefs_locked_extents_t, basics) {
+  const uint64_t M = 1 << 20;
+  {
+    uint64_t reserved = 0x2000;
+    uint64_t au = 1*M;
+    uint64_t fullsize = 128*M;
+    bluefs_locked_extents_t lcke(reserved, fullsize, au);
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    // no ops
+    lcke.reset_intersected(bluefs_extent_t(0, 1*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 10*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 127*M, reserved));
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    // get_merged verification
+    auto e1 = lcke.get_merged();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.gray_tail_offset, 0);
+    ASSERT_EQ(e1.gray_tail_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.gray_tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.gray_tail_length);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.gray_tail_offset, 0);
+    ASSERT_EQ(e1.gray_tail_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.tail_length);
+
+    // head has intersection
+    lcke.reset_intersected(bluefs_extent_t(0, reserved, au));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.gray_tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.gray_tail_length);
+
+    // gray_tail has intersections
+    lcke.reset_intersected(bluefs_extent_t(0, 127*M + reserved, 0x1000));
+    lcke.reset_intersected(bluefs_extent_t(0, 128*M - 0x1000, 0x1000));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, 0);
+    ASSERT_EQ(e1.tail_length, 0);
+  }
+  {
+    uint64_t reserved = 0x1000;
+    uint64_t au = 1*M;
+    uint64_t extra_tail = 0x10000;
+    uint64_t fullsize = 128*M + extra_tail;
+    bluefs_locked_extents_t lcke(reserved, fullsize, au);
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - extra_tail + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, extra_tail - reserved);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // no ops
+    lcke.reset_intersected(bluefs_extent_t(0, 1*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 10*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 127*M, reserved));
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - extra_tail + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, extra_tail - reserved);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // get_merged verification
+    auto e1 = lcke.get_merged();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.gray_tail_offset, 0);
+    ASSERT_EQ(e1.gray_tail_length, 0);
+    ASSERT_EQ(e1.tail_offset, std::min(lcke.gray_tail_offset, lcke.tail_offset));
+    ASSERT_EQ(e1.tail_length, fullsize - e1.tail_offset);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.tail_offset, lcke.tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.tail_length);
+
+    // head has intersection
+    lcke.reset_intersected(bluefs_extent_t(0, reserved, au));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - extra_tail + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, extra_tail - reserved);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.gray_tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.gray_tail_length);
+
+    // tail has intersections
+    lcke.reset_intersected(bluefs_extent_t(0, 128*M, 0x1000));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - extra_tail + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, extra_tail - reserved);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    // gray_tail has intersections
+    lcke.reset_intersected(bluefs_extent_t(0, 128*M + reserved, 0x1000));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, 0);
+    ASSERT_EQ(e1.tail_length, 0);
+  }
+  {
+    uint64_t reserved = 0x2000;
+    uint64_t au = 1*M;
+    uint64_t extra_tail = 0x1000;
+    uint64_t fullsize = 128*M + extra_tail;
+    bluefs_locked_extents_t lcke(reserved, fullsize, au);
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved - extra_tail);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved + extra_tail);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // no ops
+    lcke.reset_intersected(bluefs_extent_t(0, 1*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 10*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 127*M, reserved));
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved - extra_tail);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved + extra_tail);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // get_merged verification
+    auto e1 = lcke.get_merged();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.gray_tail_offset, 0);
+    ASSERT_EQ(e1.gray_tail_length, 0);
+    ASSERT_EQ(e1.tail_offset, std::min(lcke.gray_tail_offset, lcke.tail_offset));
+    ASSERT_EQ(e1.tail_length, fullsize - e1.tail_offset);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.tail_offset, lcke.tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.tail_length);
+
+    // head has intersection, hopefully partial
+    lcke.reset_intersected(bluefs_extent_t(reserved - 0x1000, reserved, au));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved - extra_tail);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved + extra_tail);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.gray_tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.gray_tail_length);
+
+    // tail&gray_tail have intersections
+    lcke.reset_intersected(bluefs_extent_t(0, 128*M, 0x1000));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, 0);
+    ASSERT_EQ(e1.tail_length, 0);
+  }
+  {
+    uint64_t reserved = 0x2000;
+    uint64_t au = 1*M;
+    uint64_t extra_tail = 0x2000;
+    uint64_t fullsize = 128*M + extra_tail;
+    bluefs_locked_extents_t lcke(reserved, fullsize, au);
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // no ops
+    lcke.reset_intersected(bluefs_extent_t(0, 1*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 10*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 127*M, reserved));
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // get_merged verification
+    auto e1 = lcke.get_merged();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.gray_tail_offset, 0);
+    ASSERT_EQ(e1.gray_tail_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.tail_offset);
+    ASSERT_EQ(e1.tail_length, fullsize - e1.tail_offset);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.tail_offset, lcke.tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.tail_length);
+
+    // head has intersection, hopefully partial
+    lcke.reset_intersected(bluefs_extent_t(reserved - 0x1000, reserved, au));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, 0);
+    ASSERT_EQ(e1.tail_length, 0);
+
+    // tail have intersections
+    lcke.reset_intersected(bluefs_extent_t(0, 128*M, 0x1000));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, 0);
+    ASSERT_EQ(e1.tail_length, 0);
+  }
 }
 
 int main(int argc, char **argv) {

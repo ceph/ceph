@@ -940,7 +940,7 @@ int DaosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
   }
 
   // Update object attrs
-  set_atomic();
+  set_atomic(true);
   attrs[attr_name] = attr_val;
 
   ret = set_dir_entry_attrs(dpp, &ent, &attrs);
@@ -1032,7 +1032,6 @@ int DaosObject::restore_obj_from_cloud(Bucket* bucket,
           rgw_bucket_dir_entry& o,
 	  CephContext* cct,
           RGWObjTier& tier_config,
-          real_time& mtime,
           uint64_t olh_epoch,
           std::optional<uint64_t> days,
           const DoutPrefixProvider* dpp, 

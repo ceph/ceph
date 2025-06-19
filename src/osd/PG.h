@@ -250,6 +250,20 @@ public:
     return !waiting_for_unreadable_object.empty();
   }
 
+  bool get_is_nonprimary_shard(const pg_shard_t &shard) const final
+  {
+    return get_pgbackend()->get_is_nonprimary_shard(shard.shard);
+  }
+
+  bool get_is_hinfo_required() const final
+  {
+    return get_pgbackend()->get_is_hinfo_required();
+  }
+
+  bool get_is_ec_optimized() const final {
+    return get_pgbackend()->get_is_ec_optimized();
+  }
+
   static void set_last_scrub_stamp(
     utime_t t, pg_history_t &history, pg_stat_t &stats) {
     stats.last_scrub_stamp = t;
@@ -262,7 +276,7 @@ public:
 	set_last_scrub_stamp(t, history, stats);
 	return true;
       });
-    on_scrub_schedule_input_change(Scrub::delay_ready_t::delay_ready);
+    on_scrub_schedule_input_change();
   }
 
   static void set_last_deep_scrub_stamp(
@@ -278,7 +292,7 @@ public:
 	set_last_scrub_stamp(t, history, stats);
 	return true;
       });
-    on_scrub_schedule_input_change(Scrub::delay_ready_t::delay_ready);
+    on_scrub_schedule_input_change();
   }
 
   static void add_objects_scrubbed_count(
@@ -355,6 +369,9 @@ public:
   }
   const std::set<pg_shard_t> &get_acting_recovery_backfill() const {
     return recovery_state.get_acting_recovery_backfill();
+  }
+  const shard_id_set &get_acting_recovery_backfill_shard_id_set() const {
+    return recovery_state.get_acting_recovery_backfill_shard_id_set();
   }
   bool is_acting(pg_shard_t osd) const {
     return recovery_state.is_acting(osd);
@@ -511,7 +528,7 @@ public:
    * - pg stat scrub timestamps
    * - etc
    */
-  void on_scrub_schedule_input_change(Scrub::delay_ready_t delay_ready);
+  void on_scrub_schedule_input_change();
 
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) override;
 
@@ -867,8 +884,8 @@ protected:
   std::set<int> probe_targets;
 
 protected:
-  BackfillInterval backfill_info;
-  std::map<pg_shard_t, BackfillInterval> peer_backfill_info;
+  PrimaryBackfillInterval backfill_info;
+  std::map<pg_shard_t, ReplicaBackfillInterval> peer_backfill_info;
   bool backfill_reserving;
 
   // The primary's num_bytes and local num_bytes for this pg, only valid
@@ -1127,6 +1144,9 @@ protected:
     void trim(const pg_log_entry_t &entry) override {
       pg->get_pgbackend()->trim(entry, t);
     }
+    void partial_write(pg_info_t *info, const pg_log_entry_t &entry) override {
+      pg->get_pgbackend()->partial_write(info, entry);
+    }
   };
 
   void update_object_snap_mapping(
@@ -1241,6 +1261,7 @@ protected:
 
 public:
   int pg_stat_adjust(osd_stat_t *new_stat);
+  bool is_degraded() const { return recovery_state.is_degraded(); }
 protected:
   bool delete_needs_sleep = false;
 
@@ -1264,7 +1285,6 @@ protected:
   bool is_backfill_unfound() const { return recovery_state.is_backfill_unfound(); }
   bool is_incomplete() const { return recovery_state.is_incomplete(); }
   bool is_clean() const { return recovery_state.is_clean(); }
-  bool is_degraded() const { return recovery_state.is_degraded(); }
   bool is_undersized() const { return recovery_state.is_undersized(); }
   bool is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); } // Primary only
   bool is_remapped() const { return recovery_state.is_remapped(); }
@@ -1389,9 +1409,9 @@ public:
    recovery_state.force_object_missing(peer, oid, version);
  }
 
- uint64_t logical_to_ondisk_size(uint64_t logical_size) const final
- {
-   return get_pgbackend()->be_get_ondisk_size(logical_size);
+ uint64_t logical_to_ondisk_size(uint64_t logical_size,
+                                 shard_id_t shard_id) const final {
+   return get_pgbackend()->be_get_ondisk_size(logical_size, shard_id_t(shard_id));
  }
 };
 

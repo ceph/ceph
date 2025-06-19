@@ -6,25 +6,14 @@
   <cds-combo-box
       type="single"
       label="Selected Gateway Group"
-      i18n-placeholder
-      placeholder="Enter group"
+      i18n-label
+      [placeholder]="gwGroupPlaceholder"
       [items]="gwGroups"
       (selected)="onGroupSelection($event)"
-      (clear)="onGroupClear()">
+      (clear)="onGroupClear()"
+      [disabled]="gwGroupsEmpty">
     <cds-dropdown-list></cds-dropdown-list>
   </cds-combo-box>
-</div>
-
-<legend i18n>
-  Gateways
-  <cd-help-text>
-    Ceph NVMe-oF gateways provide Ceph Block Device storage through NVMe/TCP. For VMware clients the NVMe/TCP volumes display as  VMFS Datastores. For Linux clients the NVMe/TCP volumes display as as block devices.</cd-help-text>
-</legend>
-<div>
-  <cd-table [data]="gateways"
-            (fetchData)="getGateways()"
-            [columns]="gatewayColumns">
-  </cd-table>
 </div>
 
 <ng-template #statusTpl
@@ -33,4 +22,65 @@
         [ngClass]="row | pipeFunction:getStatusClass">
     {{ row.status_desc }}
   </span>
+</ng-template>
+
+<cds-tabs
+  type="contained"
+  followFocus="true"
+  isNavigation="true"
+  [cacheActive]="false">
+  <cds-tab
+    heading="Gateways"
+    [tabContent]="gateways_content"
+    i18n-heading
+    (selected)="onSelected(Tabs.gateways)">
+  </cds-tab>
+  <cds-tab
+    heading="Overview"
+    [tabContent]="overview_content"
+    i18n-heading
+    (selected)="onSelected(Tabs.overview)">
+  </cds-tab>
+  <cds-tab
+    heading="Performance"
+    [tabContent]="performance_content"
+    i18n-heading
+    (selected)="onSelected(Tabs.overview)">
+  </cds-tab>
+</cds-tabs>
+
+<ng-template #gateways_content>
+  <legend *ngIf="selectedTab === Tabs.gateways"
+          i18n>
+    Gateways
+    <cd-help-text>
+      Ceph NVMe-oF gateways provide Ceph Block Device storage through NVMe/TCP. For VMware clients the NVMe/TCP volumes display as  VMFS Datastores. For Linux clients the NVMe/TCP volumes display as as block devices.
+    </cd-help-text>
+  </legend>
+  <div>
+    <cd-table [data]="gateways"
+              (fetchData)="getGateways()"
+              [columns]="gatewayColumns">
+    </cd-table>
+  </div>
+</ng-template>
+
+<ng-template #overview_content>
+  <cd-grafana i18n-title
+              title="Gateway overview"
+              grafanaPath="ceph-nvme-of-gateways-overview?var-group={{selectedGatewayGroup}}&var-gateway=All"
+              [type]="'metrics'"
+              uid="feeuv1dno43r4ddjhjssdd"
+              grafanaStyle="three">
+  </cd-grafana>
+</ng-template>
+
+<ng-template #performance_content>
+  <cd-grafana i18n-title
+              title="Gateway performance"
+              grafanaPath="ceph-nvme-of-gateways-performance?var-group={{selectedGatewayGroup}}"
+              [type]="'metrics'"
+              uid="feeuv1dno43r4deed"
+              grafanaStyle="three">
+  </cd-grafana>
 </ng-template>

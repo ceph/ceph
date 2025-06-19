@@ -3,30 +3,42 @@
 iostat
 ======
 
-This module shows the current throughput and IOPS done on the Ceph cluster.
+The ``iostat`` module reports metrics for cluster throughpout and IOPS. 
 
 Enabling
 --------
 
-To check if the *iostat* module is enabled, run::
+To determine whether the ``iostat`` module is enabled, run the following
+command:
 
-  ceph mgr module ls
+.. prompt:: bash #
 
-The module can be enabled with::
+   ceph mgr module ls
 
-  ceph mgr module enable iostat
+To enable the ``iostat`` module, run the following command:
 
-To execute the module, run::
+.. prompt:: bash #
 
-  ceph iostat
+   ceph mgr module enable iostat
+
+To execute the module, run the following command:
+
+.. prompt:: bash #
+
+   ceph iostat
 
 To change the frequency at which the statistics are printed, use the ``-p``
-option::
+option:
 
-  ceph iostat -p <period in seconds>
+.. prompt:: bash #
 
-For example, use the following command to print the statistics every 5 seconds::
+   ceph iostat -p <period in seconds>
 
-  ceph iostat -p 5
+For example, use the following command to print the statistics every 5
+seconds:
 
-To stop the module, press Ctrl-C.
+.. prompt:: bash #
+
+   ceph iostat -p 5
+
+To stop the module, press ``Ctrl-C``.

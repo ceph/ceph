@@ -351,6 +351,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
       return -ret;
     }
   }
+  closedir(dir);
 
   ret = unlinkat(parent_fd, dname, AT_REMOVEDIR);
   if (ret < 0) {
@@ -899,6 +900,13 @@ int Directory::for_each(const DoutPrefixProvider* dpp, const F& func)
     /* Limit reached */
     ret = 0;
   }
+
+  closedir(dir);
+  // closedir() closes the fd, so we need to invalidate it
+  fd = -1;
+  // closedir() closes fd, but succeeding calls might assume that fd is still valid.
+  // so let's reopen it.
+  open(dpp);
   return ret;
 }
 
@@ -2468,7 +2476,7 @@ int POSIXBucket::set_acl(const DoutPrefixProvider* dpp,
   return write_attrs(dpp, y);
 }
 
-int POSIXBucket::read_stats(const DoutPrefixProvider *dpp,
+int POSIXBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			    const bucket_index_layout_generation& idx_layout,
 			    int shard_id, std::string* bucket_ver, std::string* master_ver,
 			    std::map<RGWObjCategory, RGWStorageStats>& stats,
@@ -2477,14 +2485,14 @@ int POSIXBucket::read_stats(const DoutPrefixProvider *dpp,
   auto& main = stats[RGWObjCategory::Main];
 
   // TODO: bucket stats shouldn't have to list all objects
-  return dir->for_each(dpp, [this, dpp, &main] (const char* name) {
+  return dir->for_each(dpp, [this, dpp, y, &main] (const char* name) {
     if (name[0] == '.') {
       /* Skip dotfiles */
       return 0;
     }
 
     std::unique_ptr<FSEnt> dent;
-    int ret = dir->get_ent(dpp, null_yield, name, std::string(), dent);
+    int ret = dir->get_ent(dpp, y, name, std::string(), dent);
     if (ret < 0) {
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not get ent for object " << name << ": "
@@ -2617,17 +2625,19 @@ int POSIXBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, std::list
   return 0;
 }
 
-int POSIXBucket::check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats)
+int POSIXBucket::check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                             std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
+                             std::map<RGWObjCategory, RGWStorageStats>& calculated_stats)
 {
   return 0;
 }
 
-int POSIXBucket::rebuild_index(const DoutPrefixProvider *dpp)
+int POSIXBucket::rebuild_index(const DoutPrefixProvider *dpp, optional_yield y)
 {
   return 0;
 }
 
-int POSIXBucket::set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout)
+int POSIXBucket::set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y, uint64_t timeout)
 {
   return 0;
 }
@@ -2907,6 +2917,12 @@ int POSIXObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
   return -EOPNOTSUPP;
 }
 
+bool POSIXObject::is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
+                                    const ceph::real_time& obj_mtime)
+{
+  return false;
+}
+
 int POSIXObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
 {
   int ret = stat(dpp);
@@ -3059,7 +3075,6 @@ int POSIXObject::restore_obj_from_cloud(Bucket* bucket,
           rgw_bucket_dir_entry& o,
 	  CephContext* cct,
           RGWObjTier& tier_config,
-          real_time& mtime,
           uint64_t olh_epoch,
           std::optional<uint64_t> days,
           const DoutPrefixProvider* dpp, 

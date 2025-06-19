@@ -139,6 +139,7 @@ describe('CrushRuleFormComponent', () => {
     });
 
     it('should select all values automatically by selecting "ssd-host" as root', () => {
+      formHelper.setValue('device_class', 'ssd', true);
       assert.valuesOnRootChange('ssd-host', 'osd', 'ssd');
     });
 
@@ -149,7 +150,9 @@ describe('CrushRuleFormComponent', () => {
 
     it('should override automatic selections', () => {
       assert.formFieldValues(get.nodeByName('default'), 'osd-rack', '');
+      formHelper.setValue('device_class', 'ssd', true);
       assert.valuesOnRootChange('ssd-host', 'osd', 'ssd');
+      formHelper.setValue('device_class', '', true);
       assert.valuesOnRootChange('mix-host', 'osd-rack', '');
     });
 
@@ -160,6 +163,7 @@ describe('CrushRuleFormComponent', () => {
     });
 
     it('should preselect device by domain selection', () => {
+      formHelper.setValue('device_class', 'ssd', true);
       formHelper.setValue('failure_domain', 'osd', true);
       assert.formFieldValues(get.nodeByName('default'), 'osd', 'ssd');
     });
@@ -203,6 +207,7 @@ describe('CrushRuleFormComponent', () => {
     });
 
     it('creates a rule with all fields', () => {
+      formHelper.setValue('device_class', 'ssd', true);
       assert.valuesOnRootChange('ssd-host', 'osd', 'ssd');
       assert.creation(Mocks.getCrushRuleConfig('ssd-host-rule', 'ssd-host', 'osd', 'ssd'));
     });

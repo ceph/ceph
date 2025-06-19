@@ -32,6 +32,7 @@
 enum {
   l_blk_kernel_device_first = 1000,
   l_blk_kernel_device_discard_op,
+  l_blk_kernel_discard_threads,
   l_blk_kernel_device_last,
 };
 
@@ -166,7 +167,7 @@ public:
   void close() override;
 
   // config observer bits
-  const char** get_tracked_conf_keys() const override;
+  std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
 };

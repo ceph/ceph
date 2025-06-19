@@ -17,8 +17,8 @@
 
 #include <cstdint>
 #include <cstdio>
-#include <iomanip>
-#include <iosfwd>
+#include <list>
+#include <ostream>
 #include <string>
 #include <string>
 #include <string_view>

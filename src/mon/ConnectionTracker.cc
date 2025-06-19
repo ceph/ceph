@@ -21,6 +21,10 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, rank, epoch, version)
 
+static std::ostream& _dgraph_prefix(std::ostream *_dout, CephContext *cct) {
+  return *_dout << "DirectedGraph ";
+}
+
 static std::ostream& _prefix(std::ostream *_dout, int rank, epoch_t epoch, uint64_t version) {
   return *_dout << "rank: " << rank << " version: "<< version << " ConnectionTracker(" << epoch << ") ";
 }
@@ -268,6 +272,166 @@ void ConnectionTracker::notify_rank_removed(int rank_removed, int new_rank)
   ceph_assert(rank == new_rank);
 
   increase_version();
+}
+
+#undef dout_prefix
+#define dout_prefix _dgraph_prefix(_dout, cct)
+
+void DirectedGraph::add_outgoing_edge(unsigned from, unsigned to)
+{
+  if (outgoing_edges[from].find(to) == outgoing_edges[from].end()) {
+    outgoing_edges[from].insert(to);
+  } else {
+    ldout(cct, 30) << "Outgoing edge from " << from << " to " << to
+      << " already exists in the graph" << dendl;
+  }
+}
+
+void DirectedGraph::add_incoming_edge(unsigned to, unsigned from)
+{
+  if (incoming_edges[to].find(from) == incoming_edges[to].end()) {
+    incoming_edges[to].insert(from);
+  } else {
+    ldout(cct, 30) << "Incoming edge to " << to << " from " << to
+      << " already exists in the graph" << dendl;
+  }
+}
+
+bool DirectedGraph::has_outgoing_edge(unsigned from, unsigned to) const
+{
+  auto from_it = outgoing_edges.find(from);
+  if (from_it == outgoing_edges.end()) {
+    ldout(cct, 30) << "Node " << from
+      << " has no outgoing edges" << dendl;
+    return false;
+  }
+  return from_it->second.find(to) != from_it->second.end();
+}
+
+bool DirectedGraph::has_incoming_edge(unsigned to, unsigned from) const
+{
+  auto to_it = incoming_edges.find(to);
+  if (to_it == incoming_edges.end()) {
+    ldout(cct, 30) << "Node " << to
+      << " has no incoming edges" << dendl;
+    return false;
+  }
+  return to_it->second.find(from) != to_it->second.end();
+}
+
+#undef dout_prefix
+#define dout_prefix _prefix(_dout, rank, epoch, version)
+
+std::set<std::pair<unsigned, unsigned>> ConnectionTracker::get_netsplit(
+  std::set<unsigned> &mons_down)
+{
+    ldout(cct, 30) << __func__ << dendl;
+    /*
+      * The netsplit detection algorithm is as follows:
+      * 1. Build a directed connectivity graph from peer reports and my reports,
+      *    excluding down monitors.
+      * 2. Find missing connections (partitions).
+      * 3. Return the set of pairs of monitors that are in a netsplit.
+      * O(m^2) time complexity, where m is the number of monitors.
+      * O(m^2) space complexity.
+    */
+    // Step 1: Build a directed connectivity graph
+    // from peer reports and my reports. Exclude down monitors.
+    // peer_reports:
+    // 1: {current={0:true,2:true},history={0:0.93,2:0.99},epoch=1,epoch_version=1},
+    // 2: {current={0:true,1:true},history={0:0.93,1:0.85},epoch=1,epoch_version=1}
+    // O(m^2) time complexity, where m is the number of monitors
+    auto mons_down_end = mons_down.end();
+    peer_reports[rank] = my_reports;
+    DirectedGraph bdg(cct);
+    for (const auto& [reporter_rank, report] : peer_reports) {
+      if (reporter_rank < 0) continue;
+      if (mons_down.find(reporter_rank) != mons_down_end) {
+        ldout(cct, 30) << "Skipping down monitor: " << reporter_rank << dendl;
+        continue;
+      }
+      for (const auto& [peer_rank, is_connected] : report.current) {
+        if (peer_rank < 0) continue;
+        if (mons_down.find(peer_rank) != mons_down_end) {
+          ldout(cct, 30) << "Skipping down monitor: " << peer_rank << dendl;
+          continue;
+        }
+        if (is_connected) {
+          bdg.add_outgoing_edge(reporter_rank, peer_rank);
+          bdg.add_incoming_edge(peer_rank, reporter_rank);
+        }
+      }
+    }
+    // For debugging purposes:
+    if (cct->_conf->subsys.should_gather(ceph_subsys_mon, 30)) {
+      ldout(cct, 30) << "Directed graph: " << dendl;
+
+      ldout(cct, 30) << "Outgoing edges: {";
+      bool outer_first = true;
+      for (const auto& [node, edges] : bdg.outgoing_edges) {
+        if (!outer_first) *_dout << ", ";
+        outer_first = false;
+        *_dout << node << " -> {";
+        bool inner_first = true;
+        for (const auto& edge : edges) {
+          if (!inner_first) *_dout << ", ";
+          inner_first = false;
+          *_dout << edge;
+        }
+        *_dout << "}";
+      }
+      *_dout << "}" << dendl;
+
+      ldout(cct, 30) << "Incoming edges: {";
+      bool outer_first = true;
+      for (const auto& [node, edges] : bdg.incoming_edges) {
+        if (!outer_first) *_dout << ", ";
+        outer_first = false;
+        *_dout << node << " <- {";
+        bool inner_first = true;
+        for (const auto& edge : edges) {
+          if (!inner_first) *_dout << ", ";
+          inner_first = false;
+          *_dout << edge;
+        }
+        *_dout << "}";
+      }
+      *_dout << "}" << dendl;
+    }
+    // Step 2: Find missing connections (partitions)
+    // Only consider it a partition if both node and peer doesn't
+    // have edges to each other AND have > 0 incoming edges.
+    // looping through incoming edges garantees that we are not
+    // considering a node without incoming edges as a partition.
+    // As for nodes that are not in quourm, they are already exlcuded
+    // in the previous step.
+    // O(m^2) time complexity, where m is the number of monitors
+    std::set<std::pair<unsigned, unsigned>> nsp_pairs;
+    for (const auto& [node, _] : bdg.incoming_edges) {
+      for (const auto& [peer, _] : bdg.incoming_edges) {
+        // Skip self-connections
+        if (node == peer) continue;
+        // Check for bidirectional communication failure
+        if (!bdg.has_outgoing_edge(node, peer) &&
+            !bdg.has_outgoing_edge(peer, node) &&
+            !bdg.has_incoming_edge(node, peer) &&
+            !bdg.has_incoming_edge(peer, node)) {
+            // Normalize order to avoid duplicates
+            unsigned first = std::min(node, peer);
+            unsigned second = std::max(node, peer);
+            nsp_pairs.insert(std::make_pair(first, second));
+        }
+      }
+    }
+    // For debugging purposes:
+    if (cct->_conf->subsys.should_gather(ceph_subsys_mon, 30)) {
+      ldout(cct, 30) << "Netsplit pairs: " << dendl;
+      for (const auto& nsp_pair : nsp_pairs) {
+        ldout(cct, 30) << "(" << nsp_pair.first << ", "
+          << nsp_pair.second << ") " << dendl;
+      }
+    }
+    return nsp_pairs;
 }
 
 bool ConnectionTracker::is_clean(int mon_rank, int monmap_size)

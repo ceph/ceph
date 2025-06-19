@@ -45,6 +45,9 @@ private:
   epoch_t     gwmap_epoch;  // last received gw map epoch
   std::chrono::time_point<std::chrono::steady_clock>
               last_map_time; // used to panic on disconnect
+  std::chrono::time_point<std::chrono::steady_clock>
+                reset_timestamp; // used to bypass some validations
+
   bool first_beacon = true;
   // init gw ssl opts
   void init_gw_ssl_opts();
@@ -80,9 +83,11 @@ public:
   bool ms_handle_refused(Connection *con) override { return false; };
 
   // config observer bits
-  const char** get_tracked_conf_keys() const override;
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return {};
+  }
   void handle_conf_change(const ConfigProxy& conf,
-			  const std::set <std::string> &changed) override {};
+			  const std::set<std::string> &changed) override {};
 
   int init();
   void shutdown();

@@ -31,6 +31,10 @@ class FakeCache:
             return [FakeDaemonDescription('1.2.3.4', [9922], 'node0'),
                     FakeDaemonDescription('1.2.3.5', [9922], 'node1')]
 
+        if service_type == 'container.custom-container':
+            return [FakeDaemonDescription('1.2.3.4', [9123], 'node0'),
+                    FakeDaemonDescription('1.2.3.5', [9123], 'node1')]
+
         return [FakeDaemonDescription('1.2.3.4', [9100], 'node0'),
                 FakeDaemonDescription('1.2.3.5', [9200], 'node1')]
 
@@ -166,7 +170,8 @@ class TestServiceDiscovery:
 
         # check content
         assert cfg[0]['targets'] == ['1.2.3.4:9049']
-        assert cfg[0]['labels'] == {'instance': 'ingress'}
+        assert cfg[0]['labels'] == {'instance': 'node0', 'ingress': 'ingress'}
+        assert cfg[1]['labels'] == {'instance': 'node1', 'ingress': 'ingress'}
 
     def test_get_sd_config_ceph_exporter(self):
         mgr = FakeMgr()
@@ -223,6 +228,20 @@ class TestServiceDiscovery:
 
         # check content
         assert cfg[0]['targets'] == ['1.2.3.4:9922']
+
+    def test_get_sd_config_custom_container(self):
+        mgr = FakeMgr()
+        root = Root(mgr, 5000, '0.0.0.0')
+        cfg = root.get_sd_config('container.custom-container')
+
+        # check response structure
+        assert cfg
+        for entry in cfg:
+            assert 'labels' in entry
+            assert 'targets' in entry
+
+        # check content
+        assert cfg[0]['targets'] == ['1.2.3.4:9123']
 
     def test_get_sd_config_invalid_service(self):
         mgr = FakeMgr()

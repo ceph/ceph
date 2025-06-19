@@ -27,6 +27,7 @@ struct ECListener {
   virtual const OSDMapRef& pgb_get_osdmap() const = 0;
   virtual epoch_t pgb_get_osdmap_epoch() const = 0;
   virtual const pg_info_t &get_info() const = 0;
+  virtual uint64_t min_peer_features() const = 0;
   /**
    * Called when a pull on soid cannot be completed due to
    * down peers
@@ -35,7 +36,7 @@ struct ECListener {
   virtual void cancel_pull(
     const hobject_t &soid) = 0;
 
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   // XXX
   virtual pg_shard_t primary_shard() const = 0;
   virtual bool pgb_is_primary() const = 0;
@@ -105,7 +106,7 @@ struct ECListener {
 #endif
 
   // XXX
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   virtual GenContext<ThreadPool::TPHandle&> *bless_unlocked_gencontext(
     GenContext<ThreadPool::TPHandle&> *c) = 0;
 
@@ -147,6 +148,7 @@ struct ECListener {
   // RMWPipeline
   virtual const pg_pool_t &get_pool() const = 0;
   virtual const std::set<pg_shard_t> &get_acting_recovery_backfill_shards() const = 0;
+  virtual const shard_id_set &get_acting_recovery_backfill_shard_id_set() const = 0;
   // XXX
   virtual bool should_send_op(
     pg_shard_t peer,

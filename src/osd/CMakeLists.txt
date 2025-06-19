@@ -38,7 +38,6 @@ set(osd_srcs
   scheduler/mClockScheduler.cc
   PeeringState.cc
   PGStateUtils.cc
-  recovery_types.cc
   MissingLoc.cc
   osd_perf_counters.cc
   ECCommonL.cc
@@ -48,7 +47,7 @@ set(osd_srcs
   ECUtilL.cc
   ECCommon.cc
   ECBackend.cc
-  ExtentCache.cc
+  ECExtentCache.cc
   ECTransaction.cc
   ECUtil.cc
   ECInject.cc
@@ -88,5 +87,5 @@ if(WITH_RBD)
   add_dependencies(osd cls_rbd)
 endif()
 if(WITH_RADOSGW)
-  add_dependencies(osd cls_otp cls_rgw cls_queue cls_rgw_gc cls_2pc_queue cls_fifo)
+  add_dependencies(osd cls_otp cls_rgw cls_queue cls_rgw_gc cls_2pc_queue cls_fifo cls_sem_set)
 endif()

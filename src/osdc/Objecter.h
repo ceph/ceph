@@ -1856,6 +1856,7 @@ public:
     int min_size = -1; ///< the min size of the pool when were were last mapped
     bool sort_bitwise = false; ///< whether the hobject_t sort order is bitwise
     bool recovery_deletes = false; ///< whether the deletes are performed during recovery instead of peering
+    bool allows_ecoptimizations = false; ///< whether EC plugin optimizations are enabled.
     uint32_t peering_crush_bucket_count = 0;
     uint32_t peering_crush_bucket_target = 0;
     uint32_t peering_crush_bucket_barrier = 0;
@@ -2063,7 +2064,7 @@ public:
     }
 
     Op(const object_t& o, const object_locator_t& ol,  osdc_opvec&& _ops,
-       int f, OpComp&& fin, version_t *ov, int *offset = nullptr,
+       int f, OpComp fin, version_t *ov, int *offset = nullptr,
        ZTracer::Trace *parent_trace = nullptr) :
       target(o, ol, f),
       ops(std::move(_ops)),
@@ -2095,26 +2096,6 @@ public:
       objver(ov),
       data_offset(offset),
       otel_trace(otel_trace) {
-      if (target.base_oloc.key == o)
-	target.base_oloc.key.clear();
-      if (parent_trace && parent_trace->valid()) {
-        trace.init("op", nullptr, parent_trace);
-        trace.event("start");
-      }
-    }
-
-    Op(const object_t& o, const object_locator_t& ol, osdc_opvec&&  _ops,
-       int f, fu2::unique_function<OpSig>&& fin, version_t *ov, int *offset = nullptr,
-       ZTracer::Trace *parent_trace = nullptr) :
-      target(o, ol, f),
-      ops(std::move(_ops)),
-      out_bl(ops.size(), nullptr),
-      out_handler(ops.size()),
-      out_rval(ops.size(), nullptr),
-      out_ec(ops.size(), nullptr),
-      onfinish(std::move(fin)),
-      objver(ov),
-      data_offset(offset) {
       if (target.base_oloc.key == o)
 	target.base_oloc.key.clear();
       if (parent_trace && parent_trace->valid()) {
@@ -2377,6 +2358,11 @@ public:
 			      uint64_t cookie,
 			      uint64_t notifier_id,
 			      ceph::buffer::list&& bl)> handle;
+    // I am sorely tempted to replace function2 with cxx_function, as
+    // cxx_function has the `target` method from `std::function` and I
+    // keep having to do annoying circumlocutions like this one to be
+    // able to access function object data with function2.
+    ceph::unique_any user_data;
     OSDSession *session{nullptr};
 
     int ctx_budget{-1};
@@ -2947,8 +2933,15 @@ private:
   int _op_cancel(ceph_tid_t tid, int r);
 
   int get_read_flags(int flags) {
-    return flags | global_op_flags | extra_read_flags.load(std::memory_order_relaxed) |
-                   CEPH_OSD_FLAG_READ;
+    int ret = flags | global_op_flags |
+              extra_read_flags.load(std::memory_order_relaxed) |
+              CEPH_OSD_FLAG_READ;
+
+    // If the op is rwordered, strip out the balanced and localized flags.
+    if (flags & CEPH_OSD_FLAG_RWORDERED) {
+      ret &= ~(CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS);
+    }
+    return ret;
   }
 
 public:

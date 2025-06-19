@@ -1,5 +1,5 @@
-import pkgutil
-if not pkgutil.find_loader('setuptools'):
+import importlib.util
+if not importlib.util.find_spec('setuptools'):
     from distutils.core import setup
     from distutils.extension import Extension
 else:

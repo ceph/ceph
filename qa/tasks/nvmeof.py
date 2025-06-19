@@ -321,7 +321,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
         self.max_thrash_daemons = int(self.config.get('max_thrash', len(self.daemons) - 1))
 
         # Limits on thrashing each daemon
-        self.daemon_max_thrash_times = int(self.config.get('daemon_max_thrash_times', 5))
+        self.daemon_max_thrash_times = int(self.config.get('daemon_max_thrash_times', 4))
         self.daemon_max_thrash_period = int(self.config.get('daemon_max_thrash_period', 30 * 60)) # seconds
 
         self.min_thrash_delay = int(self.config.get('min_thrash_delay', 60))
@@ -331,7 +331,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
 
     def _get_devices(self, remote):
         GET_DEVICE_CMD = "sudo nvme list --output-format=json | " \
-            "jq -r '.Devices[].Subsystems[] | select(.Controllers | all(.ModelNumber == \"Ceph bdev Controller\")) | .Namespaces | sort_by(.NSID) | .[] | .NameSpace'"
+            "jq -r '.Devices | sort_by(.NameSpace) | .[] | select(.ModelNumber == \"Ceph bdev Controller\") | .DevicePath'"
         devices = remote.sh(GET_DEVICE_CMD).split()
         return devices
     
@@ -369,8 +369,8 @@ class NvmeofThrasher(Thrasher, Greenlet):
                 for d in self.daemons:
                     random_gateway_host = d.remote
                     d.remote.sh(d.status_cmd, check_status=False)
-                random_gateway_host.run(args=['ceph', 'orch', 'ls', '--refresh'])
-                random_gateway_host.run(args=['ceph', 'orch', 'ps', '--daemon-type', 'nvmeof', '--refresh'])
+                random_gateway_host.run(args=['ceph', 'orch', 'ls'])
+                random_gateway_host.run(args=['ceph', 'orch', 'ps', '--daemon-type', 'nvmeof'])
                 random_gateway_host.run(args=['ceph', 'health', 'detail'])
                 random_gateway_host.run(args=['ceph', '-s'])
                 random_gateway_host.run(args=['ceph', 'nvme-gw', 'show', 'mypool', 'mygroup0'])
@@ -436,7 +436,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
         if killed_method == "ceph_daemon_stop":
             daemon.remote.run(args=[
                 "ceph", "orch", "daemon", "restart",
-                name
+                name, "--force"
             ])
         # note: temporarily use 'daemon start' to restart
         # daemons instead of 'systemctl start'

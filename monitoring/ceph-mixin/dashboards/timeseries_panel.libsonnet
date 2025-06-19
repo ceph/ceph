@@ -43,6 +43,7 @@
     scaleDistributionLog=null,
     sortBy=null,
     sortDesc=null,
+    noValue=null,
   ):: {
     title: title,
     type: 'timeseries',
@@ -84,12 +85,14 @@
             mode: thresholdsStyleMode,
           },
         },
+        mappings: [],
         [if decimals != null then 'decimals']: decimals,
         [if min != null then 'min']: min,
         thresholds: {
           mode: thresholdsMode,
           steps: [],
         },
+        [if noValue != null then 'noValue']: noValue,
         unit: unit,
       },
       overrides: [],
@@ -124,6 +127,13 @@
     addThreshold(step):: self {
       fieldConfig+: { defaults+: { thresholds+: { steps+: [step] } } },
     },
+    // mappings
+    _nextMapping:: 0,
+    addMapping(mapping):: self {
+      local nextMapping = super._nextMapping,
+      _nextMapping: nextMapping + 1,
+      fieldConfig+: { defaults+: { mappings+: [mapping { id: nextMapping }] } },
+    },
     addCalc(calc):: self {
       options+: { legend+: { calcs+: [calc] } },
     },
@@ -136,6 +146,7 @@
     },
     addTargets(targets):: std.foldl(function(p, t) p.addTarget(t), targets, self),
     addThresholds(steps):: std.foldl(function(p, s) p.addThreshold(s), steps, self),
+    addMappings(mappings):: std.foldl(function(p, m) p.addMapping(m), mappings, self),
     addCalcs(calcs):: std.foldl(function(p, t) p.addCalc(t), calcs, self),
     addOverrides(overrides):: std.foldl(function(p, o) p.addOverride(o.matcher, o.properties), overrides, self),
     addSeriesOverride(override):: self {

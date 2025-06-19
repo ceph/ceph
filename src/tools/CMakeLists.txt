@@ -46,10 +46,6 @@ install(PROGRAMS
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/ceph)
 endif(WITH_TESTS)
 
-add_executable(ceph-osdomap-tool ceph_osdomap_tool.cc)
-target_link_libraries(ceph-osdomap-tool os global Boost::program_options)
-install(TARGETS ceph-osdomap-tool DESTINATION bin)
-
 add_executable(ceph-monstore-tool
   ceph_monstore_tool.cc
   ../auth/cephx/CephxKeyServer.cc

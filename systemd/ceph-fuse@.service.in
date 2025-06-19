@@ -7,7 +7,7 @@ PartOf=ceph-fuse.target
 
 [Service]
 EnvironmentFile=-@SYSTEMD_ENV_FILE@
-ExecStart=/usr/bin/ceph-fuse -f %I
+ExecStart=@CMAKE_INSTALL_PREFIX@/bin/ceph-fuse -f %I
 LockPersonality=true
 MemoryDenyWriteExecute=true
 NoNewPrivileges=true

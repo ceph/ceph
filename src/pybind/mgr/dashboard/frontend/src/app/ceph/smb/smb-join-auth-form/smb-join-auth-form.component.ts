@@ -11,7 +11,7 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { JOIN_AUTH_RESOURCE, SMBCluster, SMBJoinAuth } from '../smb.model';
 import { Observable } from 'rxjs';
-import { JOINAUTH_URL } from '../smb-join-auth-list/smb-join-auth-list.component';
+import { JOIN_AUTH_PATH } from '../smb-join-auth-list/smb-join-auth-list.component';
 import { Location } from '@angular/common';
 
 @Component({
@@ -38,7 +38,7 @@ export class SmbJoinAuthFormComponent extends CdForm implements OnInit {
     private location: Location
   ) {
     super();
-    this.editing = this.router.url.startsWith(`${JOINAUTH_URL}/${URLVerbs.EDIT}`);
+    this.editing = this.router.url.startsWith(`/${JOIN_AUTH_PATH}/${URLVerbs.EDIT}`);
     this.resource = $localize`Active directory (AD) access resource`;
   }
 
@@ -49,6 +49,7 @@ export class SmbJoinAuthFormComponent extends CdForm implements OnInit {
 
     if (this.editing) {
       this.action = this.actionLabels.UPDATE;
+      this.form.get('authId').disable();
       let editingAuthId: string;
       this.route.params.subscribe((params: { authId: string }) => {
         editingAuthId = params.authId;
@@ -83,7 +84,6 @@ export class SmbJoinAuthFormComponent extends CdForm implements OnInit {
     const username = this.form.getValue('username');
     const password = this.form.getValue('password');
     const linkedToCluster = this.form.getValue('linkedToCluster');
-    const BASE_URL = 'smb/ad/';
 
     const joinAuth: SMBJoinAuth = {
       resource_type: JOIN_AUTH_RESOURCE,
@@ -93,7 +93,7 @@ export class SmbJoinAuthFormComponent extends CdForm implements OnInit {
     };
 
     const self = this;
-    let taskUrl = `${BASE_URL}${this.editing ? URLVerbs.EDIT : URLVerbs.CREATE}`;
+    let taskUrl = `${JOIN_AUTH_PATH}/${this.editing ? URLVerbs.EDIT : URLVerbs.CREATE}`;
     this.taskWrapperService
       .wrapTaskAroundCall({
         task: new FinishedTask(taskUrl, {

@@ -29,6 +29,7 @@ struct Dencoder {
   virtual int num_generated() = 0;
   virtual std::string select_generated(unsigned n) = 0;
   virtual bool is_deterministic() = 0;
+  virtual void set_stray_okay() = 0;
   unsigned get_struct_v(bufferlist bl, uint64_t seek) const {
     auto p = bl.cbegin(seek);
     uint8_t struct_v = 0;
@@ -97,6 +98,10 @@ public:
 
   bool is_deterministic() override {
     return !nondeterministic;
+  }
+
+  void set_stray_okay() {
+    stray_okay = true;
   }
 };
 
@@ -219,6 +224,8 @@ public:
   }
   bool is_deterministic() override {
     return true;
+  }
+  void set_stray_okay() override {
   }
 
   //void print(ostream& out) {

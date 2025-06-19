@@ -459,13 +459,14 @@ string RGWMetadataManager::get_marker(void *handle)
   return h->handler->get_marker(h->handle);
 }
 
-void RGWMetadataManager::dump_log_entry(cls_log_entry& entry, Formatter *f)
+void RGWMetadataManager::dump_log_entry(cls::log::entry& entry, Formatter *f)
 {
   f->open_object_section("entry");
   f->dump_string("id", entry.id);
   f->dump_string("section", entry.section);
   f->dump_string("name", entry.name);
-  entry.timestamp.gmtime_nsec(f->dump_stream("timestamp"));
+  utime_t ts(entry.timestamp);
+  ts.gmtime_nsec(f->dump_stream("timestamp"));
 
   try {
     RGWMetadataLogData log_data;

@@ -32,7 +32,7 @@
 #include "rgw_op.h"
 #include "rgw_process_env.h"
 #include "rgw_sal_rados.h"
-#include "driver/rados/rgw_zone.h"
+#include "rgw_zone.h"
 #include "rgw_sal_config.h"
 
 using std::string;
@@ -49,6 +49,7 @@ using rgw::IAM::Effect;
 using rgw::IAM::Environment;
 using rgw::Partition;
 using rgw::IAM::Policy;
+using rgw::IAM::Condition;
 using rgw::IAM::s3All;
 using rgw::IAM::s3objectlambdaAll;
 using rgw::IAM::s3GetAccelerateConfiguration;
@@ -79,6 +80,7 @@ using rgw::IAM::s3GetObjectAttributes;
 using rgw::IAM::s3GetObjectVersionAttributes;
 using rgw::IAM::s3GetPublicAccessBlock;
 using rgw::IAM::s3GetReplicationConfiguration;
+using rgw::IAM::s3GetObjectVersionForReplication;
 using rgw::IAM::s3ListAllMyBuckets;
 using rgw::IAM::s3ListBucket;
 using rgw::IAM::s3ListBucketMultipartUploads;
@@ -158,12 +160,17 @@ public:
     return 0;
   };
 
-  bool is_admin_of(const rgw_owner& o) const override {
+  bool is_admin() const override {
     ceph_abort();
     return false;
   }
 
   bool is_owner_of(const rgw_owner& owner) const override {
+    ceph_abort();
+    return false;
+  }
+
+  bool is_root() const override {
     ceph_abort();
     return false;
   }
@@ -446,6 +453,7 @@ TEST_F(PolicyTest, Parse3) {
   act2[s3GetBucketPublicAccessBlock] = 1;
   act2[s3GetPublicAccessBlock] = 1;
   act2[s3GetBucketEncryption] = 1;
+  act2[s3GetObjectVersionForReplication] = 1;
 
   EXPECT_EQ(p->statements[2].action, act2);
   EXPECT_EQ(p->statements[2].notaction, None);
@@ -518,6 +526,7 @@ TEST_F(PolicyTest, Eval3) {
   s3allow[s3GetBucketPublicAccessBlock] = 1;
   s3allow[s3GetPublicAccessBlock] = 1;
   s3allow[s3GetBucketEncryption] = 1;
+  s3allow[s3GetObjectVersionForReplication] = 1;
 
   ARN arn1(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "mybucket");
@@ -914,6 +923,7 @@ TEST_F(ManagedPolicyTest, AmazonS3ReadOnlyAccess)
   act[s3GetPublicAccessBlock] = 1;
   act[s3GetBucketPublicAccessBlock] = 1;
   act[s3GetBucketEncryption] = 1;
+  act[s3GetObjectVersionForReplication] = 1;
   // s3:List*
   act[s3ListMultipartUploadParts] = 1;
   act[s3ListBucket] = 1;
@@ -1464,31 +1474,13 @@ TEST(MatchPolicy, Action)
   EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
 }
 
-TEST(MatchPolicy, Resource)
-{
-  constexpr auto flag = MATCH_POLICY_RESOURCE;
-  EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
-  EXPECT_FALSE(match_policy("a:b:c", "A:B:C", flag)); // case sensitive
-  EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
-  EXPECT_TRUE(match_policy("a:*", "a:b:c", flag)); // can span segments
-}
-
 TEST(MatchPolicy, ARN)
 {
   constexpr auto flag = MATCH_POLICY_ARN;
   EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
-  EXPECT_TRUE(match_policy("a:b:c", "A:B:C", flag)); // case insensitive
-  EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
-  EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
-}
-
-TEST(MatchPolicy, String)
-{
-  constexpr auto flag = MATCH_POLICY_STRING;
-  EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
   EXPECT_FALSE(match_policy("a:b:c", "A:B:C", flag)); // case sensitive
   EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
-  EXPECT_TRUE(match_policy("a:*", "a:b:c", flag)); // can span segments
+  EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
 }
 
 Action_t set_range_bits(std::uint64_t start, std::uint64_t end)
@@ -1509,4 +1501,28 @@ TEST(set_cont_bits, iamconsts)
   EXPECT_EQ(snsAllValue, set_range_bits(stsAll+1, snsAll));
   EXPECT_EQ(organizationsAllValue, set_range_bits(snsAll+1, organizationsAll));
   EXPECT_EQ(allValue , set_range_bits(0, allCount));
+}
+
+TEST(Condition, ArnLike)
+{
+  const std::string key = "aws:SourceArn";
+  {
+    Condition ArnLike{TokenID::ArnLike, key.data(), key.size(), false};
+    ArnLike.vals.push_back("arn:aws:s3:::bucket");
+
+    EXPECT_FALSE(ArnLike.eval({}));
+    EXPECT_TRUE(ArnLike.eval({{key, "arn:aws:s3:::bucket"}}));
+    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::BUCKET"}}));
+    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::user"}}));
+  }
+  {
+    Condition ArnLike{TokenID::ArnLike, key.data(), key.size(), false};
+    ArnLike.vals.push_back("arn:aws:s3:::b*");
+
+    EXPECT_FALSE(ArnLike.eval({}));
+    EXPECT_TRUE(ArnLike.eval({{key, "arn:aws:s3:::b"}}));
+    EXPECT_TRUE(ArnLike.eval({{key, "arn:aws:s3:::bucket"}}));
+    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::BUCKET"}}));
+    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::user"}}));
+  }
 }

@@ -670,7 +670,7 @@ void Client::_finish_init()
     plb.add_u64(l_c_rd_ops, "rdops", "Total read IO operations");
     plb.add_time(l_c_wr_avg, "writeavg", "Average latency for processing write requests");
     plb.add_u64(l_c_wr_sqsum, "writesqsum", "Sum of squares ((to calculate variability/stdev) for write requests");
-    plb.add_u64(l_c_wr_ops, "rdops", "Total write IO operations");
+    plb.add_u64(l_c_wr_ops, "wrops", "Total write IO operations");
     logger.reset(plb.create_perf_counters());
     cct->get_perfcounters_collection()->add(logger.get());
   }
@@ -6204,18 +6204,22 @@ int Client::may_setattr(const InodeRef& in, struct ceph_statx *stx, int mask,
   }
 
   if (mask & CEPH_SETATTR_MODE) {
+    bool allowed = false;
+    /*
+     * Currently the kernel fuse and libfuse code is buggy and
+     * won't pass the ATTR_KILL_SUID/ATTR_KILL_SGID to ceph-fuse.
+     * But will just set the ATTR_MODE and at the same time by
+     * clearing the suid/sgid bits.
+     *
+     * Only allow unprivileged users to clear S_ISUID and S_ISUID.
+     */
+    if ((in->mode & (S_ISUID | S_ISGID)) != (stx->stx_mode & (S_ISUID | S_ISGID)) &&
+        (in->mode & ~(S_ISUID | S_ISGID)) == (stx->stx_mode & ~(S_ISUID | S_ISGID))) {
+      allowed = true;
+    }
     uint32_t m = ~stx->stx_mode & in->mode; // mode bits removed
     ldout(cct, 20) << __func__ << " " << *in << " = " << hex << m << dec <<  dendl;
-    if (perms.uid() != 0 && perms.uid() != in->uid &&
-	/*
-	 * Currently the kernel fuse and libfuse code is buggy and
-	 * won't pass the ATTR_KILL_SUID/ATTR_KILL_SGID to ceph-fuse.
-	 * But will just set the ATTR_MODE and at the same time by
-	 * clearing the suid/sgid bits.
-	 *
-	 * Only allow unprivileged users to clear S_ISUID and S_ISUID.
-	 */
-	(m & ~(S_ISUID | S_ISGID)))
+    if (perms.uid() != 0 && perms.uid() != in->uid && !allowed)
       goto out;
 
     gid_t i_gid = (mask & CEPH_SETATTR_GID) ? stx->stx_gid : in->gid;
@@ -7892,7 +7896,13 @@ int Client::do_mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPe
   if (r < 0) {
     return r;
   }
-  return _mkdir(dirinode.get(), relpath, mode, perm, 0, {}, std::move(alternate_name));
+
+  walk_dentry_result wdr;
+  if (int rc = path_walk(dirinode, filepath(relpath), &wdr, perm, {.require_target = false}); rc < 0) {
+    return rc;
+  }
+
+  return _mkdir(wdr, mode, perm, 0, {}, std::move(alternate_name));
 }
 
 int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
@@ -7914,7 +7924,7 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
     if (int rc = path_walk(cwd, path, &wdr, perms, {.followsym = false}); rc < 0) {
       if (rc == -ENOENT) {
         InodeRef in;
-        rc = _mkdir(wdr.diri.get(), wdr.dname.c_str(), mode, perms, &in);
+        rc = _mkdir(wdr, mode, perms, &in);
         switch (rc) {
           case 0:
           case EEXIST:
@@ -9870,6 +9880,144 @@ int Client::readdirplus_r(dir_result_t *d, struct dirent *de,
   if (sr.full)
     return 1;
   return 0;
+}
+
+static void cleanup_state(Client *client, struct scan_state_t *sst)
+{
+  if (sst->fd1 != -1) {
+    client->_close(sst->fd1);
+  }
+  if (sst->fd2 != -1) {
+    client->_close(sst->fd2);
+  }
+  delete sst;
+}
+
+int Client::file_blockdiff_init_state(const char* path1, const char* path2,
+				      const UserPerm &perms, struct scan_state_t **state)
+{
+  ldout(cct, 20) << __func__ << dendl;
+
+  InodeRef inode1, inode2;
+  scan_state_t *sst = new scan_state_t();
+  sst->fd1 = sst->fd2 = -1;
+
+  /*
+   * lets have a constraint that both snapshot paths should be
+   * present - otherwise the caller should do a full copy or a
+   * delete on the path.
+   */
+  int r = open(path1, O_RDONLY, perms, 0);
+  if (r < 0) {
+    return r;
+  }
+  sst->fd1 = r;
+
+  r = open(path2, O_RDONLY, perms, 0);
+  if (r < 0) {
+    cleanup_state(this, sst);
+    return r;
+  }
+  sst->fd2 = r;
+
+  std::unique_lock lock(client_lock);
+  r = get_fd_inode(sst->fd1, &inode1);
+  if (r < 0) {
+    cleanup_state(this, sst);
+    return r;
+  }
+  r = get_fd_inode(sst->fd2, &inode2);
+  if (r < 0) {
+    cleanup_state(this, sst);
+    return r;
+  }
+
+  ldout(cct, 20) << __func__ << ": (snapid1, ino1, size)=(" << inode1->snapid
+		 << "," << std::hex << inode1->ino << std::dec << ","
+		 << inode1->size <<")" << " (snapid2, ino2, size)=("
+		 << inode2->snapid << "," << std::hex << inode2->ino << std::dec
+		 << "," << inode2->size << ")" << dendl;
+  if (inode1->ino != inode2->ino) {
+    cleanup_state(this, sst);
+    return -EINVAL;
+  }
+
+  sst->index = 0;
+  *state = sst;
+  return 0;
+}
+
+int Client::file_blockdiff_finish(struct scan_state_t *state)
+{
+  std::unique_lock lock(client_lock);
+
+  _close(state->fd1);
+  _close(state->fd2);
+  delete state;
+  return 0;
+}
+
+int Client::file_blockdiff(struct scan_state_t *state, const UserPerm &perms,
+			   std::vector<std::pair<uint64_t,uint64_t>> *blocks)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied()) {
+    return -ENOTCONN;
+  }
+
+  ldout(cct, 20) << __func__ << dendl;
+
+  InodeRef inode1;
+  InodeRef inode2;
+
+  std::unique_lock lock(client_lock);
+
+  int r = get_fd_inode(state->fd1, &inode1);
+  if (r < 0) {
+    return r;
+  }
+  r = get_fd_inode(state->fd2, &inode2);
+  if (r < 0) {
+    return r;
+  }
+
+  ceph_assert(inode1->ino == inode2->ino);
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_FILE_BLOCKDIFF);
+
+  filepath path1, path2;
+  inode1->make_nosnap_relative_path(path1);
+  req->set_filepath(path1);
+
+  inode2->make_nosnap_relative_path(path2);
+  req->set_filepath2(path2);
+  req->set_inode(inode2.get());
+
+  req->head.args.blockdiff.scan_idx = state->index;
+  req->head.args.blockdiff.max_objects =
+    cct->_conf.get_val<uint64_t>("client_file_blockdiff_max_concurrent_object_scans");
+
+  bufferlist bl;
+  r = make_request(req, perms, nullptr, nullptr, -1, &bl, CEPHFS_FEATURE_BLOCKDIFF);
+  ldout(cct, 10) << __func__ << ": result=" << r << dendl;
+
+  if (r < 0) {
+    return r;
+  }
+
+  BlockDiff block_diff;
+  auto p = bl.cbegin();
+  decode(block_diff, p);
+
+  ldout(cct, 10) << __func__ << ": block_diff=" << block_diff << dendl;
+  if (!block_diff.blocks.empty()) {
+    for (auto &block : block_diff.blocks) {
+      blocks->emplace_back(std::make_pair(block.first, block.second));
+    }
+  }
+
+  state->index = block_diff.scan_idx;
+  return block_diff.rval;
 }
 
 int Client::readdir_snapdiff(dir_result_t* d1, snapid_t snap2,
@@ -11989,6 +12137,7 @@ void Client::C_nonblocking_fsync_state::advance()
 
     if (waitfor_safe) {
       clnt->put_request(req);
+      waitfor_safe = false;
     }
 
     if (flush_wait && !flush_completed) {
@@ -12292,10 +12441,7 @@ int Client::statxat(int dirfd, const char *relpath,
   return r;
 }
 
-// not written yet, but i want to link!
-
-int Client::chdir(const char *relpath, std::string &new_cwd,
-		  const UserPerm& perms)
+int Client::chdir(const char *relpath, const UserPerm& perms)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
@@ -12311,29 +12457,28 @@ int Client::chdir(const char *relpath, std::string &new_cwd,
     return rc;
   }
 
-  if (!(in.get()->is_dir()))
+  if (!in->is_dir())
     return -ENOTDIR;
 
-  if (cwd != in)
-    cwd.swap(in);
+  cwd = std::move(in);
+
   ldout(cct, 3) << "chdir(" << relpath << ")  cwd now " << cwd->ino << dendl;
 
-  _getcwd(new_cwd, perms);
   return 0;
 }
 
-void Client::_getcwd(string& dir, const UserPerm& perms)
+int Client::_getcwd(string& dir, const UserPerm& perms)
 {
   filepath path;
   ldout(cct, 10) << __func__ << " " << *cwd << dendl;
 
-  Inode *in = cwd.get();
-  while (in != root.get()) {
+  auto in = cwd;
+  while (in != root) {
     ceph_assert(in->dentries.size() < 2); // dirs can't be hard-linked
 
     // A cwd or ancester is unlinked
     if (in->dentries.empty()) {
-      return;
+      return -ENOENT;
     }
 
     Dentry *dn = in->get_first_parent();
@@ -12352,25 +12497,28 @@ void Client::_getcwd(string& dir, const UserPerm& perms)
 
       // start over
       path = filepath();
-      in = cwd.get();
+      in = cwd;
       continue;
     }
-    path.push_front_dentry(dn->name);
-    in = dn->dir->parent_inode;
+    auto* diri = dn->dir->parent_inode;
+    ceph_assert(diri);
+    auto dname = _unwrap_name(*diri, dn->name, dn->alternate_name);
+    path.push_front_dentry(dname);
+    in = InodeRef(diri);
   }
   dir = "/";
   dir += path.get_path();
+  return 0;
 }
 
-void Client::getcwd(string& dir, const UserPerm& perms)
+int Client::getcwd(string& dir, const UserPerm& perms)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
-    return;
+    return -ENOTCONN;
 
   std::scoped_lock l(client_lock);
-
-  _getcwd(dir, perms);
+  return _getcwd(dir, perms);
 }
 
 int Client::statfs(const char *path, struct statvfs *stbuf,
@@ -13055,12 +13203,15 @@ int Client::mksnap(const char *relpath, const char *name, const UserPerm& perm,
     return -ENOTCONN;
 
   std::scoped_lock l(client_lock);
-  InodeRef in;
-  if (int rc = path_walk(cwd, filepath(relpath), &in, perm, {}); rc < 0) {
+  walk_dentry_result wdr;
+  if (int rc = path_walk(cwd, filepath(relpath), &wdr, perm, {}); rc < 0) {
     return rc;
   }
-  auto snapdir = open_snapdir(in.get());
-  return _mkdir(snapdir.get(), name, mode, perm, nullptr, metadata);
+  auto snapdir = open_snapdir(wdr.target);
+  if (int rc = path_walk(std::move(snapdir), filepath(name), &wdr, perm, {.require_target = false}); rc < 0) {
+    return rc;
+  }
+  return _mkdir(wdr, mode, perm, nullptr, metadata);
 }
 
 int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms, bool check_perms)
@@ -13307,9 +13458,7 @@ int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  filepath fp(name, 0);
   InodeRef in;
-  int rc;
   unsigned mask = statx_to_mask(flags, want);
 
   ldout(cct, 3) << __func__ << " " << name << dendl;
@@ -13317,8 +13466,7 @@ int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
   tout(cct) << name << std::endl;
 
   std::scoped_lock lock(client_lock);
-  rc = path_walk(cwd, fp, &in, perms, {.followsym = !(flags & AT_SYMLINK_NOFOLLOW), .mask = mask});
-  if (rc < 0) {
+  if (int rc = path_walk(cwd, filepath(name), &in, perms, {.followsym = !(flags & AT_SYMLINK_NOFOLLOW), .mask = mask}); rc < 0) {
     /* zero out mask, just in case... */
     stx->stx_mask = 0;
     stx->stx_ino = 0;
@@ -13415,6 +13563,12 @@ bool Client::_ll_forget(Inode *in, uint64_t count)
   }
 
   return last;
+}
+
+void Client::ll_get(Inode *in)
+{
+  std::scoped_lock lock(client_lock);
+  _ll_get(in);
 }
 
 bool Client::ll_forget(Inode *in, uint64_t count)
@@ -14873,18 +15027,15 @@ int Client::_create(const walk_dentry_result& wdr, int flags, mode_t mode,
   return res;
 }
 
-int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& perm,
+int Client::_mkdir(const walk_dentry_result& wdr, mode_t mode, const UserPerm& perm,
 		   InodeRef *inp, const std::map<std::string, std::string> &metadata,
                    std::string alternate_name)
 {
-  ldout(cct, 8) << "_mkdir(" << dir->ino << " " << name << ", 0" << oct
-		<< mode << dec << ", uid " << perm.uid()
+  ldout(cct, 8) << "_mkdir(" << wdr << ", 0o" << std::oct << mode << std::dec
+		<< ", uid " << perm.uid()
 		<< ", gid " << perm.gid() << ")" << dendl;
 
-  walk_dentry_result wdr;
-  if (int rc = path_walk(dir, filepath(name), &wdr, perm, {.require_target = false}); rc < 0) {
-    return rc;
-  } else if (rc == 0 && wdr.target) {
+  if (wdr.target) {
     return -EEXIST;
   }
 
@@ -14963,8 +15114,13 @@ int Client::ll_mkdir(Inode *parent, const char *name, mode_t mode,
 
   std::scoped_lock lock(client_lock);
 
+  walk_dentry_result wdr;
+  if (int rc = path_walk(parent, filepath(name), &wdr, perm, {.require_target = false}); rc < 0) {
+    return rc;
+  }
+
   InodeRef in;
-  int r = _mkdir(parent, name, mode, perm, &in);
+  int r = _mkdir(wdr, mode, perm, &in);
   if (r == 0) {
     fill_stat(in, attr);
     _ll_get(in.get());
@@ -14994,8 +15150,13 @@ int Client::ll_mkdirx(Inode *parent, const char *name, mode_t mode, Inode **out,
 
   std::scoped_lock lock(client_lock);
 
+  walk_dentry_result wdr;
+  if (int rc = path_walk(parent, filepath(name), &wdr, perms, {.require_target = false}); rc < 0) {
+    return rc;
+  }
+
   InodeRef in;
-  int r = _mkdir(parent, name, mode, perms, &in);
+  int r = _mkdir(wdr, mode, perms, &in);
   if (r == 0) {
     fill_statx(in, statx_to_mask(flags, want), stx);
     _ll_get(in.get());
@@ -17331,6 +17492,23 @@ void Client::set_cap_epoch_barrier(epoch_t e)
 {
   ldout(cct, 5) << __func__ << " epoch = " << e << dendl;
   cap_epoch_barrier = e;
+}
+
+int Client::get_perf_counters(bufferlist *outbl) {
+  RWRef_t iref_reader(initialize_state, CLIENT_INITIALIZED);
+  if (!iref_reader.is_state_satisfied()) {
+    return -ENOTCONN;
+  }
+
+  ceph::bufferlist inbl;
+  std::ostringstream err;
+  std::vector<std::string> cmd{
+    "{\"prefix\": \"perf dump\"}",
+    "{\"format\": \"json\"}"
+  };
+
+  ldout(cct, 10) << __func__ << ": perf cmd=" << cmd << dendl;
+  return cct->get_admin_socket()->execute_command(cmd, inbl, err, outbl);
 }
 
 std::vector<std::string> Client::get_tracked_keys() const noexcept

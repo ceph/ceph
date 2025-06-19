@@ -165,6 +165,7 @@ cdef extern from "rbd/librbd.h" nogil:
         _RBD_MIRROR_IMAGE_DISABLING "RBD_MIRROR_IMAGE_DISABLING"
         _RBD_MIRROR_IMAGE_ENABLED "RBD_MIRROR_IMAGE_ENABLED"
         _RBD_MIRROR_IMAGE_DISABLED "RBD_MIRROR_IMAGE_DISABLED"
+        _RBD_MIRROR_IMAGE_CREATING "RBD_MIRROR_IMAGE_CREATING"
 
     ctypedef struct rbd_mirror_image_info_t:
         char *global_id

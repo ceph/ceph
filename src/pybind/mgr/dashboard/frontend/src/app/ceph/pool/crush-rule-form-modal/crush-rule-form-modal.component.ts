@@ -76,7 +76,8 @@ export class CrushRuleFormModalComponent extends CrushNodeSelectionClass impleme
           nodes,
           this.form.get('root'),
           this.form.get('failure_domain'),
-          this.form.get('device_class')
+          this.form.get('device_class'),
+          false
         );
         this.names = names;
       });

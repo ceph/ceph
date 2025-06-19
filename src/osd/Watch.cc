@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+#include "Watch.h"
 #include "PG.h"
 
+#include "common/debug.h"
 #include "include/types.h"
 #include "messages/MWatchNotify.h"
 
@@ -8,7 +10,6 @@
 
 #include "OSD.h"
 #include "PrimaryLogPG.h"
-#include "Watch.h"
 #include "Session.h"
 
 #include "common/config.h"

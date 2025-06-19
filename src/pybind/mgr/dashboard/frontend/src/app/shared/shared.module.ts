@@ -16,6 +16,7 @@ import { FormlyArrayTypeComponent } from './forms/crud-form/formly-array-type/fo
 import { FormlyObjectTypeComponent } from './forms/crud-form/formly-object-type/formly-object-type.component';
 import { FormlyInputTypeComponent } from './forms/crud-form/formly-input-type/formly-input-type.component';
 import { FormlyTextareaTypeComponent } from './forms/crud-form/formly-textarea-type/formly-textarea-type.component';
+import { BlockUIModule, BlockUIService } from 'ng-block-ui';
 
 @NgModule({
   imports: [
@@ -34,10 +35,11 @@ import { FormlyTextareaTypeComponent } from './forms/crud-form/formly-textarea-t
       ],
       validationMessages: [{ name: 'required', message: 'This field is required' }]
     }),
-    FormlyBootstrapModule
+    FormlyBootstrapModule,
+    BlockUIModule.forRoot()
   ],
   declarations: [FormlyTextareaTypeComponent],
   exports: [ComponentsModule, PipesModule, DataTableModule, DirectivesModule],
-  providers: [AuthStorageService, AuthGuardService, FormatterService, CssHelper]
+  providers: [AuthStorageService, AuthGuardService, FormatterService, CssHelper, BlockUIService]
 })
 export class SharedModule {}

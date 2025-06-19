@@ -17,6 +17,16 @@
 #include <gtest/gtest.h>
 #include <boost/container/flat_map.hpp>
 
+/* This will override the strict_assert macro in interval set, but leave
+ * all product-asserts as ceph_assert. These asserts are used when strict mode
+ * is on to police some important restrictions.
+ */
+#define strict_mode_assert(expr)                           \
+  do {                                                     \
+    ((expr))                                               \
+    ? _CEPH_ASSERT_VOID_CAST (0) : throw std::exception(); \
+  } while (false)
+
 #include "include/interval_set.h"
 #include "include/btree_map.h"
 
@@ -26,7 +36,7 @@ using namespace ceph;
  * if (interval set has strict=true) expect that ceph will panic.
  * else expect that ceph will not panic and execute the second clause.
  */
-#define ASSERT_STRICT_DEATH(s, e) if constexpr (ISet::test_strict) ASSERT_DEATH(s, ""); else { s; e; }
+#define ASSERT_STRICT_DEATH(s, e) if constexpr (ISet::test_strict) EXPECT_THROW(s, std::exception); else { s; e; }
 
 typedef uint64_t IntervalValueType;
 
@@ -1858,5 +1868,35 @@ TYPED_TEST(IntervalSetTest, subtract) {
     iset3.union_insert(10, 5);
 
     ASSERT_STRICT_DEATH(iset1.subtract(iset2), ASSERT_EQ(iset1, iset3));
+  }
+
+  // Subtract identical
+  {
+    ISet iset1, iset2;
+    iset1.union_insert(0, 5);
+    iset2.union_insert(0, 5);
+
+    iset1.subtract(iset2);
+    ASSERT_TRUE(iset1.empty());
+  }
+}
+
+TYPED_TEST(IntervalSetTest, print) {
+  typedef typename TestFixture::ISet ISet;
+
+  ISet iset;
+  {
+    std::ostringstream out;
+    iset.insert(0, 5);
+    out << iset;
+    ASSERT_EQ("[0~5]", fmt::format("{}", iset));
+    EXPECT_EQ("[0~5]", out.str() );
+  }
+  {
+    std::ostringstream out;
+    iset.insert(10, 5);
+    out << iset;
+    ASSERT_EQ("[0~5,10~5]", fmt::format("{}", iset));
+    EXPECT_EQ("[0~5,10~5]", out.str() );
   }
 }

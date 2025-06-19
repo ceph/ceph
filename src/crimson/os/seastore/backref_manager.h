@@ -30,7 +30,7 @@ public:
    * Future will not resolve until all pins have resolved
    */
   using get_mappings_iertr = base_iertr;
-  using get_mappings_ret = get_mappings_iertr::future<backref_pin_list_t>;
+  using get_mappings_ret = get_mappings_iertr::future<backref_mapping_list_t>;
   virtual get_mappings_ret get_mappings(
     Transaction &t,
     paddr_t offset,
@@ -43,7 +43,7 @@ public:
    */
   using get_mapping_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
-  using get_mapping_ret = get_mapping_iertr::future<BackrefMappingRef>;
+  using get_mapping_ret = get_mapping_iertr::future<BackrefMapping>;
   virtual get_mapping_ret  get_mapping(
     Transaction &t,
     paddr_t offset) = 0;
@@ -63,7 +63,7 @@ public:
    * Insert new paddr_t -> laddr_t mapping
    */
   using new_mapping_iertr = base_iertr;
-  using new_mapping_ret = new_mapping_iertr::future<BackrefMappingRef>;
+  using new_mapping_ret = new_mapping_iertr::future<BackrefMapping>;
   virtual new_mapping_ret new_mapping(
     Transaction &t,
     paddr_t key,

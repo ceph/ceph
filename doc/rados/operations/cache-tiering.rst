@@ -2,10 +2,14 @@
  Cache Tiering
 ===============
 
-.. warning:: Cache tiering has been deprecated in the Reef release as it
-             has lacked a maintainer for a very long time. This does not mean
-             it will be certainly removed, but we may choose to remove it
-             without much further notice.
+.. warning:: Cache tiering has been deprecated in the Reef release. Cache
+   tiering has lacked a maintainer for a long time. This does not mean that
+   it will certainly be removed, but it might be removed without much
+   notice.
+
+   The upstream Ceph community strongly advises against deploying new cache
+   tiers. The upstream Ceph community also recommends migrating from legacy
+   deployments.
 
 A cache tier provides Ceph Clients with better I/O performance for a subset of
 the data stored in a backing storage tier. Cache tiering involves creating a
@@ -312,11 +316,10 @@ A similar parameter can be set for the write operation, which is
    ceph osd pool set {cachepool} min_write_recency_for_promote 2
 
 .. note:: The longer the period and the higher the
-   ``min_read_recency_for_promote`` and
-   ``min_write_recency_for_promote``values, the more RAM the ``ceph-osd``
-   daemon consumes. In particular, when the agent is active to flush
-   or evict cache objects, all ``hit_set_count`` HitSets are loaded
-   into RAM.
+   ``min_read_recency_for_promote`` and ``min_write_recency_for_promote``
+   values, the more RAM the ``ceph-osd`` daemon consumes. In particular, when
+   the agent is active to flush or evict cache objects, all ``hit_set_count``
+   HitSets are loaded into RAM.
 
 
 Cache Sizing

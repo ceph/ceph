@@ -71,6 +71,7 @@ describe('RgwStorageClassFormComponent', () => {
                   val: {
                     storage_class: 'CLOUDIBM',
                     tier_type: 'cloud-s3',
+                    retain_head_object: true,
                     s3: {
                       endpoint: 'https://s3.amazonaws.com',
                       access_key: 'ACCESSKEY',
@@ -94,6 +95,7 @@ describe('RgwStorageClassFormComponent', () => {
                   val: {
                     storage_class: 'CloudIBM',
                     tier_type: 'cloud-s3',
+                    retain_head_object: true,
                     s3: {
                       endpoint: 'https://s3.amazonaws.com',
                       access_key: 'ACCESSKEY',

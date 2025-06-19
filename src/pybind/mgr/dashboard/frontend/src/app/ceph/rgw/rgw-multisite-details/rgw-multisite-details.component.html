@@ -1,13 +1,14 @@
 <cd-rgw-multisite-tabs></cd-rgw-multisite-tabs>
 <div>
-  <cd-alert-panel *ngIf="!rgwModuleStatus"
+  <!-- Show the alert only when the user has the permission to configure -->
+  <cd-alert-panel *ngIf="permissions.configOpt.create && !rgwModuleStatus"
                   type="info"
                   spacingClass="mb-3"
-                  class="d-flex align-items-center"
-                  i18n>In order to access the import/export feature, the rgw module must be enabled
-    <button class="btn btn-light mx-2"
-            type="button"
-            (click)="enableRgwModule()">Enable</button>
+                  i18n
+                  class="align-items-center"
+                  actionName="Enable"
+                  (action)="enableRgwModule()">
+      In order to access the import/export/Setup Multi-site Replication feature, the rgw module must be enabled.
   </cd-alert-panel>
   <cd-alert-panel   *ngIf="restartGatewayMessage"
                     type="warning"
@@ -18,32 +19,32 @@
        Cluster->Services</a>
   </cd-alert-panel>
   <cd-table-actions class="btn-group mb-4 me-2"
-                    [permission]="permission"
+                    [permission]="permissions.rgw"
                     [selection]="selection"
                     [tableActions]="multisiteReplicationActions">
   </cd-table-actions>
   <cd-table-actions *ngIf="showMigrateAndReplicationActions"
                     class="btn-group mb-4 me-2 secondary"
-                    [permission]="permission"
+                    [permission]="permissions.rgw"
                     [btnColor]="'light'"
                     [selection]="selection"
                     [tableActions]="migrateTableAction">
   </cd-table-actions>
   <cd-table-actions *ngIf="!showMigrateAndReplicationActions"
                     class="btn-group mb-4 me-2"
-                    [permission]="permission"
+                    [permission]="permissions.rgw"
                     [selection]="selection"
                     [tableActions]="createTableActions"
                     [primaryDropDown]="true">
   </cd-table-actions>
   <cd-table-actions class="btn-group mb-4 me-2"
-                    [permission]="permission"
+                    [permission]="permissions.rgw"
                     [btnColor]="'light'"
                     [selection]="selection"
                     [tableActions]="importAction">
   </cd-table-actions>
   <cd-table-actions class="btn-group mb-4 me-2"
-                    [permission]="permission"
+                    [permission]="permissions.rgw"
                     [btnColor]="'light'"
                     [selection]="selection"
                     [tableActions]="exportAction">
@@ -51,8 +52,8 @@
 </div>
 <div class="card">
   <div class="card-header"
-       i18n>Topology Viewer
-  </div>
+       data-testid="rgw-multisite-details-header"
+       i18n>Topology Viewer</div>
   <div class="row">
     <div class="col-sm-6 col-lg-6 tree-container">
       <i *ngIf="loadingIndicator"

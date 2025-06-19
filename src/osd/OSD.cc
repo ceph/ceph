@@ -13,10 +13,13 @@
  *
  */
 
+#include "OSD.h"
+
 #include "acconfig.h"
 
 #include <cctype>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <iterator>
 
@@ -45,7 +48,6 @@
 #include "include/random.h"
 #include "include/scope_guard.h"
 
-#include "OSD.h"
 #include "OSDMap.h"
 #include "Watch.h"
 #include "osdc/Objecter.h"
@@ -54,6 +56,7 @@
 #include "common/ceph_argparse.h"
 #include "common/ceph_releases.h"
 #include "common/ceph_time.h"
+#include "common/debug.h"
 #include "common/version.h"
 #include "common/async/blocked_completion.h"
 #include "common/pick_address.h"
@@ -124,6 +127,7 @@
 #include "global/pidfile.h"
 
 #include "include/color.h"
+#include "log/Log.h"
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"
 
@@ -193,6 +197,7 @@ using ceph::make_mutex;
 using namespace ceph::osd::scheduler;
 using TOPNSPC::common::cmd_getval;
 using TOPNSPC::common::cmd_getval_or;
+using TOPNSPC::common::cmd_getval_cast_or;
 using namespace std::literals;
 
 static ostream& _prefix(std::ostream* _dout, int whoami, epoch_t epoch) {
@@ -2133,6 +2138,7 @@ void OSD::write_superblock(CephContext* cct, OSDSuperblock& sb, ObjectStore::Tra
 
   bufferlist bl;
   encode(sb, bl);
+  t.truncate(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0);
   t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
   std::map<std::string, ceph::buffer::list> attrs;
   attrs.emplace(OSD_SUPERBLOCK_OMAP_KEY, bl);
@@ -2438,7 +2444,7 @@ OSD::OSD(CephContext *cct_,
       } else {
         // This should never happen
         dout(0) << "Invalid value passed for 'osd_op_queue': " << type << dendl;
-        ceph_assert(0 == "Unsupported op queue type");
+        ceph_abort_msg("Unsupported op queue type");
       }
     } else {
       static const std::vector<op_queue_type_t> index_lookup = {
@@ -3482,10 +3488,14 @@ int OSD::run_osd_bench_test(
     bsize = osize;
   }
 
-  dout(1) << " bench count " << count
-          << " bsize " << byte_u_t(bsize) << dendl;
+  dout(0) << " bench count " << count
+          << " bsize " << byte_u_t(bsize)
+          << " onum " << onum
+          << " osize " << byte_u_t(osize)
+          << dendl;
 
   ObjectStore::Transaction cleanupt;
+  utime_t start = ceph_clock_now();
 
   if (osize && onum) {
     bufferlist bl;
@@ -3511,9 +3521,13 @@ int OSD::run_osd_bench_test(
       waiter.wait();
     }
   }
+  dout(0) << __func__
+          << " prefill took " << ceph_clock_now() - start
+          << dendl;
 
+
+  start = ceph_clock_now();
   bufferlist bl;
-  utime_t start = ceph_clock_now();
   for (int64_t pos = 0; pos < count; pos += bsize) {
     char nm[34];
     unsigned offset = 0;
@@ -3546,6 +3560,9 @@ int OSD::run_osd_bench_test(
   }
   utime_t end = ceph_clock_now();
   *elapsed = end - start;
+  dout(0) << __func__
+          << " benchmark took " << *elapsed
+          << dendl;
 
   // clean up
   store->queue_transaction(service.meta_ch, std::move(cleanupt), nullptr);
@@ -3680,6 +3697,21 @@ float OSD::get_osd_recovery_sleep()
     return cct->_conf.get_val<double>("osd_recovery_sleep_hybrid");
   else
     return cct->_conf->osd_recovery_sleep_hdd;
+}
+
+float OSD::get_osd_recovery_sleep_degraded() {
+  float osd_recovery_sleep_degraded =
+    cct->_conf.get_val<double>("osd_recovery_sleep_degraded");
+  if (osd_recovery_sleep_degraded > 0) {
+    return osd_recovery_sleep_degraded;
+  }
+  if (!store_is_rotational && !journal_is_rotational) {
+    return cct->_conf.get_val<double>("osd_recovery_sleep_degraded_ssd");
+  } else if (store_is_rotational && !journal_is_rotational) {
+    return cct->_conf.get_val<double>("osd_recovery_sleep_degraded_hybrid");
+  } else {
+    return cct->_conf.get_val<double>("osd_recovery_sleep_degraded_hdd");
+  }
 }
 
 float OSD::get_osd_delete_sleep()
@@ -3877,14 +3909,9 @@ int OSD::init()
   if (superblock.compat_features.merge(initial)) {
     // Are we adding SNAPMAPPER2?
     if (diff.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER2)) {
-      dout(1) << __func__ << " upgrade snap_mapper (first start as octopus)"
-	      << dendl;
-      auto ch = service.meta_ch;
-      auto hoid = make_snapmapper_oid();
-      unsigned max = cct->_conf->osd_target_transaction_size;
-      r = SnapMapper::convert_legacy(cct, store.get(), ch, hoid, max);
-      if (r < 0)
-	goto out;
+      derr << __func__ << " snap_mapper upgrade from pre-octopus"
+	   << " is no longer supported" << dendl;
+      ceph_abort();
     }
     // We need to persist the new compat_set before we
     // do anything else
@@ -4690,6 +4717,9 @@ int OSD::shutdown()
     osd_op_tp.drain();
     osd_op_tp.stop();
 
+    dout(10) << "stopping agent" << dendl;
+    service.agent_stop();
+
     utime_t  start_time_umount = ceph_clock_now();
     store->prepare_for_fast_shutdown();
     service.fast_shutdown();
@@ -5201,7 +5231,7 @@ PG* OSD::_make_pg(
   PG *pg;
   if (pi.type == pg_pool_t::TYPE_REPLICATED ||
       pi.type == pg_pool_t::TYPE_ERASURE)
-    pg = new PrimaryLogPG(&service, createmap, pool, ec_profile, pgid);
+    pg = new PrimaryLogPG(&service, createmap, pool, ec_profile, pgid, lookup_ec_extent_cache_lru(pgid));
   else
     ceph_abort();
   return pg;
@@ -5286,6 +5316,13 @@ bool OSD::try_finish_pg_delete(PG *pg, unsigned old_pg_num)
     service.logger->dec(l_osd_pg_stray);
 
   return true;
+}
+
+ECExtentCache::LRU &OSD::lookup_ec_extent_cache_lru(spg_t pgid) const
+{
+  uint32_t shard_index = pgid.hash_to_shard(num_shards);
+  auto sdata = shards[shard_index];
+  return sdata->ec_extent_cache_lru;
 }
 
 PGRef OSD::_lookup_pg(spg_t pgid)
@@ -6248,12 +6285,9 @@ void OSD::heartbeat_check()
 void OSD::heartbeat()
 {
   ceph_assert(ceph_mutex_is_locked_by_me(heartbeat_lock));
-  dout(30) << "heartbeat" << dendl;
-
-  auto load_for_logger = service.get_scrub_services().update_load_average();
-  if (load_for_logger) {
-    logger->set(l_osd_loadavg, load_for_logger.value());
-  }
+  logger->set(
+      l_osd_loadavg,
+      100.0 * service.get_scrub_services().update_load_average().value_or(0.0));
   dout(30) << "heartbeat checking stats" << dendl;
 
   // refresh peer list and osd stats
@@ -6567,10 +6601,12 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       return;
     }
 
-    int64_t shardid = cmd_getval_or<int64_t>(cmdmap, "shardid", shard_id_t::NO_SHARD);
-    hobject_t obj(object_t(objname), string(""), CEPH_NOSNAP, rawpg.ps(), pool, nspace);
-    ghobject_t gobj(obj, ghobject_t::NO_GEN, shard_id_t(uint8_t(shardid)));
-    spg_t pgid(curmap->raw_pg_to_pg(rawpg), shard_id_t(shardid));
+    shard_id_t shardid =
+	cmd_getval_cast_or<int64_t>(cmdmap, "shardid", shard_id_t::NO_SHARD);
+    hobject_t obj(
+	object_t(objname), ""s, CEPH_NOSNAP, rawpg.ps(), pool, nspace);
+    ghobject_t gobj(obj, ghobject_t::NO_GEN, shardid);
+    spg_t pgid(curmap->raw_pg_to_pg(rawpg), shardid);
     if (curmap->pg_is_ec(rawpg)) {
         if ((command != "injectdataerr") &&
 	    (command != "injectmdataerr") &&
@@ -9704,9 +9740,12 @@ void OSD::do_recovery(
    * ops are scheduled after osd_recovery_sleep amount of time from the previous
    * recovery event's schedule time. This is done by adding a
    * recovery_requeue_callback event, which re-queues the recovery op using
-   * queue_recovery_after_sleep.
+   * queue_recovery_after_sleep. (osd_recovery_sleep_degraded will be
+   * used instead of osd_recovery_sleep when pg is degraded)
    */
-  float recovery_sleep = get_osd_recovery_sleep();
+  float recovery_sleep = pg->is_degraded() 
+                        ? get_osd_recovery_sleep_degraded() 
+                        : get_osd_recovery_sleep();
   {
     std::lock_guard l(service.sleep_lock);
     if (recovery_sleep > 0 && service.recovery_needs_sleep) {
@@ -10015,6 +10054,10 @@ std::vector<std::string> OSD::get_tracked_keys() const noexcept
     "osd_recovery_sleep_hdd"s,
     "osd_recovery_sleep_ssd"s,
     "osd_recovery_sleep_hybrid"s,
+    "osd_recovery_sleep_degraded"s,
+    "osd_recovery_sleep_degraded_hdd"s,
+    "osd_recovery_sleep_degraded_ssd"s,
+    "osd_recovery_sleep_degraded_hybrid"s,
     "osd_delete_sleep"s,
     "osd_delete_sleep_hdd"s,
     "osd_delete_sleep_ssd"s,
@@ -10046,6 +10089,9 @@ std::vector<std::string> OSD::get_tracked_keys() const noexcept
     "osd_object_clean_region_max_num_intervals"s,
     "osd_scrub_min_interval"s,
     "osd_scrub_max_interval"s,
+    "osd_deep_scrub_interval"s,
+    "osd_deep_scrub_interval_cv"s,
+    "osd_scrub_interval_randomize_ratio"s,
     "osd_op_thread_timeout"s,
     "osd_op_thread_suicide_timeout"s,
     "osd_max_scrubs"s
@@ -10080,7 +10126,11 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       changed.count("osd_recovery_sleep") ||
       changed.count("osd_recovery_sleep_hdd") ||
       changed.count("osd_recovery_sleep_ssd") ||
-      changed.count("osd_recovery_sleep_hybrid")) {
+      changed.count("osd_recovery_sleep_hybrid") ||
+      changed.count("osd_recovery_sleep_degraded") ||
+      changed.count("osd_recovery_sleep_degraded_hdd") ||
+      changed.count("osd_recovery_sleep_degraded_ssd") ||
+      changed.count("osd_recovery_sleep_degraded_hybrid")) {
     maybe_override_sleep_options_for_qos();
   }
   if (changed.count("osd_min_recovery_priority")) {
@@ -10169,13 +10219,16 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
 
   if (changed.count("osd_scrub_min_interval") ||
       changed.count("osd_scrub_max_interval") ||
-      changed.count("osd_deep_scrub_interval")) {
+      changed.count("osd_deep_scrub_interval") ||
+      changed.count("osd_deep_scrub_interval_cv") ||
+      changed.count("osd_scrub_interval_randomize_ratio")) {
     service.get_scrub_services().on_config_change();
     dout(0) << fmt::format(
-		   "{}: scrub interval change (min:{} deep:{} max:{})",
+		   "{}: scrub interval change (min:{} deep:{} max:{} ratio:{})",
 		   __func__, cct->_conf->osd_scrub_min_interval,
 		   cct->_conf->osd_deep_scrub_interval,
-		   cct->_conf->osd_scrub_max_interval)
+		   cct->_conf->osd_scrub_max_interval,
+		   cct->_conf->osd_scrub_interval_randomize_ratio)
 	    << dendl;
   }
 
@@ -10412,6 +10465,12 @@ void OSD::maybe_override_sleep_options_for_qos()
     cct->_conf.set_val("osd_recovery_sleep_ssd", std::to_string(0));
     cct->_conf.set_val("osd_recovery_sleep_hybrid", std::to_string(0));
 
+    // Disable recovery sleep for pg degraded
+    cct->_conf.set_val("osd_recovery_sleep_degraded", std::to_string(0));
+    cct->_conf.set_val("osd_recovery_sleep_degraded_hdd", std::to_string(0));
+    cct->_conf.set_val("osd_recovery_sleep_degraded_ssd", std::to_string(0));
+    cct->_conf.set_val("osd_recovery_sleep_degraded_hybrid", std::to_string(0));
+
     // Disable delete sleep
     cct->_conf.set_val("osd_delete_sleep", std::to_string(0));
     cct->_conf.set_val("osd_delete_sleep_hdd", std::to_string(0));
@@ -10535,7 +10594,7 @@ void OSD::get_latest_osdmap()
 // --------------------------------
 
 void OSD::set_perf_queries(const ConfigPayload &config_payload) {
-  const OSDConfigPayload &osd_config_payload = boost::get<OSDConfigPayload>(config_payload);
+  const OSDConfigPayload &osd_config_payload = std::get<OSDConfigPayload>(config_payload);
   const std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> &queries = osd_config_payload.config;
   dout(10) << "setting " << queries.size() << " queries" << dendl;
 
@@ -11022,7 +11081,9 @@ OSDShard::OSDShard(
     scheduler(ceph::osd::scheduler::make_scheduler(
       cct, osd->whoami, osd->num_shards, id, osd->store->is_rotational(),
       osd->store->get_type(), osd_op_queue, osd_op_queue_cut_off, osd->monc)),
-    context_queue(sdata_wait_lock, sdata_cond)
+    context_queue(sdata_wait_lock, sdata_cond),
+    ec_extent_cache_lru(cct->_conf.get_val<uint64_t>(
+      "ec_extent_cache_size"))
 {
   dout(0) << "using op scheduler " << *scheduler << dendl;
 }

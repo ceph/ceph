@@ -40,7 +40,11 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
-#include "amqp.h"
+#if __has_include(<rabbitmq-c/amqp.h>)
+#include <rabbitmq-c/amqp.h>
+#else
+#include <amqp.h>
+#endif
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>

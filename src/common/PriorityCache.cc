@@ -15,6 +15,13 @@
 #include "PriorityCache.h"
 #include "common/dout.h"
 #include "perfglue/heap_profiler.h"
+
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_prioritycache
 #undef dout_prefix

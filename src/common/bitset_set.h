@@ -14,7 +14,9 @@
 
 #pragma once
 #include <cstdint>
+#include <fmt/ranges.h>
 
+#include "common/fmt_common.h"
 #include "include/buffer.h"
 
 template<typename KeyT, typename IntT>
@@ -220,7 +222,7 @@ class bitset_set {
     // This is not an off-by-one error. Conventionally this would have length
     // - 1, but the logic below is simpler with it as follows.
     unsigned end_word = (int(start) + length) / bits_per_uint64_t;
-    ceph_assert(0 <= end_word && end_word < word_count + 1);
+    ceph_assert(end_word < word_count + 1);
 
     if (start_word == end_word) {
       words[start_word] &=
@@ -258,8 +260,9 @@ class bitset_set {
 
   /** @return true if the container contains Key k. */
   bool contains(KeyT k) const {
-    ceph_assert(unsigned_cast(k) < max_bits);
-    ceph_assert(int(k) >= 0);
+    if (unsigned_cast(k) >= max_bits) {
+      return false;
+    }
     return (words[int(k) / bits_per_uint64_t]
       & 1ULL << (int(k) % bits_per_uint64_t));
   }
@@ -409,6 +412,20 @@ class bitset_set {
     return lhs;
   }
 
+  std::string fmt_print() const
+  requires fmt::formattable<KeyT> {
+    std::string s = "{";
+    int c = (int)size();
+    for (auto k : *this) {
+      s += fmt::format("{}", k);
+      if (--c > 0) {
+	s += ",";
+      }
+    }
+    s += "}";
+    return s;
+  }
+
   /** returns a bitset_set with the elements from lhs which are not found in rhs
    *
    * Useful to replace calls to std::difference which looked at the complete
@@ -447,3 +464,8 @@ class bitset_set {
     return std::strong_ordering::equal;
   }
 };
+
+// make sure fmt::range would not try (and fail) to treat bitset_set as a range
+template<size_t NumBitsV, typename KeyT>
+struct fmt::is_range<bitset_set<NumBitsV, KeyT>, char> : std::false_type {};
+

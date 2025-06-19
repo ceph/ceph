@@ -85,6 +85,17 @@ options:
   level: advanced
   default: 0
   desc: Report OSD status periodically in seconds, 0 to disable
+
+- name: crimson_poll_mode
+  type: bool
+  level: advanced
+  default: false
+  desc: Let the seastar reactor poll continuously without sleeping at the expense of 100% cpu usage.
+  flags:
+  - startup
+
+# Seastore options
+
 - name: seastore_segment_size
   type: size
   desc: Segment size to use for SegmentManager
@@ -150,8 +161,8 @@ options:
 - name: seastore_cache_lru_size
   type: size
   level: advanced
-  desc: Size in bytes of extents to keep in cache.
-  default: 64_M
+  desc: Size in bytes of extents to keep in cache (per reactor).
+  default: 2_G
 - name: seastore_obj_data_write_amplification
   type: float
   level: advanced
@@ -162,8 +173,8 @@ options:
 - name: seastore_max_concurrent_transactions
   type: uint
   level: advanced
-  desc: maximum concurrent transactions that seastore allows
-  default: 8
+  desc: maximum concurrent transactions that seastore allows (per reactor)
+  default: 128
 - name: seastore_main_device_type
   type: str
   level: dev

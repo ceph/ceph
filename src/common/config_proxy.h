@@ -84,7 +84,7 @@ public:
     return values;
   }
   void set_config_values(const ConfigValues& val) {
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
     std::lock_guard l{lock};
 #endif
     values = val;

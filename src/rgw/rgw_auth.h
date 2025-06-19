@@ -48,13 +48,22 @@ public:
    * applier that is being used. */
   virtual uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const = 0;
 
-  /* Verify whether a given identity *can be treated as* an admin of rgw_owner
-  * specified in @o. On error throws rgw::auth::Exception storing the reason. */
-  virtual bool is_admin_of(const rgw_owner& o) const = 0;
+  /* Verify whether a given identity *can be treated as* an admin.
+   * On error throws rgw::auth::Exception storing the reason. */
+  virtual bool is_admin() const = 0;
 
   /* Verify whether a given identity is the rgw_owner specified in @o.
    * On internal error throws rgw::auth::Exception storing the reason. */
   virtual bool is_owner_of(const rgw_owner& o) const = 0;
+
+  /* Verify whether a given identity is the root user. */
+  virtual bool is_root() const = 0;
+
+  /* Verify whether a given identity is the root user and the owner of the
+   * rgw_owner specified in @o. */
+  virtual bool is_root_of(const rgw_owner& o) const {
+    return is_root() && is_owner_of(o);
+  }
 
   /* Return the permission mask that is used to narrow down the set of
    * operations allowed for a given identity. This method reflects the idea
@@ -471,11 +480,15 @@ public:
     return RGW_PERM_NONE;
   }
 
-  bool is_admin_of(const rgw_owner& o) const override {
+  bool is_admin() const override {
     return false;
   }
 
   bool is_owner_of(const rgw_owner& o) const override;
+
+  bool is_root() const override {
+    return false;
+  }
 
   uint32_t get_perm_mask() const override {
     return RGW_PERM_NONE;
@@ -577,6 +590,7 @@ public:
     const uint32_t acct_type;
     const std::string access_key_id;
     const std::string subuser;
+    const std::string keystone_user;
 
   public:
     enum class acct_privilege_t {
@@ -586,6 +600,7 @@ public:
 
     static const std::string NO_SUBUSER;
     static const std::string NO_ACCESS_KEY;
+    static const std::string NO_KEYSTONE_USER;
 
     AuthInfo(const rgw_user& acct_user,
              const std::string& acct_name,
@@ -593,6 +608,7 @@ public:
              const acct_privilege_t level,
              const std::string access_key_id,
              const std::string subuser,
+             const std::string keystone_user,
              const uint32_t acct_type=TYPE_NONE)
     : acct_user(acct_user),
       acct_name(acct_name),
@@ -600,7 +616,8 @@ public:
       is_admin(acct_privilege_t::IS_ADMIN_ACCT == level),
       acct_type(acct_type),
       access_key_id(access_key_id),
-      subuser(subuser) {
+      subuser(subuser),
+      keystone_user(keystone_user) {
     }
   };
 
@@ -651,8 +668,9 @@ public:
 
   ACLOwner get_aclowner() const override;
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
-  bool is_admin_of(const rgw_owner& o) const override;
+  bool is_admin() const override;
   bool is_owner_of(const rgw_owner& o) const override;
+  bool is_root() const override;
   bool is_identity(const Principal& p) const override;
 
   uint32_t get_perm_mask() const override { return info.perm_mask; }
@@ -716,8 +734,9 @@ public:
 
   ACLOwner get_aclowner() const override;
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
-  bool is_admin_of(const rgw_owner& o) const override;
+  bool is_admin() const override;
   bool is_owner_of(const rgw_owner& o) const override;
+  bool is_root() const override;
   bool is_identity(const Principal& p) const override;
   uint32_t get_perm_mask() const override {
     if (this->perm_mask == RGW_PERM_INVALID) {
@@ -750,7 +769,8 @@ public:
                                       std::vector<IAM::Policy> policies,
                                       const std::string& subuser,
                                       const std::optional<uint32_t>& perm_mask,
-                                      const std::string& access_key_id) const = 0;
+                                      const std::string& access_key_id,
+                                      bool is_impersonating) const = 0;
     };
 };
 
@@ -794,10 +814,13 @@ public:
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return 0;
   }
-  bool is_admin_of(const rgw_owner& o) const override {
+  bool is_admin() const override {
     return false;
   }
   bool is_owner_of(const rgw_owner& o) const override;
+  bool is_root() const override {
+    return false;
+  }
   bool is_identity(const Principal& p) const override;
   uint32_t get_perm_mask() const override {
     return RGW_PERM_NONE; 
@@ -817,11 +840,73 @@ public:
 
   struct Factory {
     virtual ~Factory() {}
-    virtual aplptr_t create_apl_role(CephContext* cct,
-                                     const req_state* s,
-                                     Role role,
-                                     TokenAttrs token_attrs) const = 0;
-  };
+    virtual aplptr_t create_apl_role( CephContext* cct,
+                                      const req_state* s,
+                                      Role role,
+                                      TokenAttrs token_attrs,
+                                      bool is_impersonating) const = 0;
+    };
+};
+
+class ServiceIdentity : public Identity {
+  const std::string service_id;
+public:
+  ServiceIdentity(const std::string& s) : service_id(s) {}
+  virtual ~ServiceIdentity() = default;
+
+  ACLOwner get_aclowner() const override {
+    return {};
+  }
+
+  uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
+    return RGW_PERM_NONE;
+  }
+
+  bool is_admin() const override {
+    return false;
+  }
+
+  bool is_owner_of(const rgw_owner& o) const override {
+    return false;
+  }
+
+  uint32_t get_perm_mask() const override {
+    return RGW_PERM_NONE;
+  }
+
+  virtual void to_str(std::ostream& out) const override {
+    out << "rgw::auth::ServiceIdentity(id=" << service_id << ")";
+  }
+
+  bool is_identity(const Principal& p) const override {
+    return p.is_service() && p.get_service() == service_id;
+  }
+
+  uint32_t get_identity_type() const override {
+    return TYPE_RGW;
+  }
+
+  std::string get_acct_name() const override {
+    return {};
+  }
+
+  std::string get_subuser() const override {
+    return {};
+  }
+
+  const std::string& get_tenant() const override {
+    static const std::string no_tenant;
+    return no_tenant;
+  }
+
+  const std::optional<RGWAccountInfo>& get_account() const override {
+    static constexpr std::optional<RGWAccountInfo> no_account;
+    return no_account;
+  }
+
+  bool is_root() const override {
+    return false;
+  }
 };
 
 /* The anonymous abstract engine. */

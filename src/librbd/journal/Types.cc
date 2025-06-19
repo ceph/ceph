@@ -16,7 +16,7 @@ using ceph::decode;
 namespace {
 
 template <typename E>
-class GetTypeVisitor : public boost::static_visitor<E> {
+class GetTypeVisitor {
 public:
   template <typename T>
   inline E operator()(const T&) const {
@@ -24,7 +24,7 @@ public:
   }
 };
 
-class EncodeVisitor : public boost::static_visitor<void> {
+class EncodeVisitor {
 public:
   explicit EncodeVisitor(bufferlist &bl) : m_bl(bl) {
   }
@@ -38,7 +38,7 @@ private:
   bufferlist &m_bl;
 };
 
-class DecodeVisitor : public boost::static_visitor<void> {
+class DecodeVisitor {
 public:
   DecodeVisitor(__u8 version, bufferlist::const_iterator &iter)
     : m_version(version), m_iter(iter) {
@@ -53,7 +53,7 @@ private:
   bufferlist::const_iterator &m_iter;
 };
 
-class DumpVisitor : public boost::static_visitor<void> {
+class DumpVisitor {
 public:
   explicit DumpVisitor(Formatter *formatter, const std::string &key)
     : m_formatter(formatter), m_key(key) {}
@@ -411,18 +411,18 @@ void UnknownEvent::dump(Formatter *f) const {
 }
 
 EventType EventEntry::get_event_type() const {
-  return boost::apply_visitor(GetTypeVisitor<EventType>(), event);
+  return std::visit(GetTypeVisitor<EventType>(), event);
 }
 
 void EventEntry::encode(bufferlist& bl) const {
   ENCODE_START(5, 1, bl);
-  boost::apply_visitor(EncodeVisitor(bl), event);
+  std::visit(EncodeVisitor(bl), event);
   ENCODE_FINISH(bl);
   encode_metadata(bl);
 }
 
 void EventEntry::decode(bufferlist::const_iterator& it) {
-  DECODE_START(1, it);
+  DECODE_START(5, it);
 
   uint32_t event_type;
   decode(event_type, it);
@@ -494,7 +494,7 @@ void EventEntry::decode(bufferlist::const_iterator& it) {
     break;
   }
 
-  boost::apply_visitor(DecodeVisitor(struct_v, it), event);
+  std::visit(DecodeVisitor(struct_v, it), event);
   DECODE_FINISH(it);
   if (struct_v >= 4) {
     decode_metadata(it);
@@ -502,7 +502,7 @@ void EventEntry::decode(bufferlist::const_iterator& it) {
 }
 
 void EventEntry::dump(Formatter *f) const {
-  boost::apply_visitor(DumpVisitor(f, "event_type"), event);
+  std::visit(DumpVisitor(f, "event_type"), event);
   f->dump_stream("timestamp") << timestamp;
 }
 
@@ -689,12 +689,12 @@ void UnknownClientMeta::dump(Formatter *f) const {
 }
 
 ClientMetaType ClientData::get_client_meta_type() const {
-  return boost::apply_visitor(GetTypeVisitor<ClientMetaType>(), client_meta);
+  return std::visit(GetTypeVisitor<ClientMetaType>(), client_meta);
 }
 
 void ClientData::encode(bufferlist& bl) const {
   ENCODE_START(2, 1, bl);
-  boost::apply_visitor(EncodeVisitor(bl), client_meta);
+  std::visit(EncodeVisitor(bl), client_meta);
   ENCODE_FINISH(bl);
 }
 
@@ -720,12 +720,12 @@ void ClientData::decode(bufferlist::const_iterator& it) {
     break;
   }
 
-  boost::apply_visitor(DecodeVisitor(struct_v, it), client_meta);
+  std::visit(DecodeVisitor(struct_v, it), client_meta);
   DECODE_FINISH(it);
 }
 
 void ClientData::dump(Formatter *f) const {
-  boost::apply_visitor(DumpVisitor(f, "client_meta_type"), client_meta);
+  std::visit(DumpVisitor(f, "client_meta_type"), client_meta);
 }
 
 void ClientData::generate_test_instances(std::list<ClientData *> &o) {

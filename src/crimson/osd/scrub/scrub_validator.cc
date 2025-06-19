@@ -306,7 +306,7 @@ object_evaluation_t evaluate_object(
 		  [](auto &cand) { return cand.has_errors(); })) {
     for (auto &eval : shards) {
       iow.shards.emplace(
-	librados::osd_shard_t{eval.source.osd, eval.source.shard},
+	librados::osd_shard_t{eval.source.osd, static_cast<int8_t>(eval.source.shard)},
 	eval.shard_info);
       iow.union_shards.errors |= eval.shard_info.errors;
     }

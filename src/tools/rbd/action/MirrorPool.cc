@@ -606,11 +606,12 @@ public:
       const std::vector<librbd::mirror_peer_site_t>& mirror_peers,
       const std::map<std::string, std::string> &peer_mirror_uuids_to_name,
       const MirrorDaemonServiceInfo &daemon_service_info,
-      at::Format::Formatter formatter)
+      at::Format::Formatter formatter, bool* saw_image)
     : ImageRequestBase(io_ctx, throttle, image_name),
       m_instance_ids(instance_ids), m_mirror_peers(mirror_peers),
       m_peer_mirror_uuids_to_name(peer_mirror_uuids_to_name),
-      m_daemon_service_info(daemon_service_info), m_formatter(formatter) {
+      m_daemon_service_info(daemon_service_info), m_formatter(formatter),
+      m_saw_image(saw_image) {
   }
 
 protected:
@@ -679,7 +680,7 @@ protected:
           m_formatter->dump_string("site_name",
             (name_it != m_peer_mirror_uuids_to_name.end() ?
                name_it->second : ""));
-          m_formatter->dump_string("mirror_uuids", status.mirror_uuid);
+          m_formatter->dump_string("mirror_uuid", status.mirror_uuid);
 
           m_formatter->dump_string(
             "state", utils::mirror_image_site_status_state(status));
@@ -692,6 +693,7 @@ protected:
       }
       m_formatter->close_section(); // image
     } else {
+      *m_saw_image = true;
       std::cout << std::endl
                 << m_mirror_image_global_status.name << ":" << std::endl
   	        << "  global_id:   "
@@ -741,6 +743,7 @@ private:
   const std::map<std::string, std::string> &m_peer_mirror_uuids_to_name;
   const MirrorDaemonServiceInfo &m_daemon_service_info;
   at::Format::Formatter m_formatter;
+  bool *m_saw_image;
   std::string m_image_id;
   librbd::mirror_image_global_status_t m_mirror_image_global_status;
 };
@@ -775,7 +778,8 @@ public:
     librbd::RBD rbd;
     int r = rbd.list2(m_io_ctx, &m_images);
     if (r < 0 && r != -ENOENT) {
-      std::cerr << "rbd: failed to list images within pool" << std::endl;
+      std::cerr << "rbd: failed to list images within pool: "
+                << cpp_strerror(r) << std::endl;
       return r;
     }
 
@@ -929,7 +933,8 @@ int execute_peer_bootstrap_import(
     fd = open(token_path.c_str(), O_RDONLY|O_BINARY);
     if (fd < 0) {
       r = -errno;
-      std::cerr << "rbd: error opening " << token_path << std::endl;
+      std::cerr << "rbd: error opening " << token_path << ": "
+                << cpp_strerror(r) << std::endl;
       return r;
     }
   }
@@ -967,7 +972,8 @@ int execute_peer_bootstrap_import(
     std::cerr << "rbd: mirroring is not enabled on remote peer" << std::endl;
     return r;
   } else if (r < 0) {
-    std::cerr << "rbd: failed to import peer bootstrap token" << std::endl;
+    std::cerr << "rbd: failed to import peer bootstrap token: "
+              << cpp_strerror(r) << std::endl;
     return r;
   }
 
@@ -1027,7 +1033,8 @@ int execute_peer_add(const po::variables_map &vm,
   std::vector<librbd::mirror_peer_site_t> mirror_peers;
   r = rbd.mirror_peer_site_list(io_ctx, &mirror_peers);
   if (r < 0) {
-    std::cerr << "rbd: failed to list mirror peers" << std::endl;
+    std::cerr << "rbd: failed to list mirror peers: "
+              << cpp_strerror(r) << std::endl;
     return r;
   }
 
@@ -1059,7 +1066,8 @@ int execute_peer_add(const po::variables_map &vm,
     std::cerr << "rbd: mirror peer already exists" << std::endl;
     return r;
   } else if (r < 0) {
-    std::cerr << "rbd: error adding mirror peer" << std::endl;
+    std::cerr << "rbd: error adding mirror peer: "
+              << cpp_strerror(r) << std::endl;
     return r;
   }
 
@@ -1111,7 +1119,8 @@ int execute_peer_remove(const po::variables_map &vm,
   librbd::RBD rbd;
   r = rbd.mirror_peer_site_remove(io_ctx, uuid);
   if (r < 0) {
-    std::cerr << "rbd: error removing mirror peer" << std::endl;
+    std::cerr << "rbd: error removing mirror peer: "
+              << cpp_strerror(r) << std::endl;
     return r;
   }
   return 0;
@@ -1208,7 +1217,8 @@ int execute_peer_set(const po::variables_map &vm,
       std::vector<librbd::mirror_peer_site_t> mirror_peers;
       r = rbd.mirror_peer_site_list(io_ctx, &mirror_peers);
       if (r < 0) {
-        std::cerr << "rbd: failed to list mirror peers" << std::endl;
+        std::cerr << "rbd: failed to list mirror peers: "
+                  << cpp_strerror(r) << std::endl;
         return r;
       }
 
@@ -1375,16 +1385,16 @@ int execute_enable(const po::variables_map &vm,
     std::string original_remote_namespace;
     r = rbd.mirror_remote_namespace_get(io_ctx, &original_remote_namespace);
     if (r < 0) {
-      std::cerr << "rbd: failed to get the current remote namespace."
-	        << std::endl;
+      std::cerr << "rbd: failed to get the current remote namespace: "
+	        << cpp_strerror(r) << std::endl;
       return r;
     }
 
     if (original_remote_namespace != remote_namespace) {
       r = rbd.mirror_remote_namespace_set(io_ctx, remote_namespace);
       if (r < 0) {
-        std::cerr << "rbd: failed to set the remote namespace."
-                  << std::endl;
+        std::cerr << "rbd: failed to set the remote namespace: "
+                  << cpp_strerror(r) << std::endl;
 	return r;
       }
     }
@@ -1635,12 +1645,10 @@ int execute_status(const po::variables_map &vm,
       }
       formatter->close_section(); // daemons
     } else {
-      std::cout << std::endl << "DAEMONS" << std::endl;
-      if (mirror_services.empty()) {
-        std::cout << "  none" << std::endl;
-      }
+      std::cout << std::endl << "DAEMONS";
       for (auto& mirror_service : mirror_services) {
-        std::cout << "service " << mirror_service.service_id << ":"
+        std::cout << std::endl
+                  << "service " << mirror_service.service_id << ":"
                   << std::endl
                   << "  instance_id: " << mirror_service.instance_id
                   << std::endl
@@ -1653,9 +1661,10 @@ int execute_status(const po::variables_map &vm,
         if (!mirror_service.callouts.empty()) {
           std::cout << "  callouts: " << mirror_service.callouts << std::endl;
         }
-        std::cout << std::endl;
       }
-      std::cout << std::endl;
+      if (mirror_services.empty()) {
+        std::cout << std::endl << "  none" << std::endl;
+      }
     }
 
     // dump per-image status
@@ -1669,7 +1678,7 @@ int execute_status(const po::variables_map &vm,
     if (formatter != nullptr) {
       formatter->open_array_section("images");
     } else {
-      std::cout << "IMAGES";
+      std::cout << std::endl << "IMAGES";
     }
 
     std::map<std::string, std::string> instance_ids;
@@ -1696,13 +1705,18 @@ int execute_status(const po::variables_map &vm,
       start_image_id = ids.rbegin()->first;
     }
 
+    bool saw_image = false;
     ImageRequestGenerator<StatusImageRequest> generator(
       io_ctx, instance_ids, mirror_peers, peer_mirror_uuids_to_name,
-      daemon_service_info, formatter);
+      daemon_service_info, formatter, &saw_image);
     ret = generator.execute();
 
     if (formatter != nullptr) {
       formatter->close_section(); // images
+    } else {
+      if (saw_image == false) {
+        std::cout << std::endl << "  none" << std::endl;
+      }
     }
   }
 

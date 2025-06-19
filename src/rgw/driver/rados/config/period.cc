@@ -79,9 +79,8 @@ static int delete_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
   return impl->remove(dpp, y, pool, latest_oid, objv);
 }
 
-static int update_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
-                               ConfigImpl* impl, std::string_view period_id,
-                               uint32_t epoch)
+int RadosConfigStore::update_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
+                                          std::string_view period_id, uint32_t epoch)
 {
   static constexpr int MAX_RETRIES = 20;
 
@@ -91,7 +90,7 @@ static int update_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
     bool exclusive = false;
 
     // read existing epoch
-    int r = read_latest_epoch(dpp, y, impl, period_id, existing_epoch, &objv);
+    int r = read_latest_epoch(dpp, y, impl.get(), period_id, existing_epoch, &objv);
     if (r == -ENOENT) {
       // use an exclusive create to set the epoch atomically
       exclusive = true;
@@ -111,7 +110,7 @@ static int update_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
           << " -> " << epoch << " on period=" << period_id << dendl;
     }
 
-    r = write_latest_epoch(dpp, y, impl, exclusive, period_id, epoch, &objv);
+    r = write_latest_epoch(dpp, y, impl.get(), exclusive, period_id, epoch, &objv);
     if (r == -EEXIST) {
       continue; // exclusive create raced with another update, retry
     } else if (r == -ECANCELED) {
@@ -149,7 +148,8 @@ int RadosConfigStore::create_period(const DoutPrefixProvider* dpp,
     return r;
   }
 
-  (void) update_latest_epoch(dpp, y, impl.get(), info.get_id(), info.get_epoch());
+  // non const RGWPeriod
+  (void) this->update_latest_epoch(dpp, y, info.get_id(), info.get_epoch());
   return 0;
 }
 
@@ -182,8 +182,7 @@ int RadosConfigStore::delete_period(const DoutPrefixProvider* dpp,
   // read the latest_epoch
   uint32_t latest_epoch = 0;
   RGWObjVersionTracker latest_objv;
-  int r = read_latest_epoch(dpp, y, impl.get(), period_id,
-                            latest_epoch, &latest_objv);
+  int r = read_latest_epoch(dpp, y, impl.get(), period_id, latest_epoch, &latest_objv);
   if (r < 0 && r != -ENOENT) { // just delete epoch=0 on ENOENT
     ldpp_dout(dpp, 0) << "failed to read latest epoch for period "
         << period_id << ": " << cpp_strerror(r) << dendl;

@@ -4,7 +4,7 @@
 #ifndef CEPH_MGR_METRIC_TYPES_H
 #define CEPH_MGR_METRIC_TYPES_H
 
-#include <boost/variant.hpp>
+#include <variant>
 #include "include/denc.h"
 #include "include/ceph_features.h"
 #include "mgr/OSDPerfMetricTypes.h"
@@ -89,9 +89,9 @@ WRITE_CLASS_DENC(OSDMetricPayload)
 WRITE_CLASS_DENC(MDSMetricPayload)
 WRITE_CLASS_DENC(UnknownMetricPayload)
 
-typedef boost::variant<OSDMetricPayload,
-                       MDSMetricPayload,
-                       UnknownMetricPayload> MetricPayload;
+typedef std::variant<OSDMetricPayload,
+		     MDSMetricPayload,
+		     UnknownMetricPayload> MetricPayload;
 
 class EncodeMetricPayloadVisitor : public boost::static_visitor<void> {
 public:
@@ -133,14 +133,14 @@ struct MetricReportMessage {
 
   bool should_encode(uint64_t features) const {
     if (!HAVE_FEATURE(features, SERVER_PACIFIC) &&
-	boost::get<MDSMetricPayload>(&payload)) {
+	std::get_if<MDSMetricPayload>(&payload)) {
       return false;
     }
     return true;
   }
 
   void encode(ceph::buffer::list &bl) const {
-    boost::apply_visitor(EncodeMetricPayloadVisitor(bl), payload);
+    std::visit(EncodeMetricPayloadVisitor(bl), payload);
   }
 
   void decode(ceph::buffer::list::const_iterator &iter) {
@@ -161,15 +161,15 @@ struct MetricReportMessage {
       break;
   }
 
-  boost::apply_visitor(DecodeMetricPayloadVisitor(iter), payload);
+  std::visit(DecodeMetricPayloadVisitor(iter), payload);
   }
   void dump(ceph::Formatter *f) const {
     f->open_object_section("payload");
-    if (const OSDMetricPayload* osdPayload = boost::get<OSDMetricPayload>(&payload)) {
+    if (const OSDMetricPayload* osdPayload = std::get_if<OSDMetricPayload>(&payload)) {
       osdPayload->dump(f);
-    } else if (const MDSMetricPayload* mdsPayload = boost::get<MDSMetricPayload>(&payload)) {
+    } else if (const MDSMetricPayload* mdsPayload = std::get_if<MDSMetricPayload>(&payload)) {
       mdsPayload->dump(f);
-    } else if (const UnknownMetricPayload* unknownPayload = boost::get<UnknownMetricPayload>(&payload)) {
+    } else if (const UnknownMetricPayload* unknownPayload = std::get_if<UnknownMetricPayload>(&payload)) {
       unknownPayload->dump(f);
     } else {
       ceph_abort();
@@ -255,9 +255,9 @@ WRITE_CLASS_DENC(OSDConfigPayload)
 WRITE_CLASS_DENC(MDSConfigPayload)
 WRITE_CLASS_DENC(UnknownConfigPayload)
 
-typedef boost::variant<OSDConfigPayload,
-                       MDSConfigPayload,
-                       UnknownConfigPayload> ConfigPayload;
+typedef std::variant<OSDConfigPayload,
+		     MDSConfigPayload,
+		     UnknownConfigPayload> ConfigPayload;
 
 class EncodeConfigPayloadVisitor : public boost::static_visitor<void> {
 public:
@@ -299,14 +299,14 @@ struct MetricConfigMessage {
 
   bool should_encode(uint64_t features) const {
     if (!HAVE_FEATURE(features, SERVER_PACIFIC) &&
-	boost::get<MDSConfigPayload>(&payload)) {
+	std::get_if<MDSConfigPayload>(&payload)) {
       return false;
     }
     return true;
   }
 
   void encode(ceph::buffer::list &bl) const {
-    boost::apply_visitor(EncodeConfigPayloadVisitor(bl), payload);
+    std::visit(EncodeConfigPayloadVisitor(bl), payload);
   }
 
   void decode(ceph::buffer::list::const_iterator &iter) {
@@ -327,7 +327,7 @@ struct MetricConfigMessage {
       break;
   }
 
-  boost::apply_visitor(DecodeConfigPayloadVisitor(iter), payload);
+  std::visit(DecodeConfigPayloadVisitor(iter), payload);
   }
 };
 

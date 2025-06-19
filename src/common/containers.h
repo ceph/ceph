@@ -56,8 +56,9 @@ namespace ceph::containers {
 template<typename Value, std::size_t InternalCapacity = 0>
 class tiny_vector {
   // NOTE: to avoid false sharing consider aligning to cache line
-  using storage_unit_t = \
-    std::aligned_storage_t<sizeof(Value), alignof(Value)>;
+  struct alignas(Value) storage_unit_t {
+    unsigned char data[sizeof(Value)];
+  };
 
   std::size_t _size = 0;
   storage_unit_t* const data = nullptr;

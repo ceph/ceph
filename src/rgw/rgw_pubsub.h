@@ -281,7 +281,7 @@ struct rgw_pubsub_dest {
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(5, bl);
+    DECODE_START(7, bl);
     std::string dummy;
     decode(dummy, bl);
     decode(dummy, bl);

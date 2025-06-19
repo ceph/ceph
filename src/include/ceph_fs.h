@@ -293,6 +293,7 @@ struct ceph_mon_subscribe_ack {
 #define CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS (1<<7) /* fs is forbidden to use standby
                                                             for another fs */
 #define CEPH_MDSMAP_BALANCE_AUTOMATE             (1<<8)  /* automate metadata balancing */
+#define CEPH_MDSMAP_REFERENT_INODES              (1<<9)  /* create referent inode for hardlinks to store backtrace */
 #define CEPH_MDSMAP_DEFAULTS (CEPH_MDSMAP_ALLOW_SNAPS | \
 			      CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS)
 
@@ -428,6 +429,7 @@ enum {
 	CEPH_MDS_OP_LSSNAP     = 0x00402,
 	CEPH_MDS_OP_RENAMESNAP = 0x01403,
 	CEPH_MDS_OP_READDIR_SNAPDIFF   = 0x01404,
+	CEPH_MDS_OP_FILE_BLOCKDIFF = 0x01405,
 
 	// internal op
 	CEPH_MDS_OP_FRAGMENTDIR= 0x01500,
@@ -650,6 +652,12 @@ union ceph_mds_request_args {
                 __le32 offset_hash;
 		__le64 snap_other;
 	} __attribute__ ((packed)) snapdiff;
+        struct {
+                // latest scan "pointer"
+                __le64 scan_idx;
+                // how many data objects to scan in one invocation (capped by the mds).
+                __le64 max_objects;
+        } __attribute__ ((packed)) blockdiff;
 } __attribute__ ((packed));
 
 #define CEPH_MDS_REQUEST_HEAD_VERSION	3

@@ -49,7 +49,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         {
             'cmd': 'fs volume create '
                    f'name=name,type=CephString,goodchars={goodchars} '
-                   'name=placement,type=CephString,req=false ',
+                   'name=placement,type=CephString,req=false '
+                  f'name=meta_pool,type=CephString,goodchars={goodchars},req=false '
+                  f'name=data_pool,type=CephString,goodchars={goodchars},req=false ',
             'desc': "Create a CephFS volume",
             'perm': 'rw'
         },
@@ -142,7 +144,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=gid,type=CephInt,req=false '
                    'name=mode,type=CephString,req=false '
                    'name=namespace_isolated,type=CephBool,req=false '
-                   'name=earmark,type=CephString,req=false ',
+                   'name=earmark,type=CephString,req=false '
+                   'name=normalization,type=CephChoices,strings=nfd|nfc|nfkd|nfkc,req=false '
+                   'name=casesensitive,type=CephBool,req=false ',
             'desc': "Create a CephFS subvolume in a volume, and optionally, "
                     "with a specific size (in bytes), a specific data pool layout, "
                     "a specific mode, in a specific subvolume group and in separate "
@@ -465,6 +469,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs subvolume snapshot getpath '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': 'Get path for a snapshot of a CephFS subvolume located in '
+                    'a specific volume, and optionally, in a specific '
+                    'subvolume group',
+            'perm': 'r'
+        },
+        {
             'cmd': 'fs subvolume resize '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
@@ -596,7 +611,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'snapshot_clone_no_wait',
             type='bool',
             default=True,
-            desc='Reject subvolume clone request when cloner threads are busy')
+            desc='Reject subvolume clone request when cloner threads are busy'),
+        Option(
+            'pause_purging',
+            type='bool',
+            default=False,
+            desc='Pause asynchronous subvolume purge threads'),
+        Option(
+            'pause_cloning',
+            type='bool',
+            default=False,
+            desc='Pause asynchronous cloner threads')
     ]
 
     def __init__(self, *args, **kwargs):
@@ -606,6 +631,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self.snapshot_clone_delay = None
         self.periodic_async_work = False
         self.snapshot_clone_no_wait = None
+        self.pause_purging = False
+        self.pause_cloning = False
         self.lock = threading.Lock()
         super(Module, self).__init__(*args, **kwargs)
         # Initialize config option members
@@ -642,6 +669,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                             self.vc.purge_queue.unset_wakeup_timeout()
                     elif opt['name'] == "snapshot_clone_no_wait":
                         self.vc.cloner.reconfigure_reject_clones(self.snapshot_clone_no_wait)
+                    elif opt['name'] == "pause_purging":
+                        if self.pause_purging:
+                            self.vc.purge_queue.pause()
+                        else:
+                            self.vc.purge_queue.resume()
+                    elif opt['name'] == "pause_cloning":
+                        if self.pause_cloning:
+                            self.vc.cloner.pause()
+                        else:
+                            self.vc.cloner.resume()
+
 
     def handle_command(self, inbuf, cmd):
         handler_name = "_cmd_" + cmd['prefix'].replace(" ", "_")
@@ -656,7 +694,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_volume_create(self, inbuf, cmd):
         vol_id = cmd['name']
         placement = cmd.get('placement', '')
-        return self.vc.create_fs_volume(vol_id, placement)
+        data_pool = cmd.get('data_pool', None)
+        meta_pool = cmd.get('meta_pool', None)
+        return self.vc.create_fs_volume(vol_id, placement, data_pool, meta_pool)
 
     @mgr_cmd_wrap
     def _cmd_fs_volume_rm(self, inbuf, cmd):
@@ -732,7 +772,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                         gid=cmd.get('gid', None),
                                         mode=cmd.get('mode', '755'),
                                         namespace_isolated=cmd.get('namespace_isolated', False),
-                                        earmark=cmd.get('earmark', None))
+                                        earmark=cmd.get('earmark', None),
+                                        normalization=cmd.get('normalization', None),
+                                        casesensitive=cmd.get('casesensitive', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_rm(self, inbuf, cmd):
@@ -967,6 +1009,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.list_subvolume_snapshots(vol_name=cmd['vol_name'],
                                                 sub_name=cmd['sub_name'],
                                                 group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_snapshot_getpath(self, inbuf, cmd):
+        return self.vc.subvolume_snapshot_getpath(vol_name=cmd['vol_name'],
+                                                  sub_name=cmd['sub_name'],
+                                                  snap_name=cmd['snap_name'],
+                                                  group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_resize(self, inbuf, cmd):

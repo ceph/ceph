@@ -465,7 +465,7 @@ static ghobject_t test_ops_get_object_name(
 
   auto shard_id = cmd_getval_or<int64_t>(cmdmap,
 					 "shardid",
-					 shard_id_t::NO_SHARD);
+					 static_cast<int64_t>(shard_id_t::NO_SHARD));
 
   return ghobject_t{
     hobject_t{

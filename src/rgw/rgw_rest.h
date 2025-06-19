@@ -248,7 +248,10 @@ public:
   int get_params(optional_yield y) override;
   int get_data(bufferlist& bl) override;
 
-  virtual std::string canonical_name() const override { return fmt::format("REST.{}.OBJECT", s->info.method); }
+  virtual std::string canonical_name() const override {
+    const bool multipart = !multipart_upload_id.empty();
+    return fmt::format("REST.{}.{}", s->info.method, multipart ? "PART" : "OBJECT");
+  }
 };
 
 class RGWPostObj_ObjStore : public RGWPostObj
@@ -580,12 +583,14 @@ class RGWPutObjRetention_ObjStore : public RGWPutObjRetention {
 public:
   RGWPutObjRetention_ObjStore() = default;
   ~RGWPutObjRetention_ObjStore() override = default;
+  virtual std::string canonical_name() const override { return fmt::format("REST.{}.RETENTION", s->info.method); }
 };
 
 class RGWGetObjRetention_ObjStore : public RGWGetObjRetention {
 public:
   RGWGetObjRetention_ObjStore() = default;
   ~RGWGetObjRetention_ObjStore() = default;
+  virtual std::string canonical_name() const override { return fmt::format("REST.{}.RETENTION", s->info.method); }
 };
 
 class RGWPutObjLegalHold_ObjStore : public RGWPutObjLegalHold {
@@ -593,11 +598,13 @@ public:
   RGWPutObjLegalHold_ObjStore() = default;
   ~RGWPutObjLegalHold_ObjStore() override = default;
   int get_params(optional_yield y) override;
+  virtual std::string canonical_name() const override { return fmt::format("REST.{}.LEGAL_HOLD", s->info.method); }
 };
 
 class RGWGetObjLegalHold_ObjStore : public RGWGetObjLegalHold {
 public:
   RGWGetObjLegalHold_ObjStore() = default;
+  virtual std::string canonical_name() const override { return fmt::format("REST.{}.LEGAL_HOLD", s->info.method); }
   ~RGWGetObjLegalHold_ObjStore() = default;
 };
 
@@ -888,8 +895,7 @@ inline std::string compute_domain_uri(const req_state *s) {
   std::string uri = (!s->info.domain.empty()) ? s->info.domain :
     [&s]() -> std::string {
     RGWEnv const &env(*(s->info.env));
-    std::string uri =
-    env.get("SERVER_PORT_SECURE") ? "https://" : "http://";
+    std::string uri = rgw_transport_is_secure(s->cct, env) ? "https://" : "http://";
     if (env.exists("SERVER_NAME")) {
       uri.append(env.get("SERVER_NAME", "<SERVER_NAME>"));
     } else {

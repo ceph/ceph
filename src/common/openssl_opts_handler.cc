@@ -16,7 +16,9 @@
 
 #include <openssl/bio.h>
 #include <openssl/conf.h>
+#ifndef OPENSSL_NO_ENGINE
 #include <openssl/engine.h>
+#endif
 #include <mutex>
 #include <vector>
 #include <algorithm>
@@ -40,6 +42,9 @@ static ostream &_prefix(std::ostream *_dout)
 {
   return *_dout << "OpenSSLOptsHandler: ";
 }
+
+#ifndef OPENSSL_NO_ENGINE
+
 // -----------------------------------------------------------------------------
 
 string construct_engine_conf(const string &opts)
@@ -128,6 +133,7 @@ void load_module(const string &engine_conf)
     log_error("failed to load modules from CONF:\n" + get_openssl_error());
   }
 }
+#endif // !OPENSSL_NO_ENGINE
 
 void init_engine()
 {
@@ -135,8 +141,12 @@ void init_engine()
   if (opts.empty()) {
     return;
   }
+#ifdef OPENSSL_NO_ENGINE
+  derr << "OpenSSL is compiled with no engine, but openssl_engine_opts is set" << dendl;
+#else
   string engine_conf = construct_engine_conf(opts);
   load_module(engine_conf);
+#endif
 }
 
 void ceph::crypto::init_openssl_engine_once()

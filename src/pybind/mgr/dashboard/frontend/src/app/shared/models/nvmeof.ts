@@ -31,6 +31,7 @@ export interface NvmeofListener {
   adrfam: number; // 0: IPv4, 1: IPv6
   trsvcid: number; // 4420
   id?: number; // for table
+  full_addr?: string; // for table
 }
 
 export interface NvmeofSubsystemNamespace {

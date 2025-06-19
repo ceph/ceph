@@ -97,6 +97,7 @@ void RGWRealmReloader::reload()
   // TODO: make RGWRados responsible for rgw_log_usage lifetime
   rgw_log_usage_finalize();
 
+  env.driver->shutdown();
   // destroy the existing driver
   DriverManager::close_storage(env.driver);
   env.driver = nullptr;
@@ -117,8 +118,7 @@ void RGWRealmReloader::reload()
       ldpp_dout(&dp, 1) << "Creating new driver" << dendl;
 
       // recreate and initialize a new driver
-      DriverManager::Config cfg;
-      cfg.store_name = "rados";
+      DriverManager::Config cfg = DriverManager::get_config(false, g_ceph_context);
       cfg.filter_name = "none";
       env.driver = DriverManager::get_storage(&dp, cct, cfg, io_context,
 	  *env.site,
@@ -127,7 +127,7 @@ void RGWRealmReloader::reload()
           cct->_conf->rgw_enable_quota_threads,
           cct->_conf->rgw_run_sync_thread,
           cct->_conf.get_val<bool>("rgw_dynamic_resharding"),
-          true, null_yield, // run notification thread
+	        true, true, null_yield, env.cfgstore, // run notification thread
           cct->_conf->rgw_cache_enabled);
     }
 

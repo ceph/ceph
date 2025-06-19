@@ -203,7 +203,7 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
     const rgw_user id;
     const std::string display_name;
     const std::string path;
-    const bool is_admin;
+    const bool user_is_admin;
     const uint32_t type;
     const std::optional<RGWAccountInfo> account;
     const std::vector<IAM::Policy> policies;
@@ -216,7 +216,7 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
         id(user.user_id),
         display_name(user.display_name),
         path(user.path),
-        is_admin(user.admin),
+        user_is_admin(user.admin || user.system),
         type(user.type),
         account(std::move(account)),
         policies(std::move(policies))
@@ -238,12 +238,19 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
       return rgw_perms_from_aclspec_default_strategy(id.to_str(), aclspec, dpp);
     }
 
-    bool is_admin_of(const rgw_owner& o) const override {
-      return is_admin;
+    bool is_admin() const override {
+      return user_is_admin;
     }
 
     bool is_owner_of(const rgw_owner& o) const override {
       return match_owner(o, id, account);
+    }
+
+    bool is_root() const override {
+      if (account)
+        return get_identity_type() == TYPE_ROOT;
+
+      return get_perm_mask() == RGW_PERM_FULL_CONTROL;
     }
 
     bool is_identity(const Principal& p) const override {
@@ -295,7 +302,7 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
 
     void to_str(std::ostream& out) const override {
       out << "RGWDummyIdentityApplier(auth_id=" << id
-          << ", is_admin=" << is_admin << ")";
+          << ", is_admin=" << user_is_admin << ")";
     }
 
     auto load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User> override {
@@ -358,13 +365,6 @@ uint32_t rgw_perms_from_aclspec_default_strategy(
 
   ldpp_dout(dpp, 5) << "Permissions for user not found" << dendl;
   return 0;
-}
-
-
-static inline const std::string make_spec_item(const std::string& tenant,
-                                               const std::string& id)
-{
-  return tenant + ":" + id;
 }
 
 
@@ -672,16 +672,18 @@ auto rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   }
 
   //Check if user_id.buckets already exists, may have been from the time, when shadow users didnt exist
-  RGWStorageStats stats;
-  ceph::real_time last_synced;
-  ceph::real_time last_updated;
-  int ret = driver->load_stats(dpp, null_yield, federated_user, stats,
-                               last_synced, last_updated);
-  if (ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 0) << "ERROR: reading stats for the user returned error " << ret << dendl;
+  federated_user.ns = "";
+  constexpr bool need_stats = false;
+  const std::string marker; // empty
+  constexpr uint32_t max_items = 1;
+  rgw::sal::BucketList buckets;
+  auto ret = driver->list_buckets(dpp, federated_user, federated_user.tenant, marker, marker,
+                             max_items, need_stats, buckets, null_yield);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: list buckets for the user returned error " << ret << dendl;
     return user;
   }
-  if (ret == -ENOENT) { /* in case of ENOENT, which means user doesnt have buckets */
+  if (buckets.buckets.empty()) { /* no buckets */
     //In this case user will be created in oidc namespace
     ldpp_dout(dpp, 5) << "NOTICE: incoming user has no buckets " << federated_user << dendl;
     federated_user.ns = "oidc";
@@ -699,7 +701,15 @@ auto rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
 void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
 {
   s->info.args.append("sub", this->sub);
-  s->info.args.append("aud", this->aud);
+  //this is needed for AssumeRoleWithWebIdentityResponse
+  //but if aud is not present in the token, client id can be used
+  //from AWS docs - "The intended audience (also known as client ID) of the web identity token."
+  //https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRoleWithWebIdentity.html
+  if (this->aud.empty() && !this->client_id.empty()) {
+    s->info.args.append("aud", this->client_id);
+  } else {
+    s->info.args.append("aud", this->aud);
+  }
   s->info.args.append("provider_id", this->iss);
   s->info.args.append("client_id", this->client_id);
 
@@ -773,6 +783,7 @@ bool rgw::auth::WebIdentityApplier::is_identity(const Principal& p) const
 
 const std::string rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER;
 const std::string rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY;
+const std::string rgw::auth::RemoteApplier::AuthInfo::NO_KEYSTONE_USER;
 
 /* rgw::auth::RemoteAuthApplier */
 ACLOwner rgw::auth::RemoteApplier::get_aclowner() const
@@ -815,7 +826,7 @@ uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvid
   return perm;
 }
 
-bool rgw::auth::RemoteApplier::is_admin_of(const rgw_owner& o) const
+bool rgw::auth::RemoteApplier::is_admin() const
 {
   return info.is_admin;
 }
@@ -836,6 +847,11 @@ bool rgw::auth::RemoteApplier::is_owner_of(const rgw_owner& o) const
   }
 
   return info.acct_user == *uid;
+}
+
+bool rgw::auth::RemoteApplier::is_root() const
+{
+  return get_perm_mask() == RGW_PERM_FULL_CONTROL;
 }
 
 bool rgw::auth::RemoteApplier::is_identity(const Principal& p) const {
@@ -940,6 +956,7 @@ void rgw::auth::RemoteApplier::write_ops_log_entry(rgw_log_entry& entry) const
   if (account) {
     entry.account_id = account->id;
   }
+  entry.user = info.keystone_user;
 }
 
 /* TODO(rzarzynski): we need to handle display_name changes. */
@@ -1050,7 +1067,7 @@ uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvide
   return mask;
 }
 
-bool rgw::auth::LocalApplier::is_admin_of(const rgw_owner& o) const
+bool rgw::auth::LocalApplier::is_admin() const
 {
   return user_info.admin || user_info.system;
 }
@@ -1058,6 +1075,14 @@ bool rgw::auth::LocalApplier::is_admin_of(const rgw_owner& o) const
 bool rgw::auth::LocalApplier::is_owner_of(const rgw_owner& o) const
 {
   return match_owner(o, user_info.user_id, account);
+}
+
+bool rgw::auth::LocalApplier::is_root() const
+{
+  if (account)
+    return get_identity_type() == TYPE_ROOT;
+
+  return get_perm_mask() == RGW_PERM_FULL_CONTROL;
 }
 
 bool rgw::auth::LocalApplier::is_identity(const Principal& p) const {
@@ -1297,7 +1322,8 @@ rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const re
     auto apl = \
       apl_factory->create_apl_local(cct, s, std::move(user), std::nullopt, {},
                                     rgw::auth::LocalApplier::NO_SUBUSER,
-                                    std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY);
+                                    std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY,
+                                    false /* is_impersonating */);
     return result_t::grant(std::move(apl));
   }
 }

@@ -7,7 +7,9 @@ overrides:
         debug rgw: 20
         rgw bucket logging obj roll time: 5
   rgw:
-    storage classes: LUKEWARM, FROZEN
+    storage classes:
+      LUKEWARM:
+      FROZEN:
   s3tests:
     accounts:
       iam root: RGW88888888888888888

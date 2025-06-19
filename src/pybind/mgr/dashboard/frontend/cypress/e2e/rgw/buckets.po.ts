@@ -12,8 +12,8 @@ export class BucketsPageHelper extends PageHelper {
   pages = pages;
 
   columnIndex = {
-    name: 3,
-    owner: 4
+    name: 2,
+    owner: 3
   };
 
   versioningStateEnabled = 'Enabled';
@@ -35,6 +35,7 @@ export class BucketsPageHelper extends PageHelper {
     // Select bucket owner
     this.selectOwner(owner);
     cy.get('#owner').should('have.class', 'ng-valid');
+    cy.get('input[name=encryption_enabled]').should('be.disabled');
 
     if (isLocking) {
       cy.get('#lock_enabled_input').click({ force: true });
@@ -51,7 +52,7 @@ export class BucketsPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   edit(name: string, new_owner: string, isLocking = false) {
-    this.navigateEdit(name, false, false, null, true);
+    this.navigateEdit(name, false, false, null);
 
     // Placement target is not allowed to be edited and should be hidden
     cy.get('input[name=placement-target]').should('not.exist');
@@ -107,7 +108,7 @@ export class BucketsPageHelper extends PageHelper {
     cy.get('@versioningValueCell').should('have.text', this.versioningStateEnabled);
 
     // Disable versioning:
-    this.navigateEdit(name, false, true, null, true);
+    this.navigateEdit(name, false, true, null);
 
     cy.get('label[for=versioning_input]').click();
     cy.get('input[name=versioning]').should('not.be.checked');
@@ -167,7 +168,7 @@ export class BucketsPageHelper extends PageHelper {
   }
 
   testInvalidEdit(name: string) {
-    this.navigateEdit(name, false, true, null, true);
+    this.navigateEdit(name, false, true, null);
 
     cy.get('input[name=versioning]').should('exist').and('not.be.checked');
 

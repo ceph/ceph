@@ -14,12 +14,8 @@ describe('Create Cluster Review page', () => {
     createCluster.navigateTo();
     createCluster.createCluster();
 
-    cy.get('.nav-link').contains('Review').click();
-  });
-
-  describe('navigation link test', () => {
-    it('should check if active nav-link is of Review section', () => {
-      cy.get('.nav-link.active').should('contain.text', 'Review');
+    cy.get('cd-wizard').within(() => {
+      cy.get('button').contains('Review').click();
     });
   });
 

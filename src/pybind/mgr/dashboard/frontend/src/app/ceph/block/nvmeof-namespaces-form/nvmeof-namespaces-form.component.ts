@@ -38,7 +38,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
   nsForm: CdFormGroup;
   subsystemNQN: string;
   rbdPools: Array<Pool> = null;
-  units: Array<string> = ['KiB', 'MiB', 'GiB', 'TiB'];
+  units: Array<string> = ['MiB', 'GiB', 'TiB'];
   nsid: string;
   currentBytes: number;
   invalidSizeError: boolean;
@@ -87,12 +87,10 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       .subscribe((res: NvmeofSubsystemNamespace) => {
         const convertedSize = this.dimlessBinaryPipe.transform(res.rbd_image_size).split(' ');
         this.currentBytes = res.rbd_image_size;
-        this.nsForm.get('image').setValue(res.rbd_image_name);
         this.nsForm.get('pool').setValue(res.rbd_pool_name);
         this.nsForm.get('unit').setValue(convertedSize[1]);
         this.nsForm.get('image_size').setValue(convertedSize[0]);
         this.nsForm.get('image_size').addValidators(Validators.required);
-        this.nsForm.get('image').disable();
         this.nsForm.get('pool').disable();
       });
   }
@@ -100,10 +98,10 @@ export class NvmeofNamespacesFormComponent implements OnInit {
   initForCreate() {
     this.poolService.getList().subscribe((resp: Pool[]) => {
       this.rbdPools = resp.filter(this.rbdService.isRBDPool);
+      if (this.rbdPools?.length) {
+        this.nsForm.get('pool').setValue(this.rbdPools[0].pool_name);
+      }
     });
-    if (this.rbdPools?.length) {
-      this.nsForm.get('pool').setValue(this.rbdPools[0].pool_name);
-    }
   }
 
   ngOnInit() {
@@ -121,7 +119,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
         validators: [Validators.required]
       }),
       image_size: new UntypedFormControl(1, [CdValidators.number(false), Validators.min(1)]),
-      unit: new UntypedFormControl(this.units[2]),
+      unit: new UntypedFormControl(this.units[1]),
       nsCount: new UntypedFormControl(this.MAX_NAMESPACE_CREATE, [
         Validators.required,
         Validators.max(this.MAX_NAMESPACE_CREATE),
@@ -154,7 +152,8 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       const request: NamespaceCreateRequest = {
         gw_group: this.group,
         rbd_image_name: `nvme_${pool}_${this.group}_${this.randomString()}`,
-        rbd_pool: pool
+        rbd_pool: pool,
+        create_image: true
       };
       if (rbdImageSize) {
         request['rbd_image_size'] = rbdImageSize;

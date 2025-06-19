@@ -4,6 +4,7 @@
 #include "auth/AuthRegistry.h"
 
 #include "common/errno.h"
+#include "librados/AioCompletionImpl.h"
 #include "librados/librados_asio.h"
 
 #include "include/stringify.h"
@@ -94,6 +95,8 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
   if (!pool.ns.empty()) {
     ioctx.set_namespace(pool.ns);
   }
+  // at pool quota, never block waiting for space - we want to error immediately
+  ioctx.set_pool_full_try();
   return 0;
 }
 
@@ -114,6 +117,34 @@ int rgw_get_rados_ref(const DoutPrefixProvider* dpp, librados::Rados* rados,
   return 0;
 }
 
+int rgw_rados_ref::watch(const DoutPrefixProvider* dpp, uint64_t* handle,
+                         librados::WatchCtx2* ctx, optional_yield y)
+{
+  if (y) {
+    auto& yield = y.get_yield_context();
+    boost::system::error_code ec;
+    librados::async_watch(yield.get_executor(), ioctx, obj.oid,
+                          handle, ctx, 0, yield[ec]);
+    return ceph::from_error_code(ec);
+  } else {
+    maybe_warn_about_blocking(dpp);
+    return ioctx.watch2(obj.oid, handle, ctx);
+  }
+}
+
+int rgw_rados_ref::unwatch(const DoutPrefixProvider* dpp, uint64_t handle,
+                           optional_yield y)
+{
+  if (y) {
+    auto& yield = y.get_yield_context();
+    boost::system::error_code ec;
+    librados::async_unwatch(yield.get_executor(), ioctx, handle, yield[ec]);
+    return ceph::from_error_code(ec);
+  } else {
+    maybe_warn_about_blocking(dpp);
+    return ioctx.unwatch2(handle);
+  }
+}
 
 map<string, bufferlist>* no_change_attrs() {
   static map<string, bufferlist> no_change;

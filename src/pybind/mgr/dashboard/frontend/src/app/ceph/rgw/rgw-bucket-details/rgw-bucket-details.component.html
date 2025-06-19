@@ -152,13 +152,13 @@
                     <button type="button"
                             class="btn btn-light"
                             [ngClass]="{'active': lifecycleFormat === 'json'}"
-                            (click)="lifecycleFormat = 'json'">
+                            (click)="updateLifecycleFormatTo('json')">
                           JSON
                     </button>
                     <button type="button"
                             class="btn btn-light"
                             [ngClass]="{'active': lifecycleFormat === 'xml'}"
-                            (click)="lifecycleFormat = 'xml'">
+                            (click)="updateLifecycleFormatTo('xml')">
                           XML
                     </button>
                   </div>

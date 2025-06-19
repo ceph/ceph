@@ -138,6 +138,10 @@ static const actpair actpairs[] =
  { "s3:PutReplicationConfiguration", s3PutReplicationConfiguration },
  { "s3:RestoreObject", s3RestoreObject },
  { "s3:DescribeJob", s3DescribeJob },
+ { "s3:ReplicateDelete", s3ReplicateDelete },
+ { "s3:ReplicateObject", s3ReplicateObject },
+ { "s3:ReplicateTags", s3ReplicateTags },
+ { "s3:GetObjectVersionForReplication", s3GetObjectVersionForReplication },
  { "s3-object-lambda:GetObject", s3objectlambdaGetObject },
  { "s3-object-lambda:ListBucket", s3objectlambdaListBucket },
  { "iam:PutUserPolicy", iamPutUserPolicy },
@@ -584,6 +588,8 @@ boost::optional<Principal> ParseState::parse_principal(string&& s,
 	  "for an assumed role, "
 	  "`arn:aws:iam::tenant:user/user-name` for a user, "
 	  "`arn:aws:iam::tenant:oidc-provider/idp-url` for OIDC.", s);
+  } else if (w->id == TokenID::Service) {
+      return Principal::service(std::move(s));
   }
 
   if (errmsg)
@@ -852,6 +858,18 @@ ostream& operator <<(ostream& m, const MaskedIP& ip) {
   return m;
 }
 
+// Case-sensitive matching of the ARN. Each of the six colon-delimited
+// components of the ARN is checked separately and each can include multi-
+// character match wildcards (*) or single-character match wildcards (?).
+static bool arn_like(const std::string& input, const std::string& pattern)
+{
+  constexpr auto delim = [] (char c) { return c == ':'; };
+  if (std::count_if(input.begin(), input.end(), delim) != 5) {
+    return false;
+  }
+  return match_policy(pattern, input, MATCH_POLICY_ARN);
+}
+
 bool Condition::eval(const Environment& env) const {
   std::vector<std::string> runtime_vals;
   auto i = env.find(key);
@@ -992,11 +1010,14 @@ bool Condition::eval(const Environment& env) const {
       return true;
     }
 
-#if 0
-    // Amazon Resource Names! (Does S3 need this?)
-    TokenID::ArnEquals, TokenID::ArnNotEquals, TokenID::ArnLike,
-      TokenID::ArnNotLike,
-#endif
+    // Amazon Resource Names!
+    // The ArnEquals and ArnLike condition operators behave identically.
+  case TokenID::ArnEquals:
+  case TokenID::ArnLike:
+    return orrible(arn_like, itr, isruntime? runtime_vals : vals);
+  case TokenID::ArnNotEquals:
+  case TokenID::ArnNotLike:
+    return orrible(std::not_fn(arn_like), itr, isruntime? runtime_vals : vals);
 
   default:
     return false;
@@ -1282,7 +1303,6 @@ Effect Statement::eval_conditions(const Environment& e) const {
   return Effect::Deny;
 }
 
-namespace {
 const char* action_bit_string(uint64_t action) {
   switch (action) {
   case s3GetObject:
@@ -1491,6 +1511,18 @@ const char* action_bit_string(uint64_t action) {
 
   case s3DescribeJob:
     return "s3:DescribeJob";
+
+  case s3ReplicateDelete:
+    return "s3:ReplicateDelete";
+
+  case s3ReplicateObject:
+    return "s3:ReplicateObject";
+
+  case s3ReplicateTags:
+    return "s3:ReplicateTags";
+
+  case s3GetObjectVersionForReplication:
+    return "s3:GetObjectVersionForReplication";
 
   case s3objectlambdaGetObject:
     return "s3-object-lambda:GetObject";
@@ -1735,6 +1767,7 @@ const char* action_bit_string(uint64_t action) {
   return "s3Invalid";
 }
 
+namespace {
 ostream& print_actions(ostream& m, const Action_t a) {
   bool begun = false;
   m << "[ ";

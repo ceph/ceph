@@ -242,6 +242,7 @@ endif (WITH_CEPHFS)
 
 if (NOT WIN32)
   # cls_lua
+  find_package(Lua 5.3 REQUIRED)
   set(cls_lua_srcs
       lua/cls_lua.cc
       lua/lua_bufferlist.cc)
@@ -358,4 +359,12 @@ set_target_properties(cls_fifo PROPERTIES
 target_link_libraries(cls_fifo ${FMT_LIB})
 install(TARGETS cls_fifo DESTINATION ${cls_dir})
 
-
+# cls_sem_set
+set(cls_sem_set_srcs sem_set/module.cc)
+add_library(cls_sem_set SHARED ${cls_sem_set_srcs})
+set_target_properties(cls_sem_set PROPERTIES
+  VERSION "1.0.0"
+  SOVERSION "1"
+  INSTALL_RPATH ""
+  CXX_VISIBILITY_PRESET hidden)
+install(TARGETS cls_sem_set DESTINATION ${cls_dir})

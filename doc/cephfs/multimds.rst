@@ -231,16 +231,16 @@ or set the value to 0.
 
 .. prompt:: bash #
 
-   $ setfattr -n ceph.dir.pin.distributed -v 0 home
+   setfattr -n ceph.dir.pin.distributed -v 0 home
    # or
-   $ setfattr -x ceph.dir.pin.distributed home
+   setfattr -x ceph.dir.pin.distributed home
 
 For export pins, remove the extended attribute or set the extended attribute
 value to `-1`.
 
 .. prompt:: bash #
 
-   $ setfattr -n ceph.dir.pin -v -1 home
+   setfattr -n ceph.dir.pin -v -1 home
 
 
 Dynamic Subtree Partitioning

@@ -115,6 +115,9 @@ endif()
 
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-ftemplate-depth-1024>)
 
+# Because Boost can't be bothered to not include its own deprecated headers
+add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DBOOST_ALLOW_DEPRECATED_HEADERS>)
+
 CHECK_CXX_COMPILER_FLAG("-Wpessimizing-move" COMPILER_SUPPORTS_PESSIMIZING_MOVE)
 if(COMPILER_SUPPORTS_PESSIMIZING_MOVE)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wpessimizing-move>)
@@ -287,10 +290,8 @@ endif()
 
 option(ENABLE_COVERAGE "Coverage is enabled" OFF)
 if(${ENABLE_COVERAGE})
-  find_program(HAVE_GCOV gcov)
-  if(NOT HAVE_GCOV)
-    message(FATAL_ERROR "Coverage Enabled but gcov Not Found")
-  endif()
+  find_program(HAVE_GCOV gcov
+    REQUIRED)
   add_compile_options(
     --coverage
     -O0)
@@ -321,6 +322,66 @@ endif()
 if (WITH_BLKIN)
   add_subdirectory(blkin/blkin-lib)
 endif(WITH_BLKIN)
+
+## breakpad
+if(WITH_BREAKPAD)
+  include(FindMake)
+  find_make("MAKE_EXECUTABLE" "make_cmd")
+
+  set(breakpad_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/breakpad)
+  set(lss_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/lss)
+
+  ExternalProject_Add(
+    breakpad_project
+    SOURCE_DIR "${breakpad_SOURCE_DIR}"
+    PATCH_COMMAND ${CMAKE_COMMAND} -E create_symlink ${lss_SOURCE_DIR} ${breakpad_SOURCE_DIR}/src/third_party/lss
+    # the minidump processor is used when processing the minidump, we only
+    # use the breakpad's client for generating the minidump at this moment.
+    #
+    # also cancel the -Werror used by breakpad, as new compilers are more
+    # picky, and might fail the build because of warnings.
+    CONFIGURE_COMMAND ${breakpad_SOURCE_DIR}/configure --disable-processor --disable-tools --prefix=<INSTALL_DIR>
+            "CC=${CMAKE_C_COMPILER}"
+            "CFLAGS=${CMAKE_C_FLAGS} -fPIC"
+            "CXX=${CMAKE_CXX_COMPILER}"
+            "CXXFLAGS=${CMAKE_CXX_FLAGS} -fPIC -Wno-error"
+    BUILD_COMMAND ${make_cmd}
+    # Install this library to ensure headers are included with proper prefixed paths
+    # (e.g., "breakpad/client/linux/handler/minidump_descriptor.h") rather than
+    # unprefixed paths (e.g., "client/linux/handler/minidump_descriptor.h").
+    # Prefixed paths make the library dependency explicit and avoid ambiguity.
+    #
+    # Note: DESTDIR is unset to prevent Debian packaging from overriding install
+    # paths, which would break header/library discovery during build. This is safe
+    # since breakpad artifacts are not redistributed in the final package.
+    INSTALL_COMMAND ${CMAKE_COMMAND} -E env --unset=DESTDIR ${make_cmd} install
+    UPDATE_DISCONNECTED ON
+    BUILD_BYPRODUCTS "<INSTALL_DIR>/lib/libbreakpad_client.a")
+
+  ExternalProject_Get_Property(breakpad_project INSTALL_DIR)
+  # create the directory so cmake won't complain when looking at the imported
+  # target
+  file(MAKE_DIRECTORY ${INSTALL_DIR}/include/breakpad)
+
+  add_library(Breakpad::client STATIC IMPORTED GLOBAL)
+  add_dependencies(Breakpad::client breakpad_project)
+  set_target_properties(Breakpad::client PROPERTIES
+    # unfortunately, breakpad's public headers use internal include paths
+    # (e.g., "client/linux/..." rather than the installed include path
+    # (e.g., "breakpad/client/linux/..."), because the library's source
+    # structure differs between build time and install time. so we have to
+    # add ${INSTALL_DIR}/include/breakpad as well.
+    INTERFACE_INCLUDE_DIRECTORIES "${INSTALL_DIR}/include;${INSTALL_DIR}/include/breakpad"
+    IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
+    IMPORTED_LOCATION "${INSTALL_DIR}/lib/libbreakpad_client.a")
+
+  # for header-only library
+  add_library(Breakpad::breakpad INTERFACE IMPORTED GLOBAL)
+  add_dependencies(Breakpad::breakpad breakpad_project)
+  set_target_properties(Breakpad::breakpad PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${INSTALL_DIR}/include"
+    IMPORTED_LINK_INTERFACE_LANGUAGES "CXX")
+endif(WITH_BREAKPAD)
 
 if(WITH_JAEGER)
   find_package(thrift 0.13.0 REQUIRED)
@@ -356,7 +417,7 @@ endif()
 option(WITH_FMT_HEADER_ONLY "use header-only version of fmt library" OFF)
 option(WITH_SYSTEM_FMT "build against system fmt" OFF)
 if(WITH_SYSTEM_FMT)
-  find_package(fmt 8.1.1...<10.0.0 REQUIRED)
+  find_package(fmt 8.1.1...11.1.4 REQUIRED)
 endif()
 if (WITH_FMT_HEADER_ONLY)
   message(STATUS "Using fmt header-only.")
@@ -388,7 +449,7 @@ set_target_properties(Boost::MPL PROPERTIES
   INTERFACE_COMPILE_DEFINITIONS
     "BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS;BOOST_MPL_LIMIT_LIST_SIZE=30")
 
-if(WITH_SEASTAR)
+if(WITH_CRIMSON)
   find_package(c-ares 1.13.0 QUIET)
   if(NOT c-ares_FOUND)
     message(STATUS "Could not find c-ares, will build it")
@@ -401,7 +462,6 @@ if(WITH_SEASTAR)
     endif()
   endmacro ()
   set(Seastar_API_LEVEL "6" CACHE STRING "" FORCE)
-  set(Seastar_HWLOC OFF CACHE BOOL "" FORCE)
   set(Seastar_IO_URING OFF CACHE BOOL "" FORCE)
   set(Seastar_DEPRECATED_OSTREAM_FORMATTERS OFF CACHE BOOL "" FORCE)
   if(Seastar_DPDK)
@@ -567,6 +627,10 @@ if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
   endif()
 endif()
 
+if(WITH_BREAKPAD)
+  list(APPEND ceph_common_deps Breakpad::client)
+endif()
+
 add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common
   ${ceph_common_deps}
@@ -592,6 +656,10 @@ target_link_libraries(ceph-common legacy-option-headers)
 
 if(WITH_JAEGER)
 add_dependencies(ceph-common jaeger_base)
+endif()
+
+if(WITH_BREAKPAD)
+add_dependencies(ceph-common breakpad_project)
 endif()
 
 # appease dpkg-shlibdeps
@@ -685,12 +753,16 @@ if(NOT CEPH_BUILD_VIRTUALENV)
   set(CEPH_BUILD_VIRTUALENV ${CMAKE_BINARY_DIR})
 endif()
 
+option(WITH_CEPHADM "Flag to determine if cephadm should be built" ON)
+
 if(NOT WIN32)
 add_subdirectory(pybind)
 add_subdirectory(ceph-volume)
 add_subdirectory(ceph-node-proxy)
 add_subdirectory(python-common)
-add_subdirectory(cephadm)
+  if(WITH_CEPHADM)
+    add_subdirectory(cephadm)
+  endif()
 endif(NOT WIN32)
 
 # Monitor
@@ -761,7 +833,7 @@ add_subdirectory(erasure-code)
 if(WITH_TESTS)
   option(WITH_SYSTEM_GTEST "require and build with system gtest and gmock" OFF)
   if(WITH_SYSTEM_GTEST)
-    find_package(GTest REQUIRED)
+    find_package(GTest 1.13.0 REQUIRED)
     find_package(GMock REQUIRED)
   else()
     set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
@@ -772,6 +844,11 @@ if(WITH_TESTS)
       $<TARGET_PROPERTY:gtest,INTERFACE_INCLUDE_DIRECTORIES>)
     target_include_directories(gmock_main INTERFACE
       $<TARGET_PROPERTY:gtest,INTERFACE_INCLUDE_DIRECTORIES>)
+    if(NOT COMPILER_IGNORES_DEPRECATED_DECL_IN_SYSTEM_HEADERS)
+      # See https://github.com/llvm/llvm-project/issues/76515
+      target_compile_options(gtest
+        PRIVATE "-Wno-deprecated-declarations")
+    endif()
     add_library(GTest::GTest ALIAS gtest)
     add_library(GTest::Main ALIAS gtest_main)
   endif()
@@ -921,7 +998,8 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
 
   set(_REFLECTION grpc++_reflection)
   if(CMAKE_CROSSCOMPILING)
-    find_program(_PROTOBUF_PROTOC protoc)
+    find_program(_PROTOBUF_PROTOC protoc
+      REQUIRED)
   else()
     set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
   endif()
@@ -932,7 +1010,8 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
   message(STATUS "Using gRPC ${gRPC_VERSION}")
   set(_GRPC_GRPCPP gRPC::grpc++)
   if(CMAKE_CROSSCOMPILING)
-    find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin)
+    find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin
+      REQUIRED)
   else()
     set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
   endif()

@@ -12,14 +12,14 @@
  * 
  */
 
-#include "include/int_types.h"
-#include "common/errno.h"
+#include "CInode.h"
 
 #include <string>
 
-#include "CInode.h"
 #include "CDir.h"
 #include "CDentry.h"
+#include "BatchOp.h"
+#include "SnapRealm.h"
 
 #include "MDSRank.h"
 #include "MDCache.h"
@@ -37,16 +37,22 @@
 #include "LogSegment.h"
 
 #include "common/Clock.h"
-
+#include "common/ceph_json.h"
 #include "common/config.h"
+#include "common/debug.h"
+#include "common/errno.h"
 #include "global/global_context.h"
 #include "include/denc.h"
 #include "include/ceph_assert.h"
+#include "include/int_types.h"
+#include "include/random.h" // for ceph::util::generate_random_number()
 
 #include "mds/MDSContinuation.h"
 #include "mds/InoTable.h"
-#include "cephfs_features.h"
 #include "osdc/Objecter.h"
+
+#include "messages/MClientCaps.h"
+#include "messages/MClientReply.h" // for struct InodeStat
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -78,6 +84,12 @@ void CInodeCommitOperation::update(ObjectOperation &op, inode_backtrace_t &bt) {
     encode(_symlink, symlink_bl);
     op.setxattr("symlink", symlink_bl);
   }
+
+  if (remote_inode) {
+    bufferlist remote_inode_bl;
+    encode(remote_inode, remote_inode_bl);
+    op.setxattr("remote_inode", remote_inode_bl);
+  }
 }
 
 class CInodeIOContext : public MDSIOContextBase
@@ -104,6 +116,17 @@ const LockType CInode::snaplock_type(CEPH_LOCK_ISNAP);
 const LockType CInode::nestlock_type(CEPH_LOCK_INEST);
 const LockType CInode::flocklock_type(CEPH_LOCK_IFLOCK);
 const LockType CInode::policylock_type(CEPH_LOCK_IPOLICY);
+
+CInode::~CInode() {
+  close_dirfrags();
+  close_snaprealm();
+  clear_file_locks();
+  ceph_assert(num_projected_srnodes == 0);
+  ceph_assert(num_caps_notable == 0);
+  ceph_assert(num_subtree_roots == 0);
+  ceph_assert(num_exporting_dirs == 0);
+  ceph_assert(batch_ops.empty());
+}
 
 std::string_view CInode::pin_name(int p) const
 {
@@ -214,8 +237,10 @@ ostream& operator<<(ostream& out, const CInode& in)
     }
   } else {
     out << " s=" << in.get_inode()->size;
-    if (in.get_inode()->nlink != 1)
+    if (in.get_inode()->nlink != 1) {
       out << " nl=" << in.get_inode()->nlink;
+      out << " referent_inodes=" << std::hex << in.get_inode()->referent_inodes;
+    }
   }
 
   // rstat
@@ -922,6 +947,29 @@ void CInode::put_stickydirs()
 
 // pins
 
+void CInode::bad_put(int by) {
+  generic_dout(0) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref
+#ifdef MDS_REF_SET
+		  << " (" << ref_map << ")"
+#endif
+		  << dendl;
+#ifdef MDS_REF_SET
+  ceph_assert(ref_map[by] > 0);
+#endif
+  ceph_assert(ref > 0);
+}
+
+void CInode::bad_get(int by) {
+  generic_dout(0) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref
+#ifdef MDS_REF_SET
+		  << " (" << ref_map << ")"
+#endif
+		  << dendl;
+#ifdef MDS_REF_SET
+  ceph_assert(ref_map[by] >= 0);
+#endif
+}
+
 void CInode::first_get()
 {
   // pin my dentry?
@@ -1408,8 +1456,12 @@ void CInode::_store_backtrace(std::vector<CInodeCommitOperation> &ops_vec,
     slink = symlink;
   }
 
+  inodeno_t remote_inode = 0;
+  if (is_referent_remote())
+    remote_inode = get_remote_ino();
+
   ops_vec.emplace_back(op_prio, pool, get_inode()->layout,
-                       mdcache->mds->mdsmap->get_up_features(), slink);
+                       mdcache->mds->mdsmap->get_up_features(), slink, remote_inode);
 
   if (!state_test(STATE_DIRTYPOOL) || get_inode()->old_pools.empty() || ignore_old_pools) {
     dout(20) << __func__ << ": no dirtypool or no old pools or ignore_old_pools" << dendl;
@@ -1747,10 +1799,11 @@ void CInode::decode_lock_iauth(bufferlist::const_iterator& p)
 
 void CInode::encode_lock_ilink(bufferlist& bl)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(get_inode()->version, bl);
   encode(get_inode()->ctime, bl);
   encode(get_inode()->nlink, bl);
+  encode(get_inode()->referent_inodes, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1758,12 +1811,14 @@ void CInode::decode_lock_ilink(bufferlist::const_iterator& p)
 {
   ceph_assert(!is_auth());
   auto _inode = allocate_inode(*get_inode());
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   decode(_inode->version, p);
   utime_t tm;
   decode(tm, p);
   if (_inode->ctime < tm) _inode->ctime = tm;
   decode(_inode->nlink, p);
+  if (struct_v >= 2)
+    decode(_inode->referent_inodes, p);
   DECODE_FINISH(p);
   reset_inode(std::move(_inode));
 }
@@ -4713,6 +4768,7 @@ void InodeStore::generate_test_instances(std::list<InodeStore*> &ls)
 {
   InodeStore *populated = new InodeStore;
   populated->get_inode()->ino = 0xdeadbeef;
+  populated->get_inode()->mode = S_IFLNK | 0777;
   populated->symlink = "rhubarb";
   ls.push_back(populated);
 }
@@ -4721,6 +4777,7 @@ void InodeStoreBare::generate_test_instances(std::list<InodeStoreBare*> &ls)
 {
   InodeStoreBare *populated = new InodeStoreBare;
   populated->get_inode()->ino = 0xdeadbeef;
+  populated->get_inode()->mode = S_IFLNK | 0777;
   populated->symlink = "rhubarb";
   ls.push_back(populated);
 }

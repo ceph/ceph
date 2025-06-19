@@ -187,7 +187,9 @@ class Osd(RESTController):
             osd['stats_history'][prop] = rates
             # Gauge stats
         for stat in ['osd.numpg', 'osd.stat_bytes', 'osd.stat_bytes_used']:
-            osd['stats'][stat.split('.')[1]] = mgr.get_latest('osd', osd_spec, stat)
+            osd["stats"][stat.split(".")[1]] = mgr.get_unlabeled_counter_latest(
+                "osd", osd_spec, stat
+            )
 
     @RESTController.Collection('GET', version=APIVersion.EXPERIMENTAL)
     @ReadPermission

@@ -1,5 +1,6 @@
 /* You can add global styles to this file, and also import other style files */
 @use './src/styles/defaults' as *;
+
 @import './src/styles/carbon-defaults.scss';
 
 // Fork-Awesome
@@ -26,7 +27,6 @@ $grid-breakpoints: (
 @import 'app/ceph/dashboard/info-card/info-card-popover.scss';
 @import 'app/ceph/rgw/rgw-overview-dashboard/rgw-overview-card-popover.scss';
 @import './src/styles/bootstrap-extends';
-
 @import './src/styles/ceph-custom/basics';
 @import './src/styles/ceph-custom/buttons';
 @import './src/styles/ceph-custom/dropdown';
@@ -214,6 +214,7 @@ formly-form {
 
   .form-label {
     @extend .cd-col-form-label;
+
     text-align: start;
     white-space: nowrap;
     width: fit-content;

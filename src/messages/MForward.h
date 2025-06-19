@@ -48,7 +48,7 @@ public:
     tid(t), client_caps(caps), msg(NULL) {
     client_type = m->get_source().type();
     client_addrs = m->get_source_addrs();
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
     ceph_abort("In crimson, conn is independently maintained outside Message");
 #else
     if (auto &con = m->get_connection()) {

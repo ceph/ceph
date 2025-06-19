@@ -27,7 +27,7 @@ class BtreeOMapManager : public OMapManager {
 
   omap_context_t get_omap_context(
     Transaction &t, const omap_root_t &omap_root) {
-    ceph_assert(omap_root.type < omap_type_t::NUM_TYPES);
+    ceph_assert(omap_root.type < omap_type_t::NONE);
     return omap_context_t{tm, t, omap_root.hint, omap_root.type};
   }
 
@@ -106,15 +106,6 @@ public:
   omap_clear_ret omap_clear(
     omap_root_t &omap_root,
     Transaction &t) final;
-
-  static extent_len_t get_leaf_size(omap_type_t type) {
-    if (type == omap_type_t::LOG) {
-      return LOG_LEAF_BLOCK_SIZE;
-    }
-    ceph_assert(type == omap_type_t::OMAP ||
-		type == omap_type_t::XATTR);
-    return OMAP_LEAF_BLOCK_SIZE;
-  }
 };
 using BtreeOMapManagerRef = std::unique_ptr<BtreeOMapManager>;
 

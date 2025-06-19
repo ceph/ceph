@@ -22,7 +22,7 @@ from .operations.volume import create_volume, delete_volume, rename_volume, \
     list_volumes, open_volume, get_pool_names, get_pool_ids, \
     get_pending_subvol_deletions_count, get_all_pending_clones_count
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
-    create_clone, open_subvol_in_group
+    create_clone, open_subvol_in_group, open_subvol_in_vol
 
 from .vol_spec import VolSpec
 from .exception import VolumeException, ClusterError, ClusterTimeout, \
@@ -120,8 +120,8 @@ class VolumeClient(CephfsClient["Module"]):
 
     ### volume operations -- create, rm, ls
 
-    def create_fs_volume(self, volname, placement):
-        return create_volume(self.mgr, volname, placement)
+    def create_fs_volume(self, volname, placement, data_pool, meta_pool):
+        return create_volume(self.mgr, volname, placement, data_pool, meta_pool)
 
     def delete_fs_volume(self, volname, confirm):
         if confirm != "--yes-i-really-mean-it":
@@ -232,12 +232,14 @@ class VolumeClient(CephfsClient["Module"]):
         mode       = kwargs['mode']
         isolate_nspace = kwargs['namespace_isolated']
         earmark    = kwargs['earmark'] or ''  # if not set, default to empty string --> no earmark
+        normalization = kwargs['normalization']
+        casesensitive = kwargs['casesensitive']
 
         oct_mode = octal_str_to_decimal_int(mode)
 
         try:
             create_subvol(
-                self.mgr, fs_handle, self.volspec, group, subvolname, size, isolate_nspace, pool, oct_mode, uid, gid, earmark)
+                self.mgr, fs_handle, self.volspec, group, subvolname, size, isolate_nspace, pool, oct_mode, uid, gid, earmark, normalization, casesensitive)
         except VolumeException as ve:
             # kick the purge threads for async removal -- note that this
             # assumes that the subvolume is moved to trashcan for cleanup on error.
@@ -256,6 +258,8 @@ class VolumeClient(CephfsClient["Module"]):
         mode       = kwargs['mode']
         isolate_nspace = kwargs['namespace_isolated']
         earmark    = kwargs['earmark'] or ''  # if not set, default to empty string --> no earmark
+        normalization = kwargs['normalization']
+        casesensitive = kwargs['casesensitive']
 
         try:
             with open_volume(self, volname) as fs_handle:
@@ -270,7 +274,9 @@ class VolumeClient(CephfsClient["Module"]):
                                 'data_pool': pool,
                                 'pool_namespace': subvolume.namespace if isolate_nspace else None,
                                 'quota': size,
-                                'earmark': earmark
+                                'earmark': earmark,
+                                'normalization': normalization,
+                                'casesensitive': casesensitive,
                             }
                             subvolume.set_attrs(subvolume.path, attrs)
                     except VolumeException as ve:
@@ -783,6 +789,23 @@ class VolumeClient(CephfsClient["Module"]):
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def subvolume_snapshot_getpath(self, **kwargs):
+        ret        = 0, "", ""
+        volname    = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        snapname   = kwargs['snap_name']
+        groupname  = kwargs['group_name']
+
+        try:
+            with open_subvol_in_vol(self, self.volspec, volname, groupname, subvolname,
+                                    SubvolumeOpType.SNAP_GETPATH) \
+                                    as (vol, group, subvol):
+                snap_path = subvol.snapshot_data_path(snapname)
+                ret = 0, snap_path.decode("utf-8"), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
     def set_subvolume_snapshot_metadata(self, **kwargs):
         ret        = 0, "", ""
         volname    = kwargs['vol_name']
@@ -1012,7 +1035,8 @@ class VolumeClient(CephfsClient["Module"]):
             return None
 
         stats = get_stats(src_path, dst_path, vol_handle)
-        stats['percentage cloned'] = str(stats['percentage cloned']) + '%'
+        if stats:
+            stats['percentage cloned'] = str(stats['percentage cloned']) + '%'
         return stats
 
     def _get_clone_status(self, vol_handle, group, subvol):

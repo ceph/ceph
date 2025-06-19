@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #pragma once
 
+#include <cassert>
 #include <optional>
 #include <string>
 
@@ -23,6 +24,7 @@
 #include "messages/MOSDRepScrubMap.h"
 #include "osd/scrubber_common.h"
 
+#include "scrub_machine_if.h"
 #include "scrub_machine_lstnr.h"
 #include "scrub_reservations.h"
 
@@ -105,7 +107,7 @@ OP_EV(ReplicaReserveReq);
 /// explicit release request from the Primary
 OP_EV(ReplicaRelease);
 
-template <typename T, has_formatter V>
+template <typename T, fmt::formattable V>
 struct value_event_t : sc::event<T> {
   const V value;
 
@@ -278,33 +280,42 @@ struct ReplicaWaitUpdates;
 struct ReplicaBuildingMap;
 
 
-class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
+class ScrubMachine : public ScrubFsmIf, public sc::state_machine<ScrubMachine, NotActive> {
  public:
   friend class PgScrubber;
 
- public:
   explicit ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub);
-  ~ScrubMachine();
+  virtual ~ScrubMachine();
 
   spg_t m_pg_id;
   ScrubMachineListener* m_scrbr;
   std::ostream& gen_prefix(std::ostream& out) const;
 
-  void assert_not_in_session() const;
-  [[nodiscard]] bool is_reserving() const;
-  [[nodiscard]] bool is_accepting_updates() const;
-  [[nodiscard]] bool is_primary_idle() const;
+  void assert_not_in_session() const final;
+  [[nodiscard]] bool is_reserving() const final;
+  [[nodiscard]] bool is_accepting_updates() const final;
+  [[nodiscard]] bool is_primary_idle() const final;
 
   /// elapsed time for the currently active scrub.session
-  ceph::timespan get_time_scrubbing() const;
+  ceph::timespan get_time_scrubbing() const final;
 
   /// replica reservation process status
-  std::optional<pg_scrubbing_status_t> get_reservation_status() const;
+  std::optional<pg_scrubbing_status_t> get_reservation_status() const final;
 
-// ///////////////// aux declarations & functions //////////////////////// //
+  void initiate() final { sc::state_machine<ScrubMachine, NotActive>::initiate(); }
 
+  void process_event(const boost::statechart::event_base& evt) final {
+    sc::state_machine<ScrubMachine, NotActive>::process_event(evt);
+  }
+
+  /// the time when the session was initiated
+  std::optional<ScrubTimePoint> m_session_started_at;
+
+
+  // ///////////////// aux declarations & functions //////////////////////// //
 
 private:
+
   /**
    * scheduled_event_state_t
    *
@@ -554,12 +565,16 @@ struct Session : sc::state<Session, PrimaryActive, ReservingReplicas>,
   /// it's an RAII wrapper around the state of 'holding reservations')
   std::optional<ReplicaReservations> m_reservations{std::nullopt};
 
-  /// the relevant set of performance counters for this session
+  /// the relevant set of labeled performance counters for this session
   /// (relevant, i.e. for this pool type X scrub level)
   PerfCounters* m_perf_set{nullptr};
 
-  /// the time when the session was initiated
-  ScrubTimePoint m_session_started_at{ScrubClock::now()};
+  /// the OSD's unlabeled performance counters access point
+  PerfCounters* m_osd_counters{nullptr};
+
+  /// the set of performance counters for this session (relevant, i.e. for
+  /// this pool type)
+  const ScrubCounterSet* m_counters_idx{nullptr};
 
   /// abort reason - if known. Determines the delay time imposed on the
   /// failed scrub target.

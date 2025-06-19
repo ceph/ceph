@@ -8,9 +8,8 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 })
 export class RgwSyncDataInfoComponent {
   icons = Icons;
-
+  align = 'top';
   @Input()
   zone: any = {};
-
   constructor() {}
 }

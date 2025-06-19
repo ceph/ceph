@@ -16,7 +16,13 @@ from subprocess import SubprocessError
 from urllib.parse import urlparse
 
 import requests
-from mgr_util import build_url, name_to_config_section
+
+try:
+    import xmltodict
+except ModuleNotFoundError:
+    logging.error("Module 'xmltodict' is not installed.")
+
+from mgr_util import build_url
 
 from .. import mgr
 from ..awsauth import S3Auth
@@ -94,9 +100,12 @@ def _determine_rgw_addr(daemon_info: Dict[str, Any]) -> RgwDaemon:
     Parse RGW daemon info to determine the configured host (IP address) and port.
     """
     daemon = RgwDaemon()
-    rgw_dns_name = CephService.send_command('mon', 'config get',
-                                            who=name_to_config_section('rgw.' + daemon_info['metadata']['id']),  # noqa E501 #pylint: disable=line-too-long
-                                            key='rgw_dns_name').rstrip()
+    rgw_dns_name = ''
+    if (
+        Settings.RGW_HOSTNAME_PER_DAEMON
+        and daemon_info['metadata']['id'] in Settings.RGW_HOSTNAME_PER_DAEMON
+    ):
+        rgw_dns_name = Settings.RGW_HOSTNAME_PER_DAEMON[daemon_info['metadata']['id']]
 
     daemon.port, daemon.ssl = _parse_frontend_config(daemon_info['metadata']['frontend_config#0'])
 
@@ -273,7 +282,9 @@ class RgwClient(RestClient):
         return (Settings.RGW_API_ACCESS_KEY,
                 Settings.RGW_API_SECRET_KEY,
                 Settings.RGW_API_ADMIN_RESOURCE,
-                Settings.RGW_API_SSL_VERIFY)
+                Settings.RGW_API_SSL_VERIFY,
+                Settings.RGW_HOSTNAME_PER_DAEMON
+                )
 
     @staticmethod
     def instance(userid: Optional[str] = None,
@@ -715,23 +726,39 @@ class RgwClient(RestClient):
     @RestClient.api_get('/{bucket_name}?lifecycle')
     def get_lifecycle(self, bucket_name, request=None):
         # pylint: disable=unused-argument
+
+        # xmltodict parser will prepend namespace to json keys as {ns0:key}
+        def remove_namespace(xml: str):
+            """Remove namespace in given xml string."""
+            root = ET.fromstring(xml)
+            for elem in root.iter():
+                tag_elements = elem.tag.split("}")  # tag: {ns}tagname
+                # Removing namespaces and attributes
+                elem.tag = tag_elements[1]
+                elem.attrib.clear()
+
+            return ET.tostring(root)
+
         try:
-            decoded_request = request(raw_content=True).decode("utf-8")  # type: ignore
-            result = {
-                'LifecycleConfiguration':
-                json.loads(
-                    decoded_request,
-                    object_pairs_hook=RgwClient._handle_rules
-                )
-            }
+            result = request(
+                raw_content=True, headers={'Accept': 'text/xml'}).decode()  # type: ignore
+            lifecycle = xmltodict.parse(remove_namespace(result), process_namespaces=False)
+            if lifecycle is not None:
+                lifecycle_config = lifecycle.get('LifecycleConfiguration', {})
+                rule = lifecycle_config.get('Rule')
+
+                if isinstance(rule, dict):
+                    lifecycle_config['Rule'] = [rule]
+
+                lifecycle['LifecycleConfiguration'] = lifecycle_config
+            return lifecycle
         except RequestException as e:
             if e.content:
-                content = json_str_to_object(e.content)
-                if content.get(
-                        'Code') == 'NoSuchLifecycleConfiguration':
+                root = ET.fromstring(e.content)
+                code = root.find('Code')
+                if code is not None and code.text == 'NoSuchLifecycleConfiguration':
                     return None
             raise DashboardException(msg=str(e), component='rgw')
-        return result
 
     @staticmethod
     def dict_to_xml(data):
@@ -1092,6 +1119,59 @@ class RgwClient(RestClient):
                     return None
             raise e
 
+    @RestClient.api_post('?Action=CreateTopic&Name={name}')
+    def create_topic(self, request=None, name: str = '',
+                     push_endpoint: Optional[str] = '', opaque_data: Optional[str] = '',
+                     persistent: Optional[bool] = False, time_to_live: Optional[str] = '',
+                     max_retries: Optional[str] = '', retry_sleep_duration: Optional[str] = '',
+                     policy: Optional[str] = '',
+                     verify_ssl: Optional[bool] = False, cloud_events: Optional[bool] = False,
+                     ca_location: Optional[str] = None, amqp_exchange: Optional[str] = None,
+                     amqp_ack_level: Optional[str] = None,
+                     use_ssl: Optional[bool] = False, kafka_ack_level: Optional[str] = None,
+                     kafka_brokers: Optional[str] = None, mechanism: Optional[str] = None,
+                     ):
+        params = {'Name': name}
+
+        if push_endpoint:
+            params['push-endpoint'] = push_endpoint
+        if opaque_data:
+            params['OpaqueData'] = opaque_data
+        if persistent:
+            params['persistent'] = 'true' if persistent else 'false'
+        if time_to_live:
+            params['time_to_live'] = time_to_live
+        if max_retries:
+            params['max_retries'] = max_retries
+        if retry_sleep_duration:
+            params['retry_sleep_duration'] = retry_sleep_duration
+        if policy:
+            params['Policy'] = policy
+        if verify_ssl:
+            params['verify_ssl'] = 'true' if verify_ssl else 'false'
+        if cloud_events:
+            params['cloud_events'] = 'true' if cloud_events else 'false'
+        if ca_location:
+            params['ca_location'] = ca_location
+        if amqp_exchange:
+            params['amqp_exchange'] = amqp_exchange
+        if amqp_ack_level:
+            params['amqp_ack_level'] = amqp_ack_level
+        if use_ssl:
+            params['use_ssl'] = 'true' if use_ssl else 'false'
+        if kafka_ack_level:
+            params['kafka_ack_level'] = kafka_ack_level
+        if kafka_brokers:
+            params['kafka_brokers'] = kafka_brokers
+        if mechanism:
+            params['mechanism'] = mechanism
+        try:
+            result = request(params=params)
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+
+        return result
+
 
 class SyncStatus(Enum):
     enabled = 'enabled'
@@ -1137,195 +1217,220 @@ class RgwMultisiteAutomation:
                                     zone_endpoints: str, username: str,
                                     cluster_fsid: Optional[str] = None,
                                     replication_zone_name: Optional[str] = None,
-                                    cluster_details: Optional[str] = None):
+                                    cluster_details: Optional[str] = None,
+                                    selectedRealmName: Optional[str] = None):
 
-        # Set up multisite replication for Ceph RGW.
         logger.info("Starting multisite replication setup")
-        if cluster_details:
-            cluster_details_dict = json.loads(cluster_details)
+
+        cluster_details_dict = json.loads(cluster_details) if cluster_details else {}
         orch = OrchClient.instance()
-        rgw_multisite_instance = RgwMultisite()
 
         if cluster_fsid:
             self.progress_total = 4
 
-        def get_updated_endpoints(endpoints):
-            # Update endpoint URLs by replacing hostnames with IP addresses.
-            try:
-                hostname_to_ip = {host['hostname']: host['addr'] for host in (h.to_json() for h in orch.hosts.list())}  # noqa E501  # pylint: disable=line-too-long
-                updated_endpoints = [self.replace_hostname(endpoint, hostname_to_ip) for endpoint in endpoints.split(',')]  # noqa E501  # pylint: disable=line-too-long
-                logger.debug("Updated endpoints: %s", updated_endpoints)
-                return updated_endpoints
-            except Exception as e:
-                logger.error("Failed to update endpoints: %s", e)
-                raise
+        if selectedRealmName:
+            self.progress_total = 2
 
-        zonegroup_ip_url = ','.join(get_updated_endpoints(zonegroup_endpoints))
-        zone_ip_url = ','.join(get_updated_endpoints(zone_endpoints))
+        zonegroup_ip_url = ','.join(self.get_updated_endpoints(zonegroup_endpoints, orch))
+        zone_ip_url = ','.join(self.get_updated_endpoints(zone_endpoints, orch))
+
+        if not selectedRealmName:
+            self.create_realm_and_zonegroup(
+                realm_name, zonegroup_name, zone_name, zonegroup_ip_url)
+            self.create_zone_and_user(zone_name, zonegroup_name, username, zone_ip_url)
+            self.restart_daemons()
+
+        return self.export_and_import_realm(
+            realm_name, zonegroup_name, cluster_fsid, replication_zone_name,
+            cluster_details_dict, selectedRealmName, username
+        )
+
+    def get_updated_endpoints(self, endpoints: str, orch: OrchClient) -> list[str]:
         try:
-            # Create the realm and zonegroup
-            self.update_progress(
-                f"Creating realm: {realm_name}, zonegroup: {zonegroup_name} and zone: {zone_name}")
-            logger.info("Creating realm: %s", realm_name)
-            rgw_multisite_instance.create_realm(realm_name=realm_name, default=True)
-            logger.info("Creating zonegroup: %s", zonegroup_name)
-            rgw_multisite_instance.create_zonegroup(realm_name=realm_name,
-                                                    zonegroup_name=zonegroup_name,
-                                                    default=True, master=True,
-                                                    endpoints=zonegroup_ip_url)
+            hostname_to_ip = {host['hostname']: host['addr'] for host in
+                              (h.to_json() for h in orch.hosts.list())}
+            return [self.replace_hostname(endpoint, hostname_to_ip) for endpoint
+                    in endpoints.split(',')]
+        except Exception as e:
+            logger.error("Failed to update endpoints: %s", e)
+            raise
+
+    def create_realm_and_zonegroup(self, realm: str, zg: str, zone: str, zg_url: str):
+        try:
+            rgw_multisite_instance = RgwMultisite()
+            self.update_progress(f"Creating realm: {realm}, zonegroup: {zg} and zone: {zone}")
+            rgw_multisite_instance.create_realm(realm_name=realm, default=True)
+            rgw_multisite_instance.create_zonegroup(realm_name=realm, zonegroup_name=zg,
+                                                    default=True, master=True, endpoints=zg_url)
         except Exception as e:
             logger.error("Failed to create realm or zonegroup: %s", e)
             self.update_progress("Failed to create realm or zonegroup", 'fail', str(e))
             raise
+
+    def create_zone_and_user(self, zone: str, zg: str, username: str, zone_url: str):
         try:
-            # Create the zone and system user, then modify the zone with user credentials
-            logger.info("Creating zone: %s", zone_name)
-            if rgw_multisite_instance.create_zone(zone_name=zone_name,
-                                                  zonegroup_name=zonegroup_name,
-                                                  default=True, master=True,
-                                                  endpoints=zone_ip_url,
-                                                  access_key=None,
-                                                  secret_key=None):
+            rgw_multisite_instance = RgwMultisite()
+            if rgw_multisite_instance.create_zone(zone_name=zone, zonegroup_name=zg, default=True,
+                                                  master=True, endpoints=zone_url,
+                                                  access_key=None, secret_key=None):
                 self.progress_done += 1
-                logger.info("Creating system user: %s", username)
-                user_details = rgw_multisite_instance.create_system_user(username, zone_name)
-                if user_details:
-                    keys = user_details['keys'][0]
-                    access_key = keys['access_key']
-                    secret_key = keys['secret_key']
-                    if access_key and secret_key:
-                        rgw_multisite_instance.modify_zone(zone_name=zone_name,
-                                                           zonegroup_name=zonegroup_name,
-                                                           default='true', master='true',
-                                                           endpoints=zone_ip_url,
-                                                           access_key=keys['access_key'],
-                                                           secret_key=keys['secret_key'])
-                    else:
-                        raise ValueError("Access key or secret key is missing")
+                user_details = rgw_multisite_instance.create_system_user(username, zone)
+                keys = user_details.get('keys', [{}])[0]
+                access_key = keys.get('access_key')
+                secret_key = keys.get('secret_key')
+                if access_key and secret_key:
+                    rgw_multisite_instance.modify_zone(
+                        zone_name=zone, zonegroup_name=zg, default='true',
+                        master='true', endpoints=zone_url, access_key=access_key,
+                        secret_key=secret_key)
+                else:
+                    raise DashboardException("Access key or secret key is missing",
+                                             component='rgw', http_status_code=500)
         except Exception as e:
             logger.error("Failed to create zone or system user: %s", e)
-            self.update_progress("Failed to create zone or system user:", 'fail', str(e))
+            self.update_progress("Failed to create zone or system user", 'fail', str(e))
             raise
+
+    def restart_daemons(self):
         try:
-            logger.info("Restarting RGW daemons and setting credentials")
             self.update_progress("Restarting RGW daemons and setting credentials")
-            rgw_service_manager = RgwServiceManager()
-            rgw_service_manager.restart_rgw_daemons_and_set_credentials()
+            RgwServiceManager().restart_rgw_daemons_and_set_credentials()
             self.progress_done += 1
         except Exception as e:
             logger.error("Failed to restart RGW daemon: %s", e)
-            self.update_progress("Failed to restart RGW daemons:", 'fail', str(e))
+            self.update_progress("Failed to restart RGW daemons", 'fail', str(e))
             raise
-        try:
-            # Get realm tokens and import to another cluster if specified
-            logger.info("Getting realm tokens")
-            realm_token_info = CephService.get_realm_tokens()
-            logger.info("Realm tokens: %s", realm_token_info)
 
-            if cluster_fsid and realm_token_info and replication_zone_name and cluster_details_dict:
-                logger.info("Importing realm token to cluster: %s", cluster_fsid)
-                self.update_progress(f"Importing realm token to cluster: {cluster_fsid}")
-                self.import_realm_token_to_cluster(cluster_fsid, realm_name,
-                                                   zonegroup_name, realm_token_info,
-                                                   username, replication_zone_name,
-                                                   cluster_details_dict)
+    def export_and_import_realm(self, realm: str, zg: str,
+                                fsid: Optional[str], rep_zone: Optional[str],
+                                details_dict: dict, selectedRealm: Optional[str],
+                                username: str):
+        try:
+            realm_token_info = CephService.get_realm_tokens()
+            if fsid and realm_token_info and rep_zone and details_dict:
+                self.update_progress(f"Importing realm token to cluster: {fsid}")
+                self.import_realm_token_to_cluster(fsid, realm, zg, realm_token_info, username,
+                                                   rep_zone, details_dict, selectedRealm)
             else:
                 self.update_progress("Realm Export Token fetched successfully", 'complete')
+            logger.info("Multisite replication setup completed")
+            return realm_token_info
         except Exception as e:
             logger.error("Failed to get realm tokens or import to cluster: %s", e)
-            self.update_progress("Failed to get realm tokens or import to cluster:", 'fail', str(e))
+            self.update_progress("Failed to get realm tokens or import to cluster",
+                                 'fail', str(e))
             raise
-        logger.info("Multisite replication setup completed")
-        return realm_token_info
 
     def import_realm_token_to_cluster(self, cluster_fsid, realm_name, zonegroup_name,
                                       realm_token_info, username, replication_zone_name,
-                                      cluster_details):
+                                      cluster_details, selectedRealmName):
         try:
-            for realm_token in realm_token_info:
-                if realm_token['realm'] == realm_name:
-                    realm_export_token = realm_token['token']
-                    break
-            else:
-                raise ValueError(f"Realm {realm_name} not found in realm tokens")
-            for cluster in cluster_details:
-                if cluster['name'] == cluster_fsid:
-                    cluster_token = cluster['token']
-                    cluster_url = cluster['url']
-                    break
-            if cluster_token:
-                if not cluster_url.endswith('/'):
-                    cluster_url += '/'
+            if selectedRealmName:
+                rgw_service_manager = RgwServiceManager()
+                username = rgw_service_manager.get_username_from_realm_name(selectedRealmName)
+                realm_name = selectedRealmName
 
-                path = 'api/rgw/realm/import_realm_token'
-                try:
-                    multi_cluster_instance = MultiCluster()
-                    daemon_name = f"{realm_name}.{replication_zone_name}"
-                    # pylint: disable=protected-access
-                    config_payload = {
-                        'realm_name': realm_name,
-                        'zonegroup_name': zonegroup_name,
-                        'zone_name': replication_zone_name,
-                        'daemon_name': daemon_name,
-                    }
-                    config_info = multi_cluster_instance._proxy(method='PUT', base_url=cluster_url,
-                                                                path='api/rgw/daemon/set_multisite_config',  # noqa E501  # pylint: disable=line-too-long
-                                                                payload=config_payload,
-                                                                token=cluster_token)
-                    logger.info("setting config response: %s", config_info)
-                    available_port = multi_cluster_instance._proxy(method='GET',
-                                                                   base_url=cluster_url,
-                                                                   path='ui-api/rgw/multisite/available-ports',  # noqa E501  # pylint: disable=line-too-long
-                                                                   token=cluster_token)
-                    placement_spec: Dict[str, Dict] = {"placement": {}}
-                    payload = {
-                        'realm_token': realm_export_token,
-                        'zone_name': replication_zone_name,
-                        'port': available_port,
-                        'placement_spec': placement_spec,
-                    }
-                    token_import_response = multi_cluster_instance._proxy(method='POST',
-                                                                          base_url=cluster_url,
-                                                                          path=path,
-                                                                          payload=payload,
-                                                                          token=cluster_token)
-                    logger.info("Import realm token response: %s", token_import_response)
-                    self.progress_done += 1
-                    self.update_progress(f"Checking for user {username} in the selected cluster and setting credentials")  # noqa E501  # pylint: disable=line-too-long
-                    service_name = f"rgw.{daemon_name}"
-                    daemons_status = multi_cluster_instance._proxy(method='GET',
-                                                                   base_url=cluster_url,
-                                                                   path=f'ui-api/rgw/multisite/check-daemons-status?service_name={service_name}',  # noqa E501  # pylint: disable=line-too-long
-                                                                   token=cluster_token)
-                    logger.info("Daemons status: %s", daemons_status)
-                    realms_list = multi_cluster_instance._proxy(
-                        method='GET',
-                        base_url=cluster_url,
-                        path='api/rgw/realm',
-                        token=cluster_token
-                    )
-                    logger.debug("Realms info in the selected cluster: %s", realms_list)
-                    system_user_param = "realmName" if realms_list.get('default_info') \
-                        else "zoneName"
-                    if daemons_status is True:
-                        self.check_user_in_second_cluster(cluster_url, cluster_token,
-                                                          username, replication_zone_name,
-                                                          system_user_param, realm_name)
-                    else:
-                        self.update_progress("Failed to set credentials in selected cluster", 'fail', "RGW daemons failed to start")  # noqa E501  # pylint: disable=line-too-long
-                        return token_import_response
-                except requests.RequestException as e:
-                    logger.error("Could not reach %s: %s", cluster_url, e)
-                    raise DashboardException(f"Could not reach {cluster_url}: {e}",
-                                             http_status_code=404, component='dashboard')
-                except json.JSONDecodeError as e:
-                    logger.error("Error parsing Dashboard API response: %s", e.msg)
-                    raise DashboardException(f"Error parsing Dashboard API response: {e.msg}",
-                                             component='dashboard')
+            realm_export_token = self._get_realm_export_token(realm_token_info, realm_name)
+            cluster_url, cluster_token = self._get_cluster_details(cluster_fsid, cluster_details)
+
+            self._configure_selected_cluster(cluster_url, cluster_token, realm_name,
+                                             zonegroup_name, replication_zone_name)
+
+            token_import_response = self._import_realm_token(
+                cluster_url, cluster_token, realm_export_token,
+                replication_zone_name)
+
+            self.progress_done += 1
+            self.update_progress(f"Checking for user {username} in the selected cluster \
+                                 and setting credentials")
+
+            self._verify_user_and_daemons(cluster_url, cluster_token, realm_name,
+                                          replication_zone_name, username)
+
+            return token_import_response
+
         except Exception as e:
             logger.error("Failed to import realm token to cluster: %s", e)
             self.update_progress("Failed to import realm token to cluster:", 'fail', str(e))
             raise
+
+    def _get_realm_export_token(self, realm_token_info, realm_name):
+        for realm_token in realm_token_info:
+            if realm_token['realm'] == realm_name:
+                return realm_token['token']
+        raise DashboardException('Realm token not found',
+                                 http_status_code=500, component='rgw')
+
+    def _get_cluster_details(self, cluster_fsid, cluster_details):
+        for cluster in cluster_details:
+            if cluster['name'] == cluster_fsid:
+                cluster_url = cluster['url'].rstrip('/') + '/'
+                return cluster_url, cluster['token']
+        raise DashboardException("Cluster details not found",
+                                 http_status_code=500, component='rgw')
+
+    def _configure_selected_cluster(self, cluster_url, cluster_token, realm_name,
+                                    zonegroup_name, replication_zone_name):
+        daemon_name = f"{realm_name}.{replication_zone_name}"
+        config_payload = {
+            'realm_name': realm_name,
+            'zonegroup_name': zonegroup_name,
+            'zone_name': replication_zone_name,
+            'daemon_name': daemon_name,
+        }
+        multi_cluster_instance = MultiCluster()
+        # pylint: disable=protected-access
+        config_info = multi_cluster_instance._proxy(method='PUT', base_url=cluster_url,
+                                                    path='api/rgw/daemon/set_multisite_config',
+                                                    payload=config_payload,
+                                                    token=cluster_token)
+        logger.info("setting config response: %s", config_info)
+
+    def _import_realm_token(self, cluster_url, cluster_token, realm_token, zone_name):
+        multi_cluster_instance = MultiCluster()
+        # pylint: disable=protected-access
+        available_port = multi_cluster_instance._proxy(
+            method='GET', base_url=cluster_url, path='ui-api/rgw/multisite/available-ports',
+            token=cluster_token)
+        payload = {
+            'realm_token': realm_token,
+            'zone_name': zone_name,
+            'port': available_port,
+            'placement_spec': {"placement": {}}
+        }
+        # pylint: disable=protected-access
+        token_import_response = multi_cluster_instance._proxy(
+            method='POST', base_url=cluster_url, path='api/rgw/realm/import_realm_token',
+            payload=payload, token=cluster_token)
+        logger.info("Import realm token response: %s", token_import_response)
+        return token_import_response
+
+    def _verify_user_and_daemons(self, cluster_url, cluster_token, realm_name, zone_name,
+                                 username):
+        multi_cluster_instance = MultiCluster()
+        daemon_name = f"{realm_name}.{zone_name}"
+        service_name = f"rgw.{daemon_name}"
+        # pylint: disable=protected-access
+        daemons_status = multi_cluster_instance._proxy(
+            method='GET', base_url=cluster_url,
+            path=f'ui-api/rgw/multisite/check-daemons-status?service_name={service_name}',
+            token=cluster_token)
+        logger.debug("Daemons status: %s", daemons_status)
+        # pylint: disable=protected-access
+        realms_list = multi_cluster_instance._proxy(method='GET',
+                                                    base_url=cluster_url,
+                                                    path='api/rgw/realm',
+                                                    token=cluster_token)
+        logger.debug("Realms info in the selected cluster: %s", realms_list)
+
+        system_user_param = "realmName" if realms_list.get('default_info') else "zoneName"
+
+        if daemons_status is True:
+            self.check_user_in_second_cluster(cluster_url, cluster_token, username, zone_name,
+                                              system_user_param, realm_name)
+        else:
+            self.update_progress("Failed to set credentials in selected cluster", 'fail',
+                                 "RGW daemons failed to start")
 
     def check_user_in_second_cluster(self, cluster_url, cluster_token, username,
                                      replication_zone_name, system_user_param,
@@ -1358,10 +1463,12 @@ class RgwMultisiteAutomation:
                     user_found = True
                     logger.info("User %s found in the second cluster", username)
                     # pylint: disable=protected-access
-                    set_creds_cont = multi_cluster_instance._proxy(method='PUT', base_url=cluster_url,  # noqa E501  # pylint: disable=line-too-long
-                                                                   path='ui-api/rgw/multisite/setup-rgw-credentials',  # noqa E501  # pylint: disable=line-too-long
-                                                                   token=cluster_token)  # noqa E501  # pylint: disable=line-too-long
-                    logger.info("set credentials in selected cluster response: %s", set_creds_cont)  # noqa E501  # pylint: disable=line-too-long  # noqa E501  # pylint: disable=line-too-long
+                    set_creds_cont = multi_cluster_instance._proxy(
+                        method='PUT', base_url=cluster_url,
+                        path='ui-api/rgw/multisite/setup-rgw-credentials',
+                        token=cluster_token)
+                    logger.info("set credentials in selected cluster response: %s",
+                                set_creds_cont)
                     self.progress_done += 1
                     self.update_progress("Multisite replication setup completed",
                                          'complete')
@@ -1784,6 +1891,14 @@ class RgwMultisite:
         else:
             self.update_period()
 
+    def modify_retain_head(self, tier_config: dict) -> List[str]:
+        tier_config_items = []
+        for key, value in tier_config.items():
+            if isinstance(value, bool):
+                value = str(value).lower()
+            tier_config_items.append(f'{key}={value}')
+        return tier_config_items
+
     def add_placement_targets(self, zonegroup_name: str, placement_targets: List[Dict]):
         rgw_add_placement_cmd = ['zonegroup', 'placement', 'add']
         STANDARD_STORAGE_CLASS = "STANDARD"
@@ -1802,9 +1917,7 @@ class RgwMultisite:
             ):
                 tier_config = placement_target.get('tier_config', {})
                 if tier_config:
-                    tier_config_items = (
-                        f'{key}={value}' for key, value in tier_config.items()
-                    )
+                    tier_config_items = self.modify_retain_head(tier_config)
                     tier_config_str = ','.join(tier_config_items)
                     cmd_add_placement_options += [
                         '--tier-type', 'cloud-s3', '--tier-config', tier_config_str
@@ -1877,9 +1990,7 @@ class RgwMultisite:
             ):
                 tier_config = placement_target.get('tier_config', {})
                 if tier_config:
-                    tier_config_items = (
-                        f'{key}={value}' for key, value in tier_config.items()
-                    )
+                    tier_config_items = self.modify_retain_head(tier_config)
                     tier_config_str = ','.join(tier_config_items)
                     cmd_add_placement_options += [
                         '--tier-type', 'cloud-s3', '--tier-config', tier_config_str
@@ -2592,3 +2703,61 @@ class RgwMultisite:
             return True
         except DashboardException:
             return False
+
+
+class RgwTopicmanagement:
+    def list_topics(self, uid: Optional[str], tenant: Optional[str]):
+        rgw_topics_list = {}
+        rgw_topic_list_cmd = ['topic', 'list']
+        try:
+            if uid:
+                rgw_topic_list_cmd.append('--uid')
+                rgw_topic_list_cmd.append(uid)
+
+            if tenant:
+                rgw_topic_list_cmd.append('--tenant')
+                rgw_topic_list_cmd.append(tenant)
+
+            exit_code, rgw_topics_list, _ = mgr.send_rgwadmin_command(rgw_topic_list_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to fetch topic list',
+                                         http_status_code=500, component='rgw')
+            return rgw_topics_list
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def get_topic(self, name: str, tenant: Optional[str]):
+        rgw_topic_info_cmd = ['topic', 'get']
+        try:
+            if tenant:
+                rgw_topic_info_cmd.append('--tenant')
+                rgw_topic_info_cmd.append(tenant)
+
+            if name:
+                rgw_topic_info_cmd.append('--topic')
+                rgw_topic_info_cmd.append(name)
+
+            exit_code, topic_info, _ = mgr.send_rgwadmin_command(rgw_topic_info_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to get topic info',
+                                         http_status_code=500, component='rgw')
+            return topic_info
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def delete_topic(self, name: str, tenant: Optional[str] = None):
+        rgw_delete_topic_cmd = ['topic', 'rm']
+        try:
+            if tenant:
+                rgw_delete_topic_cmd.extend(['--tenant', tenant])
+
+            if name:
+                rgw_delete_topic_cmd.extend(['--topic', name])
+
+            exit_code, _, _ = mgr.send_rgwadmin_command(rgw_delete_topic_cmd)
+
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to delete topic',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')

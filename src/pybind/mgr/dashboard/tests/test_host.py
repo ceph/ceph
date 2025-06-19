@@ -187,6 +187,7 @@ class HostControllerTest(ControllerTestCase):
 
     def test_get_3(self):
         mgr.list_servers.return_value = []
+        mgr.version = 'ceph version 16.0.0-3151-gf202994fcf'
 
         with patch_orch(True, hosts=[HostSpec('node1')]):
             self._get('{}/node1'.format(self.URL_HOST))
@@ -197,6 +198,7 @@ class HostControllerTest(ControllerTestCase):
 
     def test_populate_service_instances(self):
         mgr.list_servers.return_value = []
+        mgr.version = 'ceph version 16.0.0-3151-gf202994fcf'
 
         node1_daemons = [
             DaemonDescription(

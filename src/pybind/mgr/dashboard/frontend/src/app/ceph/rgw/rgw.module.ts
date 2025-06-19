@@ -52,7 +52,6 @@ import { RgwSyncPrimaryZoneComponent } from './rgw-sync-primary-zone/rgw-sync-pr
 import { RgwSyncMetadataInfoComponent } from './rgw-sync-metadata-info/rgw-sync-metadata-info.component';
 import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-info.component';
 import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.component';
-import { NfsListComponent } from '../nfs/nfs-list/nfs-list.component';
 import { NfsFormComponent } from '../nfs/nfs-form/nfs-form.component';
 import { RgwMultisiteSyncPolicyComponent } from './rgw-multisite-sync-policy/rgw-multisite-sync-policy.component';
 import { RgwMultisiteSyncPolicyFormComponent } from './rgw-multisite-sync-policy-form/rgw-multisite-sync-policy-form.component';
@@ -83,7 +82,8 @@ import {
   AccordionModule,
   TagModule,
   TooltipModule,
-  ComboBoxModule
+  ComboBoxModule,
+  ToggletipModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
@@ -95,6 +95,9 @@ import { RgwBucketTieringFormComponent } from './rgw-bucket-tiering-form/rgw-buc
 import { RgwBucketLifecycleListComponent } from './rgw-bucket-lifecycle-list/rgw-bucket-lifecycle-list.component';
 import { RgwRateLimitComponent } from './rgw-rate-limit/rgw-rate-limit.component';
 import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-limit-details.component';
+import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
+import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
+import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
 
 @NgModule({
   imports: [
@@ -127,13 +130,13 @@ import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-
     SelectModule,
     NumberModule,
     TabsModule,
-    RadioModule,
     TagModule,
     TooltipModule,
-    ComboBoxModule
+    ComboBoxModule,
+    ToggletipModule,
+    RadioModule
   ],
   exports: [
-    RgwDaemonListComponent,
     RgwDaemonDetailsComponent,
     RgwBucketFormComponent,
     RgwBucketListComponent,
@@ -192,7 +195,9 @@ import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-
     RgwStorageClassFormComponent,
     RgwBucketTieringFormComponent,
     RgwBucketLifecycleListComponent,
-    RgwRateLimitDetailsComponent
+    RgwRateLimitDetailsComponent,
+    RgwTopicListComponent,
+    RgwTopicDetailsComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -374,7 +379,7 @@ const routes: Routes = [
       breadcrumbs: 'NFS'
     },
     children: [
-      { path: '', component: NfsListComponent },
+      { path: '', component: NfsClusterComponent },
       {
         path: URLVerbs.CREATE,
         component: NfsFormComponent,
@@ -391,6 +396,11 @@ const routes: Routes = [
     path: 'configuration',
     data: { breadcrumbs: 'Configuration' },
     children: [{ path: '', component: RgwConfigurationPageComponent }]
+  },
+  {
+    path: 'topic',
+    data: { breadcrumbs: 'Topic' },
+    children: [{ path: '', component: RgwTopicListComponent }]
   }
 ];
 

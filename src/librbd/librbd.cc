@@ -1425,8 +1425,9 @@ namespace librbd {
     tracepoint(librbd, group_snap_create_enter,
                group_ioctx.get_pool_name().c_str(),
 	       group_ioctx.get_id(), group_name, snap_name);
+    auto flags = librbd::util::get_default_snap_create_flags(group_ioctx);
     int r = librbd::api::Group<>::snap_create(group_ioctx, group_name,
-                                              snap_name, 0);
+                                              snap_name, flags);
     tracepoint(librbd, group_snap_create_exit, r);
     return r;
   }
@@ -7304,8 +7305,9 @@ extern "C" int rbd_group_snap_create(rados_ioctx_t group_p,
              group_ioctx.get_pool_name().c_str(),
 	     group_ioctx.get_id(), group_name, snap_name);
 
+  auto flags = librbd::util::get_default_snap_create_flags(group_ioctx);
   int r = librbd::api::Group<>::snap_create(group_ioctx, group_name,
-                                            snap_name, 0);
+                                            snap_name, flags);
   tracepoint(librbd, group_snap_create_exit, r);
 
   return r;

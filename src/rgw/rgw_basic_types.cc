@@ -170,6 +170,9 @@ ostream& operator <<(ostream& m, const Principal& p) {
   if (p.is_wildcard()) {
     return m << "*";
   }
+  if (p.is_service()) {
+    return m << p.get_service();
+  }
 
   m << "arn:aws:iam:" << p.get_account() << ":";
   if (p.is_account()) {

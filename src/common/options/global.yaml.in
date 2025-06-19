@@ -433,6 +433,14 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: breakpad
+  type: bool
+  level: advanced
+  desc: setup breakpad crash handler
+  default: false
+  flags:
+  - startup
+  with_legacy: true
 - name: crash_dir
   type: str
   level: advanced
@@ -1810,7 +1818,7 @@ options:
 - name: mon_warn_pg_not_scrubbed_ratio
   type: float
   level: advanced
-  desc: Percentage of the scrub max interval past the scrub max interval to warn
+  desc: Raise a health warning when shallow scrubs are delayed by this percentage of the shallow scrub interval. Note that this must be set at mgr or with global scope. Set this configurable with the command "ceph config set mgr mon_warn_pg_not_scrubbed_ratio <ratio_value>".
   default: 0.5
   see_also:
   - osd_scrub_max_interval
@@ -1819,7 +1827,7 @@ options:
 - name: mon_warn_pg_not_deep_scrubbed_ratio
   type: float
   level: advanced
-  desc: Percentage of the deep scrub interval past the deep scrub interval to warn
+  desc: Percentage of the deep scrub interval past the deep scrub interval to warn - Set this configurable with the command "ceph config set mgr mon_warn_pg_not_deep_scrubbed_ratio <ratio_value>"
   default: 0.75
   see_also:
   - osd_deep_scrub_interval
@@ -2699,6 +2707,15 @@ options:
   level: advanced
   desc: set bulk flag on new pools
   fmt_desc: Set the ``bulk`` flag on new pools. Allowing autoscaler to use scale-down mode.
+  default: false
+  services:
+  - mon
+  with_legacy: true
+- name: osd_pool_default_flag_ec_optimizations
+  type: bool
+  level: advanced
+  desc: Control whether to create new erasure coded pools with EC optimizations turned on by default.
+  fmt_desc: Set the ``allow_ec_optimizations`` flag on new erasure coded pools.
   default: false
   services:
   - mon
@@ -4248,6 +4265,15 @@ options:
   level: advanced
   default: false
   with_legacy: true
+- name: bluefs_wal_envelope_mode
+  type: bool
+  level: advanced
+  desc: Enables a faster backend in BlueFS for WAL writes.
+  long_desc: In envelope mode BlueFS files do not need to update metadata. When applied to RocksDB WAL files,
+    it reduces by ~50% the amount of fdatasync syscalls.
+    Downgrading from an envelope mode to legacy mode requires `ceph-bluestore-tool --command downgrade-wal-to-v1`.
+  default: true
+  with_legacy: false
 - name: bluefs_allocator
   type: str
   level: dev
@@ -4759,6 +4785,21 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: bluestore_recompression_min_gain
+  type: float
+  level: advanced
+  desc: Required estimated gain for accepting extents for recompressing.
+  long_desc: Partial writes over compressed blobs have high cost. New data requires
+    new allocation units, but whole old blob must remain. To combat it BlueStore
+    looks around write position to find blobs that will make it profitable to read
+    and recompress.
+  fmt_desc: A float value, (size_exact_released / size_expected_after_compression).
+  default: 1.2
+  see_also:
+  - bluestore_compression_max_blob_size
+  flags:
+  - runtime
+  with_legacy: true
 # Specifies minimum expected amount of saved allocation units
 # per single blob to enable compressed blobs garbage collection
 - name: bluestore_gc_enable_blob_threshold
@@ -4854,6 +4895,14 @@ options:
   desc: Preallocated buffer for inline shards
   default: 256
   with_legacy: true
+- name: bluestore_debug_extent_map_encode_check
+  type: bool
+  level: dev
+  desc: Check correctness of extents in encode_some
+  default: false
+  with_legacy: false
+  flags:
+  - startup
 - name: bluestore_cache_trim_interval
   type: float
   level: advanced
@@ -5103,7 +5152,7 @@ options:
   type: bool
   level: advanced
   desc: Random selection of write path mode
-  long_desc: For testing purposes. If true, value of bluestore_write_v2 is randomly selected.
+  long_desc: For testing purposes. If true, value of bluestore_write_v2 is randomly selected on each mount.
   default: false
   see_also:
   - bluestore_write_v2
@@ -5174,7 +5223,7 @@ options:
     Only applied when OSD is doing ``--mkfs``.
   default: true
   verbatim: |
-    #ifdef WITH_SEASTAR
+    #ifdef WITH_CRIMSON
     // This is necessary as the Seastar's allocator imposes restrictions
     // on the number of threads that entered malloc/free/*. Unfortunately,
     // RocksDB sharding in BlueStore dramatically lifted the number of
@@ -5613,6 +5662,23 @@ options:
   - hdd
   - ssd
   with_legacy: true
+- name: bluestore_allocator_lookup_policy
+  type: str
+  level: advanced
+  desc: Determines how to perform the next free extent lookup.
+  long_desc: When set to 'hdd_optimized' the allocator searches from the last
+     location found. This may facilitate contiguous disk writes. It may similarly
+     be beneficial for large-IU QLC SSDs to enable firmware coalescing of sub-IU
+     writes.
+     When set to 'ssd-optimized' the allocator will search from the beginning of
+     the device. This may facilitate SSD firmware housekeeping.
+     When set to 'auto' the value will be derived from the detected device type
+    (rotational or non-rotational).
+  default: auto
+  enum_values:
+  - hdd_optimized
+  - ssd_optimized
+  - auto
 - name: bluestore_avl_alloc_ff_max_search_count
   type: uint
   level: dev
@@ -6688,6 +6754,37 @@ options:
   desc: How long cleaner should sleep before re-checking utilization
   default: 5
   with_legacy: true
+- name: bluestore_onode_segment_size
+  type: size
+  level: advanced
+  desc: Size of segment for onode.
+  long_desc: When object size grows too large BlueStore splits allocation metadata into
+    smaller RocksDB keys (shards). When multiple blobs overlap each other
+    some of them might belong to more than one shard. The encoding for such case
+    is inefficient (spanning blobs). Segmentation of data prevents blobs from crossing
+    specific separation lines, preventing spanning blobs altogether.
+    The smaller values give better split on onode shards.
+    The larger values minimize space loss for padding in compression.
+    Recommended values 256K, 512K, 1024K. Value 0 disables segmentation.
+    Actual segment size cannot be smaller than "compression_max_blob_size" pool option, if set.
+  default: 0
+  see_also:
+  - bluestore_extent_map_shard_max_size
+  - bluestore_extent_map_shard_target_size
+  - bluestore_debug_onode_segmentation_random
+  with_legacy: false
+- name: bluestore_debug_onode_segmentation_random
+  type: bool
+  level: dev
+  desc: Random selection of onode segmentation
+  long_desc: For testing purposes. On each mount 50% roll decides whether to use
+    bluestore_onode_segment_size or set it to 0 (disable).
+  default: false
+  see_also:
+  - bluestore_onode_segment_size
+  flags:
+  - startup
+  with_legacy: false
 - name: jaeger_tracing_enable
   type: bool
   level: advanced
@@ -6718,3 +6815,22 @@ options:
   desc: Enables exception throwing instead of process abort on transaction submission error.
   default: false
   with_legacy: false
+- name: ceph_assert_supresssions
+  type: str
+  desc: Suppress specific ceph_assert instances to let the execution continue with unknown, potentially DESTRUCTIVE consequences.
+  fmt_desc: Comma-separated list of locations of ceph_assert in the source code.
+    The format is ``{file}:{line} [, {file}:{line}]``
+  level: dev
+  with_legacy: false
+- name: ec_extent_cache_size
+  type: uint
+  level: advanced
+  desc: Size of per-shard extent cache
+  default: 10485760
+  services:
+  - osd
+- name: ec_pdw_write_mode
+  type: uint
+  level: dev
+  default: 0
+  desc: When EC writes should generate PDWs (development only) 0=optimal 1=never 2=when possible

@@ -1,5 +1,5 @@
 add_library(crimson::cflags INTERFACE IMPORTED)
-set(crimson_cflag_definitions "WITH_SEASTAR=1")
+set(crimson_cflag_definitions "WITH_CRIMSON=1")
 
 set_target_properties(crimson::cflags PROPERTIES
   INTERFACE_COMPILE_DEFINITIONS "${crimson_cflag_definitions}"
@@ -135,6 +135,10 @@ set(crimson_common_deps
 set(crimson_common_public_deps crimson::cflags)
 if(WITH_JAEGER)
   list(APPEND crimson_common_public_deps jaeger_base)
+endif()
+
+if(WITH_BREAKPAD)
+  list(APPEND crimson_common_deps Breakpad::client)
 endif()
 
 if(NOT WITH_SYSTEM_BOOST)

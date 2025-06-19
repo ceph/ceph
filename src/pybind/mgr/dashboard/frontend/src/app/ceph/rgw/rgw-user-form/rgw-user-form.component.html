@@ -7,6 +7,50 @@
     <div i18n="form title"
          class="form-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
 
+    @if(accounts.length > 0){
+      <!-- Link Account -->
+      <div class="form-item">
+        <cds-select label="Link Account"
+                    i18n-label
+                    id="link_account"
+                    for="link_account"
+                    formControlName="account_id"
+                    [invalid]="userForm.controls.account_id.invalid && userForm.controls.account_id.dirty"
+                    [invalidText]="accountError"
+                    [helperText]="accountsHelper">
+          <option i18n
+                  *ngIf="accounts === null"
+                  [ngValue]="null">Loading...</option>
+          <option i18n
+                  *ngIf="accounts !== null"
+                  [ngValue]="null">-- Select an Account --</option>
+          <option *ngFor="let account of accounts"
+                  [value]="account.id">{{ account.name }} {{account.tenant ? '- '+account.tenant : ''}}</option>
+        </cds-select>
+        <ng-template #accountError>
+          <span class="invalid-feedback"
+                *ngIf="userForm.showError('account_id', frm, 'tenantedAccount')"
+                i18n>Only accounts with the same tenant name can be linked to a tenanted user.</span>
+        </ng-template>
+        <ng-template #accountsHelper>
+          <div i18n>Account membership is permanent. Once added, users cannot be removed from their account.</div>
+          <div i18n>Ownership of all of the user's buckets will be transferred to the account.</div>
+        </ng-template>
+      </div>
+
+      <!-- Account Root user -->
+      <div *ngIf="userForm.getValue('account_id')"
+           class="form-item">
+        <cds-checkbox formControlName="account_root_user"
+                      id="account_root_user"
+                      i18n>Account Root user
+          <cd-help-text>The account root user has full access to all resources and manages the account.
+            It's recommended to use this account for management tasks only and create additional users with specific permissions.
+          </cd-help-text>
+        </cds-checkbox>
+      </div>
+    }
+
     <!-- User ID -->
     <div class="form-item">
       <cds-text-label for="user_id"
@@ -35,14 +79,14 @@
       </ng-template>
     </div>
 
-      <!-- Show Tenant -->
-      <div class="form-item">
-        <cds-checkbox formControlName="show_tenant"
-                      id="show_tenant"
-                      [readonly]="true"
-                      (checkedChange)="updateFieldsWhenTenanted()">Show Tenant
-        </cds-checkbox>
-      </div>
+    <!-- Show Tenant -->
+    <div class="form-item">
+      <cds-checkbox formControlName="show_tenant"
+                    id="show_tenant"
+                    [readonly]="true"
+                    (checkedChange)="updateFieldsWhenTenanted()">Show Tenant
+      </cds-checkbox>
+    </div>
 
     <!-- Tenant -->
     <div class="form-item"
@@ -80,8 +124,7 @@
                formControlName="display_name"
                name="display_name"
                id="display_name"
-               [invalid]="userForm.controls.display_name.invalid && (userForm.controls.display_name.dirty)"
-               [readonly]="editing"/>
+               [invalid]="userForm.showError('display_name', formDir)"/>
       </cds-text-label>
       <ng-template #displayNameError>
         <span class="invalid-feedback"

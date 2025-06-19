@@ -7,11 +7,11 @@
         i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
   </cds-modal-header>
   <ng-container *cdFormLoading="loading">
-    <form name="domainSettingsForm"
-          #formDir="ngForm"
-          [formGroup]="domainSettingsForm"
-          novalidate>
-      <div cdsModalContent>
+    <div cdsModalContent>
+      <form name="domainSettingsForm"
+            #formDir="ngForm"
+            [formGroup]="domainSettingsForm"
+            novalidate>
         <div class="form-item">
           <cds-text-label
             label="realm"
@@ -114,17 +114,15 @@
             </button>
           </div>
         </div>
-      </div>
+      </form>
+    </div>
 
-        <!-- Join Source -->
-
-      <cd-form-button-panel
-        (submitActionEvent)="submit()"
-        [form]="domainSettingsForm"
-        [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-        [modalForm]="true"
-      >
-      </cd-form-button-panel>
-    </form>
+    <cd-form-button-panel
+      (submitActionEvent)="submit()"
+      [form]="domainSettingsForm"
+      [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+      [modalForm]="true"
+    >
+    </cd-form-button-panel>
   </ng-container>
 </cds-modal>

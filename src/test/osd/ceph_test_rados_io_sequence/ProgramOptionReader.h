@@ -115,6 +115,53 @@ class ProgramOptionSelector : public ProgramOptionReader<option_type> {
   std::optional<option_type> first_value;
 };
 
+template <typename option_type,
+          int num_selections,
+          const std::array< option_type,
+                            num_selections>& selections_array,
+          int num_selections_stable,
+          const std::array< option_type,
+                            num_selections_stable>& elections_array_stable>
+class StableOptionSelector : public ProgramOptionReader<option_type> {
+public:
+  StableOptionSelector(ceph::util::random_number_generator<int>& rng,
+                        po::variables_map& vm,
+                        const std::string& option_name,
+                        bool select_first)
+      : ProgramOptionReader<option_type>(vm, option_name), rng(rng),
+        stable(!vm.contains("allow_unstable_pool_configs") ||
+          vm.contains("disable_pool_ec_optimizations")) {
+    if (select_first) {
+      if (stable) {
+        ceph_assert(selections_array.size() > 0);
+        first_value = elections_array_stable[0];
+      } else {
+        ceph_assert(selections_array.size() > 0);
+        first_value = selections_array[0];
+      }
+    }
+  }
+
+  virtual ~StableOptionSelector() = default;
+
+  virtual const option_type select() override {
+    if (this->force_value.has_value()) {
+      return *this->force_value;
+    } else if (first_value.has_value()) {
+      return *std::exchange(first_value, std::nullopt);
+    } else if (stable) {
+      return elections_array_stable[rng(num_selections_stable - 1)];
+    } else {
+      return selections_array[rng(num_selections - 1)];
+    }
+  }
+
+protected:
+  ceph::util::random_number_generator<int>& rng;
+  std::optional<option_type> first_value;
+  bool stable;
+};
+
 template <typename option_type>
 class ProgramOptionGeneratedSelector
     : public OptionalProgramOptionReader<option_type> {

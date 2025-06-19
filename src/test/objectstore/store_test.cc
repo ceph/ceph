@@ -1591,6 +1591,7 @@ TEST_P(StoreTestSpecificAUSize, ReproBug41901Test) {
   if(string(GetParam()) != "bluestore")
     return;
 
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   SetVal(g_conf(), "bluestore_max_blob_size", "524288");
   SetVal(g_conf(), "bluestore_debug_enforce_settings", "hdd");
   g_conf().apply_changes(nullptr);
@@ -1685,6 +1686,7 @@ TEST_P(StoreTestSpecificAUSize, ReproBug41901Test) {
 TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
   if(string(GetParam()) != "bluestore")
     return;
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   SetVal(g_conf(), "bluestore_block_db_path", "");
   StartDeferred(65536);
   SetVal(g_conf(), "bluestore_compression_mode", "force");
@@ -2215,6 +2217,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
 TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
   if(string(GetParam()) != "bluestore")
     return;
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   SetVal(g_conf(), "bluestore_block_db_path", "");
   StartDeferred(0x10000);
 
@@ -3709,23 +3712,18 @@ TEST_P(StoreTest, OmapSimple) {
     ASSERT_EQ(r.size(), km.size());
     cout << "r: " << r << std::endl;
   }
-  // test iterator with seek_to_first
+  // test iterator with initial lower_bound. when an empty
+  // string is passed, lower_bound() becomes an alias
+  // to seek_to_first().
   {
     map<string,bufferlist> r;
-    ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(ch, hoid);
-    for (iter->seek_to_first(); iter->valid(); iter->next()) {
-      r[iter->key()] = iter->value();
-    }
-    cout << "r: " << r << std::endl;
-    ASSERT_EQ(r.size(), km.size());
-  }
-  // test iterator with initial lower_bound
-  {
-    map<string,bufferlist> r;
-    ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(ch, hoid);
-    for (iter->lower_bound(string()); iter->valid(); iter->next()) {
-      r[iter->key()] = iter->value();
-    }
+    store->omap_iterate(
+      ch, hoid,
+      ObjectStore::omap_iter_seek_t::min_lower_bound(),
+      [&r] (std::string_view key, std::string_view value) mutable {
+        r[std::string{key}].append(value);
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      });
     cout << "r: " << r << std::endl;
     ASSERT_EQ(r.size(), km.size());
   }
@@ -6184,8 +6182,6 @@ TEST_P(StoreTest, OMapIterator) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  ObjectMap::ObjectMapIterator iter;
-  bool correct;
   //basic iteration
   for (int i = 0; i < 100; i++) {
     if (!(i%5)) {
@@ -6194,26 +6190,28 @@ TEST_P(StoreTest, OMapIterator) {
     bufferlist bl;
 
     // FileStore may deadlock two active iterators over the same data
-    iter = ObjectMap::ObjectMapIterator();
-
-    iter = store->get_omap_iterator(ch, hoid);
-    for (iter->seek_to_first(), count=0; iter->valid(); iter->next(), count++) {
-      string key = iter->key();
-      bufferlist value = iter->value();
-      correct = attrs.count(key) && (string(value.c_str()) == string(attrs[key].c_str()));
-      if (!correct) {
-	if (attrs.count(key) > 0) {
-	  std::cout << "key " << key << "in omap , " << value.c_str() << " : " << attrs[key].c_str() << std::endl;
-	}
-	else
-	  std::cout << "key " << key << "should not exists in omap" << std::endl;
-      }
-      ASSERT_EQ(correct, true);
-    }
+    count = 0;
+    store->omap_iterate(
+      ch, hoid,
+      ObjectStore::omap_iter_seek_t::min_lower_bound(),
+      [&attrs, &count] (std::string_view key_, std::string_view value) mutable {
+        std::string key{key_};
+        const bool correct = attrs.count(key) && (value == attrs[key].to_str());
+        if (!correct) {
+          if (attrs.count(key) > 0) {
+            std::cout << "key " << key << "in omap , " << value << " : " << attrs[key].c_str() << std::endl;
+          }
+          else {
+            std::cout << "key " << key << "should not exists in omap" << std::endl;
+          }
+        }
+        [correct] { // workaround the void return within the macro
+	  ASSERT_EQ(correct, true);
+	}();
+        ++count;
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      });
     ASSERT_EQ((int)attrs.size(), count);
-
-    // FileStore may deadlock an active iterator vs queue_transaction
-    iter = ObjectMap::ObjectMapIterator();
 
     char buf[100];
     snprintf(buf, sizeof(buf), "%d", i);
@@ -6229,25 +6227,40 @@ TEST_P(StoreTest, OMapIterator) {
     ASSERT_EQ(r, 0);
   }
 
-  iter = store->get_omap_iterator(ch, hoid);
+  std::string out_key;
+  auto get_single_key =
+    [&out_key](std::string_view key, std::string_view value) mutable {
+      out_key = std::string{key};
+      return ObjectStore::omap_iter_ret_t::STOP;
+    };
   //lower bound
   string bound_key = "key-5";
-  iter->lower_bound(bound_key);
-  correct = bound_key <= iter->key();
+  store->omap_iterate(
+    ch, hoid,
+    ObjectStore::omap_iter_seek_t{
+      .seek_position = bound_key,
+      .seek_type = ObjectStore::omap_iter_seek_t::LOWER_BOUND
+    },
+    get_single_key);
+  bool correct = bound_key <= out_key;
   if (!correct) {
-    std::cout << "lower bound, bound key is " << bound_key << " < iter key is " << iter->key() << std::endl;
+    std::cout << "lower bound, bound key is " << bound_key << " < out key is " << out_key << std::endl;
   }
   ASSERT_EQ(correct, true);
   //upper bound
-  iter->upper_bound(bound_key);
-  correct = iter->key() > bound_key;
+  store->omap_iterate(
+    ch, hoid,
+    ObjectStore::omap_iter_seek_t{
+      .seek_position = bound_key,
+      .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
+    },
+    get_single_key);
+  correct = out_key > bound_key;
   if (!correct) {
-    std::cout << "upper bound, bound key is " << bound_key << " >= iter key is " << iter->key() << std::endl;
+    std::cout << "upper bound, bound key is " << bound_key << " >= out key is " << out_key << std::endl;
   }
   ASSERT_EQ(correct, true);
 
-  // FileStore may deadlock an active iterator vs queue_transaction
-  iter = ObjectMap::ObjectMapIterator();
   {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
@@ -7331,6 +7344,7 @@ class DeferredReplayTest : public DeferredWriteTest {
 TEST_P(DeferredReplayTest, DeferredReplay) {
   const bool print = false;
   deferred_test_t t = GetParam();
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   SetVal(g_conf(), "bdev_block_size", stringify(t.bdev_block_size).c_str());
   SetVal(g_conf(), "bluestore_min_alloc_size", stringify(t.min_alloc_size).c_str());
   SetVal(g_conf(), "bluestore_max_blob_size", stringify(t.max_blob_size).c_str());
@@ -7416,6 +7430,7 @@ TEST_P(DeferredReplayTest, DeferredReplay) {
 TEST_P(DeferredReplayTest, DeferredReplayInReadOnly) {
   const bool print = false;
   deferred_test_t t = GetParam();
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   SetVal(g_conf(), "bdev_block_size", stringify(t.bdev_block_size).c_str());
   SetVal(g_conf(), "bluestore_min_alloc_size", stringify(t.min_alloc_size).c_str());
   SetVal(g_conf(), "bluestore_max_blob_size", stringify(t.max_blob_size).c_str());
@@ -8394,6 +8409,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite1) {
     return;
 
   size_t block_size = 4096;
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   StartDeferred(block_size);
   SetVal(g_conf(), "bluestore_max_blob_size", "131072");
   SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
@@ -8578,6 +8594,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite2) {
     return;
 
   size_t block_size = 4096;
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   StartDeferred(block_size);
   SetVal(g_conf(), "bluestore_max_blob_size", "131072");
   SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
@@ -8724,6 +8741,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite3) {
     return;
 
   size_t block_size = 4096;
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   StartDeferred(block_size);
   SetVal(g_conf(), "bluestore_max_blob_size", "131072");
   SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
@@ -8886,6 +8904,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite4) {
     return;
 
   size_t block_size = 4096;
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", stringify(1 << 30).c_str());
   StartDeferred(block_size);
@@ -8960,6 +8979,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite5) {
     return;
 
   size_t block_size = 4096;
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", stringify(1 << 30).c_str());
   StartDeferred(block_size);
@@ -9037,6 +9057,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredDifferentChunks) {
   size_t large_object_size = 1 * 1024 * 1024;
   size_t prefer_deferred_size = 65536;
  
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", stringify(1 << 30).c_str());
 
@@ -9459,6 +9480,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
     return;
 
   size_t block_size = 4096;
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   StartDeferred(block_size);
   SetVal(g_conf(), "bluestore_max_blob_size", "65536");
   g_conf().apply_changes(nullptr);
@@ -9619,9 +9641,9 @@ TEST_P(StoreTestSpecificAUSize, ReproBug56488Test) {
 
   if (string(GetParam()) != "bluestore")
     return;
-
   size_t alloc_size = 65536;
   size_t write_size = 4096;
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   SetVal(g_conf(), "bluestore_debug_enforce_settings", "hdd");
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", stringify(1 << 30).c_str());
@@ -9806,8 +9828,8 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
       ASSERT_EQ(r, 0);\
   }
 
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   StartDeferred(65536);
-
   SetVal(g_conf(), "bluestore_compression_max_blob_size", "524288");
   SetVal(g_conf(), "bluestore_compression_min_blob_size", "262144");
   SetVal(g_conf(), "bluestore_max_blob_size", "524288");
@@ -10108,6 +10130,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
     bstore->mount();
     ghobject_t hoid4 = make_object("Object 4", pool);
     auto ch = store->open_collection(cid);
+    C_SaferCond c;
     {
       bufferlist bl;
       string s(0x1000, 'a');
@@ -10116,10 +10139,11 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
       for(size_t i = 0; i < 0x10; i++) {
               t.write(cid, hoid4, i * bl.length(), bl.length(), bl);
       }
-      r = queue_transaction(store, ch, std::move(t));
+      t.register_on_commit(&c);
+      queue_transaction(store, ch, std::move(t));
       ASSERT_EQ(r, 0);
     }
-    sleep(5);
+    c.wait();
     {
       bstore->inject_zombie_spanning_blob(cid, hoid4, 12345);
       bstore->inject_zombie_spanning_blob(cid, hoid4, 23456);
@@ -10224,21 +10248,23 @@ TEST_P(StoreTestSpecificAUSize, BluestoreBrokenZombieRepairTest) {
       ASSERT_EQ(r, 0);
     }
     cerr << "onode preparing" << std::endl;
+    C_SaferCond c[col_count];
     bufferlist bl;
     string s(0x1000, 'a');
     bl.append(s);
-
     for (size_t i = 0; i < col_count; i++) {
+      ObjectStore::Transaction t;
       for (size_t j = 0; j < obj_count; j++) {
-	ObjectStore::Transaction t;
 	t.write(*cid[i], hoid[i][j], bl.length(), bl.length(), bl);
-	r = queue_transaction(store, ch[i], std::move(t));
-	ASSERT_EQ(r, 0);
       }
+      t.register_on_commit(&c[i]);
+      r = queue_transaction(store, ch[i], std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    for (size_t i = 0; i < col_count; i++) {
+      c[i].wait();
     }
     cerr << "Zombie spanning blob injection" << std::endl;
-
-    sleep(5);
 
     for (size_t i = 0; i < col_count; i++) {
       for (size_t j = 0; j < obj_count; j++) {
@@ -10388,15 +10414,17 @@ TEST_P(StoreTestSpecificAUSize, BluestoreBrokenNoSharedBlobRepairTest) {
       ASSERT_EQ(r, 0);
     }
     {
+     C_SaferCond c;
       ObjectStore::Transaction t;
       t.clone(cid, hoid, hoid_cloned);
-      r = queue_transaction(store, ch, std::move(t));
+      t.register_on_commit(&c);
+      queue_transaction(store, ch, std::move(t));
       ASSERT_EQ(r, 0);
+      c.wait();
     }
   }
   // injecting an error and checking
   cerr << "injecting" << std::endl;
-  sleep(3); // need some time for the previous write to land
   bstore->inject_no_shared_blob_key();
   bstore->inject_stray_shared_blob_key(12345678);
 
@@ -11302,6 +11330,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreEnforceHWSettingsHdd) {
   if (string(GetParam()) != "bluestore")
     return;
 
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   SetVal(g_conf(), "bluestore_debug_enforce_settings", "hdd");
   StartDeferred(0x1000);
 
@@ -11335,6 +11364,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreEnforceHWSettingsSsd) {
   if (string(GetParam()) != "bluestore")
     return;
 
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
   StartDeferred(0x1000);
 
@@ -11369,6 +11399,7 @@ TEST_P(StoreTestSpecificAUSize, ReproNoBlobMultiTest) {
   if(string(GetParam()) != "bluestore")
     return;
 
+  SetVal(g_conf(), "bluestore_write_v2", "false");
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", "4294967296");
   SetVal(g_conf(), "bluestore_block_size", "12884901888");
@@ -11489,6 +11520,8 @@ TEST_P(StoreTestSpecificAUSize, SpilloverLegacyTest) {
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
   SetVal(g_conf(), "bluestore_volume_selection_policy", "rocksdb_original");
+  SetVal(g_conf(), "bluestore_async_db_compaction", "false");
+
   // original RocksDB settings used before https://github.com/ceph/ceph/pull/47221/
   // which enable BlueFS spillover.
   SetVal(g_conf(), "bluestore_rocksdb_options",
@@ -11520,6 +11553,8 @@ TEST_P(StoreTestSpecificAUSize, SpilloverLegacyFixedByFitToFastTest) {
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
   SetVal(g_conf(), "bluestore_volume_selection_policy", "fit_to_fast");
+  SetVal(g_conf(), "bluestore_async_db_compaction", "false");
+
   // original RocksDB settings used before https://github.com/ceph/ceph/pull/47221/
   // which enable BlueFS spillover.
   SetVal(g_conf(), "bluestore_rocksdb_options",
@@ -11968,6 +12003,79 @@ TEST_P(StoreTestOmapUpgrade, LargeLegacyToPG) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
+}
+
+TEST_P(StoreTestSpecificAUSize, BlueFSReservedTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  uint64_t db_size = 1ull << 32; // 4GiB
+  uint64_t wal_extra = 0x10000;
+  uint64_t wal_size = db_size + wal_extra; // 4GiB + 64K
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+  SetVal(g_conf(), "bluestore_block_db_size", stringify(db_size).c_str());
+  SetVal(g_conf(), "bluestore_block_wal_create", "true");
+  SetVal(g_conf(), "bluestore_block_wal_size", stringify(wal_size).c_str());
+
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(65536);
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  ceph_assert(bstore);
+  BlueFS* fs = bstore->get_bluefs();
+
+  ASSERT_EQ(fs->get_full_reserved(BlueFS::BDEV_DB),
+            g_conf()->bluefs_alloc_size);
+
+  ASSERT_EQ(fs->get_full_reserved(BlueFS::BDEV_WAL),
+            g_conf()->bluefs_alloc_size + wal_extra);
+}
+
+
+TEST_P(StoreTest, BlueFS_truncate_remove_race) {
+  if (string(GetParam()) != "bluestore")
+    GTEST_SKIP();
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  ceph_assert(bstore);
+  BlueFS& fs = *bstore->get_bluefs();
+  fs.unittest_inject_delay = []() { usleep(1000); };
+  static constexpr uint32_t batch_size = 20;
+  std::binary_semaphore go_remove(0);
+  std::binary_semaphore done_remove(0);
+
+  auto files_remover = [&]() {
+    for (uint32_t cnt = 0; cnt < batch_size; cnt++) {
+      go_remove.acquire();
+      std::string name = "test-file-" + std::to_string(cnt);
+      fs.unlink("dir", name);
+      fs.sync_metadata(false);
+      done_remove.release();
+    }
+  };
+
+  ASSERT_EQ(0, fs.mkdir("dir"));
+  std::thread remover_thread(files_remover);
+
+  for (uint32_t cnt = 0; cnt < batch_size; cnt++) {
+    std::string name = "test-file-" + std::to_string(cnt);
+    BlueFS::FileWriter *f = nullptr;
+    ASSERT_EQ(0, fs.open_for_write("dir", name, &f, false));
+    fs.preallocate(f->file, 0, 100000);
+    for (uint32_t i = 0; i < 10; i++) {
+      fs.append_try_flush(f, "x", 1);
+      fs.fsync(f);
+    }
+    go_remove.release();
+    fs.truncate(f, 10);
+    fs.close_writer(f);
+    done_remove.acquire();
+  }
+
+  remover_thread.join();
+  fs.unittest_inject_delay = nullptr;
+  EXPECT_EQ(store->umount(), 0);
+  EXPECT_EQ(store->mount(), 0);
 }
 
 #endif  // WITH_BLUESTORE

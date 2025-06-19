@@ -40,7 +40,7 @@
 
 #define CEPH_DATA(_name, _data, _data_count)       \
 	proxy_##_name##_##_data##_t _data;         \
-	struct iovec _data##_iov[_data_count + 1]; \
+	struct iovec _data##_iov[(_data_count) + 1]; \
 	int32_t _data##_count = 0;                 \
 	CEPH_BUFF_ADD(_data, &_data, sizeof(_data))
 
@@ -48,9 +48,15 @@
 	CEPH_DATA(_name, _req, _req_count);                 \
 	CEPH_DATA(_name, _ans, _ans_count)
 
+#define CEPH_CBK(_name, _cbk, _cbk_count) \
+	CEPH_DATA(_name, _cbk, _cbk_count)
+
 #define CEPH_CALL(_sd, _op, _req, _ans)                                      \
 	proxy_link_request((_sd), _op, _req##_iov, _req##_count, _ans##_iov, \
 			   _ans##_count)
+
+#define CEPH_CALL_CBK(_sd, _op, _cbk) \
+	proxy_link_req_send((_sd), _op, _cbk##_iov, _cbk##_count)
 
 #define CEPH_RET(_sd, _res, _ans) \
 	proxy_link_ans_send((_sd), (_res), _ans##_iov, _ans##_count)
@@ -105,8 +111,20 @@ enum {
 	LIBCEPHFSD_OP_LL_RMDIR,
 	LIBCEPHFSD_OP_LL_RELEASEDIR,
 	LIBCEPHFSD_OP_MOUNT_PERMS,
+	LIBCEPHFSD_OP_LL_NONBLOCKING_RW,
+
+	/* Add more operations above this comment. */
 
 	LIBCEPHFSD_OP_TOTAL_OPS
+};
+
+enum {
+	LIBCEPHFSD_CBK_NULL = 0,
+	LIBCEPHFSD_CBK_LL_NONBLOCKING_RW,
+
+	/* Add more callbacks above this comment. */
+
+	LIBCEPHFSD_CBK_TOTAL_OPS
 };
 
 #define CEPH_TYPE_REQ(_name, _fields...)                           \
@@ -123,19 +141,25 @@ enum {
 		_fields                                            \
 	}
 
+#define CEPH_TYPE_CBK(_name, _fields...)                           \
+	struct _proxy_##_name##_cbk;                               \
+	typedef struct _proxy_##_name##_cbk proxy_##_name##_cbk_t; \
+	struct _proxy_##_name##_cbk {                              \
+		_fields                                            \
+	}
+
 #define FIELDS(_fields...) _fields
 #define REQ(_fields...) FIELDS(proxy_link_req_t header; _fields)
 #define REQ_CMOUNT(_fields...) REQ(uint64_t cmount; _fields)
 #define ANS(_fields...) FIELDS(proxy_link_ans_t header; _fields)
 #define ANS_CMOUNT(_fields...) ANS(uint64_t cmount; _fields)
+#define CBK(_fields...) FIELDS(proxy_link_req_t header; _fields)
 
 #define CEPH_TYPE(_name, _req, _ans) \
 	CEPH_TYPE_REQ(_name, _req);  \
 	CEPH_TYPE_ANS(_name, _ans)
 
 /* Declaration of types used to transder requests and answers. */
-
-CEPH_TYPE(hello, FIELDS(uint32_t id;), FIELDS(int16_t major; int16_t minor;));
 
 CEPH_TYPE(ceph_version, REQ(),
 	  ANS(int32_t major; int32_t minor; int32_t patch; int16_t text;));
@@ -288,6 +312,11 @@ CEPH_TYPE(ceph_ll_releasedir, REQ_CMOUNT(uint64_t dir;), ANS());
 
 CEPH_TYPE(ceph_mount_perms, REQ_CMOUNT(), ANS(uint64_t userperm;));
 
+CEPH_TYPE(ceph_ll_nonblocking_readv_writev,
+	  REQ_CMOUNT(uint64_t info; uint64_t fh; int64_t off; uint64_t size;
+		     bool write; bool fsync; bool syncdataonly;),
+	  ANS(int64_t res;));
+
 typedef union _proxy_req {
 	proxy_link_req_t header;
 
@@ -338,6 +367,15 @@ typedef union _proxy_req {
 	proxy_ceph_ll_rmdir_req_t ll_rmdir;
 	proxy_ceph_ll_releasedir_req_t ll_releasedir;
 	proxy_ceph_mount_perms_req_t mount_perms;
+	proxy_ceph_ll_nonblocking_readv_writev_req_t ll_nonblocking_rw;
 } proxy_req_t;
+
+CEPH_TYPE_CBK(ceph_ll_nonblocking_readv_writev,
+	      CBK(uint64_t info; int64_t res;));
+
+typedef union _proxy_cbk {
+	proxy_link_req_t header;
+	proxy_ceph_ll_nonblocking_readv_writev_cbk_t ll_nonblocking_rw;
+} proxy_cbk_t;
 
 #endif

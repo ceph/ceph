@@ -19,6 +19,7 @@ export interface StorageClassDetails {
   multipart_min_part_size: number;
   multipart_sync_threshold: number;
   host_style: string;
+  retain_head_object: boolean;
 }
 
 export interface S3Details {
@@ -38,6 +39,7 @@ export interface TierTarget {
   val: {
     storage_class: string;
     tier_type: string;
+    retain_head_object: boolean;
     s3: S3Details;
   };
 }
@@ -55,6 +57,7 @@ export interface StorageClassDetails {
   multipart_sync_threshold: number;
   host_style: string;
 }
+
 export interface ZoneGroup {
   name: string;
   id: string;
@@ -74,7 +77,6 @@ export interface S3Details {
   host_style: boolean;
   retain_head_object?: boolean;
 }
-
 export interface RequestModel {
   zone_group: string;
   placement_targets: PlacementTarget[];

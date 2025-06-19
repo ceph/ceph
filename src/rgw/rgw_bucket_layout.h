@@ -136,6 +136,7 @@ void decode_json_obj(bucket_index_layout_generation& l, JSONObj *obj);
 enum class BucketLogType : uint8_t {
   // colocated with bucket index, so the log layout matches the index layout
   InIndex,
+  Deleted
 };
 
 std::string_view to_string(const BucketLogType& t);
@@ -148,6 +149,8 @@ inline std::ostream& operator<<(std::ostream& out, const BucketLogType &log_type
   switch (log_type) {
     case BucketLogType::InIndex:
       return out << "InIndex";
+    case BucketLogType::Deleted:
+      return out << "Deleted";
     default:
       return out << "Unknown";
   }
@@ -215,7 +218,6 @@ inline auto matches_gen(uint64_t gen)
 
 inline bucket_index_layout_generation log_to_index_layout(const bucket_log_layout_generation& log_layout)
 {
-  ceph_assert(log_layout.layout.type == BucketLogType::InIndex);
   bucket_index_layout_generation index;
   index.gen = log_layout.layout.in_index.gen;
   index.layout.normal = log_layout.layout.in_index.layout;

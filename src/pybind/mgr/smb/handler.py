@@ -1187,7 +1187,7 @@ def _generate_share(
         # smb.conf options
         'options': {
             'path': path,
-            "vfs objects": f"acl_xattr {ceph_vfs}",
+            "vfs objects": f"acl_xattr ceph_snapshots {ceph_vfs}",
             'acl_xattr:security_acl_name': 'user.NTACL',
             f'{ceph_vfs}:config_file': '/etc/ceph/ceph.conf',
             f'{ceph_vfs}:filesystem': cephfs.volume,
@@ -1196,6 +1196,8 @@ def _generate_share(
             'browseable': ynbool(share.browseable),
             'kernel share modes': 'no',
             'x:ceph:id': f'{share.cluster_id}.{share.share_id}',
+            'comment': '',
+            'max connections': '0',
         }
     }
     if proxy_val:

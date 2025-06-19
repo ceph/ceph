@@ -481,6 +481,10 @@ public:
     return {get_reactor_utilization()};
   }
 
+  auto create_split_pg_mapping(spg_t pgid, core_id_t core) {
+    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid, core);
+  }
+
   auto remove_pg(spg_t pgid) {
     local_state.pg_map.remove_pg(pgid);
     return pg_to_shard_mapping.remove_pg_mapping(pgid);
@@ -535,6 +539,10 @@ public:
   using wait_for_pg_ret = wait_for_pg_ertr::future<Ref<PG>>;
   wait_for_pg_ret wait_for_pg(
     PGMap::PGCreationBlockingEvent::TriggerI&&, spg_t pgid);
+  wait_for_pg_ret create_split_pg(
+    PGMap::PGCreationBlockingEvent::TriggerI&& trigger,
+    spg_t pgid);
+
   seastar::future<Ref<PG>> load_pg(spg_t pgid);
 
   /// Dispatch and reset ctx transaction
@@ -593,8 +601,7 @@ public:
   }
 
   FORWARD_TO_OSD_SINGLETON(get_pool_info)
-  FORWARD(with_throttle_while, with_throttle_while, local_state.throttler)
-  FORWARD(try_acquire_throttle_now, try_acquire_throttle_now, local_state.throttler)
+  FORWARD(get_throttle, get_throttle, local_state.throttler)
 
   FORWARD_TO_OSD_SINGLETON(build_incremental_map_msg)
   FORWARD_TO_OSD_SINGLETON(send_incremental_map)
@@ -618,6 +625,9 @@ public:
     snap_dump_reservations,
     snap_reserver.dump)
 
+  bool throttle_available() const {
+    return local_state.throttler.available();
+  }
 
   auto local_update_priority(
     singleton_orderer_t &orderer,

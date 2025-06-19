@@ -225,14 +225,16 @@
       </div>
     </ng-template>
     <!-- Enabled -->
-    <cds-checkbox [formControlName]="formControl.enabled">
+    <cds-checkbox [formControlName]="formControl.enabled"
+                  [id]="quotaType+'_checkbox'">
       Enabled
     </cds-checkbox >
     <div class="quota-sub-block"
          *ngIf="accountForm.controls[formControl.enabled].value">
       <!-- Unlimited size -->
       <cds-checkbox *ngIf="accountForm.controls[formControl.enabled].value"
-                    [formControlName]="formControl.unlimitedSize">
+                    [formControlName]="formControl.unlimitedSize"
+                    [id]="quotaType+'unlimitedSize_checkbox'">
                     Unlimited size
       </cds-checkbox>
       <!-- Maximum size -->
@@ -263,7 +265,8 @@
       </div>
       <!-- Unlimited objects -->
       <cds-checkbox *ngIf="accountForm.controls[formControl.enabled].value"
-                    [formControlName]="formControl.unlimitedObjects">
+                    [formControlName]="formControl.unlimitedObjects"
+                    [id]="quotaType+'unlimitedObjects_checkbox'">
                     Unlimited objects
       </cds-checkbox>
     <!-- Maximum objects -->

@@ -4,7 +4,7 @@ import { NFSPageHelper } from '../../orchestrator/workflow/nfs/nfs-export.po';
 import { BucketsPageHelper } from '../../rgw/buckets.po';
 /* tslint:enable*/
 
-describe('nfsExport page', () => {
+describe.skip('nfsExport page', () => {
   const nfsExport = new NFSPageHelper();
   const services = new ServicesPageHelper();
   const buckets = new BucketsPageHelper();

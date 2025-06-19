@@ -98,4 +98,4 @@ These are exciting times in the Ceph community! Get involved!
 .. _Blog: http://ceph.com/community/blog/
 .. _Tracker: http://tracker.ceph.com/
 .. _Ceph Source Code: http://github.com/ceph/ceph
-.. _Ceph Slack Invite: https://ceph-storage.slack.com/join/shared_invite/zt-2b91em8b6-NQOKhGYReEIrE28OVncnLQ#/shared-invite/email
+.. _Ceph Slack Invite: https://join.slack.com/t/ceph-storage/shared_invite/zt-32hkefbs5-f6qZDZLd5U8CYj7drBTHFw

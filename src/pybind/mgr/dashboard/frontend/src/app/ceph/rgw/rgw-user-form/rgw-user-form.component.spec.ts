@@ -23,6 +23,7 @@ import { FormatterService } from '~/app/shared/services/formatter.service';
 import { RgwRateLimitComponent } from '../rgw-rate-limit/rgw-rate-limit.component';
 import { By } from '@angular/platform-browser';
 import { CheckboxModule, NumberModule, SelectModule } from 'carbon-components-angular';
+import { LoadingStatus } from '~/app/shared/forms/cd-form';
 
 describe('RgwUserFormComponent', () => {
   let component: RgwUserFormComponent;
@@ -175,6 +176,13 @@ describe('RgwUserFormComponent', () => {
       formHelper.expectValid('user_id');
     }));
 
+    it('should validate that username can contain dot(.)', fakeAsync(() => {
+      spyOn(rgwUserService, 'get').and.returnValue(throwError('foo'));
+      formHelper.setValue('user_id', 'user.name', true);
+      tick(DUE_TIMER);
+      formHelper.expectValid('user_id');
+    }));
+
     it('should validate that username is invalid', fakeAsync(() => {
       spyOn(rgwUserService, 'get').and.returnValue(observableOf({}));
       formHelper.setValue('user_id', 'abc', true);
@@ -183,8 +191,27 @@ describe('RgwUserFormComponent', () => {
     }));
   });
 
+  describe('tenant validation', () => {
+    it('should validate that tenant is valid', fakeAsync(() => {
+      spyOn(rgwUserService, 'get').and.returnValue(throwError('foo'));
+      formHelper.setValue('show_tenant', true, true);
+      formHelper.setValue('tenant', 'new_tenant123', true);
+      tick(DUE_TIMER);
+      formHelper.expectValid('tenant');
+    }));
+
+    it('should validate that tenant is invalid', fakeAsync(() => {
+      spyOn(rgwUserService, 'get').and.returnValue(observableOf({}));
+      formHelper.setValue('show_tenant', true, true);
+      formHelper.setValue('tenant', 'new-tenant.dummy', true);
+      tick(DUE_TIMER);
+      formHelper.expectError('tenant', 'pattern');
+    }));
+  });
+
   describe('max buckets', () => {
     beforeEach(() => {
+      component.loading = LoadingStatus.Ready;
       fixture.detectChanges();
       childComponent = fixture.debugElement.query(By.directive(RgwRateLimitComponent))
         .componentInstance;
@@ -203,7 +230,9 @@ describe('RgwUserFormComponent', () => {
         secret_key: '',
         suspended: false,
         system: false,
-        uid: null
+        uid: null,
+        account_id: '',
+        account_root_user: false
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -219,7 +248,8 @@ describe('RgwUserFormComponent', () => {
         email: null,
         max_buckets: -1,
         suspended: false,
-        system: false
+        system: false,
+        account_root_user: false
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -238,7 +268,9 @@ describe('RgwUserFormComponent', () => {
         secret_key: '',
         suspended: false,
         system: false,
-        uid: null
+        uid: null,
+        account_id: '',
+        account_root_user: false
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -254,7 +286,8 @@ describe('RgwUserFormComponent', () => {
         email: null,
         max_buckets: 0,
         suspended: false,
-        system: false
+        system: false,
+        account_root_user: false
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -264,6 +297,7 @@ describe('RgwUserFormComponent', () => {
       formHelper.setValue('max_buckets_mode', 1, true);
       formHelper.setValue('max_buckets', 100, true);
       let spyRateLimit = jest.spyOn(childComponent, 'getRateLimitFormValue');
+
       component.onSubmit();
       expect(rgwUserService.create).toHaveBeenCalledWith({
         access_key: '',
@@ -274,7 +308,9 @@ describe('RgwUserFormComponent', () => {
         secret_key: '',
         suspended: false,
         system: false,
-        uid: null
+        uid: null,
+        account_id: '',
+        account_root_user: false
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -291,7 +327,8 @@ describe('RgwUserFormComponent', () => {
         email: null,
         max_buckets: 100,
         suspended: false,
-        system: false
+        system: false,
+        account_root_user: false
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -301,6 +338,7 @@ describe('RgwUserFormComponent', () => {
     let notificationService: NotificationService;
 
     beforeEach(() => {
+      component.loading = LoadingStatus.Ready;
       spyOn(TestBed.inject(Router), 'navigate').and.stub();
       notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show');
@@ -320,7 +358,8 @@ describe('RgwUserFormComponent', () => {
         email: '',
         max_buckets: 1000,
         suspended: false,
-        system: false
+        system: false,
+        account_root_user: false
       });
     });
 
@@ -348,6 +387,9 @@ describe('RgwUserFormComponent', () => {
   });
 
   describe('RgwUserCapabilities', () => {
+    beforeEach(() => {
+      component.loading = LoadingStatus.Ready;
+    });
     it('capability button disabled when all capabilities are added', () => {
       component.editing = true;
       for (const capabilityType of RgwUserCapabilities.getAll()) {
@@ -667,6 +709,51 @@ describe('RgwUserFormComponent', () => {
       expect(modalRef.setValues).toHaveBeenCalledWith('dashboard');
       expect(modalRef.setSubusers).toHaveBeenCalledWith(component.subusers);
       expect(modalRef.submitAction.subscribe).toHaveBeenCalled();
+    });
+  });
+
+  describe('RgwUserAccounts', () => {
+    beforeEach(() => {
+      component.loading = LoadingStatus.Ready;
+      fixture.detectChanges();
+      childComponent = fixture.debugElement.query(By.directive(RgwRateLimitComponent))
+        .componentInstance;
+    });
+    it('create with account id & account root user', () => {
+      spyOn(rgwUserService, 'create');
+      formHelper.setValue('account_id', 'RGW12312312312312312', true);
+      formHelper.setValue('account_root_user', true, true);
+      component.onSubmit();
+      expect(rgwUserService.create).toHaveBeenCalledWith({
+        access_key: '',
+        display_name: null,
+        email: '',
+        generate_key: true,
+        max_buckets: 1000,
+        secret_key: '',
+        suspended: false,
+        system: false,
+        uid: null,
+        account_id: 'RGW12312312312312312',
+        account_root_user: true
+      });
+    });
+
+    it('edit to link account to existing user', () => {
+      spyOn(rgwUserService, 'update');
+      component.editing = true;
+      formHelper.setValue('account_id', 'RGW12312312312312312', true);
+      formHelper.setValue('account_root_user', true, true);
+      component.onSubmit();
+      expect(rgwUserService.update).toHaveBeenCalledWith(null, {
+        display_name: null,
+        email: null,
+        max_buckets: 1000,
+        suspended: false,
+        system: false,
+        account_id: 'RGW12312312312312312',
+        account_root_user: true
+      });
     });
   });
 });

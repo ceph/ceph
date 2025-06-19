@@ -53,6 +53,107 @@
           </ng-template>
         </div>
 
+        <div class="form-item"
+             *ngIf="!editing">
+          <cds-checkbox id="customPools"
+                        name="customPools"
+                        formControlName="customPools"
+                        i18n>Use existing pools
+            <cd-help-text>Allows you to use replicated pools with 'cephfs' application tag that are already created.</cd-help-text>
+          </cds-checkbox>
+
+          <cd-alert-panel *ngIf="pools.length < 2"
+                          type="info"
+                          spacingClass="mt-1"
+                          i18n>
+            You need to have atleast 2 pools that are empty, applied with cephfs label and not erasure-coded.
+          </cd-alert-panel>
+        </div>
+
+        <!-- Data pool -->
+        <div class="form-item"
+             *ngIf="form.get('customPools')?.value || editing">
+          <cds-text-label for="dataPool"
+                          i18n
+                          *ngIf="editing">Data pool
+            <input cdsText
+                   type="text"
+                   placeholder="Pool name..."
+                   id="dataPool"
+                   name="dataPool"
+                   formControlName="dataPool">
+          </cds-text-label>
+          <cds-select label="Data pool"
+                      for="dataPool"
+                      name="dataPool"
+                      id="dataPool"
+                      formControlName="dataPool"
+                      (valueChange)="onPoolChange($event)"
+                      cdRequiredField="Data pool"
+                      [invalid]="!form.controls.dataPool.valid && form.controls.dataPool.dirty"
+                      [invalidText]="dataPoolError"
+                      *ngIf="!editing">
+            <option *ngIf="dataPools === null"
+                    [ngValue]="null"
+                    i18n>Loading...</option>
+            <option *ngIf="dataPools !== null && dataPools?.length === 0"
+                    [ngValue]="null"
+                    i18n>-- No cephfs pools available --</option>
+            <option *ngIf="dataPools !== null && dataPools?.length > 0"
+                    [ngValue]="null"
+                    i18n>-- Select a pool --</option>
+            <option *ngFor="let pool of dataPools"
+                    [value]="pool?.pool_name">{{ pool?.pool_name }}</option>
+          </cds-select>
+          <ng-template #dataPoolError>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('dataPool', formDir, 'required')"
+                  i18n>This field is required!</span>
+          </ng-template>
+        </div>
+
+        <!-- Metadata pool -->
+        <div class="form-item"
+             *ngIf="form.get('customPools')?.value || editing">
+          <cds-text-label for="metadataPool"
+                          i18n
+                          *ngIf="editing">Metadata pool
+            <input cdsText
+                   type="text"
+                   placeholder="Pool name..."
+                   id="metadataPool"
+                   name="metadataPool"
+                   formControlName="metadataPool">
+          </cds-text-label>
+          <cds-select label="Metadata pool"
+                      for="metadataPool"
+                      name="metadataPool"
+                      id="metadataPool"
+                      formControlName="metadataPool"
+                      cdRequiredField="Metadata pool"
+                      [invalid]="!form.controls.metadataPool.valid && form.controls.metadataPool.dirty"
+                      [invalidText]="metadataPoolError"
+                      (valueChange)="onPoolChange($event, true)"
+                      *ngIf="!editing">
+            <option *ngIf="metadatPools === null"
+                    [ngValue]="null"
+                    i18n>Loading...</option>
+            <option *ngIf="metadatPools !== null && metadatPools?.length === 0"
+                    [ngValue]="null"
+                    i18n>-- No cephfs pools available --</option>
+            <option *ngIf="metadatPools !== null && metadatPools?.length > 0"
+                    [ngValue]="null"
+                    i18n>-- Select a pool --</option>
+            <option *ngFor="let pool of metadatPools"
+                    [value]="pool?.pool_name">{{ pool?.pool_name }}</option>
+          </cds-select>
+          <ng-template #metadataPoolError>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('metadataPool', formDir, 'required')"
+                  i18n>This field is required!</span>
+          </ng-template>
+        </div>
+
         <ng-container *ngIf="orchStatus.available">
           <!-- Placement -->
           <div class="form-item"
@@ -87,6 +188,8 @@
                            [invalid]="form.controls.label.invalid && (form.controls.label.dirty)"
                            [invalidText]="labelError"
                            cdRequiredField="Label"
+                           cdDynamicInputCombobox
+                           (updatedItems)="data.labels = $event"
                            i18n>
               <cds-dropdown-list></cds-dropdown-list>
             </cds-combo-box>

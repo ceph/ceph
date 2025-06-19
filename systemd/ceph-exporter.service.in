@@ -7,7 +7,7 @@ Wants=network-online.target local-fs.target ceph.target ceph-mon.target
 
 [Service]
 ExecReload=/bin/kill -HUP $MAINPID
-ExecStart=/usr/bin/ceph-exporter -f --id %i --setuser ceph --setgroup ceph
+ExecStart=@CMAKE_INSTALL_PREFIX@/bin/ceph-exporter -f --id %i --setuser ceph --setgroup ceph
 LockPersonality=true
 NoNewPrivileges=true
 PrivateDevices=yes

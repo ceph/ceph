@@ -11,8 +11,12 @@
  * Foundation.  See file COPYING.
  *
  */
-#include "common/errno.h"
 #include "ReplicatedBackend.h"
+
+#include <sstream>
+
+#include "common/debug.h"
+#include "common/errno.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPGPCT.h"
 #include "messages/MOSDRepOp.h"
@@ -620,7 +624,7 @@ void ReplicatedBackend::submit_transaction(
     pg_committed_to,
     true,
     op_t);
-  
+
   op_t.register_on_commit(
     parent->bless_context(
       new C_OSD_OnOpCommit(this, &op)));
@@ -716,17 +720,39 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
   maybe_kick_pct_update();
 }
 
+static uint32_t crc32_netstring(const uint32_t orig_crc, std::string_view data)
+{
+  // XXX: This function MUST be compliant with the bufferlist marshalling format!
+  // Otherwise scrubs-during-upgrade will explode.
+  __u32 len = data.length();
+  auto crc = ceph_crc32c(orig_crc, (unsigned char*)&len, sizeof(len));
+  crc = ceph_crc32c(crc, (unsigned char*)data.data(), data.length());
+
+#ifndef _NDEBUG
+  // let's verify the compatibility but, due to performance penalty,
+  // only in debug builds.
+  ceph::bufferlist bl;
+  bl.append(data);
+  ceph::bufferlist bl_encoded;
+  encode(bl, bl_encoded);
+  ceph_assert(bl_encoded.crc32c(orig_crc) == crc);
+  // also as string view -- for the sake of keys
+  ceph::bufferlist sv_encoded;
+  encode(data, sv_encoded);
+  ceph_assert(sv_encoded.crc32c(orig_crc) == crc);
+#endif
+  return crc;
+}
+
 int ReplicatedBackend::be_deep_scrub(
+  const Scrub::ScrubCounterSet& io_counters,
   const hobject_t &poid,
   ScrubMap &map,
   ScrubMapBuilder &pos,
   ScrubMap::object &o)
 {
   dout(10) << __func__ << " " << poid << " pos " << pos << dendl;
-  int r;
-  uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
-                           CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
-                           CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE;
+  auto& perf_logger = *(get_parent()->get_logger());
 
   utime_t sleeptime;
   sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
@@ -735,6 +761,7 @@ int ReplicatedBackend::be_deep_scrub(
     sleeptime.sleep();
   }
 
+  int r{0};
   ceph_assert(poid == pos.ls[pos.pos]);
   if (!pos.data_done()) {
     if (pos.data_pos == 0) {
@@ -743,6 +770,7 @@ int ReplicatedBackend::be_deep_scrub(
 
     const uint64_t stride = cct->_conf->osd_deep_scrub_stride;
 
+    perf_logger.inc(io_counters.read_cnt);
     bufferlist bl;
     r = store->read(
       ch,
@@ -750,7 +778,7 @@ int ReplicatedBackend::be_deep_scrub(
 	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       pos.data_pos,
       stride, bl,
-      fadvise_flags);
+      scrub_fadvise_flags);
     if (r < 0) {
       dout(20) << __func__ << "  " << poid << " got "
 	       << r << " on read, read_error" << dendl;
@@ -760,6 +788,7 @@ int ReplicatedBackend::be_deep_scrub(
     if (r > 0) {
       pos.data_hash << bl;
     }
+    perf_logger.inc(io_counters.read_bytes, r);
     pos.data_pos += r;
     if (static_cast<uint64_t>(r) == stride) {
       dout(20) << __func__ << "  " << poid << " more data, digest so far 0x"
@@ -776,8 +805,9 @@ int ReplicatedBackend::be_deep_scrub(
 
   // omap header
   if (pos.omap_pos.empty()) {
-    pos.omap_hash = bufferhash(-1);
+    pos.omap_hash = -1;
 
+    perf_logger.inc(io_counters.omapgetheader_cnt);
     bufferlist hdrbl;
     r = store->omap_get_header(
       ch,
@@ -793,45 +823,49 @@ int ReplicatedBackend::be_deep_scrub(
     if (r == 0 && hdrbl.length()) {
       bool encoded = false;
       dout(25) << "CRC header " << cleanbin(hdrbl, encoded, true) << dendl;
-      pos.omap_hash << hdrbl;
+      pos.omap_hash = hdrbl.crc32c(pos.omap_hash);
+      perf_logger.inc(io_counters.omapgetheader_bytes, hdrbl.length());
     }
   }
 
   // omap
-  ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(
+
+  perf_logger.inc(io_counters.omapget_cnt);
+  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
+  auto result = store->omap_iterate(
     ch,
-    ghobject_t(
-      poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
-  ceph_assert(iter);
-  if (pos.omap_pos.length()) {
-    iter->lower_bound(pos.omap_pos);
-  } else {
-    iter->seek_to_first();
+    ghobject_t{
+      poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard},
+    // try to seek as many keys-at-once as possible for the sake of performance.
+    // note complexity should be logarithmic, so seek(n/2) + seek(n/2) is worse
+    // than just seek(n).
+    ObjectStore::omap_iter_seek_t{
+      .seek_position = pos.omap_pos,
+      .seek_type = omap_iter_seek_t::LOWER_BOUND
+    },
+    [&pos, first=true, max=cct->_conf->osd_deep_scrub_keys]
+    (std::string_view key, std::string_view value) mutable {
+      --max;
+      if (first) {
+        first = false; // preserve exact compat on `max` with old code
+      } else if (max == 0) {
+        pos.omap_pos = key;
+        return ObjectStore::omap_iter_ret_t::STOP;
+      }
+      pos.omap_bytes += value.length();
+      ++pos.omap_keys;
+      pos.omap_hash = crc32_netstring(pos.omap_hash, key);
+      pos.omap_hash = crc32_netstring(pos.omap_hash, value);
+      return ObjectStore::omap_iter_ret_t::NEXT;
+    });
+  if (result < 0) {
+    return -EIO;
+  } else if (const auto more = static_cast<bool>(result); more) {
+    return -EINPROGRESS;
   }
-  int max = g_conf()->osd_deep_scrub_keys;
-  while (iter->status() == 0 && iter->valid()) {
-    pos.omap_bytes += iter->value().length();
-    ++pos.omap_keys;
-    --max;
-    // fixme: we can do this more efficiently.
-    bufferlist bl;
-    encode(iter->key(), bl);
-    encode(iter->value(), bl);
-    pos.omap_hash << bl;
 
-    iter->next();
-
-    if (iter->valid() && max == 0) {
-      pos.omap_pos = iter->key();
-      return -EINPROGRESS;
-    }
-    if (iter->status() < 0) {
-      dout(25) << __func__ << "  " << poid
-	       << " on omap scan, db status error" << dendl;
-      o.read_error = true;
-      return 0;
-    }
-  }
+  // we have the full omap now. Finalize the perf counting
+  perf_logger.inc(io_counters.omapget_bytes, pos.omap_bytes);
 
   if (pos.omap_keys > cct->_conf->
 	osd_deep_scrub_large_omap_object_key_threshold ||
@@ -846,7 +880,7 @@ int ReplicatedBackend::be_deep_scrub(
     map.has_large_omap_object_errors = true;
   }
 
-  o.omap_digest = pos.omap_hash.digest();
+  o.omap_digest = pos.omap_hash;
   o.omap_digest_present = true;
   dout(20) << __func__ << " done with " << poid << " omap_digest "
 	   << std::hex << o.omap_digest << std::dec << dendl;
@@ -873,7 +907,7 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
   op->mark_started();
 
   vector<PushReplyOp> replies;
-  ObjectStore::Transaction t;
+  ObjectStore::Transaction t{get_parent()->min_peer_features()};
   if (get_parent()->check_failsafe_full()) {
     dout(10) << __func__ << " Out of space (failsafe) processing push request." << dendl;
     ceph_abort();
@@ -958,7 +992,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
     ceph_abort();
   }
 
-  ObjectStore::Transaction t;
+  ObjectStore::Transaction t{get_parent()->min_peer_features()};
   list<pull_complete_info> to_continue;
   for (vector<PushOp>::const_iterator i = m->pushes.begin();
        i != m->pushes.end();
@@ -1064,8 +1098,15 @@ Message * ReplicatedBackend::generate_subop(
     ObjectStore::Transaction t;
     encode(t, wr->get_data());
   } else {
-    encode(op_t, wr->get_data());
-    wr->get_header().data_off = op_t.get_data_alignment();
+    bufferlist p, d;
+    op_t.encode(p, d, get_parent()->min_peer_features());
+    if (d.length() != 0) {
+      wr->set_txn_payload(p);
+      wr->set_data(d);
+    } else {
+      // Pre-tentacle format - everything in data
+      wr->set_data(p);
+    }
   }
 
   wr->logbl = log_entries;
@@ -1169,7 +1210,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 
   op->mark_started();
 
-  RepModifyRef rm(std::make_shared<RepModify>());
+  RepModifyRef rm(std::make_shared<RepModify>(get_parent()->min_peer_features()));
   rm->op = op;
   rm->ackerosd = ackerosd;
   rm->last_complete = get_info().last_complete;
@@ -1179,8 +1220,9 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   // shipped transaction and log entries
   vector<pg_log_entry_t> log;
 
-  auto p = const_cast<bufferlist&>(m->get_data()).cbegin();
-  decode(rm->opt, p);
+  auto p = const_cast<bufferlist&>(m->get_middle()).cbegin();
+  auto d = const_cast<bufferlist&>(m->get_data()).cbegin();
+  rm->opt.decode(m->get_middle().length() != 0 ?  p : d, d);
 
   if (m->new_temp_oid != hobject_t()) {
     dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
@@ -2108,6 +2150,12 @@ void ReplicatedBackend::send_pulls(int prio, map<pg_shard_t, vector<PullOp> > &p
   }
 }
 
+static bufferlist to_bufferlist(std::string_view in) {
+  bufferlist bl;
+  bl.append(in);
+  return bl;
+}
+
 int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 				     const ObjectRecoveryProgress &progress,
 				     ObjectRecoveryProgress *out_progress,
@@ -2169,29 +2217,40 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 
   uint64_t available = cct->_conf->osd_recovery_max_chunk;
   if (!progress.omap_complete) {
-    ObjectMap::ObjectMapIterator iter =
-      store->get_omap_iterator(ch,
-			       ghobject_t(recovery_info.soid));
-    ceph_assert(iter);
-    for (iter->lower_bound(progress.omap_recovered_to);
-	 iter->valid();
-	 iter->next()) {
-      if (!out_op->omap_entries.empty() &&
-	  ((cct->_conf->osd_recovery_max_omap_entries_per_chunk > 0 &&
-	    out_op->omap_entries.size() >= cct->_conf->osd_recovery_max_omap_entries_per_chunk) ||
-	   available <= iter->key().size() + iter->value().length()))
-	break;
-      out_op->omap_entries.insert(make_pair(iter->key(), iter->value()));
-
-      if ((iter->key().size() + iter->value().length()) <= available)
-	available -= (iter->key().size() + iter->value().length());
-      else
-	available = 0;
-    }
-    if (!iter->valid())
+    using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
+    auto result = store->omap_iterate(
+      ch,
+      ghobject_t{recovery_info.soid},
+      // try to seek as many keys-at-once as possible for the sake of performance.
+      // note complexity should be logarithmic, so seek(n/2) + seek(n/2) is worse
+      // than just seek(n).
+      ObjectStore::omap_iter_seek_t{
+        .seek_position = progress.omap_recovered_to,
+        .seek_type = omap_iter_seek_t::LOWER_BOUND
+      },
+      [&available, &new_progress, &omap_entries=out_op->omap_entries,
+       max_entries=cct->_conf->osd_recovery_max_omap_entries_per_chunk]
+      (std::string_view key, std::string_view value) mutable {
+        const auto num_new_bytes = key.size() + value.size();
+        if (auto cur_num_entries = omap_entries.size(); cur_num_entries > 0) {
+	  if (max_entries > 0 && cur_num_entries >= max_entries) {
+            new_progress.omap_recovered_to = key;
+            return ObjectStore::omap_iter_ret_t::STOP; // want more!
+	  }
+	  if (num_new_bytes >= available) {
+            new_progress.omap_recovered_to = key;
+            return ObjectStore::omap_iter_ret_t::STOP;
+	  }
+        }
+        omap_entries.insert(make_pair(key, to_bufferlist(value)));
+	available -= std::min(available, num_new_bytes);
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      });
+    if (result < 0) {
+      return -EIO;
+    } else if (const auto more = static_cast<bool>(result); !more) {
       new_progress.omap_complete = true;
-    else
-      new_progress.omap_recovered_to = iter->key();
+    }
   }
 
   if (available > 0) {

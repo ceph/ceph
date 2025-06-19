@@ -135,22 +135,23 @@ as follows:
   Purge bucket index entries.
 
 :command:`object rm`
-  Remove an object.
+  Remove an S3/Swift object. Include "--yes-i-really-mean-it" to remove object's
+  entry from bucket index, for example if it's damaged.
 
 :command:`object stat`
-  Stat an object for its metadata.
+  Stat an S3/Swift object for its metadata.
 
 :command:`object manifest`
-  Display the manifest of RADOS objects containing the data.
+  Display the manifest of an S3/Swift object, producing a list of RADOS objects containing the data.
 
 :command:`object unlink`
-  Unlink object from bucket index.
+  Unlink S3/Swift object from bucket index.
 
 :command:`object rewrite`
-  Rewrite the specified object.
+  Rewrite the specified S3/Swift object.
 
 :command:`object reindex`
-  Add an object to its bucket's index. Used rarely for emergency repairs.
+  Add an S3/Swift object to its bucket's index. Used rarely for emergency repairs.
 
 :command:`objects expire`
   Run expired objects cleanup.

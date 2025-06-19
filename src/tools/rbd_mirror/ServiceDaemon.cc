@@ -26,7 +26,7 @@ namespace {
 
 const std::string RBD_MIRROR_AUTH_ID_PREFIX("rbd-mirror.");
 
-struct AttributeDumpVisitor : public boost::static_visitor<void> {
+struct AttributeDumpVisitor {
   ceph::Formatter *f;
   const std::string& name;
 
@@ -184,6 +184,13 @@ void ServiceDaemon<I>::remove_callout(int64_t pool_id, uint64_t callout_id) {
   schedule_update_status();
 }
 
+std::ostream& operator<<(std::ostream& out, const AttributeValue& value) {
+  std::visit([&out](const auto& v) {
+    out << v;
+  }, value);
+  return out;
+}
+
 template <typename I>
 void ServiceDaemon<I>::add_or_update_attribute(int64_t pool_id,
                                                const std::string& key,
@@ -287,7 +294,7 @@ void ServiceDaemon<I>::update_status() {
 
       for (auto& attribute : pool_pair.second.attributes) {
         AttributeDumpVisitor attribute_dump_visitor(&f, attribute.first);
-        boost::apply_visitor(attribute_dump_visitor, attribute.second);
+        std::visit(attribute_dump_visitor, attribute.second);
       }
 
       f.open_object_section("namespaces");
@@ -295,7 +302,7 @@ void ServiceDaemon<I>::update_status() {
         f.open_object_section(ns.c_str());
         for (auto& [key, value] : attributes) {
           AttributeDumpVisitor attribute_dump_visitor(&f, key);
-          boost::apply_visitor(attribute_dump_visitor, value);
+          std::visit(attribute_dump_visitor, value);
         }
         f.close_section(); // namespace
       }

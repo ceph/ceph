@@ -21,6 +21,8 @@ import { RgwBucketFormComponent } from './rgw-bucket-form.component';
 import { RgwRateLimitComponent } from '../rgw-rate-limit/rgw-rate-limit.component';
 import { CheckboxModule, SelectModule } from 'carbon-components-angular';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { By } from '@angular/platform-browser';
+import { LoadingStatus } from '~/app/shared/forms/cd-form';
 
 describe('RgwBucketFormComponent', () => {
   let component: RgwBucketFormComponent;
@@ -30,6 +32,7 @@ describe('RgwBucketFormComponent', () => {
   let rgwBucketServiceGetSpy: jasmine.Spy;
   let enumerateSpy: jasmine.Spy;
   let formHelper: FormHelper;
+  let childComponent: RgwRateLimitComponent;
 
   configureTestBed({
     declarations: [RgwBucketFormComponent, RgwRateLimitComponent],
@@ -337,5 +340,91 @@ describe('RgwBucketFormComponent', () => {
     const updateValidationSpy = jest.spyOn(component.bucketForm, 'updateValueAndValidity');
     component.deleteTag(0);
     expect(updateValidationSpy).toHaveBeenCalled();
+  });
+
+  describe('should call bucket ratelimit API with correct bucket name', () => {
+    beforeEach(() => {
+      component.loading = LoadingStatus.Ready;
+      fixture.detectChanges();
+      childComponent = fixture.debugElement.query(By.directive(RgwRateLimitComponent))
+        .componentInstance;
+    });
+    it('Scenario 1: tenanted owner with tenanted bucket name', () => {
+      const rateLimitSpy = spyOn(rgwBucketService, 'updateBucketRateLimit').and.returnValue(
+        observableOf([])
+      );
+      component.editing = true;
+      formHelper.setMultipleValues({
+        bid: 'tenant/bucket1',
+        owner: 'tenant$user1'
+      });
+      childComponent.form.patchValue({
+        rate_limit_enabled: true,
+        rate_limit_max_readOps: 100,
+        rate_limit_max_writeOps: 200,
+        rate_limit_max_readBytes: '10MB',
+        rate_limit_max_writeBytes: '20MB',
+        rate_limit_max_readOps_unlimited: true, // Unlimited
+        rate_limit_max_writeOps_unlimited: true, // Unlimited
+        rate_limit_max_readBytes_unlimited: true, // Unlimited
+        rate_limit_max_writeBytes_unlimited: true // Unlimited
+      });
+      childComponent.form.get('rate_limit_enabled').markAsDirty();
+      const rateLimitConfig = childComponent.getRateLimitFormValue();
+      component.updateBucketRateLimit();
+      expect(rateLimitSpy).toHaveBeenCalledWith('tenant/bucket1', rateLimitConfig);
+    });
+
+    it('Scenario 2: non tenanted owner with tenanted bucket name', () => {
+      const rateLimitSpy = spyOn(rgwBucketService, 'updateBucketRateLimit').and.returnValue(
+        observableOf([])
+      );
+      component.editing = true;
+      formHelper.setMultipleValues({
+        bid: 'tenant/bucket1',
+        owner: 'non_tenanted_user'
+      });
+      childComponent.form.patchValue({
+        rate_limit_enabled: true,
+        rate_limit_max_readOps: 100,
+        rate_limit_max_writeOps: 200,
+        rate_limit_max_readBytes: '10MB',
+        rate_limit_max_writeBytes: '20MB',
+        rate_limit_max_readOps_unlimited: true, // Unlimited
+        rate_limit_max_writeOps_unlimited: true, // Unlimited
+        rate_limit_max_readBytes_unlimited: true, // Unlimited
+        rate_limit_max_writeBytes_unlimited: true // Unlimited
+      });
+      childComponent.form.get('rate_limit_enabled').markAsDirty();
+      const rateLimitConfig = childComponent.getRateLimitFormValue();
+      component.updateBucketRateLimit();
+      expect(rateLimitSpy).toHaveBeenCalledWith('bucket1', rateLimitConfig);
+    });
+
+    it('Scenario 3: tenanted owner and with non-tenanted bucket name', () => {
+      const rateLimitSpy = spyOn(rgwBucketService, 'updateBucketRateLimit').and.returnValue(
+        observableOf([])
+      );
+      component.editing = true;
+      formHelper.setMultipleValues({
+        bid: 'bucket1',
+        owner: 'tenant$user1'
+      });
+      childComponent.form.patchValue({
+        rate_limit_enabled: true,
+        rate_limit_max_readOps: 100,
+        rate_limit_max_writeOps: 200,
+        rate_limit_max_readBytes: '10MB',
+        rate_limit_max_writeBytes: '20MB',
+        rate_limit_max_readOps_unlimited: true, // Unlimited
+        rate_limit_max_writeOps_unlimited: true, // Unlimited
+        rate_limit_max_readBytes_unlimited: true, // Unlimited
+        rate_limit_max_writeBytes_unlimited: true // Unlimited
+      });
+      childComponent.form.get('rate_limit_enabled').markAsDirty();
+      const rateLimitConfig = childComponent.getRateLimitFormValue();
+      component.updateBucketRateLimit();
+      expect(rateLimitSpy).toHaveBeenCalledWith('tenant/bucket1', rateLimitConfig);
+    });
   });
 });

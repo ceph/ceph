@@ -33,12 +33,7 @@ HashiCorp `Vault`_ can be used as a secure key management service for
                 |                 | object          |             |
                 |                 |------------------------------>|
 
-#. `Vault secrets engines`_
-#. `Vault authentication`_
-#. `Vault namespaces`_
-#. `Create a key in Vault`_
-#. `Configure the Ceph Object Gateway`_
-#. `Upload object`_
+.. contents:: :depth: 2
 
 Some examples below use the Vault command line utility to interact with
 Vault. You may need to set the following environment variable with the correct
@@ -46,7 +41,7 @@ address of your Vault server to use this utility::
 
   export VAULT_ADDR='https://vault-server-fqdn:8200'
 
-Vault secrets engines
+Vault Secrets Engines
 =====================
 
 Vault provides several secrets engines, which can store, generate, and encrypt
@@ -55,7 +50,7 @@ data. Currently, the Object Gateway supports:
 - `KV secrets engine`_ version 2
 - `Transit engine`_
 
-KV secrets engine
+KV Secrets Engine
 -----------------
 
 The KV secrets engine is used to store arbitrary key/value secrets in Vault. To
@@ -68,7 +63,7 @@ following setting::
 
   rgw crypt vault secret engine = kv
 
-Transit secrets engine
+Transit Secrets Engine
 ----------------------
 
 The transit engine handles cryptographic functions on data in-transit. To enable
@@ -81,7 +76,7 @@ following setting::
 
   rgw crypt vault secret engine = transit
 
-Vault authentication
+Vault Authentication
 ====================
 
 Vault supports several authentication mechanisms. Currently, the Object
@@ -93,7 +88,7 @@ sort of Vault token that does not have a lifetime are root tokens.
 For all other tokens, it is necessary to periodically refresh them,
 either by performing initial authentication, or by renewing the token.
 Ceph does not have any logic to perform either operation.
-The simplest best way to use Vault tokens with ceph is to
+The simplest best way to use Vault tokens with Ceph is to
 also run the Vault agent and have it refresh the token file.
 When the Vault agent is used in this mode, file system permissions
 can be used to restrict who has the use of tokens.
@@ -103,10 +98,10 @@ to act as a proxy server.  In this mode, Vault will add a token when
 necessary and add it to requests passed to it before forwarding them on
 to the real server.  Vault agent will still handle token renewal just
 as it would when storing a token in the filesystem.  In this mode, it
-is necessary to properly secure the network path rgw uses to reach the
+is necessary to properly secure the network path RGW uses to reach the
 Vault agent, such as having the Vault agent listen only to localhost.
 
-Token policies for the object gateway
+Token Policies for the Object Gateway
 -------------------------------------
 
 All Vault tokens have powers as specified by the polices attached
@@ -114,7 +109,7 @@ to that token.  Multiple policies may be associated with one
 token.  You should only use the policies necessary for your
 configuration.
 
-When using the kv secret engine with the object gateway::
+When using the KV secret engine with the Object Gateway::
 
   vault policy write rgw-kv-policy -<<EOF
     path "secret/data/*" {
@@ -122,7 +117,7 @@ When using the kv secret engine with the object gateway::
     }
   EOF
 
-When using the transit secret engine with the object gateway::
+When using the transit secret engine with the Object Gateway::
 
   vault policy write rgw-transit-policy -<<EOF
     path "transit/keys/*" {
@@ -147,7 +142,7 @@ When using the transit secret engine with the object gateway::
     }
   EOF
 
-If you had previously used an older version of ceph with the
+If you had previously used an older version of Ceph with the
 transit secret engine, you might need the following policy::
 
   vault policy write old-rgw-transit-policy -<<EOF
@@ -156,23 +151,23 @@ transit secret engine, you might need the following policy::
     }
   EOF
 
-If you are using both sse-kms and sse-s3, then you should point
+If you are using both SSE-KMS and SSE-S3, then you should point
 each to separate containers.  You could either use separate
-vault instances, or you could use either separately mounted
+Vault instances, or you could use either separately mounted
 transit instances, or different branches under a common transit
-point.  If you are not using separate vault instances, you can
-use these to point kms and sse-s3 to separate containers:
+point.  If you are not using separate Vault instances, you can
+use these to point SSE-KMS and SSE-S3 to separate containers:
 ``rgw_crypt_vault_prefix``
 and/or
 ``rgw_crypt_sse_s3_vault_prefix``.
-When granting vault permissions to sse-kms bucket owners, you should
-not give them permission to muck around with sse-s3 keys;
-only ceph itself should be doing that.
+When granting Vault permissions to SSE-KMS bucket owners, you should
+not give them permission to muck around with SSE-S3 keys;
+only Ceph itself should be doing that.
 
-Token authentication
+Token Authentication
 --------------------
 
-.. note: Never use root tokens with ceph in production environments.
+.. note: Never use root tokens with Ceph in production environments.
 
 The token authentication method expects a Vault token to be present in a
 plaintext file. The Object Gateway can be configured to use token authentication
@@ -186,7 +181,7 @@ Adjust these settings to match your configuration.
 For security reasons, the token file must be readable by the Object Gateway
 only.
 
-Vault agent
+Vault Agent
 -----------
 
 The Vault agent is a client daemon that provides authentication to Vault and
@@ -200,7 +195,7 @@ settings::
   rgw crypt vault auth = agent
   rgw crypt vault addr = http://127.0.0.1:8100
 
-You might set up vault agent as follows::
+You might set up Vault agent as follows::
 
   vault write auth/approle/role/rgw-ap \
     token_policies=rgw-transit-policy,default \
@@ -208,17 +203,19 @@ You might set up vault agent as follows::
 
 Change the policy here to match your configuration.
 
-Get the role-id:
+Get the role-id::
+
   vault read auth/approle/role/rgw-ap/role-id -format=json | \
     jq -r .data.role_id
 
-Store the output in some file, such as /usr/local/etc/vault/.rgw-ap-role-id
+Store the output in some file, such as ``/usr/local/etc/vault/.rgw-ap-role-id``.
 
-Get the secret-id:
+Get the secret-id::
+
   vault read auth/approle/role/rgw-ap/role-id -format=json | \
     jq -r .data.role_id
 
-Store the output in some file, such as /usr/local/etc/vault/.rgw-ap-secret-id
+Store the output in some file, such as ``/usr/local/etc/vault/.rgw-ap-secret-id``.
 
 Create configuration for the Vault agent, such as::
 
@@ -249,11 +246,11 @@ a persistent daemon with the following arguments::
 
     /usr/local/bin/vault agent -config=/usr/local/etc/vault/rgw-agent.hcl
 
-Once the vault agent is running, you should find it listening
+Once the Vault agent is running, you should find it listening
 to port 8100 on localhost, and you should be able to interact
-with it using the vault command.
+with it using the ``vault`` command.
 
-Vault namespaces
+Vault Namespaces
 ================
 
 In the Enterprise version, Vault supports the concept of `namespaces`_, which
@@ -265,13 +262,13 @@ namespace using the following configuration setting::
 
   rgw crypt vault namespace = tenant1
 
-Create a key in Vault
+Create a Key in Vault
 =====================
 
 .. note:: Keys for server-side encryption must be 256-bit long and base-64
    encoded.
 
-Using the KV engine
+Using the KV Engine
 -------------------
 
 A key for server-side encryption can be created in the KV version 2 engine using
@@ -290,13 +287,13 @@ Sample output::
   version          1
 
 Note that in the KV secrets engine, secrets are stored as key-value pairs, and
-the Gateway expects the key name to be ``key``, i.e. the secret must be in the
+the Object Gateway expects the key name to be ``key``, i.e. the secret must be in the
 form ``key=<secret key>``.
 
-Using the Transit engine
+Using the Transit Engine
 ------------------------
 
-Keys created for use with the Transit engine should no longer be marked
+Keys created for use with the transit engine should no longer be marked
 exportable.  They can be created with::
 
   vault write -f transit/keys/mybucketkey
@@ -347,8 +344,8 @@ Optionally, set the Vault namespace where encryption keys will be fetched from::
 
   rgw crypt vault namespace = tenant1
 
-Finally, the URLs where the Gateway will retrieve encryption keys from Vault can
-be restricted by setting a path prefix. For instance, the Gateway can be
+Finally, the URLs where the Object Gateway will retrieve encryption keys from Vault can
+be restricted by setting a path prefix. For instance, the Object Gateway can be
 restricted to fetch KV keys as follows::
 
   rgw crypt vault prefix = /v1/secret/data
@@ -357,10 +354,10 @@ Or, when using the transit secret engine::
 
   rgw crypt vault prefix = /v1/transit
 
-In the example above, the Gateway would only fetch transit encryption keys under
+In the example above, the Object Gateway would only fetch transit encryption keys under
 ``https://vault-server:8200/v1/transit``.
 
-You can use custom ssl certs to authenticate with vault with help of
+You can use custom SSL certificates to authenticate with Vault with help of
 following options::
 
   rgw crypt vault verify ssl = true
@@ -368,17 +365,17 @@ following options::
   rgw crypt vault ssl clientcert = /etc/ceph/vault.crt
   rgw crypt vault ssl clientkey = /etc/ceph/vault.key
 
-where vault.ca is CA certificate and vault.key/vault.crt are private key and ssl
-certificate generated for RGW to access the vault server. It highly recommended to
-set this option true, setting false is very dangerous and need to avoid since this
+where ``vault.ca`` is CA certificate and ``vault.key``/``vault.crt`` are private key and SSL
+certificate generated for RGW to access the Vault server. It is highly recommended to
+set this option to the value ``true``, setting ``false`` is very dangerous and needs to be avoided since this
 runs in very secured environments.
 
-Transit engine compatibility support
+Transit Engine Compatibility Support
 ------------------------------------
 The transit engine has compatibility support for previous
-versions of ceph, which used the transit engine as a simple key store.
+versions of Ceph, which used the transit engine as a simple key store.
 
-There is a "compat" option which can be given to the transit
+There is a ``compat`` option which can be given to the transit
 engine to configure the compatibility support,
 
 To entirely disable backwards support, use::
@@ -394,22 +391,22 @@ This is the normal default with the current version::
 
 This enables the new engine for newly created objects,
 but still allows the old engine to be used for old objects.
-In order to access old and new objects, the vault token given
-to ceph must have both the old and new transit policies.
+In order to access old and new objects, the Vault token given
+to Ceph must have both the old and new transit policies.
 
 To force use of only the old engine, use::
 
   rgw crypt vault secret engine = transit compat=2
 
-This mode is automatically selected if the vault prefix
-ends in export/encryption-key, which was the previously
+This mode is automatically selected if the Vault prefix
+ends in ``export/encryption-key``, which was the previously
 documented setting.
 
-Upload object
+Upload Object
 =============
 
-When uploading an object to the Gateway, provide the SSE key ID in the request.
-As an example, for the kv engine, using the AWS command-line client::
+When uploading an object to the Object Gateway, provide the SSE key ID in the request.
+As an example, for the KV engine, using the AWS command-line client::
 
   aws --endpoint=http://radosgw:8000 s3 cp plaintext.txt s3://mybucket/encrypted.txt --sse=aws:kms --sse-kms-key-id myproject/mybucketkey
   
@@ -418,18 +415,18 @@ As an example, for the transit engine (new flavor), using the AWS command-line c
   aws --endpoint=http://radosgw:8000 s3 cp plaintext.txt s3://mybucket/encrypted.txt --sse=aws:kms --sse-kms-key-id mybucketkey
 
 The Object Gateway will fetch the key from Vault, encrypt the object and store
-it in the bucket. Any request to download the object will make the Gateway
+it in the bucket. Any request to download the object will make the Object Gateway
 automatically retrieve the correspondent key from Vault and decrypt the object.
 
 Note that the secret will be fetched from Vault using a URL constructed by
 concatenating the base address (``rgw crypt vault addr``), the (optional)
 URL prefix (``rgw crypt vault prefix``), and finally the key ID. 
 
-In the kv engine example above, the Gateway would fetch the secret from::
+In the KV engine example above, the Object Gateway would fetch the secret from::
 
   http://vaultserver:8200/v1/secret/data/myproject/mybucketkey
 
-In the transit engine example above, the Gateway would encrypt the secret using this key::
+In the transit engine example above, the Object Gateway would encrypt the secret using this key::
 
   http://vaultserver:8200/v1/transit/mybucketkey
 

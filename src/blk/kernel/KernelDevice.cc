@@ -25,6 +25,7 @@
 #include <boost/lockfree/queue.hpp>
 
 #include "KernelDevice.h"
+#include "log/Log.h"
 #include "include/buffer_raw.h"
 #include "include/intarith.h"
 #include "include/types.h"
@@ -33,6 +34,7 @@
 #include "include/str_map.h"
 #include "common/blkdev.h"
 #include "common/buffer_instrumentation.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
 #if defined(__FreeBSD__)
 #include "bsm/audit_errno.h"
@@ -43,6 +45,12 @@
 #include "global/global_context.h"
 #include "io_uring.h"
 
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
@@ -52,6 +60,7 @@ using std::list;
 using std::map;
 using std::string;
 using std::vector;
+using namespace std::literals;
 
 using ceph::bufferlist;
 using ceph::bufferptr;
@@ -96,6 +105,8 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
   b.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64_counter(l_blk_kernel_device_discard_op, "discard_op",
             "Number of discard ops issued to kernel device");
+  b.add_u64_counter(l_blk_kernel_discard_threads, "discard_threads",
+            "Number of discard threads running");
 
   logger.reset(b.create_perf_counters());
   cct->get_perfcounters_collection()->add(logger.get());
@@ -601,6 +612,7 @@ void KernelDevice::_discard_update_threads(bool discard_stop)
       t->join();
     }
   }
+  logger->set(l_blk_kernel_discard_threads, discard_threads.size());
 }
 
 void KernelDevice::_discard_stop()
@@ -807,11 +819,11 @@ void KernelDevice::_discard_thread(uint64_t tid)
       // It will also allow threads to finish in a timely manner.
       constexpr unsigned MAX_LOCAL_DISCARD = 32;
       unsigned count = 0;
-      for (auto p = discard_queued.begin();
-	   p != discard_queued.end() && count < MAX_LOCAL_DISCARD;
-	   ++p, ++count) {
-	discard_processing.insert(p.get_start(), p.get_len());
-	discard_queued.erase(p);
+      for (auto it = discard_queued.begin();
+           it != discard_queued.end() && count < MAX_LOCAL_DISCARD;
+           ++count) {
+        discard_processing.insert(it.get_start(), it.get_len());
+        it = discard_queued.erase(it);
       }
 
       // there are multiple active threads -> must use a counter instead of a flag
@@ -1562,14 +1574,13 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
   return r;
 }
 
-const char** KernelDevice::get_tracked_conf_keys() const
+std::vector<std::string> KernelDevice::get_tracked_keys()
+    const noexcept
 {
-  static const char* KEYS[] = {
-    "bdev_async_discard_threads",
-    "bdev_enable_discard",
-    NULL
+  return {
+    "bdev_async_discard_threads"s,
+    "bdev_enable_discard"s
   };
-  return KEYS;
 }
 
 void KernelDevice::handle_conf_change(const ConfigProxy& conf,

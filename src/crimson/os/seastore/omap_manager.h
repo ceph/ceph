@@ -68,7 +68,8 @@ public:
    * @param string &key, omap string key
    * @param string &value, mapped value corresponding key
    */
-  using omap_set_key_iertr = base_iertr;
+  using omap_set_key_iertr = base_iertr::extend<
+    crimson::ct_error::value_too_large>;
   using omap_set_key_ret = omap_set_key_iertr::future<>;
   virtual omap_set_key_ret omap_set_key(
     omap_root_t &omap_root,
@@ -76,7 +77,7 @@ public:
     const std::string &key,
     const ceph::bufferlist &value) = 0;
 
-  using omap_set_keys_iertr = base_iertr;
+  using omap_set_keys_iertr = omap_set_key_iertr;
   using omap_set_keys_ret = omap_set_keys_iertr::future<>;
   virtual omap_set_keys_ret omap_set_keys(
     omap_root_t &omap_root,

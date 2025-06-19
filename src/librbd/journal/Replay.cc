@@ -220,8 +220,8 @@ void Replay<I>::process(const EventEntry &event_entry,
     return;
   }
 
-  boost::apply_visitor(EventVisitor(this, on_ready, on_safe),
-                       event_entry.event);
+  std::visit(EventVisitor(this, on_ready, on_safe),
+             event_entry.event);
 }
 
 template <typename I>

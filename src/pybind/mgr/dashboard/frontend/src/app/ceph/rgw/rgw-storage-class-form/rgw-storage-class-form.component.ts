@@ -80,7 +80,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     this.targetSecretKeyText =
       "To view or copy your secret key, go to your cloud service's user management or credentials section, find your user profile, and locate the access key. You can view and copy the key by following the instructions provided.";
     this.retainHeadObjectText =
-      'Retain object metadata after transition to the cloud (default: deleted).';
+      'Retain object metadata after transition to the cloud (default: false).';
     this.createForm();
     this.loadingReady();
     this.loadZoneGroup();
@@ -107,11 +107,11 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
           this.storageClassForm.get('endpoint').setValue(response.endpoint);
           this.storageClassForm.get('storage_class').setValue(this.storageClassInfo.storage_class);
           this.storageClassForm.get('access_key').setValue(response.access_key);
-          this.storageClassForm.get('secret_key').setValue(response.access_key);
+          this.storageClassForm.get('secret_key').setValue(response.secret);
           this.storageClassForm.get('target_path').setValue(response.target_path);
           this.storageClassForm
             .get('retain_head_object')
-            .setValue(response.retain_head_object || false);
+            .setValue(this.tierTargetInfo?.val?.retain_head_object || false);
           this.storageClassForm
             .get('multipart_sync_threshold')
             .setValue(response.multipart_sync_threshold || '');

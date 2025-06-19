@@ -213,19 +213,14 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   // size due to whole pages writes. The behavior is undefined if called
   // with other writes to follow.
   rocksdb::Status Truncate(uint64_t size) override {
-    // we mirror the posix env, which does nothing here; instead, it
-    // truncates to the final size on close.  whatever!
-    return rocksdb::Status::OK();
-    //int r = fs->truncate(h, size);
-    //  return err_to_status(r);
-  }
-
-  rocksdb::Status Close() override {
-
-    int r = fs->truncate(h, h->pos);
+    int r = fs->truncate(h, size);
     if (r < 0) {
       return err_to_status(r);
     }
+    return rocksdb::Status::OK();
+  }
+
+  rocksdb::Status Close() override {
     fs->fsync(h);
     return rocksdb::Status::OK();
   }

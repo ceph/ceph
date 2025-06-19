@@ -19,8 +19,9 @@
 #include "FSMap.h"
 #include "common/debug.h"
 #include "common/StackStringStream.h"
+#include "common/strtol.h" // for strict_strtoll()
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include "crimson/common/config_proxy.h"
 #else
 #include "common/config_proxy.h"
@@ -664,7 +665,7 @@ void FSMap::decode(bufferlist::const_iterator& p)
   struct_version = 0;
   DECODE_START(STRUCT_VERSION, p);
   DECODE_OLDEST(7);
-  struct_version = struct_v;
+  struct_version = struct_v.v;
   decode(epoch, p);
   decode(next_filesystem_id, p);
   decode(legacy_client_fscid, p);

@@ -6,34 +6,47 @@ This is a simple module skeleton for documentation purposes.
 Enabling
 --------
 
-The *hello* module is enabled with::
+Run the following command to enable the ``hello`` module: 
 
-  ceph mgr module enable hello
+.. prompt:: bash #
 
-To check that it is enabled, run::
+   ceph mgr module enable hello
 
-  ceph mgr module ls
+Run the following command to ensure that the ``hello`` module is enabled: 
 
-After editing the module file (found in ``src/pybind/mgr/hello/module.py``), you can see changes by running::
+.. prompt:: bash #
 
-  ceph mgr module disable hello
-  ceph mgr module enable hello
+   ceph mgr module ls
 
-or::
+After editing the module file (found in ``src/pybind/mgr/hello/module.py``),
+reload the module in order to pick up the changes by running the following
+commands:
 
-  init-ceph restart mgr
+.. prompt:: bash #
 
-To execute the module, run::
+   ceph mgr module disable hello
+   ceph mgr module enable hello
 
-  ceph hello
+Alternatively, run the following command to reload the ``hello`` module and pick up changes to its settings: 
 
-The log is found at::
+.. prompt:: bash #
 
-  build/out/mgr.x.log
+   init-ceph restart mgr
+
+Run the following command to run the module:
+
+.. prompt:: bash #
+
+   ceph hello
+
+The log is found in the following file::
+
+   build/out/mgr.x.log
 
 
 Documenting
 -----------
 
-After adding a new mgr module, be sure to add its documentation to ``doc/mgr/module_name.rst``.
-Also, add a link to your new module into ``doc/mgr/index.rst``.
+After adding a new mgr module, be sure to add its documentation to
+``doc/mgr/module_name.rst``.  Also, add a link to your new module into
+``doc/mgr/index.rst``.

@@ -33,3 +33,4 @@ tasks:
     chance_inject_pause_short: 0
     chance_thrash_cluster_full: 0
     chance_reset_purged_snaps_last: 0
+    chance_trim_stale_osdmaps: 0

@@ -147,6 +147,12 @@ class ceph_lock_state_t;
 // ========================================================
 // client interface
 
+struct scan_state_t {
+  int fd1;
+  int fd2;
+  uint64_t index;
+};
+
 struct dir_result_t {
   static const int SHIFT = 28;
   static const int64_t MASK = (1 << SHIFT) - 1;
@@ -343,10 +349,9 @@ public:
   // these should (more or less) mirror the actual system calls.
   int statfs(const char *path, struct statvfs *stbuf, const UserPerm& perms);
 
-  // crap
-  int chdir(const char *s, std::string &new_cwd, const UserPerm& perms);
-  void _getcwd(std::string& cwd, const UserPerm& perms);
-  void getcwd(std::string& cwd, const UserPerm& perms);
+  int chdir(const char *path, const UserPerm& perms);
+  int _getcwd(std::string& cwd, const UserPerm& perms);
+  int getcwd(std::string& cwd, const UserPerm& perms);
 
   // namespace ops
   int opendir(const char *name, dir_result_t **dirpp, const UserPerm& perms);
@@ -368,6 +373,14 @@ public:
   struct dirent * readdir(dir_result_t *d);
   int readdir_r(dir_result_t *dirp, struct dirent *de);
   int readdirplus_r(dir_result_t *dirp, struct dirent *de, struct ceph_statx *stx, unsigned want, unsigned flags, Inode **out);
+
+  int file_blockdiff_init_state(const char *path1, const char *path2,
+				const UserPerm &perms, struct scan_state_t **state);
+  int file_blockdiff(struct scan_state_t *state, const UserPerm &perms,
+		     std::vector<std::pair<uint64_t,uint64_t>> *blocks);
+  int file_blockdiff_finish(struct scan_state_t *state);
+
+  int get_perf_counters(bufferlist *outbl);
 
   /*
    * Get the next snapshot delta entry.
@@ -588,6 +601,7 @@ public:
   int ll_lookupx(Inode *parent, const char *name, Inode **out,
 			struct ceph_statx *stx, unsigned want, unsigned flags,
 			const UserPerm& perms);
+  void ll_get(Inode *in);
   bool ll_forget(Inode *in, uint64_t count);
   bool ll_put(Inode *in);
   int ll_get_snap_ref(snapid_t snap);
@@ -1375,14 +1389,6 @@ private:
     void finish(int r) override {
       CRF->finish_io(r);
     }
-
-    // For _read_async, we may not finish in one go, so be prepared for multiple
-    // calls to complete. All the handling though is in C_Read_Finisher.
-    void complete(int r) override {
-      finish(r);
-      if (CRF->iofinished)
-        delete this;
-    }
   };
 
   class C_Read_Sync_NonBlocking : public Context {
@@ -1701,7 +1707,7 @@ private:
   int _link(Inode *diri_from, const char* path_from, Inode* diri_to, const char* path_to, const UserPerm& perm, std::string alternate_name);
   int _unlink(Inode *dir, const char *name, const UserPerm& perm);
   int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, const UserPerm& perm, std::string alternate_name);
-  int _mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& perm,
+  int _mkdir(const walk_dentry_result& wdr, mode_t mode, const UserPerm& perm,
 	     InodeRef *inp = 0, const std::map<std::string, std::string> &metadata={},
              std::string alternate_name="");
   int _rmdir(Inode *dir, const char *name, const UserPerm& perms, bool check_perms=true);

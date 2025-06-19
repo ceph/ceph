@@ -130,10 +130,10 @@ describe('NvmeofService', () => {
     it('should call deleteListener', () => {
       const request = { host_name: 'ceph-node-02', traddr: '192.168.100.102', trsvcid: '4421' };
       service
-        .deleteListener(mockNQN, request.host_name, request.traddr, request.trsvcid)
+        .deleteListener(mockNQN, mockGroupName, request.host_name, request.traddr, request.trsvcid)
         .subscribe();
       const req = httpTesting.expectOne(
-        `${API_PATH}/subsystem/${mockNQN}/listener/${request.host_name}/${request.traddr}?trsvcid=${request.trsvcid}`
+        `${API_PATH}/subsystem/${mockNQN}/listener/${request.host_name}/${request.traddr}?gw_group=${mockGroupName}&trsvcid=${request.trsvcid}`
       );
       expect(req.request.method).toBe('DELETE');
     });
@@ -160,6 +160,7 @@ describe('NvmeofService', () => {
         rbd_image_name: 'nvme_ns_image:12345678',
         rbd_pool: 'rbd',
         rbd_image_size: 1024,
+        create_image: true,
         gw_group: mockGroupName
       };
       service.createNamespace(mockNQN, mockNamespaceObj).subscribe();

@@ -1,0 +1,83 @@
+name: Check ceph config changes
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - edited
+      - reopened
+
+# The following permissions are needed to write a comment to repo
+permissions:
+    issues: write
+    contents: read
+    pull-requests: write
+
+jobs:
+  pull_request:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout ceph.git
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 #v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: ceph
+          sparse-checkout: |
+            src/script
+            src/common/options
+            .github/workflows
+
+      - name:  'Get common ancestor between PR and ceph upstream main branch'
+        id: get_common_ancestor
+        env:
+          branch_pr: origin/${{ github.event.pull_request.head.ref }}
+          refspec_pr: +${{ github.event.pull_request.head.sha }}:remotes/origin/${{ github.event.pull_request.head.ref }}
+        working-directory: ceph
+        run: |
+          # Fetch enough history to find a common ancestor commit (aka merge-base):
+          git fetch origin ${{ env.refspec_pr }} --depth=$(( ${{ github.event.pull_request.commits }} + 1 )) \
+            --no-tags --prune --no-recurse-submodules
+
+          # This should get the oldest commit in the local fetched history (the commit in ceph upstream from which PR branched from):
+          COMMON_ANCESTOR=$( git rev-list --first-parent --max-parents=0 --max-count=1 ${{ env.branch_pr }} )
+          COMMON_ANCESTOR_SHA=$( git log --format=%H "${COMMON_ANCESTOR}" )
+
+          echo "COMMON_ANCESTOR_SHA=${COMMON_ANCESTOR_SHA}" >> $GITHUB_ENV
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 #v5.6.0
+        with:
+          python-version: '3.13'
+
+      - name: Install python packages
+        run: |
+          pip3 install -r ./src/script/config-diff/requirements.txt
+        working-directory: ceph
+
+      - name: execute config diff tool
+        id: diff_tool
+        env:
+          REF_REPO: ${{ github.event.pull_request.base.repo.clone_url }}
+          REF_BRANCH: ${{ github.event.pull_request.base.ref }}
+          REF_COMMIT_SHA: ${{ env.COMMON_ANCESTOR_SHA }}
+          REMOTE_REPO: ${{ github.event.pull_request.head.repo.clone_url }}
+          REMOTE_BRANCH: ${{ github.event.pull_request.head.ref }}
+          REMOTE_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+        run:  |
+          {
+            echo 'DIFF_JSON<<EOF'
+            python3 ./src/script/config-diff/config_diff.py diff-branch-remote-repo --ref-branch $REF_BRANCH --ref-commit-sha $REF_COMMIT_SHA --remote-repo $REMOTE_REPO --cmp-branch $REMOTE_BRANCH --cmp-commit-sha $REMOTE_COMMIT_SHA --format=posix-diff --skip-clone
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+        working-directory: ceph
+
+      - name: Post output as a comment
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIFF_JSON_OUTPUT: ${{ steps.diff_tool.outputs.DIFF_JSON }}
+        with:
+          script: |
+            const configDiff = process.env.DIFF_JSON_OUTPUT;
+            const postComment = require('./ceph/.github/workflows/scripts/config-diff-post-comment.js');
+            postComment({ github, context, core, configDiff });

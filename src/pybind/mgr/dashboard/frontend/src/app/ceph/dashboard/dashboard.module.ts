@@ -3,7 +3,7 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
-import { NgbNavModule, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { provideCharts, withDefaultRegisterables, BaseChartDirective } from 'ng2-charts';
 
 import { SharedModule } from '~/app/shared/shared.module';
@@ -19,6 +19,7 @@ import { MdsDashboardSummaryPipe } from './mds-dashboard-summary.pipe';
 import { MgrDashboardSummaryPipe } from './mgr-dashboard-summary.pipe';
 import { MonSummaryPipe } from './mon-summary.pipe';
 import { osdDashboardSummaryPipe } from './osd-dashboard-summary.pipe';
+import { ToggletipModule } from 'carbon-components-angular';
 
 @NgModule({
   imports: [
@@ -27,11 +28,11 @@ import { osdDashboardSummaryPipe } from './osd-dashboard-summary.pipe';
     NgbNavModule,
     SharedModule,
     RouterModule,
-    NgbPopoverModule,
     FormsModule,
     ReactiveFormsModule,
     DashboardV3Module,
-    BaseChartDirective
+    BaseChartDirective,
+    ToggletipModule
   ],
   declarations: [
     HealthComponent,

@@ -21,6 +21,7 @@
 
 #include "include/common_fwd.h"
 #include "include/encoding.h"
+#include "common/async/yield_context.h"
 #include "common/ceph_time.h"
 #include "common/dout.h"
 #include "rgw_common.h"
@@ -116,6 +117,7 @@ struct BucketTrimStatus {
 
 WRITE_CLASS_ENCODER(rgw::BucketTrimStatus);
 
-int bilog_trim(const DoutPrefixProvider* p, rgw::sal::RadosStore* store,
+int bilog_trim(const DoutPrefixProvider* p, optional_yield y,
+	       rgw::sal::RadosStore* store,
 	       RGWBucketInfo& bucket_info, uint64_t gen, int shard_id,
 	       std::string_view start_marker, std::string_view end_marker);

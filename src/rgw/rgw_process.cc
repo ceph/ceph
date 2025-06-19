@@ -94,8 +94,7 @@ void RGWProcess::RGWWQ::_process(RGWRequest *req, ThreadPool::TPHandle &) {
 }
 bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   // we dont want to limit health check or system or admin requests
-  const auto& is_admin_or_system = s->user->get_info();
-  if ((s->op_type ==  RGW_OP_GET_HEALTH_CHECK) || is_admin_or_system.admin || is_admin_or_system.system)
+  if ((s->op_type ==  RGW_OP_GET_HEALTH_CHECK) || s->system_request)
     return false;
   std::string userfind;
   RGWRateLimitInfo global_user;
@@ -226,14 +225,17 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
     ret = op->verify_permission(y);
     std::swap(span, s->trace);
   }
-  if (ret < 0) {
-    if (s->system_request) {
-      dout(2) << "overriding permissions due to system operation" << dendl;
-    } else if (s->auth.identity->is_admin_of(s->user->get_id())) {
+  if (ret == -EACCES || ret == -EPERM || ret == -ERR_AUTHORIZATION) {
+    // system requests may impersonate another user/role for permission checks
+    // so only rely on is_admin() to override permissions
+    if (s->auth.identity->is_admin()) {
       dout(2) << "overriding permissions due to admin operation" << dendl;
     } else {
       return ret;
     }
+  } else if (ret < 0) {
+    // other errors are not overridden as they might be invalid input
+    return ret;
   }
 
   ldpp_dout(op, 2) << "verifying op params" << dendl;
@@ -464,16 +466,16 @@ done:
     rgw_log_op(rest, s, op, penv.olog.get());
   }
 
-  if (op) {
-    std::ignore = rgw::bucketlogging::log_record(driver, 
+  if (op && op->always_do_bucket_logging()) {
+    std::ignore = rgw::bucketlogging::log_record(driver,
         rgw::bucketlogging::LoggingType::Standard,
         s->object.get(),
-        s, 
-        op->canonical_name(), 
-        "", 
+        s,
+        op->canonical_name(),
+        "",
         (s->src_object ? s->src_object->get_size() : (s->object ? s->object->get_size() : 0)),
-        op, 
-        yield, 
+        op,
+        yield,
         true,
         false);
   }

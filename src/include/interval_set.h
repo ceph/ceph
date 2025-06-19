@@ -19,8 +19,19 @@
 #include <iterator>
 #include <map>
 #include <ostream>
+#include <fmt/ranges.h>
+#include "common/fmt_common.h"
+#include "common/dout.h"
 
 #include "encoding.h"
+
+/* strict_mode_assert is a standard ceph_assert() in product code. Some tests
+ * (specifically test_interval_set.cc) can override this macro with an
+ * exception.
+ */
+#ifndef strict_mode_assert
+#define strict_mode_assert(expr) ceph_assert(expr)
+#endif
 
 /*
  * *** NOTE ***
@@ -246,6 +257,35 @@ class interval_set {
     return const_iterator(m.end());
   }
 
+  void print(std::ostream& os) const {
+    os << "[";
+    bool first = true;
+    for (const auto& [start, len] : *this) {
+      if (!first) {
+        os << ",";
+      }
+      os << start << "~" << len;
+      first = false;
+    }
+    os << "]";
+  }
+
+  std::string fmt_print() const
+  requires fmt::formattable<T> {
+    std::string s = "[";
+    bool first = true;
+    for (const auto& [start, len] : *this) {
+      if (!first) {
+        s += ",";
+      } else {
+        first = false;
+      }
+      s += fmt::format("{}~{}", start, len);
+    }
+    s += "]";
+    return s;
+  }
+
   // helpers
  private:
   auto find_inc(T start) const {
@@ -330,7 +370,7 @@ class interval_set {
 
       auto start = std::max<T>(ps->first, pl->first);
       auto en = std::min<T>(ps->first + ps->second, offset);
-      ceph_assert(en > start);
+      strict_mode_assert(en > start);
       mi = m.emplace_hint(mi, start, en - start);
       _size += mi->second;
       if (ps->first + ps->second <= offset) {
@@ -524,7 +564,7 @@ class interval_set {
 
         if (p->first + p->second != start) {
           //cout << "p is " << p->first << "~" << p->second << ", start is " << start << ", len is " << len << endl;
-          ceph_abort();
+          strict_mode_assert(false);
         }
 
         p->second += len;               // append to end
@@ -540,7 +580,7 @@ class interval_set {
 	    *plen = p->second;
           m.erase(n);
         } else {
-          ceph_assert(n == m.end() || start + len < n->first);
+          strict_mode_assert(n == m.end() || start + len < n->first);
 	  if (plen)
 	    *plen = p->second;
 	}
@@ -554,7 +594,7 @@ class interval_set {
           m.erase(p);
           m[start] = len + psecond;  // append to front
         } else {
-          ceph_assert(p->first > start+len);
+          strict_mode_assert(p->first > start+len);
 	  if (pstart)
 	    *pstart = start;
 	  if (plen)
@@ -625,9 +665,9 @@ class interval_set {
     std::swap(_size, other._size);
   }
   
-  void erase(const iterator &i) {
+  iterator erase(const iterator &i) {
     _size -= i.get_len();
-    m.erase(i._iter);
+    return iterator(m.erase(i._iter));
   }
 
   void erase(T val) {
@@ -645,11 +685,11 @@ class interval_set {
 
     _size -= len;
 
-    ceph_assert(p != m.end());
-    ceph_assert(p->first <= start);
+    strict_mode_assert(p != m.end());
+    strict_mode_assert(p->first <= start);
 
     T before = start - p->first;
-    ceph_assert(p->second >= before+len);
+    strict_mode_assert(p->second >= before+len);
     T after = p->second - before - len;
     if (before) {
       if (claim && claim(p->first, before)) {
@@ -963,19 +1003,9 @@ public:
   }
 };
 
+// make sure fmt::range would not try (and fail) to treat interval_set as a range
+template<typename T, template<typename, typename, typename ...> class C, bool strict>
+struct fmt::is_range<interval_set<T, C, strict>, char> : std::false_type {};
 
-template<typename T, template<typename, typename, typename ...> class C>
-inline std::ostream& operator<<(std::ostream& out, const interval_set<T,C> &s) {
-  out << "[";
-  bool first = true;
-  for (const auto& [start, len] : s) {
-    if (!first) out << ",";
-    out << start << "~" << len;
-    first = false;
-  }
-  out << "]";
-  return out;
-}
-
-
+#undef strict_mode_assert
 #endif

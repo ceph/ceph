@@ -97,10 +97,12 @@ expect_false ceph osd pool stretch set non_exist_pool 2 3 datacenter $TEST_CRUSH
 expect_false ceph osd pool stretch set $TEST_POOL_STRETCH 2 3 non_exist_barrier $TEST_CRUSH_RULE 6 3
 # Non existence crush_rule should return appropriate error
 expect_false ceph osd pool stretch set $TEST_POOL_STRETCH 2 3 datacenter $TEST_CRUSH_RULE 6 3
-# Unsetting a non existence pool should return error
-expect_false ceph osd pool stretch unset non_exist_pool
-# Unsetting a non-stretch pool should return error
+# Unsetting a pool with missing arguments
 expect_false ceph osd pool stretch unset $TEST_POOL_STRETCH
+# Unsetting a non existence pool should return error
+expect_false ceph osd pool stretch unset non_exist_pool replicated_rule 6 3
+# Unsetting a non-stretch pool should return error
+expect_false ceph osd pool stretch unset $TEST_POOL_STRETCH replicated_rule 6 3
 
 # Create a custom crush rule
 ceph osd getcrushmap > crushmap
@@ -139,7 +141,7 @@ expect_true ceph osd pool stretch set $TEST_POOL_STRETCH 2 3 datacenter $TEST_CR
 expect_true ceph osd pool stretch show $TEST_POOL_STRETCH
 
 # Unset the stretch pool and expects it to work
-expect_true ceph osd pool stretch unset $TEST_POOL_STRETCH
+expect_true ceph osd pool stretch unset $TEST_POOL_STRETCH replicated_rule 6 3
 # try to show the stretch pool values again, should return error since
 # the pool is not a stretch pool anymore.
 expect_false ceph osd pool stretch show $TEST_POOL_STRETCH

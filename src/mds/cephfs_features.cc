@@ -34,6 +34,7 @@ static const std::array feature_names
   "has_owner_uidgid",
   "client_mds_auth_caps",
   "charmap",
+  "blockdiff"
 };
 static_assert(feature_names.size() == CEPHFS_FEATURE_MAX + 1);
 

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Permissions } from '~/app/shared/models/permissions';
 import { Router } from '@angular/router';
 
@@ -37,6 +37,9 @@ const BASE_URL = 'cephfs/fs';
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class CephfsListComponent extends ListWithDetails implements OnInit {
+  @ViewChild('deleteTpl', { static: true })
+  deleteTpl: TemplateRef<any>;
+
   columns: CdTableColumn[];
   filesystems: any = [];
   selection = new CdTableSelection();
@@ -178,6 +181,7 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
       itemDescription: 'File System',
       itemNames: [volName],
       actionDescription: 'remove',
+      bodyTemplate: this.deleteTpl,
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
           task: new FinishedTask('cephfs/remove', { volumeName: volName }),

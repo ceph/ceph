@@ -752,10 +752,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                   .setValue(response[0].spec?.ssl_ciphers.join(':'));
               }
               if (response[0].spec?.ssl_cert) {
-                this.serviceForm.get('ssl_cert').setValue(response[0].spec.ssl_certificate);
+                this.serviceForm.get('ssl_cert').setValue(response[0].spec.ssl_cert);
               }
               if (response[0].spec?.ssl_key) {
-                this.serviceForm.get('ssl_key').setValue(response[0].spec.ssl_certificate_key);
+                this.serviceForm.get('ssl_key').setValue(response[0].spec.ssl_key);
               }
               if (response[0].spec?.enable_auth) {
                 this.serviceForm.get('enable_auth').setValue(response[0].spec.enable_auth);
@@ -1284,8 +1284,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           serviceSpec['virtual_interface_networks'] = values['virtual_interface_networks'];
           break;
         case 'mgmt-gateway':
-          serviceSpec['ssl_certificate'] = values['ssl_cert']?.trim();
-          serviceSpec['ssl_certificate_key'] = values['ssl_key']?.trim();
+          serviceSpec['ssl_cert'] = values['ssl_cert']?.trim();
+          serviceSpec['ssl_key'] = values['ssl_key']?.trim();
           serviceSpec['enable_auth'] = values['enable_auth'];
           serviceSpec['port'] = values['port'];
           if (serviceSpec['port'] === (443 || 80)) {

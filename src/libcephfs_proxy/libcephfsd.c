@@ -2,8 +2,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/uio.h>
 #include <getopt.h>
 #include <endian.h>
+#include <string.h>
+#include <stdarg.h>
 
 #include "include/cephfs/libcephfs.h"
 
@@ -13,6 +16,7 @@
 #include "proxy_log.h"
 #include "proxy_requests.h"
 #include "proxy_mount.h"
+#include "proxy_async.h"
 
 typedef struct _proxy_server {
 	proxy_link_t link;
@@ -21,6 +25,8 @@ typedef struct _proxy_server {
 
 typedef struct _proxy_client {
 	proxy_worker_t worker;
+	proxy_link_negotiate_t neg;
+	proxy_async_t async;
 	proxy_link_t *link;
 	proxy_random_t random;
 	void *buffer;
@@ -37,6 +43,12 @@ typedef struct _proxy {
 typedef int32_t (*proxy_handler_t)(proxy_client_t *, proxy_req_t *,
 				   const void *data, int32_t data_size);
 
+typedef struct _proxy_async_io {
+	struct ceph_ll_io_info io_info;
+	struct iovec iov;
+	proxy_async_t *async;
+} proxy_async_io_t;
+
 /* This is used for requests that are not associated with a cmount. */
 static proxy_random_t global_random;
 
@@ -49,68 +61,6 @@ static int32_t send_error(proxy_client_t *client, int32_t error)
 	iov[0].iov_len = sizeof(ans);
 
 	return proxy_link_ans_send(client->sd, error, iov, 1);
-}
-
-static uint64_t uint64_checksum(uint64_t value)
-{
-	value = (value & 0xff00ff00ff00ffULL) +
-		((value >> 8) & 0xff00ff00ff00ffULL);
-	value += value >> 16;
-	value += value >> 32;
-
-	return value & 0xff;
-}
-
-static uint64_t ptr_checksum(proxy_random_t *rnd, void *ptr)
-{
-	uint64_t value;
-
-	if (ptr == NULL) {
-		return 0;
-	}
-
-	value = (uint64_t)(uintptr_t)ptr;
-	/* Many current processors don't use the full 64-bits for the virtual
-         * address space, and Linux assigns the lower 128 TiB (47 bits) for
-         * user-space applications on most architectures, so the highest 8 bits
-         * of all valid addressess are always 0.
-         *
-         * We use this to encode a checksum in the high byte of the address to
-         * be able to do a verification before dereferencing the pointer,
-	 * avoiding crashes if the client passes an invalid or corrupted pointer
-	 * value.
-         *
-         * Alternatives like using indexes in a table or registering valid
-	 * pointers require access to a shared data structure that will require
-	 * thread synchronization, making it slower. */
-	if ((value & 0xff00000000000007ULL) != 0) {
-		proxy_log(LOG_ERR, EINVAL,
-			  "Unexpected pointer value");
-		abort();
-	}
-
-	value -= uint64_checksum(value) << 56;
-
-	return random_scramble(rnd, value);
-}
-
-static int32_t ptr_check(proxy_random_t *rnd, uint64_t value, void **pptr)
-{
-	if (value == 0) {
-		*pptr = NULL;
-		return 0;
-	}
-
-	value = random_unscramble(rnd, value);
-
-	if ((uint64_checksum(value) != 0) || ((value & 7) != 0)) {
-		proxy_log(LOG_ERR, EFAULT, "Unexpected pointer value");
-		return -EFAULT;
-	}
-
-	*pptr = (void *)(uintptr_t)(value & 0xffffffffffffffULL);
-
-	return 0;
 }
 
 /* Macro to simplify request handling. */
@@ -291,7 +241,7 @@ static int32_t libcephfsd_conf_set(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		option = CEPH_STR_GET(req->conf_set, option, data);
 		value = CEPH_STR_GET(req->conf_set, value,
-				     data + req->conf_set.option);
+				     (const char *)(data) + req->conf_set.option);
 
 		err = proxy_mount_set(mount, option, value);
 		TRACE("ceph_conf_set(%p, '%s', '%s') -> %d", mount, option,
@@ -863,7 +813,7 @@ static int32_t libcephfsd_ll_rename(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		old_name = CEPH_STR_GET(req->ll_rename, old_name, data);
 		new_name = CEPH_STR_GET(req->ll_rename, new_name,
-					data + req->ll_rename.old_name);
+					(const char *)data + req->ll_rename.old_name);
 
 		err = ceph_ll_rename(proxy_cmount(mount), old_parent, old_name,
 				     new_parent, new_name, perms);
@@ -1273,7 +1223,7 @@ static int32_t libcephfsd_ll_setxattr(proxy_client_t *client, proxy_req_t *req,
 	}
 	if (err >= 0) {
 		name = CEPH_STR_GET(req->ll_setxattr, name, data);
-		value = data + req->ll_setxattr.name;
+		value = (const char *)data + req->ll_setxattr.name;
 		size = req->ll_setxattr.size;
 		flags = req->ll_setxattr.flags;
 
@@ -1379,7 +1329,7 @@ static int32_t libcephfsd_ll_symlink(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		name = CEPH_STR_GET(req->ll_symlink, name, data);
 		value = CEPH_STR_GET(req->ll_symlink, target,
-				     data + req->ll_symlink.name);
+				     (const char *)data + req->ll_symlink.name);
 		want = req->ll_symlink.want;
 		flags = req->ll_symlink.flags;
 
@@ -1552,6 +1502,113 @@ static int32_t libcephfsd_mount_perms(proxy_client_t *client, proxy_req_t *req,
 	return CEPH_COMPLETE(client, err, ans);
 }
 
+static void libcephfsd_ll_nonblocking_rw_cbk(struct ceph_ll_io_info *cb_info)
+{
+	CEPH_CBK(ceph_ll_nonblocking_readv_writev, cbk, 1);
+	proxy_async_io_t *async_io;
+	proxy_async_t *async;
+	int32_t err;
+
+	async_io = container_of(cb_info, proxy_async_io_t, io_info);
+	async = async_io->async;
+
+	cbk.info = (uintptr_t)cb_info->priv;
+	cbk.res = cb_info->result;
+
+	if ((cbk.res >= 0) && !cb_info->write) {
+		CEPH_BUFF_ADD(cbk, cb_info->iov->iov_base, cbk.res);
+	}
+
+	err = CEPH_CALL_CBK(async->fd, LIBCEPHFSD_CBK_LL_NONBLOCKING_RW, cbk);
+	if (err < 0) {
+		proxy_log(LOG_ERR, -err,
+			  "Failed to send nonblocking rw completion "
+			  "notification");
+	}
+
+	if (!cb_info->write) {
+		proxy_free(cb_info->iov->iov_base);
+	}
+
+	proxy_free(async_io);
+}
+
+static int32_t libcephfsd_ll_nonblocking_rw(proxy_client_t *client,
+					    proxy_req_t *req,
+					    const void *data, int32_t data_size)
+{
+	CEPH_DATA(ceph_ll_nonblocking_readv_writev, ans, 0);
+	struct ceph_ll_io_info *io_info;
+	proxy_mount_t *mount;
+	proxy_async_io_t *async_io;
+	int64_t res;
+	int32_t err;
+
+	if ((client->neg.v1.enabled & PROXY_FEAT_ASYNC_IO) == 0) {
+		return -EOPNOTSUPP;
+	}
+
+	err = ptr_check(&client->random, req->ll_nonblocking_rw.cmount,
+			(void **)&mount);
+	if (err < 0) {
+		goto done;
+	}
+
+	async_io = proxy_malloc(sizeof(proxy_async_io_t));
+	if (async_io == NULL) {
+		err = -ENOMEM;
+		goto done;
+	}
+	io_info = &async_io->io_info;
+
+	memset(io_info, 0, sizeof(struct ceph_ll_io_info));
+	io_info->callback = libcephfsd_ll_nonblocking_rw_cbk;
+	io_info->priv = (void *)(uintptr_t)req->ll_nonblocking_rw.info;
+	io_info->iov = &async_io->iov;
+	io_info->iovcnt = 1;
+	io_info->off = req->ll_nonblocking_rw.off;
+	io_info->write = req->ll_nonblocking_rw.write;
+	io_info->fsync = req->ll_nonblocking_rw.fsync;
+	io_info->syncdataonly = req->ll_nonblocking_rw.syncdataonly;
+
+	err = ptr_check(&client->random, req->ll_nonblocking_rw.fh,
+			(void **)&io_info->fh);
+	if (err < 0) {
+		goto done;
+	}
+
+	if (io_info->write) {
+		async_io->iov.iov_len = data_size;
+		async_io->iov.iov_base = (void *)data;
+	} else {
+		async_io->iov.iov_len = req->ll_nonblocking_rw.size;
+		async_io->iov.iov_base = proxy_malloc(async_io->iov.iov_len);
+		if (async_io->iov.iov_base == NULL) {
+			proxy_free(async_io);
+			err = -ENOMEM;
+			goto done;
+		}
+	}
+
+	async_io->async = &client->async;
+
+	res = ceph_ll_nonblocking_readv_writev(proxy_cmount(mount), io_info);
+	TRACE("ceph_ll_nonblocking_readv_writev(%p) -> %ld", mount, res);
+
+	ans.res = res;
+	if (res < 0) {
+		if (!io_info->write) {
+			proxy_free(async_io->iov.iov_base);
+		}
+		proxy_free(async_io);
+	}
+
+	err = 0;
+
+done:
+	return CEPH_COMPLETE(client, err, ans);
+}
+
 static proxy_handler_t libcephfsd_handlers[LIBCEPHFSD_OP_TOTAL_OPS] = {
 	[LIBCEPHFSD_OP_VERSION] = libcephfsd_version,
 	[LIBCEPHFSD_OP_USERPERM_NEW] = libcephfsd_userperm_new,
@@ -1600,12 +1657,12 @@ static proxy_handler_t libcephfsd_handlers[LIBCEPHFSD_OP_TOTAL_OPS] = {
 	[LIBCEPHFSD_OP_LL_RMDIR] = libcephfsd_ll_rmdir,
 	[LIBCEPHFSD_OP_LL_RELEASEDIR] = libcephfsd_ll_releasedir,
 	[LIBCEPHFSD_OP_MOUNT_PERMS] = libcephfsd_mount_perms,
+	[LIBCEPHFSD_OP_LL_NONBLOCKING_RW] = libcephfsd_ll_nonblocking_rw,
 };
 
 static void serve_binary(proxy_client_t *client)
 {
 	proxy_req_t req;
-	CEPH_DATA(hello, ans, 0);
 	struct iovec req_iov[2];
 	void *buffer;
 	uint32_t size;
@@ -1620,14 +1677,6 @@ static void serve_binary(proxy_client_t *client)
 		return;
 	}
 
-	ans.major = LIBCEPHFSD_MAJOR;
-	ans.minor = LIBCEPHFSD_MINOR;
-	err = proxy_link_send(client->sd, ans_iov, ans_count);
-	if (err < 0) {
-		proxy_free(buffer);
-		return;
-	}
-
 	while (true) {
 		req_iov[0].iov_base = &req;
 		req_iov[0].iov_len = sizeof(req);
@@ -1635,49 +1684,68 @@ static void serve_binary(proxy_client_t *client)
 		req_iov[1].iov_len = size;
 
 		err = proxy_link_req_recv(client->sd, req_iov, 2);
-		if (err > 0) {
-			if (req.header.op >= LIBCEPHFSD_OP_TOTAL_OPS) {
-				err = send_error(client, -ENOSYS);
-			} else if (libcephfsd_handlers[req.header.op] == NULL) {
-				err = send_error(client, -EOPNOTSUPP);
-			} else {
-				err = libcephfsd_handlers[req.header.op](
-					client, &req, req_iov[1].iov_base,
-					req.header.data_len);
-			}
+		if (err <= 0) {
+			break;
+		}
+
+		if (req.header.op >= LIBCEPHFSD_OP_TOTAL_OPS) {
+			err = send_error(client, -ENOSYS);
+		} else if (libcephfsd_handlers[req.header.op] == NULL) {
+			err = send_error(client, -EOPNOTSUPP);
+		} else {
+			err = libcephfsd_handlers[req.header.op](
+				client, &req, req_iov[1].iov_base,
+				req.header.data_len);
+		}
+		if (err < 0) {
+			break;
 		}
 
 		if (req_iov[1].iov_base != buffer) {
 			/* Free the buffer if it was temporarily allocated. */
 			proxy_free(req_iov[1].iov_base);
 		}
-
-		if (err < 0) {
-			break;
-		}
 	}
 
+	if (req_iov[1].iov_base != buffer) {
+		proxy_free(req_iov[1].iov_base);
+	}
 	proxy_free(buffer);
+}
+
+static int32_t server_negotiation_check(proxy_link_negotiate_t *neg)
+{
+	proxy_log(LOG_INFO, 0, "Features enabled: %08x", neg->v1.enabled);
+
+	return 0;
 }
 
 static void serve_connection(proxy_worker_t *worker)
 {
-	CEPH_DATA(hello, req, 0);
 	proxy_client_t *client;
 	int32_t err;
 
 	client = container_of(worker, proxy_client_t, worker);
 
-	err = proxy_link_recv(client->sd, req_iov, req_count);
-	if (err >= 0) {
-		if (req.id == LIBCEPHFS_LIB_CLIENT) {
-			serve_binary(client);
-		} else {
-			proxy_log(LOG_ERR, EINVAL,
-				  "Invalid client initial message");
+	proxy_link_negotiate_init(&client->neg, 0, PROXY_FEAT_ALL, 0, 0);
+
+	err = proxy_link_handshake_server(client->link, client->sd,
+					  &client->neg,
+					  server_negotiation_check);
+	if (err < 0) {
+		goto done;
+	}
+
+	if ((client->neg.v1.enabled & PROXY_FEAT_ASYNC_CBK) != 0) {
+		err = proxy_async_server(&client->async, client->sd);
+		if (err < 0) {
+			goto done;
 		}
 	}
 
+	serve_binary(client);
+
+done:
 	close(client->sd);
 }
 
@@ -1760,10 +1828,54 @@ static int32_t server_start(proxy_manager_t *manager)
 				 accept_connection, check_stop);
 }
 
+static void log_format(struct iovec *iov, char *buffer, size_t size,
+		       const char *fmt, const char *err, ...)
+{
+	va_list args;
+	int32_t len;
+
+	va_start(args, err);
+	len = vsnprintf(buffer, size, fmt, args);
+	va_end(args);
+
+	if (len < 0) {
+		iov->iov_base = (void *)err;
+		iov->iov_len = strlen(err);
+	} else {
+		if (len >= size) {
+			memcpy(buffer + size - 6, "[...]", 6);
+			len = size - 1;
+		}
+
+		iov->iov_base = buffer;
+		iov->iov_len = len;
+	}
+}
+
 static void log_print(proxy_log_handler_t *handler, int32_t level, int32_t err,
 		      const char *msg)
 {
-	printf("[%d] %s\n", level, msg);
+	static const char level_chars[] = "CEWID";
+
+	char emsg[256];
+	char header[8];
+	struct iovec iov[3];
+
+	log_format(&iov[0], header, sizeof(header), "[%c] ", "[?] ",
+		   level_chars[level]);
+
+	iov[1].iov_base = (void *)msg;
+	iov[1].iov_len = strlen(msg);
+
+	if (err != 0) {
+		log_format(&iov[2], emsg, sizeof(emsg), " (error %d: %s)\n",
+			   " (error ?)\n", err, strerror(err));
+	} else {
+		iov[2].iov_base = "\n";
+		iov[2].iov_len = 1;
+	}
+
+	writev(STDOUT_FILENO, iov, 3);
 }
 
 static struct option main_opts[] = {

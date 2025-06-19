@@ -102,7 +102,7 @@ class NFSService(CephService):
         # create the RGW keyring
         rgw_user = f'{rados_user}-rgw'
         rgw_keyring = self.create_rgw_keyring(daemon_spec)
-        if spec.virtual_ip:
+        if spec.virtual_ip and not spec.enable_haproxy_protocol:
             bind_addr = spec.virtual_ip
             daemon_spec.port_ips = {str(port): spec.virtual_ip}
         else:
@@ -132,6 +132,8 @@ class NFSService(CephService):
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
+                if spec.virtual_ip:
+                    context["haproxy_hosts"].append(spec.virtual_ip)
                 logger.debug("selected haproxy_hosts: %r", context["haproxy_hosts"])
             return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
 

@@ -460,6 +460,37 @@ done
 mys3cmd rb --recursive s3://$d_bkt
 mys3cmd rb --recursive s3://$o_bkt
 
+############################################################
+# copy a multipart object to itself
+# run gc process after the copy, then try to get the object
+
+o_bkt="orig-mp-bkt-8"
+
+mys3cmd mb s3://$o_bkt
+
+mp_obj="multipart-obj-1"
+mys3cmd put -q $huge_obj s3://${o_bkt}/$mp_obj
+
+mys3cmd cp --mime-type="text/plain" s3://${o_bkt}/$mp_obj s3://${o_bkt}/$mp_obj
+
+#####################################################################
+# FORCE GARBAGE COLLECTION
+sleep 6 # since for testing age at which gc can happen is 5 secs
+radosgw-admin gc process --include-all
+#####################################################################
+
+mp_obj_retrieved="multipart-obj-1-retrieved"
+mys3cmd get s3://${o_bkt}/$mp_obj $mp_obj_retrieved --force
+
+if [ -f $mp_obj_retrieved ]; then
+    rm -f $mp_obj_retrieved
+else
+    echo "ERROR: failed to get the object after copying to itself"
+    exit 1
+fi
+
+mys3cmd rb --recursive s3://$o_bkt
+
 #####################################################################
 # FORCE GARBAGE COLLECTION
 sleep 6 # since for testing age at which gc can happen is 5 secs

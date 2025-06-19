@@ -15,6 +15,7 @@
 namespace bi = boost::intrusive;
 
 class RGWPeriod;
+namespace rgw::sal { class ConfigStore; }
 
 /**
  * RGWPeriodHistory tracks the relative history of all inserted periods,
@@ -43,7 +44,7 @@ class RGWPeriodHistory final {
     virtual ~Puller() = default;
 
     virtual int pull(const DoutPrefixProvider *dpp, const std::string& period_id, RGWPeriod& period,
-		     optional_yield y) = 0;
+		     optional_yield y, rgw::sal::ConfigStore* cfgstore) = 0;
   };
 
   RGWPeriodHistory(CephContext* cct, Puller* puller,
@@ -100,7 +101,7 @@ class RGWPeriodHistory final {
   /// current_period and the given period, reading predecessor periods or
   /// fetching them from the master as necessary. returns a cursor at the
   /// given period that can be used to traverse the current_history
-  Cursor attach(const DoutPrefixProvider *dpp, RGWPeriod&& period, optional_yield y);
+  Cursor attach(const DoutPrefixProvider *dpp, RGWPeriod&& period, optional_yield y, rgw::sal::ConfigStore* cfgstore);
 
   /// insert the given period into an existing history, or create a new
   /// unconnected history. similar to attach(), but it doesn't try to fetch

@@ -2,7 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 #pragma once
 
+#include <fmt/base.h>
 #include <optional>
+#include <type_traits>
 
 /**
  * \file default fmtlib formatters for specifically-tagged types
@@ -17,8 +19,13 @@
  * such classes in Crimson.
  */
 
-template <typename T>
-concept has_formatter = fmt::has_formatter<T, fmt::format_context>::value;
+#if FMT_VERSION < 110000
+// TODO: drop me once fmt v11 is required
+namespace fmt {
+  template <typename T, typename Char = char>
+  concept formattable = is_formattable<std::remove_reference_t<T>, Char>::value>;
+}
+#endif
 
 /**
  * Tagging classes that provide support for default fmtlib formatting,

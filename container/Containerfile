@@ -144,7 +144,7 @@ rbd-mirror" \
 >> packages.txt
 
 # Optional crimson package(s)
-RUN if [ "${OSD_FLAVOR}" == "crimson" ]; then \
+RUN if [[ "${OSD_FLAVOR}" == "crimson-debug" || "${OSD_FLAVOR}" == "crimson-release" ]]; then \
     echo "ceph-crimson-osd" >> packages.txt ; \
 fi
 

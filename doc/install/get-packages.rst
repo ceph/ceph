@@ -86,7 +86,7 @@ APT
 
 To install the ``release.asc`` key, execute the following::
 
-	wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
+	wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo tee /etc/apt/trusted.gpg.d/ceph.asc
 
 
 RPM

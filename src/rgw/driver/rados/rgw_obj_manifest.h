@@ -297,7 +297,7 @@ public:
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(7, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(8, 2, 2, bl);
     decode(obj_size, bl);
     decode(objs, bl);
     if (struct_v >= 3) {
@@ -471,16 +471,27 @@ public:
       return tier_type;
   }
 
+  bool is_tier_type_s3() {
+      return (tier_type == RGWTierType::CLOUD_S3 ||
+              tier_type == RGWTierType::CLOUD_S3_GLACIER);
+  }
+
+  bool is_tier_type_s3_glacier() {
+      return (tier_type == RGWTierType::CLOUD_S3_GLACIER);
+  }
+
   inline void set_tier_type(std::string value) {
-      /* Only "cloud-s3" tier-type is supported for now */
-      if (value == "cloud-s3") {
+      /* Only RGWTierType::CLOUD_S3 & RGWTierType::CLOUD_S3_GLACIER
+       * tier-type are supported for now */
+      if (RGWTierType::is_tier_type_supported(value)) {
         tier_type = value;
       }
   }
 
   inline void set_tier_config(RGWObjTier t) {
-      /* Set only if tier_type set to "cloud-s3" */
-      if (tier_type != "cloud-s3")
+      /* Set only if tier_type set to RGWTierType::CLOUD_S3 or
+       * RGWTierType::CLOUD_S3_GLACIER */
+      if (!is_tier_type_s3())
         return;
 
       tier_config.name = t.name;
@@ -489,7 +500,7 @@ public:
   }
 
   inline const void get_tier_config(RGWObjTier* t) {
-      if (tier_type != "cloud-s3")
+      if (!is_tier_type_s3())
         return;
 
       t->name = tier_config.name;

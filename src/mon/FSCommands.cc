@@ -417,9 +417,10 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
   const Filesystem* fsp;
   if (std::holds_alternative<Filesystem*>(fsv)) {
     fsp = std::get<Filesystem*>(fsv);
-  } else if (std::holds_alternative<fs_cluster_id_t>(fsv)) {
+  } else {
+    ceph_assert(std::holds_alternative<fs_cluster_id_t>(fsv));
     fsp = &fsmap.get_filesystem(std::get<fs_cluster_id_t>(fsv));
-  } else ceph_assert(0);
+  }
 
   {
     std::string interr;
@@ -597,6 +598,28 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
         {
 	  fs.get_mds_map().clear_multimds_snaps_allowed();
         });
+      }
+    } else if (var == "allow_referent_inodes") {
+      bool allow_referent_inodes = false;
+      int r = parse_bool(val, &allow_referent_inodes, ss);
+      if (r != 0) {
+        return r;
+      }
+
+      if (!allow_referent_inodes) {
+        modify_filesystem(fsmap, fsv,
+            [](auto&& fs)
+        {
+          fs.get_mds_map().clear_referent_inodes();
+        });
+	ss << "Disabled creation of referent inodes for hardlinks to store backtrace";
+      } else {
+        modify_filesystem(fsmap, fsv,
+            [](auto&& fs)
+        {
+          fs.get_mds_map().set_referent_inodes();
+        });
+	ss << "Enabled creation of referent inodes for hardlinks to store backtrace";
       }
     } else if (var == "allow_dirfrags") {
         ss << "Directory fragmentation is now permanently enabled."

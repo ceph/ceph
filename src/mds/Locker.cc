@@ -26,6 +26,8 @@
 #include "MDLog.h"
 #include "MDSRank.h"
 #include "MDSMap.h"
+#include "RetryMessage.h"
+#include "RetryRequest.h"
 #include "SimpleLock.h"
 #include "SnapRealm.h"
 #include "messages/MClientCaps.h"
@@ -423,7 +425,7 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
       if (mdr->lock_cache) { // debug
 	ceph_assert(mdr->lock_cache->opcode == CEPH_MDS_OP_UNLINK);
 	CDentry *dn = mdr->dn[0].back();
-	ceph_assert(dn->get_projected_linkage()->is_remote());
+	ceph_assert(dn->get_projected_linkage()->is_remote() || dn->get_projected_linkage()->is_referent_remote());
       }
 
       if (object->is_ambiguous_auth()) {
@@ -449,7 +451,7 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
 	} else if (CDentry *dn = dynamic_cast<CDentry*>(object)) {
 	  dir = dn->get_dir();
 	} else {
-	  ceph_assert(0 == "unknown type of lock parent");
+	  ceph_abort_msg("unknown type of lock parent");
 	}
 	if (dir->get_inode() == mdr->lock_cache->get_dir_inode()) {
 	  // forcibly auth pin if there is lock cache on parent dir
@@ -459,7 +461,7 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
 	{ // debug
 	  ceph_assert(mdr->lock_cache->opcode == CEPH_MDS_OP_UNLINK);
 	  CDentry *dn = mdr->dn[0].back();
-	  ceph_assert(dn->get_projected_linkage()->is_remote());
+	  ceph_assert(dn->get_projected_linkage()->is_remote() || dn->get_projected_linkage()->is_referent_remote());
 	}
       }
 
@@ -4511,7 +4513,7 @@ void Locker::issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef& mdr
       ceph_assert(dnl->get_inode() == in);
       mask = CEPH_LEASE_PRIMARY_LINK;
     } else {
-      if (dnl->is_remote())
+      if (dnl->is_remote() || dnl->is_referent_remote())
         ceph_assert(dnl->get_remote_ino() == in->ino());
       else
         ceph_assert(!in);

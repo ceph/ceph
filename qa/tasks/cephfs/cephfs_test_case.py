@@ -71,6 +71,7 @@ class CephFSTestCase(CephTestCase):
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 1
     REQUIRE_ONE_CLIENT_REMOTE = False
+    ALLOW_REFERENT_INODES = False
 
     # Whether to create the default filesystem during setUp
     REQUIRE_FILESYSTEM = True
@@ -189,6 +190,10 @@ class CephFSTestCase(CephTestCase):
             # Mount the requested number of clients
             for i in range(0, self.CLIENTS_REQUIRED):
                 self.mounts[i].mount_wait()
+
+            # enable referent inodes
+            if self.ALLOW_REFERENT_INODES:
+              self.fs.set_allow_referent_inodes(True)
 
         if self.REQUIRE_BACKUP_FILESYSTEM:
             if not self.REQUIRE_FILESYSTEM:

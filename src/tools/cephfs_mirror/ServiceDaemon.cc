@@ -19,7 +19,7 @@ namespace mirror {
 
 namespace {
 
-struct AttributeDumpVisitor : public boost::static_visitor<void> {
+struct AttributeDumpVisitor {
   ceph::Formatter *f;
   std::string name;
 
@@ -192,7 +192,7 @@ void ServiceDaemon::update_status() {
       f.dump_string("name", filesystem.fs_name);
       for (auto &[attr_name, attr_value] : filesystem.fs_attributes) {
             AttributeDumpVisitor visitor(&f, attr_name);
-            boost::apply_visitor(visitor, attr_value);
+            std::visit(visitor, attr_value);
       }
       f.open_object_section("peers");
       for (auto &[peer, attributes] : filesystem.peer_attributes) {
@@ -201,7 +201,7 @@ void ServiceDaemon::update_status() {
         f.open_object_section("stats");
         for (auto &[attr_name, attr_value] : attributes) {
             AttributeDumpVisitor visitor(&f, attr_name);
-            boost::apply_visitor(visitor, attr_value);
+            std::visit(visitor, attr_value);
         }
         f.close_section(); // stats
         f.close_section(); // peer.uuid

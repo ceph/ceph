@@ -66,7 +66,7 @@ struct TestMockCryptoLuksFormatRequest : public TestMockFixture {
   void expect_image_write() {
     EXPECT_CALL(*mock_image_ctx->io_image_dispatcher, send(_))
             .WillOnce(Invoke([this](io::ImageDispatchSpec* spec) {
-                auto* write = boost::get<io::ImageDispatchSpec::Write>(
+                auto* write = std::get_if<io::ImageDispatchSpec::Write>(
                         &spec->request);
                 ASSERT_TRUE(write != nullptr);
 

@@ -15,16 +15,16 @@ Enabling
 
 To enable the module, use the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
-    ceph mgr module enable influx
+   ceph mgr module enable influx
 
 If you wish to subsequently disable the module, you can use the equivalent
 *disable* command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
-    ceph mgr module disable influx
+   ceph mgr module disable influx
 
 -------------
 Configuration 
@@ -36,20 +36,20 @@ credentials.
 
 Set configuration values using the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
-    ceph config set mgr mgr/influx/<key> <value>
+   ceph config set mgr mgr/influx/<key> <value>
 
 
 The most important settings are :confval:`mgr/influx/hostname`,
 :confval:`mgr/influx/username` and :confval:`mgr/influx/password`.
 For example, a typical configuration might look like this:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
-    ceph config set mgr mgr/influx/hostname influx.mydomain.com
-    ceph config set mgr mgr/influx/username admin123
-    ceph config set mgr mgr/influx/password p4ssw0rd
+   ceph config set mgr mgr/influx/hostname influx.mydomain.com
+   ceph config set mgr mgr/influx/username admin123
+   ceph config set mgr mgr/influx/password p4ssw0rd
     
 Following is the list of all configuration settings:
 
@@ -71,7 +71,7 @@ Debugging
 By default, a few debugging statements as well as error statements have been set to print in the log files. Users can add more if necessary.
 To make use of the debugging option in the module:
 
-- Add this to the ceph.conf file.
+- Add this to the ``ceph.conf`` file.
 
   .. code-block:: ini
 
@@ -79,7 +79,8 @@ To make use of the debugging option in the module:
         debug_mgr = 20  
 
 - Use this command ``ceph influx self-test``.
-- Check the log files. Users may find it easier to filter the log files using *mgr[influx]*.
+- Check the log files. Users may find it easier to filter the log files using
+  ``mgr[influx]``.
 
 --------------------
 Interesting counters
@@ -169,5 +170,6 @@ OSDs
 |op_before_dequeue_op_lat| Latency of IO before calling dequeue_op(already dequeued and get PG lock)|
 +------------------------+--------------------------------------------------------------------------+
 
-Latency counters are measured in microseconds unless otherwise specified in the description.
+Latency counters are measured in microseconds unless otherwise specified in
+the description.
 

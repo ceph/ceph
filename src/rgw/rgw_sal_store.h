@@ -37,7 +37,6 @@ struct RGWObjState {
   bool has_data{false};
   bufferlist data;
   bool prefetch_data{false};
-  bool keep_tail{false};
   bool is_olh{false};
   bufferlist olh_tag;
   uint64_t pg_ver{false};
@@ -73,7 +72,6 @@ struct RGWObjState {
       data = rhs.data;
     }
     prefetch_data = rhs.prefetch_data;
-    keep_tail = rhs.keep_tail;
     is_olh = rhs.is_olh;
     objv_tracker = rhs.objv_tracker;
     pg_ver = rhs.pg_ver;
@@ -268,7 +266,7 @@ class StoreBucket : public Bucket {
         optional_yield y,
         const DoutPrefixProvider *dpp,
         RGWObjVersionTracker* objv_tracker) override { return 0; }
-    int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) override { return 0; }
+    int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp, const std::string& prefix, std::string* last_committed) override { return 0; }
     int remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) override { return 0; }
     int write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) override {
       return 0;
@@ -295,14 +293,12 @@ class StoreObject : public Object {
 
     virtual ~StoreObject() = default;
 
-    virtual void set_atomic() override { state.is_atomic = true; }
+    virtual void set_atomic(bool atomic) override { state.is_atomic = atomic; }
     virtual bool is_atomic() override { return state.is_atomic; }
     virtual void set_prefetch_data() override { state.prefetch_data = true; }
     virtual bool is_prefetch_data() override { return state.prefetch_data; }
     virtual void set_compressed() override { state.compressed = true; }
     virtual bool is_compressed() override { return state.compressed; }
-    virtual bool is_sync_completed(const DoutPrefixProvider* dpp,
-      const ceph::real_time& obj_mtime) override { return false; }
     virtual void invalidate() override {
       rgw_obj obj = state.obj;
       bool is_atomic = state.is_atomic;
@@ -378,7 +374,6 @@ class StoreObject : public Object {
 			   rgw_bucket_dir_entry& o,
 			   CephContext* cct,
     		           RGWObjTier& tier_config,
-			   real_time& mtime,
 			   uint64_t olh_epoch,
 		           std::optional<uint64_t> days,
 			   const DoutPrefixProvider* dpp,

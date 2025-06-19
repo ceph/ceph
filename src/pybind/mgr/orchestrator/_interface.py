@@ -454,6 +454,14 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def stop_drain_host(self, hostname: str) -> OrchResult[str]:
+        """
+        stop draining daemons of a host
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
     def update_host_addr(self, host: str, addr: str) -> OrchResult[str]:
         """
         Update a host's address
@@ -560,7 +568,16 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def cert_store_cert_ls(self) -> OrchResult[Dict[str, Any]]:
+    def cert_store_cert_ls(self, show_details: bool = False) -> OrchResult[Dict[str, Any]]:
+        raise NotImplementedError()
+
+    def cert_store_entity_ls(self) -> OrchResult[Dict[Any, Dict[str, List[str]]]]:
+        raise NotImplementedError()
+
+    def cert_store_reload(self) -> OrchResult[str]:
+        raise NotImplementedError()
+
+    def cert_store_cert_check(self) -> OrchResult[List[str]]:
         raise NotImplementedError()
 
     def cert_store_key_ls(self) -> OrchResult[Dict[str, Any]]:
@@ -568,7 +585,7 @@ class Orchestrator(object):
 
     def cert_store_get_cert(
         self,
-        entity: str,
+        cert_name: str,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
         no_exception_when_missing: bool = False
@@ -577,10 +594,56 @@ class Orchestrator(object):
 
     def cert_store_get_key(
         self,
-        entity: str,
+        key_name: str,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
         no_exception_when_missing: bool = False
+    ) -> OrchResult[str]:
+        raise NotImplementedError()
+
+    def cert_store_set_pair(
+        self,
+        cert: str,
+        key: str,
+        entity: str,
+        cert_name: Optional[str] = None,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        force: Optional[bool] = False
+    ) -> OrchResult[str]:
+        raise NotImplementedError()
+
+    def cert_store_set_cert(
+        self,
+        cert_name: str,
+        cert: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+    ) -> OrchResult[str]:
+        raise NotImplementedError()
+
+    def cert_store_set_key(
+        self,
+        key: str,
+        key_name: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+    ) -> OrchResult[str]:
+        raise NotImplementedError()
+
+    def cert_store_rm_cert(
+        self,
+        cert_name: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+    ) -> OrchResult[str]:
+        raise NotImplementedError()
+
+    def cert_store_rm_key(
+        self,
+        key_name: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
     ) -> OrchResult[str]:
         raise NotImplementedError()
 
@@ -682,7 +745,7 @@ class Orchestrator(object):
         # assert action in ["start", "stop", "reload, "restart", "redeploy"]
         raise NotImplementedError()
 
-    def create_osds(self, drive_group: DriveGroupSpec) -> OrchResult[str]:
+    def create_osds(self, drive_group: DriveGroupSpec, skip_validation: bool = False) -> OrchResult[str]:
         """
         Create one or more OSDs within a single Drive Group.
 
@@ -1179,6 +1242,7 @@ class DaemonDescription(object):
                  rank_generation: Optional[int] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
+                 pending_daemon_config: bool = False
                  ) -> None:
 
         #: Host is at the same granularity as InventoryHost
@@ -1253,6 +1317,7 @@ class DaemonDescription(object):
         if extra_entrypoint_args:
             self.extra_entrypoint_args = ArgumentSpec.from_general_args(
                 extra_entrypoint_args)
+        self.pending_daemon_config = pending_daemon_config
 
     def __setattr__(self, name: str, value: Any) -> None:
         if value is not None and name in ('extra_container_args', 'extra_entrypoint_args'):
@@ -1374,6 +1439,9 @@ class DaemonDescription(object):
             return f'{daemon_type_to_service(self.daemon_type)}.{self.service_id()}'
         return daemon_type_to_service(self.daemon_type)
 
+    def update_pending_daemon_config(self, value: bool) -> None:
+        self.pending_daemon_config = value
+
     def __repr__(self) -> str:
         return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
                                                          id=self.daemon_id)
@@ -1407,6 +1475,7 @@ class DaemonDescription(object):
         out['rank'] = self.rank
         out['rank_generation'] = self.rank_generation
         out['systemd_unit'] = self.systemd_unit
+        out['pending_daemon_config'] = self.pending_daemon_config
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
@@ -1444,6 +1513,7 @@ class DaemonDescription(object):
         out['ports'] = self.ports
         out['ip'] = self.ip
         out['systemd_unit'] = self.systemd_unit
+        out['pending_daemon_config'] = self.pending_daemon_config
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:

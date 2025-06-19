@@ -8,7 +8,7 @@
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/journal/circular_bounded_journal.h"
-#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/lba/lba_btree_node.h"
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
 
 /*
@@ -151,9 +151,10 @@ TransactionManager::mount()
             extent_len_t len,
             extent_types_t type,
             laddr_t laddr) {
+          assert(paddr.is_absolute());
           if (is_backref_node(type)) {
             assert(laddr == L_ADDR_NULL);
-	    assert(backref_key != P_ADDR_NULL);
+	    assert(backref_key.is_absolute() || backref_key == P_ADDR_MIN);
             backref_manager->cache_new_backref_extent(paddr, backref_key, type);
             cache->update_tree_extents_num(type, 1);
             epm->mark_space_used(paddr, len);
@@ -198,45 +199,13 @@ TransactionManager::close() {
   });
 }
 
-#ifdef UNIT_TESTS_BUILT
-TransactionManager::ref_ret TransactionManager::inc_ref(
-  Transaction &t,
-  LogicalChildNodeRef &ref)
-{
-  LOG_PREFIX(TransactionManager::inc_ref);
-  TRACET("{}", t, *ref);
-  return lba_manager->incref_extent(t, ref->get_laddr()
-  ).si_then([FNAME, ref, &t](auto result) {
-    DEBUGT("extent refcount is incremented to {} -- {}",
-           t, result.refcount, *ref);
-    return result.refcount;
-  }).handle_error_interruptible(
-    ref_iertr::pass_further{},
-    ct_error::assert_all{"unhandled error, TODO"});
-}
-
-TransactionManager::ref_ret TransactionManager::inc_ref(
-  Transaction &t,
-  laddr_t offset)
-{
-  LOG_PREFIX(TransactionManager::inc_ref);
-  TRACET("{}", t, offset);
-  return lba_manager->incref_extent(t, offset
-  ).si_then([FNAME, offset, &t](auto result) {
-    DEBUGT("extent refcount is incremented to {} -- {}~0x{:x}, {}",
-           t, result.refcount, offset, result.length, result.addr);
-    return result.refcount;
-  });
-}
-#endif
-
 TransactionManager::ref_ret TransactionManager::remove(
   Transaction &t,
   LogicalChildNodeRef &ref)
 {
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, *ref);
-  return lba_manager->decref_extent(t, ref->get_laddr()
+  return lba_manager->remove_mapping(t, ref->get_laddr()
   ).si_then([this, FNAME, &t, ref](auto result) {
     if (result.refcount == 0) {
       cache->retire_extent(t, ref);
@@ -253,7 +222,7 @@ TransactionManager::ref_ret TransactionManager::remove(
 {
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, offset);
-  return lba_manager->decref_extent(t, offset
+  return lba_manager->remove_mapping(t, offset
   ).si_then([this, FNAME, offset, &t](auto result) -> ref_ret {
     auto fut = ref_iertr::now();
     if (result.refcount == 0) {
@@ -530,7 +499,7 @@ TransactionManager::rewrite_logical_extent(
   if (get_extent_category(extent->get_type()) == data_category_t::METADATA) {
     assert(extent->is_fully_loaded());
     cache->retire_extent(t, extent);
-    auto nextent = cache->alloc_new_extent_by_type(
+    auto nextent = cache->alloc_new_non_data_extent_by_type(
       t,
       extent->get_type(),
       extent->get_length(),
@@ -558,10 +527,7 @@ TransactionManager::rewrite_logical_extent(
       extent->get_laddr(),
       extent->get_length(),
       extent->get_paddr(),
-      nextent->get_length(),
-      nextent->get_paddr(),
-      nextent->get_last_committed_crc(),
-      nextent.get()
+      *nextent
     ).discard_result();
   } else {
     assert(get_extent_category(extent->get_type()) == data_category_t::DATA);
@@ -602,15 +568,13 @@ TransactionManager::rewrite_logical_extent(
            * avoid this complication. */
           auto fut = base_iertr::now();
           if (first_extent) {
+            assert(off == 0);
             fut = lba_manager->update_mapping(
               t,
-              (extent->get_laddr() + off).checked_to_laddr(),
+              extent->get_laddr(),
               extent->get_length(),
               extent->get_paddr(),
-              nextent->get_length(),
-              nextent->get_paddr(),
-              nextent->get_last_committed_crc(),
-              nextent.get()
+              *nextent
             ).si_then([&refcount](auto c) {
               refcount = c;
             });
@@ -622,8 +586,8 @@ TransactionManager::rewrite_logical_extent(
               *nextent,
               refcount
             ).si_then([extent, nextent, off](auto mapping) {
-              ceph_assert(mapping->get_key() == extent->get_laddr() + off);
-              ceph_assert(mapping->get_val() == nextent->get_paddr());
+              ceph_assert(mapping.get_key() == extent->get_laddr() + off);
+              ceph_assert(mapping.get_val() == nextent->get_paddr());
               return seastar::now();
             });
           }
@@ -665,17 +629,18 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   }
 
   assert(extent->is_valid() && !extent->is_initial_pending());
-  if (extent->is_dirty()) {
+  if (extent->has_delta()) {
     assert(extent->get_version() > 0);
     if (is_root_type(extent->get_type())) {
       // pass
-    } else if (extent->get_version() == 1 && extent->is_mutation_pending()) {
+    } else if (extent->get_version() == 1 && extent->has_mutation()) {
       t.get_rewrite_stats().account_n_dirty();
     } else {
+      // extent->get_version() > 1 or DIRTY
       t.get_rewrite_stats().account_dirty(extent->get_version());
     }
     if (epm->can_inplace_rewrite(t, extent)) {
-      // FIXME: is_dirty() is true for mutation pending extents
+      // FIXME: has_delta() is true for mutation pending extents
       // which shouldn't do inplace rewrite because a pending transaction
       // may fail.
       t.add_inplace_rewrite_extent(extent);
@@ -727,14 +692,15 @@ TransactionManager::get_extents_if_live(
 
   // This only works with segments to check if alive,
   // as parallel transactions may split the extent at the same time.
-  ceph_assert(paddr.get_addr_type() == paddr_types_t::SEGMENT);
+  ceph_assert(paddr.is_absolute_segmented());
 
-  return cache->get_extent_if_cached(t, paddr, type
+  return cache->get_extent_if_cached(t, paddr, len, type
   ).si_then([this, FNAME, type, paddr, laddr, len, &t](auto extent)
 	    -> get_extents_if_live_ret {
-    if (extent && extent->get_length() == len) {
+    if (extent) {
       DEBUGT("{} {}~0x{:x} {} is cached and alive -- {}",
              t, type, laddr, len, paddr, *extent);
+      assert(extent->get_length() == len);
       std::list<CachedExtentRef> res;
       res.emplace_back(std::move(extent));
       return get_extents_if_live_ret(
@@ -747,7 +713,7 @@ TransactionManager::get_extents_if_live(
 	t,
 	laddr,
 	len
-      ).si_then([this, FNAME, type, paddr, laddr, len, &t](lba_pin_list_t pin_list) {
+      ).si_then([this, FNAME, type, paddr, laddr, len, &t](lba_mapping_list_t pin_list) {
 	return seastar::do_with(
 	  std::list<CachedExtentRef>(),
 	  std::move(pin_list),
@@ -758,11 +724,11 @@ TransactionManager::get_extents_if_live(
           return trans_intr::parallel_for_each(
             pin_list,
             [this, FNAME, type, paddr_seg_id, &extent_list, &t](
-              LBAMappingRef& pin) -> Cache::get_extent_iertr::future<>
+              LBAMapping& pin) -> Cache::get_extent_iertr::future<>
           {
-            DEBUGT("got pin, try read in parallel ... -- {}", t, *pin);
-            auto pin_paddr = pin->get_val();
-            if (pin_paddr.get_addr_type() != paddr_types_t::SEGMENT) {
+            DEBUGT("got pin, try read in parallel ... -- {}", t, pin);
+            auto pin_paddr = pin.get_val();
+            if (!pin_paddr.is_absolute_segmented()) {
               return seastar::now();
             }
             auto &pin_seg_paddr = pin_paddr.as_seg_paddr();
@@ -840,7 +806,7 @@ TransactionManagerRef make_transaction_manager(
 {
   auto epm = std::make_unique<ExtentPlacementManager>();
   auto cache = std::make_unique<Cache>(*epm);
-  auto lba_manager = lba_manager::create_lba_manager(*cache);
+  auto lba_manager = lba::create_lba_manager(*cache);
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto rbs = std::make_unique<RBMDeviceGroup>();
   auto backref_manager = create_backref_manager(*cache);

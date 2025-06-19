@@ -33,13 +33,13 @@ class stripe_info_t {
   const std::vector<unsigned int> chunk_mapping_reverse;
 private:
   static std::vector<int> complete_chunk_mapping(
-    std::vector<int> _chunk_mapping, unsigned int n)
+    std::vector<shard_id_t> _chunk_mapping, unsigned int n)
   {
     unsigned int size = _chunk_mapping.size();
     std::vector<int> chunk_mapping(n);
     for (unsigned int i = 0; i < n; i++) {
       if (size > i) {
-        chunk_mapping.at(i) = _chunk_mapping.at(i);
+        chunk_mapping.at(i) = int(_chunk_mapping.at(i));
       } else {
         chunk_mapping.at(i) = static_cast<int>(i);
       }
@@ -78,12 +78,12 @@ public:
       chunk_size(stripe_width / k),
       k(k),
       m(m),
-      chunk_mapping(complete_chunk_mapping(std::vector<int>(), k + m)),
+      chunk_mapping(complete_chunk_mapping(std::vector<shard_id_t>(), k + m)),
       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)) {
     ceph_assert(stripe_width % k == 0);
   }
   stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
-		std::vector<int> _chunk_mapping)
+		std::vector<shard_id_t> _chunk_mapping)
     : stripe_width(stripe_width),
       chunk_size(stripe_width / k),
       k(k),

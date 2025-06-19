@@ -9,14 +9,12 @@
 #include "common/config_proxy.h"
 #include "common/scrub_types.h"
 #include "crimson/common/log.h"
-#include "osd/ECUtil.h"
 #include "osd/osd_types.h"
 
 namespace crimson::osd::scrub {
 
 struct chunk_validation_policy_t {
   pg_shard_t primary;
-  std::optional<ECUtil::stripe_info_t> stripe_info;
 
   // osd_max_object_size
   size_t max_object_size;
@@ -31,11 +29,13 @@ struct chunk_validation_policy_t {
 
 
   bool is_ec() const {
-    return !!stripe_info;
+    // FIXME: See scrub_backend in classic for reference.
+    return false;
   }
 
   size_t logical_to_ondisk_size(size_t size) const {
-    return stripe_info ? stripe_info->logical_to_next_chunk_offset(size) : size;
+    // FIXME: See scrub_backend in classic for how to handle EC.
+    return size;
   }
 };
 
