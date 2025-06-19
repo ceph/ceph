@@ -1626,21 +1626,20 @@ debugging.
 
      .. prompt:: bash #
 
-        bin/ceph config set mgr mgr/dashboard/log_level debug
+        ceph config set mgr mgr/dashboard/log_level debug
 
 3. High log levels can result in considerable log volume, which can
-easily fill up your filesystem. Set a calendar reminder for an hour, a day,
-or a week in the future to revert this temporary logging increase.  This looks
-something like this:
+easily fill up your filesystem or central log store. Set a calendar reminder for an hour, a day,
+or a week in the future to revert a temporary logging increase. Any current, non-default setting
+may be shown with the below command:
 
    .. prompt:: bash #
 
-      ceph config log
+      ceph config dump | grep mgr/dashboard/log_level
 
    ::
-
       ...
-      --- 11 --- 2020-11-07 11:11:11.960659 --- mgr.x/dashboard/log_level = debug ---
+      mgr advanced  mgr/dashboard/log_level debug
       ...
     
    .. prompt:: bash #

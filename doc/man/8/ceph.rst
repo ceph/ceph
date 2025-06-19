@@ -231,8 +231,8 @@ Usage::
 
     ceph config rm <who> <option>
 
-Subcommand ``log`` to show recent history of config changes. If `count` option
-is omitted it defaults to 10.
+Subcommand ``log`` to show recent history of central config changes. If the `count` argument
+is omitted the last ten entries are shown.
 
 Usage::
 
