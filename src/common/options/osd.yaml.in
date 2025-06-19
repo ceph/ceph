@@ -457,15 +457,17 @@ options:
   desc: Automatically repair damaged objects detected during scrub
   fmt_desc: Setting this to ``true`` will enable automatic PG repair when errors
     are found by scrubs or deep-scrubs.  However, if more than
-    ``osd_scrub_auto_repair_num_errors`` errors are found a repair is NOT performed.
+    ``osd_scrub_auto_repair_num_errors`` damaged objects are found
+    a repair is NOT performed.
   default: false
   with_legacy: true
 # only auto-repair when number of errors is below this threshold
 - name: osd_scrub_auto_repair_num_errors
   type: uint
   level: advanced
-  desc: Maximum number of detected errors to automatically repair
-  fmt_desc: Auto repair will not occur if more than this many errors are found.
+  desc: Maximum number of damaged objects to automatically repair
+  fmt_desc: Scrub will not perform automatic repair if more than this many
+    damaged objects are found.
   default: 5
   see_also:
   - osd_scrub_auto_repair
