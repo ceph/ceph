@@ -156,6 +156,21 @@
   Related trackers:
    - https://tracker.ceph.com/issues/67777
 
+* RBD: Fetching the mirroring mode of an image is invalid if the image is
+  disabled for mirroring. The public APIs -- C++ `mirror_image_get_mode()`,
+  C `rbd_mirror_image_get_mode()`, and Python `Image.mirror_image_get_mode()`
+  -- will return EINVAL when mirroring is disabled.
+
+* RBD: Promoting an image is invalid if the image is not enabled for mirroring.
+  The public APIs -- C++ `mirror_image_promote()`,
+  C `rbd_mirror_image_promote()`, and Python `Image.mirror_image_promote()` --
+  will return EINVAL instead of ENOENT when mirroring is not enabled.
+
+* RBD: Requesting a resync on an image is invalid if the image is not enabled
+  for mirroring. The public APIs -- C++ `mirror_image_resync()`,
+  C `rbd_mirror_image_resync()`, and Python `Image.mirror_image_resync()` --
+  will return EINVAL instead of ENOENT when mirroring is not enabled.
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
