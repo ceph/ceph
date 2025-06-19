@@ -783,8 +783,8 @@ struct transaction_manager_test_t :
   }
 
   LBAMapping refresh_lba_mapping(test_transaction_t &t, LBAMapping mapping) {
-    return with_trans_intr(*t.t, [this, mapping=std::move(mapping)](auto &t) mutable {
-      return lba_manager->refresh_lba_mapping(t, std::move(mapping));
+    return with_trans_intr(*t.t, [mapping=std::move(mapping)](auto &t) mutable {
+      return mapping.refresh();
     }).unsafe_get();
   }
 
