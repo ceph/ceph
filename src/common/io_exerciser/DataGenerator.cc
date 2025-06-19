@@ -73,7 +73,7 @@ ceph::bufferptr SeededRandomGenerator::generate_block(uint64_t block_offset) {
     size_t remainingBytes = block_size % (generation_length * 2);
     if (remainingBytes > generation_length) {
       size_t remainingBytes2 = remainingBytes - generation_length;
-      std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
+      std::memcpy(buffer + block_size - remainingBytes, &rand1, generation_length);
       std::memcpy(buffer + block_size - remainingBytes2, &rand2,
                   remainingBytes2);
     } else if (remainingBytes > 0) {
@@ -105,7 +105,7 @@ ceph::bufferptr SeededRandomGenerator::generate_wrong_block(
   size_t remainingBytes = block_size % (generation_length * 2);
   if (remainingBytes > generation_length) {
     size_t remainingBytes2 = remainingBytes - generation_length;
-    std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
+    std::memcpy(buffer + block_size - remainingBytes, &rand1, generation_length);
     std::memcpy(buffer + block_size - remainingBytes2, &rand2, remainingBytes2);
   } else if (remainingBytes > 0) {
     std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
