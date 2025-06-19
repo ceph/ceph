@@ -80,12 +80,16 @@ void MgrStatMonitor::handle_conf_change(
              << dendl;
 
     // if fetaure is toggled from off to on, 
-    // store the new value of last_uptime and last_downtime 
-    // (to be updated in calc_pool_availability) 
+    // reset last_uptime and last_downtime across all pools
     if (newval > oldval) {
-      reset_availability_last_uptime_downtime_val = ceph_clock_now();
-      dout(10) << __func__ << " reset_availability_last_uptime_downtime_val " 
-               <<  reset_availability_last_uptime_downtime_val << dendl; 
+      utime_t now = ceph_clock_now(); 
+      for (const auto& i : pending_pool_availability) {
+      const auto& poolid = i.first;
+      pending_pool_availability[poolid].last_downtime = now;
+      pending_pool_availability[poolid].last_uptime = now;
+    }
+    dout(20) << __func__ << " reset last_uptime and last_downtime to " 
+             << now << dendl;
     }
     enable_availability_tracking = newval;
   }
@@ -116,20 +120,6 @@ void MgrStatMonitor::calc_pool_availability()
   if (!enable_availability_tracking) {
     dout(20) << __func__ << " tracking availability score is disabled" << dendl;
     return;
-  }
-
-  // if reset_availability_last_uptime_downtime_val is not utime_t(1, 2), 
-  // update last_uptime and last_downtime for all pools to the 
-  // recorded values
-  if (reset_availability_last_uptime_downtime_val.has_value()) {
-    for (const auto& i : pool_availability) {
-      const auto& poolid = i.first;
-      pool_availability[poolid].last_downtime = reset_availability_last_uptime_downtime_val.value();
-      pool_availability[poolid].last_uptime = reset_availability_last_uptime_downtime_val.value();
-    }
-    dout(20) << __func__ << " reset last_uptime and last_downtime to " 
-             << reset_availability_last_uptime_downtime_val << dendl;
-    reset_availability_last_uptime_downtime_val.reset();
   }
 
   auto pool_avail_end = pool_availability.end();
@@ -402,6 +392,7 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   jf.close_section();
   jf.flush(*_dout);
   *_dout << dendl;
+  std::scoped_lock l(lock);
   dout(20) << "pool_availability:\n";
   JSONFormatter jf(true);
   jf.open_object_section("pool_availability");
