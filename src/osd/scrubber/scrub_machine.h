@@ -284,7 +284,6 @@ class ScrubMachine : public ScrubFsmIf, public sc::state_machine<ScrubMachine, N
  public:
   friend class PgScrubber;
 
- public:
   explicit ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub);
   virtual ~ScrubMachine();
 
@@ -309,10 +308,14 @@ class ScrubMachine : public ScrubFsmIf, public sc::state_machine<ScrubMachine, N
     sc::state_machine<ScrubMachine, NotActive>::process_event(evt);
   }
 
-// ///////////////// aux declarations & functions //////////////////////// //
+  /// the time when the session was initiated
+  std::optional<ScrubTimePoint> m_session_started_at;
 
+
+  // ///////////////// aux declarations & functions //////////////////////// //
 
 private:
+
   /**
    * scheduled_event_state_t
    *
@@ -572,9 +575,6 @@ struct Session : sc::state<Session, PrimaryActive, ReservingReplicas>,
   /// the set of performance counters for this session (relevant, i.e. for
   /// this pool type)
   const ScrubCounterSet* m_counters_idx{nullptr};
-
-  /// the time when the session was initiated
-  ScrubTimePoint m_session_started_at{ScrubClock::now()};
 
   /// abort reason - if known. Determines the delay time imposed on the
   /// failed scrub target.
