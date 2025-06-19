@@ -6,7 +6,7 @@ a powerful tool that allows you to analyze the execution flow
 of a process.
 GDB can help to find bugs, uncover crash errors or track the
 source code during execution of a development cluster.
-It can also be used to debug Teuthology test runs.
+It can also be used to debug Teuthology tests runs.
 
 GET STARTED WITH GDB
 --------------------
@@ -24,7 +24,7 @@ Attaching gdb to the process::
 
 .. note::
     It is recommended to compile without any optimizations (``-O0`` gcc flag)
-    in order to avoid elimination of intermediate values.
+    in order to avoid elimintaion of intermediate values.
 
 Stopping for breakpoints while debugging may cause timeouts, so the following
 configuration options are suggested::
