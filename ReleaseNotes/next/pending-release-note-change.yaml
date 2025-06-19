@@ -1,0 +1,13 @@
+release-notes:
+  header:
+    - |
+      .. _tracker: https://tracker.ceph.com/issues/71198
+  section:
+    documentation:
+      name: Documentation
+      notes:
+        - |
+          .. A reStructuredText comment.
+
+          The release notes mechanism has been reworked, hurray for easier backports!
+          See the `tracker`_ for more information.

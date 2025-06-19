@@ -1,0 +1,31 @@
+---
+name: "Check that release notes are valid reStructuredText"
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - edited
+      - reopened
+
+jobs:
+  pull_request:
+    name: "Check that release notes are valid reStructuredText"
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout PR HEAD
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+             python -m pip install --upgrade pip
+             pip install docutils PyYAML
+
+      - name: Test PendingReleaseNotes/next/*
+        run: |
+             python ReleaseNotes/generate-release-doc.py check ReleaseNotes/next/*
