@@ -662,6 +662,20 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
       periodic_stats();
 
       std::unique_lock locker(m_lock);
+
+      ceph_assert(m_current_sync_point);
+      if (!m_current_sync_point->earlier_sync_point) {
+        // This is the only sync point, hence no need to wait for the persistence
+        // of prior sync points.
+        m_current_sync_point->prior_persisted_gather_activate();
+        // we don't create a new sync point, if there are no writes in current sync point's
+        // log entry.
+        ceph_assert(m_current_sync_point->log_entry->writes == 0);
+        // In that case, we shold not wait for the log entry's persistence of current
+        // sync point, which is otherwise waited until we flush its prior sync point.
+        m_current_sync_point->persist_gather_activate();
+      }
+
       check_image_cache_state_clean();
       m_wake_up_enabled = false;
       m_log_entries.clear();
