@@ -439,7 +439,7 @@ This allows a user to add a non-existent directory for synchronization. The mirr
 will mark such a directory as failed and retry (less frequently). When the directory is
 created, the mirror daemon will clear the failed state upon successful synchronization.
 
-Adding a new snapshot or a new directory manually in the ``.snap`` directory of the
+Adding a new snapshot or a new directory in the ``.snap`` directory of the
 remote filesystem will result in failed status of the corresponding configured directory.
 In the remote filesystem::
 
@@ -472,6 +472,9 @@ In the remote filesystem::
 
 When the snapshot or the directory is removed from the remote filesystem, the mirror daemon will
 clear the failed state upon successful synchronization of the pending snapshots, if any.
+
+.. note:: Setting snap-schedule on the remote flle system for directories that are being mirrored will
+          cause the mirror daemon to report errors like ``invalid metadata``.
 
 .. note:: Treat the remote filesystem as read-only. Nothing is inherently enforced by CephFS.
           But with the right MDS caps, users would not be able to snapshot directories in the
