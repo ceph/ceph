@@ -4536,8 +4536,20 @@ void PeeringState::add_log_entry(const pg_log_entry_t& e, ObjectStore::Transacti
   // log mutation
   enum PGLog::NonPrimary nonprimary{pool.info.is_nonprimary_shard(info.pgid.shard)};
   PGLog::LogEntryHandlerRef handler{pl->get_log_handler(t)};
-  pg_log.add(e, nonprimary, applied, &info, handler.get());
-  psdout(10) << "add_log_entry " << e << dendl;
+  /* Normally an unwritten shard does not get told about a log entry. However
+   * there are exceptions - in these cases we want to skip adding the entry
+   * to the log.
+   */
+  if (e.is_written_shard(pg_whoami.shard)) {
+    pg_log.add(e, nonprimary, applied, &info, handler.get());
+    psdout(10) << "add_log_entry " << e << dendl;
+  } else {
+    psdout(10) << "add_log_entry skipping partial write " << e << dendl;
+    eversion_t head = pg_log.get_head();
+    ceph_assert(e.version > head);
+    ceph_assert(head.version == 0 || e.version.version > head.version);
+    pg_log.set_head(e.version);
+  }
 }
 
 
