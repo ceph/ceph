@@ -756,7 +756,7 @@ class vtable<property<IsThrowing, HasStrongExceptGuarantee, FormalArgs...>> {
             // Just swap both pointers if we allocated on the heap
             to->ptr_ = from->ptr_;
 
-#ifndef _NDEBUG
+#ifndef NDEBUG
             // We don't need to null the pointer since we know that
             // we don't own the data anymore through the vtable
             // which is set to empty.
