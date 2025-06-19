@@ -725,38 +725,6 @@ BtreeLBAManager::get_physical_extent_if_live(
     });
 }
 
-BtreeLBAManager::refresh_lba_mapping_ret
-BtreeLBAManager::refresh_lba_mapping(Transaction &t, LBAMapping mapping)
-{
-  if (mapping.is_viewable()) {
-    return refresh_lba_mapping_iertr::make_ready_future<
-      LBAMapping>(std::move(mapping));
-  }
-  auto c = get_context(t);
-  return with_btree_state<LBABtree, LBAMapping>(
-    cache,
-    c,
-    std::move(mapping),
-    [](LBABtree &btree, LBAMapping &mapping) mutable
-  {
-    return seastar::futurize_invoke([&mapping] {
-      if (mapping.direct_cursor) {
-	return mapping.direct_cursor->refresh();
-      }
-      return base_iertr::now();
-    }).si_then([&mapping] {
-      if (mapping.indirect_cursor) {
-	return mapping.indirect_cursor->refresh();
-      }
-      return base_iertr::now();
-#ifndef NDEBUG
-    }).si_then([&mapping] {
-      assert(mapping.is_viewable());
-#endif
-    });
-  });
-}
-
 void BtreeLBAManager::register_metrics()
 {
   LOG_PREFIX(BtreeLBAManager::register_metrics);

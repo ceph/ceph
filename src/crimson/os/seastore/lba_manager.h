@@ -230,12 +230,6 @@ public:
     laddr_t laddr,
     extent_len_t len) = 0;
 
-  using refresh_lba_mapping_iertr = base_iertr;
-  using refresh_lba_mapping_ret = refresh_lba_mapping_iertr::future<LBAMapping>;
-  virtual refresh_lba_mapping_ret refresh_lba_mapping(
-    Transaction &t,
-    LBAMapping mapping) = 0;
-
   virtual ~LBAManager() {}
 };
 using LBAManagerRef = std::unique_ptr<LBAManager>;

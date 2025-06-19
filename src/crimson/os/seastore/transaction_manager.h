@@ -277,7 +277,7 @@ public:
     SUBDEBUGT(seastore_tm, "{} {} 0x{:x}~0x{:x} direct_off=0x{:x} ...",
               t, T::TYPE, pin, partial_off, partial_len, direct_partial_off);
 
-    return lba_manager->refresh_lba_mapping(t, std::move(pin)
+    return pin.refresh(
     ).si_then([&t, this, direct_partial_off, partial_len,
 	       maybe_init=std::move(maybe_init)](auto npin) mutable {
       // checking the lba child must be atomic with creating
