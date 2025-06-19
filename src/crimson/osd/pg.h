@@ -425,7 +425,6 @@ public:
   void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final {}
   void set_ready_to_merge_source(eversion_t lu) final {}
 
-  // seastar::future<> scrub_purged_snaps();
   void queue_snap_retrims(const std::vector<snapid_t>& snaps);
   void trim_snaps();
 

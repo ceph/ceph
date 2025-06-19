@@ -544,8 +544,8 @@ seastar::future<> OSD::start()
           ceph::os::Transaction t;
           t.touch(pg_shard_manager.get_meta_coll().collection()->get_cid(), OSDMeta::purged_snaps_oid());
           return store.get_sharded_store().do_transaction(
-	          pg_shard_manager.get_meta_coll().collection(),
-	          std::move(t)).then([] {
+            pg_shard_manager.get_meta_coll().collection(),
+            std::move(t)).then([] {
               return seastar::now();
             });
         }

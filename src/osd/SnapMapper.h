@@ -376,7 +376,6 @@ private:
   }
 
   static bool is_mapping(const std::string &to_test);
-  static bool is_purged(const std::string &to_test);
 
   uint32_t mask_bits;
   const uint32_t match;
