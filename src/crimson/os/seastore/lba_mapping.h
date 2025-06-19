@@ -134,6 +134,9 @@ public:
   using refresh_iertr = LBACursor::base_iertr;
   refresh_iertr::future<LBAMapping> refresh();
 
+  using next_iertr = LBACursor::base_iertr;
+  next_iertr::future<LBAMapping> next();
+
 private:
   friend lba::BtreeLBAManager;
   friend class TransactionManager;
