@@ -4,26 +4,27 @@ Telemetry Module
 ================
 
 The telemetry module sends anonymous data about the cluster back to the Ceph
-developers to help understand how Ceph is used and what problems users may
-be experiencing.
+developers to report how Ceph is used and to report problems experienced by
+users. 
 
-This data is visualized on `public dashboards <https://telemetry-public.ceph.com/>`_
-that allow the community to quickly see summary statistics on how many clusters
-are reporting, their total capacity and OSD count, and version distribution
-trends.
+This data is visualized on `public dashboards
+<https://telemetry-public.ceph.com/>`_ that allow the community to see a
+summary of statistics including how many clusters are reporting, their total
+capacity and OSD count, and version distribution trends.
 
 Channels
 --------
 
 The telemetry report is broken down into several "channels", each with
-a different type of information.  Assuming telemetry has been enabled,
-individual channels can be turned on and off.  (If telemetry is off,
+a different type of information. If telemetry has been enabled,
+individual channels can be turned on and off. (If telemetry is off,
 the per-channel setting has no effect.)
 
 * **basic** (default: on): Basic information about the cluster
 
     - capacity of the cluster
-    - number of monitors, managers, OSDs, MDSs, object gateways, or other daemons
+    - number of monitors, managers, OSDs, MDSs, object gateways, or other
+      daemons
     - software version currently being used
     - number and types of RADOS pools and CephFS file systems
     - names of configuration options that have been changed from their
@@ -34,7 +35,7 @@ the per-channel setting has no effect.)
     - type of daemon
     - version of the daemon
     - operating system (OS distribution, kernel version)
-    - stack trace identifying where in the Ceph code the crash occurred
+    - stack trace, identifying where in the Ceph code the crash occurred
 
 * **device** (default: on): Information about device metrics, including
 
@@ -46,25 +47,28 @@ the per-channel setting has no effect.)
     - cluster description
     - contact email address
 
-* **perf** (default: off): Various performance metrics of a cluster, which can be used to
+* **perf** (default: off): Various performance metrics of a cluster, which can
+  be used to
 
     - reveal overall cluster health
     - identify workload patterns
     - troubleshoot issues with latency, throttling, memory management, etc.
     - monitor cluster performance by daemon
 
-The data being reported does *not* contain any sensitive
-data like pool names, object names, object contents, hostnames, or device
-serial numbers.
+The reported data does *not* contain any sensitive data. This means that the
+reported data does not include pool names, object names, object contents,
+hostnames, or device serial numbers.
 
-It contains counters and statistics on how the cluster has been
-deployed, the version of Ceph, the distribution of the hosts and other
-parameters which help the project to gain a better understanding of
+The reported data contains counters and statistics pertaining to how the
+cluster has been deployed, the version of Ceph, the distribution of the hosts,
+and other parameters that help the project develop a better understanding of
 the way Ceph is used.
 
-Data is sent secured to *https://telemetry.ceph.com*.
+Data is sent secured to
+`https://telemetry.ceph.com<https://telemetry.ceph.com>`_.
 
-Individual channels can be enabled or disabled with:
+Individual channels can be enabled or disabled by running the following
+commands:
 
 .. prompt:: bash #
 
@@ -80,21 +84,23 @@ Individual channels can be enabled or disabled with:
    ceph telemetry disable channel ident
    ceph telemetry disable channel perf
 
-Multiple channels can be enabled or disabled with:
+Multiple channels can be enabled or disabled at the same time by running the
+following commands:
 
 .. prompt:: bash #
 
    ceph telemetry enable channel basic crash device ident perf
    ceph telemetry disable channel basic crash device ident perf
 
-Channels can be enabled or disabled all at once with:
+All channels can be enabled or disabled at once by running the following
+commands:
 
 .. prompt:: bash #
 
    ceph telemetry enable channel all
    ceph telemetry disable channel all
 
-Please note that telemetry should be on for these commands to take effect.
+Note that telemetry must be on for these commands to take effect.
 
 List all channels with:
 
