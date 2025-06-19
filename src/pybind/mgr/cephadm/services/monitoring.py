@@ -279,6 +279,10 @@ class AlertmanagerService(CephadmService):
     USER_CFG_KEY = 'alertmanager/web_user'
     PASS_CFG_KEY = 'alertmanager/web_password'
 
+    @property
+    def needs_monitoring(self) -> bool:
+        return True
+
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
@@ -799,6 +803,10 @@ class PrometheusService(CephadmService):
 class NodeExporterService(CephadmService):
     TYPE = 'node-exporter'
     DEFAULT_SERVICE_PORT = 9100
+
+    @property
+    def needs_monitoring(self) -> bool:
+        return True
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
