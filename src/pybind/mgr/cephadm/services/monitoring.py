@@ -309,7 +309,7 @@ class AlertmanagerService(CephadmService):
                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []
         deps.append(f'secure_monitoring_stack:{mgr.secure_monitoring_stack}')
-        deps = deps + mgr.cache.get_daemons_by_types(['alertmanager', 'snmp-gateway', 'mgmt-gateway', 'oauth2-proxy'])
+        deps += mgr.cache.get_daemons_by_types(['alertmanager', 'snmp-gateway', 'mgmt-gateway', 'oauth2-proxy'])
         security_enabled, mgmt_gw_enabled, _ = mgr._get_security_config()
         if security_enabled:
             alertmanager_user, alertmanager_password = mgr._get_alertmanager_credentials()
@@ -654,19 +654,9 @@ class PrometheusService(CephadmService):
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []  # type: List[str]
-        port = cast(int, mgr.get_module_option_ex('prometheus', 'server_port', PrometheusService.DEFAULT_MGR_PROMETHEUS_PORT))
-        deps.append(str(port))
         deps.append(str(mgr.service_discovery_port))
         deps.append(f'secure_monitoring_stack:{mgr.secure_monitoring_stack}')
         security_enabled, mgmt_gw_enabled, _ = mgr._get_security_config()
-
-        if not mgmt_gw_enabled:
-            # add an explicit dependency on the active manager. This will force to
-            # re-deploy prometheus if the mgr has changed (due to a fail-over i.e).
-            # when mgmt_gw is enabled there's no need for such dep as mgmt-gw wil
-            # route to the active mgr automatically
-            deps.append(mgr.get_active_mgr().name())
-
         if security_enabled:
             alertmanager_user, alertmanager_password = mgr._get_alertmanager_credentials()
             prometheus_user, prometheus_password = mgr._get_prometheus_credentials()
@@ -675,16 +665,19 @@ class PrometheusService(CephadmService):
             if alertmanager_user and alertmanager_password:
                 deps.append(f'{utils.md5_hash(alertmanager_user + alertmanager_password)}')
 
-        # add a dependency since url_prefix depends on the existence of mgmt-gateway
-        deps += [d.name() for d in mgr.cache.get_daemons_by_service('mgmt-gateway')]
-        # add a dependency since enbling basic-auth (or not) depends on the existence of 'oauth2-proxy'
-        deps += [d.name() for d in mgr.cache.get_daemons_by_service('oauth2-proxy')]
+        # Adding other services as deps (with corresponding justification):
+        # ceph-exporter: scraping target
+        # node-exporter: scraping target
+        # ingress      : scraping target
+        # alert-manager: part of prometheus configuration
+        # mgmt-gateway : since url_prefix depends on the existence of mgmt-gateway
+        # oauth2-proxy : enbling basic-auth (or not) depends on the existence of 'oauth2-proxy'
+        for svc in ['mgmt-gateway', 'oauth2-proxy', 'alertmanager', 'node-exporter', 'ceph-exporter', 'ingress']:
+            deps.append(f'{svc}_configured:{bool(mgr.cache.get_daemons_by_service(svc))}')
 
-        # add dependency on ceph-exporter daemons
-        deps += [d.name() for d in mgr.cache.get_daemons_by_service('ceph-exporter')]
-        deps += [s for s in ['node-exporter', 'alertmanager'] if mgr.cache.get_daemons_by_service(s)]
-        if len(mgr.cache.get_daemons_by_type('ingress')) > 0:
-            deps.append('ingress')
+        if not mgmt_gw_enabled:
+            # Ceph mgrs are dependency because when mgmt-gateway is not enabled the service-discovery depends on mgrs ips
+            deps += mgr.cache.get_daemons_by_types(['mgr'])
 
         return sorted(deps)
 
@@ -797,7 +790,7 @@ class NodeExporterService(CephadmService):
                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []
         deps.append(f'secure_monitoring_stack:{mgr.secure_monitoring_stack}')
-        deps = deps + mgr.cache.get_daemons_by_types(['mgmt-gateway'])
+        deps += mgr.cache.get_daemons_by_types(['mgmt-gateway'])
         return sorted(deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
