@@ -151,6 +151,24 @@ ceph osd crush rm osd.$o5
 ceph osd rm osd.$o4
 ceph osd rm osd.$o5
 
+# test reweight-by-scaling-factor
+ceph config set global osd_crush_scaling_factor 0.1
+o6=`ceph osd create`
+o7=`ceph osd create`
+ceph osd crush add $o6 123 root=default host=foobaz
+ceph osd crush add $o7 123 root=default host=foobaz
+ceph osd tree | grep osd.$o6 | grep 123
+ceph osd tree | grep osd.$o7 | grep 123
+ceph osd crush test-reweight-by-scaling-factor --skip-metadata-lookup -o newcrush
+crushdiff compare -c newcrush | grep '(0.00%) bytes to move'
+ceph osd crush reweight-by-scaling-factor --skip-metadata-lookup
+ceph osd tree | grep osd.$o6 | grep '12\.3'
+ceph osd tree | grep osd.$o7 | grep '12\.3'
+ceph osd crush rm osd.$o6
+ceph osd crush rm osd.$o7
+ceph osd rm osd.$o6
+ceph osd rm osd.$o7
+
 # weight sets
 # make sure we require luminous before testing weight-sets
 ceph osd set-require-min-compat-client luminous
