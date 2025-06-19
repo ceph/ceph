@@ -151,7 +151,8 @@ public:
       assert(read_set.count(ref->prior_instance->get_paddr(), extent_cmp_t{}));
       ref->reset_prior_instance();
     } else {
-      ceph_assert(ref->is_stable_ready());
+      ceph_assert(ref->is_stable());
+      ceph_assert(ref->get_paddr().is_absolute());
       // XXX: prevent double retire -- retired_set.count(ref->get_paddr()) == 0
       // If it's already in the set, insert here will be a noop,
       // which is what we want.
