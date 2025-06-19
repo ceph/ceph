@@ -77,6 +77,30 @@ bool LBAMapping::is_data_stable() const {
     direct_cursor->key);
 }
 
+LBAMapping::next_iertr::future<LBAMapping> LBAMapping::next()
+{
+  LOG_PREFIX(LBAMapping::next);
+  auto ctx = get_effective_cursor().ctx;
+  SUBDEBUGT(seastore_lba, "{}", ctx.trans, *this);
+  return refresh().si_then([ctx](auto mapping) {
+    return with_btree_state<lba::LBABtree, LBAMapping>(
+      ctx.cache,
+      ctx,
+      std::move(mapping),
+      [ctx](auto &btree, auto &mapping) mutable {
+      auto &cursor = mapping.get_effective_cursor();
+      auto iter = btree.make_partial_iter(ctx, cursor);
+      return iter.next(ctx).si_then([ctx, &mapping](auto iter) {
+	if (!iter.is_end() && iter.get_val().pladdr.is_laddr()) {
+	  mapping = LBAMapping::create_indirect(nullptr, iter.get_cursor(ctx));
+	} else {
+	  mapping = LBAMapping::create_direct(iter.get_cursor(ctx));
+	}
+      });
+    });
+  });
+}
+
 LBAMapping::refresh_iertr::future<LBAMapping> LBAMapping::refresh()
 {
   if (is_viewable()) {
