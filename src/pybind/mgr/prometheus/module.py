@@ -577,6 +577,11 @@ class Module(MgrModule, OrchestratorClientMixin):
             default=300
         ),
         Option(
+            name='rbd_capacity_stats_pools_refresh_interval',
+            type='int',
+            default=900
+        ),
+        Option(
             name='standby_behaviour',
             type='str',
             default='default',
@@ -634,6 +639,10 @@ class Module(MgrModule, OrchestratorClientMixin):
                                  'desc': 'RBD image reads latency (nsec)'},
             },
         }  # type: Dict[str, Any]
+        self.rbd_cpacity_stats = {
+            'pools': [],
+            'pools_refresh_time': 0
+        }
         global _global_instance
         _global_instance = self
         self.metrics_thread = MetricCollectionThread(_global_instance)
@@ -738,6 +747,13 @@ class Module(MgrModule, OrchestratorClientMixin):
             'rbd_mirror_metadata',
             'RBD Mirror Metadata',
             RBD_MIRROR_METADATA
+        )
+
+        metrics['rbd_provisioned_bytes'] = Metric(
+            'gauge',
+            'rbd_image_provisioned_bytes',
+            'Total provisioned size of RBD images in bytes.',
+            ('pool_name', 'image_name')
         )
 
         metrics['pg_total'] = Metric(
@@ -1574,12 +1590,55 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self.log.error('failed listing pool %s: %s' % (pool_name, e))
         self.rbd_stats['pools_refresh_time'] = time.time()
 
+    @profile_method
+    def get_rbd_capacity_stats(self):
+        # Parse rbd capacity stats for all rbd pools
+        osd_map = self.get('osd_map')
+        rbd_pools = [pool['pool_name'] for pool in osd_map['pools']
+                     if 'rbd' in pool.get('application_metadata', {})]
+        self.rbd_capacity_stats = dict()
+        self.rbd_capacity_stats['pools'] = rbd_pools
+        next_refresh = self.rbd_stats['pools_refresh_time'] + \
+                       self.get_localized_module_option(
+                           'rbd_capacity_stats_pools_refresh_interval', 900)
+        if time.time() >= next_refresh:
+            self.refresh_rbd_capacity_stats()
+
+    def refresh_rbd_capacity_stats(self):
+        rbd_instance = RBD()
+
+        for pool_name in self.rbd_capacity_stats['pools']:
+            try:
+                with self.rados.open_ioctx(pool_name) as ioctx:
+                    if 'rbd' in ioctx.application_list():
+                        for image_name in rbd_instance.list(ioctx):
+                            try:
+                                with rbd_instance.Image(ioctx, image_name,
+                                                        read_only=True) as image:
+                                    img_stat = image.stat()
+                                    provisioned_bytes = img_stat["size"]
+                                    self.metrics['rbd_provisioned_bytes'].set(
+                                        provisioned_bytes,
+                                        (pool_name, image_name)
+                                    )
+                            except Exception as e:
+                                self.log.exception(f"Error collecting info for RBD image"
+                                                   f" '{image_name}' in pool '{pool_name}': {e}")
+            except Exception as e:
+                self.log.error('failed listing pool %s: %s' % (pool_name, e))
+        self.rbd_capacity_stats['pools_refresh_time'] = time.time()
+
     def shutdown_rbd_stats(self) -> None:
         if 'query_id' in self.rbd_stats:
             self.remove_osd_perf_query(self.rbd_stats['query_id'])
             del self.rbd_stats['query_id']
             del self.rbd_stats['query']
         self.rbd_stats['pools'].clear()
+
+    def shutdown_rbd_stats(self) -> None:
+        self.rbd_capacity_stats['pools'].clear()
+        self.metrics['rbd_provisioned_bytes'].clear()
+
 
     def add_fixed_name_metrics(self) -> None:
         """
@@ -1723,6 +1782,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         if not self.get_module_option('exclude_perf_counters'):
             self.get_perf_counters()
         self.get_rbd_stats()
+        self.get_rbd_capacity_stats()
 
         self.get_collect_time_metrics()
 
@@ -1939,6 +1999,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         cherrypy.server.httpserver = None
         self.log.info('Engine stopped.')
         self.shutdown_rbd_stats()
+        self.shutdown_rbd_capacity_stats()
         # wait for the metrics collection thread to stop
         self.metrics_thread.join()
 
