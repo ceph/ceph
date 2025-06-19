@@ -78,6 +78,10 @@ struct hash<neorados::IOContext>;
 namespace neorados {
 namespace detail {
 class Client;
+template<std::size_t S, std::size_t Alignment = std::bit_ceil(S)>
+struct alignas(Alignment) aligned_storage {
+  std::byte data[S];
+};
 }
 
 class RADOS;
@@ -117,7 +121,7 @@ public:
 private:
 
   static constexpr std::size_t impl_size = 4 * 8;
-  std::aligned_storage_t<impl_size> impl;
+  detail::aligned_storage<impl_size> impl;
 };
 
 inline constexpr std::uint64_t snap_dir = -1;
@@ -193,7 +197,7 @@ public:
 private:
 
   static constexpr std::size_t impl_size = 16 * 8;
-  std::aligned_storage_t<impl_size> impl;
+  detail::aligned_storage<impl_size> impl;
 };
 
 inline const std::string all_nspaces("\001");
@@ -386,7 +390,7 @@ public:
 protected:
   Op();
   static constexpr std::size_t impl_size = 85 * 8;
-  std::aligned_storage_t<impl_size> impl;
+  detail::aligned_storage<impl_size> impl;
 };
 
 // This class is /not/ thread-safe. If you want you can wrap it in
@@ -1278,7 +1282,7 @@ private:
   Cursor(void*);
   friend RADOS;
   static constexpr std::size_t impl_size = 16 * 8;
-  std::aligned_storage_t<impl_size> impl;
+  detail::aligned_storage<impl_size> impl;
 };
 
 // Result from `next_notification`
