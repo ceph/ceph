@@ -265,10 +265,6 @@ public:
     laddr_t laddr,
     extent_len_t len) final;
 
-  refresh_lba_mapping_ret refresh_lba_mapping(
-    Transaction &t,
-    LBAMapping mapping) final;
-
 private:
   Cache &cache;
 
