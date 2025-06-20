@@ -8663,7 +8663,7 @@ int RGWRados::recover_reshard_logrecord(RGWBucketInfo& bucket_info,
                                             const DoutPrefixProvider *dpp)
 {
   RGWBucketReshardLock reshard_lock(this->driver, bucket_info, true);
-  int ret = reshard_lock.lock(dpp);
+  int ret = reshard_lock.lock(dpp, y);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << __func__ <<
       " INFO: failed to take reshard lock for bucket " <<
@@ -8681,7 +8681,7 @@ int RGWRados::recover_reshard_logrecord(RGWBucketInfo& bucket_info,
     // clear the RESHARD_IN_PROGRESS status after reshard failed, set bucket instance status
     // to CLS_RGW_RESHARD_NONE, also clear the reshard log entries
     ret = RGWBucketReshard::clear_resharding(this->driver, bucket_info, bucket_attrs, dpp, y);
-    reshard_lock.unlock();
+    std::ignore = reshard_lock.unlock(dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ <<
         " ERROR: failed to clear resharding flags for bucket " <<
@@ -8808,7 +8808,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
       const rgw_bucket& b = bs->bucket;
       std::string bucket_id = b.get_key();
       RGWBucketReshardLock reshard_lock(this->driver, bucket_info, true);
-      ret = reshard_lock.lock(dpp);
+      ret = reshard_lock.lock(dpp, y);
       if (ret == -ENOENT) {
 	continue;
       } else if (ret < 0) {
@@ -8834,7 +8834,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
         // bucket_attrs for call to clear_resharding below
         ret = fetch_new_bucket_info("trying_to_clear_resharding");
         if (ret < 0) {
-	  reshard_lock.unlock();
+          std::ignore = reshard_lock.unlock(dpp, y);
 	  ldpp_dout(dpp, 0) << __func__ <<
 	    " ERROR: failed to update bucket info before clear resharding for bucket " <<
 	    bucket_id << dendl;
@@ -8842,7 +8842,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
         }
 
 	ret = RGWBucketReshard::clear_resharding(this->driver, bucket_info, bucket_attrs, dpp, y);
-	reshard_lock.unlock();
+	std::ignore = reshard_lock.unlock(dpp, y);
 	if (ret == -ENOENT) {
 	  ldpp_dout(dpp, 5) << __func__ <<
 	    " INFO: no need to reset reshard flags; old shards apparently"
