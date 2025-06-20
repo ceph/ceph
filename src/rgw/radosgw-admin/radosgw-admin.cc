@@ -4616,7 +4616,7 @@ int main(int argc, const char **argv)
     if (raw_storage_op) {
       site = rgw::SiteConfig::make_fake();
       driver = DriverManager::get_raw_storage(dpp(), g_ceph_context,
-					      cfg, context_pool, *site, cfgstore.get());
+					      cfg, context_pool, *site, cfgstore.get(), true);
     } else {
       site = std::make_unique<rgw::SiteConfig>();
       auto r = site->load(dpp(), null_yield, cfgstore.get(), localzonegroup_op);
@@ -4640,7 +4640,7 @@ int main(int argc, const char **argv)
                                         null_yield,
 					cfgstore.get(),
 					need_cache && g_conf()->rgw_cache_enabled,
-					need_gc);
+					need_gc, true);
     }
     if (!driver) {
       cerr << "couldn't init storage provider" << std::endl;

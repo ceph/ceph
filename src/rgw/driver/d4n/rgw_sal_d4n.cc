@@ -36,15 +36,15 @@ static inline Object* nextObject(Object* t)
   return dynamic_cast<FilterObject*>(t)->get_next();
 }
 
-D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context) : FilterDriver(_next),
-                                                                                       io_context(io_context) 
+D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context, bool admin) : FilterDriver(_next),
+												   io_context(io_context) 
 {
   rgw::cache::Partition partition_info;
   partition_info.location = g_conf()->rgw_d4n_l1_datacache_persistent_path;
   partition_info.name = "d4n";
   partition_info.type = "read-cache";
   partition_info.size = g_conf()->rgw_d4n_l1_datacache_size;
-  cacheDriver = std::make_unique<rgw::cache::SSDDriver>(partition_info);
+  cacheDriver = std::make_unique<rgw::cache::SSDDriver>(partition_info, admin);
 }
 
 D4NFilterDriver::~D4NFilterDriver() = default;
@@ -3102,9 +3102,9 @@ int D4NFilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
 extern "C" {
 
-rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, void* io_context)
+rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, void* io_context, bool admin)
 {
-  rgw::sal::D4NFilterDriver* driver = new rgw::sal::D4NFilterDriver(next, *static_cast<boost::asio::io_context*>(io_context));
+  rgw::sal::D4NFilterDriver* driver = new rgw::sal::D4NFilterDriver(next, *static_cast<boost::asio::io_context*>(io_context), admin);
 
   return driver;
 }

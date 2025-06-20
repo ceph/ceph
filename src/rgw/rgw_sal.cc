@@ -63,7 +63,7 @@ extern rgw::sal::Driver* newPOSIXDriver(rgw::sal::Driver* next);
 #endif
 extern rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next);
 #ifdef WITH_RADOSGW_D4N
-extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context);
+extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin);
 #endif
 }
 
@@ -81,7 +81,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 						     bool use_cache,
 						     bool use_gc,
 						     bool background_tasks,
-						    optional_yield y, rgw::sal::ConfigStore* cfgstore)
+						    optional_yield y, rgw::sal::ConfigStore* cfgstore, bool admin)
 {
   rgw::sal::Driver* driver{nullptr};
 
@@ -206,7 +206,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 #ifdef WITH_RADOSGW_D4N 
   else if (cfg.filter_name.compare("d4n") == 0) {
     rgw::sal::Driver* next = driver;
-    driver = newD4NFilter(next, io_context);
+    driver = newD4NFilter(next, io_context, admin);
 
     if (driver->initialize(cct, dpp) < 0) {
       delete driver;
@@ -234,7 +234,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 
 rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct,
 							   const Config& cfg, boost::asio::io_context& io_context,
-							   const rgw::SiteConfig& site_config, rgw::sal::ConfigStore* cfgstore)
+							   const rgw::SiteConfig& site_config, rgw::sal::ConfigStore* cfgstore, bool admin)
 {
   rgw::sal::Driver* driver = nullptr;
   if (cfg.store_name.compare("rados") == 0) {
