@@ -85,6 +85,8 @@ def test_internal_apply_cluster_and_share(thandler):
         cluster_id='foo',
         share_id='s1',
         name='Ess One',
+        comment='This is a test share',
+        max_connections=5,
         cephfs=_cephfs(
             volume='cephfs',
             path='/',
@@ -98,6 +100,10 @@ def test_internal_apply_cluster_and_share(thandler):
     shares = thandler.share_ids()
     assert len(shares) == 1
     assert ('foo', 's1') in shares
+
+    share_dict = thandler.internal_store.data[('shares', 'foo.s1')]
+    assert share_dict['comment'] == 'This is a test share'
+    assert share_dict['max_connections'] == 5
 
 
 def test_internal_apply_remove_cluster(thandler):
