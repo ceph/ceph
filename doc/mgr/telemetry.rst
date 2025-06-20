@@ -121,21 +121,22 @@ List all channels with:
 Enabling Telemetry
 ------------------
 
-To allow the *telemetry* module to start sharing data:
+To allow the *telemetry* module to start sharing data, run the following
+command:
 
 .. prompt:: bash #
 
    ceph telemetry on
 
-Please note: Telemetry data is licensed under the Community Data License
-Agreement - Sharing - Version 1.0 (https://cdla.io/sharing-1-0/). Hence,
-telemetry module can be enabled only after you add ``--license sharing-1-0`` to
-the ``ceph telemetry on`` command.  Once telemetry is on, please consider
-enabling channels which are off by default, such as the ``perf`` channel.
-``ceph telemetry on`` output will list the exact command to enable these
-channels.
+Please note: Telemetry data is licensed under the `Community Data License
+Agreement - Sharing - Version 1.0 <https://cdla.io/sharing-1-0/>`_.  This means
+that telemetry module can be enabled only after you add ``--license
+sharing-1-0`` to the ``ceph telemetry on`` command. After telemetry is on,
+consider enabling channels which are off by default, such as the
+``perf`` channel.  ``ceph telemetry on`` output will list the exact command to
+enable these channels.
 
-Telemetry can be disabled at any time with:
+Telemetry can be disabled at any time by running the following command:
 
 .. prompt:: bash #
 
@@ -144,50 +145,52 @@ Telemetry can be disabled at any time with:
 Sample report
 -------------
 
-You can look at what data is reported at any time with the command:
+Show reported data by running the following command: 
 
 .. prompt:: bash #
 
    ceph telemetry show
 
-If telemetry is off, you can preview a sample report with:
+If telemetry is disabled, run the following command to preview a sample report:
 
 .. prompt:: bash #
 
    ceph telemetry preview
 
-Generating a sample report might take a few moments in big clusters (clusters
-with hundreds of OSDs or more).
+The generation of a sample report might take a few moments in big clusters
+(clusters with hundreds of OSDs or more).
 
-To protect your privacy, device reports are generated separately, and data such
-as hostname and device serial number is anonymized. The device telemetry is
-sent to a different endpoint and does not associate the device data with a
-particular cluster. To see a preview of the device report use the command:
+To protect your privacy, device reports are generated separately. Data
+including  hostnames and device serial numbers are anonymized. The device
+telemetry is sent to a different endpoint and does not associate the device
+data with a particular cluster. To see a preview of the device report, run the
+following command: 
 
 .. prompt:: bash #
 
    ceph telemetry show-device
 
-If telemetry is off, you can preview a sample device report with:
+If telemetry is disabled, run the following command to preview a sample device
+report:
 
 .. prompt:: bash #
 
    ceph telemetry preview-device
 
-Please note: In order to generate the device report we use Smartmontools
-version 7.0 and up, which supports JSON output.  If you have any concerns about
-privacy with regard to the information included in this report, please contact
-the Ceph developers.
+.. note:: In order to generate the device report we use Smartmontools version
+   7.0 and up, which supports JSON output. If you have any concerns about
+   privacy with regard to the information included in this report, contact the
+   Ceph developers.
 
-In case you prefer to have a single output of both reports, and telemetry is
-on, use:
+When telemetry is enabled, run the following command to generate both reports
+in a single output: 
 
 .. prompt:: bash #
 
    ceph telemetry show-all
 
-If you would like to view a single output of both reports, and telemetry is
-off, use:
+When telemetry is disabled, run the following command to view both reports in a
+single output:
 
 .. prompt:: bash #
 
@@ -195,7 +198,8 @@ off, use:
 
 **Sample report by channel**
 
-When telemetry is on you can see what data is reported by channel with:
+Run the following command when telemetry is enabled to show the data reported
+by a specified channel:
 
 .. prompt:: bash #
 
