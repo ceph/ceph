@@ -381,11 +381,10 @@ void ECExtentCache::LRU::add(const Line &line) {
 
 shared_ptr<shard_extent_map_t> ECExtentCache::LRU::find(
     const hobject_t &oid, uint64_t offset) {
-  Key k(offset, oid);
   shared_ptr<shard_extent_map_t> cache = nullptr;
   std::lock_guard lock{mutex};
-  if (map.contains(k)) {
-    auto &&[lru_iter, c] = map.at(k);
+  if (auto found = map.find({offset, oid}); found != map.end()) {
+    auto &&[lru_iter, c] = found->second;
     cache = c;
     auto it = lru_iter; // Intentional copy.
     erase(it, false);
