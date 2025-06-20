@@ -615,7 +615,7 @@ class TestMirroring(CephFSTestCase):
         self.assertGreater(second["counters"]["last_synced_start"], first["counters"]["last_synced_start"])
         self.assertGreaterEqual(second["counters"]["last_synced_end"], second["counters"]["last_synced_start"])
         self.assertGreater(second["counters"]["last_synced_duration"], 0)
-        self.assertEquals(second["counters"]["last_synced_bytes"], 1048576000) # last_synced_bytes = 10 files of 100MB size each
+        self.assertEqual(second["counters"]["last_synced_bytes"], 1048576000) # last_synced_bytes = 10 files of 1024MB size each
 
         # some more IO
         for i in range(15):
@@ -638,7 +638,7 @@ class TestMirroring(CephFSTestCase):
         self.assertGreater(third["counters"]["last_synced_start"], second["counters"]["last_synced_end"])
         self.assertGreaterEqual(third["counters"]["last_synced_end"], third["counters"]["last_synced_start"])
         self.assertGreater(third["counters"]["last_synced_duration"], 0)
-        self.assertEquals(third["counters"]["last_synced_bytes"], 1572864000) # last_synced_bytes = 15 files of 100MB size each
+        self.assertEqual(third["counters"]["last_synced_bytes"], 1572864000) # last_synced_bytes = 10 files of 1024MB size each
 
         # delete a snapshot
         self.mount_a.run_shell(["rmdir", "d0/.snap/snap0"])
@@ -822,9 +822,9 @@ class TestMirroring(CephFSTestCase):
 
         # we have not added any directories
         peer = status['filesystems'][0]['peers'][0]
-        self.assertEquals(status['filesystems'][0]['directory_count'], 0)
-        self.assertEquals(peer['stats']['failure_count'], 0)
-        self.assertEquals(peer['stats']['recovery_count'], 0)
+        self.assertEqual(status['filesystems'][0]['directory_count'], 0)
+        self.assertEqual(peer['stats']['failure_count'], 0)
+        self.assertEqual(peer['stats']['recovery_count'], 0)
 
         # add a non-existent directory for synchronization -- check if its reported
         # in daemon stats
@@ -834,10 +834,10 @@ class TestMirroring(CephFSTestCase):
         status = self.get_mirror_daemon_status()
         # we added one
         peer = status['filesystems'][0]['peers'][0]
-        self.assertEquals(status['filesystems'][0]['directory_count'], 1)
+        self.assertEqual(status['filesystems'][0]['directory_count'], 1)
         # failure count should be reflected
-        self.assertEquals(peer['stats']['failure_count'], 1)
-        self.assertEquals(peer['stats']['recovery_count'], 0)
+        self.assertEqual(peer['stats']['failure_count'], 1)
+        self.assertEqual(peer['stats']['recovery_count'], 0)
 
         # create the directory, mirror daemon would recover
         self.mount_a.run_shell(["mkdir", "d0"])
@@ -845,10 +845,10 @@ class TestMirroring(CephFSTestCase):
         time.sleep(120)
         status = self.get_mirror_daemon_status()
         peer = status['filesystems'][0]['peers'][0]
-        self.assertEquals(status['filesystems'][0]['directory_count'], 1)
+        self.assertEqual(status['filesystems'][0]['directory_count'], 1)
         # failure and recovery count should be reflected
-        self.assertEquals(peer['stats']['failure_count'], 1)
-        self.assertEquals(peer['stats']['recovery_count'], 1)
+        self.assertEqual(peer['stats']['failure_count'], 1)
+        self.assertEqual(peer['stats']['recovery_count'], 1)
 
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
@@ -856,7 +856,7 @@ class TestMirroring(CephFSTestCase):
         """Test mirror daemon init failure"""
 
         # disable mgr mirroring plugin as it would try to load dir map on
-        # on mirroring enabled for a filesystem (an throw up erorrs in
+        # on mirroring enabled for a filesystem (an throw up errors in
         # the logs)
         self.disable_mirroring_module()
 
@@ -892,7 +892,7 @@ class TestMirroring(CephFSTestCase):
         """Test if the mirror daemon can recover from a init failure"""
 
         # disable mgr mirroring plugin as it would try to load dir map on
-        # on mirroring enabled for a filesystem (an throw up erorrs in
+        # on mirroring enabled for a filesystem (an throw up errors in
         # the logs)
         self.disable_mirroring_module()
 
@@ -1253,11 +1253,11 @@ class TestMirroring(CephFSTestCase):
             for fname in fnames:
                 t = self.mount_b.run_shell_payload(f"stat -c %F {dirname}/.snap/{snap_name}/{fname}").stdout.getvalue().strip()
                 if typs[tidx] == 'reg':
-                    self.assertEquals('regular file', t)
+                    self.assertEqual('regular file', t)
                 elif typs[tidx] == 'dir':
-                    self.assertEquals('directory', t)
+                    self.assertEqual('directory', t)
                 elif typs[tidx] == 'sym':
-                    self.assertEquals('symbolic link', t)
+                    self.assertEqual('symbolic link', t)
                 tidx += 1
 
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
@@ -1293,7 +1293,7 @@ class TestMirroring(CephFSTestCase):
         """Test snapshot synchronization in midst of snapshot deletes.
 
         Deleted the previous snapshot when the mirror daemon is figuring out
-        incremental differences between current and previous snaphot. The
+        incremental differences between current and previous snapshot. The
         mirror daemon should identify the purge and switch to using remote
         comparison to sync the snapshot (in the next iteration of course).
         """
