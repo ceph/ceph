@@ -619,7 +619,6 @@ Requires:       python%{python3_pkgversion}-setuptools
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-routes
-Requires:       python%{python3_pkgversion}-werkzeug
 %if 0%{?weak_deps}
 Recommends:     python%{python3_pkgversion}-saml
 %endif
