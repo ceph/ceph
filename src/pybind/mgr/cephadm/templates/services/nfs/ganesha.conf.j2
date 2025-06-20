@@ -47,15 +47,16 @@ RGW {
 }
 {% if kmip_addrs %}
 
+%plugin ganesha/libkmip_fscrypt.so
 KMIP {
-            HOST {
+	HOST {
 {% for kmip_addr in kmip_addrs %}
-                     addr = {{ kmip_addr }};
+		addr = {{ kmip_addr }};
 {% endfor %}
-            }
-            cert = /etc/ganesha/kmip/kmip_cert.pem;
-            key = /etc/ganesha/kmip/kmip_key.pem;
-            ca = /etc/ganesha/kmip/kmip_ca_cert.pem;
+	}
+	cert = /etc/ganesha/kmip/kmip_cert.pem;
+	key = /etc/ganesha/kmip/kmip_key.pem;
+	ca = /etc/ganesha/kmip/kmip_ca_cert.pem;
 }
 
 {% endif %}
