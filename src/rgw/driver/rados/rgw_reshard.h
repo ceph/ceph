@@ -60,9 +60,10 @@ public:
     RGWBucketReshardLock(_store, bucket_info.bucket.get_key(':'), _ephemeral)
   {}
 
-  int lock(const DoutPrefixProvider *dpp);
-  void unlock();
-  int renew(const Clock::time_point&);
+  int lock(const DoutPrefixProvider *dpp, optional_yield y);
+  int unlock(const DoutPrefixProvider *dpp, optional_yield y);
+  int renew(const DoutPrefixProvider *dpp, optional_yield y,
+            const Clock::time_point& now);
 
   bool should_renew(const Clock::time_point& now) const {
     return now >= renew_thresh;
@@ -120,7 +121,7 @@ public:
   int get_status(const DoutPrefixProvider *dpp, optional_yield y,
                  std::list<cls_rgw_bucket_instance_entry> *status);
   int cancel(const DoutPrefixProvider* dpp, optional_yield y);
-  int renew_lock_if_needed(const DoutPrefixProvider *dpp);
+  int renew_lock_if_needed(const DoutPrefixProvider *dpp, optional_yield y);
 
   static int clear_resharding(rgw::sal::RadosStore* store,
 			      RGWBucketInfo& bucket_info,

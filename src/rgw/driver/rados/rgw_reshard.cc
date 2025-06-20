@@ -342,7 +342,7 @@ public:
         ret = r;
       }
       if (br != nullptr) {
-        r = br->renew_lock_if_needed(dpp);
+        r = br->renew_lock_if_needed(dpp, null_yield);
       }
       if (r < 0) {
         derr << "ERROR: br->renew_lock_if_needed() returned error: " << cpp_strerror(-r) << dendl;
@@ -916,7 +916,7 @@ int RGWBucketReshard::clear_resharding(rgw::sal::RadosStore* store,
 
 int RGWBucketReshard::cancel(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  int ret = reshard_lock.lock(dpp);
+  int ret = reshard_lock.lock(dpp, y);
   if (ret < 0) {
     return ret;
   }
@@ -929,7 +929,7 @@ int RGWBucketReshard::cancel(const DoutPrefixProvider* dpp, optional_yield y)
     ret = clear_resharding(store, bucket_info, bucket_attrs, dpp, y);
   }
 
-  reshard_lock.unlock();
+  std::ignore = reshard_lock.unlock(dpp, y);
   return ret;
 }
 
@@ -954,17 +954,18 @@ RGWBucketReshardLock::RGWBucketReshardLock(rgw::sal::RadosStore* _store,
   internal_lock.set_duration(duration);
 }
 
-int RGWBucketReshardLock::lock(const DoutPrefixProvider *dpp) {
+int RGWBucketReshardLock::lock(const DoutPrefixProvider *dpp, optional_yield y) {
   internal_lock.set_must_renew(false);
 
-  int ret;
+  librados::ObjectWriteOperation op;
   if (ephemeral) {
-    ret = internal_lock.lock_exclusive_ephemeral(&store->getRados()->reshard_pool_ctx,
-						 lock_oid);
+    internal_lock.lock_exclusive_ephemeral(&op);
   } else {
-    ret = internal_lock.lock_exclusive(&store->getRados()->reshard_pool_ctx, lock_oid);
+    internal_lock.lock_exclusive(&op);
   }
 
+  int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx,
+                              lock_oid, std::move(op), y);
   if (ret == -EBUSY) {
     ldout(store->ctx(), 0) << "INFO: RGWReshardLock::" << __func__ <<
       " found lock on " << lock_oid <<
@@ -982,23 +983,31 @@ int RGWBucketReshardLock::lock(const DoutPrefixProvider *dpp) {
   return 0;
 }
 
-void RGWBucketReshardLock::unlock() {
-  int ret = internal_lock.unlock(&store->getRados()->reshard_pool_ctx, lock_oid);
+int RGWBucketReshardLock::unlock(const DoutPrefixProvider *dpp, optional_yield y) {
+  librados::ObjectWriteOperation op;
+  internal_lock.unlock(&op);
+  int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx,
+                              lock_oid, std::move(op), y);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "WARNING: RGWBucketReshardLock::" << __func__ <<
       " failed to drop lock on " << lock_oid << " ret=" << ret << dendl;
   }
+  return ret;
 }
 
-int RGWBucketReshardLock::renew(const Clock::time_point& now) {
+int RGWBucketReshardLock::renew(const DoutPrefixProvider *dpp, optional_yield y,
+                                const Clock::time_point& now)
+{
   internal_lock.set_must_renew(true);
-  int ret;
+
+  librados::ObjectWriteOperation op;
   if (ephemeral) {
-    ret = internal_lock.lock_exclusive_ephemeral(&store->getRados()->reshard_pool_ctx,
-						 lock_oid);
+    internal_lock.lock_exclusive_ephemeral(&op);
   } else {
-    ret = internal_lock.lock_exclusive(&store->getRados()->reshard_pool_ctx, lock_oid);
+    internal_lock.lock_exclusive(&op);
   }
+  int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx,
+                              lock_oid, std::move(op), y);
   if (ret < 0) { /* expired or already locked by another processor */
     std::stringstream error_s;
     if (-ENOENT == ret) {
@@ -1019,19 +1028,19 @@ int RGWBucketReshardLock::renew(const Clock::time_point& now) {
   return 0;
 }
 
-int RGWBucketReshard::renew_lock_if_needed(const DoutPrefixProvider *dpp) {
+int RGWBucketReshard::renew_lock_if_needed(const DoutPrefixProvider *dpp, optional_yield y) {
   int ret = 0;
   Clock::time_point now = Clock::now();
   if (reshard_lock.should_renew(now)) {
     // assume outer locks have timespans at least the size of ours, so
     // can call inside conditional
     if (outer_reshard_lock) {
-      ret = outer_reshard_lock->renew(now);
+      ret = outer_reshard_lock->renew(dpp, y, now);
       if (ret < 0) {
         return ret;
       }
     }
-    ret = reshard_lock.renew(now);
+    ret = reshard_lock.renew(dpp, y, now);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "Error renewing bucket lock: " << ret << dendl;
       return ret;
@@ -1158,7 +1167,7 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
           return ret;
         }
 
-        ret = renew_lock_if_needed(dpp);
+        ret = renew_lock_if_needed(dpp, y);
         if (ret < 0) {
           return ret;
         }
@@ -1269,12 +1278,14 @@ int RGWBucketReshard::execute(int num_shards,
                               RGWReshard* reshard_log)
 {
   // take a reshard lock on the bucket
-  int ret = reshard_lock.lock(dpp);
+  int ret = reshard_lock.lock(dpp, y);
   if (ret < 0) {
     return ret;
   }
   // TODO: release the lock when purging the old index shards or unsucessful new index shards
-  auto unlock = make_scope_guard([this] { reshard_lock.unlock(); });
+  auto unlock = make_scope_guard([this, dpp, y] {
+        std::ignore = reshard_lock.unlock(dpp, y);
+      });
 
   if (reshard_log) {
     ret = reshard_log->update(dpp, y, bucket_info.bucket, initiator);
@@ -1735,7 +1746,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 
   RGWBucketReshardLock logshard_lock(store, logshard_oid, false);
 
-  int ret = logshard_lock.lock(dpp);
+  int ret = logshard_lock.lock(dpp, y);
   if (ret < 0) { 
     ldpp_dout(dpp, 5) << __func__ << "(): failed to acquire lock on " <<
       logshard_oid << ", ret = " << ret <<dendl;
@@ -1756,7 +1767,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 
       Clock::time_point now = Clock::now();
       if (logshard_lock.should_renew(now)) {
-        ret = logshard_lock.renew(now);
+        ret = logshard_lock.renew(dpp, y, now);
         if (ret < 0) {
           return ret;
         }
@@ -1766,7 +1777,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
     } // entry for loop
   } while (is_truncated);
 
-  logshard_lock.unlock();
+  std::ignore = logshard_lock.unlock(dpp, y);
   return 0;
 }
 
