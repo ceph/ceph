@@ -211,22 +211,26 @@ class slice_iterator {
 
         // If we have reached the end of the extent, we need to move that on too.
         if (bl_iter == emap_iter.get_val().end()) {
+          // NOTE: Despite appearances, the following is happening BEFORE
+          // the caller gets to use the buffer pointers (since the in/out is
+          // set a few lines above).  This means that the caller must not
+          // check the CRC.
+          if (out_set.contains(shard)) {
+            invalidate_crcs(shard);
+          }
           ++emap_iter;
           if (emap_iter == input[shard].end()) {
             erase = true;
           } else {
-            if (out_set.contains(shard)) {
-              bufferlist bl = emap_iter.get_val();
-              bl.invalidate_crc();
-            }
             iters.at(shard).second = emap_iter.get_val().begin();
             if (zeros) {
               zeros->emplace(shard, emap_iter.get_off(), emap_iter.get_len());
             }
           }
         }
-      } else
+      } else {
         ceph_assert(iter_offset > start);
+      }
 
       if (erase) {
         iter = iters.erase(iter);
@@ -247,6 +251,11 @@ class slice_iterator {
     if (out.empty()) {
       advance();
     }
+  }
+
+  void invalidate_crcs(shard_id_t shard) {
+    bufferlist bl = iters.at(shard).first.get_val();
+    bl.invalidate_crc();
   }
 
 public:
