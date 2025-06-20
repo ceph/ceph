@@ -1825,8 +1825,8 @@ void PgScrubber::scrub_finish()
   ceph_assert(m_pg->is_locked());
   ceph_assert(is_queued_or_active());
 
-  // if the repair request comes from auto-repair and large number of errors,
-  // we would like to cancel auto-repair
+  // if the repair request comes from auto-repair and there is a large
+  // number of objects known to be damaged, we cancel the auto-repair
   if (m_is_repair && m_flags.auto_repair &&
       m_be->authoritative_peers_count() >
 	static_cast<int>(m_pg->cct->_conf->osd_scrub_auto_repair_num_errors)) {
@@ -1839,8 +1839,8 @@ void PgScrubber::scrub_finish()
 
   m_be->update_repair_status(m_is_repair);
 
-  // if a regular scrub had errors within the limit, do a deep scrub to auto
-  // repair
+  // if the count of damaged objects found in shallow-scrubbing is not
+  // too high - do a deep scrub to auto repair
   bool do_auto_scrub = false;
   if (m_flags.deep_scrub_on_error && m_be->authoritative_peers_count() &&
       m_be->authoritative_peers_count() <=
