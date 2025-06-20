@@ -23,21 +23,13 @@
 #include "osd/PG.h"
 #include "osd/PGPeeringEvent.h"
 #include "messages/MOSDOp.h"
+#include "common/mclock_common.h"
 
 
 class OSD;
 struct OSDShard;
 
 namespace ceph::osd::scheduler {
-
-enum class op_scheduler_class : uint8_t {
-  background_recovery = 0,
-  background_best_effort,
-  immediate,
-  client,
-};
-
-std::ostream& operator<<(std::ostream& out, const op_scheduler_class& class_id);
 
 class OpSchedulerItem {
 public:
@@ -76,7 +68,7 @@ public:
     virtual std::string print() const = 0;
 
     virtual void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) = 0;
-    virtual op_scheduler_class get_scheduler_class() const = 0;
+    virtual SchedulerClass get_scheduler_class() const = 0;
 
     virtual ~OpQueueable() {}
     friend std::ostream& operator<<(std::ostream& out, const OpQueueable& q) {
@@ -161,7 +153,7 @@ public:
     return qitem->peering_requires_pg();
   }
 
-  op_scheduler_class get_scheduler_class() const {
+  SchedulerClass get_scheduler_class() const {
     return qitem->get_scheduler_class();
   }
 
@@ -201,13 +193,13 @@ protected:
     return pgid;
   }
 
-  static op_scheduler_class priority_to_scheduler_class(int priority) {
+  static SchedulerClass priority_to_scheduler_class(int priority) {
     if (priority >= CEPH_MSG_PRIO_HIGH) {
-      return op_scheduler_class::immediate;
+      return SchedulerClass::immediate;
     } else if (priority >= PeeringState::recovery_msg_priority_t::DEGRADED) {
-      return op_scheduler_class::background_recovery;
+      return SchedulerClass::background_recovery;
     } else {
-      return op_scheduler_class::background_best_effort;
+      return SchedulerClass::background_best_effort;
     }
   }
 
@@ -240,13 +232,13 @@ public:
     return op;
   }
 
-  op_scheduler_class get_scheduler_class() const final {
+   SchedulerClass get_scheduler_class() const final {
     auto type = op->get_req()->get_type();
     if (type == CEPH_MSG_OSD_OP ||
 	type == CEPH_MSG_OSD_BACKOFF) {
-      return op_scheduler_class::client;
+      return SchedulerClass::client;
     } else {
-      return op_scheduler_class::immediate;
+      return SchedulerClass::immediate;
     }
   }
 
@@ -273,8 +265,8 @@ public:
   const PGCreateInfo *creates_pg() const override {
     return evt->create_info.get();
   }
-  op_scheduler_class get_scheduler_class() const final {
-    return op_scheduler_class::immediate;
+  SchedulerClass get_scheduler_class() const final {
+    return SchedulerClass::immediate;
   }
 };
 
@@ -296,8 +288,8 @@ public:
   }
   void run(
     OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
-  op_scheduler_class get_scheduler_class() const final {
-    return op_scheduler_class::background_best_effort;
+  SchedulerClass get_scheduler_class() const final {
+    return SchedulerClass::background_best_effort;
   }
 };
 
@@ -319,8 +311,8 @@ public:
   }
   void run(
     OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
-  op_scheduler_class get_scheduler_class() const final {
-    return op_scheduler_class::background_best_effort;
+  SchedulerClass get_scheduler_class() const final {
+    return SchedulerClass::background_best_effort;
   }
 };
 
@@ -359,9 +351,9 @@ class PGScrubItem : public PGOpQueueable {
 	   OSDShard* sdata,
 	   PGRef& pg,
 	   ThreadPool::TPHandle& handle) override = 0;
-  op_scheduler_class get_scheduler_class() const final
+  SchedulerClass get_scheduler_class() const final
   {
-    return op_scheduler_class::background_best_effort;
+    return SchedulerClass::background_best_effort;
   }
 };
 
@@ -507,7 +499,7 @@ public:
   }
   void run(
     OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
-  op_scheduler_class get_scheduler_class() const final {
+  SchedulerClass get_scheduler_class() const final {
     return priority_to_scheduler_class(priority);
   }
 };
@@ -535,7 +527,7 @@ public:
   }
   void run(
     OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
-  op_scheduler_class get_scheduler_class() const final {
+  SchedulerClass get_scheduler_class() const final {
     return priority_to_scheduler_class(priority);
   }
 };
@@ -559,8 +551,8 @@ public:
   }
   void run(
     OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
-  op_scheduler_class get_scheduler_class() const final {
-    return op_scheduler_class::background_best_effort;
+  SchedulerClass get_scheduler_class() const final {
+    return SchedulerClass::background_best_effort;
   }
 };
 
@@ -598,7 +590,7 @@ public:
     return op;
   }
 
-  op_scheduler_class get_scheduler_class() const final {
+  SchedulerClass get_scheduler_class() const final {
     return priority_to_scheduler_class(op->get_req()->get_priority());
   }
 
@@ -618,7 +610,7 @@ struct fmt::formatter<ceph::osd::scheduler::OpSchedulerItem> {
   {
     // matching existing op_scheduler_item_t::operator<<() format
     using class_t =
-	std::underlying_type_t<ceph::osd::scheduler::op_scheduler_class>;
+	std::underlying_type_t<SchedulerClass>;
     const auto qos_cost = opsi.was_queued_via_mclock()
 			      ? fmt::format(" qos_cost {}", opsi.qos_cost)
 			      : "";
