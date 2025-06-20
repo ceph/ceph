@@ -1564,7 +1564,7 @@ class TestMirroring(CephFSTestCase):
 
     def test_cephfs_mirror_remote_snap_corrupt_fails_synced_snapshot(self):
         """
-        That making manual changes to the remote .snap directory shows 'peer status' state: "failed"
+        That making changes to the remote .snap directory shows 'peer status' state: "failed"
         for a synced snapshot and then restores to "idle" when those changes are reverted.
         """
         log.debug('reconfigure client auth caps')
