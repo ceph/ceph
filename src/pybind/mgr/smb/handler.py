@@ -1196,11 +1196,15 @@ def _generate_share(
             'browseable': ynbool(share.browseable),
             'kernel share modes': 'no',
             'x:ceph:id': f'{share.cluster_id}.{share.share_id}',
-            'comment': '',
-            'max connections': '0',
             'smbd profiling share': 'yes',
         }
     }
+    if share.comment is not None:
+        cfg['options']['comment'] = share.comment
+
+    if share.max_connections is not None:
+        cfg['options']['max connections'] = str(share.max_connections)
+
     if proxy_val:
         cfg['options'][f'{ceph_vfs}:proxy'] = proxy_val
     # extend share with user+group login access lists
