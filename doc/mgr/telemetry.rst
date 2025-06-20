@@ -121,7 +121,7 @@ List all channels with:
 Enabling Telemetry
 ------------------
 
-To allow the *telemetry* module to start sharing data:
+To allow the *telemetry* module to share data, run the following command:
 
 .. prompt:: bash #
 
@@ -156,13 +156,13 @@ If telemetry is off, you can preview a sample report with:
 
    ceph telemetry preview
 
-Generating a sample report might take a few moments in big clusters (clusters
-with hundreds of OSDs or more).
+The generation of a sample report for larger clusters might take some time.
 
-To protect your privacy, device reports are generated separately, and data such
-as hostname and device serial number is anonymized. The device telemetry is
-sent to a different endpoint and does not associate the device data with a
-particular cluster. To see a preview of the device report use the command:
+To protect sensitive information, device reports are generated separately. Data
+including  hostnames and device serial numbers are anonymized. The device
+telemetry is sent to a different endpoint and does not associate the device
+data with a particular cluster. To see a preview of the device report, run the
+following command: 
 
 .. prompt:: bash #
 
@@ -174,10 +174,10 @@ If telemetry is off, you can preview a sample device report with:
 
    ceph telemetry preview-device
 
-Please note: In order to generate the device report we use Smartmontools
-version 7.0 and up, which supports JSON output.  If you have any concerns about
-privacy with regard to the information included in this report, please contact
-the Ceph developers.
+.. note:: ``smartmontools`` version 7.0 or later must be installed so that JSON
+   output can be specified and parsed. If you have any concerns about privacy
+   with regard to the information included in this report, contact the Ceph
+   developers.
 
 In case you prefer to have a single output of both reports, and telemetry is
 on, use:
