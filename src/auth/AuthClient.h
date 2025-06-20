@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 #include "include/buffer_fwd.h"
 
