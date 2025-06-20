@@ -190,9 +190,6 @@ void bluefs_super_t::encode(bufferlist& bl) const
   encode(block_size, bl);
   encode(log_fnode, bl);
   encode(memorized_layout, bl);
-  if (_version >= 3) {
-    encode(wal_version, bl);
-  }
   ENCODE_FINISH(bl);
 }
 
@@ -207,9 +204,6 @@ void bluefs_super_t::decode(bufferlist::const_iterator& p)
   decode(log_fnode, p);
   if (struct_v >= 2) {
     decode(memorized_layout, p);
-  }
-  if (struct_v >= 3) {
-    decode(wal_version, p);
   }
   DECODE_FINISH(p);
 }
