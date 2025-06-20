@@ -328,8 +328,6 @@ struct bluefs_super_t {
 
   std::optional<bluefs_layout_t> memorized_layout;
 
-  uint8_t wal_version;
-
   bluefs_super_t();
 
   uint64_t block_mask() const {
