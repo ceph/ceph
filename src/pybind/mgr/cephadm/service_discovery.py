@@ -38,6 +38,7 @@ def cherrypy_filter(record: logging.LogRecord) -> bool:
 
 logging.getLogger('cherrypy.error').addFilter(cherrypy_filter)
 cherrypy.log.access_log.propagate = False
+logger = logging.getLogger(__name__)
 
 
 class Route(NamedTuple):
@@ -280,7 +281,7 @@ class Root(Server):
             try:
                 spec = cast(SMBSpec, self.mgr.spec_store[dd.service_name()].spec)
             except KeyError:
-                # TODO: logging
+                logger.warning("no spec found for %s", dd.service_name())
                 continue
             # TODO: needs updating once ip control/colocation is present
             addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
