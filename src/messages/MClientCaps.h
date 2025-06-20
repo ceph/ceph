@@ -62,6 +62,20 @@ private:
   std::vector<uint8_t> fscrypt_auth;
   std::vector<uint8_t> fscrypt_file;
 
+  bool is_fscrypt_enabled() const {
+    return !!fscrypt_auth.size();
+  }
+
+  uint64_t effective_size() const {
+    if(is_fscrypt_enabled()) {
+      if (fscrypt_file.size() >= sizeof(uint64_t)) {
+        return *(ceph_le64 *)fscrypt_file.data();
+      }
+    }
+
+    return size;
+  }
+
   int      get_caps() const { return head.caps; }
   int      get_wanted() const { return head.wanted; }
   int      get_dirty() const { return head.dirty; }

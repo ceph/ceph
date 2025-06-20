@@ -135,22 +135,21 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
                         if stat.S_ISDIR(stx["mode"]):
                             log.debug("cptree: (DIR) {0}".format(d_full_src))
                             try:
-                                fs_handle.mkdir(d_full_dst, mo)
+                                fs_handle.fcopyfile(d_full_src, d_full_dst, mo)
                             except cephfs.Error as e:
                                 if not e.args[0] == errno.EEXIST:
                                     raise
                             cptree(d_full_src, d_full_dst)
                         elif stat.S_ISLNK(stx["mode"]):
                             log.debug("cptree: (SYMLINK) {0}".format(d_full_src))
-                            target = fs_handle.readlink(d_full_src, 4096)
                             try:
-                                fs_handle.symlink(target[:stx["size"]], d_full_dst)
+                                fs_handle.fcopyfile(d_full_src, d_full_dst, mo)
                             except cephfs.Error as e:
                                 if not e.args[0] == errno.EEXIST:
                                     raise
                         elif stat.S_ISREG(stx["mode"]):
                             log.debug("cptree: (REG) {0}".format(d_full_src))
-                            copy_file(fs_handle, d_full_src, d_full_dst, mo, cancel_check=should_cancel)
+                            fs_handle.fcopyfile(d_full_src, d_full_dst, mo)
                         else:
                             handled = False
                             log.warning("cptree: (IGNORE) {0}".format(d_full_src))
