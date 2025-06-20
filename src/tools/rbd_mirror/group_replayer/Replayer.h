@@ -129,8 +129,6 @@ private:
   uint64_t m_last_snapshot_bytes = 0;
 
   bool is_replay_interrupted(std::unique_lock<ceph::mutex>* locker);
-  int local_group_image_list_by_id(
-      std::vector<cls::rbd::GroupImageStatus> *image_ids);
 
   void schedule_load_group_snapshots();
   void handle_schedule_load_group_snapshots(int r);
@@ -140,8 +138,14 @@ private:
                               int r, const std::string& desc);
   void notify_group_listener();
 
+  int local_group_image_list_by_id(
+      std::vector<cls::rbd::GroupImageStatus> *image_ids);
+
   bool is_resync_requested();
   bool is_rename_requested();
+
+  void validate_image_snaps_sync_complete(std::unique_lock<ceph::mutex>* locker,
+    const cls::rbd::GroupSnapshot &local_snap);
 
   void load_local_group_snapshots();
   void handle_load_local_group_snapshots(int r);
@@ -149,8 +153,6 @@ private:
   void load_remote_group_snapshots();
   void handle_load_remote_group_snapshots(int r);
 
-  void validate_image_snaps_sync_complete(std::unique_lock<ceph::mutex>* locker,
-    const cls::rbd::GroupSnapshot &local_snap);
   void scan_for_unsynced_group_snapshots(std::unique_lock<ceph::mutex>* locker);
 
   void try_create_group_snapshot(cls::rbd::GroupSnapshot snap,
@@ -163,9 +165,6 @@ private:
   void handle_create_mirror_snapshot(
     int r, const std::string &group_snap_id, Context *on_finish);
 
-  std::string prepare_non_primary_mirror_snap_name(
-    const std::string &global_group_id, const std::string &snap_id);
-
   void mirror_snapshot_complete(
     const std::string &group_snap_id,
     std::unique_lock<ceph::mutex>* locker,
@@ -173,21 +172,11 @@ private:
   void handle_mirror_snapshot_complete(
     int r, const std::string &group_snap_id, Context *on_finish);
 
-  void remove_mirror_peer_uuid(const std::string &snap_id);
-  void handle_remove_mirror_peer_uuid(int r, const std::string &snap_id);
-  bool prune_all_image_snapshots(
-      cls::rbd::GroupSnapshot *local_snap,
-      std::unique_lock<ceph::mutex>* locker);
-  void unlink_group_snapshots(std::unique_lock<ceph::mutex>* locker);
-
   void create_regular_snapshot(
     cls::rbd::GroupSnapshot *snap,
     Context *on_finish);
   void handle_create_regular_snapshot(
       int r, const std::string &group_snap_id, Context *on_finish);
-  void set_image_replayer_limits(const std::string &image_id,
-                                 cls::rbd::GroupSnapshot *remote_snap,
-                                 std::unique_lock<ceph::mutex>* locker);
 
   void regular_snapshot_complete(
     const std::string &group_snap_id,
@@ -195,6 +184,17 @@ private:
   void handle_regular_snapshot_complete(
     int r, const std::string &group_snap_id, Context *on_finish);
 
+  void remove_mirror_peer_uuid(const std::string &snap_id);
+  void handle_remove_mirror_peer_uuid(int r, const std::string &snap_id);
+
+  bool prune_all_image_snapshots(
+      cls::rbd::GroupSnapshot *local_snap,
+      std::unique_lock<ceph::mutex>* locker);
+  void unlink_group_snapshots(std::unique_lock<ceph::mutex>* locker);
+
+  void set_image_replayer_limits(const std::string &image_id,
+                                 cls::rbd::GroupSnapshot *remote_snap,
+                                 std::unique_lock<ceph::mutex>* locker);
 };
 
 } // namespace group_replayer
