@@ -104,13 +104,9 @@ class ECExtentCache {
 
   class LRU {
    public:
-    class Key {
-     public:
+    struct Key {
       uint64_t offset;
       hobject_t oid;
-
-      Key(uint64_t offset, const hobject_t &oid) : offset(offset), oid(oid) {};
-
       bool operator==(const Key&) const = default;
     };
 
