@@ -1185,7 +1185,7 @@ class Object {
     /** Set the ACL for this object */
     virtual int set_acl(const RGWAccessControlPolicy& acl) = 0;
     /** Mark further operations on this object as being atomic */
-    virtual void set_atomic() = 0;
+    virtual void set_atomic(bool atomic) = 0;
     /** Check if this object is atomic */
     virtual bool is_atomic() = 0;
     /** Pre-fetch data when reading */

@@ -542,7 +542,7 @@ namespace rgw::sal {
     if (r < 0) {
       return r;
     }
-    set_atomic();
+    set_atomic(true);
     state.attrset[attr_name] = attr_val;
     return set_obj_attrs(dpp, &state.attrset, nullptr, y, 0);
   }
@@ -552,7 +552,7 @@ namespace rgw::sal {
     Attrs rmattr;
     bufferlist bl;
 
-    set_atomic();
+    set_atomic(true);
     rmattr[attr_name] = bl;
     return set_obj_attrs(dpp, nullptr, &rmattr, y, 0);
   }

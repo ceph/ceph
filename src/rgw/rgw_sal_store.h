@@ -200,7 +200,7 @@ class StoreObject : public Object {
 
     virtual ~StoreObject() = default;
 
-    virtual void set_atomic() override { state.is_atomic = true; }
+    virtual void set_atomic(bool atomic) override { state.is_atomic = atomic; }
     virtual bool is_atomic() override { return state.is_atomic; }
     virtual void set_prefetch_data() override { state.prefetch_data = true; }
     virtual bool is_prefetch_data() override { return state.prefetch_data; }

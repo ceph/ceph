@@ -220,10 +220,10 @@ void RGWObjectCtx::set_compressed(const rgw_obj& obj) {
   objs_state[obj].state.compressed = true;
 }
 
-void RGWObjectCtx::set_atomic(const rgw_obj& obj) {
+void RGWObjectCtx::set_atomic(const rgw_obj& obj, bool atomic) {
   std::unique_lock wl{lock};
   assert (!obj.empty());
-  objs_state[obj].state.is_atomic = true;
+  objs_state[obj].state.is_atomic = atomic;
 }
 void RGWObjectCtx::set_prefetch_data(const rgw_obj& obj) {
   std::unique_lock wl{lock};
@@ -2914,7 +2914,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
     return 0;
   }
 
-  obj_ctx.set_atomic(obj);
+  obj_ctx.set_atomic(obj, true);
 
   RGWObjState * state = nullptr;
   RGWObjManifest *manifest = nullptr;
@@ -2954,7 +2954,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
     gen_rand_obj_instance_name(&dest_obj);
   }
 
-  obj_ctx.set_atomic(dest_obj);
+  obj_ctx.set_atomic(dest_obj, true);
 
   rgw_zone_id no_zone;
 
@@ -3055,8 +3055,8 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
       gen_rand_obj_instance_name(&obj);
     }
 
-    obj_ctx.set_atomic(archive_obj);
-    obj_ctx.set_atomic(obj);
+    obj_ctx.set_atomic(archive_obj, true);
+    obj_ctx.set_atomic(obj, true);
 
     jspan_context no_trace{false, false};
 
@@ -5124,7 +5124,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
   real_time read_mtime;
   uint64_t obj_size;
 
-  obj_ctx.set_atomic(obj);
+  obj_ctx.set_atomic(obj, true);
   RGWRados::Object op_target(this, bucket_info, obj_ctx, obj);
   RGWRados::Object::Read read_op(&op_target);
 
@@ -5529,7 +5529,7 @@ static int resync_encrypted_multipart(const DoutPrefixProvider* dpp,
                                       const RGWObjState& state)
 {
   // only overwrite if the tag hasn't changed
-  obj_ctx.set_atomic(state.obj);
+  obj_ctx.set_atomic(state.obj, true);
 
   // make a tiny adjustment to the existing mtime so that fetch_remote_obj()
   // won't return ERR_NOT_MODIFIED when resyncing the object
@@ -6101,6 +6101,11 @@ int RGWRados::get_olh_target_state(const DoutPrefixProvider *dpp, RGWObjectCtx&
                                obj, &target, y); /* might return -EAGAIN */
   if (r < 0) {
     return r;
+  }
+
+  // if prefetch was requested, apply it to the target too
+  if (olh_state->prefetch_data) {
+    obj_ctx.set_prefetch_data(target);
   }
 
   return get_obj_state(dpp, &obj_ctx, bucket_info, target, psm, false, y);

@@ -579,9 +579,9 @@ class RadosObject : public StoreObject {
                const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
     virtual int set_acl(const RGWAccessControlPolicy& acl) override { acls = acl; return 0; }
-    virtual void set_atomic() override {
-      rados_ctx->set_atomic(state.obj);
-      StoreObject::set_atomic();
+    virtual void set_atomic(bool atomic) override {
+      rados_ctx->set_atomic(state.obj, atomic);
+      StoreObject::set_atomic(atomic);
     }
     virtual void set_prefetch_data() override {
       rados_ctx->set_prefetch_data(state.obj);
