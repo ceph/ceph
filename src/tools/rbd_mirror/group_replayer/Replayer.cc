@@ -1158,7 +1158,7 @@ void Replayer<I>::handle_regular_snapshot_complete(
 }
 
 template <typename I>
-void Replayer<I>::remove_mirror_peer_uuid(const std::string &snap_id) {
+void Replayer<I>::mirror_group_snapshot_unlink_peer(const std::string &snap_id) {
   auto remote_snap = std::find_if(
       m_remote_group_snaps.begin(), m_remote_group_snaps.end(),
       [snap_id](const cls::rbd::GroupSnapshot &s) {
@@ -1183,7 +1183,7 @@ void Replayer<I>::remove_mirror_peer_uuid(const std::string &snap_id) {
     rns->mirror_peer_uuids.erase(m_remote_mirror_peer_uuid);
     auto comp = create_rados_callback(
       new LambdaContext([this, snap_id](int r) {
-	handle_remove_mirror_peer_uuid(r, snap_id);
+	handle_mirror_group_snapshot_unlink_peer(r, snap_id);
       }));
 
     librados::ObjectWriteOperation op;
@@ -1196,7 +1196,7 @@ void Replayer<I>::remove_mirror_peer_uuid(const std::string &snap_id) {
 }
 
 template <typename I>
-void Replayer<I>::handle_remove_mirror_peer_uuid(
+void Replayer<I>::handle_mirror_group_snapshot_unlink_peer(
     int r, const std::string &snap_id) {
   dout(10) << snap_id << ", r=" << r << dendl;
 
@@ -1360,7 +1360,7 @@ void Replayer<I>::prune_mirror_group_snapshots(
         }
       }
     }
-    remove_mirror_peer_uuid(prune_snap->id);
+    mirror_group_snapshot_unlink_peer(prune_snap->id);
     // prune all the image snaps of the group snap locally
     if (prune_all_image_snapshots(prune_snap, locker)) {
       prune_snap = nullptr;
