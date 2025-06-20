@@ -9890,7 +9890,21 @@ int RGWRados::raw_obj_stat(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
+/* `RGWRados::get_bucket_stats()` mixes different resposibilities:
+  * retrieval of bucket's statistics with max_marker and sync control.
+  * Unfortunately, this is just a reflection of our data structures.
+  * The same `rgw_bucket_dir_header` carries things from both domains:
+  * _Bucket Index_ and _Bucket Index Log_.
+  * In the future we should consider introduction of an interface:
+  *
+  *   class RGWBucketMetaInfo {
+  *     virtual get_stats();
+  *     virtual get_max_marker();
+  *     virtual is_sync_stopped();
+  *   };
+  */
+
+int RGWRados::get_bucket_stats_and_bilog_meta(const DoutPrefixProvider *dpp, optional_yield y,
 			       RGWBucketInfo& bucket_info,
 			       const rgw::bucket_index_layout_generation& idx_layout,
 			       int shard_id, string *bucket_ver, string *master_ver,
