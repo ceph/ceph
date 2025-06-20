@@ -152,8 +152,16 @@ void ECExtentCache::Object::write_done(shard_extent_map_t const &buffers,
 }
 
 void ECExtentCache::Object::unpin(Op &op) const {
+  // Preserve member variables on stack before clearing lines, since
+  // clearing the last line may trigger Object deletion. If this Object
+  // is removed from cache due to having no remaining references, any
+  // subsequent access to member variables would be a use-after-free.
+  const auto& pg = this->pg;
+  const auto oid = this->oid;
   op.lines.clear();
-  delete_maybe();
+  if (pg.objects.contains(oid))	{
+    delete_maybe();
+  }
 }
 
 void ECExtentCache::Object::delete_maybe() const {
