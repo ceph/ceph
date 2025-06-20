@@ -194,6 +194,8 @@ class Share(_RBase):
     name: str = ''
     readonly: bool = False
     browseable: bool = True
+    comment: Optional[str] = None
+    max_connections: Optional[int] = None
     cephfs: Optional[CephFSStorage] = None
     custom_smb_share_options: Optional[Dict[str, str]] = None
     login_control: Optional[List[LoginAccessEntry]] = None
@@ -217,6 +219,12 @@ class Share(_RBase):
         # currently only cephfs is supported
         if self.cephfs is None:
             raise ValueError('a cephfs configuration is required')
+        if self.max_connections is not None and self.max_connections < 0:
+            raise ValueError(
+                'max_connections must be 0 or a non-negative integer'
+            )
+        if self.comment is not None and '\n' in self.comment:
+            raise ValueError('Comment cannot contain newlines')
         validation.check_custom_options(self.custom_smb_share_options)
         if self.restrict_access and not self.login_control:
             raise ValueError(

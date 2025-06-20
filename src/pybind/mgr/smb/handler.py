@@ -1200,6 +1200,12 @@ def _generate_share(
             'max connections': '0',
         }
     }
+    if share.comment is not None:
+        cfg['options']['comment'] = share.comment
+
+    if share.max_connections is not None:
+        cfg['options']['max_connections'] = share.max_connections
+
     if proxy_val:
         cfg['options'][f'{ceph_vfs}:proxy'] = proxy_val
     # extend share with user+group login access lists
