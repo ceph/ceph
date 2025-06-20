@@ -95,12 +95,19 @@ class DistroKind(StrEnum):
     CENTOS8 = "centos8"
     CENTOS9 = "centos9"
     FEDORA41 = "fedora41"
+    ROCKY10 = "rocky10"
     UBUNTU2204 = "ubuntu22.04"
     UBUNTU2404 = "ubuntu24.04"
 
     @classmethod
     def uses_dnf(cls):
-        return {cls.CENTOS8, cls.CENTOS9, cls.CENTOS10, cls.FEDORA41}
+        return {
+            cls.CENTOS10,
+            cls.CENTOS8,
+            cls.CENTOS9,
+            cls.FEDORA41,
+            cls.ROCKY10,
+        }
 
     @classmethod
     def uses_rpmbuild(cls):
@@ -118,6 +125,8 @@ class DistroKind(StrEnum):
             "centos9stream": cls.CENTOS9,
             str(cls.FEDORA41): cls.FEDORA41,
             "fc41": cls.FEDORA41,
+            str(cls.ROCKY10): cls.ROCKY10,
+            'rockylinux10': cls.ROCKY10,
             str(cls.UBUNTU2204): cls.UBUNTU2204,
             "ubuntu-jammy": cls.UBUNTU2204,
             "jammy": cls.UBUNTU2204,
@@ -136,6 +145,7 @@ class DefaultImage(StrEnum):
     CENTOS8 = "quay.io/centos/centos:stream8"
     CENTOS9 = "quay.io/centos/centos:stream9"
     FEDORA41 = "registry.fedoraproject.org/fedora:41"
+    ROCKY10 = "docker.io/rockylinux/rockylinux:10"
     UBUNTU2204 = "docker.io/ubuntu:22.04"
     UBUNTU2404 = "docker.io/ubuntu:24.04"
 
