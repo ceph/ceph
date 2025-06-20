@@ -190,7 +190,9 @@ private:
   bool prune_all_image_snapshots(
       cls::rbd::GroupSnapshot *local_snap,
       std::unique_lock<ceph::mutex>* locker);
-  void unlink_group_snapshots(std::unique_lock<ceph::mutex>* locker);
+  void prune_user_group_snapshots(std::unique_lock<ceph::mutex>* locker);
+  void prune_mirror_group_snapshots(std::unique_lock<ceph::mutex>* locker);
+  void prune_group_snapshots(std::unique_lock<ceph::mutex>* locker);
 
   void set_image_replayer_limits(const std::string &image_id,
                                  cls::rbd::GroupSnapshot *remote_snap,
