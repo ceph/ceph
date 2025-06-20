@@ -39,6 +39,10 @@ class Elector : public ElectionOwner, RankProvider {
    * @defgroup Elector_h_class Elector
    * @{
    */
+
+  private:
+    std::set<int> pending_pings;  // Monitors waiting for quorum features to be established
+
   ElectionLogic logic;
   // connectivity validation and scoring
   ConnectionTracker peer_tracker;
@@ -406,6 +410,11 @@ class Elector : public ElectionOwner, RankProvider {
     disallowed_leaders = dl;
     return true;
   }
+  /**
+   * process all pending pings when quorum is established
+   *
+   */
+  void process_pending_pings();
   void dump_connection_scores(Formatter *f) {
     f->open_object_section("connection scores");
     peer_tracker.dump(f);
