@@ -553,6 +553,8 @@ def build_container(ctx):
             f"--volume={ctx.dnf_cache_dir}:/var/cache/dnf:Z",
             "--build-arg=CLEAN_DNF=no",
         ]
+    if ctx.cli.build_args:
+        cmd.extend([f"--build-arg={v}" for v in ctx.cli.build_args])
     cmd += ["-f", ctx.cli.containerfile, ctx.cli.containerdir]
     with ctx.user_command():
         _run(cmd, check=True, ctx=ctx)
@@ -933,6 +935,15 @@ def parse_cli(build_step_names):
         help=(
             "Specify a build directory relative to the home dir"
             " (the ceph source root)"
+        ),
+    )
+    parser.add_argument(
+        "--build-arg",
+        dest="build_args",
+        action="append",
+        help=(
+            "Extra argument to pass to container image build."
+            " Can be used to override default build image behavior."
         ),
     )
     parser.add_argument(
