@@ -333,7 +333,15 @@ ceph::io_sequence::tester::lrc::SelectMappingAndLayers::SelectMappingAndLayers(
       sma{mapping_rng, vm, "mapping", first_use},
       sly{layers_rng, vm, "layers", first_use} {
   if (sma.isForced() != sly.isForced()) {
-    ceph_abort_msg("Mapping and layers must be used together when one is used");
+    std::string forced_parameter = "mapping";
+    std::string unforced_parameter = "layers";
+    if (sly.isForced()) {
+      std::swap(forced_parameter, unforced_parameter);
+    }
+
+    throw std::invalid_argument(fmt::format("The parameter --{} can only be used"
+                                " when a --{} parameter is also supplied.",
+                                forced_parameter, unforced_parameter));
   }
 }
 
@@ -570,10 +578,9 @@ ceph::io_sequence::tester::SelectErasureProfile::SelectErasureProfile(
 
     for (std::string& option : disallowed_options) {
       if (vm.count(option) > 0) {
-        ceph_abort_msg(
-            fmt::format("{} option not allowed "
-                        "if profile is specified",
-                        option));
+        throw std::invalid_argument(fmt::format("{} option not allowed "
+                                                "if profile is specified",
+                                                option));
       }
     }
   }
@@ -653,7 +660,9 @@ ceph::io_sequence::tester::SelectErasureProfile::select() {
     instance.factory(std::string(profile.plugin),
                      cct->_conf.get_val<std::string>("erasure_code_dir"),
                      erasure_code_profile, &ec_impl, &ss);
-    ceph_assert(ec_impl);
+    if (!ec_impl) {
+      throw std::runtime_error(ss.str());
+    }
 
     SelectErasureChunkSize scs{rng, vm, ec_impl, first_use};
     profile.chunk_size = scs.select();
@@ -799,10 +808,9 @@ ceph::io_sequence::tester::SelectErasurePool::SelectErasurePool(
 
     for (std::string& option : disallowed_options) {
       if (vm.count(option) > 0) {
-        ceph_abort_msg(
-            fmt::format("{} option not allowed "
-                        "if pool is specified",
-                        option));
+        throw std::invalid_argument(fmt::format("{} option not allowed "
+                                    "if pool is specified",
+                                    option));
       }
     }
   }
@@ -1401,10 +1409,16 @@ bool ceph::io_sequence::tester::TestRunner::run_automated_test() {
     } else {
       name = object_name + std::to_string(obj);
     }
-    test_objects.push_back(
-        std::make_shared<ceph::io_sequence::tester::TestObject>(
-            name, rados, asio, sbs, spo, sos, snt, ssr, rng, lock, cond, dryrun,
-            verbose, seqseed, testrecovery));
+    try {
+      test_objects.push_back(
+          std::make_shared<ceph::io_sequence::tester::TestObject>(
+              name, rados, asio, sbs, spo, sos, snt, ssr, rng, lock, cond,
+              dryrun, verbose, seqseed, testrecovery));
+    }
+    catch (const std::runtime_error &e) {
+      std::cerr << "Error: " << e.what() << std::endl;
+      return false;
+    }
   }
   if (!dryrun) {
     rados.wait_for_latest_osdmap();
@@ -1488,8 +1502,14 @@ int main(int argc, char** argv) {
         std::make_unique<ceph::io_sequence::tester::TestRunner>(cct, vm, rados);
   } catch (const po::error& e) {
     return 1;
+  } catch (const std::invalid_argument& e) {
+    std::cerr << "Error: " << e.what() << std::endl;
+    return 1;
   }
-  runner->run_test();
+
+  if (!runner->run_test()) {
+    return 1;
+  }
 
   return 0;
 }
