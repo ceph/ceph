@@ -30,12 +30,6 @@
 
 namespace rgw::dedup {
   struct key_t;
-#define CEPHTOH_16 le16toh
-#define CEPHTOH_32 le32toh
-#define CEPHTOH_64 le64toh
-#define HTOCEPH_16 htole16
-#define HTOCEPH_32 htole32
-#define HTOCEPH_64 htole64
 
   static inline constexpr unsigned DISK_BLOCK_SIZE  = 8*1024;
   // we use 16 bit offset
