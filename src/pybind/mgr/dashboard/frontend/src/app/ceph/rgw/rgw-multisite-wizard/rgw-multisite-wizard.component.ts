@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, NgZone, OnInit } from '@angular/core';
 import { Location } from '@angular/common';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
@@ -29,6 +29,7 @@ import {
 } from './multisite-wizard-steps.enum';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { MultiCluster, MultiClusterConfig } from '~/app/shared/models/multi-cluster';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 
 interface DaemonStats {
   rgw_metadata?: {
@@ -80,7 +81,7 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
   setupCompleted = false;
   showConfigType = false;
   realmList: string[] = [];
-  realmsInfo: { realm: string; token: string }[];
+  rgwModuleStatus: boolean;
 
   constructor(
     private wizardStepsService: WizardStepsService,
@@ -94,7 +95,9 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
     private route: ActivatedRoute,
     private summaryService: SummaryService,
     private location: Location,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private mgrModuleService: MgrModuleService,
+    private zone: NgZone
   ) {
     super();
     this.pageURL = 'rgw/multisite/configuration';
@@ -138,23 +141,29 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
     });
 
     this.summaryService.subscribe((summary) => {
-      this.executingTask = summary.executing_tasks.find((task) =>
-        task.name.includes('progress/Multisite-Setup')
-      );
+      this.zone.run(() => {
+        this.executingTask = summary.executing_tasks.find((task) =>
+          task.name.includes('progress/Multisite-Setup')
+        );
+        this.cdr.detectChanges();
+      });
     });
 
     this.stepTitles.forEach((step) => {
       this.stepsToSkip[step.label] = false;
     });
 
-    this.rgwRealmService.getRealmTokens().subscribe((data: { realm: string; token: string }[]) => {
-      const base64Matcher = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})$/;
-      this.realmsInfo = data.filter((realmInfo) => base64Matcher.test(realmInfo.token));
-      this.showConfigType = this.realmsInfo.length > 0;
+    this.rgwRealmService.list().subscribe((realms: string[]) => {
+      this.realmList = realms;
+      this.showConfigType = this.realmList.length > 0;
       if (this.showConfigType) {
-        this.multisiteSetupForm.get('selectedRealm')?.setValue(this.realmsInfo[0].realm);
+        this.multisiteSetupForm.get('selectedRealm')?.setValue(this.realmList[0]);
         this.cdr.detectChanges();
       }
+    });
+
+    this.rgwMultisiteService.getRgwModuleStatus().subscribe((status: boolean) => {
+      this.rgwModuleStatus = status;
     });
   }
 
@@ -271,61 +280,86 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
 
   onSubmit() {
     this.loading = true;
-    const values = this.multisiteSetupForm.getRawValue();
-    const realmName = values['realmName'];
-    const zonegroupName = values['zonegroupName'];
-    const zonegroupEndpoints = this.rgwEndpoints.value.join(',');
-    const zoneName = values['zoneName'];
-    const zoneEndpoints = this.rgwEndpoints.value.join(',');
-    const username = values['username'];
-    if (!this.isMultiClusterConfigured || this.stepsToSkip['Select Cluster']) {
-      this.rgwMultisiteService
-        .setUpMultisiteReplication(
-          realmName,
-          zonegroupName,
-          zonegroupEndpoints,
-          zoneName,
-          zoneEndpoints,
-          username
-        )
-        .subscribe((data: object[]) => {
-          this.setupCompleted = true;
-          this.rgwMultisiteService.setRestartGatewayMessage(false);
-          this.loading = false;
-          this.realms = data;
-          this.showSuccessNotification();
-        });
-    } else {
-      const cluster = values['cluster'];
-      const replicationZoneName = values['replicationZoneName'];
-      let selectedRealmName = '';
-      if (this.multisiteSetupForm.get('configType').value === ConfigType.ExistingRealm) {
-        selectedRealmName = this.multisiteSetupForm.get('selectedRealm').value;
-      }
-      this.rgwMultisiteService
-        .setUpMultisiteReplication(
-          realmName,
-          zonegroupName,
-          zonegroupEndpoints,
-          zoneName,
-          zoneEndpoints,
-          username,
-          cluster,
-          replicationZoneName,
-          this.clusterDetailsArray,
-          selectedRealmName
-        )
-        .subscribe(
-          () => {
+
+    const proceedWithSetup = () => {
+      this.cdr.detectChanges();
+      const values = this.multisiteSetupForm.getRawValue();
+      const realmName = values['realmName'];
+      const zonegroupName = values['zonegroupName'];
+      const zonegroupEndpoints = this.rgwEndpoints.value.join(',');
+      const zoneName = values['zoneName'];
+      const zoneEndpoints = this.rgwEndpoints.value.join(',');
+      const username = values['username'];
+
+      if (!this.isMultiClusterConfigured || this.stepsToSkip['Select Cluster']) {
+        this.rgwMultisiteService
+          .setUpMultisiteReplication(
+            realmName,
+            zonegroupName,
+            zonegroupEndpoints,
+            zoneName,
+            zoneEndpoints,
+            username
+          )
+          .subscribe((data: object[]) => {
             this.setupCompleted = true;
             this.rgwMultisiteService.setRestartGatewayMessage(false);
             this.loading = false;
+            this.realms = data;
             this.showSuccessNotification();
-          },
-          () => {
-            this.multisiteSetupForm.setErrors({ cdSubmitButton: true });
-          }
-        );
+          });
+      } else {
+        const cluster = values['cluster'];
+        const replicationZoneName = values['replicationZoneName'];
+        let selectedRealmName = '';
+
+        if (this.multisiteSetupForm.get('configType').value === ConfigType.ExistingRealm) {
+          selectedRealmName = this.multisiteSetupForm.get('selectedRealm').value;
+        }
+
+        this.rgwMultisiteService
+          .setUpMultisiteReplication(
+            realmName,
+            zonegroupName,
+            zonegroupEndpoints,
+            zoneName,
+            zoneEndpoints,
+            username,
+            cluster,
+            replicationZoneName,
+            this.clusterDetailsArray,
+            selectedRealmName
+          )
+          .subscribe(
+            () => {
+              this.setupCompleted = true;
+              this.rgwMultisiteService.setRestartGatewayMessage(false);
+              this.loading = false;
+              this.showSuccessNotification();
+            },
+            () => {
+              this.multisiteSetupForm.setErrors({ cdSubmitButton: true });
+            }
+          );
+      }
+    };
+
+    if (!this.rgwModuleStatus) {
+      this.mgrModuleService.updateModuleState(
+        'rgw',
+        false,
+        null,
+        '',
+        '',
+        false,
+        $localize`RGW module is being enabled. Waiting for the system to reconnect...`
+      );
+      const subscription = this.mgrModuleService.updateCompleted$.subscribe(() => {
+        subscription.unsubscribe();
+        proceedWithSetup();
+      });
+    } else {
+      proceedWithSetup();
     }
   }
 

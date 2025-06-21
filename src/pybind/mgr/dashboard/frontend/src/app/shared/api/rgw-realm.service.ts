@@ -30,8 +30,14 @@ export class RgwRealmService {
     return this.http.put(`${this.url}/${realm.name}`, requestBody);
   }
 
-  list(): Observable<object> {
-    return this.http.get<object>(`${this.url}`);
+  list(replicable?: boolean): Observable<object> {
+    let params = new HttpParams();
+    if (replicable) {
+      params = params.appendAll({
+        replicable: replicable.toString()
+      });
+    }
+    return this.http.get<object>(`${this.url}`, { params });
   }
 
   get(realm: RgwRealm): Observable<object> {
