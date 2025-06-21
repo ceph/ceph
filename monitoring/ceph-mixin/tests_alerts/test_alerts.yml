@@ -3152,3 +3152,55 @@ tests:
         exp_annotations:
           summary: "The average write latency over the last 5 mins has reached 20 ms or more on node-1"
           description: "High latencies may indicate a constraint within the cluster e.g. CPU, network. Please investigate"
+
+ # NVMeoFHostKeepAliveTimeout
+ - interval: 1h
+   input_series:
+    - series: 'ceph_nvmeof_host_keepalive_timeout{gw_name="client.nvmeof.a", host_nqn="nqn.1", instance="node-1:10008", nqn="nqn.2016-06.io.spdk:cnode1.mygroup"}'
+      values: '0 0 0 0 1 0 1 0 1 1 0x14 1 1 0x3'
+    - series: 'ceph_nvmeof_host_keepalive_timeout{gw_name="client.nvmeof.a", host_nqn="nqn.2", instance="node-1:10008", nqn="nqn.2016-06.io.spdk:cnode1.mygroup"}'
+      values: '0 1 1 0 0 0 0 0 0 0 0x19'
+   promql_expr_test:
+     - expr: ceil(changes(ceph_nvmeof_host_keepalive_timeout[24h:]) / 2) > 0
+       eval_time: 2h
+       exp_samples:
+         - labels: '{gw_name="client.nvmeof.a", host_nqn="nqn.2", instance="node-1:10008", nqn="nqn.2016-06.io.spdk:cnode1.mygroup"}'
+           value: 1
+     - expr: ceil(changes(ceph_nvmeof_host_keepalive_timeout[24h:]) / 2) > 0
+       eval_time: 8h
+       exp_samples:
+         - labels: '{gw_name="client.nvmeof.a", host_nqn="nqn.1", instance="node-1:10008", nqn="nqn.2016-06.io.spdk:cnode1.mygroup"}'
+           value: 3
+         - labels: '{gw_name="client.nvmeof.a", host_nqn="nqn.2", instance="node-1:10008", nqn="nqn.2016-06.io.spdk:cnode1.mygroup"}'
+           value: 1
+     - expr: ceil(changes(ceph_nvmeof_host_keepalive_timeout[24h:]) / 2) > 0
+       eval_time: 29h
+       exp_samples:
+         - labels: '{gw_name="client.nvmeof.a", host_nqn="nqn.1", instance="node-1:10008", nqn="nqn.2016-06.io.spdk:cnode1.mygroup"}'
+           value: 3
+   alert_rule_test:
+    - eval_time: 1h
+      alertname: NVMeoFHostKeepAliveTimeout
+    - eval_time: 12h
+      alertname: NVMeoFHostKeepAliveTimeout
+      exp_alerts:
+      - exp_labels:
+          gw_name: client.nvmeof.a
+          host_nqn: nqn.1
+          instance: node-1:10008
+          nqn: nqn.2016-06.io.spdk:cnode1.mygroup
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "Host (nqn.1) was disconnected 3 times from subsystem (nqn.2016-06.io.spdk:cnode1.mygroup) in last 24 hours"
+          description: "Host was disconnected due to host keep alive timeout"
+      - exp_labels:
+          gw_name: client.nvmeof.a
+          host_nqn: nqn.2
+          instance: node-1:10008
+          nqn: nqn.2016-06.io.spdk:cnode1.mygroup
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "Host (nqn.2) was disconnected 1 times from subsystem (nqn.2016-06.io.spdk:cnode1.mygroup) in last 24 hours"
+          description: "Host was disconnected due to host keep alive timeout"
