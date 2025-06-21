@@ -104,6 +104,7 @@ void CachedExtent::set_invalid(Transaction &t) {
 
 std::pair<bool, CachedExtent::viewable_state_t>
 CachedExtent::is_viewable_by_trans(Transaction &t) {
+  ceph_assert(is_valid());
   if (!is_valid()) {
     return std::make_pair(false, viewable_state_t::invalid);
   }
