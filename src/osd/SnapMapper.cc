@@ -90,7 +90,7 @@ int OSDriver::get_keys(
 {
   CRIMSON_DEBUG("OSDriver::{}", __func__);
   using crimson::os::FuturizedStore;
-  return interruptor::green_get(os->omap_get_values(
+  return os->omap_get_values(
     ch, hoid, keys
   ).safe_then([out] (FuturizedStore::Shard::omap_values_t&& vals) {
     // just the difference in comparator (`std::less<>` in omap_values_t`)
@@ -99,7 +99,7 @@ int OSDriver::get_keys(
   }, FuturizedStore::Shard::read_errorator::all_same_way([] (auto& e) {
     assert(e.value() > 0);
     return -e.value();
-  }))); // this requires seastar::thread
+  })).get(); // this requires seastar::thread
 }
 
 int OSDriver::get_next(
@@ -108,7 +108,7 @@ int OSDriver::get_next(
 {
   CRIMSON_DEBUG("OSDriver::{} key {}", __func__, key);
   using crimson::os::FuturizedStore;
-  return interruptor::green_get(os->omap_get_values(
+  return os->omap_get_values(
     ch, hoid, key
   ).safe_then_unpack([&key, next] (bool, FuturizedStore::Shard::omap_values_t&& vals) {
     CRIMSON_DEBUG("OSDriver::get_next key {} got omap values", key);
@@ -125,7 +125,7 @@ int OSDriver::get_next(
   }, FuturizedStore::Shard::read_errorator::all_same_way([] {
     CRIMSON_DEBUG("OSDriver::get_next saw error returning EINVAL");
     return -EINVAL;
-  }))); // this requires seastar::thread
+  })).get(); // this requires seastar::thread
 }
 
 int OSDriver::get_next_or_current(
@@ -135,19 +135,25 @@ int OSDriver::get_next_or_current(
   CRIMSON_DEBUG("OSDriver::{} key {}", __func__, key);
   using crimson::os::FuturizedStore;
   // let's try to get current first
-  return interruptor::green_get(os->omap_get_values(
+  int r = os->omap_get_values(
     ch, hoid, FuturizedStore::Shard::omap_keys_t{key}
   ).safe_then([&key, next_or_current] (FuturizedStore::Shard::omap_values_t&& vals) {
+    if (vals.size() != 1) {
+      return -ENOENT;
+    }
     CRIMSON_DEBUG("OSDriver::get_next_or_current returning {}", key);
-    assert(vals.size() == 1);
     *next_or_current = std::make_pair(key, std::move(vals.begin()->second));
     return 0;
   }, FuturizedStore::Shard::read_errorator::all_same_way(
-    [next_or_current, &key, this] {
-    CRIMSON_DEBUG("OSDriver::get_next_or_current no current, try next {}", key);
+    [] {
+    return -ENOENT;
+  })).get(); // this requires seastar::thread
+  if (r == -ENOENT) {
     // no current, try next
+    CRIMSON_DEBUG("OSDriver::get_next_or_current no current, try next {}", key);
     return get_next(key, next_or_current);
-  }))); // this requires seastar::thread
+  }
+  return r;
 }
 #else
 int OSDriver::get_keys(
@@ -923,8 +929,6 @@ void SnapMapper::record_purged_snaps(
 	   << " keys" << dendl;
 }
 
-
-#ifndef WITH_CRIMSON
 bool SnapMapper::Scrubber::_parse_p(std::string_view key, std::string_view value)
 {
   if (key.find(PURGED_SNAP_PREFIX) != 0) {
@@ -971,12 +975,126 @@ bool SnapMapper::Scrubber::_parse_m(
   return true;
 }
 
+#ifdef WITH_CRIMSON
+seastar::future<> SnapMapper::Scrubber::OmapIterator::load(
+  CrimsonStoreT store, 
+  CollectionHandleT ch,
+  const ghobject_t& hoid, 
+  const std::string& start_key)
+{
+  using crimson::os::FuturizedStore;
+  return store.omap_get_values(ch, hoid, start_key).safe_then_unpack(
+    [this](bool found, FuturizedStore::Shard::omap_values_t&& vals) {
+      if (found) {
+        values = std::move(vals);
+        current = values.begin();
+      } else {
+        values.clear();
+        current = values.end();
+      }
+      loaded = true;
+      return seastar::now();
+    }, FuturizedStore::Shard::read_errorator::all_same_way([this] {
+      values.clear();
+      current = values.end();
+      loaded = true;
+      return seastar::now();
+    }));
+}
+
+bool SnapMapper::Scrubber::OmapIterator::valid() const
+{
+  return loaded && current != values.end();
+}
+
+const std::string& SnapMapper::Scrubber::OmapIterator::key() const
+{
+  ceph_assert(valid());
+  return current->first;
+}
+
+const ceph::buffer::list& SnapMapper::Scrubber::OmapIterator::value() const
+{
+  ceph_assert(valid());
+  return current->second;
+}
+
+void SnapMapper::Scrubber::OmapIterator::next()
+{
+  if (valid()) {
+    ++current;
+  }
+}
+
+void SnapMapper::Scrubber::OmapIterator::seek(const std::string& seek_key, int seek_type)
+{
+  if (!loaded) {
+    return;
+  }
+
+  if (seek_key.empty()) {
+    current = values.begin();
+  } else if (seek_type == ObjectStore::omap_iter_seek_t::LOWER_BOUND) {
+    current = values.lower_bound(seek_key);
+  } else { // UPPER_BOUND
+    current = values.upper_bound(seek_key);
+  }
+}
+
+int SnapMapper::Scrubber::OmapStore::omap_iterate(
+  CollectionHandleT ch,
+  const ghobject_t& hoid,
+  ObjectStore::omap_iter_seek_t start_from,
+  std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> visitor)
+{
+  auto it = cache.find(ch->get_cid());
+  if (it == cache.end()) {
+    ceph_abort_msg("invalid collection handle in omap_iterate");
+  }
+  auto& iterator = it->second;
+
+  iterator->seek(start_from.seek_position, start_from.seek_type);
+  while (iterator->valid()) {
+    std::string value_str = iterator->value().to_str();
+    auto ret = visitor(iterator->key(), std::string_view(value_str));
+    if (ret == ObjectStore::omap_iter_ret_t::STOP) {
+      return 1;
+    }
+    iterator->next();
+  }
+  return 0;
+}
+
+// Avoid nested async calls by preloading cache data
+seastar::future<> SnapMapper::Scrubber::load_data_async() {
+  dout(10) << __func__ << dendl;
+
+  auto mapping_cache = std::make_unique<OmapIterator>();
+  auto purged_snaps_cache = std::make_unique<OmapIterator>();
+
+  auto fut1 = mapping_cache->load(store->crimson_store, ch_m, mapping_hoid, MAPPING_PREFIX);
+  auto fut2 = purged_snaps_cache->load(store->crimson_store, ch_p, purged_snaps_hoid, PURGED_SNAP_PREFIX);
+  
+  co_await seastar::when_all_succeed(std::move(fut1), std::move(fut2));
+  
+  store->cache.emplace(ch_m->get_cid(), std::move(mapping_cache));
+  store->cache.emplace(ch_p->get_cid(), std::move(purged_snaps_cache));
+  
+  dout(10) << __func__ << " cache loaded" << dendl;
+  co_return;
+}
+#endif
+
 void SnapMapper::Scrubber::run()
 {
   dout(10) << __func__ << dendl;
 
+#ifdef WITH_CRIMSON
+  load_data_async().get();
+#endif
+
   store->omap_iterate(
-    ch, mapping_hoid,
+    ch_m, mapping_hoid,
     ObjectStore::omap_iter_seek_t{
       .seek_position = MAPPING_PREFIX,
       .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
@@ -987,7 +1105,7 @@ void SnapMapper::Scrubber::run()
       }
       // advance to next purged_snaps range?
       const auto ret = store->omap_iterate(
-        ch, purged_snaps_hoid,
+        ch_p, purged_snaps_hoid,
         ObjectStore::omap_iter_seek_t{
           .seek_position = PURGED_SNAP_PREFIX,
           .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
@@ -1039,4 +1157,3 @@ void SnapMapper::Scrubber::run()
     });
   dout(10) << __func__ << " end, found " << stray.size() << " stray" << dendl;
 }
-#endif // !WITH_CRIMSON

@@ -33,6 +33,7 @@
 #include "osd/PGPeeringEvent.h"
 
 class MCommand;
+class MMonGetPurgedSnapsReply;
 class MOSDMap;
 class MOSDPGPCT;
 class MOSDRepOpReply;
@@ -111,6 +112,7 @@ class OSD final : public crimson::net::Dispatcher,
   // which pgs were scanned for min_lec
   std::vector<pg_t> min_last_epoch_clean_pgs;
   void update_stats();
+  seastar::future<> deep_scrub_purged_snaps();
   seastar::future<MessageURef> get_stats() final;
 
   // AuthHandler methods
@@ -176,6 +178,14 @@ public:
   auto &get_shard_services() {
     return shard_services.local();
   }
+  seastar::future<> scrub_purged_snaps();
+  seastar::future<> reset_purged_snaps_last();
+  static ghobject_t make_purged_snaps_oid() {
+    return ghobject_t(hobject_t(
+      sobject_t(
+	object_t("purged_snaps"),
+	0)));
+  }
 
 private:
   static seastar::future<> _write_superblock(
@@ -187,6 +197,8 @@ private:
   );
   seastar::future<> start_boot();
   seastar::future<> _preboot(version_t oldest_osdmap, version_t newest_osdmap);
+  seastar::future<> _get_purged_snaps();
+  seastar::future<> handle_get_purged_snaps_reply(Ref<MMonGetPurgedSnapsReply> m);
   seastar::future<> _send_boot();
   seastar::future<> _add_me_to_crush();
   seastar::future<> _add_device_class();
