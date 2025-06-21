@@ -21,6 +21,8 @@
 #include "../CDir.h"
 #include "../CDentry.h"
 #include "../LogSegment.h"
+#include "../LogSegmentRef.h"
+
 
 #include "include/interval_set.h"
 #include "common/strescape.h"
@@ -43,7 +45,6 @@ struct MDPeerUpdate;
  *   it is journaled).
  *
  */
-
 
 class EMetaBlob {
 
@@ -626,8 +627,8 @@ private:
     out << "]";
   }
 
-  void update_segment(LogSegment *ls);
-  void replay(MDSRank *mds, LogSegment *ls, int type, MDPeerUpdate *su=NULL);
+  void update_segment(LogSegmentRef const& ls);
+  void replay(MDSRank *mds, LogSegmentRef const& ls, int type, MDPeerUpdate *su=NULL);
 };
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob)
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::fullbit)
