@@ -27,6 +27,8 @@
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/core/with_timeout.hh>
+#include <seastar/util/closeable.hh>
+#include "../apps/lib/stop_signal.hh"
 
 #include "test_messenger.h"
 #include "test/crimson/ctest_utils.h"
@@ -57,17 +59,14 @@ static entity_addr_t get_server_addr() {
 template <typename T, typename... Args>
 seastar::future<T*> create_sharded(Args... args) {
   // we should only construct/stop shards on #0
-  return seastar::smp::submit_to(0, [=] {
+  seastar_apps_lib::stop_signal stop_signal;
+  return seastar::smp::submit_to(0, [=, &stop_signal] {
     auto sharded_obj = seastar::make_lw_shared<seastar::sharded<T>>();
-    return sharded_obj->start(args...
-    ).then([sharded_obj] {
-      seastar::engine().at_exit([sharded_obj] {
-        return sharded_obj->stop().then([sharded_obj] {});
-      });
-      return sharded_obj.get();
-    });
-  }).then([](seastar::sharded<T> *ptr_shard) {
-    return &ptr_shard->local();
+    sharded_obj->start(args...).get();
+    auto *local_ptr = &sharded_obj->local();
+    auto stop_shared_obj = seastar::deferred_stop(*sharded_obj);
+    stop_signal.wait().get();
+    return local_ptr;
   });
 }
 
