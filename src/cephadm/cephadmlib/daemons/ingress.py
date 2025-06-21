@@ -106,7 +106,6 @@ class HAproxy(ContainerDaemonForm):
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
         # better directory for this?
-        print('UUUUU', extract_uid_gid)
         return extract_uid_gid(self.ctx, file_path='/var/lib')
 
     @staticmethod

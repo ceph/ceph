@@ -153,7 +153,7 @@ class OSDService(CephService):
                 )
                 daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
                 await CephadmServe(self.mgr)._create_daemon(
-                    daemon_spec,
+                    [daemon_spec],
                     osd_uuid_map=osd_uuid_map)
 
         # check result: raw
@@ -195,7 +195,7 @@ class OSDService(CephService):
             )
             daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
             await CephadmServe(self.mgr)._create_daemon(
-                daemon_spec,
+                [daemon_spec],
                 osd_uuid_map=osd_uuid_map)
 
         if created:
@@ -892,7 +892,7 @@ class OSDRemovalQueue(object):
             assert osd.hostname is not None
 
             if self.mgr.cache.has_daemon(f'osd.{osd.osd_id}'):
-                CephadmServe(self.mgr)._remove_daemon(f'osd.{osd.osd_id}', osd.hostname)
+                self.mgr.wait_async(CephadmServe(self.mgr)._remove_daemon([f'osd.{osd.osd_id}'], osd.hostname))
                 logger.info(f"Successfully removed {osd} on {osd.hostname}")
                 result = True
             else:

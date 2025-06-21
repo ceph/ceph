@@ -12,6 +12,7 @@ from .container_engines import Docker, Podman
 from .context import CephadmContext
 from .daemon_identity import DaemonIdentity, DaemonSubIdentity
 from .file_utils import write_new
+from .locking import FileLock
 from .logging import write_cluster_logrotate_config
 
 
@@ -204,6 +205,8 @@ def update_files(
     init_container_ids: Optional[List[DaemonSubIdentity]] = None,
     sidecar_ids: Optional[List[DaemonSubIdentity]] = None,
 ) -> None:
+    systemd_files_lock = FileLock(ctx, f'{ident.fsid}-systemd-unit')
+    systemd_files_lock.acquire()
     _install_base_units(ctx, ident.fsid)
     unit = _get_unit_file(ctx, ident.fsid)
     pathinfo = PathInfo(ctx.unit_dir, ident, sidecar_ids=sidecar_ids)
@@ -212,6 +215,7 @@ def update_files(
     _install_extended_systemd_services(
         ctx, pathinfo, ident, bool(init_container_ids)
     )
+    systemd_files_lock.release()
 
 
 def sidecars_from_dropin(

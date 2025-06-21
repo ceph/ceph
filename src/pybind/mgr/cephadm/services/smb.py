@@ -117,6 +117,14 @@ class SMBService(CephService):
         self._configure_cluster_meta(smb_spec, daemon_spec)
         return config_blobs, []
 
+    def get_daemon_deployment_ordering(self, daemons: List[CephadmDaemonDeploySpec]) -> Dict[int, List[CephadmDaemonDeploySpec]]:
+        if not daemons:
+            return {}
+        # order SMB deployment by the rank of the daemon
+        # This is necessary in order for CTDB to work
+        sorted_by_rank = sorted(daemons, key=lambda dd: dd.rank or -1)
+        return {i: [sorted_by_rank[i]] for i in range(len(sorted_by_rank))}
+
     def config_dashboard(
         self, daemon_descrs: List[DaemonDescription]
     ) -> None:
