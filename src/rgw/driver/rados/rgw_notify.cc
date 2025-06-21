@@ -23,6 +23,8 @@
 #include <chrono>
 #include <fmt/format.h>
 #include "librados/AioCompletionImpl.h"
+#include "common/async/yield_waiter.h"
+#include "common/async/waiter.h"
 
 #include <unordered_map>
 
@@ -143,53 +145,44 @@ private:
     return 0;
   }
 
-  using Clock = ceph::coarse_mono_clock;
-  using Executor = boost::asio::io_context::executor_type;
-  using Timer = boost::asio::basic_waitable_timer<Clock,
-        boost::asio::wait_traits<Clock>, Executor>;
-
   class tokens_waiter {
-    const std::chrono::hours infinite_duration;
-    size_t pending_tokens;
-    Timer timer;
- 
-    struct token {
-      tokens_waiter& waiter;
-      token(const token& other) : waiter(other.waiter) {
-        ++waiter.pending_tokens;
-      }
-      token(tokens_waiter& _waiter) : waiter(_waiter) {
-        ++waiter.pending_tokens;
-      }
-      
-      ~token() {
-        --waiter.pending_tokens;
-        if (waiter.pending_tokens == 0) {
-          waiter.timer.cancel();
-        }   
-      }   
-    };
-  
-  public:
+    size_t pending_tokens = 0;
+    DoutPrefixProvider* const dpp;
+    ceph::async::yield_waiter<void> waiter;
 
-    tokens_waiter(boost::asio::io_context& io_context) :
-      infinite_duration(1000),
-      pending_tokens(0),
-      timer(io_context) {}  
- 
+  public:
+    class token{
+      tokens_waiter& tw;
+    public:
+      token(const token& other) = delete;
+      token& operator=(const token& other) = delete;
+      token(tokens_waiter& _tw) : tw(_tw) {
+        ++tw.pending_tokens;
+      }
+
+      ~token() {
+        --tw.pending_tokens;
+        if (tw.pending_tokens == 0 && tw.waiter) {
+          tw.waiter.complete(boost::system::error_code{});
+        }
+      }
+    };
+
+    tokens_waiter(DoutPrefixProvider* _dpp) : dpp(_dpp) {}
+    tokens_waiter(const tokens_waiter& other) = delete;
+    tokens_waiter& operator=(const tokens_waiter& other) = delete;
+
     void async_wait(boost::asio::yield_context yield) {
       if (pending_tokens == 0) {
+        ldpp_dout(dpp, 20) << "INFO: tokens waiter has no tokens. nothing to wait for" << dendl;
         return;
       }
-      timer.expires_after(infinite_duration);
-      boost::system::error_code ec; 
-      timer.async_wait(yield[ec]);
-      ceph_assert(ec == boost::system::errc::operation_canceled);
-    }   
- 
-    token make_token() {    
-      return token(*this);
-    }   
+      ldpp_dout(dpp, 20) << "INFO: tokens waiter is waiting on " <<
+        pending_tokens << " tokens" << dendl;
+      boost::system::error_code ec;
+      waiter.async_wait(yield[ec]);
+      ldpp_dout(dpp, 20) << "INFO: tokens waiter finished waiting for all tokens" << dendl;
+    }
   };
 
   enum class EntryProcessingResult {
@@ -266,6 +259,11 @@ private:
       perfcounter->inc(l_rgw_pubsub_push_ok);
     return EntryProcessingResult::Successful;
   }
+
+  using Clock = ceph::coarse_mono_clock;
+  using Executor = boost::asio::io_context::executor_type;
+  using Timer = boost::asio::basic_waitable_timer<Clock,
+        boost::asio::wait_traits<Clock>, Executor>;
 
   // clean stale reservation from queue
   void cleanup_queue(const std::string& queue_name, boost::asio::yield_context yield) {
@@ -465,7 +463,7 @@ private:
       auto has_error = false;
       auto remove_entries = false;
       auto entry_idx = 1U;
-      tokens_waiter waiter(io_context);
+      tokens_waiter tw(this);
       std::vector<bool> needs_migration_vector(entries.size(), false);
       for (auto& entry : entries) {
         if (has_error) {
@@ -477,9 +475,10 @@ private:
         boost::asio::spawn(yield, std::allocator_arg, make_stack_allocator(),
           [this, &notifs_persistency_tracker, &queue_name, entry_idx,
            total_entries, &end_marker, &remove_entries, &has_error,
-           token = waiter.make_token(), &entry, &needs_migration_vector,
+           &tw, &entry, &needs_migration_vector,
            push_endpoint = push_endpoint.get(),
            &topic_info](boost::asio::yield_context yield) {
+            tokens_waiter::token token(tw);
             auto& persistency_tracker = notifs_persistency_tracker[entry.marker];
             auto result =
                 process_entry(this->get_cct()->_conf, persistency_tracker,
@@ -509,7 +508,7 @@ private:
       }
 
       // wait for all pending work to finish
-      waiter.async_wait(yield);
+      tw.async_wait(yield);
 
       // delete all published entries from queue
       if (remove_entries) {
