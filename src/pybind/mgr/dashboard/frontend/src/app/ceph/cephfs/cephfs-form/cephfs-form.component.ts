@@ -21,6 +21,7 @@ import { Permission } from '~/app/shared/models/permissions';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { Pool } from '../../pool/pool';
+import { Host } from '~/app/shared/models/host.interface';
 
 @Component({
   selector: 'cd-cephfs-form',
@@ -176,7 +177,7 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
         labels: this.hostService.getLabels()
       }).pipe(
         map(({ hosts, labels }) => ({
-          hosts: hosts.map((host: any) => ({ content: host['hostname'] })),
+          hosts: hosts.map((host: Host) => ({ content: host['hostname'] })),
           labels: labels.map((label: string) => ({ content: label }))
         }))
       );
