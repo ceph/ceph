@@ -151,12 +151,17 @@ int DataScan::main(const std::vector<const char*> &args)
 
   // Common RADOS init: open metadata pool
   // =====================================
-  librados::Rados rados;
+  
   int r = rados.init_with_context(g_ceph_context);
   if (r < 0) {
     derr << "RADOS unavailable" << dendl;
     return r;
   }
+
+
+  // Initialize progress tracking
+  processed_objects = 0;
+  start_time = ceph::coarse_mono_clock::now();
 
   std::string const &command = args[0];
   std::string data_pool_name;
@@ -574,6 +579,13 @@ int DataScan::scan_extents()
     data_ios.push_back(&extra_data_io);
   }
 
+  total_objects = get_pool_objects(data_ios);
+
+  if (total_objects == 0) {
+    dout(4) << "No objects found in data pools" << dendl;
+    return 0;
+  }
+
   for (auto ioctx : data_ios) {
     int r = forall_objects(*ioctx, false, [this, ioctx](
         std::string const &oid,
@@ -618,13 +630,18 @@ int DataScan::scan_extents()
 	return r;
       }
 
+      // Update progress
+      processed_objects++;
+      if (processed_objects.load() % 100 == 0) {
+        display_progress();
+      }
+
       return r;
     });
     if (r < 0) {
       return r;
     }
   }
-
   return 0;
 }
 
@@ -736,6 +753,57 @@ int DataScan::forall_objects(
   return r;
 }
 
+uint64_t DataScan::get_pool_objects(const std::vector<librados::IoCtx*>& data_ios)
+{
+  uint64_t total = 0;
+  std::list<std::string> pool_names;
+  
+  for (auto ioctx : data_ios) {
+    if (!ioctx) 
+      continue;
+    pool_names.push_back(ioctx->get_pool_name());
+  }
+
+  librados::stats_map stats;
+  int ret = rados.get_pool_stats(pool_names, stats);
+  if (ret < 0) {
+    dout(1) << "Failed to get pool stats: " << cpp_strerror(ret) << dendl;
+    return 0;
+  }
+
+  for (const auto& stat : stats) {
+    dout(20) << "Pool " << stat.first << " has "
+             << stat.second.num_objects << " objects" << dendl;
+    total += stat.second.num_objects;
+  }
+
+  return total;
+}
+
+void DataScan::display_progress()
+{
+  auto now = ceph::coarse_mono_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - start_time);
+  
+  if (duration.count() == 0) {
+    return;  // Avoid division by zero
+  }
+
+  float objects_per_sec = processed_objects.load() / static_cast<float>(duration.count());
+  float progress = total_objects.load() > 0 ?
+                  (float)processed_objects.load() / total_objects.load() : 0.0;
+  
+  float remaining = total_objects.load() - processed_objects.load();
+  int eta_seconds = objects_per_sec > 0 ? remaining / objects_per_sec : 0;
+
+  std::cout << "\rProcessed " << processed_objects.load() << "/"
+            << total_objects.load() << " objects ("
+            << std::fixed << std::setprecision(2) << (progress * 100.0) << "%), "
+            << "ETA: " << eta_seconds/60 << "m" << eta_seconds%60
+            << "s"
+            << std::flush;
+}
+
 int DataScan::scan_inodes()
 {
   bool roots_present;
@@ -750,6 +818,13 @@ int DataScan::scan_inodes()
     std::cerr << "Some or all system inodes are absent.  Run 'init' from "
       "one node before running 'scan_inodes'" << std::endl;
     return -EIO;
+  }
+
+  total_objects = get_pool_objects({&data_io});
+
+  if (total_objects == 0) {
+    dout(4) << "No objects found in data pool" << dendl;
+    return 0;
   }
 
   return forall_objects(data_io, true, [this](
@@ -1009,27 +1084,44 @@ int DataScan::scan_inodes()
       }
     }
 
+    // Update progress after each object
+    processed_objects++;
+    if (processed_objects.load() % 100 == 0) {
+      display_progress();
+    }
+
     return r;
   });
 }
 
 int DataScan::cleanup()
 {
+  total_objects = get_pool_objects({&data_io});
+
+  if (total_objects == 0) {
+    dout(4) << "No objects found in data pool" << dendl;
+    return 0;
+  }
+
   // We are looking for only zeroth object
-  //
   return forall_objects(data_io, true, [this](
         std::string const &oid,
         uint64_t obj_name_ino,
         uint64_t obj_name_offset) -> int
-      {
-      int r = 0;
-      r = ClsCephFSClient::delete_inode_accumulate_result(data_io, oid);
-      if (r < 0) {
+  {
+  int r = ClsCephFSClient::delete_inode_accumulate_result(data_io, oid);
+  if (r < 0) {
       dout(4) << "Error deleting accumulated metadata from '"
       << oid << "': " << cpp_strerror(r) << dendl;
-      }
-      return r;
-      });
+  }
+
+    processed_objects++;
+    if (processed_objects.load() % 100 == 0) {
+      display_progress();
+    }
+
+  return r;
+  });
 }
 
 bool DataScan::valid_ino(inodeno_t ino) const
@@ -1288,6 +1380,10 @@ int DataScan::scan_links()
 	}
       }
     }
+    processed_objects++;
+    if (processed_objects.load() % 100 == 0) {
+      display_progress();
+    }
   }
 
   map<unsigned, uint64_t> max_ino_map;
@@ -1519,6 +1615,12 @@ int DataScan::scan_links()
 
 int DataScan::scan_frags()
 {
+  total_objects = get_pool_objects({&metadata_io});
+  if (total_objects == 0) {
+    dout(4) << "No objects found in data pool" << dendl;
+    return 0;
+  }
+
   bool roots_present;
   int r = driver->check_roots(&roots_present);
   if (r != 0) {
@@ -1671,6 +1773,11 @@ int DataScan::scan_frags()
                      "appear to be corrupt" << dendl;
         }
       }
+    }
+
+    processed_objects++;
+    if (processed_objects.load() % 100 == 0) {
+      display_progress();
     }
 
     return r;
