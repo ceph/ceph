@@ -87,30 +87,6 @@ describe('RgwStorageClassFormComponent', () => {
                   }
                 }
               ]
-            },
-            {
-              name: 'placement1',
-              tier_targets: [
-                {
-                  val: {
-                    storage_class: 'CloudIBM',
-                    tier_type: 'cloud-s3',
-                    retain_head_object: true,
-                    s3: {
-                      endpoint: 'https://s3.amazonaws.com',
-                      access_key: 'ACCESSKEY',
-                      storage_class: 'GLACIER',
-                      target_path: '/pathStorage',
-                      target_storage_class: 'CloudIBM',
-                      region: 'useast1',
-                      secret: 'SECRETKEY',
-                      multipart_min_part_size: 187988787,
-                      multipart_sync_threshold: 878787878,
-                      host_style: false
-                    }
-                  }
-                }
-              ]
             }
           ]
         }
