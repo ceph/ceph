@@ -54,7 +54,7 @@ public:
   };
   struct read_divertor {
     virtual ~read_divertor() = default;
-    virtual bufferlist read(uint32_t object_offset, uint32_t object_length) = 0;
+    virtual int read(uint32_t object_offset, uint32_t object_length, bufferlist& result) = 0;
   };
   Writer(BlueStore* bstore, TransContext* txc, WriteContext* wctx, OnodeRef o)
     :left_shard_bound(0), right_shard_bound(OBJECT_MAX_SIZE)
@@ -67,11 +67,18 @@ public:
     bufferlist& data
   );
 
-  void do_write_with_blobs(
+  void write_no_read(
     uint32_t location,
+    bufferlist& data
+  );
+
+  void do_write_with_blobs(
+    uint32_t data_begin,
     uint32_t data_end,
+    uint32_t ref_begin,
     uint32_t ref_end,
-    blob_vec& blobs
+    blob_vec& blobs,
+    bool allow_blob_reuse = true
   );
 
   void debug_iterate_buffers(
@@ -137,9 +144,10 @@ private:
     uint32_t length,
     PExtentVector& dst);
 
-  inline bufferlist _read_self(
+  inline int _read_self(
     uint32_t offset,
-    uint32_t length);
+    uint32_t length,
+    bufferlist& result);
 
   inline void _maybe_expand_blob(
     Blob* blob,
@@ -155,8 +163,10 @@ private:
     bufferlist& data,
     blob_vec& bd);
 
-  void _align_to_disk_block(
+  bool _expand_to_disk_block(
     uint32_t& location,
+    uint32_t& data_end,
+    uint32_t& ref_begin,
     uint32_t& ref_end,
     blob_vec& blobs);
 
@@ -196,26 +206,30 @@ private:
     bufferlist& object_data);
 
   void _try_reuse_allocated_l(
-    exmp_it after_punch_it,   // hint, we could have found it ourselves
-    uint32_t& logical_offset, // will fix value if something consumed
-    uint32_t ref_end_offset,  // useful when data is padded
-    blob_data_t& bd);           // modified when consumed
+    exmp_it after_punch_it, // hint, we could have found it ourselves
+    uint32_t& data_begin,   // will fix value if something consumed
+    uint32_t& ref_begin,    // TODO explain me
+    uint32_t ref_end,       // useful when data is padded
+    blob_data_t& bd);       // modified when consumed
 
   void _try_reuse_allocated_r(
     exmp_it after_punch_it,   // hint, we could have found it ourselves
-    uint32_t& end_offset,     // will fix value if something consumed
-    uint32_t ref_end_offset,  // useful when data is padded
+    uint32_t& data_end,     // will fix value if something consumed
+    uint32_t ref_begin,
+    uint32_t& ref_end,  // useful when data is padded
     blob_data_t& bd);           // modified when consumed
 
   void _try_put_data_on_allocated(
-  uint32_t& logical_offset, 
-  uint32_t& end_offset,
-  uint32_t& ref_end_offset,
+  uint32_t& data_begin,
+  uint32_t& data_end,
+  uint32_t& ref_begin,
+  uint32_t& ref_end,
   blob_vec& bd,
   exmp_it after_punch_it);
 
   void _do_put_new_blobs(
-    uint32_t logical_offset, 
+    uint32_t logical_offset,
+    uint32_t ref_begin_offset,
     uint32_t ref_end_offset,
     blob_vec::iterator& bd_it,
     blob_vec::iterator bd_end);
@@ -223,9 +237,11 @@ private:
   void _do_put_blobs(
     uint32_t logical_offset, 
     uint32_t data_end_offset,
+    uint32_t ref_begin_offset,
     uint32_t ref_end_offset,
     blob_vec& bd,
-    exmp_it after_punch_it);
+    exmp_it after_punch_it,
+    bool allow_blob_reuse);
 
   std::pair<bool, uint32_t> _write_expand_l(
     uint32_t logical_offset);
