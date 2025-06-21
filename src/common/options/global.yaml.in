@@ -5601,7 +5601,7 @@ options:
 - name: bluestore_slow_ops_warn_threshold
   type: uint
   level: advanced
-  desc: Set the minimum number of BluesStore slow ops before raising a health warning state
+  desc: Set the minimum number of BlueStore slow ops before raising a health warning state
   default: 1
   with_legacy: true
   see_also:
