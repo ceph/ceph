@@ -306,8 +306,8 @@
                          title="Edit"
                          class="mt-4 tc_showSubuserButton"
                          (click)="showSubuserModal(i)">
-          <svg cdsIcon="edit"
-               size="32"
+          <svg [cdsIcon]="icons.edit"
+               [size]="icons.size32"
                class="cds--btn__icon"></svg>
         </cds-icon-button>
         <cds-icon-button kind="danger"
@@ -315,9 +315,9 @@
                          title="Delete"
                          class="mt-4 tc_deleteSubuserButton"
                          (click)="deleteSubuser(i)">
-          <svg cdsIcon="trash-can"
-               size="32"
-               class="cds--btn__icon"></svg>
+          <svg [cdsIcon]="icons.trash"
+               [size]="icons.size32"
+               class="cds--btn__icon">></svg>
         </cds-icon-button>
         </div>
       </ng-container>
@@ -330,8 +330,8 @@
                   (click)="showSubuserModal()">
             <ng-container i18n>{{ actionLabels.CREATE | titlecase }}
               {{ subuserLabel | upperFirst }}</ng-container>
-            <svg cdsIcon="add"
-                 size="32"
+            <svg [cdsIcon]="icons.add"
+                 [size]="icons.size32"
                  class="cds--btn__icon"></svg>
           </button>
         </div>
@@ -366,10 +366,11 @@
             <cds-icon-button kind="tertiary"
                              size="md"
                              title="Show"
+                             i18n-title
                              class="mt-2 tc_showS3KeyButton"
                              (click)="showS3KeyModal(i)">
-              <svg cdsIcon="view"
-                   size="16"
+              <svg [cdsIcon]="icons.edit"
+                   [size]="icons.size16"
                    class="cds--btn__icon"></svg>
             </cds-icon-button>
             <cds-icon-button kind="danger"
@@ -377,8 +378,8 @@
                              title="Delete"
                              class="mt-2 tc_deleteS3KeyButton"
                              (click)="deleteS3Key(i)">
-              <svg cdsIcon="trash-can"
-                   size="32"
+              <svg [cdsIcon]="icons.trash"
+                   [size]="icons.size32"
                    class="cds--btn__icon"></svg>
             </cds-icon-button>
           </div>
@@ -394,8 +395,8 @@
                     (click)="showS3KeyModal()">
               <ng-container i18n>{{ actionLabels.CREATE | titlecase }}
                 {{ s3keyLabel | upperFirst }}</ng-container>
-              <svg cdsIcon="add"
-                   size="32"
+              <svg [cdsIcon]="icons.add"
+                   [size]="icons.size32"
                    class="cds--btn__icon"></svg>
             </button>
           </div>
@@ -424,15 +425,17 @@
                        readonly>
               </cds-text-label>
             </div>
-            <cds-icon-button kind="tertiary"
-                             size="md"
-                             title="Show"
-                             class="mt-2 tc_showSwiftKeyButton"
-                             (click)="showSwiftKeyModal(i)">
-              <svg cdsIcon="view"
-                   size="16"
-                   class="cds--btn__icon"></svg>
-            </cds-icon-button>
+          <cds-icon-button kind="tertiary"
+                           size="md"
+                           title="Show"
+                           i18n-title
+                           class="mt-2 tc_showSwiftKeyButton"
+                           (click)="showSwiftKeyModal(i)">
+            <svg [cdsIcon]="icons.show"
+                 [size]="icons.size16"
+                 class="cds--btn__icon">
+            </svg>
+          </cds-icon-button>
           </div>
         </span>
       </div>
@@ -473,8 +476,8 @@
                              title="Edit"
                              class="mt-4 tc_editCapButton"
                              (click)="showCapabilityModal(i)">
-              <svg cdsIcon="edit"
-                   size="32"
+              <svg [cdsIcon]="icons.edit"
+                   [size]="icons.size16"
                    class="cds--btn__icon"></svg>
             </cds-icon-button>
             <cds-icon-button kind="danger"
@@ -482,8 +485,8 @@
                              title="Delete"
                              class="mt-4 tc_deleteCapButton"
                              (click)="deleteCapability(i)">
-              <svg cdsIcon="trash-can"
-                   size="32"
+              <svg [cdsIcon]="icons.trash"
+                   [size]="icons.size32"
                    class="cds--btn__icon"></svg>
             </cds-icon-button>
           </div>
@@ -504,8 +507,8 @@
                     (click)="showCapabilityModal()">
               <ng-container i18n>{{ actionLabels.ADD | titlecase }}
                 {{ capabilityLabel | upperFirst }}</ng-container>
-              <svg cdsIcon="add"
-                   size="32"
+              <svg [cdsIcon]="icons.add"
+                   [size]="icons.size32"
                    class="cds--btn__icon"></svg>
             </button>
           </div>
