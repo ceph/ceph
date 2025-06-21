@@ -79,6 +79,44 @@ void publish_commit_completion(rados_completion_t completion, void* arg) {
   }
 };
 
+static int get_topic_stats(const DoutPrefixProvider* dpp, optional_yield y,
+                           librados::IoCtx& ioctx, const std::string& oid,
+                           uint32_t& count, uint64_t& size)
+{
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  int rval = 0;
+  cls_2pc_queue_get_topic_stats(op, &bl, &rval);
+
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
+  if (ret < 0) {
+    return ret;
+  }
+  if (rval < 0) {
+    return rval;
+  }
+  return cls_2pc_queue_get_topic_stats_result(bl, count, size);
+}
+
+static int list_reservations(const DoutPrefixProvider* dpp, optional_yield y,
+                             librados::IoCtx& ioctx, const std::string& oid,
+                             cls_2pc_reservations& reservations)
+{
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  int rval = 0;
+  cls_2pc_queue_list_reservations(op, &bl, &rval);
+
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
+  if (ret < 0) {
+    return ret;
+  }
+  if (rval < 0) {
+    return rval;
+  }
+  return cls_2pc_queue_list_reservations_result(bl, reservations);
+}
+
 class Manager : public DoutPrefixProvider {
   bool shutdown = false;
   const uint32_t queues_update_period_ms;
@@ -625,7 +663,8 @@ private:
       // updating perfcounters with topic stats
       uint64_t entries_size;
       uint32_t entries_number;
-      const auto ret = cls_2pc_queue_get_topic_stats(rados_ioctx, queue_name, entries_number, entries_size);
+      int ret = get_topic_stats(this, yield, rados_ioctx, queue_name,
+                                entries_number, entries_size);
       if (ret < 0) {
         ldpp_dout(this, 1) << "ERROR: topic stats for topic: " << queue_name << ". error: " << ret << dendl;
       } else {
@@ -1316,16 +1355,16 @@ int publish_abort(reservation_t& res) {
 int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &rados_ioctx,
                                const std::string &queue_name, rgw_topic_stats &stats, optional_yield y)
 {
-  // TODO: use optional_yield instead calling rados_ioctx.operate() synchronously
   cls_2pc_reservations reservations;
-  auto ret = cls_2pc_queue_list_reservations(rados_ioctx, queue_name, reservations);
+  int ret = list_reservations(dpp, y, rados_ioctx, queue_name, reservations);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to read queue list reservation: " << ret << dendl;
     return ret;
   }
   stats.queue_reservations = reservations.size();
 
-  ret = cls_2pc_queue_get_topic_stats(rados_ioctx, queue_name, stats.queue_entries, stats.queue_size);
+  ret = get_topic_stats(dpp, y, rados_ioctx, queue_name,
+                        stats.queue_entries, stats.queue_size);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get the queue size or the number of entries: " << ret << dendl;
     return ret;

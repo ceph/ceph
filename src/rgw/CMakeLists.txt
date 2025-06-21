@@ -331,6 +331,8 @@ target_compile_definitions(rgw_common PUBLIC
   $<$<CONFIG:Debug>:XXH_NO_INLINE_HINTS=1>
   $<$<CONFIG:RelWithDebInfo>:XXH_NO_INLINE_HINTS=1>)
 
+target_compile_definitions(rgw_common PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
+
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   # used by rgw_kafka.cc
   target_link_libraries(rgw_common
@@ -429,8 +431,6 @@ set_source_files_properties(rgw_iam_policy.cc PROPERTIES
 add_library(rgw_a STATIC
     ${rgw_a_srcs})
 
-target_compile_definitions(rgw_a PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
-
 target_include_directories(rgw_a
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
@@ -485,7 +485,6 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   # target_include_directories(radosgw PUBLIC Arrow::Arrow)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
-target_compile_definitions(radosgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(radosgw
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
   PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip"
@@ -580,7 +579,6 @@ set(librgw_srcs
   librgw.cc)
 add_library(rgw SHARED ${librgw_srcs})
 
-target_compile_definitions(rgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(rgw
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
   PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip"

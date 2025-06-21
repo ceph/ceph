@@ -1732,7 +1732,7 @@ int RGWRados::read_usage(const DoutPrefixProvider *dpp, const rgw_user& user, co
     map<rgw_user_bucket, rgw_usage_log_entry> ret_usage;
     map<rgw_user_bucket, rgw_usage_log_entry>::iterator iter;
 
-    int ret =  cls_obj_usage_log_read(dpp, hash, user_str, bucket_name, start_epoch, end_epoch, num,
+    int ret =  cls_obj_usage_log_read(dpp, null_yield, hash, user_str, bucket_name, start_epoch, end_epoch, num,
                                     usage_iter.read_iter, ret_usage, is_truncated);
     if (ret == -ENOENT)
       goto next;
@@ -8387,7 +8387,7 @@ int RGWRados::recover_reshard_logrecord(RGWBucketInfo& bucket_info,
                                             const DoutPrefixProvider *dpp)
 {
   RGWBucketReshardLock reshard_lock(this->driver, bucket_info, true);
-  int ret = reshard_lock.lock(dpp);
+  int ret = reshard_lock.lock(dpp, y);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << __func__ <<
       " INFO: failed to take reshard lock for bucket " <<
@@ -8405,7 +8405,7 @@ int RGWRados::recover_reshard_logrecord(RGWBucketInfo& bucket_info,
     // clear the RESHARD_IN_PROGRESS status after reshard failed, set bucket instance status
     // to CLS_RGW_RESHARD_NONE, also clear the reshard log entries
     ret = RGWBucketReshard::clear_resharding(this->driver, bucket_info, bucket_attrs, dpp, y);
-    reshard_lock.unlock();
+    std::ignore = reshard_lock.unlock(dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ <<
         " ERROR: failed to clear resharding flags for bucket " <<
@@ -8532,7 +8532,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
       const rgw_bucket& b = bs->bucket;
       std::string bucket_id = b.get_key();
       RGWBucketReshardLock reshard_lock(this->driver, bucket_info, true);
-      ret = reshard_lock.lock(dpp);
+      ret = reshard_lock.lock(dpp, y);
       if (ret == -ENOENT) {
 	continue;
       } else if (ret < 0) {
@@ -8558,7 +8558,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
         // bucket_attrs for call to clear_resharding below
         ret = fetch_new_bucket_info("trying_to_clear_resharding");
         if (ret < 0) {
-	  reshard_lock.unlock();
+          std::ignore = reshard_lock.unlock(dpp, y);
 	  ldpp_dout(dpp, 0) << __func__ <<
 	    " ERROR: failed to update bucket info before clear resharding for bucket " <<
 	    bucket_id << dendl;
@@ -8566,7 +8566,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
         }
 
 	ret = RGWBucketReshard::clear_resharding(this->driver, bucket_info, bucket_attrs, dpp, y);
-	reshard_lock.unlock();
+	std::ignore = reshard_lock.unlock(dpp, y);
 	if (ret == -ENOENT) {
 	  ldpp_dout(dpp, 5) << __func__ <<
 	    " INFO: no need to reset reshard flags; old shards apparently"
@@ -10811,7 +10811,8 @@ int RGWRados::cls_obj_usage_log_add(const DoutPrefixProvider *dpp, const string&
   return r;
 }
 
-int RGWRados::cls_obj_usage_log_read(const DoutPrefixProvider *dpp, const string& oid, const string& user, const string& bucket,
+int RGWRados::cls_obj_usage_log_read(const DoutPrefixProvider *dpp, optional_yield y,
+                                     const string& oid, const string& user, const string& bucket,
                                      uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
                                      string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage,
 				     bool *is_truncated)
@@ -10826,10 +10827,19 @@ int RGWRados::cls_obj_usage_log_read(const DoutPrefixProvider *dpp, const string
 
   *is_truncated = false;
 
-  r = cls_rgw_usage_log_read(ref.ioctx, ref.obj.oid, user, bucket, start_epoch, end_epoch,
-			     max_entries, read_iter, usage, is_truncated);
-
-  return r;
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  int rval = 0;
+  cls_rgw_usage_log_read(op, user, bucket, start_epoch, end_epoch,
+                         max_entries, read_iter, bl, rval);
+  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), nullptr, y);
+  if (r < 0) {
+    return r;
+  }
+  if (rval < 0) {
+    return rval;
+  }
+  return cls_rgw_usage_log_read_decode(bl, read_iter, usage, is_truncated);
 }
 
 static int cls_rgw_usage_log_trim_repeat(const DoutPrefixProvider *dpp, rgw_rados_ref ref, const string& user, const string& bucket, uint64_t start_epoch, uint64_t end_epoch, optional_yield y)

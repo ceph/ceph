@@ -258,6 +258,14 @@ static int gc_list(const DoutPrefixProvider* dpp, optional_yield y, librados::Io
   return cls_rgw_gc_list_decode(bl, entries, truncated, next_marker);
 }
 
+static int version_read(const DoutPrefixProvider* dpp, optional_yield y,
+                        librados::IoCtx& io_ctx, std::string& oid, obj_version* objv)
+{
+  librados::ObjectReadOperation op;
+  cls_version_read(op, objv);
+  return rgw_rados_operate(dpp, io_ctx, oid, std::move(op), nullptr, y);
+}
+
 int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue)
 {
   result.clear();
@@ -275,7 +283,8 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
         return ret;
       }
       obj_version objv;
-      cls_version_read(store->gc_pool_ctx, obj_names[*index], &objv);
+      std::ignore = version_read(this, null_yield, store->gc_pool_ctx,
+                                 obj_names[*index], &objv);
       if (ret == -ENOENT || entries.size() == 0) {
         if (objv.ver == 0) {
           continue;
@@ -608,7 +617,8 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
       ", entries.size=" << entries.size() << ", truncated=" << truncated <<
       ", next_marker='" << next_marker << "'" << dendl;
       obj_version objv;
-      cls_version_read(store->gc_pool_ctx, obj_names[index], &objv);
+      std::ignore = version_read(this, y, store->gc_pool_ctx,
+                                 obj_names[index], &objv);
       if ((objv.ver == 1) && entries.size() == 0) {
         std::list<cls_rgw_gc_obj_info> non_expired_entries;
         ret = gc_list(this, y, store->gc_pool_ctx, obj_names[index], marker, 1, false, non_expired_entries, &truncated, next_marker);
