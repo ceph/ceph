@@ -138,11 +138,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         if flush:
             self.metadata_mgr.flush()
 
-    def remove_clone_source(self, flush=False):
-        self.metadata_mgr.remove_section("source")
-        if flush:
-            self.metadata_mgr.flush()
-
     def add_clone_failure(self, errno, error_msg):
         try:
             self.metadata_mgr.add_section(MetadataManager.CLONE_FAILURE_SECTION)
@@ -656,30 +651,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                       )
                 log.error(msg)
                 raise EvictionError(msg)
-
-    def _get_clone_source(self):
-        try:
-            clone_source = {
-                'volume'   : self.metadata_mgr.get_option("source", "volume"),
-                'subvolume': self.metadata_mgr.get_option("source", "subvolume"),
-                'snapshot' : self.metadata_mgr.get_option("source", "snapshot"),
-            }
-
-            try:
-                clone_source["group"] = self.metadata_mgr.get_option("source", "group")
-            except MetadataMgrException as me:
-                if me.errno == -errno.ENOENT:
-                    pass
-                else:
-                    raise
-        except MetadataMgrException:
-            raise VolumeException(-errno.EINVAL, "error fetching subvolume metadata")
-        return clone_source
-
-    def get_clone_source(self):
-        src = self._get_clone_source()
-        return (src['volume'], src.get('group', None), src['subvolume'],
-                src['snapshot'])
 
     def _get_clone_failure(self):
         clone_failure = {
