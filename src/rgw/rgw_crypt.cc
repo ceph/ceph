@@ -750,6 +750,10 @@ int RGWGetObj_BlockDecrypt::fixup_range(off_t& bl_ofs, off_t& bl_end) {
   }
   ldpp_dout(this->dpp, 20) << "fixup_range [" << inp_ofs << "," << inp_end
       << "] => [" << bl_ofs << "," << bl_end << "]" << dendl;
+
+  if (next)
+    return next->fixup_range(bl_ofs, bl_end);
+
   return 0;
 }
 
@@ -822,8 +826,15 @@ int RGWGetObj_BlockDecrypt::flush() {
   // flush up to block boundaries, aligned or not
   if (cache.length() > 0) {
     res = process(cache, part_ofs, cache.length());
+    if (res < 0) {
+      return res;
+    }
   }
-  return res;
+
+  if (next)
+    return next->flush();
+
+  return 0;
 }
 
 RGWPutObj_BlockEncrypt::RGWPutObj_BlockEncrypt(const DoutPrefixProvider *dpp,
@@ -1303,7 +1314,8 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
 int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
                            map<string, bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
-                           std::map<std::string, std::string>& crypt_http_responses)
+                           std::map<std::string, std::string>* crypt_http_responses,
+                           bool copy_source)
 {
   int res = 0;
   std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
@@ -1320,9 +1332,10 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
       ldpp_dout(s, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }
-    const char *req_cust_alg =
-        s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM", NULL);
 
+    const char *sse_c_algo_hdr = copy_source ? "HTTP_X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM" :
+                                               "HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM";
+    const char *req_cust_alg = s->info.env->get(sse_c_algo_hdr, NULL);
     if (nullptr == req_cust_alg)  {
       ldpp_dout(s, 5) << "ERROR: Request for SSE-C encrypted object missing "
                        << "x-amz-server-side-encryption-customer-algorithm"
@@ -1336,9 +1349,11 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
       return -ERR_INVALID_ENCRYPTION_ALGORITHM;
     }
 
+    const char *sse_c_key_hdr = copy_source ? "HTTP_X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY" :
+                                              "HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY";
     std::string key_bin;
     try {
-      key_bin = from_base64(s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY", ""));
+      key_bin = from_base64(s->info.env->get(sse_c_key_hdr, ""));
     } catch (...) {
       ldpp_dout(s, 5) << "ERROR: rgw_s3_prepare_decrypt invalid encryption key "
                        << "which contains character that is not base64 encoded."
@@ -1355,8 +1370,9 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
       return -EINVAL;
     }
 
-    std::string keymd5 =
-        s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5", "");
+    const char *sse_c_key_md5_hdr = copy_source ? "HTTP_X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5" :
+                                                  "HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5";
+    std::string keymd5 = s->info.env->get(sse_c_key_md5_hdr, "");
     std::string keymd5_bin;
     try {
       keymd5_bin = from_base64(keymd5);
@@ -1368,7 +1384,6 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
                        "provided keys must provide an appropriate secret key md5.";
       return -EINVAL;
     }
-
 
     if (keymd5_bin.size() != CEPH_CRYPTO_MD5_DIGESTSIZE) {
       ldpp_dout(s, 5) << "ERROR: Invalid key md5 size " << dendl;
@@ -1393,8 +1408,11 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
     aes->set_key(reinterpret_cast<const uint8_t*>(key_bin.c_str()), AES_256_CBC::AES_256_KEYSIZE);
     if (block_crypt) *block_crypt = std::move(aes);
 
-    crypt_http_responses["x-amz-server-side-encryption-customer-algorithm"] = "AES256";
-    crypt_http_responses["x-amz-server-side-encryption-customer-key-MD5"] = keymd5;
+    if (crypt_http_responses) {
+      crypt_http_responses->emplace("x-amz-server-side-encryption-customer-algorithm", "AES256");
+      crypt_http_responses->emplace("x-amz-server-side-encryption-customer-key-MD5", keymd5);
+    }
+
     return 0;
   }
 
@@ -1425,8 +1443,11 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
     actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
     if (block_crypt) *block_crypt = std::move(aes);
 
-    crypt_http_responses["x-amz-server-side-encryption"] = "aws:kms";
-    crypt_http_responses["x-amz-server-side-encryption-aws-kms-key-id"] = key_id;
+    if (crypt_http_responses) {
+      crypt_http_responses->emplace("x-amz-server-side-encryption", "aws:kms");
+      crypt_http_responses->emplace("x-amz-server-side-encryption-aws-kms-key-id", key_id);
+    }
+
     return 0;
   }
 
@@ -1490,10 +1511,12 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
     actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
     if (block_crypt) *block_crypt = std::move(aes);
 
-    crypt_http_responses["x-amz-server-side-encryption"] = "AES256";
+    if (crypt_http_responses) {
+      crypt_http_responses->emplace("x-amz-server-side-encryption", "AES256");
+    }
+
     return 0;
   }
-
 
   /*no decryption*/
   return 0;
