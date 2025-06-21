@@ -182,6 +182,10 @@
                 "Value":{
                     "shape":"FilterRuleValue",
                     "documentation":"<p>The value that the filter searches for in object key names.</p>"
+                }, 
+                "Type": {
+                    "shape":"FilterRuleType",
+                    "documentation":"<p>Type of the filter rule. The type can be <code>IN</code> or <code>OUT</code>. Defaults to <code>IN</code> by default, <code>IN</code> indicates filter is honoured, else it is a negative filter.</p>"
                 }
             },
             "documentation":"<p>Specifies the Amazon S3 object key name to filter on and whether to filter on the suffix, prefix or regex of the key name.</p>"
@@ -192,6 +196,13 @@
                 "prefix",
                 "suffix",
                 "regex"
+            ]
+        },
+        "FilterRuleType":{
+            "type":"string",
+            "enum":[
+                "IN",
+                "OUT"
             ]
         },
         "NotificationConfigurationFilter":{
