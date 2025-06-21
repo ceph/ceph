@@ -529,6 +529,8 @@ public:
     paddr_t base, const ceph::bufferlist &bl) = 0;
 
   /**
+   * complete_load
+   *
    * Called on dirty CachedExtent implementation after replay.
    * Implementation should perform any reads/in-memory-setup
    * necessary. (for instance, the lba implementation will use this
