@@ -39,6 +39,13 @@ static hobject_t hobj_ms1{object_t{"hobj_ms1"},
 			  0,		// pool
 			  ""s};		// nspace
 
+hobject_t ec_hobj_ms1{object_t{"ec_hobj_ms1"},
+                      "keykey",     // key
+                      CEPH_NOSNAP,  // snap_id
+                      0,            // hash
+                      0,            // pool
+                      ""s};         // nspace
+
 SnapsetMockData::CookedCloneSnaps ms1_fn()
 {
   std::map<snapid_t, uint64_t> clnsz;
@@ -55,9 +62,14 @@ SnapsetMockData::CookedCloneSnaps ms1_fn()
   return {clnsz, clnsn, overlaps};
 }
 
+SnapsetMockData::CookedCloneSnaps ms2_fn() { return {{}, {}, {}}; }
+
 static SnapsetMockData hobj_ms1_snapset{/* seq */ 0x40,
 					/* clones */ {0x20, 0x30},
 					ms1_fn};
+
+static SnapsetMockData empty_snapset{/* seq */ 0x0,
+                                     /* clones */ {}, ms2_fn};
 
 hobject_t hobj_ms1_snp30{object_t{"hobj_ms1"},
 			 "keykey",  // key
@@ -115,5 +127,9 @@ ScrubGenerator::RealObjsConf minimal_snaps_configuration{
      &hobj_ms1_snapset}}
 
 };
+
+ScrubGenerator::RealObj erasure_code_obj{
+    ghobject_t{ec_hobj_ms1, 1, shard_id_t{0}},
+    RealData{100, 0xf8346009, 0, 0, {}, {}}, &crpt_funcs_set0, &empty_snapset};
 
 }  // namespace ScrubDatasets
