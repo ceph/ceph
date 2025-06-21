@@ -50,10 +50,10 @@ describe('cd-notification classes', () => {
       expectObject(new CdNotification(), {
         application: 'Ceph',
         applicationClass: 'ceph-icon',
-        iconClass: 'fa fa-info',
+        iconClass: 'information',
         message: undefined,
         options: undefined,
-        textClass: 'text-info',
+        textClass: 'cds-info-color',
         timestamp: '2022-02-22T00:00:00.000Z',
         title: undefined,
         type: 1
@@ -74,10 +74,10 @@ describe('cd-notification classes', () => {
         {
           application: 'Prometheus',
           applicationClass: 'prometheus-icon',
-          iconClass: 'fa fa-exclamation-triangle',
+          iconClass: 'warning--alt--filled',
           message: 'Something failed',
           options: undefined,
-          textClass: 'text-danger',
+          textClass: 'cds-warning-color',
           timestamp: '2022-02-22T00:00:00.000Z',
           title: 'Some Alert',
           type: 0
@@ -87,8 +87,8 @@ describe('cd-notification classes', () => {
 
     it('should expect the right success classes', () => {
       expectObject(new CdNotification(new CdNotificationConfig(NotificationType.success)), {
-        iconClass: 'fa fa-check',
-        textClass: 'text-success'
+        iconClass: 'checkmark',
+        textClass: 'cds-success-color'
       });
     });
   });

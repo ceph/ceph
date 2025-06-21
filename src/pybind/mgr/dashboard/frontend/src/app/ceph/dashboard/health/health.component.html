@@ -20,11 +20,12 @@
         <cds-toggletip  [dropShadow]="true"
                         [autoAlign]="true">
           <div cdsToggletipButton>
-            <span [ngStyle]="healthData.health.status | healthColor"
+            <span [ngStyle]="healthData?.health?.status | healthColor"
                   class="info-card-content-clickable">
                   {{ healthData.health.status | healthLabel | uppercase }}
-              <i  *ngIf="healthData.health?.status !== 'HEALTH_OK'"
-                  class="fa fa-exclamation-triangle"></i>
+              <span *ngIf="healthData?.health?.status !== 'HEALTH_OK'"
+                    [cdsIcon]="icons.warning"
+                    [size]="icons.size20"></span>
             </span>
           </div>
           <div cdsToggletipContent>
