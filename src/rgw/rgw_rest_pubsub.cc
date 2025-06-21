@@ -1189,6 +1189,7 @@ public:
   }
 
   const char* name() const override { return "pubsub_notification_create_s3"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.NOTIFICATION", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_NOTIF_CREATE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 
@@ -1444,6 +1445,7 @@ class RGWPSDeleteNotifOp : public RGWDefaultResponseOp {
   }
   
   const char* name() const override { return "pubsub_notification_delete_s3"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.NOTIFICATION", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_NOTIF_DELETE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
 
@@ -1548,6 +1550,7 @@ public:
   }
 
   const char* name() const override { return "pubsub_notifications_get_s3"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.NOTIFICATION", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_NOTIF_LIST; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 
