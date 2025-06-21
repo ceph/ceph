@@ -587,9 +587,9 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
       if (!json_blob_iterator.end()) {
           secret_string = (*json_blob_iterator)->get_data();
 
-          ldpp_dout(dpp, 0) << "Loaded secret for access key [" << access_key_id << "] with credential ID [" << access_key_actual_id << "]." << dendl;
+          ldpp_dout(dpp, 10) << "Loaded secret for access key [" << access_key_id << "] with credential ID [" << access_key_actual_id << "]." << dendl;
       } else {
-          ldpp_dout(dpp, 0) << "Keystone credential secret not present in response from server" << dendl;
+          ldpp_dout(dpp, 0) << "Keystone credential secret not found in the response from Keystone server blob [" << blob_string << "] ." << dendl;
           return make_pair(boost::none, -EINVAL);
       }
     } else {
