@@ -2,7 +2,25 @@
   <!-- ************************ -->
   <!-- NOTIFICATIONS     -->
   <!-- ************************ -->
-  <cd-notifications-sidebar></cd-notifications-sidebar>
+  <cd-notifications-sidebar *ngIf="!notificationService.useCarbonNotificationPanel"></cd-notifications-sidebar>
+
+  <!-- Add the new Carbon notification panel -->
+  <cd-carbon-notification-panel
+    *ngIf="notificationService.useCarbonNotificationPanel"
+    [notifications]="notificationService.data$ | async"
+    [executingTasks]="summaryData?.executing_tasks || []"
+    [unreadCount]="(notificationService.data$ | async)?.length || 0"
+    [doNotDisturb]="notificationService.doNotDisturb"
+    [showCarbonPanel]="notificationService.showCarbonPanel"
+    (doNotDisturbChange)="notificationService.setDoNotDisturb($event)"
+    (dismissNotification)="notificationService.remove($event)"
+    (retryNotification)="notificationService.retryNotification($event)"
+    (toggleAlert)="notificationService.toggleAlert($event)"
+    (viewAllNotifications)="notificationService.viewAllNotifications()"
+    (clearAllNotifications)="notificationService.removeAll()"
+    (openSettings)="notificationService.openSettings()">
+  </cd-carbon-notification-panel>
+
   <!-- ************************ -->
   <!-- HEADER                   -->
   <!-- ************************ -->
@@ -33,17 +51,30 @@
       <cds-header-navigation>
         <cd-language-selector class="d-flex"></cd-language-selector>
       </cds-header-navigation>
+
+
+      <!-- Original notification bell -->
       <div class="cds--btn cds--btn--icon-only cds--header__action"
-           (click)="toggleSidebar()">
+           (click)="toggleSidebar()"
+           *ngIf="!useCarbonNotificationPanel">
         <cd-notifications></cd-notifications>
       </div>
+      <!-- New Carbon notification bell -->
+      <div class="cds--btn cds--btn--icon-only cds--header__action"
+           *ngIf="useCarbonNotificationPanel"
+           (click)="carbonNotificationPanel.togglePanel()">
+        <cds-icon icon="notification--filled" size="20"></cds-icon>
+      </div>
+
       <div class="cds--btn cds--btn--icon-only cds--header__action">
         <cd-dashboard-help></cd-dashboard-help>
       </div>
+      <!-- Administration -->
       <div class="cds--btn cds--btn--icon-only cds--header__action"
            *ngIf="permissions.user.read">
         <cd-administration></cd-administration>
       </div>
+      <!-- Identity -->
       <div class="cds--btn cds--btn--icon-only cds--header__action">
         <cd-identity></cd-identity>
       </div>
@@ -350,4 +381,7 @@
       </cds-sidenav>
     </ng-container>
   </ng-template>
+  <!-- Add the Carbon notification panel -->
+  <cd-carbon-notification-panel #carbonNotificationPanel *ngIf="useCarbonNotificationPanel">
+  </cd-carbon-notification-panel>
   </div>
