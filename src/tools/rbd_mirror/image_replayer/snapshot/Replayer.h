@@ -257,6 +257,8 @@ private:
 
   PerfCounters *m_perf_counters = nullptr;
 
+  bool is_resync_required();
+
   void load_local_image_meta();
   void handle_load_local_image_meta(int r);
 
