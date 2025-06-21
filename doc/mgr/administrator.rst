@@ -31,6 +31,46 @@ which should now include a mgr status line::
 
     mgr active: $name
 
+ceph-mgr Status Overview
+=========================
+
+The ``ceph-mgr`` daemon can be in one of three states:
+
+1. **active**
+   The manager is fully started and available to receive and execute commands.
+
+2. **active (starting)**
+   The manager is in the process of starting up. It is not yet ready to process
+   commands, although commands may be issued. These commands will be held and
+   executed once the manager transitions to ``active`` state.
+
+3. **standby**
+   The manager is not currently active, but it is on standby to take over if the
+   active manager becomes unavailable. An operator can also manually promote a
+   standby manager to active if needed.
+
+Each of these states are visible in the output of the ``ceph -s``. For example:
+
+.. prompt:: bash #
+
+   $ ceph -s
+     cluster:
+       id:     b150f540-745a-460c-a566-376b28b95ac3
+       health: HEALTH_OK
+
+     services:
+       mon: 3 daemons, quorum a,b,c (age 47m) [leader: a]
+       mgr: x(active, starting, since 3s)
+       mds: 1/1 daemons up, 2 standby
+       osd: 4 osds: 4 up (since 47m), 4 in (since 47m)
+
+     data:
+       volumes: 1/1 healthy
+       pools:   4 pools, 177 pgs
+       objects: 24 objects, 451 KiB
+       usage:   4.0 GiB used, 400 GiB / 404 GiB avail
+       pgs:     177 active+clean
+
 Client authentication
 ---------------------
 
