@@ -98,6 +98,8 @@ import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-
 import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
 import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
+import { RgwGlacierStorageclassFormComponent } from './rgw-glacier-storageclass-form/rgw-glacier-storageclass-form.component';
+import { RgwCloudS3FormComponent } from './rgw-cloud-s3-form/rgw-cloud-s3-form.component';
 
 @NgModule({
   imports: [
@@ -193,11 +195,13 @@ import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.
     RgwStorageClassListComponent,
     RgwStorageClassDetailsComponent,
     RgwStorageClassFormComponent,
+    RgwGlacierStorageclassFormComponent,
     RgwBucketTieringFormComponent,
     RgwBucketLifecycleListComponent,
     RgwRateLimitDetailsComponent,
     RgwTopicListComponent,
-    RgwTopicDetailsComponent
+    RgwTopicDetailsComponent,
+    RgwCloudS3FormComponent
   ],
   providers: [TitleCasePipe]
 })

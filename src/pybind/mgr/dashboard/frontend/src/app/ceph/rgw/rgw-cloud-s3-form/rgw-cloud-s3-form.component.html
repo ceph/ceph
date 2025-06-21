@@ -1,0 +1,78 @@
+
+<div>
+    <ng-template #title>
+      <h5 class="cds--accordion__title cd-header">Cloud-s3 Storage Class</h5>
+    </ng-template>
+  
+  <ng-container *cdFormLoading="loading">
+    <form name="clouds3StorageClassForm"
+          #formDir="ngForm"
+          [formGroup]="clouds3StorageClassForm"
+          novalidate>
+    <div>
+        <div>
+            <div class="form-item form-item-append"
+                 cdsRow>
+              <div cdsCol>
+                <!-- Target Region -->
+                <cds-text-label
+                  labelInputID="region"
+                  i18n
+                  [invalid]="clouds3StorageClassForm.showError('region', formDir, 'required')"
+                  [invalidText]="regionError"
+                  [helperText]="targetRegionText"
+                  >Target Region
+                  <input
+                    cdsText
+                    type="text"
+                    id="region"
+                    formControlName="region"
+                    placeholder="e.g, us-east-1"
+                    i18n-placeholder
+                    [invalid]="clouds3StorageClassForm.showError('region', formDir, 'required')"
+                  />
+                </cds-text-label>
+                <ng-template #regionError>
+                  <span
+                    class="invalid-feedback"
+                    *ngIf="clouds3StorageClassForm.showError('region', formDir, 'required')"
+                    i18n
+                    >This field is required.</span
+                  >
+                </ng-template>
+              </div>
+              <div cdsCol>
+                <!-- Target Endpoint -->
+                <cds-text-label
+                  labelInputID="endpoint"
+                  i18n
+                  [invalid]="clouds3StorageClassForm.showError('endpoint', formDir, 'required')"
+                  [invalidText]="endpointError"
+                  [helperText]="targetEndpointText"
+                  >Target Endpoint
+                  <input
+                    cdsText
+                    type="text"
+                    placeholder="e.g, http://ceph-node-00.com:80"
+                    i18n-placeholder
+                    id="endpoint"
+                    formControlName="endpoint"
+                    [invalid]="clouds3StorageClassForm.showError('endpoint', formDir, 'required')"
+                  />
+                </cds-text-label>
+                <ng-template #endpointError>
+                  <span
+                    class="invalid-feedback"
+                    *ngIf="clouds3StorageClassForm.showError('endpoint', formDir, 'required')"
+                    i18n
+                    >This field is required.</span
+                  >
+                </ng-template>
+              </div>
+            </div>
+    
+        </div>
+      </div>
+    </form>
+  </ng-container>
+  </div>

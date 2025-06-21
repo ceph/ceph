@@ -1,0 +1,95 @@
+
+<div>
+    <ng-template #title>
+      <h5 class="cds--accordion__title cd-header">Glacier Storage Class</h5>
+    </ng-template>
+  
+  <ng-container *cdFormLoading="loading">
+    <form name="glacierStorageClassForm"
+          #formDir="ngForm"
+          [formGroup]="glacierStorageClassForm"
+          novalidate>
+    <div>
+    <div class="form-item form-item-append" cdsRow>
+
+          <div cdsCol>
+          <cds-select
+            formControlName="glacier_restore_tier_type"
+            label="Glacier Restore Tier Type"
+            cdRequiredField="Glacier Restore Tier Type"
+            id="glacier_restore_tier_type"
+            [invalid]="
+            glacierStorageClassForm.controls.glacier_restore_tier_type.invalid &&
+            glacierStorageClassForm.controls.glacier_restore_tier_type.dirty
+            "
+            [invalidText]="glacierError"
+            [helperText]="tiertypeText"
+            i18n-label
+          >
+            <option value=""
+                    i18n>-- Select the glacier restore tier type --</option>
+            <option [ngValue]="standard"
+                    i18n>Standard</option>
+            <option [ngValue]="expedited"
+                    i18n>Expedited</option>
+          </cds-select>
+          <ng-template #glacierError>
+            <span
+              class="invalid-feedback"
+              *ngIf="glacierStorageClassForm.showError('glacier_restore_tier_type', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+          </div>
+          <div cdsCol>
+            <cds-select
+            formControlName="restore_storage_class"
+            label="Restore Storage Class"
+            cdRequiredField="Restore Storage Class"
+            id="restore_storage_class"
+          
+            [invalidText]="glacierError"
+            [helperText]="restoreStorageClassText"
+            i18n-label
+          >
+         
+            <option 
+                    i18n>Standard</option>
+           
+          </cds-select>
+          <ng-template #glacierError>
+            <span
+              class="invalid-feedback"
+              *ngIf="glacierStorageClassForm.showError('restore_storage_class', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+          
+          </div>
+        </div>
+        <div class="form-item form-item-append" cdsRow>
+          <div cdsCol>
+          <cds-number
+            [id]="'readthrough_restore_days'"
+            [formControlName]="'readthrough_restore_days'"
+            [label]="'ReadThrough Restore Days'"
+            [helperText]="readthroughrestoreDaysText"
+            [min]="1"
+          ></cds-number>
+        </div>
+        <div cdsCol>
+          <cds-number
+            [id]="'glacier_restore_days'"
+            [formControlName]="'glacier_restore_days'"
+            [label]="'Glacier Restore Days'"
+            [helperText]="restoreDaysText"
+            [min]="1"
+          ></cds-number>
+        </div>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+  </div>

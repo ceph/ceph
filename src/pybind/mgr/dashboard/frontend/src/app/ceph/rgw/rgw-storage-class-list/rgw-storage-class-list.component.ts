@@ -56,6 +56,11 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         flexGrow: 2
       },
       {
+        name: $localize`Type`,
+        prop: 'tier_type',
+        flexGrow: 2
+      },
+      {
         name: $localize`Zone Group`,
         prop: 'zonegroup_name',
         flexGrow: 2

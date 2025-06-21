@@ -22,7 +22,7 @@ export class RgwStorageClassDetailsComponent implements OnChanges {
         multipart_min_part_size: this.selection.multipart_min_part_size,
         multipart_sync_threshold: this.selection.multipart_sync_threshold,
         host_style: this.selection.host_style,
-        retain_head_object: this.selection.retain_head_object
+        retain_head_object: this.selection.retain_head_object,
       };
     }
   }
