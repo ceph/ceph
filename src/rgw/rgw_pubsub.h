@@ -263,9 +263,12 @@ struct rgw_pubsub_dest {
   uint32_t time_to_live;
   uint32_t max_retries;
   uint32_t retry_sleep_duration;
+  // naming convention of sharded queues in the 'notif' pool -> persistent_queue, persistent_queue.1, persistent_queue.(num_shards -1)...
+  uint64_t num_shards; //defaults to a single shard for now, for backward compatibility
+
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 1, bl);
+    ENCODE_START(8, 1, bl);
     encode("", bl);
     encode("", bl);
     encode(push_endpoint, bl);
@@ -277,11 +280,12 @@ struct rgw_pubsub_dest {
     encode(max_retries, bl);
     encode(retry_sleep_duration, bl);
     encode(persistent_queue, bl);
+    encode(num_shards, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(7, bl);
+    DECODE_START(8, bl);
     std::string dummy;
     decode(dummy, bl);
     decode(dummy, bl);
@@ -297,6 +301,7 @@ struct rgw_pubsub_dest {
     }
     if (struct_v >= 5) {
         decode(persistent, bl);
+        num_shards = persistent ? 1 : 0; //defaults to a single shard for backward compatibility
     }
     if (struct_v >= 6) {
       decode(time_to_live, bl);
@@ -305,11 +310,16 @@ struct rgw_pubsub_dest {
     }
     if (struct_v >= 7) {
       decode(persistent_queue, bl);
-    } else if (persistent) {
+    } 
+    else if (persistent) {
       // persistent topics created before v7 did not support tenant namespacing.
       // continue to use 'arn_topic' alone as the queue's rados object name
       persistent_queue = arn_topic;
     }
+    if (struct_v >= 8) { 
+      decode(num_shards, bl);
+    }
+
     DECODE_FINISH(bl);
   }
 
@@ -317,6 +327,8 @@ struct rgw_pubsub_dest {
   void dump_xml(Formatter *f) const;
   std::string to_json_str() const;
   void decode_json(JSONObj* obj);
+  
+  std::vector<std::string> get_queue_names() const;
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_dest)
 
