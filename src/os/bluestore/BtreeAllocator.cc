@@ -241,7 +241,7 @@ int64_t BtreeAllocator::_allocate(
     extents->emplace_back(offset, length);
     allocated += length;
   }
-  assert(range_size_tree.size() == range_tree.size());
+  ceph_assert(range_size_tree.size() == range_tree.size());
   return allocated ? allocated : -ENOSPC;
 }
 

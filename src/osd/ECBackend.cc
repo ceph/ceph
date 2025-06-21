@@ -1432,7 +1432,7 @@ struct ECClassicalOp : ECCommon::RMWPipeline::Op {
     shard_id_map<ObjectStore::Transaction> *transactions,
     DoutPrefixProvider *dpp,
     const OSDMapRef &osdmap) final {
-    assert(t);
+    ceph_assert(t);
     ECTransaction::generate_transactions(
       t.get(),
       plan,

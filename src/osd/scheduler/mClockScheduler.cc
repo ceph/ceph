@@ -157,7 +157,7 @@ WorkItem mClockScheduler::dequeue()
   if (!high_priority.empty()) {
     auto iter = high_priority.begin();
     // invariant: high_priority entries are never empty
-    assert(!iter->second.empty());
+    ceph_assert(!iter->second.empty());
     WorkItem ret{std::move(iter->second.back())};
     iter->second.pop_back();
     if (iter->second.empty()) {
