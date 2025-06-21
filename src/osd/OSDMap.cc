@@ -22,6 +22,8 @@
 #include <iomanip>
 #include <optional>
 #include <random>
+#include <string>
+#include <string_view>
 #include <sstream>
 #include <fmt/format.h>
 
@@ -2625,6 +2627,24 @@ int OSDMap::map_to_pg(
   return 0;
 }
 
+tl::expected<pg_t, int> OSDMap::map_to_pg(
+  int64_t poolid,
+  std::string_view name,
+  std::string_view key,
+  std::string_view nspace) const
+{
+  // calculate ps (placement seed)
+  const pg_pool_t *pool = get_pg_pool(poolid);
+  if (!pool)
+    return tl::unexpected(-ENOENT);
+  ps_t ps;
+  if (key.empty())
+    ps = pool->hash_key(name, nspace);
+  else
+    ps = pool->hash_key(key, nspace);
+  return pg_t(ps, poolid);
+}
+
 int OSDMap::object_locator_to_pg(
   const object_t& oid, const object_locator_t& loc, pg_t &pg) const
 {
@@ -2636,6 +2656,19 @@ int OSDMap::object_locator_to_pg(
     return 0;
   }
   return map_to_pg(loc.get_pool(), oid.name, loc.key, loc.nspace, &pg);
+}
+
+tl::expected<pg_t, int> OSDMap::object_locator_to_expected_pg(
+  const object_t& oid,
+  const object_locator_t& loc) const
+{
+  if (loc.hash >= 0) {
+    if (!get_pg_pool(loc.get_pool())) {
+      return tl::unexpected(-ENOENT);
+    }
+    return pg_t(loc.hash, loc.get_pool());
+  }
+  return map_to_pg(loc.get_pool(), oid.name, loc.key, loc.nspace);
 }
 
 ceph_object_layout OSDMap::make_object_layout(
