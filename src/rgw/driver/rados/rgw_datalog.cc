@@ -1464,11 +1464,6 @@ asio::awaitable<void> RGWDataChangesLog::renew_run(decltype(renew_signal)) {
 	++run;
       }
 
-      if (ceph::mono_clock::now() - last_recovery < 6h)  {
-	co_await recover(&dp, recovery_signal);
-      };
-
-
       int interval = cct->_conf->rgw_data_log_window * 3 / 4;
       renew_timer->expires_after(std::chrono::seconds(interval));
       co_await renew_timer->async_wait(asio::use_awaitable);
