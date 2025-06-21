@@ -20,7 +20,6 @@
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/TracepointProvider.h"
-#include "common/openssl_opts_handler.h"
 #include "common/numa.h"
 #include "include/compat.h"
 #include "include/str_list.h"
@@ -168,8 +167,6 @@ void rgw::AppMain::init_frontends1(bool nfs)
   if (!g_conf()->rgw_region.empty() && g_conf()->rgw_zonegroup.empty()) {
     g_conf().set_val_or_die("rgw_zonegroup", g_conf()->rgw_region.c_str());
   }
-
-  ceph::crypto::init_openssl_engine_once();
 } /* init_frontends1 */
 
 void rgw::AppMain::init_numa()
