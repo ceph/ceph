@@ -20,3 +20,11 @@ target_link_libraries(perf-staged-fltree crimson-seastore crimson::gtest)
 else()
 target_link_libraries(perf-staged-fltree crimson-seastore)
 endif()
+
+add_executable(crimson-objectstore-tool
+  objectstore/objectstore_tool.cc
+  objectstore/crimson_objectstore_tool.cc)
+target_link_libraries(crimson-objectstore-tool
+  legacy-option-headers
+  crimson
+  crimson-os)
