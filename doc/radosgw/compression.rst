@@ -1,3 +1,5 @@
+.. _radosgw-compression:
+
 ===========
 Compression
 ===========
@@ -7,7 +9,7 @@ Compression
 The Ceph Object Gateway supports server-side compression of uploaded objects.
 
 .. note:: The Reef release added a :ref:`feature_compress_encrypted` zonegroup
-   feature to enable compression with `Server-Side Encryption`_.
+   feature to enable compression with :ref:`Server-Side Encryption <radosgw-encryption>`.
 
 Supported compression plugins include the following:
 
@@ -76,7 +78,7 @@ For example:
   }
 
 .. note:: A ``default`` zone is created for you if you have not done any
-   previous `Multisite Configuration`_.
+   previous :ref:`Multisite Configuration <multisite>`.
 
 
 Statistics
@@ -113,6 +115,3 @@ uncompressed data.
 The ``size_utilized`` and ``size_kb_utilized`` fields represent the total
 size of compressed data, in bytes and kilobytes respectively.
 
-
-.. _`Server-Side Encryption`: ../encryption
-.. _`Multisite Configuration`: ../multisite

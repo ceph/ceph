@@ -3,7 +3,7 @@ KMIP Integration
 ================
 
 `KMIP`_ can be used as a secure key management service for
-`Server-Side Encryption`_ (SSE-KMS).
+:ref:`Server-Side Encryption <radosgw-encryption>` (SSE-KMS).
 
 .. ditaa::
 
@@ -53,15 +53,15 @@ here,
 1. `IBM Security Guardium Key Lifecycle Manager (SKLM)`__.  This is a well
    supported commercial product.
 
-__ SKLM_
-
-2. PyKMIP_.  This is a small python project, suitable for experimental
+2. `PyKMIP`_.  This is a small python project, suitable for experimental
    and testing use only.
+
+__ SKLM_
 
 Using IBM SKLM
 --------------
 
-IBM SKLM__ supports client authentication using certificates.
+IBM `SKLM`_ supports client authentication using certificates.
 Certificates may either be self-signed certificates created,
 for instance, using openssl, or certificates may be created
 using SKLM.  Ceph should then be configured (see below) to
@@ -69,8 +69,6 @@ use KMIP and an attempt made to use it.  This will fail,
 but it will leave an "untrusted client device certificate" in SKLM.
 This can be then upgraded to a registered client using the web
 interface to complete the registration process.
-
-__ SKLM_
 
 Find untrusted clients under ``Advanced Configuration``,
 ``Client Device Communication Certificates``.  Select
@@ -80,7 +78,7 @@ Find untrusted clients under ``Advanced Configuration``,
 Using PyKMIP 
 ------------
 
-PyKMIP_ has no special registration process, it simply
+`PyKMIP`_ has no special registration process, it simply
 trusts the certificate.  However, the certificate has to
 be issued by a certificate authority that is trusted by
 pykmip.  PyKMIP also prefers that the certificate contain
@@ -213,7 +211,6 @@ radosgw would fetch the secret from::
 
   pykmip-mybucketkey
 
-.. _Server-Side Encryption: ../encryption
 .. _KMIP: http://www.oasis-open.org/committees/kmip/
 .. _SKLM: https://www.ibm.com/products/ibm-security-key-lifecycle-manager
 .. _PyKMIP: https://pykmip.readthedocs.io/en/latest/
