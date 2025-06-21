@@ -34,7 +34,7 @@ done
 
 fio_file=$(mktemp -t nvmeof-fio-XXXX)
 all_drives_list=$(sudo nvme list --output-format=json | 
-    jq -r '.Devices[].Subsystems[] | select(.Controllers | all(.ModelNumber == "Ceph bdev Controller")) | .Namespaces | sort_by(.NSID) | .[] | .NameSpace')
+    jq -r '.Devices | sort_by(.NameSpace) | .[] | select(.ModelNumber == "Ceph bdev Controller") | .DevicePath')
 
 # When the script is passed --start_ns and --end_ns (example: `nvmeof_fio_test.sh --start_ns 1 --end_ns 3`), 
 # then fio runs on namespaces only in the defined range (which is 1 to 3 here). 
@@ -50,8 +50,6 @@ fi
 
 
 RUNTIME=${RUNTIME:-600}
-filename=$(echo "$selected_drives" | sed -z 's/\n/:\/dev\//g' | sed 's/:\/dev\/$//')
-filename="/dev/$filename"
 
 cat >> $fio_file <<EOF
 [global]
@@ -73,7 +71,7 @@ EOF
 
 for i in $selected_drives; do
   echo "[job-$i]" >> "$fio_file"
-  echo "filename=/dev/$i" >> "$fio_file"
+  echo "filename=$i" >> "$fio_file"
   echo "" >> "$fio_file"  # Adds a blank line
 done
 
