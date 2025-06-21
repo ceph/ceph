@@ -881,3 +881,10 @@ options:
   default: 0
   services:
   - rbd
+- name: rbd_config_pool_override_test_config_diff
+  type: uint
+  level: dev
+  desc: timestamp of last update to pool-level config overrides
+  default: 0
+  services:
+  - rbd
