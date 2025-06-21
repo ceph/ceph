@@ -150,7 +150,7 @@
 %{!?python3_pkgversion: %global python3_pkgversion 3}
 %{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
-%if 0%{with crimson}
+%if 0%{with crimson} && 0%{?rhel} < 10
 %{!?gts_version: %global gts_version 13}
 %else
 %if 0%{?rhel} == 8
@@ -466,7 +466,7 @@ BuildRequires:	lz4-devel >= 1.7
 %if 0%{with make_check}
 BuildRequires:	golang
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-BuildRequires:	golang-github-prometheus
+%dnl BuildRequires:	golang-github-prometheus
 BuildRequires:	libtool-ltdl-devel
 BuildRequires:	xmlsec1
 BuildRequires:	xmlsec1-devel
@@ -526,8 +526,15 @@ BuildRequires:  libcryptopp-devel
 BuildRequires:  libnuma-devel
 %endif
 %endif
+%if 0%{?rhel} >= 10
+# TODO - can this be simplified on other versions to use macros?
+BuildRequires: python-rpm-macros
+%global pathfix_py /usr/lib/rpm/redhat/pathfix.py
+%else
 %if 0%{?rhel} >= 8
 BuildRequires:  /usr/bin/pathfix.py
+%global pathfix_py /usr/bin/pathfix.py
+%endif
 %endif
 
 %description
@@ -1634,8 +1641,8 @@ install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
 install -m 0440 -D sudoers.d/ceph-smartctl %{buildroot}%{_sysconfdir}/sudoers.d/ceph-smartctl
 
 %if 0%{?rhel} >= 8 || 0%{?openEuler}
-pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_bindir}/*
-pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_sbindir}/*
+%{__python3} %{pathfix_py} -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_bindir}/*
+%{__python3} %{pathfix_py} -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_sbindir}/*
 %endif
 
 #set up placeholder directories
