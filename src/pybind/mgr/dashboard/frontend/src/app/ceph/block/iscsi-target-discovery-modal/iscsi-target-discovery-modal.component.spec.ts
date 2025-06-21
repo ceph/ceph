@@ -15,6 +15,7 @@ import { Permission } from '~/app/shared/models/permissions';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper, IscsiHelper } from '~/testing/unit-test-helper';
 import { IscsiTargetDiscoveryModalComponent } from './iscsi-target-discovery-modal.component';
+import { USER } from '~/app/shared/constants/app.constants';
 
 describe('IscsiTargetDiscoveryModalComponent', () => {
   let component: IscsiTargetDiscoveryModalComponent;
@@ -125,7 +126,7 @@ describe('IscsiTargetDiscoveryModalComponent', () => {
     const formHelper = new FormHelper(control);
     formHelper.expectValid(control);
 
-    IscsiHelper.validateUser(formHelper, 'user');
+    IscsiHelper.validateUser(formHelper, USER);
     IscsiHelper.validatePassword(formHelper, 'password');
     IscsiHelper.validateUser(formHelper, 'mutual_user');
     IscsiHelper.validatePassword(formHelper, 'mutual_password');
