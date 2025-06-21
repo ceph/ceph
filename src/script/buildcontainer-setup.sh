@@ -5,7 +5,6 @@ install_container_deps() {
     # set JENKINS_HOME in order to have the build container look as much
     # like an existing jenkins build environment as possible
     export JENKINS_HOME=/ceph
-    export WITH_CRIMSON=true
     prepare
 }
 
@@ -36,7 +35,8 @@ case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
         install_container_deps
         dnf_clean
     ;;
-    *~*centos*9|*~*centos*10*|*~fedora*)
+    # EL-ish, 9+
+    *~*centos*|*~fedora*|*~rocky*|*~alma*)
         dnf install -y /usr/bin/{rpmbuild,wget,curl}
         install_container_deps
         dnf_clean
