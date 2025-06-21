@@ -334,6 +334,27 @@ struct seastore_test_t :
         std::move(t)).get();
     }
 
+    void alloc_hint(
+      CTransaction &t,
+      uint64_t expected_object_size) {
+      t.set_alloc_hint(
+        cid,
+        oid,
+        expected_object_size,
+        0,
+	0);
+    }
+
+    void alloc_hint(
+      SeaStoreShard &sharded_seastore,
+      size_t len) {
+      CTransaction t;
+      alloc_hint(t, len);
+      sharded_seastore.do_transaction(
+        coll,
+        std::move(t)).get();
+    }
+
     void read(
       SeaStoreShard &sharded_seastore,
       uint64_t offset,
@@ -1278,6 +1299,42 @@ TEST_P(seastore_test_t, zero)
       (BS * 4) + 128);
   });
 }
+
+TEST_P(seastore_test_t, set_alloc_hint)
+{
+  run_async([this] {
+    auto &test_obj = get_object(make_oid(0));
+    uint64_t size = 4194304;
+    test_obj.alloc_hint(*sharded_seastore, size);
+    store_statfs_t st = {};
+    st = sharded_seastore->stat(
+      test_obj.coll,
+      test_obj.oid).get();
+    if (st.st_size == size) {
+      CTransaction t;
+      auto &test_obj2 = get_object(make_oid(2));
+      test_obj2.alloc_hint(t, size);
+      auto len = 4096;
+      auto buffer = bufferptr(buffer::create(len));
+      ::memset(buffer.c_str(), 'b', len);
+      bufferlist bl;
+      bl.append(buffer);
+      test_obj2.write(*sharded_seastore, t, len, bl);
+      do_transaction(std::move(t));
+      test_obj2.read(
+	*sharded_seastore,
+	len,
+	len);
+      st = sharded_seastore->stat(
+	test_obj2.coll,
+	test_obj2.oid).get();
+      EXPECT_EQ(size, st.st_size);
+    } else {
+      EXPECT_EQ(0, st.st_size);
+    }
+});
+}
+
 INSTANTIATE_TEST_SUITE_P(
   seastore_test,
   seastore_test_t,
