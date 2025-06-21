@@ -90,6 +90,13 @@ class CephNvmeof(ContainerDaemonForm):
             mounts['/dev/vfio/vfio'] = '/dev/vfio/vfio'
         return mounts
 
+    def _get_dsa_mounts(self, files: Dict[str, str]) -> Dict[str, str]:
+        mounts = dict()
+        if 'enable_dsa_acceleration' in files:
+            mounts['/dev/dsa'] = '/dev/dsa'
+            mounts['/dev/char'] = '/dev/char'
+        return mounts
+
     def _get_tls_cert_key_mounts(
         self, data_dir: str, files: Dict[str, str]
     ) -> Dict[str, str]:
@@ -123,6 +130,7 @@ class CephNvmeof(ContainerDaemonForm):
         else:
             mounts.update(self._get_container_mounts(data_dir, log_dir))
         mounts.update(self._get_huge_pages_mounts(self.files))
+        mounts.update(self._get_dsa_mounts(self.files))
         mounts.update(self._get_tls_cert_key_mounts(data_dir, self.files))
 
     def customize_container_binds(
@@ -254,6 +262,10 @@ class CephNvmeof(ContainerDaemonForm):
         args.extend(['--ulimit', 'memlock=-1:-1'])
         args.extend(['--ulimit', 'nofile=10240'])
         args.extend(['--cap-add=CAP_SYS_NICE'])
+        # idxd/dsa
+        if 'enable_dsa_acceleration' in self.files:
+            args.extend(['--privileged'])
+            args.extend(['--cap-add=SYS_RAWIO'])
         if 'spdk_mem_size' not in self.files:
             args.extend(['--cap-add=SYS_ADMIN'])
             if 'spdk_huge_pages' in self.files:
