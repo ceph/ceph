@@ -243,7 +243,7 @@ describe('NavigationComponent', () => {
         '.tc_submenuitem_admin_upgrade': 'Upgrade',
         '.tc_submenuitem_observe_log': 'Logs',
         '.tc_submenuitem_observe_monitoring': 'Alerts',
-        '.tc_submenuitem_block_images': 'Images',
+        '.tc_submenuitem_block_images': 'Volumes',
         '.tc_submenuitem_block_mirroring': 'Mirroring',
         '.tc_submenuitem_block_iscsi': 'iSCSI',
         '.tc_submenuitem_block_nvme': 'NVMe/TCP',

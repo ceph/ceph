@@ -31,7 +31,7 @@
                  [invalid]="snapshotForm.controls['snapshotName'].invalid && (snapshotForm.controls['snapshotName'].dirty)"
                  autofocus>
           <span *ngIf="((mirroring === 'snapshot') ? true : null) && (snapshotForm.getValue('mirrorImageSnapshot') === true) ? true: null">
-            Snapshot mode is enabled on image <b>{{ imageName }}</b>: snapshot names are auto generated</span>
+            Snapshot mode is enabled on volume <b>{{ imageName }}</b>: snapshot names are auto generated</span>
         </cds-text-label>
         <ng-template #snapshotError>
           <span *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')"
@@ -51,7 +51,7 @@
                         name="mirrorImageSnapshot"
                         (checkedChange)="onMirrorCheckBoxChange()"
                         [attr.disabled]="!peerConfigured.length > 0 ? true : null"
-                        i18n>Mirror Image Snapshot
+                        i18n>Mirror Volume Snapshot
           </cds-checkbox>
         </div>
       </ng-container>
