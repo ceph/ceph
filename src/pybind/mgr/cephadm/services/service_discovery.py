@@ -143,7 +143,7 @@ class Root(Server):
 <head><title>Cephadm HTTP Endpoint</title></head>
 <body>
 <h2>Cephadm Service Discovery Endpoints</h2>
-<p><a href='prometheus/sd-config?service=mgr-prometheus'>mgr/Prometheus http sd-config</a></p>
+<p><a href='prometheus/sd-config?service=ceph'>mgr/Prometheus http sd-config</a></p>
 <p><a href='prometheus/sd-config?service=alertmanager'>Alertmanager http sd-config</a></p>
 <p><a href='prometheus/sd-config?service=node-exporter'>Node exporter http sd-config</a></p>
 <p><a href='prometheus/sd-config?service=haproxy'>HAProxy http sd-config</a></p>
@@ -159,26 +159,23 @@ class Root(Server):
     @cherrypy.tools.json_out()
     def get_sd_config(self, service: str) -> List[Dict[str, Collection[str]]]:
         """Return <http_sd_config> compatible prometheus config for the specified service."""
-        if service == 'mgr-prometheus':
-            return self.prometheus_sd_config()
-        elif service == 'alertmanager':
-            return self.alertmgr_sd_config()
-        elif service == 'node-exporter':
-            return self.node_exporter_sd_config()
-        elif service == 'haproxy':
-            return self.haproxy_sd_config()
-        elif service == 'ceph-exporter':
-            return self.ceph_exporter_sd_config()
-        elif service == 'nvmeof':
-            return self.nvmeof_sd_config()
-        elif service == 'nfs':
-            return self.nfs_sd_config()
-        elif service == 'smb':
-            return self.smb_sd_config()
-        elif service.startswith("container"):
+
+        if service.startswith("container"):
             return self.container_sd_config(service)
-        else:
-            return []
+
+        service_to_config = {
+            'mgr-prometheus': self.prometheus_sd_config,
+            'ceph': self.prometheus_sd_config,
+            'alertmanager': self.alertmgr_sd_config,
+            'node-exporter': self.node_exporter_sd_config,
+            'haproxy': self.haproxy_sd_config,
+            'ingress': self.haproxy_sd_config,
+            'ceph-exporter': self.ceph_exporter_sd_config,
+            'nvmeof': self.nvmeof_sd_config,
+            'nfs': self.nfs_sd_config,
+            'smb': self.smb_sd_config,
+        }
+        return service_to_config.get(service, lambda: [])()
 
     def prometheus_sd_config(self) -> List[Dict[str, Collection[str]]]:
         """Return <http_sd_config> compatible prometheus config for prometheus service."""
