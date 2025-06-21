@@ -615,6 +615,9 @@ export class TaskMessageService {
     return $localize`SMB users and groups access resource '${metadata.usersGroupsId}'`;
   }
 
+  topic(metadata: any) {
+    return $localize`Topic  '${metadata.name}'`;
+  }
   service(metadata: any) {
     return $localize`service '${metadata.service_name}'`;
   }
