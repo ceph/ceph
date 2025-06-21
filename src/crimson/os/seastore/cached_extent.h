@@ -299,7 +299,7 @@ class CachedExtent
   uint32_t last_committed_crc = 0;
 
   // Points at the prior stable version while in state MUTATION_PENDING
-  // or is rewriting (in state INITIAL_PENDING).
+  // or is rewriting (in state INITIAL_WRITE_PENDING).
   CachedExtentRef prior_instance;
 
   // time of the last modification
@@ -469,7 +469,6 @@ public:
     out << "CachedExtent(addr=" << this
 	<< ", type=" << get_type()
 	<< ", trans=" << pending_for_transaction
-	<< ", pending_io=" << is_pending_io()
 	<< ", version=" << version
 	<< ", dirty_from=" << dirty_from
 	<< ", modify_time=" << sea_time_point_printer_t{modify_time}
@@ -481,7 +480,13 @@ public:
 	<< ", last_committed_crc=" << last_committed_crc
 	<< ", refcount=" << use_count()
 	<< ", user_hint=" << user_hint
-	<< ", rewrite_gen=" << rewrite_gen_printer_t{rewrite_generation};
+	<< ", rewrite_gen=" << rewrite_gen_printer_t{rewrite_generation}
+	<< ", pending_io=";
+    if (is_pending_io()) {
+      out << io_wait->from_state;
+    } else {
+      out << "N/A";
+    }
     if (is_valid() && is_fully_loaded() && !is_stable_clean_pending()) {
       print_detail(out);
     }
@@ -544,7 +549,7 @@ public:
   }
 
   /// Returns true if extent can be mutated in an open transaction,
-  /// normally equivalent to !is_data_stable.
+  /// equivalent to !is_data_stable.
   bool is_mutable() const {
     return state == extent_state_t::INITIAL_WRITE_PENDING ||
       state == extent_state_t::MUTATION_PENDING ||
@@ -552,40 +557,9 @@ public:
   }
 
   /// Returns true if extent is part of an open transaction,
-  /// normally equivalent to !is_stable.
+  /// equivalent to !is_stable.
   bool is_pending() const {
     return is_mutable() || state == extent_state_t::EXIST_CLEAN;
-  }
-
-  bool is_rewrite() {
-    return is_initial_pending() && get_prior_instance();
-  }
-
-  /// Returns true if extent is stable, written and shared among transactions
-  bool is_stable_written() const {
-    return state == extent_state_t::CLEAN
-           || state == extent_state_t::DIRTY;
-  }
-
-  bool is_stable_writting() const {
-    // mutated/INITIAL_PENDING and under-io extents are already
-    // stable and visible, see prepare_record().
-    //
-    // XXX: It might be good to mark this case as DIRTY/CLEAN from the definition,
-    // which probably can make things simpler.
-    return (has_mutation() || is_initial_pending()) && is_pending_io();
-  }
-
-  /// Returns true if extent is stable and shared among transactions,
-  /// normally equivalent to !is_pending
-  bool is_stable() const {
-    return is_stable_written() || is_stable_writting();
-  }
-
-  /// Returns true if extent can not be mutated,
-  /// normally equivalent to !is_mutable.
-  bool is_data_stable() const {
-    return is_stable() || is_exist_clean();
   }
 
   /// Returns true if extent has a pending delta
@@ -603,30 +577,8 @@ public:
     return state == extent_state_t::INITIAL_WRITE_PENDING;
   }
 
-  /// Returns iff extent has deltas on disk or pending
-  bool has_delta() const {
-    ceph_assert(is_valid());
-    if (state == extent_state_t::INITIAL_WRITE_PENDING
-        || state == extent_state_t::CLEAN
-        || state == extent_state_t::EXIST_CLEAN) {
-      return false;
-    } else {
-      assert(state == extent_state_t::MUTATION_PENDING
-             || state == extent_state_t::DIRTY
-             || state == extent_state_t::EXIST_MUTATION_PENDING);
-      return true;
-    }
-  }
-
-  // Returs true if extent is stable and clean
-  bool is_stable_clean() const {
-    ceph_assert(is_valid());
-    return state == extent_state_t::CLEAN;
-  }
-
-  // Returns true if the buffer is still loading
-  bool is_stable_clean_pending() const {
-    return is_stable_clean() && is_pending_io();
+  bool is_rewrite() {
+    return is_initial_pending() && get_prior_instance();
   }
 
   /// Ruturns true if data is persisted while metadata isn't
@@ -637,6 +589,39 @@ public:
   /// Returns true if the extent with EXTIST_CLEAN is modified
   bool is_exist_mutation_pending() const {
     return state == extent_state_t::EXIST_MUTATION_PENDING;
+  }
+
+  /// Returns true iff extent is stable (shared among transactions),
+  /// equivalent to !is_pending()
+  bool is_stable() const {
+    return state == extent_state_t::CLEAN
+        || state == extent_state_t::DIRTY;
+  }
+
+  /// Returns true iff extent is stable and not io-pending
+  bool is_stable_ready() const {
+    return is_stable() && !is_pending_io();
+  }
+
+  /// Returns true if extent can not be mutated,
+  /// equivalent to !is_mutable.
+  bool is_data_stable() const {
+    return is_stable() || is_exist_clean();
+  }
+
+  /// Returns iff extent is DIRTY
+  bool is_stable_dirty() const {
+    return state == extent_state_t::DIRTY;
+  }
+
+  /// Returns iff extent is CLEAN
+  bool is_stable_clean() const {
+    return state == extent_state_t::CLEAN;
+  }
+
+  /// Returns iff extent is CLEAN and io-pending
+  bool is_stable_clean_pending() const {
+    return is_stable_clean() && is_pending_io();
   }
 
   /// Returns true if extent has not been superceded or retired
@@ -655,12 +640,12 @@ public:
   }
 
   bool is_pending_io() const {
-    return !!io_wait_promise;
+    return io_wait.has_value();
   }
 
   /// Return journal location of oldest relevant delta, only valid while DIRTY
   auto get_dirty_from() const {
-    ceph_assert(has_delta());
+    ceph_assert(is_stable_dirty());
     return dirty_from;
   }
 
@@ -721,7 +706,8 @@ public:
     return loaded_length;
   }
 
-  /// Returns version, get_version() == 0 iff !has_delta()
+  /// Returns version, get_version() == 0
+  /// iff CLEAN/EXIST_CLEAN/INITIAL_WRITE_PENDING
   extent_version_t get_version() const {
     return version;
   }
@@ -897,25 +883,30 @@ private:
   /// relative address before ool write, used to update mapping
   std::optional<paddr_t> prior_poffset = std::nullopt;
 
-  /// used to wait while in-progress commit completes
-  std::optional<seastar::shared_promise<>> io_wait_promise;
+  struct io_wait_t {
+    seastar::shared_promise<> pr;
+    extent_state_t from_state;
+  };
+  std::optional<io_wait_t> io_wait;
 
-  void set_io_wait() {
-    ceph_assert(!io_wait_promise);
-    io_wait_promise = seastar::shared_promise<>();
+  void set_io_wait(extent_state_t new_state) {
+    ceph_assert(!io_wait);
+    io_wait.emplace(seastar::shared_promise<>(), state);
+    state = new_state;
+    assert(is_data_stable());
   }
 
   void complete_io() {
-    ceph_assert(io_wait_promise);
-    io_wait_promise->set_value();
-    io_wait_promise = std::nullopt;
+    ceph_assert(io_wait.has_value());
+    io_wait->pr.set_value();
+    io_wait = std::nullopt;
   }
 
   seastar::future<> wait_io() {
-    if (!io_wait_promise) {
+    if (!io_wait) {
       return seastar::now();
     } else {
-      return io_wait_promise->get_shared_future();
+      return io_wait->pr.get_shared_future();
     }
   }
 
@@ -1479,7 +1470,6 @@ protected:
   virtual void logical_on_delta_write() {}
 
   void on_delta_write(paddr_t record_block_offset) final {
-    assert(is_exist_mutation_pending() || get_prior_instance());
     logical_on_delta_write();
   }
 

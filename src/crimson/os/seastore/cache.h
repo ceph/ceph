@@ -222,10 +222,11 @@ public:
       ceph_assert(ret->get_type() == type);
 
       if (ret->is_stable()) {
-        if (ret->has_delta()) {
+        if (ret->is_stable_dirty()) {
           ++access_stats.trans_dirty;
           ++stats.access.trans_dirty;
         } else {
+          assert(ret->is_stable_clean());
           ++access_stats.trans_lru;
           ++stats.access.trans_lru;
         }
@@ -278,10 +279,11 @@ public:
 
     ceph_assert(ret->get_type() == type);
 
-    if (ret->has_delta()) {
+    if (ret->is_stable_dirty()) {
       ++access_stats.cache_dirty;
       ++stats.access.cache_dirty;
     } else {
+      assert(ret->is_stable_clean());
       ++access_stats.cache_lru;
       ++stats.access.cache_lru;
     }
@@ -395,7 +397,7 @@ public:
 	      t, T::TYPE, offset, length);
     const auto t_src = t.get_src();
     auto f = [&t, this, t_src](CachedExtent &ext) {
-      // FIXME: assert(ext.is_stable_clean());
+      // XXX: is_stable_dirty() may not be linked in lba tree
       assert(ext.is_stable());
       assert(T::TYPE == ext.get_type());
       cache_access_stats_t& access_stats = get_by_ext(
@@ -487,9 +489,9 @@ public:
     if (extent->is_stable()) {
       p_extent = extent->get_transactional_view(t);
       if (p_extent != extent.get()) {
-        assert(!extent->is_stable_writting());
+        assert(!extent->is_pending_io());
         assert(p_extent->is_pending_in_trans(t.get_trans_id()));
-        assert(!p_extent->is_stable_writting());
+        assert(!p_extent->is_pending_io());
         ++access_stats.trans_pending;
         ++stats.access.trans_pending;
         if (p_extent->is_mutable()) {
@@ -505,10 +507,11 @@ public:
         assert(!p_extent->is_pending_in_trans(t.get_trans_id()));
         auto ret = t.maybe_add_to_read_set(p_extent);
         if (ret.added) {
-          if (p_extent->has_delta()) {
+          if (p_extent->is_stable_dirty()) {
             ++access_stats.cache_dirty;
             ++stats.access.cache_dirty;
           } else {
+            assert(p_extent->is_stable_clean());
             ++access_stats.cache_lru;
             ++stats.access.cache_lru;
           }
@@ -519,10 +522,11 @@ public:
           }
         } else {
           // already exists
-          if (p_extent->has_delta()) {
+          if (p_extent->is_stable_dirty()) {
             ++access_stats.trans_dirty;
             ++stats.access.trans_dirty;
           } else {
+            assert(p_extent->is_stable_clean());
             ++access_stats.trans_lru;
             ++stats.access.trans_lru;
           }
@@ -532,7 +536,7 @@ public:
         needs_step_2 = !ret.is_paddr_known;
       }
     } else {
-      assert(!extent->is_stable_writting());
+      assert(!extent->is_pending_io());
       assert(extent->is_pending_in_trans(t.get_trans_id()));
       ++access_stats.trans_pending;
       ++stats.access.trans_pending;
@@ -897,7 +901,7 @@ private:
 	      t, type, offset, length, laddr);
     const auto t_src = t.get_src();
     auto f = [&t, this, t_src](CachedExtent &ext) {
-      // FIXME: assert(ext.is_stable_clean());
+      // XXX: is_stable_dirty() may not be linked in lba tree
       assert(ext.is_stable());
       cache_access_stats_t& access_stats = get_by_ext(
         get_by_src(stats.access_by_src_ext, t_src),
@@ -1295,7 +1299,7 @@ public:
 
     // journal replay should has been finished at this point,
     // Cache::root should have been inserted to the dirty list
-    assert(root->has_delta());
+    assert(root->is_stable_dirty());
     std::vector<CachedExtentRef> _dirty;
     for (auto &e : extents_index) {
       _dirty.push_back(CachedExtentRef(&e));
@@ -1641,7 +1645,8 @@ private:
         double seconds) const;
 
     void remove_from_lru(CachedExtent &extent) {
-      assert(extent.is_stable_clean() && !extent.is_placeholder());
+      assert(extent.is_stable_clean());
+      assert(!extent.is_placeholder());
 
       if (extent.primary_ref_list_hook.is_linked()) {
         do_remove_from_lru(extent, nullptr);
@@ -1651,7 +1656,8 @@ private:
     void move_to_top(
         CachedExtent &extent,
         const Transaction::src_t* p_src) {
-      assert(extent.is_stable_clean() && !extent.is_placeholder());
+      assert(extent.is_stable_clean());
+      assert(!extent.is_placeholder());
 
       auto extent_loaded_length = extent.get_loaded_length();
       if (extent.primary_ref_list_hook.is_linked()) {
@@ -1688,7 +1694,8 @@ private:
       assert(extent.is_data_stable());
 
       if (extent.primary_ref_list_hook.is_linked()) {
-        assert(extent.is_stable_clean() && !extent.is_placeholder());
+        assert(extent.is_stable_clean());
+        assert(!extent.is_placeholder());
         // present, increase size
         assert(lru.size() > 0);
         current_size += increased_length;
@@ -1941,7 +1948,7 @@ private:
     assert(is_aligned(offset, get_block_size()));
     assert(is_aligned(length, get_block_size()));
     assert(extent->get_paddr().is_absolute());
-    extent->set_io_wait();
+    extent->set_io_wait(extent->state);
     auto old_length = extent->get_loaded_length();
     load_ranges_t to_read = extent->load_ranges(offset, length);
     auto new_length = extent->get_loaded_length();
