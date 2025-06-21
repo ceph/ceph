@@ -227,6 +227,46 @@ options:
   default: 2
   flags:
   - runtime
+- name: osd_next_snap_trim_sleep
+  type: float
+  level: advanced
+  desc: The sleep time in seconds after snaptrim requests resources. 
+    This setting overrides _ssd, _hdd, and _hybrid if non-zero.
+  fmt_desc: The sleep time in seconds after snaptrim requests resources. 
+    Increasing this value will slow down snap trimming.
+    Especially, it can avoid the existence of a large number of emtpy snap in the snaptrim queue, 
+    which causes idling and leads to excessive cpu usage of the node.
+    This option overrides backend specific variants.
+  note: This setting is ignored when the mClock scheduler is used.
+  default: 0
+  flags:
+  - runtime
+  with_legacy: true
+- name: osd_next_snap_trim_sleep_hdd
+  type: float
+  level: advanced
+  desc: The sleep time in seconds after snaptrim requests resources for HDDs
+  note: This setting is ignored when the mClock scheduler is used.
+  default: 1
+  flags:
+  - runtime
+- name: osd_next_snap_trim_sleep_ssd
+  type: float
+  level: advanced
+  desc: The sleep time in seconds after snaptrim requests resources for SSDs
+  note: This setting is ignored when the mClock scheduler is used.
+  default: 0
+  flags:
+  - runtime
+- name: osd_next_snap_trim_sleep_hybrid
+  type: float
+  level: advanced
+  desc: The sleep time in seconds after snaptrim requests resources when data is on HDD and journal
+    is on SSD
+  note: This setting is ignored when the mClock scheduler is used.
+  default: 1
+  flags:
+  - runtime
 - name: osd_scrub_invalid_stats
   type: bool
   level: advanced
