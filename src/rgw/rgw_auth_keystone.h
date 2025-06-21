@@ -11,6 +11,9 @@
 #include "rgw_rest_s3.h"
 #include "rgw_common.h"
 #include "rgw_keystone.h"
+#include <boost/asio/basic_waitable_timer.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/intrusive/list.hpp>
 
 namespace rgw {
 namespace auth {
@@ -77,7 +80,39 @@ public:
   }
 }; /* class TokenEngine */
 
-class SecretCache {
+class AuthRequestCache {
+   public:
+  // the blocking wait uses std::condition_variable::wait_for(), which uses the
+  // std::chrono::steady_clock. use that for the async waits as well
+  using Clock = std::chrono::steady_clock;
+ private:
+  const ceph::timespan duration;
+  ceph::mutex mutex = ceph::make_mutex("AuthRequestCache::lock");
+  ceph::condition_variable cond;
+
+  struct Waiter : boost::intrusive::list_base_hook<> {
+    using Executor = boost::asio::any_io_executor;
+    using Timer = boost::asio::basic_waitable_timer<Clock,
+          boost::asio::wait_traits<Clock>, Executor>;
+    Timer timer;
+    explicit Waiter(boost::asio::any_io_executor ex) : timer(ex) {}
+  };
+  boost::intrusive::list<Waiter> waiters;
+
+  bool going_down{false};
+
+public:
+  AuthRequestCache(ceph::timespan duration = std::chrono::seconds(5))
+    : duration(duration) {}
+  ~AuthRequestCache() {
+    ceph_assert(going_down);
+  }
+  int wait(optional_yield y);
+  // unblock any threads waiting on reshard
+  void stop();
+}; /* class AuthRequestCache */
+
+class SecretCache : private AuthRequestCache {
   using token_envelope_t = rgw::keystone::TokenEnvelope;
 
   struct secret_entry {
@@ -98,6 +133,7 @@ class SecretCache {
 
   const utime_t s3_token_expiry_length;
 
+public:
   SecretCache()
     : cct(g_ceph_context),
       lock(),
@@ -107,7 +143,6 @@ class SecretCache {
 
   ~SecretCache() {}
 
-public:
   SecretCache(const SecretCache&) = delete;
   void operator=(const SecretCache&) = delete;
 
@@ -117,17 +152,40 @@ public:
     return instance;
   }
 
-  bool find(const std::string& token_id, token_envelope_t& token, std::string& secret);
-  boost::optional<boost::tuple<token_envelope_t, std::string>> find(const std::string& token_id) {
+  bool find(const std::string& token_id, token_envelope_t& token, std::string& secret, optional_yield y);
+  boost::optional<boost::tuple<token_envelope_t, std::string>> find(const std::string& token_id, optional_yield y) {
     token_envelope_t token_envlp;
     std::string secret;
-    if (find(token_id, token_envlp, secret)) {
-      return boost::make_tuple(token_envlp, secret);
+
+    // Attempt to find the token
+    bool found = find(token_id, token_envlp, secret, y);
+
+    if (found) {
+        return boost::make_tuple(token_envlp, secret);
     }
+
+    // If the token is not found, wait for it to become available
+    if (y) {
+        // Wait for the token to become available
+        AuthRequestCache authreq_cache_wait;
+        int ret = authreq_cache_wait.wait(y);
+
+        if (ret == 0) {
+            // Retry finding the token after waiting
+            found = find(token_id, token_envlp, secret, y);
+            if (found) {
+                return boost::make_tuple(token_envlp, secret);
+            }
+        }
+    }
+
+    // If find fails or waiting fails
     return boost::none;
-  }
+}
   void add(const std::string& token_id, const token_envelope_t& token, const std::string& secret);
+  void clear();
 }; /* class SecretCache */
+
 
 class EC2Engine : public rgw::auth::s3::AWSEngine {
   using acl_strategy_t = rgw::auth::RemoteApplier::acl_strategy_t;
