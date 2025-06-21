@@ -1082,6 +1082,7 @@ struct error_code;
 					 unsigned align_memory,
 					 unsigned max_buffers = 0);
     bool rebuild_page_aligned();
+    void rebuild_if_saves_space();
 
     void reserve(size_t prealloc);
 

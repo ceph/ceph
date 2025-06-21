@@ -1130,6 +1130,23 @@ static ceph::spinlock debug_lock;
       rebuild(ptr_node::create(buffer::create(_len)));
   }
 
+  void buffer::list::rebuild_if_saves_space()
+  {
+    if (_len == 0) {
+      _carriage = &always_empty_bptr;
+      _buffers.clear_and_dispose();
+      _num = 0;
+      return;
+    }
+    if (!is_contiguous() ||
+        p2roundup<uint32_t>(_len, sizeof(void*)) < front().raw_length()) {
+      if ((_len & ~CEPH_PAGE_MASK) == 0)
+        rebuild(ptr_node::create(buffer::create_page_aligned(_len)));
+      else
+        rebuild(ptr_node::create(buffer::create(_len)));
+    }
+  }
+
   void buffer::list::rebuild(
     std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer> nb)
   {
