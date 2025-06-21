@@ -1215,6 +1215,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_ioctx_pool_stat)(
   uint64_t user_bytes = r.get_user_data_bytes(1.0, per_pool) +
     r.get_user_omap_bytes(1.0, per_pool);
 
+  // num_bytes will be used as ALLOCATED
   stats->num_kb = shift_round_up(allocated_bytes, 10);
   stats->num_bytes = allocated_bytes;
   stats->num_objects = r.stats.sum.num_objects;
