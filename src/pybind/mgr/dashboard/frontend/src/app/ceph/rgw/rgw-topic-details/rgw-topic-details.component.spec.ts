@@ -1,30 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RgwTopicDetailsComponent } from './rgw-topic-details.component';
-import { TopicDetails } from '~/app/shared/models/topic.model';
-
-interface Destination {
-  push_endpoint: string;
-  push_endpoint_args: string;
-  push_endpoint_topic: string;
-  stored_secret: string;
-  persistent: boolean;
-  persistent_queue: string;
-  time_to_live: number;
-  max_retries: number;
-  retry_sleep_duration: number;
-}
-
-const mockDestination: Destination = {
-  push_endpoint: 'http://localhost:8080',
-  push_endpoint_args: 'args',
-  push_endpoint_topic: 'topic',
-  stored_secret: 'secret',
-  persistent: true,
-  persistent_queue: 'queue',
-  time_to_live: 3600,
-  max_retries: 5,
-  retry_sleep_duration: 10
-};
+import { Topic, Destination } from '~/app/shared/models/topic.model';
 
 describe('RgwTopicDetailsComponent', () => {
   let component: RgwTopicDetailsComponent;
@@ -45,11 +21,11 @@ describe('RgwTopicDetailsComponent', () => {
   });
 
   it('should parse policy string correctly', () => {
-    const mockSelection: TopicDetails = {
+    const mockSelection: Topic = {
       name: 'testHttp',
       owner: 'ownerName',
       arn: 'arnValue',
-      dest: mockDestination,
+      dest: {} as Destination,
       policy: '{"key": "value"}',
       opaqueData: 'test@12345',
       subscribed_buckets: []
@@ -69,11 +45,11 @@ describe('RgwTopicDetailsComponent', () => {
   });
 
   it('should set policy to empty object if policy is not a string', () => {
-    const mockSelection: TopicDetails = {
+    const mockSelection: Topic = {
       name: 'testHttp',
       owner: 'ownerName',
       arn: 'arnValue',
-      dest: mockDestination,
+      dest: {} as Destination,
       policy: '{}',
       subscribed_buckets: [],
       opaqueData: ''
