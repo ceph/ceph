@@ -212,3 +212,18 @@ options:
         internal checksum feature without using sever CPU then enable if available,
         set to true to disable unconditionally.
   default: true
+- name: seastore_extent_pinboard_algorithm
+  type: str
+  level: dev
+  desc: The cache replacement algorithm used by extent pinboard in seastore. (LRU or TwoQ)
+  default: LRU
+- name: seastore_extent_pinboard_2q_in_ratio
+  type: float
+  level: advanced
+  desc: Ratio of A1 in queue size to Am queue size in 2Q cache algorithm
+  default: 0.5
+- name: seastore_extent_pinboard_2q_out_ratio
+  type: float
+  level: advanced
+  desc: Ratio of A1 out queue size to Am queue size in 2Q cache algorithm
+  default: 0.5
