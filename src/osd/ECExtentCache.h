@@ -104,21 +104,10 @@ class ECExtentCache {
 
   class LRU {
    public:
-    class Key {
-     public:
+    struct Key {
       uint64_t offset;
       hobject_t oid;
-
-      Key(uint64_t offset, const hobject_t &oid) : offset(offset), oid(oid) {};
-
-      friend bool operator==(const Key &lhs, const Key &rhs) {
-        return lhs.offset == rhs.offset
-            && lhs.oid == rhs.oid;
-      }
-
-      friend bool operator!=(const Key &lhs, const Key &rhs) {
-        return !(lhs == rhs);
-      }
+      bool operator==(const Key&) const = default;
     };
 
     struct KeyHash {
