@@ -24,6 +24,7 @@
 #include "rgw_pool_types.h"
 #include "rgw_bucket_types.h"
 #include "rgw_user_types.h"
+#include "rgw_bucket_snap_types.h"
 
 #include "common/dout.h"
 #include "common/Formatter.h"
@@ -31,6 +32,7 @@
 struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
   std::string name;
   std::string instance;
+  rgw_bucket_snap_id snap_id;
 
   rgw_obj_index_key() {}
   rgw_obj_index_key(const std::string &_name) : name(_name) {}
@@ -72,20 +74,32 @@ struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
   }
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
+    /* only encode snap_id if it's set. This saves some space. */
+    int v = (!snap_id.is_set() ? 1 : 2);
+
+    ENCODE_START(v, 1, bl);
     encode(name, bl);
     encode(instance, bl);
+    if (v >= 2) {
+      encode(snap_id, bl);
+    }
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(name, bl);
     decode(instance, bl);
+    if (struct_v >= 2) {
+      decode(snap_id, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const {
-    f->dump_string("name", name);
-    f->dump_string("instance", instance);
+    encode_json("name", name, f);
+    encode_json("instance", instance, f);
+    if (snap_id.is_set()) {
+      encode_json("snap_id", snap_id, f);
+    }
   }
   void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<rgw_obj_index_key*>& ls) {
@@ -109,6 +123,8 @@ struct rgw_obj_key {
   std::string name;
   std::string instance;
   std::string ns;
+
+  rgw_bucket_snap_id snap_id;
 
   rgw_obj_key() {}
 
@@ -364,18 +380,25 @@ struct rgw_obj_key {
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    int v = (!snap_id.is_set() ? 2 : 3);
+    ENCODE_START(v, 1, bl);
     encode(name, bl);
     encode(instance, bl);
     encode(ns, bl);
+    if (v >= 3) {
+      encode(snap_id, bl);
+    }
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(name, bl);
     decode(instance, bl);
     if (struct_v >= 2) {
       decode(ns, bl);
+    }
+    if (struct_v >= 3) {
+      decode(snap_id, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -550,17 +573,18 @@ struct rgw_obj {
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 6, bl);
+    ENCODE_START(7, 6, bl);
     encode(bucket, bl);
     encode(key.ns, bl);
     encode(key.name, bl);
     encode(key.instance, bl);
 //    encode(placement_id, bl);
+    encode(key.snap_id, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
     if (struct_v < 6) {
       std::string s;
       decode(bucket.name, bl); /* bucket.name */
@@ -592,6 +616,9 @@ struct rgw_obj {
       decode(key.name, bl);
       decode(key.instance, bl);
 //      decode(placement_id, bl);
+      if (struct_v >= 7) {
+        decode(key.snap_id, bl);
+      }
     }
     DECODE_FINISH(bl);
   }
