@@ -703,6 +703,7 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
         _get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
         _get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
         _get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100));
+    vselector->update_from_config(cct);
   }
 
   _init_logger();
@@ -1070,6 +1071,7 @@ int BlueFS::mount()
         _get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
         _get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
         _get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100));
+    vselector->update_from_config(cct);
   }
 
   _init_alloc();
