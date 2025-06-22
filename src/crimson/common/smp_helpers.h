@@ -51,33 +51,17 @@ auto proxy_method_on_core(
  *
  * Invokes f on each reactor sequentially, Caller may assume that
  * f will not be invoked concurrently on multiple cores.
+ * f is copied here and is kept alive due to coroutine parameter copying.
  */
 template <typename F>
-auto reactor_map_seq(F &&f) {
-  using ret_type = decltype(f());
-  if constexpr (is_errorated_future_v<ret_type>) {
-    auto ret = crimson::do_for_each(
-      seastar::smp::all_cpus().begin(),
-      seastar::smp::all_cpus().end(),
-      [f=std::move(f)](auto core) mutable {
-	return seastar::smp::submit_to(
-	  core,
-	  [&f] {
-	    return std::invoke(f);
-	  });
-      });
-    return ret_type(ret);
-  } else {
-    return seastar::do_for_each(
-      seastar::smp::all_cpus().begin(),
-      seastar::smp::all_cpus().end(),
-      [f=std::move(f)](auto core) mutable {
-	return seastar::smp::submit_to(
-	  core,
-	  [&f] {
-	    return std::invoke(f);
-	  });
-      });
+auto reactor_map_seq(F f) -> decltype(seastar::futurize_invoke(f)) {
+  for (auto core: seastar::smp::all_cpus()) {
+    using ret_type = decltype(f());
+    if constexpr (is_errorated_future_v<ret_type>) {
+      co_await crimson::submit_to(core, [&f] { return seastar::futurize_invoke(f);});
+    } else {
+      co_await seastar::smp::submit_to(core, [&f] { return seastar::futurize_invoke(f);});
+    }
   }
 }
 
