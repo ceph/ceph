@@ -571,6 +571,24 @@ public:
   }
 }; // class RGWGCIOManger
 
+static int lock_shard(const DoutPrefixProvider* dpp, optional_yield y,
+                      librados::IoCtx& ioctx, const std::string& oid,
+                      rados::cls::lock::Lock& lock)
+{
+  librados::ObjectWriteOperation op;
+  lock.lock_exclusive(&op);
+  return rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
+}
+
+static int unlock_shard(const DoutPrefixProvider* dpp, optional_yield y,
+                        librados::IoCtx& ioctx, const std::string& oid,
+                        rados::cls::lock::Lock& lock)
+{
+  librados::ObjectWriteOperation op;
+  lock.unlock(&op);
+  return rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
+}
+
 int RGWGC::process(int index, int max_secs, bool expired_only,
                    RGWGCIOManager& io_manager, optional_yield y)
 {
@@ -592,7 +610,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
   utime_t time(max_secs, 0);
   l.set_duration(time);
 
-  int ret = l.lock_exclusive(&store->gc_pool_ctx, obj_names[index]);
+  int ret = lock_shard(this, y, store->gc_pool_ctx, obj_names[index], l);
   if (ret == -EBUSY) { /* already locked by another gc processor */
     ldpp_dout(this, 10) << "RGWGC::process failed to acquire lock on " <<
       obj_names[index] << dendl;
@@ -742,7 +760,7 @@ done:
   /* we don't drain here, because if we're going down we don't want to
    * hold the system if backend is unresponsive
    */
-  l.unlock(&store->gc_pool_ctx, obj_names[index]);
+  std::ignore = unlock_shard(this, y, store->gc_pool_ctx, obj_names[index], l);
   delete ctx;
 
   return 0;
