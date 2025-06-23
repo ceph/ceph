@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import cherrypy
 from orchestrator import OrchestratorError
@@ -100,10 +100,11 @@ else:
         @NvmeofCLICommand("nvmeof spdk_log_level get", model.SpdkNvmfLogFlagsAndLevelInfo)
         @convert_to_model(model.SpdkNvmfLogFlagsAndLevelInfo)
         @handle_nvmeof_error
-        def get_spdk_log_level(self, gw_group: Optional[str] = None, traddr: Optional[str] = None):
+        def get_spdk_log_level(self, all_log_flags: Optional[bool] = None,
+                               gw_group: Optional[str] = None, traddr: Optional[str] = None):
             spdk_log_level = NVMeoFClient(gw_group=gw_group,
                                           traddr=traddr).stub.get_spdk_nvmf_log_flags_and_level(
-                NVMeoFClient.pb2.get_spdk_nvmf_log_flags_and_level_req()
+                NVMeoFClient.pb2.get_spdk_nvmf_log_flags_and_level_req(all_log_flags=all_log_flags)
             )
             return spdk_log_level
 
@@ -114,13 +115,15 @@ else:
         @handle_nvmeof_error
         def set_spdk_log_level(self, log_level: Optional[str] = None,
                                print_level: Optional[str] = None,
+                               extra_log_flags: Optional[List[str]] = None,
                                gw_group: Optional[str] = None, traddr: Optional[str] = None):
             log_level = log_level.upper() if log_level else None
             print_level = print_level.upper() if print_level else None
             spdk_log_level = NVMeoFClient(gw_group=gw_group,
-                                          traddr=traddr).stub.set_spdk_nvmf_logs_req(
+                                          traddr=traddr).stub.set_spdk_nvmf_logs(
                 NVMeoFClient.pb2.set_spdk_nvmf_logs_req(log_level=log_level,
-                                                        print_level=print_level)
+                                                        print_level=print_level,
+                                                        extra_log_flags=extra_log_flags)
             )
             return spdk_log_level
 
@@ -129,11 +132,12 @@ else:
         @NvmeofCLICommand("nvmeof spdk_log_level disable", model.RequestStatus)
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
-        def disable_spdk_log_level(self, gw_group: Optional[str] = None,
+        def disable_spdk_log_level(self, extra_log_flags: Optional[List[str]] = None,
+                                   gw_group: Optional[str] = None,
                                    traddr: Optional[str] = None):
             spdk_log_level = NVMeoFClient(gw_group=gw_group,
                                           traddr=traddr).stub.disable_spdk_nvmf_logs(
-                NVMeoFClient.pb2.disable_spdk_nvmf_logs_req()
+                NVMeoFClient.pb2.disable_spdk_nvmf_logs_req(extra_log_flags=extra_log_flags)
             )
             return spdk_log_level
 
@@ -874,7 +878,8 @@ else:
         @NvmeofCLICommand("nvmeof connection list", model.ConnectionList)
         @convert_to_model(model.ConnectionList)
         @handle_nvmeof_error
-        def list(self, nqn: Optional[str] = None, gw_group: Optional[str] = None, traddr: Optional[str] = None):
+        def list(self, nqn: Optional[str] = None,
+                 gw_group: Optional[str] = None, traddr: Optional[str] = None):
             if not nqn:
                 nqn = '*'
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.list_connections(
