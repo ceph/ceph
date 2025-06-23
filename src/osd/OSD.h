@@ -1065,6 +1065,58 @@ struct OSDShard {
     unsigned osd_op_queue_cut_off);
 };
 
+struct OSDBenchTest {
+  CephContext *cct;
+  ObjectStore *store;
+  ObjectStore::CollectionHandle ch;
+  int64_t count;
+  int64_t bsize;
+  int64_t osize;
+  int64_t onum;
+
+  double prefill_time;
+  double elapsed;
+  double bandwidth;
+  double iops;
+  ObjectStore::Transaction cleanupt;
+
+  int run_test();
+  int precheck();
+  void prefill_objects();
+  void perform_write_test();
+  void wait_for_flush_commit();
+  void cleanup();
+
+  int flush_store_cache() {
+    return store->flush_cache();
+  }
+
+  double get_elapsed_time() {
+    return elapsed;
+  }
+
+  double get_prefill_time() {
+    return prefill_time;
+  }
+
+  double get_bandwidth_rate() {
+    return bandwidth;
+  }
+
+  double get_iops_rate() {
+    return iops;
+  }
+
+  OSDBenchTest(
+    CephContext *cct,
+    ObjectStore *store,
+    ObjectStore::CollectionHandle& ch,
+    int64_t count,
+    int64_t bsize,
+    int64_t osize,
+    int64_t onum);
+};
+
 class OSD : public Dispatcher,
 	    public md_config_obs_t {
   using OpSchedulerItem = ceph::osd::scheduler::OpSchedulerItem;
@@ -2009,6 +2061,9 @@ private:
 		  uuid_d fsid,
 		  int whoami,
 		  std::string osdspec_affinity);
+
+  static tl::expected<std::string, int>
+    run_osd_bench(CephContext *cct, ObjectStore *store);
 
   /* remove any non-user xattrs from a std::map of them */
   void filter_xattrs(std::map<std::string, ceph::buffer::ptr>& attrs) {
