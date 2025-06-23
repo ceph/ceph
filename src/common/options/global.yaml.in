@@ -6504,3 +6504,9 @@ options:
   desc: Enables exception throwing instead of process abort on transaction submission error.
   default: false
   with_legacy: false
+- name: upmap_max_deviation 
+  type: int
+  level: unknown (fixme)
+  default: 5
+  desc: If the number of PGs is within this count then no optimization is attempted
+>>>>>>> 80de0a3c92d (doc/rados: clarify "upmap_max_deviation")
