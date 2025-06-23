@@ -179,6 +179,34 @@ struct transaction_manager_test_t :
 	  return *this;
 	}
 
+        bool to_left() {
+          assert(is_end() || is_valid());
+          do {
+            if (biter == parent.extents.begin()
+                && oiter == parent.delta.begin()) {
+              return false;
+            } else if (biter == parent.extents.begin()) {
+              --oiter;
+            } else if (oiter == parent.delta.begin()) {
+              --biter;
+            } else {
+              auto l_biter = biter;
+              auto l_oiter = oiter;
+              --l_biter;
+              --l_oiter;
+              auto l_bkey = l_biter->first;
+              auto l_okey = l_oiter->first;
+              if (l_bkey > l_okey) {
+                biter = l_biter;
+              } else { // l_bkey <= l_okey
+                oiter = l_oiter;
+              }
+            }
+          } while (!is_valid());
+          cur = get_pair();
+          return true;
+        }
+
 	bool operator==(const iterator &o) const {
 	  return o.biter == biter && o.oiter == oiter;
 	}
@@ -187,10 +215,12 @@ struct transaction_manager_test_t :
 	}
 
 	auto operator*() {
+	  assert(is_valid());
 	  assert(!is_end());
 	  return *cur;
 	}
 	auto operator->() {
+	  assert(is_valid());
 	  assert(!is_end());
 	  return &*cur;
 	}
@@ -228,18 +258,36 @@ struct transaction_manager_test_t :
 	  return ret;
 	}
       }
+
+      std::optional<iterator> get_left(const iterator &it) {
+        iterator left_it(it);
+        bool success = left_it.to_left();
+        if (success) {
+          auto ret = left_it;
+          assert(++left_it == it);
+          return ret;
+        } else {
+          assert(begin() == it);
+          return std::nullopt;
+        }
+      }
     };
+
   private:
     void check_available(
       laddr_t addr, extent_len_t len, const delta_t &delta
     ) const {
       delta_overlay_t overlay(*this, delta);
-      for (const auto &i: overlay) {
-	if (i.first < addr) {
-	  EXPECT_FALSE(i.first + i.second.desc.len > addr);
-	} else {
-	  EXPECT_FALSE(addr + len > i.first);
-	}
+      auto iter = overlay.lower_bound(addr);
+      if (iter != overlay.end()) {
+        assert(iter->first >= addr);
+        EXPECT_TRUE(iter->first >= addr + len);
+      }
+      auto maybe_left_it = overlay.get_left(iter);
+      if (maybe_left_it.has_value()) {
+        auto left_it = *maybe_left_it;
+        assert(left_it->first < addr);
+        EXPECT_TRUE(left_it->first + left_it->second.desc.len <= addr);
       }
     }
 
