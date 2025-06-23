@@ -21,7 +21,7 @@
 #include "BLAKE3/c/blake3.h"
 
 namespace cls::hash {
-  //#define DEBUG_ENDIANNESS
+//#define DEBUG_ENDIANNESS
 
 #ifndef DEBUG_ENDIANNESS
 #define CEPHTOH_16 be16toh
@@ -82,7 +82,8 @@ namespace cls::hash {
   private:
     static constexpr uint8_t CLS_BLK3_FLAG_FIRST_PART = 0x01;
     static constexpr uint8_t CLS_BLK3_FLAG_LAST_PART  = 0x02;
-
+    static constexpr uint8_t CLS_BLK3_FLAG_SINGLE_PART = (CLS_BLK3_FLAG_FIRST_PART|
+                                                          CLS_BLK3_FLAG_LAST_PART);
   public:
     cls_hash_flags_t() : flags(0) {}
     cls_hash_flags_t(uint8_t _flags) : flags(_flags) {}
@@ -113,6 +114,14 @@ namespace cls::hash {
 
     inline void set_last_part() {
       flags |= CLS_BLK3_FLAG_LAST_PART;
+    }
+
+    inline bool is_single_part() const {
+      return ((CLS_BLK3_FLAG_SINGLE_PART & flags) == CLS_BLK3_FLAG_SINGLE_PART);
+    }
+
+    inline void set_single_part() {
+      flags |= CLS_BLK3_FLAG_SINGLE_PART;
     }
 
   private:

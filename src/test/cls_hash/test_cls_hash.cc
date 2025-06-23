@@ -102,6 +102,26 @@ namespace cls::hash {
   }
 
   //---------------------------------------------------------------------------
+  [[maybe_unused]]static void blake3_lcl(const std::vector<std::string> &vec,
+                                         librados::IoCtx &ioctx,
+                                         uint8_t *p_hash)
+  {
+    blake3_hasher hmac;
+    blake3_hasher_init(&hmac);
+    for (const auto& oid : vec ) {
+      bufferlist bl;
+      int ret = ioctx.read(oid, bl, 0, 0);
+      ASSERT_EQ(bl.length(), ret);
+      for (const auto& bptr : bl.buffers()) {
+        blake3_hasher_update(&hmac, (const unsigned char *)bptr.c_str(), bptr.length());
+      }
+    }
+
+    memset(p_hash, 0, BLAKE3_OUT_LEN);
+    blake3_hasher_finalize(&hmac, p_hash, BLAKE3_OUT_LEN);
+  }
+
+  //---------------------------------------------------------------------------
   [[maybe_unused]]static void blake3_cls(const std::vector<std::string> &vec,
                                          const std::vector<uint32_t> &size_vec,
                                          librados::IoCtx &ioctx,
@@ -125,7 +145,15 @@ namespace cls::hash {
       bufferlist out_bl;
       ASSERT_EQ(0, hash_data(op, HASH_BLAKE3, offset, &hash_state_bl, &out_bl, flags));
       int ret = ioctx.operate(oid, &op, nullptr, 0);
-      ASSERT_EQ(0, ret);
+      if (ret == -EOPNOTSUPP) {
+        ASSERT_GT(vec.size(), 1);
+        //std::cerr << "CLS doesn't support multi_part BLAKE3" << std::endl;
+        blake3_lcl(vec, ioctx, p_hash);
+        return;
+      }
+      else {
+        ASSERT_EQ(0, ret);
+      }
 
       if (idx == last_part_idx) {
         ASSERT_EQ(out_bl.length(), BLAKE3_OUT_LEN);
@@ -139,26 +167,6 @@ namespace cls::hash {
       offset += size_vec[idx];
       idx++;
     }
-  }
-
-  //---------------------------------------------------------------------------
-  [[maybe_unused]]static void blake3_lcl(const std::vector<std::string> &vec,
-                                         librados::IoCtx &ioctx,
-                                         uint8_t *p_hash)
-  {
-    blake3_hasher hmac;
-    blake3_hasher_init(&hmac);
-    for (const auto& oid : vec ) {
-      bufferlist bl;
-      int ret = ioctx.read(oid, bl, 0, 0);
-      ASSERT_EQ(bl.length(), ret);
-      for (const auto& bptr : bl.buffers()) {
-        blake3_hasher_update(&hmac, (const unsigned char *)bptr.c_str(), bptr.length());
-      }
-    }
-
-    memset(p_hash, 0, BLAKE3_OUT_LEN);
-    blake3_hasher_finalize(&hmac, p_hash, BLAKE3_OUT_LEN);
   }
 
   //---------------------------------------------------------------------------
@@ -197,12 +205,13 @@ namespace cls::hash {
     fill_buff_with_rand_data(gbuff, size);
     write_obj(oid, ioctx, gbuff, size);
   }
+
 #ifdef RUN_BLAKE3_TESTS
   //---------------------------------------------------------------------------
-  static void hash_multi_objs_file(const std::string &namebase,
-                                   librados::IoCtx &ioctx,
-                                   uint32_t obj_count,
-                                   uint32_t fixed_size = 0)
+  [[maybe_unused]] static void hash_multi_objs_file(const std::string &namebase,
+                                                    librados::IoCtx &ioctx,
+                                                    uint32_t obj_count,
+                                                    uint32_t fixed_size = 0)
   {
     std::vector<std::string> vec;
     std::vector<uint32_t> size_vec;
@@ -629,6 +638,7 @@ namespace cls::hash {
     librados::ObjectReadOperation op;
     cls_hash_flags_t flags;
     flags.set_first_part();
+    flags.set_last_part();
     ASSERT_EQ(0, hash_data(op, HASH_BLAKE3, 0, &hash_state_bl, &out_bl, flags));
     int ret = ioctx.operate(oid, &op, nullptr, 0);
     ASSERT_EQ(-EOVERFLOW, ret);
@@ -655,7 +665,9 @@ namespace cls::hash {
     cls_hash_flags_t flags;
     ASSERT_EQ(0, hash_data(op, HASH_BLAKE3, off, &hash_state_bl, &out_bl, flags));
     int ret = ioctx.operate(oid, &op, nullptr, 0);
-    ASSERT_EQ(-EOVERFLOW, ret);
+    if (ret != -EOPNOTSUPP) {
+      ASSERT_EQ(-EOVERFLOW, ret);
+    }
   }
 
   //---------------------------------------------------------------------------
@@ -678,7 +690,9 @@ namespace cls::hash {
     cls_hash_flags_t flags;
     ASSERT_EQ(0, hash_data(op, HASH_BLAKE3, off, &hash_state_bl, &out_bl, flags));
     int ret = ioctx.operate(oid, &op, nullptr, 0);
-    ASSERT_EQ(-EINVAL, ret);
+    if (ret != -EOPNOTSUPP) {
+      ASSERT_EQ(-EINVAL, ret);
+    }
   }
 
   //---------------------------------------------------------------------------
@@ -702,7 +716,9 @@ namespace cls::hash {
     cls_hash_flags_t flags;
     ASSERT_EQ(0, hash_data(op, HASH_BLAKE3, off, &hash_state_bl, &out_bl, flags));
     int ret = ioctx.operate(oid, &op, nullptr, 0);
-    ASSERT_EQ(-EINVAL, ret);
+    if (ret != -EOPNOTSUPP) {
+      ASSERT_EQ(-EINVAL, ret);
+    }
   }
 
   //---------------------------------------------------------------------------
@@ -726,7 +742,9 @@ namespace cls::hash {
     cls_hash_flags_t flags;
     ASSERT_EQ(0, hash_data(op, HASH_BLAKE3, off, &hash_state_bl, &out_bl, flags));
     int ret = ioctx.operate(oid, &op, nullptr, 0);
-    ASSERT_EQ(-EINVAL, ret);
+    if (ret != -EOPNOTSUPP) {
+      ASSERT_EQ(-EINVAL, ret);
+    }
   }
 
   //---------------------------------------------------------------------------
@@ -847,8 +865,7 @@ namespace cls::hash {
       bufferlist hash_state_bl;
       librados::ObjectReadOperation op;
       cls_hash_flags_t flags;
-      flags.set_first_part();
-      flags.set_last_part();
+      flags.set_single_part();
       ASSERT_EQ(0, hash_data(op, HASH_MD5, off, &hash_state_bl, &out_bl, flags));
       int ret = ioctx.operate(oid, &op, nullptr, 0);
       ASSERT_EQ(0, ret);
@@ -943,8 +960,7 @@ namespace cls::hash {
       bufferlist hash_state_bl;
       librados::ObjectReadOperation op;
       cls_hash_flags_t flags;
-      flags.set_first_part();
-      flags.set_last_part();
+      flags.set_single_part();
       ASSERT_EQ(0, hash_data(op, HASH_SHA256, off, &hash_state_bl, &out_bl, flags));
       int ret = ioctx.operate(oid, &op, nullptr, 0);
       ASSERT_EQ(0, ret);

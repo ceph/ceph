@@ -180,8 +180,12 @@ namespace rgw::dedup {
 
 #ifdef FULL_DEDUP_SUPPORT
     int calc_object_sha256(const disk_record_t *p_rec, uint8_t *p_sha256);
-    int calc_object_blake3(const disk_record_t *p_rec, uint8_t *p_blake3);
-    int calc_object_blake3_cls(const disk_record_t *p_rec, uint8_t *p_blake3);
+    int calc_object_blake3_lcl(const disk_record_t *p_rec,
+                               uint8_t *p_blake3,
+                               md5_stats_t *p_stats);
+    int calc_object_blake3_cls(const disk_record_t *p_rec,
+                               uint8_t *p_blake3,
+                               md5_stats_t *p_stats);
     int add_obj_attrs_to_record(rgw_bucket            *p_rb,
                                 disk_record_t         *p_rec,
                                 const rgw::sal::Attrs &attrs,
@@ -234,9 +238,10 @@ namespace rgw::dedup {
     unsigned d_heart_beat_max_elapsed_sec;
 
     // A pool with 6 billion objects has a  1/(2^64) chance for collison with a 128bit MD5
-    uint64_t d_max_protected_objects   = (6ULL * 1024 * 1024 * 1024);
-    uint64_t d_all_buckets_obj_count   = 0;
-    uint64_t d_all_buckets_obj_size    = 0;
+    uint64_t d_max_protected_objects  = (6ULL * 1024 * 1024 * 1024);
+    uint64_t d_all_buckets_obj_count  = 0;
+    uint64_t d_all_buckets_obj_size   = 0;
+    bool     d_disable_multipart_cls  = false;
     // we don't benefit from deduping RGW objects smaller than head-object size
     uint32_t d_min_obj_size_for_dedup = (4ULL * 1024 * 1024);
     uint32_t d_head_object_size       = (4ULL * 1024 * 1024);

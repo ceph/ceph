@@ -328,6 +328,13 @@ namespace rgw::dedup {
       f->dump_unsigned("Valid SHA256 attrs", this->valid_sha256_attrs);
       f->dump_unsigned("Invalid SHA256 attrs", this->invalid_sha256_attrs);
 
+      if (this->local_blake3) {
+        f->dump_unsigned("Local Blake3 calculation", this->local_blake3);
+      }
+      if (this->cls_blake3) {
+        f->dump_unsigned("CLS Blake3 calculation", this->cls_blake3);
+      }
+
       if (this->set_sha256_attrs) {
         f->dump_unsigned("Set SHA256", this->set_sha256_attrs);
       }

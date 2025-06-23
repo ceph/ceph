@@ -749,7 +749,9 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::calc_object_blake3(const disk_record_t *p_rec, uint8_t *p_hash)
+  int Background::calc_object_blake3_lcl(const disk_record_t *p_rec,
+                                         uint8_t *p_hash,
+                                         md5_stats_t *p_stats)
   {
     const utime_t start_time = ceph_clock_now();
     utime_t calc_time;
@@ -808,6 +810,7 @@ namespace rgw::dedup {
     start = ceph_clock_now();
     blake3_hasher_finalize(&hmac, p_hash, BLAKE3_OUT_LEN);
     calc_time += (ceph_clock_now() - start);
+    p_stats->local_blake3 ++;
     const utime_t total_time = ceph_clock_now() - start_time;
     ldpp_dout(dpp, 20) << __func__ << "::C_BLAKE3::" << p_rec->obj_name
                        << "::parts=" << parts << "::total_time=" << total_time
@@ -816,7 +819,9 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::calc_object_blake3_cls(const disk_record_t *p_rec, uint8_t *p_hash)
+  int Background::calc_object_blake3_cls(const disk_record_t *p_rec,
+                                         uint8_t *p_hash,
+                                         md5_stats_t *p_stats)
   {
     const utime_t start_time = ceph_clock_now();
     //ldpp_dout(dpp, 20) << __func__ << "::p_rec->obj_name=" << p_rec->obj_name << dendl;
@@ -865,6 +870,7 @@ namespace rgw::dedup {
         ldpp_dout(dpp, 20) << __func__ << "::Set BLK3_FLAG_LAST_PART" << dendl;
         flags.set_last_part();
       }
+
       ret = hash_data(op, HASH_BLAKE3, offset, &hash_state_bl, &out_bl, flags);
       if (unlikely(ret != 0)) {
         ldpp_dout(dpp, 1) << __func__ << "::failed hash_state_bl()" << dendl;
@@ -876,6 +882,11 @@ namespace rgw::dedup {
         ldpp_dout(dpp, 1) << __func__ << "::failed cls_hash() for " << raw_obj.oid
                           << "::part=" << parts << ", error is "
                           << cpp_strerror(-ret) << dendl;
+        if (unlikely(ret == -EOPNOTSUPP)) {
+          ldpp_dout(dpp, 1) << __func__ << "::disable multipart BLAKE3 CLS" << dendl;
+          d_disable_multipart_cls = true;
+          return calc_object_blake3_lcl(p_rec, p_hash, p_stats);
+        }
         return ret;
       }
       parts++;
@@ -889,7 +900,7 @@ namespace rgw::dedup {
         break;
       }
     }
-
+    p_stats->cls_blake3 ++;
     const utime_t total_time = ceph_clock_now() - start_time;
     ldpp_dout(dpp, 20) << __func__ << "::BLAKE3::" << p_rec->obj_name
                        << "::parts=" << parts << "::total_time=" << total_time
@@ -920,13 +931,14 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  [[maybe_unused]]static std::string stringToHex(const std::string& input) {
-    std::stringstream ss;
-    for (char c : input) {
-      ss << std::hex << std::setw(2) << std::setfill('0')
-         << static_cast<int>(static_cast<unsigned char>(c));
+  [[maybe_unused]]static std::string stringToHex(const std::string& input)
+  {
+    fmt::memory_buffer buf;
+    buf.reserve(input.size() * 2);
+    for (const unsigned char b : input) {
+      fmt::format_to(std::back_inserter(buf), FMT_COMPILE("{:02X}"), b);
     }
-    return ss.str();
+    return string{buf.begin(), buf.end()};
   }
 
   //---------------------------------------------------------------------------
@@ -1030,10 +1042,18 @@ namespace rgw::dedup {
 
     // TBD: redundant memset...
     memset(p_rec->s.sha256, 0, sizeof(p_rec->s.sha256));
-    int ret = calc_object_blake3_cls(p_rec, (uint8_t*)p_rec->s.sha256);
+    int ret = 0;
+    if (!d_disable_multipart_cls || p_rec->s.obj_bytes_size <= d_head_object_size) {
+      ret = calc_object_blake3_cls(p_rec, (uint8_t*)p_rec->s.sha256, p_stats);
+    }
+    else {
+      ret = calc_object_blake3_lcl(p_rec, (uint8_t*)p_rec->s.sha256, p_stats);
+    }
 #ifdef DEBUG_BLAKE3_CLS
     uint8_t hash2[BLAKE3_OUT_LEN];
-    int ret2 = calc_object_blake3(p_rec, hash2);
+    int ret2 = calc_object_blake3_lcl(p_rec, hash2, p_stats);
+    // we should not count this call
+    p_stats->local_blake3 --;
     if (ret == 0 && ret2 == 0) {
       if (0 == memcmp(p_rec->s.sha256, hash2, sizeof(p_rec->s.sha256))) {
         ldpp_dout(dpp, 10) << "BLAKE3 & BLAKE3_CLS match" << dendl;
@@ -2243,7 +2263,7 @@ namespace rgw::dedup {
     if (unlikely(ret != 0)) {
       return ret;
     }
-
+    d_disable_multipart_cls = false;
     md5_shard_t num_md5_shards = calc_num_md5_shards(d_all_buckets_obj_count);
     num_md5_shards = std::min(num_md5_shards, MAX_MD5_SHARD);
     num_md5_shards = std::max(num_md5_shards, MIN_MD5_SHARD);

@@ -216,6 +216,8 @@ namespace rgw::dedup {
       this->duplicate_records       += other.duplicate_records;
       this->size_mismatch           += other.size_mismatch;
       this->sha256_mismatch         += other.sha256_mismatch;
+      this->local_blake3            += other.local_blake3;
+      this->cls_blake3              += other.cls_blake3;
       this->failed_src_load         += other.failed_src_load;
       this->failed_rec_load         += other.failed_rec_load;
       this->failed_block_load       += other.failed_block_load;
@@ -261,6 +263,8 @@ namespace rgw::dedup {
     uint64_t duplicate_records = 0;
     uint64_t size_mismatch = 0;
     uint64_t sha256_mismatch = 0;
+    uint64_t local_blake3 = 0;
+    uint64_t cls_blake3 = 0;
     uint64_t failed_src_load = 0;
     uint64_t failed_rec_load = 0;
     uint64_t failed_block_load = 0;
@@ -310,6 +314,8 @@ namespace rgw::dedup {
     encode(m.duplicate_records, bl);
     encode(m.size_mismatch, bl);
     encode(m.sha256_mismatch, bl);
+    encode(m.local_blake3, bl);
+    encode(m.cls_blake3, bl);
     encode(m.failed_src_load, bl);
     encode(m.failed_rec_load, bl);
     encode(m.failed_block_load, bl);
@@ -358,6 +364,8 @@ namespace rgw::dedup {
     decode(m.duplicate_records, bl);
     decode(m.size_mismatch, bl);
     decode(m.sha256_mismatch, bl);
+    decode(m.local_blake3, bl);
+    decode(m.cls_blake3, bl);
     decode(m.failed_src_load, bl);
     decode(m.failed_rec_load, bl);
     decode(m.failed_block_load, bl);
