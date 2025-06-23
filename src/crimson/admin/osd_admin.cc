@@ -341,7 +341,7 @@ public:
     cmd_getval(cmdmap, "group", prefix);
     fref->open_object_section("metrics");
     fref->open_array_section("metrics");
-    co_await crimson::reactor_map_seq([f = fref.get(), &prefix] {
+    co_await crimson::invoke_on_all_seq([f = fref.get(), &prefix] {
       for (const auto& [full_name, metric_family]: seastar::scollectd::get_value_map()) {
         if (!prefix.empty() && full_name.compare(0, prefix.size(), prefix) != 0) {
           continue;
