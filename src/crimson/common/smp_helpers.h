@@ -47,14 +47,14 @@ auto proxy_method_on_core(
 }
 
 /**
- * reactor_map_seq
+ * invoke_on_all_seq
  *
  * Invokes f on each reactor sequentially, Caller may assume that
  * f will not be invoked concurrently on multiple cores.
  * f is copied here and is kept alive due to coroutine parameter copying.
  */
 template <typename F>
-auto reactor_map_seq(F f) -> decltype(seastar::futurize_invoke(f)) {
+auto invoke_on_all_seq(F f) -> decltype(seastar::futurize_invoke(f)) {
   for (auto core: seastar::smp::all_cpus()) {
     using ret_type = decltype(f());
     if constexpr (is_errorated_future_v<ret_type>) {
@@ -73,7 +73,7 @@ auto reactor_map_seq(F f) -> decltype(seastar::futurize_invoke(f)) {
  */
 template <typename T, typename F>
 auto sharded_map_seq(T &t, F &&f) {
-  return reactor_map_seq(
+  return invoke_on_all_seq(
     [&t, f=std::forward<F>(f)]() mutable {
       return std::invoke(f, t.local());
     });
