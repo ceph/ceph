@@ -873,8 +873,6 @@ if(WITH_TESTS)
   add_subdirectory(test)
 endif()
 
-add_subdirectory(crypto)
-
 if(WITH_TESTS)
   install(PROGRAMS
     ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack
@@ -1147,6 +1145,7 @@ if(WITH_RADOSGW)
     endif(WITH_SYSTEM_ARROW)
   endif(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
 
+  add_subdirectory(crypto)
   add_subdirectory(libkmip)
   add_subdirectory(rgw)
 endif(WITH_RADOSGW)
