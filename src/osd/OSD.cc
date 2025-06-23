@@ -2793,7 +2793,7 @@ void OSD::asok_command(
     f->dump_stream("osd_fsid") << superblock.osd_fsid;
     f->dump_unsigned("whoami", superblock.whoami);
     f->dump_string("state", get_state_name(get_state()));
-    f->dump_stream("maps") << superblock.maps;
+    f->dump_stream("maps") << superblock.get_maps();
     f->dump_stream("oldest_map") << superblock.get_oldest_map();
     f->dump_stream("newest_map") << superblock.get_newest_map();
     f->dump_unsigned("cluster_osdmap_trim_lower_bound",
@@ -6923,7 +6923,7 @@ void OSD::start_boot()
   }
   dout(1) << __func__ << dendl;
   set_state(STATE_PREBOOT);
-  dout(10) << "start_boot - have maps " << superblock.maps << dendl;
+  dout(10) << "start_boot - have maps " << superblock.get_maps() << dendl;
   monc->get_version("osdmap", CB_OSD_GetVersion(this));
 }
 
@@ -8121,7 +8121,7 @@ void OSD::trim_maps(epoch_t oldest)
     dout(20) << " removing old osdmap epoch " << superblock.get_oldest_map() << dendl;
     t.remove(coll_t::meta(), get_osdmap_pobject_name(superblock.get_oldest_map()));
     t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(superblock.get_oldest_map()));
-    superblock.maps.erase(superblock.get_oldest_map());
+    superblock.erase_oldest_maps();
   }
 
   service.publish_superblock(superblock);
@@ -8422,16 +8422,16 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   track_pools_and_pg_num_changes(added_maps, t);
 
-  if (!superblock.maps.empty()) {
+  if (!superblock.is_maps_empty()) {
     trim_maps(m->cluster_osdmap_trim_lower_bound);
     pg_num_history.prune(superblock.get_oldest_map());
   }
   superblock.insert_osdmap_epochs(first, last);
-  if (superblock.maps.num_intervals() > 1) {
+  if (superblock.get_maps_num_intervals() > 1) {
     // we had a map gap and not yet trimmed all the way up to
     // cluster_osdmap_trim_lower_bound
     dout(10) << __func__ << " osd maps are not contiguous"
-             << superblock.maps << dendl;
+             << superblock.get_maps() << dendl;
   }
   superblock.current_epoch = last;
 
@@ -8501,7 +8501,7 @@ void OSD::track_pools_and_pg_num_changes(
   // lastmap should be the newest_map we have.
   OSDMapRef lastmap;
 
-  if (superblock.maps.empty()) {
+  if (superblock.is_maps_empty()) {
     dout(10) << __func__ << " no maps stored, this is probably "
              << "the first start of this osd" << dendl;
     lastmap = added_maps.at(first);
