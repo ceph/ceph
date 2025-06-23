@@ -45,7 +45,7 @@ add_subdirectory(allocsim)
 add_executable(ceph_test_keyvaluedb
   test_kv.cc)
 target_link_libraries(ceph_test_keyvaluedb
-  os
+  kv
   ceph-common
   ${UNITTEST_LIBS}
   global
@@ -62,7 +62,9 @@ add_executable(unittest_rocksdb_option
   $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_rocksdb_option)
-target_link_libraries(unittest_rocksdb_option global os ${BLKID_LIBRARIES})
+target_link_libraries(unittest_rocksdb_option
+  global os ${BLKID_LIBRARIES}
+  RocksDB::RocksDB)
 
 # ceph_test_bluefs (a clone of unittest_bluefs)
 add_executable(ceph_test_bluefs
