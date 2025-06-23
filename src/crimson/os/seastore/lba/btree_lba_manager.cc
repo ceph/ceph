@@ -436,9 +436,13 @@ BtreeLBAManager::insert_mappings(
 	ceph_assert(p.second);
 	iter = std::move(p.first);
 	auto &leaf_node = *iter.get_leaf_node();
+	bool need_reserved_ptr =
+	  info.is_indirect_mapping() || info.is_zero_mapping();
 	leaf_node.insert_child_ptr(
 	  iter.get_leaf_pos(),
-	  info.extent,
+	  need_reserved_ptr
+	    ? get_reserved_ptr<LBALeafNode, laddr_t>()
+	    : static_cast<BaseChildNode<LBALeafNode, laddr_t>*>(info.extent),
 	  leaf_node.get_size() - 1 /*the size before the insert*/);
 	if (is_valid_child_ptr(info.extent)) {
 	  ceph_assert(info.value.pladdr.is_paddr());
