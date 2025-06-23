@@ -94,6 +94,7 @@ class Connection(NamedTuple):
     connected: bool
     qpairs_count: int
     controller_id: int
+    subsystem: Optional[str]
 
 
 class ConnectionList(NamedTuple):
