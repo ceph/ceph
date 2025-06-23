@@ -6834,3 +6834,8 @@ options:
   level: dev
   default: 0
   desc: When EC writes should generate PDWs (development only) 0=optimal 1=never 2=when possible
+- name: upmap_max_deviation 
+  type: int
+  level: unknown (fixme)
+  default: 5
+  desc: If the number of PGs is within this count then no optimization is attempted
