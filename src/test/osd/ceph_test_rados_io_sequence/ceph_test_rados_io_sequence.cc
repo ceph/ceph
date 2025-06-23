@@ -847,6 +847,8 @@ const std::string ceph::io_sequence::tester::SelectErasurePool::select() {
       configureServices(allow_pool_autoscaling, allow_pool_balancer,
                         allow_pool_deep_scrubbing, allow_pool_scrubbing,
                         test_recovery);
+
+      setApplication(created_pool_name);
     }
   }
 
@@ -870,6 +872,21 @@ std::string ceph::io_sequence::tester::SelectErasurePool::create() {
   ceph_assert(rc == 0);
 
   return pool_name;
+}
+
+void ceph::io_sequence::tester::SelectErasurePool::setApplication(
+    const std::string& pool_name) {
+  bufferlist inbl, outbl;
+  auto formatter = std::make_shared<JSONFormatter>(false);
+
+  ceph::messaging::osd::OSDEnableApplicationRequest
+  enableApplicationRequest{pool_name, "rados"};
+
+  int rc = send_mon_command(enableApplicationRequest, rados,
+                            "OSDEnableApplicationRequest", inbl, &outbl,
+                            formatter.get());
+
+  ceph_assert(rc == 0);
 }
 
 void ceph::io_sequence::tester::SelectErasurePool::configureServices(
