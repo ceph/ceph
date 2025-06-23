@@ -155,8 +155,10 @@ private:
 
   void scan_for_unsynced_group_snapshots(std::unique_lock<ceph::mutex>* locker);
 
-  void try_create_group_snapshot(cls::rbd::GroupSnapshot snap,
+  void try_create_group_snapshot(std::string prev_snap_id,
                                  std::unique_lock<ceph::mutex>* locker);
+  void create_group_snapshot(cls::rbd::GroupSnapshot snap,
+                             std::unique_lock<ceph::mutex>* locker);
 
   void create_mirror_snapshot(
     cls::rbd::GroupSnapshot *snap,
