@@ -584,8 +584,8 @@ public:
     fref->open_array_section("ops_in_flight");
     co_await pg_shard_manager.when_active();
     co_await pg_shard_manager.invoke_on_each_shard_seq(
-      [f = fref.get()](const auto &shard_services) {
-        return shard_services.dump_ops_in_flight(f);
+      [f = fref.get()](const auto &local_service) {
+        return local_service.dump_ops_in_flight(f);
     });
     fref->close_section();
     fref->close_section();

@@ -303,17 +303,16 @@ public:
    * invoke_method_on_each_shard_seq
    *
    * Invokes shard_services method on each shard sequentially.
+   * Following sharded<Service>::invoke_on_all but invoke_on_all_seq
+   * is used to support errorated return types.
    */
   template <typename F, typename... Args>
   seastar::future<> invoke_on_each_shard_seq(
     F &&f) const {
-    return sharded_map_seq(
-      shard_services,
-      [f=std::forward<F>(f)](const ShardServices &shard_services) mutable {
-	return std::invoke(
-	  f,
-	  shard_services);
-      });
+    return invoke_on_all_seq(
+      [this, f=std::forward<F>(f)]() mutable {
+      return std::invoke(f, shard_services.local());
+    });
   }
 
   /**
