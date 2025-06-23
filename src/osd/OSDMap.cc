@@ -2034,9 +2034,17 @@ void OSDMap::clean_temps(CephContext *cct,
       // force a change of primary shard - do not remove pg_temp
       // if it is being used for this purpose
       if (pool->allows_ecoptimizations()) {
-	if (nextmap._pick_primary(pg.second) != primary) {
-	  // pg_temp still required
-	  keep = true;
+        // primary might not be in raw_up - so keep pg_temp unless
+	// proven that the primary is not a non-primary shard
+	keep = true;
+        for (unsigned int i = 0; i < raw_up.size(); ++i) {
+	  if (raw_up[i] == primary) {
+	    if (!pool->is_nonprimary_shard(shard_id_t(i))) {
+	      // pg_temp not required
+	      keep = false;
+	    }
+	    break;
+	  }
 	}
       }
       if (!keep) {
