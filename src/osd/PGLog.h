@@ -1719,7 +1719,14 @@ public:
 		ceph_assert(miter->second.need == i->version);
 		// the 'have' version is reset if an object is deleted,
 		// then created again
-		ceph_assert(miter->second.have == oi.version || miter->second.have == eversion_t());
+		if (ec_optimizations_enabled) {
+		  // non-primary shards in an optimized pool may not have updates
+		  // because of partial writes, which may result in oi.version being
+		  // less than have
+		  ceph_assert(miter->second.have >= oi.version || miter->second.have == eversion_t());
+		} else {
+		  ceph_assert(miter->second.have == oi.version || miter->second.have == eversion_t());
+		}
 		checked.insert(i->soid);
 	      } else {
 		missing.add(i->soid, i->version, oi.version, i->is_delete());
