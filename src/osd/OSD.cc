@@ -2228,6 +2228,46 @@ int OSD::mkfs(CephContext *cct,
   return ret;
 }
 
+int OSD::run_osd_bench(CephContext *cct,
+                       ObjectStore *store,
+                       std::ostream& out)
+{
+  int ret = 0;
+
+  // Bench params: Write 100 4MiB objects with blocksize 4KiB
+  int64_t count = 12288000; // Count of bytes to write
+  int64_t bsize = 4096;     // Block size
+  int64_t osize = 4194304;  // Object size
+  int64_t onum = 100;       // Count of objects to write
+
+  ObjectStore::CollectionHandle ch =
+    store->open_collection(coll_t::meta());
+
+  OSDBenchTest osd_bench{cct, store, ch, count, bsize, osize, onum};
+
+  ret = osd_bench.run_test();
+  if (ret < 0) {
+    return ret;
+  }
+
+  // Format the result in json format
+  Formatter *f = Formatter::create("json");
+  f->open_object_section("osd_bench_results");
+  f->dump_int("status", ret);
+  f->dump_int("bytes_written", count);
+  f->dump_int("blocksize", bsize);
+  f->dump_float("prefill_time", osd_bench.get_prefill_time());
+  f->dump_float("elapsed_sec", osd_bench.get_elapsed_time());
+  f->dump_float("bytes_per_sec", osd_bench.get_bandwidth_rate());
+  f->dump_float("iops", osd_bench.get_iops_rate());
+  f->dump_int("is_rotational", store->is_rotational() ? 1 : 0);
+  f->close_section();
+  f->flush(out);
+  delete f;
+
+  return ret;
+}
+
 int OSD::write_meta(CephContext *cct, ObjectStore *store, uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami, string& osdspec_affinity)
 {
   char val[80];
@@ -3494,84 +3534,15 @@ int OSD::run_osd_bench_test(
           << " osize " << byte_u_t(osize)
           << dendl;
 
-  ObjectStore::Transaction cleanupt;
-  utime_t start = ceph_clock_now();
-
-  if (osize && onum) {
-    bufferlist bl;
-    bufferptr bp(osize);
-    memset(bp.c_str(), 'a', bp.length());
-    bl.push_back(std::move(bp));
-    bl.rebuild_page_aligned();
-    for (int i=0; i<onum; ++i) {
-      char nm[30];
-      snprintf(nm, sizeof(nm), "disk_bw_test_%d", i);
-      object_t oid(nm);
-      hobject_t soid(sobject_t(oid, 0));
-      ObjectStore::Transaction t;
-      t.write(coll_t(), ghobject_t(soid), 0, osize, bl);
-      store->queue_transaction(service.meta_ch, std::move(t), nullptr);
-      cleanupt.remove(coll_t(), ghobject_t(soid));
-    }
+  OSDBenchTest osd_bench{cct, store.get(), service.meta_ch,
+                         count, bsize, osize, onum};
+  ret = osd_bench.run_test();
+  if (ret != 0) {
+    return ret;
   }
 
-  {
-    C_SaferCond waiter;
-    if (!service.meta_ch->flush_commit(&waiter)) {
-      waiter.wait();
-    }
-  }
-  dout(0) << __func__
-          << " prefill took " << ceph_clock_now() - start
-          << dendl;
-
-
-  start = ceph_clock_now();
-  bufferlist bl;
-  for (int64_t pos = 0; pos < count; pos += bsize) {
-    char nm[34];
-    unsigned offset = 0;
-    bufferptr bp(bsize);
-    memset(bp.c_str(), rand() & 0xff, bp.length());
-    bl.push_back(std::move(bp));
-    bl.rebuild_page_aligned();
-    if (onum && osize) {
-      snprintf(nm, sizeof(nm), "disk_bw_test_%d", (int)(rand() % onum));
-      offset = rand() % (osize / bsize) * bsize;
-    } else {
-      snprintf(nm, sizeof(nm), "disk_bw_test_%lld", (long long)pos);
-    }
-    object_t oid(nm);
-    hobject_t soid(sobject_t(oid, 0));
-    ObjectStore::Transaction t;
-    t.write(coll_t::meta(), ghobject_t(soid), offset, bsize, bl);
-    store->queue_transaction(service.meta_ch, std::move(t), nullptr);
-    if (!onum || !osize) {
-      cleanupt.remove(coll_t::meta(), ghobject_t(soid));
-    }
-    bl.clear();
-  }
-
-  {
-    C_SaferCond waiter;
-    if (!service.meta_ch->flush_commit(&waiter)) {
-      waiter.wait();
-    }
-  }
-  utime_t end = ceph_clock_now();
-  *elapsed = end - start;
-  dout(0) << __func__
-          << " benchmark took " << *elapsed
-          << dendl;
-
-  // clean up
-  store->queue_transaction(service.meta_ch, std::move(cleanupt), nullptr);
-  {
-    C_SaferCond waiter;
-    if (!service.meta_ch->flush_commit(&waiter)) {
-      waiter.wait();
-    }
-  }
+  // get elapsed time
+  *elapsed = osd_bench.get_elapsed_time();
 
  return ret;
 }
@@ -10295,27 +10266,15 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
     int64_t bsize = 4096;     // Block size
     int64_t osize = 4194304;  // Object size
     int64_t onum = 100;       // Count of objects to write
-    double elapsed = 0.0;     // Time taken to complete the test
-    double iops = 0.0;
-    stringstream ss;
-    int ret = run_osd_bench_test(count, bsize, osize, onum, &elapsed, ss);
+    OSDBenchTest osd_bench{cct, store.get(), service.meta_ch,
+                           count, bsize, osize, onum};
+    int ret = osd_bench.run_test();
     if (ret != 0) {
       derr << __func__
            << " osd bench err: " << ret
-           << " osd bench errstr: " << ss.str()
            << dendl;
       return;
     }
-
-    double rate = count / elapsed;
-    iops = rate / bsize;
-    dout(1) << __func__
-            << " osd bench result -"
-            << std::fixed << std::setprecision(3)
-            << " bandwidth (MiB/sec): " << rate / (1024 * 1024)
-            << " iops: " << iops
-            << " elapsed_sec: " << elapsed
-            << dendl;
 
     // Get the threshold IOPS set for the underlying hdd/ssd.
     double hi_threshold_iops = 0.0;
@@ -10335,6 +10294,7 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
     // Persist the iops value to the MON store or throw cluster warning
     // if the measured iops is not in the threshold range. If the iops is
     // not within the threshold range, the current/default value is retained.
+    double iops = osd_bench.get_iops_rate();
     if (iops < lo_threshold_iops || iops > hi_threshold_iops) {
       clog->warn() << "OSD bench result of " << std::to_string(iops)
                    << " IOPS is not within the threshold limit range of "
@@ -11532,6 +11492,187 @@ void OSD::ShardedOpWQ::stop_for_fast_shutdown()
       sdata->scheduler->dequeue();
     }
   }
+}
+
+// =============================================================
+
+#undef dout_context
+#define dout_context cct
+#undef dout_prefix
+#define dout_prefix *_dout << "OSDBenchTest: "
+
+int OSDBenchTest::precheck()
+{
+  int ret = 0;
+
+  if (!store) {
+    derr << "OSDBenchTest: objectstore not specified!" << dendl;
+    ret = -ENOENT;
+  }
+
+  if (!ch) {
+    derr << "OSDBenchTest: meta collection not specified!" << dendl;
+    ret = -ENOENT;
+  }
+
+  if (!count || !bsize) {
+    ret = -EINVAL;
+  }
+
+  return ret;
+}
+
+int OSDBenchTest::run_test()
+{
+  int ret = 0;
+
+  ret = precheck();
+  if (ret != 0) {
+    return ret;
+  }
+
+  // flush store cache
+  ret = flush_store_cache();
+  if (ret != 0) {
+    return ret;
+  }
+
+  // Prefill
+  prefill_objects();
+
+  // randwrite test
+  randwrite();
+
+  // cleanup
+  cleanup();
+
+  // Calculate bandwidth & iops
+  if (elapsed && bsize) {
+    bandwidth = count / elapsed;
+    iops = bandwidth / bsize;
+    dout(0) << __func__
+            << ": osd bench result -"
+            << std::fixed << std::setprecision(2)
+            << " bandwidth: " << byte_u_t(bandwidth) << "/sec"
+            << " iops: " << iops
+            << " elapsed_sec: " << elapsed << " secs"
+            << dendl;
+
+  } else {
+    ret = -1; // test did not run properly
+  }
+
+  return ret;
+}
+
+void OSDBenchTest::wait_for_flush_commit()
+{
+  C_SaferCond waiter;
+  if (!ch->flush_commit(&waiter)) {
+    waiter.wait();
+  }
+}
+
+void OSDBenchTest::prefill_objects()
+{
+  utime_t start = ceph_clock_now();
+  if (osize && onum) {
+    bufferlist bl;
+    bufferptr bp(osize);
+    memset(bp.c_str(), 'a', bp.length());
+    bl.push_back(std::move(bp));
+    bl.rebuild_page_aligned();
+    for (int i = 0; i < onum; ++i) {
+      char nm[30];
+      snprintf(nm, sizeof(nm), "disk_bw_test_%d", i);
+      object_t oid(nm);
+      hobject_t soid(sobject_t(oid, 0));
+      ObjectStore::Transaction t;
+      t.write(coll_t(), ghobject_t(soid), 0, osize, bl);
+      store->queue_transaction(ch, std::move(t), nullptr);
+      cleanupt.remove(coll_t(), ghobject_t(soid));
+    }
+  }
+
+  wait_for_flush_commit();
+
+  prefill_time = ceph_clock_now() - start;
+  dout(0) << __func__ << ": Prefill took "
+          << std::fixed << std::setprecision(2)
+          << prefill_time << " secs." << dendl;
+}
+
+void OSDBenchTest::randwrite()
+{
+  std::mt19937 random_gen(std::random_device{}());
+  bufferlist bl;
+
+  utime_t start = ceph_clock_now();
+  for (int64_t pos = 0; pos < count; pos += bsize) {
+    char nm[34];
+    unsigned offset = 0;
+    bufferptr bp(bsize);
+    memset(bp.c_str(), random_gen() & 0xff, bp.length());
+    bl.push_back(std::move(bp));
+    bl.rebuild_page_aligned();
+    if (onum && osize) {
+      snprintf(nm, sizeof(nm), "disk_bw_test_%d", (int)(random_gen() % onum));
+      offset = random_gen() % (osize / bsize) * bsize;
+    } else {
+      snprintf(nm, sizeof(nm), "disk_bw_test_%lld", (long long)pos);
+    }
+    object_t oid(nm);
+    hobject_t soid(sobject_t(oid, 0));
+    ObjectStore::Transaction t;
+    t.write(coll_t::meta(), ghobject_t(soid), offset, bsize, bl);
+    store->queue_transaction(ch, std::move(t), nullptr);
+    if (!onum || !osize) {
+      cleanupt.remove(coll_t::meta(), ghobject_t(soid));
+    }
+    bl.clear();
+  }
+
+  wait_for_flush_commit();
+
+  elapsed = ceph_clock_now() - start;
+  dout(0) << __func__ << ": Test took "
+          << std::fixed << std::setprecision(2)
+          << elapsed << " secs." << dendl;
+}
+
+void OSDBenchTest::cleanup()
+{
+  store->queue_transaction(ch, std::move(cleanupt), nullptr);
+  wait_for_flush_commit();
+  dout(0) << __func__ << ": Clean-up done." << dendl;
+}
+
+OSDBenchTest::OSDBenchTest(
+  CephContext *cct,
+  ObjectStore *store,
+  ObjectStore::CollectionHandle& ch,
+  int64_t count,
+  int64_t bsize,
+  int64_t osize,
+  int64_t onum)
+  : cct(cct),
+    store(store),
+    ch(ch),
+    count(count),
+    bsize(bsize),
+    osize(osize),
+    onum(onum),
+    prefill_time(0.0),
+    elapsed(0.0),
+    bandwidth(0.0),
+    iops(0.0)
+{
+  dout(0) << "OSD Bench Test Params:"
+          << " bench count: " << count
+          << " block size: " << byte_u_t(bsize)
+          << " object size: " << byte_u_t(osize)
+          << " number of objects: " << onum
+          << dendl;
 }
 
 namespace ceph::osd_cmds {
