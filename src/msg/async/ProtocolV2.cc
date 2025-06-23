@@ -2671,6 +2671,17 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
     return WRITE(wait, "wait", read_frame);
   }
 
+  if (peer_global_seq < exproto->peer_global_seq &&
+      exproto->client_cookie && client_cookie &&
+      exproto->client_cookie != client_cookie) {
+    ldout(cct, 1) << __func__ << " client has clearly restarted (peer_global_seq < ex_peer_global_seq && cookie changed), "
+                  << "dropping existing connection=" << existing << " in favor of new one" << dendl;
+    existing->protocol->stop();
+    existing->dispatch_queue->queue_reset(existing.get());
+    l.unlock();
+    return send_server_ident();
+  }
+
   if (exproto->peer_global_seq > peer_global_seq) {
     ldout(cct, 1) << __func__ << " this is a stale connection, peer_global_seq="
                   << peer_global_seq
