@@ -488,17 +488,18 @@ class TestVolumesHelper(CephFSTestCase):
         """
         # get paths to validate old_inodes
         sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {self.volname} {subvolname} {group}')[1:].strip()
-        sv_path = Path(sv_path) #/volumes/<group>/<subvol>/<uuid>
-        sv_dir_path = sv_path.parent #/volumes/<group>/<subvol>
-        group_path = sv_path.parent.parent #/volumes/<group>
-        volumes_path = sv_path.parent.parent.parent #/volumes
-        root_path = sv_path.parent.parent.parent.parent #/
+        os.path.dirname = dirname
+        uuid_path = dirname(sv_path)
+        subvol_path = dirname(dirname(uuid_path))
+        group_path = dirname(subvol_path)
+        volumes_path = dirname(group_path)
+        vol_base_path = dirname(volumes_path)
 
         # dump inodes to validate old_inodes
-        subvol_inode = self.mount_a.path_to_ino(sv_dir_path)
+        uuid_inode = self.mount_a.path_to_ino(uuid_path)
         group_inode = self.mount_a.path_to_ino(group_path)
         volumes_inode = self.mount_a.path_to_ino(volumes_path)
-        root_inode = self.mount_a.path_to_ino(root_path)
+        vol_base_inode = self.mount_a.path_to_ino(vol_base_path)
 
         # Flush journal if asked and then validate
         # If any parent inode's 'first' has not caught up with global snaprealm's seq number because the
@@ -510,10 +511,10 @@ class TestVolumesHelper(CephFSTestCase):
             self.fs.mds_asok(["flush", "journal"])
             self.fs.mds_asok(["flush", "journal"])
 
-        subvol_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(subvol_inode)])
+        uuid_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(uuid_inode)])
         group_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(group_inode)])
         volumes_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(volumes_inode)])
-        root_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(root_inode)])
+        vol_base_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(vol_base_inode)])
 
         # Validate number of old_inodes
         if flush_journal:
@@ -535,30 +536,30 @@ class TestVolumesHelper(CephFSTestCase):
             # in that range. In conclusion, old_inode count depends if parent has snap or not at the time of directory creation
             # and as well on the propagation delay.
             if root_snapshot:
-                self.assertEqual(len(subvol_inode_dump["old_inodes"]), 2) # 1 + 1
+                self.assertEqual(len(uuid_inode_dump["old_inodes"]), 2) # 1 + 1
                 self.assertTrue(0 <= len(group_inode_dump["old_inodes"]) <= 2) # 0 + n
                 self.assertTrue(0 <= len(volumes_inode_dump["old_inodes"]) <= 2) # 0 + n
-                self.assertEqual(len(root_inode_dump["old_inodes"]), 2) # 2 + 0 (no parent snap for root)
+                self.assertEqual(len(vol_base_inode_dump["old_inodes"]), 2) # 2 + 0 (no parent snap for root)
             else:
-                self.assertEqual(len(subvol_inode_dump["old_inodes"]), 1) # 1 + 0
+                self.assertEqual(len(uuid_inode_dump["old_inodes"]), 1) # 1 + 0
                 self.assertEqual(len(group_inode_dump["old_inodes"]), 0) # 0 + 0
                 self.assertEqual(len(volumes_inode_dump["old_inodes"]), 0) # 0 + 0
-                self.assertEqual(len(root_inode_dump["old_inodes"]), 0) # 0 + 0
+                self.assertEqual(len(vol_base__inode_dump["old_inodes"]), 0) # 0 + 0
         elif mds_use_global_snaprealm_seq_for_subvol and not root_snapshot:
-            self.assertGreaterEqual(len(subvol_inode_dump["old_inodes"]), 1)
+            self.assertGreaterEqual(len(uuid_inode_dump["old_inodes"]), 1)
             self.assertGreaterEqual(len(group_inode_dump["old_inodes"]), 0)
             self.assertGreaterEqual(len(volumes_inode_dump["old_inodes"]), 0)
-            self.assertGreaterEqual(len(root_inode_dump["old_inodes"]), 0)
+            self.assertGreaterEqual(len(vol_base_inode_dump["old_inodes"]), 0)
         elif not mds_use_global_snaprealm_seq_for_subvol and not root_snapshot:
-            self.assertEqual(len(subvol_inode_dump["old_inodes"]), 1)
+            self.assertEqual(len(uuid_inode_dump["old_inodes"]), 1)
             self.assertEqual(len(group_inode_dump["old_inodes"]), 0)
             self.assertEqual(len(volumes_inode_dump["old_inodes"]), 0)
-            self.assertEqual(len(root_inode_dump["old_inodes"]), 0)
+            self.assertEqual(len(vol_base_inode_dump["old_inodes"]), 0)
         elif not mds_use_global_snaprealm_seq_for_subvol and root_snapshot:
-            self.assertGreaterEqual(len(subvol_inode_dump["old_inodes"]), 2)
+            self.assertGreaterEqual(len(uuid_inode_dump["old_inodes"]), 2)
             self.assertGreaterEqual(len(group_inode_dump["old_inodes"]), 0)
             self.assertGreaterEqual(len(volumes_inode_dump["old_inodes"]), 0)
-            self.assertGreaterEqual(len(root_inode_dump["old_inodes"]), 2)
+            self.assertGreaterEqual(len(vol_base_inode_dump["old_inodes"]), 2)
 
     def get_client_snapshot_visibility_flag(self, who: str):
         """
@@ -2716,6 +2717,7 @@ class TestSubvolumes(TestVolumesHelper):
         self._wait_for_trash_empty()
 
     def test_subvolume_create_with_desired_mode(self):
+        dirname = os.path.dirname
         subvol1 = self._gen_subvol_name()
 
         # default mode
@@ -2726,10 +2728,8 @@ class TestSubvolumes(TestVolumesHelper):
         self._fs_cmd("subvolume", "create", self.volname, subvol1,  "--mode", "777")
 
         subvol1_path = self._get_subvolume_path(self.volname, subvol1)
-
         # check subvolumegroup's mode
-        subvol_par_path = os.path.dirname(subvol1_path)
-        group_path = os.path.dirname(subvol_par_path)
+        group_path = dirname(dirname(dirname(dirname(subvol1_path))))
         actual_mode1 = self.mount_a.run_shell(['stat', '-c' '%a', group_path]).stdout.getvalue().strip()
         self.assertEqual(actual_mode1, default_mode)
         # check /volumes mode
@@ -3332,11 +3332,11 @@ class TestSubvolumes(TestVolumesHelper):
         subvolume = self._gen_subvol_name()
         self._fs_cmd("subvolume", "create", self.volname, subvolume)
         self._fs_cmd("subvolume", "pin", self.volname, subvolume, "export", "1")
-        path = self._fs_cmd("subvolume", "getpath", self.volname, subvolume)
-        path = os.path.dirname(path) # get subvolume path
+        sv_path = self._fs_cmd("subvolume", "getpath", self.volname, subvolume)
+        sv_base_path = dirname(dirname(dirname(sv_path)))
 
         self._get_subtrees(status=status, rank=1)
-        self._wait_subtrees([(path, 1)], status=status)
+        self._wait_subtrees([(sv_base_path, 1)], status=status)
 
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
@@ -5151,11 +5151,7 @@ class TestPausePurging(TestVolumesHelper):
         return sv_path
 
     def _assert_sv_is_absent_in_trash(self, sv, sv_path, sv_files):
-        uuid = self.mount_a.get_shell_stdout('sudo ls volumes/_deleting').\
-            strip()
-
-        trash_sv_path = sv_path.replace('_nogroup', f'_deleting/{uuid}')
-        trash_sv_path = trash_sv_path.replace(sv, '')
+        trash_sv_path = sv_path.replace('_nogroup', '_deleting/')
 
         try:
             sv_files_new = self.mount_a.get_shell_stdout(
@@ -5170,11 +5166,7 @@ class TestPausePurging(TestVolumesHelper):
             self.assertNotIn(filename, sv_files_new)
 
     def _assert_trashed_sv_is_unpurged(self, sv, sv_path, sv_files):
-        uuid = self.mount_a.get_shell_stdout('sudo ls volumes/_deleting').\
-                    strip()
-
-        trash_sv_path = sv_path.replace('_nogroup', f'_deleting/{uuid}')
-        trash_sv_path = trash_sv_path.replace(sv, '')
+        trash_sv_path = sv_path.replace('_nogroup', '_deleting/')
         sv_files_new = self.mount_a.get_shell_stdout(f'sudo ls {trash_sv_path}').\
             strip()
 
@@ -5238,11 +5230,7 @@ class TestPausePurging(TestVolumesHelper):
         self._wait_for_trash_empty()
 
     def _get_trashed_sv_path(self, sv, sv_path):
-        uuid = self.mount_a.get_shell_stdout('sudo ls volumes/_deleting').\
-            strip()
-
-        trashed_sv_path = sv_path.replace('_nogroup', f'_deleting/{uuid}')
-        trashed_sv_path = trashed_sv_path.replace(sv, '')
+        trashed_sv_path = sv_path.replace('_nogroup', '_deleting/')
         return trashed_sv_path
 
     def _get_num_of_files_in_trashed_sv(self, trashed_sv_path):
@@ -5374,10 +5362,11 @@ class TestPauseCloning(TestVolumesHelper):
         # ...and now let's pause cloning
         self.run_ceph_cmd(f'config set mgr {self.CONF_OPT} true')
 
-        path = os.path.dirname(os.path.dirname(sv_path))
-        uuid = self.mount_a.get_shell_stdout(f'ls {path}/{c}').strip()
+        dirname = os.path.dirname
+        grp_path = dirname(dirname(dirname(dirname(sv_path))))
+        uuid = self.mount_a.get_shell_stdout(f'ls {grp_path}/{c}').strip()
         # n = num of files, value returned by "wc -l"
-        n = self.mount_a.get_shell_stdout(f'ls {path}/{c}/{uuid} | wc -l')
+        n = self.mount_a.get_shell_stdout(f'ls {grp_path}/{c}/{uuid} | wc -l')
         # num of files should be less or equal number of cloner threads
         self.assertLessEqual(int(n), self.NUM_OF_CLONER_THREADS)
 
@@ -7072,6 +7061,24 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
         subvol_uuid = os.path.basename(subvol_path)
         return subvol_uuid
 
+    def get_subvol_uuid_for_v3(self, subvol_name, group_name=None):
+        '''
+        Return the UUID directory component obtained from the path of
+        subvolume.
+        '''
+        cmd = f'fs subvolume getpath {self.volname} {subvol_name}'
+        if group_name:
+            cmd += f' {group_name}'
+
+        subvol_path = self.get_ceph_cmd_stdout(cmd).strip()
+        subvol_uuid = os.path.basename(os.path.dirname(subvol_path))
+        return subvol_uuid
+
+    def construct_snap_path_for_v3(self, subvol_name, snap_name, uuid,
+                                   group_name='_nogroup'):
+        return os.path.join('/volumes', group_name, subvol_name, 'roots',
+                            uuid, '.snap', snap_name, 'mnt')
+
     def construct_snap_path_for_v2(self, subvol_name, snap_name, uuid,
                                    group_name='_nogroup'):
         return os.path.join('/volumes', group_name, subvol_name, '.snap',
@@ -7096,14 +7103,14 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
         snap_name = self._gen_subvol_snap_name()
 
         self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol_name}')
-        sv_uuid = self.get_subvol_uuid(subvol_name)
+        sv_uuid = self.get_subvol_uuid_for_v3(subvol_name)
         self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
                           f'{subvol_name} {snap_name}')
 
         snap_path = self.get_ceph_cmd_stdout(f'fs subvolume snapshot getpath '
                                              f'{self.volname} {subvol_name} '
                                              f'{snap_name}').strip()
-        exp_snap_path = self.construct_snap_path_for_v2(subvol_name, snap_name,
+        exp_snap_path = self.construct_snap_path_for_v3(subvol_name, snap_name,
                                                         sv_uuid)
         self.assertEqual(snap_path, exp_snap_path)
 
@@ -7120,7 +7127,7 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
         self.run_ceph_cmd(f'fs subvolumegroup create {self.volname} {group_name}')
         self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol_name} '
                           f'{group_name}')
-        sv_uuid = self.get_subvol_uuid(subvol_name, group_name)
+        sv_uuid = self.get_subvol_uuid_for_v3(subvol_name, group_name)
         self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
                           f'{subvol_name} {snap_name} {group_name}')
 
@@ -7128,7 +7135,7 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
                                              f'{self.volname} {subvol_name} '
                                              f'{snap_name} {group_name}')\
                                              .strip()
-        exp_snap_path = self.construct_snap_path_for_v2(subvol_name, snap_name,
+        exp_snap_path = self.construct_snap_path_for_v3(subvol_name, snap_name,
                                                         sv_uuid, group_name)
         self.assertEqual(snap_path, exp_snap_path)
 
@@ -7142,7 +7149,7 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
         snap_name = self._gen_subvol_snap_name()
 
         self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol_name}')
-        sv_uuid = self.get_subvol_uuid(subvol_name)
+        sv_uuid = self.get_subvol_uuid_for_v3(subvol_name)
         self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
                           f'{subvol_name} {snap_name}')
         self.run_ceph_cmd(f'fs subvolume rm {self.volname} {subvol_name} '
@@ -7151,7 +7158,7 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
         snap_path = self.get_ceph_cmd_stdout(f'fs subvolume snapshot getpath '
                                              f'{self.volname} {subvol_name} '
                                              f'{snap_name}').strip()
-        exp_snap_path = self.construct_snap_path_for_v2(subvol_name, snap_name,
+        exp_snap_path = self.construct_snap_path_for_v3(subvol_name, snap_name,
                                                         sv_uuid)
         self.assertEqual(snap_path, exp_snap_path)
 
@@ -7169,7 +7176,7 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
         self.run_ceph_cmd(f'fs subvolumegroup create {self.volname} {group_name}')
         self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol_name} '
                           f'{group_name}')
-        sv_uuid = self.get_subvol_uuid(subvol_name, group_name)
+        sv_uuid = self.get_subvol_uuid_for_v3(subvol_name, group_name)
         self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
                           f'{subvol_name} {snap_name} {group_name}')
         self.run_ceph_cmd(f'fs subvolume rm {self.volname} {subvol_name} '
@@ -7179,7 +7186,7 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
                                              f'{self.volname} {subvol_name} '
                                              f'{snap_name} {group_name}')\
                                              .strip()
-        exp_snap_path = self.construct_snap_path_for_v2(subvol_name, snap_name,
+        exp_snap_path = self.construct_snap_path_for_v3(subvol_name, snap_name,
                                                         sv_uuid, group_name)
         self.assertEqual(snap_path, exp_snap_path)
 
@@ -8246,7 +8253,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1)
 
         # remove snapshot from backend to force the clone failure.
-        snappath = os.path.join(".", "volumes", "_nogroup", subvolume, ".snap", snapshot)
+        roots_dir = os.path.join(".", "volumes", "_nogroup", subvolume, "roots")
+        uuid = self.mount_a.get_shell_stdout(f'ls {roots_dir}').strip()
+        snappath = os.path.join(roots_dir, uuid, ".snap", snapshot)
         self.mount_a.run_shell(['sudo', 'rmdir', snappath], omit_sudo=False)
 
         # wait for clone1 to fail.
