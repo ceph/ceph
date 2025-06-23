@@ -415,5 +415,5 @@ add_catch2_test(${test_name}
 endfunction()
 
 add_catch2_test_rgw(rgw_hex)
-add_catch2_test_rgw(fdb)
+add_catch2_test_rgw(fdb NO_CATCH2_MAIN)
 

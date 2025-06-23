@@ -302,7 +302,8 @@ if(WITH_RADOSGW_FDB)
   /usr/include/foundationdb)
 
  target_include_directories(rgw_common PRIVATE 
-  /usr/include/foundationdb)
+  /usr/include/foundationdb
+  "${CMAKE_SOURCE_DIR}/src/rgw")
 
  target_link_libraries(rgw_common PRIVATE
   rgw_fdb)
