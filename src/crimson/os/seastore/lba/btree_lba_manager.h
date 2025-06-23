@@ -352,6 +352,14 @@ private:
     lba_map_val_t value;
     LogicalChildNode* extent = nullptr;
 
+    bool is_zero_mapping() const {
+      return value.pladdr.is_paddr() && value.pladdr.get_paddr().is_zero();
+    }
+
+    bool is_indirect_mapping() const {
+      return value.pladdr.is_laddr();
+    }
+
     static alloc_mapping_info_t create_zero(extent_len_t len) {
       return {
 	L_ADDR_NULL,
@@ -360,8 +368,7 @@ private:
 	  pladdr_t(P_ADDR_ZERO),
 	  EXTENT_DEFAULT_REF_COUNT,
 	  0
-	},
-	static_cast<LogicalChildNode*>(get_reserved_ptr<LBALeafNode, laddr_t>())};
+	}};
     }
     static alloc_mapping_info_t create_indirect(
       laddr_t laddr,
@@ -375,8 +382,7 @@ private:
 	  EXTENT_DEFAULT_REF_COUNT,
 	  0	// crc will only be used and checked with LBA direct mappings
 		// also see pin_to_extent(_by_type)
-	},
-	static_cast<LogicalChildNode*>(get_reserved_ptr<LBALeafNode, laddr_t>())};
+	}};
     }
     static alloc_mapping_info_t create_direct(
       laddr_t laddr,
