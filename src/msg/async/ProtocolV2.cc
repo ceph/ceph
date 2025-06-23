@@ -24,7 +24,11 @@ std::ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
 		<< " " << ceph_con_mode_name(auth_meta->con_mode)
 		<< " :" << connection->port
                 << " s=" << get_state_name(state) << " pgs=" << peer_global_seq
-                << " cs=" << connect_seq << " l=" << connection->policy.lossy
+                << " gs=" << global_seq << " cs=" << connect_seq
+                << " l=" << connection->policy.lossy
+                << " c_cookie=" << client_cookie
+                << " s_cookie=" << server_cookie
+                << " reconnecting=" << reconnecting
                 << " rev1=" << HAVE_MSGR2_FEATURE(peer_supported_features,
                                                   REVISION_1)
                 << " crypto rx=" << session_stream_handlers.rx.get()
@@ -2673,11 +2677,40 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
     auto wait = WaitFrame::Encode();
     return WRITE(wait, "wait", read_frame);
   }
+  // Detect a peer (client) restart and prefer the new connection.
+  // Rationale:
+  // - The client cookie is regenerated in send_client_ident() on client startup.
+  // - If the existing connection (exproto) has a strictly higher peer_global_seq
+  //   than the incoming one, the peer’s sequence appears to have reset on the new
+  //   connection (exproto->peer_global_seq > peer_global_seq).
+  // - Both sides present non-zero cookies and they differ, which strongly indicates
+  //   a new client instance (exproto->client_cookie != client_cookie).
+  // - We only do this when the existing connection is not in a benign terminal/idle
+  //   state (READY or STANDBY); otherwise we might drop a healthy/idle connection.
+  // Action:
+  // Drop the existing connection in favor of the incoming one, then continue the
+  // handshake on the new connection.
+  if (exproto->peer_global_seq > peer_global_seq &&
+    exproto->client_cookie && client_cookie &&
+    exproto->client_cookie != client_cookie &&
+    exproto->state != READY && exproto->state != STANDBY) {
+    ldout(cct, 1) << __func__ << " client has clearly restarted (ex_peer_global_seq="
+                  << exproto->peer_global_seq << " > peer_global_seq=" << peer_global_seq
+                  << " && cookie changed: client_cookie=" << client_cookie << " != ex_client_cookie="
+                  << exproto->client_cookie << "), "
+                  << "existing connection state is " << get_state_name(exproto->state)
+                  << " (not READY or STANDBY), dropping existing_connection=" << existing
+                  << " in favor of new_connection=" << connection << dendl;
+    existing->protocol->stop();
+    existing->dispatch_queue->queue_reset(existing.get());
+    l.unlock();
+    return send_server_ident();
+  }
 
   if (exproto->peer_global_seq > peer_global_seq) {
-    ldout(cct, 1) << __func__ << " this is a stale connection, peer_global_seq="
-                  << peer_global_seq
-                  << " existing->peer_global_seq=" << exproto->peer_global_seq
+    ldout(cct, 1) << __func__ << " this is a stale connection, ex_peer_global_seq="
+                  << exproto->peer_global_seq
+                  << " > peer_global_seq=" << peer_global_seq
                   << ", stopping this connection." << dendl;
     stop();
     connection->dispatch_queue->queue_reset(connection);
@@ -2702,7 +2735,9 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
     // peer has reseted and we're going to reuse the existing connection
     // by replacing the communication socket
     ldout(cct, 1) << __func__ << " found previous session existing=" << existing
-                  << ", peer must have reseted." << dendl;
+                  << ", ex_client_cookie=" << exproto->client_cookie
+                  << "!= client_cookie=" << client_cookie
+                  << ", peer must have reseted!" << dendl;
     if (connection->policy.resetcheck) {
       exproto->reset_session();
     }
