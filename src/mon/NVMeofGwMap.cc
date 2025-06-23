@@ -286,6 +286,11 @@ void NVMeofGwMap::set_addr_vect(const NvmeGwId &gw_id,
 void NVMeofGwMap::increment_gw_epoch(const NvmeGroupKey& group_key)
 {
   if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOFHAMAP)) {
+    if (gw_epoch.find(group_key) == gw_epoch.end()) {
+      gw_epoch[group_key] = epoch;
+      dout(4) << "recreated GW epoch of " << group_key
+           << " " << gw_epoch[group_key] << dendl;
+    }
     gw_epoch[group_key] ++;
     dout(4) << "incremented epoch of " << group_key
          << " " << gw_epoch[group_key] << dendl;
