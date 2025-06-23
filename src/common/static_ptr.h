@@ -101,7 +101,8 @@ class static_ptr {
   // difference in semantics between a pointer-to-const and a const
   // pointer.
   //
-  mutable struct alignas(std::bit_ceil(Size)) {
+  static constexpr std::size_t Alignment = std::bit_ceil(Size);
+  mutable struct alignas(Alignment) {
     unsigned char data[sizeof(Base)];
   } buf;
 
