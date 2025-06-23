@@ -2720,10 +2720,10 @@ class TestSubvolumes(TestVolumesHelper):
         self._fs_cmd("subvolume", "create", self.volname, subvol1,  "--mode", "777")
 
         subvol1_path = self._get_subvolume_path(self.volname, subvol1)
-
         # check subvolumegroup's mode
-        subvol_par_path = os.path.dirname(subvol1_path)
-        group_path = os.path.dirname(subvol_par_path)
+        group_path = subvol1_path
+        for i in range(4):
+            group_path = os.path.dirname(group_path)
         actual_mode1 = self.mount_a.run_shell(['stat', '-c' '%a', group_path]).stdout.getvalue().strip()
         self.assertEqual(actual_mode1, default_mode)
         # check /volumes mode
