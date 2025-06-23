@@ -32,11 +32,11 @@ class PreV3Helper:
     def snapshot_base_path(self):
         return self.get_incar_snap_base_path()
 
-    def snapshot_path(self, snap_name, uuid=None):
+    def snapshot_data_path(self, snap_name):
         '''
         Path to a specific snapshot named 'snap_name'.
         '''
-        self.get_snap_path()
+        return self.get_snap_path(snap_name)
 
 
 class SubvolumeV3(SubvolumeV2):
@@ -114,7 +114,7 @@ class SubvolumeV3(SubvolumeV2):
 
     def get_incar_snap_base_path(self, uuid=None):
         uuid = uuid if uuid else self.uuid
-        return safe_join(self.get_incar_path(uuid), self.spec.snap_base_dir)
+        return safe_join(self.get_incar_path(uuid), self.spec.snap_base_path)
 
     def get_incar_snap_path(self, snap_name, uuid=None):
         uuid = uuid if uuid else self.uuid
@@ -147,7 +147,10 @@ class SubvolumeV3(SubvolumeV2):
     def create_or_update_meta_file(self, subvol_type):
         super(SubvolumeV3, self).create_or_update_meta_file(subvol_type)
 
-        self.fs.symlink(self.meta_file_name, self.meta_path[1:])
+        if self.path_exists(self.meta_path)
+            self.fs.unlink(self.meta_path)
+
+        self.fs.symlink(self.meta_file_name, self.meta_symlink_path)
 
     def _create(self, mode, attrs, subvol_type, auth=True):
         if not self.path_exists(self.group.path):
@@ -185,7 +188,7 @@ class SubvolumeV3(SubvolumeV2):
         create_trashcan(self.fs, self.vol_spec)
 
         with open_trashcan(self.fs, self.vol_spec) as trashcan:
-            trashcan.dump(self.subvol_dir)
+            trashcan.dump(self.subvol_path)
 
     # TODO: base dir should be deleted in subvol v3 too when no snaps are
     # retained on any incarnation, right?
@@ -245,6 +248,7 @@ class SubvolumeV3(SubvolumeV2):
         except MetadataMgrException as e:
             log.error(f"failed to write config: {e}")
             raise VolumeException(e.args[0], e.args[1])
+
     # in subvol v3, self.mnt_dir (AKA data dir) is renamed to ".unlinked" if
     # subvol is deleted but snapshots are retained.
     def trash_incarnation_dir(self):
@@ -263,7 +267,7 @@ class SubvolumeV3(SubvolumeV2):
     # ----- methods for clone operations -----
 
 
-    def snapshot_data_path(self, snap_name):
+    def get_snap_path(self, snap_name):
         uuid = self.get_incar_uuid_for_snap(snap_name)
         if uuid == None:
             raise VolumeException(-errno.ENOENT,
@@ -286,13 +290,17 @@ class SubvolumeV3(SubvolumeV2):
         # adding a delay using mgr/volumes/snapshot_clone_delay config option.
         try:
             self.fs.stat(snap_path)
-        except cephfs.Error as e:
+        except cephfs.ObjectNotFound as e:
             if e.errno == errno.ENOENT:
                 raise VolumeException(-errno.ENOENT,
                                       f'snapshot \'{snap_name}\' does not exist')
             raise VolumeException(-e.args[0], e.args[1])
 
         return snap_path
+
+    @property
+    def purgeable(self):
+        return False if not self.retained or self.list_snapshots() else True
 
     def list_snapshots(self):
         '''
