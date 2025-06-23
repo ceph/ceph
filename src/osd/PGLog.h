@@ -296,8 +296,8 @@ public:
 					eversion_t previous_version) {});
     }
 
-    mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
-      auto divergent = pg_log_t::rewind_from_head(newhead);
+    mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead, bool *dirty_log = nullptr) {
+      auto divergent = pg_log_t::rewind_from_head(newhead, dirty_log);
       index();
       reset_rollback_info_trimmed_to_riter();
       return divergent;
