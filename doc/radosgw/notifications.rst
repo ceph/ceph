@@ -137,6 +137,17 @@ Notification Performance Statistics
     event on each notification, but ``pubsub_push_ok`` and ``pubsub_push_fail``
     are incremented per push action on each notification.
 
+Configuration Options
+------------------------------
+The following are global configuration options for the different endpoints:
+
+HTTP
+~~~~
+.. confval:: rgw_http_notif_message_timeout
+.. confval:: rgw_http_notif_connection_timeout
+.. confval:: rgw_http_notif_max_inflight
+
+
 Bucket Notification REST API
 ----------------------------
 
