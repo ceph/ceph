@@ -349,10 +349,18 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
   if (info.last_complete > newhead)
     info.last_complete = newhead;
 
-  auto divergent = log.rewind_from_head(newhead);
+  bool need_dirty_log;
+  auto divergent = log.rewind_from_head(newhead, &need_dirty_log);
   if (!divergent.empty()) {
     mark_dirty_from(divergent.front().version);
+  } else if (need_dirty_log) {
+    // can_rollback_to and/or rollback_info_trimmed_to have been modified
+    // and need checkpointing
+    dout(10) << "rewind_divergent_log crt = "
+	     << log.get_can_rollback_to() << dendl;
+    dirty_log = true;
   }
+
   for (auto &&entry: divergent) {
     dout(10) << "rewind_divergent_log future divergent " << entry << dendl;
   }
