@@ -65,20 +65,6 @@ auto invoke_on_all_seq(F f) -> decltype(seastar::futurize_invoke(f)) {
   }
 }
 
-/**
- * sharded_map_seq
- *
- * Invokes f on each shard of t sequentially.  Caller may assume that
- * f will not be invoked concurrently on multiple cores.
- */
-template <typename T, typename F>
-auto sharded_map_seq(T &t, F &&f) {
-  return invoke_on_all_seq(
-    [&t, f=std::forward<F>(f)]() mutable {
-      return std::invoke(f, t.local());
-    });
-}
-
 enum class crosscore_type_t {
   ONE,   // from 1 to 1 core
   ONE_N, // from 1 to n cores
