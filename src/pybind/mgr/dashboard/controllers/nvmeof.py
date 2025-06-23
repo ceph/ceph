@@ -604,7 +604,9 @@ else:
         @NvmeofCLICommand("nvmeof connection list")
         @convert_to_model(model.ConnectionList)
         @handle_nvmeof_error
-        def list(self, nqn: str, gw_group: Optional[str] = None, traddr: Optional[str] = None):
+        def list(self, nqn: Optional[str] = None, gw_group: Optional[str] = None, traddr: Optional[str] = None):
+            if not nqn:
+                nqn = '*'
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.list_connections(
                 NVMeoFClient.pb2.list_connections_req(subsystem=nqn)
             )
