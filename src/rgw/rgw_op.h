@@ -1153,6 +1153,7 @@ class RGWCreateBucket : public RGWOp {
   RGWCORSConfiguration cors_config;
   std::set<std::string> rmattr_names;
   bufferlist in_data;
+  std::optional<rgw::s3::ObjectOwnership> object_ownership;
 
   virtual bool need_metadata_upload() const { return false; }
 

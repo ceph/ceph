@@ -3452,6 +3452,13 @@ int RGWCreateBucket::verify_permission(optional_yield y)
     return -EACCES;
   }
 
+  if (object_ownership) {
+    // x-amz-object-ownership requires s3:PutBucketOwnershipControls permission
+    if (!verify_user_permission(this, s, arn, rgw::IAM::s3PutBucketOwnershipControls, false)) {
+      return -EACCES;
+    }
+  }
+
   if (s->auth.identity->get_tenant() != s->bucket_tenant) {
     //AssumeRole is meant for cross account access
     if (s->auth.identity->get_identity_type() != TYPE_ROLE) {
@@ -3813,6 +3820,12 @@ void RGWCreateBucket::execute(optional_yield y)
     cors_config.encode(corsbl);
     createparams.attrs[RGW_ATTR_CORS] = std::move(corsbl);
   }
+
+  if (object_ownership) {
+    rgw::s3::OwnershipControls controls;
+    controls.object_ownership = *object_ownership;
+    encode(controls, createparams.attrs[RGW_ATTR_OWNERSHIP_CONTROLS]);
+  } // TODO: config option to set default ownership when not requested
 
   if (need_metadata_upload()) {
     /* It's supposed that following functions WILL NOT change any special

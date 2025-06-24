@@ -2691,6 +2691,15 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
     }
     createparams.obj_lock_enabled = boost::algorithm::iequals(iter->second, "true");
   }
+
+  if (auto i = s->info.x_meta_map.find("x-amz-object-ownership");
+      i != s->info.x_meta_map.end()) {
+    rgw::s3::ObjectOwnership tmp;
+    if (!rgw::s3::parse(i->second, tmp, s->err.message)) {
+      return -EINVAL;
+    }
+    object_ownership = std::move(tmp);
+  }
   return 0;
 }
 

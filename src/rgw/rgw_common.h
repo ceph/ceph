@@ -120,6 +120,8 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_OBJECT_RETENTION   RGW_ATTR_PREFIX "object-retention"
 #define RGW_ATTR_OBJECT_LEGAL_HOLD  RGW_ATTR_PREFIX "object-legal-hold"
 
+// S3 Object Ownership
+#define RGW_ATTR_OWNERSHIP_CONTROLS RGW_ATTR_PREFIX "ownership-controls"
 
 #define RGW_ATTR_PG_VER 	RGW_ATTR_PREFIX "pg_ver"
 #define RGW_ATTR_SOURCE_ZONE    RGW_ATTR_PREFIX "source_zone"
