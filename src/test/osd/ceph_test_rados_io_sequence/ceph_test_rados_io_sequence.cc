@@ -1098,7 +1098,7 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
           vm.contains("allow_pool_balancer"),
           vm.contains("allow_pool_deep_scrubbing"),
           vm.contains("allow_pool_scrubbing"),
-          vm.contains("test_recovery"),
+          vm.contains("testrecovery"),
           vm.contains("disable_pool_ec_optimizations")},
       snt{rng, vm, "threads", true},
       ssr{vm} {
