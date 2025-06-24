@@ -3894,6 +3894,7 @@ bool OSDMonitor::preprocess_alive(MonOpRequestRef op)
   return false;
 
  ignore:
+  mon.no_reply(op);
   return true;
 }
 
