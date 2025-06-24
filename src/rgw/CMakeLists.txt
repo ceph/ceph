@@ -72,6 +72,7 @@ set(librgw_common_srcs
   rgw_multi_del.cc
   rgw_multipart_meta_filter.cc
   rgw_obj_manifest.cc
+  rgw_object_ownership.cc
   rgw_period.cc
   rgw_realm.cc
   rgw_sync.cc
