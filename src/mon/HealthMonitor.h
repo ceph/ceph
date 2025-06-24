@@ -20,12 +20,14 @@
 #include <string>
 
 #include "mon/PaxosService.h"
+#include "mon/PaxosMap.h"
+#include "mon/health_check.h"
 
 class HealthMonitor : public PaxosService
 {
   version_t version = 0;
-  std::map<int,health_check_map_t> quorum_checks;  // for each quorum member
-  health_check_map_t leader_checks;           // leader only
+  PaxosMap<Monitor, HealthMonitor, std::map<int,health_check_map_t> > quorum_checks;  // for each quorum member
+  PaxosMap<Monitor, HealthMonitor, health_check_map_t> leader_checks;           // leader only
   std::map<std::string,health_mute_t> mutes;
   // location level netsplit pairs to elasped time
   std::map<std::pair<std::string, std::string>, ceph::coarse_mono_clock::time_point> pending_location_netsplits;
