@@ -597,7 +597,7 @@ TEST(ECExtentCache, test_invalidate)
     ASSERT_FALSE(result++->empty());
     ASSERT_TRUE(result++->empty());
     ASSERT_TRUE(result++->empty());
-    ASSERT_TRUE(result++->empty());
+    ASSERT_FALSE(result++->empty());
     cl.complete_write(*op1);
     cl.complete_write(*op2);
     cl.complete_write(*op3);
@@ -629,7 +629,7 @@ TEST(ECExtentCache, test_invalidate_lru)
     auto io2 = iset_from_vector({{{align_prev(18*bs), align_next(19*bs) - align_prev(18*bs)}}}, cl.get_stripe_info());
     io2[shard_id_t(k)].insert(io1.get_extent_superset());
     io2[shard_id_t(k+1)].insert(io1.get_extent_superset());
-    // io 3 is the truncate
+    // io 3 is the truncate (This does the invalidate)
     auto io3 = shard_extent_set_t(cl.sinfo.get_k_plus_m());
     auto io4 = iset_from_vector({{{align_prev(30*bs), align_next(31*bs) - align_prev(30*bs)}}}, cl.get_stripe_info());
     io3[shard_id_t(k)].insert(io1.get_extent_superset());
@@ -662,7 +662,7 @@ TEST(ECExtentCache, test_invalidate_lru)
     cl.complete_write(*op2);
     op2.reset();
 
-    optional op3 = cl.cache.prepare(cl.oid, nullopt, io3, align_next(36*bs), 0, false,
+    optional op3 = cl.cache.prepare(cl.oid, nullopt, io3, align_next(36*bs), 0, true,
       [&cl](ECExtentCache::OpRef &op)
       {
         cl.cache_ready(op->get_hoid(), op->get_result());
