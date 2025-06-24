@@ -974,7 +974,14 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
       Inode *in = fh->inode.get();
 
       if (in->is_fscrypt_enabled()) {
-        in->fscrypt_ctx->convert_to(&out_arg.policy.v2);
+
+        int r = cfuse->client->ll_get_fscrypt_policy_v2(in, &out_arg.policy.v2);
+
+        if (r < 0) {
+          fuse_reply_err(req, r);
+	  break;
+        }
+
         out_arg.policy_size = sizeof(out_arg.policy);
 
         fuse_reply_ioctl(req, 0, &out_arg, sizeof(out_arg));

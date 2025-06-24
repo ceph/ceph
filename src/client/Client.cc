@@ -18349,6 +18349,28 @@ int Client::ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& 
   return 0;
 }
 
+int Client::get_fscrypt_policy_v2(int fd, struct fscrypt_policy_v2* policy)
+{
+  Fh *f = get_filehandle(fd);
+  if (!f) {
+    return -EBADF;
+  }
+
+  return ll_get_fscrypt_policy_v2(f->inode.get(), policy);
+}
+
+int Client::ll_get_fscrypt_policy_v2(Inode *in, struct fscrypt_policy_v2* policy)
+{
+  if (in->is_fscrypt_enabled()) {
+    in->fscrypt_ctx->convert_to(policy);
+    if (policy->version != 2) {
+      return EINVAL;
+    }
+    return 0;
+  }
+  return ENODATA;
+}
+
 int Client::is_encrypted(int fd, UserPerm& perms, char* enctag)
 {
   Fh *f = get_filehandle(fd);

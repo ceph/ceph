@@ -387,6 +387,7 @@ public:
   int fcopyfile(const char *sname, const char *dname, UserPerm& perms, mode_t mode);
 
   int set_fscrypt_policy_v2(int fd, const struct fscrypt_policy_v2& policy);
+  int get_fscrypt_policy_v2(int fd, struct fscrypt_policy_v2* policy);
   int is_encrypted(int fd, UserPerm& perms, char* enctag);
 
   int mds_command(
@@ -750,6 +751,7 @@ public:
   }
 
   int ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& policy);
+  int ll_get_fscrypt_policy_v2(Inode *in, struct fscrypt_policy_v2* policy);
 
   int ll_get_stripe_osd(struct Inode *in, uint64_t blockno,
 			file_layout_t* layout);
