@@ -715,6 +715,7 @@ class CephadmServe:
             + [d.name() for d in all_conflicting_daemons]
             + [d.name() for d in all_daemons_to_remove]
         )
+        results: List[Tuple[bool, Set[str], List[str]]] = []
         for tier in sorted(all_daemons_to_deploy.keys()):
             all_daemons_in_tier_to_deploy = all_daemons_to_deploy[tier]
             deploy_names = [d.name() for d in all_daemons_in_tier_to_deploy]
