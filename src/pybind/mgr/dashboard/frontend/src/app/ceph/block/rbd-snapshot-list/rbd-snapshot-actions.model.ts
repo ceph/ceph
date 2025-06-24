@@ -111,7 +111,7 @@ export class RbdSnapshotActionsModel {
   getProtectDisableDesc(selection: CdTableSelection, featuresName: string[]): boolean | string {
     if (selection.hasSingleSelection && !selection.first().cdExecuting) {
       if (!featuresName?.includes('layering')) {
-        return $localize`The layering feature needs to be enabled on parent image`;
+        return $localize`The layering feature needs to be enabled on parent volume`;
       }
       return false;
     }
