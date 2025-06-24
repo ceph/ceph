@@ -21,6 +21,11 @@ namespace crimson {
 using core_id_t = seastar::shard_id;
 static constexpr core_id_t NULL_CORE = std::numeric_limits<core_id_t>::max();
 
+/**
+ * submit_to
+ *
+ * Transparently deal with vanilla and errorated futures
+ */
 auto submit_to(core_id_t core, auto &&f) {
   using ret_type = decltype(f());
   if constexpr (is_errorated_future_v<ret_type>) {
@@ -56,12 +61,7 @@ auto proxy_method_on_core(
 template <typename F>
 auto invoke_on_all_seq(F f) -> decltype(seastar::futurize_invoke(f)) {
   for (auto core: seastar::smp::all_cpus()) {
-    using ret_type = decltype(f());
-    if constexpr (is_errorated_future_v<ret_type>) {
       co_await crimson::submit_to(core, [&f] { return seastar::futurize_invoke(f);});
-    } else {
-      co_await seastar::smp::submit_to(core, [&f] { return seastar::futurize_invoke(f);});
-    }
   }
 }
 
