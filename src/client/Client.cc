@@ -18311,7 +18311,10 @@ int Client::set_fscrypt_policy_v2(int fd, const struct fscrypt_policy_v2& policy
 int Client::ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& policy)
 {
   if (in->fscrypt_auth.size() > 0) {
-    return -EEXIST;
+    struct fscrypt_policy_v2 policy2;
+    in->fscrypt_ctx->convert_to(&policy2);
+    if (memcmp(&policy, &policy2, sizeof(policy)))
+      return -EEXIST;
   }
 
   if (!in->is_dir())
