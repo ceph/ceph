@@ -7126,7 +7126,6 @@ void OSD::_send_boot()
   if (cluster_messenger->set_addr_unknowns(client_addrs)) {
     dout(10) << " assuming cluster_addrs match client_addrs "
 	     << client_addrs << dendl;
-    cluster_addrs = cluster_messenger->get_myaddrs();
   }
   if (auto session = local_connection->get_priv(); !session) {
     cluster_messenger->ms_deliver_handle_fast_connect(local_connection);
@@ -7155,6 +7154,7 @@ void OSD::_send_boot()
   // are, so now is a good time!
   set_numa_affinity();
 
+  cluster_addrs = cluster_messenger->get_myaddrs(); // honor background updates
   entity_addrvec_t hb_back_addrs = hb_back_server_messenger->get_myaddrs();
   entity_addrvec_t hb_front_addrs = hb_front_server_messenger->get_myaddrs();
   MOSDBoot *mboot = new MOSDBoot(
