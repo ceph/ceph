@@ -6302,6 +6302,12 @@ void RGWDeleteLC::pre_exec()
 
 void RGWPutACLs::execute(optional_yield y)
 {
+  if (s->bucket_object_ownership == rgw::s3::ObjectOwnership::BucketOwnerEnforced) {
+    s->err.message = "Cannot set ACLs when ObjectOwnership is BucketOwnerEnforced.";
+    op_ret = -ERR_ACLS_NOT_SUPPORTED;
+    return;
+  }
+
   const RGWAccessControlPolicy& existing_policy = \
     (rgw::sal::Object::empty(s->object.get()) ? s->bucket_acl : s->object_acl);
 
