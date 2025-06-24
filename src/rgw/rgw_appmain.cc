@@ -65,7 +65,9 @@
 #include "rgw_asio_frontend.h"
 #include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_lua.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_dedup.h"
+#endif
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"
 #endif
@@ -594,6 +596,7 @@ void rgw::AppMain::init_lua()
 #endif
 } /* init_lua */
 
+#ifdef WITH_RADOSGW_RADOS
 void rgw::AppMain::init_dedup()
 {
   rgw::sal::Driver* driver = env.driver;
@@ -608,6 +611,7 @@ void rgw::AppMain::init_dedup()
     }
   }
 }
+#endif
 
 void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
@@ -615,9 +619,9 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   rgw_pauser.reset();
   fe_pauser.reset();
   realm_watcher.reset();
-  pusher.reset();
   reloader.reset();
 #ifdef WITH_RADOSGW_RADOS
+  pusher.reset();
   if (env.driver->get_name() == "rados") {
     if (g_conf().get_val<bool>("rgw_lua_enable"))
       static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->
@@ -636,9 +640,11 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   ldh.reset(nullptr); // deletes ldap helper if it was created
   rgw_log_usage_finalize();
 
+#ifdef WITH_RADOSGW_RADOS
   if (dedup_background) {
     dedup_background->shutdown();
   }
+#endif
 
   if (lua_background) {
     lua_background->shutdown();

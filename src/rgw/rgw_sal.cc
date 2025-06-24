@@ -25,10 +25,14 @@
 #include "common/async/blocked_completion.h"
 
 #include "rgw_sal.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_sal_rados.h"
+#endif
 #include "driver/rados/config/store.h"
 #include "driver/json_config/store.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_d3n_datacache.h"
+#endif
 
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"

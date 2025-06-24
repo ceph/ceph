@@ -27,18 +27,11 @@
 #include "rgw_bucket.h"
 #include "rgw_bucket_layout.h"
 #include "rgw_lc.h"
-#include "rgw_zone.h"
 #include "rgw_string.h"
-#include "rgw_multi.h"
 #include "rgw_sal.h"
-#include "rgw_lc_tier.h"
-#include "rgw_notify.h"
+#include "rgw_multipart_meta_filter.h"
 
 #include "fmt/format.h"
-
-#include "services/svc_sys_obj.h"
-#include "services/svc_zone.h"
-#include "services/svc_tier_rados.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw_lifecycle
@@ -500,7 +493,6 @@ struct lc_op_ctx {
   LCObjsLister& ol;
 
   std::unique_ptr<rgw::sal::Object> obj;
-  RGWObjectCtx octx;
   const DoutPrefixProvider *dpp;
   WorkQ* wq;
 
@@ -514,7 +506,7 @@ struct lc_op_ctx {
     : cct(env.driver->ctx()), env(env), o(o), next_key_name(next_key_name),
       num_noncurrent(num_noncurrent), effective_mtime(effective_mtime),
       driver(env.driver), bucket(env.bucket), op(env.op), ol(env.ol),
-      octx(env.driver), dpp(dpp), wq(wq)
+      dpp(dpp), wq(wq)
     {
       obj = bucket->get_object(o.key);
       /* once bucket versioning is enabled, the non-current entries with
