@@ -1268,9 +1268,9 @@ TEST(ECCommon, encode)
 TEST(ECCommon, decode)
 {
   const uint64_t align_size = EC_ALIGN_SIZE;
-  const uint64_t swidth = 3*align_size;
-  const unsigned int k = 3;
+  const unsigned int k = 4;
   const unsigned int m = 2;
+  const uint64_t swidth = k*align_size;
 
   ECUtil::stripe_info_t s(k, m, swidth, vector<shard_id_t>(0));
   ECListenerStub listenerStub;
@@ -1285,26 +1285,16 @@ TEST(ECCommon, decode)
   ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
 
   ECUtil::shard_extent_map_t semap(&s);
-  bufferlist bl12k;
-  bl12k.append_zero(12288);
-  bufferlist bl8k;
-  bl8k.append_zero(8192);
-  bufferlist bl16k;
-  bl16k.append_zero(16384);
-  semap.insert_in_shard(shard_id_t(1), 512000, bl12k);
-  semap.insert_in_shard(shard_id_t(1), 634880, bl12k);
-  semap.insert_in_shard(shard_id_t(2), 512000, bl12k);
-  semap.insert_in_shard(shard_id_t(2), 630784, bl16k);
-  semap.insert_in_shard(shard_id_t(3), 516096, bl8k);
-  semap.insert_in_shard(shard_id_t(3), 634880, bl12k);
+  bufferlist bl4k;
+  bl4k.append_zero(4096);
+  semap.insert_in_shard(shard_id_t(1), 256 * 1024, bl4k);
+  semap.insert_in_shard(shard_id_t(4), 256 * 1024, bl4k);
+
   ECUtil::shard_extent_set_t want = semap.get_extent_set();
+  want[shard_id_t(0)].insert(256 * 1024, 4096);
+  want[shard_id_t(5)].insert(256 * 1024, 4096);
 
-  want[shard_id_t(0)].insert(516096, 8192);
-  want[shard_id_t(0)].insert(634880, 12288);
-  want[shard_id_t(4)].insert(516096, 8192);
-  want[shard_id_t(4)].insert(634880, 12288);
-
-  ceph_assert(0 == semap.decode(ec_impl, want, 2*1024*1024));
+  ceph_assert(0 == semap.decode(ec_impl, want, k * 256 * 1024 + 4096 + 1));
 }
 
 
@@ -1333,7 +1323,7 @@ TEST(ECCommon, decode2)
   bl528k.append_zero(528*1024);
   bufferlist bl524k;
   bl524k.append_zero(524*1024);
-  semap.insert_in_shard(shard_id_t(0), 0, bl524k);
+  semap.insert_in_shard(shard_id_t(0), 0, bl528k);
   semap.insert_in_shard(shard_id_t(1), 0, bl528k);
   semap.insert_in_shard(shard_id_t(3), 0, bl524k);
   semap.insert_in_shard(shard_id_t(4), 0, bl528k);
@@ -1348,3 +1338,5 @@ TEST(ECCommon, decode2)
 
   ceph_assert(0 == semap.decode(ec_impl, want, 2104*1024));
 }
+
+
