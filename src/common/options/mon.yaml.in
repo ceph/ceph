@@ -856,6 +856,15 @@ options:
   - mon
   flags:
   - runtime
+- name: mon_auth_emergency_allowed_ciphers
+  type: str
+  level: advanced
+  desc: set allowed ciphers to override mon map configuration
+  services:
+  - mon
+  flags:
+  - startup
+  - no_mon_update
 - name: mon_auth_validate_all_caps
   type: bool
   level: advanced
