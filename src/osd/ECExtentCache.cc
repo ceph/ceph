@@ -4,6 +4,7 @@
 #include "ECExtentCache.h"
 #include "ECUtil.h"
 
+#include <mutex>
 #include <ranges>
 
 using namespace std;
@@ -369,33 +370,30 @@ void ECExtentCache::LRU::add(const Line &line) {
 
   shared_ptr<shard_extent_map_t> cache = line.cache;
 
-  mutex.lock();
+  std::lock_guard lock{mutex};
   ceph_assert(!map.contains(k));
   auto i = lru.insert(lru.end(), k);
   auto j = make_pair(std::move(i), std::move(cache));
   map.insert(std::pair(std::move(k), std::move(j)));
   size += line.size; // This is already accounted for in mempool.
   free_maybe();
-  mutex.unlock();
 }
 
 shared_ptr<shard_extent_map_t> ECExtentCache::LRU::find(
     const hobject_t &oid, uint64_t offset) {
-  Key k(offset, oid);
   shared_ptr<shard_extent_map_t> cache = nullptr;
-  mutex.lock();
-  if (map.contains(k)) {
-    auto &&[lru_iter, c] = map.at(k);
+  std::lock_guard lock{mutex};
+  if (auto found = map.find({offset, oid}); found != map.end()) {
+    auto &&[lru_iter, c] = found->second;
     cache = c;
     auto it = lru_iter; // Intentional copy.
     erase(it, false);
   }
-  mutex.unlock();
   return cache;
 }
 
 void ECExtentCache::LRU::remove_object(const hobject_t &oid) {
-  mutex.lock();
+  std::lock_guard lock{mutex};
   for (auto it = lru.begin(); it != lru.end();) {
     if (it->oid == oid) {
       it = erase(it, true);
@@ -403,7 +401,6 @@ void ECExtentCache::LRU::remove_object(const hobject_t &oid) {
       ++it;
     }
   }
-  mutex.unlock();
 }
 
 void ECExtentCache::LRU::free_maybe() {
@@ -414,12 +411,11 @@ void ECExtentCache::LRU::free_maybe() {
 }
 
 void ECExtentCache::LRU::discard() {
-  mutex.lock();
+  std::lock_guard lock{mutex};
   lru.clear();
   update_mempool(0 - map.size(), 0 - size);
   map.clear();
   size = 0;
-  mutex.unlock();
 }
 
 const extent_set ECExtentCache::Op::get_pin_eset(uint64_t alignment) const {
