@@ -517,6 +517,10 @@ bool AuthMonitor::check_health()
     next.add("AUTH_INSECURE_KEYS_CREATABLE", HEALTH_WARN, "Monitors are configured to allow creation of insecure key types", 1);
   }
 
+  if (auto c = cct->_conf.get_val<std::string>("mon_auth_emergency_allowed_ciphers"); !c.empty()) {
+    next.add("AUTH_EMERGENCY_CIPHERS_SET", HEALTH_WARN, "Monitors are configured to use emergency allowed ciphers", 1);
+  }
+
   {
     auto service_key_type = mon.monmap->auth_service_cipher;
     if (!secure_key_types.contains(service_key_type)) {
