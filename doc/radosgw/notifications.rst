@@ -103,6 +103,7 @@ Remove a topic by running the following command:
 Notification Performance Statistics
 -----------------------------------
 
+- ``persistent_topic_size``: queue size in bytes. 
 - ``pubsub_event_triggered``: a running counter of events that have at least one topic associated with them
 - ``pubsub_push_ok``: a running counter, for all notifications, of events successfully pushed to their endpoints
 - ``pubsub_push_fail``: a running counter, for all notifications, of events that failed to be pushed to their endpoints
