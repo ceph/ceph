@@ -21,7 +21,7 @@ import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants
 import { Icons } from '~/app/shared/enum/icons.enum';
 
 import { FormArray, FormControl, UntypedFormControl, Validators } from '@angular/forms';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -44,7 +44,7 @@ import { Host } from '~/app/shared/models/host.interface';
   templateUrl: './smb-cluster-form.component.html',
   styleUrls: ['./smb-cluster-form.component.scss']
 })
-export class SmbClusterFormComponent extends CdForm implements OnInit {
+export class SmbClusterFormComponent extends CdFormCanDeactivate implements OnInit {
   smbForm: CdFormGroup;
   hostsAndLabels$: Observable<{ hosts: any[]; labels: any[] }>;
   hasOrchestrator: boolean;
@@ -179,6 +179,10 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     this.allClustering = Object.values(CLUSTERING);
     this.loadingReady();
     if (!this.isEdit) this.onAuthModeChange();
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.smbForm;
   }
 
   createForm() {

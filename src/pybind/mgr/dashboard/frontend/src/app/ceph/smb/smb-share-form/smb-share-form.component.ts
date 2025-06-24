@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 
@@ -28,7 +28,7 @@ import { SHARE_PATH } from '../smb-share-list/smb-share-list.component';
   templateUrl: './smb-share-form.component.html',
   styleUrls: ['./smb-share-form.component.scss']
 })
-export class SmbShareFormComponent extends CdForm implements OnInit {
+export class SmbShareFormComponent extends CdFormCanDeactivate implements OnInit {
   smbShareForm: CdFormGroup;
   action: string;
   resource: string;
@@ -85,6 +85,10 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
       });
     }
     this.loadingReady();
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.smbShareForm;
   }
 
   createForm() {
