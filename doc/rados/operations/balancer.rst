@@ -60,12 +60,14 @@ of the following form:
 A larger value may increase the speed of cluster balancing / convergence
 at the potential cost of greater impact on client operations.
 
-There is a separate setting ``upmap_max_deviation`` for how uniform the
-distribution of PGs must be for the module to consider the cluster adequately
-balanced.  At the time of writing (June 2025), this value defaults to ``5``,
-which means that if a given OSD's PG replicas vary by five or fewer above or
-below the cluster's average, it will be considered sufficiently balanced.
+The setting ``upmax_max_deviation`` sets the threshold at which the balancer
+module considers the cluster's distribution of PGs adequately balanced. At the
+time of writing (June 2025), this value defaults to ``5``, which means that a
+given OSD's PG replicas are considered adequately balanced when they vary by
+five or fewer above or below the cluster's average. Here are the details of
+this configurable:
 
+.. confval:: upmap_max_deviation
 
 This value of PG replicas / shards (as distinct from logical PGs) is reported
 by the ``ceph osd df`` command under the ``PGS`` column and the variance
