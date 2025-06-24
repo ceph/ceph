@@ -2838,8 +2838,8 @@ tests:
           cluster: mycluster
           type: ceph_default
         exp_annotations:
-          summary: "The number of subsystems defined to the gateway exceeds supported values on cluster mycluster"
-          description: "Although you may continue to create subsystems in node-1, the configuration may not be supported"
+          summary: "The number of subsystems defined to the NVMeoF gateway reached or exceeded the supported values on cluster mycluster"
+          description: "NVMeoF gateway node-1 has reached or exceeded the supported maximum of 128 subsystems. Current count: 129."
 
 # NVMeoFTooManyNamespaces
  - interval: 1m
@@ -2882,8 +2882,8 @@ tests:
           cluster: mycluster
           type: ceph_default
         exp_annotations:
-          summary: "The number of namespaces defined to the gateway exceeds supported values on cluster mycluster"
-          description: "Although you may continue to create namespaces in node-1, the configuration may not be supported"
+          summary: "The number of namespaces defined to the NVMeoF gateway reached or exceeded supported values on cluster mycluster"
+          description: "NVMeoF gateway node-1 has reached or exceeded the supported maximum of 2048 namespaces. Current count: 2200."
 
  # NVMeoFVersionMismatch
  - interval: 1m
