@@ -677,14 +677,32 @@ void write_policy_xml(const RGWAccessControlPolicy& policy,
 
 int create_canned_acl(const ACLOwner& owner,
                       const ACLOwner& bucket_owner,
+                      ObjectOwnership object_ownership,
                       const std::string& canned_acl,
-                      RGWAccessControlPolicy& policy)
+                      RGWAccessControlPolicy& policy,
+                      std::string& error_message)
 {
   if (owner.id == parse_owner("anonymous")) {
     policy.set_owner(bucket_owner);
   } else {
     policy.set_owner(owner);
   }
+
+  // special handling for BucketOwnerEnforced/Preferred
+  if (object_ownership == ObjectOwnership::BucketOwnerEnforced) {
+    // only supports bucket-owner-full-control
+    if (canned_acl != "" && canned_acl != "bucket-owner-full-control") {
+      error_message = "Cannot set ACLs when ObjectOwnership is BucketOwnerEnforced.";
+      return -ERR_ACLS_NOT_SUPPORTED;
+    }
+    policy.set_owner(bucket_owner);
+  } else if (object_ownership == ObjectOwnership::BucketOwnerPreferred) {
+    // prefer bucket owner only for bucket-owner-full-control
+    if (canned_acl == "bucket-owner-full-control") {
+      policy.set_owner(bucket_owner);
+    }
+  }
+
   return create_canned(owner, bucket_owner, canned_acl, policy.get_acl());
 }
 
