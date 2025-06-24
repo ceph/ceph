@@ -173,6 +173,7 @@ TEST_F(OnBlueStore, test_debug_transaction)
   }
 }
 
+// simple test if BlueStore can write to object when read fails
 TEST_F(OnBlueStore, test_write_no_read)
 {
   int r;
@@ -237,6 +238,7 @@ TEST_F(OnBlueStore, test_write_no_read)
   }
 }
 
+// multiple overlapping writes, it tests debug.write_no_read
 TEST_F(OnBlueStore, test_write_no_read_intense)
 {
   typedef boost::mt11213b rand_t;
@@ -303,6 +305,7 @@ TEST_F(OnBlueStore, test_write_no_read_intense)
   }
 }
 
+// tests if regular BlueStore write can operate over corrupted object
 TEST_F(OnBlueStore, test_write_on_corrupted)
 {
   int r;
@@ -363,6 +366,156 @@ TEST_F(OnBlueStore, test_write_on_corrupted)
   {
     ObjectStore::Transaction t;
     t.remove(cid, oid);
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_F(OnBlueStore, test_write_on_corrupted_compressed)
+{
+  typedef boost::mt11213b rand_t;
+  rand_t rng(0);
+  uint32_t align_size = 4096;
+  auto size_sometimes_aligned = [&](uint32_t limit) -> uint32_t {
+    uint32_t x = boost::uniform_int<>(1, limit)(rng);
+    if (boost::uniform_int<>(0,2)(rng) == 0) { //33%
+      uint32_t y = p2align(x, align_size);
+      if (y > 0)
+        return y;
+    }
+    return x;
+  };
+  auto offset_sometimes_aligned = [&](uint32_t limit) -> uint32_t {
+    uint32_t x = boost::uniform_int<>(0, limit)(rng);
+    if (boost::uniform_int<>(0,2)(rng) == 0) { //33%
+      return p2align(x, align_size);
+    }
+    return x;
+  };
+  int r;
+  coll_t cid(spg_t(pg_t(0xcabbea, 10)));
+  auto ch = store->create_new_collection(cid);
+  {
+    pool_opts_t opts;
+    opts.set(pool_opts_t::COMPRESSION_MODE, "force");
+    store->set_collection_opts(ch, opts);
+  }
+
+  constexpr uint32_t test_count = 300;
+  struct item_t {
+    ghobject_t oid;
+    uint32_t object_offset; // one compressed write offset~size
+    uint32_t object_size; // must be more than 0x10000
+    uint32_t write_offset;
+    uint32_t write_size;
+  };
+  std::vector<item_t> test_cases;
+  uint32_t next_object_nr = 0;
+  uint32_t last_object_nr = 0;
+
+  for (uint32_t i = 0; i < test_count; i++)
+  {
+    auto& item = test_cases.emplace_back();
+    item.oid = ghobject_t(hobject_t(sobject_t(
+      string("a_corrupted_object") + to_string(next_object_nr), CEPH_NOSNAP)));
+    last_object_nr = next_object_nr;
+    next_object_nr += boost::uniform_int<>(0,1)(rng);
+    item.object_offset = offset_sometimes_aligned(0x30000);
+    item.object_size = size_sometimes_aligned(0x60000);
+    item.write_offset = offset_sometimes_aligned(0xa0000);
+    item.write_size = size_sometimes_aligned(0x60000);
+  }
+
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    for (const auto& item : test_cases) {
+      t.touch(cid, item.oid);
+      bufferlist bl;
+      bl.append(std::string(item.object_size, 'a'));
+      t.write(cid, item.oid, item.object_offset, item.object_size, bl);
+    }
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+
+
+  // corrupt data on disk
+  for (const auto& item : test_cases) {
+    interval_set<uint64_t, std::map, false> disk_used;
+    debug().get_used_disk(cid, item.oid, disk_used);
+    for (auto& it : disk_used) {
+      auto bdev = debug().get_bdev();
+      bufferlist bl;
+      bl.append(std::string(it.second,'b'));
+      bdev->write(it.first, bl, false);
+    }
+  }
+  {
+    // reload to drop any caches
+    ch.reset();
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+    ch = store->open_collection(cid);
+  }
+  // check objects are unreadable on future write locations
+  for (const auto& item : test_cases) {
+    bufferlist read_data;
+    r = store->read(ch, item.oid, item.write_offset, item.write_size, read_data);
+    if (r == 0) {
+      // reading from above EOF
+    } else if (r == (int)item.write_size) {
+      // it can be zeros from unwritten portion
+      bool is_ok = true;
+      for (auto z : read_data.to_str()) {
+        if (z != '\0') is_ok = false;
+      }
+      EXPECT_TRUE(is_ok);
+    } else {
+      EXPECT_EQ(r, -EIO);
+    }
+  }
+  // perform writes
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    for (const auto& item : test_cases) {
+      bufferlist bl;
+      bl.append(std::string(item.write_size, 'c'));
+      t.write(cid, item.oid, item.write_offset, item.write_size, bl);
+    }
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+
+  }
+  // now objects are readable on all write locations
+  for (const auto& item : test_cases) {
+    bufferlist read_data;
+    r = store->read(ch, item.oid, item.write_offset, item.write_size, read_data);
+    bufferlist expected_data;
+    expected_data.append(std::string(item.write_size, 'c'));
+    EXPECT_TRUE(bl_eq(expected_data, read_data));
+  }
+  {
+    ObjectStore::Transaction t;
+    for (uint32_t nr = 0; nr <= last_object_nr; nr++) {
+      t.remove(cid, ghobject_t(hobject_t(sobject_t(
+        string("a_corrupted_object") + to_string(nr), CEPH_NOSNAP))));
+    }
     t.remove_collection(cid);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
