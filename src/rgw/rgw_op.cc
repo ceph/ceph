@@ -615,7 +615,8 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
       return -EINVAL;
     }
 
-    s->bucket_access_conf = get_public_access_conf_from_attr(s->bucket->get_attrs());
+    s->bucket_access_conf = get_public_access_conf_from_attr(s->bucket_attrs);
+    s->bucket_object_ownership = rgw::s3::get_object_ownership(s->bucket_attrs);
   }
 
   /* handle user ACL only for those APIs which support it */

@@ -1117,6 +1117,7 @@ struct perm_state_from_req_state : public perm_state_base {
 		      _s->env,
 		      _s->auth.identity.get(),
 		      _s->bucket.get() ? _s->bucket->get_info() : RGWBucketInfo(),
+		      _s->bucket_object_ownership,
 		      _s->perm_mask,
 		      _s->defer_to_bucket_acls,
 		      _s->bucket_access_conf),
@@ -1624,11 +1625,12 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
     return true;
   }
 
-  bool ret = object_acl.verify_permission(dpp, *ps->identity, ps->perm_mask, perm,
-					  nullptr, /* http referrer */
-					  ps->bucket_access_conf &&
-					  ps->bucket_access_conf->ignore_public_acls());
-  if (ret) {
+  // object ACLs don't apply for BucketOwnerEnforced
+  if (ps->bucket_object_ownership != rgw::s3::ObjectOwnership::BucketOwnerEnforced &&
+      object_acl.verify_permission(dpp, *ps->identity, ps->perm_mask, perm,
+                                   nullptr, /* http referrer */
+                                   ps->bucket_access_conf &&
+                                   ps->bucket_access_conf->ignore_public_acls())) {
     ldpp_dout(dpp, 10) << __func__ << ": granted by object acl" << dendl;
     if (granted_by_acl) {
       *granted_by_acl = true;
@@ -1637,7 +1639,7 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
   }
 
   if (!ps->cct->_conf->rgw_enforce_swift_acls)
-    return ret;
+    return false;
 
   if ((perm & (int)ps->perm_mask) != perm)
     return false;

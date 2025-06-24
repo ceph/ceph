@@ -14,6 +14,7 @@
  */
 
 #include "rgw_object_ownership.h"
+#include "rgw_common.h"
 #include "rgw_xml.h"
 
 namespace rgw::s3 {
@@ -85,6 +86,24 @@ void decode(OwnershipControls& c, bufferlist::const_iterator& bl)
   DECODE_START(1, bl);
   decode(c.object_ownership, bl);
   DECODE_FINISH(bl);
+}
+
+ObjectOwnership get_object_ownership(const sal::Attrs& attrs)
+{
+  auto i = attrs.find(RGW_ATTR_OWNERSHIP_CONTROLS);
+  if (i == attrs.end()) {
+    // default to ObjectWriter for backward compat
+    return ObjectOwnership::ObjectWriter;
+  }
+
+  try {
+    OwnershipControls ownership;
+    auto p = i->second.cbegin();
+    decode(ownership, p);
+    return ownership.object_ownership;
+  } catch (const buffer::error&) {
+    return ObjectOwnership::ObjectWriter;
+  }
 }
 
 } // namespace rgw::s3

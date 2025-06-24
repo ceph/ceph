@@ -43,6 +43,7 @@
 #include "common/async/yield_context.h"
 #include "rgw_website.h"
 #include "rgw_object_lock.h"
+#include "rgw_object_ownership.h"
 #include "rgw_tag.h"
 #include "rgw_op_type.h"
 #include "rgw_sync_policy.h"
@@ -1383,6 +1384,7 @@ struct req_state : DoutPrefixProvider {
   rgw::IAM::Environment env;
   boost::optional<rgw::IAM::Policy> iam_policy;
   boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
+  rgw::s3::ObjectOwnership bucket_object_ownership = rgw::s3::ObjectOwnership::ObjectWriter;
   std::vector<rgw::IAM::Policy> iam_identity_policies;
 
   /* Is the request made by an user marked as a system one?
@@ -1695,6 +1697,7 @@ struct perm_state_base {
   const rgw::IAM::Environment& env;
   rgw::auth::Identity *identity;
   const RGWBucketInfo bucket_info;
+  rgw::s3::ObjectOwnership bucket_object_ownership;
   int perm_mask;
   bool defer_to_bucket_acls;
   boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
@@ -1703,6 +1706,7 @@ struct perm_state_base {
                   const rgw::IAM::Environment& _env,
                   rgw::auth::Identity *_identity,
                   const RGWBucketInfo& _bucket_info,
+                  rgw::s3::ObjectOwnership bucket_object_ownership,
                   int _perm_mask,
                   bool _defer_to_bucket_acls,
                   boost::optional<PublicAccessBlockConfiguration> _bucket_access_conf = boost::none) :
@@ -1710,6 +1714,7 @@ struct perm_state_base {
                                                 env(_env),
                                                 identity(_identity),
                                                 bucket_info(_bucket_info),
+                                                bucket_object_ownership(bucket_object_ownership),
                                                 perm_mask(_perm_mask),
                                                 defer_to_bucket_acls(_defer_to_bucket_acls),
                                                 bucket_access_conf(_bucket_access_conf)
@@ -1732,6 +1737,7 @@ struct perm_state : public perm_state_base {
              const rgw::IAM::Environment& _env,
              rgw::auth::Identity *_identity,
              const RGWBucketInfo& _bucket_info,
+             rgw::s3::ObjectOwnership bucket_object_ownership,
              int _perm_mask,
              bool _defer_to_bucket_acls,
              const char *_referer,
@@ -1739,6 +1745,7 @@ struct perm_state : public perm_state_base {
                                                     _env,
                                                     _identity,
                                                     _bucket_info,
+                                                    bucket_object_ownership,
                                                     _perm_mask,
                                                     _defer_to_bucket_acls),
                                     referer(_referer),
