@@ -10,8 +10,6 @@ from docutils.statemachine import StringList
 
 from sphinx import addnodes
 from sphinx.directives import ObjectDescription
-from sphinx.domains.python import PyField
-from sphinx.environment import BuildEnvironment
 from sphinx.locale import _
 from sphinx.util import logging, status_iterator, ws_re
 from sphinx.util.docutils import switch_source_input, SphinxDirective
