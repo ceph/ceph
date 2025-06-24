@@ -81,12 +81,23 @@
               <span *ngIf="node?.data?.name"
                     class="me-3">
                 <span *ngIf="(node?.data?.show_warning)">
-                  <i  class="text-danger"
-                      i18n-title
-                      [title]="node?.data?.warning_message"
-                      [ngClass]="icons.danger"></i>
+                  <svg [cdsIcon]="icons.danger"
+                       [size]="icons.size16"
+                       [title]="node?.data?.warning_message"
+                       class="cds-danger-color"></svg>
                 </span>
-                <i [ngClass]="node?.data?.icon"></i>
+                <svg  *ngIf="node?.data?.icon === 'scales'"
+                      [cdsIcon]="icons.reweight"
+                      [size]="icons.size20"
+                      ></svg>
+                <svg *ngIf="node?.data?.icon === 'cube'"
+                     [cdsIcon]="icons.deploy"
+                     [size]="icons.size20"
+                     ></svg>
+                <svg *ngIf="node?.data?.icon === 'fa fa-cubes'"
+                     [cdsIcon]="icons.parentChild"
+                     [size]="icons.size20"
+                     ></svg>
                 {{ node?.data?.name }}
               </span>
               <span class="badge badge-success me-2"
@@ -109,7 +120,9 @@
                         class="btn btn-light dropdown-toggle-split ms-1"
                         (click)="openModal(node, true)"
                         [disabled]="getDisable() || node?.data?.secondary_zone">
-                  <i [ngClass]="[icons.edit]"></i>
+                  <svg [cdsIcon]="icons.edit"
+                       [size]="icons.size16"
+                       class="cds-info-color"></svg>
                 </button>
               </div>
               <ng-container *ngIf="isDeleteDisabled(node) as nodeDeleteData">
@@ -119,7 +132,9 @@
                           class="btn btn-light ms-1"
                           [disabled]="nodeDeleteData.isDisabled || node?.data?.secondary_zone"
                           (click)="delete(node)">
-                    <i [ngClass]="[icons.destroy]"></i>
+                    <svg [cdsIcon]="icons.destroy"
+                         [size]="icons.size16"
+                         class="cds-info-color"></svg>
                   </button>
                 </div>
               </ng-container>

@@ -239,7 +239,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
             }
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: Icons.destroyCircle
+        icon: Icons.clearFilters
       },
       {
         name: this.actionLabels.DELETE,

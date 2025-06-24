@@ -20,7 +20,9 @@
               data-toggle="tooltip"
               [title]="addButtonTooltip"
               [disabled]="availDevices.length === 0 || !canSelect || expansionCanSelect">
-        <i [ngClass]="[icons.add]"></i>
+        <svg [cdsIcon]="icons.add"
+             [size]="icons.size16"
+             ></svg>
         <ng-container i18n>Add</ng-container>
       </button>
     </ng-container>
@@ -32,7 +34,9 @@
         <a class="tc_clearSelections"
            href=""
            (click)="clearDevices(); false">
-          <i [ngClass]="[icons.clearFilters]"></i>
+          <svg [cdsIcon]="icons.clearFilters"
+               [size]="icons.size16"
+               ></svg>
           <ng-container i18n>Clear</ng-container>
         </a>
       </div>

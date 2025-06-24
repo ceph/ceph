@@ -6,8 +6,10 @@
     <h5 class="cd-header">
       <legend (click)="toggleSectionVisibility(section.class)"
               class="collapsible">
-        {{ section.heading }} <i [ngClass]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle"
-                                 aria-hidden="true"></i>
+        {{ section.heading }}&nbsp;
+        <svg [cdsIcon]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle"
+             [size]="icons.size20"
+             ></svg>
       </legend>
     </h5>
     <div class="{{ section.class }}"
@@ -64,7 +66,6 @@
               <ng-template #resetIcon>
                 <svg cdsIcon="reset"
                      size="32"
-                     class="cds--btn__icon"
                      *ngIf="form.get('configuration').get(option.name).disabled"></svg>
               </ng-template>
             </cds-icon-button>
