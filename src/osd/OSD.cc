@@ -7155,6 +7155,7 @@ void OSD::_send_boot()
   // are, so now is a good time!
   set_numa_affinity();
 
+  cluster_addrs = cluster_messenger->get_myaddrs(); // honor background updates
   entity_addrvec_t hb_back_addrs = hb_back_server_messenger->get_myaddrs();
   entity_addrvec_t hb_front_addrs = hb_front_server_messenger->get_myaddrs();
   MOSDBoot *mboot = new MOSDBoot(
