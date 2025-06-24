@@ -8,7 +8,7 @@
 #include "svc_notify.h"
 
 #include "rgw_zone.h"
-#include "rgw_tools.h"
+#include "driver/rados/rgw_tools.h"
 
 #define dout_subsys ceph_subsys_rgw
 

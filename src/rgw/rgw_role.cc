@@ -10,16 +10,12 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include "common/ceph_time.h"
-#include "rgw_rados.h"
 #include "rgw_zone.h"
 
 #include "include/types.h"
 #include "rgw_string.h"
 
 #include "rgw_common.h"
-#include "rgw_metadata.h"
-#include "rgw_metadata_lister.h"
-#include "rgw_tools.h"
 #include "rgw_role.h"
 
 #include "services/svc_zone.h"

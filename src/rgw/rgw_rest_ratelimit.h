@@ -5,7 +5,9 @@
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_sal_rados.h"
+#endif
 
 class RGWHandler_Ratelimit : public RGWHandler_Auth_S3 {
 protected:

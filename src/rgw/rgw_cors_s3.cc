@@ -23,7 +23,7 @@
 #include "include/types.h"
 
 #include "rgw_cors_s3.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw

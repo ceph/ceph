@@ -14,6 +14,12 @@
 #include "rgw_common.h"
 #include "rgw_sal.h"
 
+/*
+ * Defined Bucket Index Namespaces
+ */
+#define RGW_OBJ_NS_MULTIPART "multipart"
+#define RGW_OBJ_NS_SHADOW    "shadow"
+
 extern void init_bucket(rgw_bucket *b, const char *t, const char *n, const char *dp, const char *ip, const char *m, const char *id);
 
 extern int rgw_bucket_parse_bucket_key(CephContext *cct, const std::string& key,

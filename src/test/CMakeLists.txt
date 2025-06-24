@@ -623,12 +623,14 @@ if(NOT WIN32)
   ceph_snappy
   cls_lock
   ceph_test_objectstore
-  ceph_test_bluefs
   ceph_erasure_code_non_regression
   cython_modules
   crushtool
   monmaptool)
 
+if (WITH_BLUESTORE)
+  add_dependencies(tests ceph_test_bluefs)
+endif()
 if (WITH_CEPHFS)
   add_dependencies(tests ceph-mds)
 endif()

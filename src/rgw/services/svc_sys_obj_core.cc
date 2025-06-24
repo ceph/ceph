@@ -4,7 +4,7 @@
 #include "svc_sys_obj_core.h"
 #include "svc_zone.h"
 
-#include "rgw_tools.h"
+#include "driver/rados/rgw_tools.h"
 
 #define dout_subsys ceph_subsys_rgw
 

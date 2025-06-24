@@ -3,7 +3,7 @@
 
 #include "svc_config_key_rados.h"
 
-#include "rgw_tools.h"
+#include "driver/rados/rgw_tools.h"
 
 using std::string;
 
