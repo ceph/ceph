@@ -957,6 +957,23 @@ int Monitor::init()
   dout(2) << "init" << dendl;
   std::lock_guard l(lock);
 
+  auto emergency_ciphers = cct->_conf.get_val<std::string>("mon_auth_emergency_allowed_ciphers");
+  if (!emergency_ciphers.empty()) {
+    std::vector<std::string> v;
+    std::vector<int> ciphers;
+    get_str_vec(emergency_ciphers, ", ", v);
+    for (auto& cipher : v) {
+      int c = CryptoManager::get_key_type(cipher);
+      if (c < 0) {
+        lderr(cct) << "init: invalid cipher: " << cipher << dendl;
+        continue;
+      }
+      ciphers.push_back(c);
+    }
+    std::lock_guard lock{cipher_mutex};
+    my_allowed_ciphers = std::move(ciphers);
+  }
+
   finisher.start();
 
   // start ticker
@@ -6815,8 +6832,16 @@ void Monitor::notify_new_monmap(bool can_change_external_state, bool remove_rank
     std::lock_guard lock{cipher_mutex};
     my_service_cipher = monmap->auth_service_cipher;
     dout(20) << __func__ << ": my_service_cipher now " << my_service_cipher << dendl;
-    my_allowed_ciphers = monmap->auth_allowed_ciphers;
-    dout(20) << __func__ << ": auth_allowed_ciphers now " << my_allowed_ciphers << dendl;
+    auto emergency_ciphers = cct->_conf.get_val<std::string>("mon_auth_emergency_allowed_ciphers");
+    if (emergency_ciphers.empty()) {
+      my_allowed_ciphers = monmap->auth_allowed_ciphers;
+      dout(20) << __func__ << ": auth_allowed_ciphers now " << my_allowed_ciphers << dendl;
+    } else {
+      dout(20) << __func__
+               << ": mon_auth_emergency_allowed_ciphers (" << my_allowed_ciphers
+               << ") overrides MonMap::auth_allowed_ciphers (" << monmap->auth_allowed_ciphers << ")"
+               << dendl;
+    }
   }
 }
 
