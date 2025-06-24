@@ -321,15 +321,19 @@ void NVMeofGwMap::track_deleting_gws(const NvmeGroupKey& group_key,
   propose_pending = false;
   for (auto& itr: created_gws[group_key]) {
     auto &gw_id = itr.first;
-    if (itr.second.availability == gw_availability_t::GW_DELETING) {
+    if (subs.size() &&
+	 itr.second.availability == gw_availability_t::GW_DELETING) {
       int num_ns = 0;
+      dout(4) << " to delete ? " << gw_id
+          << " subsystems size "<< subs.size() << dendl;
       if ( (num_ns = get_num_namespaces(gw_id, group_key, subs)) == 0) {
         do_delete_gw(gw_id, group_key);
         propose_pending =  true;
       }
-      dout(4) << " to delete ? " << gw_id  << " num_ns " << num_ns
-          << " subsystems size "<< subs.size() << dendl;
-      break; // handle just one GW in "Deleting" state in time.
+      dout(4)  << " num_ns " << num_ns << dendl;
+      if (propose_pending) {
+        break; // handle just one GW in "Deleting" state in time.
+      }
     }
   }
 }
