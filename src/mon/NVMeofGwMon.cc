@@ -426,8 +426,10 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
       if (map.created_gws[group_key].size()) {
         time_t seconds_since_1970 = time(NULL);
         uint32_t index = ((seconds_since_1970/60) %
-             map.created_gws[group_key].size()) + 1;
-        f->dump_unsigned("rebalance_ana_group", index);
+             map.created_gws[group_key].size());
+        auto it = map.created_gws[group_key].begin();
+        std::advance(it, index);
+        f->dump_unsigned("rebalance_ana_group", it->second.ana_grp_id + 1);
       }
     }
     f->dump_unsigned("num gws", map.created_gws[group_key].size());
