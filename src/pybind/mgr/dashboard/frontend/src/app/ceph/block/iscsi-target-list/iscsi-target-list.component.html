@@ -38,9 +38,9 @@
     <button class="btn btn-light"
             type="button"
             (click)="configureDiscoveryAuth()">
-      <i [ngClass]="[icons.key]"
-         aria-hidden="true">
-      </i>
+      <svg [cdsIcon]="icons.key"
+           [size]="icons.size16"
+           ></svg>
       <ng-container i18n>Discovery authentication</ng-container>
     </button>
   </div>

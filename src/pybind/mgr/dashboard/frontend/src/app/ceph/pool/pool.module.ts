@@ -14,6 +14,10 @@ import { ErasureCodeProfileFormModalComponent } from './erasure-code-profile-for
 import { PoolDetailsComponent } from './pool-details/pool-details.component';
 import { PoolFormComponent } from './pool-form/pool-form.component';
 import { PoolListComponent } from './pool-list/pool-list.component';
+import { IconModule, IconService } from 'carbon-components-angular';
+import HelpIcon from '@carbon/icons/es/help/16';
+import UnlockedIcon from '@carbon/icons/es/unlocked/16';
+import LockedIcon from '@carbon/icons/es/locked/16';
 
 @NgModule({
   imports: [
@@ -24,7 +28,8 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     RouterModule,
     ReactiveFormsModule,
     NgbTooltipModule,
-    BlockModule
+    BlockModule,
+    IconModule
   ],
   exports: [PoolListComponent, PoolFormComponent],
   declarations: [
@@ -35,7 +40,11 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     PoolDetailsComponent
   ]
 })
-export class PoolModule {}
+export class PoolModule {
+  constructor(private iconService: IconService) {
+    this.iconService.registerAll([HelpIcon, UnlockedIcon, LockedIcon]);
+  }
+}
 
 const routes: Routes = [
   { path: '', component: PoolListComponent },

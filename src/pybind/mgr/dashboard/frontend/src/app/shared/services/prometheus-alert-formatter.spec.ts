@@ -86,7 +86,7 @@ describe('PrometheusAlertFormatter', () => {
         NotificationType.error,
         'Some alert (active)',
         'Some alert is active <a href="http://some-alert" target="_blank">' +
-          '<i class="fa fa-line-chart"></i></a>',
+          '<svg cdsIcon="analytics" size="16" ></svg></a>',
         undefined,
         'Prometheus'
       )

@@ -190,7 +190,10 @@
                 id="add-plc"
                 class="btn btn-light float-end my-3"
                 (click)="addPlacementTarget()">
-          <i [ngClass]="[icons.add]"></i>
+          <svg [cdsIcon]="icons.add"
+               [size]="icons.size16"
+               class="cds-info-color">
+          </svg>
           <ng-container i18n>Add placement target</ng-container>
         </button>
       </div>
