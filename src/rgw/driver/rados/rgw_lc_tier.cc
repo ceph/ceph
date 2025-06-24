@@ -1019,8 +1019,10 @@ int cloud_tier_restore(const DoutPrefixProvider *dpp, RGWRESTConn& dest_conn,
   bufferlist bl, out_bl;
   string resource = obj_to_aws_path(dest_obj);
 
-  const std::string tier_v = (glacier_params.glacier_restore_tier_type == GlacierRestoreTierType::Expedited) ? "Expedited" : "Standard";
-
+  std::optional<std::string> tier_v;
+  if (glacier_params.glacier_restore_tier_type != GlacierRestoreTierType::NoTier) {
+    tier_v = (glacier_params.glacier_restore_tier_type == GlacierRestoreTierType::Expedited) ? "Expedited" : "Standard";
+  }
   struct RestoreRequest {
 	  std::optional<uint64_t> days;
 	  std::optional<std::string> tier;
@@ -1029,7 +1031,7 @@ int cloud_tier_restore(const DoutPrefixProvider *dpp, RGWRESTConn& dest_conn,
 
     void dump_xml(Formatter *f) const {
       encode_xml("Days", days, f);
-      if (tier) {
+      if (tier && tier != "") {
       	f->open_object_section("GlacierJobParameters");
 	      encode_xml("Tier", tier, f);
       	f->close_section();
