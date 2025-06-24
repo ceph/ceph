@@ -102,6 +102,7 @@ void populate_policy(struct ceph_fscrypt_key_identifier kid, struct fscrypt_poli
   policy->contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
   policy->filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
   policy->flags = FSCRYPT_POLICY_FLAGS_PAD_32;
+  memset(policy->__reserved, 0, sizeof(policy->__reserved));
   memcpy(policy->master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
 }
 
@@ -401,7 +402,7 @@ TEST(FSCrypt, SetPolicyNotEmptyDir) {
   ceph_shutdown(cmount);
 }
 
-TEST(FSCrypt, SetPolicyAlreadyExistSameKey) {
+TEST(FSCrypt, SetPolicyAlreadyExistSamePolicy) {
   struct ceph_fscrypt_key_identifier kid;
 
   struct ceph_mount_info* cmount;
@@ -422,6 +423,43 @@ TEST(FSCrypt, SetPolicyAlreadyExistSameKey) {
   ASSERT_EQ(0, r);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
+  ASSERT_EQ(0, r);
+
+  ceph_rmdir(cmount, dir_path.c_str());
+  ceph_shutdown(cmount);
+}
+
+TEST(FSCrypt, SetPolicyAlreadyExistDifferentPolicy) {
+  struct ceph_fscrypt_key_identifier kid;
+
+  struct ceph_mount_info* cmount;
+  int r = init_mount(&cmount);
+  ASSERT_EQ(0, r);
+
+  string dir_path = "dir2";
+  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+
+  int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
+
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+
+  struct fscrypt_policy_v2 policy;
+  populate_policy(kid, &policy);
+
+  r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
+  ASSERT_EQ(0, r);
+
+  char fscrypt_key2[32];
+  for (int i = 0; i < (int)sizeof(fscrypt_key2); ++i) {
+    fscrypt_key2[i] = (char)rand();
+  }
+  struct ceph_fscrypt_key_identifier kid2;
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key2, sizeof(fscrypt_key2), &kid2, 1299);
+
+  struct fscrypt_policy_v2 policy2;
+  populate_policy(kid2, &policy2);
+
+  r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy2);
   ASSERT_EQ(-EEXIST, r);
 
   ceph_rmdir(cmount, dir_path.c_str());
