@@ -1122,6 +1122,11 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
   allow_pool_scrubbing = vm.contains("allow_pool_scrubbing");
   disable_pool_ec_optimizations = vm.contains("disable_pool_ec_optimizations");
 
+  if (testrecovery && (num_objects > 1)) {
+    throw std::invalid_argument("testrecovery option not allowed if parallel is"
+                                " specified, except when parallel=1 is used");
+  }
+
   if (!dryrun) {
     guard.emplace(boost::asio::make_work_guard(asio));
     thread = make_named_thread("io_thread", [&asio = asio] { asio.run(); });
