@@ -283,6 +283,319 @@ indefinitely by running the following command:
    ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false
 
 
+
+AUTH_INSECURE_KEYS_CREATABLE
+____________________________
+
+This warning indicates that the Ceph Monitors are configured to allow the
+creation or rotation of keys with insecure ciphers. This is controlled by the
+Monitor configuration ``mon_auth_allow_insecure_key``. By default, this
+configuration is ``false`` unless the cluster health warning
+``AUTH_INSECURE_KEYS_ALLOWED`` is raised. In other words, when the cluster
+allows insecure keys to authenticate, then it will, by default, also permit the
+creation of new insecure keys.
+
+This warning can be resolved by addressing ``AUTH_INSECURE_KEYS_ALLOWED`` or by
+manually setting this configuration to false.
+
+.. warning:: Only do this when you are sure that it is no longer necessary to
+             create or rotate keys for legacy clients.
+
+.. prompt:: bash $
+
+    ceph config set mon mon_auth_allow_insecure_key false
+
+.. note:: cephadm and Rook should automate this process for you.
+
+
+
+AUTH_INSECURE_SERVICE_TICKETS
+_____________________________
+
+The Ceph Monitors are currently configured to generate tickets for service
+daemons (``ceph-mgr``, ``ceph-osd``, and ``ceph-mds``) using an insecure cipher
+type.
+
+
+.. prompt:: bash $
+
+    ceph health detail
+
+outputs
+
+::
+
+    [WRN] AUTH_INSECURE_SERVICE_TICKETS: Monitors are configured to issue insecure service key types
+
+.. warning:: This warning should only be addressed when all service daemons have been upgraded to a version supporting a secure cipher type.
+
+The warning can be resolved by setting:
+
+.. prompt:: bash $
+
+    ceph mon set auth_service_cipher aes256k
+
+The Ceph Monitors will begin issuing tickets using the more secure cipher type.
+
+.. note:: cephadm and Rook should automate this process for you.
+
+
+
+AUTH_INSECURE_SERVICE_KEY_TYPE
+______________________________
+
+The Ceph Monitors have detected that one or more service daemons are still
+using insecure cipher types for authentication with the Monitors.
+
+.. prompt:: bash $
+
+    ceph health detail
+
+outputs
+
+::
+
+    [ERR] AUTH_INSECURE_SERVICE_KEY_TYPE: 11 auth service entities with insecure key types
+    entity mds.a using insecure key type: aes
+    entity mds.b using insecure key type: aes
+    entity osd.0 using insecure key type: aes
+    entity osd.1 using insecure key type: aes
+    entity osd.2 using insecure key type: aes
+    entity osd.3 using insecure key type: aes
+    entity osd.4 using insecure key type: aes
+    entity osd.5 using insecure key type: aes
+    entity osd.6 using insecure key type: aes
+    entity osd.7 using insecure key type: aes
+    entity mgr.x using insecure key type: aes
+
+.. warning:: Ensure that the daemon is running a version of Ceph that understands the new cipher type.
+
+Fixing this requires rotating the key for each service daemon. You must save
+the new key in daemon's keyring or it will not be able to authenticate.
+
+.. prompt:: bash $
+
+    ceph auth rotate --key-type=aes256k mds.a > MDS_A_KEYRING
+
+Do this for each daemon.
+
+.. note:: cephadm and Rook should automate this process for you.
+
+
+
+AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE
+_______________________________________
+
+The Ceph Monitors have detected insecure cipher types for the rotating service
+keys which encrypt tickets for clients to authenticate with service daemons.
+
+.. prompt:: bash $
+
+    ceph health detail
+
+outputs
+
+::
+
+    [ERR] AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE: 4 rotating auth service keys using insecure key types
+    rotating service keys for mon using insecure key type: aes
+    rotating service keys for mds using insecure key type: aes
+    rotating service keys for osd using insecure key type: aes
+    rotating service keys for mgr using insecure key type: aes
+
+.. warning:: This warning can only be addressed by first resolving AUTH_INSECURE_SERVICE_TICKETS.
+
+The warning will resolve naturally as the extant rotating service keys eventually expire. This is controlled by
+the ``auth_service_ticket_ttl`` Monitor config:
+
+.. prompt:: bash $
+
+    ceph config get mon auth_service_ticket_ttl
+
+::
+
+    3600.000000
+
+There are three rotating keys by default. The keys have laddered expiration;
+one key will expire every ``auth_service_ticket_ttl`` interval. You can wait for the keys to expire
+naturally or force rotation.
+
+.. warning:: Wiping the service keys invalidates tickets for all existing clients.
+             Only upgraded service daemons understand how to acquire new
+             rotating service keys necessary to decrypt client tickets.  Also,
+             only upgraded clients understand how to acquire new tickets when
+             service keys are wiped. You probably do not want to do this
+             manually!
+
+Forcing rotating can be done by:
+
+.. prompt:: bash $
+
+    ceph auth wipe-rotating-service-keys
+
+outputs
+
+::
+
+    wiped rotating service keys!
+
+
+The warning should resolve immediately.
+
+.. note:: cephadm and Rook should automate this process for you.
+
+
+
+AUTH_INSECURE_CLIENT_KEY_TYPE
+_____________________________
+
+
+The Ceph Monitors have detected that client credentials have keys with insecure
+cipher types.
+
+.. prompt:: bash $
+
+    ceph health detail
+
+outputs
+
+::
+
+    [WRN] AUTH_INSECURE_CLIENT_KEY_TYPE: 3 auth client entities with insecure key types
+    entity client.admin using insecure key type: aes
+    entity client.fs using insecure key type: aes
+    entity client.fs_a using insecure key type: aes
+
+
+.. warning:: Resolving this warning may not be immediately possible if there exists legacy clients that do not understand secure cipher types. If this applies to your situation, muting this warning is recommended.
+
+Fixing this requires rotating the key for each affected client. You must save
+the new key on each machine using the client keyring or the client will not be
+able to authenticate.
+
+.. prompt:: bash $
+
+    ceph auth rotate --key-type=aes256k client.X > CLIENT_X_KEYRING
+
+Do this for each client.
+
+
+.. note:: Rook should automate this process for you. cephadm does not generally administer client credentials.
+
+
+AUTH_INSECURE_KEYS_ALLOWED
+__________________________
+
+The Ceph Monitors are currently configured to permit authentication using
+insecure cipher types. This may be necessary to allow authentication
+for legacy clients that cannot use more secure cipher types.
+
+This warning can be addressed by only allowing secure ciphers to be used
+for authentication, like:
+
+.. prompt:: bash $
+
+    ceph mon dump
+
+outputs
+
+::
+
+    epoch 2
+    fsid 75a36aa4-8702-48ca-9138-efff9fabe6a5
+    last_changed 2025-06-17T17:13:13.884177+0000
+    created 2025-06-17T17:13:03.344583+0000
+    min_mon_release 20 (tentacle)
+    election_strategy: 1
+    0: [v2:172.21.10.4:40440/0,v1:172.21.10.4:40441/0] mon.a
+    1: [v2:172.21.10.4:40442/0,v1:172.21.10.4:40443/0] mon.b
+    2: [v2:172.21.10.4:40444/0,v1:172.21.10.4:40445/0] mon.c
+    auth_epoch 0
+    auth_service_cipher aes256k
+    auth_allowed_ciphers aes, aes256k
+    auth_preferred_cipher aes256k
+
+The ``auth_allowed_ciphers`` includes the insecure cipher ``aes`` in ``aes, aes256k``. The ``health detail`` also shows:
+
+.. prompt:: bash $
+
+    ceph health detail
+
+outputs
+
+::
+
+    [WRN] AUTH_INSECURE_SERVICE_KEYS_ALLOWED: Monitors are configured to issue insecure service key types
+    insecure cipher aes allowed for auth
+
+
+.. warning:: Changing the allowed ciphers can result in losing administrative
+             access to the cluster (without emergency measures). If your admin
+             key is using an insecure cipher type, then rotate it to a secure
+             key type and save it to your keyring. Check for
+             AUTH_INSECURE_CLIENT_KEY_TYPE and AUTH_INSECURE_SERVICE_KEY_TYPE
+             warnings to learn what clients or daemons will lose the ability
+             to authenticate. Do not try to resolve AUTH_INSECURE_KEYS_ALLOWED
+             before AUTH_INSECURE_SERVICE_KEY_TYPE.
+
+To remove the insecure cipher type, update to ``aes256k``:
+
+.. prompt:: bash $
+
+    ceph mon set auth_allowed_ciphers aes256k
+
+and verify:
+
+.. prompt:: bash $
+
+    ceph mon dump
+
+outputs
+
+::
+
+    epoch 3
+    fsid 75a36aa4-8702-48ca-9138-efff9fabe6a5
+    last_changed 2025-06-17T17:13:56.336336+0000
+    created 2025-06-17T17:13:03.344583+0000
+    min_mon_release 20 (tentacle)
+    election_strategy: 1
+    0: [v2:172.21.10.4:40440/0,v1:172.21.10.4:40441/0] mon.a
+    1: [v2:172.21.10.4:40442/0,v1:172.21.10.4:40443/0] mon.b
+    2: [v2:172.21.10.4:40444/0,v1:172.21.10.4:40445/0] mon.c
+    auth_epoch 0
+    auth_service_cipher aes256k
+    auth_allowed_ciphers aes256k
+    auth_preferred_cipher aes256k
+
+The warning should now be resolved.
+
+.. note:: Rook should automate this process for you. cephadm will not change this as it may adversely affect existing clients.
+
+
+
+AUTH_EMERGENCY_CIPHERS_SET
+__________________________
+
+The Ceph Monitors are configured to use an set of ciphers to replace the
+``auth_allowed_ciphers`` Monitor setting. This configuration is done on
+an emergency basis and should be temporary.
+
+This configuration is used when the ``auth_allowed_ciphers`` setting prevents
+access to the cluster (due to administrative error). The Monitors can be
+rescued using the ``mon_auth_emergency_allowed_ciphers`` configuration on the
+``ceph-mon`` command-line argument or via its local ``ceph.conf``. The Monitors
+will prefer the ``mon_auth_emergency_allowed_ciphers`` configuration over the
+``mon`` setting when present.
+
+As the warning and configuration name implies, this configuration should only
+be used in an emergency to restore access to other cipher types. The cluster
+will raise ``AUTH_EMERGENCY_CIPHERS_SET`` until that configuration has been
+removed.
+
+
+
+
 Manager
 -------
 
