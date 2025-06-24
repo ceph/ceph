@@ -19,6 +19,7 @@
 #include <optional>
 #include <string>
 #include "include/encoding.h"
+#include "rgw_sal_fwd.h"
 
 class XMLObj;
 namespace ceph { class Formatter; }
@@ -50,5 +51,9 @@ struct OwnershipControls {
 
 void encode(const OwnershipControls&, bufferlist&, uint64_t f=0);
 void decode(OwnershipControls&, bufferlist::const_iterator&);
+
+/// Return the ObjectOwnership from RGW_ATTR_OWNERSHIP_CONTROLS,
+/// or default to ObjectWriter.
+ObjectOwnership get_object_ownership(const sal::Attrs& attrs);
 
 } // namespace rgw::s3
