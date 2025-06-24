@@ -145,20 +145,28 @@ ObjectDataHandler::prepare_shared_region(
   );
 }
 
-ObjectDataHandler::read_ret load_padding(
+ObjectDataHandler::read_iertr::future<std::optional<bufferlist>> load_padding(
   ObjectDataHandler::context_t ctx,
   LBAMapping mapping,
   extent_len_t offset,
-  extent_len_t len)
+  extent_len_t len,
+  bool do_zero = false)
 {
+  LOG_PREFIX(ObjectDataHandler::load_padding);
+  DEBUGT("{}~{} {}", ctx.t, offset, len, mapping);
   if (len == 0) {
-    return seastar::make_ready_future<bufferlist>();
+    return seastar::make_ready_future<std::optional<bufferlist>>();
   }
   if (mapping.get_val().is_zero()) {
-    bufferlist bl;
-    bl.append_zero(len);
-    return ObjectDataHandler::read_iertr::make_ready_future<
-      bufferlist>(std::move(bl));
+    if (do_zero) {
+      return ObjectDataHandler::read_iertr::make_ready_future<
+	std::optional<bufferlist>>();
+    } else {
+      bufferlist bl;
+      bl.append_zero(len);
+      return ObjectDataHandler::read_iertr::make_ready_future<
+	std::optional<bufferlist>>(std::move(bl));
+    }
   } else {
     return ctx.tm.read_pin<ObjectDataBlock>(ctx.t, mapping
     ).si_then([offset, len](auto maybe_indirect_left_extent) {
@@ -166,7 +174,7 @@ ObjectDataHandler::read_ret load_padding(
       ceph::bufferlist prepend_bl;
       prepend_bl.substr_of(read_bl, offset, len);
       return ObjectDataHandler::read_iertr::make_ready_future<
-	bufferlist>(std::move(prepend_bl));
+	std::optional<bufferlist>>(std::move(prepend_bl));
     });
   }
 }
@@ -399,7 +407,8 @@ on_unaligned_edge(
   const overwrite_params_t &params,
   data_t &data,
   LBAMapping &mapping,
-  bool is_beginning)
+  bool is_beginning,
+  bool do_zero = false)
 {
   extent_len_t off = 0;
   extent_len_t length = 0;
@@ -413,7 +422,7 @@ on_unaligned_edge(
     length = params.data_end.template get_byte_distance<
       extent_len_t>(params.raw_end);
   }
-  return load_padding(ctx, mapping, off, length
+  return load_padding(ctx, mapping, off, length, do_zero
   ).si_then([is_beginning, &data](auto bl) {
     if (is_beginning) {
       data.headbl = std::move(bl);
@@ -503,7 +512,8 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
       return ctx.tm.punch_hole<ObjectDataBlock>(
 	ctx.t, params.get_punch_hole_params(), std::move(mapping),
 	[&params, ctx, &data](LBAMapping &mapping, bool is_beginning) {
-	  return on_unaligned_edge(ctx, params, data, mapping, is_beginning);
+	  return on_unaligned_edge(
+	    ctx, params, data, mapping, is_beginning, !data.bl);
 	},
 	[&params, ctx, &data](LBAMapping &mapping, bool merge_left) {
 	  return on_merge(ctx, params, data, mapping, merge_left);
@@ -672,7 +682,7 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
       return ctx.tm.punch_hole<ObjectDataBlock>(
 	ctx.t, params.get_punch_hole_params(), std::move(mapping),
 	[&params, ctx, &data](LBAMapping &mapping, bool is_beginning) {
-	  return on_unaligned_edge(ctx, params, data, mapping, is_beginning);
+	  return on_unaligned_edge(ctx, params, data, mapping, is_beginning, true);
 	},
 	[&params, ctx, &data](LBAMapping &mapping, bool merge_left) {
 	  return on_merge(ctx, params, data, mapping, merge_left);
@@ -930,8 +940,8 @@ ObjectDataHandler::clone_ret do_clone_range(
   extent_len_t len,
   LBAMapping &src_first_mapping,
   LBAMapping &dest_first_mapping,
-  bufferlist &head_padding,
-  bufferlist &tail_padding)
+  std::optional<bufferlist> &head_padding,
+  std::optional<bufferlist> &tail_padding)
 {
   LOG_PREFIX(ObjectDataHandler::do_clone_range);
   DEBUGT(
@@ -967,12 +977,12 @@ ObjectDataHandler::clone_ret do_clone_range(
     ).si_then([&params, ctx, &data, &head_padding, src_base, dest_base,
 	      &tail_padding, &src_first_mapping](auto mapping) {
       assert(mapping.is_end() || mapping.get_key() >= params.data_end);
-      assert((bool)data.headbl == (head_padding.length() != 0));
-      assert((bool)data.tailbl == (tail_padding.length() != 0));
+      assert((bool)data.headbl == (bool)(head_padding));
+      assert((bool)data.tailbl == (bool)(tail_padding));
       auto fut = TransactionManager::get_pin_iertr::make_ready_future<
 	LBAMapping>(mapping);
       if (data.headbl) {
-	data.headbl->append(head_padding);
+	data.headbl->append(*head_padding);
 	fut = ctx.tm.alloc_data_extents<ObjectDataBlock>(
 	  ctx.t,
 	  laddr_hint_t::create_as_fixed(params.data_begin),
@@ -1000,7 +1010,7 @@ ObjectDataHandler::clone_ret do_clone_range(
 	  params.len, std::move(pos), std::move(src_first_mapping));
       });
       if (data.tailbl) {
-	tail_padding.append(*data.tailbl);
+	tail_padding->append(*data.tailbl);
 	data.tailbl = std::move(tail_padding);
 	fut = fut.si_then([ctx, &params](auto pos) {
 	  return ctx.tm.alloc_data_extents<ObjectDataBlock>(
@@ -1054,16 +1064,14 @@ ObjectDataHandler::clone_ret _clone_range(
     LBAMapping sfmapping;
     LBAMapping dfmapping;
     LBAMapping fdmapping;
-    bufferlist head_padding;
-    bufferlist tail_padding;
+    std::optional<bufferlist> head_padding = std::nullopt;
+    std::optional<bufferlist> tail_padding = std::nullopt;
   };
   return seastar::do_with(
     cr_state_t{
       std::move(src_first_mapping),
       std::move(dest_first_mapping),
-      std::move(first_direct_mapping),
-      bufferlist{},
-      bufferlist{}},
+      std::move(first_direct_mapping)},
     [ctx, src_base, dest_base, direct_base, offset, len](auto &state) {
     // load the unaligned head padding if offset is not 4K aligned
     return load_padding(
