@@ -213,8 +213,9 @@ private:
     try {
       decode(event_entry, iter);
     } catch (buffer::error& err) {
-      ldpp_dout(this, 5) << "WARNING: failed to decode entry. error: " << err.what() << dendl;
-      return EntryProcessingResult::Failure;
+      ldpp_dout(this, 1) << "WARNING: failed to decode entry marker: " << entry.marker
+        << ". error: " << err.what() << dendl;
+      return EntryProcessingResult::Expired;
     }
 
     if (event_entry.creation_time == ceph::coarse_real_clock::zero()) {
