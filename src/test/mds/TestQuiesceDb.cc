@@ -1774,7 +1774,7 @@ TEST_F(QuiesceDbTest, QuiesceRootMerge)
     managers.at(mds_gid_t(1))->reset_agent_callback([&agent_map_promise](QuiesceMap& map) -> bool {
       try {
         agent_map_promise.set_value(map);
-      } catch (std::future_error) {
+      } catch (const std::future_error&) {
         // ignore this if we accidentally get called more than once
       }
       return false;
