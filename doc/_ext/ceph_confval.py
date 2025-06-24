@@ -11,7 +11,11 @@ from docutils.statemachine import StringList
 from sphinx import addnodes
 from sphinx.directives import ObjectDescription
 from sphinx.locale import _
-from sphinx.util import logging, status_iterator, ws_re
+from sphinx.util import logging, ws_re
+try:
+    from sphinx.util.display import status_iterator
+except ImportError:
+    from sphinx.util import status_iterator
 from sphinx.util.docutils import switch_source_input, SphinxDirective
 from sphinx.util.docfields import Field
 from sphinx.util.nodes import make_id
