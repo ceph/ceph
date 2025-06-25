@@ -1445,10 +1445,12 @@ class CephadmAgent(DaemonForm):
                 self.loop_interval = int(config['refresh_period'])
                 self.starting_port = int(config['listener_port'])
                 self.jitter_seconds = int(config.get('jitter_seconds', 0))
+                self.metadata_compresion_enabled = bool(config.get('metadata_compresion_enabled', False))
                 self.metadata_payload_optimization_enabled = bool(config.get('metadata_payload_optimization_enabled', False))
                 self.initial_startup_delay_max = int(config.get('initial_startup_delay_max', 0))
                 self.host = config['host']
                 use_lsm = config['device_enhanced_scan']
+                logger.info(f"Agent configuration at startup: {config}")
         except Exception as e:
             self.shutdown()
             raise Error(f'Failed to get agent target ip and port from config: {e}')
@@ -1578,7 +1580,8 @@ class CephadmAgent(DaemonForm):
                                               port=self.target_port,
                                               data=data,
                                               endpoint='/data',
-                                              ssl_ctx=self.ssl_ctx)
+                                              ssl_ctx=self.ssl_ctx,
+                                              compress=self.metadata_compresion_enabled)
                 if status != 200:
                     logger.error(f'HTTP error {status} while querying agent endpoint: {response}')
                     raise RuntimeError(f'non-200 response <{status}> from agent endpoint: {response}')

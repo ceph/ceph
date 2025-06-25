@@ -641,12 +641,33 @@ class HostData(Server):
         self.unsubscribe()
         super().stop()
 
+    def get_data(self) -> Optional[dict]:
+        import io
+        import gzip
+        try:
+            content_encoding = cherrypy.request.headers.get('Content-Encoding', '')
+            raw_body = cherrypy.request.body.read()
+            if content_encoding == 'gzip':
+                self.mgr.log.info(">>> Received gzipped payload")
+                buf = io.BytesIO(raw_body)
+                with gzip.GzipFile(fileobj=buf) as gz:
+                    decompressed = gz.read()
+                data = json.loads(decompressed.decode('utf-8'))
+            else:
+                self.mgr.log.info(">>> Received plain payload")
+                data = json.loads(raw_body.decode('utf-8'))
+            return data
+        except Exception as e:
+            self.mgr.log.error(f"Failed to read request body: {e}")
+            return None
+
     @cherrypy.tools.allow(methods=['POST'])
-    @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
     @cherrypy.expose
     def index(self) -> Dict[str, Any]:
-        data: Dict[str, Any] = cherrypy.request.json
+        data: Optional[Dict[str, Any]] = self.get_data()
+        if data is None:
+            return {}
         results: Dict[str, Any] = {}
         try:
             self.check_request_fields(data)
@@ -686,11 +707,6 @@ class HostData(Server):
         except Exception as e:
             raise Exception(
                 f'Counter value from agent on host {host} could not be converted to an integer: {e}')
-        metadata_types = ['ls', 'networks', 'facts', 'volume']
-        metadata_types_str = '{' + ', '.join(metadata_types) + '}'
-        if not all(item in data.keys() for item in metadata_types):
-            self.mgr.log.warning(
-                f'Agent on host {host} reported incomplete metadata. Not all of {metadata_types_str} were present. Received fields {fields}')
 
     def handle_metadata(self, data: Dict[str, Any]) -> str:
         try:
@@ -861,6 +877,7 @@ class CephadmAgentHelpers:
             payload: Dict[str, Any] = {'counter': self.mgr.agent_cache.agent_counter[host]}
             if daemon_spec:
                 payload['config'] = daemon_spec.final_config
+
             message_thread = AgentMessageThread(
                 host, self.mgr.agent_cache.agent_ports[host], payload, self.mgr, daemon_spec)
             message_thread.start()

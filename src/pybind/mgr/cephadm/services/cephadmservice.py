@@ -1575,6 +1575,7 @@ class CephadmAgent(CephService):
                'listener_port': self.mgr.agent_starting_port,
                'host': daemon_spec.host,
                'device_enhanced_scan': str(self.mgr.device_enhanced_scan),
+               'metadata_compresion_enabled': self.mgr.agent_metadata_compresion_enabled,
                'metadata_payload_optimization_enabled': self.mgr.agent_metadata_payload_optimization_enabled,
                'initial_startup_delay_max': self.get_agent_initial_delay(),
                'jitter_seconds': self.get_agent_jitter()}
