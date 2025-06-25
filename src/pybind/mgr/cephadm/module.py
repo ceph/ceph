@@ -383,6 +383,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Max random startup delay (sec) before agent start sending metadata. Set to -1 for auto (default), or 0 to disable.'
         ),
         Option(
+            'agent_metadata_payload_optimization_enabled',
+            type='bool',
+            default=True,
+            desc='Reduce agent-produced metadata payload by excluding sections that have not changed (such as ls, networks, and volumes).'
+        ),
+        Option(
             'agent_starting_port',
             type='int',
             default=4721,
@@ -580,6 +586,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.agent_refresh_rate = 0
             self.agent_jitter_seconds = 0
             self.agent_initial_startup_delay_max = 0
+            self.agent_metadata_payload_optimization_enabled = True
             self.agent_down_multiplier = 0.0
             self.agent_starting_port = 0
             self.hw_monitoring = False
