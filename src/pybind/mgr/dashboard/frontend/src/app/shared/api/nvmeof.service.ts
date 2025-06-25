@@ -159,7 +159,8 @@ export class NvmeofService {
         observe: 'response',
         params: {
           gw_group: group,
-          trsvcid
+          trsvcid,
+          force: 'true'
         }
       }
     );
