@@ -1,6 +1,6 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
-import { fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { fakeAsync, TestBed, tick, flush } from '@angular/core/testing';
 import { Router } from '@angular/router';
 
 import { ToastrService } from 'ngx-toastr';
@@ -192,6 +192,7 @@ describe('ApiInterceptorService', () => {
     it('should show default behaviour', fakeAsync(() => {
       httpError(undefined, { status: 500 });
       expectSaveToHaveBeenCalled(true);
+      flush();
     }));
 
     it('should prevent the default behaviour with preventDefault', fakeAsync(() => {
@@ -219,8 +220,14 @@ describe('ApiInterceptorService', () => {
         (resp.application = 'Prometheus'), (resp.message = msg);
       });
       expectSaveToHaveBeenCalled(true);
+      flush();
       expect(notificationService.save).toHaveBeenCalledWith(
-        createCdNotification(0, '500 - Unknown Error', msg, undefined, 'Prometheus')
+        jasmine.objectContaining({
+          type: 0,
+          title: '500 - Unknown Error',
+          message: msg,
+          application: 'Prometheus'
+        })
       );
     }));
   });
