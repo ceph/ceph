@@ -400,6 +400,7 @@ spec:
   frontend_port: 8080
   monitor_port: 8081
   virtual_ip: 192.168.20.1/24
+  monitor_cert_source: reuse_service_cert
 ---
 service_type: nfs
 service_id: mynfs
