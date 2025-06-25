@@ -489,6 +489,18 @@ void rgw_cls_bi_entry::generate_test_instances(list<rgw_cls_bi_entry*>& o)
   o.push_back(new rgw_cls_bi_entry);
 }
 
+void rgw_bucket_key_epoch::dump(Formatter *f) const
+{
+  encode_json("key", key, f);
+  encode_json("epoch", epoch, f);
+}
+
+void rgw_bucket_key_epoch::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("key", key, obj);
+  JSONDecoder::decode_json("epoch", epoch, obj);
+}
+
 void rgw_bucket_olh_entry::dump(Formatter *f) const
 {
   encode_json("key", key, f);
@@ -500,6 +512,7 @@ void rgw_bucket_olh_entry::dump(Formatter *f) const
   encode_json("pending_removal", pending_removal, f);
   encode_json("snap_id", snap_id, f);
   encode_json("null_ver_snap_id", null_ver_snap_id, f);
+  encode_json("first_hidden", first_hidden, f);
 }
 
 void rgw_bucket_olh_entry::decode_json(JSONObj *obj)
@@ -512,6 +525,7 @@ void rgw_bucket_olh_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("exists", exists, obj);
   JSONDecoder::decode_json("snap_id", snap_id, obj);
   JSONDecoder::decode_json("null_ver_snap_id", null_ver_snap_id, obj);
+  JSONDecoder::decode_json("first_hidden", first_hidden, obj);
 }
 
 void rgw_bucket_olh_entry::generate_test_instances(list<rgw_bucket_olh_entry*>& o)

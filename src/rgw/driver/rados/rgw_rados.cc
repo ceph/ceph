@@ -9170,6 +9170,8 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
         need_to_remove = true;
         need_to_link = false;
         break;
+      case CLS_RGW_OLH_OP_KEEP_INSTANCE:
+        break;
       default:
         ldpp_dout(dpp, 0) << "ERROR: apply_olh_log: invalid op: " << (int)entry.op << dendl;
         return -EIO;

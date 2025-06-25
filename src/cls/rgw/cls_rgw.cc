@@ -2150,6 +2150,10 @@ public:
     return instance_entry;
   }
 
+  const rgw_bucket_dir_entry& get_dir_entry() const {
+    return instance_entry;
+  }
+
   void init_as_delete_marker(rgw_bucket_dir_entry_meta& meta) {
     /* a deletion marker, need to initialize it, there's no instance entry for it yet */
     instance_entry.key = key;
@@ -2335,7 +2339,8 @@ public:
   }
 
   int find_next_key(rgw_bucket_snap_id snap_id,
-                    cls_rgw_obj_key *next_key, rgw_bucket_snap_id *next_snap_id, bool *found) {
+                    cls_rgw_obj_key *next_key, rgw_bucket_snap_id *next_snap_id,
+                    bool *found) {
     string list_idx;
     /* this instance has a previous list entry, remove that entry */
     get_list_index_key(instance_entry, &list_idx);
@@ -2369,7 +2374,8 @@ public:
     return 0;
   }
 
-  int find_next_dir_entry(uint64_t epoch, rgw_bucket_dir_entry *next_entry, string *next_idx, bool *found) {
+  int find_next_dir_entry(uint64_t epoch, rgw_bucket_dir_entry *next_entry, string *next_idx, bool *found,
+                          bool only_hidden = false) {
     string list_idx;
 
     get_list_index_key(instance_entry, epoch, &list_idx);
@@ -2407,6 +2413,13 @@ public:
         }
 
         if (next_entry->flags & rgw_bucket_dir_entry::FLAG_VER_MARKER) {
+          continue;
+        }
+
+        if (only_hidden &&
+            !next_entry->removed_at_snap().is_set()) {
+          /* searching for a hidden entry: one that only exists in a snapshot, which means
+           * its removed_at_snap is set */
           continue;
         }
 
@@ -2518,10 +2531,50 @@ public:
     update_olh_log(olh_data_entry, op, op_tag, key, snap_id, delete_marker, epoch);
   }
 
+  void log_remove_instance(bool removing, const string& op_tag, cls_rgw_obj_key& key, rgw_bucket_snap_id snap_id,
+                  bool delete_marker, uint64_t epoch = 0) {
+    OLHLogOp op = (removing ? CLS_RGW_OLH_OP_REMOVE_INSTANCE : CLS_RGW_OLH_OP_KEEP_INSTANCE);
+    update_log(op, op_tag, key, snap_id, delete_marker, epoch);
+  }
+
   bool exists() { return olh_data_entry.exists; }
 
   void set_exists(bool exists) {
     olh_data_entry.exists = exists;
+  }
+
+  void reset_hidden() {
+    olh_data_entry.first_hidden.reset();
+  }
+
+  void set_hidden(const cls_rgw_obj_key& key, uint64_t epoch) {
+    olh_data_entry.first_hidden = { key, epoch };
+  }
+
+  void try_set_hidden(const cls_rgw_obj_key& key, uint64_t epoch) {
+    if (!olh_data_entry.first_hidden ||
+        olh_data_entry.first_hidden->epoch < epoch) {
+      set_hidden(key, epoch);
+    }
+  }
+
+  void try_set_hidden(const BIVerObjEntry& obj) {
+    const auto& dir_entry = obj.get_dir_entry();
+    try_set_hidden(dir_entry.key, dir_entry.versioned_epoch);
+  }
+
+  bool is_first_hidden(const BIVerObjEntry& obj) const {
+    if (!olh_data_entry.first_hidden) {
+      /* nothing is hidden */
+      return false;
+    }
+    const auto& dir_entry = obj.get_dir_entry();
+    return (dir_entry.key == olh_data_entry.first_hidden->key &&
+            dir_entry.versioned_epoch == olh_data_entry.first_hidden->epoch);
+  }
+
+  bool has_hidden() const {
+    return !!(olh_data_entry.first_hidden);
   }
 
   bool pending_removal() { return olh_data_entry.pending_removal; }
@@ -2753,9 +2806,7 @@ static int _rgw_bucket_link_olh(ClsOmapAccess *omap, bufferlist *in, bufferlist 
     if (ret < 0) {
       return ret;
     }
-    if (removing) {
-      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, op.meta.snap_id, false, op.olh_epoch);
-    }
+    olh.log_remove_instance(removing, op.op_tag, op.key, op.meta.snap_id, false, op.olh_epoch);
     return write_header_while_logrecord(omap, header);
   }
 
@@ -2834,6 +2885,9 @@ static int _rgw_bucket_link_olh(ClsOmapAccess *omap, bufferlist *in, bufferlist 
         return ret;
       }
 
+      /* prev one is now a hidden entry */
+      olh.try_set_hidden(prev_null_obj);
+
       /*
        * this would have been an object overwrite if snapshots weren't involved
        * so we need to treat it as such
@@ -2845,9 +2899,7 @@ static int _rgw_bucket_link_olh(ClsOmapAccess *omap, bufferlist *in, bufferlist 
 
   /* update the olh log */
   olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.meta.snap_id, op.delete_marker);
-  if (removing) {
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, op.meta.snap_id, false);
-  }
+  olh.log_remove_instance(removing, op.op_tag, op.key, op.meta.snap_id, false);
 
   if (promote) {
     olh.update(op.key, op.delete_marker);
@@ -2998,6 +3050,26 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
 
   obj.set_unlink_conf(op.snap_id, op.flags);
 
+  if (obj.can_be_unlinked() &&
+      olh.is_first_hidden(obj)) {
+    /* maintain the olh "first_hidden" entry before anything else */
+    CLS_LOG(20, "%s:%d key=%s object is_first_hidden=true, can be unlinked", __func__, __LINE__, op.key.to_string().c_str());
+    rgw_bucket_dir_entry next_entry;
+    string next_idx;
+    bool found;
+    rgw_bucket_dir_entry& cur_entry = obj.get_dir_entry();
+    ret = obj.find_next_dir_entry(cur_entry.versioned_epoch, &next_entry, &next_idx, &found, true /* only search for hidden entry */);
+    if (ret < 0) {
+      CLS_LOG(20, "obj.find_next_dir_entry() return error: ret=%d", ret);
+      return ret;
+    }
+    if (found) {
+      olh.set_hidden(next_entry.key, next_entry.versioned_epoch);
+    } else {
+      olh.reset_hidden();
+    }
+  }
+
   if (!olh.start_modify(op.olh_epoch)) {
     ret = obj.unlink_list_entry(header);
     if (ret < 0) {
@@ -3007,9 +3079,12 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     if (obj.is_delete_marker()) {
       return omap.flush();
     }
+
+    bool can_unlink_instance = obj.can_be_unlinked();
   
-    if (obj.can_be_unlinked()) {
-      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, op.key.snap_id, false, op.olh_epoch);
+    olh.log_remove_instance(can_unlink_instance, op.op_tag, op.key, op.key.snap_id, false, op.olh_epoch);
+    if (!can_unlink_instance) {
+      olh.try_set_hidden(obj);
     }
     return omap.flush(olh.write(header));
   }
@@ -3044,27 +3119,55 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
       olh.update(next_key, next.is_delete_marker());
       olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next_snap_id, next.is_delete_marker());
     } else {
-      // next_key is empty, but we need to preserve its name in case this entry
-      // gets resharded, because this key is used for hash placement
-      next_key.name = dest_key.name;
-      olh.update(next_key, false);
-      olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, rgw_bucket_snap_id(), false);
+      CLS_LOG(20, "%s: setting olh to exists=false, but not pointing it to anything (no viable instance exists)", __func__);
       olh.set_exists(false);
-      olh.set_pending_removal(true);
     }
   }
 
+  bool can_remove_olh = (!olh.exists() && obj.can_be_unlinked() && !olh.has_hidden());
+  if (can_remove_olh) {
+    CLS_LOG(20, "%s:%d olh can be removed", __func__, __LINE__);
+    // next_key is empty, but we need to preserve its name in case this entry
+    // gets resharded, because this key is used for hash placement
+    cls_rgw_obj_key next_key;
+    next_key.name = dest_key.name;
+    olh.update(next_key, false);
+    olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, rgw_bucket_snap_id(), false);
+    olh.set_exists(false);
+    olh.set_pending_removal(true);
+  } else if (!olh.exists()) {
+    /* olh cannot be removed but exists=false, we update the olh object to point at object with no
+     * instance, and set it as a 'delete marker', so that reading the object returns ENOENT */
+    CLS_LOG(20, "%s:%d olh can't be removed (has hidden), but it set as exists=false", __func__, __LINE__);
+    /* olh doesn't point at anything, mark object as delete marker with no instance */
+    cls_rgw_obj_key next_key;
+    next_key.name = dest_key.name;
+    rgw_bucket_snap_id snap_id;
+    olh.update(next_key, true);
+    olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, snap_id, true);
+  }
+
+  bool can_unlink_instance = obj.can_be_unlinked();
   if (!obj.is_delete_marker()) {
-    if (obj.can_be_unlinked()) {
-      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, op.key.snap_id, false);
+    /* we need to log operation whether we unlink or not. The olh object has 'pending' entries that
+     * need to be cleared, otherwise the object cannot be removed */
+    olh.log_remove_instance(can_unlink_instance, op.op_tag, op.key, op.key.snap_id, false);
+  }
+
+  if (can_unlink_instance) {
+    if (obj.is_delete_marker()) {
+      /* this is a delete marker, it's our responsibility to remove its
+       * instance entry */
+      ret = obj.unlink(header, op.key);
+      if (ret < 0) {
+        return ret;
+      }
     }
   } else {
-    /* this is a delete marker, it's our responsibility to remove its
-     * instance entry */
-    ret = obj.unlink(header, op.key);
-    if (ret < 0) {
-      return ret;
-    }
+    /* cannot unlink the instance, it is in a snapshot. Is it the 'first' snapshot (in listing
+     * order)?
+     */
+    olh.try_set_hidden(obj);
   }
 
   ret = obj.unlink_list_entry(header);

@@ -642,6 +642,7 @@ enum OLHLogOp {
   CLS_RGW_OLH_OP_LINK_OLH        = 1,
   CLS_RGW_OLH_OP_UNLINK_OLH      = 2, /* object does not exist */
   CLS_RGW_OLH_OP_REMOVE_INSTANCE = 3,
+  CLS_RGW_OLH_OP_KEEP_INSTANCE   = 4,
 };
 
 struct rgw_bucket_olh_log_entry {
@@ -686,6 +687,27 @@ struct rgw_bucket_olh_log_entry {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_olh_log_entry)
 
+struct rgw_bucket_key_epoch {
+  cls_rgw_obj_key key;
+  uint64_t epoch{0};
+
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(key, bl);
+    encode(epoch, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(key, bl);
+    decode(epoch, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_bucket_key_epoch)
+
 struct rgw_bucket_olh_entry {
   cls_rgw_obj_key key;
   rgw_bucket_snap_id snap_id;
@@ -700,6 +722,9 @@ struct rgw_bucket_olh_entry {
                                           when a new null version is being written,
                                           so that we may need to mark the old one
                                           as 'removed' at a specific snapshot */
+  std::optional<rgw_bucket_key_epoch> first_hidden; /* the first object instance (in index order) that is
+                                                    in a snapshot but was also removed in a later snapshot,
+                                                    which makes it effectively hidden */
                                     
   rgw_bucket_olh_entry() : delete_marker(false), epoch(0), exists(false), pending_removal(false) {}
 
@@ -714,6 +739,7 @@ struct rgw_bucket_olh_entry {
     encode(pending_removal, bl);
     encode(snap_id, bl);
     encode(null_ver_snap_id, bl);
+    encode(first_hidden, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
@@ -728,6 +754,7 @@ struct rgw_bucket_olh_entry {
     if (struct_v >= 2) {
       decode(snap_id, bl);
       decode(null_ver_snap_id, bl);
+      decode(first_hidden, bl);
     }
     DECODE_FINISH(bl);
   }
