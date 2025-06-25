@@ -48,6 +48,8 @@ static inline seastar::log_level to_log_level(int level) {
 #define LOGGER(subname_) crimson::get_logger(ceph_subsys_##subname_)
 #define LOG_PREFIX(x) constexpr auto FNAME = #x
 
+#define GENERIC_LOG(level_, MSG, ...) \
+  LOCAL_LOGGER.log(level_, MSG , ##__VA_ARGS__)
 #define LOG(level_, MSG, ...) \
   LOCAL_LOGGER.log(level_, "{}: " MSG, FNAME , ##__VA_ARGS__)
 #define SUBLOG(subname_, level_, MSG, ...) \
@@ -80,6 +82,7 @@ static inline seastar::log_level to_log_level(int level) {
 #define SUBWARNI(subname_, ...) SUBLOGI(subname_, seastar::log_level::warn, __VA_ARGS__)
 
 #define ERROR(...) LOG(seastar::log_level::error, __VA_ARGS__)
+#define GENERIC_ERROR(...) GENERIC_LOG(seastar::log_level::error, __VA_ARGS__)
 #define ERRORI(...) LOGI(seastar::log_level::error, __VA_ARGS__)
 #define SUBERROR(subname_, ...) SUBLOG(subname_, seastar::log_level::error, __VA_ARGS__)
 #define SUBERRORI(subname_, ...) SUBLOGI(subname_, seastar::log_level::error, __VA_ARGS__)
