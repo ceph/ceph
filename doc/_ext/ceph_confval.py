@@ -84,7 +84,7 @@ TEMPLATE = '''
 def eval_size(value) -> int:
     try:
         return int(value)
-    except ValueError:
+    except ValueError as ex:
         times = dict(_K=1 << 10,
                      _M=1 << 20,
                      _G=1 << 30,
@@ -92,7 +92,7 @@ def eval_size(value) -> int:
         for unit, m in times.items():
             if value.endswith(unit):
                 return int(value[:-len(unit)]) * m
-        raise ValueError(f'unknown value: {value}')
+        raise ValueError(f'unknown value: {value}') from ex
 
 
 def readable_duration(value: str, typ: str) -> str:
@@ -105,7 +105,7 @@ def readable_duration(value: str, typ: str) -> str:
             return str(float(value))
         else:
             return str(int(value))
-    except ValueError:
+    except ValueError as ex:
         times = dict(_min=['minute', 'minutes'],
                      _hr=['hour', 'hours'],
                      _day=['day', 'days'])
@@ -114,7 +114,7 @@ def readable_duration(value: str, typ: str) -> str:
                 v = int(value[:-len(unit)])
                 postfix = readables[0 if v == 1 else 1]
                 return f'{v} {postfix}'
-        raise ValueError(f'unknown value: {value}')
+        raise ValueError(f'unknown value: {value}') from ex
 
 
 def do_plain_num(value: str, typ: str) -> str:
