@@ -240,7 +240,7 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
 
   std::shared_lock l{lock};
   f->open_object_section("ops_in_flight"); // overall dump
-  uint64_t total_ops_in_flight = 0;
+  std::vector<TrackedOpRef> ops_in_flight;
 
   if (!count_only) {
     f->open_array_section("ops"); // list of TrackedOps
@@ -249,33 +249,35 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
   utime_t now = ceph_clock_now();
   for (uint32_t i = 0; i < num_optracker_shards; i++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[i];
-    ceph_assert(NULL != sdata); 
+    ceph_assert(NULL != sdata);
     std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
     for (auto& op : sdata->ops_in_flight_sharded) {
       if (print_only_blocked && (now - op.get_initiated() <= complaint_time))
         break;
       if (!op.filter_out(filters))
         continue;
-      
-      if (!count_only) {
-        f->open_object_section("op");
-        op.dump(now, f, lambda);
-        f->close_section(); // this TrackedOp
-      }
 
-      total_ops_in_flight++;
+      ops_in_flight.push_back(TrackedOpRef(&op));
     }
   }
 
   if (!count_only) {
+    std::sort(ops_in_flight.begin(), ops_in_flight.end(), [](auto& l, auto& r) {
+      return l->get_initiated() < r->get_initiated();
+    });
+    for (auto& op : ops_in_flight) {
+      f->open_object_section("op");
+      op->dump(now, f, lambda);
+      f->close_section(); // this TrackedOp
+    }
     f->close_section(); // list of TrackedOps
   }
 
   if (print_only_blocked) {
     f->dump_float("complaint_time", complaint_time);
-    f->dump_int("num_blocked_ops", total_ops_in_flight);
+    f->dump_int("num_blocked_ops", ops_in_flight.size());
   } else {
-    f->dump_int("num_ops", total_ops_in_flight);
+    f->dump_int("num_ops", ops_in_flight.size());
   }
   f->close_section(); // overall dump
   return true;
@@ -368,6 +370,11 @@ bool OpTracker::visit_ops_in_flight(utime_t* oldest_secs,
     return false;
 
   l.unlock();
+
+  std::sort(ops_in_flight.begin(), ops_in_flight.end(), [](auto& l, auto& r) {
+    return l->get_initiated() < r->get_initiated();
+  });
+
   for (auto& op : ops_in_flight) {
     // `lock` neither `ops_in_flight_lock_sharded` should be held when
     // calling the visitor. Otherwise `OSD::get_health_metrics()` can
