@@ -66,6 +66,7 @@ public:
     ceph::os::Transaction&,
     LocalOSDMapRef lastmap,
     std::map<epoch_t, LocalOSDMapRef>&);
+  static ghobject_t purged_snaps_oid();
 private:
   static ghobject_t osdmap_oid(epoch_t epoch);
   static ghobject_t inc_osdmap_oid(epoch_t epoch);
