@@ -1548,6 +1548,18 @@ class CephadmAgent(CephService):
             agent_jitter = max(0, self.mgr.agent_jitter_seconds)
         return agent_jitter
 
+    def get_agent_initial_delay(self) -> int:
+
+        if self.mgr.agent_initial_startup_delay_max == -1: # auto-calculation mode
+            num_hosts = len(self.mgr.cache.get_hosts())
+            base_spread_per_host = 2  # seconds per host
+            max_spread = 90           # upper cap in seconds
+            min_spread = 10           # minimum window even for small clusters
+            calculated = num_hosts * base_spread_per_host
+            return max(min_spread, min(calculated, max_spread))
+        else:
+            return self.mgr.agent_initial_startup_delay_max
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         agent = self.mgr.http_server.agent
         try:
@@ -1563,6 +1575,7 @@ class CephadmAgent(CephService):
                'listener_port': self.mgr.agent_starting_port,
                'host': daemon_spec.host,
                'device_enhanced_scan': str(self.mgr.device_enhanced_scan),
+               'initial_startup_delay_max': self.get_agent_initial_delay(),
                'jitter_seconds': self.get_agent_jitter()}
 
         listener_cert, listener_key = self.mgr.cert_mgr.generate_cert(daemon_spec.host, self.mgr.inventory.get_addr(daemon_spec.host))
