@@ -394,10 +394,11 @@ else:
             trash_image: Optional[bool] = False,
             block_size: int = 512,
             load_balancing_group: Optional[int] = None,
+            force: Optional[bool] = False,
+            no_auto_visible: Optional[bool] = False,
+            disable_auto_resize: Optional[bool] = False,
             gw_group: Optional[str] = None,
             traddr: Optional[str] = None,
-            force: Optional[bool] = False,
-            no_auto_visible: Optional[bool] = False
         ):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.namespace_add(
                 NVMeoFClient.pb2.namespace_add_req(
@@ -410,7 +411,8 @@ else:
                     trash_image=trash_image,
                     anagrpid=load_balancing_group,
                     force=force,
-                    no_auto_visible=no_auto_visible
+                    no_auto_visible=no_auto_visible,
+                    disable_auto_resize=disable_auto_resize
                 )
             )
 
@@ -617,6 +619,41 @@ else:
                     nsid=int(nsid),
                     auto_visible=str_to_bool(auto_visible),
                     force=str_to_bool(force),
+                )
+            )
+
+        @ReadPermission
+        @Endpoint('PUT', '{nsid}/set_auto_resize')
+        @EndpointDoc(
+            "Enable or disable namespace auto resize when RBD image is resized",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "nsid": Param(str, "NVMeoF Namespace ID"),
+                "auto_resize_enabled": Param(
+                    bool,
+                    'Enable or disable auto resize of '
+                    'namespace when RBD image is resized'
+                ),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "traddr": Param(str, "NVMeoF gateway address", True, None),
+            },
+        )
+        @NvmeofCLICommand("nvmeof ns set_auto_resize", model=model.RequestStatus)
+        @convert_to_model(model.RequestStatus)
+        @handle_nvmeof_error
+        def set_auto_resize(
+            self,
+            nqn: str,
+            nsid: str,
+            auto_resize_enabled: bool,
+            gw_group: Optional[str] = None,
+            traddr: Optional[str] = None
+        ):
+            return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.namespace_set_auto_resize(
+                NVMeoFClient.pb2.namespace_set_auto_resize_req(
+                    subsystem_nqn=nqn,
+                    nsid=int(nsid),
+                    auto_resize=str_to_bool(auto_resize_enabled),
                 )
             )
 
