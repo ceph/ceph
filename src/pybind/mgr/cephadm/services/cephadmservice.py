@@ -1508,13 +1508,24 @@ class CephadmAgent(CephService):
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
-        agent = mgr.http_server.agent
+
+        agent_options = [
+            "device_enhanced_scan",
+            "agent_refresh_rate",
+            "agent_jitter_seconds",
+            "agent_initial_startup_delay_max",
+            "agent_metadata_compresion_enabled",
+            "agent_metadata_payload_optimization_enabled",
+            "agent_starting_port",
+        ]
+
+        agent_cfg_deps = [f"{opt}: {mgr.get_module_option(opt)}" for opt in agent_options]
         return sorted(
             [
                 str(mgr.get_mgr_ip()),
-                str(agent.server_port),
+                str(mgr.http_server.agent.server_port),
                 mgr.cert_mgr.get_root_ca(),
-                str(mgr.get_module_option("device_enhanced_scan")),
+                *agent_cfg_deps,
             ]
         )
 
@@ -1589,6 +1600,4 @@ class CephadmAgent(CephService):
             'listener.key': listener_key,
         }
 
-        return config, sorted([str(self.mgr.get_mgr_ip()), str(agent.server_port),
-                               self.mgr.cert_mgr.get_root_ca(),
-                               str(self.mgr.get_module_option('device_enhanced_scan'))])
+        return config, self.get_dependencies(self.mgr)
