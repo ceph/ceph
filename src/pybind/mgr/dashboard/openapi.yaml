@@ -7268,7 +7268,7 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: List all NFS-Ganesha exports
+      summary: List all or cluster specific NFS-Ganesha exports
       tags:
       - NFS-Ganesha
     post:
