@@ -1951,7 +1951,7 @@ void OSDService::set_ready_to_merge_source(PG *pg, eversion_t version)
   std::lock_guard l(merge_lock);
   dout(10) << __func__ << " " << pg->pg_id << dendl;
   ready_to_merge_source[pg->pg_id.pgid] = version;
-  assert(not_ready_to_merge_source.count(pg->pg_id.pgid) == 0);
+  ceph_assert(not_ready_to_merge_source.count(pg->pg_id.pgid) == 0);
   _send_ready_to_merge();
 }
 
@@ -1966,7 +1966,7 @@ void OSDService::set_ready_to_merge_target(PG *pg,
 					 make_tuple(version,
 						    last_epoch_started,
 						    last_epoch_clean)));
-  assert(not_ready_to_merge_target.count(pg->pg_id.pgid) == 0);
+  ceph_assert(not_ready_to_merge_target.count(pg->pg_id.pgid) == 0);
   _send_ready_to_merge();
 }
 
@@ -1975,7 +1975,7 @@ void OSDService::set_not_ready_to_merge_source(pg_t source)
   std::lock_guard l(merge_lock);
   dout(10) << __func__ << " " << source << dendl;
   not_ready_to_merge_source.insert(source);
-  assert(ready_to_merge_source.count(source) == 0);
+  ceph_assert(ready_to_merge_source.count(source) == 0);
   _send_ready_to_merge();
 }
 
@@ -1984,7 +1984,7 @@ void OSDService::set_not_ready_to_merge_target(pg_t target, pg_t source)
   std::lock_guard l(merge_lock);
   dout(10) << __func__ << " " << target << " source " << source << dendl;
   not_ready_to_merge_target[target] = source;
-  assert(ready_to_merge_target.count(target) == 0);
+  ceph_assert(ready_to_merge_target.count(target) == 0);
   _send_ready_to_merge();
 }
 
@@ -4055,13 +4055,13 @@ int OSD::init()
 	for (auto shard : shards) {
 	  shard->prime_splits(osdmap, &new_children);
 	}
-	assert(new_children.empty());
+	ceph_assert(new_children.empty());
       }
       if (!merge_pgs.empty()) {
 	for (auto shard : shards) {
 	  shard->prime_merges(osdmap, &merge_pgs);
 	}
-	assert(merge_pgs.empty());
+	ceph_assert(merge_pgs.empty());
       }
     }
   }
@@ -5449,7 +5449,7 @@ void OSD::load_pgs()
     }
     {
       uint32_t shard_index = pgid.hash_to_shard(shards.size());
-      assert(NULL != shards[shard_index]);
+      ceph_assert(NULL != shards[shard_index]);
       store->set_collection_commit_queue(pg->coll, &(shards[shard_index]->context_queue));
     }
 
@@ -5518,7 +5518,7 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
 
   {
     uint32_t shard_index = pgid.hash_to_shard(shards.size());
-    assert(NULL != shards[shard_index]);
+    ceph_assert(NULL != shards[shard_index]);
     store->set_collection_commit_queue(pg->coll, &(shards[shard_index]->context_queue));
   }
 
@@ -5673,7 +5673,7 @@ void OSD::_add_heartbeat_peer(int p)
     pair<ConnectionRef,ConnectionRef> cons = service.get_con_osd_hb(p, get_osdmap_epoch());
     if (!cons.first)
       return;
-    assert(cons.second);
+    ceph_assert(cons.second);
 
     hi = &heartbeat_peers[p];
     hi->peer = p;
@@ -7940,7 +7940,7 @@ MPGStats* OSD::collect_pg_stats()
       per_pool_stats = false;
       break;
     } else {
-      assert(r >= 0);
+      ceph_assert(r >= 0);
       m->pool_stat[p] = st;
     }
   }
@@ -9362,7 +9362,7 @@ void OSD::split_pgs(
 
     {
       uint32_t shard_index = i->hash_to_shard(shards.size());
-      assert(NULL != shards[shard_index]);
+      ceph_assert(NULL != shards[shard_index]);
       store->set_collection_commit_queue(child->coll, &(shards[shard_index]->context_queue));
     }
 

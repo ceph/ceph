@@ -245,9 +245,9 @@ mempool::bluefs::vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
   if (extents_index.size() > 4) {
     auto it = std::upper_bound(extents_index.begin(), extents_index.end(),
       offset);
-    assert(it != extents_index.begin());
+    ceph_assert(it != extents_index.begin());
     --it;
-    assert(offset >= *it);
+    ceph_assert(offset >= *it);
     uint32_t skip = it - extents_index.begin();
     ceph_assert(skip <= extents.size());
     p += skip;

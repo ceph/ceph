@@ -1861,7 +1861,7 @@ int MonConnection::handle_auth_bad_method(
   auth_registry->get_supported_methods(con->get_peer_type(), &auth_supported);
   auto p = std::find(auth_supported.begin(), auth_supported.end(),
 		     old_auth_method);
-  assert(p != auth_supported.end());
+  ceph_assert(p != auth_supported.end());
   p = std::find_first_of(std::next(p), auth_supported.end(),
 			 allowed_methods.begin(), allowed_methods.end());
   if (p == auth_supported.end()) {

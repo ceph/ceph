@@ -7796,8 +7796,8 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 	*min_size =
 	  erasure_code->get_data_chunk_count() +
 	  std::min<int>(1, erasure_code->get_coding_chunk_count() - 1);
-	assert(*min_size <= *size);
-	assert(*min_size >= erasure_code->get_data_chunk_count());
+	ceph_assert(*min_size <= *size);
+	ceph_assert(*min_size >= erasure_code->get_data_chunk_count());
       }
     }
     break;
@@ -8679,7 +8679,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     }
     if (osdmap.require_osd_release < ceph_release_t::nautilus) {
       // pre-nautilus osdmap format; increase pg_num directly
-      assert(n > (int)p.get_pg_num());
+      ceph_assert(n > (int)p.get_pg_num());
       // force pre-nautilus clients to resend their ops, since they
       // don't understand pg_num_target changes form a new interval
       p.last_force_op_resend_prenautilus = pending_inc.epoch;

@@ -465,7 +465,7 @@ void LogMonitor::log_external_backlog()
     } else {
       // pre-quincy, we assumed that anything through summary.version was
       // logged externally.
-      assert(r == -ENOENT);
+      ceph_assert(r == -ENOENT);
       external_log_to = summary.version;
       dout(10) << __func__ << " initialized external_log_to = " << external_log_to
 	       << " (summary v " << summary.version << ")" << dendl;
