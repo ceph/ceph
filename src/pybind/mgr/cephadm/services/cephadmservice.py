@@ -1534,6 +1534,20 @@ class CephadmAgent(CephService):
 
         return daemon_spec
 
+    def get_agent_jitter(self) -> int:
+
+        if self.mgr.agent_jitter_seconds == -1:  # auto-jitter mode
+            num_hosts = len(self.mgr.cache.get_hosts())
+            # Target: ~1s jitter per 5 hosts
+            base_jitter = num_hosts // 5
+            # Clamp jitter to a sane range
+            min_jitter, max_jitter = 2, 15
+            # Final jitter to apply
+            agent_jitter = max(min(base_jitter, max_jitter), min_jitter)
+        else:
+            agent_jitter = max(0, self.mgr.agent_jitter_seconds)
+        return agent_jitter
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         agent = self.mgr.http_server.agent
         try:
@@ -1548,7 +1562,8 @@ class CephadmAgent(CephService):
                'refresh_period': self.mgr.agent_refresh_rate,
                'listener_port': self.mgr.agent_starting_port,
                'host': daemon_spec.host,
-               'device_enhanced_scan': str(self.mgr.device_enhanced_scan)}
+               'device_enhanced_scan': str(self.mgr.device_enhanced_scan),
+               'jitter_seconds': self.get_agent_jitter()}
 
         listener_cert, listener_key = self.mgr.cert_mgr.generate_cert(daemon_spec.host, self.mgr.inventory.get_addr(daemon_spec.host))
         config = {
