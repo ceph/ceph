@@ -2,6 +2,13 @@
 ---
 
 options:
+- name: rgw_openssl_conf
+  type: str
+  level: advanced
+  desc: Use rgw_openssl_conf for specific openssl algorithm
+  long_desc: 'Pass opts in this way: rgw_openssl_conf=/path/to/openssl.conf'
+  services:
+  - rgw
 # According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html),
 # An ACL may have up to 100 grants.
 - name: rgw_acl_grants_max_num

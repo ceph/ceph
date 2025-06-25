@@ -1,3 +1,15 @@
+* RGW: RGW specific openssl algorithm.
+  * Removed openssl_engine_opts, no longer supports passing OpenSSL engine configurations in string format.
+  * Added openssl_conf parameter, provider configurations must now be provided via a configuration file (openssl.conf),
+    the specified provider will be loaded first and set as the default.
+  * Added rgw_openssl_conf parameter, allows per-RGW instance provider configuration (overrides the global openssl_conf),
+    the specified provider will be loaded first and set as the default.
+  * Configuration file syntax follows the official OpenSSL standard, see
+    https://github.com/openssl/openssl/blob/master/doc/man5/config.pod
+  * If another provider is already loaded and the default provider is still required,
+    it must be explicitly loaded either in the configuration file or in the code, see
+    https://github.com/openssl/openssl/blob/master/README-PROVIDERS.md
+
 >=20.0.0
 
 * RADOS: leader monitor and stretch mode status are now included in the `ceph status` output.
