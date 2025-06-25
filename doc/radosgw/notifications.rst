@@ -103,6 +103,7 @@ Remove a topic by running the following command:
 Notification Performance Statistics
 -----------------------------------
 
+- ``pubsub_event_triggered``: a running counter of events that have at least one topic associated with them
 - ``pubsub_push_ok``: a running counter, for all notifications, of events successfully pushed to their endpoints
 - ``pubsub_push_fail``: a running counter, for all notifications, of events that failed to be pushed to their endpoints
 - ``pubsub_push_pending``: the gauge value of events pushed to an endpoint but
