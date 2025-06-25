@@ -2435,7 +2435,7 @@ public:
   void set_unlink_conf(rgw_bucket_snap_id cur_snap_id,
                        rgw_cls_unlink_instance_op::UnlinkFlags flags) {
     can_rm = ((uint8_t)flags & (uint8_t)rgw_cls_unlink_instance_op::UnlinkFlags::SnapRemoval) ||
-      (instance_entry.meta.snap_id >= cur_snap_id);
+      (instance_entry.meta.snap_id.get_or(rgw_bucket_snap_id::SNAP_MIN) >= cur_snap_id);
     instance_entry.set_snap_info().removed_at = cur_snap_id;
   }
 
