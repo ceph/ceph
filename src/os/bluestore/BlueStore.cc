@@ -6101,7 +6101,7 @@ int BlueStore::write_meta(const std::string& key, const std::string& value)
     int r = _write_bdev_label(cct, bdev, p, bdev_label, bdev_label_valid_locations);
     ceph_assert(r == 0);
   }
-  return ObjectStore::write_meta(key, value);
+  return 0;
 }
 
 int BlueStore::read_meta(const std::string& key, std::string *value)
@@ -6122,7 +6122,7 @@ int BlueStore::read_meta(const std::string& key, std::string *value)
       local_bdev = nullptr;
     }
   }
-  if (!local_bdev || !local_bdev->supported_bdev_label()) {
+  if (!local_bdev) {
     // skip bdev label section if not supported
     return ObjectStore::read_meta(key, value);
   }
@@ -6138,7 +6138,7 @@ int BlueStore::read_meta(const std::string& key, std::string *value)
       return 0;
     }
   }
-  return ObjectStore::read_meta(key, value);
+  return -1;
 }
 
 
@@ -8540,6 +8540,9 @@ int BlueStore::mkfs()
       r = write_meta("type", "bluestore");
       if (r < 0)
         return r;
+      r = ObjectStore::write_meta("type", "bluestore");
+      if (r < 0)
+	return r;
     }
   }
 
@@ -8698,7 +8701,33 @@ int BlueStore::mkfs()
 
   if (r < 0) {
     derr << __func__ << " failed, " << cpp_strerror(r) << dendl;
-  } else {
+  }
+
+  if (bdev && !bdev->supported_bdev_label()) {
+    std::string dev = path + "/block";
+    std::vector<std::string> devs = {dev};
+    std::vector<uint64_t> valid_positions = {0};
+    r = BlueStore::create_bdev_labels(cct, path, devs, &valid_positions, true);
+    if (r < 0) {
+      derr << __func__ << " failed, " << cpp_strerror(r) << dendl;
+    }
+    if (cct->_conf->bluestore_bluefs) {
+      dev = path + "/block.db";
+      devs = {dev};
+      r = BlueStore::create_bdev_labels(cct, path, devs, &valid_positions, true);
+      if (r < 0) {
+        derr << __func__ << " failed, " << cpp_strerror(r) << dendl;
+      }
+      dev = path + "/block.wal";
+      devs = {dev};
+      r = BlueStore::create_bdev_labels(cct, path, devs, &valid_positions, true);
+      if (r < 0) {
+        derr << __func__ << " failed, " << cpp_strerror(r) << dendl;
+      }
+    }
+  }
+
+  if (r == 0) {
     dout(0) << __func__ << " success" << dendl;
   }
   return r;
