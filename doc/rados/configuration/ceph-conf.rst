@@ -318,7 +318,7 @@ ago``".  Be careful to not place a backslash at the end of the final line
 of the multi-line string.
 
 An option value setting in a local config file ends with a newline.
-A comment prefixed with ``#``may be added before the newline.
+A comment prefixed with ``#`` may be added before the newline.
 
 Examples:
 
