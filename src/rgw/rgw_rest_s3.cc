@@ -4408,6 +4408,73 @@ void RGWDeleteBucketEncryption_ObjStore_S3::send_response()
   end_header(s);
 }
 
+int RGWPutBucketOwnershipControls_ObjStore_S3::get_params(optional_yield y)
+{
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  int ret = 0;
+  std::tie(ret, data) = read_all_input(s, max_size, false);
+  if (ret < 0) {
+    return ret;
+  }
+
+  RGWXMLParser parser;
+  if (!parser.init()) {
+    return -EINVAL;
+  }
+  if (!parser.parse(data.c_str(), data.length(), 1)) {
+    ldpp_dout(this, 5) << "ERROR: malformed XML" << dendl;
+    return -ERR_MALFORMED_XML;
+  }
+  XMLObj* o = parser.find_first("OwnershipControls");
+  if (!o) {
+    s->err.message = "Missing required element OwnershipControls";
+    return -ERR_MALFORMED_XML;
+  }
+  if (!ownership.decode_xml(o, s->err.message)) {
+    return -ERR_MALFORMED_XML;
+  }
+  return 0;
+}
+
+void RGWPutBucketOwnershipControls_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+void RGWGetBucketOwnershipControls_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    if (op_ret == -ENOENT)
+      set_req_state_err(s, -ERR_NO_SUCH_OWNERSHIP_CONTROLS);
+    else
+      set_req_state_err(s, op_ret);
+  }
+
+  dump_errno(s);
+  end_header(s, this, to_mime_type(s->format));
+  dump_start(s);
+
+  if (!op_ret) {
+    encode_xml("OwnershipControls", XMLNS_AWS_S3, ownership, s->formatter);
+    rgw_flush_formatter_and_reset(s, s->formatter);
+  }
+}
+
+void RGWDeleteBucketOwnershipControls_ObjStore_S3::send_response()
+{
+  if (op_ret == 0) {
+    op_ret = STATUS_NO_CONTENT;
+  }
+
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s);
+}
+
 void RGWGetRequestPayment_ObjStore_S3::send_response()
 {
   dump_errno(s);
@@ -5235,6 +5302,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWGetBucketPublicAccessBlock_ObjStore_S3;
   } else if (is_bucket_encryption_op()) {
     return new RGWGetBucketEncryption_ObjStore_S3;
+  } else if (is_bucket_ownership_op()) {
+    return new RGWGetBucketOwnershipControls_ObjStore_S3;
   }
   return get_obj_op(true);
 }
@@ -5293,6 +5362,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWPutBucketPublicAccessBlock_ObjStore_S3;
   } else if (is_bucket_encryption_op()) {
     return new RGWPutBucketEncryption_ObjStore_S3;
+  } else if (is_bucket_ownership_op()) {
+    return new RGWPutBucketOwnershipControls_ObjStore_S3;
   }
   return new RGWCreateBucket_ObjStore_S3;
 }
@@ -5318,6 +5389,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
     return new RGWDeleteBucketPublicAccessBlock;
   } else if (is_bucket_encryption_op()) {
     return new RGWDeleteBucketEncryption_ObjStore_S3;
+  } else if (is_bucket_ownership_op()) {
+    return new RGWDeleteBucketOwnershipControls_ObjStore_S3;
   }
 
   if (s->info.args.sub_resource_exists("website")) {
@@ -6510,6 +6583,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_BUCKET_LOGGING:
         case RGW_OP_POST_BUCKET_LOGGING:
         case RGW_OP_GET_BUCKET_LOGGING: 
+        case RGW_OP_PUT_BUCKET_OWNERSHIP_CONTROLS:
           break;
         default:
           ldpp_dout(s, 10) << "ERROR: AWS4 completion for operation: " << s->op_type << ", NOT IMPLEMENTED" << dendl;

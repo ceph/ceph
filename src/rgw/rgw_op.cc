@@ -9570,6 +9570,119 @@ void RGWDeleteBucketEncryption::execute(optional_yield y)
   }, y);
 }
 
+int RGWPutBucketOwnershipControls::verify_permission(optional_yield y)
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketOwnershipControls)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWPutBucketOwnershipControls::execute(optional_yield y)
+{
+  op_ret = get_params(y);
+  if (op_ret < 0) {
+    return;
+  }
+
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
+                                         &data, nullptr, s->info, s->err, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
+  bufferlist conf_bl;
+  encode(ownership, conf_bl);
+
+  // construct a default private acl for BucketOwnerEnforced comparison
+  RGWAccessControlPolicy private_acl;
+  private_acl.create_default(s->bucket_owner.id,
+                             s->bucket_owner.display_name);
+
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(),
+      [this, y, &conf_bl, &private_acl] {
+        rgw::sal::Attrs& attrs = s->bucket->get_attrs();
+
+        using rgw::s3::ObjectOwnership::BucketOwnerEnforced;
+        if (ownership.object_ownership == BucketOwnerEnforced) {
+          // reject BucketOwnerEnforced if the bucket's acl doesn't
+          // match the default private acl policy
+          RGWAccessControlPolicy bucket_acl;
+          if (auto i = attrs.find(RGW_ATTR_ACL); i != attrs.end()) {
+            try {
+              auto p = i->second.cbegin();
+              decode(bucket_acl, p);
+            } catch (const buffer::error&) {
+              ldpp_dout(this, 20) << "failed to decode RGW_ATTR_ACL" << dendl;
+              return -EIO;
+            }
+            if (bucket_acl != private_acl) {
+              s->err.message = "The bucket's ACL must be made private "
+                  "before setting BucketOwnerEnforced.";
+              return -ERR_INVALID_BUCKET_ACL;
+            }
+          }
+        }
+
+        attrs[RGW_ATTR_OWNERSHIP_CONTROLS] = conf_bl;
+        return s->bucket->put_info(this, false, real_time(), y);
+      }, y);
+}
+
+int RGWGetBucketOwnershipControls::verify_permission(optional_yield y)
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketOwnershipControls)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWGetBucketOwnershipControls::execute(optional_yield y)
+{
+  const auto& attrs = s->bucket_attrs;
+  if (auto aiter = attrs.find(RGW_ATTR_OWNERSHIP_CONTROLS);
+      aiter == attrs.end()) {
+    op_ret = -ENOENT;
+    s->err.message = "The bucket ownership controls were not found";
+    return;
+  } else {
+    bufferlist::const_iterator iter{&aiter->second};
+    try {
+      decode(ownership, iter);
+    } catch (const buffer::error& e) {
+      ldpp_dout(this, 0) << __func__ << " failed to decode "
+          "RGW_ATTR_OWNERSHIP_CONTROLS: " << e.what() << dendl;
+      op_ret = -EIO;
+      return;
+    }
+  }
+}
+
+int RGWDeleteBucketOwnershipControls::verify_permission(optional_yield y)
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketOwnershipControls)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWDeleteBucketOwnershipControls::execute(optional_yield y)
+{
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
+                                         nullptr, nullptr, s->info, s->err, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
+    rgw::sal::Attrs& attrs = s->bucket->get_attrs();
+    attrs.erase(RGW_ATTR_OWNERSHIP_CONTROLS);
+    return s->bucket->put_info(this, false, real_time(), y);
+  }, y);
+}
+
 void rgw_slo_entry::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("path", path, obj);

@@ -1934,6 +1934,39 @@ public:
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 
+class RGWPutBucketOwnershipControls : public RGWOp {
+ protected:
+  rgw::s3::OwnershipControls ownership;
+  bufferlist data;
+ public:
+  virtual int get_params(optional_yield y) = 0;
+  int verify_permission(optional_yield y) override;
+  void execute(optional_yield y) override;
+  const char* name() const override { return "put_bucket_ownership_controls"; }
+  RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_OWNERSHIP_CONTROLS; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWGetBucketOwnershipControls : public RGWOp {
+ protected:
+  rgw::s3::OwnershipControls ownership;
+ public:
+  int verify_permission(optional_yield y) override;
+  void execute(optional_yield y) override;
+  const char* name() const override { return "get_bucket_ownership_controls"; }
+  RGWOpType get_type() override { return RGW_OP_GET_BUCKET_OWNERSHIP_CONTROLS; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+};
+
+class RGWDeleteBucketOwnershipControls : public RGWOp {
+ public:
+  int verify_permission(optional_yield y) override;
+  void execute(optional_yield y) override;
+  const char* name() const override { return "delete_bucket_ownership_controls"; }
+  RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET_OWNERSHIP_CONTROLS; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+};
+
 class RGWGetRequestPayment : public RGWOp {
 protected:
   bool requester_pays;

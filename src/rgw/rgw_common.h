@@ -353,6 +353,8 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_AUTHORIZATION        2225 // SNS 403 AuthorizationError
 #define ERR_ILLEGAL_LOCATION_CONSTRAINT_EXCEPTION 2226
 #define ERR_ACLS_NOT_SUPPORTED   2227 // 400 AccessControlListNotSupported
+#define ERR_INVALID_BUCKET_ACL   2228 // 400 InvalidBucketAclWithObjectOwnership
+#define ERR_NO_SUCH_OWNERSHIP_CONTROLS 2229 // 404 OwnershipControlsNotFoundError
 
 #define ERR_BUSY_RESHARDING      2300 // also in cls_rgw_types.h, don't change!
 #define ERR_NO_SUCH_ENTITY       2301
