@@ -400,6 +400,7 @@ be automatically processed. Example:
 
 .. _`Rule of Silence`: http://www.linfo.org/rule_of_silence.html
 
+.. _mgr module dev configuration options:
 
 Configuration options
 ---------------------
@@ -412,14 +413,70 @@ Modules can load and store configuration options using the
    certificates). If you want to persist module-internal data or
    binary configuration data consider using the `KV store`_.
 
-You must declare your available configuration options in the
-``MODULE_OPTIONS`` class attribute, like this:
+Configuration options must be declared in the ``MODULE_OPTIONS`` class attribute:
 
 .. code-block:: python
 
     MODULE_OPTIONS = [
-        Option(name="my_option")
+        Option(name="check_interval",
+               level=OptionLevel.ADVANCED,
+               default=60,
+               type="secs",
+               desc="The interval in seconds to check the inbox",
+               long_desc="The interval in seconds to check the inbox. Set to 0 to disable the check",
+               min=0,
+               runtime=True)
     ]
+
+The example above demonstrates most supported properties, though typically only
+a subset is needed. The following properties are supported:
+
+**name**
+    The option's name. This is the only required property.
+
+**type** (optional, default: ``str``)
+    The option's data type. Supported types:
+
+    * ``uint`` - unsigned 64-bit integer
+    * ``int`` - signed 64-bit integer
+    * ``str`` - string
+    * ``float`` - double-precision floating point
+    * ``bool`` - boolean
+    * ``addr`` - Ceph messenger address for peer communication
+    * ``addrvec`` - comma-separated list of Ceph messenger addresses
+    * ``uuid`` - UUID as defined by `RFC 4122 <https://www.ietf.org/rfc/rfc4122.txt>`_
+    * ``size`` - size value (stored as uint64_t)
+    * ``secs`` - timespan in format ``"<number><unit>..."``, e.g., ``"3h 2m 1s"`` or ``"3weeks"``
+
+      Supported units: ``s``, ``sec``, ``second(s)``, ``m``, ``min``, ``minute(s)``,
+      ``h``, ``hr``, ``hour(s)``, ``d``, ``day(s)``, ``w``, ``wk``, ``week(s)``,
+      ``mo``, ``month(s)``, ``y``, ``yr``, ``year(s)``
+
+    * ``millisecs`` - timespan in milliseconds
+
+**desc**
+    Short description (can be a sentence fragment).
+
+**long_desc**
+    Detailed description using complete sentences or paragraphs.
+
+**default**
+    Default value for the option.
+
+**min** / **max**
+    Minimum and maximum allowed values.
+
+**enum_allowed**
+    For ``str`` type options, a list of allowed string values. Values outside this set are rejected.
+
+**see_also**
+    List of related option names (used in documentation only).
+
+**tags**
+    List of tags for categorizing the option (used in documentation only).
+
+**runtime** (default: ``False``)
+    Whether the option can be updated after module loading.
 
 If you try to use ``set_module_option`` or ``get_module_option`` on options
 not declared in ``MODULE_OPTIONS``, an exception will be raised.
