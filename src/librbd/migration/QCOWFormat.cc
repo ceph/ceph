@@ -636,7 +636,7 @@ private:
         [this, cct=qcow_format->m_image_ctx->cct,
          image_offset=cluster_extent.image_offset,
          image_length=cluster_extent.cluster_length, ctx=read_ctx](int r) {
-          handle_read_cluster(cct, r, image_offset, image_length, ctx);
+          handle_read_clusters(cct, r, image_offset, image_length, ctx);
         });
 
       if (cluster_extent.cluster_offset == 0) {
@@ -657,8 +657,8 @@ private:
     delete this;
   }
 
-  void handle_read_cluster(CephContext* cct, int r, uint64_t image_offset,
-                           uint64_t image_length, Context* on_finish) const {
+  void handle_read_clusters(CephContext* cct, int r, uint64_t image_offset,
+                            uint64_t image_length, Context* on_finish) const {
     // NOTE: treat as static function, expect object has been deleted
 
     ldout(cct, 20) << "r=" << r << ", "
