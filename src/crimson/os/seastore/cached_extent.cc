@@ -116,7 +116,7 @@ CachedExtent::is_viewable_by_trans(Transaction &t) {
 
   // shared by multiple transactions
   assert(t.is_in_read_set(this));
-  assert(is_stable_written());
+  assert(is_stable_ready());
 
   auto cmp = trans_spec_view_t::cmp_t();
   if (mutation_pending_extents.find(trans_id, cmp) !=
