@@ -58,11 +58,13 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::OsdStatusHook);
+    DEBUG("");
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     f->open_object_section("status");
     osd.dump_status(f.get());
     f->close_section();
-    return seastar::make_ready_future<tell_result_t>(std::move(f));
+    co_return std::move(f);
   }
 private:
   const crimson::osd::OSD& osd;
@@ -85,9 +87,10 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
-    return osd.send_beacon().then([] {
-      return seastar::make_ready_future<tell_result_t>();
-    });
+    LOG_PREFIX(AdminSocketHook::SendBeaconHook);
+    DEBUG("");
+    co_await osd.send_beacon();
+    co_return tell_result_t();
   }
 private:
   crimson::osd::OSD& osd;
@@ -118,7 +121,8 @@ public:
               std::string_view format,
               ceph::bufferlist&& input) const final
   {
-    LOG_PREFIX(RunOSDBenchHook::call);
+    LOG_PREFIX(AdminSocketHook::RunOSDBenchHook::call);
+    DEBUG("");
     int64_t count = cmd_getval_or<int64_t>(cmdmap, "count", 1LL << 30);
     int64_t bsize = cmd_getval_or<int64_t>(cmdmap, "size", 4LL << 20);
     int64_t osize = cmd_getval_or<int64_t>(cmdmap, "object_size", 0);
@@ -132,7 +136,7 @@ public:
       INFO("block 'size' values are capped at {}. If you wish to use"
         " a higher value, please adjust 'osd_bench_max_block_size'",
         byte_u_t(max_block_size));
-      return seastar::make_ready_future<tell_result_t>(-EINVAL, "block size too large");
+      co_return tell_result_t(-EINVAL, "block size too large");
     } else if (bsize < (1LL << 20)) {
       // entering the realm of small block sizes.
       // limit the count to a sane value, assuming a configurable amount of
@@ -142,7 +146,7 @@ public:
       if (count > max_count) {
         INFO("bench count {} > osd_bench_small_size_max_iops {}",
           count, max_count);
-        return seastar::make_ready_future<tell_result_t>(-EINVAL, "count too large");
+        co_return tell_result_t(-EINVAL, "count too large");
       }
     } else {
       // 1MB block sizes are big enough so that we get more stuff done.
@@ -162,31 +166,28 @@ public:
           " with a higher value if you wish to use a higher 'count'.",
           max_count, byte_u_t(bsize), local_conf()->osd_bench_small_size_max_iops,
           duration);
-        return seastar::make_ready_future<tell_result_t>(-EINVAL, "count too large");
+        co_return tell_result_t(-EINVAL, "count too large");
       }
     }
     if (osize && bsize > osize) {
       bsize = osize;
     }
 
-    return osd.run_bench(count, bsize, osize, onum).then(
-      [format, bsize, count](double elapsed) {
-      if (elapsed < 0) {
-        return seastar::make_ready_future<tell_result_t>
-          (elapsed, "bench failed with error");
-      }
+    auto elapsed = co_await osd.run_bench(count, bsize, osize, onum);
+    if (elapsed < 0) {
+      co_return tell_result_t(elapsed, "bench failed with error");
+    }
 
-      unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
-      f->open_object_section("osd_bench_results");
-      f->dump_int("bytes_written", count);
-      f->dump_int("blocksize", bsize);
-      f->dump_float("elapsed_sec", elapsed);
-      f->dump_float("bytes_per_sec", (elapsed > 0) ? count / elapsed : 0);
-      f->dump_float("iops", (elapsed > 0) ? (count / elapsed) / bsize : 0);
-      f->close_section();
-      
-      return seastar::make_ready_future<tell_result_t>(std::move(f));
-    });
+    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    f->open_object_section("osd_bench_results");
+    f->dump_int("bytes_written", count);
+    f->dump_int("blocksize", bsize);
+    f->dump_float("elapsed_sec", elapsed);
+    f->dump_float("bytes_per_sec", (elapsed > 0) ? count / elapsed : 0);
+    f->dump_float("iops", (elapsed > 0) ? (count / elapsed) / bsize : 0);
+    f->close_section();
+
+    co_return std::move(f);
   }
 private:
   crimson::osd::OSD& osd;
@@ -209,10 +210,12 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::FlushPgStatsHook);
+    DEBUG("");
     uint64_t seq = osd.send_pg_stats();
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     f->dump_unsigned("stat_seq", seq);
-    return seastar::make_ready_future<tell_result_t>(std::move(f));
+    co_return std::move(f);
   }
 
 private:
@@ -233,23 +236,23 @@ public:
                                       std::string_view format,
                                       ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::DumpPGStateHistory);
+    DEBUG("");
     std::unique_ptr<Formatter> fref{
       Formatter::create(format, "json-pretty", "json-pretty")};
-    Formatter *f = fref.get();
-    f->open_object_section("pgstate_history");
-    f->open_array_section("pgs");
-    return pg_shard_manager.for_each_pg([f](auto &pgid, auto &pg) {
+    fref->open_object_section("pgstate_history");
+    fref->open_array_section("pgs");
+    co_await pg_shard_manager.for_each_pg([f = fref.get()](auto &pgid, auto &pg) {
       f->open_object_section("pg");
       f->dump_stream("pg") << pgid;
       const auto& peering_state = pg->get_peering_state();
       f->dump_string("currently", peering_state.get_current_state());
       peering_state.dump_history(f);
       f->close_section();
-    }).then([fref=std::move(fref)]() mutable {
-      fref->close_section();
-      fref->close_section();
-      return seastar::make_ready_future<tell_result_t>(std::move(fref));
     });
+    fref->close_section();
+    fref->close_section();
+    co_return std::move(fref);
   }
 
 private:
@@ -271,6 +274,8 @@ public:
                                       std::string_view format,
                                       ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::DumpPerfCountersHook);
+    DEBUG("");
     std::unique_ptr<Formatter> f{Formatter::create(format,
                                                    "json-pretty",
                                                    "json-pretty")};
@@ -281,7 +286,7 @@ public:
 
     crimson::common::local_perf_coll().dump_formatted(f.get(), false,
       select_labeled_t::unlabeled, logger, counter);
-    return seastar::make_ready_future<tell_result_t>(std::move(f));
+    co_return std::move(f);
   }
 };
 template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpPerfCountersHook>();
@@ -303,12 +308,13 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::AssertAlwaysHook);
+    DEBUG("");
     if (local_conf().get_val<bool>("debug_asok_assert_abort")) {
       ceph_assert_always(0);
-      return seastar::make_ready_future<tell_result_t>();
+      co_return tell_result_t();
     } else {
-      return seastar::make_ready_future<tell_result_t>(
-        tell_result_t{-EPERM, "configuration set to disallow asok assert"});
+      co_return tell_result_t{-EPERM, "configuration set to disallow asok assert"};
     }
   }
 };
@@ -328,32 +334,30 @@ public:
                                       std::string_view format,
                                       ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::DumpMetricsHook);
+    DEBUG("");
     std::unique_ptr<Formatter> fref{Formatter::create(format, "json-pretty", "json-pretty")};
-    auto *f = fref.get();
     std::string prefix;
     cmd_getval(cmdmap, "group", prefix);
-    f->open_object_section("metrics");
-    f->open_array_section("metrics");
-    return seastar::do_with(std::move(prefix), [f](auto &prefix) {
-      return crimson::reactor_map_seq([f, &prefix] {
-        for (const auto& [full_name, metric_family]: seastar::scollectd::get_value_map()) {
-          if (!prefix.empty() && full_name.compare(0, prefix.size(), prefix) != 0) {
-            continue;
-          }
-          for (const auto& [labels, metric] : metric_family) {
-            if (metric && metric->is_enabled()) {
-	      f->open_object_section(""); // enclosed by array
-              DumpMetricsHook::dump_metric_value(f, full_name, *metric, labels.labels());
-	      f->close_section();
-            }
+    fref->open_object_section("metrics");
+    fref->open_array_section("metrics");
+    co_await crimson::invoke_on_all_seq([f = fref.get(), &prefix] {
+      for (const auto& [full_name, metric_family]: seastar::scollectd::get_value_map()) {
+        if (!prefix.empty() && full_name.compare(0, prefix.size(), prefix) != 0) {
+          continue;
+        }
+        for (const auto& [labels, metric] : metric_family) {
+          if (metric && metric->is_enabled()) {
+	    f->open_object_section(""); // enclosed by array
+            DumpMetricsHook::dump_metric_value(f, full_name, *metric, labels.labels());
+	    f->close_section();
           }
         }
-      });
-    }).then([fref = std::move(fref)]() mutable {
-      fref->close_section();
-      fref->close_section();
-      return seastar::make_ready_future<tell_result_t>(std::move(fref));
+      }
     });
+    fref->close_section();
+    fref->close_section();
+    co_return std::move(fref);
   }
 private:
   using registered_metric = seastar::metrics::impl::registered_metric;
@@ -493,22 +497,22 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::InjectDataErrorHook);
+    DEBUG("");
     ghobject_t obj;
     try {
       obj = test_ops_get_object_name(*shard_services.get_map(), cmdmap);
     } catch (const std::invalid_argument& e) {
       logger().info("error during data error injection: {}", e.what());
-      return seastar::make_ready_future<tell_result_t>(-EINVAL,
-	                                               e.what());
+      co_return tell_result_t(-EINVAL, e.what());
     }
-    return shard_services.get_store().inject_data_error(obj).then([=] {
-      logger().info("successfully injected data error for obj={}", obj);
-      ceph::bufferlist bl;
-      bl.append("ok"sv);
-      return seastar::make_ready_future<tell_result_t>(0,
-						       std::string{}, // no err
-						       std::move(bl));
-    });
+    co_await shard_services.get_store().inject_data_error(obj);
+    logger().info("successfully injected data error for obj={}", obj);
+    ceph::bufferlist bl;
+    bl.append("ok"sv);
+    co_return tell_result_t(0,
+                            std::string{}, // no err
+                            std::move(bl));
   }
 
 private:
@@ -535,22 +539,22 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::InjectMDataErrorHook);
+    DEBUG("");
     ghobject_t obj;
     try {
       obj = test_ops_get_object_name(*shard_services.get_map(), cmdmap);
     } catch (const std::invalid_argument& e) {
       logger().info("error during metadata error injection: {}", e.what());
-      return seastar::make_ready_future<tell_result_t>(-EINVAL,
-	                                               e.what());
+      co_return tell_result_t(-EINVAL, e.what());
     }
-    return shard_services.get_store().inject_mdata_error(obj).then([=] {
-      logger().info("successfully injected metadata error for obj={}", obj);
-      ceph::bufferlist bl;
-      bl.append("ok"sv);
-      return seastar::make_ready_future<tell_result_t>(0,
-						       std::string{}, // no err
-						       std::move(bl));
-    });
+    co_await shard_services.get_store().inject_mdata_error(obj);
+    logger().info("successfully injected metadata error for obj={}", obj);
+    ceph::bufferlist bl;
+    bl.append("ok"sv);
+    co_return tell_result_t(0,
+                            std::string{}, // no err
+                            std::move(bl));
   }
 
 private:
@@ -573,18 +577,19 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
-    unique_ptr<Formatter> fref{
-      Formatter::create(format, "json-pretty", "json-pretty")};
-    auto *f = fref.get();
-    f->open_object_section("ops_in_flight");
-    f->open_array_section("ops_in_flight");
-    return pg_shard_manager.invoke_on_each_shard_seq([f](const auto &shard_services) {
-      return shard_services.dump_ops_in_flight(f);
-    }).then([fref=std::move(fref)]() mutable {
-      fref->close_section();
-      fref->close_section();
-      return seastar::make_ready_future<tell_result_t>(std::move(fref));
+    LOG_PREFIX(AdminSocketHook::DumpInFlightOpsHook);
+    DEBUG("");
+    std::unique_ptr<Formatter> fref{Formatter::create(format, "json-pretty", "json-pretty")};
+    fref->open_object_section("ops_in_flight");
+    fref->open_array_section("ops_in_flight");
+    co_await pg_shard_manager.when_active();
+    co_await pg_shard_manager.invoke_on_each_shard_seq(
+      [f = fref.get()](const auto &local_service) {
+        return local_service.dump_ops_in_flight(f);
     });
+    fref->close_section();
+    fref->close_section();
+    co_return std::move(fref);
   }
 private:
   const crimson::osd::PGShardManager &pg_shard_manager;
@@ -603,12 +608,14 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
+    LOG_PREFIX(AdminSocketHook::DumpHistoricOpsHook);
+    DEBUG("");
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     f->open_object_section("historic_ops");
     op_registry.dump_historic_client_requests(f.get());
     f->close_section();
     f->dump_int("num_ops", 0);
-    return seastar::make_ready_future<tell_result_t>(std::move(f));
+    co_return std::move(f);
   }
 private:
   const crimson::osd::OSDOperationRegistry& op_registry;
@@ -627,13 +634,14 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
-    logger().warn("{}", __func__);
+    LOG_PREFIX(AdminSocketHook::DumpSlowestHistoricOpsHook);
+    DEBUG("");
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     f->open_object_section("historic_slow_ops");
     op_registry.dump_slowest_historic_client_requests(f.get());
     f->close_section();
     f->dump_int("num_ops", 0);
-    return seastar::make_ready_future<tell_result_t>(std::move(f));
+    co_return std::move(f);
   }
 private:
   const crimson::osd::OSDOperationRegistry& op_registry;
@@ -651,21 +659,18 @@ public:
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
-    logger().debug("{}", __func__);
+    LOG_PREFIX(AdminSocketHook::DumpRecoveryReservationsHook);
+    DEBUG("");
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
-    return seastar::do_with(std::move(f), [this](auto&& f) {
-      f->open_object_section("reservations");
-      f->open_object_section("local_reservations");
-      return shard_services.local_dump_reservations(f.get()).then([&f, this] {
-        f->close_section();
-        f->open_object_section("remote_reservations");
-        return shard_services.remote_dump_reservations(f.get()).then([&f] {
-          f->close_section();
-          f->close_section();
-          return seastar::make_ready_future<tell_result_t>(std::move(f));
-        });
-      });
-    });
+    f->open_object_section("reservations");
+    f->open_object_section("local_reservations");
+    co_await shard_services.local_dump_reservations(f.get());
+    f->close_section();
+    f->open_object_section("remote_reservations");
+    co_await shard_services.remote_dump_reservations(f.get());
+    f->close_section();
+    f->close_section();
+    co_return std::move(f);
   }
 private:
   crimson::osd::ShardServices& shard_services;

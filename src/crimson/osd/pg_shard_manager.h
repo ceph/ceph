@@ -121,7 +121,7 @@ public:
   FORWARD(set_booting, set_booting, get_shard_services().local_state.osd_state)
   FORWARD(set_stopping, set_stopping, get_shard_services().local_state.osd_state)
   FORWARD(set_active, set_active, get_shard_services().local_state.osd_state)
-  FORWARD(when_active, when_active, get_shard_services().local_state.osd_state)
+  FORWARD_CONST(when_active, when_active, get_shard_services().local_state.osd_state)
   FORWARD_CONST(get_osd_state_string, to_string, get_shard_services().local_state.osd_state)
 
   FORWARD(got_map, got_map, get_shard_services().local_state.osdmap_gate)
@@ -303,17 +303,16 @@ public:
    * invoke_method_on_each_shard_seq
    *
    * Invokes shard_services method on each shard sequentially.
+   * Following sharded<Service>::invoke_on_all but invoke_on_all_seq
+   * is used to support errorated return types.
    */
   template <typename F, typename... Args>
   seastar::future<> invoke_on_each_shard_seq(
     F &&f) const {
-    return sharded_map_seq(
-      shard_services,
-      [f=std::forward<F>(f)](const ShardServices &shard_services) mutable {
-	return std::invoke(
-	  f,
-	  shard_services);
-      });
+    return invoke_on_all_seq(
+      [this, f=std::forward<F>(f)]() mutable {
+      return std::invoke(f, shard_services.local());
+    });
   }
 
   /**
