@@ -163,7 +163,7 @@ def literal(name) -> str:
     if name:
         return f'``{name}``'
     else:
-        return f'<empty string>'
+        return '<empty string>'
 
 
 def ref_confval(name) -> str:
