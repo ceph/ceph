@@ -537,6 +537,8 @@ else:
                 "nqn": Param(str, "NVMeoF subsystem NQN"),
                 "nsid": Param(str, "NVMeoF Namespace ID"),
                 "host_nqn": Param(str, 'NVMeoF host NQN. Use "*" to allow any host.'),
+                "force": Param(bool, "Allow adding the host to the namespace even if the host "
+                    "has no access to the subsystem"),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
                 "traddr": Param(str, "NVMeoF gateway address", True, None),
             },
@@ -549,13 +551,15 @@ else:
             nqn: str,
             nsid: str,
             host_nqn: str,
+            force: Optional[bool] = None,
             gw_group: Optional[str] = None,
             traddr: Optional[str] = None
         ):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.namespace_add_host(
                 NVMeoFClient.pb2.namespace_add_host_req(subsystem_nqn=nqn,
                                                         nsid=int(nsid),
-                                                        host_nqn=host_nqn)
+                                                        host_nqn=host_nqn,
+                                                        force=str_to_bool(force))
             )
 
         @ReadPermission
