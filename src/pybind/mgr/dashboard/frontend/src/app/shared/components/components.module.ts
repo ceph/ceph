@@ -90,6 +90,7 @@ import { ChartsModule } from '@carbon/charts-angular';
 import { InlineMessageComponent } from './inline-message/inline-message.component';
 import { IconComponent } from './icon/icon.component';
 import { DetailsCardComponent } from './details-card/details-card.component';
+import { ToastComponent } from './notification-toast/notification-toast.component';
 
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
@@ -186,7 +187,8 @@ import CloseIcon from '@carbon/icons/es/close/16';
     SidePanelComponent,
     IconComponent,
     InlineMessageComponent,
-    DetailsCardComponent
+    DetailsCardComponent,
+    ToastComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -228,7 +230,8 @@ import CloseIcon from '@carbon/icons/es/close/16';
     SidePanelComponent,
     IconComponent,
     InlineMessageComponent,
-    DetailsCardComponent
+    DetailsCardComponent,
+    ToastComponent
   ]
 })
 export class ComponentsModule {
