@@ -311,67 +311,103 @@ class CephadmService(metaclass=ABCMeta):
                          fqdns: List[str] = [],
                          custom_sans: List[str] = []
                          ) -> Tuple[str, str]:
-
         svc_spec = cast(ServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-        if not self.requires_certificates or not svc_spec.ssl:
+        return self.get_certificates_generic(
+            svc_spec=svc_spec,
+            daemon_spec=daemon_spec,
+            cert_attr='ssl_cert',
+            key_attr='ssl_key',
+            cert_source_attr='certificate_source',
+            cert_name=self.cert_name,
+            key_name=self.key_name,
+            requires_cert=self.requires_certificates,
+            ips=ips,
+            fqdns=fqdns,
+            custom_sans=custom_sans
+        )
+
+    def get_certificates_generic(
+        self,
+        svc_spec: ServiceSpec,
+        daemon_spec: CephadmDaemonDeploySpec,
+        cert_attr: str,
+        key_attr: str,
+        cert_source_attr: str,
+        cert_name: str,
+        key_name: str,
+        requires_cert: bool = True,
+        custom_sans: Optional[List[str]] = None,
+        ips: Optional[List[str]] = None,
+        fqdns: Optional[List[str]] = None
+    ) -> Tuple[str, str]:
+        if requires_cert and not getattr(svc_spec, 'ssl', False):
             return '', ''
 
-        ips = ips or [self.mgr.inventory.get_addr(daemon_spec.host)]
-        fqdns = fqdns or [self.mgr.get_fqdn(daemon_spec.host)]
+        ips = ips if ips is not None else [self.mgr.inventory.get_addr(daemon_spec.host)]
+        fqdns = fqdns if fqdns is not None else [self.mgr.get_fqdn(daemon_spec.host)]
+        custom_sans = custom_sans if custom_sans is not None else []
 
-        cert_source = svc_spec.certificate_source
+        cert_source = getattr(svc_spec, cert_source_attr, None)
         logger.info(f'redo: getting certificate for {svc_spec.service_name()} using source: {cert_source}')
+
         if cert_source == CertificateSource.INLINE.value:
-            return self._get_certificates_from_spec(svc_spec, daemon_spec)
+            return self._get_certificates_from_spec(svc_spec, daemon_spec, cert_attr, key_attr, cert_name, key_name)
         elif cert_source == CertificateSource.REFERENCE.value:
-            return self._get_certificates_from_certmgr_store(svc_spec)
+            return self._get_certificates_from_certmgr_store(svc_spec, cert_name, key_name)
         elif cert_source == CertificateSource.CEPHADM_SIGNED.value:
             return self._get_cephadm_signed_certificates(svc_spec, daemon_spec, ips, fqdns, custom_sans)
         else:
             logger.error(f'redo: invalid cert_source is {cert_source}')
             return '', ''
 
-    def _get_certificates_from_spec(self,
-                                    svc_spec: ServiceSpec,
-                                    daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
+    def _get_certificates_from_spec(
+        self,
+        svc_spec: ServiceSpec,
+        daemon_spec: CephadmDaemonDeploySpec,
+        cert_attr: str,
+        key_attr: str,
+        cert_name: str,
+        key_name: str
+    ) -> Tuple[str, str]:
+        cert = getattr(svc_spec, cert_attr, None)
+        key = getattr(svc_spec, key_attr, None)
 
-        if hasattr(svc_spec, 'ssl_cert') and hasattr(svc_spec, 'ssl_key'):
-            cert, key = svc_spec.ssl_cert, svc_spec.ssl_key
-        elif hasattr(svc_spec, 'rgw_frontend_ssl_certificate'):
-            cert, key = parse_combined_pem_file(svc_spec.rgw_frontend_ssl_certificate) \
-                if svc_spec.rgw_frontend_ssl_certificate else (None, None)
-
-        # save certs in the certmgr
         if cert and key:
-            self.mgr.cert_mgr.save_cert(self.cert_name, cert, svc_spec.service_name(), daemon_spec.host, True)
-            self.mgr.cert_mgr.save_key(self.key_name, key, svc_spec.service_name(), daemon_spec.host, True)
+            self.mgr.cert_mgr.save_cert(cert_name, cert, svc_spec.service_name(), daemon_spec.host, True)
+            self.mgr.cert_mgr.save_key(key_name, key, svc_spec.service_name(), daemon_spec.host, True)
             return cert, key
         else:
             logger.error(f'redo: Cannot get cert/key {self.cert_name}/{self.key_name} for service {svc_spec.service_name()} in the spec.')
             return '', ''
 
-    def _get_certificates_from_certmgr_store(self, svc_spec: ServiceSpec) -> Tuple[str, str]:
-
-        cert = self.mgr.cert_mgr.get_cert(self.cert_name, svc_spec.service_name())
-        key = self.mgr.cert_mgr.get_key(self.key_name, svc_spec.service_name())
+    def _get_certificates_from_certmgr_store(
+        self,
+        svc_spec: ServiceSpec,
+        cert_name: str,
+        key_name: str
+    ) -> Tuple[str, str]:
+        cert = self.mgr.cert_mgr.get_cert(cert_name, svc_spec.service_name())
+        key = self.mgr.cert_mgr.get_key(key_name, svc_spec.service_name())
         if cert and key:
             return cert, key
         else:
             logger.error(f'redo: Failed to get cert/key {self.cert_name} for service {svc_spec.service_name()} from the certmgr store.')
             return '', ''
 
-    def _get_cephadm_signed_certificates(self,
-                                         svc_spec: ServiceSpec,
-                                         daemon_spec: CephadmDaemonDeploySpec,
-                                         ips: Optional[List[str]] = None,
-                                         fqdns: Optional[List[str]] = None,
-                                         custom_sans: Optional[List[str]] = None,
-                                         ) -> Tuple[str, str]:
+    def _get_cephadm_signed_certificates(
+        self,
+        svc_spec: ServiceSpec,
+        daemon_spec: CephadmDaemonDeploySpec,
+        ips: List[str],
+        fqdns: List[str],
+        custom_sans: List[str],
+    ) -> Tuple[str, str]:
 
         custom_sans = custom_sans or svc_spec.custom_sans or []
         ips = ips or [self.mgr.inventory.get_addr(daemon_spec.host)]
         fqdns = fqdns or [self.mgr.get_fqdn(daemon_spec.host)]
         cert, key = self.mgr.cert_mgr.get_self_signed_cert_key_pair(svc_spec.service_name(), daemon_spec.host)
+
         if cert and key:
             combined_fqdns = sorted(set(s.lower() for s in fqdns + custom_sans))
             cert_ips, cert_fqdns = extract_ips_and_fqdns_from_cert(cert)

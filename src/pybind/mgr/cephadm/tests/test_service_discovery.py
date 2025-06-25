@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 from cephadm.service_discovery import Root
+from cephadm.services.service_registry import service_registry
 
 
 class FakeDaemonDescription:
@@ -53,15 +54,25 @@ class FakeServiceSpec:
         self.monitor_port = port
 
 
-class FakeSpecDescription:
+class FakeIngressServiceSpec:
     def __init__(self, port):
-        self.spec = FakeServiceSpec(port)
+        self.monitor_port = port
+        self.monitor_ip_addrs = {}
+        self.monitor_networks = {}
+
+
+class FakeSpecDescription:
+    def __init__(self, service, port):
+        if service == 'ingress':
+            self.spec = FakeIngressServiceSpec(port)
+        else:
+            self.spec = FakeServiceSpec(port)
 
 
 class FakeSpecStore():
     def __init__(self, mgr):
         self.mgr = mgr
-        self._specs = {'ingress': FakeSpecDescription(9049)}
+        self._specs = {'ingress': FakeSpecDescription('ingress', 9049)}
 
     def __contains__(self, name):
         return name in self._specs
@@ -80,6 +91,7 @@ class FakeMgr:
         self.inventory = FakeInventory()
         self.cache = FakeCache()
         self.spec_store = FakeSpecStore(self)
+        service_registry.init_services(self)
 
     def get_mgr_id(self):
         return 'mgr-1'
