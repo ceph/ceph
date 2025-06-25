@@ -1587,7 +1587,7 @@ public:
       });
     if (info.pgid.is_no_shard()) {
       // replicated pool pg does not persist this key
-      assert(on_disk_rollback_info_trimmed_to == eversion_t());
+      ceph_assert(on_disk_rollback_info_trimmed_to == eversion_t());
       on_disk_rollback_info_trimmed_to = info.last_update;
     }
     log = IndexedLog(

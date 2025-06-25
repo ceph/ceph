@@ -633,7 +633,7 @@ public:
     }
 
     PeeringCtxWrapper &get_recovery_ctx() {
-      assert(state->rctx);
+      ceph_assert(state->rctx);
       return *(state->rctx);
     }
 
@@ -2397,13 +2397,13 @@ public:
       return pg_log.get_missing();
     } else {
       auto it = peer_missing.find(peer);
-      assert(it != peer_missing.end());
+      ceph_assert(it != peer_missing.end());
       return it->second;
     }
   }
   const pg_info_t&get_peer_info(pg_shard_t peer) const {
     auto it = peer_info.find(peer);
-    assert(it != peer_info.end());
+    ceph_assert(it != peer_info.end());
     return it->second;
   }
   bool has_peer_info(pg_shard_t peer) const {

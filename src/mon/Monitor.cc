@@ -6507,7 +6507,7 @@ int Monitor::handle_auth_request(
 	dout(1) << __func__ << " invalid mode " << (int)mode << dendl;
 	return -EACCES;
       }
-      assert(mode >= AUTH_MODE_MON && mode <= AUTH_MODE_MON_MAX);
+      ceph_assert(mode >= AUTH_MODE_MON && mode <= AUTH_MODE_MON_MAX);
       decode(entity_name, p);
       decode(con->peer_global_id, p);
     } catch (ceph::buffer::error& e) {
@@ -6639,7 +6639,7 @@ bool Monitor::ms_handle_fast_authentication(Connection *con)
       entity_name_t(con->get_peer_type(), -1),  // we don't know yet
       con->get_peer_addrs(),
       con);
-    assert(s);
+    ceph_assert(s);
     dout(10) << __func__ << " adding session " << s << " to con " << con
 	     << dendl;
     con->set_priv(s);
