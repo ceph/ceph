@@ -256,7 +256,7 @@ TEST_F(cache_test_t, test_dirty_extent)
       }
       // submit transaction
       submit_transaction(std::move(t)).get();
-      ASSERT_TRUE(extent->has_delta());
+      ASSERT_TRUE(extent->is_stable_dirty());
       ASSERT_EQ(addr, extent->get_paddr());
       ASSERT_EQ(extent->get_version(), 1);
       ASSERT_EQ(extent->calc_crc32c(), csum2);
@@ -268,7 +268,7 @@ TEST_F(cache_test_t, test_dirty_extent)
 	*t,
 	addr,
 	TestBlockPhysical::SIZE).unsafe_get();
-      ASSERT_TRUE(extent->has_delta());
+      ASSERT_TRUE(extent->is_stable_dirty());
       ASSERT_EQ(addr, extent->get_paddr());
       ASSERT_EQ(extent->get_version(), 1);
       ASSERT_EQ(csum2, extent->calc_crc32c());

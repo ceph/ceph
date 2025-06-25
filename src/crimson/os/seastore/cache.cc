@@ -739,7 +739,7 @@ void Cache::add_extent(CachedExtentRef ref)
 void Cache::mark_dirty(CachedExtentRef ref)
 {
   assert(ref->get_paddr().is_absolute());
-  if (ref->has_delta()) {
+  if (ref->is_stable_dirty()) {
     assert(ref->primary_ref_list_hook.is_linked());
     return;
   }
@@ -753,15 +753,13 @@ void Cache::add_to_dirty(
     CachedExtentRef ref,
     const Transaction::src_t* p_src)
 {
-  assert(ref->has_delta());
+  assert(ref->is_stable_dirty());
   assert(!ref->primary_ref_list_hook.is_linked());
   ceph_assert(ref->get_modify_time() != NULL_TIME);
   assert(ref->is_fully_loaded());
   assert(ref->get_paddr().is_absolute() ||
          ref->get_paddr().is_root());
 
-  // Note: next might not be at extent_state_t::DIRTY,
-  // also see CachedExtent::is_stable_writting()
   intrusive_ptr_add_ref(&*ref);
   dirty.push_back(*ref);
 
@@ -785,7 +783,7 @@ void Cache::remove_from_dirty(
     CachedExtentRef ref,
     const Transaction::src_t* p_src)
 {
-  assert(ref->has_delta());
+  assert(ref->is_stable_dirty());
   ceph_assert(ref->primary_ref_list_hook.is_linked());
   assert(ref->is_fully_loaded());
   assert(ref->get_paddr().is_absolute() ||
@@ -817,13 +815,11 @@ void Cache::replace_dirty(
     CachedExtentRef prev,
     const Transaction::src_t& src)
 {
-  assert(prev->has_delta());
+  assert(prev->is_stable_dirty());
   ceph_assert(prev->primary_ref_list_hook.is_linked());
   assert(prev->is_fully_loaded());
 
-  // Note: next might not be at extent_state_t::DIRTY,
-  // also see CachedExtent::is_stable_writting()
-  assert(next->has_delta());
+  assert(next->is_stable_dirty());
   assert(!next->primary_ref_list_hook.is_linked());
   ceph_assert(next->get_modify_time() != NULL_TIME);
   assert(next->is_fully_loaded());
@@ -849,7 +845,7 @@ void Cache::clear_dirty()
 {
   for (auto i = dirty.begin(); i != dirty.end(); ) {
     auto ptr = &*i;
-    assert(ptr->has_delta());
+    assert(ptr->is_stable_dirty());
     ceph_assert(ptr->primary_ref_list_hook.is_linked());
     assert(ptr->is_fully_loaded());
 
@@ -873,7 +869,7 @@ void Cache::remove_extent(
   assert(ref->is_valid());
   assert(ref->get_paddr().is_absolute() ||
          ref->get_paddr().is_root());
-  if (ref->has_delta()) {
+  if (ref->is_stable_dirty()) {
     remove_from_dirty(ref, p_src);
   } else if (!ref->is_placeholder()) {
     assert(ref->get_paddr().is_absolute());
@@ -905,21 +901,18 @@ void Cache::commit_replace_extent(
 
   const auto t_src = t.get_src();
   if (is_root_type(prev->get_type())) {
-    assert(prev->is_stable_clean()
-      || prev->primary_ref_list_hook.is_linked());
-    if (prev->has_delta()) {
-      // add the new dirty root to front
-      remove_from_dirty(prev, nullptr/* exclude root */);
-    }
+    assert(prev->is_stable_dirty());
+    assert(prev->primary_ref_list_hook.is_linked());
+    // add the new dirty root to front
+    remove_from_dirty(prev, nullptr/* exclude root */);
     add_to_dirty(next, nullptr/* exclude root */);
-  } else if (prev->has_delta()) {
+  } else if (prev->is_stable_dirty()) {
     replace_dirty(next, prev, t_src);
   } else {
     lru.remove_from_lru(*prev);
     add_to_dirty(next, &t_src);
   }
 
-  next->on_replace_prior();
   invalidate_extent(t, *prev);
 }
 
@@ -1306,14 +1299,9 @@ record_t Cache::prepare_record(
     i->prepare_commit();
 
     if (i->is_mutation_pending()) {
-      i->set_io_wait();
-      // extent with EXIST_MUTATION_PENDING doesn't have
-      // prior_instance field so skip these extents.
-      // the existing extents should be added into Cache
-      // during complete_commit to sync with gc transaction.
-      commit_replace_extent(t, i, i->prior_instance);
-    } // Note, else, add_extent() below
-    // Note, i->state become DIRTY in complete_commit()
+      i->on_replace_prior();
+    } // else, is_exist_mutation_pending():
+      // - it doesn't have prior_instance to replace
 
     assert(i->get_version() > 0);
     auto final_crc = i->calc_crc32c();
@@ -1380,6 +1368,24 @@ record_t Cache::prepare_record(
     // phase if they are rewritten.
     e->prepare_commit();
   });
+
+  /*
+   * We can only update extent states after the logical linked tree is
+   * resolved:
+   * - on_replace_prior()
+   * - prepare_commit()
+   */
+  for (auto &i: t.mutated_block_list) {
+    if (i->is_valid()) {
+      if (i->is_mutation_pending()) {
+        i->set_io_wait(CachedExtent::extent_state_t::DIRTY);
+        commit_replace_extent(t, i, i->prior_instance);
+      } // else, is_exist_mutation_pending():
+        // - it doesn't have prior_instance to replace
+        // - and add_extent() atomically below
+        // - set_io_wait(DIRTY) atomically below
+    }
+  }
 
   // Transaction is now a go, set up in-memory cache state
   // invalidate now invalid blocks
@@ -1493,7 +1499,7 @@ record_t Cache::prepare_record(
 	  i->get_length(),
 	  i->get_type()));
     }
-    i->set_io_wait();
+    i->set_io_wait(CachedExtent::extent_state_t::CLEAN);
     // Note, paddr is known until complete_commit(),
     // so add_extent() later.
   }
@@ -1519,7 +1525,7 @@ record_t Cache::prepare_record(
 	  i->get_length(),
 	  i->get_type()));
     }
-    i->set_io_wait();
+    i->set_io_wait(CachedExtent::extent_state_t::CLEAN);
     // Note, paddr is (can be) known until complete_commit(),
     // so add_extent() later.
   }
@@ -1530,12 +1536,15 @@ record_t Cache::prepare_record(
     }
     assert(i->state == CachedExtent::extent_state_t::DIRTY);
     assert(i->version > 0);
+    assert(i->pending_for_transaction == TRANS_ID_NULL);
+    assert(!i->prior_instance);
     remove_from_dirty(i, &trans_src);
     // set the version to zero because the extent state is now clean
     // in order to handle this transparently
     i->version = 0;
     i->dirty_from = JOURNAL_SEQ_MIN;
-    // no set_io_wait()
+    // no set_io_wait(), skip complete_commit()
+    assert(!i->is_pending_io());
     i->state = CachedExtent::extent_state_t::CLEAN;
     assert(i->is_logical());
     i->clear_modified_region();
@@ -1557,18 +1566,21 @@ record_t Cache::prepare_record(
     }
 
     if (i->is_exist_clean()) {
-      // no set_io_wait()
+      assert(i->version == 0);
+      assert(!i->prior_instance);
+      // no set_io_wait(), skip complete_commit()
+      assert(!i->is_pending_io());
+      i->pending_for_transaction = TRANS_ID_NULL;
       i->state = CachedExtent::extent_state_t::CLEAN;
     } else {
       assert(i->is_exist_mutation_pending());
-      i->set_io_wait();
-      // Note, i->state become DIRTY in complete_commit()
+      i->set_io_wait(CachedExtent::extent_state_t::DIRTY);
     }
 
     // exist mutation pending extents must be in t.mutated_block_list
     add_extent(i);
     const auto t_src = t.get_src();
-    if (i->has_delta()) {
+    if (i->is_stable_dirty()) {
       add_to_dirty(i, &t_src);
     } else {
       touch_extent(*i, &t_src, t.get_cache_hint());
@@ -1794,6 +1806,7 @@ void Cache::complete_commit(
       return;
     }
 
+    assert(i->is_stable_clean_pending());
     bool is_inline = false;
     if (i->is_inline()) {
       is_inline = true;
@@ -1808,14 +1821,11 @@ void Cache::complete_commit(
 #endif
     i->pending_for_transaction = TRANS_ID_NULL;
     i->on_initial_write();
-
-    i->state = CachedExtent::extent_state_t::CLEAN;
     i->reset_prior_instance();
     DEBUGT("add extent as fresh, inline={} -- {}",
 	   t, is_inline, *i);
     i->invalidate_hints();
     add_extent(i);
-    assert(!i->has_delta());
     const auto t_src = t.get_src();
     touch_extent(*i, &t_src, t.get_cache_hint());
     i->complete_io();
@@ -1858,12 +1868,14 @@ void Cache::complete_commit(
     if (!i->is_valid()) {
       continue;
     }
-    assert(i->is_exist_mutation_pending() ||
-	   i->prior_instance);
+    assert(i->is_stable_dirty());
+    assert(i->is_pending_io());
+    assert(i->io_wait->from_state == CachedExtent::extent_state_t::EXIST_MUTATION_PENDING
+           || (i->io_wait->from_state == CachedExtent::extent_state_t::MUTATION_PENDING
+               && i->prior_instance));
     i->on_delta_write(final_block_start);
     i->pending_for_transaction = TRANS_ID_NULL;
     i->reset_prior_instance();
-    i->state = CachedExtent::extent_state_t::DIRTY;
     assert(i->version > 0);
     if (i->version == 1 || is_root_type(i->get_type())) {
       i->dirty_from = start_seq;

@@ -490,7 +490,7 @@ public:
         }
       }
       if (ret == Transaction::get_extent_ret::PRESENT) {
-        if (child_node->is_stable_written()) {
+        if (child_node->is_stable_ready()) {
           assert(child_node->is_valid());
           auto cnode = child_node->template cast<child_node_t>();
           assert(cnode->has_parent_tracker());
@@ -1237,7 +1237,7 @@ private:
       // This can only happen during init_cached_extent
       // or when backref extent being rewritten by gc space reclaiming
       if (ret->is_stable() && !ret->is_linked()) {
-        assert(ret->has_delta() || is_backref_node(ret->get_type()));
+        assert(ret->is_stable_dirty() || is_backref_node(ret->get_type()));
         init_internal(*ret);
       }
       auto meta = ret->get_meta();
@@ -1320,7 +1320,7 @@ private:
       // This can only happen during init_cached_extent
       // or when backref extent being rewritten by gc space reclaiming
       if (ret->is_stable() && !ret->is_linked()) {
-        assert(ret->has_delta() || is_backref_node(ret->get_type()));
+        assert(ret->is_stable_dirty() || is_backref_node(ret->get_type()));
         init_leaf(*ret);
       }
       auto meta = ret->get_meta();
