@@ -5639,6 +5639,10 @@ int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& b
     return 0;
   }
 
+  if (bucket_info.local.snap_mgr.has_live_snapshots()) {
+    return -ENOTEMPTY;
+  }
+
   constexpr uint NUM_ENTRIES = 1000u;
 
   rgw_obj_index_key marker;
@@ -5859,6 +5863,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bu
     if (r < 0) {
       return r;
     }
+
   }
 
   // check if asymmetric replication policy exists either at zonegroup or bucket level.

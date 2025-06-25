@@ -62,6 +62,10 @@ public:
    */
   bool live_snapshot_at_range(rgw_bucket_snap_id min, rgw_bucket_snap_id max) const;
 
+  bool has_live_snapshots() const {
+    return !snaps.empty();
+  }
+
   bool find_snap(const std::string& snap_name, rgw_bucket_snap_id *snap_id) const {
     auto iter = names_to_ids.find(snap_name);
     if (iter == names_to_ids.end()) {
