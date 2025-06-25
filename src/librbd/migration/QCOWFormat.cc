@@ -641,11 +641,13 @@ private:
 
       if (cluster_extent.cluster_offset == 0) {
         // QCOW header is at offset 0, implies cluster DNE
-        log_ctx->complete(-ENOENT);
+        boost::asio::post(*qcow_format->m_image_ctx->asio_engine,
+                          [log_ctx] { log_ctx->complete(-ENOENT); });
       } else if (cluster_extent.cluster_offset == QCOW_OFLAG_ZERO) {
         // explicitly zeroed section
         read_ctx->bl.append_zero(cluster_extent.cluster_length);
-        log_ctx->complete(0);
+        boost::asio::post(*qcow_format->m_image_ctx->asio_engine,
+                          [log_ctx] { log_ctx->complete(0); });
       } else {
         // request the (sub)cluster from the cluster cache
         qcow_format->m_cluster_cache->get_cluster(
