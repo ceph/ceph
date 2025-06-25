@@ -2214,6 +2214,14 @@ int ceph_ll_setlk(struct ceph_mount_info *cmount,
 
 int ceph_ll_lazyio(struct ceph_mount_info *cmount, Fh *fh, int enable);
 
+int ceph_ll_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,
+                               Inode *in, const struct fscrypt_policy_v2 *policy);
+
+int ceph_ll_get_fscrypt_policy_v2(struct ceph_mount_info *cmount,
+                               Inode *in, struct fscrypt_policy_v2 *policy);
+
+int ceph_ll_is_encrypted(struct ceph_mount_info *cmount, Inode *in, char* enctag);
+
 /*
  * Delegation support
  *

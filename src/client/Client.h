@@ -752,6 +752,7 @@ public:
 
   int ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& policy);
   int ll_get_fscrypt_policy_v2(Inode *in, struct fscrypt_policy_v2* policy);
+  int ll_is_encrypted(Inode *in, UserPerm& perms, char* enctag);
 
   int ll_get_stripe_osd(struct Inode *in, uint64_t blockno,
 			file_layout_t* layout);

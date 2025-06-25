@@ -18378,7 +18378,11 @@ int Client::is_encrypted(int fd, UserPerm& perms, char* enctag)
     return -EBADF;
   }
 
-  Inode *in = f->inode.get();
+  return ll_is_encrypted(f->inode.get(), perms, enctag);
+}
+
+int Client::ll_is_encrypted(Inode *in, UserPerm& perms, char *enctag)
+{
   if (in->is_encrypted()) {
     int r = ll_getxattr(in, "user.ceph.subvolume.enctag", enctag, sizeof(enctag), perms);
     // dir can be encrypted and xattr DNE if it isn't setup via mgr subvolume

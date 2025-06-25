@@ -2561,6 +2561,32 @@ extern "C" int ceph_get_fscrypt_policy_v2(struct ceph_mount_info *cmount,
   return cmount->get_client()->get_fscrypt_policy_v2(fd, policy);
 }
 
+extern "C" int ceph_ll_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,
+                                          Inode *in, const struct fscrypt_policy_v2 *policy)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+
+  return cmount->get_client()->ll_set_fscrypt_policy_v2(in, *policy);
+}
+
+extern "C" int ceph_ll_get_fscrypt_policy_v2(struct ceph_mount_info *cmount,
+                                          Inode *in, struct fscrypt_policy_v2 *policy)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+
+  return cmount->get_client()->ll_get_fscrypt_policy_v2(in, policy);
+}
+
+extern "C" int ceph_ll_is_encrypted(struct ceph_mount_info *cmount,
+                                          Inode *in, char* enctag)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+
+  return cmount->get_client()->ll_is_encrypted(in, cmount->default_perms, enctag);
+}
 
 // This is deprecated, use ceph_ll_register_callbacks2 instead.
 extern "C" void ceph_ll_register_callbacks(class ceph_mount_info *cmount,
