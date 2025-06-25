@@ -448,6 +448,18 @@ class SpecStore():
                     ingress_spec.ssl_key,
                     service_name=ingress_spec.service_name(),
                     user_made=True)
+            if ingress_spec.monitor_ssl_cert:
+                self.mgr.cert_mgr.save_cert(
+                    'haproxy_monitor_ssl_cert',
+                    ingress_spec.monitor_ssl_cert,
+                    service_name=ingress_spec.service_name(),
+                    user_made=True)
+            if ingress_spec.monitor_ssl_key:
+                self.mgr.cert_mgr.save_key(
+                    'haproxy_monitor_ssl_key',
+                    ingress_spec.monitor_ssl_key,
+                    service_name=ingress_spec.service_name(),
+                    user_made=True)
         elif spec.service_type == 'nvmeof':
             nvmeof_spec = cast(NvmeofServiceSpec, spec)
             for cert_attr in [
@@ -508,6 +520,8 @@ class SpecStore():
         if spec.service_type == 'iscsi':
             self.mgr.cert_mgr.rm_cert('iscsi_ssl_cert', service_name=spec.service_name())
             self.mgr.cert_mgr.rm_key('iscsi_ssl_key', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_cert('haproxy_monitor_ssl_cert', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_key('haproxy_monitor_ssl_key', service_name=spec.service_name())
         if spec.service_type == 'ingress':
             self.mgr.cert_mgr.rm_cert('ingress_ssl_cert', service_name=spec.service_name())
             self.mgr.cert_mgr.rm_key('ingress_ssl_key', service_name=spec.service_name())
@@ -1610,6 +1624,14 @@ class HostCache():
         assert not daemon.startswith('ha-rgw.')
 
         return self.scheduled_daemon_actions.get(host, {}).get(daemon)
+
+    def get_host_network_ips(self, host: str) -> List[str]:
+        return [
+            ip
+            for net_details in self.networks.get(host, {}).values()
+            for ips in net_details.values()
+            for ip in ips
+        ]
 
 
 class NodeProxyCache:

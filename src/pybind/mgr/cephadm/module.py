@@ -713,6 +713,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             if svc.allows_user_certificates:
                 assert svc.SCOPE != TLSObjectScope.UNKNOWN, f"Service {svc.TYPE} requieres certificates but it has not defined its svc.SCOPE field."
                 self.cert_mgr.register_cert_key_pair(svc.TYPE, svc.cert_name, svc.key_name, svc.SCOPE)
+                if svc.TYPE == 'ingress':
+                    self.cert_mgr.register_cert_key_pair(svc.TYPE, 'haproxy_monitor_ssl_cert', 'haproxy_monitor_ssl_key', svc.SCOPE)
 
         self.cert_mgr.register_cert_key_pair('nvmeof', 'nvmeof_server_cert', 'nvmeof_server_key', TLSObjectScope.SERVICE)
         self.cert_mgr.register_cert_key_pair('nvmeof', 'nvmeof_client_cert', 'nvmeof_client_key', TLSObjectScope.SERVICE)
@@ -1060,8 +1062,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.set_health_warning('CEPHADM_FAILED_DAEMON', f'{len(failed_daemons)} failed cephadm daemon(s)', len(
                 failed_daemons), failed_daemons)
 
-    def get_first_matching_network_ip(self, host: str, sspec: ServiceSpec) -> Optional[str]:
-        sspec_networks = sspec.networks
+    def get_first_matching_network_ip(
+        self,
+        host: str,
+        sspec: ServiceSpec,
+        sspec_networks: Optional[List[str]] = None
+    ) -> Optional[str]:
+        if not sspec_networks:
+            sspec_networks = sspec.networks
         for subnet, ifaces in self.cache.networks.get(host, {}).items():
             host_network = ipaddress.ip_network(subnet)
             for spec_network_str in sspec_networks:

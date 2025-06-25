@@ -45,10 +45,16 @@ defaults
 {% endif %}
     maxconn                 8000
 
+{% if spec.enable_stats %}
 frontend stats
     mode http
-    bind {{ ip }}:{{ monitor_port }}
-    bind {{ local_host_ip }}:{{ monitor_port }}
+{% for monitor_ip in monitor_ips %}
+    {% if spec.monitor_ssl %}
+    bind {{ monitor_ip }}:{{ monitor_port }} ssl crt /var/lib/haproxy/{{ monitor_ssl_file }}
+    {% else %}
+    bind {{ monitor_ip }}:{{ monitor_port }}
+    {% endif %}
+{% endfor %}
     stats enable
     stats uri /stats
     stats refresh 10s
@@ -56,6 +62,7 @@ frontend stats
     http-request use-service prometheus-exporter if { path /metrics }
     monitor-uri /health
 
+{% endif %}
 frontend frontend
 {% if spec.ssl or spec.ssl_cert %}
     bind {{ ip }}:{{ frontend_port }} ssl crt /var/lib/haproxy/haproxy.pem {{ v4v6_flag }}
