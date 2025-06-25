@@ -1,5 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { fakeAsync, TestBed, tick, flush } from '@angular/core/testing';
 
 import { ToastrModule, ToastrService } from 'ngx-toastr';
 import { of, throwError } from 'rxjs';
@@ -109,8 +109,10 @@ describe('PrometheusNotificationService', () => {
     const expectShown = (expected: object[]) => {
       tick(500);
       expect(shown.length).toBe(expected.length);
-      expected.forEach((e, i) =>
-        Object.keys(e).forEach((key) => expect(shown[i][key]).toEqual(expected[i][key]))
+      (expected as CdNotificationConfig[]).forEach((e, i) =>
+        (Object.keys(e) as (keyof CdNotificationConfig)[]).forEach((key) =>
+          expect(shown[i][key]).toEqual(e[key])
+        )
       );
     };
 
@@ -125,6 +127,7 @@ describe('PrometheusNotificationService', () => {
 
     it('notify looks on single notification with single alert like', fakeAsync(() => {
       asyncRefresh();
+      flush();
       expectShown([
         new CdNotificationConfig(
           NotificationType.error,
@@ -140,6 +143,7 @@ describe('PrometheusNotificationService', () => {
       asyncRefresh();
       notifications[0].alerts.push(prometheus.createNotificationAlert('alert1', 'resolved'));
       asyncRefresh();
+      flush();
       expectShown([
         new CdNotificationConfig(
           NotificationType.error,
@@ -163,6 +167,7 @@ describe('PrometheusNotificationService', () => {
       notifications.push(prometheus.createNotification());
       notifications[1].alerts.push(prometheus.createNotificationAlert('alert2'));
       asyncRefresh();
+      flush();
       expectShown([
         new CdNotificationConfig(
           NotificationType.error,
@@ -212,7 +217,7 @@ describe('PrometheusNotificationService', () => {
       notifications[1].alerts.push(prometheus.createNotificationAlert('alert0'));
       notifications[1].notified = 'by somebody else';
       asyncRefresh();
-
+      flush();
       expectShown([
         new CdNotificationConfig(
           NotificationType.error,
