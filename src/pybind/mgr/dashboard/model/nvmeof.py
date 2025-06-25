@@ -127,6 +127,7 @@ class Namespace(NamedTuple):
     uuid: Optional[str]
     ns_subsystem_nqn: Optional[str]
     trash_image: Optional[bool]
+    disable_auto_resize: Optional[bool]
 
 
 class NamespaceList(NamedTuple):
