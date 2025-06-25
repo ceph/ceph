@@ -92,6 +92,7 @@ import { TearsheetComponent } from './tearsheet/tearsheet.component';
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { DetailsCardComponent } from './details-card/details-card.component';
 import { SidePanelComponent } from './side-panel/side-panel.component';
+import { ToastComponent } from './notification-toast/notification-toast.component';
 
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
@@ -220,7 +221,8 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     TearsheetStepComponent,
     DetailsCardComponent,
     SidePanelComponent,
-    SidebarLayoutComponent
+    SidebarLayoutComponent,
+    ToastComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -265,7 +267,8 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     TearsheetStepComponent,
     DetailsCardComponent,
     SidePanelComponent,
-    SidebarLayoutComponent
+    SidebarLayoutComponent,
+    ToastComponent
   ]
 })
 export class ComponentsModule {
