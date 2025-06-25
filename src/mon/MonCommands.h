@@ -1246,6 +1246,10 @@ COMMAND("osd pool stretch unset "
 COMMAND("osd pool availability-status", \
         "obtain availability stats from all pools", \
         "osd", "r")
+COMMAND("osd pool clear-availability-status "
+		"name=pool,type=CephPoolname ",
+        "clear a pool's existing availability stats", 
+        "osd", "r")
 COMMAND("osd utilization",
 	"get basic pg distribution stats",
 	"osd", "r")
