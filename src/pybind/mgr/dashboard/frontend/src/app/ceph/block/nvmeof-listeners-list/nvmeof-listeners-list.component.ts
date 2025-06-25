@@ -104,7 +104,10 @@ export class NvmeofListenersListComponent implements OnInit, OnChanges {
     this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: 'Listener',
       actionDescription: 'delete',
-      itemNames: [`listener ${listener.host_name} (${listener.traddr}:${listener.trsvcid})`],
+      infoMessage: $localize`This action will delete listener despite any active connections.`,
+      itemNames: [
+        $localize`listener` + ' ' + `${listener.host_name} (${listener.traddr}:${listener.trsvcid})`
+      ],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
           task: new FinishedTask('nvmeof/listener/delete', {
