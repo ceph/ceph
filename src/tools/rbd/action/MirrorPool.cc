@@ -471,10 +471,7 @@ private:
   void handle_get_info(int r) {
     dout(20) << this << " " << __func__ << ": r=" << r << dendl;
 
-    if (r == -ENOENT) {
-      close_image();
-      return;
-    } else if (r < 0) {
+    if (r < 0) {
       std::cerr << "rbd: failed to retrieve mirror image info for "
                 << m_image_name << ": " << cpp_strerror(r) << std::endl;
       m_ret_val = r;

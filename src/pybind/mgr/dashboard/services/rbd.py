@@ -305,8 +305,13 @@ class RbdService(object):
         with rbd.Image(ioctx, image_name) as img:
             stat = img.stat()
             mirror_info = img.mirror_image_get_info()
-            mirror_mode = img.mirror_image_get_mode()
-            if mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_JOURNAL and mirror_info['state'] != rbd.RBD_MIRROR_IMAGE_DISABLED:  # noqa E501 #pylint: disable=line-too-long
+            mirror_mode = None
+            if mirror_info['state'] != rbd.RBD_MIRROR_IMAGE_DISABLED:
+                mirror_mode = img.mirror_image_get_mode()
+            else:
+                stat['mirror_mode'] = 'Disabled'
+
+            if mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_JOURNAL:
                 stat['mirror_mode'] = 'journal'
             elif mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
                 stat['mirror_mode'] = 'snapshot'
@@ -315,8 +320,6 @@ class RbdService(object):
                 for scheduled_image in schedule_status['scheduled_images']:
                     if scheduled_image['image'] == get_image_spec(pool_name, namespace, image_name):
                         stat['schedule_info'] = scheduled_image
-            else:
-                stat['mirror_mode'] = 'Disabled'
 
             stat['name'] = image_name
 
@@ -364,10 +367,8 @@ class RbdService(object):
                 if snap['namespace'] == rbd.RBD_SNAP_NAMESPACE_TYPE_TRASH:
                     continue
 
-                try:
-                    snap['mirror_mode'] = MIRROR_IMAGE_MODE(img.mirror_image_get_mode()).name
-                except ValueError as ex:
-                    raise DashboardException(f'Unknown RBD Mirror mode: {ex}')
+                if mirror_mode:
+                    snap['mirror_mode'] = mirror_mode
 
                 snap['timestamp'] = "{}Z".format(
                     img.get_snap_timestamp(snap['id']).isoformat())

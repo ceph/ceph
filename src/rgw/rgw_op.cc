@@ -4031,13 +4031,17 @@ int RGWPutObj::init_processing(optional_yield y) {
     copy_source_bucket_name = copy_source_bucket_name.substr(0, pos);
 #define VERSION_ID_STR "?versionId="
     pos = copy_source_object_name.find(VERSION_ID_STR);
-    if (pos == std::string::npos) {
-      copy_source_object_name = url_decode(copy_source_object_name);
-    } else {
+    if (pos != std::string::npos) {
       copy_source_version_id =
         copy_source_object_name.substr(pos + sizeof(VERSION_ID_STR) - 1);
       copy_source_object_name =
-        url_decode(copy_source_object_name.substr(0, pos));
+        copy_source_object_name.substr(0, pos);
+    }
+    if (copy_source_object_name.empty()) {
+      //means copy_source_object_name is empty string so the url is formatted badly
+      ret = -EINVAL;
+      ldpp_dout(this, 5) << "x-amz-copy-source bad format" << dendl;
+      return ret;
     }
     pos = copy_source_bucket_name.find(":");
     if (pos == std::string::npos) {
@@ -7290,7 +7294,7 @@ void RGWCompleteMultipart::complete()
 {
   /* release exclusive lock iff not already */
   if (unlikely(serializer.get() && serializer->is_locked())) {
-    int r = serializer->unlock();
+    int r = serializer->unlock(this, s->yield);
     if (r < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlock " << *serializer.get() << dendl;
     }
@@ -7353,7 +7357,7 @@ void RGWAbortMultipart::execute(optional_yield y)
     return;
   }
   op_ret = upload->abort(this, s->cct, y);
-  serializer->unlock();
+  serializer->unlock(this, y);
 }
 
 int RGWListMultipart::verify_permission(optional_yield y)

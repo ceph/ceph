@@ -870,7 +870,7 @@ void OSD::dump_status(Formatter* f) const
   f->dump_stream("osd_fsid") << superblock.osd_fsid;
   f->dump_unsigned("whoami", superblock.whoami);
   f->dump_string("state", pg_shard_manager.get_osd_state_string());
-  f->dump_stream("maps") << superblock.maps;
+  f->dump_stream("maps") << superblock.get_maps();
   f->dump_stream("oldest_map") << superblock.get_oldest_map();
   f->dump_stream("newest_map") << superblock.get_newest_map();
   f->dump_unsigned("cluster_osdmap_trim_lower_bound",
@@ -881,7 +881,7 @@ void OSD::dump_status(Formatter* f) const
 void OSD::print(std::ostream& out) const
 {
   out << "{osd." << superblock.whoami << " "
-      << superblock.osd_fsid << " maps " << superblock.maps
+      << superblock.osd_fsid << " maps " << superblock.get_maps()
       << " tlb:" << superblock.cluster_osdmap_trim_lower_bound
       << " pgs:" << pg_shard_manager.get_num_pgs()
       << "}";
@@ -1197,7 +1197,7 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
       // even if this map isn't from a mon, we may have satisfied our subscription
       monc->sub_got("osdmap", last);
 
-      if (!superblock.maps.empty()) {
+      if (!superblock.is_maps_empty()) {
         pg_shard_manager.trim_maps(t, superblock);
         // TODO: once we support pg splitting, update pg_num_history here
         //pg_num_history.prune(superblock.get_oldest_map());

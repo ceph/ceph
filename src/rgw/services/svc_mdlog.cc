@@ -12,7 +12,7 @@
 #include "rgw_coroutine.h"
 #include "rgw_cr_rados.h"
 
-#include "driver/rados/rgw_zone.h" // FIXME: subclass dependency
+#include "rgw/rgw_zone.h"
 
 #include "common/errno.h"
 

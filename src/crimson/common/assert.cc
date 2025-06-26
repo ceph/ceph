@@ -8,6 +8,8 @@
 
 #include "crimson/common/log.h"
 
+SET_SUBSYS(osd);
+
 namespace ceph {
   [[gnu::cold]] void __ceph_assert_fail(const ceph::assert_data &ctx)
   {
@@ -18,12 +20,8 @@ namespace ceph {
                                         const char* file, int line,
                                         const char* func)
   {
-    seastar::logger& logger = crimson::get_logger(0);
-    logger.error("{}:{} : In function '{}', ceph_assert(%s)\n"
-                 "{}",
-                 file, line, func, assertion,
-                 seastar::current_backtrace());
-    std::cout << std::flush;
+    GENERIC_ERROR("{}:{} : In function '{}', ceph_assert({})\n",
+                  file, line, func, assertion);
     abort();
   }
   [[gnu::cold]] void __ceph_assertf_fail(const char *assertion,
@@ -37,25 +35,15 @@ namespace ceph {
     std::vsnprintf(buf, sizeof(buf), msg, args);
     va_end(args);
 
-    seastar::logger& logger = crimson::get_logger(0);
-    logger.error("{}:{} : In function '{}', ceph_assert(%s)\n"
-                 "{}\n{}\n",
-                 file, line, func, assertion,
-                 buf,
-                 seastar::current_backtrace());
-    std::cout << std::flush;
+    GENERIC_ERROR("{}:{} : In function '{}', ceph_assert({})\n {}\n",
+                 file, line, func, assertion, buf);
     abort();
   }
 
   [[gnu::cold]] void __ceph_abort(const char* file, int line,
                                   const char* func, const std::string& msg)
   {
-    seastar::logger& logger = crimson::get_logger(0);
-    logger.error("{}:{} : In function '{}', abort(%s)\n"
-                 "{}",
-                 file, line, func, msg,
-                 seastar::current_backtrace());
-    std::cout << std::flush;
+    GENERIC_ERROR("{}:{} : In function '{}', abort({})\n", file, line, func, msg);
     abort();
   }
 
@@ -69,12 +57,8 @@ namespace ceph {
     std::vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
 
-    seastar::logger& logger = crimson::get_logger(0);
-    logger.error("{}:{} : In function '{}', abort()\n"
-                 "{}\n{}\n",
-                 file, line, func,
-                 buf,
-                 seastar::current_backtrace());
+    GENERIC_ERROR("{}:{} : In function '{}', abort()\n {}\n",
+                  file, line, func, buf);
     std::cout << std::flush;
     abort();
   }

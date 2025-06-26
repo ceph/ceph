@@ -190,9 +190,6 @@ void bluefs_super_t::encode(bufferlist& bl) const
   encode(block_size, bl);
   encode(log_fnode, bl);
   encode(memorized_layout, bl);
-  if (_version >= 3) {
-    encode(wal_version, bl);
-  }
   ENCODE_FINISH(bl);
 }
 
@@ -207,9 +204,6 @@ void bluefs_super_t::decode(bufferlist::const_iterator& p)
   decode(log_fnode, p);
   if (struct_v >= 2) {
     decode(memorized_layout, p);
-  }
-  if (struct_v >= 3) {
-    decode(wal_version, p);
   }
   DECODE_FINISH(p);
 }
@@ -251,9 +245,9 @@ mempool::bluefs::vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
   if (extents_index.size() > 4) {
     auto it = std::upper_bound(extents_index.begin(), extents_index.end(),
       offset);
-    assert(it != extents_index.begin());
+    ceph_assert(it != extents_index.begin());
     --it;
-    assert(offset >= *it);
+    ceph_assert(offset >= *it);
     uint32_t skip = it - extents_index.begin();
     ceph_assert(skip <= extents.size());
     p += skip;

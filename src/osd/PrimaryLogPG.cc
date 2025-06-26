@@ -852,7 +852,7 @@ void PrimaryLogPG::maybe_force_recovery()
 
 bool PrimaryLogPG::check_laggy(OpRequestRef& op)
 {
-  assert(HAVE_FEATURE(recovery_state.get_min_upacting_features(),
+  ceph_assert(HAVE_FEATURE(recovery_state.get_min_upacting_features(),
 		      SERVER_OCTOPUS));
   if (state_test(PG_STATE_WAIT)) {
     dout(10) << __func__ << " PG is WAIT state" << dendl;
@@ -884,7 +884,7 @@ bool PrimaryLogPG::check_laggy(OpRequestRef& op)
 
 bool PrimaryLogPG::check_laggy_requeue(OpRequestRef& op)
 {
-  assert(HAVE_FEATURE(recovery_state.get_min_upacting_features(),
+  ceph_assert(HAVE_FEATURE(recovery_state.get_min_upacting_features(),
 		      SERVER_OCTOPUS));
   if (!state_test(PG_STATE_WAIT) && !state_test(PG_STATE_LAGGY)) {
     return true; // not laggy
@@ -3997,7 +3997,7 @@ void PrimaryLogPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
 
   if (!pwop->sent_reply) {
     // send commit.
-    assert(pwop->ctx->reply == nullptr);
+    ceph_assert(pwop->ctx->reply == nullptr);
     MOSDOpReply *reply = new MOSDOpReply(m, r, get_osdmap_epoch(), 0,
 					 true /* we claim it below */);
     reply->set_reply_versions(eversion_t(), pwop->user_version);
@@ -10738,7 +10738,7 @@ std::pair<int, hobject_t> PrimaryLogPG::get_fpoid_from_chunk(
       case pg_pool_t::TYPE_FINGERPRINT_SHA512:
 	return ceph::crypto::digest<ceph::crypto::SHA512>(chunk).to_str();
       default:
-	assert(0 == "unrecognized fingerprint type");
+	ceph_assert(0 == "unrecognized fingerprint type");
 	return {};
     }
   }();    
@@ -14118,7 +14118,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 	dout(20) << " BACKFILL keeping " << check
 		 << " with ver " << obj_v
 		 << " on peers " << keep_ver_targs << dendl;
-	//assert(!waiting_for_degraded_object.count(check));
+	//ceph_assert(!waiting_for_degraded_object.count(check));
       }
       if (!need_ver_targs.empty() || !missing_targs.empty()) {
 	ObjectContextRef obc = get_object_context(backfill_info.begin, false);

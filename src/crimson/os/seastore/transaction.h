@@ -151,8 +151,9 @@ public:
       assert(read_set.count(ref->prior_instance->get_paddr(), extent_cmp_t{}));
       ref->reset_prior_instance();
     } else {
-      assert(ref->is_stable_written());
-      // && retired_set.count(ref->get_paddr()) == 0
+      ceph_assert(ref->is_stable());
+      ceph_assert(ref->get_paddr().is_absolute());
+      // XXX: prevent double retire -- retired_set.count(ref->get_paddr()) == 0
       // If it's already in the set, insert here will be a noop,
       // which is what we want.
       retired_set.emplace(ref, trans_id);
@@ -165,6 +166,7 @@ public:
     bool is_paddr_known;
   };
   maybe_add_readset_ret maybe_add_to_read_set(CachedExtentRef ref) {
+    assert(ref->is_stable());
     assert(ref->get_paddr().is_absolute()
            || ref->get_paddr().is_record_relative());
     if (is_weak()) {
@@ -177,6 +179,7 @@ public:
     } else {
       // paddr is unknown until wait_io() finished
       // to call maybe_add_to_read_set_step_2(ref)
+      assert(ref->is_pending_io());
       ceph_assert(ref->get_paddr().is_record_relative());
       bool added = maybe_add_to_read_set_step_1(ref);
       return {added, false};
@@ -673,6 +676,7 @@ private:
 
   void maybe_add_to_read_set_step_2(CachedExtentRef ref) {
     // paddr must be known for read_set
+    assert(ref->is_stable_ready());
     ceph_assert(ref->get_paddr().is_absolute());
     if (is_weak()) {
       return;

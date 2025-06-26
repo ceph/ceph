@@ -75,7 +75,7 @@ public:
   const RGWZoneParams& get_zone_params() const;
   const RGWPeriod& get_current_period() const;
   const RGWRealm& get_realm() const;
-  const RGWZoneGroup& get_zonegroup() const;
+  const RGWZoneGroup& get_zonegroup() const { return *zonegroup; };
   int get_zonegroup(const std::string& id, RGWZoneGroup& zonegroup) const;
   const RGWZone& get_zone() const;
 
@@ -134,7 +134,7 @@ public:
   bool is_meta_master() const;
 
   bool need_to_sync() const;
-  bool need_to_log_data() const;
+  bool need_to_log_data() const { return (zone_public_config->log_data && sync_module_exports_data()); };
   bool need_to_log_metadata() const;
   bool can_reshard() const;
   bool is_syncing_bucket_meta() const;

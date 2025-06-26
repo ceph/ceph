@@ -76,10 +76,8 @@ if(WITH_CCACHE)
   if(CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
     message(WARNING "Compiler launcher already set. stop configuring ccache")
   else()
-    find_program(CCACHE_EXECUTABLE ccache)
-    if(NOT CCACHE_EXECUTABLE)
-      message(FATAL_ERROR "Can't find ccache. Is it installed?")
-    endif()
+    find_program(CCACHE_EXECUTABLE ccache
+      REQUIRED)
     message(STATUS "Building with ccache: ${CCACHE_EXECUTABLE}, CCACHE_DIR=$ENV{CCACHE_DIR}")
     set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_EXECUTABLE})
     set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_EXECUTABLE})
@@ -88,10 +86,8 @@ endif(WITH_CCACHE)
 
 option(WITH_SCCACHE "Build with sccache.")
 if(WITH_SCCACHE)
-  find_program(SCCACHE_EXECUTABLE sccache)
-  if(NOT SCCACHE_EXECUTABLE)
-    message(FATAL_ERROR "Can't find sccache. Is it installed?")
-  endif()
+  find_program(SCCACHE_EXECUTABLE sccache
+    REQUIRED)
   if(NOT NINJA_MAX_COMPILE_JOBS)
     if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
       execute_process(
@@ -123,10 +119,8 @@ endif(WITH_SCCACHE)
 option(WITH_MANPAGE "Build man pages." ON)
 if(WITH_MANPAGE)
   find_program(SPHINX_BUILD
-    NAMES sphinx-build sphinx-build-3)
-  if(NOT SPHINX_BUILD)
-    message(FATAL_ERROR "Can't find sphinx-build.")
-  endif(NOT SPHINX_BUILD)
+    NAMES sphinx-build sphinx-build-3
+    REQUIRED)
 endif(WITH_MANPAGE)
 
 include_directories(
@@ -565,6 +559,7 @@ option(WITH_RADOSGW_MOTR "CORTX-Motr backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_DAOS "DAOS backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_D4N "D4N wrapper for RADOS Gateway" ON)
 option(WITH_RADOSGW_POSIX "POSIX backend for RADOS Gateway" ON)
+option(WITH_RADOSGW_RADOS "RADOS backend for Rados Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
 option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)
 option(WITH_RADOSGW_BACKTRACE_LOGGING "Enable backtraces in rgw logs" OFF)
@@ -670,10 +665,8 @@ option(WITH_LTTNG "LTTng tracing is enabled" ON)
 if(${WITH_LTTNG})
   find_package(LTTngUST REQUIRED)
   find_program(LTTNG_GEN_TP
-    lttng-gen-tp)
-  if(NOT LTTNG_GEN_TP)
-    message(FATAL_ERROR "Can't find lttng-gen-tp.")
-  endif()
+    lttng-gen-tp
+    REQUIRED)
 endif(${WITH_LTTNG})
 
 option(WITH_OSD_INSTRUMENT_FUNCTIONS OFF)
@@ -808,10 +801,8 @@ include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
 option(WITH_MGR_DASHBOARD_FRONTEND "Build the mgr/dashboard frontend using `npm`" ON)
 option(WITH_SYSTEM_NPM "Assume that dashboard build tools already installed through packages" OFF)
 if(WITH_SYSTEM_NPM)
-  find_program(NPM_EXECUTABLE npm)
-  if(NOT NPM_EXECUTABLE)
-    message(FATAL_ERROR "Can't find npm.")
-  endif()
+  find_program(NPM_EXECUTABLE npm
+    REQUIRED)
 endif()
 set(DASHBOARD_FRONTEND_LANGS "ALL" CACHE STRING
   "List of comma separated ceph-dashboard frontend languages to build. \

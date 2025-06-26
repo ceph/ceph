@@ -13,7 +13,7 @@
 #include "rgw_rest_iam_group.h"
 #include "rgw_rest_iam_user.h"
 #include "rgw_rest_conn.h"
-#include "driver/rados/rgw_zone.h"
+#include "rgw_zone.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw

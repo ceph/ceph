@@ -1348,7 +1348,7 @@ namespace rgw {
 	      goto rele;
 	    }
 	    /* maybe clear state */
-	    d = get<directory>(&rgw_fh->variant_type);
+	    d = std::get_if<directory>(&rgw_fh->variant_type);
 	    if (d) {
 	      struct timespec ev_ts = ev.ts;
 	      lock_guard guard(rgw_fh->mtx);
@@ -1543,8 +1543,7 @@ namespace rgw {
   std::ostream& operator<<(std::ostream &os,
 			   RGWFileHandle::readdir_offset const &offset)
   {
-    using boost::get;
-    if (unlikely(!! get<uint64_t*>(&offset))) {
+    if (unlikely(!!std::get_if<uint64_t*>(&offset))) {
       uint64_t* ioff = get<uint64_t*>(offset);
       os << *ioff;
     }
@@ -1568,7 +1567,7 @@ namespace rgw {
       << object_name()
       << dendl;
 
-    directory* d = get<directory>(&variant_type);
+    directory* d = std::get_if<directory>(&variant_type);
     if (d) {
       (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
       lock_guard guard(mtx);
@@ -1578,7 +1577,7 @@ namespace rgw {
     bool initial_off;
     char* mk{nullptr};
 
-    if (likely(!! get<const char*>(&offset))) {
+    if (likely(!!std::get_if<const char*>(&offset))) {
       mk = const_cast<char*>(get<const char*>(offset));
       initial_off = !mk;
     } else {
@@ -1635,7 +1634,7 @@ namespace rgw {
 
     int rc = 0;
 
-    file* f = get<file>(&variant_type);
+    file* f = std::get_if<file>(&variant_type);
     if (! f)
       return -EISDIR;
 
@@ -1754,7 +1753,7 @@ namespace rgw {
       guard.lock();
     }
 
-    file* f = get<file>(&variant_type);
+    file* f = std::get_if<file>(&variant_type);
     if (f && (f->write_req)) {
       lsubdout(fs->get_context(), rgw, 10)
 	<< __func__
@@ -1790,7 +1789,7 @@ namespace rgw {
 
   void RGWFileHandle::clear_state()
   {
-    directory* d = get<directory>(&variant_type);
+    directory* d = std::get_if<directory>(&variant_type);
     if (d) {
       state.nlink = 2;
       d->last_marker = rgw_obj_key{};
@@ -1823,6 +1822,33 @@ namespace rgw {
     if (fs->invalidate_cb) {
       fs->invalidate_cb(fs->invalidate_arg, get_key().fh_hk);
     }
+  }
+
+  bool RGWListBucketsRequest::eof() {
+    if (unlikely(cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15))) {
+      bool is_offset =
+	unlikely(!std::get_if<const char*>(&offset)) ||
+	!! get<const char*>(offset);
+      lsubdout(cct, rgw, 15) << "READDIR offset: " <<
+	((is_offset) ? offset : "(nil)")
+			     << " is_truncated: " << is_truncated
+			     << dendl;
+    }
+    return !is_truncated && !rcb_eof;
+  }
+
+  bool RGWReaddirRequest::eof() {
+    if (unlikely(cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15))) {
+      bool is_offset =
+	unlikely(!std::get_if<const char*>(&offset)) ||
+	!! get<const char*>(offset);
+      lsubdout(cct, rgw, 15) << "READDIR offset: " <<
+	((is_offset) ? offset : "(nil)")
+			     << " next marker: " << next_marker
+			     << " is_truncated: " << is_truncated
+			     << dendl;
+    }
+    return !is_truncated && !rcb_eof;
   }
 
   int RGWWriteRequest::exec_start() {

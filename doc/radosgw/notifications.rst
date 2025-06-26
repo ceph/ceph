@@ -125,17 +125,21 @@ Dump (in JSON format) all pending bucket notifications of a persistent topic by 
 Notification Performance Statistics
 -----------------------------------
 
-- ``pubsub_event_triggered``: a running counter of events that have at least one topic associated with them
-- ``pubsub_event_lost``: a running counter of events that had topics associated with them, but that were not pushed to any of the endpoints
+- ``persistent_topic_size``: queue size in bytes. 
+- ``persistent_topic_len``: shows how many notifications are currently waiting
+  in the queue
 - ``pubsub_push_ok``: a running counter, for all notifications, of events successfully pushed to their endpoints
 - ``pubsub_push_fail``: a running counter, for all notifications, of events that failed to be pushed to their endpoints
-- ``pubsub_push_pending``: the gauge value of events pushed to an endpoint but not acked or nacked yet
+- ``pubsub_push_pending``: the gauge value of events pushed to an endpoint but
+  not acked or nacked yet. This does not include the notifications waiting in
+  the persistent queue. Only the notifications that are in flight in both
+  persistent and non-persistent cases are counted.
 
 .. note::
 
-    ``pubsub_event_triggered`` and ``pubsub_event_lost`` are incremented per
-    event on each notification, but ``pubsub_push_ok`` and ``pubsub_push_fail``
-    are incremented per push action on each notification.
+    ``pubsub_event_lost`` is incremented per event on each notification, but
+    ``pubsub_push_ok`` and ``pubsub_push_fail`` are incremented per push action
+    on each notification.
 
 Bucket Notification REST API
 ----------------------------

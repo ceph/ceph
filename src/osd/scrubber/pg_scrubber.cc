@@ -1825,8 +1825,8 @@ void PgScrubber::scrub_finish()
   ceph_assert(m_pg->is_locked());
   ceph_assert(is_queued_or_active());
 
-  // if the repair request comes from auto-repair and large number of errors,
-  // we would like to cancel auto-repair
+  // if the repair request comes from auto-repair and there is a large
+  // number of objects known to be damaged, we cancel the auto-repair
   if (m_is_repair && m_flags.auto_repair &&
       m_be->authoritative_peers_count() >
 	static_cast<int>(m_pg->cct->_conf->osd_scrub_auto_repair_num_errors)) {
@@ -1839,8 +1839,8 @@ void PgScrubber::scrub_finish()
 
   m_be->update_repair_status(m_is_repair);
 
-  // if a regular scrub had errors within the limit, do a deep scrub to auto
-  // repair
+  // if the count of damaged objects found in shallow-scrubbing is not
+  // too high - do a deep scrub to auto repair
   bool do_auto_scrub = false;
   if (m_flags.deep_scrub_on_error && m_be->authoritative_peers_count() &&
       m_be->authoritative_peers_count() <=
@@ -2760,18 +2760,19 @@ void PgScrubber::update_scrub_stats(ceph::coarse_real_clock::time_point now_is)
 
   /// \todo use the date library (either the one included in Arrow or directly)
   /// to get the formatting of the time_points.
-
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 25>()) {
     // will only create the debug strings if required
-    char buf[50];
-    auto printable_last = fmt::localtime(clock::to_time_t(m_last_stat_upd));
-    strftime(buf, sizeof(buf), "%Y-%m-%dT%T", &printable_last);
-    dout(20) << fmt::format("{}: period: {}/{}-> {} last:{}",
+    std::time_t time = clock::to_time_t(m_last_stat_upd);
+    std::tm tm_local;
+    if (!localtime_r(&time, &tm_local)) {
+      throw fmt::format_error("time_t value out of range");
+    }
+    dout(20) << fmt::format("{}: period: {}/{}-> {} last:{:%FT%T}",
 			    __func__,
 			    period_active,
 			    period_inactive,
 			    period,
-			    buf)
+			    tm_local)
 	     << dendl;
   }
 

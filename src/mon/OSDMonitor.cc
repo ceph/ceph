@@ -7796,8 +7796,8 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 	*min_size =
 	  erasure_code->get_data_chunk_count() +
 	  std::min<int>(1, erasure_code->get_coding_chunk_count() - 1);
-	assert(*min_size <= *size);
-	assert(*min_size >= erasure_code->get_data_chunk_count());
+	ceph_assert(*min_size <= *size);
+	ceph_assert(*min_size >= erasure_code->get_data_chunk_count());
       }
     }
     break;
@@ -8679,7 +8679,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     }
     if (osdmap.require_osd_release < ceph_release_t::nautilus) {
       // pre-nautilus osdmap format; increase pg_num directly
-      assert(n > (int)p.get_pg_num());
+      ceph_assert(n > (int)p.get_pg_num());
       // force pre-nautilus clients to resend their ops, since they
       // don't understand pg_num_target changes form a new interval
       p.last_force_op_resend_prenautilus = pending_inc.epoch;
@@ -14406,7 +14406,39 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						   get_last_committed() + 1));
     return true;
+  } else if (prefix == "osd pool clear-availability-status") {
+    if (!g_conf().get_val<bool>("enable_availability_tracking")) {
+      ss << "Availability tracking is disabled. Availability status can not be cleared "
+      << "while the feature is disabled. Enable it by setting the config "
+      << "option enable_availability_tracking to ``true`` then try again.";
+      err = -EOPNOTSUPP;
+      goto reply_no_propose;
+    }
+
+    string pool_name;
+    cmd_getval(cmdmap, "pool", pool_name);
+    int64_t pool_id = osdmap.lookup_pg_pool_name(pool_name);
+    // check if pool exists
+    if (pool_id < 0) {
+      ss << "unrecognized pool '" << pool_name << "'";
+      err = -ENOENT;
+      goto reply_no_propose;
+    }
+    std::map<uint64_t, PoolAvailability> pool_availability = mon.mgrstatmon()->get_pool_availability();
+    // check if pool exists in pool_availability
+    if (pool_availability.find(pool_id) == pool_availability.end()){
+      ss << "unrecognized pool '" << pool_name << "'";
+      err = -ENOENT;
+      goto reply_no_propose;
+    }
+    // clear existing calculations
+    mon.mgrstatmon()->clear_pool_availability(pool_id);
   } else if (prefix == "osd pool availability-status") {
+    if (!g_conf().get_val<bool>("enable_availability_tracking")) {
+      ss << "availability tracking is disabled; you can enable it by setting the config option enable_availability_tracking";
+      err = -EOPNOTSUPP;
+      goto reply_no_propose;
+    }
     TextTable tbl;
     tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("UPTIME", TextTable::LEFT, TextTable::RIGHT);

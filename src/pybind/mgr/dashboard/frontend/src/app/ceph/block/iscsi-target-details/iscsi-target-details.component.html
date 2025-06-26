@@ -8,7 +8,10 @@
     </cds-tree-view>
     <ng-template #treeNodeTemplate
                  let-node>
-      <i [class]="node?.cdIcon"></i>
+                 {{node?.data?.cdIcon}}
+    <svg [cdsIcon]="node?.data?.cdIcon"
+         [size]="icons.size16"
+         ></svg>
       <span>{{ node?.name }}</span>
       &nbsp;
       <span class="badge"

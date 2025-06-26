@@ -8,6 +8,8 @@ import { CephServiceSpec } from '../models/service.interface';
 
 export const MAX_NAMESPACE = 1024;
 
+export type GatewayGroup = CephServiceSpec;
+
 export type GroupsComboboxItem = {
   content: string;
   serviceName?: string;
@@ -72,7 +74,7 @@ export class NvmeofService {
 
   // Gateway groups
   listGatewayGroups() {
-    return this.http.get(`${API_PATH}/gateway/group`);
+    return this.http.get<GatewayGroup[][]>(`${API_PATH}/gateway/group`);
   }
 
   // Gateways
@@ -158,7 +160,8 @@ export class NvmeofService {
         observe: 'response',
         params: {
           gw_group: group,
-          trsvcid
+          trsvcid,
+          force: 'true'
         }
       }
     );

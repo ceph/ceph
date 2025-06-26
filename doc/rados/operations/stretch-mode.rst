@@ -64,7 +64,7 @@ discover that your cluster does not satisfy those constraints.
 
 The first category of these failures that we will discuss involves inconsistent
 networks. If there is a netsplit (a failure that
-splits the network into two conceptual islands that cannot communicte with
+splits the network into two conceptual islands that cannot communicate with
 each other), Ceph might be unable to mark OSDs ``down``
 and remove them from Placement Group (PG) acting sets. This failure to mark ODSs ``down``
 will occur despite the fact that the primary PG is unable to replicate data (a

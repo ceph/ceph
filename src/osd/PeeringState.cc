@@ -1247,7 +1247,7 @@ void PeeringState::send_lease()
 
 void PeeringState::proc_lease(const pg_lease_t& l)
 {
-  assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
+  ceph_assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
   if (!is_nonprimary()) {
     psdout(20) << "no-op, !nonprimary" << dendl;
     return;
@@ -1289,7 +1289,7 @@ void PeeringState::proc_lease(const pg_lease_t& l)
 
 void PeeringState::proc_lease_ack(int from, const pg_lease_ack_t& a)
 {
-  assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
+  ceph_assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
   auto now = pl->get_mnow();
   bool was_min = false;
   for (unsigned i = 0; i < acting.size(); ++i) {
@@ -1315,7 +1315,7 @@ void PeeringState::proc_lease_ack(int from, const pg_lease_ack_t& a)
 
 void PeeringState::proc_renew_lease()
 {
-  assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
+  ceph_assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
   renew_lease(pl->get_mnow());
   if (actingset.size() > 1) {
     send_lease();
@@ -1327,7 +1327,7 @@ void PeeringState::proc_renew_lease()
 
 void PeeringState::recalc_readable_until()
 {
-  assert(is_primary());
+  ceph_assert(is_primary());
   ceph::signedspan min = readable_until_ub_sent;
   for (unsigned i = 0; i < acting.size(); ++i) {
     if (acting[i] == pg_whoami.osd || acting[i] == CRUSH_ITEM_NONE) {
@@ -1347,7 +1347,7 @@ void PeeringState::recalc_readable_until()
 
 bool PeeringState::check_prior_readable_down_osds(const OSDMapRef& map)
 {
-  assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
+  ceph_assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
   bool changed = false;
   auto p = prior_readable_down_osds.begin();
   while (p != prior_readable_down_osds.end()) {
@@ -1762,7 +1762,7 @@ PeeringState::select_replicated_primary(
       !primary->second.is_incomplete() &&
       primary->second.last_update >=
         auth_log_shard->second.log_tail) {
-    assert(HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS));
+    ceph_assert(HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS));
     auto approx_missing_objects =
       primary->second.stats.stats.sum.num_objects_missing;
     auto auth_version = auth_log_shard->second.last_update.version;
@@ -1961,7 +1961,7 @@ class bucket_candidates_t {
 public:
   void add_osd(osd_ord_t ord, osd_id_t osd) {
     // osds will be added in smallest to largest order
-    assert(osds.empty() || osds.back().first <= ord);
+    ceph_assert(osds.empty() || osds.back().first <= ord);
     osds.push_back(std::make_pair(ord, osd));
   }
   osd_id_t pop_osd() {
@@ -2295,7 +2295,7 @@ void PeeringState::choose_async_recovery_ec(
     // past the authoritative last_update the same as those equal to it.
     version_t auth_version = auth_info.last_update.version;
     version_t candidate_version = shard_info.last_update.version;
-    assert(HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS));
+    ceph_assert(HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS));
     auto approx_missing_objects =
       shard_info.stats.stats.sum.num_objects_missing;
     if (auth_version > candidate_version) {
@@ -2353,7 +2353,7 @@ void PeeringState::choose_async_recovery_replicated(
     // logs plus historical missing objects as the cost of recovery
     version_t auth_version = auth_info.last_update.version;
     version_t candidate_version = shard_info.last_update.version;
-    assert(HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS));
+    ceph_assert(HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS));
     auto approx_missing_objects =
       shard_info.stats.stats.sum.num_objects_missing;
     if (auth_version > candidate_version) {
@@ -2886,7 +2886,7 @@ void PeeringState::activate(
     purged.intersection_of(to_trim, info.purged_snaps);
     to_trim.subtract(purged);
 
-    assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
+    ceph_assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
     renew_lease(pl->get_mnow());
     // do not schedule until we are actually activated
 
@@ -4584,7 +4584,7 @@ void PeeringState::recover_got(
     psdout(10) << "last_complete now " << info.last_complete
 	       << " log.complete_to at end" << dendl;
     //below is not true in the repair case.
-    //assert(missing.num_missing() == 0);  // otherwise, complete_to was wrong.
+    //ceph_assert(missing.num_missing() == 0);  // otherwise, complete_to was wrong.
     ceph_assert(info.last_complete == info.last_update);
   }
 
@@ -4774,8 +4774,8 @@ void PeeringState::calc_trim_to()
     }
     psdout(10) << "calc_trim_to " << pg_trim_to << " -> " << new_trim_to << dendl;
     pg_trim_to = new_trim_to;
-    assert(pg_trim_to <= pg_log.get_head());
-    assert(pg_trim_to <= min_last_complete_ondisk);
+    ceph_assert(pg_trim_to <= pg_log.get_head());
+    ceph_assert(pg_trim_to <= min_last_complete_ondisk);
   }
 }
 
@@ -5411,13 +5411,12 @@ boost::statechart::result
 PeeringState::Backfilling::react(const DeferBackfill &c)
 {
   DECLARE_LOCALS;
-
-  psdout(10) << "defer backfill, retry delay " << c.delay << dendl;
-  ps->state_set(PG_STATE_BACKFILL_WAIT);
-  ps->state_clear(PG_STATE_BACKFILLING);
-  suspend_backfill();
-
   if (ps->needs_backfill()) {
+    psdout(10) << "defer backfill, retry delay " << c.delay << dendl;
+    ps->state_set(PG_STATE_BACKFILL_WAIT);
+    ps->state_clear(PG_STATE_BACKFILLING);
+    suspend_backfill();
+
     pl->schedule_event_after(
       std::make_shared<PGPeeringEvent>(
 	ps->get_osdmap_epoch(),
@@ -5427,6 +5426,9 @@ PeeringState::Backfilling::react(const DeferBackfill &c)
     return transit<NotBackfilling>();
   } else {
     // raced with MOSDPGBackfill::OP_BACKFILL_FINISH, ignore
+    psdout(10) << "discarding stale DeferBackfill event , pg does not need "
+		  "backfill anymore"
+	       << dendl;
     return discard_event();
   }
 }
@@ -6004,6 +6006,18 @@ PeeringState::WaitLocalRecoveryReserved::react(const RecoveryTooFull &evt)
   return transit<NotRecovering>();
 }
 
+boost::statechart::result
+PeeringState::WaitLocalRecoveryReserved::react(const AdvMap& ev)
+{
+  DECLARE_LOCALS;
+  if (!ps->cct->_conf->osd_debug_skip_full_check_in_recovery &&
+      ps->get_osdmap()->check_full(ps->acting_recovery_backfill)) {
+    post_event(RecoveryTooFull());
+    return discard_event();
+  }
+  return forward_event();
+}
+
 void PeeringState::WaitLocalRecoveryReserved::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
@@ -6042,6 +6056,18 @@ PeeringState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserved &ev
     post_event(AllRemotesReserved());
   }
   return discard_event();
+}
+
+boost::statechart::result
+PeeringState::WaitRemoteRecoveryReserved::react(const AdvMap& ev)
+{
+  DECLARE_LOCALS;
+  if (!ps->cct->_conf->osd_debug_skip_full_check_in_recovery &&
+      ps->get_osdmap()->check_full(ps->acting_recovery_backfill)) {
+    post_event(RecoveryTooFull());
+    return discard_event();
+  }
+  return forward_event();
 }
 
 void PeeringState::WaitRemoteRecoveryReserved::exit()
@@ -6584,7 +6610,7 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
       if (merge_target) {
 	pg_t src = pgid;
 	src.set_ps(ps->pool.info.get_pg_num_pending());
-	assert(src.get_parent() == pgid);
+	ceph_assert(src.get_parent() == pgid);
 	pl->set_not_ready_to_merge_target(pgid, src);
       } else {
 	pl->set_not_ready_to_merge_source(pgid);
@@ -6679,7 +6705,7 @@ void PeeringState::Active::all_activated_and_committed()
   ceph_assert(!ps->acting_recovery_backfill.empty());
   ceph_assert(ps->blocked_by.empty());
 
-  assert(HAVE_FEATURE(ps->upacting_features, SERVER_OCTOPUS));
+  ceph_assert(HAVE_FEATURE(ps->upacting_features, SERVER_OCTOPUS));
   // this is overkill when the activation is quick, but when it is slow it
   // is important, because the lease was renewed by the activate itself but we
   // don't know how long ago that was, and simply scheduling now may leave
@@ -8069,7 +8095,7 @@ std::vector<pg_shard_t> PeeringState::get_replica_recovery_order() const
       continue;
     }
     auto pm = get_peer_missing().find(p);
-    assert(pm != get_peer_missing().end());
+    ceph_assert(pm != get_peer_missing().end());
     auto nm = pm->second.num_missing();
     if (nm != 0) {
       if (is_async_recovery_target(p)) {

@@ -32,10 +32,10 @@
   <span ngbTooltip="Service instances running out of the total number of services requested.">
     {{ value.running }} / {{ value.size }}
   </span>
-  <i *ngIf="value.running == 0 || value.size == 0"
-     class="icon-warning-color"
-     [ngClass]="[icons.warning]">
-  </i>
+  <svg  *ngIf="value.running == 0 || value.size == 0"
+        [cdsIcon]="icons.warning"
+        [size]="icons.size16"
+        class="cds-warning-color"></svg>
 </ng-template>
 
 <ng-template #urlTpl
@@ -45,14 +45,18 @@
        target="_blank"
        [href]="serviceUrls[row.service_type]">
       {{ row.service_name }}
-      <i class="fa fa-external-link"></i>
+      <svg [cdsIcon]="icons.launch"
+           [size]="icons.size16"
+           class="cds-info-color"></svg>
     </a>
 
     <ng-template #mgmtGateway>
       <a target="_blank"
          [href]="row.service_type">
         {{ row.service_name }}
-        <i class="fa fa-external-link"></i>
+        <svg [cdsIcon]="icons.launch"
+             [size]="icons.size16"
+             class="cds-info-color"></svg>
       </a>
     </ng-template>
   </ng-container>

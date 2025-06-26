@@ -10,6 +10,7 @@ if(${WITH_CEPHFS})
     test_trim_caps.cc
   )
   target_link_libraries(ceph_test_trim_caps
+      ceph-common
       cephfs
   )
   install(TARGETS ceph_test_trim_caps DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -18,6 +19,7 @@ if(${WITH_CEPHFS})
     test_ino_release_cb.cc
   )
   target_link_libraries(ceph_test_ino_release_cb
+      ceph-common
       cephfs
   )
   install(TARGETS ceph_test_ino_release_cb DESTINATION ${CMAKE_INSTALL_BINDIR})

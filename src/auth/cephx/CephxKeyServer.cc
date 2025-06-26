@@ -14,6 +14,7 @@
 
 #include "common/config.h"
 #include "CephxKeyServer.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/dout.h"
 #include <sstream>
 

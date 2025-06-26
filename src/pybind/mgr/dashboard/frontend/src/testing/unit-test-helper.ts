@@ -346,7 +346,7 @@ export class PrometheusHelper {
   }
 
   createLink(url: string) {
-    return `<a href="${url}" target="_blank"><i class="${Icons.lineChart}"></i></a>`;
+    return `<a href="${url}" target="_blank"><svg cdsIcon="${Icons.lineChart}" size="${Icons.size16}" ></svg></a>`;
   }
 }
 

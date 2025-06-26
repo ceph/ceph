@@ -728,7 +728,7 @@ static uint32_t crc32_netstring(const uint32_t orig_crc, std::string_view data)
   auto crc = ceph_crc32c(orig_crc, (unsigned char*)&len, sizeof(len));
   crc = ceph_crc32c(crc, (unsigned char*)data.data(), data.length());
 
-#ifndef _NDEBUG
+#ifndef NDEBUG
   // let's verify the compatibility but, due to performance penalty,
   // only in debug builds.
   ceph::bufferlist bl;
@@ -1334,9 +1334,9 @@ void ReplicatedBackend::calc_head_subsets(
   if (size)
     data_subset.insert(0, size);
 
-  assert(HAVE_FEATURE(parent->min_peer_features(), SERVER_OCTOPUS));
+  ceph_assert(HAVE_FEATURE(parent->min_peer_features(), SERVER_OCTOPUS));
   const auto it = missing.get_items().find(head);
-  assert(it != missing.get_items().end());
+  ceph_assert(it != missing.get_items().end());
   data_subset.intersection_of(it->second.clean_regions.get_dirty_regions());
   dout(10) << "calc_head_subsets " << head
 	   << " data_subset " << data_subset << dendl;
@@ -1572,7 +1572,7 @@ void ReplicatedBackend::prepare_pull(
     // pulling head or unversioned object.
     // always pull the whole thing.
     recovery_info.copy_subset.insert(0, (uint64_t)-1);
-    assert(HAVE_FEATURE(parent->min_peer_features(), SERVER_OCTOPUS));
+    ceph_assert(HAVE_FEATURE(parent->min_peer_features(), SERVER_OCTOPUS));
     recovery_info.copy_subset.intersection_of(missing_iter->second.clean_regions.get_dirty_regions());
     recovery_info.size = ((uint64_t)-1);
     recovery_info.object_exist = missing_iter->second.clean_regions.object_is_exist();
@@ -1701,7 +1701,7 @@ int ReplicatedBackend::prep_push(
   get_parent()->begin_peer_recover(peer, soid);
   const auto pmissing_iter = get_parent()->get_shard_missing().find(peer);
   const auto missing_iter = pmissing_iter->second.get_items().find(soid);
-  assert(missing_iter != pmissing_iter->second.get_items().end());
+  ceph_assert(missing_iter != pmissing_iter->second.get_items().end());
   // take note.
   push_info_t &push_info = pushing[soid][peer];
   push_info.obc = obc;
@@ -1805,7 +1805,7 @@ void ReplicatedBackend::submit_push_data(
     if (!complete) {
       //clone overlap content in local object
       if (recovery_info.object_exist) {
-        assert(r == 0);
+        ceph_assert(r == 0);
         uint64_t local_size = std::min(recovery_info.size, (uint64_t)st.st_size);
         interval_set<uint64_t> local_intervals_included, local_intervals_excluded;
         if (local_size) {
@@ -1831,7 +1831,7 @@ void ReplicatedBackend::submit_push_data(
   // Punch zeros for data, if fiemap indicates nothing but it is marked dirty
   if (data_zeros.size() > 0) {
     data_zeros.intersection_of(recovery_info.copy_subset);
-    assert(intervals_included.subset_of(data_zeros));
+    ceph_assert(intervals_included.subset_of(data_zeros));
     data_zeros.subtract(intervals_included);
 
     dout(20) << __func__ <<" recovering object " << recovery_info.soid
@@ -1967,7 +1967,7 @@ bool ReplicatedBackend::handle_pull_response(
     if (attrset.find(SS_ATTR) != attrset.end()) {
       bufferlist ssbv = attrset.at(SS_ATTR);
       SnapSet ss(ssbv);
-      assert(!pull_info.obc->ssc->exists || ss.seq  == pull_info.obc->ssc->snapset.seq);
+      ceph_assert(!pull_info.obc->ssc->exists || ss.seq  == pull_info.obc->ssc->snapset.seq);
     }
     pull_info.recovery_info.oi = pull_info.obc->obs.oi;
     pull_info.recovery_info = recalc_subsets(
@@ -2443,7 +2443,7 @@ void ReplicatedBackend::handle_pull(pg_shard_t peer, PullOp &op, PushOp *reply)
       } else {
         recovery_info.copy_subset.clear();
       }
-      assert(recovery_info.clone_subset.empty());
+      ceph_assert(recovery_info.clone_subset.empty());
     }
 
     r = build_push_op(recovery_info, progress, 0, reply);
@@ -2500,7 +2500,7 @@ void ReplicatedBackend::_failed_pull(pg_shard_t from, const hobject_t &soid)
 {
   dout(20) << __func__ << ": " << soid << " from " << from << dendl;
   auto it = pulling.find(soid);
-  assert(it != pulling.end());
+  ceph_assert(it != pulling.end());
   get_parent()->on_failed_pull(
     { from },
     soid,

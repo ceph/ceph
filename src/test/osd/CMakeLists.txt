@@ -21,6 +21,7 @@ install(TARGETS
 
 add_executable(ceph_test_rados_io_sequence
   ${CMAKE_CURRENT_SOURCE_DIR}/ceph_test_rados_io_sequence/ceph_test_rados_io_sequence.cc)
+add_dependencies(ceph_test_rados_io_sequence erasure_code_plugins)
 target_link_libraries(ceph_test_rados_io_sequence
   librados global object_io_exerciser json_structures)
 install(TARGETS

@@ -1,6 +1,6 @@
 >=20.0.0
 
-* RADOS: leader monitor and stretch mode status are now included in the `ceph status` output.
+* RADOS: lead Monitor and stretch mode status are now included in the `ceph status` output.
   Related Tracker: https://tracker.ceph.com/issues/70406
 * RGW: The User Account feature introduced in Squid provides first-class support for
   IAM APIs and policy. Our preliminary STS support was instead based on tenants, and
@@ -133,6 +133,13 @@
   ISA-L is recommended for new pools because the Jerasure library is
   no longer maintained.
 
+* CephFS: Format of name of pool namespace for CephFS volumes has been changed
+  from `fsvolumens__<subvol-name>` to `fsvolumens__<subvol-grp-name>_<subvol-name>`
+  to avoid namespace collision when two subvolumes located in different
+  subvolume groups have the same name. Even with namespace collision, there were
+  no security issues since the MDS auth cap is restricted to the subvolume path.
+  Now, with this change, the namespaces are completely isolated.
+
 * RGW: Added support for the `RestrictPublicBuckets` property of the S3 `PublicAccessBlock`
   configuration.
 
@@ -147,13 +154,31 @@
   `s3:GetObjectRetention` are also considered when fetching the source object.
   Replication of tags is controlled by the `s3:GetObject(Version)Tagging` permission.
 
-* RADOS: A new command, `ceph osd pool availability-status`, has been added that allows
+* RADOS: A new command, ``ceph osd pool availability-status``, has been added that allows
   users to view the availability score for each pool in a cluster. A pool is considered 
   unavailable if any PG in the pool is not in active state or if there are unfound 
   objects. Otherwise the pool is considered available. The score is updated every 
-  5 seconds. This feature is in tech preview. 
+  5 seconds. The feature is on by default. A new config option ``enable_availability_tracking``
+  can be used to turn off the feature if required. Another command is added to clear the 
+  availability status for a specific pool, ``ceph osd pool clear-availability-status <pool-name>``. 
+  This feature is in tech preview. 
   Related trackers:
    - https://tracker.ceph.com/issues/67777
+
+* RBD: Fetching the mirroring mode of an image is invalid if the image is
+  disabled for mirroring. The public APIs -- C++ `mirror_image_get_mode()`,
+  C `rbd_mirror_image_get_mode()`, and Python `Image.mirror_image_get_mode()`
+  -- will return EINVAL when mirroring is disabled.
+
+* RBD: Promoting an image is invalid if the image is not enabled for mirroring.
+  The public APIs -- C++ `mirror_image_promote()`,
+  C `rbd_mirror_image_promote()`, and Python `Image.mirror_image_promote()` --
+  will return EINVAL instead of ENOENT when mirroring is not enabled.
+
+* RBD: Requesting a resync on an image is invalid if the image is not enabled
+  for mirroring. The public APIs -- C++ `mirror_image_resync()`,
+  C `rbd_mirror_image_resync()`, and Python `Image.mirror_image_resync()` --
+  will return EINVAL instead of ENOENT when mirroring is not enabled.
 
 >=19.2.1
 

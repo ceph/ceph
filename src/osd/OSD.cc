@@ -1951,7 +1951,7 @@ void OSDService::set_ready_to_merge_source(PG *pg, eversion_t version)
   std::lock_guard l(merge_lock);
   dout(10) << __func__ << " " << pg->pg_id << dendl;
   ready_to_merge_source[pg->pg_id.pgid] = version;
-  assert(not_ready_to_merge_source.count(pg->pg_id.pgid) == 0);
+  ceph_assert(not_ready_to_merge_source.count(pg->pg_id.pgid) == 0);
   _send_ready_to_merge();
 }
 
@@ -1966,7 +1966,7 @@ void OSDService::set_ready_to_merge_target(PG *pg,
 					 make_tuple(version,
 						    last_epoch_started,
 						    last_epoch_clean)));
-  assert(not_ready_to_merge_target.count(pg->pg_id.pgid) == 0);
+  ceph_assert(not_ready_to_merge_target.count(pg->pg_id.pgid) == 0);
   _send_ready_to_merge();
 }
 
@@ -1975,7 +1975,7 @@ void OSDService::set_not_ready_to_merge_source(pg_t source)
   std::lock_guard l(merge_lock);
   dout(10) << __func__ << " " << source << dendl;
   not_ready_to_merge_source.insert(source);
-  assert(ready_to_merge_source.count(source) == 0);
+  ceph_assert(ready_to_merge_source.count(source) == 0);
   _send_ready_to_merge();
 }
 
@@ -1984,7 +1984,7 @@ void OSDService::set_not_ready_to_merge_target(pg_t target, pg_t source)
   std::lock_guard l(merge_lock);
   dout(10) << __func__ << " " << target << " source " << source << dendl;
   not_ready_to_merge_target[target] = source;
-  assert(ready_to_merge_target.count(target) == 0);
+  ceph_assert(ready_to_merge_target.count(target) == 0);
   _send_ready_to_merge();
 }
 
@@ -2793,7 +2793,7 @@ void OSD::asok_command(
     f->dump_stream("osd_fsid") << superblock.osd_fsid;
     f->dump_unsigned("whoami", superblock.whoami);
     f->dump_string("state", get_state_name(get_state()));
-    f->dump_stream("maps") << superblock.maps;
+    f->dump_stream("maps") << superblock.get_maps();
     f->dump_stream("oldest_map") << superblock.get_oldest_map();
     f->dump_stream("newest_map") << superblock.get_newest_map();
     f->dump_unsigned("cluster_osdmap_trim_lower_bound",
@@ -4055,13 +4055,13 @@ int OSD::init()
 	for (auto shard : shards) {
 	  shard->prime_splits(osdmap, &new_children);
 	}
-	assert(new_children.empty());
+	ceph_assert(new_children.empty());
       }
       if (!merge_pgs.empty()) {
 	for (auto shard : shards) {
 	  shard->prime_merges(osdmap, &merge_pgs);
 	}
-	assert(merge_pgs.empty());
+	ceph_assert(merge_pgs.empty());
       }
     }
   }
@@ -5449,7 +5449,7 @@ void OSD::load_pgs()
     }
     {
       uint32_t shard_index = pgid.hash_to_shard(shards.size());
-      assert(NULL != shards[shard_index]);
+      ceph_assert(NULL != shards[shard_index]);
       store->set_collection_commit_queue(pg->coll, &(shards[shard_index]->context_queue));
     }
 
@@ -5518,7 +5518,7 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
 
   {
     uint32_t shard_index = pgid.hash_to_shard(shards.size());
-    assert(NULL != shards[shard_index]);
+    ceph_assert(NULL != shards[shard_index]);
     store->set_collection_commit_queue(pg->coll, &(shards[shard_index]->context_queue));
   }
 
@@ -5673,7 +5673,7 @@ void OSD::_add_heartbeat_peer(int p)
     pair<ConnectionRef,ConnectionRef> cons = service.get_con_osd_hb(p, get_osdmap_epoch());
     if (!cons.first)
       return;
-    assert(cons.second);
+    ceph_assert(cons.second);
 
     hi = &heartbeat_peers[p];
     hi->peer = p;
@@ -6923,7 +6923,7 @@ void OSD::start_boot()
   }
   dout(1) << __func__ << dendl;
   set_state(STATE_PREBOOT);
-  dout(10) << "start_boot - have maps " << superblock.maps << dendl;
+  dout(10) << "start_boot - have maps " << superblock.get_maps() << dendl;
   monc->get_version("osdmap", CB_OSD_GetVersion(this));
 }
 
@@ -7940,7 +7940,7 @@ MPGStats* OSD::collect_pg_stats()
       per_pool_stats = false;
       break;
     } else {
-      assert(r >= 0);
+      ceph_assert(r >= 0);
       m->pool_stat[p] = st;
     }
   }
@@ -8121,7 +8121,7 @@ void OSD::trim_maps(epoch_t oldest)
     dout(20) << " removing old osdmap epoch " << superblock.get_oldest_map() << dendl;
     t.remove(coll_t::meta(), get_osdmap_pobject_name(superblock.get_oldest_map()));
     t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(superblock.get_oldest_map()));
-    superblock.maps.erase(superblock.get_oldest_map());
+    superblock.erase_oldest_maps();
   }
 
   service.publish_superblock(superblock);
@@ -8422,16 +8422,16 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   track_pools_and_pg_num_changes(added_maps, t);
 
-  if (!superblock.maps.empty()) {
+  if (!superblock.is_maps_empty()) {
     trim_maps(m->cluster_osdmap_trim_lower_bound);
     pg_num_history.prune(superblock.get_oldest_map());
   }
   superblock.insert_osdmap_epochs(first, last);
-  if (superblock.maps.num_intervals() > 1) {
+  if (superblock.get_maps_num_intervals() > 1) {
     // we had a map gap and not yet trimmed all the way up to
     // cluster_osdmap_trim_lower_bound
     dout(10) << __func__ << " osd maps are not contiguous"
-             << superblock.maps << dendl;
+             << superblock.get_maps() << dendl;
   }
   superblock.current_epoch = last;
 
@@ -8501,7 +8501,7 @@ void OSD::track_pools_and_pg_num_changes(
   // lastmap should be the newest_map we have.
   OSDMapRef lastmap;
 
-  if (superblock.maps.empty()) {
+  if (superblock.is_maps_empty()) {
     dout(10) << __func__ << " no maps stored, this is probably "
              << "the first start of this osd" << dendl;
     lastmap = added_maps.at(first);
@@ -9362,7 +9362,7 @@ void OSD::split_pgs(
 
     {
       uint32_t shard_index = i->hash_to_shard(shards.size());
-      assert(NULL != shards[shard_index]);
+      ceph_assert(NULL != shards[shard_index]);
       store->set_collection_commit_queue(child->coll, &(shards[shard_index]->context_queue));
     }
 

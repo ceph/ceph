@@ -24,7 +24,6 @@
 #include <variant>
 #include <fmt/format.h>
 
-#include "common/dout.h"
 #include "common/Formatter.h"
 
 // strong typedef to std::string

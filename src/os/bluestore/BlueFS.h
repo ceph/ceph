@@ -434,6 +434,9 @@ public:
     // NOTE: caller must call BlueFS::close_writer()
     ~FileWriter() {
       --file->num_writers;
+      for (unsigned i = 0; i < MAX_BDEV; ++i) {
+        delete iocv[i];
+      }
     }
 
     // note: BlueRocksEnv uses this append exclusively, so it's safe

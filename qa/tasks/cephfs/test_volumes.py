@@ -244,7 +244,7 @@ class TestVolumesHelper(CephFSTestCase):
         # remove the leading '/', and trailing whitespaces
         return path[1:].rstrip()
 
-    def  _get_subvolume_info(self, vol_name, subvol_name, group_name=None):
+    def _get_subvolume_info(self, vol_name, subvol_name, group_name=None):
         args = ["subvolume", "info", vol_name, subvol_name]
         if group_name:
             args.append(group_name)
@@ -2383,12 +2383,33 @@ class TestSubvolumes(TestVolumesHelper):
         # get subvolume metadata
         subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
         self.assertNotEqual(len(subvol_info), 0)
-        self.assertEqual(subvol_info["pool_namespace"], "fsvolumens_" + subvolume)
+        pool_namespace = subvol_info["pool_namespace"]
+        self.assertEqual(pool_namespace, f'fsvolumens___nogroup_{subvolume}')
 
         # remove subvolumes
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
         # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_for_group_name_in_pool_namespace(self):
+        '''
+        Test that subvolume group name is included in the pool namespace of a
+        subvolume.
+        '''
+        sv = self._gen_subvol_name()
+        svg = self._gen_subvol_grp_name()
+        self.run_ceph_cmd(f'fs subvolumegroup create {self.volname} {svg}')
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {sv} {svg} '
+                          f'--namespace-isolated')
+
+        subvol_info = self._get_subvolume_info(self.volname, sv, svg)
+        subvol_info = json.loads(subvol_info)
+        pool_namespace = subvol_info['pool_namespace']
+        self.assertEqual(pool_namespace, f'fsvolumens__{svg}_{sv}')
+
+        self.run_ceph_cmd(f'fs subvolume rm {self.volname} {sv} {svg}')
+        self.run_ceph_cmd(f'fs subvolumegroup rm {self.volname} {svg}')
         self._wait_for_trash_empty()
 
     def test_subvolume_create_with_auto_cleanup_on_fail(self):
@@ -3117,6 +3138,64 @@ class TestSubvolumes(TestVolumesHelper):
         existing_ids = [a['entity'] for a in self.auth_list()]
         self.assertNotIn("client.{0}".format(authid), existing_ids)
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_deauthorize_with_shared_key(self):
+        """
+        That mon caps are preserved when one cephx key authorized on multiple
+        subvolumes is deauthorized on any of those.
+        """
+        subvolume1 = self._gen_subvol_name()
+        subvolume2 = self._gen_subvol_name()
+        group = self._gen_subvol_grp_name()
+        authid = "alice"
+
+        # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolumes
+        self._fs_cmd("subvolume", "create", self.volname, subvolume1, "--group_name", group)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume2, "--group_name", group)
+
+        # authorize alice authID read-write access to both subvolumes
+        self._fs_cmd("subvolume", "authorize", self.volname, subvolume1, authid,
+                     "--group_name", group)
+        self._fs_cmd("subvolume", "authorize", self.volname, subvolume2, authid,
+                     "--group_name", group)
+
+        # verify autorized-id has access to both subvolumes
+        expected_auth_list = [{'alice': 'rw'}]
+        auth_list1 = json.loads(self._fs_cmd('subvolume', 'authorized_list', self.volname, subvolume1, "--group_name", group))
+        self.assertEqual(expected_auth_list, auth_list1)
+        auth_list2 = json.loads(self._fs_cmd('subvolume', 'authorized_list', self.volname, subvolume2, "--group_name", group))
+        self.assertEqual(expected_auth_list, auth_list2)
+
+        # check mon caps for authid
+        expected_mon_caps = 'allow r'
+        full_caps = json.loads(self._raw_cmd("auth", "get", "client.alice", "--format=json-pretty"))
+        self.assertEqual(expected_mon_caps, full_caps[0]['caps']['mon'])
+
+        # deauthorize guest1 authID
+        self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume2, authid,
+                     "--group_name", group)
+
+        # verify autorized-id has access to subvolume1 only
+        expected_auth_list = [{'alice': 'rw'}]
+        auth_list1 = json.loads(self._fs_cmd('subvolume', 'authorized_list', self.volname, subvolume1, "--group_name", group))
+        self.assertEqual(expected_auth_list, auth_list1)
+        auth_list2 = json.loads(self._fs_cmd('subvolume', 'authorized_list', self.volname, subvolume2, "--group_name", group))
+        self.assertEqual([], auth_list2)
+
+        # check mon caps still hold for authid
+        expected_mon_caps = 'allow r'
+        full_caps = json.loads(self._raw_cmd("auth", "get", "client.alice", "--format=json-pretty"))
+        self.assertEqual(expected_mon_caps, full_caps[0]['caps']['mon'])
+
+        # cleanup
+        self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume1, authid,
+                     "--group_name", group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume1, "--group_name", group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume2, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
     def test_multitenant_subvolumes(self):
