@@ -130,7 +130,10 @@ Notification Performance Statistics
   in the queue
 - ``pubsub_push_ok``: a running counter, for all notifications, of events successfully pushed to their endpoints
 - ``pubsub_push_fail``: a running counter, for all notifications, of events that failed to be pushed to their endpoints
-- ``pubsub_push_pending``: the gauge value of events pushed to an endpoint but not acked or nacked yet
+- ``pubsub_push_pending``: the gauge value of events pushed to an endpoint but
+  not acked or nacked yet. This does not include the notifications waiting in
+  the persistent queue. Only the notifications that are in flight in both
+  persistent and non-persistent cases are counted.
 
 .. note::
 
