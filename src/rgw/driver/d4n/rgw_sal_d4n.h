@@ -63,7 +63,7 @@ class D4NFilterDriver : public FilterDriver {
     optional_yield y;
 
   public:
-    D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context);
+    D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context, bool admin);
     virtual ~D4NFilterDriver();
 
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
