@@ -1,8 +1,9 @@
 import errno
 import logging
 import json
+import re
 from typing import List, cast, Optional
-from ipaddress import ip_address, IPv6Address
+from ipaddress import ip_address, IPv6Address, ip_network
 
 from mgr_module import HandleCommandResult
 from ceph.deployment.service_spec import NvmeofServiceSpec
@@ -69,6 +70,17 @@ class NvmeofService(CephService):
         self.mgr.log.info(f"gateway address: {addr} from {map_addr=} {spec.addr=} {host_ip=}")
         discovery_addr = map_discovery_addr or spec.discovery_addr or host_ip
         self.mgr.log.info(f"discovery address: {discovery_addr} from {map_discovery_addr=} {spec.discovery_addr=} {host_ip=}")
+        default_listeners = spec.default_listeners # "1.1.1.*,2.2.2.*"
+        if default_listeners:
+            listeners_ip = ""
+            for listeners_format in default_listeners.split(','):
+                hosts = [h.hostname for h in spec.placement.hosts]
+                for h in hosts:
+                    ip = self.get_matching_host_ip(h, listeners_format)
+                    if ip:
+                        if utils.resolve_ip(ip):
+                            listeners_ip += f'{h}={ip};'
+            default_listeners = listeners_ip
         context = {
             'spec': spec,
             'name': name,
@@ -80,7 +92,8 @@ class NvmeofService(CephService):
             'rpc_socket_name': 'spdk.sock',
             'transport_tcp_options': transport_tcp_options,
             'iobuf_options': iobuf_options,
-            'rados_id': rados_id
+            'rados_id': rados_id,
+            'default_listeners': default_listeners,
         }
         gw_conf = self.mgr.template.render('services/nvmeof/ceph-nvmeof.conf.j2', context)
 
@@ -128,6 +141,18 @@ class NvmeofService(CephService):
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.deps = []
         return daemon_spec
+
+    def get_matching_host_ip(self, host: str, ip_format: str) -> Optional[str]:
+        networks = self.mgr.cache.networks.get(host, {})
+        ipaddr = None
+        for n_subnet, n_ifaces in networks.items(): 
+            if ip_network(n_subnet).version != 4:
+                continue
+            for ip_list in n_ifaces.values():
+                for ip in ip_list:
+                    if re.match(ip_format, ip):
+                        ipaddr = ip
+        return ipaddr
 
     def daemon_check_post(self, daemon_descrs: List[DaemonDescription]) -> None:
         """ Overrides the daemon_check_post to add nvmeof gateways safely
