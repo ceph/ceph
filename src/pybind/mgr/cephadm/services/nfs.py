@@ -105,6 +105,7 @@ class NFSService(CephService):
         if spec.virtual_ip and not spec.enable_haproxy_protocol:
             bind_addr = spec.virtual_ip
             daemon_spec.port_ips = {str(port): spec.virtual_ip}
+            daemon_spec.ip = bind_addr
         else:
             bind_addr = daemon_spec.ip if daemon_spec.ip else ''
         if not bind_addr:
