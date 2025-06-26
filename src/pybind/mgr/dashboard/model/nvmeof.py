@@ -128,6 +128,7 @@ class Namespace(NamedTuple):
     ns_subsystem_nqn: Optional[str]
     trash_image: Optional[bool]
     disable_auto_resize: Optional[bool]
+    read_only: Optional[bool]
 
 
 class NamespaceList(NamedTuple):
