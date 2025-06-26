@@ -128,7 +128,6 @@ class Namespace(NamedTuple):
     read_only: Optional[bool]
 
 
-
 class NamespaceList(NamedTuple):
     status: int
     error_message: str
