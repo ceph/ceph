@@ -1545,32 +1545,6 @@ class CephadmAgent(CephService):
 
         return daemon_spec
 
-    def get_agent_jitter(self) -> int:
-
-        if self.mgr.agent_jitter_seconds == -1:  # auto-jitter mode
-            num_hosts = len(self.mgr.cache.get_hosts())
-            # Target: ~1s jitter per 5 hosts
-            base_jitter = num_hosts // 5
-            # Clamp jitter to a sane range
-            min_jitter, max_jitter = 2, 15
-            # Final jitter to apply
-            agent_jitter = max(min(base_jitter, max_jitter), min_jitter)
-        else:
-            agent_jitter = max(0, self.mgr.agent_jitter_seconds)
-        return agent_jitter
-
-    def get_agent_initial_delay(self) -> int:
-
-        if self.mgr.agent_initial_startup_delay_max == -1: # auto-calculation mode
-            num_hosts = len(self.mgr.cache.get_hosts())
-            base_spread_per_host = 2  # seconds per host
-            max_spread = 90           # upper cap in seconds
-            min_spread = 10           # minimum window even for small clusters
-            calculated = num_hosts * base_spread_per_host
-            return max(min_spread, min(calculated, max_spread))
-        else:
-            return self.mgr.agent_initial_startup_delay_max
-
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         agent = self.mgr.http_server.agent
         try:
@@ -1588,8 +1562,8 @@ class CephadmAgent(CephService):
                'device_enhanced_scan': str(self.mgr.device_enhanced_scan),
                'metadata_compresion_enabled': self.mgr.agent_metadata_compresion_enabled,
                'metadata_payload_optimization_enabled': self.mgr.agent_metadata_payload_optimization_enabled,
-               'initial_startup_delay_max': self.get_agent_initial_delay(),
-               'jitter_seconds': self.get_agent_jitter()}
+               'initial_startup_delay_max': agent.get_initial_delay(),
+               'jitter_seconds': agent.get_jitter()}
 
         listener_cert, listener_key = self.mgr.cert_mgr.generate_cert(daemon_spec.host, self.mgr.inventory.get_addr(daemon_spec.host))
         config = {

@@ -85,6 +85,20 @@ class AgentEndpoint:
                 self.server_port += 1
         self.mgr.log.error(f'Cephadm agent could not find free port in range {max_port - 150}-{max_port} and failed to start')
 
+    def get_jitter(self) -> int:
+        if self.mgr.agent_jitter_seconds == -1:  # auto-jitter mode
+            num_hosts = len(self.mgr.cache.get_hosts())
+            return max(2, num_hosts // 2)
+        else:
+            return max(0, self.mgr.agent_jitter_seconds)
+
+    def get_initial_delay(self) -> int:
+        if self.mgr.agent_initial_startup_delay_max == -1: # auto-delay mode
+            num_hosts = len(self.mgr.cache.get_hosts())
+            return max(10, num_hosts // 2)
+        else:
+            return self.mgr.agent_initial_startup_delay_max
+
     def configure(self) -> None:
         self.host_data = HostData(self.mgr, self.server_port, self.server_addr)
         self.configure_tls(self.host_data)
@@ -903,10 +917,11 @@ class CephadmAgentHelpers:
             if host in self.mgr.offline_hosts:
                 return False
             self.mgr.agent_cache.agent_timestamp[host] = datetime_now()
-        # agent hasn't reported in down multiplier * it's refresh rate. Something is likely wrong with it.
+        # agent hasn't reported in:  down_multiplier * it's refresh rate + jitter. Something is likely wrong with it.
+        jitter: float = self.agent.get_jitter()
         down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
         time_diff = datetime_now() - self.mgr.agent_cache.agent_timestamp[host]
-        if time_diff.total_seconds() > down_mult * float(self.mgr.agent_refresh_rate):
+        if time_diff.total_seconds() > down_mult * float(self.mgr.agent_refresh_rate + jitter):
             return True
         return False
 
