@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=too-many-lines
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -100,8 +101,10 @@ else:
         @NvmeofCLICommand("nvmeof spdk_log_level get", model.SpdkNvmfLogFlagsAndLevelInfo)
         @convert_to_model(model.SpdkNvmfLogFlagsAndLevelInfo)
         @handle_nvmeof_error
-        def get_spdk_log_level(self, all_log_flags: Optional[bool] = None,
-                               gw_group: Optional[str] = None, traddr: Optional[str] = None):
+        def get_spdk_log_level(
+            self, all_log_flags: Optional[bool] = None,
+            gw_group: Optional[str] = None, traddr: Optional[str] = None
+        ):
             spdk_log_level = NVMeoFClient(gw_group=gw_group,
                                           traddr=traddr).stub.get_spdk_nvmf_log_flags_and_level(
                 NVMeoFClient.pb2.get_spdk_nvmf_log_flags_and_level_req(all_log_flags=all_log_flags)
@@ -132,9 +135,11 @@ else:
         @NvmeofCLICommand("nvmeof spdk_log_level disable", model.RequestStatus)
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
-        def disable_spdk_log_level(self, extra_log_flags: Optional[List[str]] = None,
-                                   gw_group: Optional[str] = None,
-                                   traddr: Optional[str] = None):
+        def disable_spdk_log_level(
+            self, extra_log_flags: Optional[List[str]] = None,
+            gw_group: Optional[str] = None,
+            traddr: Optional[str] = None
+        ):
             spdk_log_level = NVMeoFClient(gw_group=gw_group,
                                           traddr=traddr).stub.disable_spdk_nvmf_logs(
                 NVMeoFClient.pb2.disable_spdk_nvmf_logs_req(extra_log_flags=extra_log_flags)
@@ -871,8 +876,10 @@ else:
         @NvmeofCLICommand("nvmeof host list", model.HostsInfo)
         @convert_to_model(model.HostsInfo, finalize=_update_hosts)
         @handle_nvmeof_error
-        def list(self, nqn: str, clear_alerts: Optional[bool], 
-                 gw_group: Optional[str] = None, traddr: Optional[str] = None):
+        def list(
+            self, nqn: str, clear_alerts: Optional[bool],
+            gw_group: Optional[str] = None, traddr: Optional[str] = None
+        ):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.list_hosts(
                 NVMeoFClient.pb2.list_hosts_req(subsystem=nqn, clear_alerts=clear_alerts)
             )
@@ -911,6 +918,51 @@ else:
                    traddr: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.remove_host(
                 NVMeoFClient.pb2.remove_host_req(subsystem_nqn=nqn, host_nqn=host_nqn)
+            )
+
+        @EndpointDoc(
+            "Change host DH-HMAC-CHAP key",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "host_nqn": Param(str, 'NVMeoF host NQN'),
+                "dhchap_key": Param(str, 'Host DH-HMAC-CHAP key'),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+            },
+        )
+        @empty_response
+        @NvmeofCLICommand("nvmeof host change_key", model.RequestStatus)
+        @convert_to_model(model.RequestStatus)
+        @handle_nvmeof_error
+        def change_key(
+            self, nqn: str, host_nqn: str, dhchap_key: str,
+            gw_group: Optional[str] = None, traddr: Optional[str] = None
+        ):
+            return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.change_host_key(
+                NVMeoFClient.pb2.change_host_key_req(subsystem_nqn=nqn,
+                                                     host_nqn=host_nqn,
+                                                     dhchap_key=dhchap_key)
+            )
+
+        @EndpointDoc(
+            "Delete host DH-HMAC-CHAP key",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "host_nqn": Param(str, 'NVMeoF host NQN.'),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+            },
+        )
+        @empty_response
+        @NvmeofCLICommand("nvmeof host del_key", model.RequestStatus)
+        @convert_to_model(model.RequestStatus)
+        @handle_nvmeof_error
+        def del_key(
+            self, nqn: str, host_nqn: str, gw_group: Optional[str] = None,
+            traddr: Optional[str] = None
+        ):
+            return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.change_host_key(
+                NVMeoFClient.pb2.change_host_key_req(subsystem_nqn=nqn,
+                                                     host_nqn=host_nqn,
+                                                     dhchap_key=None)
             )
 
     @APIRouter("/nvmeof/subsystem/{nqn}/connection", Scope.NVME_OF)
