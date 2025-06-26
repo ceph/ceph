@@ -80,12 +80,16 @@ void MgrStatMonitor::handle_conf_change(
              << dendl;
 
     // if fetaure is toggled from off to on, 
-    // store the new value of last_uptime and last_downtime 
-    // (to be updated in calc_pool_availability) 
+    // reset last_uptime and last_downtime across all pools
     if (newval > oldval) {
-      reset_availability_last_uptime_downtime_val = ceph_clock_now();
-      dout(10) << __func__ << " reset_availability_last_uptime_downtime_val " 
-               <<  reset_availability_last_uptime_downtime_val << dendl; 
+      utime_t now = ceph_clock_now(); 
+      for (const auto& i : pending_pool_availability) {
+        const auto& poolid = i.first;
+        pending_pool_availability[poolid].last_downtime = now;
+        pending_pool_availability[poolid].last_uptime = now;
+      }
+      dout(20) << __func__ << " reset last_uptime and last_downtime to " 
+               << now << dendl;
     }
     enable_availability_tracking = newval;
   }
@@ -195,18 +199,8 @@ void MgrStatMonitor::calc_pool_availability()
       }
     }
 
-    // if reset_availability_last_uptime_downtime_val is not utime_t(1, 2), 
-    // update last_uptime and last_downtime for all pools to the 
-    // recorded values
-    if (reset_availability_last_uptime_downtime_val.has_value()) {
-      dout(20) << fmt::format("{}: Pool {} reset last_uptime and last_downtime to {}",
-                              __func__, poolid, reset_availability_last_uptime_downtime_val.value()) << dendl;
-      avail.last_downtime = reset_availability_last_uptime_downtime_val.value();
-      avail.last_uptime = reset_availability_last_uptime_downtime_val.value();
-    }
   }
   pending_pool_availability = pool_availability;
-  reset_availability_last_uptime_downtime_val.reset();
 }
 
 void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
