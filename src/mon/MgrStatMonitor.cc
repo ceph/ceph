@@ -205,7 +205,7 @@ void MgrStatMonitor::calc_pool_availability()
       avail.last_uptime = reset_availability_last_uptime_downtime_val.value();
     }
   }
-  pending_pool_availability.swap(pool_availability);
+  pending_pool_availability = pool_availability;
   reset_availability_last_uptime_downtime_val.reset();
 }
 
@@ -242,7 +242,11 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
   check_subs();
   update_logger();
   mon.osdmon()->notify_new_pg_digest();
-  calc_pool_availability();
+
+  // only calculate pool_availability within leader mon
+  if (mon.is_leader()) {
+      calc_pool_availability();
+  }
 }
 
 void MgrStatMonitor::update_logger()
