@@ -938,7 +938,8 @@ asio::io_context& RADOS::get_io_context() {
 void RADOS::execute_(Object o, IOContext _ioc, ReadOp _op,
 		     cb::list* bl,
 		     ReadOp::Completion c, version_t* objver,
-		     const blkin_trace_info *trace_info) {
+		     const blkin_trace_info *trace_info,
+		     std::uint64_t subsystem) {
   if (_op.size() == 0) {
     asio::dispatch(asio::append(std::move(c), bs::error_code{}));
     return;
@@ -957,14 +958,16 @@ void RADOS::execute_(Object o, IOContext _ioc, ReadOp _op,
   trace.event("init");
   impl->objecter->read(
     *oid, ioc->oloc, std::move(op->op), ioc->snap_seq, bl, flags,
-    std::move(c), objver, nullptr /* data_offset */, 0 /* features */, &trace);
+    std::move(c), objver, nullptr /* data_offset */, 0 /* features */, &trace,
+    subsystem);
 
   trace.event("submitted");
 }
 
 void RADOS::execute_(Object o, IOContext _ioc, WriteOp _op,
 		     WriteOp::Completion c, version_t* objver,
-		     const blkin_trace_info *trace_info) {
+		     const blkin_trace_info *trace_info,
+		     std::uint64_t subsystem) {
   if (_op.size() == 0) {
     asio::dispatch(asio::append(std::move(c), bs::error_code{}));
     return;
@@ -989,7 +992,7 @@ void RADOS::execute_(Object o, IOContext _ioc, WriteOp _op,
   impl->objecter->mutate(
     *oid, ioc->oloc, std::move(op->op), ioc->snapc,
     mtime, flags,
-    std::move(c), objver, osd_reqid_t{}, &trace);
+    std::move(c), objver, osd_reqid_t{}, &trace, subsystem);
   trace.event("submitted");
 }
 
@@ -1965,6 +1968,17 @@ void RADOS::mon_command_(std::vector<std::string> command,
 
 uint64_t RADOS::instance_id() const {
   return impl->get_instance_id();
+}
+
+uint64_t RADOS::new_subsystem() const
+{
+  return impl->objecter->unique_subsystem_id();
+}
+
+void RADOS::cancel_subsystem(uint64_t subsystem) const
+{
+  impl->objecter->subsystem_cancel(subsystem,
+				   asio::error::operation_aborted);
 }
 
 #pragma GCC diagnostic push

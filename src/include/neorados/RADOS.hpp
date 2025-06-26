@@ -1404,26 +1404,29 @@ public:
   auto execute(Object o, IOContext ioc, ReadOp op,
 	       ceph::buffer::list* bl,
 	       CompletionToken&& token, uint64_t* objver = nullptr,
-	       const blkin_trace_info* trace_info = nullptr) {
+	       const blkin_trace_info* trace_info = nullptr,
+	       std::uint64_t subsystem = 0) {
     auto consigned = consign(std::forward<CompletionToken>(token));
     return boost::asio::async_initiate<decltype(consigned), Op::Signature>(
-      [bl, objver, trace_info, this](auto&& handler, Object o, IOContext ioc,
-				     ReadOp op) {
+      [bl, objver, trace_info,
+       subsystem, this](auto&& handler, Object o, IOContext ioc,
+			ReadOp op) {
 	execute_(std::move(o), std::move(ioc), std::move(op), bl,
-		 std::move(handler), objver, trace_info);
+		 std::move(handler), objver, trace_info, subsystem);
       }, consigned, std::move(o), std::move(ioc), std::move(op));
   }
 
   template<boost::asio::completion_token_for<Op::Signature> CompletionToken>
   auto execute(Object o, IOContext ioc, WriteOp op,
 	       CompletionToken&& token, uint64_t* objver = nullptr,
-	       const blkin_trace_info* trace_info = nullptr) {
+	       const blkin_trace_info* trace_info = nullptr,
+	       std::uint64_t subsystem = 0) {
     auto consigned = consign(std::forward<CompletionToken>(token));
     return boost::asio::async_initiate<decltype(consigned), Op::Signature>(
-      [objver, trace_info, this](auto&& handler, Object o, IOContext ioc,
-				 WriteOp op) {
+      [objver, trace_info,
+       subsystem, this](auto&& handler, Object o, IOContext ioc, WriteOp op) {
 	execute_(std::move(o), std::move(ioc), std::move(op),
-		 std::move(handler), objver, trace_info);
+		 std::move(handler), objver, trace_info, subsystem);
       }, consigned, std::move(o), std::move(ioc), std::move(op));
   }
 
@@ -1799,6 +1802,9 @@ public:
 
   uint64_t instance_id() const;
 
+  uint64_t new_subsystem() const;
+  void cancel_subsystem(uint64_t subsystem) const;
+
 private:
 
   RADOS();
@@ -1812,11 +1818,13 @@ private:
 
   void execute_(Object o, IOContext ioc, ReadOp op,
 		ceph::buffer::list* bl, Op::Completion c,
-		uint64_t* objver, const blkin_trace_info* trace_info);
+		uint64_t* objver, const blkin_trace_info* trace_info,
+		uint64_t subsystem);
 
   void execute_(Object o, IOContext ioc, WriteOp op,
 		Op::Completion c, uint64_t* objver,
-		const blkin_trace_info* trace_info);
+		const blkin_trace_info* trace_info,
+		uint64_t subsystem);
 
   void lookup_pool_(std::string name, LookupPoolComp c);
   void list_pools_(LSPoolsComp c);

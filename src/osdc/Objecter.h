@@ -1714,6 +1714,7 @@ public:
 
 private:
   std::atomic<uint64_t> last_tid{0};
+  std::atomic<uint64_t> last_subsystem{0};
   std::atomic<unsigned> inflight_ops{0};
   std::atomic<int> client_inc{-1};
   uint64_t max_linger_id{0};
@@ -1796,6 +1797,11 @@ public:
   void maybe_request_map();
 
   void enable_blocklist_events();
+
+  uint64_t unique_subsystem_id() {
+    return ++last_subsystem;
+  }
+
 private:
 
   void _maybe_request_map();
@@ -2035,6 +2041,7 @@ public:
 
     osd_reqid_t reqid; // explicitly setting reqid
     ZTracer::Trace trace;
+    std::uint64_t subsystem = 0;
     const jspan_context* otel_trace = nullptr;
 
     static bool has_completion(decltype(onfinish)& f) {
@@ -2066,7 +2073,7 @@ public:
 
     Op(const object_t& o, const object_locator_t& ol,  osdc_opvec&& _ops,
        int f, OpComp fin, version_t *ov, int *offset = nullptr,
-       ZTracer::Trace *parent_trace = nullptr) :
+       ZTracer::Trace *parent_trace = nullptr, uint64_t subsystem = 0) :
       target(o, ol, f),
       ops(std::move(_ops)),
       out_bl(ops.size(), nullptr),
@@ -2075,7 +2082,7 @@ public:
       out_ec(ops.size(), nullptr),
       onfinish(std::move(fin)),
       objver(ov),
-      data_offset(offset) {
+      data_offset(offset), subsystem(subsystem) {
       if (target.base_oloc.key == o)
 	target.base_oloc.key.clear();
       if (parent_trace && parent_trace->valid()) {
@@ -2086,7 +2093,8 @@ public:
 
     Op(const object_t& o, const object_locator_t& ol, osdc_opvec&& _ops,
        int f, Context* fin, version_t *ov, int *offset = nullptr,
-       ZTracer::Trace *parent_trace = nullptr, const jspan_context *otel_trace = nullptr) :
+       ZTracer::Trace *parent_trace = nullptr, const jspan_context *otel_trace = nullptr,
+       uint64_t subsystem = 0) :
       target(o, ol, f),
       ops(std::move(_ops)),
       out_bl(ops.size(), nullptr),
@@ -2096,6 +2104,7 @@ public:
       onfinish(fin),
       objver(ov),
       data_offset(offset),
+      subsystem(subsystem),
       otel_trace(otel_trace) {
       if (target.base_oloc.key == o)
 	target.base_oloc.key.clear();
@@ -2933,7 +2942,8 @@ public:
 
   /// cancel an in-progress request with the given return code
 private:
-  int op_cancel(OSDSession *s, ceph_tid_t tid, int r);
+  int op_cancel(OSDSession *s, ceph_tid_t tid, int r,
+		boost::system::error_code ec);
   int _op_cancel(ceph_tid_t tid, int r);
 
   int get_read_flags(int flags) {
@@ -2950,6 +2960,7 @@ private:
 
 public:
   int op_cancel(ceph_tid_t tid, int r);
+  void subsystem_cancel(uint64_t subsystem, boost::system::error_code e);
   int op_cancel(const std::vector<ceph_tid_t>& tidls, int r);
 
   /**
@@ -3055,10 +3066,10 @@ public:
 	      ceph::real_time mtime, int flags,
 	      Op::OpComp oncommit,
 	      version_t *objver = NULL, osd_reqid_t reqid = osd_reqid_t(),
-	      ZTracer::Trace *parent_trace = nullptr) {
+	      ZTracer::Trace *parent_trace = nullptr, uint32_t subsystem = 0) {
     Op *o = new Op(oid, oloc, std::move(op.ops), flags | global_op_flags |
 		   CEPH_OSD_FLAG_WRITE, std::move(oncommit), objver,
-		   nullptr, parent_trace);
+		   nullptr, parent_trace, subsystem);
     o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
@@ -3114,10 +3125,11 @@ public:
 	    ObjectOperation&& op, snapid_t snapid, ceph::buffer::list *pbl,
 	    int flags, Op::OpComp onack,
 	    version_t *objver = nullptr, int *data_offset = nullptr,
-	    uint64_t features = 0, ZTracer::Trace *parent_trace = nullptr) {
+	    uint64_t features = 0, ZTracer::Trace *parent_trace = nullptr,
+	    uint64_t subsystem = 0) {
     Op *o = new Op(oid, oloc, std::move(op.ops), get_read_flags(flags),
 		   std::move(onack), objver,
-		   data_offset, parent_trace);
+		   data_offset, parent_trace, subsystem);
     o->priority = op.priority;
     o->snapid = snapid;
     o->outbl = pbl;
