@@ -59,20 +59,12 @@ void ceph_lock_state_t::decode(ceph::bufferlist::const_iterator& bl) {
 }
 
 void ceph_lock_state_t::dump(ceph::Formatter *f) const {
-  f->dump_int("type", type);
+  // do not dump fields which are not persisted:
+  // - type: set in constructor
+  // - waiting_locks: runtime-only field
+  // - client_waiting_lock_counts: runtime-only field
   f->dump_int("held_locks", held_locks.size());
   for (auto &p : held_locks) {
-    f->open_object_section("lock");
-    f->dump_int("start", p.second.start);
-    f->dump_int("length", p.second.length);
-    f->dump_int("client", p.second.client);
-    f->dump_int("owner", p.second.owner);
-    f->dump_int("pid", p.second.pid);
-    f->dump_int("type", p.second.type);
-    f->close_section();
-  }
-  f->dump_int("waiting_locks", waiting_locks.size());
-  for (auto &p : waiting_locks) {
     f->open_object_section("lock");
     f->dump_int("start", p.second.start);
     f->dump_int("length", p.second.length);
@@ -89,7 +81,6 @@ void ceph_lock_state_t::dump(ceph::Formatter *f) const {
     f->dump_int("count", p.second);
     f->close_section();
   }
-  f->dump_int("client_waiting_lock_counts", client_waiting_lock_counts.size());
 }
 
 
