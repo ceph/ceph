@@ -85,17 +85,51 @@ class AgentEndpoint:
                 self.server_port += 1
         self.mgr.log.error(f'Cephadm agent could not find free port in range {max_port - 150}-{max_port} and failed to start')
 
+    def compute_agents_avg_concurrency(self) -> int:
+        """
+        Compute the average number of agents allowed to report metadata per second (M).
+
+        - If user-specified value is -1, use an adaptive formula: sqrt(N)/2 (capped at 10).
+        - Ensures a minimum of 2 agents/sec to avoid unnecessary serialization.
+        - This helps spread load while avoiding bursts, especially on small clusters.
+        """
+        if self.mgr.agent_avg_concurrency == -1:  # auto-concurrency mode
+            num_agents = len(self.mgr.cache.get_hosts())
+            agents_concurrency = min(10, int(num_agents ** 0.5 / 2))
+        else:
+            agents_concurrency = self.mgr.agent_avg_concurrency
+        # We force a minimum of 2 agents per seconds
+        return max(2, agents_concurrency)
+
     def get_jitter(self) -> int:
+        """
+        Compute the jitter window (in seconds) applied before agents send metadata.
+
+        - If agent_jitter_seconds is -1 (auto), compute it as:
+            jitter = num_agents / avg_concurrency (M)
+        - This spreads agent reports evenly across the window.
+        - Uses a min jitter of 2s to prevent tight clustering in very small clusters.
+        """
         if self.mgr.agent_jitter_seconds == -1:  # auto-jitter mode
-            num_hosts = len(self.mgr.cache.get_hosts())
-            return max(2, num_hosts // 2)
+            num_agents = len(self.mgr.cache.get_hosts())
+            agents_avg_concurrency = self.compute_agents_avg_concurrency()
+            return max(2, num_agents // agents_avg_concurrency)
         else:
             return max(0, self.mgr.agent_jitter_seconds)
 
     def get_initial_delay(self) -> int:
+        """
+        Compute the maximum initial random startup delay (in seconds) before an agent starts reporting.
+
+        - If agent_initial_startup_delay_max is -1 (auto), compute as:
+            delay = num_agents / avg_concurrency (M)
+        - This prevents bursts of all agents from reporting immediately at startup.
+        - Enforces a minimum of 10s to avoid early tight clustering.
+        """
         if self.mgr.agent_initial_startup_delay_max == -1: # auto-delay mode
-            num_hosts = len(self.mgr.cache.get_hosts())
-            return max(10, num_hosts // 2)
+            num_agents = len(self.mgr.cache.get_hosts())
+            agents_avg_concurrency = self.compute_agents_avg_concurrency()
+            return max(10, num_agents // agents_avg_concurrency)
         else:
             return self.mgr.agent_initial_startup_delay_max
 

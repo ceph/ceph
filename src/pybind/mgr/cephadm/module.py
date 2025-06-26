@@ -371,6 +371,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='How often agent on each host will try to gather and send metadata'
         ),
         Option(
+            'agent_avg_concurrency',
+            type='int',
+            default=-1,
+            desc='Target average number of agents sending per second. Used to compute jitter window. Set -1 for auto.'
+        ),
+        Option(
             'agent_jitter_seconds',
             type='int',
             default=-1,
@@ -591,6 +597,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.use_agent = False
             self.agent_refresh_rate = 0
             self.agent_jitter_seconds = 0
+            self.agent_avg_concurrency = 0
             self.agent_initial_startup_delay_max = 0
             self.agent_metadata_compresion_enabled = True
             self.agent_metadata_payload_optimization_enabled = True
