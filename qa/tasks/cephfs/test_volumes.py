@@ -244,7 +244,7 @@ class TestVolumesHelper(CephFSTestCase):
         # remove the leading '/', and trailing whitespaces
         return path[1:].rstrip()
 
-    def  _get_subvolume_info(self, vol_name, subvol_name, group_name=None):
+    def _get_subvolume_info(self, vol_name, subvol_name, group_name=None):
         args = ["subvolume", "info", vol_name, subvol_name]
         if group_name:
             args.append(group_name)
@@ -2383,12 +2383,33 @@ class TestSubvolumes(TestVolumesHelper):
         # get subvolume metadata
         subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
         self.assertNotEqual(len(subvol_info), 0)
-        self.assertEqual(subvol_info["pool_namespace"], "fsvolumens_" + subvolume)
+        pool_namespace = subvol_info["pool_namespace"]
+        self.assertEqual(pool_namespace, f'fsvolumens___nogroup_{subvolume}')
 
         # remove subvolumes
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
         # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_for_group_name_in_pool_namespace(self):
+        '''
+        Test that subvolume group name is included in the pool namespace of a
+        subvolume.
+        '''
+        sv = self._gen_subvol_name()
+        svg = self._gen_subvol_grp_name()
+        self.run_ceph_cmd(f'fs subvolumegroup create {self.volname} {svg}')
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {sv} {svg} '
+                          f'--namespace-isolated')
+
+        subvol_info = self._get_subvolume_info(self.volname, sv, svg)
+        subvol_info = json.loads(subvol_info)
+        pool_namespace = subvol_info['pool_namespace']
+        self.assertEqual(pool_namespace, f'fsvolumens__{svg}_{sv}')
+
+        self.run_ceph_cmd(f'fs subvolume rm {self.volname} {sv} {svg}')
+        self.run_ceph_cmd(f'fs subvolumegroup rm {self.volname} {svg}')
         self._wait_for_trash_empty()
 
     def test_subvolume_create_with_auto_cleanup_on_fail(self):

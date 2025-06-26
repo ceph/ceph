@@ -1627,5 +1627,13 @@ threads launched by volumes plugins for cloning and purging trash. For details
 on these see: :ref:`Pause Purge threads<pause-purge-threads>` and :ref:`Pause Clone Threads<pause-clone-threads>`.
 
 
+
+.. note:: Pool namespace for CephFS volumes until Tentacle release had names in
+   this format: "fsvolumens__<subvol-name>". However, this could lead to clash
+   in namespace when two subvolumes of same were located in this different
+   subvolume group. And therefore after Tentacle pool namespace format was
+   changed to "fsvolumens__<subvol-grp-name>_<subvol-name>".
+
+
 .. _manila: https://github.com/openstack/manila
 .. _CSI: https://github.com/ceph/ceph-csi
