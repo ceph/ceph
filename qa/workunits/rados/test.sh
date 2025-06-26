@@ -1,14 +1,39 @@
 #!/usr/bin/env bash
 set -ex
 
+# ./test.sh                       # Default: parallel mode, 30-min timeout
+# ./test.sh --serial              # Serial mode, 30-min timeout
+# ./test.sh --crimson             # Crimson mode, 30-min timeout
+# ./test.sh --timeout 3600        # Parallel mode, 60-min timeout
+# ./test.sh --serial --timeout 60 # Serial mode, 1-min timeout
+# ./test.sh --crimson --timeout 0 # Crimson mode, no timeout
+
+# First argument must be either --serial or --crimson or nothing
 parallel=1
-[ "$1" = "--serial" ] && parallel=0
-
-# let crimson run in serial mode
 crimson=0
-[ "$1" = "--crimson" ] && parallel=0 && crimson=1
+if [ "$1" = "--serial" ]; then
+    parallel=0
+    shift # Remove the first argument from the list so timeout can be processed next
+elif [ "$1" = "--crimson" ]; then
+    parallel=0
+    crimson=1
+    shift
+fi
 
-color=""
+# After processing the first arg, check for --timeout
+timeout=1800  # 30 minutes default value
+if [ "$1" = "--timeout" ]; then
+    shift
+    if [ -n "$1" ] && [[ "$1" =~ ^[0-9]+$ ]]; then
+        timeout=$1
+        shift # Remove the timeout value from the list so color can be processed next
+    else
+        echo "Invalid or missing timeout value after --timeout. Must be a number."
+        exit 1
+    fi
+fi
+
+color="" # Default color setting for gtest in terminal (-t)
 [ -t 1 ] && color="--gtest_color=yes"
 
 function cleanup() {
@@ -78,12 +103,35 @@ ret=0
 if [ $parallel -eq 1 ]; then
 for t in "${!pids[@]}"
 do
-  pid=${pids[$t]}
-  if ! wait $pid
-  then
-    echo "error in $t ($pid)"
-    ret=1
-  fi
+    # Set timeout values
+    max_wait=$timeout
+    waited=0
+    check_interval=10
+    pid=${pids[$t]}
+    echo "Checking Test $t (PID $pid)..."
+    # Check in a loop with timeout
+    # kill -0 checks if the process is running
+    # and 2 >/dev/null suppresses error messages if the process is not found
+    while kill -0 $pid 2>/dev/null; do
+        sleep $check_interval
+        waited=$((waited + check_interval))
+        echo "Waiting for test $t (PID $pid)... waited $waited seconds"
+        if [ $waited -ge $max_wait ]; then
+        # Process timed out
+        echo "ERROR: Test $t ($pid) - TIMED OUT after $max_wait seconds"
+        kill -9 $pid 2>/dev/null || true
+        ret=1
+        break
+        fi
+    done
+    # Only wait after process has ended naturally or been killed
+    # We only call wait after determining that the process is no longer running
+    # So this won't hang indefinitely like https://tracker.ceph.com/issues/70772
+    wait $pid 2>/dev/null || {
+        echo "ERROR: Test $t (PID $pid) failed with non-zero exit status"
+        echo "Check the logs for failures in $t"
+        ret=1
+    }
 done
 fi
 
