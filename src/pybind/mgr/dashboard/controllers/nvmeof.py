@@ -397,6 +397,7 @@ else:
             force: Optional[bool] = False,
             no_auto_visible: Optional[bool] = False,
             disable_auto_resize: Optional[bool] = False,
+            read_only: Optional[bool] = False,
             gw_group: Optional[str] = None,
             traddr: Optional[str] = None,
         ):
@@ -412,7 +413,8 @@ else:
                     anagrpid=load_balancing_group,
                     force=force,
                     no_auto_visible=no_auto_visible,
-                    disable_auto_resize=disable_auto_resize
+                    disable_auto_resize=disable_auto_resize,
+                    read_only=read_only
                 )
             )
 
@@ -537,8 +539,11 @@ else:
                 "nqn": Param(str, "NVMeoF subsystem NQN"),
                 "nsid": Param(str, "NVMeoF Namespace ID"),
                 "host_nqn": Param(str, 'NVMeoF host NQN. Use "*" to allow any host.'),
-                "force": Param(bool, "Allow adding the host to the namespace even if the host "
-                    "has no access to the subsystem"),
+                "force": Param(
+                    bool,
+                    "Allow adding the host to the namespace even if the host "
+                    "has no access to the subsystem"
+                ),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
                 "traddr": Param(str, "NVMeoF gateway address", True, None),
             },
