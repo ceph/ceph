@@ -862,6 +862,8 @@ else:
             "List all allowed hosts for an NVMeoF subsystem",
             parameters={
                 "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "clear_alerts": Param(bool, "Clear any host alert signal after getting its value",
+                                      True, False),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
@@ -869,9 +871,10 @@ else:
         @NvmeofCLICommand("nvmeof host list", model.HostsInfo)
         @convert_to_model(model.HostsInfo, finalize=_update_hosts)
         @handle_nvmeof_error
-        def list(self, nqn: str, gw_group: Optional[str] = None, traddr: Optional[str] = None):
+        def list(self, nqn: str, clear_alerts: Optional[bool], 
+                 gw_group: Optional[str] = None, traddr: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.list_hosts(
-                NVMeoFClient.pb2.list_hosts_req(subsystem=nqn)
+                NVMeoFClient.pb2.list_hosts_req(subsystem=nqn, clear_alerts=clear_alerts)
             )
 
         @EndpointDoc(
