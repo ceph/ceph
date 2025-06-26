@@ -22,7 +22,6 @@
 #include <boost/intrusive_ptr.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 #include <boost/container/flat_map.hpp>
-#include <boost/variant.hpp>
 #include <boost/optional.hpp>
 #include "xxhash.h"
 #include "include/buffer.h"
@@ -180,7 +179,6 @@ namespace rgw {
     return (lhs < rhs) || (lhs == rhs);
   }
 
-  using boost::variant;
   using boost::container::flat_map;
 
   typedef std::tuple<bool, bool> DecodeAttrsResult;
@@ -243,7 +241,7 @@ namespace rgw {
     void clear_state();
     void advance_mtime(uint32_t flags = FLAG_NONE);
 
-    boost::variant<file, directory> variant_type;
+    std::variant<file, directory> variant_type;
 
     uint16_t depth;
     uint32_t flags;
@@ -434,7 +432,7 @@ namespace rgw {
     }
 
     directory* get_directory() {
-      return boost::get<directory>(&variant_type);
+      return std::get_if<directory>(&variant_type);
     }
 
     size_t get_size() const { return state.size; }
@@ -615,8 +613,7 @@ namespace rgw {
 
     void add_marker(uint64_t off, const rgw_obj_key& marker,
 		    uint8_t obj_type) {
-      using std::get;
-      directory* d = get<directory>(&variant_type);
+      directory* d = std::get_if<directory>(&variant_type);
       if (d) {
 	unique_lock guard(mtx);
 	d->last_marker = marker;
@@ -626,8 +623,8 @@ namespace rgw {
     const rgw_obj_key* find_marker(uint64_t off) const {
       using std::get;
       if (off > 0) {
-	const directory* d = get<directory>(&variant_type);
-	if (d ) {
+	const directory* d = std::get_if<directory>(&variant_type);
+	if (d) {
 	  return &d->last_marker;
 	}
       }
@@ -667,7 +664,7 @@ namespace rgw {
       return -EPERM;
     }
 
-    typedef boost::variant<uint64_t*, const char*> readdir_offset;
+    typedef std::variant<uint64_t*, const char*> readdir_offset;
 
     int readdir(rgw_readdir_cb rcb, void *cb_arg, readdir_offset offset,
 		bool *eof, uint32_t flags);
@@ -1357,9 +1354,7 @@ public:
       cb_arg(_cb_arg), rcb(_rcb), ioff(nullptr), ix(0), d_count(0),
       rcb_eof(false) {
 
-    using boost::get;
-
-    if (unlikely(!! get<uint64_t*>(&offset))) {
+    if (unlikely(!! std::get_if<uint64_t*>(&offset))) {
       ioff = get<uint64_t*>(offset);
       const auto& mk = rgw_fh->find_marker(*ioff);
       if (mk) {
@@ -1442,21 +1437,7 @@ public:
     return rcb(name.data(), cb_arg, off, nullptr, 0, RGW_LOOKUP_FLAG_DIR);
   }
 
-  bool eof() {
-    using boost::get;
-
-    if (unlikely(cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15))) {
-      bool is_offset =
-	unlikely(! get<const char*>(&offset)) ||
-	!! get<const char*>(offset);
-      lsubdout(cct, rgw, 15) << "READDIR offset: " <<
-	((is_offset) ? offset : "(nil)")
-			     << " is_truncated: " << is_truncated
-			     << dendl;
-    }
-    return !is_truncated && !rcb_eof;
-  }
-
+  inline bool eof();
 }; /* RGWListBucketsRequest */
 
 /*
@@ -1483,9 +1464,7 @@ public:
       cb_arg(_cb_arg), rcb(_rcb), ioff(nullptr), ix(0), d_count(0),
       rcb_eof(false) {
 
-    using boost::get;
-
-    if (unlikely(!! get<uint64_t*>(&offset))) {
+    if (unlikely(!! std::get_if<uint64_t*>(&offset))) {
       ioff = get<uint64_t*>(offset);
       const auto& mk = rgw_fh->find_marker(*ioff);
       if (mk) {
@@ -1769,22 +1748,7 @@ public:
     send_response();
   }
 
-  bool eof() {
-    using boost::get;
-
-    if (unlikely(cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15))) {
-      bool is_offset =
-	unlikely(! get<const char*>(&offset)) ||
-	!! get<const char*>(offset);
-      lsubdout(cct, rgw, 15) << "READDIR offset: " <<
-	((is_offset) ? offset : "(nil)")
-			     << " next marker: " << next_marker
-			     << " is_truncated: " << is_truncated
-			     << dendl;
-    }
-    return !is_truncated && !rcb_eof;
-  }
-
+  inline bool eof();
 }; /* RGWReaddirRequest */
 
 /*
