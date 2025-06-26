@@ -120,7 +120,7 @@ void HybridAllocatorBase<T>::_spillover_range(uint64_t start, uint64_t end)
     dout(1) << __func__
       << " constructing fallback allocator"
       << dendl;
-    bmap_alloc = new BitmapAllocator(T::get_context(),
+    bmap_alloc = std::make_unique<BitmapAllocator>(T::get_context(),
       T::get_capacity(),
       T::get_block_size(),
       T::get_name() + ".fallback");
