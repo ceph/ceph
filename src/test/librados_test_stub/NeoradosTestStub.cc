@@ -584,7 +584,8 @@ boost::asio::io_context::executor_type neorados::RADOS::get_executor() const {
 
 void RADOS::execute_(Object o, IOContext ioc, ReadOp op,
 		     ceph::buffer::list* bl, Op::Completion c,
-		     uint64_t* objver, const blkin_trace_info* trace_info) {
+		     uint64_t* objver, const blkin_trace_info* trace_info,
+		     uint64_t subsystem) {
   auto io_ctx = impl->get_io_ctx(ioc);
   if (io_ctx == nullptr) {
     asio::dispatch(asio::append(std::move(c), osdc_errc::pool_dne));
@@ -603,7 +604,8 @@ void RADOS::execute_(Object o, IOContext ioc, ReadOp op,
 
 void RADOS::execute_(Object o, IOContext ioc, WriteOp op,
 		     Op::Completion c, uint64_t* objver,
-		     const blkin_trace_info* trace_info) {
+		     const blkin_trace_info* trace_info,
+		     uint64_t subsystem) {
   auto io_ctx = impl->get_io_ctx(ioc);
   if (io_ctx == nullptr) {
     asio::dispatch(asio::append(std::move(c), osdc_errc::pool_dne));
