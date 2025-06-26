@@ -18,18 +18,8 @@ namespace rados {
 		       const std::string& description, const utime_t& duration,
 		       uint8_t flags);
 
-      extern int lock(librados::IoCtx *ioctx,
-		      const std::string& oid,
-		      const std::string& name, ClsLockType type,
-		      const std::string& cookie, const std::string& tag,
-		      const std::string& description, const utime_t& duration,
-		      uint8_t flags);
-
       extern void unlock(librados::ObjectWriteOperation *rados_op,
 			 const std::string& name, const std::string& cookie);
-
-      extern int unlock(librados::IoCtx *ioctx, const std::string& oid,
-			const std::string& name, const std::string& cookie);
 
       extern int aio_unlock(librados::IoCtx *ioctx, const std::string& oid,
 			    const std::string& name, const std::string& cookie,
@@ -39,22 +29,11 @@ namespace rados {
 			     const std::string& name, const std::string& cookie,
 			     const entity_name_t& locker);
 
-      extern int break_lock(librados::IoCtx *ioctx, const std::string& oid,
-			    const std::string& name, const std::string& cookie,
-			    const entity_name_t& locker);
-
-      extern int list_locks(librados::IoCtx *ioctx, const std::string& oid,
-			    std::list<std::string> *locks);
       extern void get_lock_info_start(librados::ObjectReadOperation *rados_op,
 				      const std::string& name);
       extern int get_lock_info_finish(ceph::bufferlist::const_iterator *out,
 				      std::map<locker_id_t, locker_info_t> *lockers,
 				      ClsLockType *type, std::string *tag);
-
-      extern int get_lock_info(librados::IoCtx *ioctx, const std::string& oid,
-			       const std::string& name,
-			       std::map<locker_id_t, locker_info_t> *lockers,
-			       ClsLockType *type, std::string *tag);
 
       extern void assert_locked(librados::ObjectOperation *rados_op,
                                 const std::string& name, ClsLockType type,
@@ -65,6 +44,31 @@ namespace rados {
                              const std::string& name, ClsLockType type,
                              const std::string& cookie, const std::string& tag,
                              const std::string& new_cookie);
+
+// allow targets to hide the synchronous IoCtx overloads to force the
+// use of async-enabled ObjectOperation overloads
+#ifndef CLS_CLIENT_HIDE_IOCTX
+      extern int lock(librados::IoCtx *ioctx,
+		      const std::string& oid,
+		      const std::string& name, ClsLockType type,
+		      const std::string& cookie, const std::string& tag,
+		      const std::string& description, const utime_t& duration,
+		      uint8_t flags);
+
+      extern int unlock(librados::IoCtx *ioctx, const std::string& oid,
+			const std::string& name, const std::string& cookie);
+
+      extern int break_lock(librados::IoCtx *ioctx, const std::string& oid,
+			    const std::string& name, const std::string& cookie,
+			    const entity_name_t& locker);
+
+      extern int list_locks(librados::IoCtx *ioctx, const std::string& oid,
+			    std::list<std::string> *locks);
+      extern int get_lock_info(librados::IoCtx *ioctx, const std::string& oid,
+			       const std::string& name,
+			       std::map<locker_id_t, locker_info_t> *lockers,
+			       ClsLockType *type, std::string *tag);
+#endif // !CLS_CLIENT_HIDE_IOCTX
 
       class Lock {
 	std::string name;
@@ -122,6 +126,7 @@ namespace rados {
 	void break_lock(librados::ObjectWriteOperation *ioctx,
 			const entity_name_t& locker);
 
+#ifndef CLS_CLIENT_HIDE_IOCTX
 	/* IoCtx */
 	int lock_shared(librados::IoCtx *ioctx, const std::string& oid);
 	int lock_exclusive(librados::IoCtx *ioctx, const std::string& oid);
@@ -132,6 +137,7 @@ namespace rados {
 	int unlock(librados::IoCtx *ioctx, const std::string& oid);
 	int break_lock(librados::IoCtx *ioctx, const std::string& oid,
 		       const entity_name_t& locker);
+#endif // !CLS_CLIENT_HIDE_IOCTX
       };
 
     } // namespace lock
