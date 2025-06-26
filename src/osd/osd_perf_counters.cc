@@ -335,6 +335,9 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter(
     l_osd_pg_biginfo, "osd_pg_biginfo", "PG updated its biginfo attr");
 
+  // back to "interesting" counters
+  osd_plb.set_prio_default(PerfCountersBuilder::PRIO_INTERESTING);
+
   /// scrub's replicas reservation time/#replicas histogram
   PerfHistogramCommon::axis_config_d rsrv_hist_x_axis_config{
       "number of replicas",
@@ -448,7 +451,7 @@ PerfCounters *build_osd_logger(CephContext *cct) {
       l_osd_scrub_ec_failed_elapsed, "failed_scrubs_ec_elapsed",
       "time to scrub failure ec");
 
-  // the replica reservation process - EC
+  // the secondaries reservation process - EC
   osd_plb.add_u64_counter(
       l_osd_scrub_ec_reserv_success, "scrub_ec_reservations_completed",
       "successfully completed reservation processes EC");
