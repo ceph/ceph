@@ -1,0 +1,61 @@
+---
+name: Redmine Upkeep
+on:
+  # To manually trigger this: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_dispatch
+  # View past runs and output: https://github.com/ceph/ceph/actions/workflows/create-backport-trackers.yml
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: 'issue to update'
+        type: string
+        default: ''
+      limit:
+        description: '--limit: limit issue traversal'
+        default: 50
+        type: int
+      debug:
+        description: '--debug: Show debug-level messages'
+        default: false
+        type: boolean
+  schedule:
+    - cron: '*/30 * * * *'
+# TODO enable/setup after upkeep has caught up
+#  push:
+#    tags:
+#      - 'v*'
+  # for testing
+  push:
+    branches:
+      - 'feature/redmine-upkeep'
+concurrency:
+  group: redmine-upkeep-workflow-concurrency-group
+  cancel-in-progress: false
+jobs:
+  redmine-upkeep:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/redmine-upkeep'
+    steps:
+      - name: checkout main
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: ceph
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+          cache-dependency-path: ceph/src/script/requirements.redmine-upkeep.txt
+
+      - name: install dependencies
+        run: pip install -r ceph/src/script/requirements.redmine-upkeep.txt
+
+      - run: >
+             python3 ceph/src/script/redmine-upkeep.py
+             --github-action
+             --git-dir=./ceph/
+             ${{ github.event_name == 'workflow_dispatch' && (inputs.debug && '--debug' || '') || '' }}
+             ${{ github.event_name == 'workflow_dispatch' && format('--limit={}', inputs.limit) || '' }}
+        env:
+          REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
