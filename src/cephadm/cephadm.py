@@ -245,8 +245,14 @@ def fuzzy_changed(prev: dict, current: dict, mem_threshold: int = 10 * 1024 * 10
                     return True
             except Exception:
                 return True
-        elif current[key] != prev[key]:
+        elif sorted(current[key]) != sorted(prev[key]):
             return True
+
+    # Detect keys removed in current
+    for key in prev:
+        if key not in current:
+            return True
+
     return False
 
 
@@ -1500,6 +1506,7 @@ class CephadmAgent(DaemonForm):
                 logger.debug(f"{name} changed. Included in payload.")
             else:
                 logger.debug(f"{name} has not changed. Skipped.")
+
     def run(self) -> None:
 
         self.pull_conf_settings()
