@@ -40,6 +40,8 @@ Custom theme
 /******************************************
 Datatable
 ******************************************/
+@include type.type-classes();
+$purple-60-dark: #7f3ae7;
 
 tr.cds--expandable-row > td:first-of-type {
   background-color: vv.$white !important;
@@ -211,4 +213,8 @@ Tabs
 
 .cds-mb-4 {
   margin-bottom: layout.$spacing-02;
+}
+
+.cds--purple-60-darker:hover {
+  background-color: $purple-60-dark;
 }
