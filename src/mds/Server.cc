@@ -2078,7 +2078,7 @@ void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEv
     mdr->set_queued_next_replay_op();
     mds->queue_one_replay();
   } else if (mdr->did_early_reply)
-    mds->locker->drop_rdlocks_for_early_reply(mdr.get());
+    mds->locker->handle_locks_for_early_reply(mdr.get());
   else
     mdlog->flush();
 }
