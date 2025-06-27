@@ -1,0 +1,42 @@
+@use '@carbon/colors';
+@use '@carbon/themes';
+@use './src/styles/vendor/variables' as vv;
+@use '@carbon/layout';
+
+.inline-tip-container {
+  position: relative;
+  background: linear-gradient(90deg, colors.$blue-90, colors.$purple-70);
+  color: vv.$white;
+  padding: layout.$spacing-05;
+
+  .inline-tip-body-content {
+    width: 80%;
+
+    .btn-toggle {
+      margin-top: layout.$spacing-05;
+      color: themes.$link-inverse-hover;
+
+      &:hover {
+        color: themes.$link-inverse-active;
+      }
+    }
+  }
+}
+
+.close-btn-position {
+  position: absolute;
+  top: 0;
+  right: 0;
+
+  .close-btn {
+    padding: 0;
+
+    svg {
+      fill: themes.$icon-on-color;
+    }
+  }
+}
+
+.inline-tip-bg-color:hover {
+  background-color: #7f3ae7;
+}
