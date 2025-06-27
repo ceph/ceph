@@ -696,13 +696,13 @@ class HostData(Server):
             content_encoding = cherrypy.request.headers.get('Content-Encoding', '')
             raw_body = cherrypy.request.body.read()
             if content_encoding == 'gzip':
-                self.mgr.log.info(">>> Received gzipped payload")
+                self.mgr.log.info(f">>> Received gzipped payload (From: {cherrypy.request.remote.ip})")
                 buf = io.BytesIO(raw_body)
                 with gzip.GzipFile(fileobj=buf) as gz:
                     decompressed = gz.read()
                 data = json.loads(decompressed.decode('utf-8'))
             else:
-                self.mgr.log.info(">>> Received plain payload")
+                self.mgr.log.info(f">>> Received plain payload (From: {cherrypy.request.remote.ip})")
                 data = json.loads(raw_body.decode('utf-8'))
             return data
         except Exception as e:
