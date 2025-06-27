@@ -23,6 +23,22 @@ from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
+# Global variable to track whether we're using crimson-objectstore-tool
+CRIMSON = False
+
+def SKIP_IF_CRIMSON(reason="Not supported in crimson-objectstore-tool"):
+    """
+    Decorator to skip tests that are not supported in crimson-objectstore-tool
+    """
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            if CRIMSON:
+                log.info("SKIPPING: {} - {}".format(func.__name__, reason))
+                return 0  # Return no errors for skipped tests
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
 # Should get cluster name "ceph" from somewhere
 # and normal path from osd_data and osd_journal in conf
 FSPATH = "/var/lib/ceph/osd/ceph-{id}"
@@ -152,6 +168,7 @@ def task(ctx, config):
         ceph_objectstore_tool:
           objects: 20 # <number of objects>
           pgnum: 12
+          crimson_objectstore_tool: true # use crimson-objectstore-tool instead of ceph-objectstore-tool
     """
 
     if config is None:
@@ -159,7 +176,12 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         'ceph_objectstore_tool task only accepts a dict for configuration'
 
-    log.info('Beginning ceph_objectstore_tool...')
+    # Set global CRIMSON flag based on configuration
+    global CRIMSON
+    CRIMSON = config.get('crimson_objectstore_tool', False)
+    
+    tool_name = 'crimson-objectstore-tool' if CRIMSON else 'ceph-objectstore-tool'
+    log.info('Beginning ceph_objectstore_tool using {}...'.format(tool_name))
 
     log.debug(config)
     log.debug(ctx)
@@ -198,9 +220,13 @@ def task(ctx, config):
 
     EC_POOL = "ec_pool"
     EC_NAME = "ECobject"
-    create_ec_pool(cli_remote, EC_POOL, 'default', PGNUM)
-    ERRORS += test_objectstore(ctx, config, cli_remote,
-                               EC_POOL, EC_NAME, ec=True)
+    if not CRIMSON:
+        # EC pools may not be supported in crimson-objectstore-tool yet
+        create_ec_pool(cli_remote, EC_POOL, 'default', PGNUM)
+        ERRORS += test_objectstore(ctx, config, cli_remote,
+                                   EC_POOL, EC_NAME, ec=True)
+    else:
+        log.info("SKIPPING EC pool tests for crimson-objectstore-tool")
 
     if ERRORS == 0:
         log.info("TEST PASSED")
@@ -279,9 +305,15 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
 
     # Test --op list and generate json for all objects
     log.info("Test --op list by generating json for all objects")
-    prefix = ("sudo ceph-objectstore-tool "
-              "--data-path {fpath} "
-              "--journal-path {jpath} ").format(fpath=FSPATH, jpath=JPATH)
+    
+    if CRIMSON:
+        # crimson-objectstore-tool uses different command format
+        prefix = ("sudo crimson-objectstore-tool "
+                  "--data-path {fpath} ").format(fpath=FSPATH)
+    else:
+        prefix = ("sudo ceph-objectstore-tool "
+                  "--data-path {fpath} "
+                  "--journal-path {jpath} ").format(fpath=FSPATH, jpath=JPATH)
     for remote in osds.remotes.keys():
         log.debug(remote)
         log.debug(osds.remotes[remote])
@@ -495,112 +527,74 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
                             log.error("Not all keys found, remaining keys:")
                             log.error(values)
 
-    log.info("Test pg info")
-    for remote in osds.remotes.keys():
-        for role in osds.remotes[remote]:
-            if not role.startswith("osd."):
-                continue
-            osdid = int(role.split('.')[1])
-            if osdid not in pgs:
-                continue
-
-            for pg in pgs[osdid]:
-                cmd = ((prefix + "--op info --pgid {pg}").
-                       format(id=osdid, pg=pg).split())
-                try:
-                    info = remote.sh(cmd, wait=True)
-                except CommandFailedError as e:
-                    log.error("Failure of --op info command with %s",
-                              e.exitstatus)
-                    ERRORS += 1
+    def test_pg_info():
+        local_errors = 0
+        log.info("Test pg info")
+        for remote in osds.remotes.keys():
+            for role in osds.remotes[remote]:
+                if not role.startswith("osd."):
                     continue
-                if not str(pg) in info:
-                    log.error("Bad data from info: %s", info)
-                    ERRORS += 1
-
-    log.info("Test pg logging")
-    for remote in osds.remotes.keys():
-        for role in osds.remotes[remote]:
-            if not role.startswith("osd."):
-                continue
-            osdid = int(role.split('.')[1])
-            if osdid not in pgs:
-                continue
-
-            for pg in pgs[osdid]:
-                cmd = ((prefix + "--op log --pgid {pg}").
-                       format(id=osdid, pg=pg).split())
-                try:
-                    output = remote.sh(cmd, wait=True)
-                except CommandFailedError as e:
-                    log.error("Getting log failed for pg {pg} "
-                              "from osd.{id} with {ret}".
-                              format(pg=pg, id=osdid, ret=e.exitstatus))
-                    ERRORS += 1
+                osdid = int(role.split('.')[1])
+                if osdid not in pgs:
                     continue
-                HASOBJ = pg in pgswithobjects
-                MODOBJ = "modify" in output
-                if HASOBJ != MODOBJ:
-                    log.error("Bad log for pg {pg} from osd.{id}".
-                              format(pg=pg, id=osdid))
-                    MSG = (HASOBJ and [""] or ["NOT "])[0]
-                    log.error("Log should {msg}have a modify entry".
-                              format(msg=MSG))
-                    ERRORS += 1
 
-    log.info("Test pg export")
-    EXP_ERRORS = 0
-    for remote in osds.remotes.keys():
-        for role in osds.remotes[remote]:
-            if not role.startswith("osd."):
-                continue
-            osdid = int(role.split('.')[1])
-            if osdid not in pgs:
-                continue
+                for pg in pgs[osdid]:
+                    cmd = ((prefix + "--op info --pgid {pg}").
+                           format(id=osdid, pg=pg).split())
+                    try:
+                        info = remote.sh(cmd, wait=True)
+                    except CommandFailedError as e:
+                        log.error("Failure of --op info command with %s",
+                                  e.exitstatus)
+                        local_errors += 1
+                        continue
+                    if not str(pg) in info:
+                        log.error("Bad data from info: %s", info)
+                        local_errors += 1
+        return local_errors
 
-            for pg in pgs[osdid]:
-                fpath = os.path.join(DATADIR, "osd{id}.{pg}".
-                                     format(id=osdid, pg=pg))
+    ERRORS += test_pg_info()
 
-                cmd = ((prefix + "--op export --pgid {pg} --file {file}").
-                       format(id=osdid, pg=pg, file=fpath))
-                try:
-                    remote.sh(cmd, wait=True)
-                except CommandFailedError as e:
-                    log.error("Exporting failed for pg {pg} "
-                              "on osd.{id} with {ret}".
-                              format(pg=pg, id=osdid, ret=e.exitstatus))
-                    EXP_ERRORS += 1
+    @SKIP_IF_CRIMSON("PG logging not implemented")
+    def test_pg_logging():
+        local_errors = 0
+        log.info("Test pg logging")
+        for remote in osds.remotes.keys():
+            for role in osds.remotes[remote]:
+                if not role.startswith("osd."):
+                    continue
+                osdid = int(role.split('.')[1])
+                if osdid not in pgs:
+                    continue
 
-    ERRORS += EXP_ERRORS
+                for pg in pgs[osdid]:
+                    cmd = ((prefix + "--op log --pgid {pg}").
+                           format(id=osdid, pg=pg).split())
+                    try:
+                        output = remote.sh(cmd, wait=True)
+                    except CommandFailedError as e:
+                        log.error("Getting log failed for pg {pg} "
+                                  "from osd.{id} with {ret}".
+                                  format(pg=pg, id=osdid, ret=e.exitstatus))
+                        local_errors += 1
+                        continue
+                    HASOBJ = pg in pgswithobjects
+                    MODOBJ = "modify" in output
+                    if HASOBJ != MODOBJ:
+                        log.error("Bad log for pg {pg} from osd.{id}".
+                                  format(pg=pg, id=osdid))
+                        MSG = (HASOBJ and [""] or ["NOT "])[0]
+                        log.error("Log should {msg}have a modify entry".
+                                  format(msg=MSG))
+                        local_errors += 1
+        return local_errors
+    
+    ERRORS += test_pg_logging()
 
-    log.info("Test pg removal")
-    RM_ERRORS = 0
-    for remote in osds.remotes.keys():
-        for role in osds.remotes[remote]:
-            if not role.startswith("osd."):
-                continue
-            osdid = int(role.split('.')[1])
-            if osdid not in pgs:
-                continue
-
-            for pg in pgs[osdid]:
-                cmd = ((prefix + "--force --op remove --pgid {pg}").
-                       format(pg=pg, id=osdid))
-                try:
-                    remote.sh(cmd, wait=True)
-                except CommandFailedError as e:
-                    log.error("Removing failed for pg {pg} "
-                              "on osd.{id} with {ret}".
-                              format(pg=pg, id=osdid, ret=e.exitstatus))
-                    RM_ERRORS += 1
-
-    ERRORS += RM_ERRORS
-
-    IMP_ERRORS = 0
-    if EXP_ERRORS == 0 and RM_ERRORS == 0:
-        log.info("Test pg import")
-
+    @SKIP_IF_CRIMSON("PG export not implemented")
+    def test_pg_export():
+        exp_errors = 0
+        log.info("Test pg export")
         for remote in osds.remotes.keys():
             for role in osds.remotes[remote]:
                 if not role.startswith("osd."):
@@ -613,17 +607,78 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
                     fpath = os.path.join(DATADIR, "osd{id}.{pg}".
                                          format(id=osdid, pg=pg))
 
-                    cmd = ((prefix + "--op import --file {file}").
-                           format(id=osdid, file=fpath))
+                    cmd = ((prefix + "--op export --pgid {pg} --file {file}").
+                           format(id=osdid, pg=pg, file=fpath))
                     try:
                         remote.sh(cmd, wait=True)
                     except CommandFailedError as e:
-                        log.error("Import failed from {file} with {ret}".
-                                  format(file=fpath, ret=e.exitstatus))
-                        IMP_ERRORS += 1
-    else:
-        log.warning("SKIPPING IMPORT TESTS DUE TO PREVIOUS FAILURES")
+                        log.error("Exporting failed for pg {pg} "
+                                  "on osd.{id} with {ret}".
+                                  format(pg=pg, id=osdid, ret=e.exitstatus))
+                        exp_errors += 1
+        return exp_errors
 
+    EXP_ERRORS = test_pg_export()
+    ERRORS += EXP_ERRORS
+
+    @SKIP_IF_CRIMSON("PG removal not implemented")
+    def test_pg_removal():
+        rm_errors = 0
+        log.info("Test pg removal")
+        for remote in osds.remotes.keys():
+            for role in osds.remotes[remote]:
+                if not role.startswith("osd."):
+                    continue
+                osdid = int(role.split('.')[1])
+                if osdid not in pgs:
+                    continue
+
+                for pg in pgs[osdid]:
+                    cmd = ((prefix + "--force --op remove --pgid {pg}").
+                           format(pg=pg, id=osdid))
+                    try:
+                        remote.sh(cmd, wait=True)
+                    except CommandFailedError as e:
+                        log.error("Removing failed for pg {pg} "
+                                  "on osd.{id} with {ret}".
+                                  format(pg=pg, id=osdid, ret=e.exitstatus))
+                        rm_errors += 1
+        return rm_errors
+
+    RM_ERRORS = test_pg_removal()
+    ERRORS += RM_ERRORS
+
+    @SKIP_IF_CRIMSON("PG import not implemented")
+    def test_pg_import():
+        imp_errors = 0
+        if EXP_ERRORS == 0 and RM_ERRORS == 0:
+            log.info("Test pg import")
+
+            for remote in osds.remotes.keys():
+                for role in osds.remotes[remote]:
+                    if not role.startswith("osd."):
+                        continue
+                    osdid = int(role.split('.')[1])
+                    if osdid not in pgs:
+                        continue
+
+                    for pg in pgs[osdid]:
+                        fpath = os.path.join(DATADIR, "osd{id}.{pg}".
+                                             format(id=osdid, pg=pg))
+
+                        cmd = ((prefix + "--op import --file {file}").
+                               format(id=osdid, file=fpath))
+                        try:
+                            remote.sh(cmd, wait=True)
+                        except CommandFailedError as e:
+                            log.error("Import failed from {file} with {ret}".
+                                      format(file=fpath, ret=e.exitstatus))
+                            imp_errors += 1
+        else:
+            log.warning("SKIPPING IMPORT TESTS DUE TO PREVIOUS FAILURES")
+        return imp_errors
+
+    IMP_ERRORS = test_pg_import()
     ERRORS += IMP_ERRORS
 
     if EXP_ERRORS == 0 and RM_ERRORS == 0 and IMP_ERRORS == 0:
