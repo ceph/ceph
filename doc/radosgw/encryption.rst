@@ -83,7 +83,53 @@ The configuration expects a base64-encoded 256 bit key. For example::
    file is not a secure method for storing encryption keys. Keys that are
    accidentally exposed in this way should be considered compromised.
 
+Caching
+=======
 
+The caching feature for Key Management Service (KMS) secrets greatly
+improves the performance of server-side encryption and lessens the
+load on the KMS.
+
+Secrets are stored using the `Linux Kernel Key Retention Service`_ in
+the RGW processes' process keyring. This is subject to a global quota
+and must be set in accordance with the configured cache size.
+Depending on whether RGW runs as root, these quotas can be managed by adjusting:
+- ``/proc/sys/kernel/keys/root_maxkeys`` and ``/proc/sys/kernel/keys/root_maxbytes``
+- ``/proc/sys/kernel/keys/maxkeys`` and ``/proc/sys/kernel/keys/maxbytes``
+
+Exceeding a quota will disable the cache, fail the request with an
+internal error, and log a failure message.
+
+Three different Cache Time-to-Live (TTL) values can be set:
+- **Positive TTL**: How long a successfully retrieved secret remains
+  in the cache.
+- **Negative TTL**: How long to remember that a key does not exist,
+  preventing unnecessary requests to the KMS.
+- **Transient Error TTL**: How long to cache failures due to temporary
+  issues like KMS timeouts.
+
+Metrics
+---------
+
+The cache exports metrics under the ``kms-cache`` collection.
+- ``hit``: Hit counter
+- ``miss``:  Miss counter
+- ``expired``: Number of TTL expired entries
+- ``size``: Current cache size
+- ``capacity``: Cache maximum size
+- ``clear``: Number of cache clears. Resets ``size``, ``hit``,
+  ``miss``, ``expired``
+
+In addition the ``rgw`` collection has:
+- ``kms_fetch_lat``: Average KMS fetch latency. Also includes a
+  successful request counter. Each event results in a positive cache
+  entry.
+- ``kms_error_transient``: Transient KMS fetch error counter. Each
+  event results in a transient error cache entry.
+- ``kms_error_permanent``: Permanent KMS fetch error counter. Each
+  event results in a negative cache cache entry.
+
+.. _Linux Kernel Key Retention Service:  https://www.kernel.org/doc/html/latest/security/keys/core.html
 .. _Amazon SSE-C: https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html
 .. _Amazon SSE-KMS: http://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
 .. _Amazon SSE-S3: https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingServerSideEncryption.html
