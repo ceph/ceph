@@ -607,6 +607,7 @@ private:
   unsigned delegate_inos_pct = 0;
   uint64_t dir_max_entries = 0;
   int64_t bal_fragment_size_max = 0;
+  bool allow_batched_ops = true;
 
   double inject_rename_corrupt_dentry_first = 0.0;
 
