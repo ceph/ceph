@@ -15,7 +15,6 @@
  */
 
 #include "ceph_ver.h"
-#include "common/debug.h"
 #include "ErasureCodePluginClay.h"
 #include "ErasureCodeClay.h"
 
