@@ -13552,3 +13552,53 @@ def test_upload_part_copy_percent_encoded_key():
     final_obj = s3_client.get_object(Bucket=bucket_name, Key=key)
     content = final_obj['Body'].read()
     assert content == b"foo"
+
+@pytest.mark.conditional_write
+def test_put_object_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    key = 'obj'
+
+    etag = client.put_object(Bucket=bucket, Key=key, IfNoneMatch='*')['ETag']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch='*')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch=etag)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    client.put_object(Bucket=bucket, Key=key, IfMatch=etag)
+
+    client.delete_object(Bucket=bucket, Key=key)
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='*')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+    client.put_object(Bucket=bucket, Key=key, IfNoneMatch=etag)
+
+@pytest.mark.conditional_write
+def test_put_object_current_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    etag = client.put_object(Bucket=bucket, Key=key, IfNoneMatch='*')['ETag']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch='*')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch=etag)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    client.put_object(Bucket=bucket, Key=key, IfMatch=etag)
+
+    response = client.delete_object(Bucket=bucket, Key=key)
+    assert response['DeleteMarker']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='*')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+    client.put_object(Bucket=bucket, Key=key, IfNoneMatch=etag)
