@@ -265,6 +265,9 @@ public:
       if (len != bp.length()) {
         ADD_FAILURE();
       }
+      if (bp.is_zero_fast()) {
+        ADD_FAILURE();
+      }
     }
     return 0;
   }
@@ -1272,11 +1275,16 @@ TEST(ECCommon, encode)
   semap.encode(ec_impl);
 }
 
-
 bufferlist create_buf(uint64_t len) {
   bufferlist bl;
-  bl.append_zero(len);
+
+  while (bl.length() < len) {
+    uint64_t pages = std::rand() % 5;
+    uint64_t len_to_add = std::min(len - bl.length(), pages * EC_ALIGN_SIZE);
+    bl.append_zero(len_to_add);
+  }
   ceph_assert(bl.is_aligned(EC_ALIGN_SIZE));
+  ceph_assert(len == bl.length());
   return bl;
 }
 
@@ -1313,7 +1321,7 @@ void test_decode(unsigned int k, unsigned int m, uint64_t chunk_size, uint64_t o
   }
 
   semap.add_zero_padding_for_decode(read_request.zeros_for_decode);
-  ASSERT_EQ(0, semap.decode(ec_impl, want, object_size));
+  ASSERT_EQ(0, semap.decode(ec_impl, want, object_size, nullptr, true));
 }
 
 TEST(ECCommon, decode) {
@@ -1455,3 +1463,18 @@ TEST(ECCommon, decode6) {
   test_decode(k, m, chunk_size, object_size, want, acting_set);
 }
 
+TEST(ECCommon, decode7) {
+  const unsigned int k = 3;
+  const unsigned int m = 3;
+  const uint64_t chunk_size = 4096;
+  const uint64_t object_size = 89236;
+
+
+  ECUtil::shard_extent_set_t want(k+m);
+  shard_id_set acting_set;
+  want[shard_id_t(5)].insert(0, 32*1024);
+
+  acting_set.insert_range(shard_id_t(0), 3);
+
+  test_decode(k, m, chunk_size, object_size, want, acting_set);
+}

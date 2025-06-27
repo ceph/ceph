@@ -574,7 +574,8 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
       res.buffers_read.add_zero_padding_for_decode(req.zeros_for_decode);
       int r = res.buffers_read.decode(read_pipeline.ec_impl,
                                   req.shard_want_to_read,
-                                  req.object_size);
+                                  req.object_size,
+                                  read_pipeline.get_parent()->get_dpp());
       ceph_assert( r == 0 );
       dout(20) << __func__ << ": after decode: "
                << res.buffers_read.debug_string(2048, 0)
