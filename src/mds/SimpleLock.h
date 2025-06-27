@@ -250,6 +250,9 @@ public:
   bool is_waiter_for(uint64_t mask) const {
     return parent->is_waiter_for(getmask(mask));
   }
+  bool has_any_waiter() const {
+    return is_waiter_for(std::numeric_limits<uint64_t>::max());
+  }
 
   bool is_cached() const {
     return state_flags & CACHED;
