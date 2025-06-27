@@ -47,6 +47,10 @@ static ostream& _prefix(std::ostream* _dout)
 }
 
 
+ErasureCodeJerasure::~ErasureCodeJerasure()
+{
+}
+
 int ErasureCodeJerasure::init(ErasureCodeProfile& profile, ostream *ss)
 {
   int err = 0;
