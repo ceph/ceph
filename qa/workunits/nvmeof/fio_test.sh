@@ -94,7 +94,7 @@ status_log() {
         sudo nvme list-subsys /dev/$device
         sudo nvme id-ns /dev/$device
     done
-    
+    sudo dmesg -T > $TESTDIR/archive/dmesg-fio_tests.log 
 }
 
 
