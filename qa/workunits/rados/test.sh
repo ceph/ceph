@@ -84,7 +84,7 @@ do
     if [ $parallel -eq 1 ]; then
 	r=`printf '%25s' $f`
 	ff=`echo $f | awk '{print $1}'`
-	bash -o pipefail -exc "ceph_test_neorados_$f $color 2>&1 | tee ceph_test_neorados_$ff.log | sed \"s/^/$r: /\"" &
+	bash -o pipefail -exc "ceph_test_neorados_$f --gtest_output=xml:$GTEST_OUTPUT_DIR/neorados_$f.xml $color 2>&1 | tee ceph_test_neorados_$ff.log | sed \"s/^/$r: /\"" &
 	pid=$!
 	echo "test $f on pid $pid"
 	pids[$f]=$pid
