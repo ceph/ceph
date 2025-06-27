@@ -151,7 +151,9 @@
 %{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
 %if 0%{with crimson}
+%if 0%{?rhel} < 10
 %{!?gts_version: %global gts_version 13}
+%endif
 %else
 %if 0%{?rhel} == 8
 %{!?gts_version: %global gts_version 11}
