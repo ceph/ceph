@@ -3337,6 +3337,8 @@ void PeeringState::proc_master_log(
 	can_check_next_entry = true;
       }
     }
+    PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
+    bool update_pwlc = false;
     while (can_check_next_entry) {
       ++p;
       if (p == pg_log.get_log().log.end()) {
@@ -3379,9 +3381,19 @@ void PeeringState::proc_master_log(
       // This entry can be kept, only shards that didn't participate in
       // the partial write missed the update
       psdout(20) << "keeping entry " << p->version << dendl;
-      olog.head = p->version;
+      rollbacker.get()->partial_write(&info, olog.head, *p);
+	update_pwlc = true;
+	olog.head = p->version;
 
       // We need to continue processing the log, so don't break.
+    }
+    if (update_pwlc) {
+      psdout(20) << "applying pwlc updates" << dendl;
+      for (auto & [shard, peer] : peer_info) {
+	if (info.partial_writes_last_complete.contains(shard.shard)) {
+	  apply_pwlc(info.partial_writes_last_complete[shard.shard], shard, peer);
+	}
+      }
     }
   }
   // merge log into our own log to build master log.  no need to
@@ -7784,67 +7796,6 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
       psdout(10) << " osd." << *i << " will fully backfill; can infer empty missing set" << dendl;
       ps->peer_missing[*i].clear();
       continue;
-    }
-
-    // If the peer log is only divergent because of partial writes then
-    // roll forward the peer to cover writes it was not involved in.
-    if (pi.last_update < ps->info.last_update) {
-      // Search backwards through log looking for a match with peer's head
-      // entry
-      mempool::osd_pglog::list<pg_log_entry_t>::const_iterator p =
-	ps->pg_log.get_log().log.end();
-      while (p != ps->pg_log.get_log().log.begin()) {
-	--p;
-	if (p->version.version <= pi.last_update.version) {
-	  break;
-	}
-      }
-      if (pi.last_update == pi.last_complete &&
-	  p->version == pi.last_update) {
-	// Matched peer's head entry - see if we can advance last_update
-	// because of partial written shards
-	eversion_t old_last_update = pi.last_update;
-	if (ps->info.partial_writes_last_complete.contains(i->shard) &&
-	    ps->info.partial_writes_last_complete[i->shard].first <
-	    old_last_update) {
-	  old_last_update =
-	    ps->info.partial_writes_last_complete[i->shard].first;
-	}
-	++p;
-	bool advanced = false;
-	while (p != ps->pg_log.get_log().log.end()) {
-	  if (p->is_written_shard(i->shard)) {
-	    psdout(20) << "log entry " << p->version
-		       << " written_shards=" << p->written_shards
-		       << " is divergent" << dendl;
-	    break;
-	  }
-	  pi.last_update = p->version;
-	  pi.last_complete = p->version;
-	  // Update partial_writes_last_complete
-	  if (ps->info.partial_writes_last_complete.contains(i->shard)) {
-	    // Existing pwlc entry - only update if p->version is newer
-	    if (ps->info.partial_writes_last_complete[i->shard].second <
-		p->version) {
-	      ps->info.partial_writes_last_complete[i->shard] =
-		std::pair(old_last_update, p->version);
-	    }
-	  } else {
-	    // No existing pwlc entry - create one
-	    ps->info.partial_writes_last_complete[i->shard] =
-	      std::pair(old_last_update, p->version);
-	  }
-	  advanced = true;
-	  ++p;
-	}
-	if (advanced) {
-	  psdout(20) << "shard " << i->shard << " pwlc="
-		     << ps->info.partial_writes_last_complete.at(i->shard)
-		     << " last_complete=" << ps->info.last_complete
-		     << " last_update=" << pi.last_update
-		     << dendl;
-	}
-      }
     }
 
     if (pi.last_update == pi.last_complete &&  // peer has no missing
