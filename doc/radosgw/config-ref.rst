@@ -272,6 +272,16 @@ SSE-S3 Settings
 .. confval:: rgw_crypt_sse_s3_vault_ssl_clientcert
 .. confval:: rgw_crypt_sse_s3_vault_ssl_clientkey
 
+KMS Secrets Cache Settings
+==========================
+
+.. confval:: rgw_crypt_s3_kms_cache_enabled
+.. confval:: rgw_crypt_s3_kms_cache_max_size
+.. confval:: rgw_crypt_s3_kms_cache_positive_ttl
+.. confval:: rgw_crypt_s3_kms_cache_transient_error_ttl
+.. confval:: rgw_crypt_s3_kms_cache_negative_ttl
+
+.. _Encryption: ../encryption
 
 QoS Settings
 ============
