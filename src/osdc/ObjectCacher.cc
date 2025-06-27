@@ -410,10 +410,12 @@ void ObjectCacher::Object::audit_buffers()
       ceph_assert(it->first == it->second->start());
     }
     if (it->first < offset) {
-      lderr(oc->cct) << "AUDIT FAILURE: " << it->first << " " << *it->second
-		     << " overlaps with previous bh " << *((--it)->second)
+      auto prev = std::prev(it);
+      lderr(oc->cct) << "AUDIT FAILURE: " << it->first << " " << *(it->second)
+		     << " overlaps with previous bh " << *(prev->second)
 		     << dendl;
-      ceph_assert(it->first >= offset);
+      ceph_assert(prev->first >= offset);
+      --it;
     }
     BufferHead *bh = it->second;
     for (auto w_it = bh->waitfor_read.begin();
