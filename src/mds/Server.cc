@@ -288,6 +288,7 @@ Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
 {
   forward_all_requests_to_auth = g_conf().get_val<bool>("mds_forward_all_requests_to_auth");
   replay_unsafe_with_closed_session = g_conf().get_val<bool>("mds_replay_unsafe_with_closed_session");
+  allow_batched_ops = g_conf().get_val<bool>("mds_allow_batched_ops");
   cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
   max_snaps_per_dir = g_conf().get_val<uint64_t>("mds_max_snaps_per_dir");
   delegate_inos_pct = g_conf().get_val<uint64_t>("mds_client_delegate_inos_pct");
@@ -1385,6 +1386,9 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
   }
   if (changed.count("mds_forward_all_requests_to_auth")){
     forward_all_requests_to_auth = g_conf().get_val<bool>("mds_forward_all_requests_to_auth");
+  }
+  if (changed.count("mds_allow_batched_ops")) {
+    allow_batched_ops = g_conf().get_val<bool>("mds_allow_batched_ops");
   }
   if (changed.count("mds_cap_revoke_eviction_timeout")) {
     cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
@@ -4220,7 +4224,7 @@ void Server::handle_client_getattr(const MDRequestRef& mdr, bool is_lookup)
   if (mask & CEPH_STAT_RSTAT)
     want_auth = true; // set want_auth for CEPH_STAT_RSTAT mask
 
-  if (!mdr->is_batch_head() && mdr->can_batch()) {
+  if (!mdr->is_batch_head() && allow_batched_ops && mdr->can_batch()) {
     CF_MDS_RetryRequestFactory cf(mdcache, mdr, false);
     int r = mdcache->path_traverse(mdr, cf, mdr->get_filepath(),
 				   (want_auth ? MDS_TRAVERSE_WANT_AUTH : 0),
