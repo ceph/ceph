@@ -1,7 +1,45 @@
-<cds-actionable-notification class="mb-1 content-theme"
-                             [ngClass]="spacingClass"
-                             [notificationObj]="notificationContent"
-                             (close)="onClose()"></cds-actionable-notification>
+<ng-container *ngIf="type === 'inline-tip'; else otherTypes">
+  <div class="inline-tip-container">
+    <div class="close-btn-position"
+         *ngIf="dismissible">
+      <cds-icon-button class="close-btn cds--purple-60-darker"
+                       type="button"
+                       kind="ghost"
+                       size="sm"
+                       description="Close"
+                       (click)="onClick()">
+        <svg [size]="icons.size16"
+             [cdsIcon]="icons.destroy"></svg>
+      </cds-icon-button>
+    </div>
+    <div class="inline-tip-body">
+      <svg [cdsIcon]="icons.idea"
+           [size]="icons.size20"></svg>
+      <div class="inline-tip-body-content">
+        <div class="cds--type-heading-compact-01"
+             *ngIf="title">{{title}}</div>
+        <div class="cds--type-body-compact-01">
+          <div [class.truncate]="isCollapsed && isTruncated">
+            <ng-template [ngTemplateOutlet]="content"></ng-template>
+          </div>
+          <button class="cds--purple-60-darker btn-toggle"
+                  *ngIf="isCollapsed"
+                  cdsButton="ghost"
+                  size="md"
+                  (click)="toggleContent()">
+            <span i18n>{{ isTruncated ? 'Read more' : 'Read less' }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</ng-container>
+<ng-template #otherTypes>
+  <cds-actionable-notification class="mb-1 content-theme"
+                               [ngClass]="spacingClass"
+                               [notificationObj]="notificationContent"
+                               (close)="onClose()"></cds-actionable-notification>
+  </ng-template>
 
 <ng-template #content>
   <ng-content></ng-content>

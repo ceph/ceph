@@ -1,3 +1,8 @@
+@use '@carbon/layout';
+@use '@carbon/colors';
+@use '@carbon/themes';
+@use './src/styles/vendor/variables' as vv;
+
 .alert-panel-icon {
   padding-right: 0.5em;
   vertical-align: top;
@@ -13,4 +18,53 @@
 
 cds-actionable-notification {
   max-width: 100%;
+}
+
+.inline-tip-container {
+  position: relative;
+  background: linear-gradient(90deg, colors.$blue-90, colors.$purple-70);
+  color: vv.$white;
+  padding: layout.rem(16px);
+
+  .inline-tip-body {
+    display: flex;
+    gap: layout.rem(16px);
+
+    .inline-tip-body-content {
+      display: flex;
+      flex-direction: column;
+      flex: 0 1 60%;
+
+      .truncate {
+        display: -webkit-box;
+        overflow: hidden;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 1;
+      }
+
+      .btn-toggle {
+        margin-top: 1rem;
+        color: colors.$blue-30;
+
+        &:hover {
+          color: colors.$gray-10;
+        }
+      }
+    }
+  }
+
+  .close-btn-position {
+    position: absolute;
+    top: 0;
+    right: 0;
+    cursor: pointer;
+
+    .close-btn {
+      padding: 0;
+
+      svg {
+        fill: themes.$icon-on-color;
+      }
+    }
+  }
 }

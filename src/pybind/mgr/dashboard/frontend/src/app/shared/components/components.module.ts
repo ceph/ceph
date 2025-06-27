@@ -83,12 +83,14 @@ import { FormAdvancedFieldsetComponent } from './form-advanced-fieldset/form-adv
 import { UpgradableComponent } from './upgradable/upgradable.component';
 import { ProgressComponent } from './progress/progress.component';
 import { SidePanelComponent } from './side-panel/side-panel.component';
+import { ChartsModule } from '@carbon/charts-angular';
 
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
 import CopyIcon from '@carbon/icons/es/copy/32';
 import downloadIcon from '@carbon/icons/es/download/16';
-import { ChartsModule } from '@carbon/charts-angular';
+import IdeaIcon from '@carbon/icons/es/idea/20';
+import CloseIcon from '@carbon/icons/es/close/16';
 
 @NgModule({
   imports: [
@@ -217,6 +219,14 @@ import { ChartsModule } from '@carbon/charts-angular';
 })
 export class ComponentsModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([InfoIcon, CopyIcon, EditIcon, CodeIcon, downloadIcon]);
+    this.iconService.registerAll([
+      InfoIcon,
+      CopyIcon,
+      EditIcon,
+      CodeIcon,
+      downloadIcon,
+      IdeaIcon,
+      CloseIcon
+    ]);
   }
 }
