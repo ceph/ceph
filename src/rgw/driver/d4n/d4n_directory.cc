@@ -1,5 +1,7 @@
+#include <algorithm>
 #include <boost/asio/consign.hpp>
 #include <boost/algorithm/string.hpp>
+#include <memory>
 #include "common/async/blocked_completion.h"
 #include "common/dout.h" 
 #include "d4n_directory.h"
@@ -49,7 +51,7 @@ void redis_exec(std::shared_ptr<connection> conn,
 }
 
 template <typename... Types>
-void redis_exec_cp(rgw::d4n::RedisPool* pool,
+void redis_exec_cp(std::shared_ptr<rgw::d4n::RedisPool> pool,
                 boost::system::error_code& ec,
                 const boost::redis::request& req,
                 boost::redis::response<Types...>& resp,
@@ -87,7 +89,7 @@ void redis_exec(std::shared_ptr<connection> conn,
   }
 }
 
-void redis_exec_cp(rgw::d4n::RedisPool* pool,
+void redis_exec_cp(std::shared_ptr<rgw::d4n::RedisPool> pool,
                 boost::system::error_code& ec,
                 const boost::redis::request& req,
                 boost::redis::generic_response& resp, optional_yield y)
@@ -121,7 +123,7 @@ int check_bool(std::string str) {
 }
 
 void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
-				RedisPool* redis_pool,
+				std::shared_ptr<RedisPool> redis_pool,
 				std::shared_ptr<connection> conn,
 				boost::system::error_code& ec,
 				const boost::redis::request& req,
@@ -131,7 +133,7 @@ void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
     if(redis_pool==nullptr)
     {
 	redis_exec(conn, ec, req, resp, y);
-	//ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() Using connection: " << conn.get() << dendl;
+	ldpp_dout(dpp, 0) << "Directory::" << __func__ << " not using connection-pool, it's using the shared connection " << dendl;
     }
     else
     	redis_exec_cp(redis_pool, ec, req, resp, y);
@@ -139,7 +141,7 @@ void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
 
 template <typename... Types>
 void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
-				RedisPool* redis_pool,
+				std::shared_ptr<RedisPool> redis_pool,
 				std::shared_ptr<connection> conn,
 				boost::system::error_code& ec,
 				const boost::redis::request& req,
@@ -149,7 +151,7 @@ void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
     if(redis_pool==nullptr)
     {
 	redis_exec(conn, ec, req, resp, y);
-	//ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() Using connection: " << conn.get() << dendl;
+	ldpp_dout(dpp, 0) << "Directory::" << __func__ << " not using connection-pool, it's using the shared connection " << dendl;
     }
     else
     	redis_exec_cp(redis_pool, ec, req, resp, y);

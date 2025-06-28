@@ -62,8 +62,7 @@ class D4NFilterDriver : public FilterDriver {
     boost::asio::io_context& io_context;
 
     // Redis connection pool
-    //std::shared_ptr<RedisPool> redis_pool;
-    rgw::d4n::RedisPool* redis_pool;
+    std::shared_ptr<rgw::d4n::RedisPool> redis_pool;
 
   public:
     D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context);

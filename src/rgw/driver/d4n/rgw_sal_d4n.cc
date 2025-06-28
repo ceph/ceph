@@ -15,6 +15,7 @@
 
 #include "rgw_perf_counters.h"
 #include <boost/redis/config.hpp>
+#include <memory>
 #include "rgw_sal_d4n.h"
 
 namespace rgw { namespace sal {
@@ -83,9 +84,9 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 
   //setting the connection pool size and other parameters
   uint64_t rgw_redis_connection_pool_size = dpp->get_cct()->_conf->rgw_redis_connection_pool_size;
-  rgw::d4n::RedisPool* redis_pool = nullptr;
+  std::shared_ptr<rgw::d4n::RedisPool>redis_pool = nullptr;
   if(rgw_redis_connection_pool_size>0){
-      redis_pool = new rgw::d4n::RedisPool(&io_context,cfg,rgw_redis_connection_pool_size);
+      redis_pool = std::make_shared<rgw::d4n::RedisPool>(&io_context, cfg, rgw_redis_connection_pool_size);
       ldpp_dout(dpp, 10) << "redis connection pool created with " << rgw_redis_connection_pool_size << " connections "  << dendl;
   }
 
