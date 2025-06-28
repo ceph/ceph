@@ -18315,10 +18315,21 @@ int Client::set_fscrypt_policy_v2(int fd, const struct fscrypt_policy_v2& policy
   return ll_set_fscrypt_policy_v2(f->inode.get(), policy);
 }
 
+int Client::_is_empty_directory(Inode *in, const UserPerm& perms)
+{
+  if (in->dir && in->dir->dentries.size() != in->dir->num_null_dentries) {
+    return -ENOTEMPTY;
+  }
+  return 0;
+}
+
 int Client::ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& policy)
 {
-  if (!in->is_dir())
+  UserPerm perms(in->uid, in->gid);
+
+  if (!in->is_dir()) {
     return -ENOTDIR;
+  }
 
   if (in->is_fscrypt_enabled()) {
     struct fscrypt_policy_v2 policy2;
@@ -18329,8 +18340,9 @@ int Client::ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& 
     return 0;
   }
 
-  if (in->dir && in->dir->dentries.size() != in->dir->num_null_dentries) {
-    return -ENOTEMPTY;
+  int r = _is_empty_directory(in, perms);
+  if (r < 0) {
+    return r;
   }
 
   FSCryptContext fsc(cct);
@@ -18342,13 +18354,11 @@ int Client::ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& 
   fsc.init(policy);
   fsc.generate_new_nonce();
 
-  UserPerm perms(in->uid, in->gid);
-
   bufferlist env_bl;
 
   fsc.encode(env_bl);
 
-  int r = ll_setxattr(in, "ceph.fscrypt.auth", (void *)env_bl.c_str(), env_bl.length(), CEPH_XATTR_CREATE, perms);
+  r = ll_setxattr(in, "ceph.fscrypt.auth", (void *)env_bl.c_str(), env_bl.length(), CEPH_XATTR_CREATE, perms);
   if (r < 0) {
     ldout(cct, 0) << __func__ << "(): failed to set fscrypt_auth attr: r=" << r << dendl;
     return r;

@@ -2148,6 +2148,8 @@ private:
 
   Dentry *get_or_create(Inode *dir, const std::string& name);
 
+  int _is_empty_directory(Inode *in, const UserPerm& perms);
+
   int xattr_permission(Inode *in, const char *name, unsigned want,
 		       const UserPerm& perms);
   int may_setattr(const InodeRef& in, struct ceph_statx *stx, int mask,
