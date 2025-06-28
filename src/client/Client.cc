@@ -18317,10 +18317,19 @@ int Client::set_fscrypt_policy_v2(int fd, const struct fscrypt_policy_v2& policy
 
 int Client::_is_empty_directory(Inode *in, const UserPerm& perms)
 {
-  if (in->dir && in->dir->dentries.size() != in->dir->num_null_dentries) {
-    return -ENOTEMPTY;
+  int r = 0;
+  unsigned mask = CEPH_CAP_FILE_SHARED;
+
+  std::scoped_lock lock(client_lock);
+
+  if (!in->caps_issued_mask(mask, true)) {
+    r = _ll_getattr(in, mask, perms);
   }
-  return 0;
+  if (!r && (in->dirstat.nsubdirs | in->dirstat.nfiles)) {
+    r = -ENOTEMPTY;
+  }
+
+  return r;
 }
 
 int Client::ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& policy)
