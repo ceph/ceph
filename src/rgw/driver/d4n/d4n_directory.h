@@ -6,6 +6,7 @@
 #include <boost/redis/connection.hpp>
 #include <condition_variable>
 #include <deque>
+#include <memory>
 
 namespace rgw { namespace d4n {
 
@@ -131,10 +132,10 @@ struct CacheBlock {
 
 class Directory {
   public:
-	RedisPool* redis_pool{nullptr}; // Redis connection pool
-    	void set_redis_pool(RedisPool* pool) {
+	std::shared_ptr<RedisPool> redis_pool{nullptr}; // Redis connection pool
+    	void set_redis_pool(std::shared_ptr<RedisPool> pool) {
       	redis_pool = pool;
-    }	
+    }
     Directory() {}
 };
 
