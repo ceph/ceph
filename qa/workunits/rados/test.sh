@@ -119,6 +119,28 @@ do
         if [ $waited -ge $max_wait ]; then
         # Process timed out
         echo "ERROR: Test $t ($pid) - TIMED OUT after $max_wait seconds"
+
+        # Create fallback XML file
+        xml_path="$GTEST_OUTPUT_DIR/$t.xml"
+        if [[ $t == neorados_* ]]; then
+            xml_path="$GTEST_OUTPUT_DIR/neorados_$t.xml"
+        fi
+
+        echo "Creating fallback XML report at $xml_path"
+        cat > "$xml_path" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="1" failures="1" disabled="0" errors="0" time="${max_wait}.000" timestamp="$(date -Iseconds)" name="AllTests">
+  <testsuite name="Timeout" tests="1" failures="1" disabled="0" errors="0" time="${max_wait}.000">
+    <testcase name="UnknownTestCase" status="timeout" time="${max_wait}.000" classname="${t}">
+      <failure message="Test suite timed out after ${max_wait} seconds" type="timeout">
+        The test suite ${t} (PID ${pid}) exceeded the maximum allowed execution time of ${max_wait} seconds.
+        Unable to determine which specific test case was running when the timeout occurred.
+        Please check the logs for more details, this may indicate a hang, deadlock, or extremely slow performance.
+      </failure>
+    </testcase>
+  </testsuite>
+</testsuites>
+EOF
         kill -9 $pid 2>/dev/null || true
         ret=1
         break
