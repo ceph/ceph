@@ -1,16 +1,15 @@
 Crash Module
 ============
+
 The crash module collects information about daemon crashdumps and stores
 it in the Ceph cluster for later analysis.
 
-Enabling
---------
+Authentication Setup
+--------------------
 
-Enable the *crash* module by running the following command:
-
-.. prompt:: bash #
-
-   ceph mgr module enable crash
+The *crash* module is one of the modules which are always on and cannot be
+disabled. To enable crash report archiving, you must first generate a keyring
+with appropriate privileges.
 
 Generate the *crash* upload key by running the following command:
 
@@ -18,15 +17,15 @@ Generate the *crash* upload key by running the following command:
 
    ceph auth get-or-create client.crash mon 'profile crash' mgr 'profile crash'
 
-On each node, you should store this key in
-``/etc/ceph/ceph.client.crash.keyring``.
+Store this key in ``/etc/ceph/ceph.client.crash.keyring`` on each node in your
+cluster.
 
 
 Automated collection
 --------------------
 
 Daemon crashdumps are dumped in ``/var/lib/ceph/crash`` by default; this can
-be configured with the option 'crash dir'.  Crash directories are named by
+be configured with the option ``crash dir``.  Crash directories are named by
 time and date and a randomly-generated UUID, and contain a metadata file
 'meta' and a recent log file, with a "crash_id" that is the same.
 
