@@ -255,17 +255,22 @@ ECTransaction::WritePlanObj::WritePlanObj(
    */
   if (op.truncate && op.truncate->first < orig_size) {
     ECUtil::shard_extent_set_t truncate_read(sinfo.get_k_plus_m());
-    extent_set truncate_write;
     uint64_t prev_stripe = sinfo.ro_offset_to_prev_stripe_ro_offset(op.truncate->first);
     uint64_t next_align = ECUtil::align_next(op.truncate->first);
-    sinfo.ro_range_to_shard_extent_set_with_superset(
+    sinfo.ro_range_to_shard_extent_set(
       prev_stripe, next_align - prev_stripe,
-      truncate_read, truncate_write);
+      truncate_read);
 
-    /* We must always update the entire parity chunk, even if we only read
-     * a small amount of one shard.
+    /* Unless we are doing a full stripe write, we must always read the data
+     * for the partial stripe and update the parity. For the purposes of
+     * parity, the truncated shards are all zero.
      */
-    truncate_write.align(sinfo.get_chunk_size());
+    extent_set truncate_write;
+
+    if (next_align != 0) {
+      truncate_write = truncate_read.at(shard_id_t(0));
+      truncate_write.align(EC_ALIGN_SIZE);
+    }
 
     if (!truncate_read.empty()) {
       if (to_read) {
