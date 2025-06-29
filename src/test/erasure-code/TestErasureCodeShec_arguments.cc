@@ -41,7 +41,8 @@ unsigned int value_count = 0;
 
 map<shard_id_set,set<shard_id_set>> shec_table;
 
-constexpr int getint(std::initializer_list<int> is) {
+template<size_t N>
+constexpr int getint(const std::array<int, N>& is) {
   int a = 0;
   for (const auto i : is) {
     a |= 1 << i;
@@ -74,8 +75,8 @@ void create_table_shec432() {
         }
         if (std::popcount(avails) == 2 &&
             std::popcount(want) == 1) {
-	  if (std::cmp_equal(want | avails, getint({0,1,5})) ||
-	      std::cmp_equal(want | avails, getint({2,3,6}))) {
+	  if (std::cmp_equal(want | avails, getint(std::to_array({0,1,5}))) ||
+	      std::cmp_equal(want | avails, getint(std::to_array({2,3,6})))) {
             vec.push_back(avails);
           }
         }
@@ -86,14 +87,14 @@ void create_table_shec432() {
           continue;
         }
         if (std::popcount(avails) == 4) {
-	  auto a = to_array<std::initializer_list<int>>({
+	  auto a = std::to_array<std::array<int, 4>>({
 	      {0,1,2,3}, {0,1,2,4}, {0,1,2,6}, {0,1,3,4}, {0,1,3,6}, {0,1,4,6},
 	      {0,2,3,4}, {0,2,3,5}, {0,2,4,5}, {0,2,4,6}, {0,2,5,6}, {0,3,4,5},
 	      {0,3,4,6}, {0,3,5,6}, {0,4,5,6}, {1,2,3,4}, {1,2,3,5}, {1,2,4,5},
 	      {1,2,4,6}, {1,2,5,6}, {1,3,4,5}, {1,3,4,6}, {1,3,5,6}, {1,4,5,6},
 	      {2,3,4,5}, {2,4,5,6}, {3,4,5,6}});
-          if (ranges::any_of(a, std::bind_front(cmp_equal<uint, int>, avails),
-			     getint)) {
+          if (ranges::any_of(a, [avails] (int n) { return cmp_equal(avails, n); },
+			     getint<4>)) {
 	    vec.push_back(avails);
 	  }
 	}
