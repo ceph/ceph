@@ -210,7 +210,7 @@ struct formatter<Scrub::SchedEntry> {
   auto format(const Scrub::SchedEntry& st, FormatContext& ctx) const
   {
     return fmt::format_to(
-	ctx.out(), "{}/{},nb:{:s},({},tr:{:s})", st.pgid,
+	ctx.out(), "{}/{},nb:{:s},({},tr:{:s})", st.pgid.pgid,
 	(st.level == scrub_level_t::deep ? "dp" : "sh"), st.schedule.not_before,
 	st.urgency, st.schedule.scheduled_at);
   }
