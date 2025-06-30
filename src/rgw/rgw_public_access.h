@@ -19,29 +19,11 @@
 class XMLObj;
 namespace ceph { class Formatter; }
 
-class PublicAccessBlockConfiguration {
-  bool BlockPublicAcls;
-  bool IgnorePublicAcls;
-  bool BlockPublicPolicy;
-  bool RestrictPublicBuckets;
- public:
- PublicAccessBlockConfiguration():
-   BlockPublicAcls(false), IgnorePublicAcls(false),
-  BlockPublicPolicy(false), RestrictPublicBuckets(false)
-    {}
-
-  auto block_public_acls() const {
-    return BlockPublicAcls;
-  }
-  auto ignore_public_acls() const {
-    return IgnorePublicAcls;
-  }
-  auto block_public_policy() const {
-    return BlockPublicPolicy;
-  }
-  auto restrict_public_buckets() const {
-    return RestrictPublicBuckets;
-  }
+struct PublicAccessBlockConfiguration {
+  bool BlockPublicAcls = false;
+  bool IgnorePublicAcls = false;
+  bool BlockPublicPolicy = false;
+  bool RestrictPublicBuckets = false;
 
   void encode(ceph::bufferlist& bl) const {
     ENCODE_START(1,1, bl);
