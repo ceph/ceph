@@ -9892,8 +9892,7 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef&& op, epoch_t epoch)
            << " type " << type
 	   << " cost " << cost
 	   << " latency " << latency
-	   << " epoch " << epoch
-	   << " " << *(op->get_req()) << dendl;
+	   << " epoch " << epoch << dendl;
   op->osd_trace.event("enqueue op");
   op->osd_trace.keyval("priority", priority);
   op->osd_trace.keyval("cost", cost);
