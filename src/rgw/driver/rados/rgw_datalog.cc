@@ -131,7 +131,7 @@ class RGWDataChangesOmap final : public RGWDataChangesBE {
   std::vector<std::string> oids;
 
 public:
-  RGWDataChangesOmap(neorados::RADOS& r,
+  RGWDataChangesOmap(neorados::RADOS r,
 		     neorados::IOContext loc,
 		     RGWDataChangesLog& datalog,
 		     uint64_t gen_id,
@@ -272,7 +272,7 @@ class RGWDataChangesFIFO final : public RGWDataChangesBE {
   tiny_vector<LazyFIFO> fifos;
 
 public:
-  RGWDataChangesFIFO(neorados::RADOS& r,
+  RGWDataChangesFIFO(neorados::RADOS r,
 		     neorados::IOContext loc,
 		     RGWDataChangesLog& datalog,
 		     uint64_t gen_id,
