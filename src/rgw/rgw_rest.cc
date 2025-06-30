@@ -1885,7 +1885,7 @@ static http_op op_from_method(const char *method)
 int RGWHandler_REST::init_permissions(RGWOp* op, optional_yield y)
 {
   if (op->get_type() == RGW_OP_CREATE_BUCKET) {
-    rgw_build_iam_environment(driver, s);
+    rgw_build_iam_environment(s);
     return 0;
   }
 
