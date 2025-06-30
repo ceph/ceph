@@ -57,6 +57,13 @@ public:
                      const int shard_id,
                      std::map<int, std::string> *max_markers,
                      optional_yield y) = 0;
+
+  virtual int log_get_max_marker(const DoutPrefixProvider *dpp,
+                     const RGWBucketInfo& bucket_info,
+                     const std::map<int, rgw_bucket_dir_header>& headers,
+                     const int shard_id,
+                     std::string *max_marker,
+                     optional_yield y) = 0;
 };
 
 class RGWSI_BILog_RADOS_InIndex : public RGWSI_BILog_RADOS
@@ -98,6 +105,13 @@ public:
                      const std::map<int, rgw_bucket_dir_header>& headers,
                      const int shard_id,
                      std::map<int, std::string> *max_markers,
+                     optional_yield y) override;
+
+int log_get_max_marker(const DoutPrefixProvider *dpp,
+                     const RGWBucketInfo& bucket_info,
+                     const std::map<int, rgw_bucket_dir_header>& headers,
+                     const int shard_id,
+                     std::string *max_marker,
                      optional_yield y) override;
 };
 
@@ -154,4 +168,11 @@ public:
                          const int shard_id,
                          std::map<int, std::string>* max_markers,
                          optional_yield y) override;
+
+int log_get_max_marker(const DoutPrefixProvider *dpp,
+                     const RGWBucketInfo& bucket_info,
+                     const std::map<int, rgw_bucket_dir_header>& headers,
+                     const int shard_id,
+                     std::string *max_marker,
+                     optional_yield y) override;
 };

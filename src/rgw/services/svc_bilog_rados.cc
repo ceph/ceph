@@ -370,6 +370,25 @@ int RGWSI_BILog_RADOS_InIndex::log_get_max_marker(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+int RGWSI_BILog_RADOS_InIndex::log_get_max_marker(const DoutPrefixProvider *dpp,
+                                      const RGWBucketInfo& bucket_info,
+                                      const std::map<int, rgw_bucket_dir_header>& headers,
+                                      const int shard_id,
+                                      std::string* max_marker,
+				      optional_yield y)
+{
+  if (shard_id < 0) {
+  BucketIndexShardsManager marker_mgr;
+  for (const auto& [ header_shard_id, header ] : headers) {
+    marker_mgr.add(header_shard_id, header.max_marker);
+  }
+  marker_mgr.to_string(max_marker);
+  } else if (!headers.empty()) {
+  *max_marker = std::end(headers)->second.max_marker;
+  }
+  return 0;
+}
+
 // CLS FIFO
 void RGWSI_BILog_RADOS_FIFO::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
 {
@@ -525,7 +544,7 @@ int RGWSI_BILog_RADOS_FIFO::log_get_max_marker(const DoutPrefixProvider *dpp,
                                                const RGWBucketInfo& bucket_info,
                                                const std::map<int, rgw_bucket_dir_header>& headers,
                                                const int shard_id,
-                                               std::map<int, std::string>* max_markers,
+                                               std::string* max_marker,
                                                optional_yield y)
 {
   if (shard_id > 1) {
@@ -560,9 +579,21 @@ int RGWSI_BILog_RADOS_FIFO::log_get_max_marker(const DoutPrefixProvider *dpp,
                << dendl;
     return ret;
   }
-  (*max_markers)[0] = rgw::cls::fifo::marker{
+  *max_marker = rgw::cls::fifo::marker{
     head_part_num,
     head_part_header.last_ofs
   }.to_string();
+
   return 0;
+}
+
+int RGWSI_BILog_RADOS_FIFO::log_get_max_marker(const DoutPrefixProvider *dpp,
+                                               const RGWBucketInfo& bucket_info,
+                                               const std::map<int, rgw_bucket_dir_header>& headers,
+                                               const int shard_id,
+                                               std::map<int, std::string>* max_markers,
+                                               optional_yield y)
+{
+  auto& max_marker = (*max_markers)[0];
+  return log_get_max_marker(dpp, bucket_info, headers, shard_id, &max_marker, y);
 }
